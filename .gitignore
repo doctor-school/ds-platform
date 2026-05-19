@@ -39,3 +39,6 @@ test-results/
 
 # Tooling state
 .changeset/.changeset-version
+
+# Claude Code — share settings.json, keep local overrides private
+.claude/settings.local.json

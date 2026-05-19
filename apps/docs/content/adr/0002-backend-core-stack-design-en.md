@@ -1,4 +1,10 @@
-﻿> **EN (this)** · **RU:** [`0002-backend-core-stack-design-ru.md`](./0002-backend-core-stack-design-ru.md)
+---
+title: "DS Platform — Backend Core design [EN]"
+description: "1. Runtime + language: Node.js 22 LTS + TypeScript 5.6+ strict. Soft constraint from prep — AI agents write TS backend best; types flow end-to-end to..."
+lang: en
+---
+
+> **EN (this)** · **RU:** [`0002-backend-core-stack-design-ru.md`](./0002-backend-core-stack-design-ru.md)
 
 # DS Platform — Backend Core design
 

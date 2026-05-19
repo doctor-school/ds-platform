@@ -1,4 +1,10 @@
-﻿> **EN:** [`0008-repo-strategy-and-dev-workflow-en.md`](./0008-repo-strategy-and-dev-workflow-en.md) · **RU (this)**
+---
+title: "ADR-0008 — DS Platform Repository Strategy + Dev Workflow [RU]"
+description: "DSO-25..30 + DSO-60 зафиксировали технологический стек DS Platform, методологию разработки и task-tracking split (Plane strategic / GitHub Issues..."
+lang: ru
+---
+
+> **EN:** [`0008-repo-strategy-and-dev-workflow-en.md`](./0008-repo-strategy-and-dev-workflow-en.md) · **RU (this)**
 
 # ADR-0008 — DS Platform Repository Strategy + Dev Workflow
 

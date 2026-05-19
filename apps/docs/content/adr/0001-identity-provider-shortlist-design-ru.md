@@ -1,4 +1,10 @@
-﻿> **EN:** [`0001-identity-provider-shortlist-design-en.md`](./0001-identity-provider-shortlist-design-en.md) · **RU (this)**
+---
+title: "DS Platform — Identity / Auth / RBAC design [RU]"
+description: "1. RBAC = гибрид — IdP знает 9 product-ролей (PRD §13) как groups + временная legacy_admin группа на migration window + MFA-policy per group;..."
+lang: ru
+---
+
+> **EN:** [`0001-identity-provider-shortlist-design-en.md`](./0001-identity-provider-shortlist-design-en.md) · **RU (this)**
 
 # DS Platform — Identity / Auth / RBAC design
 

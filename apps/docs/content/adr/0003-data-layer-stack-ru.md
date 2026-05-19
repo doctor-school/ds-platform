@@ -1,4 +1,10 @@
-﻿> **EN:** [`0003-data-layer-stack-en.md`](./0003-data-layer-stack-en.md) · **RU (this)**
+---
+title: "ADR-0003 — Data Layer Stack (Primary DB / ORM / Migrations / Policy engine / FTS / Vector / Cache) для DS Platform [RU]"
+description: "DS Platform — самостоятельная платформа, заменяющая Bubble + Directual + Supabase. Data layer должен обеспечивать:"
+lang: ru
+---
+
+> **EN:** [`0003-data-layer-stack-en.md`](./0003-data-layer-stack-en.md) · **RU (this)**
 
 # ADR-0003 — Data Layer Stack (Primary DB / ORM / Migrations / Policy engine / FTS / Vector / Cache) для DS Platform
 

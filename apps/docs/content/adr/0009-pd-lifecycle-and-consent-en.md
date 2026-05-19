@@ -1,4 +1,10 @@
-﻿> **RU:** [`0009-pd-lifecycle-and-consent-ru.md`](./0009-pd-lifecycle-and-consent-ru.md) · **EN (this)**
+---
+title: "ADR-0009 — PD Lifecycle, Consent, Retention, Erasure [EN]"
+description: "ADR-0001 §134-141, engineering-readiness §5, data-layer-design §2.5 (OQ-D3) reference consent management, right-to-erasure, retention — without a..."
+lang: en
+---
+
+> **RU:** [`0009-pd-lifecycle-and-consent-ru.md`](./0009-pd-lifecycle-and-consent-ru.md) · **EN (this)**
 
 # ADR-0009 — PD Lifecycle, Consent, Retention, Erasure
 

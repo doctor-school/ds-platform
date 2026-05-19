@@ -1,4 +1,10 @@
-﻿> **EN:** [`0007-ai-stack-design-en.md`](./0007-ai-stack-design-en.md) · **RU (this)**
+---
+title: "Design Spec — AI Stack для DS Platform (Phase 0 methodology + deferred runtime) [RU]"
+description: "Этот документ — реализационная детализация ADR-0007. ADR фиксирует «что и почему»; spec — «как именно»: file paths, code sketches, GH Actions YAML,..."
+lang: ru
+---
+
+> **EN:** [`0007-ai-stack-design-en.md`](./0007-ai-stack-design-en.md) · **RU (this)**
 
 # Design Spec — AI Stack для DS Platform (Phase 0 methodology + deferred runtime)
 

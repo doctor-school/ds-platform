@@ -1,4 +1,10 @@
-﻿> **EN:** [`0008-repo-strategy-and-dev-workflow-design-en.md`](./0008-repo-strategy-and-dev-workflow-design-en.md) · **RU (this)**
+---
+title: "Design Spec — DS Platform Repository Strategy + Dev Workflow [RU]"
+description: "Этот документ — реализационная детализация ADR-0008. ADR фиксирует «что и почему»; spec — «как именно»: содержимое каждого root-level manifest файла,..."
+lang: ru
+---
+
+> **EN:** [`0008-repo-strategy-and-dev-workflow-design-en.md`](./0008-repo-strategy-and-dev-workflow-design-en.md) · **RU (this)**
 
 # Design Spec — DS Platform Repository Strategy + Dev Workflow
 

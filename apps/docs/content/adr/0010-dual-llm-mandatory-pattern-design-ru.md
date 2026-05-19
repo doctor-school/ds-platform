@@ -1,4 +1,10 @@
-﻿> **EN:** mirror отложен (RU master per [[feedback_docs_as_ssot]]).
+---
+title: "Design Spec — Dual-LLM Reference Implementation Pattern (DS Platform) [RU]"
+description: "Этот документ — pattern spec, не реализационный manual. Он фиксирует когда применять dual-LLM (decision matrix) и какие архитектурные инварианты..."
+lang: ru
+---
+
+> **EN:** mirror отложен (RU master per [[feedback_docs_as_ssot]]).
 
 # Design Spec — Dual-LLM Reference Implementation Pattern (DS Platform)
 

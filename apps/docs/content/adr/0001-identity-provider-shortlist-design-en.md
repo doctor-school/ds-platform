@@ -1,4 +1,10 @@
-﻿> **EN (this)** · **RU:** [`0001-identity-provider-shortlist-design-ru.md`](./0001-identity-provider-shortlist-design-ru.md)
+---
+title: "DS Platform — Identity / Auth / RBAC design [EN]"
+description: "1. RBAC = hybrid — IdP knows 9 product roles (PRD §13) as groups + temporary legacy_admin group for the migration window + MFA-policy per group;..."
+lang: en
+---
+
+> **EN (this)** · **RU:** [`0001-identity-provider-shortlist-design-ru.md`](./0001-identity-provider-shortlist-design-ru.md)
 
 # DS Platform — Identity / Auth / RBAC design
 

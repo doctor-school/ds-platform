@@ -1,4 +1,10 @@
-﻿> **EN:** [`0009-pd-lifecycle-and-consent-design-en.md`](./0009-pd-lifecycle-and-consent-design-en.md) · **RU (this)**
+---
+title: "DS Platform — PD Lifecycle, Consent, Retention, Erasure design [RU]"
+description: "1. Three erasure levels chosen per table: hard delete / tombstone / crypto-shred. Выбор фиксируется в retention matrix (§3) + CI lint. 2. Per-subject..."
+lang: ru
+---
+
+> **EN:** [`0009-pd-lifecycle-and-consent-design-en.md`](./0009-pd-lifecycle-and-consent-design-en.md) · **RU (this)**
 
 # DS Platform — PD Lifecycle, Consent, Retention, Erasure design
 

@@ -1,4 +1,10 @@
-﻿**Notion title:** [BBM · DS] ADR-0010 — Dual-LLM как обязательный pattern для tool-enabled AI-flows
+---
+title: "ADR-0010 — Dual-LLM как обязательный pattern для tool-enabled AI-flows [RU]"
+description: "DS Platform — медицинская образовательная платформа под 152-ФЗ. AI-flows на ней оперируют untrusted-контентом (сообщения доктора в chat, загруженные..."
+lang: ru
+---
+
+**Notion title:** [BBM · DS] ADR-0010 — Dual-LLM как обязательный pattern для tool-enabled AI-flows
 **Notion page ID:** —
 **Мастер:** репозиторий → `apps/docs/content/adr/0010-dual-llm-mandatory-pattern-ru.md`
 

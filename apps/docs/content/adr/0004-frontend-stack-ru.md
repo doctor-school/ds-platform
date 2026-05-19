@@ -1,4 +1,10 @@
-﻿> **EN:** [`0004-frontend-stack-en.md`](./0004-frontend-stack-en.md) · **RU (this)**
+---
+title: "ADR-0004 — Frontend Stack для DS Platform [RU]"
+description: "DS Platform — 6 веб-поверхностей с разными жанрами:"
+lang: ru
+---
+
+> **EN:** [`0004-frontend-stack-en.md`](./0004-frontend-stack-en.md) · **RU (this)**
 
 # ADR-0004 — Frontend Stack для DS Platform
 

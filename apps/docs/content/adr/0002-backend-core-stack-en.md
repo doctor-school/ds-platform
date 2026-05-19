@@ -1,4 +1,10 @@
-﻿> **EN (this)** · **RU:** [`0002-backend-core-stack-ru.md`](./0002-backend-core-stack-ru.md)
+---
+title: "ADR-0002 — Backend Core Stack (language / framework / validation / API style) for DS Platform [EN]"
+description: "DS Platform is a standalone platform replacing Bubble + Directual + Supabase. The backend core must serve all clients (Web, Mobile, Admin, partner..."
+lang: en
+---
+
+> **EN (this)** · **RU:** [`0002-backend-core-stack-ru.md`](./0002-backend-core-stack-ru.md)
 
 # ADR-0002 — Backend Core Stack (language / framework / validation / API style) for DS Platform
 

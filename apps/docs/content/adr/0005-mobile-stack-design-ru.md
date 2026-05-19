@@ -1,4 +1,10 @@
-﻿> **EN:** [`0005-mobile-stack-design-en.md`](./0005-mobile-stack-design-en.md) · **RU (this)**
+---
+title: "DS Platform — Mobile Stack Design [RU]"
+description: "DS Platform — медицинская образовательная платформа. Mobile-приложение врача — основной геймплейный фронт (PRD §15): прохождение уроков, клинических..."
+lang: ru
+---
+
+> **EN:** [`0005-mobile-stack-design-en.md`](./0005-mobile-stack-design-en.md) · **RU (this)**
 
 # DS Platform — Mobile Stack Design
 

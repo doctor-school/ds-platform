@@ -1,4 +1,10 @@
-﻿> **EN:** [`0001-identity-provider-shortlist-en.md`](./0001-identity-provider-shortlist-en.md) · **RU (this)**
+---
+title: "ADR-0001 — Identity / Auth / RBAC для DS Platform [RU]"
+description: "DS Platform — самостоятельная платформа, заменяющая текущий Bubble + Directual + Supabase стек. Нужна identity-инфраструктура, поддерживающая:"
+lang: ru
+---
+
+> **EN:** [`0001-identity-provider-shortlist-en.md`](./0001-identity-provider-shortlist-en.md) · **RU (this)**
 
 # ADR-0001 — Identity / Auth / RBAC для DS Platform
 

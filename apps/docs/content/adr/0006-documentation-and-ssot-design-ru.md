@@ -1,4 +1,10 @@
-﻿> **EN:** [`0006-documentation-and-ssot-design-en.md`](./0006-documentation-and-ssot-design-en.md) · **RU (this)**
+---
+title: "Design Spec — Documentation Framework + SSOT для DS Platform [RU]"
+description: "Этот документ — реализационная детализация ADR-0006. ADR фиксирует «что и почему»; spec — «как именно»: file paths, code sketches, CI gates yml,..."
+lang: ru
+---
+
+> **EN:** [`0006-documentation-and-ssot-design-en.md`](./0006-documentation-and-ssot-design-en.md) · **RU (this)**
 
 # Design Spec — Documentation Framework + SSOT для DS Platform
 

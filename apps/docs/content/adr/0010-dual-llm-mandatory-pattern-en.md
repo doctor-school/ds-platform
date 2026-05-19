@@ -1,4 +1,10 @@
-﻿> **RU:** [`0010-dual-llm-mandatory-pattern-ru.md`](./0010-dual-llm-mandatory-pattern-ru.md) · **EN (this)**
+---
+title: "ADR-0010 — Dual-LLM as a Mandatory Pattern for Tool-Enabled AI Flows [EN]"
+description: "The DS Platform is a medical education platform under 152-FZ. Its AI flows operate on untrusted content (doctor messages in chat, PDF/docx uploads by..."
+lang: en
+---
+
+> **RU:** [`0010-dual-llm-mandatory-pattern-ru.md`](./0010-dual-llm-mandatory-pattern-ru.md) · **EN (this)**
 
 # ADR-0010 — Dual-LLM as a Mandatory Pattern for Tool-Enabled AI Flows
 

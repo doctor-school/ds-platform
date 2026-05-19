@@ -1,4 +1,10 @@
-﻿> **EN:** [`0005-mobile-stack-en.md`](./0005-mobile-stack-en.md) · **RU (this)**
+---
+title: "ADR-0005 — Mobile Stack для DS Platform [RU]"
+description: "DS Platform — медицинская образовательная платформа. Mobile-приложение врача — основной геймплейный фронт (PRD §15): прохождение уроков, клинических..."
+lang: ru
+---
+
+> **EN:** [`0005-mobile-stack-en.md`](./0005-mobile-stack-en.md) · **RU (this)**
 
 # ADR-0005 — Mobile Stack для DS Platform
 

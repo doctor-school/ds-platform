@@ -1,3 +1,9 @@
+---
+title: "ADR-0011 — Egress Control Plane [EN]"
+description: '> Note: ADR-0010 is intentionally skipped in the numbering — reserved for a future "RF edge & comms providers" ADR if a separate document is needed...'
+lang: en
+---
+
 > **RU:** [`0011-egress-control-plane-ru.md`](./0011-egress-control-plane-ru.md) · **EN (this)**
 
 # ADR-0011 — Egress Control Plane

@@ -1,4 +1,10 @@
-﻿> **EN (this)** · **RU:** [`0005-mobile-stack-ru.md`](./0005-mobile-stack-ru.md)
+---
+title: "ADR-0005 — Mobile Stack for DS Platform [EN]"
+description: "DS Platform is a medical education platform. The doctor mobile app is the primary gameplay front-end (PRD §15): lesson walkthroughs, clinical tasks,..."
+lang: en
+---
+
+> **EN (this)** · **RU:** [`0005-mobile-stack-ru.md`](./0005-mobile-stack-ru.md)
 
 # ADR-0005 — Mobile Stack for DS Platform
 

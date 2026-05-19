@@ -1,4 +1,10 @@
-﻿> **EN:** [`0006-documentation-and-ssot-en.md`](./0006-documentation-and-ssot-en.md) · **RU (this)**
+---
+title: "ADR-0006 — Documentation Framework + SSOT-стратегия для DS Platform [RU]"
+description: "DS Platform — greenfield TS/Postgres/Next.js платформа, разрабатывается AI-агентами с малой командой (1-2 dev + продукт-владелец Product..."
+lang: ru
+---
+
+> **EN:** [`0006-documentation-and-ssot-en.md`](./0006-documentation-and-ssot-en.md) · **RU (this)**
 
 # ADR-0006 — Documentation Framework + SSOT-стратегия для DS Platform
 

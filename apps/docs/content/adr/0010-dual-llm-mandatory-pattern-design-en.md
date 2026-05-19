@@ -1,4 +1,10 @@
-﻿> **RU:** [`0010-dual-llm-mandatory-pattern-design-ru.md`](./0010-dual-llm-mandatory-pattern-design-ru.md) · **EN (this)**
+---
+title: "Design Spec — Dual-LLM Reference Implementation Pattern (DS Platform) [EN]"
+description: "This document is a pattern spec, not an implementation manual. It fixes when dual-LLM applies (decision matrix) and which architectural invariants..."
+lang: en
+---
+
+> **RU:** [`0010-dual-llm-mandatory-pattern-design-ru.md`](./0010-dual-llm-mandatory-pattern-design-ru.md) · **EN (this)**
 
 # Design Spec — Dual-LLM Reference Implementation Pattern (DS Platform)
 

@@ -1,4 +1,10 @@
-﻿> **EN (this)** · **RU:** [`0007-ai-stack-ru.md`](./0007-ai-stack-ru.md)
+---
+title: "ADR-0007 — AI Stack for DS Platform: Phase 0 methodology + deferred runtime [EN]"
+description: "DS Platform is a greenfield TS/Postgres platform developed in Phase 0 primarily by AI agents (Claude Code and Codex) with a minimal team (Tech Lead +..."
+lang: en
+---
+
+> **EN (this)** · **RU:** [`0007-ai-stack-ru.md`](./0007-ai-stack-ru.md)
 
 # ADR-0007 — AI Stack for DS Platform: Phase 0 methodology + deferred runtime
 

@@ -1,3 +1,9 @@
+---
+title: "ADR-0011 — Egress Control Plane [RU]"
+description: "> Note: ADR-0010 пропущен в нумерации намеренно — оставлен как reserve для будущего ADR «RF edge & comms providers», если в Phase 1 потребуется..."
+lang: ru
+---
+
 > **EN:** [`0011-egress-control-plane-en.md`](./0011-egress-control-plane-en.md) · **RU (this)**
 
 # ADR-0011 — Egress Control Plane

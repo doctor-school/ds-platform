@@ -1,0 +1,5 @@
+{
+  "title": "Architecture Decision Records",
+  "description": "Numbered, immutable decisions + paired design specs (ADR-NNNN-en + ADR-NNNN-design-en + RU mirrors).",
+  "icon": "FileText"
+}

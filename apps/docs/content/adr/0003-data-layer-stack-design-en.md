@@ -1,4 +1,10 @@
-﻿> **EN (this)** · **RU:** [`0003-data-layer-stack-design-ru.md`](./0003-data-layer-stack-design-ru.md)
+---
+title: "DS Platform — Data Layer design [EN]"
+description: "1. Primary DB: PostgreSQL 17, self-hosted in Docker on a dedicated data-layer VPS. pgbackrest daily full + 15-min WAL → Timeweb Object Storage..."
+lang: en
+---
+
+> **EN (this)** · **RU:** [`0003-data-layer-stack-design-ru.md`](./0003-data-layer-stack-design-ru.md)
 
 # DS Platform — Data Layer design
 

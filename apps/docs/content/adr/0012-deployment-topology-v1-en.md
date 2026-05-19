@@ -1,3 +1,9 @@
+---
+title: "ADR-0012 — Deployment Topology v1 (production cluster shape + preview environments) for DS Platform [EN]"
+description: "After DSO-59, the v1 availability target is fixed at 99.0% single-AZ (ADR-0002 Amendment A1) with a cost envelope ≤30k ₽/month. These bounds shape..."
+lang: en
+---
+
 > **EN (this)** · **RU:** [`0012-deployment-topology-v1-ru.md`](./0012-deployment-topology-v1-ru.md)
 
 # ADR-0012 — Deployment Topology v1 (production cluster shape + preview environments) for DS Platform

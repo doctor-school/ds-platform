@@ -1,4 +1,10 @@
-﻿> **EN:** [`0004-frontend-stack-design-en.md`](./0004-frontend-stack-design-en.md) · **RU (this)**
+---
+title: "DS Platform — Frontend Stack design [RU]"
+description: "1. Meta-framework: Next.js 15 App Router + RSC, один framework на все 6 веб-поверхностей. 2. App-split: 4 Next.js приложения — apps/promo (SSG/ISR,..."
+lang: ru
+---
+
+> **EN:** [`0004-frontend-stack-design-en.md`](./0004-frontend-stack-design-en.md) · **RU (this)**
 
 # DS Platform — Frontend Stack design
 

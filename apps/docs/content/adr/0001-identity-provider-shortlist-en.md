@@ -1,4 +1,10 @@
-﻿> **EN (this)** · **RU:** [`0001-identity-provider-shortlist-ru.md`](./0001-identity-provider-shortlist-ru.md)
+---
+title: "ADR-0001 — Identity / Auth / RBAC for DS Platform [EN]"
+description: "DS Platform is a standalone platform replacing the current Bubble + Directual + Supabase stack. It requires an identity infrastructure that supports:"
+lang: en
+---
+
+> **EN (this)** · **RU:** [`0001-identity-provider-shortlist-ru.md`](./0001-identity-provider-shortlist-ru.md)
 
 # ADR-0001 — Identity / Auth / RBAC for DS Platform
 

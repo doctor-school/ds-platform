@@ -1,4 +1,10 @@
-﻿> **EN (this)** · **RU:** [`0005-mobile-stack-design-ru.md`](./0005-mobile-stack-design-ru.md)
+---
+title: "DS Platform — Mobile Stack Design [EN]"
+description: "DS Platform is a medical education platform. The doctor mobile app is the primary gameplay front-end (PRD §15): lesson walkthroughs, clinical tasks,..."
+lang: en
+---
+
+> **EN (this)** · **RU:** [`0005-mobile-stack-design-ru.md`](./0005-mobile-stack-design-ru.md)
 
 # DS Platform — Mobile Stack Design
 

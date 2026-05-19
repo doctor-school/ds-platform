@@ -8,7 +8,7 @@ Universal AI-agent constitution for the DS Platform monorepo. Vendor-agnostic �
 
 DS Platform is the medical-education platform for Doctor.School (B2B pharma sponsor → B2D doctor audience). Greenfield monorepo in **Phase 0** — architectural ADRs (0001–0008) accepted, engineering scaffolding in progress. Pre-pilot target: **2026 Q3**.
 
-Stack at a glance (see `apps/docs/content/adr/` for full reference once ADRs migrate per G8; until then they live in `bbm/docs/adr/`):
+Stack at a glance (see `apps/docs/content/adr/` for full reference):
 
 - **Backend:** NestJS + Zod + REST + openapi-typescript SDK (ADR-0002)
 - **Data:** Postgres 17 + Drizzle + pgvector (ADR-0003)
@@ -46,8 +46,6 @@ Long-form context: `README.md`.
 - no force push, no branch deletion
 
 **ADRs** live in `apps/docs/content/adr/`, rendered by Fumadocs at `/adr/<slug>`. Paired design spec — `NNNN-<slug>-design.md` alongside.
-
-> **Note (Phase A interim):** ADRs are **not yet** in `apps/docs/content/adr/`. Group G8 (Plane DSP-181) will migrate ADR-0001..0008 from `bbm/docs/adr/`. Until then, treat `bbm/docs/adr/` as authoritative and link via full GitHub URL.
 
 **Feature specs** live in `apps/docs/content/specs/features/NNN-<slug>/` (3 files: `requirements.md`, `design.md`, `scenarios.feature`). One spec → one GitHub Milestone → multiple Issues (one per EARS-handler). See §6 for SDD format.
 
@@ -241,21 +239,21 @@ In **Phase 0**, Tech Lead is the **single CODEOWNERS owner** (`* @sidorovanthon`
 
 Quick reference for AI agents orienting themselves:
 
-| Thing                                 | Location                                                                                  |
-| ------------------------------------- | ----------------------------------------------------------------------------------------- |
-| ADRs                                  | `apps/docs/content/adr/NNNN-<slug>.md` (after G8 migration; currently in `bbm/docs/adr/`) |
-| Companion design specs                | `apps/docs/content/adr/NNNN-<slug>-design.md` (post-G8)                                   |
-| Feature specs                         | `apps/docs/content/specs/features/NNN-<slug>/{requirements,design,scenarios.feature}`     |
-| Tech specs (brainstorm)               | `apps/docs/content/specs/tech/<topic>.md`                                                 |
-| Glossary                              | `apps/docs/content/product/glossary/` (file-per-term, Keystatic-managed)                  |
-| API contract SSOT                     | `packages/schemas/` (Zod)                                                                 |
-| DB schema SSOT                        | `packages/db/schema/` (Drizzle)                                                           |
-| Generated SDK                         | `packages/api-client/` (do not edit by hand)                                              |
-| Generated glossary IDs                | `packages/glossary/ids.ts` (do not edit by hand)                                          |
-| Lint tools                            | `tools/lint/*.ts`                                                                         |
-| Bootstrap script                      | `tools/agent-bootstrap.ts` (run via `pnpm bootstrap`)                                     |
-| BBM strategic / cross-team work-items | Plane workspace `doctor-school` (projects DSP, DSC, DSM, DSO)                             |
-| DS Platform code-level Issues         | **GitHub Issues** in this repo                                                            |
+| Thing                                 | Location                                                                              |
+| ------------------------------------- | ------------------------------------------------------------------------------------- |
+| ADRs                                  | `apps/docs/content/adr/NNNN-<slug>.md`                                                |
+| Companion design specs                | `apps/docs/content/adr/NNNN-<slug>-design.md` (post-G8)                               |
+| Feature specs                         | `apps/docs/content/specs/features/NNN-<slug>/{requirements,design,scenarios.feature}` |
+| Tech specs (brainstorm)               | `apps/docs/content/specs/tech/<topic>.md`                                             |
+| Glossary                              | `apps/docs/content/product/glossary/` (file-per-term, Keystatic-managed)              |
+| API contract SSOT                     | `packages/schemas/` (Zod)                                                             |
+| DB schema SSOT                        | `packages/db/schema/` (Drizzle)                                                       |
+| Generated SDK                         | `packages/api-client/` (do not edit by hand)                                          |
+| Generated glossary IDs                | `packages/glossary/ids.ts` (do not edit by hand)                                      |
+| Lint tools                            | `tools/lint/*.ts`                                                                     |
+| Bootstrap script                      | `tools/agent-bootstrap.ts` (run via `pnpm bootstrap`)                                 |
+| BBM strategic / cross-team work-items | Plane workspace `doctor-school` (projects DSP, DSC, DSM, DSO)                         |
+| DS Platform code-level Issues         | **GitHub Issues** in this repo                                                        |
 
 **Almost-SSOT rule for trackers** (ADR-0006 §9): in the **BBM repo** (`bbm/CLAUDE.md`) the rule is "pp-plane CLI first." In **this repo** (DS Platform) the rule inverts: **"`gh` CLI first for code-level Issues; `pp-plane` only for cross-tracker references"** (e.g., when an ADR cites a Plane DSO-XXX milestone).
 

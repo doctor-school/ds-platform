@@ -237,7 +237,10 @@ jobs:
   # Phase 0 baseline: only required-needs jobs that actually run today.
   # docs-build, api-drift, db-drift, generated-artifacts join needs-list as their
   # owning groups (G6/G8/G9) land. WARN-only jobs are intentionally excluded.
-  ci-result:
+  # Job name must stay `ci` — branch protection on `main` (per ADR-0008
+  # §2.6 item 4 + Amendment A2.2) requires exactly one status check
+  # context named `ci`. Renaming this job breaks merge gating.
+  ci:
     needs: [lint, types, unit, build, docs-build, markdown-links, spec-link]
     if: always()
     runs-on: ubuntu-latest

@@ -6,7 +6,7 @@ import {
   DocsDescription,
 } from 'fumadocs-ui/page';
 import { notFound } from 'next/navigation';
-import defaultMdxComponents from 'fumadocs-ui/mdx';
+import defaultMdxComponents, { createRelativeLink } from 'fumadocs-ui/mdx';
 
 export default async function Page(props: {
   params: Promise<{ slug?: string[] }>;
@@ -22,7 +22,14 @@ export default async function Page(props: {
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>
-        <MDX components={{ ...defaultMdxComponents }} />
+        <MDX
+          components={{
+            ...defaultMdxComponents,
+            // Resolve relative `./0008-...md` cross-links between ADRs
+            // to their actual page URL (`/adr/0008-...`).
+            a: createRelativeLink(source, page),
+          }}
+        />
       </DocsBody>
     </DocsPage>
   );

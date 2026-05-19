@@ -24,31 +24,33 @@ export default config({
     adrs: collection({
       label: 'ADRs',
       slugField: 'title',
-      path: '../docs/content/adr/*',
+      path: 'content/adr/*',
       format: { contentField: 'content' },
       schema: {
         title: fields.slug({ name: { label: 'Title' } }),
-        content: fields.markdoc({ label: 'Content' }),
+        // ADRs are CommonMark/MDX-compatible with `.md` extension.
+        // `fields.markdoc` defaults to `.mdoc`, so it would match 0 files.
+        content: fields.mdx({ label: 'Content', extension: 'md' }),
       },
     }),
     glossary: collection({
       label: 'Glossary terms',
       slugField: 'title',
-      path: '../docs/content/product/glossary/*',
+      path: 'content/product/glossary/*',
       format: { contentField: 'content' },
       schema: {
         title: fields.slug({ name: { label: 'Term' } }),
-        content: fields.markdoc({ label: 'Definition' }),
+        content: fields.mdx({ label: 'Definition', extension: 'md' }),
       },
     }),
   },
   singletons: {
     vision: singleton({
       label: 'Product vision',
-      path: '../docs/content/product/vision',
+      path: 'content/product/vision',
       format: { contentField: 'content' },
       schema: {
-        content: fields.markdoc({ label: 'Vision' }),
+        content: fields.mdx({ label: 'Vision', extension: 'md' }),
       },
     }),
   },

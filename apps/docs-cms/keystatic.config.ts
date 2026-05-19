@@ -28,9 +28,23 @@ export default config({
       format: { contentField: 'content' },
       schema: {
         title: fields.slug({ name: { label: 'Title' } }),
-        // ADRs are CommonMark/MDX-compatible with `.md` extension.
-        // `fields.markdoc` defaults to `.mdoc`, so it would match 0 files.
-        content: fields.mdx({ label: 'Content', extension: 'md' }),
+        // Frontmatter fields mirrored from the G9.1 sweep. Keystatic
+        // rejects unknown keys on load, so every key present in the
+        // `.md` files must be declared here.
+        description: fields.text({ label: 'Description', multiline: true }),
+        lang: fields.select({
+          label: 'Language',
+          options: [
+            { label: 'English', value: 'en' },
+            { label: 'Russian', value: 'ru' },
+          ],
+          defaultValue: 'en',
+        }),
+        // `fields.markdoc` defaults to `.mdoc` extension, so we
+        // override it to `md` to match the actual ADR files.
+        // Markdoc is more permissive than MDX about raw `<` characters
+        // (literal `<300ms`, `<1%` patterns are pervasive in the ADRs).
+        content: fields.markdoc({ label: 'Content', extension: 'md' }),
       },
     }),
     glossary: collection({
@@ -40,7 +54,16 @@ export default config({
       format: { contentField: 'content' },
       schema: {
         title: fields.slug({ name: { label: 'Term' } }),
-        content: fields.mdx({ label: 'Definition', extension: 'md' }),
+        description: fields.text({ label: 'Description', multiline: true }),
+        lang: fields.select({
+          label: 'Language',
+          options: [
+            { label: 'English', value: 'en' },
+            { label: 'Russian', value: 'ru' },
+          ],
+          defaultValue: 'en',
+        }),
+        content: fields.markdoc({ label: 'Definition', extension: 'md' }),
       },
     }),
   },
@@ -50,7 +73,7 @@ export default config({
       path: 'content/product/vision',
       format: { contentField: 'content' },
       schema: {
-        content: fields.mdx({ label: 'Vision', extension: 'md' }),
+        content: fields.markdoc({ label: 'Vision', extension: 'md' }),
       },
     }),
   },

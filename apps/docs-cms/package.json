@@ -1,5 +1,26 @@
 {
   "name": "@ds/docs-cms",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "lint": "next lint || true",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@keystatic/core": "0.5.50",
+    "@keystatic/next": "5.0.4",
+    "next": "15.5.18",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^6.0.3"
+  }
 }

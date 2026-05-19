@@ -33,6 +33,8 @@ export default [
       'pnpm-lock.yaml',
       '.changeset/**',
       'apps/docs/.source/**',
+      // Next.js generated triple-slash reference files
+      '**/next-env.d.ts',
     ],
   },
   js.configs.recommended,

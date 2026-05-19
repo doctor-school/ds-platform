@@ -182,6 +182,9 @@ jobs:
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/spec-link-lint.ts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
 
   ears-tests:
     needs: setup
@@ -236,7 +239,7 @@ jobs:
   # docs-build, api-drift, db-drift, generated-artifacts join needs-list as their
   # owning groups (G6/G8/G9) land. WARN-only jobs are intentionally excluded.
   ci-result:
-    needs: [lint, types, unit, build, markdown-links]
+    needs: [lint, types, unit, build, markdown-links, spec-link]
     if: always()
     runs-on: ubuntu-latest
     steps:

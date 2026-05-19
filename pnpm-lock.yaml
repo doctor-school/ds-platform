@@ -25,6 +25,9 @@ importers:
       execa:
         specifier: ^8.0.1
         version: 8.0.1
+      fast-glob:
+        specifier: ^3.3.3
+        version: 3.3.3
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3

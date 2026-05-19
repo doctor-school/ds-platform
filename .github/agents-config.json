@@ -1,0 +1,6 @@
+{
+  "agents_enabled": true,
+  "cross_vendor_review_required": true,
+  "reviewer_vendor_default": "openai",
+  "soft_cost_cap_weekly_usd": 50
+}

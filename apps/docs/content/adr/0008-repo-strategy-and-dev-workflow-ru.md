@@ -8,8 +8,8 @@ lang: ru
 
 # ADR-0008 — DS Platform Repository Strategy + Dev Workflow
 
-**Дата:** 2026-05-15 (last amended 2026-05-18 — Amendment A1, см. §7)
-**Статус:** Accepted (+ Amendment A1 — org boundary correction + dev-stand infra location)
+**Дата:** 2026-05-15 (last amended 2026-05-19 — Amendment A3, см. §7)
+**Статус:** Accepted (+ Amendment A1 — org boundary correction + dev-stand infra location; + Amendment A2 — `agent-review` check удалён; + Amendment A3 — server-side branch protection отложен до смены plan/visibility)
 **Связан с:** Plane DSO-31 (`fae57ab6-f09b-4a4d-9ede-9a4f1ca504c0`), milestone DSO-24
 **Design spec:** `apps/docs/content/adr/0008-repo-strategy-and-dev-workflow-design-ru.md`
 **Наследует:** ADR-0001 (Authentik/Zitadel), ADR-0002 (NestJS+BullMQ), ADR-0003 (Postgres17+Drizzle), ADR-0004 (Next.js 15+Refine), ADR-0005 (RN+Expo), ADR-0006 (Fumadocs+Keystatic+GitHub Issues), ADR-0007 (AI loop + cross-vendor reviewer + 14-step migration)
@@ -483,3 +483,63 @@ ADR-0008 §2.10 step 0b → переписан: «Transfer `bbm-academy-dev/ds-p
 - ADR-0007 §2.6 строка «cross-vendor review visited» уже SUPERSEDED через ADR-0007 Amendment A1 — она ссылалась на тот же status check `agent-review`.
 - Repo-strategy design spec §4.2 — параметры `gh api` invocation должны убрать context `agent-review`.
 - Plane DSP-180, DSP-189 — обновления описаний (отдельная Plane-работа).
+
+### Amendment A3 — Server-side branch protection отложен (GitHub Free + private блокирует enforcement) (2026-05-19)
+
+**Контекст:** Когда G10 Phase A orchestration plan попытался применить branch protection на `doctor-school/ds-platform` через `gh api PUT /repos/{owner}/{repo}/branches/main/protection` (список правил §2.6, после A2), GitHub вернул HTTP 403: `"Upgrade to GitHub Pro or make this repository public to enable this feature"`. Тот же paywall применяется и к GitHub Rulesets (более новый ruleset API тоже 403'ит на private-репо в Free-plan org'е). Организация `doctor-school` — на GitHub Free plan; репо приватный (per §2 «Repository: private до Pre-pilot launch»). Tech Lead решил: **никаких платных апгрейдов в Phase 0**.
+
+Это делает весь rule-list §2.6 — required status checks, required approving review, dismiss stale reviews, linear history, conversation resolution, `include administrators`, force-push prevention, deletion prevention — **неприменимым как server-side enforcement** до тех пор, пока (a) org plan не апгрейдится (Team/Enterprise) или (b) репо не станет public. Payload `gh api` сам по себе технически корректен (проверен в G10 dry-run); GitHub просто отказывается ставить protection rule на этот репо в этом billing-тиере.
+
+**Решение (амендмент):**
+
+**A3.1 — §2.6 переформулирован как _target state_, не current state.** 8-item rule list в §2.6 (post-A2: 7 items, без `agent-review`) сохраняется дословно как **target branch-protection contract**, который будет применён, когда сработает reactivation trigger. Это не текущее operational state.
+
+**A3.2 — Interim (Phase 0) merge gate — _process-level_, не server-side.** Пока §2.6 нельзя enforce'ить server-side, тот же merge-gate intent сохраняется через local + convention-level substitute'ы:
+
+| §2.6 target rule (post-A2)                          | Phase 0 process-level substitute                                                                                                                                                                                                                                          |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. PR required до merge в `main`                    | Convention: Tech Lead никогда не делает `git push origin main` напрямую; все изменения через PR. Нет технического блока — опирается на AGENTS.md hard rule + AI-agent compliance.                                                                                         |
+| 2. ≥1 approving review                              | Convention: Tech Lead читает diff перед нажатием merge (single-developer flow; «self-review = read-the-diff»). Когда доступен второй человек — запрашивается через PR sidebar; не enforce'ится.                                                                           |
+| 3. Dismiss stale reviews on new commits             | Manual: Tech Lead перечитывает diff после любого push'а после прежнего чтения. Только convention.                                                                                                                                                                         |
+| 4. Required status check `ci` — passing             | `gh pr merge --auto --squash` — стандартная команда merge (см. AGENTS.md). GitHub держит merge до прохождения всех check'ов; эквивалентно семантике required-status-check для single-developer happy path. CI всё равно прогоняется на каждом PR и виден в check-runs UI. |
+| 5. Branches up-to-date перед merge (`strict: true`) | `gh pr merge --auto --squash` ребейзит-или-падает в зависимости от repo-setting; ручной `git pull --rebase origin main` перед push — convention.                                                                                                                          |
+| 6. Linear history (squash-only)                     | Enforce'ится на repo-level через «Allow squash merging» + disable merge-commits + disable rebase-merge в `Settings → General → Pull Requests` (это **не** branch protection и **не** paywall'ится; применяется в рамках A3 closure).                                      |
+| 7. `include administrators`                         | Не применимо в interim — нет server-side rule, который можно bypass'ить. Convention: Tech Lead не push'ит в `main` напрямую, даже когда технически может.                                                                                                                 |
+| 8. No force pushes / no deletions                   | Pre-push hook (simple-git-hooks, уже подключён в G3) отбивает `--force` и `--delete` против `main`. Local-only enforcement; bypass возможен через `--no-verify`. Convention: не делать.                                                                                   |
+| 9. Required conversation resolution                 | Только convention — GitHub всё равно показывает unresolved threads в merge-button UI; Tech Lead читает перед merge.                                                                                                                                                       |
+
+**A3.3 — Lint guards (ADR-0007 §2.6 BLOCK/WARN table) семантика под interim.** Строки `BLOCK` в ADR-0007 §2.6 предполагают required `ci` status check, который hard-rejects merge. Под A3 `BLOCK` означает **CI job выходит red, и Tech Lead трактует это как merge-blocker по convention'у** — тот же operational outcome на single-developer happy path, без server-side гарантии. См. footnote к ADR-0007 §2.6 (добавлен в том же change set, что и этот amendment) для явного уточнения.
+
+**A3.4 — Scope pre-push hook'а расширен.** Pre-push hook, установленный в G3 (Step 17 — simple-git-hooks + lint-staged), расширяется в interim чтобы на push'ах в `main` запускать local-эквивалент required `ci` job'а: `pnpm lint && pnpm typecheck && pnpm test`. Failure abort'ит push. Это ближайшее local-приближение отсутствующего server-side required check'а. Реализация трекается отдельно (Plane DSP-180 переклассифицирован, см. ниже).
+
+**A3.5 — Reactivation trigger.** Rule-list §2.6 (post-A2: 7 items) применяется дословно через `gh api PUT …/branches/main/protection` (или эквивалентный ruleset) в первый раз, когда становится истинным **любое** из условий:
+
+- Org `doctor-school` апгрейдится до GitHub Team или Enterprise plan (даёт branch protection на private-репо).
+- Репо `doctor-school/ds-platform` становится public (даёт branch protection на public-репо на Free plan).
+- Репо мигрирует на другой forge (Forgejo / GitLab self-hosted и т.д.), где эквивалентная фича бесплатна — отдельный ADR, если это произойдёт.
+
+Payload для применения на trigger закоммичен в `branch-protection.json` в корне репо (хранится в дереве как документация; не consumed никакой текущей automation).
+
+**Consequences:**
+
+- **Нормативный статус §2.6:** target-state contract, не current state. Implementer'ы и reviewer'ы не должны предполагать, что какой-либо item §2.6 в данный момент enforce'ится server-side на `main`.
+- **Merge-gate семантика для человека:** не меняется по **intent'у** (CI green + human read-the-diff до merge); меняется по **mechanism'у** (нет server-side block; convention + `gh pr merge --auto`).
+- **`enforce_admins: true` семантика теряется в interim.** Когда §2.6 reactivate'ится, Tech Lead намеренно не exempt; пока этого нет, нет и admin-bypass'а, о котором можно беспокоиться, потому что нет правила.
+- **G10 Phase A orchestration plan переклассифицирован.** Изначально «Apply branch protection». Теперь: «Apply repo settings (squash-only merge, auto-delete head branches) + extend pre-push hook + document reactivation trigger.» Plane DSP-180 / DSP-189 cancelled с reactivation trigger в комментарии (см. Plane).
+- **AGENTS.md обновлён** в том же change set: `gh pr merge --auto --squash` зафиксирован как стандартная merge-команда; Tech Lead human-merge gate сделан явным.
+- **Audit trail не затронут.** Git history + GitHub PR record + Plane work-item history остаются audit surface; A3 не меняет что записывается, только что _enforce'ится_.
+
+**Why now (timing):** G10 вскрыл paywall во время dry-run. Применить §2.6 невозможно; переклассифицировать — 30-минутный amendment, который предотвращает обращение будущих agent'ов к §2.6 как к current operational truth и трату циклов на повторные попытки применения. Дёшево amend'ить сейчас; дорого оставлять silently сломанным.
+
+**Open follow-up:**
+
+- **OQ-R15 (reactivation discipline).** Когда trigger срабатывает, кто отвечает за re-application §2.6? Default owner: Tech Lead. Трекается под той же Plane-задачей, которая обрабатывает trigger event (org upgrade или repo visibility change).
+- **OQ-R16 (process-level audit).** Есть ли смысл в периодическом (раз в месяц?) self-audit, что недавние merge'и Tech Lead'а реально удовлетворили intent §2.6 (CI был зелёный, diff прочитан)? Deferred — добавляет overhead без очевидного value в single-developer Phase 0.
+
+**Affects (downstream):**
+
+- ADR-0007 §2.6 BLOCK/WARN table — footnote добавлен, уточняющий interim семантику (см. update ADR-0007 в том же change set).
+- AGENTS.md root — добавлен interim merge-flow section.
+- Plane DSP-180 и DSP-189 — Cancelled с reactivation trigger в комментариях.
+- Repo-strategy design spec §4.2 — добавлен Amendment SD3, зеркалирующий A3 (snippet `gh api` сохраняется как target-state payload; не удаляется).
+- `branch-protection.json` в корне репо — закоммичен как дословный target-state payload, готовый к применению на trigger.

@@ -8,8 +8,8 @@ lang: en
 
 # ADR-0008 — DS Platform Repository Strategy + Dev Workflow
 
-**Date:** 2026-05-15 (last amended 2026-05-18 — Amendment A1, see §7)
-**Status:** Accepted (+ Amendment A1 — org boundary correction + dev-stand infra location)
+**Date:** 2026-05-15 (last amended 2026-05-19 — Amendment A3, see §7)
+**Status:** Accepted (+ Amendment A1 — org boundary correction + dev-stand infra location; + Amendment A2 — `agent-review` check removed; + Amendment A3 — server-side branch protection deferred until plan/visibility change)
 **Related to:** Plane DSO-31 (`fae57ab6-f09b-4a4d-9ede-9a4f1ca504c0`), milestone DSO-24
 **Design spec:** `apps/docs/content/adr/0008-repo-strategy-and-dev-workflow-design-en.md`
 **Inherits:** ADR-0001 (Authentik/Zitadel), ADR-0002 (NestJS+BullMQ), ADR-0003 (Postgres17+Drizzle), ADR-0004 (Next.js 15+Refine), ADR-0005 (RN+Expo), ADR-0006 (Fumadocs+Keystatic+GitHub Issues), ADR-0007 (AI loop + cross-vendor reviewer + 14-step migration)
@@ -483,3 +483,63 @@ is **removed** from the §2.6 branch protection rule list.
 - ADR-0007 §2.6 row "cross-vendor review visited" already SUPERSEDED via ADR-0007 Amendment A1 — that row referenced the same `agent-review` status check.
 - Repo-strategy design spec §4.2 — `gh api` invocation parameters must drop the `agent-review` context.
 - Plane DSP-180, DSP-189 — description updates (separate Plane work).
+
+### Amendment A3 — Server-side branch protection deferred (GitHub Free + private blocks enforcement) (2026-05-19)
+
+**Context:** When G10 of the Phase A orchestration plan tried to apply branch protection on `doctor-school/ds-platform` via `gh api PUT /repos/{owner}/{repo}/branches/main/protection` (the §2.6 rule list, post-A2), GitHub returned HTTP 403 `"Upgrade to GitHub Pro or make this repository public to enable this feature"`. The same paywall applies to GitHub Rulesets (the newer ruleset API also 403s on private repos in a Free-plan organisation). The `doctor-school` organisation is on the GitHub Free plan; the repository is private (per §2 "Repository: private until Pre-pilot launch"). The Tech Lead has decided **no paid plan upgrades** in Phase 0.
+
+This makes the entire §2.6 rule list — required status checks, required reviewing approval, dismiss stale reviews, linear history, conversation resolution, `include administrators`, force-push prevention, deletion prevention — **inapplicable as server-side enforcement** until either the org plan is upgraded (Team / Enterprise) or the repository is made public. The `gh api` payload itself is technically correct (verified during G10 dry-run); GitHub is simply refusing to install any protection rule on this repo at this billing tier.
+
+**Decision (amendment):**
+
+**A3.1 — §2.6 reframed as _target state_, not current state.** The 8-item rule list in §2.6 (post-A2: 7 items, with `agent-review` removed) is preserved verbatim as the **target branch-protection contract** that will be applied once the reactivation trigger fires. It is not the current operational state.
+
+**A3.2 — Interim (Phase 0) merge gate is _process-level_, not server-side.** While §2.6 cannot be enforced server-side, the same merge-gate intent is preserved via local + convention-level substitutes:
+
+| §2.6 target rule (post-A2)                           | Phase 0 process-level substitute                                                                                                                                                                                                                                                |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. PR required before merge to `main`                | Convention: Tech Lead never `git push origin main` directly; all changes go through a PR. No technical block — relies on AGENTS.md hard rule + AI-agent compliance.                                                                                                             |
+| 2. ≥1 approving review                               | Convention: Tech Lead reads the diff before clicking merge (single-developer flow; "self-review = read-the-diff"). When a second human reviewer is available, requested via PR sidebar; not enforceable as required.                                                            |
+| 3. Dismiss stale reviews on new commits              | Manual: Tech Lead re-reads the diff after any push that follows an earlier read. Convention only.                                                                                                                                                                               |
+| 4. Required status check `ci` — passing              | `gh pr merge --auto --squash` is the standard merge command (see AGENTS.md). GitHub holds the merge until all checks pass; equivalent to required-status-check semantics for the single-developer happy path. CI still runs on every PR and is visible in the PR check-runs UI. |
+| 5. Branches up-to-date before merge (`strict: true`) | `gh pr merge --auto --squash` rebases-or-fails depending on repo setting; manual `git pull --rebase origin main` before push is the convention.                                                                                                                                 |
+| 6. Linear history (squash-only)                      | Enforced at repo-level via "Allow squash merging" + disable merge-commits + disable rebase-merge in `Settings → General → Pull Requests` (this is **not** branch protection and is **not** paywalled; applied as part of A3 closure).                                           |
+| 7. `include administrators`                          | Not applicable in interim — no server-side rule to bypass. Convention: Tech Lead does not push to `main` directly even when technically possible.                                                                                                                               |
+| 8. No force pushes / no deletions                    | Pre-push hook (simple-git-hooks, already wired in G3) refuses `--force` and `--delete` against `main`. Local-only enforcement; bypass possible with `--no-verify`. Convention: don't.                                                                                           |
+| 9. Required conversation resolution                  | Convention only — GitHub still surfaces unresolved threads in the merge button UI; Tech Lead reads before merging.                                                                                                                                                              |
+
+**A3.3 — Lint guards (ADR-0007 §2.6 BLOCK/WARN table) semantics under interim.** Rows marked `BLOCK` in ADR-0007 §2.6 assume a required `ci` status check that hard-rejects merge. Under A3, `BLOCK` means **CI job exits red and the Tech Lead treats that as a merge-blocker by convention** — same operational outcome on the single-developer happy path, no server-side guarantee. See ADR-0007 §2.6 footnote (added in the same change set as this amendment) for the explicit clarification.
+
+**A3.4 — Pre-push hook scope expanded.** The pre-push hook installed in G3 (Step 17 — simple-git-hooks + lint-staged) is extended in interim to run, against pushes to `main` only, a local equivalent of the required `ci` job: `pnpm lint && pnpm typecheck && pnpm test`. Failure aborts the push. This is the closest local approximation of the missing server-side required check. Implementation tracked separately (Plane DSP-180 reclassified, see below).
+
+**A3.5 — Reactivation trigger.** §2.6 rule list (post-A2: 7 items) is applied verbatim via `gh api PUT …/branches/main/protection` (or equivalent ruleset) the first time **any** of these conditions becomes true:
+
+- The `doctor-school` org upgrades to GitHub Team or Enterprise plan (gives branch protection on private repos).
+- The `doctor-school/ds-platform` repo is made public (gives branch protection on public repos at Free plan).
+- The repo migrates to another forge (Forgejo / GitLab self-hosted etc.) where the equivalent feature is free — separate ADR if this happens.
+
+The payload to apply on trigger is committed to `branch-protection.json` at repo root (kept in tree as documentation; not consumed by any current automation).
+
+**Consequences:**
+
+- **§2.6 normative status:** target-state contract, not current state. Implementations and reviewers should not assume any §2.6 item is currently enforced server-side on `main`.
+- **Merge-gate semantics for the human:** unchanged in **intent** (CI green + human read-the-diff before merge); changed in **mechanism** (no server-side block; convention + `gh pr merge --auto`).
+- **`enforce_admins: true` semantics lost in interim.** When §2.6 reactivates, the Tech Lead is intentionally not exempt; until then there is no admin-bypass to worry about because there is no rule.
+- **G10 of the Phase A orchestration plan reclassified.** Originally "Apply branch protection". Now: "Apply repo settings (squash-only merge, auto-delete head branches) + extend pre-push hook + document reactivation trigger." Plane DSP-180 / DSP-189 cancelled with the reactivation trigger captured in a comment (see Plane).
+- **AGENTS.md updated** in the same change set: `gh pr merge --auto --squash` codified as the standard merge command; Tech Lead human-merge gate made explicit.
+- **Audit trail unaffected.** Git history + GitHub PR record + Plane work-item history remain the audit surface; A3 does not change what is recorded, only what is _enforced_.
+
+**Why now (timing):** G10 surfaced the paywall during the dry-run. Applying §2.6 is impossible; reclassifying it is a 30-minute amendment that prevents future agents from treating §2.6 as current operational truth and wasting cycles attempting re-application. Cheap to amend now; expensive to leave silently broken.
+
+**Open follow-up:**
+
+- **OQ-R15 (reactivation discipline).** When the trigger fires, who is responsible for re-applying §2.6? Default owner: Tech Lead. Tracked under the same Plane issue that handles the trigger event (org upgrade or repo visibility change).
+- **OQ-R16 (process-level audit).** Is there value in a periodic (monthly?) self-audit that Tech Lead's recent merges actually satisfied §2.6 intent (CI was green, diff was read)? Deferred — adds overhead without obvious value in single-developer Phase 0.
+
+**Affects (downstream):**
+
+- ADR-0007 §2.6 BLOCK/WARN table — footnote added clarifying interim semantics (see ADR-0007 update in same change set).
+- AGENTS.md root — interim merge-flow section added.
+- Plane DSP-180 and DSP-189 — Cancelled with reactivation trigger captured in comments.
+- Repo-strategy design spec §4.2 — Amendment SD3 added mirroring A3 (the `gh api` snippet is preserved as the target-state payload; not removed).
+- `branch-protection.json` at repo root — committed as the verbatim target-state payload, ready to apply on trigger.

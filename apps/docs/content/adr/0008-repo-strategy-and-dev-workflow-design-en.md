@@ -1014,3 +1014,18 @@ Concrete workflow when a trigger fires (any of OQ-R1..R12):
 **Effect:** Plane sub-issues DSP-180 (`gh api` branch-protection call) and DSP-189 (manual gate setup) now consume the corrected payload upstream — no separate change request needed on those tickets.
 
 **Cross-refs:** ADR-0007 §Amendment A1, ADR-0008 §Amendment A2, AI-stack design spec §6/§7/§10 SUPERSEDED callouts.
+
+### Amendment SD3 — `gh api` payload preserved as target-state; not applied in Phase 0 (2026-05-19, follow-up to ADR-0008 Amendment A3)
+
+**Context:** ADR-0008 Amendment A3 (2026-05-19) reframes §2.6 as target-state, not current state — branch protection cannot be applied on `doctor-school/ds-platform` while the org is on GitHub Free and the repo is private (HTTP 403 from both the legacy branch-protection API and the rulesets API). This spec's §4.2 documents the `gh api` invocation that implements §2.6; A3 changes what we do with that invocation, not its content.
+
+**Change:** §4.2 `gh api PUT …/branches/main/protection` snippet — **preserved verbatim** (post-SD2: without `agent-review`). It is now annotated as the target-state payload, to be applied once any reactivation trigger fires (ADR-0008 A3.5). The snippet is **not executed in G10**; G10 is reclassified per A3 (apply repo settings + extend pre-push hook + commit `branch-protection.json` + cancel DSP-180/DSP-189).
+
+**Reactivation procedure (when trigger fires):**
+
+1. Re-read ADR-0008 §2.6 (post-A2) and confirm the 7-item list still represents desired contract.
+2. Run the §4.2 `gh api` call (payload already captured in `branch-protection.json` at repo root).
+3. Verify with `gh api repos/doctor-school/ds-platform/branches/main/protection` (200 OK + matching payload).
+4. Open a follow-up to flip §2.6 back to current-state and drop the A3 interim-substitute table.
+
+**Cross-refs:** ADR-0008 §Amendment A3, AGENTS.md root (interim merge-flow), `branch-protection.json` at repo root.

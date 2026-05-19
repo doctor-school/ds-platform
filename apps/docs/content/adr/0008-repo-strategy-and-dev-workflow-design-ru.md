@@ -998,3 +998,18 @@ See AGENTS.md (universal constitution) и CLAUDE.md (Claude Code overlay).
 **Effect:** Plane sub-issues DSP-180 (`gh api` branch-protection call) и DSP-189 (manual gate setup) потребляют исправленный payload upstream — отдельный change request на эти тикеты не нужен.
 
 **Cross-refs:** ADR-0007 §Amendment A1, ADR-0008 §Amendment A2, AI-stack design spec §6/§7/§10 SUPERSEDED callouts.
+
+### Amendment SD3 — `gh api` payload сохранён как target-state; не применяется в Phase 0 (2026-05-19, follow-up к ADR-0008 Amendment A3)
+
+**Контекст:** ADR-0008 Amendment A3 (2026-05-19) переформулирует §2.6 как target-state, не current state — branch protection нельзя применить на `doctor-school/ds-platform` пока org на GitHub Free и репо private (HTTP 403 и от legacy branch-protection API, и от rulesets API). Этот spec в §4.2 документирует `gh api` invocation, реализующий §2.6; A3 меняет _что мы делаем_ с этим invocation, а не его содержание.
+
+**Change:** §4.2 snippet `gh api PUT …/branches/main/protection` — **сохранён дословно** (post-SD2: без `agent-review`). Теперь он аннотирован как target-state payload, применяемый когда сработает любой reactivation trigger (ADR-0008 A3.5). Snippet **не выполняется в G10**; G10 переклассифицирован per A3 (apply repo settings + extend pre-push hook + закоммитить `branch-protection.json` + cancel DSP-180/DSP-189).
+
+**Reactivation procedure (когда trigger срабатывает):**
+
+1. Перечитать ADR-0008 §2.6 (post-A2) и подтвердить, что 7-item list всё ещё представляет desired contract.
+2. Запустить §4.2 `gh api` call (payload уже зафиксирован в `branch-protection.json` в корне репо).
+3. Проверить через `gh api repos/doctor-school/ds-platform/branches/main/protection` (200 OK + matching payload).
+4. Открыть follow-up чтобы вернуть §2.6 обратно в current-state и убрать A3 interim-substitute таблицу.
+
+**Cross-refs:** ADR-0008 §Amendment A3, AGENTS.md root (interim merge-flow), `branch-protection.json` в корне репо.

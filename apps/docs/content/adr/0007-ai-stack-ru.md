@@ -109,6 +109,8 @@ Sketch и edge cases — design spec §4.
 
 Реализация в `tools/lint/spec-link-lint.ts`, `tools/lint/ears-test-lint.ts`. Branch protection rule требует passing status check `agent-review` (не approving review от bot account) — это обеспечивает что reviewer-agent run _произошёл_, при этом human approval остаётся отдельным branch protection requirement.
 
+> **Interim semantics note (2026-05-19, per ADR-0008 Amendment A3):** строки `BLOCK` выше предполагают server-side required status check на `main`. Пока ADR-0008 §2.6 в target-state (branch protection отложен до апгрейда плана org'а или перевода репо в public), `BLOCK` читается операционально как **«CI job выходит red, и Tech Lead трактует это как merge-blocker по convention'у»** — тот же outcome на single-developer happy path, без server-side гарантии. Строка `cross-vendor review visited` независимо SUPERSEDED через ADR-0007 Amendment A1.
+
 ### 2.7 9-item iteration-end checklist (AGENTS.md hard rule)
 
 Перед `git push` агент verify'ет:

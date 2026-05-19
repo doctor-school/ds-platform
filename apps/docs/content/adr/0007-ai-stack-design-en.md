@@ -431,6 +431,8 @@ Before `git push` the agent goes through each item. If even one is false — do 
 | **Spec status freshness**       | Merged PR with spec:NNN but spec status='Draft'                          | Custom lint: at merge — check `status: In dev` minimum.                                                                                                                                                                                                                        | WARN v1                       |
 | **Prior decisions cited**       | New spec without cited ADRs in "Prior decisions" if category ≠ docs-only | Spec lint: `requirements.md` has a section with ≥1 ADR-link.                                                                                                                                                                                                                   | WARN v1                       |
 
+> **Interim semantics note (2026-05-19, per ADR-0008 Amendment A3):** rows marked `BLOCK` assume a server-side required status check on `main`. While ADR-0008 §2.6 is in target-state (branch protection deferred until org plan upgrade or repo made public), `BLOCK` is read operationally as **"CI job exits red and the Tech Lead treats it as a merge-blocker by convention"** — same outcome on the single-developer happy path, no server-side guarantee. The `cross-vendor review visited` row is independently SUPERSEDED by ADR-0007 Amendment A1 (no producer, no enforcement, even at target-state).
+
 ### 5.3 Custom lint scripts
 
 **`tools/lint/ears-test-lint.ts`** — sketch example:

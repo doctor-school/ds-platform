@@ -36,7 +36,7 @@ Long-form context: `README.md`.
 
 **PR template is required** — set the correct label (feature/bug/chore/refactor/docs), link the Issue (`Closes #N`), mark the author (`author:claude` / `author:codex` / `author:human`). The author marker is retained for vendor detection in interactive-review modes (see §4).
 
-**Branch protection:** `main` is protected. A PR requires:
+**Branch protection (target state — see ADR-0008 §2.6 + Amendment A3):** the contract for `main` is:
 
 - passing `ci` status check
 - ≥1 human approval
@@ -44,6 +44,23 @@ Long-form context: `README.md`.
 - branch up-to-date with `main`
 - linear history
 - no force push, no branch deletion
+
+**Interim (Phase 0, 2026-05-19 onwards):** server-side branch protection is **deferred** per ADR-0008 Amendment A3 — `doctor-school` org is on GitHub Free + the repo is private, and that combination blocks the branch-protection API (HTTP 403). The contract above is enforced **by convention + local hooks**, not by GitHub. Reactivation trigger: org plan upgrade or repo made public. The verbatim target-state payload lives at `branch-protection.json` in the repo root.
+
+**Interim merge flow (single command, mandatory):**
+
+```bash
+gh pr merge <PR-number> --auto --squash --delete-branch
+```
+
+`--auto` makes GitHub hold the merge until all checks pass (functionally equivalent to a required `ci` status check on the single-developer happy path). `--squash` enforces linear history. `--delete-branch` cleans up the head branch.
+
+**Human-merge gate (Tech Lead hard rule):**
+
+- Never run `gh pr merge` without `--auto` — direct merge bypasses the implicit CI wait.
+- Never `git push origin main` directly. All changes go through a PR, no exceptions.
+- Read the diff before clicking merge / before issuing `gh pr merge --auto`. "Read" means: open the PR's "Files changed" tab and review each file, not just scroll past.
+- If CI is red, fix the underlying issue. Do not `--admin` past a failing required check; do not `--no-verify` past a pre-push hook on `main`.
 
 **ADRs** live in `apps/docs/content/adr/`, rendered by Fumadocs at `/adr/<slug>`. Paired design spec — `NNNN-<slug>-design.md` alongside.
 

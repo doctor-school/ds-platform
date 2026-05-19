@@ -431,6 +431,8 @@ main().catch((e) => {
 | **Spec status freshness**       | Merged PR со spec:NNN, но spec status='Draft'                               | Custom lint: при merge — проверить `status: In dev` minimum.                                                                                                                                                                                                                          | WARN v1                       |
 | **Prior decisions cited**       | Новый spec без указанных ADR в "Prior decisions" если категория ≠ docs-only | Spec lint: `requirements.md` имеет секцию с ≥1 ADR-link.                                                                                                                                                                                                                              | WARN v1                       |
 
+> **Interim semantics note (2026-05-19, per ADR-0008 Amendment A3):** строки `BLOCK` предполагают server-side required status check на `main`. Пока ADR-0008 §2.6 в target-state (branch protection отложен до апгрейда плана org'а или перевода репо в public), `BLOCK` читается операционально как **«CI job выходит red, и Tech Lead трактует это как merge-blocker по convention'у»** — тот же outcome на single-developer happy path, без server-side гарантии. Строка `cross-vendor review visited` независимо SUPERSEDED через ADR-0007 Amendment A1 (нет producer'а, нет enforcement даже на target-state).
+
 ### 5.3 Custom lint скрипты
 
 **`tools/lint/ears-test-lint.ts`** — пример sketch:

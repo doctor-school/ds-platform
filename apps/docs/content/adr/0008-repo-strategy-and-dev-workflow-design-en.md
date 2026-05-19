@@ -1019,7 +1019,7 @@ Concrete workflow when a trigger fires (any of OQ-R1..R12):
 
 **Context:** ADR-0008 Amendment A3 (2026-05-19) reframes §2.6 as target-state, not current state — branch protection cannot be applied on `doctor-school/ds-platform` while the org is on GitHub Free and the repo is private (HTTP 403 from both the legacy branch-protection API and the rulesets API). This spec's §4.2 documents the `gh api` invocation that implements §2.6; A3 changes what we do with that invocation, not its content.
 
-**Change:** §4.2 `gh api PUT …/branches/main/protection` snippet — **preserved verbatim** (post-SD2: without `agent-review`). It is now annotated as the target-state payload, to be applied once any reactivation trigger fires (ADR-0008 A3.5). The snippet is **not executed in G10**; G10 is reclassified per A3 (apply repo settings + extend pre-push hook + commit `branch-protection.json` + cancel DSP-180/DSP-189).
+**Change:** §4.2 `gh api PUT …/branches/main/protection` snippet — **preserved verbatim** (post-SD2: without `agent-review`). It is now annotated as the target-state payload, to be applied once any reactivation trigger fires (ADR-0008 A3.4). The snippet is **not executed in G10**; G10 is reclassified per A3 (apply repo settings + commit `branch-protection.json` + cancel DSP-180/DSP-189). No new pre-push instrumentation in interim — covered in A3 Consequences.
 
 **Reactivation procedure (when trigger fires):**
 

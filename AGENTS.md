@@ -60,7 +60,7 @@ gh pr merge <PR-number> --auto --squash --delete-branch
 - Never run `gh pr merge` without `--auto` — direct merge bypasses the implicit CI wait.
 - Never `git push origin main` directly. All changes go through a PR, no exceptions.
 - Read the diff before clicking merge / before issuing `gh pr merge --auto`. "Read" means: open the PR's "Files changed" tab and review each file, not just scroll past.
-- If CI is red, fix the underlying issue. Do not `--admin` past a failing required check; do not `--no-verify` past a pre-push hook on `main`.
+- If CI is red, fix the underlying issue. Do not `--admin` past a failing required check; do not `--no-verify` past the pre-commit lint-staged hook.
 
 **ADRs** live in `apps/docs/content/adr/`, rendered by Fumadocs at `/adr/<slug>`. Paired design spec — `NNNN-<slug>-design.md` alongside.
 

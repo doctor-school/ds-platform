@@ -1003,7 +1003,7 @@ See AGENTS.md (universal constitution) и CLAUDE.md (Claude Code overlay).
 
 **Контекст:** ADR-0008 Amendment A3 (2026-05-19) переформулирует §2.6 как target-state, не current state — branch protection нельзя применить на `doctor-school/ds-platform` пока org на GitHub Free и репо private (HTTP 403 и от legacy branch-protection API, и от rulesets API). Этот spec в §4.2 документирует `gh api` invocation, реализующий §2.6; A3 меняет _что мы делаем_ с этим invocation, а не его содержание.
 
-**Change:** §4.2 snippet `gh api PUT …/branches/main/protection` — **сохранён дословно** (post-SD2: без `agent-review`). Теперь он аннотирован как target-state payload, применяемый когда сработает любой reactivation trigger (ADR-0008 A3.5). Snippet **не выполняется в G10**; G10 переклассифицирован per A3 (apply repo settings + extend pre-push hook + закоммитить `branch-protection.json` + cancel DSP-180/DSP-189).
+**Change:** §4.2 snippet `gh api PUT …/branches/main/protection` — **сохранён дословно** (post-SD2: без `agent-review`). Теперь он аннотирован как target-state payload, применяемый когда сработает любой reactivation trigger (ADR-0008 A3.4). Snippet **не выполняется в G10**; G10 переклассифицирован per A3 (apply repo settings + закоммитить `branch-protection.json` + cancel DSP-180/DSP-189). Новой pre-push инструментации в interim не вводим — покрыто в A3 Consequences.
 
 **Reactivation procedure (когда trigger срабатывает):**
 

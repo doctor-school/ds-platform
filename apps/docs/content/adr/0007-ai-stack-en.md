@@ -68,18 +68,11 @@ All harnesses follow the same 8-step iteration cycle (see §2.4).
 
 Enforcement: AGENTS.md hard rules + machine-checkable CI guards (§2.6).
 
-### 2.4 8-step iteration cycle
+### 2.4 Iteration cycle — delegated to `do-feature-iteration` skill
 
-```
-1. READ        — run agent-bootstrap; load AGENTS.md, spec, ADRs, glossary, gh issue
-2. PLAN        — create parent Issue + sub-issues per EARS (gh issue create with milestone NNN-<slug>); or resume open Issue
-3. RED         — write failing tests first (TDD)
-4. GREEN       — minimum code to pass
-5. REFACTOR    — clean up, keep green
-6. CHECKLIST   — 9-item iteration-end checklist (§2.7)
-7. PR OPEN     — title with [#N], body with Closes #N; CI gates trip
-8. HUMAN-MERGE — Tech Lead reads diff + reviewer-bot comments; merge → Issue closes
-```
+Every implementation iteration follows an orchestrated cycle: READ relevant ADRs → verify base CI green → RED (failing test) → GREEN (minimum code) → REFACTOR → iteration-end checklist (dispatch, verdict-gated) → surface decision-debt → PR open → Mode (a) review dispatch (verdict-gated) → respond-to-review until APPROVE + green CI → iteration summary → merge via `gh pr merge --auto --squash --delete-branch`. Per ADR-0007 Amendment A1.4 (refined) and Amendment A2, a positive Mode (a) or Mode (b) review verdict + green CI is sufficient for merge.
+
+The procedural source of truth is **`apps/docs/content/skills/do-feature-iteration/SKILL.md`** (per the DSP-194 refactor, 2026-05-20). The previous inline 8-step block ("READ / PLAN / RED / GREEN / REFACTOR / CHECKLIST / PR OPEN / HUMAN-MERGE") is **superseded** by that skill: the orchestration skill carries the discipline gates (checklist verdict, review verdict, decision-debt invocation) that the inline narrative was unable to enforce (G11 findings F-14, F-15, F-19, F-21).
 
 ### 2.5 Session bootstrap — `tools/agent-bootstrap.ts`
 
@@ -350,7 +343,9 @@ All three modes are **interactive**, session-driven, and use **the human's own L
 
 **A1.4 — 8-step iteration cycle (ADR-0007 §2.4) updated.** Step 7 (PR open) unchanged. Step 8 was "HUMAN-MERGE — Tech Lead reads diff + reviewer-bot comments; merge → Issue closes"; it is now:
 
-> **8. HUMAN-MERGE** — Human dispatches review in mode (a), (b), or (c) before merge; merge is a single human decision based on CI status checks + (optional) LLM-assist output + human reading of the diff.
+> **8. REVIEW + MERGE** — The author-agent (or human) dispatches review in mode (a), (b), or (c). After a positive Mode (a) or Mode (b) verdict + green CI, the author-agent merges via `gh pr merge <N> --auto --squash --delete-branch` — **human-merge is not required**. Mode (c) reviews remain a single human decision. See Amendment A2 below for the artifact-gate codification (closing G11 finding F-10).
+
+**Refinement (2026-05-20, DSP-194):** the original A1.4 wording above implied that every merge was "a single human decision." This was always inconsistent with `--auto --squash --delete-branch` being the mandatory invocation (`--auto` runs without a human at the moment of merge). The refined wording above codifies what was already the operational pattern: positive subagent / Codex review verdict + green CI is sufficient; the human remains in the loop for Mode (c) reviews and for any PR where the author chooses to escalate.
 
 **A1.5 — Lint guards in ADR-0007 §2.6 retained.** The five guards (`spec-link`, `ears-test`, `tdd-signal`, `spec-status-fresh`, `prior-decisions`) remain in the CI pipeline at their original severities (BLOCK or WARN per the §2.6 table). Their purpose **shifts**: originally framed as inputs feeding the reviewer-bot's compliance pass, they now serve as **CI signals visible directly to the human reviewer** in the PR UI. WARN-only guards appear as non-blocking checks; BLOCK guards prevent merge. Their role becomes "nudge the human" rather than "feed the bot."
 
@@ -384,3 +379,45 @@ Until then, Phase 2 baseline = human-merge gate + lint guards + interactive revi
 - **ADR-0008** §2.6 — see Amendment A2 in ADR-0008.
 - **AI-stack design spec** (`0007-ai-stack-design-en.md`) — §6 (reviewer-bot architecture), §7 (cost observability subsection), §10 (CLAUDE.md overlay review tooling), §11 Migration plan Steps 5/6/10 — all SUPERSEDED per spec Amendment SD1.
 - **Plane workspace `doctor-school`** — 4 sub-issues cancelled (DSP-172, DSP-173, DSP-177, DSP-184); 2 sub-issues description-updated (DSP-180 Step 13, DSP-189 Step 21).
+
+### Amendment A2 — Discipline gates (artifact-required) + auto-merge after positive review (2026-05-20, DSP-194 follow-up)
+
+**Context:** the G11 smoke test (DSP-181, run on the `001-api-bootstrap-health` feature) reached green CI and a merged PR, but the retrospective in `bbm/outputs/g11-smoke-findings.md` recorded that green was reached **only because the human observer intervened at three critical moments**. Three findings dominate the cost:
+
+- **F-14** — Step 8 (review dispatch) was forgotten. The author-agent declared the cycle complete after `gh pr create`, treating "human-merge" as the sole final action. Only a direct question from the human ("did you dispatch a review?") triggered Mode (a). The review then caught two BLOCKER findings that would otherwise have shipped to `main`.
+- **F-15** — the 9-item iteration-end checklist (then in AGENTS.md §3 Step 6, prior to the DSP-194 refactor) was never executed as a discrete step. Of nine items, two or three were applied; the rest were skipped or silently deferred. The checklist as a narrative bullet list was, in the retrospective's words, "effectively decorative."
+- **F-10** — the original A1.4 wording implied human-merge after every review. The operational pattern was different: `gh pr merge --auto --squash --delete-branch` does not need a human at the moment of merge, and a positive Mode (a) verdict + green CI was already sufficient on the velocity-constrained pre-pilot path.
+
+The structural cause of F-14 and F-15 is that AGENTS.md §3 carried a narrative, step-by-step procedure rather than a set of dispatchable, verifiable, artifact-producing actions. An agent reading a narrative checklist will skip silently; an agent that cannot proceed without an artifact returned by a subagent cannot skip.
+
+**Decision (amendment):**
+
+**A2.1 — Iteration-end checklist becomes artifact-gated and dispatch-mode.** The 11-item checklist (extended from the prior 9 items by `apps/docs/content/architecture/` and `apps/docs/content/operations/` per F-3) is implemented as the procedural skill **`run-iteration-end-checklist`** in `apps/docs/content/skills/run-iteration-end-checklist/SKILL.md`. The skill runs in **dispatch mode**: the lead agent passes the skill body to a fresh-context subagent; the subagent returns a structured verdict line `VERDICT: N of 11 — <PASS | BLOCKED on #X>`. The lead agent cannot proceed past the checklist gate while the verdict is `BLOCKED`. This is the primary enforcement for F-15.
+
+**A2.2 — Mode (a) review becomes artifact-gated and dispatch-mode.** Mode (a) review (per Amendment A1.3) is implemented as the procedural skill **`request-mode-a-review`** in `apps/docs/content/skills/request-mode-a-review/SKILL.md`. The skill runs in dispatch mode; the subagent reviewer returns a structured verdict line `VERDICT: <APPROVE | REQUEST_CHANGES>`. The lead agent cannot invoke `merge-when-green` while the latest verdict is `REQUEST_CHANGES` or absent. This is the primary enforcement for F-14.
+
+**A2.3 — Auto-merge after positive review.** Per the refinement to A1.4 above (closing F-10): after a positive Mode (a) or Mode (b) verdict + green CI, the author-agent merges via the single mandatory invocation `gh pr merge <N> --auto --squash --delete-branch`. Human-merge is **not** required for the Mode (a) / Mode (b) paths. Mode (c) reviews remain a single human decision. This codifies the operational pattern in place since Amendment A1; it is not a new autonomy step toward Phase 3 (auto-merge of low-risk PRs behind a feature flag remains deferred per A1.7).
+
+**A2.4 — Decision-debt surfacing is invocation-required.** The procedural skill **`surface-decision-debt`** in `apps/docs/content/skills/surface-decision-debt/SKILL.md` is required before `write-iteration-summary`. The skill's output may be `[]`, but the invocation itself is required; silently skipping it is the F-19 / F-21 pattern recorded in the retrospective.
+
+**Consequences:**
+
+- AGENTS.md §3 (formerly the 8-step inline cycle) is rewritten as a Work Protocol entry-triplet (identify task kind → cite entry point → load skill). Procedural detail relocates into the skill catalog at `apps/docs/content/skills/`.
+- The discipline gates added by A2 are documented as "Cannot proceed without" clauses on each orchestration skill (`do-feature-iteration`, `do-hotfix-pr`, `do-adr-amendment`). The clauses are the contract that an agent reads when loading the skill.
+- The `superpowers:*` chain (formerly listed in `CLAUDE.md` Skill priorities) is replaced by a single allowed exception: `superpowers:brainstorming` for spec-authoring. All other `superpowers:*` skills are explicitly disallowed for project work; their procedures are absorbed by the project skill catalog (e.g., TDD lives inside `do-feature-iteration`; review dispatch lives inside `request-mode-a-review`). This closes G11 findings F-16 and F-18.
+- A1.4 is refined as noted above; the inconsistency between "single human decision" and `--auto --squash` is resolved in favour of the operational pattern.
+
+**Why now (timing):**
+
+The DSP-181 retrospective is the worked example that human-in-loop catches what slips through; without artifact gates, the next iteration would repeat F-14 and F-15. The cost of landing A2 now is one PR (DSP-194); the cost of deferring is one human-prompt per iteration across all future PRs.
+
+**Open follow-up:**
+
+- **OQ-A3** — `agents-skills-consistency-check.ts` (a WARN-level lint that the AGENTS.md skill catalog and `apps/docs/content/skills/` directory agree) — deferred pending F-12 resolution (Issue #10 hotfix); the spec marks it as optional and WARN-only, so adding it on top of a broken BLOCK guard would compound the gap.
+
+**Affects (downstream):**
+
+- **AGENTS.md** — rewritten by DSP-194 commit 1.
+- **CLAUDE.md** — Skill priorities section rewritten by DSP-194 commit 1.
+- **`apps/docs/content/skills/`** — 14 new SKILL.md files (4 orchestration + 10 procedural) added by DSP-194 commit 2.
+- **DSP-190** — the next smoke run is the acceptance test for A2; it is the first iteration under the new instruction system.

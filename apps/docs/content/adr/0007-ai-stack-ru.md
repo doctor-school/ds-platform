@@ -68,18 +68,11 @@ ADR фиксирует:
 
 Enforcement: AGENTS.md hard rules + machine-checkable CI guards (§2.6).
 
-### 2.4 8-step iteration cycle
+### 2.4 Цикл итерации — делегирован skill'у `do-feature-iteration`
 
-```
-1. READ        — run agent-bootstrap; load AGENTS.md, spec, ADRs, glossary, gh issue
-2. PLAN        — create parent Issue + sub-issues per EARS (gh issue create with milestone NNN-<slug>); или resume open Issue
-3. RED         — write failing tests first (TDD)
-4. GREEN       — minimum code to pass
-5. REFACTOR    — clean up, keep green
-6. CHECKLIST   — 9-item iteration-end checklist (§2.7)
-7. PR OPEN     — title with [#N], body with Closes #N; CI gates трип
-8. HUMAN-MERGE — Tech Lead reads diff + reviewer-bot comments; merge → Issue closes
-```
+Каждая итерация реализации проходит оркестрованный цикл: READ relevant ADRs → verify base CI green → RED (failing test) → GREEN (минимум кода) → REFACTOR → iteration-end checklist (dispatch, verdict-gated) → surface decision-debt → PR open → Mode (a) review dispatch (verdict-gated) → respond-to-review до APPROVE + green CI → iteration summary → merge через `gh pr merge --auto --squash --delete-branch`. По ADR-0007 Amendment A1.4 (refined) и Amendment A2, положительный verdict Mode (a) или Mode (b) + green CI достаточен для merge.
+
+Procedural source of truth — **`apps/docs/content/skills/do-feature-iteration/SKILL.md`** (по рефакторингу DSP-194, 2026-05-20). Прежний inline 8-step блок ("READ / PLAN / RED / GREEN / REFACTOR / CHECKLIST / PR OPEN / HUMAN-MERGE") **superseded** этим skill'ом: оркестрация skill'а несёт discipline-gate'ы (verdict checklist'а, verdict review, обязательная инвокация decision-debt), которые inline-narrative не мог обеспечить (находки G11: F-14, F-15, F-19, F-21).
 
 ### 2.5 Session bootstrap — `tools/agent-bootstrap.ts`
 
@@ -350,7 +343,9 @@ Hard rule в AGENTS.md для всех runtime LLM-вызовов (reviewer-bot,
 
 **A1.4 — 8-step iteration cycle (ADR-0007 §2.4) обновлён.** Step 7 (PR open) без изменений. Step 8 был «HUMAN-MERGE — Tech Lead reads diff + reviewer-bot comments; merge → Issue closes»; теперь:
 
-> **8. HUMAN-MERGE** — Человек запускает ревью в mode (a), (b) или (c) перед мержем; merge — single human decision на основе CI status checks + (опционально) LLM-assist output + чтение диффа человеком.
+> **8. REVIEW + MERGE** — Author-agent (или человек) запускает ревью в mode (a), (b) или (c). После положительного verdict'а Mode (a) или Mode (b) + green CI author-agent мержит через `gh pr merge <N> --auto --squash --delete-branch` — **human-merge не требуется**. Mode (c)-ревью остаются единственным human decision. Codification artifact-gate'а — Amendment A2 ниже (закрывает G11 finding F-10).
+
+**Уточнение (2026-05-20, DSP-194):** исходная формулировка A1.4 выше подразумевала, что каждый merge — «single human decision». Это всегда было несовместимо с тем, что `--auto --squash --delete-branch` — обязательная invocation (`--auto` уходит без человека в момент merge). Уточнённая формулировка выше кодифицирует то, что уже было операционным паттерном: положительный verdict subagent / Codex review + green CI достаточен; человек остаётся в loop'е для Mode (c)-ревью и для любого PR, где автор решает escalate.
 
 **A1.5 — Lint guards в ADR-0007 §2.6 retained.** Пять guard'ов (`spec-link`, `ears-test`, `tdd-signal`, `spec-status-fresh`, `prior-decisions`) остаются в CI-пайплайне с исходными severity (BLOCK или WARN per §2.6 таблица). Их цель **сдвигается**: изначально они задумывались как вход для compliance-pass'а reviewer-bot'а, теперь служат **CI-сигналами, видимыми прямо человеку-ревьюверу** в PR UI. WARN guards — non-blocking checks; BLOCK guards — блокируют merge. Их роль становится «подсказать человеку», а не «накормить бота».
 
@@ -384,3 +379,45 @@ Hard rule в AGENTS.md для всех runtime LLM-вызовов (reviewer-bot,
 - **ADR-0008** §2.6 — см. Amendment A2 в ADR-0008.
 - **AI-stack design spec** (`0007-ai-stack-design-ru.md`) — §6 (reviewer-bot architecture), §7 (cost observability subsection), §10 (CLAUDE.md overlay review tooling), §11 Migration plan Steps 5/6/10 — все SUPERSEDED per spec Amendment SD1.
 - **Plane workspace `doctor-school`** — 4 sub-issues cancelled (DSP-172, DSP-173, DSP-177, DSP-184); 2 sub-issues description-updated (DSP-180 Step 13, DSP-189 Step 21).
+
+### Amendment A2 — Discipline-gate'ы (artifact-required) + auto-merge после положительного review (2026-05-20, follow-up к DSP-194)
+
+**Контекст:** G11 smoke (DSP-181, проход по feature'у `001-api-bootstrap-health`) дошёл до green CI и merged PR, но retrospective в `bbm/outputs/g11-smoke-findings.md` зафиксировал, что green был достигнут **только потому, что человек-наблюдатель вмешался в трёх критических точках**. Три находки доминируют стоимость:
+
+- **F-14** — Step 8 (review dispatch) был забыт. Author-agent объявил цикл завершённым после `gh pr create`, считая «human-merge» единственным финальным действием. Только прямой вопрос человека («ты запустил ревью?») запустил Mode (a). Ревью тогда поймало два BLOCKER-findings, которые иначе бы ушли в `main`.
+- **F-15** — 9-item iteration-end checklist (тогда в AGENTS.md §3 Step 6, до рефакторинга DSP-194) никогда не исполнялся как дискретный шаг. Из девяти пунктов применялись два-три; остальные были пропущены или молча отложены. Checklist как narrative bullet list был, по словам retrospective, «фактически декоративным».
+- **F-10** — исходная формулировка A1.4 подразумевала human-merge после каждого review. Операционный паттерн был другим: `gh pr merge --auto --squash --delete-branch` не нуждается в человеке в момент merge, и положительного Mode (a)-verdict'а + green CI уже было достаточно на velocity-constrained pre-pilot пути.
+
+Структурная причина F-14 и F-15 — AGENTS.md §3 нёс narrative, пошаговую процедуру вместо набора dispatchable, verifiable, artifact-producing действий. Агент, читающий narrative checklist, пропустит молча; агент, который не может пройти дальше без артефакта, возвращённого subagent'ом, пропустить не может.
+
+**Решение (amendment):**
+
+**A2.1 — Iteration-end checklist становится artifact-gated и dispatch-mode.** 11-item checklist (расширен с прежних 9 пунктов на `apps/docs/content/architecture/` и `apps/docs/content/operations/` по F-3) реализован как procedural skill **`run-iteration-end-checklist`** в `apps/docs/content/skills/run-iteration-end-checklist/SKILL.md`. Skill работает в **dispatch-mode**: lead agent передаёт тело skill'а fresh-context subagent'у; subagent возвращает структурированную строку verdict'а `VERDICT: N of 11 — <PASS | BLOCKED on #X>`. Lead agent не может пройти дальше checklist gate, пока verdict — `BLOCKED`. Это primary enforcement для F-15.
+
+**A2.2 — Mode (a) review становится artifact-gated и dispatch-mode.** Mode (a) review (по Amendment A1.3) реализован как procedural skill **`request-mode-a-review`** в `apps/docs/content/skills/request-mode-a-review/SKILL.md`. Skill работает в dispatch-mode; subagent-ревьювер возвращает структурированную строку verdict'а `VERDICT: <APPROVE | REQUEST_CHANGES>`. Lead agent не может invocate'нуть `merge-when-green`, пока последний verdict — `REQUEST_CHANGES` или отсутствует. Это primary enforcement для F-14.
+
+**A2.3 — Auto-merge после положительного review.** Per уточнение к A1.4 выше (закрывает F-10): после положительного Mode (a) или Mode (b) verdict + green CI author-agent мержит через единственную обязательную invocation `gh pr merge <N> --auto --squash --delete-branch`. Human-merge для Mode (a) / Mode (b) путей **не** требуется. Mode (c)-ревью остаются single human decision. Это кодификация операционного паттерна, уже действующего с Amendment A1; это не новый шаг autonomy в сторону Phase 3 (auto-merge low-risk PR за feature flag остаётся deferred per A1.7).
+
+**A2.4 — Surfacing decision-debt — обязательная invocation.** Procedural skill **`surface-decision-debt`** в `apps/docs/content/skills/surface-decision-debt/SKILL.md` обязателен перед `write-iteration-summary`. Output skill'а может быть `[]`, но invocation сам по себе обязателен; молчаливый skip — это F-19 / F-21 паттерн, зафиксированный в retrospective.
+
+**Последствия:**
+
+- AGENTS.md §3 (прежде inline 8-step cycle) переписан как Work Protocol entry-triplet (identify task kind → cite entry point → load skill). Procedural detail переезжает в каталог skill'ов `apps/docs/content/skills/`.
+- Discipline-gate'ы, добавленные A2, документированы как «Cannot proceed without» секции на каждом orchestration skill'е (`do-feature-iteration`, `do-hotfix-pr`, `do-adr-amendment`). Эти секции — контракт, который агент читает при загрузке skill'а.
+- Цепочка `superpowers:*` (прежде перечисленная в `CLAUDE.md` Skill priorities) заменена единственным исключением: `superpowers:brainstorming` для spec-authoring. Все остальные `superpowers:*` skill'ы явно запрещены для project work; их процедуры абсорбированы каталогом проектных skill'ов (например, TDD живёт внутри `do-feature-iteration`; review dispatch — внутри `request-mode-a-review`). Закрывает находки G11 F-16 и F-18.
+- A1.4 уточнён, как указано выше; несовместимость между «single human decision» и `--auto --squash` разрешена в пользу операционного паттерна.
+
+**Почему сейчас (timing):**
+
+DSP-181 retrospective — это worked example того, что human-in-loop ловит то, что просочилось; без artifact-gate'ов следующая итерация повторит F-14 и F-15. Стоимость лэндинга A2 сейчас — один PR (DSP-194); стоимость отложить — один human-prompt на итерацию по всем будущим PR.
+
+**Открытый follow-up:**
+
+- **OQ-A3** — `agents-skills-consistency-check.ts` (WARN-уровень lint того, что каталог skill'ов в AGENTS.md и директория `apps/docs/content/skills/` согласованы) — deferred до разрешения F-12 (Issue #10 hotfix); spec помечает его как optional и WARN-only, поэтому добавлять его поверх сломанного BLOCK guard'а — это compound the gap.
+
+**Affects (downstream):**
+
+- **AGENTS.md** — переписан DSP-194 commit 1.
+- **CLAUDE.md** — секция Skill priorities переписана DSP-194 commit 1.
+- **`apps/docs/content/skills/`** — 14 новых SKILL.md (4 orchestration + 10 procedural) добавлены DSP-194 commit 2.
+- **DSP-190** — следующий smoke-прогон — acceptance test для A2; это первая итерация под новой instruction system.

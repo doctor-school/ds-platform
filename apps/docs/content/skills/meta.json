@@ -1,0 +1,5 @@
+{
+  "title": "Project Skills",
+  "description": "Project-skill catalog for DS Platform AI agents. Orchestration skills are selected by task kind; procedural skills are single-purpose verbs. The path apps/docs/content/skills/<name>/SKILL.md is the contract (AGENTS.md §3).",
+  "icon": "Workflow"
+}

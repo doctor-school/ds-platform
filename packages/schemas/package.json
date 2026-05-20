@@ -1,5 +1,34 @@
 {
   "name": "@ds/schemas",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "type": "module",
+  "description": "Zod schemas — API SSOT (ADR-0002 §3, ADR-0006 §6.2). Framework-agnostic; depends on zod only.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./health": {
+      "types": "./dist/health/index.d.ts",
+      "default": "./dist/health/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist .tsbuildinfo"
+  },
+  "dependencies": {
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
 }

@@ -24,223 +24,109 @@ Long-form context: `README.md`.
 
 **Monorepo:** pnpm 10 workspaces + Turborepo 2.x. Root commands run via `pnpm <script>`; per-package via `pnpm --filter <name> <script>`.
 
-**Apps live in `apps/<name>/`:** api (NestJS backend), promo, portal, admin, cms, docs, docs-cms, mobile. Shared code in `packages/<name>/` (schemas, api-client, db, glossary, hooks, design-system, observability, utils, eslint-config, tsconfig, llm-utils). Build/dev tooling in `tools/`.
+**Apps live in `apps/<name>/`:** api, promo, portal, admin, cms, docs, docs-cms, mobile. Shared code in `packages/<name>/`. Build/dev tooling in `tools/`.
 
-**Branch strategy:** trunk-based. New work goes into `feat/DSO-NN-<slug>` or `fix/<N>-<slug>` short-lived branches. Squash-merge into `main`; branch deleted automatically.
+**Branch strategy:** trunk-based. `feat/DSO-NN-<slug>` or `fix/<N>-<slug>` short-lived branches. Squash-merge into `main`.
 
-**Commits:** Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`). Light convention — squash-merge title is enforced via PR title, not a commit-message linter.
+**Commits:** Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`). Squash-merge title enforced via PR title.
 
-**Versioning:** changesets. Any user-facing PR → add a changeset via `pnpm changeset` (interactive). Bug fixes = patch, new features = minor, breaking = major. Internal-only PRs (refactor, docs, chore) — no changeset.
+**Versioning:** changesets. User-facing PR → `pnpm changeset`. Internal-only (refactor/docs/chore) — no changeset.
 
-**Pre-commit:** simple-git-hooks runs `lint-staged` on staged files (ESLint `--fix` + Prettier). If the hook breaks a commit unexpectedly — `git commit --no-verify` is a valid escape hatch, but log the reason in the PR description.
+**Pre-commit:** simple-git-hooks runs `lint-staged` (ESLint `--fix` + Prettier). `--no-verify` is a valid escape hatch — log the reason in the PR description.
 
-**PR template is required** — set the correct label (feature/bug/chore/refactor/docs), link the Issue (`Closes #N`), mark the author (`author:claude` / `author:codex` / `author:human`). The author marker is retained for vendor detection in interactive-review modes (see §4).
+**PR template required** — set label (feature/bug/chore/refactor/docs), link Issue (`Closes #N`), mark author (`author:claude` / `author:codex` / `author:human`).
 
-**Branch protection (target state — see ADR-0008 §2.6 + Amendment A3):** the contract for `main` is:
+**Branch protection.** Target-state contract (ADR-0008 §2.6) is enforced by convention + local hooks during Phase 0; server-side enforcement is deferred per ADR-0008 Amendment A3 (GitHub Free + private repo blocks the branch-protection API). Verbatim payload at `branch-protection.json`. See ADR-0008 §2.6 + A3 for the full contract and reactivation trigger.
 
-- passing `ci` status check
-- ≥1 human approval
-- conversation resolved
-- branch up-to-date with `main`
-- linear history
-- no force push, no branch deletion
-
-**Interim (Phase 0, 2026-05-19 onwards):** server-side branch protection is **deferred** per ADR-0008 Amendment A3 — `doctor-school` org is on GitHub Free + the repo is private, and that combination blocks the branch-protection API (HTTP 403). The contract above is enforced **by convention + local hooks**, not by GitHub. Reactivation trigger: org plan upgrade or repo made public. The verbatim target-state payload lives at `branch-protection.json` in the repo root.
-
-**Interim merge flow (single command, mandatory):**
+**Merge command (single, mandatory):**
 
 ```bash
 gh pr merge <PR-number> --auto --squash --delete-branch
 ```
 
-`--auto` makes GitHub hold the merge until all checks pass (functionally equivalent to a required `ci` status check on the single-developer happy path). `--squash` enforces linear history. `--delete-branch` cleans up the head branch.
+`--auto` waits for CI; `--squash` enforces linear history; `--delete-branch` cleans up.
 
-**Human-merge gate (Tech Lead hard rule):**
+**ADRs** live in `apps/docs/content/adr/`, rendered at `/adr/<slug>`. Paired design spec — `NNNN-<slug>-design.md`.
 
-- Never run `gh pr merge` without `--auto` — direct merge bypasses the implicit CI wait.
-- Never `git push origin main` directly. All changes go through a PR, no exceptions.
-- Read the diff before clicking merge / before issuing `gh pr merge --auto`. "Read" means: open the PR's "Files changed" tab and review each file, not just scroll past.
-- If CI is red, fix the underlying issue. Do not `--admin` past a failing required check; do not `--no-verify` past the pre-commit lint-staged hook.
-
-**ADRs** live in `apps/docs/content/adr/`, rendered by Fumadocs at `/adr/<slug>`. Paired design spec — `NNNN-<slug>-design.md` alongside.
-
-**Feature specs** live in `apps/docs/content/specs/features/NNN-<slug>/` (3 files: `requirements.md`, `design.md`, `scenarios.feature`). One spec → one GitHub Milestone → multiple Issues (one per EARS-handler). See §6 for SDD format.
+**Feature specs** live in `apps/docs/content/specs/features/NNN-<slug>/` (3 files: `requirements.md`, `design.md`, `scenarios.feature`). One spec → one GitHub Milestone → multiple Issues (one per EARS-handler). Format spec moved into `apps/docs/content/skills/author-ears-spec/SKILL.md`.
 
 ---
 
-## 3. AI loop discipline — 8-step cycle
+## 3. Work protocol
 
-Every implementation iteration follows this canonical cycle. Per ADR-0007 §2.4, with Steps 7–8 updated per ADR-0007 Amendment A1.4 (2026-05-19).
+Every agent session, regardless of vendor, follows this three-step entry — **identify task kind → cite entry point → load skill**.
 
-### Step 1 — READ (always first)
+### 3.1 Identify task kind
 
-Run `pnpm bootstrap` (alias for `tsx tools/agent-bootstrap.ts`). Read its output — git state, open Issues/PRs, active spec, recommended next step. Then load:
+| Kind              | Trigger                                                       | Skill                                                         |
+| ----------------- | ------------------------------------------------------------- | ------------------------------------------------------------- |
+| feature-iteration | One EARS handler inside an existing feature-spec              | `apps/docs/content/skills/do-feature-iteration/SKILL.md`      |
+| hotfix-pr         | Code-level bug; no feature-spec required                      | `apps/docs/content/skills/do-hotfix-pr/SKILL.md`              |
+| adr-amendment     | Edit to an existing ADR                                       | `apps/docs/content/skills/do-adr-amendment/SKILL.md`          |
+| decision-debt     | Closing a silent-decision artifact surfaced earlier           | `apps/docs/content/skills/do-decision-debt-followup/SKILL.md` |
+| engineering-task  | Phase A bootstrap (DSP-160 sub-issue), CI hardening, scaffold | No skill — follow the task spec directly                      |
+| spec-authoring    | New feature-spec / new ADR / new design-spec                  | `superpowers:brainstorming` (sole allowed exception)          |
 
-- This file (`AGENTS.md`)
-- `CLAUDE.md` if you are Claude Code
-- Active feature spec at `apps/docs/content/specs/features/NNN-<slug>/` (requirements.md → design.md → scenarios.feature)
-- ADRs listed in the spec's "Prior decisions" section
-- `gh issue view <N>` for current Issue context and discussion history
+If the kind is ambiguous, stop and ask Tech Lead.
 
-### Step 2 — PLAN
+### 3.2 Cite the entry point
 
-Per ADR-0006 §9 conventions. If no parent Issue exists for the spec, create one:
+In the first user-facing reply, state: kind, active artifact (Issue #N / spec path / ADR section), skill being dispatched.
 
-```bash
-gh issue create --title "Feature NNN: <name>" \
-  --milestone "NNN-<slug>" --label "feature:NNN-<slug>" \
-  --body-file .github/ISSUE_TEMPLATE/feature.md
-```
+### 3.3 Load the skill
 
-Then one Issue per EARS-handler from `requirements.md`:
+`Read` `apps/docs/content/skills/<name>/SKILL.md` directly. Do not rely on vendor-specific auto-discovery — **the path is the contract**.
 
-```bash
-gh issue create --title "[NNN] EARS-N.M: <description>" \
-  --milestone "NNN-<slug>" --label "feature:NNN-<slug>,kind:ears-handler,agent-ready" \
-  --body "Spec: apps/docs/content/specs/features/NNN-<slug>/. Parent: #<parent-issue>."
-```
+### 3.4 Superpowers whitelist (single exception)
 
-`gh issue create` without `--body`/`--body-file` opens an editor and will hang in non-interactive contexts (CI, Codex cloud). Always provide a body.
+`superpowers:brainstorming` is the only `superpowers:*` skill allowed for project work, and only for spec-authoring. After brainstorming concludes, **do not chain into `superpowers:writing-plans`** — the `requirements.md` / `design.md` triplet is the plan (ADR-0007 §2.4 via `do-feature-iteration`). All other `superpowers:*` skills, and any chain initiated internally by a superpowers skill, are explicitly disallowed for project work. They may be referenced as implementation patterns inside project SKILL.md content, but not as the orchestrator.
 
-Invoke `superpowers:writing-plans` skill only if the task is multi-step within a single Issue.
+### 3.5 Bootstrap
 
-### Step 3 — RED (TDD: failing test first)
+Run `pnpm bootstrap` (alias `tsx tools/agent-bootstrap.ts`) for git/Issue/PR/spec state. Claude Code does this via SessionStart hook (`.claude/settings.json`) automatically.
 
-Per `superpowers:test-driven-development`. Write a failing test before any production code. One Vitest test per EARS:
+### 3.6 Permission-mode disclosure
 
-```ts
-it('EARS-3.1: when <trigger>, system shall <behavior>', () => { ... })
-```
-
-### Step 4 — GREEN
-
-Minimum code to pass the failing test. Nothing more.
-
-### Step 5 — REFACTOR
-
-Clean up while staying green. Apply `superpowers:simplify`-style review if scope is non-trivial.
-
-### Step 6 — ITERATION-END CHECKLIST (hard rules)
-
-Before `git push`, verify all items pass (ADR-0007 §2.7):
-
-1. `pnpm test` — green (unit + e2e where applicable)
-2. `pnpm generate:all && git diff --exit-code` — no drift in generated artifacts
-3. `pnpm typecheck` — green
-4. `pnpm lint` — green
-5. Module README updated if exports changed
-6. Spec `status:` frontmatter updated (Draft → In dev → Shipped)
-7. New glossary terms added if domain vocabulary grew
-8. ADR created if an architectural decision was made
-9. Linked Issue received a summary comment (file paths, decisions, what remains)
-
-Failure of any item → no push. Fix it, or escalate.
-
-### Step 7 — PR OPEN
-
-Push the branch and open a PR with the template filled:
-
-- Title: `<type>(<module>): <description> [#N]`
-- Body: `Closes #N`, link to spec, set the type label, set the `author:*` label
-- CI gates (ADR-0006 §7 drift checks + ADR-0007 §2.6 AI guards) will run; address any blocks before requesting review
-
-### Step 8 — HUMAN-GATE MERGE (per ADR-0007 Amendment A1.4)
-
-The human reviewer (Tech Lead) dispatches review in one of three modes — see §4 below. After any review feedback is addressed, the Tech Lead merges. **There is no automated reviewer-bot.** Merge is a single human decision based on CI status checks + (optional) LLM-assist output + human reading of the diff.
+If the session is launched with `--dangerously-skip-permissions`, the agent assumes the discipline responsibility that CI guards would otherwise enforce. If CI guards are themselves broken, bypass mode amplifies the gap.
 
 ---
 
-## 4. Review modes (replaces dropped automated reviewer-bot)
+## 4. Review modes
 
-Per ADR-0007 Amendment A1.3 (2026-05-19). **Review is interactive. The human reviewer picks one mode — or combines.** LLM credentials live in the human's terminal, not in CI secrets.
+Per ADR-0007 Amendment A1.3 (2026-05-19). Three modes:
 
-### Mode (a) — same-session subagent dispatch with `/review` skill
+- **Mode (a)** — same-session subagent dispatch with `request-mode-a-review` skill. Lead agent finishes work → dispatches subagent with the reviewer prompt → subagent reads diff + spec + ADRs and returns a structured verdict (APPROVE / REQUEST_CHANGES).
+- **Mode (b)** — parallel Codex CLI session reviewing the PR independently.
+- **Mode (c)** — pure human review in the GitHub UI.
 
-The agent that authored the PR (in the Tech Lead's primary Claude Code session) finishes the work → the orchestrator dispatches a subagent with the `/review` skill (or `superpowers:requesting-code-review`) → the subagent reads the PR diff + spec + ADRs and returns a review report. Tech Lead reads, dispatches a fix subagent if needed, repeats.
+LLM credentials live in the human's terminal, not in CI secrets. **No automated reviewer-bot.**
 
-### Mode (b) — parallel Codex CLI session
-
-The Tech Lead opens a second terminal, runs Codex CLI on the PR. Codex reads the diff and gives an independent review. **Cross-vendor benefit retained manually** — author = Claude, reviewer = Codex (or vice versa). Tech Lead synthesizes both reviews.
-
-### Mode (c) — pure human review
-
-Tech Lead reviews the PR diff in the GitHub UI without any LLM assist. Appropriate for small, well-scoped PRs.
-
-### Merge gate
-
-**Tech Lead's single human approval + CI green.** No automated gates beyond CI. The `author:*` label and PR-template `Author` checkbox stay in the template — they enable the human reviewer to detect vendor and pick the opposing one for mode (b) cross-vendor effect.
+**Merge gate.** A positive Mode (a) or Mode (b) verdict + green CI is sufficient to merge via `gh pr merge --auto --squash --delete-branch`; human-merge is **not** required (ADR-0007 Amendment A1.4 refined + Amendment A2). Mode (c) reviews remain a single human decision. Procedure detail: `apps/docs/content/skills/request-mode-a-review/SKILL.md` and `apps/docs/content/skills/merge-when-green/SKILL.md`.
 
 ---
 
-## 5. Lint guards = nudges for the human reviewer
+## 5. Lint guards
 
-Per ADR-0007 Amendment A1.5. The CI lint guards from ADR-0007 §2.6 are retained, but their role shifts from "input feeding the reviewer-bot" to **"signal directly visible to the human reviewer in the PR Checks UI."**
-
-| Guard                                                                         | Severity  | What the human should do                                                                                                                                                 |
-| ----------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `spec-link`                                                                   | **BLOCK** | Feature-PRs without a proper `Closes #N` referencing an Issue under a matching milestone won't merge. Fix the link in the PR body.                                       |
-| `ears-tests`                                                                  | WARN      | Surfaces EARS-N.M IDs from the spec that lack a matching `it('EARS-N.M: ...')` test. Treat as a checklist of missing tests; not blocking, but worth fixing before merge. |
-| `tdd-signal` (stub)                                                           | WARN      | Reminds you to ship tests alongside implementation. Stub today, real check later.                                                                                        |
-| `spec-status-fresh` (stub)                                                    | WARN      | Spec stuck in `Draft` after a feature PR merged? Update the frontmatter.                                                                                                 |
-| `prior-decisions` (stub)                                                      | WARN      | New spec without an ADR cite? Consider linking one in "Prior decisions".                                                                                                 |
-| `glossary-mdx`, `glossary-roundtrip`, `module-readme`, `events-drift` (stubs) | WARN      | Placeholders; activate when the domain layer exists.                                                                                                                     |
-
-WARN guards appear as non-blocking checks in the PR UI. BLOCK guards prevent merge. **No guard is consumed by a bot** — the human reads them.
+The CI lint guards from ADR-0007 §2.6 (Amendment A1.5) act as nudges visible in the PR Checks UI for the human reviewer and the author-agent. Full table lives in **ADR-0007 §2.6**. `spec-link` is BLOCK; others are WARN in Phase 0.
 
 ---
 
-## 6. SDD format — 3-file feature spec
+## 6. Hard rules
 
-Per ADR-0006 §4. Each feature spec is a folder under `apps/docs/content/specs/features/NNN-<slug>/`:
-
-### `requirements.md`
-
-Frontmatter (`tracker:` field with GitHub Milestone URL, `status:` Draft/In dev/Shipped) + sections:
-
-- **Outcomes** — what the user/business gets
-- **Scope** — what's in, what's explicitly out
-- **Constraints** — non-functional, regulatory, etc.
-- **Prior decisions** — ADR cites
-- **Event Model** — Commands / Events / Read models / Policies
-- **EARS requirements** — one per handler, format `EARS-N.M: When <trigger>, the system shall <response>.`
-- **Invariants**
-- **Verification** — which tests, which scenarios cover what
-
-### `design.md`
-
-Mermaid sequence diagrams of cascades, state diagrams of lifecycles, ER fragments. The "how" behind the "what."
-
-### `scenarios.feature`
-
-Gherkin — happy path + 2–3 failure branches. Transpiled to Playwright E2E via `playwright-bdd`.
-
-**No `tasks.md`.** Tasks live in GitHub Issues (one per EARS-handler), not in Git. Git holds intent; GitHub Issues hold execution state.
-
-If a feature has a long transaction with compensations, add a "Saga" section to `requirements.md` with an explicit compensate-mapping per step and failure policy.
+- **SDD.** No production code without a feature spec at `apps/docs/content/specs/features/NNN-<slug>/`. If absent, invoke `superpowers:brainstorming` per §3.4 to author one.
+- **TDD.** No production code without a failing test. Naming: `it('EARS-N: ...')`. Flat numbering per ADR-0006 Amendment A1; nested `N.M` only when a single handler carries multiple shall-clauses.
+- **Trackers.** Code-level → GitHub Issues here; strategic / cross-team → Plane in `bbm`. Never both.
+- **Roles, not names** in any spec / ADR / design doc.
+- **Direct push to `main` is forbidden.** Single merge command: `gh pr merge <N> --auto --squash --delete-branch`.
+- **Project skill catalog.** Only `apps/docs/content/skills/`. Vendor-specific skill auto-discovery is not used to dispatch project work. The path is the contract.
+- **Discipline gates.** `run-iteration-end-checklist` and `request-mode-a-review` produce artifacts that orchestration skills cannot bypass. Without their outputs, merge is forbidden (ADR-0007 Amendment A2).
+- **Decision-debt.** Any silent deviation from a documented convention MUST surface via `surface-decision-debt`. The output may be `[]`, but the invocation is required before iteration summary.
 
 ---
 
-## 7. TDD discipline
+## 7. Roles
 
-**No production code without a failing test that motivates it.** Per `superpowers:test-driven-development`:
-
-1. Write the failing test first (RED)
-2. Write minimum code to pass (GREEN)
-3. Refactor while staying green
-
-Each EARS-N.M requirement maps to **at least one test** that references the ID in its `it()` / `test()` description:
-
-```ts
-it('EARS-3.1: when OIDC callback received, system shall create or upsert the doctor profile', () => { ... })
-```
-
-Vitest for unit; Playwright (via `playwright-bdd`) for e2e from `scenarios.feature`.
-
----
-
-## 8. Roles
-
-Per memory `reference_team_roles.md`. **Specs / ADRs / process docs use roles, not names.** Names live only in operational memory.
+Per memory `reference_team_roles.md`. **Specs / ADRs / process docs use roles, not names.**
 
 | Role                             | Responsibility                                                                                             |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -248,20 +134,19 @@ Per memory `reference_team_roles.md`. **Specs / ADRs / process docs use roles, n
 | **Product Lead**                 | Doctor.School owner, MBA marketer, pharma sales, domain expertise; primary author of product / PRD content |
 | **Partner / Strategic**          | Strategic partner (data centers, AI wellness adjacency); not in dev loop                                   |
 
-In **Phase 0**, Tech Lead is the **single CODEOWNERS owner** (`* @sidorovanthon`, per ADR-0008 §2.7) and the single human approver on PRs. Hire #2 expands CODEOWNERS to per-path patterns + GitHub Teams.
+In **Phase 0**, Tech Lead is the **single CODEOWNERS owner** (ADR-0008 §2.7) and the single human approver on PRs.
 
 ---
 
-## 9. Where things live
-
-Quick reference for AI agents orienting themselves:
+## 8. Where things live
 
 | Thing                                 | Location                                                                              |
 | ------------------------------------- | ------------------------------------------------------------------------------------- |
 | ADRs                                  | `apps/docs/content/adr/NNNN-<slug>.md`                                                |
-| Companion design specs                | `apps/docs/content/adr/NNNN-<slug>-design.md` (post-G8)                               |
+| Companion design specs                | `apps/docs/content/adr/NNNN-<slug>-design.md`                                         |
 | Feature specs                         | `apps/docs/content/specs/features/NNN-<slug>/{requirements,design,scenarios.feature}` |
 | Tech specs (brainstorm)               | `apps/docs/content/specs/tech/<topic>.md`                                             |
+| **Project skill catalog**             | **`apps/docs/content/skills/<name>/SKILL.md`**                                        |
 | Glossary                              | `apps/docs/content/product/glossary/` (file-per-term, Keystatic-managed)              |
 | API contract SSOT                     | `packages/schemas/` (Zod)                                                             |
 | DB schema SSOT                        | `packages/db/schema/` (Drizzle)                                                       |
@@ -272,15 +157,4 @@ Quick reference for AI agents orienting themselves:
 | BBM strategic / cross-team work-items | Plane workspace `doctor-school` (projects DSP, DSC, DSM, DSO)                         |
 | DS Platform code-level Issues         | **GitHub Issues** in this repo                                                        |
 
-**Almost-SSOT rule for trackers** (ADR-0006 §9): in the **BBM repo** (`bbm/CLAUDE.md`) the rule is "pp-plane CLI first." In **this repo** (DS Platform) the rule inverts: **"`gh` CLI first for code-level Issues; `pp-plane` only for cross-tracker references"** (e.g., when an ADR cites a Plane DSO-XXX milestone).
-
----
-
-## 10. Hard rules — summary
-
-- **SDD:** no production code without a feature spec at `apps/docs/content/specs/features/NNN-<slug>/`. If the feature has no spec → invoke `superpowers:brainstorming` first.
-- **TDD:** no production code without a failing test. Naming: `it('EARS-N.M: ...', ...)`.
-- **Trackers:** code-level → GitHub Issues here; strategic / cross-team → Plane in `bbm`. Never both.
-- **Roles, not names** in any spec / ADR / design doc.
-- **Iteration-end checklist** (§3 Step 6) — verify all 9 items before `git push`.
-- **Review:** interactive only — mode (a), (b), or (c). No automated reviewer-bot in Phase 0.
+**Almost-SSOT for trackers** (ADR-0006 §9): in **bbm** the rule is "pp-plane CLI first"; **here** the rule inverts: "`gh` CLI first for code-level Issues; `pp-plane` only for cross-tracker references."

@@ -2,7 +2,7 @@
 title: "001 — apps/api bootstrap + GET /v1/health (Design)"
 description: "Design: NestJS 11 + Fastify bootstrap of apps/api with HealthModule; Zod SSOT in @ds/schemas via createZodDto; URI versioning; Vitest + supertest e2e; nest build emit; workspace layout, dependency manifest, tsconfig strategy."
 slug: 001-api-bootstrap-health
-status: Draft
+status: In dev
 tracker: https://github.com/doctor-school/ds-platform/milestone/1
 parent_issue: https://github.com/doctor-school/ds-platform/issues/7
 lang: en

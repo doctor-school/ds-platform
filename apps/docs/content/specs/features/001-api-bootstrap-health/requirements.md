@@ -2,7 +2,7 @@
 title: "001 — apps/api bootstrap + GET /v1/health"
 description: "Requirements: scaffold apps/api as NestJS 11 + Fastify + nestjs-zod and expose GET /v1/health (status, uptime, timestamp). First feature spec, first use of @ds/schemas as Zod SSOT."
 slug: 001-api-bootstrap-health
-status: Draft
+status: In dev
 tracker: https://github.com/doctor-school/ds-platform/milestone/1
 parent_issue: https://github.com/doctor-school/ds-platform/issues/7
 prior_decisions:
@@ -63,6 +63,8 @@ This feature exposes a synchronous query handler, not an aggregate. No commands,
 | Query handler | `GET /v1/health` | Returns `HealthResponse` synchronously, no I/O.                |
 
 ## EARS requirements
+
+> **Numbering convention used here:** this spec has a single requirement, so the flat ID `EARS-1` is used as shorthand for `EARS-1.1` (the `N.M` form mandated by AGENTS.md §6 / ADR-0007 §2.6). When a second requirement appears in this feature, the existing one becomes `EARS-1.1` and the new one `EARS-1.2`. The `ears-tests` CI guard is content-match WARN in Phase 0, so the shorthand does not regress.
 
 - **EARS-1:** When the client sends `GET /v1/health`, the system shall respond with HTTP 200 and a JSON body conforming to `HealthResponseSchema` (`status === 'ok'`, `uptime` as non-negative seconds since process start, `timestamp` as a valid ISO-8601 UTC datetime ending in `Z` — the output of `new Date().toISOString()`).
 

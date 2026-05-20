@@ -214,7 +214,7 @@ describe("GET /v1/health", () => {
     await app.close();
   });
 
-  it("EARS-1.1: returns 200 with body matching HealthResponseSchema", async () => {
+  it("EARS-1: returns 200 with body matching HealthResponseSchema", async () => {
     const res = await request(app.getHttpServer())
       .get("/v1/health")
       .expect(200);

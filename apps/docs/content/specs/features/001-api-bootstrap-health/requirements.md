@@ -28,7 +28,7 @@ lang: en
 - Bootstrap `packages/schemas` from stub: export `HealthResponseSchema` and `HealthResponse` type.
 - Implement `HealthModule` / `HealthController` serving `GET /v1/health` via `VersioningType.URI`.
 - Wire `dev` / `build` / `start` / `test` / `typecheck` / `lint` scripts so Turbo picks them up.
-- One Vitest + supertest e2e test asserting EARS-1.1.
+- One Vitest + supertest e2e test asserting EARS-1.
 
 **Explicitly out** (each becomes a separate follow-up):
 
@@ -64,7 +64,7 @@ This feature exposes a synchronous query handler, not an aggregate. No commands,
 
 ## EARS requirements
 
-- **EARS-1.1:** When the client sends `GET /v1/health`, the system shall respond with HTTP 200 and a JSON body conforming to `HealthResponseSchema` (`status === 'ok'`, `uptime` as non-negative seconds since process start, `timestamp` as a valid ISO-8601 UTC datetime ending in `Z` — the output of `new Date().toISOString()`).
+- **EARS-1:** When the client sends `GET /v1/health`, the system shall respond with HTTP 200 and a JSON body conforming to `HealthResponseSchema` (`status === 'ok'`, `uptime` as non-negative seconds since process start, `timestamp` as a valid ISO-8601 UTC datetime ending in `Z` — the output of `new Date().toISOString()`).
 
 ## Invariants
 
@@ -77,5 +77,5 @@ This feature exposes a synchronous query handler, not an aggregate. No commands,
 
 | EARS | Test type     | File                               | Notes                                                                                                                                                                            |
 | ---- | ------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1.1  | Vitest e2e    | `apps/api/test/health.e2e-spec.ts` | `it('EARS-1.1: ...')`; uses supertest against booted Fastify app; asserts status 200 + `HealthResponseSchema.parse(body)` + `uptime >= 0` + `Date.parse(timestamp) > 0`.         |
-| 1.1  | Gherkin (e2e) | `scenarios.feature`                | Happy-path scenario; translated to Playwright via `playwright-bdd` once that runner exists (out of scope here — `scenarios.feature` is authored now to satisfy the SDD triplet). |
+| 1    | Vitest e2e    | `apps/api/test/health.e2e-spec.ts` | `it('EARS-1: ...')`; uses supertest against booted Fastify app; asserts status 200 + `HealthResponseSchema.parse(body)` + `uptime >= 0` + `Date.parse(timestamp) > 0`.           |
+| 1    | Gherkin (e2e) | `scenarios.feature`                | Happy-path scenario; translated to Playwright via `playwright-bdd` once that runner exists (out of scope here — `scenarios.feature` is authored now to satisfy the SDD triplet). |

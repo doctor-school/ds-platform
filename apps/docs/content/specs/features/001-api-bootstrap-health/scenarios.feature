@@ -3,7 +3,7 @@ Feature: API liveness via GET /v1/health
   I want a public liveness endpoint
   So that I can detect whether the API process is running and responsive
 
-  # EARS-1.1
+  # EARS-1
   Scenario: Health endpoint reports ok on a running process
     Given the API process is running
     When the client sends a GET request to "/v1/health"

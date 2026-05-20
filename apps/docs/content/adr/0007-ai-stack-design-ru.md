@@ -1480,3 +1480,17 @@ Phase 2+ (runtime AI features):
 **См.:** ADR-0007 §7 Amendment A1 для полного контекста, решений A1.1–A1.7, consequences и revisit triggers.
 
 **Почему не удалить original content?** Будущие читатели (включая будущего Tech Lead'а, пересматривающего automated review когда OQ-A1 trigger сработает) должны видеть, что было исходно спроектировано. SUPERSEDED callouts маркируют status; исходная архитектура остаётся как design baseline для возможного будущего re-introduction.
+
+### Amendment SD2 — §2.4 inline 8-step cycle → каталог skill'ов (парный с ADR-0007 Amendment A2, 2026-05-20)
+
+**Контекст:** §2 этого design-spec'а (AI-loop architecture — Phase 0) разбирал 8-step iteration cycle как inline narrative. ADR-0007 §2.4 нёс тот же narrative. G11 retrospective (DSP-181, `bbm/outputs/g11-smoke-findings.md`) показал, что narrative-only процедура не enforceable — F-14 (review forgotten), F-15 (checklist decorative), F-19/F-21 (decision-debt silently dropped) — все всплыли потому, что агент мог прочитать narrative и молча пропустить шаги.
+
+**Решение (amendment):**
+
+ADR-0007 §2.4 переписан как reference на `apps/docs/content/skills/do-feature-iteration/SKILL.md` плюс single-paragraph summary (ADR-0007 Amendment A2). Procedural source of truth уезжает в каталог skill'ов `apps/docs/content/skills/<name>/SKILL.md`. Каталог skill'ов содержит 14 entries: 4 orchestration (`do-feature-iteration`, `do-hotfix-pr`, `do-adr-amendment`, `do-decision-debt-followup`) + 10 procedural (`read-relevant-adrs`, `verify-base-ci-green`, `author-ears-spec`, `open-ears-issues`, `run-iteration-end-checklist`, `request-mode-a-review`, `respond-to-review`, `write-iteration-summary`, `surface-decision-debt`, `merge-when-green`).
+
+Discipline-gate'ы (artifact-required) кодифицированы как «Cannot proceed without» секции на каждом orchestration skill'е (ADR-0007 Amendment A2 §A2.1–A2.4). 11-item iteration-end checklist (расширен с 9 пунктов по F-3) работает в dispatch-mode; Mode (a) review работает в dispatch-mode; surfacing decision-debt — invocation-required. Auto-merge после положительного Mode (a) / Mode (b) verdict + green CI кодифицирован (закрывает F-10; уточняет ADR-0007 Amendment A1.4).
+
+**Affects:** §2 narrative в этом design-spec'е **superseded** для procedural detail; архитектурный rationale (vendor neutrality, dispatch-vs-inline trade-offs, prompt-cache implications) остаётся в силе. Исходное содержимое §2 сохранено как design baseline (тот же паттерн, что SD1 для §6/§7/§10/§11).
+
+**См.:** ADR-0007 §7 Amendment A2 для полного текста решения и consequences. Brainstorm spec: `bbm/docs/superpowers/specs/2026-05-20-ds-platform-agent-instructions-refactor-design-en.md`.

@@ -33,20 +33,11 @@ The `pnpm bootstrap` alias (defined in root `package.json` as `tsx tools/agent-b
 
 ## Skill priorities
 
-For DS Platform feature work, invoke these `superpowers:*` skills (and the built-in `/review` skill where noted). Listed in approximate order of when they appear in the 8-step cycle:
+For DS Platform project work, the catalog is **`apps/docs/content/skills/<name>/SKILL.md`** — see AGENTS.md §3 (Work protocol). The lead agent identifies task kind, cites the entry point, then `Read`s the corresponding SKILL.md.
 
-- `superpowers:brainstorming` — required before any creative work (new feature spec, ADR, design decision)
-- `superpowers:writing-plans` — when a spec / ADR is ready and you have a multi-step implementation
-- `superpowers:using-git-worktrees` — for feature isolation from the current workspace
-- `superpowers:test-driven-development` — before writing any production code (Step 3 RED)
-- `superpowers:systematic-debugging` — before proposing any bug fix
-- `superpowers:executing-plans` — for executing a written implementation plan in a separate session
-- `superpowers:subagent-driven-development` — for orchestrating implementation across subagents
-- `superpowers:dispatching-parallel-agents` — for ≥2 independent tasks
-- `superpowers:verification-before-completion` — before claiming work done / before merge
-- `superpowers:requesting-code-review` — at PR open (mode (a) review dispatch — see AGENTS.md §4)
-- `superpowers:receiving-code-review` — when review feedback arrives
-- `superpowers:finishing-a-development-branch` — at branch completion
+**Single allowed `superpowers:*` exception:** `superpowers:brainstorming` — only for spec-authoring (new feature-spec, new ADR, new design-spec). After brainstorming concludes, do **not** chain into `superpowers:writing-plans` — the SDD triplet (`requirements.md` / `design.md` / `scenarios.feature`) is the plan.
+
+**All other `superpowers:*` chains are disallowed for project work**, including (non-exhaustive): `writing-plans`, `executing-plans`, `subagent-driven-development`, `dispatching-parallel-agents`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `requesting-code-review`, `receiving-code-review`, `finishing-a-development-branch`, `using-git-worktrees`. Their procedures are absorbed by the project skill catalog (e.g., TDD lives inside `do-feature-iteration/SKILL.md`; review dispatch lives inside `request-mode-a-review/SKILL.md`). They may be referenced as implementation patterns inside SKILL.md content, but never as the orchestrator.
 
 ---
 

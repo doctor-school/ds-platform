@@ -1,0 +1,17 @@
+# Lychee URL exclusions for the markdown-links CI job.
+# Each entry is a Rust regex matched against the full URL. Add a one-line
+# comment above the entry explaining why it is excluded. See Issue #10.
+
+# nestjs-zod GitHub repo: the package author's handle has rotated; the
+# `risenforces/nestjs-zod` URL cited in ADR-0002 (EN+RU narrative+design,
+# 4 occurrences) returns 404. The npm registry (https://www.npmjs.com/
+# package/nestjs-zod) is the stable, content-addressed reference; the
+# GitHub URL is kept inline for historical context but lychee ignores it.
+^https://github\.com/risenforces/nestjs-zod($|/.*$)
+
+# bbm strategic-spec links: the sidorovanthon/bbm repository is private,
+# so lychee (unauthenticated) gets 404 even when the file path is valid.
+# The links are useful to humans with bbm access (e.g., the Tech Lead);
+# they are exercised manually rather than by CI. CLAUDE.md cites two
+# such specs (engineering-readiness + local-dev-environment).
+^https://github\.com/sidorovanthon/bbm/blob/.*$

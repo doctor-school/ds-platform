@@ -1320,3 +1320,13 @@ Phase 1 (production):
 5. Gherkin → Playwright transpilation pipeline setup (`playwright-bdd` setup details).
 6. Initial 30 glossary terms — which ones from BBM memory to migrate in the first batch.
 7. Migration: what to do with existing Notion DS-Platform pages (if any). Recommend: deprecated + redirect notice in Notion, content already in Git.
+
+---
+
+## 13. Amendments
+
+### Amendment SD1 — EARS-N flat numbering (paired with ADR-0006 Amendment A1, 2026-05-20)
+
+§4 of this design spec showed `it('EARS-3.1: ...', ...)` as the Vitest naming convention. Per ADR-0006 Amendment A1, the convention is now flat — `it('EARS-N: ...', ...)` — with nested `N.M` reserved for single handlers carrying multiple shall-clauses. Open follow-up §12 item 4 is closed by the amendment.
+
+Source: G11 smoke retrospective F-5 (`bbm/outputs/g11-smoke-findings.md`). Reference spec: `001-api-bootstrap-health` post commit `073d6da`. Skill: `apps/docs/content/skills/author-ears-spec/SKILL.md`.

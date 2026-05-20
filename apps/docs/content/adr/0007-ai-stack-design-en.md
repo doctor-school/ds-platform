@@ -1480,3 +1480,17 @@ Phase 2+ (runtime AI features):
 **See:** ADR-0007 §7 Amendment A1 for full context, decisions A1.1–A1.7, consequences, and revisit triggers.
 
 **Why not delete the original content?** Future readers (including a future Tech Lead reconsidering automated review when OQ-A1 trigger fires) need to see what was originally designed. The SUPERSEDED callouts mark status; the original architecture remains as design baseline for any future re-introduction.
+
+### Amendment SD2 — §2.4 inline 8-step cycle → skill catalog (paired with ADR-0007 Amendment A2, 2026-05-20)
+
+**Context:** §2 of this design spec (AI-loop architecture — Phase 0) walked through the 8-step iteration cycle as inline narrative. ADR-0007 §2.4 carried the same narrative. The G11 retrospective (DSP-181, `bbm/outputs/g11-smoke-findings.md`) showed that narrative-only procedure is not enforceable — F-14 (review forgotten), F-15 (checklist decorative), F-19/F-21 (decision-debt silently dropped) all surfaced because the agent could read the narrative and silently skip steps.
+
+**Decision (amendment):**
+
+ADR-0007 §2.4 is rewritten as a reference to `apps/docs/content/skills/do-feature-iteration/SKILL.md` plus a single-paragraph summary (ADR-0007 Amendment A2). The procedural source of truth moves into the skill catalog at `apps/docs/content/skills/<name>/SKILL.md`. The skill catalog has 14 entries: 4 orchestration (`do-feature-iteration`, `do-hotfix-pr`, `do-adr-amendment`, `do-decision-debt-followup`) + 10 procedural (`read-relevant-adrs`, `verify-base-ci-green`, `author-ears-spec`, `open-ears-issues`, `run-iteration-end-checklist`, `request-mode-a-review`, `respond-to-review`, `write-iteration-summary`, `surface-decision-debt`, `merge-when-green`).
+
+Discipline gates (artifact-required) are codified as "Cannot proceed without" clauses on each orchestration skill (ADR-0007 Amendment A2 §A2.1–A2.4). The 11-item iteration-end checklist (extended from 9 by F-3) runs dispatch-mode; the Mode (a) review runs dispatch-mode; decision-debt surfacing is invocation-required. Auto-merge after a positive Mode (a) / Mode (b) verdict + green CI is codified (closing F-10; refining ADR-0007 Amendment A1.4).
+
+**Affects:** the §2 narrative in this design spec is **superseded** for the procedural detail; the architectural rationale (vendor neutrality, dispatch-vs-inline trade-offs, prompt-cache implications) remains valid. The original §2 content is preserved as design baseline (same pattern as SD1 for §6/§7/§10/§11).
+
+**See:** ADR-0007 §7 Amendment A2 for the full decision text and consequences. Brainstorm spec: `bbm/docs/superpowers/specs/2026-05-20-ds-platform-agent-instructions-refactor-design-en.md`.

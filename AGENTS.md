@@ -26,7 +26,18 @@ Long-form context: `README.md`.
 
 **Apps live in `apps/<name>/`:** api, promo, portal, admin, cms, docs, docs-cms, mobile. Shared code in `packages/<name>/`. Build/dev tooling in `tools/`.
 
-**Branch strategy:** trunk-based. `feat/DSO-NN-<slug>` or `fix/<N>-<slug>` short-lived branches. Squash-merge into `main`.
+**Branch strategy:** trunk-based; short-lived branches off `main`, squash-merge back. Naming (`<prefix>/<N>-<slug>`, `N` = GitHub Issue # — or `<TRACKER-ID>` for Plane-driven work without a GitHub Issue, e.g. `chore/dsp-193-repo-hygiene`):
+
+- `feat/` — new feature
+- `fix/` — bug fix
+- `chore/` — maintenance task
+- `refactor/` — code restructure without behavior change
+- `docs/` — documentation-only changes
+- `tooling/` — build / CI / dev-tooling changes
+
+Dependabot branches (`dependabot/...`) — leave as-is, do not rename.
+
+**Stale branches.** Auto-deleted on merge via `--delete-branch` in the squash-merge command. For PRs closed **without** merge, delete the branch in the same step (`gh pr close <N> --delete-branch`). Do not leave un-merged branches alive longer than the PR they came from. Dependabot branches Dependabot owns — closing the PR is enough; Dependabot will recreate when a new bump arrives.
 
 **Commits:** Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`). Squash-merge title enforced via PR title.
 
@@ -34,7 +45,7 @@ Long-form context: `README.md`.
 
 **Pre-commit:** simple-git-hooks runs `lint-staged` (ESLint `--fix` + Prettier). `--no-verify` is a valid escape hatch — log the reason in the PR description.
 
-**PR template required** — set label (feature/bug/chore/refactor/docs), link Issue (`Closes #N`), mark author (`author:claude` / `author:codex` / `author:human`).
+**PR template required** — set label (`feature` / `bug` / `chore` / `refactor` / `docs` / `tooling`), link Issue (`Closes #N`), mark author (`author:claude` / `author:codex` / `author:human`).
 
 **Branch protection.** Target-state contract (ADR-0008 §2.6) is enforced by convention + local hooks during Phase 0; server-side enforcement is deferred per ADR-0008 Amendment A3 (GitHub Free + private repo blocks the branch-protection API). Verbatim payload at `branch-protection.json`. See ADR-0008 §2.6 + A3 for the full contract and reactivation trigger.
 

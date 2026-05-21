@@ -49,5 +49,12 @@
     "*.{md,json,yaml,yml,css}": [
       "prettier --write"
     ]
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "esbuild",
+      "simple-git-hooks"
+    ]
   }
 }

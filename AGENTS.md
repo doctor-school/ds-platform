@@ -102,6 +102,10 @@ Run `pnpm bootstrap` (alias `tsx tools/agent-bootstrap.ts`) for git/Issue/PR/spe
 
 If the session is launched with `--dangerously-skip-permissions`, the agent assumes the discipline responsibility that CI guards would otherwise enforce. If CI guards are themselves broken, bypass mode amplifies the gap.
 
+### 3.7 Plane lifecycle entry (if applicable)
+
+If the active task is a Plane work-item (DSP-XXX / DSO-XXX), the very first tool call after identifying task kind is `plane-pp-cli` to: (1) move the task to `In Progress`, (2) post a start comment describing the planned approach. This precedes any code or doc edit. The end-of-session counterpart — move to `Done` + result comment — is in §6 Hard rules (Plane lifecycle).
+
 ---
 
 ## 4. Review modes

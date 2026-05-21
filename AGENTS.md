@@ -45,6 +45,14 @@ Dependabot branches (`dependabot/...`) — leave as-is, do not rename.
 
 **Versioning:** changesets. User-facing PR → `pnpm changeset`. Internal-only (refactor/docs/chore) — no changeset.
 
+**Bump letter** (semver, per package):
+
+- `patch` — bugfix; no API change; no new exports; no consumer-visible behavior change.
+- `minor` — additive change: new feature, new exports, new optional fields, new endpoints; no breaking change.
+- `major` — breaking change: removed or renamed exports, changed function signatures, changed return shapes, changed semantics of an existing field, raised minimum runtime/Node version, removed support for an option.
+- Pre-1.0 (`0.x.y`) follows the same rule: `0.x → 0.(x+1)` is `minor` only if no breaking change; if there is a breaking change, bump `major` (`0.x → 1.0`). We don't reuse `0.x` minors to hide breakage.
+- When unsure between `minor` and `major`, default to `major` — consumers can pin loosely against minor but cannot recover from an undetected breaking change shipped as minor.
+
 **Pre-commit:** simple-git-hooks runs `lint-staged` (ESLint `--fix` + Prettier). `--no-verify` is a valid escape hatch — log the reason in the PR description.
 
 **PR template required** — set label (`feature` / `bug` / `chore` / `refactor` / `docs` / `tooling`), link Issue (`Closes #N`), mark author (`author:claude` / `author:codex` / `author:human`).

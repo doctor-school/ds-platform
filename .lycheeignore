@@ -15,3 +15,9 @@
 # they are exercised manually rather than by CI. CLAUDE.md cites two
 # such specs (engineering-readiness + local-dev-environment).
 ^https://github\.com/sidorovanthon/bbm/blob/.*$
+
+# Org-level Projects v2 boards under doctor-school: project boards are
+# private, so lychee (unauthenticated) gets 404 even when the project
+# exists. The URL is useful for owner / agent navigation; verified
+# manually rather than by CI. DSP-198 board #1 is the current example.
+^https://github\.com/orgs/doctor-school/projects/.*$

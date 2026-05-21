@@ -1,6 +1,6 @@
 ---
 title: "DSP-198 — GitHub Projects v2 board setup (Design)"
-description: "Org-level Projects v2 board 'DS Platform' as the operational + roadmap surface for ds-platform: single board with Status / Area / Kind fields plus optional long-lived Milestones, 6 built-in workflows, 4 views, backfill of all closed items, Issue body convention, agent ordering procedure with In Progress resume, and a direct rewrite of the relevant AGENTS.md §2 line."
+description: "Org-level Projects v2 board 'DS Platform' as the operational + roadmap surface for ds-platform: single board with Status / Area fields plus native Type (Issues) / Labels (PRs) for classification, optional long-lived Milestones, 6 built-in workflows, 3 views, backfill of all closed items, Issue body convention, agent ordering procedure with In Progress resume, and a direct rewrite of the relevant AGENTS.md §2 line."
 slug: dsp-198-github-projects-v2-board
 status: Implemented (pending UI follow-up)
 tracker: Plane DSP-198 (workspace `doctor-school`, project DSP)
@@ -38,7 +38,7 @@ Releases as artifacts are produced **continuously** via changesets — every mer
 ### Goals
 
 1. A single org-level Projects v2 board ships items from `doctor-school/ds-platform` and is the only place the agent reads to answer "what next".
-2. The board exposes the axes that genuinely slice work today: **Status** (daily kanban), **Area** (which module), **Kind** (what flavour). Milestones are present built-in but are populated only when a long-lived product theme actually exists.
+2. The board exposes the axes that genuinely slice work today: **Status** (daily kanban) and **Area** (which module). Work flavour is read off native fields — **Type** (built-in Issue Type on Issues) and **Labels** (the `feature` / `bug` / `chore` / `refactor` / `docs` / `tooling` labels already mandated by AGENTS.md §2 for PRs). Milestones are present built-in but are populated only when a long-lived product theme actually exists.
 3. The agent can pick the next item deterministically — including resuming In Progress work, not only starting fresh Backlog items.
 4. New Issues carry a structured body sufficient for a cold-start agent to act without trawling history.
 5. The setup is **reproducible**: a script in `tools/` rebuilds the board from scratch.
@@ -68,14 +68,15 @@ Releases as artifacts are produced **continuously** via changesets — every mer
 
 ### 3.2 Fields
 
-| Field         | Type                     | Values                                                                                                                                                                                                                                 | Filled                                                                 |
-| ------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| **Status**    | single-select (built-in) | `Backlog` / `In Progress` / `Review` / `Done`                                                                                                                                                                                          | automatic via workflows (§3.3)                                         |
-| **Milestone** | built-in                 | Empty at setup. PM creates a Milestone when a long-lived product theme appears (spans multiple specs, lives weeks–months). Examples: `Auth foundations v1`, `Doctor portal MVP`, `Directual cutover`. **Milestones are NOT per-spec.** | manual on Issue create, only when a relevant Milestone already exists  |
-| **Area**      | single-select (custom)   | `api` / `promo` / `portal` / `admin` / `cms` / `cms-payload` / `mobile` / `docs` / `docs-cms` / `packages` / `infra` / `tooling` / `cross-cutting`                                                                                     | manual on Issue create                                                 |
-| **Kind**      | single-select (custom)   | `feature` / `fix` / `chore` / `refactor` / `docs` / `tooling` / `adr-amendment`                                                                                                                                                        | manual on Issue create (mirrors PR label / conventional-commit prefix) |
+| Field         | Type                     | Values                                                                                                                                                                                                                                     | Filled                                                                |
+| ------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| **Status**    | single-select (built-in) | `Backlog` / `In Progress` / `Review` / `Done`                                                                                                                                                                                              | automatic via workflows (§3.3)                                        |
+| **Type**      | built-in (Issue Type)    | Org-level Issue Types. Default set `Task / Bug / Feature` is sufficient; the org admin can extend with `chore / docs / tooling / refactor` if richer typing is wanted. **PRs do not have an Issue Type** — they are classified via Labels. | manual on Issue create                                                |
+| **Milestone** | built-in                 | Empty at setup. PM creates a Milestone when a long-lived product theme appears (spans multiple specs, lives weeks–months). Examples: `Auth foundations v1`, `Doctor portal MVP`, `Directual cutover`. **Milestones are NOT per-spec.**     | manual on Issue create, only when a relevant Milestone already exists |
+| **Labels**    | built-in                 | Surfaced on the board as a column. For PRs, the AGENTS.md §2 mandatory label (`feature` / `bug` / `chore` / `refactor` / `docs` / `tooling`) is the PR-side analogue of Issue Type.                                                        | set on the PR per AGENTS.md §2; agent / author responsibility         |
+| **Area**      | single-select (custom)   | `api` / `promo` / `portal` / `admin` / `cms` / `cms-payload` / `mobile` / `docs` / `docs-cms` / `packages` / `infra` / `tooling` / `cross-cutting`                                                                                         | manual on Issue create                                                |
 
-**Explicitly excluded fields:** Release, Phase, Priority, Estimate, Iteration, Start date, Target date, Plane ref, Spec slug. Rationales:
+**Explicitly excluded fields:** Release, Phase, Priority, Estimate, Iteration, Start date, Target date, Plane ref, Spec slug, Kind. Rationales:
 
 - **Release** — releases happen continuously via changesets, not as planning buckets. See §2 non-goals.
 - **Phase** — coarse temporal landmark, not an active filter for the working set. See §2 non-goals.
@@ -85,6 +86,7 @@ Releases as artifacts are produced **continuously** via changesets — every mer
 - **Start / Target date** — no Roadmap-timeline view yet.
 - **Plane ref** — strict tracker separation (memory `feedback_plane_github_strict_separation`).
 - **Spec slug** — when a spec-bound Issue exists, the spec link is in the body under "Spec reference" (§7); duplicating it as a field has no slicing payoff because per-spec grouping is not a board view (specs are short-lived; their work-streams roll up through Milestone when one applies).
+- **Kind** — initial design had a custom `Kind` field, but it duplicates two existing mechanisms: native Issue **Type** (for Issues) and the mandatory PR **Label** (for PRs). One source of truth per object class is cleaner than a third field that has to be kept in sync with both. Removed at clean-up after first real run.
 
 ### 3.3 Workflows (built-in presets)
 
@@ -103,16 +105,17 @@ The auto-add filter is single-repo at setup. Extending to additional org repos i
 
 ### 3.4 Views
 
-Four views configured at setup. All read from the single board.
+Three views configured at setup. All read from the single board.
 
-| View               | Audience | Layout         | Filter / Group                                                                                                          |
-| ------------------ | -------- | -------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| **Now**            | both     | Board (kanban) | Group by Status. No release/phase filter. Default landing view. Shows everything not archived.                          |
-| **By milestone**   | PM       | Table          | Filter `status != Done`. Group by Milestone. Empty-Milestone bucket holds work that does not belong to a tracked theme. |
-| **By area**        | agent    | Table          | Filter `status != Done`. Group by Area. For "what is left to do in `api`" style queries.                                |
-| **ADR amendments** | both     | Table          | Filter `kind = adr-amendment`. Group by ADR number (extracted from Issue title or label). Surfaces amendment load.      |
+| View             | Audience | Layout         | Filter / Group                                                                                                          |
+| ---------------- | -------- | -------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **Now**          | both     | Board (kanban) | Group by Status. No release/phase filter. Default landing view. Shows everything not archived.                          |
+| **By milestone** | PM       | Table          | Filter `status != Done`. Group by Milestone. Empty-Milestone bucket holds work that does not belong to a tracked theme. |
+| **By area**      | agent    | Table          | Filter `status != Done`. Group by Area. For "what is left to do in `api`" style queries.                                |
 
 The "By milestone" view is the PM roadmap surrogate: each Milestone tile shows native percent-complete (closed / total). For ad-hoc release-readiness questions, the PM filters this view by an in-flight Milestone (e.g. `milestone = Auth foundations v1`).
+
+ADR amendments are not promoted to a dedicated view — they are infrequent enough that an ad-hoc title search (`Amendment` or `ADR-`) or filtering by the `docs` label is sufficient. If the amendment cadence becomes load-bearing, a new view is added as an amendment to this spec.
 
 ## 4. Backfill plan
 
@@ -129,14 +132,6 @@ All 17 closed items as of 2026-05-21:
 The setup script reads each item via `gh issue list --state all` / `gh pr list --state all` and assigns:
 
 - **Status** — `Done` for all backfilled items (every closed item maps to `Done` regardless of merge state, since `Status` represents board-level lifecycle, not merge outcome).
-- **Kind** — derived from conventional-commit prefix in the title:
-  - `feat:` → `feature`
-  - `fix:` → `fix`
-  - `chore(deps):` / `chore(deps-dev):` → `tooling`
-  - `chore(release):` → `tooling`
-  - `chore:` → `chore`
-  - `docs:` → `docs` (override to `adr-amendment` if the title contains `ADR-` or `Amendment`)
-  - `refactor:` → `refactor`
 - **Area** — derived from the scope segment of the conventional-commit title:
   - `feat(api)` / `fix(api)` → `api`
   - `docs(agents)` → `docs`
@@ -145,6 +140,7 @@ The setup script reads each item via `gh issue list --state all` / `gh pr list -
   - `feat(meta)` → `cross-cutting`
   - Unknown / unparseable → left empty for manual review.
 - **Milestone** — left empty for all backfill items. The closed work to date was Phase 0 scaffolding without long-lived product themes; back-assigning Milestones retroactively has no analytic payoff.
+- **Type / Labels** — not touched by backfill. PR labels already exist on every PR (mandated by AGENTS.md §2). Issue Types on the three closed Issues can be set manually if useful, but Done items rarely need their typing changed.
 
 The script logs every field decision in human-readable form before applying so a dry-run mode can preview the assignment.
 
@@ -283,13 +279,13 @@ Lives at `tools/setup-project-board.ts`. Run-once at bootstrap; kept in-repo aft
 ### 9.1 Sequence
 
 1. **Project creation.** `gh project create --owner doctor-school --title "DS Platform" --format json` → capture `PROJECT_NUMBER` and `PROJECT_ID`.
-2. **Field creation.** For each custom field in §3.2 (`Area`, `Kind`), call `gh project field-create` (single-select) or the equivalent GraphQL mutation. Built-in `Status` field has its option set updated via `updateProjectV2Field` to align with the four target values. `Milestone` is built-in and requires no field creation.
+2. **Field creation.** The only custom field is `Area`; create via `gh project field-create` (single-select). Built-in `Status` field has its option set adjusted to the four target values (script warns + defers to UI if defaults differ to avoid item data loss on re-create). Built-in `Type`, `Milestone`, `Labels` require no field creation.
 3. **Workflow activation.** For each of the six workflows in §3.3, call the GraphQL `updateProjectV2Workflow` mutation with the appropriate trigger / action payload.
-4. **View creation.** For each of the four views in §3.4, call `createProjectV2View` with the configured filter / group / layout.
+4. **View creation.** For each of the three views in §3.4, configure via UI (the GraphQL view-mutation surface is preview-only).
 5. **Backfill.**
    - Fetch closed Issues and PRs via `gh issue list --state all --json …` / `gh pr list --state all --json …`.
    - For each item: `gh project item-add --owner doctor-school --url <html_url>`.
-   - For each added item: set Status, Kind, Area per §4.2. Milestone left empty for all backfill items.
+   - For each added item: set Status + Area per §4.2. Milestone, Type, Labels untouched.
 6. **Audit log.** Write a final summary to stdout: items processed, fields assigned, ambiguous title parses listed for manual review.
 
 The script does **not** create any Milestone objects — Milestones are created by the PM through the GitHub UI when a long-lived theme emerges.
@@ -313,10 +309,10 @@ Flag `--dry-run` prints every intended mutation to stdout without executing. Use
 ## 10. Acceptance criteria
 
 1. Org-level Projects v2 board `DS Platform` exists in org `doctor-school`, visibility = private. URL recorded as an amendment to this spec.
-2. Fields configured: `Status` (4 options), `Area` (13 options), `Kind` (7 options). Built-in `Milestone` field is enabled (empty at setup, no objects created).
+2. Fields configured: `Status` (4 options), `Area` (13 options). Built-in `Type`, `Milestone`, `Labels` fields are enabled (no objects created at setup).
 3. All six workflows (§3.3) are enabled and active.
-4. All four views (§3.4) are configured with the correct filter / group / layout.
-5. All 17 closed items are linked, `Status = Done`. Kind and Area assigned per §4.2 (with unambiguous-parse failures logged for manual review). Milestone left empty for every backfill item.
+4. All three views (§3.4) are configured with the correct filter / group / layout.
+5. All 17 closed items are linked, `Status = Done`. Area assigned per §4.2 (with unambiguous-parse failures logged for manual review). Milestone / Type / Labels untouched by backfill.
 6. `tools/setup-project-board.ts` is committed, idempotent, and supports `--dry-run`.
 7. `.github/ISSUE_TEMPLATE/default.md` is committed and surfaces in the "New issue" UI (verified manually).
 8. `AGENTS.md §2` is rewritten per §8.1 and `§2.1 Issue conventions` is inserted per §8.2 — both in the same PR.
@@ -327,7 +323,7 @@ Flag `--dry-run` prints every intended mutation to stdout without executing. Use
 Manual checks after the script's first successful run:
 
 - `gh project view <PROJECT_NUMBER> --owner doctor-school --format json` — fields and workflows enumerated.
-- Open the board in a browser and confirm: four views render, Backlog column is empty, Done column shows the 17 backfilled items, Milestone column is empty (no Milestone objects exist yet).
+- Open the board in a browser and confirm: three views render, Backlog column is empty, Done column shows the 17 backfilled items, Milestone column is empty (no Milestone objects exist yet).
 - Create a throwaway Issue in `doctor-school/ds-platform` — confirm auto-add fires (workflow #1) and the Issue appears in Backlog. Close it; confirm workflow #2 moves it to Done. Delete it.
 
 No automated test harness — this is a one-off setup script, not a recurring pipeline.
@@ -339,7 +335,7 @@ No automated test harness — this is a one-off setup script, not a recurring pi
 | GitHub renames or deprecates a workflow trigger before the script runs.                                          | The script reads each workflow's available triggers from the API before activating; on mismatch it logs and skips, leaving the workflow inactive rather than crashing.                 |
 | Auto-add filter unexpectedly pulls in items from forks or transferred repos.                                     | Filter is anchored to `repo:doctor-school/ds-platform`. Forks live outside the org and do not match. Transferred repos away from the org also stop matching.                           |
 | `Status` built-in field cannot have its option set fully replaced; some platforms require additive-only changes. | The script first attempts in-place update; on failure, creates a new single-select field `Status (custom)` with the four target options and migrates items. Logged as a fallback path. |
-| Backfill heuristics misclassify Kind or Area on items with non-conventional titles.                              | Script logs every ambiguous parse; AC #5 requires manual review of these. The misclassification is recoverable via UI.                                                                 |
+| Backfill heuristics misclassify Area on items with non-conventional titles.                                      | Script logs every ambiguous parse; AC #5 requires manual review of these. The misclassification is recoverable via UI.                                                                 |
 | WIP > 1 in `In Progress` due to forgotten stop-state hygiene.                                                    | Documented convention only; not enforced. The ordering procedure §5 handles WIP > 1 by picking newest updated_at. A future tightening (e.g., a CI lint) is out of scope here.          |
 | PM does not create Milestones, so the "By milestone" view is permanently empty.                                  | Acceptable. Until a long-lived theme exists, "By milestone" simply renders one bucket "No milestone" — the cost is one ignored view, not broken automation.                            |
 

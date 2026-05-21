@@ -11,10 +11,13 @@
  *
  * What it does (declarative desired state):
  *   - Creates org-level project "DS Platform" under `doctor-school` (idempotent).
- *   - Creates custom single-select fields `Area` and `Kind` with the option sets from §3.2.
+ *   - Creates custom single-select field `Area` with the option set from §3.2.
  *   - Ensures the built-in `Status` field has the four target options.
  *   - Backfills every Issue + PR from `doctor-school/ds-platform` as project items,
- *     sets Status from open/closed, Kind + Area from conventional-commit heuristics.
+ *     sets Status from open/closed, Area from conventional-commit heuristics. Kind
+ *     is NOT set as a custom field — for Issues use the native Type field (org
+ *     Settings → Issue Types), for PRs use existing labels (feature / bug / chore
+ *     / refactor / docs / tooling).
  *   - Prints UI steps for the six workflows (§3.3) and four views (§3.4) — these
  *     pieces of Projects v2 are configured via the web UI; the GraphQL surface
  *     for workflow toggles is preview-only and brittle.
@@ -53,18 +56,7 @@ const AREA_OPTIONS = [
   'cross-cutting',
 ] as const;
 
-const KIND_OPTIONS = [
-  'feature',
-  'fix',
-  'chore',
-  'refactor',
-  'docs',
-  'tooling',
-  'adr-amendment',
-] as const;
-
 type AreaOption = (typeof AREA_OPTIONS)[number];
-type KindOption = (typeof KIND_OPTIONS)[number];
 
 const WORKFLOWS = [
   {
@@ -120,13 +112,6 @@ const VIEWS = [
     layout: 'table',
     groupBy: 'Area',
     filter: 'status:!=Done',
-  },
-  {
-    name: 'ADR amendments',
-    description: 'Amendment accumulation — all items with Kind=adr-amendment.',
-    layout: 'table',
-    groupBy: 'Status',
-    filter: 'kind:adr-amendment',
   },
 ];
 
@@ -294,7 +279,7 @@ async function ensureStatusOptions(projectNumber: number, existing: ProjectField
 // Heuristics for Kind + Area from conventional-commit titles
 // ---------------------------------------------------------------------------
 
-interface Heuristic { kind: KindOption | null; area: AreaOption | null }
+interface Heuristic { area: AreaOption | null }
 
 const AREA_BY_SCOPE: Record<string, AreaOption> = {
   api: 'api',
@@ -321,29 +306,10 @@ const AREA_BY_SCOPE: Record<string, AreaOption> = {
 
 function classify(title: string): Heuristic {
   const m = /^([a-z]+)(?:\(([^)]+)\))?:\s*(.*)$/i.exec(title);
-  if (!m) return { kind: null, area: null };
-  const [, typeRaw, scopeRaw, subjectRaw] = m;
-  const type = typeRaw.toLowerCase();
-  const scope = scopeRaw?.toLowerCase() ?? '';
-  const subject = subjectRaw ?? '';
-
-  let kind: KindOption | null = null;
-  switch (type) {
-    case 'feat': kind = 'feature'; break;
-    case 'fix': kind = 'fix'; break;
-    case 'chore':
-      kind = scope === 'deps' || scope === 'deps-dev' || scope === 'release' ? 'tooling' : 'chore';
-      break;
-    case 'refactor': kind = 'refactor'; break;
-    case 'docs':
-      kind = /\b(ADR-|Amendment)/i.test(subject) ? 'adr-amendment' : 'docs';
-      break;
-    case 'tooling': kind = 'tooling'; break;
-    default: kind = null;
-  }
-
+  if (!m) return { area: null };
+  const scope = m[2]?.toLowerCase() ?? '';
   const area: AreaOption | null = scope in AREA_BY_SCOPE ? AREA_BY_SCOPE[scope] : null;
-  return { kind, area };
+  return { area };
 }
 
 // ---------------------------------------------------------------------------
@@ -439,11 +405,10 @@ async function backfill(projectNumber: number, projectId: string): Promise<void>
     }
     const targetStatus = item.state === 'OPEN' ? 'Backlog' : 'Done';
     const heur = classify(item.title);
-    log('info', `#${item.number} (${item.type}, ${item.state}): "${item.title}" → status=${targetStatus} kind=${heur.kind ?? '∅'} area=${heur.area ?? '∅'}`);
+    log('info', `#${item.number} (${item.type}, ${item.state}): "${item.title}" → status=${targetStatus} area=${heur.area ?? '∅'}`);
 
-    if (!heur.kind || !heur.area) {
-      const reason = [heur.kind ? null : 'kind', heur.area ? null : 'area'].filter(Boolean).join(' + ') + ' unparsed';
-      ambiguous.push({ item, reason });
+    if (!heur.area) {
+      ambiguous.push({ item, reason: 'area unparsed' });
     }
 
     const addRes = await ghMutate([
@@ -466,7 +431,6 @@ async function backfill(projectNumber: number, projectId: string): Promise<void>
     }
     await setFieldValues(projectNumber, projectId, addedId, {
       Status: targetStatus,
-      Kind: heur.kind,
       Area: heur.area,
     });
   }
@@ -534,7 +498,6 @@ async function main(): Promise<void> {
   const fields = DRY_RUN ? [] : await listFields(project.number);
   await ensureStatusOptions(project.number, fields);
   await ensureSingleSelectField(project.number, 'Area', AREA_OPTIONS, fields);
-  await ensureSingleSelectField(project.number, 'Kind', KIND_OPTIONS, fields);
 
   printWorkflows();
   printViews();

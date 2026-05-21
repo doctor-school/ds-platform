@@ -69,7 +69,13 @@ gh pr merge <PR-number> --auto --squash --delete-branch
 
 **ADRs** live in `apps/docs/content/adr/`, rendered at `/adr/<slug>`. Paired design spec — `NNNN-<slug>-design.md`.
 
-**Feature specs** live in `apps/docs/content/specs/features/NNN-<slug>/` (3 files: `requirements.md`, `design.md`, `scenarios.feature`). One spec → one GitHub Milestone → multiple Issues (one per EARS-handler). Format spec moved into `apps/docs/content/skills/author-ears-spec/SKILL.md`.
+**Feature specs** live in `apps/docs/content/specs/features/NNN-<slug>/` (3 files: `requirements.md`, `design.md`, `scenarios.feature`). One spec → multiple Issues (one per EARS-handler). Milestones are used independently of specs: a Milestone tracks a long-lived product theme (`Auth foundations v1`, `Directual cutover`, `Doctor portal MVP`) that typically spans multiple specs and lives weeks–months. Specs themselves do not become Milestones. Format spec moved into `apps/docs/content/skills/author-ears-spec/SKILL.md`.
+
+---
+
+## 2.1 Issue conventions
+
+New Issues use the `.github/ISSUE_TEMPLATE/default.md` skeleton (Context / Scope / Spec reference / Acceptance criteria / Dependencies / Notes). Agents resuming In Progress items read the latest stop-state comment first. Stop-state comments follow a fixed four-field shape — see `apps/docs/content/specs/tech/2026-05-21-dsp-198-github-projects-v2-board-design.md` §6 for the canonical form. The board ordering procedure (resume → rework → fresh → unblock) is documented in §5 of the same spec.
 
 ---
 

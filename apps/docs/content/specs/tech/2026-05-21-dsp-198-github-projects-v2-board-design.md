@@ -2,8 +2,9 @@
 title: "DSP-198 — GitHub Projects v2 board setup (Design)"
 description: "Org-level Projects v2 board 'DS Platform' as the operational + roadmap surface for ds-platform: single board with Status / Area / Kind fields plus optional long-lived Milestones, 6 built-in workflows, 4 views, backfill of all closed items, Issue body convention, agent ordering procedure with In Progress resume, and a direct rewrite of the relevant AGENTS.md §2 line."
 slug: dsp-198-github-projects-v2-board
-status: In design
-tracker: Plane workspace `doctor-school`, project DSP, issue 198 (URL filled in at amendment time)
+status: Implemented (pending UI follow-up)
+tracker: Plane DSP-198 (workspace `doctor-school`, project DSP)
+board_url: https://github.com/orgs/doctor-school/projects/1
 parent_issue: null
 lang: en
 ---
@@ -61,7 +62,9 @@ Releases as artifacts are produced **continuously** via changesets — every mer
 - **Owner type:** ORGANIZATION (`doctor-school`).
 - **Title:** `DS Platform`.
 - **Visibility:** private (org-internal).
-- **Number / URL:** assigned at creation, recorded back into this spec as an amendment.
+- **Number:** `1`.
+- **Project ID:** `PVT_kwDOEQZdbM4BYYrZ`.
+- **URL:** https://github.com/orgs/doctor-school/projects/1.
 
 ### 3.2 Fields
 

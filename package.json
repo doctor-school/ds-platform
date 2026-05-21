@@ -28,7 +28,7 @@
     "@eslint/js": "^10.0.1",
     "eslint": "^10.4.0",
     "eslint-config-prettier": "^10.1.8",
-    "execa": "^8.0.1",
+    "execa": "^9.6.1",
     "fast-glob": "^3.3.3",
     "gray-matter": "^4.0.3",
     "lint-staged": "^17.0.5",

@@ -116,6 +116,7 @@ The CI lint guards from ADR-0007 §2.6 (Amendment A1.5) act as nudges visible in
 - **SDD.** No production code without a feature spec at `apps/docs/content/specs/features/NNN-<slug>/`. If absent, invoke `superpowers:brainstorming` per §3.4 to author one.
 - **TDD.** No production code without a failing test. Naming: `it('EARS-N: ...')`. Flat numbering per ADR-0006 Amendment A1; nested `N.M` only when a single handler carries multiple shall-clauses.
 - **Trackers.** Code-level → GitHub Issues here; strategic / cross-team → Plane in `bbm`. Never both.
+- **Plane lifecycle.** When the task is a Plane work-item: move to `In Progress` with a start comment before code work; on completion, move to `Done` with a result comment containing artifacts (links to files/PRs/pages), what was done, open questions, and what is unblocked. If the task stays incomplete, leave a status comment with "where we stopped / what remains" instead of dropping it silently. Tool: `plane-pp-cli`.
 - **Roles, not names** in any spec / ADR / design doc.
 - **Direct push to `main` is forbidden.** Single merge command: `gh pr merge <N> --auto --squash --delete-branch`.
 - **Project skill catalog.** Only `apps/docs/content/skills/`. Vendor-specific skill auto-discovery is not used to dispatch project work. The path is the contract.

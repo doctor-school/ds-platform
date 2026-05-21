@@ -39,6 +39,8 @@ Dependabot branches (`dependabot/...`) — leave as-is, do not rename.
 
 **Stale branches.** Auto-deleted on merge via `--delete-branch` in the squash-merge command. For PRs closed **without** merge, delete the branch in the same step (`gh pr close <N> --delete-branch`). Do not leave un-merged branches alive longer than the PR they came from. Dependabot branches Dependabot owns — closing the PR is enough; Dependabot will recreate when a new bump arrives.
 
+**Post-merge inventory re-sweep.** After merging a PR that touches `.changeset/`, `.github/workflows/*`, dependency manifests, or security configs, re-run `gh pr list` and `git ls-remote --heads origin` once more before declaring the session done. Automation-generated bot branches (`changeset-release/main`, `dependabot/*`, `codeql/*`) can appear post-merge and would otherwise leave the repo non-clean.
+
 **Commits:** Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`). Squash-merge title enforced via PR title.
 
 **Versioning:** changesets. User-facing PR → `pnpm changeset`. Internal-only (refactor/docs/chore) — no changeset.
@@ -99,6 +101,10 @@ Run `pnpm bootstrap` (alias `tsx tools/agent-bootstrap.ts`) for git/Issue/PR/spe
 ### 3.6 Permission-mode disclosure
 
 If the session is launched with `--dangerously-skip-permissions`, the agent assumes the discipline responsibility that CI guards would otherwise enforce. If CI guards are themselves broken, bypass mode amplifies the gap.
+
+### 3.7 Plane lifecycle entry (if applicable)
+
+If the active task is a Plane work-item (DSP-XXX / DSO-XXX), the very first tool call after identifying task kind is `plane-pp-cli` to: (1) move the task to `In Progress`, (2) post a start comment describing the planned approach. This precedes any code or doc edit. The end-of-session counterpart — move to `Done` + result comment — is in §6 Hard rules (Plane lifecycle).
 
 ---
 

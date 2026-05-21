@@ -38,7 +38,7 @@ const OWNER = 'doctor-school';
 const REPO = 'ds-platform';
 const PROJECT_TITLE = 'DS Platform';
 
-const STATUS_OPTIONS = ['Backlog', 'In Progress', 'Review', 'Done'] as const;
+const STATUS_OPTIONS = ['Todo', 'In Progress', 'Review', 'Done'] as const;
 
 const AREA_OPTIONS = [
   'api',
@@ -61,7 +61,7 @@ type AreaOption = (typeof AREA_OPTIONS)[number];
 const WORKFLOWS = [
   {
     key: 'auto-add',
-    description: `Auto-add items matching: repo:${OWNER}/${REPO} is:open is:issue,pr → Status=Backlog`,
+    description: `Auto-add items matching: repo:${OWNER}/${REPO} is:open is:issue,pr → Status=Todo`,
     uiPath: 'Settings → Workflows → Auto-add to project',
   },
   {
@@ -81,7 +81,7 @@ const WORKFLOWS = [
   },
   {
     key: 'item-reopened',
-    description: 'Item reopened → Status=Backlog',
+    description: 'Item reopened → Status=Todo',
     uiPath: 'Settings → Workflows → Item reopened',
   },
   {
@@ -403,7 +403,7 @@ async function backfill(projectNumber: number, projectId: string): Promise<void>
       log('ok', `#${item.number} already linked, skipping`);
       continue;
     }
-    const targetStatus = item.state === 'OPEN' ? 'Backlog' : 'Done';
+    const targetStatus = item.state === 'OPEN' ? 'Todo' : 'Done';
     const heur = classify(item.title);
     log('info', `#${item.number} (${item.type}, ${item.state}): "${item.title}" → status=${targetStatus} area=${heur.area ?? '∅'}`);
 

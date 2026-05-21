@@ -39,7 +39,7 @@ Releases as artifacts are produced **continuously** via changesets — every mer
 
 1. A single org-level Projects v2 board ships items from `doctor-school/ds-platform` and is the only place the agent reads to answer "what next".
 2. The board exposes the axes that genuinely slice work today: **Status** (daily kanban) and **Area** (which module). Work flavour is read off native fields — **Type** (built-in Issue Type on Issues) and **Labels** (the `feature` / `bug` / `chore` / `refactor` / `docs` / `tooling` labels already mandated by AGENTS.md §2 for PRs). Milestones are present built-in but are populated only when a long-lived product theme actually exists.
-3. The agent can pick the next item deterministically — including resuming In Progress work, not only starting fresh Backlog items.
+3. The agent can pick the next item deterministically — including resuming In Progress work, not only starting fresh Todo items.
 4. New Issues carry a structured body sufficient for a cold-start agent to act without trawling history.
 5. The setup is **reproducible**: a script in `tools/` rebuilds the board from scratch.
 
@@ -70,7 +70,7 @@ Releases as artifacts are produced **continuously** via changesets — every mer
 
 | Field         | Type                     | Values                                                                                                                                                                                                                                     | Filled                                                                |
 | ------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| **Status**    | single-select (built-in) | `Backlog` / `In Progress` / `Review` / `Done`                                                                                                                                                                                              | automatic via workflows (§3.3)                                        |
+| **Status**    | single-select (built-in) | `Todo` / `In Progress` / `Review` / `Done`                                                                                                                                                                                                 | automatic via workflows (§3.3)                                        |
 | **Type**      | built-in (Issue Type)    | Org-level Issue Types. Default set `Task / Bug / Feature` is sufficient; the org admin can extend with `chore / docs / tooling / refactor` if richer typing is wanted. **PRs do not have an Issue Type** — they are classified via Labels. | manual on Issue create                                                |
 | **Milestone** | built-in                 | Empty at setup. PM creates a Milestone when a long-lived product theme appears (spans multiple specs, lives weeks–months). Examples: `Auth foundations v1`, `Doctor portal MVP`, `Directual cutover`. **Milestones are NOT per-spec.**     | manual on Issue create, only when a relevant Milestone already exists |
 | **Labels**    | built-in                 | Surfaced on the board as a column. For PRs, the AGENTS.md §2 mandatory label (`feature` / `bug` / `chore` / `refactor` / `docs` / `tooling`) is the PR-side analogue of Issue Type.                                                        | set on the PR per AGENTS.md §2; agent / author responsibility         |
@@ -80,7 +80,7 @@ Releases as artifacts are produced **continuously** via changesets — every mer
 
 - **Release** — releases happen continuously via changesets, not as planning buckets. See §2 non-goals.
 - **Phase** — coarse temporal landmark, not an active filter for the working set. See §2 non-goals.
-- **Priority** — drag-reorder inside the Backlog column is the single source of order. A separate priority field would create a second source and the two can diverge.
+- **Priority** — drag-reorder inside the Todo column is the single source of order. A separate priority field would create a second source and the two can diverge.
 - **Estimate** — no sprint velocity tracking; 1+AI team.
 - **Iteration** — explicitly out of scope.
 - **Start / Target date** — no Roadmap-timeline view yet.
@@ -92,14 +92,14 @@ Releases as artifacts are produced **continuously** via changesets — every mer
 
 All six are enabled at setup time. Activation goes through the Projects v2 GraphQL `updateProjectV2Workflow` mutation, packaged inside the setup script.
 
-| #   | Trigger                                                                  | Action                                      |
-| --- | ------------------------------------------------------------------------ | ------------------------------------------- |
-| 1   | Item matches filter `repo:doctor-school/ds-platform is:open is:issue,pr` | **Auto-add** to project, `Status = Backlog` |
-| 2   | Item closed                                                              | `Status → Done`                             |
-| 3   | PR opened (ready-for-review, not draft)                                  | `Status → Review`                           |
-| 4   | PR converted to draft                                                    | `Status → In Progress`                      |
-| 5   | Item reopened                                                            | `Status → Backlog`                          |
-| 6   | Item `Status = Done` for >14 days                                        | **Auto-archive**                            |
+| #   | Trigger                                                                  | Action                                   |
+| --- | ------------------------------------------------------------------------ | ---------------------------------------- |
+| 1   | Item matches filter `repo:doctor-school/ds-platform is:open is:issue,pr` | **Auto-add** to project, `Status = Todo` |
+| 2   | Item closed                                                              | `Status → Done`                          |
+| 3   | PR opened (ready-for-review, not draft)                                  | `Status → Review`                        |
+| 4   | PR converted to draft                                                    | `Status → In Progress`                   |
+| 5   | Item reopened                                                            | `Status → Todo`                          |
+| 6   | Item `Status = Done` for >14 days                                        | **Auto-archive**                         |
 
 The auto-add filter is single-repo at setup. Extending to additional org repos in the future requires only adding `repo:doctor-school/<X>` to the filter — no schema change.
 
@@ -172,12 +172,12 @@ PRIORITY 2 — Rework Review-stage items
   for "review requested changes".
   STOP if any match.
 
-PRIORITY 3 — Pick fresh from Backlog
-  Filter Backlog items by: all native "blocked by" dependencies are Done.
+PRIORITY 3 — Pick fresh from Todo
+  Filter Todo items by: all native "blocked by" dependencies are Done.
   Pick the topmost unblocked item by position.
   STOP.
 
-PRIORITY 4 — All Backlog blocked
+PRIORITY 4 — All Todo blocked
   Surface the topmost blocker as the actionable item — the work now is
   unblocking, not implementing.
 ```
@@ -323,8 +323,8 @@ Flag `--dry-run` prints every intended mutation to stdout without executing. Use
 Manual checks after the script's first successful run:
 
 - `gh project view <PROJECT_NUMBER> --owner doctor-school --format json` — fields and workflows enumerated.
-- Open the board in a browser and confirm: three views render, Backlog column is empty, Done column shows the 17 backfilled items, Milestone column is empty (no Milestone objects exist yet).
-- Create a throwaway Issue in `doctor-school/ds-platform` — confirm auto-add fires (workflow #1) and the Issue appears in Backlog. Close it; confirm workflow #2 moves it to Done. Delete it.
+- Open the board in a browser and confirm: three views render, Todo column is empty, Done column shows the 17 backfilled items, Milestone column is empty (no Milestone objects exist yet).
+- Create a throwaway Issue in `doctor-school/ds-platform` — confirm auto-add fires (workflow #1) and the Issue appears in Todo. Close it; confirm workflow #2 moves it to Done. Delete it.
 
 No automated test harness — this is a one-off setup script, not a recurring pipeline.
 
@@ -345,7 +345,7 @@ The single-board design holds until any of the following triggers fire:
 
 - A second human owner with a bounded scope appears (e.g., Product Lead taking sole ownership of `cms-payload` content).
 - v1 implementation crosses ~50 concurrently open items — at that point a separate `v1 — pilot` board might reduce noise on the operational view.
-- More than 100 open items concurrently — the single Backlog column drag-reorder UX breaks down.
+- More than 100 open items concurrently — the single Todo column drag-reorder UX breaks down.
 - A second org-repo with an independent lifecycle joins the board (Plane-tracked `bbm` does not count — it uses Plane, not Projects v2).
 - A real demand for a Roadmap-timeline view emerges (then date fields per Milestone, and a Roadmap view added — amendment, not redesign).
 

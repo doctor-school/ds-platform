@@ -522,6 +522,14 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  section('Link to repo');
+  log('info', `linking project #${project.number} to ${OWNER}/${REPO} so it appears under the repo's Projects tab`);
+  await ghMutate([
+    'project', 'link', String(project.number),
+    '--owner', OWNER,
+    '--repo', `${OWNER}/${REPO}`,
+  ]);
+
   section('Fields');
   const fields = DRY_RUN ? [] : await listFields(project.number);
   await ensureStatusOptions(project.number, fields);

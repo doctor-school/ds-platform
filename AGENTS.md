@@ -39,6 +39,8 @@ Dependabot branches (`dependabot/...`) — leave as-is, do not rename.
 
 **Stale branches.** Auto-deleted on merge via `--delete-branch` in the squash-merge command. For PRs closed **without** merge, delete the branch in the same step (`gh pr close <N> --delete-branch`). Do not leave un-merged branches alive longer than the PR they came from. Dependabot branches Dependabot owns — closing the PR is enough; Dependabot will recreate when a new bump arrives.
 
+**Post-merge inventory re-sweep.** After merging a PR that touches `.changeset/`, `.github/workflows/*`, dependency manifests, or security configs, re-run `gh pr list` and `git ls-remote --heads origin` once more before declaring the session done. Automation-generated bot branches (`changeset-release/main`, `dependabot/*`, `codeql/*`) can appear post-merge and would otherwise leave the repo non-clean.
+
 **Commits:** Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`). Squash-merge title enforced via PR title.
 
 **Versioning:** changesets. User-facing PR → `pnpm changeset`. Internal-only (refactor/docs/chore) — no changeset.

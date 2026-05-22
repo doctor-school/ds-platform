@@ -200,3 +200,47 @@ In **Phase 0**, Tech Lead is the **single CODEOWNERS owner** (ADR-0008 §2.7) an
 | DS Platform code-level Issues     | **GitHub Issues** in this repo                                                        |
 
 **Tracker rule** (ADR-0006 §9): `gh` CLI first for code-level Issues; `pp-plane` only for cross-tracker references (e.g., a Plane DSO-XXX milestone cited from an ADR or spec).
+
+---
+
+## 9. Local Dev Stand
+
+The local dev stand (Postgres, Redis, MinIO, `idp`, Centrifugo, Cerbos, Mailpit) runs as a Docker Compose stack. It is a **two-layer model** (setup-design §2.1): a portable contract in git (`infra/dev-stand/compose.core.yml`, `.env.example`, README) plus a per-developer recipe kept outside git (`.env.local`, `compose.override.yml`). The rules below are **portable** — they hold on every recipe. Recipe-specific endpoints, paths, and failure modes live in the developer's personal `~/.ds-platform/AGENT_NOTES.md`, never here.
+
+Full design: [`local-dev-environment-setup-design`](./apps/docs/content/specs/tech/2026-05-18-local-dev-environment-setup-design-en.md) (§8 AI-agent integration). Bootstrap checklist, DX-command cheat sheet, and container-isolation rules: [`infra/dev-stand/README.md`](./infra/dev-stand/README.md).
+
+### 9.1 Endpoints — read from `.env.local`, never hardcode
+
+Service endpoints (`DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT`, `CENTRIFUGO_URL`, `CERBOS_URL`, `IDP_ISSUER`, `SMTP_HOST`…) are **recipe-specific** and live in the developer's `~/.ds-platform/.env.local`. Agents read them from there (or from the running process env) — they MUST NOT hardcode a host or port in code, specs, or this file. The `HOST` differs per recipe (`truenas.local`, `localhost`, a cloud VM…); a hardcoded endpoint silently breaks every other recipe.
+
+### 9.2 DX commands
+
+The stack is driven by `pnpm dev:*` (env-driven launcher `tools/dev/run.mjs`, DSP-156). The launcher reads `.env.local`, picks the transport, and runs `docker compose` against the stand.
+
+| Command                      | Does                                                             |
+| ---------------------------- | ---------------------------------------------------------------- |
+| `pnpm dev:up`                | Start the stack (detached); syncs the contract to the box.       |
+| `pnpm dev:down`              | Stop the stack; named volumes preserved.                         |
+| `pnpm dev:status`            | List dev-stand containers.                                       |
+| `pnpm dev:logs [service]`    | Follow logs — all services, or one.                              |
+| `pnpm dev:restart [service]` | Restart all services, or one.                                    |
+| `pnpm dev:psql`              | Open a `psql` shell on `ds_dev`.                                 |
+| `pnpm dev:snapshot <desc>`   | Pre-migration snapshot (recipe-specific; no-ops if unsupported). |
+| `pnpm dev:rollback <name>`   | Roll the database back to a snapshot (recipe-specific).          |
+| `pnpm dev:reset-db`          | Drop + recreate the database volume, then start.                 |
+
+### 9.3 Rules for agents
+
+- **Snapshot before migrate.** Before `pnpm drizzle:migrate`, ALWAYS run `pnpm dev:snapshot pre-mig-<short-desc>` first. The `drizzle:migrate` wrapper chains this automatically (setup-design §9.2), but a manual migration or a raw `drizzle-kit migrate` call bypasses the wrapper — snapshot first by hand.
+- **Never edit files inside volumes.** Container volumes (Postgres `pgdata`, Redis dumps, MinIO buckets) hold **live data**. Do not edit, copy over, or `rm` files inside them directly — go through the service (`psql`, an S3 client) or a snapshot/rollback. A direct write to a live `pgdata` corrupts the database.
+- **LAN endpoints are trusted, not egress.** Dev-stand services are LAN endpoints — per ADR-0011 §2.1 the LAN is a trusted network. Do NOT route stand traffic (e.g. `truenas.local`) through the egress PII scanner; these are intra-zone calls.
+- **No source code on the remote Docker host.** Only Docker volumes live on a remote box. `apps/*` and `packages/*` stay on the developer's local NVMe (setup-design §2.2).
+
+### 9.4 Baseline failure modes
+
+| Symptom                          | Check                                                                                                                                                                                                                  |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stack not running / service down | `pnpm dev:status`, then `pnpm dev:logs <service>` / `pnpm dev:restart <service>`.                                                                                                                                      |
+| Endpoint unreachable             | Verify the value in `.env.local`; confirm the service is up via `dev:status`.                                                                                                                                          |
+| Host port already in use         | Inspect listening ports (`netstat` / `ss`); remap the host-side port in the recipe override.                                                                                                                           |
+| `*.local` host does not resolve  | mDNS failure — fall back to the static IP. Recipe-specific causes (Windows network profile, WSL2 NAT) and the static IP are in the developer's `AGENT_NOTES.md` and `infra/dev-stand/README.md` → Bootstrap checklist. |

@@ -19,10 +19,48 @@ established convention for this server (see `home-budgeting-system/ARCHITECTURE.
 access — deferred, setup-design §11 OQ-1).
 
 Full design: [`ds-platform-local-dev-environment-setup-design`][spec] in the `bbm`
-repo. The compose stack itself lands with DSP-150 — this directory currently holds
-only the bootstrap checklist (DSP-152).
+repo. This directory currently holds the Layer-A **skeleton** — the bootstrap
+checklist (DSP-152) plus the portable-contract files stubbed by DSP-153. The
+compose contract itself (`compose.core.yml` service definitions) is filled in by
+DSP-154; the ZFS recipe by DSP-155; the `pnpm dev:*` DX scripts by DSP-156.
 
 [spec]: https://github.com/sidorovanthon/bbm/blob/main/docs/superpowers/specs/2026-05-18-ds-platform-local-dev-environment-setup-design-en.md
+
+---
+
+## Setup
+
+The dev-stand is two layers (setup-design §2.1): the **portable contract** in git
+(`compose.core.yml`, `.env.example`, this README) and a **personal recipe** kept
+outside git (`.env.local`, `compose.override.yml`). Setup order:
+
+1. **Prerequisites** — for the TrueNAS Hybrid recipe, complete the
+   [Bootstrap checklist](#bootstrap-checklist) below first. Host-only recipes can
+   skip it.
+2. **Personal env** — copy the env template and fill in real values for your
+   machine (`HOST`, `DOCKER_HOST`, passwords, data paths):
+
+   ```powershell
+   cp .env.example ~/.ds-platform/.env.local
+   ```
+
+3. **Personal override (optional)** — only if your recipe needs a non-default
+   storage topology (bind mounts, cloud disks). Named volumes work without it:
+
+   ```powershell
+   cp compose.override.example.yml ~/.ds-platform/compose.override.yml
+   ```
+
+4. **Start the stack** — `pnpm dev:up` (DX scripts land with DSP-156; the core
+   services they bring up land with DSP-154).
+
+`.env.local` and `compose.override.yml` are gitignored (see `.gitignore` in this
+directory) — they hold per-machine secrets and must never be committed.
+
+> **Save bootstrap secrets** (`POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`,
+> `IDP_SECRET_KEY`, …) in a password manager. They are not covered by ZFS
+> snapshots or host backups — on a wipe they are lost and must be rotated
+> (setup-design §10).
 
 ---
 

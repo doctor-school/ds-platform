@@ -1,0 +1,3 @@
+# Cerbos PDP policy directory (bind-mounted read-only into the cerbos container
+# at /policies). Starts empty — deny-all. Real policies land with the platform
+# policy package (packages/cerbos-policies/, setup-design §7.1).

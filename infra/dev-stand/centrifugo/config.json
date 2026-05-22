@@ -1,0 +1,18 @@
+{
+  "//": "DS Platform dev-stand — Centrifugo v6 minimal dev config (PORTABLE CONTRACT).",
+  "//secrets": "Values below are dev-only placeholders, NOT secrets. A recipe needing real keys overrides them via CENTRIFUGO_* env vars (setup-design §4).",
+  "client": {
+    "allowed_origins": ["*"],
+    "token": {
+      "hmac_secret_key": "dev-only-not-a-secret"
+    }
+  },
+  "http_api": {
+    "key": "dev-only-not-a-secret"
+  },
+  "admin": {
+    "enabled": true,
+    "password": "dev",
+    "secret": "dev-only-not-a-secret"
+  }
+}

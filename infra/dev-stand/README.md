@@ -83,10 +83,12 @@ The stack is driven by `pnpm dev:*` scripts — a cross-platform Node launcher
 
 **Transport.** The launcher reads `DEV_SSH_HOST` / `DEV_DOCKER_SUDO` /
 `DEV_REMOTE_DIR` from `.env.local` (see `.env.example`). With `DEV_SSH_HOST` set
-it syncs `infra/dev-stand/` to `DEV_REMOTE_DIR` on the box and runs
-`sudo docker compose` there over `ssh.exe`; with it empty it uses the local
-Docker daemon. The contract in git is always the single source of truth — every
-compose command re-syncs, so the box never drifts.
+it runs `sudo docker compose` on the box over `ssh.exe`; with it empty it uses
+the local Docker daemon. `dev:up` and `dev:reset-db` first sync
+`infra/dev-stand/` to `DEV_REMOTE_DIR` on the box — staged into a temp dir and
+swapped in only once fully transferred, so a failed transfer never disturbs a
+running stack. The other commands run against that already-synced dir, so
+`dev:up` is what keeps the box in step with the contract in git.
 
 **Recipe-specific commands.** `dev:snapshot` / `dev:rollback` carry no portable
 implementation — their logic lives per recipe in

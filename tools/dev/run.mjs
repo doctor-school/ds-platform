@@ -94,8 +94,15 @@ function cfg() {
   const env = loadEnv();
   const sshHost = (env.DEV_SSH_HOST || '').trim();
   const remoteDir = (env.DEV_REMOTE_DIR || '~/ds-platform-dev-stand').trim();
-  if (sshHost && ['', '~', '~/', '/', '.', './'].includes(remoteDir)) {
-    fail(`DEV_REMOTE_DIR resolves to an unsafe path: "${remoteDir}"`);
+  // remoteDir is interpolated unquoted into a remote `rm -rf` — the leading `~`
+  // must stay unquoted to expand, so it cannot be naively shell-quoted.
+  // Constrain it hard instead: a `/`- or `~/`-rooted path of safe characters
+  // only, no `..`, no spaces, no shell metacharacters.
+  if (sshHost && (!/^~?\/[A-Za-z0-9._/-]+$/.test(remoteDir) || remoteDir.includes('..'))) {
+    fail(
+      'DEV_REMOTE_DIR must be a plain absolute or ~/ path — no spaces, no "..", ' +
+        `no shell metacharacters: "${remoteDir}"`,
+    );
   }
   const overrideFile = (
     env.DEV_COMPOSE_OVERRIDE || join(homedir(), '.ds-platform', 'compose.override.yml')
@@ -106,6 +113,7 @@ function cfg() {
     useSudo: /^(1|true|yes)$/i.test((env.DEV_DOCKER_SUDO || '').trim()),
     overrideFile,
     hasOverride: existsSync(overrideFile),
+    pgDataset: (env.DEV_PG_DATASET || '').trim(),
   };
   return cfgCache;
 }
@@ -126,6 +134,10 @@ const composeFileFlags = () =>
 
 // Push infra/dev-stand/ (+ the personal override) to the remote box so the
 // compose file and its bind-mounted config dirs exist on the daemon side.
+// Only `dev:up` and `dev:reset-db` call this — the commands that (re)start
+// containers. The tarball is unpacked into a staging dir and swapped in only
+// once it is fully extracted, so a mid-transfer failure leaves the live dir
+// (and any running container's :ro bind mounts) untouched.
 function syncToRemote() {
   const { sshHost, remoteDir, hasOverride, overrideFile } = cfg();
   const tar = spawnSync('tar', ['-czf', '-', '-C', STAND_DIR, '.'], {
@@ -135,7 +147,10 @@ function syncToRemote() {
   if (tar.error) fail(`could not spawn tar: ${tar.error.message}`);
   if (tar.status !== 0) fail('packing infra/dev-stand/ failed');
 
-  const unpack = `rm -rf ${remoteDir} && mkdir -p ${remoteDir} && tar -xzf - -C ${remoteDir}`;
+  const stage = `${remoteDir}.stage`;
+  const unpack =
+    `rm -rf ${stage} && mkdir -p ${stage} && tar -xzf - -C ${stage} && ` +
+    `rm -rf ${remoteDir} && mv ${stage} ${remoteDir}`;
   const push = spawnSync('ssh', [sshHost, unpack], {
     input: tar.stdout,
     stdio: ['pipe', 'inherit', 'inherit'],
@@ -152,11 +167,12 @@ function syncToRemote() {
   }
 }
 
-// Run a `docker compose <sub...>` invocation against the active recipe.
+// Run a `docker compose <sub...>` invocation against the active recipe. The
+// SSH recipe runs against the already-synced remote dir (see syncToRemote —
+// only up/reset-db re-sync); if it is missing, `cd` fails with a clear error.
 function compose(sub, { tty = false } = {}) {
   const { sshHost, remoteDir, useSudo, hasOverride, overrideFile } = cfg();
   if (sshHost) {
-    syncToRemote();
     const remote = `cd ${remoteDir} && ${useSudo ? 'sudo ' : ''}docker compose ${composeFileFlags()} ${sub.join(' ')}`;
     return run('ssh', tty ? ['-t', sshHost, remote] : [sshHost, remote]);
   }
@@ -168,10 +184,12 @@ function compose(sub, { tty = false } = {}) {
 
 // Stream a recipe script to the remote box and run it with `bash -s`.
 function runRecipeScript(name, scriptArgs) {
+  const { sshHost, pgDataset } = cfg();
   const script = join(RECIPE_DIR, name);
   if (!existsSync(script)) fail(`recipe script missing: ${script}`);
   const quoted = scriptArgs.map(shq).join(' ');
-  const r = spawnSync('ssh', [cfg().sshHost, `bash -s -- ${quoted}`], {
+  const envPrefix = pgDataset ? `DEV_PG_DATASET=${shq(pgDataset)} ` : '';
+  const r = spawnSync('ssh', [sshHost, `${envPrefix}bash -s -- ${quoted}`], {
     input: readFileSync(script),
     stdio: ['pipe', 'inherit', 'inherit'],
   });
@@ -198,12 +216,21 @@ function cmdRollback(name) {
   }
   if (compose(['stop', 'postgres']) !== 0) fail('could not stop postgres before rollback');
   const code = runRecipeScript('rollback.sh', [name]);
-  compose(['start', 'postgres']);
-  return code;
+  const startCode = compose(['start', 'postgres']);
+  if (startCode !== 0) {
+    console.warn('dev:rollback: postgres did not start cleanly after rollback — check `pnpm dev:status`.');
+  }
+  return code || startCode;
+}
+
+function cmdUp() {
+  if (cfg().sshHost) syncToRemote();
+  return compose(['up', '-d']);
 }
 
 function cmdResetDb() {
   console.warn('dev:reset-db: dropping the dev database volume.');
+  if (cfg().sshHost) syncToRemote();
   compose(['down', '-v']);
   const code = compose(['up', '-d']);
   console.warn('dev:reset-db: schema migrate + seed are wired once apps/api lands (setup-design §11 OQ-4).');
@@ -213,7 +240,7 @@ function cmdResetDb() {
 function dispatch(cmd, rest) {
   switch (cmd) {
     case 'up':
-      return compose(['up', '-d']);
+      return cmdUp();
     case 'down':
       return compose(['down']);
     case 'status':

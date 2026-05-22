@@ -14,7 +14,7 @@ lang: en
 **Brainstorm:** superpowers:brainstorming skill, symmetric to DSO-25..30 + DSO-60
 **Inherits:** ADR-0001..0007
 
-This document is the implementation detail for ADR-0008. The ADR fixes "what and why"; the spec covers "exactly how": the contents of each root-level manifest file, concrete `gh api` commands for branch protection, steps for moving ADRs/specs from `bbm`, and AGENTS.md/CLAUDE.md sections for repo conventions.
+This document is the implementation detail for ADR-0008. The ADR fixes "what and why"; the spec covers "exactly how": the contents of each root-level manifest file, concrete `gh api` commands for branch protection, and AGENTS.md/CLAUDE.md sections for repo conventions.
 
 ---
 
@@ -22,9 +22,8 @@ This document is the implementation detail for ADR-0008. The ADR fixes "what and
 
 | Decision               | Choice                                                                                                                                | ADR-0008 §                  |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| GitHub org             | `bbm-academy-dev` (created 2026-05-15)                                                                                                | §2.1                        |
-| Repo name + visibility | `bbm-academy-dev/ds-platform`, private                                                                                                | §2.1                        |
-| `bbm` repo location    | planned transfer to org as housekeeping; does not block                                                                               | §2.10 step 0c               |
+| GitHub org             | `doctor-school` (GitHub Free plan)                                                                                                    | §2.1                        |
+| Repo name + visibility | `doctor-school/ds-platform`, private                                                                                                  | §2.1                        |
 | Monorepo orchestrator  | Turborepo 2.x + pnpm 10.x workspaces                                                                                                  | §2.2                        |
 | Node version pin       | `.nvmrc` (`22`) + `packageManager: pnpm@10.x` + `engines` + `engine-strict=true`                                                      | §2.2                        |
 | Repo layout root       | `apps/`, `packages/`, `tools/`, `.github/`, `.changeset/`, manifest files                                                             | §2.3                        |
@@ -43,7 +42,7 @@ This document is the implementation detail for ADR-0008. The ADR fixes "what and
 | CODEOWNERS Phase 0     | `* @sidorovanthon`                                                                                                                    | §2.7                        |
 | CI runner              | GitHub-hosted `ubuntu-latest` only                                                                                                    | §2.8                        |
 | Dependabot             | weekly, grouped, ecosystems npm + github-actions                                                                                      | §2.9                        |
-| Migration plan         | extends AI-stack design spec §11 + steps 15–22                                                                                        | §2.10                       |
+| Bootstrap steps        | extends AI-stack design spec §11 + steps 15–22                                                                                        | §2.10                       |
 
 ---
 
@@ -266,7 +265,7 @@ test-results/
   "$schema": "https://unpkg.com/@changesets/config@3.0.0/schema.json",
   "changelog": [
     "@changesets/changelog-github",
-    { "repo": "bbm-academy-dev/ds-platform" }
+    { "repo": "doctor-school/ds-platform" }
   ],
   "commit": false,
   "fixed": [],
@@ -690,7 +689,7 @@ Per ADR-0008 §2.6, step 21. Admin runs both calls once:
 gh api \
   --method PATCH \
   -H "Accept: application/vnd.github+json" \
-  /repos/bbm-academy-dev/ds-platform \
+  /repos/doctor-school/ds-platform \
   -F allow_squash_merge=true \
   -F allow_rebase_merge=false \
   -F allow_merge_commit=false \
@@ -708,7 +707,7 @@ gh api \
   --method PUT \
   -H "Accept: application/vnd.github+json" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
-  /repos/bbm-academy-dev/ds-platform/branches/main/protection \
+  /repos/doctor-school/ds-platform/branches/main/protection \
   -f required_status_checks[strict]=true \
   -f required_status_checks[contexts][]=ci \
   -f enforce_admins=true \
@@ -730,125 +729,11 @@ gh api \
 
 ---
 
-## 5. Move steps 18 — concrete commands
-
-Step 18 (ADR-0008 §2.10) is performed manually by Tech Lead. **`git mv` does not work cross-repo** (fails with error: source and destination are not in the same working tree) — these are two separate git repos. Use `cp` + `git rm` in bbm + `git add` in ds-platform.
-
-**Decision: git history for ADR files is lost** — it remains in the `bbm` git log (the `docs/adr/` section is retained for historical lookups). Preserving history via `git filter-repo --path docs/adr/` + cross-repo merge — overkill for 8 files. Acceptable trade-off for Phase 0.
-
-**In the ds-platform repo (Bash or PowerShell):**
-
-```bash
-# Bash
-cd /path/to/ds-platform
-mkdir -p apps/docs/content/adr
-cp /path/to/bbm/docs/adr/0001-identity-provider-shortlist-ru.md       apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0001-identity-provider-shortlist-en.md       apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0002-backend-core-stack-ru.md                 apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0002-backend-core-stack-en.md                 apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0003-data-layer-stack-ru.md                   apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0003-data-layer-stack-en.md                   apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0004-frontend-stack-ru.md                     apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0004-frontend-stack-en.md                     apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0005-mobile-stack-ru.md                       apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0005-mobile-stack-en.md                       apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0006-documentation-and-ssot-ru.md             apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0006-documentation-and-ssot-en.md             apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0007-ai-stack-ru.md                            apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0007-ai-stack-en.md                            apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0008-repo-strategy-and-dev-workflow-ru.md     apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0008-repo-strategy-and-dev-workflow-en.md     apps/docs/content/adr/
-
-# Companion design specs — copy + rename to NNNN-<slug>-design.md pattern
-cp /path/to/bbm/docs/superpowers/specs/0001-identity-provider-shortlist-design-ru.md  apps/docs/content/adr/0001-identity-provider-shortlist-design.md
-cp /path/to/bbm/docs/superpowers/specs/0001-identity-provider-shortlist-design-en.md  apps/docs/content/adr/0001-identity-provider-shortlist-design-en.md
-cp /path/to/bbm/docs/superpowers/specs/0002-backend-core-stack-design-ru.md         apps/docs/content/adr/0002-backend-core-stack-design.md
-cp /path/to/bbm/docs/superpowers/specs/0002-backend-core-stack-design-en.md         apps/docs/content/adr/0002-backend-core-stack-design-en.md
-cp /path/to/bbm/docs/superpowers/specs/0003-data-layer-stack-design-ru.md           apps/docs/content/adr/0003-data-layer-stack-design.md
-cp /path/to/bbm/docs/superpowers/specs/0003-data-layer-stack-design-en.md           apps/docs/content/adr/0003-data-layer-stack-design-en.md
-cp /path/to/bbm/docs/superpowers/specs/0004-frontend-stack-design-ru.md       apps/docs/content/adr/0004-frontend-stack-design.md
-cp /path/to/bbm/docs/superpowers/specs/0004-frontend-stack-design-en.md       apps/docs/content/adr/0004-frontend-stack-design-en.md
-cp /path/to/bbm/docs/superpowers/specs/0005-mobile-stack-design-ru.md         apps/docs/content/adr/0005-mobile-stack-design.md
-cp /path/to/bbm/docs/superpowers/specs/0005-mobile-stack-design-en.md         apps/docs/content/adr/0005-mobile-stack-design-en.md
-cp /path/to/bbm/docs/superpowers/specs/0006-documentation-and-ssot-design-ru.md   apps/docs/content/adr/0006-documentation-and-ssot-design.md
-cp /path/to/bbm/docs/superpowers/specs/0006-documentation-and-ssot-design-en.md   apps/docs/content/adr/0006-documentation-and-ssot-design-en.md
-cp /path/to/bbm/docs/superpowers/specs/0007-ai-stack-design-ru.md             apps/docs/content/adr/0007-ai-stack-design.md
-cp /path/to/bbm/docs/superpowers/specs/0007-ai-stack-design-en.md             apps/docs/content/adr/0007-ai-stack-design-en.md
-cp /path/to/bbm/docs/superpowers/specs/0008-repo-strategy-and-dev-workflow-design-ru.md        apps/docs/content/adr/0008-repo-strategy-and-dev-workflow-design.md
-cp /path/to/bbm/docs/superpowers/specs/0008-repo-strategy-and-dev-workflow-design-en.md        apps/docs/content/adr/0008-repo-strategy-and-dev-workflow-design-en.md
-
-git add apps/docs/content/adr/
-git commit -m "docs(adr): import ADR-0001..0008 + design specs from bbm repo"
-```
-
-**PowerShell equivalent** (if Tech Lead is working in a Windows shell — copy commands are identical; `git` commands unchanged):
-
-```powershell
-Copy-Item C:\Users\sidor\repos\bbm\docs\adr\*.md C:\Users\sidor\repos\ds-platform\apps\docs\content\adr\
-Copy-Item C:\Users\sidor\repos\bbm\docs\superpowers\specs\2026-05-1*-ds-platform-*-design.md C:\Users\sidor\repos\ds-platform\apps\docs\content\adr\
-# Then manually rename each -design.md per the pattern above
-```
-
-**In the bbm repo cleanup:**
-
-```bash
-cd /path/to/bbm
-git rm apps/docs/content/adr/0001-identity-provider-shortlist-ru.md
-git rm apps/docs/content/adr/0002-backend-core-stack-ru.md
-# ... all 8 ADR files
-git rm apps/docs/content/adr/0001-identity-provider-shortlist-design-ru.md
-# ... all 8 design specs
-
-# Create stub README in docs/adr/
-mkdir -p docs/adr
-```
-
-Create `docs/adr/README.md` (contents; on Windows PowerShell — via VS Code/Notepad, heredoc `cat <<EOF` breaks, see memory `feedback_tech_stack_criteria_no_team_skill` Windows notes in the general rules):
-
-```markdown
-# ADR for DS Platform
-
-ADRs and design specs for the DS Platform technical stack have moved to:
-**https://github.com/bbm-academy-dev/ds-platform/tree/main/apps/docs/content/adr**
-
-This `bbm` repository hosts BBM-level strategy and business documents only.
-
-Historical ADR-0001..0008 (created here before ds-platform repo existed): see git history.
-```
-
-```bash
-git add docs/adr/README.md
-git commit -m "docs(adr): move platform ADRs to bbm-academy-dev/ds-platform"
-```
-
-**Updated references:** grep the BBM repo and replace inline paths. On Windows PowerShell use `Select-String`:
-
-```powershell
-Select-String -Path '**/*.md','**/*.json' -Pattern 'docs/adr/' -SimpleMatch
-```
-
-Bash:
-
-```bash
-grep -rn "docs/adr/" --include='*.md' --include='*.json' .
-```
-
-References found in CLAUDE.md, processed/summaries, outputs/, memory/MEMORY.md — replace with `https://github.com/bbm-academy-dev/ds-platform/blob/main/apps/docs/content/adr/...` or a relative ref (if inside the ds-platform repo).
-
-**NOT moved (remain in bbm):**
-
-- All `docs/superpowers/specs/` files that are **not** related to the platform stack: Plane migration, Linear migration, infra-cost research, business-process design specs
-- `outputs/`, `transcripts/`, `models/`, `knowledge-base/documents/` — BBM-level artifacts
-- `infra/plane/` — Plane management tooling (BBM-level)
-- `CLAUDE.md`, `MEMORY.md` — BBM-level agent instructions (a new CLAUDE.md is created in ds-platform separately — per AI-stack design spec §11 step 12)
-
----
-
-## 6. AGENTS.md / CLAUDE.md sections for ds-platform
+## 5. AGENTS.md / CLAUDE.md sections for ds-platform
 
 Beyond the baseline from ADR-0006/0007, add a repository conventions section:
 
-### 6.1 AGENTS.md "Repository conventions" section (skeleton)
+### 5.1 AGENTS.md "Repository conventions" section (skeleton)
 
 ```markdown
 ## Repository conventions
@@ -874,7 +759,7 @@ Beyond the baseline from ADR-0006/0007, add a repository conventions section:
 **Feature specs live in `apps/docs/content/specs/features/NNN-<slug>/`** (3 files: requirements.md, design.md, scenarios.feature). One spec → one GitHub Milestone → multiple Issues per EARS-handler.
 ```
 
-### 6.2 CLAUDE.md "Repository conventions" overlay (Claude Code-specific)
+### 5.2 CLAUDE.md "Repository conventions" overlay (Claude Code-specific)
 
 ```markdown
 ## Repository conventions (Claude Code overlay)
@@ -904,14 +789,14 @@ Bootstrap output (≤2 KB live state snapshot) is automatically placed in `addit
 **Plane vs GitHub Issues split** (ADR-0006 §9):
 
 - DS Platform code-level Issues → GitHub Issues in this repo (`gh issue ...`)
-- BBM strategic Issues, cross-team milestones → Plane workspace `doctor-school`
+- Strategic Issues, cross-team milestones → Plane workspace `doctor-school`
 
 **Do not invoke `pp-plane` CLI for code tasks** — this would create duplicate sources.
 ```
 
 ---
 
-## 7. README.md (ds-platform root)
+## 6. README.md (ds-platform root)
 
 Skeleton, specific contents filled in at step 15:
 
@@ -937,7 +822,7 @@ Phase 0 (greenfield, brainstorm complete). Pre-pilot target: 2026 Q3 (TBD).
 
 Full reference: `apps/docs/content/adr/`.
 
-Runtime/operational tooling (Coolify preview, Caddy, GlitchTip, Loki, Vault, Unleash): see [engineering-readiness spec](https://github.com/bbm-academy-dev/bbm/blob/main/docs/superpowers/specs/2026-05-12-ds-platform-engineering-readiness-design-en.md).
+Runtime/operational tooling (Coolify preview, Caddy, GlitchTip, Loki, Vault, Unleash): see [engineering-readiness spec](apps/docs/content/specs/tech/2026-05-12-engineering-readiness-design-en.md).
 
 ## Prerequisites
 
@@ -965,7 +850,7 @@ See AGENTS.md (universal constitution) and CLAUDE.md (Claude Code overlay).
 
 ---
 
-## 8. Open follow-ups (references to ADR-0008 §5)
+## 7. Open follow-ups (references to ADR-0008 §5)
 
 All open questions (OQ-R1..R12) are listed in ADR-0008 §5 with triggers. This spec details them only when a trigger fires — without premature speculation.
 
@@ -978,7 +863,7 @@ Concrete workflow when a trigger fires (any of OQ-R1..R12):
 
 ---
 
-## 9. Cross-refs
+## 8. Cross-refs
 
 - **ADR-0001** §8 — IdP shortlist (Authentik **or Zitadel** — TBD per §8 spike): when team SSO for GitHub Enterprise plan appears — reuse the same tenant, not a separate one.
 - **ADR-0002** §6 — `apps/api/` implements NestJS + BullMQ.
@@ -990,20 +875,20 @@ Concrete workflow when a trigger fires (any of OQ-R1..R12):
 - **ADR-0005** — `apps/mobile/` — Expo SDK 53, separate build/release pipeline (Expo EAS).
 - **ADR-0006** §1, §2, §3, §6, §7, §9, §10 — doc topology, Fumadocs, Keystatic, glossary, drift guards, task-tracker split: materialised in layout §2.3 + tooling §3.
 - **ADR-0007** §2.4 (8-step cycle), §2.5 (bootstrap), §2.6 (drift guards), §2.8 (reviewer-bot), §2.10 (cost-ledger), §2.11 (autonomy + kill switch); **AI-stack design spec §11** (14-step migration plan): this ADR-0008 + spec — operational ground for §11 migration steps.
-- **Engineering-readiness spec** (`docs/superpowers/specs/2026-05-12-ds-platform-engineering-readiness-design-en.md`) — runtime tooling defaults: Caddy/Traefik, Coolify, GlitchTip, Loki+Prometheus+Tempo, Vault, Unleash, Beget DNS. Referenced from `README.md` § Runtime tooling. Not duplicated in ADR-0008.
+- **Engineering-readiness spec** (`../specs/tech/2026-05-12-engineering-readiness-design-en.md`) — runtime tooling defaults: Caddy/Traefik, Coolify, GlitchTip, Loki+Prometheus+Tempo, Vault, Unleash, Beget DNS. Referenced from `README.md` § Runtime tooling. Not duplicated in ADR-0008.
 
 ---
 
-## 10. Source
+## 9. Source
 
 - Brainstorm session 2026-05-15 with Tech Lead (superpowers:brainstorming)
 - Inherited decisions: ADR-0001..0007 (DSO-25..30 + DSO-60)
 - Plane DSO-31 ticket scope (open decisions + scope-notes)
-- Current ds-platform repo context: `bbm-academy-dev/ds-platform` (created 2026-05-15)
+- Current ds-platform repo context: `doctor-school/ds-platform`
 
 ---
 
-## 11. Amendments
+## 10. Amendments
 
 ### Amendment SD2 — agent-review check removed per ADR-0008 Amendment A2 (2026-05-19)
 

@@ -14,7 +14,7 @@ lang: ru
 **Brainstorm:** superpowers:brainstorming skill, симметрично DSO-25..30 + DSO-60
 **Наследует:** ADR-0001..0007
 
-Этот документ — реализационная детализация ADR-0008. ADR фиксирует «что и почему»; spec — «как именно»: содержимое каждого root-level manifest файла, конкретные команды `gh api` для branch protection, шаги move ADR/specs из `bbm`, AGENTS.md/CLAUDE.md sections для repo conventions.
+Этот документ — реализационная детализация ADR-0008. ADR фиксирует «что и почему»; spec — «как именно»: содержимое каждого root-level manifest файла, конкретные команды `gh api` для branch protection, AGENTS.md/CLAUDE.md sections для repo conventions.
 
 ---
 
@@ -22,9 +22,8 @@ lang: ru
 
 | Решение                | Выбор                                                                                                                                 | ADR-0008 §                  |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| GitHub org             | `bbm-academy-dev` (created 2026-05-15)                                                                                                | §2.1                        |
-| Repo name + visibility | `bbm-academy-dev/ds-platform`, private                                                                                                | §2.1                        |
-| `bbm` repo location    | планируется transfer в org как housekeeping; не блокирует                                                                             | §2.10 step 0c               |
+| GitHub org             | `doctor-school` (GitHub Free plan)                                                                                                    | §2.1                        |
+| Repo name + visibility | `doctor-school/ds-platform`, private                                                                                                  | §2.1                        |
 | Monorepo orchestrator  | Turborepo 2.x + pnpm 10.x workspaces                                                                                                  | §2.2                        |
 | Node version pin       | `.nvmrc` (`22`) + `packageManager: pnpm@10.x` + `engines` + `engine-strict=true`                                                      | §2.2                        |
 | Repo layout root       | `apps/`, `packages/`, `tools/`, `.github/`, `.changeset/`, manifest files                                                             | §2.3                        |
@@ -43,7 +42,7 @@ lang: ru
 | CODEOWNERS Phase 0     | `* @sidorovanthon`                                                                                                                    | §2.7                        |
 | CI runner              | GitHub-hosted `ubuntu-latest` only                                                                                                    | §2.8                        |
 | Dependabot             | weekly, grouped, ecosystems npm + github-actions                                                                                      | §2.9                        |
-| Migration plan         | extends AI-stack design spec §11 + steps 15–22                                                                                        | §2.10                       |
+| Bootstrap steps        | extends AI-stack design spec §11 + steps 15–22                                                                                        | §2.10                       |
 
 ---
 
@@ -266,7 +265,7 @@ test-results/
   "$schema": "https://unpkg.com/@changesets/config@3.0.0/schema.json",
   "changelog": [
     "@changesets/changelog-github",
-    { "repo": "bbm-academy-dev/ds-platform" }
+    { "repo": "doctor-school/ds-platform" }
   ],
   "commit": false,
   "fixed": [],
@@ -690,7 +689,7 @@ Per ADR-0008 §2.6, step 21. Admin запускает оба вызова оди
 gh api \
   --method PATCH \
   -H "Accept: application/vnd.github+json" \
-  /repos/bbm-academy-dev/ds-platform \
+  /repos/doctor-school/ds-platform \
   -F allow_squash_merge=true \
   -F allow_rebase_merge=false \
   -F allow_merge_commit=false \
@@ -708,7 +707,7 @@ gh api \
   --method PUT \
   -H "Accept: application/vnd.github+json" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
-  /repos/bbm-academy-dev/ds-platform/branches/main/protection \
+  /repos/doctor-school/ds-platform/branches/main/protection \
   -f required_status_checks[strict]=true \
   -f required_status_checks[contexts][]=ci \
   -f enforce_admins=true \
@@ -730,109 +729,11 @@ gh api \
 
 ---
 
-## 5. Move steps 18 — конкретные команды
-
-Step 18 (ADR-0008 §2.10) выполняется Tech Lead вручную. **`git mv` cross-repo не работает** (отказывается с error: source and destination не в одном working tree) — это два разных git repos. Используем `cp` + `git rm` в bbm + `git add` в ds-platform.
-
-**Decision: git history для ADR файлов теряется** — она остаётся в `bbm` git log (раздел `docs/adr/` retained for historical lookups). Сохранение history через `git filter-repo --path docs/adr/` + cross-repo merge — overkill для 8 файлов. Acceptable trade-off для Phase 0.
-
-**В ds-platform repo (Bash или PowerShell):**
-
-```bash
-# Bash
-cd /path/to/ds-platform
-mkdir -p apps/docs/content/adr
-cp /path/to/bbm/docs/adr/0001-identity-provider-shortlist-ru.md       apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0002-backend-core-stack-ru.md                 apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0003-data-layer-stack-ru.md                   apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0004-frontend-stack-ru.md                     apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0005-mobile-stack-ru.md                       apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0006-documentation-and-ssot-ru.md             apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0007-ai-stack-ru.md                            apps/docs/content/adr/
-cp /path/to/bbm/docs/adr/0008-repo-strategy-and-dev-workflow-ru.md     apps/docs/content/adr/
-
-# Companion design specs — copy + rename to NNNN-<slug>-design.md pattern
-cp /path/to/bbm/docs/superpowers/specs/0001-identity-provider-shortlist-design-ru.md  apps/docs/content/adr/0001-identity-provider-shortlist-design.md
-cp /path/to/bbm/docs/superpowers/specs/0002-backend-core-stack-design-ru.md         apps/docs/content/adr/0002-backend-core-stack-design.md
-cp /path/to/bbm/docs/superpowers/specs/0003-data-layer-stack-design-ru.md           apps/docs/content/adr/0003-data-layer-stack-design.md
-cp /path/to/bbm/docs/superpowers/specs/0004-frontend-stack-design-ru.md       apps/docs/content/adr/0004-frontend-stack-design.md
-cp /path/to/bbm/docs/superpowers/specs/0005-mobile-stack-design-ru.md         apps/docs/content/adr/0005-mobile-stack-design.md
-cp /path/to/bbm/docs/superpowers/specs/0006-documentation-and-ssot-design-ru.md   apps/docs/content/adr/0006-documentation-and-ssot-design.md
-cp /path/to/bbm/docs/superpowers/specs/0007-ai-stack-design-ru.md             apps/docs/content/adr/0007-ai-stack-design.md
-cp /path/to/bbm/docs/superpowers/specs/0008-repo-strategy-and-dev-workflow-design-ru.md        apps/docs/content/adr/0008-repo-strategy-and-dev-workflow-design.md
-
-git add apps/docs/content/adr/
-git commit -m "docs(adr): import ADR-0001..0008 + design specs from bbm repo"
-```
-
-**PowerShell-эквивалент** (если Анton работает в Windows-shell — copy-команды одинаково; `git` команды unchanged):
-
-```powershell
-Copy-Item C:\Users\sidor\repos\bbm\docs\adr\*.md C:\Users\sidor\repos\ds-platform\apps\docs\content\adr\
-Copy-Item C:\Users\sidor\repos\bbm\docs\superpowers\specs\2026-05-1*-ds-platform-*-design.md C:\Users\sidor\repos\ds-platform\apps\docs\content\adr\
-# Затем вручную rename каждый -design.md per pattern выше
-```
-
-**В bbm repo cleanup:**
-
-```bash
-cd /path/to/bbm
-git rm apps/docs/content/adr/0001-identity-provider-shortlist-ru.md
-git rm apps/docs/content/adr/0002-backend-core-stack-ru.md
-# ... все 8 ADR файлов
-git rm apps/docs/content/adr/0001-identity-provider-shortlist-design-ru.md
-# ... все 8 design specs
-
-# Создать stub README в docs/adr/
-mkdir -p docs/adr
-```
-
-Создать `docs/adr/README.md` (содержимое; на Windows PowerShell — через VS Code/Notepad, heredoc `cat <<EOF` ломается, см. memory `feedback_tech_stack_criteria_no_team_skill` Windows-нотес в общих правилах):
-
-```markdown
-# ADR for DS Platform
-
-ADRs and design specs for the DS Platform technical stack have moved to:
-**https://github.com/bbm-academy-dev/ds-platform/tree/main/apps/docs/content/adr**
-
-This `bbm` repository hosts BBM-level strategy and business documents only.
-
-Historical ADR-0001..0008 (created here before ds-platform repo existed): see git history.
-```
-
-```bash
-git add docs/adr/README.md
-git commit -m "docs(adr): move platform ADRs to bbm-academy-dev/ds-platform"
-```
-
-**Updated references:** grep BBM repo и заменить inline-paths. На Windows PowerShell используется `Select-String`:
-
-```powershell
-Select-String -Path '**/*.md','**/*.json' -Pattern 'docs/adr/' -SimpleMatch
-```
-
-Bash:
-
-```bash
-grep -rn "docs/adr/" --include='*.md' --include='*.json' .
-```
-
-Найденные ссылки в CLAUDE.md, processed/summaries, outputs/, memory/MEMORY.md — заменить на `https://github.com/bbm-academy-dev/ds-platform/blob/main/apps/docs/content/adr/...` или relative ref (если в ds-platform repo).
-
-**NOT moved (остаются в bbm):**
-
-- Все `docs/superpowers/specs/` файлы, которые **не** относятся к платформенному стеку: Plane migration, Linear migration, infra-cost research, business-process design specs
-- `outputs/`, `transcripts/`, `models/`, `knowledge-base/documents/` — BBM-level artifacts
-- `infra/plane/` — Plane management tooling (BBM-level)
-- `CLAUDE.md`, `MEMORY.md` — BBM-level agent instructions (новый CLAUDE.md создаётся в ds-platform отдельно — per AI-stack design spec §11 step 12)
-
----
-
-## 6. AGENTS.md / CLAUDE.md sections для ds-platform
+## 5. AGENTS.md / CLAUDE.md sections для ds-platform
 
 Сверх baseline из ADR-0006/0007, добавить repository conventions section:
 
-### 6.1 AGENTS.md "Repository conventions" section (skeleton)
+### 5.1 AGENTS.md "Repository conventions" section (skeleton)
 
 ```markdown
 ## Repository conventions
@@ -858,7 +759,7 @@ grep -rn "docs/adr/" --include='*.md' --include='*.json' .
 **Feature specs live in `apps/docs/content/specs/features/NNN-<slug>/`** (3 файла: requirements.md, design.md, scenarios.feature). One spec → one GitHub Milestone → multiple Issues per EARS-handler.
 ```
 
-### 6.2 CLAUDE.md "Repository conventions" overlay (Claude Code-specific)
+### 5.2 CLAUDE.md "Repository conventions" overlay (Claude Code-specific)
 
 ```markdown
 ## Repository conventions (Claude Code overlay)
@@ -888,14 +789,14 @@ Output bootstrap'а (≤2 KB live state snapshot) автоматически в 
 **Plane vs GitHub Issues split** (ADR-0006 §9):
 
 - DS Platform code-level Issues → GitHub Issues в этом repo (`gh issue ...`)
-- BBM strategic Issues, cross-team milestones → Plane workspace `doctor-school`
+- Strategic Issues, cross-team milestones → Plane workspace `doctor-school`
 
 **Не дёргать `pp-plane` CLI для code-tasks** — это создавало бы duplicate sources.
 ```
 
 ---
 
-## 7. README.md (ds-platform root)
+## 6. README.md (ds-platform root)
 
 Skeleton, конкретное содержимое заполняется на step 15:
 
@@ -921,7 +822,7 @@ Phase 0 (greenfield, brainstorm complete). Pre-pilot target: 2026 Q3 (TBD).
 
 Full reference: `apps/docs/content/adr/`.
 
-Runtime/operational tooling (Coolify preview, Caddy, GlitchTip, Loki, Vault, Unleash): see [engineering-readiness spec](https://github.com/bbm-academy-dev/bbm/blob/main/docs/superpowers/specs/2026-05-12-ds-platform-engineering-readiness-design-ru.md).
+Runtime/operational tooling (Coolify preview, Caddy, GlitchTip, Loki, Vault, Unleash): see [engineering-readiness spec](apps/docs/content/specs/tech/2026-05-12-engineering-readiness-design-ru.md).
 
 ## Prerequisites
 
@@ -949,7 +850,7 @@ See AGENTS.md (universal constitution) и CLAUDE.md (Claude Code overlay).
 
 ---
 
-## 8. Open follow-ups (ссылки на ADR-0008 §5)
+## 7. Open follow-ups (ссылки на ADR-0008 §5)
 
 Все open questions (OQ-R1..R12) перечислены в ADR-0008 §5 с triggers. Spec их детализирует только когда trigger fires — без premature speculation.
 
@@ -962,7 +863,7 @@ See AGENTS.md (universal constitution) и CLAUDE.md (Claude Code overlay).
 
 ---
 
-## 9. Cross-refs
+## 8. Cross-refs
 
 - **ADR-0001** §8 — IdP shortlist (Authentik **или Zitadel** — TBD per §8 spike): при появлении team SSO для GitHub Enterprise plan — reuse того же tenant, не отдельный.
 - **ADR-0002** §6 — `apps/api/` имплементирует NestJS + BullMQ.
@@ -974,20 +875,20 @@ See AGENTS.md (universal constitution) и CLAUDE.md (Claude Code overlay).
 - **ADR-0005** — `apps/mobile/` — Expo SDK 53, отдельный build/release pipeline (Expo EAS).
 - **ADR-0006** §1, §2, §3, §6, §7, §9, §10 — doc topology, Fumadocs, Keystatic, glossary, drift guards, task-tracker split: воплощается в layout §2.3 + tooling §3.
 - **ADR-0007** §2.4 (8-step cycle), §2.5 (bootstrap), §2.6 (drift guards), §2.8 (reviewer-bot), §2.10 (cost-ledger), §2.11 (autonomy + kill switch); **AI-stack design spec §11** (14-step migration plan): этот ADR-0008 + spec — operational ground для §11 migration steps.
-- **Engineering-readiness spec** (`docs/superpowers/specs/2026-05-12-ds-platform-engineering-readiness-design-ru.md`) — runtime tooling defaults: Caddy/Traefik, Coolify, GlitchTip, Loki+Prometheus+Tempo, Vault, Unleash, Beget DNS. Referenced from `README.md` § Runtime tooling. Не дублируется в ADR-0008.
+- **Engineering-readiness spec** (`../specs/tech/2026-05-12-engineering-readiness-design-ru.md`) — runtime tooling defaults: Caddy/Traefik, Coolify, GlitchTip, Loki+Prometheus+Tempo, Vault, Unleash, Beget DNS. Referenced from `README.md` § Runtime tooling. Не дублируется в ADR-0008.
 
 ---
 
-## 10. Source
+## 9. Source
 
 - Brainstorm-сессия 2026-05-15 с Tech Lead (superpowers:brainstorming)
 - Inherited decisions: ADR-0001..0007 (DSO-25..30 + DSO-60)
 - Plane DSO-31 ticket scope (открытые decisions + scope-notes)
-- Текущий контекст ds-platform repo: `bbm-academy-dev/ds-platform` (created 2026-05-15)
+- Текущий контекст ds-platform repo: `doctor-school/ds-platform`
 
 ---
 
-## 11. Amendments
+## 10. Amendments
 
 ### Amendment SD2 — agent-review check removed per ADR-0008 Amendment A2 (2026-05-19)
 

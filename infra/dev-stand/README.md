@@ -1,7 +1,7 @@
 # Local dev-stand
 
-Local development environment for DS Platform — Postgres, Redis, MinIO, Centrifugo,
-Cerbos, Mailpit and friends, run as a Docker Compose stack.
+Local development environment for DS Platform — Postgres, Redis, MinIO, `idp`,
+Centrifugo, Cerbos, Mailpit and friends, run as a Docker Compose stack.
 
 The platform contract (compose files, `.env.example`, DX wrappers) is portable and
 lives in git. Each developer picks a **recipe** for _where_ Docker actually runs.
@@ -89,6 +89,10 @@ the local Docker daemon. `dev:up` and `dev:reset-db` first sync
 swapped in only once fully transferred, so a failed transfer never disturbs a
 running stack. The other commands run against that already-synced dir, so
 `dev:up` is what keeps the box in step with the contract in git.
+
+**Before a migration.** Always run `pnpm dev:snapshot pre-mig-<desc>` before
+`pnpm drizzle:migrate`. The portable agent rules for the stand — snapshot-before-migrate,
+never-edit-volumes, LAN-is-trusted — live in [`AGENTS.md` §9](../../AGENTS.md#9-local-dev-stand).
 
 **Recipe-specific commands.** `dev:snapshot` / `dev:rollback` carry no portable
 implementation — their logic lives per recipe in

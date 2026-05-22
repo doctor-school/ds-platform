@@ -1,32 +1,140 @@
 # DS Platform — local dev-stand core compose (PORTABLE CONTRACT)
 #
-# STUB — skeleton placeholder created by DSP-153.
-# The real service definitions land with DSP-154 (compose contract).
-#
-# This file is the single source of truth for service composition: which
-# services exist, their images/versions, env-var names, named volumes and
-# healthchecks. It is identical for every developer. Storage topology is NOT
-# prescribed here — each developer's compose.override.yml decides that (see
+# Single source of truth for service composition: which services exist, their
+# images/versions, env-var names, named volumes and healthchecks. Identical for
+# every developer. Storage topology is NOT prescribed here — a personal
+# compose.override.yml may swap the named volumes for bind mounts (see
 # compose.override.example.yml and setup-design §7.2).
 #
 # Fixed project name keeps every container namespaced as ds-platform-dev-<svc>-1
-# so the stand never collides with co-hosted workloads (see README -> Container
-# isolation).
+# and the bridge as ds-platform-dev_default, so the stand never collides with
+# co-hosted workloads (see README -> Container isolation).
+#
+# Host-side ports are env-driven (${<SVC>_PORT:-default}); a recipe whose host
+# already binds a default port remaps it in .env.local without editing this
+# file (see README -> Container isolation port table; .env.example -> Host port
+# overrides).
+#
+# The idp service (Authentik|Zitadel) is intentionally absent — pending the
+# ADR-0001 §8 spike; it lands as a separate task. Observability services
+# (loki/grafana/glitchtip/promtail) live in a separate compose.observability.yml
+# started on demand only (setup-design §3.2).
 name: ds-platform-dev
 
-# --- Core services (always-on) — to be defined by DSP-154, setup-design §3.1 ---
-#   postgres    pgvector/pgvector:pg17        5432
-#   redis       redis:7-alpine               6379
-#   minio       minio/minio:latest           9000 (S3) + 9001 (console)
-#   idp         authentik|zitadel (TBD)      9080 / 9443
-#   centrifugo  centrifugo/centrifugo:v6     8000
-#   cerbos      ghcr.io/cerbos/cerbos:latest 3592 (gRPC) + 3593 (HTTP)
-#   mailpit     axllent/mailpit:latest       1025 (SMTP) + 8025 (UI)
-#
-# Observability services (loki/grafana/glitchtip/promtail) live in a separate
-# compose.observability.yml — started on demand only (setup-design §3.2).
-services: {}
+services:
+  # --- Postgres 17 + pgvector — primary datastore (ADR-0003) ---
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ds
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ds_dev
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ds-postgres:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./postgres/postgresql.conf.dev:/etc/postgresql/postgresql.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ds -d ds_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # --- Redis 7 — cache, sessions, BullMQ broker, Centrifugo PubSub ---
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - ds-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- MinIO — S3-compatible object storage ---
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - ds-minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # --- Centrifugo v6 — realtime WebSocket server ---
+  centrifugo:
+    image: centrifugo/centrifugo:v6
+    restart: unless-stopped
+    command: centrifugo --config=/centrifugo/config.json --health.enabled
+    ports:
+      - "${CENTRIFUGO_PORT:-8000}:8000"
+    volumes:
+      - ./centrifugo/config.json:/centrifugo/config.json:ro
+      - ds-centrifugo:/centrifugo/data
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # --- Cerbos — policy decision point (PDP) ---
+  cerbos:
+    image: ghcr.io/cerbos/cerbos:latest
+    restart: unless-stopped
+    command: ["server", "--config=/config/config.yaml"]
+    ports:
+      - "${CERBOS_HTTP_PORT:-3592}:3592"
+      - "${CERBOS_GRPC_PORT:-3593}:3593"
+    volumes:
+      - ./cerbos/config.yaml:/config/config.yaml:ro
+      - ./cerbos/policies:/policies:ro
+    healthcheck:
+      test: ["CMD", "/cerbos", "healthcheck", "--config=/config/config.yaml"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # --- Mailpit — dev SMTP catch-all + web UI ---
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 # Named volumes — Docker-managed, isolated per machine. A personal
 # compose.override.yml may swap these for bind mounts (setup-design §7.2).
-volumes: {}
+volumes:
+  ds-postgres:
+  ds-redis:
+  ds-minio:
+  ds-centrifugo:

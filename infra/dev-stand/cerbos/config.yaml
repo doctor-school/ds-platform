@@ -1,0 +1,15 @@
+# DS Platform dev-stand — Cerbos PDP config (PORTABLE CONTRACT)
+#
+# Minimal dev configuration. Policies are read from the bind-mounted /policies
+# directory; it starts empty (deny-all) and is populated once the platform
+# policy package (packages/cerbos-policies/, setup-design §7.1) is wired in.
+
+server:
+  httpListenAddr: ":3592"
+  grpcListenAddr: ":3593"
+
+storage:
+  driver: "disk"
+  disk:
+    directory: /policies
+    watchForChanges: true

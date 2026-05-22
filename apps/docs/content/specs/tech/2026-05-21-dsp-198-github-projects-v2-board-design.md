@@ -24,12 +24,12 @@ A single board with the right fields serves both. The design therefore goes beyo
 
 Product trajectory for context only (not encoded as a board axis):
 
-| Era            | Scope                                                                                                                                                                                                        | Window               |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------- |
-| **Phase 0**    | Engineering readiness: ADR scaffolding, dev-loop (AI + CI + changesets + bootstrap), local-dev (DSP-150), engineering-readiness in `bbm`. Directual hard-cutover discovery (2–3 weeks). IdP spike (~3 days). | **now** (mid-flight) |
-| **v1 (Pilot)** | Email / SMS-OTP / magic-link auth, 5 of 9 product roles, no social OAuth, MFA TOTP for admin/expert, portal + admin + CMS minimal viable, Directual migration with 90-day window.                            | Q3 2026 target       |
-| **v2**         | + VK ID, Yandex ID, Telegram OAuth. + `expert / moderator / support / investor` roles. WebAuthn / Passkeys. MFA TOTP upgrade for `moderator / support`. HIBP. Full CMS-Payload content pipeline.             | after v1             |
-| **v3**         | + Apple Sign-In, mobile App Store distribution, `clinic_admin` role, anomaly detection / impossible travel, scale-out to 1M MAU.                                                                             | after v2             |
+| Era            | Scope                                                                                                                                                                                                    | Window               |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| **Phase 0**    | Engineering readiness: ADR scaffolding, dev-loop (AI + CI + changesets + bootstrap), local-dev (DSP-150), engineering-readiness spec. Directual hard-cutover discovery (2–3 weeks). IdP spike (~3 days). | **now** (mid-flight) |
+| **v1 (Pilot)** | Email / SMS-OTP / magic-link auth, 5 of 9 product roles, no social OAuth, MFA TOTP for admin/expert, portal + admin + CMS minimal viable, Directual migration with 90-day window.                        | Q3 2026 target       |
+| **v2**         | + VK ID, Yandex ID, Telegram OAuth. + `expert / moderator / support / investor` roles. WebAuthn / Passkeys. MFA TOTP upgrade for `moderator / support`. HIBP. Full CMS-Payload content pipeline.         | after v1             |
+| **v3**         | + Apple Sign-In, mobile App Store distribution, `clinic_admin` role, anomaly detection / impossible travel, scale-out to 1M MAU.                                                                         | after v2             |
 
 Releases as artifacts are produced **continuously** via changesets — every merged PR carrying a changeset emits a semver-tagged GitHub Release. They are not planning containers and do not appear on the board.
 
@@ -346,7 +346,7 @@ The single-board design holds until any of the following triggers fire:
 - A second human owner with a bounded scope appears (e.g., Product Lead taking sole ownership of `cms-payload` content).
 - v1 implementation crosses ~50 concurrently open items — at that point a separate `v1 — pilot` board might reduce noise on the operational view.
 - More than 100 open items concurrently — the single Todo column drag-reorder UX breaks down.
-- A second org-repo with an independent lifecycle joins the board (Plane-tracked `bbm` does not count — it uses Plane, not Projects v2).
+- A second org-repo with an independent lifecycle joins the board.
 - A real demand for a Roadmap-timeline view emerges (then date fields per Milestone, and a Roadmap view added — amendment, not redesign).
 
 Each trigger reopens this spec as an amendment, not as a fresh design.

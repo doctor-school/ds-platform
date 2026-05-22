@@ -9,8 +9,6 @@ lang: en
 # DS Platform — PD Lifecycle, Consent, Retention, Erasure design
 
 **Date:** 2026-05-18
-**Notion title:** [BBM · DS] 2026-05-18 — DS Platform: PD lifecycle design
-**Notion page ID:** —
 **Master:** repository → `apps/docs/content/adr/0009-pd-lifecycle-and-consent-design-ru.md`
 **Author:** Tech Lead
 **Related to:** Plane DSO-63 findings #5 + #6, milestone DSO-24

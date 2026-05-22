@@ -18,13 +18,13 @@ established convention for this server (see `home-budgeting-system/ARCHITECTURE.
 `ssh.exe`; the `DOCKER_HOST=ssh://` transport is **not** used (it needs direct socket
 access — deferred, setup-design §11 OQ-1).
 
-Full design: [`ds-platform-local-dev-environment-setup-design`][spec] in the `bbm`
-repo. This directory currently holds the Layer-A **skeleton** — the bootstrap
+Full design: [`local-dev-environment-setup-design`][spec]. This directory
+currently holds the Layer-A **skeleton** — the bootstrap
 checklist (DSP-152) plus the portable-contract files stubbed by DSP-153. The
 compose contract itself (`compose.core.yml` service definitions) is filled in by
 DSP-154; the ZFS recipe by DSP-155; the `pnpm dev:*` DX scripts by DSP-156.
 
-[spec]: https://github.com/sidorovanthon/bbm/blob/main/docs/superpowers/specs/2026-05-18-ds-platform-local-dev-environment-setup-design-en.md
+[spec]: ../../apps/docs/content/specs/tech/2026-05-18-local-dev-environment-setup-design-en.md
 
 ---
 

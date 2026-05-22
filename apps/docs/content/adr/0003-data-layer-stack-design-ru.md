@@ -9,8 +9,6 @@ lang: ru
 # DS Platform — Data Layer design
 
 **Дата:** 2026-05-13
-**Notion title:** [BBM · DS] 2026-05-13 — DS Platform: Data Layer design
-**Notion page ID:** —
 **Мастер:** репозиторий → `apps/docs/content/adr/0003-data-layer-stack-design-ru.md`
 **Автор:** Tech Lead Сидоров
 **Связан с:** Plane DSO-27 (`bb877d3b-e922-4d8d-8e7b-9b33b4c941ee`), milestone DSO-24

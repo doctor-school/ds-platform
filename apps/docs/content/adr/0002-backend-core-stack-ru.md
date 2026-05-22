@@ -183,7 +183,7 @@ Doc-first cycle, auto-generation везде где можно, CI-gates на con
 
 ## Amendment A1 — v1 availability target resolved (2026-05-18, DSO-59)
 
-**Источник:** DSO-59 (`https://plane.bbm.academy/doctor-school/.../DSO-59`). Закрывает OQ11.
+**Источник:** Plane DSO-59. Закрывает OQ11.
 
 **Контекст.** В оригинальном ADR-0002 (2026-05-13) performance budget декларировал availability 99.5% v1, при этом cons-секция признавала, что реалистично 99.0% single-AZ без HA Postgres. OQ11 оставлял выбор открытым. После DSO-63 external validation топология бэкапов и RPO/RTO для single-node v1 зафиксированы в ADR-0003 §2.4 + §9. Этот amendment синхронизирует ADR-0002 с уже принятыми решениями и формально закрывает OQ11.
 

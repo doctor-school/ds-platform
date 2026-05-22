@@ -382,7 +382,7 @@ Hard rule в AGENTS.md для всех runtime LLM-вызовов (reviewer-bot,
 
 ### Amendment A2 — Discipline-gate'ы (artifact-required) + auto-merge после положительного review (2026-05-20, follow-up к DSP-194)
 
-**Контекст:** G11 smoke (DSP-181, проход по feature'у `001-api-bootstrap-health`) дошёл до green CI и merged PR, но retrospective в `bbm/outputs/g11-smoke-findings.md` зафиксировал, что green был достигнут **только потому, что человек-наблюдатель вмешался в трёх критических точках**. Три находки доминируют стоимость:
+**Контекст:** G11 smoke (DSP-181, проход по feature'у `001-api-bootstrap-health`) дошёл до green CI и merged PR, но G11 smoke retrospective зафиксировал, что green был достигнут **только потому, что человек-наблюдатель вмешался в трёх критических точках**. Три находки доминируют стоимость:
 
 - **F-14** — Step 8 (review dispatch) был забыт. Author-agent объявил цикл завершённым после `gh pr create`, считая «human-merge» единственным финальным действием. Только прямой вопрос человека («ты запустил ревью?») запустил Mode (a). Ревью тогда поймало два BLOCKER-findings, которые иначе бы ушли в `main`.
 - **F-15** — 9-item iteration-end checklist (тогда в AGENTS.md §3 Step 6, до рефакторинга DSP-194) никогда не исполнялся как дискретный шаг. Из девяти пунктов применялись два-три; остальные были пропущены или молча отложены. Checklist как narrative bullet list был, по словам retrospective, «фактически декоративным».

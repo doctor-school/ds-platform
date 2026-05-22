@@ -1049,7 +1049,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "cost-ledger-bot"
-          git config user.email "bot@bbm.academy"
+          git config user.email "bot@doctor.school"
           DATE=$(date -u +%Y-%m-%d)
           BRANCH="chore/cost-ledger-$DATE"
           git checkout -b "$BRANCH"
@@ -1483,7 +1483,7 @@ Phase 2+ (runtime AI features):
 
 ### Amendment SD2 — §2.4 inline 8-step cycle → каталог skill'ов (парный с ADR-0007 Amendment A2, 2026-05-20)
 
-**Контекст:** §2 этого design-spec'а (AI-loop architecture — Phase 0) разбирал 8-step iteration cycle как inline narrative. ADR-0007 §2.4 нёс тот же narrative. G11 retrospective (DSP-181, `bbm/outputs/g11-smoke-findings.md`) показал, что narrative-only процедура не enforceable — F-14 (review forgotten), F-15 (checklist decorative), F-19/F-21 (decision-debt silently dropped) — все всплыли потому, что агент мог прочитать narrative и молча пропустить шаги.
+**Контекст:** §2 этого design-spec'а (AI-loop architecture — Phase 0) разбирал 8-step iteration cycle как inline narrative. ADR-0007 §2.4 нёс тот же narrative. G11 retrospective (DSP-181) показал, что narrative-only процедура не enforceable — F-14 (review forgotten), F-15 (checklist decorative), F-19/F-21 (decision-debt silently dropped) — все всплыли потому, что агент мог прочитать narrative и молча пропустить шаги.
 
 **Решение (amendment):**
 
@@ -1493,4 +1493,4 @@ Discipline-gate'ы (artifact-required) кодифицированы как «Can
 
 **Affects:** §2 narrative в этом design-spec'е **superseded** для procedural detail; архитектурный rationale (vendor neutrality, dispatch-vs-inline trade-offs, prompt-cache implications) остаётся в силе. Исходное содержимое §2 сохранено как design baseline (тот же паттерн, что SD1 для §6/§7/§10/§11).
 
-**См.:** ADR-0007 §7 Amendment A2 для полного текста решения и consequences. Brainstorm spec: `bbm/docs/superpowers/specs/2026-05-20-ds-platform-agent-instructions-refactor-design-en.md`.
+**См.:** ADR-0007 §7 Amendment A2 для полного текста решения и consequences. Brainstorm spec: agent-instructions refactor design (2026-05-20).

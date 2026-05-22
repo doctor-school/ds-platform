@@ -1049,7 +1049,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "cost-ledger-bot"
-          git config user.email "bot@bbm.academy"
+          git config user.email "bot@doctor.school"
           DATE=$(date -u +%Y-%m-%d)
           BRANCH="chore/cost-ledger-$DATE"
           git checkout -b "$BRANCH"
@@ -1483,7 +1483,7 @@ Phase 2+ (runtime AI features):
 
 ### Amendment SD2 — §2.4 inline 8-step cycle → skill catalog (paired with ADR-0007 Amendment A2, 2026-05-20)
 
-**Context:** §2 of this design spec (AI-loop architecture — Phase 0) walked through the 8-step iteration cycle as inline narrative. ADR-0007 §2.4 carried the same narrative. The G11 retrospective (DSP-181, `bbm/outputs/g11-smoke-findings.md`) showed that narrative-only procedure is not enforceable — F-14 (review forgotten), F-15 (checklist decorative), F-19/F-21 (decision-debt silently dropped) all surfaced because the agent could read the narrative and silently skip steps.
+**Context:** §2 of this design spec (AI-loop architecture — Phase 0) walked through the 8-step iteration cycle as inline narrative. ADR-0007 §2.4 carried the same narrative. The G11 retrospective (DSP-181) showed that narrative-only procedure is not enforceable — F-14 (review forgotten), F-15 (checklist decorative), F-19/F-21 (decision-debt silently dropped) all surfaced because the agent could read the narrative and silently skip steps.
 
 **Decision (amendment):**
 
@@ -1493,4 +1493,4 @@ Discipline gates (artifact-required) are codified as "Cannot proceed without" cl
 
 **Affects:** the §2 narrative in this design spec is **superseded** for the procedural detail; the architectural rationale (vendor neutrality, dispatch-vs-inline trade-offs, prompt-cache implications) remains valid. The original §2 content is preserved as design baseline (same pattern as SD1 for §6/§7/§10/§11).
 
-**See:** ADR-0007 §7 Amendment A2 for the full decision text and consequences. Brainstorm spec: `bbm/docs/superpowers/specs/2026-05-20-ds-platform-agent-instructions-refactor-design-en.md`.
+**See:** ADR-0007 §7 Amendment A2 for the full decision text and consequences. Brainstorm spec: agent-instructions refactor design (2026-05-20).

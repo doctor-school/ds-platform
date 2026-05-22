@@ -9,8 +9,6 @@ lang: ru
 # DS Platform — PD Lifecycle, Consent, Retention, Erasure design
 
 **Дата:** 2026-05-18
-**Notion title:** [BBM · DS] 2026-05-18 — DS Platform: PD lifecycle design
-**Notion page ID:** —
 **Мастер:** репозиторий → `apps/docs/content/adr/0009-pd-lifecycle-and-consent-design-ru.md`
 **Автор:** Tech Lead Сидоров
 **Связан с:** Plane DSO-63 finding #5 + #6, milestone DSO-24

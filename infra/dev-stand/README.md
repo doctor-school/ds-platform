@@ -12,6 +12,12 @@ On this recipe the TrueNAS box is **shared** with unrelated projects (home-budge
 media-index, RTMP, TrueNAS Apps). The dev-stand must stay isolated from them — see
 [Container isolation](#container-isolation).
 
+Docker on the box runs via `sudo docker` over the `truenas` SSH alias — the
+established convention for this server (see `home-budgeting-system/ARCHITECTURE.md`
+§11). DX wrappers (`tools/dev/*.sh`, DSP-150) call `sudo docker compose` over
+`ssh.exe`; the `DOCKER_HOST=ssh://` transport is **not** used (it needs direct socket
+access — deferred, setup-design §11 OQ-1).
+
 Full design: [`ds-platform-local-dev-environment-setup-design`][spec] in the `bbm`
 repo. The compose stack itself lands with DSP-150 — this directory currently holds
 only the bootstrap checklist (DSP-152).
@@ -22,7 +28,7 @@ only the bootstrap checklist (DSP-152).
 
 ## Bootstrap checklist
 
-One-time prerequisites before the dev-stand can be brought up. Steps 1–2 are
+One-time prerequisites before the dev-stand can be brought up. Step 1–2 are
 recipe-specific (TrueNAS Hybrid); steps 3–5 are host-side and apply to anyone
 talking to a remote Docker host over SSH.
 
@@ -31,34 +37,28 @@ when all five verifications pass.
 
 ### 1. SSH access to TrueNAS Docker
 
-The dev-stand reaches Docker as `ssh://claude@truenas.local` (setup-design §4, §9).
-The `claude` user already exists on TrueNAS with the host key in
-`~/.ssh/authorized_keys` — SSH itself works. The one gap: `claude` is **not** in the
-`docker` group, so it can only reach the daemon via `sudo docker`. `DOCKER_HOST=ssh://`
-needs direct socket access, so `claude` must join the `docker` group.
+The dev-stand reaches Docker over the `truenas` SSH alias as user `claude`, which
+is already provisioned on the box (key in `~/.ssh/authorized_keys`, passwordless
+sudo). Docker commands run with `sudo docker` — `claude` is intentionally **not** in
+the `docker` group, matching the existing server convention. No new user, no group
+change is needed.
 
-- On TrueNAS (one-time): `sudo usermod -aG docker claude`, then open a fresh session
-  so the new group takes effect.
-- On the host, the `truenas` SSH alias maps to `claude` + the right key. For
-  `DOCKER_HOST=ssh://claude@truenas.local` to resolve the same way, extend the alias
-  in `~/.ssh/config` to also match the mDNS name:
+The host `~/.ssh/config` alias:
 
-  ```
-  Host truenas truenas.local
-      HostName 192.168.1.115
-      User claude
-      IdentityFile ~/.ssh/truenas
-  ```
+```
+Host truenas
+    HostName 192.168.1.115
+    User claude
+    IdentityFile ~/.ssh/truenas
+```
 
 **Verification** (from the host):
 
 ```powershell
-ssh truenas "id && docker version"
+ssh truenas "sudo docker version"
 ```
 
-`id` must list `docker` in the groups; `docker version` must print both Client **and**
-Server sections. A `permission denied ... /var/run/docker.sock` on the Server section
-means the `docker` group has not taken effect yet (reconnect the session).
+Must print both Client **and** Server sections.
 
 ### 2. DHCP reservation for TrueNAS
 
@@ -116,7 +116,7 @@ End-to-end check that `truenas.local` resolves and Docker is reachable.
 
 ```powershell
 ping truenas.local
-ssh truenas "docker version"
+ssh truenas "sudo docker version"
 ```
 
 Attach the `docker version` output to the DSP-152 Plane thread once it passes.
@@ -143,12 +143,12 @@ with the compose stack in DSP-150; the rules are fixed here so DSP-150 implement
 - **Host ports** — the setup-design port list collides with ports already bound on
   TrueNAS. DSP-150 must remap these:
 
-  | Service (spec port)                                                                    | Status on TrueNAS              | Action for DSP-150                |
-  | -------------------------------------------------------------------------------------- | ------------------------------ | --------------------------------- |
-  | Postgres `5432`                                                                        | **in use** (`5433` also taken) | remap host side, e.g. `5442:5432` |
-  | `8000`                                                                                 | **in use**                     | remap, e.g. `8100:8000`           |
-  | `8001`                                                                                 | **in use**                     | remap, e.g. `8101:8001`           |
-  | `6379`, `9000`, `9001`, `9080`, `9443`, `3100`, `4000`, `1025`, `8025`, `3592`, `3593` | free                           | keep as-is                        |
+  | Service (spec port)                                                                    | Status on TrueNAS                                             | Action for DSP-150                |
+  | -------------------------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------- |
+  | Postgres `5432`                                                                        | **in use** — `home-budgeting-system-db-1` (`5433` also taken) | remap host side, e.g. `5442:5432` |
+  | `8000`                                                                                 | **in use**                                                    | remap, e.g. `8100:8000`           |
+  | `8001`                                                                                 | **in use**                                                    | remap, e.g. `8101:8001`           |
+  | `6379`, `9000`, `9001`, `9080`, `9443`, `3100`, `4000`, `1025`, `8025`, `3592`, `3593` | free                                                          | keep as-is                        |
 
   Prefer **not publishing** internal-only ports at all and reaching services over the
   Docker network / SSH tunnel; publish only what the host apps genuinely need.
@@ -164,10 +164,10 @@ ssh truenas "sudo ss -tlnH | awk '{print \$4}' | sed 's/.*://' | sort -nu" |
 
 ## Checklist status
 
-| #   | Check                                   | Status                            |
-| --- | --------------------------------------- | --------------------------------- |
-| 1   | SSH access — `claude` in `docker` group | ⬜ pending — `usermod -aG docker` |
-| 2   | DHCP reservation `192.168.1.115`        | ⬜ pending — manual router step   |
-| 3   | Windows network profile = Private       | ✅ verified 2026-05-22            |
-| 4   | OpenSSH client present                  | ✅ verified 2026-05-22            |
-| 5   | mDNS resolution + SSH smoke test        | ⬜ blocked on step 1              |
+| #   | Check                                 | Status                         |
+| --- | ------------------------------------- | ------------------------------ |
+| 1   | SSH access — `claude` + `sudo docker` | ✅ verified 2026-05-22         |
+| 2   | DHCP reservation `192.168.1.115`      | ⬜ pending — confirm on router |
+| 3   | Windows network profile = Private     | ✅ verified 2026-05-22         |
+| 4   | OpenSSH client present                | ✅ verified 2026-05-22         |
+| 5   | mDNS resolution + SSH smoke test      | ✅ verified 2026-05-22         |

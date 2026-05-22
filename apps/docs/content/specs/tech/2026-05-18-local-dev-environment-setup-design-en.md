@@ -104,7 +104,7 @@ This is the part **in git**. Identical for every developer. Volumes use **env-dr
 | `minio`                                                 | `minio/minio:latest`                                             | 9000 (S3) + 9001 (console)      | 9000+9001          | 512 MB                                         | api (uploads), Payload (media), mobile (offline cache target)       |
 | `idp` (`authentik` or `zitadel`, TBD ADR-0001 §8 spike) | placeholder service named `idp` now                              | 9080 (HTTP), 9443 (HTTPS)       | 9000/9443 internal | 1–2 GB + internal Postgres + Redis (or shared) | api (JWT issuer), all web apps (OIDC login)                         |
 | `centrifugo`                                            | `centrifugo/centrifugo:v6`                                       | 8000                            | 8000               | 128 MB                                         | api (publish), web/mobile (WS subscribe)                            |
-| `cerbos`                                                | `ghcr.io/cerbos/cerbos:latest`                                   | 3592 (gRPC), 3593 (HTTP)        | 3592/3593          | 128 MB                                         | api (PDP queries)                                                   |
+| `cerbos`                                                | `ghcr.io/cerbos/cerbos:latest`                                   | 3592 (HTTP), 3593 (gRPC)        | 3592/3593          | 128 MB                                         | api (PDP queries)                                                   |
 | `mailpit`                                               | `axllent/mailpit:latest`                                         | 1025 (SMTP), 8025 (UI)          | 1025/8025          | 64 MB                                          | api (email dev catch-all)                                           |
 
 **Total core RAM:** ≈ 4–8 GB working set. Recipe-specific: whether this fits on your machine is your check. On Tech Lead's recipe (TrueNAS hybrid) — OK (≈18–20 GB usable).
@@ -169,7 +169,7 @@ SMTP_HOST=HOST
 SMTP_PORT=1025
 
 # === Data volume root (recipe-specific) ===
-# Tech Lead's TrueNAS recipe: DS_DATA_PATH=/mnt/Daily/dev
+# Tech Lead's TrueNAS recipe: DS_DATA_PATH=/mnt/dev-stand
 # Host-only recipe (named volumes): leave empty → compose uses named volumes
 DS_DATA_PATH=
 
@@ -189,7 +189,7 @@ External hostnames — recipe-specific (see §5+).
 
 ### 4.3 Firewall — recipe-specific
 
-Specific to each deployment. Tech Lead's recipe (TrueNAS Scale) — nftables rules open the port list to `192.168.1.0/24`. Host-only recipe — Windows Firewall unchanged (localhost-only). See §5.4 (Tech Lead's recipe).
+Specific to each deployment. Tech Lead's recipe (TrueNAS Scale 24.10) — no firewall change needed: the box has no host-level inbound filter, LAN ports are reachable as-is (see §5.4). Host-only recipe — Windows Firewall unchanged (localhost-only).
 
 ---
 
@@ -225,23 +225,25 @@ Static IP fallback: `192.168.1.115` (DHCP reservation on router).
 
 ```
 Daily SSD pool (900 GB)
-├── Daily/dev-postgres        # Postgres pgdata, mountpoint /mnt/Daily/dev/postgres
-├── Daily/dev-redis           # Redis AOF/RDB dumps
-├── Daily/dev-minio           # MinIO buckets storage
-├── Daily/dev-idp             # Authentik|Zitadel media + certificates
-├── Daily/dev-centrifugo      # Centrifugo state (small)
-├── Daily/dev-cerbos-policies # Cerbos PDP policies
-└── Daily/dev-observability   # Loki chunks, Grafana state, GlitchTip Postgres (when activated)
+├── Daily SSD/dev-postgres        # Postgres pgdata,   mountpoint /mnt/dev-stand/postgres
+├── Daily SSD/dev-redis           # Redis AOF/RDB dumps,         /mnt/dev-stand/redis
+├── Daily SSD/dev-minio           # MinIO buckets storage,       /mnt/dev-stand/minio
+├── Daily SSD/dev-idp             # Authentik|Zitadel media,     /mnt/dev-stand/idp
+├── Daily SSD/dev-centrifugo      # Centrifugo state (small),    /mnt/dev-stand/centrifugo
+├── Daily SSD/dev-cerbos-policies # Cerbos PDP policies,         /mnt/dev-stand/cerbos-policies
+└── Daily SSD/dev-observability   # Loki/Grafana/GlitchTip,      /mnt/dev-stand/observability
 
 RaidPool (449 GB) — reserved for per-feature snapshot clones (§5.5 OQ-2); free until trigger.
 Media (7.14 TiB) — off-host ZFS replication target.
 ```
 
+> **Note (DSP-155 implementation):** the SSD pool is named `Daily SSD` (with a space), not `Daily` — datasets are `Daily SSD/dev-*`. The space stays only inside `zfs` commands (always quoted); each dataset carries an explicit `mountpoint=/mnt/dev-stand/<name>`, so Docker bind-mount paths are space-free.
+
 **Recordsize tuning:**
 
-- `Daily/dev-postgres`: `recordsize=16K`, `compression=lz4`, `atime=off`, `logbias=throughput`, `primarycache=metadata`. **Caveat:** `primarycache=metadata` is effective when `shared_buffers` covers the working set. The current dev `shared_buffers=512MB` against a ~4 GB working set may cause a cold-read penalty — if observed, switch to `primarycache=all` (open ZFS discussion openzfs/zfs#15400).
-- `Daily/dev-minio`: `recordsize=1M`, `compression=lz4`, `atime=off`.
-- `Daily/dev-redis`: `recordsize=128K`, `compression=lz4`.
+- `Daily SSD/dev-postgres`: `recordsize=16K`, `compression=lz4`, `atime=off`, `logbias=throughput`, `primarycache=metadata`. **Caveat:** `primarycache=metadata` is effective when `shared_buffers` covers the working set. The current dev `shared_buffers=512MB` against a ~4 GB working set may cause a cold-read penalty — if observed, switch to `primarycache=all` (open ZFS discussion openzfs/zfs#15400).
+- `Daily SSD/dev-minio`: `recordsize=1M`, `compression=lz4`, `atime=off`.
+- `Daily SSD/dev-redis`: `recordsize=128K`, `compression=lz4`.
 
 In `compose.override.yml` (Tech Lead's personal file, **not in git**) bind mounts point to these datasets:
 
@@ -250,26 +252,28 @@ In `compose.override.yml` (Tech Lead's personal file, **not in git**) bind mount
 services:
   postgres:
     volumes:
-      - /mnt/Daily/dev/postgres:/var/lib/postgresql/data
+      - /mnt/dev-stand/postgres:/var/lib/postgresql/data
   redis:
     volumes:
-      - /mnt/Daily/dev/redis:/data
+      - /mnt/dev-stand/redis:/data
   # ... etc
 ```
 
 ### 5.4 Firewall + DHCP (Tech Lead's recipe)
 
-- TrueNAS Scale firewall (nftables) allows 5432/6379/9000-9001/9080/9443/8000/3100/4000/1025/8025/3592/3593 from `192.168.1.0/24`.
-- Internet ports closed.
+- TrueNAS Scale 24.10 ships **no host-level inbound firewall** — the live nftables ruleset contains only Docker's bridge-isolation chains, no `filter hook input`. LAN clients on `192.168.1.0/24` reach the published ports (5432/6379/9000-9001/9080/9443/8000/3100/4000/1025/8025/3592/3593) with no extra configuration — "open the firewall" is a no-op for this recipe. If inbound filtering is ever required, add it explicitly via a custom nftables init script.
+- Internet exposure is governed by the router (no port-forwarding to the TrueNAS box), not by a host firewall.
 - DHCP reservation `192.168.1.115` for TrueNAS MAC on the router.
 
 ### 5.5 Snapshot & backup (Tech Lead's recipe — ZFS-based)
 
-**Auto-snapshot:** Periodic Snapshot Task — daily 03:00 retention 7d on all `Daily/dev-*`.
+**Why not a TrueNAS Periodic Snapshot Task:** the TrueNAS box is not 24/7. A fixed-time cron task is silently skipped on every day the box is powered off at that hour — TrueNAS Periodic Snapshot Tasks have no catch-up. The recipe instead uses an age-checked, boot-triggered maintenance script, so coverage depends on uptime, not wall-clock time.
 
-**Off-pool replication:** weekly `Daily/dev-postgres` → `Media/backups/dev-stand/`, retention 4 weeks. Backup for Daily-pool corruption, not disaster recovery.
+**Auto-snapshot:** `/root/dev-stand-maintenance.sh` on TrueNAS, launched ~30 min after each boot via a Post-Init init script (`systemd-run --on-active=30min`). For each `Daily SSD/dev-*` dataset it creates a snapshot only if the newest `@auto-dev-*` snapshot is ≥ 7 days old, then prunes to the last 3. Cadence is effectively "weekly, relative to uptime". Known limit: if the box runs > 7 days without a reboot the boot trigger does not re-fire — acceptable for a dev box that is power-cycled regularly; revisit by adding a `systemd` `OnUnitActiveSec=1week` re-check if long uptimes become common.
 
-**Pre-migration manual snapshot:** before `pnpm drizzle:migrate` AI agent / dev runs `pnpm dev:snapshot pre-mig-<desc>`. Wrapper SSHs into TrueNAS, `zfs snapshot Daily/dev-postgres@<...>`. Rollback: `pnpm dev:rollback <snapshot>` (requires `docker compose stop postgres` before `zfs rollback`).
+**Off-pool replication:** the same script — if the last replica is ≥ 7 days old — runs an incremental `zfs send -I … | zfs recv` of `Daily SSD/dev-postgres` → `Media/backups/dev-stand/postgres`, then prunes target snapshots older than 4 weeks. Backup for Daily-SSD-pool corruption, not disaster recovery.
+
+**Pre-migration manual snapshot:** before `pnpm drizzle:migrate` AI agent / dev runs `pnpm dev:snapshot pre-mig-<desc>`. Wrapper SSHs into TrueNAS, `zfs snapshot "Daily SSD/dev-postgres@<...>"`. Rollback: `pnpm dev:rollback <snapshot>` (requires `docker compose stop postgres` before `zfs rollback`).
 
 Drizzle pre-migration hook — wrapper in `apps/api/package.json` (see §9.2).
 
@@ -361,13 +365,13 @@ volumes:
 services:
   postgres:
     volumes:
-      - /mnt/Daily/dev/postgres:/var/lib/postgresql/data
+      - /mnt/dev-stand/postgres:/var/lib/postgresql/data
   redis:
     volumes:
-      - /mnt/Daily/dev/redis:/data
+      - /mnt/dev-stand/redis:/data
   minio:
     volumes:
-      - /mnt/Daily/dev/minio:/data
+      - /mnt/dev-stand/minio:/data
   # ... etc
 ```
 
@@ -485,7 +489,7 @@ Wrapper scripts in `tools/dev/`: portable Node.js launcher `tools/dev/run.mjs` (
 ```bash
 # tools/dev/snapshot.sh (excerpt)
 NAME="$1-$(date -u +%Y%m%dT%H%M%SZ)"
-zfs snapshot "Daily/dev-postgres@${NAME}"
+zfs snapshot "Daily SSD/dev-postgres@${NAME}"
 ```
 
 This yields readable names (`pre-mig-auto-20260518T091230Z`) and works identically on a Windows host (cmd / PowerShell / WSL without bash-substitution headaches).
@@ -604,9 +608,9 @@ Done **first**, outlives any single developer.
 Done **in parallel** with Layer A, but content partially in repo (as recipe documentation) and partially personal.
 
 1. Bootstrap Tech Lead's TrueNAS: SSH keys, DHCP reservation, Windows Private profile, OpenSSH client check.
-2. ZFS datasets `Daily/dev-*` with tunings (§5.3).
+2. ZFS datasets `Daily SSD/dev-*` with tunings (§5.3).
 3. TrueNAS firewall rules (§5.4).
-4. Periodic Snapshot Task + weekly replication (§5.5).
+4. Boot-triggered snapshot + replication maintenance script (§5.5).
 5. Tech Lead's `~/.ds-platform/compose.override.yml` with bind mounts to ZFS datasets.
 6. Tech Lead's `~/.ds-platform/.env.local` with real secrets + endpoints.
 7. Recipe documentation in repo README (§7.4, §5) — for future devs and AI agents.

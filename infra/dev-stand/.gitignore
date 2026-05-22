@@ -1,0 +1,5 @@
+# Personal overlay files — never committed (setup-design §2.1 layer B, §7.1).
+# Real values live in ~/.ds-platform/ by convention; this guards the case
+# where a developer keeps them inside infra/dev-stand/ instead.
+.env.local
+compose.override.yml

@@ -1,0 +1,32 @@
+# DS Platform — local dev-stand core compose (PORTABLE CONTRACT)
+#
+# STUB — skeleton placeholder created by DSP-153.
+# The real service definitions land with DSP-154 (compose contract).
+#
+# This file is the single source of truth for service composition: which
+# services exist, their images/versions, env-var names, named volumes and
+# healthchecks. It is identical for every developer. Storage topology is NOT
+# prescribed here — each developer's compose.override.yml decides that (see
+# compose.override.example.yml and setup-design §7.2).
+#
+# Fixed project name keeps every container namespaced as ds-platform-dev-<svc>-1
+# so the stand never collides with co-hosted workloads (see README -> Container
+# isolation).
+name: ds-platform-dev
+
+# --- Core services (always-on) — to be defined by DSP-154, setup-design §3.1 ---
+#   postgres    pgvector/pgvector:pg17        5432
+#   redis       redis:7-alpine               6379
+#   minio       minio/minio:latest           9000 (S3) + 9001 (console)
+#   idp         authentik|zitadel (TBD)      9080 / 9443
+#   centrifugo  centrifugo/centrifugo:v6     8000
+#   cerbos      ghcr.io/cerbos/cerbos:latest 3592 (gRPC) + 3593 (HTTP)
+#   mailpit     axllent/mailpit:latest       1025 (SMTP) + 8025 (UI)
+#
+# Observability services (loki/grafana/glitchtip/promtail) live in a separate
+# compose.observability.yml — started on demand only (setup-design §3.2).
+services: {}
+
+# Named volumes — Docker-managed, isolated per machine. A personal
+# compose.override.yml may swap these for bind mounts (setup-design §7.2).
+volumes: {}

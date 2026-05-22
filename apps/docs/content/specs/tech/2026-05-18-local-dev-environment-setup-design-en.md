@@ -609,7 +609,7 @@ Done **in parallel** with Layer A, but content partially in repo (as recipe docu
 
 1. Bootstrap Tech Lead's TrueNAS: SSH keys, DHCP reservation, Windows Private profile, OpenSSH client check.
 2. ZFS datasets `Daily SSD/dev-*` with tunings (§5.3).
-3. TrueNAS firewall rules (§5.4).
+3. TrueNAS firewall — verify there is no host inbound filter; no change needed (§5.4).
 4. Boot-triggered snapshot + replication maintenance script (§5.5).
 5. Tech Lead's `~/.ds-platform/compose.override.yml` with bind mounts to ZFS datasets.
 6. Tech Lead's `~/.ds-platform/.env.local` with real secrets + endpoints.

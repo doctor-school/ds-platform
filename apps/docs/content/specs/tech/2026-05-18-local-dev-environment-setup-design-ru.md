@@ -621,7 +621,7 @@ Implementation split по слоям. Plane-tracking уже создан (DSP-15
 
 1. Bootstrap Tech Lead's TrueNAS: SSH ключи, DHCP-резервация, Windows Private profile, OpenSSH client check.
 2. ZFS datasets `Daily SSD/dev-*` с tunings (§5.3).
-3. TrueNAS firewall rules (§5.4).
+3. TrueNAS firewall — проверить, что host inbound-фильтра нет; изменения не нужны (§5.4).
 4. Boot-triggered snapshot + replication maintenance-скрипт (§5.5).
 5. Tech Lead's `~/.ds-platform/compose.override.yml` с bind mounts на ZFS-датасеты.
 6. Tech Lead's `~/.ds-platform/.env.local` с реальными секретами + endpoint'ами.

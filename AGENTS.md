@@ -118,7 +118,17 @@ If the session is launched with `--dangerously-skip-permissions`, the agent assu
 
 ### 3.7 Plane lifecycle entry (if applicable)
 
-If the active task is a Plane work-item (DSP-XXX / DSO-XXX), the very first tool call after identifying task kind is `plane-pp-cli` to: (1) move the task to `In Progress`, (2) post a start comment describing the planned approach. This precedes any code or doc edit. The end-of-session counterpart — move to `Done` + result comment — is in §6 Hard rules (Plane lifecycle).
+If the active task is a Plane work-item (DSP-XXX / DSO-XXX), the very first action after identifying task kind is the Plane lifecycle entry: (1) move the task to `In Progress`, (2) post a start comment describing the planned approach. This precedes any code or doc edit. The end-of-session counterpart — move to `Done` + result comment — is in §6 Hard rules (Plane lifecycle).
+
+**Tooling.** `plane-pp-cli` reads work-items but is **read-only** for them in the current Plane CE — state changes and comments go through the Plane MCP (`mcp__plane-pp-mcp__*`). Use the CLI for lookups, the MCP for the lifecycle writes.
+
+### 3.8 Engineering-task discipline (no orchestration skill)
+
+`engineering-task` is the only kind with no orchestration skill (§3.1) — but the §6 discipline gates still apply. Because no skill carries them, the lead agent runs them directly:
+
+- **`surface-decision-debt`** (inline) — mandatory before the result comment. Reflect on silent deviations from a documented convention; output `[]` or a list. For a Plane work-item, the result lands in the Plane result comment, which serves as the iteration summary.
+- **`request-mode-a-review`** (dispatch) — mandatory before merge, same gate as any code or docs PR (§4).
+- **`run-iteration-end-checklist`** is **not** dispatched for an engineering-task — CI already runs `test` / `typecheck` / `lint` / generate-drift. Its remaining items (module README, `apps/docs/content/architecture/`, `apps/docs/content/operations/` runbook, glossary terms) are an inline self-check the lead performs before opening the PR.
 
 ---
 
@@ -147,12 +157,12 @@ The CI lint guards from ADR-0007 §2.6 (Amendment A1.5) act as nudges visible in
 - **SDD.** No production code without a feature spec at `apps/docs/content/specs/features/NNN-<slug>/`. If absent, invoke `superpowers:brainstorming` per §3.4 to author one.
 - **TDD.** No production code without a failing test. Naming: `it('EARS-N: ...')`. Flat numbering per ADR-0006 Amendment A1; nested `N.M` only when a single handler carries multiple shall-clauses.
 - **Trackers.** Code-level → GitHub Issues here; strategic / cross-team → Plane workspace `doctor-school`. Never both.
-- **Plane lifecycle.** When the task is a Plane work-item: move to `In Progress` with a start comment before code work; on completion, move to `Done` with a result comment containing artifacts (links to files/PRs/pages), what was done, open questions, and what is unblocked. If the task stays incomplete, leave a status comment with "where we stopped / what remains" instead of dropping it silently. Tool: `plane-pp-cli`.
+- **Plane lifecycle.** When the task is a Plane work-item: move to `In Progress` with a start comment before code work; on completion, move to `Done` with a result comment containing artifacts (links to files/PRs/pages), what was done, open questions, and what is unblocked. If the task stays incomplete, leave a status comment with "where we stopped / what remains" instead of dropping it silently. Tooling: `plane-pp-cli` for reads; Plane MCP (`mcp__plane-pp-mcp__*`) for state changes and comments (see §3.7).
 - **Roles, not names** in any spec / ADR / design doc.
 - **Direct push to `main` is forbidden.** Single merge command: `gh pr merge <N> --auto --squash --delete-branch`.
 - **Project skill catalog.** Only `apps/docs/content/skills/`. Vendor-specific skill auto-discovery is not used to dispatch project work. The path is the contract.
-- **Discipline gates.** `run-iteration-end-checklist` and `request-mode-a-review` produce artifacts that orchestration skills cannot bypass. Without their outputs, merge is forbidden (ADR-0007 Amendment A2).
-- **Decision-debt.** Any silent deviation from a documented convention MUST surface via `surface-decision-debt`. The output may be `[]`, but the invocation is required before iteration summary.
+- **Discipline gates.** `run-iteration-end-checklist` and `request-mode-a-review` produce artifacts the lead agent cannot bypass — whether dispatched by an orchestration skill or run directly for an engineering-task (§3.8). Without their outputs, merge is forbidden (ADR-0007 Amendment A2).
+- **Decision-debt.** Any silent deviation from a documented convention MUST surface via `surface-decision-debt`. The output may be `[]`, but the invocation is required before the iteration summary — or, for an engineering-task, before the Plane / Issue result comment (§3.8).
 
 ---
 

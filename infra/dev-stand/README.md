@@ -164,10 +164,10 @@ ssh truenas "sudo ss -tlnH | awk '{print \$4}' | sed 's/.*://' | sort -nu" |
 
 ## Checklist status
 
-| #   | Check                                 | Status                         |
-| --- | ------------------------------------- | ------------------------------ |
-| 1   | SSH access — `claude` + `sudo docker` | ✅ verified 2026-05-22         |
-| 2   | DHCP reservation `192.168.1.115`      | ⬜ pending — confirm on router |
-| 3   | Windows network profile = Private     | ✅ verified 2026-05-22         |
-| 4   | OpenSSH client present                | ✅ verified 2026-05-22         |
-| 5   | mDNS resolution + SSH smoke test      | ✅ verified 2026-05-22         |
+| #   | Check                                 | Status                  |
+| --- | ------------------------------------- | ----------------------- |
+| 1   | SSH access — `claude` + `sudo docker` | ✅ verified 2026-05-22  |
+| 2   | DHCP reservation `192.168.1.115`      | ✅ confirmed 2026-05-22 |
+| 3   | Windows network profile = Private     | ✅ verified 2026-05-22  |
+| 4   | OpenSSH client present                | ✅ verified 2026-05-22  |
+| 5   | mDNS resolution + SSH smoke test      | ✅ verified 2026-05-22  |

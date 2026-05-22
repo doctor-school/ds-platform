@@ -170,7 +170,7 @@ Attach the `docker version` output to the DSP-152 Plane thread once it passes.
 The TrueNAS box co-hosts unrelated Docker workloads (`home-budgeting-system-*`,
 `media-index-system`, `rtmp-server`) and TrueNAS Apps (`ix-jellyfin`, `ix-transmission`,
 `ix-pihole`). The DSP dev-stand must not collide with any of them. Enforcement lands
-with the compose stack in DSP-150; the rules are fixed here so DSP-150 implements them:
+with the compose stack in DSP-154; the rules are fixed here so DSP-154 implements them:
 
 - **Project name** — the compose stack sets a fixed `name: ds-platform-dev`, so every
   container is `ds-platform-dev-<svc>-1` and never clashes with `home-budgeting-system-*`.
@@ -179,9 +179,9 @@ with the compose stack in DSP-150; the rules are fixed here so DSP-150 implement
 - **Volumes** — named volumes are project-prefixed; ZFS bind-mounts live under the
   dev-stand-only datasets `Daily/dev-*` (setup-design §5.3).
 - **Host ports** — the setup-design port list collides with ports already bound on
-  TrueNAS. DSP-150 must remap these:
+  TrueNAS. DSP-154 must remap these:
 
-  | Service (spec port)                                                                    | Status on TrueNAS                                             | Action for DSP-150                |
+  | Service (spec port)                                                                    | Status on TrueNAS                                             | Action for DSP-154                |
   | -------------------------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------- |
   | Postgres `5432`                                                                        | **in use** — `home-budgeting-system-db-1` (`5433` also taken) | remap host side, e.g. `5442:5432` |
   | `8000`                                                                                 | **in use**                                                    | remap, e.g. `8100:8000`           |

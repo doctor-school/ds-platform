@@ -474,7 +474,7 @@ Quarantine LLM workload (per ADR-0010 mandatory pattern) в Pre-pilot работ
 
 ### 9.2 Pre-migration hook
 
-`drizzle-kit migrate` обёртка в `apps/api/package.json` (cross-platform — таймстамп генерируется внутри `tools/dev/snapshot.sh` на TrueNAS Linux-стороне, чтобы не зависеть от bash `$(date +%s)` substitution на Windows host):
+`drizzle-kit migrate` обёртка в `apps/api/package.json` (cross-platform — таймстамп генерируется внутри `tools/dev/recipes/truenas-hybrid/snapshot.sh` на TrueNAS Linux-стороне, чтобы не зависеть от bash `$(date +%s)` substitution на Windows host):
 
 ```json
 {
@@ -484,10 +484,10 @@ Quarantine LLM workload (per ADR-0010 mandatory pattern) в Pre-pilot работ
 }
 ```
 
-`tools/dev/snapshot.sh` (выполняется через `ssh.exe truenas.local`) добавляет timestamp на стороне Linux:
+`tools/dev/recipes/truenas-hybrid/snapshot.sh` (стримится на TrueNAS через `ssh.exe`) добавляет timestamp на стороне Linux:
 
 ```bash
-# tools/dev/snapshot.sh (excerpt)
+# tools/dev/recipes/truenas-hybrid/snapshot.sh (excerpt)
 NAME="$1-$(date -u +%Y%m%dT%H%M%SZ)"
 zfs snapshot "Daily SSD/dev-postgres@${NAME}"
 ```

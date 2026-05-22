@@ -474,7 +474,7 @@ Wrapper scripts in `tools/dev/`: portable Node.js launcher `tools/dev/run.mjs` (
 
 ### 9.2 Pre-migration hook
 
-`drizzle-kit migrate` wrapper in `apps/api/package.json` (cross-platform — timestamp is generated inside `tools/dev/snapshot.sh` on the TrueNAS Linux side to avoid relying on bash `$(date +%s)` substitution on the Windows host):
+`drizzle-kit migrate` wrapper in `apps/api/package.json` (cross-platform — timestamp is generated inside `tools/dev/recipes/truenas-hybrid/snapshot.sh` on the TrueNAS Linux side to avoid relying on bash `$(date +%s)` substitution on the Windows host):
 
 ```json
 {
@@ -484,10 +484,10 @@ Wrapper scripts in `tools/dev/`: portable Node.js launcher `tools/dev/run.mjs` (
 }
 ```
 
-`tools/dev/snapshot.sh` (executed via `ssh.exe truenas.local`) appends the timestamp on the Linux side:
+`tools/dev/recipes/truenas-hybrid/snapshot.sh` (streamed to TrueNAS via `ssh.exe`) appends the timestamp on the Linux side:
 
 ```bash
-# tools/dev/snapshot.sh (excerpt)
+# tools/dev/recipes/truenas-hybrid/snapshot.sh (excerpt)
 NAME="$1-$(date -u +%Y%m%dT%H%M%SZ)"
 zfs snapshot "Daily SSD/dev-postgres@${NAME}"
 ```

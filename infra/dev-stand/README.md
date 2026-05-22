@@ -14,15 +14,15 @@ media-index, RTMP, TrueNAS Apps). The dev-stand must stay isolated from them —
 
 Docker on the box runs via `sudo docker` over the `truenas` SSH alias — the
 established convention for this server (see `home-budgeting-system/ARCHITECTURE.md`
-§11). DX wrappers (`tools/dev/*.sh`, DSP-150) call `sudo docker compose` over
-`ssh.exe`; the `DOCKER_HOST=ssh://` transport is **not** used (it needs direct socket
-access — deferred, setup-design §11 OQ-1).
+§11). The `pnpm dev:*` DX scripts (`tools/dev/run.mjs`, DSP-156) call
+`sudo docker compose` over `ssh.exe`; the `DOCKER_HOST=ssh://` transport is **not**
+used (it needs direct socket access — deferred, setup-design §11 OQ-1).
 
-Full design: [`local-dev-environment-setup-design`][spec]. This directory
-currently holds the Layer-A **skeleton** — the bootstrap
-checklist (DSP-152) plus the portable-contract files stubbed by DSP-153. The
-compose contract itself (`compose.core.yml` service definitions) is filled in by
-DSP-154; the ZFS recipe by DSP-155; the `pnpm dev:*` DX scripts by DSP-156.
+Full design: [`local-dev-environment-setup-design`][spec]. This directory holds
+the Layer-A portable contract: the bootstrap checklist (DSP-152), the
+portable-contract files (DSP-153), the `compose.core.yml` service definitions
+(DSP-154) and the ZFS recipe (DSP-155). The `pnpm dev:*` DX scripts that drive
+the stack live in `tools/dev/` (DSP-156) — see [DX commands](#dx-commands).
 
 [spec]: ../../apps/docs/content/specs/tech/2026-05-18-local-dev-environment-setup-design-en.md
 
@@ -51,8 +51,7 @@ outside git (`.env.local`, `compose.override.yml`). Setup order:
    cp compose.override.example.yml ~/.ds-platform/compose.override.yml
    ```
 
-4. **Start the stack** — `pnpm dev:up` (DX scripts land with DSP-156; the core
-   services they bring up land with DSP-154).
+4. **Start the stack** — `pnpm dev:up` (see [DX commands](#dx-commands)).
 
 `.env.local` and `compose.override.yml` are gitignored (see `.gitignore` in this
 directory) — they hold per-machine secrets and must never be committed.
@@ -61,6 +60,43 @@ directory) — they hold per-machine secrets and must never be committed.
 > `IDP_SECRET_KEY`, …) in a password manager. They are not covered by ZFS
 > snapshots or host backups — on a wipe they are lost and must be rotated
 > (setup-design §10).
+
+---
+
+## DX commands
+
+The stack is driven by `pnpm dev:*` scripts — a cross-platform Node launcher
+(`tools/dev/run.mjs`) that reads your `.env.local`, picks the transport, and runs
+`docker compose` against the dev-stand (setup-design §9).
+
+| Command                      | Does                                                                |
+| ---------------------------- | ------------------------------------------------------------------- |
+| `pnpm dev:up`                | Start the stack (detached).                                         |
+| `pnpm dev:down`              | Stop the stack; named volumes preserved.                            |
+| `pnpm dev:status`            | List dev-stand containers (`docker compose ps`).                    |
+| `pnpm dev:logs [service]`    | Follow logs — all services, or one (`pnpm dev:logs postgres`).      |
+| `pnpm dev:restart [service]` | Restart all services, or one.                                       |
+| `pnpm dev:psql`              | Open a `psql` shell on `ds_dev` (`docker compose exec postgres …`). |
+| `pnpm dev:snapshot <desc>`   | Pre-migration snapshot — recipe-specific.                           |
+| `pnpm dev:rollback <name>`   | Roll the database back to a snapshot — recipe-specific.             |
+| `pnpm dev:reset-db`          | Drop + recreate the database volume, then start.                    |
+
+**Transport.** The launcher reads `DEV_SSH_HOST` / `DEV_DOCKER_SUDO` /
+`DEV_REMOTE_DIR` from `.env.local` (see `.env.example`). With `DEV_SSH_HOST` set
+it syncs `infra/dev-stand/` to `DEV_REMOTE_DIR` on the box and runs
+`sudo docker compose` there over `ssh.exe`; with it empty it uses the local
+Docker daemon. The contract in git is always the single source of truth — every
+compose command re-syncs, so the box never drifts.
+
+**Recipe-specific commands.** `dev:snapshot` / `dev:rollback` carry no portable
+implementation — their logic lives per recipe in
+`tools/dev/recipes/<recipe>/*.sh` (setup-design §9.1). The TrueNAS Hybrid recipe
+ships `tools/dev/recipes/truenas-hybrid/{snapshot,rollback}.sh` (ZFS). On a
+host-only recipe both commands warn and no-op.
+
+**Not yet wired.** `dev:reset-db` recreates the volume and starts the stack, but
+the schema-migrate + seed steps are added once `apps/api` exists (setup-design
+§11 OQ-4).
 
 ---
 

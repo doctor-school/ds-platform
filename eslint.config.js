@@ -40,6 +40,24 @@ export default [
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    // Node runtime globals for plain JS/ESM tooling scripts (tools/**/*.mjs).
+    // TS files get this from typescript-eslint, which disables `no-undef`.
+    files: ['**/*.{js,mjs,cjs}'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        Buffer: 'readonly',
+        URL: 'readonly',
+        URLSearchParams: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+      },
+    },
+  },
+  {
     files: ['**/*.{ts,tsx,mts,cts}'],
     rules: {
       // Pragmatic Phase 0 narrowings; revisited in G5 via packages/eslint-config.

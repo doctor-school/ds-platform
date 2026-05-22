@@ -63,7 +63,7 @@ This document is the implementation detail for ADR-0006. The ADR records "what a
 │  merge to main → CI:
 │    1. Lint & drift checks (§7)
 │    2. Generate artifacts (openapi-ts, glossary ids, ERD)
-│    3. Build apps/docs (Fumadocs) → deploy docs.dsplatform.bbm.academy
+│    3. Build apps/docs (Fumadocs) → deploy docs.doctor.school
 │    4. Sync glossary.yaml → Payload Glossary Collection
 └────────────────────────────────────────────────────────────
                                 ▼
@@ -76,8 +76,8 @@ This document is the implementation detail for ADR-0006. The ADR records "what a
 
 ### 2.2 Deployment topology
 
-- `docs.dsplatform.bbm.academy` — Fumadocs (public read-only).
-- `docs-cms.dsplatform.bbm.academy` — Keystatic admin (Authentik-protected — same tenant as `apps/admin` per ADR-0001/0004).
+- `docs.doctor.school` — Fumadocs (public read-only).
+- `docs-cms.doctor.school` — Keystatic admin (Authentik-protected — same tenant as `apps/admin` per ADR-0001/0004).
 - `apps/docs` and `apps/docs-cms` live as the 5th and 6th Next.js app in the `apps/` directory of the monorepo (see §4 layout).
 - Build: one Turborepo task `pnpm docs:build` rebuilds both.
 
@@ -205,7 +205,7 @@ ds-platform/                          # repo root
 
 - No symlinks (which break in Docker builds / Windows CI runners).
 - No copies (which create false-SSOT — a violation of principle 7).
-- ADR canonical path stays `docs/adr/` — symmetric with the BBM repo and the DSO-25..29 pattern.
+- ADR canonical path stays `docs/adr/` — symmetric with the DSO-25..29 pattern.
 
 Sketch `apps/docs/source.config.ts`:
 
@@ -239,7 +239,7 @@ import { config, collection, fields, singleton } from "@keystatic/core";
 export default config({
   storage: {
     kind: "github",
-    repo: { owner: "bbm-academy", name: "ds-platform" },
+    repo: { owner: "doctor-school", name: "ds-platform" },
     branchPrefix: "docs/", // PR branch naming
   },
   ui: {
@@ -357,7 +357,7 @@ export default config({
 });
 ```
 
-**Authentication:** Keystatic admin is protected by Authentik **or Zitadel** (final IdP — pending ADR-0001 §8 spike), the same tenant as `apps/admin`. Group `docs-editors` (Tech Lead + Product Lead) grants access. Commits are made by the GitHub App (`bbm-docs-bot`), with `Co-authored-by: <oidc-user-email>` in the commit message.
+**Authentication:** Keystatic admin is protected by Authentik **or Zitadel** (final IdP — pending ADR-0001 §8 spike), the same tenant as `apps/admin`. Group `docs-editors` (Tech Lead + Product Lead) grants access. Commits are made by the GitHub App (`ds-docs-bot`), with `Co-authored-by: <oidc-user-email>` in the commit message.
 
 **Immutability of `id`:** not enforced in the Keystatic UI (the slugField is editable in Keystatic). Instead:
 
@@ -963,7 +963,7 @@ Each feature is created as a folder `apps/docs/content/specs/features/NNN-<slug>
 status: draft # draft / spec-approved / in-dev / shipped
 owner: <name>
 plane_ref: DSP-XXX # strategic parent in Plane (if any)
-tracker: https://github.com/bbm-academy/ds-platform/milestone/N # GitHub Milestone for implementation Issues
+tracker: https://github.com/doctor-school/ds-platform/milestone/N # GitHub Milestone for implementation Issues
 related_adr: [ADR-NNNN]
 ---
 
@@ -1243,7 +1243,7 @@ Inherit from `/AGENTS.md` (universal AI constitution). This file adds Claude-Cod
 ## Tool preferences
 
 - **For code-level task tracking** (current sprint, EARS-handler Issues, bugs, refactors): `gh` CLI first — `gh issue view`, `gh issue list --milestone`, `gh pr create`. Issues live in DS Platform repo.
-- **For strategic / cross-tracker references** (Plane DSO-XXX из ADR/spec, BBM-level work): `plane-pp-cli` (inherits BBM CLAUDE.md rule for BBM-level work).
+- **For strategic / cross-tracker references** (Plane DSO-XXX из ADR/spec): `plane-pp-cli`.
 - For DB inspection: `drizzle-kit introspect:pg` over raw `psql`
 - For schema changes: edit `packages/db/schema/<module>.ts`, then `pnpm db:generate` — never hand-write migrations
 
@@ -1261,7 +1261,7 @@ Inherit from `/AGENTS.md` (universal AI constitution). This file adds Claude-Cod
 
 ## Notes for Claude
 
-- Skill output language: Russian (per BBM project convention)
+- Skill output language: Russian (per project convention)
 - Doc-as-SSOT — STRICT rule. Read docs first, code second (per [[feedback_docs_as_ssot]])
 - No bias arguments — see [[feedback_tech_stack_criteria_no_team_skill]]
 ```
@@ -1283,7 +1283,7 @@ Phase 0 (Tech Lead solo, sequential):
 | 7    | Add `tools/lint/` scripts                                                                                                                                                                                                                                   | events-lint, glossary-mdx-lint, module-readme-lint stubs | —         |
 | 8    | Add CI workflow.yml                                                                                                                                                                                                                                         | green build on empty app                                 | steps 2-7 |
 | 9    | Write AGENTS.md + CLAUDE.md draft                                                                                                                                                                                                                           | committed                                                | —         |
-| 10   | Deploy `docs.dsplatform.bbm.academy` + `docs-cms.dsplatform.bbm.academy`                                                                                                                                                                                    | live portal + editor                                     | step 8    |
+| 10   | Deploy `docs.doctor.school` + `docs-cms.doctor.school`                                                                                                                                                                                                      | live portal + editor                                     | step 8    |
 
 Phase 0.5 (after Phase 0 is ready):
 
@@ -1303,7 +1303,7 @@ Phase 1 (production):
 
 ## 11. Related decisions (cross-ref)
 
-- **ADR-0001** — OIDC tenant (Authentik **or Zitadel** — final choice pending ADR-0001 §8 spike): `docs-cms.dsplatform.bbm.academy` uses the same OIDC client as `apps/admin`. Group `docs-editors`.
+- **ADR-0001** — OIDC tenant (Authentik **or Zitadel** — final choice pending ADR-0001 §8 spike): `docs-cms.doctor.school` uses the same OIDC client as `apps/admin`. Group `docs-editors`.
 - **ADR-0002 §3-5** — Zod as API SSOT, openapi-typescript as codegen. Confirmed as Master in the SSOT table in §3 of this spec.
 - **ADR-0003 §4** — Drizzle as DB SSOT, drizzle-kit as migrations. drizzle-kit check replaces atlas schema diff.
 - **ADR-0004 §7, §10.3** — Payload v3 content-only + Glossary Collection. §10.3 hard dep — this spec resolves it: Payload Glossary Collection is synced FROM glossary.yaml, not the other way around.
@@ -1314,11 +1314,11 @@ Phase 1 (production):
 ## 12. Open follow-ups (DSO-31+)
 
 1. Fumadocs setup specifics (theme, search provider, navigation config).
-2. Keystatic GitHub App registration (`bbm-docs-bot`).
+2. Keystatic GitHub App registration (`ds-docs-bot`).
 3. Lint-tools package structure (one package `@ds/lint-tools` or per-tool?).
 4. EARS-ID ↔ Vitest describe linkage convention (e.g., `it('EARS-3.1: ...', ...)`)
 5. Gherkin → Playwright transpilation pipeline setup (`playwright-bdd` setup details).
-6. Initial 30 glossary terms — which ones from BBM memory to migrate in the first batch.
+6. Initial 30 glossary terms — which ones to migrate in the first batch.
 7. Migration: what to do with existing Notion DS-Platform pages (if any). Recommend: deprecated + redirect notice in Notion, content already in Git.
 
 ---
@@ -1329,4 +1329,4 @@ Phase 1 (production):
 
 §4 of this design spec showed `it('EARS-3.1: ...', ...)` as the Vitest naming convention. Per ADR-0006 Amendment A1, the convention is now flat — `it('EARS-N: ...', ...)` — with nested `N.M` reserved for single handlers carrying multiple shall-clauses. Open follow-up §12 item 4 is closed by the amendment.
 
-Source: G11 smoke retrospective F-5 (`bbm/outputs/g11-smoke-findings.md`). Reference spec: `001-api-bootstrap-health` post commit `073d6da`. Skill: `apps/docs/content/skills/author-ears-spec/SKILL.md`.
+Source: G11 smoke retrospective F-5. Reference spec: `001-api-bootstrap-health` post commit `073d6da`. Skill: `apps/docs/content/skills/author-ears-spec/SKILL.md`.

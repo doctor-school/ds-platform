@@ -9,8 +9,6 @@ lang: ru
 # DS Platform — Identity / Auth / RBAC design
 
 **Дата:** 2026-05-12 (v2 — после независимого арх-ревью, плотная ревизия security baseline + миграции)
-**Notion title:** [BBM · DS] 2026-05-12 — DS Platform: Identity / Auth / RBAC design
-**Notion page ID:** —
 **Мастер:** репозиторий → `apps/docs/content/adr/0001-identity-provider-shortlist-design-ru.md`
 **Автор:** Tech Lead Сидоров
 **Связан с:** Plane DSO-25 (`0a8f2276-956f-4f4e-9134-2f197ff4bab8`), milestone DSO-24

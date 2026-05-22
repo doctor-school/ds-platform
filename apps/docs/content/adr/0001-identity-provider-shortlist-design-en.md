@@ -9,9 +9,6 @@ lang: en
 # DS Platform — Identity / Auth / RBAC design
 
 **Date:** 2026-05-12 (v2 — after independent architecture review, thorough revision of security baseline + migration)
-**Notion title:** [BBM · DS] 2026-05-12 — DS Platform: Identity / Auth / RBAC design
-**Notion page ID:** —
-**Master copy:** repository → `apps/docs/content/adr/0001-identity-provider-shortlist-design-en.md`
 **Author:** Tech Lead
 **Related to:** Plane DSO-25 (`0a8f2276-956f-4f4e-9134-2f197ff4bab8`), milestone DSO-24
 **Inputs:** `outputs/2026-05-12-ds-platform-tech-requirements-digest.md` §8.1/§1.1/§9.3, `outputs/2026-05-12-ds-platform-inventory.md`, `outputs/2026-05-12-tech-stack-brainstorm-prep.md`

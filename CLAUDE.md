@@ -25,9 +25,9 @@ The `pnpm bootstrap` alias (defined in root `package.json` as `tsx tools/agent-b
 ## Plane vs GitHub Issues split (ADR-0006 §9)
 
 - **DS Platform code-level tasks** → GitHub Issues in this repo (`gh issue ...`)
-- **BBM strategic / cross-team milestones** → Plane workspace `doctor-school` (projects DSP / DSC / DSM / DSO)
+- **Strategic / cross-team milestones** → Plane workspace `doctor-school` (projects DSP / DSC / DSM / DSO)
 
-**Do not invoke `pp-plane` CLI for code tasks** — duplicate sources of truth break AI reasoning. The BBM repo (`bbm/CLAUDE.md`) has the opposite default ("pp-plane first") because its scope is strategic-only.
+**Do not invoke `pp-plane` CLI for code tasks** — duplicate sources of truth break AI reasoning. `pp-plane` is reserved for cross-tracker references only (e.g., linking a Plane DSO-XXX milestone from an ADR or commit message).
 
 ---
 
@@ -43,14 +43,14 @@ For DS Platform project work, the catalog is **`apps/docs/content/skills/<name>/
 
 ## Engineering-readiness reference
 
-Runtime / operational tooling defaults (Coolify, Caddy, GlitchTip, Loki + Prometheus + Tempo, Vault, Unleash, Beget DNS) live in the [engineering-readiness spec][es] in `bbm`.
+Runtime / operational tooling defaults (Coolify, Caddy, GlitchTip, Loki + Prometheus + Tempo, Vault, Unleash, Beget DNS) live in the [engineering-readiness spec][es].
 
-[es]: https://github.com/sidorovanthon/bbm/blob/main/docs/superpowers/specs/2026-05-12-ds-platform-engineering-readiness-design-en.md
+[es]: ./apps/docs/content/specs/tech/2026-05-12-engineering-readiness-design-en.md
 
 ---
 
 ## Local dev environment
 
-Compose stack for Postgres / Redis / etc. → `infra/dev-stand/` (when DSP-150 lands; not yet implemented). See the [local-dev-environment setup-design spec][lds] in `bbm`.
+Compose stack for Postgres / Redis / etc. → `infra/dev-stand/`. See the [local-dev-environment setup-design spec][lds].
 
-[lds]: https://github.com/sidorovanthon/bbm/blob/main/docs/superpowers/specs/2026-05-18-ds-platform-local-dev-environment-setup-design-en.md
+[lds]: ./apps/docs/content/specs/tech/2026-05-18-local-dev-environment-setup-design-en.md

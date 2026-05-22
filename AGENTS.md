@@ -146,7 +146,7 @@ The CI lint guards from ADR-0007 §2.6 (Amendment A1.5) act as nudges visible in
 
 - **SDD.** No production code without a feature spec at `apps/docs/content/specs/features/NNN-<slug>/`. If absent, invoke `superpowers:brainstorming` per §3.4 to author one.
 - **TDD.** No production code without a failing test. Naming: `it('EARS-N: ...')`. Flat numbering per ADR-0006 Amendment A1; nested `N.M` only when a single handler carries multiple shall-clauses.
-- **Trackers.** Code-level → GitHub Issues here; strategic / cross-team → Plane in `bbm`. Never both.
+- **Trackers.** Code-level → GitHub Issues here; strategic / cross-team → Plane workspace `doctor-school`. Never both.
 - **Plane lifecycle.** When the task is a Plane work-item: move to `In Progress` with a start comment before code work; on completion, move to `Done` with a result comment containing artifacts (links to files/PRs/pages), what was done, open questions, and what is unblocked. If the task stays incomplete, leave a status comment with "where we stopped / what remains" instead of dropping it silently. Tool: `plane-pp-cli`.
 - **Roles, not names** in any spec / ADR / design doc.
 - **Direct push to `main` is forbidden.** Single merge command: `gh pr merge <N> --auto --squash --delete-branch`.
@@ -172,21 +172,21 @@ In **Phase 0**, Tech Lead is the **single CODEOWNERS owner** (ADR-0008 §2.7) an
 
 ## 8. Where things live
 
-| Thing                                 | Location                                                                              |
-| ------------------------------------- | ------------------------------------------------------------------------------------- |
-| ADRs                                  | `apps/docs/content/adr/NNNN-<slug>.md`                                                |
-| Companion design specs                | `apps/docs/content/adr/NNNN-<slug>-design.md`                                         |
-| Feature specs                         | `apps/docs/content/specs/features/NNN-<slug>/{requirements,design,scenarios.feature}` |
-| Tech specs (brainstorm)               | `apps/docs/content/specs/tech/<topic>.md`                                             |
-| **Project skill catalog**             | **`apps/docs/content/skills/<name>/SKILL.md`**                                        |
-| Glossary                              | `apps/docs/content/product/glossary/` (file-per-term, Keystatic-managed)              |
-| API contract SSOT                     | `packages/schemas/` (Zod)                                                             |
-| DB schema SSOT                        | `packages/db/schema/` (Drizzle)                                                       |
-| Generated SDK                         | `packages/api-client/` (do not edit by hand)                                          |
-| Generated glossary IDs                | `packages/glossary/ids.ts` (do not edit by hand)                                      |
-| Lint tools                            | `tools/lint/*.ts`                                                                     |
-| Bootstrap script                      | `tools/agent-bootstrap.ts` (run via `pnpm bootstrap`)                                 |
-| BBM strategic / cross-team work-items | Plane workspace `doctor-school` (projects DSP, DSC, DSM, DSO)                         |
-| DS Platform code-level Issues         | **GitHub Issues** in this repo                                                        |
+| Thing                             | Location                                                                              |
+| --------------------------------- | ------------------------------------------------------------------------------------- |
+| ADRs                              | `apps/docs/content/adr/NNNN-<slug>.md`                                                |
+| Companion design specs            | `apps/docs/content/adr/NNNN-<slug>-design.md`                                         |
+| Feature specs                     | `apps/docs/content/specs/features/NNN-<slug>/{requirements,design,scenarios.feature}` |
+| Tech specs (brainstorm)           | `apps/docs/content/specs/tech/<topic>.md`                                             |
+| **Project skill catalog**         | **`apps/docs/content/skills/<name>/SKILL.md`**                                        |
+| Glossary                          | `apps/docs/content/product/glossary/` (file-per-term, Keystatic-managed)              |
+| API contract SSOT                 | `packages/schemas/` (Zod)                                                             |
+| DB schema SSOT                    | `packages/db/schema/` (Drizzle)                                                       |
+| Generated SDK                     | `packages/api-client/` (do not edit by hand)                                          |
+| Generated glossary IDs            | `packages/glossary/ids.ts` (do not edit by hand)                                      |
+| Lint tools                        | `tools/lint/*.ts`                                                                     |
+| Bootstrap script                  | `tools/agent-bootstrap.ts` (run via `pnpm bootstrap`)                                 |
+| Strategic / cross-team work-items | Plane workspace `doctor-school` (projects DSP, DSC, DSM, DSO)                         |
+| DS Platform code-level Issues     | **GitHub Issues** in this repo                                                        |
 
-**Almost-SSOT for trackers** (ADR-0006 §9): in **bbm** the rule is "pp-plane CLI first"; **here** the rule inverts: "`gh` CLI first for code-level Issues; `pp-plane` only for cross-tracker references."
+**Tracker rule** (ADR-0006 §9): `gh` CLI first for code-level Issues; `pp-plane` only for cross-tracker references (e.g., a Plane DSO-XXX milestone cited from an ADR or spec).

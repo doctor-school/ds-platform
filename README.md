@@ -19,7 +19,7 @@ Phase 0 (greenfield, brainstorm complete). Pre-pilot target: 2026 Q3 (TBD).
 
 Full reference: `apps/docs/content/adr/`.
 
-Runtime/operational tooling (Coolify preview, Caddy, GlitchTip, Loki, Vault, Unleash): see [engineering-readiness spec](https://github.com/sidorovanthon/bbm/blob/main/docs/superpowers/specs/2026-05-12-ds-platform-engineering-readiness-design-en.md).
+Runtime/operational tooling (Coolify preview, Caddy, GlitchTip, Loki, Vault, Unleash): see [engineering-readiness spec](apps/docs/content/specs/tech/2026-05-12-engineering-readiness-design-en.md).
 
 ## Prerequisites
 

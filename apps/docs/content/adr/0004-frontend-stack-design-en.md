@@ -9,9 +9,6 @@ lang: en
 # DS Platform — Frontend Stack design
 
 **Date:** 2026-05-14
-**Notion title:** [BBM · DS] 2026-05-14 — DS Platform: Frontend Stack design
-**Notion page ID:** —
-**Master copy:** repository → `apps/docs/content/adr/0004-frontend-stack-design-en.md`
 **Author:** Tech Lead
 **Related to:** Plane DSO-28 (`b9b950e8-6ad2-4e50-807d-f7e74aaeed5a`), milestone DSO-24
 **Inherits:** ADR-0001 (Identity/Auth/RBAC), ADR-0002 (Backend core: NestJS+TS, Zod, REST, Centrifugo, Timeweb storage/CDN, openapi-typescript SDK), ADR-0003 (Postgres+Drizzle+Cerbos+Redis, single instance)
@@ -126,7 +123,7 @@ Self-host via `output: 'standalone'` in `next.config.ts` → Docker image ~100MB
 apps/
 ├── promo/    # SSG/ISR, doctor.school, public
 ├── portal/   # SSR auth, app.doctor.school, multi-role (doctor/expert/clinic/investor)
-├── admin/    # SSR auth + 2FA + Refine, admin.doctor.school (BBM moderators)
+├── admin/    # SSR auth + 2FA + Refine, admin.doctor.school (platform moderators)
 └── cms/      # Payload v3 inside Next.js, cms.doctor.school (marketing team)
 ```
 

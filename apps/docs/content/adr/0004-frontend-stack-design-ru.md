@@ -9,8 +9,6 @@ lang: ru
 # DS Platform — Frontend Stack design
 
 **Дата:** 2026-05-14
-**Notion title:** [BBM · DS] 2026-05-14 — DS Platform: Frontend Stack design
-**Notion page ID:** —
 **Мастер:** репозиторий → `apps/docs/content/adr/0004-frontend-stack-design-ru.md`
 **Автор:** Tech Lead Сидоров
 **Связан с:** Plane DSO-28 (`b9b950e8-6ad2-4e50-807d-f7e74aaeed5a`), milestone DSO-24
@@ -126,7 +124,7 @@ Self-host через `output: 'standalone'` в `next.config.ts` → Docker image
 apps/
 ├── promo/    # SSG/ISR, doctor.school, public
 ├── portal/   # SSR auth, app.doctor.school, multi-role (доктор/эксперт/клиника/инвестор)
-├── admin/    # SSR auth + 2FA + Refine, admin.doctor.school (модераторы BBM)
+├── admin/    # SSR auth + 2FA + Refine, admin.doctor.school (модераторы платформы)
 └── cms/      # Payload v3 inside Next.js, cms.doctor.school (маркетинг-team)
 ```
 

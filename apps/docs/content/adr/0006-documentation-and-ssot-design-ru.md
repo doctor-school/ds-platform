@@ -63,7 +63,7 @@ lang: ru
 │  merge to main → CI:
 │    1. Lint & drift checks (§7)
 │    2. Generate artifacts (openapi-ts, glossary ids, ERD)
-│    3. Build apps/docs (Fumadocs) → deploy docs.dsplatform.bbm.academy
+│    3. Build apps/docs (Fumadocs) → deploy docs.doctor.school
 │    4. Sync glossary.yaml → Payload Glossary Collection
 └────────────────────────────────────────────────────────────
                                 ▼
@@ -76,8 +76,8 @@ lang: ru
 
 ### 2.2 Топология deploy
 
-- `docs.dsplatform.bbm.academy` — Fumadocs (public read-only).
-- `docs-cms.dsplatform.bbm.academy` — Keystatic admin (Authentik-protected — same tenant as `apps/admin` per ADR-0001/0004).
+- `docs.doctor.school` — Fumadocs (public read-only).
+- `docs-cms.doctor.school` — Keystatic admin (Authentik-protected — same tenant as `apps/admin` per ADR-0001/0004).
 - `apps/docs` и `apps/docs-cms` живут как 5-й и 6-й Next.js app в `apps/` директории monorepo (см. §4 layout).
 - Build: один Turborepo task `pnpm docs:build` пересобирает оба.
 
@@ -205,7 +205,7 @@ ds-platform/                          # репо корень
 
 - Нет симлинков (которые ломаются в Docker-build / Windows CI runner).
 - Нет копий (которые создают false-SSOT — нарушение принципа 7).
-- ADR canonical path остаётся `docs/adr/` — symmetric с BBM repo и DSO-25..29 pattern.
+- ADR canonical path остаётся `docs/adr/` — symmetric с DSO-25..29 pattern.
 
 Sketch `apps/docs/source.config.ts`:
 
@@ -239,7 +239,7 @@ import { config, collection, fields, singleton } from "@keystatic/core";
 export default config({
   storage: {
     kind: "github",
-    repo: { owner: "bbm-academy", name: "ds-platform" },
+    repo: { owner: "doctor-school", name: "ds-platform" },
     branchPrefix: "docs/", // PR branch naming
   },
   ui: {
@@ -357,7 +357,7 @@ export default config({
 });
 ```
 
-**Authentication:** Keystatic admin защищён Authentik **или Zitadel** (финальный IdP — pending ADR-0001 §8 spike) тем же tenant что `apps/admin`. Group `docs-editors` (Tech Lead + Product Lead) даёт access. Commits идут от GitHub App (`bbm-docs-bot`), в commit message — `Co-authored-by: <oidc-user-email>`.
+**Authentication:** Keystatic admin защищён Authentik **или Zitadel** (финальный IdP — pending ADR-0001 §8 spike) тем же tenant что `apps/admin`. Group `docs-editors` (Tech Lead + Product Lead) даёт access. Commits идут от GitHub App (`ds-docs-bot`), в commit message — `Co-authored-by: <oidc-user-email>`.
 
 **Immutability of `id`:** не enforce'ится в Keystatic UI (slugField field в Keystatic editable). Вместо этого:
 
@@ -963,7 +963,7 @@ sync-glossary:
 status: draft # draft / spec-approved / in-dev / shipped
 owner: <name>
 plane_ref: DSP-XXX # strategic parent в Plane (если есть)
-tracker: https://github.com/bbm-academy/ds-platform/milestone/N # GitHub Milestone для implementation Issues
+tracker: https://github.com/doctor-school/ds-platform/milestone/N # GitHub Milestone для implementation Issues
 related_adr: [ADR-NNNN]
 ---
 
@@ -1243,7 +1243,7 @@ Inherit from `/AGENTS.md` (universal AI constitution). This file adds Claude-Cod
 ## Tool preferences
 
 - **For code-level task tracking** (current sprint, EARS-handler Issues, bugs, refactors): `gh` CLI first — `gh issue view`, `gh issue list --milestone`, `gh pr create`. Issues live in DS Platform repo.
-- **For strategic / cross-tracker references** (Plane DSO-XXX из ADR/spec, BBM-level work): `plane-pp-cli` (inherits BBM CLAUDE.md rule for BBM-level work).
+- **For strategic / cross-tracker references** (Plane DSO-XXX из ADR/spec): `plane-pp-cli`.
 - For DB inspection: `drizzle-kit introspect:pg` over raw `psql`
 - For schema changes: edit `packages/db/schema/<module>.ts`, then `pnpm db:generate` — never hand-write migrations
 
@@ -1261,7 +1261,7 @@ Inherit from `/AGENTS.md` (universal AI constitution). This file adds Claude-Cod
 
 ## Notes for Claude
 
-- Skill output language: Russian (per BBM project convention)
+- Skill output language: Russian (per project convention)
 - Doc-as-SSOT — STRICT rule. Read docs first, code second (per [[feedback_docs_as_ssot]])
 - No bias arguments — see [[feedback_tech_stack_criteria_no_team_skill]]
 ```
@@ -1283,7 +1283,7 @@ Phase 0 (Tech Lead solo, sequential):
 | 7    | Add `tools/lint/` scripts                                                                                                                                                                                                                                       | events-lint, glossary-mdx-lint, module-readme-lint stubs | —         |
 | 8    | Add CI workflow.yml                                                                                                                                                                                                                                             | green build на empty app                                 | steps 2-7 |
 | 9    | Write AGENTS.md + CLAUDE.md draft                                                                                                                                                                                                                               | committed                                                | —         |
-| 10   | Deploy `docs.dsplatform.bbm.academy` + `docs-cms.dsplatform.bbm.academy`                                                                                                                                                                                        | live portal + editor                                     | step 8    |
+| 10   | Deploy `docs.doctor.school` + `docs-cms.doctor.school`                                                                                                                                                                                                          | live portal + editor                                     | step 8    |
 
 Phase 0.5 (после Phase 0 готов):
 
@@ -1303,7 +1303,7 @@ Phase 1 (продакшн):
 
 ## 11. Связанные decisions (cross-ref)
 
-- **ADR-0001** — OIDC tenant (Authentik **или Zitadel** — финальный выбор pending ADR-0001 §8 spike): `docs-cms.dsplatform.bbm.academy` использует тот же OIDC client что `apps/admin`. Group `docs-editors`.
+- **ADR-0001** — OIDC tenant (Authentik **или Zitadel** — финальный выбор pending ADR-0001 §8 spike): `docs-cms.doctor.school` использует тот же OIDC client что `apps/admin`. Group `docs-editors`.
 - **ADR-0002 §3-5** — Zod как API SSOT, openapi-typescript как codegen. Подтверждено как Master в SSOT-таблице §3 этого spec'а.
 - **ADR-0003 §4** — Drizzle как DB SSOT, drizzle-kit как migrations. drizzle-kit check заменяет atlas schema diff.
 - **ADR-0004 §7, §10.3** — Payload v3 content-only + Glossary Collection. §10.3 hard dep — этот spec разрешает: Payload Glossary Collection синхронизируется FROM glossary.yaml, не наоборот.
@@ -1314,11 +1314,11 @@ Phase 1 (продакшн):
 ## 12. Open follow-ups (DSO-31+)
 
 1. Fumadocs setup specifics (theme, search provider, navigation config).
-2. Keystatic GitHub App registration (`bbm-docs-bot`).
+2. Keystatic GitHub App registration (`ds-docs-bot`).
 3. Lint-tools пакет structure (один пакет `@ds/lint-tools` или per-tool?).
 4. EARS-ID ↔ Vitest describe linkage convention (например `it('EARS-3.1: ...', ...)`)
 5. Gherkin → Playwright transpilation pipeline setup (`playwright-bdd` setup details).
-6. Initial 30 glossary terms — какие из BBM memory переносим первым batch'ом.
+6. Initial 30 glossary terms — какие переносим первым batch'ом.
 7. Migration: что делать с существующими Notion DS-Platform-страницами (если есть). Recommend: deprecated + redirect notice в Notion, content уже в Git.
 
 ---
@@ -1329,4 +1329,4 @@ Phase 1 (продакшн):
 
 §4 этого design-spec'а показывал `it('EARS-3.1: ...', ...)` как соглашение об именовании Vitest-тестов. По ADR-0006 Amendment A1, соглашение теперь плоское — `it('EARS-N: ...', ...)` — с вложенным `N.M`, зарезервированным для одного обработчика, несущего несколько shall-выражений. Открытый follow-up §12 пункт 4 закрыт amendment'ом.
 
-Источник: G11 smoke retrospective F-5 (`bbm/outputs/g11-smoke-findings.md`). Референс-spec: `001-api-bootstrap-health` после коммита `073d6da`. Skill: `apps/docs/content/skills/author-ears-spec/SKILL.md`.
+Источник: G11 smoke retrospective F-5. Референс-spec: `001-api-bootstrap-health` после коммита `073d6da`. Skill: `apps/docs/content/skills/author-ears-spec/SKILL.md`.

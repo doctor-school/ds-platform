@@ -9,9 +9,6 @@ lang: en
 # DS Platform — Data Layer design
 
 **Date:** 2026-05-13
-**Notion title:** [BBM · DS] 2026-05-13 — DS Platform: Data Layer design
-**Notion page ID:** —
-**Master copy:** repository → `apps/docs/content/adr/0003-data-layer-stack-design-en.md`
 **Author:** Tech Lead
 **Related to:** Plane DSO-27 (`bb877d3b-e922-4d8d-8e7b-9b33b4c941ee`), milestone DSO-24
 **Inherits:** ADR-0001 (Identity/Auth/RBAC, hybrid RBAC, IPolicyEngine interface), ADR-0002 (Backend core: NestJS+TS, Zod, REST, BullMQ on Redis, Centrifugo, Timeweb storage/CDN, outbox pattern with consumer-side idempotency)

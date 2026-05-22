@@ -57,9 +57,9 @@ Rejected alternatives — §Rejected ниже. docker-compose выбран ка�
 
 Weekly window 02:00–06:00 МСК (один слот) исключён из SLO calculation (наследуется из ADR-0002 Amendment A1). Конкретный график (день недели, длительность каждого окна) — операционный детайл, фиксируется в DSO-10 readiness checklist.
 
-### 6. Зависимости на bbm-tooling VPS (вне scope этого ADR)
+### 6. Зависимости на shared-tooling VPS (вне scope этого ADR)
 
-DS Platform prod зависит от сервисов на отдельном `bbm-tooling` VPS (вне scope ADR-0012, фиксируется DSO-10):
+DS Platform prod зависит от сервисов на отдельном `shared-tooling` VPS (вне scope ADR-0012, фиксируется DSO-10):
 
 - **Verdaccio** — npm pull-through mirror (защита CI от блокировок upstream npm).
 - **Harbor / Nexus** — Docker registry mirror.
@@ -107,7 +107,7 @@ Backup orchestration (rclone Timeweb → Beget) запускается тоже 
 | Static IP × 2                            | api-prod public + preview public | 200–400                      |
 | **Total v1 prod + preview**              |                                  | **~12 700–17 100 ₽/мес**     |
 
-Bbm-tooling VPS (Verdaccio + observability + IdP + Vault) — shared infra, cost проходит по DSO-10 budget, не дублируется здесь (~8–12k ₽/мес отдельно).
+Shared-tooling VPS (Verdaccio + observability + IdP + Vault) — shared infra, cost проходит по DSO-10 budget, не дублируется здесь (~8–12k ₽/мес отдельно).
 
 **Total DS Platform prod-direct cost:** ~12–17k ₽/мес. С запасом на CDN-всплески, snapshot-storage, мелкие сервисы — ~20–25k ₽/мес. Помещается в envelope ≤30k ₽/мес (DSO-59).
 
@@ -143,15 +143,15 @@ Bbm-tooling VPS (Verdaccio + observability + IdP + Vault) — shared infra, cost
 
 ## Open questions (deferred)
 
-| OQ                                                                         | Trigger пересмотра                                                                                                                                                                                                                                                                                                                 |
-| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **OQ-T1.** Permanent staging environment topology                          | Pre-pilot → pilot transition (тот же триггер, что OQ-D7 ADR-0003)                                                                                                                                                                                                                                                                  |
-| **OQ-T2.** Multi-VPS HA для data-plane (Postgres replica + Redis Sentinel) | OQ-D7 ADR-0003 (v2 HA target 99.5%)                                                                                                                                                                                                                                                                                                |
-| **OQ-T3.** Migration к K3s                                                 | (a) ≥3 api-replicas requirement, ИЛИ (b) cross-VPS distributed-state requirement, ИЛИ (c) в команде появляется dedicated DevOps-инженер с k8s background                                                                                                                                                                           |
-| **OQ-T4.** Preview-VPS pool size + sizing                                  | (a) PR-throughput >5/день, ИЛИ (b) OOM-кратность на preview-vps ≥1/неделю                                                                                                                                                                                                                                                          |
-| **OQ-T5.** Backup off-site provider re-evaluation                          | Если Beget S3 становится недоступен / некомпатибилен с pgbackrest                                                                                                                                                                                                                                                                  |
-| **OQ-T6.** Geographic redundancy (multi-region / cross-DC)                 | v3 при ≥1M MAU или явное regulatory requirement                                                                                                                                                                                                                                                                                    |
-| **OQ-T7.** Log-shipping topology + sidecar buffer                          | Если bbm-tooling VPS (где живёт Loki/Tempo/Prometheus) даст >1 outage/мес или observability-gap во время outage'а будет critical. Кандидаты: Promtail с local queue, Vector с persistent buffer на api-prod/data-prod, отдельный durable-spool. Pre-pilot: log loss во время outage'а приемлем; pilot transition — пересматриваем. |
+| OQ                                                                         | Trigger пересмотра                                                                                                                                                                                                                                                                                                                    |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **OQ-T1.** Permanent staging environment topology                          | Pre-pilot → pilot transition (тот же триггер, что OQ-D7 ADR-0003)                                                                                                                                                                                                                                                                     |
+| **OQ-T2.** Multi-VPS HA для data-plane (Postgres replica + Redis Sentinel) | OQ-D7 ADR-0003 (v2 HA target 99.5%)                                                                                                                                                                                                                                                                                                   |
+| **OQ-T3.** Migration к K3s                                                 | (a) ≥3 api-replicas requirement, ИЛИ (b) cross-VPS distributed-state requirement, ИЛИ (c) в команде появляется dedicated DevOps-инженер с k8s background                                                                                                                                                                              |
+| **OQ-T4.** Preview-VPS pool size + sizing                                  | (a) PR-throughput >5/день, ИЛИ (b) OOM-кратность на preview-vps ≥1/неделю                                                                                                                                                                                                                                                             |
+| **OQ-T5.** Backup off-site provider re-evaluation                          | Если Beget S3 становится недоступен / некомпатибилен с pgbackrest                                                                                                                                                                                                                                                                     |
+| **OQ-T6.** Geographic redundancy (multi-region / cross-DC)                 | v3 при ≥1M MAU или явное regulatory requirement                                                                                                                                                                                                                                                                                       |
+| **OQ-T7.** Log-shipping topology + sidecar buffer                          | Если shared-tooling VPS (где живёт Loki/Tempo/Prometheus) даст >1 outage/мес или observability-gap во время outage'а будет critical. Кандидаты: Promtail с local queue, Vector с persistent buffer на api-prod/data-prod, отдельный durable-spool. Pre-pilot: log loss во время outage'а приемлем; pilot transition — пересматриваем. |
 
 ---
 
@@ -159,7 +159,7 @@ Bbm-tooling VPS (Verdaccio + observability + IdP + Vault) — shared infra, cost
 
 ### Положительные
 
-- Минимальный ops-overhead для команды 1–2: docker-compose уже использован в bbm-tooling / Plane / Authentik, дисциплина та же.
+- Минимальный ops-overhead для команды 1–2: docker-compose уже использован в shared-tooling / Plane / Authentik, дисциплина та же.
 - AI-агенты пишут docker-compose YAML консистентно между сессиями (mainstream + большой обучающий датасет).
 - Изоляция api ⟷ data: OOM/IO в одном плоскости не разрушает другую.
 - Cost envelope ≤30k ₽/мес выполнен с запасом (~20–25k ₽/мес).
@@ -196,7 +196,7 @@ Bbm-tooling VPS (Verdaccio + observability + IdP + Vault) — shared infra, cost
 - **ADR-0003 §8** (Amendment A2) — Redis single-node v1 policy + HA trigger.
 - **Backend-core-design §5.8** — capacity table; Redis-count fixed синхронно с этим ADR.
 - **Engineering-readiness §1** — CI/CD, preview-env tooling (Coolify/Dokploy), blue-green pilot.
-- **DSO-10** — infra readiness checklist (maintenance schedule, bbm-tooling sizing, Verdaccio + observability deploy).
+- **DSO-10** — infra readiness checklist (maintenance schedule, shared-tooling sizing, Verdaccio + observability deploy).
 - **DSO-70** — local dev environment (separate scope, не пересекается).
 - **ADR-0011 §125** — k8s deferred to Phase 1+ (consistent с OQ-T3 здесь).
 

@@ -9,9 +9,6 @@ lang: en
 # DS Platform — Backend Core design
 
 **Date:** 2026-05-13
-**Notion title:** [BBM · DS] 2026-05-13 — DS Platform: Backend Core design
-**Notion page ID:** —
-**Master copy:** repository → `apps/docs/content/adr/0002-backend-core-stack-design-en.md`
 **Author:** Tech Lead
 **Related to:** Plane DSO-26 (`5556d45e-7b62-431e-8d6f-b8beca3386f0`), milestone DSO-24
 **Inherits:** ADR-0001 (Identity/Auth/RBAC), spec `0001-identity-provider-shortlist-design-en.md`
@@ -432,11 +429,11 @@ Via OpenTelemetry SDK → Loki + Tempo + Prometheus (engineering-readiness defau
 
 ### 5.8. Capacity planning + infra footprint
 
-| Phase        | MAU  | DAU  | Concurrent peak | API RPS peak | Infra footprint (Timeweb VPS)                                                                                                                                                                                                                                                                                                                                                | Est. monthly cost ₽                               | Realistic availability                                                       |
-| ------------ | ---- | ---- | --------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------- |
-| v1 (Q1 2027) | 10k  | 1k   | 200             | ~50          | DS Platform prod (see ADR-0012 §Process inventory): api-prod VPS = 1× API + 1× generic-worker + 1× notifications-worker + 1× Centrifugo + 1× nginx; data-prod VPS = 1× Postgres + **1× Redis 7 single-node** (HA trigger per ADR-0003 §8 Amendment A2) + 1× pgbackrest sidecar. Shared bbm-tooling VPS (DSO-10, separate budget): Verdaccio + Loki/Tempo/Prometheus + Vault. | **~20-30k ₽/month** (see ADR-0012 §Cost envelope) | **99.0% single-AZ** (ADR-0002 Amendment A1; HA within one DC; cross-AZ — v2) |
-| v2 (Q3 2027) | 100k | 10k  | 2k              | ~500         | 2× API + 2× workers (split: ledger + pdf + generic) + 2× Centrifugo + Redis cluster + Postgres primary + 2× read-replica + DWH                                                                                                                                                                                                                                               | ~80-120k ₽/month                                  | 99.5% multi-AZ                                                               |
-| v3 (Q1 2028) | 1M   | 100k | 20k             | ~5000        | 5+ API + 4+ workers (full split) + 4× Centrifugo + Redis cluster sharded + Postgres + ClickHouse DWH + full observability infra                                                                                                                                                                                                                                              | ~300-500k ₽/month                                 | 99.95% multi-AZ                                                              |
+| Phase        | MAU  | DAU  | Concurrent peak | API RPS peak | Infra footprint (Timeweb VPS)                                                                                                                                                                                                                                                                                                                                                   | Est. monthly cost ₽                               | Realistic availability                                                       |
+| ------------ | ---- | ---- | --------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------- |
+| v1 (Q1 2027) | 10k  | 1k   | 200             | ~50          | DS Platform prod (see ADR-0012 §Process inventory): api-prod VPS = 1× API + 1× generic-worker + 1× notifications-worker + 1× Centrifugo + 1× nginx; data-prod VPS = 1× Postgres + **1× Redis 7 single-node** (HA trigger per ADR-0003 §8 Amendment A2) + 1× pgbackrest sidecar. Shared shared-tooling VPS (DSO-10, separate budget): Verdaccio + Loki/Tempo/Prometheus + Vault. | **~20-30k ₽/month** (see ADR-0012 §Cost envelope) | **99.0% single-AZ** (ADR-0002 Amendment A1; HA within one DC; cross-AZ — v2) |
+| v2 (Q3 2027) | 100k | 10k  | 2k              | ~500         | 2× API + 2× workers (split: ledger + pdf + generic) + 2× Centrifugo + Redis cluster + Postgres primary + 2× read-replica + DWH                                                                                                                                                                                                                                                  | ~80-120k ₽/month                                  | 99.5% multi-AZ                                                               |
+| v3 (Q1 2028) | 1M   | 100k | 20k             | ~5000        | 5+ API + 4+ workers (full split) + 4× Centrifugo + Redis cluster sharded + Postgres + ClickHouse DWH + full observability infra                                                                                                                                                                                                                                                 | ~300-500k ₽/month                                 | 99.95% multi-AZ                                                              |
 
 **Important note on v1 availability:** **resolved 2026-05-18 (DSO-59, ADR-0002 Amendment A1).** v1 SLO = 99.0% single-AZ; 99.5% moved to v2 upon triggering OQ-D7 ADR-0003 (HA Postgres). Maintenance window 02:00–06:00 MSK excluded from SLO calculation. The full prod-cluster topology is in ADR-0012 "Deployment Topology v1".
 
@@ -660,7 +657,7 @@ Documentation is the single source of truth for development, not a by-product. T
 | API docs (OpenAPI) | `/v1/openapi.json` + Scalar UI           | **Auto from Zod**       | Every build           |
 | Module READMEs     | `src/modules/<name>/README.md`           | Developer/AI with code  | In PR (manual review) |
 | Runbooks           | `docs/runbooks/<scenario>.md`            | Developer               | On new scenario       |
-| Knowledge base     | Notion `[BBM · DS] ...`                  | Auto sync repo → Notion | Merge to main         |
+| Knowledge base     | Fumadocs portal (`apps/docs`)            | Repo is SSOT (ADR-0006) | Merge to main         |
 
 **v2 (when team grows to 3+):**
 
@@ -767,16 +764,9 @@ Documentation is the single source of truth for development, not a by-product. T
 | c4-diagram-render                     | After adding C4 Mermaid                      |
 | cross-doc-consistency                 | After ADR corpus grows to 15+                |
 
-### 8.6. Sync to knowledge base (repo → Notion)
+### 8.6. Knowledge base
 
-GitHub Action / GitLab CI job on merge to `main` uses the Notion API for upsert of pages:
-
-- ADR → `[BBM · DS] ADR Registry`.
-- Specs → `[BBM · DS] Design Specs`.
-- Module READMEs → `[BBM · DS] Backend Modules`.
-- C4 diagrams → embedded SVG in `[BBM · DS] Architecture`.
-
-Direction: **repo → Notion**, Notion is not edited by hand.
+Documentation SSOT and publishing are defined in ADR-0006 (Documentation & SSOT): the repository is the single source of truth, rendered by the Fumadocs portal (`apps/docs`). No external knowledge-base sync.
 
 ### 8.7. Tooling
 

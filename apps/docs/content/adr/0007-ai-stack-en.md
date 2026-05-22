@@ -382,7 +382,7 @@ Until then, Phase 2 baseline = human-merge gate + lint guards + interactive revi
 
 ### Amendment A2 — Discipline gates (artifact-required) + auto-merge after positive review (2026-05-20, DSP-194 follow-up)
 
-**Context:** the G11 smoke test (DSP-181, run on the `001-api-bootstrap-health` feature) reached green CI and a merged PR, but the retrospective in `bbm/outputs/g11-smoke-findings.md` recorded that green was reached **only because the human observer intervened at three critical moments**. Three findings dominate the cost:
+**Context:** the G11 smoke test (DSP-181, run on the `001-api-bootstrap-health` feature) reached green CI and a merged PR, but the G11 smoke retrospective recorded that green was reached **only because the human observer intervened at three critical moments**. Three findings dominate the cost:
 
 - **F-14** — Step 8 (review dispatch) was forgotten. The author-agent declared the cycle complete after `gh pr create`, treating "human-merge" as the sole final action. Only a direct question from the human ("did you dispatch a review?") triggered Mode (a). The review then caught two BLOCKER findings that would otherwise have shipped to `main`.
 - **F-15** — the 9-item iteration-end checklist (then in AGENTS.md §3 Step 6, prior to the DSP-194 refactor) was never executed as a discrete step. Of nine items, two or three were applied; the rest were skipped or silently deferred. The checklist as a narrative bullet list was, in the retrospective's words, "effectively decorative."

@@ -9,8 +9,6 @@ lang: ru
 # DS Platform — Backend Core design
 
 **Дата:** 2026-05-13
-**Notion title:** [BBM · DS] 2026-05-13 — DS Platform: Backend Core design
-**Notion page ID:** —
 **Мастер:** репозиторий → `apps/docs/content/adr/0002-backend-core-stack-design-ru.md`
 **Автор:** Tech Lead Сидоров
 **Связан с:** Plane DSO-26 (`5556d45e-7b62-431e-8d6f-b8beca3386f0`), milestone DSO-24
@@ -432,11 +430,11 @@ export class CoursesController {
 
 ### 5.8. Capacity planning + infra footprint
 
-| Этап         | MAU  | DAU  | Concurrent peak | API RPS peak | Infra footprint (Timeweb VPS)                                                                                                                                                                                                                                                                                                                                                 | Est. monthly cost ₽                             | Realistic availability                                                          |
-| ------------ | ---- | ---- | --------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------- |
-| v1 (Q1 2027) | 10k  | 1k   | 200             | ~50          | DS Platform prod (см. ADR-0012 §Process inventory): api-prod VPS = 1× API + 1× generic-worker + 1× notifications-worker + 1× Centrifugo + 1× nginx; data-prod VPS = 1× Postgres + **1× Redis 7 single-node** (HA trigger per ADR-0003 §8 Amendment A2) + 1× pgbackrest sidecar. Shared bbm-tooling VPS (DSO-10, отдельный budget): Verdaccio + Loki/Tempo/Prometheus + Vault. | **~20-30k ₽/мес** (см. ADR-0012 §Cost envelope) | **99.0% single-AZ** (ADR-0002 Amendment A1; HA внутри одного DC; cross-AZ — v2) |
-| v2 (Q3 2027) | 100k | 10k  | 2k              | ~500         | 2× API + 2× workers (split: ledger + pdf + generic) + 2× Centrifugo + Redis cluster + Postgres primary + 2× read-replica + DWH                                                                                                                                                                                                                                                | ~80-120k ₽/мес                                  | 99.5% multi-AZ                                                                  |
-| v3 (Q1 2028) | 1M   | 100k | 20k             | ~5000        | 5+ API + 4+ workers (full split) + 4× Centrifugo + Redis cluster sharded + Postgres + ClickHouse DWH + полная инфра observability                                                                                                                                                                                                                                             | ~300-500k ₽/мес                                 | 99.95% multi-AZ                                                                 |
+| Этап         | MAU  | DAU  | Concurrent peak | API RPS peak | Infra footprint (Timeweb VPS)                                                                                                                                                                                                                                                                                                                                                    | Est. monthly cost ₽                             | Realistic availability                                                          |
+| ------------ | ---- | ---- | --------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------- |
+| v1 (Q1 2027) | 10k  | 1k   | 200             | ~50          | DS Platform prod (см. ADR-0012 §Process inventory): api-prod VPS = 1× API + 1× generic-worker + 1× notifications-worker + 1× Centrifugo + 1× nginx; data-prod VPS = 1× Postgres + **1× Redis 7 single-node** (HA trigger per ADR-0003 §8 Amendment A2) + 1× pgbackrest sidecar. Shared shared-tooling VPS (DSO-10, отдельный budget): Verdaccio + Loki/Tempo/Prometheus + Vault. | **~20-30k ₽/мес** (см. ADR-0012 §Cost envelope) | **99.0% single-AZ** (ADR-0002 Amendment A1; HA внутри одного DC; cross-AZ — v2) |
+| v2 (Q3 2027) | 100k | 10k  | 2k              | ~500         | 2× API + 2× workers (split: ledger + pdf + generic) + 2× Centrifugo + Redis cluster + Postgres primary + 2× read-replica + DWH                                                                                                                                                                                                                                                   | ~80-120k ₽/мес                                  | 99.5% multi-AZ                                                                  |
+| v3 (Q1 2028) | 1M   | 100k | 20k             | ~5000        | 5+ API + 4+ workers (full split) + 4× Centrifugo + Redis cluster sharded + Postgres + ClickHouse DWH + полная инфра observability                                                                                                                                                                                                                                                | ~300-500k ₽/мес                                 | 99.95% multi-AZ                                                                 |
 
 **Важное замечание про v1 availability:** **resolved 2026-05-18 (DSO-59, ADR-0002 Amendment A1).** v1 SLO = 99.0% single-AZ; 99.5% перенесён в v2 при срабатывании OQ-D7 ADR-0003 (HA Postgres). Maintenance window 02:00–06:00 МСК исключён из SLO calculation. Полная топология prod-кластера — ADR-0012 «Deployment Topology v1».
 
@@ -660,7 +658,7 @@ API-ответ — сразу после COMMIT. Через ~200ms прилет�
 | API docs (OpenAPI) | `/v1/openapi.json` + Scalar UI           | **Auto из Zod**         | Каждый build         |
 | Module READMEs     | `src/modules/<name>/README.md`           | Разработчик/AI с кодом  | В PR (manual review) |
 | Runbooks           | `docs/runbooks/<scenario>.md`            | Разработчик             | На новый сценарий    |
-| Knowledge base     | Notion `[BBM · DS] ...`                  | Auto sync репо → Notion | Merge в main         |
+| Knowledge base     | Fumadocs-портал (`apps/docs`)            | Репо — SSOT (ADR-0006)  | Merge в main         |
 
 **v2 (при росте команды до 3+):**
 
@@ -767,16 +765,9 @@ API-ответ — сразу после COMMIT. Через ~200ms прилет�
 | c4-diagram-render                     | После добавления C4 Mermaid                    |
 | cross-doc-consistency                 | После роста ADR-corpus до 15+                  |
 
-### 8.6. Sync в knowledge base (репо → Notion)
+### 8.6. Knowledge base
 
-GitHub Action / GitLab CI job при merge в `main` использует Notion API для upsert страниц:
-
-- ADR → `[BBM · DS] ADR Registry`.
-- Specs → `[BBM · DS] Design Specs`.
-- Module READMEs → `[BBM · DS] Backend Modules`.
-- C4 диаграммы → embedded SVG в `[BBM · DS] Architecture`.
-
-Direction: **репо → Notion**, Notion не редактируется руками.
+SSOT документации и публикация определены в ADR-0006 (Documentation & SSOT): репозиторий — единственный источник правды, рендерится Fumadocs-порталом (`apps/docs`). Внешней синхронизации knowledge base нет.
 
 ### 8.7. Тулинг
 

@@ -226,7 +226,7 @@ To avoid false-SSOT in Git (`tasks.md`), task execution state lives in task trac
 - Start of session in DS Platform repo: `gh issue view N` → read linked feature spec → implement → PR auto-close on merge.
 - AI agent does NOT open Plane for code-level work — that would create friction. Plane is opened only for strategic context (e.g., reading a DSO-ADR when referenced).
 
-**Almost-SSOT for the Plane CLI rule:** in the BBM repo (`CLAUDE.md`) the "pp-plane CLI first" rule applies to the BBM level (DSP/DSC/DSM/DSO). In the DS Platform repo, `AGENTS.md` / `CLAUDE.md` fix an alternative rule: "`gh` CLI first for code-level Issues; pp-plane — for cross-tracker references (Plane DSO-XXX from an ADR/spec)."
+**Plane CLI rule:** `AGENTS.md` / `CLAUDE.md` fix the rule: "`gh` CLI first for code-level Issues; pp-plane — for cross-tracker references only (Plane DSO-XXX from an ADR/spec)."
 
 ### 10. Repository Topology in the Monorepo
 
@@ -304,7 +304,7 @@ ds-platform/
 ### Risks
 
 - **Keystatic + Fumadocs combined youth** — both are young; theoretically possible for both to break simultaneously on a major Next.js upgrade. Mitigation: pin major Next.js, run upgrades through a canary branch.
-- **Product Lead continues writing in Notion despite Keystatic** — a social risk. Mitigation: explicitly state in the DS Platform section of the Master Copy Policy that "BBM Notion is no longer Master for DS Platform docs"; deactivate the corresponding Notion pages (or make them a read-only mirror via CI).
+- **Product Lead continues writing in Notion despite Keystatic** — a social risk. Mitigation: explicitly state that Notion is no longer Master for DS Platform docs"; deactivate the corresponding Notion pages (or make them a read-only mirror via CI).
 - **AI agent writes to `apps/docs/content/` directly, breaking Keystatic schema** — e.g., adds a `.md` file without required frontmatter. Mitigation: CI schema-validation for Keystatic collections — fail if a file does not conform to the schema.
 
 ---
@@ -313,7 +313,7 @@ ds-platform/
 
 | Alternative                                            |  Score  | Reason                                                                                                                           |
 | ------------------------------------------------------ | :-----: | -------------------------------------------------------------------------------------------------------------------------------- |
-| Notion-as-Master for prose (BBM pattern extension)     |   n/a   | Federal Law 152-FZ vendor compliance; AI must fetch via MCP — slower context build; markdown ↔ Notion-blocks lossy serialization |
+| Notion-as-Master for prose                             |   n/a   | Federal Law 152-FZ vendor compliance; AI must fetch via MCP — slower context build; markdown ↔ Notion-blocks lossy serialization |
 | Outline self-hosted                                    |   n/a   | Storage = Postgres (not Git) → AI reads a snapshot, drift risk; bidirectional sync with Git non-trivial                          |
 | TinaCMS                                                |   147   | Close to Keystatic (149) — GraphQL layer adds complexity; revisit trigger recorded                                               |
 | Wiki.js                                                |   122   | Classical wiki UX, not Notion-blocks; AGPL acceptable but restrictive; sync interval-based                                       |
@@ -330,7 +330,7 @@ ds-platform/
 | Atlas migrations                                       |   n/a   | drizzle-kit covers this (ADR-0003 §4) — no point in a second migration tool                                                      |
 | DBML + dbdocs.io                                       |   n/a   | Drizzle introspect → ERD render covers this (ADR-0003 §4)                                                                        |
 | AGENTS.md only (no CLAUDE.md)                          |   n/a   | Lose Claude-specific MCP / skills / hooks config                                                                                 |
-| CLAUDE.md only (BBM pattern)                           |   n/a   | Does not scale to multi-agent (Cursor, Codex)                                                                                    |
+| CLAUDE.md only                                         |   n/a   | Does not scale to multi-agent (Cursor, Codex)                                                                                    |
 
 ---
 
@@ -364,7 +364,7 @@ ds-platform/
 
 **Delegated to other tasks:**
 
-- **DSO-31 (Repo strategy / Engineering readiness):** monorepo tooling finalization (Turborepo); CI workflow.yml; Fumadocs setup; Keystatic setup; AGENTS.md/CLAUDE.md draft; first glossary YAML scaffold; lint-tools package; sync-glossary-to-payload script; deployment domain `docs.dsplatform.bbm.academy` + `docs-cms.dsplatform.bbm.academy`.
+- **DSO-31 (Repo strategy / Engineering readiness):** monorepo tooling finalization (Turborepo); CI workflow.yml; Fumadocs setup; Keystatic setup; AGENTS.md/CLAUDE.md draft; first glossary YAML scaffold; lint-tools package; sync-glossary-to-payload script; deployment domain `docs.doctor.school` + `docs-cms.doctor.school`.
 - **Phase 0.5 after DSO-31:** first feature spec in SDD format as acceptance proof.
 - **DSO-32 (Legal):** status of DS Platform Notion pages after migration — read-only mirror or deprecation.
 
@@ -380,7 +380,7 @@ ds-platform/
 
 ### Amendment A1 — EARS-N flat numbering (2026-05-20, DSP-194 follow-up)
 
-**Context:** §4 of this ADR fixed the SDD feature-spec format but left EARS requirement numbering underspecified: the original text shows `EARS-N.M` examples (e.g., `EARS-3.1`) without explicit guidance on when `.M` is required vs. cosmetic. The G11 smoke test (DSP-181) authored the first feature-spec (`001-api-bootstrap-health`) with a single-shall-clause handler initially numbered `EARS-1.1`; the spec was subsequently flattened to `EARS-1` in commit `073d6da`. The retrospective in `bbm/outputs/g11-smoke-findings.md` (finding F-5) recommended codifying flat numbering as the default.
+**Context:** §4 of this ADR fixed the SDD feature-spec format but left EARS requirement numbering underspecified: the original text shows `EARS-N.M` examples (e.g., `EARS-3.1`) without explicit guidance on when `.M` is required vs. cosmetic. The G11 smoke test (DSP-181) authored the first feature-spec (`001-api-bootstrap-health`) with a single-shall-clause handler initially numbered `EARS-1.1`; the spec was subsequently flattened to `EARS-1` in commit `073d6da`. The G11 smoke retrospective (finding F-5) recommended codifying flat numbering as the default.
 
 **Decision (amendment):**
 

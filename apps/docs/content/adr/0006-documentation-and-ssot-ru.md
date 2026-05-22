@@ -226,7 +226,7 @@ Sequence / state / ER / C4Context — все Mermaid в MDX. Rendering — Fumad
 - Старт сессии в DS Platform repo: `gh issue view N` → реад linked feature spec → реализация → PR auto-close on merge.
 - AI agent НЕ открывает Plane для code-level work — это бы создало friction. Plane open'ится только для strategic context (например, читать DSO-ADR при референсе).
 
-**Almost-SSOT для Plane CLI rule:** в BBM repo (`CLAUDE.md`) правило «pp-plane CLI первый» относится к BBM-уровню (DSP/DSC/DSM/DSO). В DS Platform repo `AGENTS.md` / `CLAUDE.md` фиксируют альтернативное правило: «`gh` CLI первый для code-level Issues; pp-plane — для cross-tracker references (Plane DSO-XXX из ADR/spec)».
+**Plane CLI rule:** `AGENTS.md` / `CLAUDE.md` фиксируют правило: «`gh` CLI первый для code-level Issues; pp-plane — только для cross-tracker references (Plane DSO-XXX из ADR/spec)».
 
 ### 10. Repository topology в monorepo
 
@@ -304,7 +304,7 @@ ds-platform/
 ### Risks
 
 - **Keystatic + Fumadocs combined youth** — оба молоды; теоретически возможна ситуация, когда оба ломаются одновременно major upgrade Next.js. Mitigation: pin major Next.js, проходим upgrade через canary branch.
-- **Product Lead продолжает писать в Notion несмотря на Keystatic** — социальный risk. Mitigation: в Master Copy Policy DS Platform-секции явно сказать «BBM Notion больше не Master для DS Platform docs»; деактивировать соответствующие Notion-страницы (или сделать read-only mirror через CI).
+- **Product Lead продолжает писать в Notion несмотря на Keystatic** — социальный risk. Mitigation: явно сказать «Notion больше не Master для DS Platform docs»; деактивировать соответствующие Notion-страницы (или сделать read-only mirror через CI).
 - **AI-агент пишет в `apps/docs/content/` напрямую, ломая Keystatic schema** — например добавляет `.md` файл без обязательного frontmatter. Mitigation: CI schema-validation для Keystatic collections — fail если файл не соответствует schema.
 
 ---
@@ -313,7 +313,7 @@ ds-platform/
 
 | Alternative                                             |  Score  | Reason                                                                                                                   |
 | ------------------------------------------------------- | :-----: | ------------------------------------------------------------------------------------------------------------------------ |
-| Notion-as-Master для prose (BBM pattern extension)      |   n/a   | 152-ФЗ vendor compliance; AI должен fetch через MCP — slower context build; markdown ↔ Notion-blocks lossy serialization |
+| Notion-as-Master для prose                              |   n/a   | 152-ФЗ vendor compliance; AI должен fetch через MCP — slower context build; markdown ↔ Notion-blocks lossy serialization |
 | Outline self-hosted                                     |   n/a   | Storage = Postgres (не Git) → AI читает snapshot, drift risk; bidirectional sync с Git non-trivial                       |
 | TinaCMS                                                 |   147   | Близко к Keystatic (149) — GraphQL-layer добавляет complexity; revisit trigger зафиксирован                              |
 | Wiki.js                                                 |   122   | Classical wiki UX, не Notion-blocks; AGPL acceptable но restrictive; sync-interval-based                                 |
@@ -330,7 +330,7 @@ ds-platform/
 | Atlas migrations                                        |   n/a   | Drizzle-kit покрывает (ADR-0003 §4) — нет смысла второй migration tool                                                   |
 | DBML + dbdocs.io                                        |   n/a   | Drizzle introspect → ERD рендер покрывает (ADR-0003 §4)                                                                  |
 | AGENTS.md only (no CLAUDE.md)                           |   n/a   | Теряем Claude-specific MCP / skills / hooks config                                                                       |
-| CLAUDE.md only (BBM pattern)                            |   n/a   | Не масштабируется на multi-agent (Cursor, Codex)                                                                         |
+| CLAUDE.md only                                          |   n/a   | Не масштабируется на multi-agent (Cursor, Codex)                                                                         |
 
 ---
 
@@ -364,7 +364,7 @@ ds-platform/
 
 **Делегировано в другие задачи:**
 
-- **DSO-31 (Repo strategy / Engineering readiness):** monorepo tooling финализация (Turborepo); CI workflow.yml; Fumadocs setup; Keystatic setup; AGENTS.md/CLAUDE.md draft; первый glossary YAML scaffold; lint-tools пакет; sync-glossary-to-payload script; deployment домен `docs.dsplatform.bbm.academy` + `docs-cms.dsplatform.bbm.academy`.
+- **DSO-31 (Repo strategy / Engineering readiness):** monorepo tooling финализация (Turborepo); CI workflow.yml; Fumadocs setup; Keystatic setup; AGENTS.md/CLAUDE.md draft; первый glossary YAML scaffold; lint-tools пакет; sync-glossary-to-payload script; deployment домен `docs.doctor.school` + `docs-cms.doctor.school`.
 - **Phase 0.5 после DSO-31:** первый feature-spec в SDD-формате как acceptance proof.
 - **DSO-32 (Юр):** статусы Notion-страниц DS Platform после миграции — read-only mirror или deprecation.
 
@@ -380,7 +380,7 @@ ds-platform/
 
 ### Amendment A1 — Плоская нумерация EARS-N (2026-05-20, follow-up к DSP-194)
 
-**Контекст:** §4 этой ADR зафиксировал формат SDD feature-spec, но оставил нумерацию EARS-требований недостаточно специфицированной: исходный текст использует примеры `EARS-N.M` (например, `EARS-3.1`) без явного указания, когда `.M` обязательно, а когда косметика. G11 smoke (DSP-181) сначала пронумеровал единственное shall-выражение в обработчике как `EARS-1.1` в первом feature-spec'е (`001-api-bootstrap-health`), затем spec был сплющен до `EARS-1` коммитом `073d6da`. Retrospective в `bbm/outputs/g11-smoke-findings.md` (находка F-5) рекомендовал кодифицировать плоскую нумерацию как дефолт.
+**Контекст:** §4 этой ADR зафиксировал формат SDD feature-spec, но оставил нумерацию EARS-требований недостаточно специфицированной: исходный текст использует примеры `EARS-N.M` (например, `EARS-3.1`) без явного указания, когда `.M` обязательно, а когда косметика. G11 smoke (DSP-181) сначала пронумеровал единственное shall-выражение в обработчике как `EARS-1.1` в первом feature-spec'е (`001-api-bootstrap-health`), затем spec был сплющен до `EARS-1` коммитом `073d6da`. G11 smoke retrospective (находка F-5) рекомендовал кодифицировать плоскую нумерацию как дефолт.
 
 **Решение (amendment):**
 

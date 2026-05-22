@@ -233,7 +233,7 @@ The stack is driven by `pnpm dev:*` (env-driven launcher `tools/dev/run.mjs`, DS
 
 - **Snapshot before migrate.** Before `pnpm drizzle:migrate`, ALWAYS run `pnpm dev:snapshot pre-mig-<short-desc>` first. The `drizzle:migrate` wrapper chains this automatically (setup-design §9.2), but a manual migration or a raw `drizzle-kit migrate` call bypasses the wrapper — snapshot first by hand.
 - **Never edit files inside volumes.** Container volumes (Postgres `pgdata`, Redis dumps, MinIO buckets) hold **live data**. Do not edit, copy over, or `rm` files inside them directly — go through the service (`psql`, an S3 client) or a snapshot/rollback. A direct write to a live `pgdata` corrupts the database.
-- **LAN endpoints are trusted, not egress.** Dev-stand services are LAN endpoints — per ADR-0011 §2.1 the LAN is a trusted network. Do NOT route stand traffic (e.g. `truenas.local`) through the egress PII scanner; these are intra-zone calls.
+- **LAN endpoints are trusted, not egress.** Dev-stand services are LAN endpoints — the LAN is classified as a trusted network (setup-design §8.3). Do NOT route stand traffic (e.g. `truenas.local`) through the egress PII scanner (ADR-0011); these are intra-zone calls.
 - **No source code on the remote Docker host.** Only Docker volumes live on a remote box. `apps/*` and `packages/*` stay on the developer's local NVMe (setup-design §2.2).
 
 ### 9.4 Baseline failure modes

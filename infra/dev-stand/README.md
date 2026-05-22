@@ -1,7 +1,7 @@
 # Local dev-stand
 
-Local development environment for DS Platform — Postgres, Redis, MinIO, Centrifugo,
-Cerbos, Mailpit and friends, run as a Docker Compose stack.
+Local development environment for DS Platform — Postgres, Redis, MinIO, `idp`,
+Centrifugo, Cerbos, Mailpit and friends, run as a Docker Compose stack.
 
 The platform contract (compose files, `.env.example`, DX wrappers) is portable and
 lives in git. Each developer picks a **recipe** for _where_ Docker actually runs.

@@ -19,7 +19,7 @@ Without an explicit "tooling" checklist there are three risks:
 2. **Regression of agent changes** — without strong CI gates autonomous development breaks prod without a human filter.
 3. **Tech debt accumulation** — without a phased approach we either build everything at once (losing pace), or nothing (impossible to retrofit later).
 
-The brainstorm research (summary in `outputs/2026-05-12-ai-agent-dev-readiness-research.md`) confirmed that under AI-agent driven development the 2025-2026 standard is an extended tooling set with focus on supply chain security, OpenTelemetry GenAI, prompt-injection protection, autonomy ladder, and spec-driven workflows.
+The brainstorm research confirmed that under AI-agent driven development the 2025-2026 standard is an extended tooling set with focus on supply chain security, OpenTelemetry GenAI, prompt-injection protection, autonomy ladder, and spec-driven workflows.
 
 ## Decision
 
@@ -348,8 +348,8 @@ A registry of external processors with DPA status, fallback chain, and category.
 **Pre-pilot:**
 
 - ADR format (Markdown, template in repo): context / decision / consequences / alternatives
-- ADR catalog in repo (`docs/adr/`) + index
-- Spec format (inherits from current `docs/superpowers/specs/` structure)
+- ADR catalog in repo (`apps/docs/content/adr/`) + index
+- Spec format (`apps/docs/content/specs/`)
 - Mandatory: new feature = spec before code, architecture change = ADR
 - Spec/ADR — read context for agents via MCP or direct repo read
 

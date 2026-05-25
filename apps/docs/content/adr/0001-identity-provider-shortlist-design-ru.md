@@ -490,50 +490,37 @@ Flow:
 
 ---
 
-## 9. IdP shortlist — Authentik vs Zitadel
+## 9. IdP — Zitadel (закрыто 2026-05-25, DSP-209)
 
-### 9.1. Equal capabilities OOB
+**Decision summary:** desk-research анализ закрыл выбор в пользу **Zitadel** (81.6% vs Authentik 75.8% по 7 взвешенным дифференциаторам). Hands-on спайк не выполнялся — все требования и различия верифицируются по документации, release notes и community-фактуре. Полный текст решения и consequences — ADR-0001 §8.
 
-Оба покрывают:
+**Ключевые факты по Zitadel (актуальные на 2026-05-25):** лицензия **AGPL 3.0** (смена с Apache 2.0 в 2025; copyleft + network-clause — для self-host без модификаций обязательств не возникает, см. ADR §8 «License discipline»). Бинарь **stateless**; event store = обычные Postgres-таблицы → DR = стандартный backup Postgres (pgbackrest), идентично Authentik. **Magic-link не core-фича** (GitHub #2075) — строится кастомно поверх session API (~1–2 дня work; учтено в D1 scoring); у Authentik покрывается Email-stage внутри flow.
 
-- Headless API для custom UI
-- Magic-link + SMS-OTP + password + MFA per group
-- OAuth2 generic sources (VK / Я / Max через config)
-- PKCE для public clients (OOB)
-- Telegram custom integration через flow stage / action (~50 строк кода в обоих)
-- Multi-group membership + multi-role
-- OIDC issuer для backend
-- Admin UI для оператора
-- 1 service + Postgres deployment
-- MIT (Authentik) / Apache 2.0 (Zitadel) — оба permissive
+### 9.1. Гейты (оба кандидата проходят равно — в scoring не входят)
 
-### 9.2. Точки различия (определяются спайком)
+Headless API для custom UI · OIDC issuer + PKCE + JWKS rotation · `prompt=none` silent re-auth · `prompt=login`+`acr_values` step-up · multiple redirect_uri/clients · OAuth2 generic sources (VK / Я / Max через config) · TOTP MFA (RFC 6238 — Google Authenticator / Authy / Yandex Key) + per-group enforcement · SMS-OTP (Authentik — SMS Authenticator stage; Zitadel — session API SMS challenge; РФ-провайдер кастомен в обоих) · Telegram custom integration (~50 строк в обоих) · Multi-group + multi-role · Admin UI · «1 service + Postgres» deployable · bulk-import API · webhook (у обоих нет встроенного outbox — компенсируется retry, §3.2).
 
-| Критерий                                   | Authentik                                                                  | Zitadel                                  |
-| ------------------------------------------ | -------------------------------------------------------------------------- | ---------------------------------------- |
-| Stack                                      | Python/Django                                                              | Go event-sourced                         |
-| Multi-tenancy                              | Через `organizations` field                                                | First-class (нам не нужно, но не блокер) |
-| Event-sourced audit                        | Стандартный audit log                                                      | Всё в event store                        |
-| Headless API ergonomics                    | Flow executor — stage-based JSON                                           | gRPC + REST sessions — чище API surface  |
-| Battle-testedness self-hosted              | Больше production deployments                                              | Меньше, но активно растёт                |
-| Backup/restore complexity                  | Стандартный SQL dump                                                       | Event-store replay (сложнее DR)          |
-| Vendor commercial push                     | Минимальный managed-push (BeryJu GmbH, DE)                                 | Активный (Zitadel Cloud — CAOS AG, CH)   |
-| Русскоязычная документация / РФ-сообщество | Больше                                                                     | Меньше                                   |
-| Sanctions exposure                         | Оба EU-based, MIT/Apache → код доступен даже при отзыве commercial support | Тот же риск                              |
+### 9.2. Дифференциаторы и итоговый scoring
 
-### 9.3. Spike critères (Phase 0 implementation)
+Методология: импакт × вероятность × длительность. Гейты не нагружают веса (см. §9.1).
 
-| Тест                                                                   | Время          | Закрывает вопрос                  |
-| ---------------------------------------------------------------------- | -------------- | --------------------------------- |
-| Реализовать login phone-OTP + magic-link end-to-end через headless API | 2–4ч/кандидата | Headless API ergonomics           |
-| Интегрировать РФ SMS-провайдера (SMSC.ru / SMS.ru) через webhook       | 1–2ч/кандидата | Custom provider integration       |
-| Реализовать Telegram Login HMAC                                        | 1–2ч/кандидата | Custom auth-stage complexity      |
-| Bulk-import 100 users из Directual через admin API                     | 1–2ч/кандидата | Migration tooling                 |
-| Webhook outbox-pattern прогон (`user.*` events)                        | 1ч/кандидата   | Sync-стратегия §3.2 жизнеспособна |
-| Account-linking PKCE-flow с pre-auth takeover scenario                 | 1ч/кандидата   | §6.2 guards реализуемы            |
-| Deploy + backup/restore прогон на Timeweb                              | 1–2ч/кандидата | Ops ergonomics + DR               |
+| #               | Критерий                                                                                                                      | Вес | Authentik       | Zitadel         | Ключевая фактура                                                                                                                                                                                                                                                                                                                     |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------- | --- | --------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| D1              | Объём кастомной auth-разработки v1 (magic-link, phone SMS-OTP с РФ-провайдером, Telegram HMAC, account-linking anti-takeover) | 20  | 4 → 80          | 3 → 60          | A: flow-движок закрывает декларативно; Z: magic-link и orchestration императивны                                                                                                                                                                                                                                                     |
+| D2              | Эргономика headless API (поверхность интеграции 6 приложений на нашем домене)                                                 | 22  | 4 → 88          | 5 → 110         | A: flow-executor server-driven state machine, спроектирован для outposts; Z: v2 Session API explicit resource-oriented                                                                                                                                                                                                               |
+| D3              | Эксплуатационный налог (footprint, upgrade discipline, breaking changes)                                                      | 22  | 3 → 66          | 4.5 → 99        | A: multi-service ~1 GB, calendar releases ~monthly, breaking changes ~каждый релиз (2025.12 RBAC overhaul + storage mount; 2026.2 SCIM filter, `ak_groups` rename), нельзя пропускать версии, downgrade нет, документированы upgrade-падения (#14501, #20634). Z: stateless Go-binary ~512 MB, апгрейд = подмена тега, миграции авто |
+| D5              | AI-agent разрабатываемость (LLM-friendly stack)                                                                               | 10  | 4 → 40          | 4 → 40          | A: больше комьюнити-контента (~20.7k★), но модель flows/stages/providers с «неочевидными связями» (HN); Z: меньше корпус, но protobuf-defined API явный и предсказуемый. Взаимозачёт                                                                                                                                                 |
+| D4              | Зрелость / track-record self-hosted                                                                                           | 8   | 4.5 → 36        | 3.5 → 28        | A: 20.7k★, большая обкатанная база; Z: 13.4k★, моложе в self-host, крен в cloud. В v1 ≤200 юзеров — почти не давит                                                                                                                                                                                                                   |
+| D6              | Лицензия и vendor-риск                                                                                                        | 10  | 4.5 → 45        | 3.5 → 35        | A: MIT core (всё v1-нужное в OSS); Z: AGPL 3.0 + активный commercial cloud push. Оба EU/CH, OSS-код остаётся доступен                                                                                                                                                                                                                |
+| D7              | Compliance posture для PD под 152-ФЗ/УЗ-3                                                                                     | 8   | 3 → 24          | 4.5 → 36        | A: нет own certifications, audit-export CSV в Enterprise, PII-min partial; Z: ISO 27001 + SOC 2 Type II vendor, SIEM-export OOB, PII-min full                                                                                                                                                                                        |
+| **Итого / 500** |                                                                                                                               | 100 | **379 (75.8%)** | **408 (81.6%)** | **Zitadel +5.8 п.п.**                                                                                                                                                                                                                                                                                                                |
 
-**Бюджет:** 1.5 рабочих дня на кандидата = 3 дня (пересмотрено с 2). Решение — ADR в `docs/adr/` по итогам спайка.
+### 9.3. Источники ресёрча
+
+- ZITADEL docs — [Requirements](https://zitadel.com/docs/self-hosting/manage/requirements), [Database](https://zitadel.com/docs/self-hosting/manage/database), [Backup & restore (zitadel-helper)](https://github.com/zitadel/zitadel-helper/blob/main/db/backup-and-restore.md), [MFA in custom login UI](https://zitadel.com/docs/guides/integrate/login-ui/mfa)
+- Authentik docs — [Headless flow executor](https://docs.goauthentik.io/add-secure-apps/flows-stages/flow/executors/headless/), [SMS Authenticator stage](https://docs.goauthentik.io/add-secure-apps/flows-stages/stages/authenticator_sms/), [Brands](https://docs.goauthentik.io/brands/), [Enterprise features](https://docs.goauthentik.io/enterprise/enterprise-features/), upgrade issues [#14501](https://github.com/goauthentik/authentik/issues/14501), [#20634](https://github.com/goauthentik/authentik/issues/20634)
+- Сравнительные обзоры — [wz-it Authentik vs Zitadel 2026](https://wz-it.com/en/blog/authentik-vs-zitadel-identity-provider-comparison/) · [House of FOSS Keycloak/Authentik/Zitadel 2026](https://blog.houseoffoss.com/post/keycloak-vs-authentik-vs-zitadel-2026-which-open-source-login-tool-should-you-use) · [Gupta Deepak CIAM Compass Authentik vs Zitadel](https://guptadeepak.com/ciam-compass/compare/authentik-vs-zitadel/)
+- Community evidence — [HN 41600896 (enterprise-y over-complexity)](https://news.ycombinator.com/item?id=41600896), [Zitadel magic-link discussion #2075](https://github.com/zitadel/zitadel/discussions/2075)
 
 ---
 

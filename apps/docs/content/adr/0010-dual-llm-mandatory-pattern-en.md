@@ -70,7 +70,7 @@ Every AI flow MUST explicitly declare its class in code (annotation, see §5):
 
 ### 2.3 Reference flows
 
-Four conceptual DS Platform flows to which the rule applies immediately on implementation are described in dual-llm-pattern-design §5: (5.1) author-upload → draft lesson; (5.2) AI assistant over the NMO base; (5.3) web-search research agent; (5.4) reviewer-bot evolution to write-tools. The Phase 0 reviewer agent (ADR-0007 §6) is today a single-Q-LLM-equivalent without tools, an **inherited contract**: any extension with tools automatically triggers a re-design under dual-LLM.
+Three conceptual DS Platform flows to which the rule applies immediately on implementation are described in dual-llm-pattern-design §5: (5.1) author-upload → draft lesson; (5.2) AI assistant over the NMO base; (5.3) web-search research agent.
 
 ---
 
@@ -101,7 +101,6 @@ Four conceptual DS Platform flows to which the rule applies immediately on imple
 - An architectural (not probabilistic) guarantee against a class of prompt-injection attacks that lead to PD exfiltration / unauthorized action.
 - A clean separation between "what the LLM read" (Q-LLM) and "what the LLM did" (P-LLM) — the audit log becomes regulatory-defensible.
 - Cost attribution and observability by role (Q vs P) — easier alerting, budget control (ADR-0007 §budget), red-team metrics.
-- The reviewer-agent inherited contract is fixed: any attempt to give it write-tools automatically rebuilds it as dual-LLM, without a separate decision each time.
 
 ### Negative / costs
 
@@ -169,23 +168,3 @@ Every AI flow MUST carry a CI-readable annotation:
 - **OQ-DL10-1:** Hard rule vs recommendation on cross-vendor between Q-LLM and P-LLM in a single flow. Pre-pilot — a recommendation (see dual-llm-pattern-design §7.3). Pilot+ — revisit after the first real injection incident; may be promoted to a hard rule via a separate amendment.
 - **OQ-DL10-2:** Applicability of the pattern to future non-backend AI flows (mobile-side on-device inference, browser-side classification). Pre-pilot — out of scope (all AI logic is server-side per ADR-0007). Revisit at the first on-device feature.
 - **OQ-DL10-3:** P-LLM streaming mode and preserving fail-closed semantics on partial streams — resolved in the first streaming flow design (see dual-llm-pattern-design §13 OQ-DL-6).
-
----
-
-## 8. Amendments
-
-### Amendment A1 — Reviewer-agent "inherited contract" reference is now vestigial; main mandate unchanged (2026-05-19, follow-up to ADR-0007 Amendment A1)
-
-**Context:** ADR-0007 Amendment A1 (2026-05-19) dropped the automated GitHub-Actions reviewer-bot entirely (no `tools/reviewer-agent/`, no `agent-review.yml`). ADR-0010 §2.3 used the reviewer-agent as an example of a "single-Q-LLM-equivalent without tools" — an inherited contract that would auto-trigger a dual-LLM redesign if write-tools were ever added.
-
-**Decision: scope-clarified, NOT SUPERSEDED.** ADR-0010's mandate is on **any backend AI flow** with untrusted-input + tools (§2 Decision: "Any backend AI flow in DS Platform where the LLM (a) receives untrusted content **and** (b) has access to tools with side effects MUST be implemented through the Dual-LLM pattern"). The runtime targets (chat assistant, content-pipeline author-upload, NMO-base assistant, web-search research agent — §2.3 / dual-llm-pattern-design §5.1–§5.3) are the load-bearing scope. The reviewer-agent was an inherited example, not the mandate's basis.
-
-**Effect:**
-
-- §2.3 sentence "The Phase 0 reviewer agent (ADR-0007 §6) is today a single-Q-LLM-equivalent without tools, an inherited contract: any extension with tools automatically triggers a re-design under dual-LLM." — semantically vestigial (the reviewer-agent does not exist in Phase 0). Kept inline as historical context; if a future ADR reinstates an automated reviewer with write-tools, ADR-0010 §2 (Decision) auto-applies without a new amendment.
-- §2.2 (architectural invariants), §5 (Verification & enforcement), and the reference-flow list (5.1–5.3 in dual-llm-pattern-design) are unchanged and remain MUST for runtime AI features (Content Pipeline v2 onwards).
-- Interactive review modes (subagent `/review` skill OR parallel Codex CLI per ADR-0007 Amendment A1) are out of scope for ADR-0010 — they are not "backend AI flows" with side-effect tools; they are local developer tooling, no `audit_ledger` requirement.
-
-**Open Questions touched:** OQ-DL10-1 (cross-vendor hard rule) — unchanged: still a recommendation pre-pilot, promotable to hard rule on first injection incident in runtime AI.
-
-**Cross-refs:** ADR-0007 §Amendment A1, ADR-0008 §Amendment A2, dual-llm-pattern-design §Amendment DL1.

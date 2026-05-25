@@ -70,7 +70,7 @@ DS Platform — медицинская образовательная платф
 
 ### 2.3 Reference flows
 
-4 концептуальных flow'а DS Platform, к которым правило применяется немедленно при их implementation — описаны в dual-llm-pattern-design §5: (5.1) author-upload → draft lesson; (5.2) AI-assistant по NMO-базе; (5.3) web-search research agent; (5.4) reviewer-bot эволюция к write-tools. Reviewer-agent Phase 0 (ADR-0007 §6) на сегодня — single-Q-LLM-эквивалент без tools, **inherited-контракт**: любое расширение tool'ами автоматически триггерит re-design под dual-LLM.
+3 концептуальных flow'а DS Platform, к которым правило применяется немедленно при их implementation — описаны в dual-llm-pattern-design §5: (5.1) author-upload → draft lesson; (5.2) AI-assistant по NMO-базе; (5.3) web-search research agent.
 
 ---
 
@@ -101,7 +101,6 @@ DS Platform — медицинская образовательная платф
 - Архитектурная гарантия (а не вероятностная) на класс prompt-injection атак, ведущих к exfiltration PD / unauthorized action.
 - Чёткое разделение «что LLM прочитал» (Q-LLM) и «что LLM сделал» (P-LLM) — audit log становится regulatory-defensible.
 - Cost-attribution и observability по ролям (Q vs P) — облегчает alerting, budget control (ADR-0007 §budget), red-team-метрики.
-- Reviewer-agent inherited-контракт зафиксирован: попытка дать ему write-tools автоматически перестраивает его в dual-LLM, без отдельного решения каждый раз.
 
 ### Negative / costs
 
@@ -169,23 +168,3 @@ DS Platform — медицинская образовательная платф
 - **OQ-DL10-1:** Hard rule vs рекомендация на cross-vendor для Q-LLM и P-LLM в одном flow. Pre-pilot — рекомендация (см. dual-llm-pattern-design §7.3). Pilot+ — пересмотреть после первого реального injection incident'а; возможно превратить в hard rule отдельным amendment'ом.
 - **OQ-DL10-2:** Применимость pattern'а к будущим non-backend AI-flows (mobile-side on-device inference, browser-side classification). Pre-pilot — out of scope (вся AI-логика server-side per ADR-0007). Пересмотр при первом on-device feature.
 - **OQ-DL10-3:** Streaming-режим P-LLM и сохранение fail-closed semantics при partial-stream'е — резолюция в первом streaming flow design'е (см. dual-llm-pattern-design §13 OQ-DL-6).
-
----
-
-## 8. Amendments
-
-### Amendment A1 — Reviewer-agent "inherited contract" reference стала vestigial; основной мандат не меняется (2026-05-19, follow-up к ADR-0007 Amendment A1)
-
-**Контекст:** ADR-0007 Amendment A1 (2026-05-19) полностью дропнул автоматический GitHub-Actions reviewer-bot (нет `tools/reviewer-agent/`, нет `agent-review.yml`). ADR-0010 §2.3 использовала reviewer-agent как пример «single-Q-LLM-equivalent без tools» — inherited contract, который автоматически триггерит редизайн под dual-LLM при появлении write-tools.
-
-**Решение: scope-clarified, НЕ SUPERSEDED.** Мандат ADR-0010 — на **любой backend AI flow** с untrusted-input + tools (§2 Decision: «Любой backend AI flow в DS Platform, где LLM (a) получает untrusted content **и** (b) имеет доступ к tools со side effects, ОБЯЗАН быть реализован через Dual-LLM pattern»). Runtime-цели (chat assistant, content-pipeline author-upload, NMO-base assistant, web-search research agent — §2.3 / dual-llm-pattern-design §5.1–§5.3) — это нагрузочный scope. Reviewer-agent был inherited example, а не основанием мандата.
-
-**Effect:**
-
-- §2.3 предложение «Phase 0 reviewer agent (ADR-0007 §6) сегодня — single-Q-LLM-equivalent без tools, inherited contract: любое расширение с tools автоматически триггерит редизайн под dual-LLM» — семантически vestigial (reviewer-agent не существует в Phase 0). Оставлено inline как исторический контекст; если будущая ADR вернёт автоматический reviewer с write-tools, ADR-0010 §2 (Decision) применится автоматически без нового amendment'а.
-- §2.2 (architectural invariants), §5 (Verification & enforcement) и список reference flows (5.1–5.3 в dual-llm-pattern-design) не меняются и остаются MUST для runtime AI-фич (Content Pipeline v2 и далее).
-- Interactive review modes (subagent `/review` skill ИЛИ параллельный Codex CLI по ADR-0007 Amendment A1) — out of scope для ADR-0010 — они не «backend AI flows» с side-effect tools; они — локальный developer tooling, нет требования к `audit_ledger`.
-
-**Открытые вопросы, которых касается:** OQ-DL10-1 (cross-vendor hard rule) — не меняется: остаётся рекомендацией pre-pilot, продвигается до hard rule при первом injection incident'е в runtime AI.
-
-**Cross-refs:** ADR-0007 §Amendment A1, ADR-0008 §Amendment A2, dual-llm-pattern-design §Amendment DL1.

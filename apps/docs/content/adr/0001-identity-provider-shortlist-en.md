@@ -8,9 +8,9 @@ lang: en
 
 # ADR-0001 — Identity / Auth / RBAC for DS Platform
 
-**Date:** 2026-05-12 (v2 — after independent architecture review); last amended 2026-05-18 (Amendment A2, DSO-63 #2/#4; Amendment A3 (2026-05-18, DSO-63 #5/#6 — PD lifecycle → ADR-0009); Amendment A4 (2026-05-18, DSO-63 follow-up — step-up auth))
-**Status:** Accepted (shortlist), final IdP selection — spike ~3 days in Phase 0 implementation
-**Related to:** Plane DSO-25 (`0a8f2276-956f-4f4e-9134-2f197ff4bab8`), milestone DSO-24, DSO-63 (external validation)
+**Date:** 2026-05-12 (v2 — after independent architecture review); amended 2026-05-25 (§8 rewritten — IdP closed: Zitadel, DSP-209). Previous amendments: 2026-05-18 (Amendment A2, DSO-63 #2/#4; A3 — PD lifecycle → ADR-0009; A4 — step-up auth).
+**Status:** Accepted — IdP = Zitadel
+**Related to:** Plane DSO-25 (`0a8f2276-956f-4f4e-9134-2f197ff4bab8`), milestone DSO-24, DSO-63 (external validation), DSP-209 (final IdP selection)
 **Design spec:** `apps/docs/content/adr/0001-identity-provider-shortlist-design-en.md`
 
 ---
@@ -94,18 +94,42 @@ Rationale for deferral: v1 user base ≤200 from the existing Doctor.School data
 - PD in logs is masked; full values only in encrypted audit log with RF-resident KMS.
 - Full list of mandatory auth audit events — spec §7.3.
 
-### 8. IdP shortlist — **Authentik** or **Zitadel**
+### 8. IdP — Zitadel
 
-Final selection is deferred to the Phase 0 implementation spike. Budget: **~3 working days** (1.5 per candidate). Criteria — headless API ergonomics, RF SMS-provider integration, Telegram HMAC, bulk-import dry-run, **webhook outbox-pattern run**, **account-linking PKCE-flow with pre-auth takeover scenario**, ops ergonomics on Timeweb.
+**Decision.** The DS Platform IdP is **Zitadel** (2026-05-25, DSP-209). No hands-on spike was run: all differences and requirements are verifiable from official documentation, release notes, and community evidence — a hands-on spike at this stage added no information.
+
+**Methodology (full evidence — design-spec §9).** Criteria are split into gates (both candidates pass equally — excluded from scoring; otherwise they ballast the totals) and differentiators (where candidates genuinely differ). Differentiator weights follow impact × probability × duration: lifetime/recurring pain > one-time/tail risk.
+
+**Scoring.** Across 7 weighted differentiators: **Zitadel 408 / 500 = 81.6%** vs Authentik 379 / 500 = 75.8% (+5.8 pp). The three heaviest weights (52% of scoring) all go to Zitadel:
+
+- **D2 Headless API ergonomics (22).** v2 Session API — explicit, resource-oriented — vs Authentik flow-executor, a server-driven state machine designed for outposts. This is a lifetime integration surface for 6 apps.
+- **D3 Operational tax (22).** Stateless Go binary + automatic Postgres migrations vs Authentik multi-service + breaking changes ~every release (cannot skip versions, no downgrade, upgrade failures documented #14501, #20634). Recurring pain for a 1–2 team.
+- **D7 Compliance posture (8).** ISO 27001 + SOC 2 Type II vendor, SIEM export OOB, full PII-min — makes the upcoming UZ-3 audit narrative easier. Authentik — no own certifications, audit-export CSV gated in Enterprise.
+
+Authentik's wins (D1 v1 OOB functionality, D4 self-hosted maturity, D6 MIT license) are structurally «lighter»: one-time build cost, barely loaded in v1 ≤200 users, controllable license discipline.
+
+**License discipline (AGPL 3.0).** Zitadel relicensed Apache 2.0 → AGPL 3.0 in 2025. The source-disclosure obligation (AGPL §13) triggers ONLY when patching Zitadel source with network access for users. For self-host without modifications the practical difference vs MIT = 0. Rule:
+
+- ✅ Allowed: deploy, configure, integrate via API/gRPC/REST, custom Actions (JS hooks inside Zitadel — application code, not source modification), custom frontend, branding.
+- ⚠️ AGPL §13 trigger: patching Zitadel src → obligation to offer modified source to users interacting over the network (a public git mirror covers this).
+- 🛡 Discipline: fix bugs via upstream PR or work around via Action/config; do not patch src. This is part of the Definition of Done for any Zitadel-related PR.
+
+**Known trade-offs.**
+
+- Magic-link is a custom build on the session API (~1–2 days; not a Zitadel core feature, GitHub #2075). Mandatory security review.
+- Smaller self-hosted base vs Authentik (13.4k★ vs 20.7k★) — does not bite in v1 ≤200 users; re-evaluation triggers only if v2+ uncovers production maturity issues.
 
 #### Rejected candidates
 
-- **Keycloak.** Enormous maturity, RedHat-backed, significant local expertise in the RF sector. However: magic-link and SMS-OTP are not out-of-the-box — only via Java SPI extensions; JVM operation (2GB+ heap, GC tuning) is more resource-intensive for a 1–2 person team than Python/Go IdPs; admin API ergonomics are heavier. This is not a disqualification, but a trade-off against Authentik/Zitadel: in our scenario (headless-first, magic-link OOB, low ops budget) Authentik/Zitadel win. If both fail the spike — Keycloak is the fallback.
-- **Ory Kratos.** Best-in-class headless-first API. However: **no built-in admin UI** — for a 1–2 person team this means writing admin tooling from scratch; multi-service deployment (Kratos + optional Hydra/Oathkeeper/Keto) complicates ops; vendor (Ory Inc) actively pushes managed Ory Network, self-hosted remains but the direction is commercial.
-- **Authelia.** Wrong category — this is a forward-auth proxy for protecting services behind nginx/Traefik, not a full IdP. No self-signup, magic-link, SMS-OTP, social OAuth client, or admin UI for users. May be used separately to protect internal tooling (Plane / Grafana / GlitchTip), but not for user-facing DS Platform identity.
-- **Logto** (rejected after explicit review per architecture review). TS/Node, headless-first, MIT, lightweight self-host. A strong candidate on paper. Rejected because: (a) less battle-tested in self-hosted production (project is younger than Authentik/Zitadel/Keycloak); (b) SMS-OTP support is less mature — requires a custom connector; (c) admin UI is claimed but less feature-rich than Authentik's. Possible reconsideration in v2 if both Authentik and Zitadel fail the spike.
-- **FusionAuth** (rejected after explicit review per architecture review). One of the best headless APIs, single-binary deploy, free self-hosted edition. Rejected because: (a) free edition has limits on advanced policy features (multi-tenancy, advanced threat detection) — may become a blocker in v2/v3; (b) Java/JVM stack with the same ops costs as Keycloak; (c) commercial vendor (FusionAuth Inc, US) — higher sanctions exposure than EU-based Authentik/Zitadel.
+- **Keycloak.** Enormous maturity, RedHat-backed, significant local expertise in the RF sector. However: magic-link and SMS-OTP are not OOB — only via Java SPI extensions; JVM operation (2GB+ heap, GC tuning) is more resource-intensive for a 1–2 team; admin API ergonomics are heavier. On the «headless-first + low-ops budget» scenario Zitadel wins more cleanly. Fallback in case of critical issues with Zitadel — Keycloak (the most mature OSS alternative).
+- **Authentik.** See scoring above — loses to Zitadel on the two heaviest criteria (D2 headless ergonomics, D3 operational tax) and on D7 compliance posture. Authentik's wins (D1, D4, D6) are structurally overridden: one-time build cost vs lifetime/recurring pain.
+- **Ory Kratos.** Best-in-class headless-first API. However: no built-in admin UI — for a 1–2 team this means writing admin tooling from scratch; multi-service deployment (Kratos + optional Hydra/Oathkeeper/Keto) complicates ops; vendor Ory Inc actively pushes managed Ory Network.
+- **Authelia.** Wrong category — this is a forward-auth proxy for protecting services behind nginx/Traefik, not a full IdP. No self-signup, magic-link, SMS-OTP, social OAuth client, or admin UI for users. May be used separately to protect internal tooling (Plane / Grafana / GlitchTip).
+- **Logto.** TS/Node, headless-first, MIT, lightweight self-host. A strong candidate on paper. Rejected: (a) less battle-tested in self-hosted production (younger than Zitadel/Authentik/Keycloak); (b) SMS-OTP support is less mature — requires a custom connector; (c) admin UI is less feature-rich. Possible reconsideration in v2.
+- **FusionAuth.** One of the best headless APIs, single-binary deploy, free self-hosted edition. Rejected: (a) free edition has limits on advanced policy features (multi-tenancy, advanced threat detection) — may become a blocker in v2/v3; (b) Java/JVM stack with the same ops costs as Keycloak; (c) commercial vendor (FusionAuth Inc, US) — higher sanctions exposure than EU/CH-based.
 - **SuperTokens.** Headless, MIT, but a fragmented SDK approach (auth-core separate from per-language SDK) — adds complexity to our custom form-flows. Less mature admin UI.
+
+**Consequences for other ADRs / specs.** ADR-0004 §3, the local-dev design-spec §3.1, and arch-viz v2 historically used «Authentik» as a placeholder/default — sweep via a separate follow-up (DSP-210 under DSP-160). DSP-157 (local-dev compose IDP) is unblocked.
 
 ### 9. Migration from Directual — hard domain cutover (changed 2026-05-18, DSO-63 #4)
 
@@ -144,14 +168,13 @@ Final selection is deferred to the Phase 0 implementation spike. Budget: **~3 wo
 
 ## Open questions (deferred)
 
-1. Final choice of Authentik vs Zitadel — Phase 0 spike (~3 days).
-2. Session store: inside IdP or shared backend Redis — Phase 0 implementation.
-3. Policy engine for backend RBAC (Cerbos / OPA / OpenFGA / SQL) — DSO-26.
-4. RF SMS provider + failover scheme — DSO-26.
-5. Apple Developer Program registration for an RF legal entity — parallel legal track.
-6. Actual count + hash format in Directual + consent re-acquisition plan — Phase 0 discovery.
-7. **Target admin/operational role model for DS Platform** — parallel product track (outside DSO-25).
-8. Bot-protection provider in RF — default Yandex SmartCaptcha, alternatives — DSO-26.
+1. Session store: inside IdP or shared backend Redis — Phase 0 implementation.
+2. Policy engine for backend RBAC (Cerbos / OPA / OpenFGA / SQL) — DSO-26.
+3. RF SMS provider + failover scheme — DSO-26.
+4. Apple Developer Program registration for an RF legal entity — parallel legal track.
+5. Actual count + hash format in Directual + consent re-acquisition plan — Phase 0 discovery.
+6. **Target admin/operational role model for DS Platform** — parallel product track (outside DSO-25).
+7. Bot-protection provider in RF — default Yandex SmartCaptcha, alternatives — DSO-26.
 
 ## Deferred gaps (known)
 

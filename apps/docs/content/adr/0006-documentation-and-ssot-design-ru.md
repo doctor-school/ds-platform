@@ -1316,17 +1316,7 @@ Phase 1 (продакшн):
 1. Fumadocs setup specifics (theme, search provider, navigation config).
 2. Keystatic GitHub App registration (`ds-docs-bot`).
 3. Lint-tools пакет structure (один пакет `@ds/lint-tools` или per-tool?).
-4. EARS-ID ↔ Vitest describe linkage convention (например `it('EARS-3.1: ...', ...)`)
+4. EARS-ID ↔ Vitest linkage convention (закрыто): плоская нумерация — `it('EARS-N: ...', ...)`; вложенное `N.M` только если один handler несёт несколько shall-выражений. Референс-spec: `001-api-bootstrap-health`.
 5. Gherkin → Playwright transpilation pipeline setup (`playwright-bdd` setup details).
 6. Initial 30 glossary terms — какие переносим первым batch'ом.
 7. Migration: что делать с существующими Notion DS-Platform-страницами (если есть). Recommend: deprecated + redirect notice в Notion, content уже в Git.
-
----
-
-## 13. Amendments
-
-### Amendment SD1 — Плоская нумерация EARS-N (парный с ADR-0006 Amendment A1, 2026-05-20)
-
-§4 этого design-spec'а показывал `it('EARS-3.1: ...', ...)` как соглашение об именовании Vitest-тестов. По ADR-0006 Amendment A1, соглашение теперь плоское — `it('EARS-N: ...', ...)` — с вложенным `N.M`, зарезервированным для одного обработчика, несущего несколько shall-выражений. Открытый follow-up §12 пункт 4 закрыт amendment'ом.
-
-Источник: G11 smoke retrospective F-5. Референс-spec: `001-api-bootstrap-health` после коммита `073d6da`. Skill: `apps/docs/content/skills/author-ears-spec/SKILL.md`.

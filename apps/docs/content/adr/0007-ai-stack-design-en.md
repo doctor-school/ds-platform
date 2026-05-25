@@ -14,28 +14,28 @@ lang: en
 **Brainstorm:** superpowers:brainstorming skill, symmetrical to DSO-25..29 + DSO-60
 **Inherits:** ADR-0001..0006
 
-This document is the implementation detail for ADR-0007. The ADR establishes "what and why"; the spec establishes "how exactly": file paths, code sketches, GH Actions YAML, AGENTS.md templates, bootstrap and reviewer-agent scripts.
+This document is the implementation detail for ADR-0007. The ADR establishes "what and why"; the spec establishes "how exactly": file paths, code sketches, AGENTS.md templates, bootstrap script.
 
 ---
 
 ## 1. Decision summary (cross-ref ADR-0007)
 
-| Decision                         | Choice                                                                                                                                                                             | ADR-0007 §        |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| Scope ADR-0007                   | Phase 0 = AI-loop methodology (dev-time); runtime AI infra — deferred with triggers                                                                                                | §1                |
-| Coding agent harnesses Pre-pilot | Claude Code (primary, sync) + Codex (opt-in async). Cursor deferred.                                                                                                               | §2                |
-| Agent loop discipline            | SDD + TDD as hard rules; iteration-end checklist machine-checkable                                                                                                                 | §3                |
-| Task tracking source             | GitHub Issues (per ADR-0006 §9), milestone per feature-spec                                                                                                                        | inherits ADR-0006 |
-| Session bootstrap                | `tools/agent-bootstrap.ts` — deterministic script, output = live state snapshot                                                                                                    | §4                |
-| AI-specific drift guards         | 7 additional CI checks on top of ADR-0006 §7 (spec-link, TDD signal, cross-vendor review, EARS↔test linkage, etc.)                                                                 | §5                |
-| Cross-vendor PR review           | GH Action triggers reviewer-bot of the opposing vendor (explicit label `author:claude` / `author:codex`); required status check on workflow pass; approval-only-by-human preserved | §6                |
-| Prompt-caching                   | `cache_control: ephemeral` on AGENTS.md+CLAUDE.md+active spec+ADRs; stable prefix order for OpenAI prefix-cache                                                                    | §7                |
-| Cost observability               | Weekly `cost-ledger-sync.ts`: pull Anthropic+OpenAI usage → CSV in repo via auto-PR (not direct push to main); alert via GitHub Issue when soft-cap > $50/wk                       | §7                |
-| Autonomy phase                   | Phase 2 (chores + supervised PRs); explicit triggers for Phase 3                                                                                                                   | §8                |
-| Runtime LLM gateway              | LiteLLM Proxy self-hosted in Zone AI (Hetzner EU) — **deferred**, trigger: first runtime AI feature deploy                                                                         | §9                |
-| PD filter / egress proxy         | Same trigger — deferred                                                                                                                                                            | §9                |
-| OTel GenAI semconv collector     | Same trigger — in Phase 0 minimal token-count logging without semconv                                                                                                              | §9                |
-| Vector DB                        | pgvector in Postgres17 (inherited from ADR-0003), trigger for Qdrant — separate ADR                                                                                                | inherits ADR-0003 |
+| Decision                         | Choice                                                                                                                                           | ADR-0007 §        |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------- |
+| Scope ADR-0007                   | Phase 0 = AI-loop methodology (dev-time); runtime AI infra — deferred with triggers                                                              | §1                |
+| Coding agent harnesses Pre-pilot | Claude Code (primary, sync) + Codex (opt-in async). Cursor deferred.                                                                             | §2                |
+| Agent loop discipline            | SDD + TDD as hard rules; iteration-end checklist machine-checkable                                                                               | §3                |
+| Task tracking source             | GitHub Issues (per ADR-0006 §9), milestone per feature-spec                                                                                      | inherits ADR-0006 |
+| Session bootstrap                | `tools/agent-bootstrap.ts` — deterministic script, output = live state snapshot                                                                  | §4                |
+| AI-specific drift guards         | Additional CI checks on top of ADR-0006 §7 (spec-link, TDD signal, EARS↔test linkage, etc.)                                                      | §5                |
+| LLM-assisted PR review           | Interactive only (three modes — subagent `/review`, parallel Codex CLI, pure human). No automated reviewer-bot, no LLM API keys in repo secrets. | §6, AGENTS.md §4  |
+| Prompt-caching                   | `cache_control: ephemeral` on AGENTS.md+CLAUDE.md+active spec+ADRs; stable prefix order for OpenAI prefix-cache                                  | §7                |
+| Cost observability               | Manual via vendor consoles (Anthropic Console, OpenAI Platform) in Phase 0; no automated cost-ledger CSV in the repo.                            | §7                |
+| Autonomy phase                   | Phase 2 (chores + supervised PRs); explicit triggers for Phase 3                                                                                 | §8                |
+| Runtime LLM gateway              | LiteLLM Proxy self-hosted in Zone AI (Hetzner EU) — **deferred**, trigger: first runtime AI feature deploy                                       | §9                |
+| PD filter / egress proxy         | Same trigger — deferred                                                                                                                          | §9                |
+| OTel GenAI semconv collector     | Same trigger — in Phase 0 minimal token-count logging without semconv                                                                            | §9                |
+| Vector DB                        | pgvector in Postgres17 (inherited from ADR-0003), trigger for Qdrant — separate ADR                                                              | inherits ADR-0003 |
 
 ---
 
@@ -45,7 +45,11 @@ This document is the implementation detail for ADR-0007. The ADR establishes "wh
 
 One iteration = one feature spec → one or more related PRs. Source of intent — `apps/docs/content/specs/features/NNN-<slug>/{requirements.md, design.md, scenarios.feature}` (3 files, ADR-0006 §4). Source of execution state — GitHub Milestone `NNN-<slug>` + Issues per EARS handler (ADR-0006 §9). No `tasks.md` file.
 
-### 2.2 8-step cycle (canonical, AGENTS.md follows it)
+### 2.2 Canonical procedure — skill catalog at `apps/docs/content/skills/<name>/SKILL.md`
+
+The procedural source of truth for an AI feature iteration is the **project skill catalog** at `apps/docs/content/skills/<name>/SKILL.md` (AGENTS.md §3.3 — "the path is the contract"). Orchestration skills (`do-feature-iteration`, `do-hotfix-pr`, `do-adr-amendment`, `do-decision-debt-followup`) compose procedural skills (`read-relevant-adrs`, `verify-base-ci-green`, `author-ears-spec`, `open-ears-issues`, `run-iteration-end-checklist`, `request-mode-a-review`, `respond-to-review`, `write-iteration-summary`, `surface-decision-debt`, `merge-when-green`). Discipline gates are expressed as "Cannot proceed without" clauses on each orchestration skill — the agent cannot bypass them with narrative reading. The inline summary below mirrors the catalog; the catalog is authoritative.
+
+The 8-step cycle (`do-feature-iteration` orchestrates these):
 
 ```
 1. READ
@@ -62,16 +66,15 @@ One iteration = one feature spec → one or more related PRs. Source of intent �
        --milestone "NNN-<slug>" --label "feature:NNN-<slug>"
    - If parent exists → pick an open sub-issue or open a new one
      (if a gap is discovered during the work)
-   - Use superpowers:writing-plans skill only if the task is
-     multi-step within a single Issue. Simple Issue = TodoWrite in place.
 
 3. RED (TDD)
    - Write failing test(s) for the current EARS handler
    - One Vitest test per EARS requirement, naming convention:
        it('EARS-3.1: ...', () => { ... })
+     (flat `EARS-N` is the default; `EARS-N.M` only when a single
+      handler carries multiple shall-clauses — ADR-0006 §TDD)
    - Playwright tests are compiled from scenarios.feature
      via playwright-bdd (ADR-0006 §4 + §7 generated artifacts)
-   - Invoke superpowers:test-driven-development
 
 4. GREEN
    - Minimum code to pass tests
@@ -82,18 +85,20 @@ One iteration = one feature spec → one or more related PRs. Source of intent �
 5. REFACTOR
    - Improve code, keep tests green
 
-6. ITERATION-END CHECKLIST (§5.1)
-   - All 9 hard rules pass. If even one is false — do not push.
+6. ITERATION-END CHECKLIST (§5.1, skill: run-iteration-end-checklist)
+   - Dispatch-mode artifact — cannot be skipped silently.
+   - If any hard rule fails — do not push.
 
 7. PR OPEN
    - Title: `<type>(<module>): <description> [#N]` (#N = Issue)
    - Body template from AGENTS.md (includes `Closes #N`, spec-link)
    - CI runs ADR-0006 §7 + AI-specific guards (§5.2)
-   - Cross-vendor reviewer-bot triggered automatically
 
-8. HUMAN-GATE MERGE
-   - Tech Lead reads diff + reviewer-bot comments
-   - Merge → Issue closes → milestone progress updates
+8. REVIEW + MERGE
+   - Mode (a) subagent `/review` skill, Mode (b) parallel Codex CLI,
+     or Mode (c) human review (AGENTS.md §4).
+   - On positive verdict + green CI → `gh pr merge <N> --auto --squash --delete-branch`
+     (skill: merge-when-green).
 ```
 
 ### 2.3 Which harnesses follow this cycle
@@ -137,7 +142,7 @@ Narrow exceptions, documented explicitly in the PR description:
 - **Generated artifact updates** — the test suite itself is the test.
 - **Bug-fix without feature-shift** — must add a regression test (TDD preserved); spec does not necessarily need to be updated if the behavior is already captured in the spec.
 
-In all other cases, a skip = methodology violation; reviewer-bot should catch it.
+In all other cases, a skip = methodology violation; the interactive reviewer (AGENTS.md §4) should catch it.
 
 ---
 
@@ -416,22 +421,21 @@ Before `git push` the agent goes through each item. If even one is false — do 
 | 5   | Module README updated if exports changed                                      | `pnpm lint:module-readme`                                     |
 | 6   | Spec `status` frontmatter updated (Draft → In dev → Shipped)                  | manual edit in `requirements.md`                              |
 | 7   | Glossary terms added if new domain vocabulary appeared in code/spec           | `pnpm lint:glossary-mdx`                                      |
-| 8   | ADR created if an architectural decision was made                             | judgment; reviewer-bot catches misses                         |
+| 8   | ADR created if an architectural decision was made                             | judgment; interactive reviewer (AGENTS.md §4) catches misses  |
 | 9   | Linked Issue received a summary comment (file paths, decisions, what remains) | `gh issue comment <N> --body-file <summary>`                  |
 
 ### 5.2 CI gates — AI-specific extensions (on top of ADR-0006 §7)
 
-| Guard                           | What it catches                                                          | Implementation                                                                                                                                                                                                                                                                 | Severity Phase 0              |
-| ------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------- |
-| **spec-link required**          | PR without a link to an Issue whose milestone = spec                     | GH Action: PR body contains `Closes #N`; Issue `#N` has milestone `NNN-<slug>`; spec folder `apps/docs/content/specs/features/NNN-<slug>/` exists.                                                                                                                             | BLOCK                         |
-| **TDD signal**                  | implementation-only commit without a test file                           | GH Action: for each modified `src/**/*.ts` — `*.test.ts` is either in the diff, or commit history shows a test-commit preceding it. Heuristic; false positives possible.                                                                                                       | WARN v1                       |
-| **cross-vendor review visited** | Merge without agent-review run                                           | Branch protection rule: requires passing GH status check `agent-review`. Workflow exits 0 in both cases — successful LLM review and `[REVIEWER-UNAVAILABLE]` fallback (see §6.5). Reviewer-bot never approves PRs; human approval is a separate branch protection requirement. | BLOCK (workflow run required) |
-| **EARS ↔ test linkage**         | EARS requirement without `it('EARS-N.M: ...')`                           | Custom lint `tools/lint/ears-test-lint.ts`: parses EARS IDs in requirements.md, checks for it-descriptions with the same ID in the module.                                                                                                                                     | WARN v1 → BLOCK v2            |
-| **Gherkin coverage**            | scenarios without Playwright step implementation                         | playwright-bdd native error — test fails if step is undefined.                                                                                                                                                                                                                 | BLOCK (via test fail)         |
-| **Spec status freshness**       | Merged PR with spec:NNN but spec status='Draft'                          | Custom lint: at merge — check `status: In dev` minimum.                                                                                                                                                                                                                        | WARN v1                       |
-| **Prior decisions cited**       | New spec without cited ADRs in "Prior decisions" if category ≠ docs-only | Spec lint: `requirements.md` has a section with ≥1 ADR-link.                                                                                                                                                                                                                   | WARN v1                       |
+| Guard                     | What it catches                                                          | Implementation                                                                                                                                                           | Severity Phase 0      |
+| ------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- |
+| **spec-link required**    | PR without a link to an Issue whose milestone = spec                     | GH Action: PR body contains `Closes #N`; Issue `#N` has milestone `NNN-<slug>`; spec folder `apps/docs/content/specs/features/NNN-<slug>/` exists.                       | BLOCK                 |
+| **TDD signal**            | implementation-only commit without a test file                           | GH Action: for each modified `src/**/*.ts` — `*.test.ts` is either in the diff, or commit history shows a test-commit preceding it. Heuristic; false positives possible. | WARN v1               |
+| **EARS ↔ test linkage**   | EARS requirement without `it('EARS-N: ...')`                             | Custom lint `tools/lint/ears-test-lint.ts`: parses EARS IDs in requirements.md, checks for it-descriptions with the same ID in the module.                               | WARN v1 → BLOCK v2    |
+| **Gherkin coverage**      | scenarios without Playwright step implementation                         | playwright-bdd native error — test fails if step is undefined.                                                                                                           | BLOCK (via test fail) |
+| **Spec status freshness** | Merged PR with spec:NNN but spec status='Draft'                          | Custom lint: at merge — check `status: In dev` minimum.                                                                                                                  | WARN v1               |
+| **Prior decisions cited** | New spec without cited ADRs in "Prior decisions" if category ≠ docs-only | Spec lint: `requirements.md` has a section with ≥1 ADR-link.                                                                                                             | WARN v1               |
 
-> **Interim semantics note (2026-05-19, per ADR-0008 Amendment A3):** rows marked `BLOCK` assume a server-side required status check on `main`. While ADR-0008 §2.6 is in target-state (branch protection deferred until org plan upgrade or repo made public), `BLOCK` is read operationally as **"CI job exits red and the Tech Lead treats it as a merge-blocker by convention"** — same outcome on the single-developer happy path, no server-side guarantee. The `cross-vendor review visited` row is independently SUPERSEDED by ADR-0007 Amendment A1 (no producer, no enforcement, even at target-state).
+> **Interim semantics note:** rows marked `BLOCK` assume a server-side required status check on `main`. While ADR-0008 §2.6 branch protection is deferred (GitHub Free + private repo blocks the branch-protection API — ADR-0008 §2.6), `BLOCK` is read operationally as **"CI job exits red and the Tech Lead treats it as a merge-blocker by convention"** — same outcome on the single-developer happy path, no server-side guarantee.
 
 ### 5.3 Custom lint scripts
 
@@ -579,184 +583,19 @@ main().catch((e) => {
 
 ---
 
-## 6. Cross-vendor reviewer-agent
+## 6. Reviewer roles — see §2.2 and AGENTS.md §4
 
-> **⚠️ SUPERSEDED by ADR-0007 Amendment A1 (2026-05-19):** The automated cross-vendor reviewer-bot (`tools/reviewer-agent/` + `.github/workflows/agent-review.yml`) is **not implemented in Phase 0**. Replacement = interactive-only LLM-assisted review in three modes (a) main-session subagent `/review` skill, (b) parallel Codex CLI session, (c) pure human review. No headless CI calls to LLM APIs; no repo-secret API keys. See ADR-0007 §7 Amendment A1 for full context. Content below is preserved for historical reference and future reconsideration.
-
-### 6.1 GitHub Actions workflow
-
-**Design intent:**
-
-- Workflow exit code = required GitHub status check. Branch protection rule = "status check `agent-review` passes" (not "approving review from reviewer-bot account"). This allows: (a) on API downtime the workflow still completes with exit 0 + sends a fallback comment with `[REVIEWER-UNAVAILABLE]` marker — the human sees it and decides; (b) reviewer-bot never "approves" a PR; human gate is preserved cleanly.
-- Vendor detection — **explicit label** `author:claude` / `author:codex` set by the agent at PR open (part of AGENTS.md PR template). Default when no label is present = OpenAI (Claude is the primary harness in Phase 0, so fallback to non-Claude).
-
-`.github/workflows/agent-review.yml`:
-
-```yaml
-name: Agent Review
-on:
-  pull_request:
-    types: [opened, synchronize, ready_for_review, labeled]
-permissions:
-  contents: read
-  pull-requests: write
-  issues: read
-
-jobs:
-  review:
-    if: github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      - uses: pnpm/action-setup@v3
-      - uses: actions/setup-node@v4
-        with: { node-version: "22", cache: "pnpm" }
-      - run: pnpm install --frozen-lockfile
-
-      - name: Determine reviewer vendor (explicit label)
-        id: vendor
-        env:
-          LABELS_JSON: ${{ toJson(github.event.pull_request.labels) }}
-        run: |
-          # Explicit label set by author-agent at PR open per AGENTS.md PR template.
-          # If author:claude → reviewer=openai; if author:codex → reviewer=anthropic.
-          # If no author:* label present → default reviewer=openai (Claude is Phase 0 primary).
-          if echo "$LABELS_JSON" | grep -q '"author:codex"'; then
-            echo "vendor=anthropic" >> $GITHUB_OUTPUT
-          else
-            echo "vendor=openai" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Run reviewer (always exits 0; posts fallback comment on API failure)
-        env:
-          REVIEWER_VENDOR: ${{ steps.vendor.outputs.vendor }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: pnpm tsx tools/reviewer-agent/run.ts
-```
-
-**Failure-mode contract (`tools/reviewer-agent/run.ts`):**
-
-- Successful LLM call → posts `gh pr review --comment` with findings, exit 0.
-- LLM API error / timeout → posts `gh pr comment` (regular issue comment, not review) with body `[REVIEWER-UNAVAILABLE] Agent review skipped — API error: <message>. Human reviewer should perform manual review.`, exit 0.
-- Configuration error (missing secret / context dir) → posts `[REVIEWER-CONFIG-ERROR] ...`, exit 0.
-- Internal bug (uncaught exception) → workflow shows red ❌; investigated as infra incident.
-
-Workflow exit 0 in the first three cases = required check passes. The human sees the pinned comment + reads the diff. The branch protection rule set on status check `agent-review` remains satisfied.
-
-**Branch protection rule (manual setup, see §11 migration step 8):**
-
-- Require status check: `agent-review` to pass before merging
-- Require at least 1 review approval from human collaborators (`reviewer-bot` is NOT a required approver)
-- Restrict who can push to `main`: empty (only PR merges)
-
-### 6.2 Reviewer logic
-
-`tools/reviewer-agent/run.ts`:
-
-1. **Loads context** (stable order for prefix-cache):
-
-- `AGENTS.md`, `CLAUDE.md`
-- Linked Issue body + milestone-spec (3 files)
-- ADRs from spec's Prior decisions
-- PR diff (`gh pr diff <N>`)
-
-2. **Two-pass review:**
-
-- **Pass A — general code review.** Prompt: bugs, security (OWASP), edge cases, performance, readability. Output — list of findings with file/line refs.
-- **Pass B — ADR/SDD compliance.** Prompt: does code respect cited ADRs? does code match scenarios.feature? are all EARS handlers implemented per requirements.md? does spec.status reflect reality? are new domain terms in the glossary? Output — list of compliance issues.
-
-3. **Posts review:** combined list → `gh pr review <N> --comment --body-file <findings.md>`. Does NOT post approval (human gate preserved).
-4. **Special markers** in output:
-
-- `[BLOCKING]` finding — critical problem (security, clear SDD/TDD violation, ADR violation). Reviewer-bot still does not block merge itself (that's the branch protection rule), but the human sees an explicit signal.
-- `[NIT]` finding — style / minor.
-
-### 6.3 Prompt templates
-
-`tools/reviewer-agent/prompts/general.md`:
-
-```
-You are a senior code reviewer for the DS Platform monorepo. Your task: review a PR diff and produce a list of findings.
-
-Context (in stable order for prefix caching):
-1. AGENTS.md — universal AI constitution
-2. CLAUDE.md — Claude-Code specific overlay (may not apply to this PR's author)
-3. Linked Issue + feature spec (requirements.md, design.md, scenarios.feature)
-4. Relevant ADRs
-
-Diff follows after this block.
-
-Find:
-- Bugs and logic errors (off-by-one, null/undefined, race conditions)
-- Security issues (SQL injection, auth bypass, secret leakage, prompt injection vectors)
-- Edge cases the test suite likely misses
-- Performance pitfalls (N+1 queries, unnecessary re-renders, missing pagination)
-- Readability / naming consistency with existing codebase
-
-For each finding:
-- Mark severity: [BLOCKING] / [NIT] / [SUGGESTION]
-- Cite file:line
-- Explain *why* it's a problem
-- Suggest specific fix when possible
-
-Output as markdown list. Be precise; no filler.
-```
-
-`tools/reviewer-agent/prompts/sdd-compliance.md`:
-
-```
-You are an architectural compliance reviewer. Your task: verify that this PR adheres to:
-1. The cited ADRs in the spec's "Prior decisions" section
-2. The feature spec's EARS requirements and scenarios.feature scenarios
-3. SDD/TDD methodology per AGENTS.md
-
-Check:
-- Does every EARS-N.M requirement have a corresponding `it('EARS-N.M: ...')` test in the diff?
-- Does every scenario in scenarios.feature have a corresponding Playwright test?
-- Does the implementation respect the architectural decisions in cited ADRs? Cite specific § when violated.
-- Is `requirements.md` `status:` frontmatter updated if the implementation moves the feature forward?
-- Are new domain terms added to glossary if introduced in code?
-- Is the PR linked to a GitHub Issue via `Closes #N`, and does that Issue have a milestone matching a spec folder?
-- **Does this PR introduce a new architectural choice (new technology, new cross-module pattern, new security boundary, new external dependency) that is NOT covered by any cited ADR?** If so, flag as [BLOCKING] — a new ADR is required before merge, not after.
-
-Note on correlated context: you are reading the same ADRs and spec that the PR author agent read. Be especially skeptical of implementations that *exactly match* an ambiguous interpretation of an ADR — flag ambiguities as [QUESTION] for human reviewer rather than rubber-stamping.
-
-Output as markdown list. For each violation:
-- Mark severity: [BLOCKING] (clear violation) / [QUESTION] (unclear, ask author)
-- Cite spec/ADR §
-- Explain expected vs observed
-```
-
-### 6.4 Cost estimate
-
-- Per PR: ~5–15K input tokens (cached ~70% after the first call of the day) + ~1–2K output × 2 passes
-- ~5 PRs/day × ~$0.03/PR (Claude Sonnet / GPT-5-equivalent pricing 2026) = **~$0.15/day**
-- Not critical in Pre-pilot
-
-### 6.5 Failure modes
-
-- **Reviewer API down / timeout** → reviewer-agent catches and posts `[REVIEWER-UNAVAILABLE]` fallback comment, workflow exit 0, status check passes. Human reads comment + diff, manually verifies, merges via approval. Logging in the weekly cost-ledger shows downtime incidents.
-- **Reviewer hallucinates non-existent issues** → bot never approves PR (only `--comment` review); human gate preserved cleanly. Tech Lead filters false positives at merge approval. Precision metric (see §8.2 Phase 3 trigger) tracks these cases.
-- **PR is huge** (>5K diff lines) → reviewer cuts diff to first N hunks + caveat in comment "truncated review, manual deep-review recommended". Threshold — config in reviewer-agent.
-- **Rate-limit burst** (10+ PRs simultaneously) — `@anthropic-ai/sdk` and `openai` have built-in exponential-backoff retry; should handle typical tier limits. On exhausted retry budget — `[REVIEWER-UNAVAILABLE]` fallback path.
-
-### 6.6 Limitation: correlated misinterpretation on shared context
-
-Cross-vendor review reduces correlated **code-level** errors (different models have different blind spots for bugs/security/edge cases) — this is the primary benefit. However, Pass B (ADR/SDD compliance) feeds **the same text** of ADRs and spec to both models. If the author-agent misinterpreted ADR-N §M, the reviewer-agent sees the same §M and will in all likelihood accept the same interpretation. This is an **honest limitation** of the design: cross-vendor review **does not replace** human review for architecturally critical decisions; the human merge gate catches this class of errors.
+The cross-vendor LLM-assisted review is interactive-only in Phase 0 (three modes: (a) main-session subagent `/review` skill, (b) parallel Codex CLI, (c) pure human review). The §2.2 cycle Step 8 and AGENTS.md §4 carry the full contract. There is no automated headless reviewer-bot, no `tools/reviewer-agent/`, no `.github/workflows/agent-review.yml`, and no LLM API keys in repo secrets.
 
 ---
 
-## 7. Prompt-caching policy + cost observability
+## 7. Prompt-caching policy
 
-> **⚠️ SUPERSEDED by ADR-0007 Amendment A1 (2026-05-19) — cost-observability subsection only:** The automated cost-ledger (`tools/cost-ledger-sync.ts` + `.github/workflows/cost-ledger.yml` weekly cron + auto-PR pattern) is **not implemented in Phase 0**. Cost tracking now happens manually via vendor consoles (Anthropic Console, OpenAI Platform). The **prompt-caching policy (§7.1)** remains in force for any future LLM client (interactive `/review` skill, runtime AI features after §9 trigger). See ADR-0007 §7 Amendment A1. Cost-ledger content below is preserved for historical reference.
+The prompt-caching policy is in force for any LLM client — the interactive `/review` skill subagent today, runtime AI features after the §9 trigger fires. Cost tracking in Phase 0 happens via vendor consoles (Anthropic Console, OpenAI Platform); there is no automated cost-ledger CSV in the repo.
 
 ### 7.1 Caching policy
 
-Hard rule in AGENTS.md, mandatory for all runtime LLM calls (reviewer-bot, future Content Pipeline, etc.):
+Hard rule in AGENTS.md, mandatory for all LLM calls (interactive `/review` skill subagent today, future Content Pipeline, etc.):
 
 | What                                   | Cache policy                                                                       |
 | -------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -772,7 +611,7 @@ Hard rule in AGENTS.md, mandatory for all runtime LLM calls (reviewer-bot, futur
 [system] AGENTS.md → CLAUDE.md → active spec (req → design → scenarios) → ADRs (sorted by ADR number) → glossary terms (in-scope only) → [user turn]
 ```
 
-Anthropic — explicit `cache_control: {type: 'ephemeral'}`, 5-min TTL. OpenAI GPT-5+ — automatic prefix cache, requires the prefix to be byte-identical. The reviewer-agent and any other LLM clients build the payload via the shared helper `packages/llm-utils/buildContext.ts` to guarantee stability.
+Anthropic — explicit `cache_control: {type: 'ephemeral'}`, 5-min TTL. OpenAI GPT-5+ — automatic prefix cache, requires the prefix to be byte-identical. All LLM clients build the payload via the shared helper `packages/llm-utils/buildContext.ts` to guarantee stability.
 
 ### 7.2 Sketch buildContext
 
@@ -889,7 +728,7 @@ export async function buildSystemBlocks(
 }
 ```
 
-Used in reviewer-agent and any other runtime LLM clients.
+Used by the interactive `/review` skill subagent and any other LLM clients.
 
 **Cache invariants:**
 
@@ -897,175 +736,6 @@ Used in reviewer-agent and any other runtime LLM clients.
 - Spec changes per feature → tier 2 cache hit while the session is within the same feature.
 - ADRs are immutable after Accepted → tier 3 cache hit ~always (a new ADR in "Prior decisions" invalidates — acceptable, rare event).
 - Glossary terms — last, so that per-spec-scope changes do not break the prefix above.
-
-### 7.3 Cost observability — Phase 0
-
-No gateway, no in-line rejection. Simple weekly pull + alert:
-
-`tools/cost-ledger-sync.ts` (runs via GitHub Actions cron weekly):
-
-```ts
-#!/usr/bin/env tsx
-import { writeFile, readFile, mkdir } from "node:fs/promises";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-import { execa } from "execa";
-
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const LEDGER = resolve(REPO_ROOT, "outputs/llm-cost-ledger.csv");
-const SOFT_CAP_USD = parseFloat(process.env.SOFT_CAP_USD ?? "50");
-
-interface Row {
-  date: string;
-  vendor: string;
-  project: string;
-  input_tokens: number;
-  cached_input_tokens: number;
-  output_tokens: number;
-  cost_usd: number;
-}
-
-async function pullAnthropic(): Promise<Row[]> {
-  // Anthropic Console API: GET /v1/organizations/{org_id}/usage_report
-  // ANTHROPIC_ADMIN_KEY required (separate from API key for usage endpoints)
-  // Returns daily usage per workspace
-  // TODO: implementation depends on current Anthropic Admin API shape — verify at impl time (DSO-31 step 11)
-  console.warn(
-    "[cost-ledger] pullAnthropic() is not yet implemented — returning empty rows.",
-  );
-  return [];
-}
-
-async function pullOpenAI(): Promise<Row[]> {
-  // OpenAI Usage API: GET /v1/organization/usage/completions
-  // OPENAI_ADMIN_KEY required
-  // TODO: implementation depends on current OpenAI Admin API shape — verify at impl time (DSO-31 step 11)
-  console.warn(
-    "[cost-ledger] pullOpenAI() is not yet implemented — returning empty rows.",
-  );
-  return [];
-}
-
-async function appendCsv(rows: Row[]) {
-  await mkdir(dirname(LEDGER), { recursive: true });
-  let existing = "";
-  try {
-    existing = await readFile(LEDGER, "utf-8");
-  } catch {
-    /* first run */
-  }
-  const header =
-    "date,vendor,project,input_tokens,cached_input_tokens,output_tokens,cost_usd\n";
-  if (!existing.startsWith("date,")) existing = header;
-  const lines = rows.map(
-    (r) =>
-      `${r.date},${r.vendor},${r.project},${r.input_tokens},${r.cached_input_tokens},${r.output_tokens},${r.cost_usd.toFixed(4)}`,
-  );
-  await writeFile(LEDGER, existing + lines.join("\n") + "\n");
-}
-
-async function alertIfOverCap(rows: Row[]) {
-  const weekStart = new Date(Date.now() - 7 * 24 * 3600 * 1000)
-    .toISOString()
-    .slice(0, 10);
-  const weekTotal = rows
-    .filter((r) => r.date >= weekStart)
-    .reduce((s, r) => s + r.cost_usd, 0);
-  if (weekTotal > SOFT_CAP_USD) {
-    const body =
-      `Weekly LLM cost reached **$${weekTotal.toFixed(2)}** (cap: $${SOFT_CAP_USD}). Breakdown:\n\n` +
-      Object.entries(
-        rows
-          .filter((r) => r.date >= weekStart)
-          .reduce<Record<string, number>>((acc, r) => {
-            const k = `${r.vendor} / ${r.project}`;
-            acc[k] = (acc[k] ?? 0) + r.cost_usd;
-            return acc;
-          }, {}),
-      )
-        .map(([k, v]) => `- ${k}: $${v.toFixed(2)}`)
-        .join("\n");
-    await execa("gh", [
-      "issue",
-      "create",
-      "--title",
-      `LLM cost alert: weekly $${weekTotal.toFixed(2)} > cap $${SOFT_CAP_USD}`,
-      "--body",
-      body,
-      "--label",
-      "cost-alert",
-    ]);
-  }
-}
-
-async function main() {
-  const rows = [...(await pullAnthropic()), ...(await pullOpenAI())];
-  if (rows.length === 0) {
-    // Loud failure — silent empty rows = weeks without alerts, ledger looks "working"
-    console.error(
-      "[cost-ledger] ERROR: both pullers returned empty. Either both vendors have zero usage (unlikely) or stubs are still unimplemented. Exiting non-zero so the GH Actions step shows red.",
-    );
-    process.exit(2);
-  }
-  await appendCsv(rows);
-  await alertIfOverCap(rows);
-}
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
-```
-
-GitHub Actions cron `.github/workflows/cost-ledger.yml`. **Important:** direct push to `main` is prohibited (§8.1). The workflow creates a branch `chore/cost-ledger-<date>` + auto-PR, which Tech Lead merges manually (consistent with autonomy policy):
-
-```yaml
-name: Weekly LLM cost ledger
-on:
-  schedule:
-    - cron: "0 9 * * 1" # every Monday 09:00 UTC (12:00 MSK)
-  workflow_dispatch:
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write
-jobs:
-  sync:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
-      - uses: actions/setup-node@v4
-        with: { node-version: "22", cache: "pnpm" }
-      - run: pnpm install --frozen-lockfile
-      - name: Sync usage data
-        env:
-          ANTHROPIC_ADMIN_KEY: ${{ secrets.ANTHROPIC_ADMIN_KEY }}
-          OPENAI_ADMIN_KEY: ${{ secrets.OPENAI_ADMIN_KEY }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SOFT_CAP_USD: "50"
-        run: pnpm tsx tools/cost-ledger-sync.ts
-      - name: Create PR with ledger updates
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config user.name "cost-ledger-bot"
-          git config user.email "bot@doctor.school"
-          DATE=$(date -u +%Y-%m-%d)
-          BRANCH="chore/cost-ledger-$DATE"
-          git checkout -b "$BRANCH"
-          git add outputs/llm-cost-ledger.csv
-          if git diff --staged --quiet; then
-            echo "No ledger changes; skipping PR."
-            exit 0
-          fi
-          git commit -m "chore(cost): weekly ledger sync $DATE"
-          git push -u origin "$BRANCH"
-          gh pr create --title "chore(cost): weekly ledger sync $DATE" \
-            --body "Automated weekly cost-ledger sync. See \`outputs/llm-cost-ledger.csv\` diff." \
-            --label "chore:auto"
-```
-
-CSV in Git — history is visible; can be imported into Grafana / Excel when needed. The auto-PR goes through the cross-vendor reviewer + human merge like any regular PR (label `chore:auto` marks content as machine-generated).
 
 ---
 
@@ -1076,9 +746,7 @@ CSV in Git — history is visible; can be imported into Grafana / Excel when nee
 Parameters:
 
 - Agents write PRs for any feature/bugfix/refactor
-- Human-merge gate **is mandatory** (branch protection rule)
-- Cross-vendor reviewer-bot **is mandatory** (branch protection rule)
-- Auto-merge prohibited
+- Human-merge gate or positive interactive LLM-review verdict (Mode (a) / Mode (b) per AGENTS.md §4) **is mandatory** before merge
 - Write access to prod-DB prohibited (only via migrations in PR)
 - Direct push to `main` prohibited
 - Direct writes to `docs/adr/*.md` after `status: Accepted` prohibited (creating a superseding ADR is allowed)
@@ -1089,33 +757,17 @@ Parameters:
 - Dep-bump in `devDependencies` (via Renovate / Dependabot)
 - Doc-sync (`pnpm generate:all` artifact updates)
 
-All auto-chore PRs still go through cross-vendor review + human-merge.
+All auto-chore PRs still go through the standard review path (interactive Mode (a)/(b)/(c) per AGENTS.md §4) + merge gate.
 
 ### 8.2 Trigger for Phase 3
 
 Phase 3 = auto-merge low-risk PR behind feature flag. Activated when ALL conditions are met:
 
 - ≥50 successful agent-PRs without post-merge incident (tracked via `post-merge-incident` labels)
-- Reviewer-bot precision ≥70% (see measurement protocol below)
 - Documented low-risk criteria in a separate ADR — for example: "only `*.test.ts` files modified", "only docs in `apps/docs/content/`", "devDep version bump with green CI"
 - Kill switch tested (see §8.4)
 
 Phase 3 activation — separate ADR-NNNN.
-
-**Measurement protocol — reviewer-bot precision/recall:**
-
-| Term                | Definition                                                                                                                                                                          |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TP (true positive)  | Reviewer-bot posted a `[BLOCKING]` finding, and Tech Lead confirmed it as a valid issue **before merge** (either fixed it or explicitly marked `valid-but-deferred` in PR comment). |
-| FP (false positive) | Reviewer-bot posted a `[BLOCKING]` finding, and Tech Lead dismissed it (explicit reply "not a bug" or merge without addressing).                                                    |
-| FN (false negative) | Post-merge incident (label `post-merge-incident`) that reviewer-bot should have caught but did not. Determined in the post-mortem of each incident.                                 |
-| Precision           | `TP / (TP + FP)` — % findings that were valid. Target ≥70%.                                                                                                                         |
-| Recall              | `TP / (TP + FN)` — % issues bot caught out of all it should have. Target ≥50%.                                                                                                      |
-
-**Evaluator:** Tech Lead (single judge — acceptable for team-of-1 baseline; as team grows → 2–3 evaluators with inter-rater check).
-**Sample size:** ≥20 PRs with reviewer-bot findings accumulated in Phase 2.
-**Tracking:** simple CSV `outputs/reviewer-bot-eval.csv` (PR_number, finding_id, severity, anton_verdict). Recall column filled on post-merge-incident occurrence.
-**Cadence:** evaluator update every 2 weeks in Phase 2; after 20 PRs — formal Phase 3 trigger assessment.
 
 ### 8.3 Phase 4 — out of scope for ADR-0007
 
@@ -1127,14 +779,13 @@ Single config flag in `.github/agents-config.json`:
 
 ```json
 {
-  "agents_enabled": true,
-  "cross_vendor_review_required": true
+  "agents_enabled": true
 }
 ```
 
-When `agents_enabled: false` — Action `agent-review.yml` skips itself; the bot does not respond. Activated on a security incident or emergency stop. Changing this file is a regular PR + human merge (so the kill switch cannot accidentally destroy itself).
+When `agents_enabled: false` — agent-driven activity stops; activated on a security incident or emergency stop. Changing this file is a regular PR + human merge (so the kill switch cannot accidentally destroy itself).
 
-`auto_merge_enabled` field is NOT added in Phase 2 — auto-merge is prohibited by design (§8.1). The field will appear in Phase 3 ADR-NNNN when the corresponding mechanism is introduced.
+`auto_merge_enabled` field is NOT added in Phase 2 — auto-merge of arbitrary PRs is prohibited by design (§8.1). The field will appear in Phase 3 ADR-NNNN when the corresponding mechanism is introduced.
 
 ---
 
@@ -1227,7 +878,7 @@ Output-direction PD filter — **v3 concern**. Until v3 — operational mitigati
 - Grafana dashboard: per-virtual-key cost, latency P50/P95/P99, error rate, cache hit rate.
 - **Forward reference (observability for dual-LLM):** when the dual-LLM pattern is enabled, the spans `ai.dual_llm.quarantined_call` and `ai.dual_llm.privileged_call` plus the audit class `ai_dual_llm` (with pseudonymized subject_id) are added. Contract — `2026-05-18-ds-platform-dual-llm-pattern-design` §«Observability» + ADR-0010.
 
-In Phase 0 — minimal token-count logging without semconv: reviewer-agent simply writes to stderr `[cost] tokens=in:5000 cached:3500 out:1200 cost_usd=0.018`, parsed by CI workflow → aggregated weekly in cost-ledger (§7.3).
+In Phase 0 — no in-repo semconv collector; cost and token usage are read from the vendor consoles (Anthropic Console, OpenAI Platform).
 
 ### 9.4 Vector DB scaling
 
@@ -1260,7 +911,7 @@ In Phase 0 — minimal token-count logging without semconv: reviewer-agent simpl
 
 ## 10. AGENTS.md / CLAUDE.md — sketches for DS Platform
 
-> **⚠️ SUPERSEDED by ADR-0007 Amendment A1 (2026-05-19) — review-tooling portions only:** Any references in the AGENTS.md / CLAUDE.md sketches below to the automated reviewer-bot, the `cross_vendor_review_required` kill-switch flag, the `agent-review` status check, or the weekly cost-ledger PR are **no longer authoritative**. These overlays must be rewritten in G7 (AGENTS.md / CLAUDE.md drafting) to describe the new interactive-review modes (a)/(b)/(c) from ADR-0007 Amendment A1 §A1.3. Sections unrelated to review/cost (8-step cycle wording, SDD/TDD discipline, prompt-caching, SessionStart hook, skill priorities) remain authoritative. See ADR-0007 §7 Amendment A1.
+These sketches show the AI-loop-specific overlays added on top of the ADR-0006 §9 baseline. Sections unrelated to review/cost (8-step cycle wording, SDD/TDD discipline, prompt-caching, SessionStart hook, skill priorities) are the authoritative parts of these sketches. Review-related lines describe the interactive three-mode review per AGENTS.md §4 — no automated reviewer-bot, no headless LLM CI workflow.
 
 ### 10.1 AGENTS.md (root)
 
@@ -1333,10 +984,11 @@ Title: `<type>(<module>): <description> [#N]`
 Body must contain `Closes #N` linking to the Issue. CI gates (ADR-0006 §7 +
 ADR-0007 §5.2) will block merge if violated.
 
-### Step 8 — HUMAN-GATE MERGE
+### Step 8 — REVIEW + MERGE
 
-Wait for the Tech Lead to review and merge. Cross-vendor reviewer-bot will post review
-comments — read them, address before re-requesting review.
+Trigger the interactive review via Mode (a) subagent `/review` skill, Mode (b) parallel
+Codex CLI, or Mode (c) pure human (AGENTS.md §4). Address findings, then merge with
+`gh pr merge <N> --auto --squash --delete-branch` once the verdict is positive and CI is green.
 
 ## SDD — hard rule
 
@@ -1350,16 +1002,16 @@ Naming convention: `it('EARS-N.M: ...', ...)`.
 
 ## Prompt-caching
 
-For any LLM call you make (e.g., reviewer-agent), use
+For any LLM call you make (e.g., the interactive `/review` skill subagent), use
 packages/llm-utils/buildContext.ts to construct the system message. This
 ensures cache_control: ephemeral on AGENTS.md / CLAUDE.md / active spec /
 ADRs in a stable prefix order. Cache hit rate target: ≥60% on second+ calls.
 
 ## Cost discipline
 
-LLM token usage logged to outputs/llm-cost-ledger.csv weekly. Soft cap: $50/week.
-If your work generates expensive calls (e.g., large diff reviews, bulk doc generation),
-flag it in PR description.
+Cost is tracked manually via the vendor consoles (Anthropic Console, OpenAI Platform)
+in Phase 0. If your work generates expensive calls (e.g., large diff reviews, bulk
+doc generation), flag it in PR description.
 
 ## Kill switch
 
@@ -1401,32 +1053,29 @@ For DS Platform feature work, invoke skills in this order:
 
 ## 11. Migration plan
 
-Phase 0 (Tech Lead + AI, sequential — after DSO-31 creates the `ds-platform` repo). Order rearranged: lint tools (step 9) and CI integration (step 10) come **before** the branch protection rule (step 13), so that when protection is first activated all guards are already wired and there is no window between "protection on" and "guards live."
+Phase 0 (Tech Lead + AI, sequential — after DSO-31 creates the `ds-platform` repo). Order: bootstrap + helpers (steps 1–4), kill switch + lint tools + CI integration (steps 7–9), AGENTS.md / CLAUDE.md drafting (steps 11–12), branch protection (step 13 — deferred per ADR-0008 §2.6 / A3), smoke test (step 14).
 
-**Pre-requisite:** Tech Lead must have admin permissions on the repo (branch protection rule in step 13 requires admin token; cannot be automated). If the repo belongs to an organization — org-admin rights or explicit delegation to repo-admin role are needed.
+**Pre-requisite for step 13:** Tech Lead must have admin permissions on the repo (branch protection rule in step 13 requires admin token; cannot be automated). If the repo belongs to an organization — org-admin rights or explicit delegation to repo-admin role are needed.
 
-| Step | Action                                                                                                                                                                                                                              | Output                                                             | Blocking                  |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------- | ------------------------------------------------------------------- |
-| 1    | Create `tools/agent-bootstrap.ts`                                                                                                                                                                                                   | bootstrap works locally                                            | DSO-31 (repo exists)      |
-| 2    | Add `pnpm bootstrap` alias to root `package.json`                                                                                                                                                                                   | command is runnable                                                | step 1                    | **Done in G1, see commit `ae3826f` in `doctor-school/ds-platform`** |
-| 3    | Add `.claude/settings.json` with SessionStart hook                                                                                                                                                                                  | Claude Code auto-loads bootstrap                                   | step 2                    |
-| 4    | Create `packages/llm-utils/buildContext.ts`                                                                                                                                                                                         | reusable helper for LLM clients                                    | DSO-31                    |
-| 5    | ~~Create `tools/reviewer-agent/{run.ts, prompts/}`~~                                                                                                                                                                                | ~~reviewer-bot works~~                                             | ~~step 4~~                | **Cancelled per ADR-0007 Amendment A1**                             |
-| 6    | ~~Add `.github/workflows/agent-review.yml`~~                                                                                                                                                                                        | ~~bot triggered on PR open~~                                       | ~~step 5~~                | **Cancelled per ADR-0007 Amendment A1**                             |
-| 7    | Add `.github/agents-config.json` kill switch                                                                                                                                                                                        | kill switch active                                                 | —                         |
-| 8    | Create `tools/lint/spec-link-lint.ts` + `ears-test-lint.ts`                                                                                                                                                                         | AI-specific guards available                                       | —                         |
-| 9    | Add steps to `.github/workflows/ci.yml` for guards (WARN/BLOCK per §5.2)                                                                                                                                                            | CI executes guards                                                 | step 8                    |
-| 10   | ~~Create `tools/cost-ledger-sync.ts` + `.github/workflows/cost-ledger.yml` cron~~                                                                                                                                                   | ~~weekly cost tracking active (auto-PR pattern)~~                  | ~~—~~                     | **Cancelled per ADR-0007 Amendment A1**                             |
-| 11   | Update `AGENTS.md` (root) with AI-loop discipline section                                                                                                                                                                           | agents follow 8-step cycle                                         | DSO-31 baseline AGENTS.md |
-| 12   | Update `CLAUDE.md` (root) with SessionStart hook reference + skill priorities                                                                                                                                                       | Claude Code aligned                                                | step 11                   |
-| 13   | **[Manual GitHub UI / `gh api`]** Add branch protection rule: status check `agent-review` required, ≥1 human approval required, no direct push to main. **Requires repo admin permissions; cannot be done by regular CI workflow.** | merge blocked without CI green + reviewer-bot run + human approval | steps 6, 9                |
-| 14   | Smoke test: first feature spec through the cycle (superpowers:brainstorming → spec → Issues → PR → review → merge)                                                                                                                  | proof of concept                                                   | steps 1–13                |
+| Step | Action                                                                                                                                                                                         | Output                                               | Blocking                  |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------- | ------------------------------------------------------------------- |
+| 1    | Create `tools/agent-bootstrap.ts`                                                                                                                                                              | bootstrap works locally                              | DSO-31 (repo exists)      |
+| 2    | Add `pnpm bootstrap` alias to root `package.json`                                                                                                                                              | command is runnable                                  | step 1                    | **Done in G1, see commit `ae3826f` in `doctor-school/ds-platform`** |
+| 3    | Add `.claude/settings.json` with SessionStart hook                                                                                                                                             | Claude Code auto-loads bootstrap                     | step 2                    |
+| 4    | Create `packages/llm-utils/buildContext.ts`                                                                                                                                                    | reusable helper for LLM clients                      | DSO-31                    |
+| 7    | Add `.github/agents-config.json` kill switch                                                                                                                                                   | kill switch active                                   | —                         |
+| 8    | Create `tools/lint/spec-link-lint.ts` + `ears-test-lint.ts`                                                                                                                                    | AI-specific guards available                         | —                         |
+| 9    | Add steps to `.github/workflows/ci.yml` for guards (WARN/BLOCK per §5.2)                                                                                                                       | CI executes guards                                   | step 8                    |
+| 11   | Update `AGENTS.md` (root) with AI-loop discipline section                                                                                                                                      | agents follow 8-step cycle                           | DSO-31 baseline AGENTS.md |
+| 12   | Update `CLAUDE.md` (root) with SessionStart hook reference + skill priorities                                                                                                                  | Claude Code aligned                                  | step 11                   |
+| 13   | **[Manual GitHub UI / `gh api`]** Add branch protection rule: ≥1 human approval required, no direct push to main. Deferred per ADR-0008 §2.6 / A3 (GitHub Free + private repo blocks the API). | merge gated server-side once protection is reachable | step 9                    |
+| 14   | Smoke test: first feature spec through the cycle (superpowers:brainstorming → spec → Issues → PR → review → merge)                                                                             | proof of concept                                     | steps 1–13                |
+
+Step numbering preserves the original sequence; cancelled steps (5, 6, 10) are intentionally omitted.
 
 Phase 1 (production, after Pre-pilot launch):
 
 - Promote WARN-only guards to BLOCK (TDD signal, EARS↔test linkage, spec status freshness)
-- Calibrate reviewer-bot precision on 20+ PRs; make Phase 3 activation decision if ≥70%
-- Run cost-ledger-sync weekly, verify alerting works
 
 Phase 2+ (runtime AI features):
 
@@ -1437,12 +1086,12 @@ Phase 2+ (runtime AI features):
 
 ## 12. Cross-refs
 
-- **ADR-0001** — Authentik/Zitadel: reviewer-bot does not require OIDC (uses GitHub App token). Future runtime LLM gateway (§9.1) — gateway admin protected by the same OIDC tenant.
+- **ADR-0001** — Zitadel IdP: the future runtime LLM gateway (§9.1) admin is protected by the same OIDC tenant.
 - **ADR-0002 §6 BullMQ** — async queue for Content Pipeline AI jobs (§9.1).
 - **ADR-0003 §7 pgvector** — vector DB default; trigger for Qdrant (§9.4).
-- **ADR-0004 §13 ESLint `no-vercel-only-api`** — reviewer-bot includes this rule in SDD-compliance pass.
+- **ADR-0004 §13 ESLint `no-vercel-only-api`** — the interactive `/review` skill subagent applies this rule in its SDD-compliance prompt.
 - **ADR-0005** — mobile clients for AI recommendations (v3) will call the backend, backend → LiteLLM (§9.1).
-- **ADR-0006 §7 drift detection** — DSO-30 extends with 7 AI-specific guards (§5.2).
+- **ADR-0006 §7 drift detection** — DSO-30 extends with AI-specific guards (§5.2).
 - **ADR-0006 §4 SDD format** — DSO-30 inherits the 3-file feature-spec.
 - **ADR-0006 §9 task-tracker split** — DSO-30 inherits GitHub Issues + milestone convention.
 - **ADR-0006 §5 AGENTS.md/CLAUDE.md** — DSO-30 extends with AI-loop section.
@@ -1451,46 +1100,9 @@ Phase 2+ (runtime AI features):
 
 ## 13. Open follow-ups (DSO-31+ and beyond)
 
-1. **Anthropic Admin API vs Console API shape** — at impl tooling time (Phase 0 step 11) confirm current endpoint paths for usage report. Same for OpenAI.
-2. **Reviewer-bot calibration metric** — formal protocol for measuring precision/recall on a sample of 20+ PRs. Who selects the sample, how false positives/negatives are labeled.
-3. **TDD signal heuristic false-positive rate** — after the first 10 PRs in Phase 1, reassess and decide whether to switch to BLOCK.
-4. **Codex cloud activation playbook** — specific setup for when Tech Lead wants the first async task (label conventions, GitHub App config).
-5. **Phase 3 low-risk criteria** — formal list of change classes (test-only, doc-only, devDep bumps) for auto-merge activation.
-6. **Vendor detection in reviewer-agent** — improve heuristic from commit message to explicit label `author:claude` / `author:codex` (agents set this at PR open).
-7. **PR template** — `.github/pull_request_template.md` with mandatory sections (Closes #N, spec link, checklist).
-8. **Glossary auto-population from reviewer-bot** — if bot spots a "potentially new domain term," open a draft glossary PR.
-9. **Bootstrap caching** — for frequent calls (if such scenarios arise) — cache gh API calls for ≤60s; not needed in Phase 0 (one call per session).
-10. **Multi-repo support** — if DS Platform splits into multiple repos (mobile separate?), bootstrap needs adaptation.
-
----
-
-## Amendments
-
-### Amendment SD1 — Reviewer-bot + cost-ledger sections SUPERSEDED (2026-05-19, follow-up to ADR-0007 Amendment A1)
-
-**Context:** ADR-0007 Amendment A1 (2026-05-19) drops the automated cross-vendor reviewer-bot and the automated cost-ledger. Replacement = interactive-only LLM-assisted review in three modes (subagent `/review`, parallel Codex CLI, pure human). This spec's design-level content for the dropped components is preserved (for historical reference and future reconsideration) but is no longer authoritative.
-
-**Sections of this spec affected:**
-
-- **§6 (Cross-vendor reviewer-agent)** — entire section SUPERSEDED. The GitHub Actions workflow, prompts, vendor-detection label scheme, two-pass review structure, status check semantics — all not implemented in Phase 0. SUPERSEDED callout prepended to §6 body.
-- **§7 (Prompt-caching policy + cost observability)** — **cost-observability subsection** (cost-ledger script, cron, auto-PR, soft-cap alert via Issue) SUPERSEDED. **Prompt-caching policy (§7.1) remains in force** for any future LLM client (interactive `/review` skill subagent, runtime AI features after §9 trigger). SUPERSEDED callout prepended to §7 body.
-- **§10 (AGENTS.md / CLAUDE.md sketches)** — review-tooling-related portions SUPERSEDED. The sketches need rewriting in G7 to describe the new interactive-review modes (a)/(b)/(c). Sections unrelated to review/cost (8-step cycle wording, SDD/TDD discipline, prompt-caching, SessionStart hook, skill priorities) remain authoritative. SUPERSEDED callout prepended.
-- **§11 (Migration plan) Steps 5, 6, 10** — cancelled (strikethrough applied + cancellation note). Step 2 marked done in G1 (commit `ae3826f`). Other steps unchanged.
-
-**See:** ADR-0007 §7 Amendment A1 for full context, decisions A1.1–A1.7, consequences, and revisit triggers.
-
-**Why not delete the original content?** Future readers (including a future Tech Lead reconsidering automated review when OQ-A1 trigger fires) need to see what was originally designed. The SUPERSEDED callouts mark status; the original architecture remains as design baseline for any future re-introduction.
-
-### Amendment SD2 — §2.4 inline 8-step cycle → skill catalog (paired with ADR-0007 Amendment A2, 2026-05-20)
-
-**Context:** §2 of this design spec (AI-loop architecture — Phase 0) walked through the 8-step iteration cycle as inline narrative. ADR-0007 §2.4 carried the same narrative. The G11 retrospective (DSP-181) showed that narrative-only procedure is not enforceable — F-14 (review forgotten), F-15 (checklist decorative), F-19/F-21 (decision-debt silently dropped) all surfaced because the agent could read the narrative and silently skip steps.
-
-**Decision (amendment):**
-
-ADR-0007 §2.4 is rewritten as a reference to `apps/docs/content/skills/do-feature-iteration/SKILL.md` plus a single-paragraph summary (ADR-0007 Amendment A2). The procedural source of truth moves into the skill catalog at `apps/docs/content/skills/<name>/SKILL.md`. The skill catalog has 14 entries: 4 orchestration (`do-feature-iteration`, `do-hotfix-pr`, `do-adr-amendment`, `do-decision-debt-followup`) + 10 procedural (`read-relevant-adrs`, `verify-base-ci-green`, `author-ears-spec`, `open-ears-issues`, `run-iteration-end-checklist`, `request-mode-a-review`, `respond-to-review`, `write-iteration-summary`, `surface-decision-debt`, `merge-when-green`).
-
-Discipline gates (artifact-required) are codified as "Cannot proceed without" clauses on each orchestration skill (ADR-0007 Amendment A2 §A2.1–A2.4). The 11-item iteration-end checklist (extended from 9 by F-3) runs dispatch-mode; the Mode (a) review runs dispatch-mode; decision-debt surfacing is invocation-required. Auto-merge after a positive Mode (a) / Mode (b) verdict + green CI is codified (closing F-10; refining ADR-0007 Amendment A1.4).
-
-**Affects:** the §2 narrative in this design spec is **superseded** for the procedural detail; the architectural rationale (vendor neutrality, dispatch-vs-inline trade-offs, prompt-cache implications) remains valid. The original §2 content is preserved as design baseline (same pattern as SD1 for §6/§7/§10/§11).
-
-**See:** ADR-0007 §7 Amendment A2 for the full decision text and consequences. Brainstorm spec: agent-instructions refactor design (2026-05-20).
+1. **TDD signal heuristic false-positive rate** — after the first 10 PRs in Phase 1, reassess and decide whether to switch to BLOCK.
+2. **Codex cloud activation playbook** — specific setup for when Tech Lead wants the first async task (label conventions, GitHub App config).
+3. **Phase 3 low-risk criteria** — formal list of change classes (test-only, doc-only, devDep bumps) for auto-merge activation.
+4. **PR template** — `.github/pull_request_template.md` with mandatory sections (Closes #N, spec link, checklist).
+5. **Bootstrap caching** — for frequent calls (if such scenarios arise) — cache gh API calls for ≤60s; not needed in Phase 0 (one call per session).
+6. **Multi-repo support** — if DS Platform splits into multiple repos (mobile separate?), bootstrap needs adaptation.

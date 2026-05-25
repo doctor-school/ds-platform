@@ -492,50 +492,37 @@ This is a closed flow with audit events `mfa_enrolled` + `lockout_triggered (mfa
 
 ---
 
-## 9. IdP shortlist — Authentik vs Zitadel
+## 9. IdP — Zitadel (closed 2026-05-25, DSP-209)
 
-### 9.1. Equal capabilities OOB
+**Decision summary:** desk-research analysis closed the choice in favor of **Zitadel** (81.6% vs Authentik 75.8% across 7 weighted differentiators). No hands-on spike was performed — all requirements and differences are verifiable from official documentation, release notes, and community evidence. Full decision text and consequences — ADR-0001 §8.
 
-Both cover:
+**Key Zitadel facts (as of 2026-05-25):** license is **AGPL 3.0** (relicensed from Apache 2.0 in 2025; copyleft + network clause — for self-host without modifications no obligations arise, see ADR §8 «License discipline»). The binary is **stateless**; the event store consists of plain Postgres tables → DR = standard Postgres backup (pgbackrest), identical to Authentik. **Magic-link is not a core feature** (GitHub #2075) — must be built custom over the session API (~1–2 days work; factored into D1 scoring); in Authentik it is covered by the Email-stage inside a flow.
 
-- Headless API for custom UI
-- Magic-link + SMS-OTP + password + MFA per group
-- OAuth2 generic sources (VK / Yandex / Max via config)
-- PKCE for public clients (OOB)
-- Telegram custom integration via flow stage / action (~50 lines of code in both)
-- Multi-group membership + multi-role
-- OIDC issuer for backend
-- Admin UI for operator
-- 1 service + Postgres deployment
-- MIT (Authentik) / Apache 2.0 (Zitadel) — both permissive
+### 9.1. Gates (both candidates pass equally — not part of scoring)
 
-### 9.2. Differentiating points (determined by spike)
+Headless API for custom UI · OIDC issuer + PKCE + JWKS rotation · `prompt=none` silent re-auth · `prompt=login`+`acr_values` step-up · multiple redirect_uri/clients · OAuth2 generic sources (VK / Yandex / Max via config) · TOTP MFA (RFC 6238 — Google Authenticator / Authy / Yandex Key) + per-group enforcement · SMS-OTP (Authentik — SMS Authenticator stage; Zitadel — session API SMS challenge; RF provider is custom in both) · Telegram custom integration (~50 lines in both) · Multi-group + multi-role · Admin UI · «1 service + Postgres» deployable · bulk-import API · webhook (neither has a built-in outbox — compensated by retry, §3.2).
 
-| Criterion                            | Authentik                                                                        | Zitadel                                           |
-| ------------------------------------ | -------------------------------------------------------------------------------- | ------------------------------------------------- |
-| Stack                                | Python/Django                                                                    | Go event-sourced                                  |
-| Multi-tenancy                        | Via `organizations` field                                                        | First-class (not needed by us, but not a blocker) |
-| Event-sourced audit                  | Standard audit log                                                               | Everything in event store                         |
-| Headless API ergonomics              | Flow executor — stage-based JSON                                                 | gRPC + REST sessions — cleaner API surface        |
-| Battle-testedness self-hosted        | More production deployments                                                      | Fewer, but growing actively                       |
-| Backup/restore complexity            | Standard SQL dump                                                                | Event-store replay (more complex DR)              |
-| Vendor commercial push               | Minimal managed push (BeryJu GmbH, DE)                                           | Active (Zitadel Cloud — CAOS AG, CH)              |
-| Russian-language docs / RF community | More                                                                             | Less                                              |
-| Sanctions exposure                   | Both EU-based, MIT/Apache → code available even if commercial support is revoked | Same risk                                         |
+### 9.2. Differentiators and final scoring
 
-### 9.3. Spike criteria (Phase 0 implementation)
+Methodology: impact × probability × duration. Gates do not carry weight (see §9.1).
 
-| Test                                                               | Time           | Closes question               |
-| ------------------------------------------------------------------ | -------------- | ----------------------------- |
-| Implement login phone-OTP + magic-link end-to-end via headless API | 2–4h/candidate | Headless API ergonomics       |
-| Integrate RF SMS provider (SMSC.ru / SMS.ru) via webhook           | 1–2h/candidate | Custom provider integration   |
-| Implement Telegram Login HMAC                                      | 1–2h/candidate | Custom auth-stage complexity  |
-| Bulk-import 100 users from Directual via admin API                 | 1–2h/candidate | Migration tooling             |
-| Webhook outbox-pattern run (`user.*` events)                       | 1h/candidate   | Sync strategy §3.2 is viable  |
-| Account-linking PKCE-flow with pre-auth takeover scenario          | 1h/candidate   | §6.2 guards are implementable |
-| Deploy + backup/restore run on Timeweb                             | 1–2h/candidate | Ops ergonomics + DR           |
+| #               | Criterion                                                                                                                   | Weight | Authentik       | Zitadel         | Key evidence                                                                                                                                                                                                                                                                                                               |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------- | ------ | --------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1              | Volume of custom auth dev for v1 (magic-link, phone SMS-OTP with RF provider, Telegram HMAC, account-linking anti-takeover) | 20     | 4 → 80          | 3 → 60          | A: flow engine handles declaratively; Z: magic-link and orchestration are imperative                                                                                                                                                                                                                                       |
+| D2              | Headless API ergonomics (integration surface for 6 apps on our domain)                                                      | 22     | 4 → 88          | 5 → 110         | A: flow-executor server-driven state machine, designed for outposts; Z: v2 Session API explicit resource-oriented                                                                                                                                                                                                          |
+| D3              | Operational tax (footprint, upgrade discipline, breaking changes)                                                           | 22     | 3 → 66          | 4.5 → 99        | A: multi-service ~1 GB, calendar releases ~monthly, breaking changes ~every release (2025.12 RBAC overhaul + storage mount; 2026.2 SCIM filter, `ak_groups` rename), cannot skip versions, no downgrade, documented upgrade failures (#14501, #20634). Z: stateless Go binary ~512 MB, upgrade = tag swap, auto migrations |
+| D5              | AI-agent buildability (LLM-friendly stack)                                                                                  | 10     | 4 → 40          | 4 → 40          | A: larger community corpus (~20.7k★), but flows/stages/providers model with «non-obvious relationships» (HN); Z: smaller corpus, but protobuf-defined API is explicit and predictable. Wash                                                                                                                                |
+| D4              | Maturity / self-hosted track record                                                                                         | 8      | 4.5 → 36        | 3.5 → 28        | A: 20.7k★, large battle-tested base; Z: 13.4k★, younger in self-host, cloud-leaning. In v1 ≤200 users — barely loads                                                                                                                                                                                                       |
+| D6              | License and vendor risk                                                                                                     | 10     | 4.5 → 45        | 3.5 → 35        | A: MIT core (all v1 needs in OSS); Z: AGPL 3.0 + active commercial cloud push. Both EU/CH, OSS code remains accessible                                                                                                                                                                                                     |
+| D7              | Compliance posture for PD under 152-FZ/UZ-3                                                                                 | 8      | 3 → 24          | 4.5 → 36        | A: no own certifications, audit-export CSV in Enterprise, partial PII-min; Z: ISO 27001 + SOC 2 Type II vendor, SIEM-export OOB, full PII-min                                                                                                                                                                              |
+| **Total / 500** |                                                                                                                             | 100    | **379 (75.8%)** | **408 (81.6%)** | **Zitadel +5.8 pp**                                                                                                                                                                                                                                                                                                        |
 
-**Budget:** 1.5 working days per candidate = 3 days (revised from 2). Decision — ADR in `docs/adr/` following the spike.
+### 9.3. Research sources
+
+- ZITADEL docs — [Requirements](https://zitadel.com/docs/self-hosting/manage/requirements), [Database](https://zitadel.com/docs/self-hosting/manage/database), [Backup & restore (zitadel-helper)](https://github.com/zitadel/zitadel-helper/blob/main/db/backup-and-restore.md), [MFA in custom login UI](https://zitadel.com/docs/guides/integrate/login-ui/mfa)
+- Authentik docs — [Headless flow executor](https://docs.goauthentik.io/add-secure-apps/flows-stages/flow/executors/headless/), [SMS Authenticator stage](https://docs.goauthentik.io/add-secure-apps/flows-stages/stages/authenticator_sms/), [Brands](https://docs.goauthentik.io/brands/), [Enterprise features](https://docs.goauthentik.io/enterprise/enterprise-features/), upgrade issues [#14501](https://github.com/goauthentik/authentik/issues/14501), [#20634](https://github.com/goauthentik/authentik/issues/20634)
+- Comparative reviews — [wz-it Authentik vs Zitadel 2026](https://wz-it.com/en/blog/authentik-vs-zitadel-identity-provider-comparison/) · [House of FOSS Keycloak/Authentik/Zitadel 2026](https://blog.houseoffoss.com/post/keycloak-vs-authentik-vs-zitadel-2026-which-open-source-login-tool-should-you-use) · [Gupta Deepak CIAM Compass Authentik vs Zitadel](https://guptadeepak.com/ciam-compass/compare/authentik-vs-zitadel/)
+- Community evidence — [HN 41600896 (enterprise-y over-complexity)](https://news.ycombinator.com/item?id=41600896), [Zitadel magic-link discussion #2075](https://github.com/zitadel/zitadel/discussions/2075)
 
 ---
 

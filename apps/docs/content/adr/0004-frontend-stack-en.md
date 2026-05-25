@@ -60,7 +60,7 @@ apps/admin/    # Refine + 2FA, admin.doctor.school
 apps/cms/      # Payload v3 inside Next.js, cms.doctor.school
 ```
 
-Cookies: **host-only `__Host-` cookie per app** (`__Host-ds_portal_session`, `__Host-ds_admin_session`, `__Host-ds_cms_session`, etc.). Cross-app SSO continuity — via OIDC silent re-auth (`prompt=none`), not via shared cookie. Fixed in ADR-0001 §6 + Amendment A2 (2026-05-18, DSO-63 #2 — supersedes A1.1). The previously accepted downgrade (shared `__Secure-ds_session` on `.doctor.school`) is reversed following external architecture validation.
+Cookies: **host-only `__Host-` cookie per app** (`__Host-ds_portal_session`, `__Host-ds_admin_session`, `__Host-ds_cms_session`, etc.). Cross-app SSO continuity — via OIDC silent re-auth (`prompt=none`) at the IdP, not via a shared cookie spanning `.doctor.school`. Single source of truth: ADR-0001 §6.
 
 Deployment v1-v2: one VPS "frontend-prod" + 4 Docker containers + nginx reverse-proxy. v3+ trigger — split at 1M MAU.
 

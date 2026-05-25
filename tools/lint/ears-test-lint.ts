@@ -3,7 +3,7 @@
  * tools/lint/ears-test-lint.ts — WARN guard for EARS-ID test coverage.
  *
  * Spec: docs/superpowers/specs/2026-05-15-ds-platform-ai-stack-design-en.md §5
- * ADR:  docs/adr/0007-ai-stack-en.md §2.6 (Amendment A1.5 — humans consume.)
+ * ADR:  apps/docs/content/adr/0007-ai-stack-en.md §2.6 (CI nudges for humans).
  *
  * Scans `apps/docs/content/specs/features/<slug>/requirements.md` for
  * EARS-N.M identifiers, then scans `apps/**\/*.test.{ts,tsx}` and

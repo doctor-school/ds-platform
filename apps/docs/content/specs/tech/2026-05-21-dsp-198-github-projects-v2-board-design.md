@@ -115,7 +115,7 @@ Three views configured at setup. All read from the single board.
 
 The "By milestone" view is the PM roadmap surrogate: each Milestone tile shows native percent-complete (closed / total). For ad-hoc release-readiness questions, the PM filters this view by an in-flight Milestone (e.g. `milestone = Auth foundations v1`).
 
-ADR amendments are not promoted to a dedicated view — they are infrequent enough that an ad-hoc title search (`Amendment` or `ADR-`) or filtering by the `docs` label is sufficient. If the amendment cadence becomes load-bearing, a new view is added as an amendment to this spec.
+ADR revisions are not promoted to a dedicated view — they are infrequent enough that an ad-hoc title search (`ADR-`) or filtering by the `docs` label is sufficient. If the ADR-revision cadence becomes load-bearing, a new view is added when this spec is next revised.
 
 ## 4. Backfill plan
 
@@ -221,7 +221,7 @@ rare exception, Plane DSP-XXX.>
 ## Spec reference
 
 <For a single EARS-handler: link to `requirements.md#EARS-N`.
-For an ADR-amendment: link to the ADR plus the Amendment letter.
+For an ADR revision: link to the ADR (and the specific § being changed).
 For scaffolding / tooling without a spec: write "no spec".>
 
 ## Acceptance criteria

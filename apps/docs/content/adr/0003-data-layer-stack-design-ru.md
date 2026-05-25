@@ -242,7 +242,7 @@ Retention matrix per entity/table — в `packages/db/schema/pd/retention.ts` (T
 
 ### 3.3. Schema organization
 
-- `packages/db/schema/` — TS-файлы по доменам (`users.ts`, `courses.ts`, `ledger.ts`, ...). Master location per ADR-0003 Amendment A1 (formerly `apps/api/src/db/schema/` per ADR-0003 §4).
+- `packages/db/schema/` — TS-файлы по доменам (`users.ts`, `courses.ts`, `ledger.ts`, ...). Master location per ADR-0003 §4.
 - Каждый файл экспортирует `pgTable` definitions, indexes, foreign keys.
 - Один `packages/db/schema/index.ts` re-export'ит всё.
 - Drizzle infer type'ы: `type User = typeof users.$inferSelect`, `type NewUser = typeof users.$inferInsert`.
@@ -382,7 +382,7 @@ UX-метрика (admin-аналитика с v1):
 
 ## 7. Cache + Redis responsibilities matrix
 
-> **Изменено 2026-05-18 (DSO-63 #10):** explicit responsibilities matrix по durability classes. Single Redis больше не multi-purpose SPOF — критичные concerns (idempotency keys, critical jobs) переехали в Postgres. Sessions — в IdP (ADR-0001 Amendment A2). См. ADR-0003 Amendment A2/§A.
+Redis несёт только cache + Centrifugo presence + BullMQ best-effort jobs; критичные concerns (idempotency keys, critical jobs) живут в Postgres (ADR-0003 §8), session state — в IdP (ADR-0001 §6). Single Redis благодаря этому не multi-purpose SPOF — полная responsibilities matrix в ADR-0003 §8.
 
 ### 7.1. Решение
 
@@ -400,7 +400,7 @@ UX-метрика (admin-аналитика с v1):
 | Non-critical jobs    | Redis (BullMQ)                      | `bull:<queue>:*`                             | best-effort | per-job                  | At-least-once retry policy             |
 | **Idempotency keys** | **Postgres**                        | `idempotency_keys` (UNIQUE)                  | **durable** | 24h via cron cleanup     | n/a                                    |
 | **Critical jobs**    | **Postgres outbox + BullMQ worker** | `job_outbox` + `bull:critical:*`             | **durable** | retained until completed | Replay from outbox after Redis restart |
-| **Session state**    | **IdP** (ADR-0001 Amendment A2)     | IdP's DB                                     | durable     | refresh-token TTL        | IdP handles                            |
+| **Session state**    | **IdP** (ADR-0001 §6)               | IdP's DB                                     | durable     | refresh-token TTL        | IdP handles                            |
 | Audit ledger, PD     | Postgres                            | per ADR-0003 §6 + ADR-0009 retention matrix  | durable     | per ADR-0009 §2.6        | n/a                                    |
 
 ### 7.3. Конфиг (Redis)
@@ -537,7 +537,7 @@ Redis Cluster mode — только если memory >32GB или throughput >50k
 
 - Drizzle schema TS-файлы — single source для DB-структуры.
 - Cerbos policies `policies/*.yaml` — single source для permissions; auto-doc через `cerbos generate documentation` в CI → выкладывается в Module README.
-- README в `packages/db/` (per ADR-0003 Amendment A1) объясняет: схему, partitioning, backup-стратегию, extensions list, restore-runbook. Этот README — обязательное чтение для AI-session, начинающей работу с data-layer.
+- README в `packages/db/` (per ADR-0003 §4) объясняет: схему, partitioning, backup-стратегию, extensions list, restore-runbook. Этот README — обязательное чтение для AI-session, начинающей работу с data-layer.
 - ADR-0003 — для cross-cutting решений; spec-этот-файл — для деталей.
 
 ### 10.2. ERD / schema documentation tooling
@@ -553,7 +553,7 @@ Redis Cluster mode — только если memory >32GB или throughput >50k
 
 **Дополнительные инструменты:**
 
-- **Mermaid ER-диаграмма** в `packages/db/README.md` (per ADR-0003 Amendment A1) — текстовая, человекочитаемая, версионируется в git, авто-рендерится в GitHub/Notion. Генерируется отдельным скриптом из Drizzle schema (или поддерживается via `drizzle-zero-erd`/community plugin). Это «text-mode» дубль для AI-агента и code-review (Liam HTML смотреть в браузере неудобно во время PR-ревью).
+- **Mermaid ER-диаграмма** в `packages/db/README.md` (per ADR-0003 §4) — текстовая, человекочитаемая, версионируется в git, авто-рендерится в GitHub/Notion. Генерируется отдельным скриптом из Drizzle schema (или поддерживается via `drizzle-zero-erd`/community plugin). Это «text-mode» дубль для AI-агента и code-review (Liam HTML смотреть в браузере неудобно во время PR-ревью).
 - **SchemaSpy** (опционально, после v1) — Java-based tool, генерирует HTML-доки + статистика **из живой БД** (не из schema-файлов). Полезен для verification «реальная БД совпадает с задуманной schema» и для visualizing index usage / statistics. Запускается раз в неделю как cron-job в CI против staging.
 
 **Отвергнуто:**
@@ -568,7 +568,7 @@ Redis Cluster mode — только если memory >32GB или throughput >50k
 
 - При push в `main` → `liam erd build` → артефакты HTML.
 - Публикация HTML на internal docs-host (Timeweb VPS + nginx) или в Notion-embed.
-- Mermaid auto-update в `packages/db/README.md` (per ADR-0003 Amendment A1) через pre-commit hook (или PR-bot который пушит regenerated mermaid обратно в PR).
+- Mermaid auto-update в `packages/db/README.md` (per ADR-0003 §4) через pre-commit hook (или PR-bot который пушит regenerated mermaid обратно в PR).
 - Diff в ERD блокирует merge без code review — guard rail против неосознанных schema changes.
 
 ---

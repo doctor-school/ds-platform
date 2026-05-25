@@ -3,8 +3,8 @@
  * tools/lint/spec-link-lint.ts — BLOCK guard for `feature:*` PRs.
  *
  * Spec: docs/superpowers/specs/2026-05-15-ds-platform-ai-stack-design-en.md §5
- * ADR:  docs/adr/0007-ai-stack-en.md §2.6 (per Amendment A1.5, guards retained;
- *       consumer is the human reviewer via PR check UI, not the dropped bot.)
+ * ADR:  apps/docs/content/adr/0007-ai-stack-en.md §2.6 (CI guards surface as
+ *       PR checks the human reviewer consumes; no automated reviewer-bot.)
  *
  * Validates that any PR labeled `feature:*`:
  *   1. Has `Closes #N` (or equivalent auto-close keyword) in the body

@@ -1,6 +1,6 @@
 ---
 title: "ADR-0012 — Deployment Topology v1 (production cluster shape + preview environments) for DS Platform [EN]"
-description: "After DSO-59, the v1 availability target is fixed at 99.0% single-AZ (ADR-0002 Amendment A1) with a cost envelope ≤30k ₽/month. These bounds shape..."
+description: "After DSO-59, the v1 availability target is fixed at 99.0% single-AZ (ADR-0002 §5.6) with a cost envelope ≤30k ₽/month. These bounds shape..."
 lang: en
 ---
 
@@ -10,15 +10,15 @@ lang: en
 
 **Date:** 2026-05-18
 **Status:** Accepted
-**Related to:** Plane DSO-53 (`fb3e57f2-6602-40ea-af66-f29694dc5002`), milestone DSO-10 (infra readiness), DSO-59 (v1 availability target — ADR-0002 Amendment A1)
+**Related to:** Plane DSO-53 (`fb3e57f2-6602-40ea-af66-f29694dc5002`), milestone DSO-10 (infra readiness), DSO-59 (v1 availability target — ADR-0002 §5.6)
 **Lift source:** ADR-0003 §8 (cluster topology v1), backend-core-design §5.8 (capacity planning + infra footprint)
-**Inherits:** ADR-0002 (NestJS API + BullMQ + Centrifugo), ADR-0003 (Postgres 17 + Redis 7 + canonical backup topology §2.4), ADR-0002 Amendment A1 (99.0% v1 single-AZ, maintenance window 02:00–06:00 MSK)
+**Inherits:** ADR-0002 (NestJS API + BullMQ + Centrifugo), ADR-0003 (Postgres 17 + Redis 7 + canonical backup topology §2.4), ADR-0002 §5.6 (99.0% v1 single-AZ, maintenance window 02:00–06:00 MSK)
 
 ---
 
 ## Context
 
-After DSO-59, the v1 availability target is fixed at **99.0% single-AZ** (ADR-0002 Amendment A1) with a cost envelope ≤30k ₽/month. These bounds shape the production cluster. Until this ADR, deployment topology was declared as a side-decision inside the data-layer ADR (ADR-0003 §8) and a capacity table inside backend-core-design §5.8, without a formal comparison against alternative orchestrators and with a contradiction in the Redis inventory (§5.8 showed "3× Redis Sentinel", while ADR-0003 §8 + Amendment A2 declared "single-node Redis acceptable v1, HA trigger >1000 active users").
+After DSO-59, the v1 availability target is fixed at **99.0% single-AZ** (ADR-0002 §5.6) with a cost envelope ≤30k ₽/month. These bounds shape the production cluster. Until this ADR, deployment topology was declared as a side-decision inside the data-layer ADR (ADR-0003 §8) and a capacity table inside backend-core-design §5.8, without a formal comparison against alternative orchestrators and with a contradiction in the Redis inventory (§5.8 showed "3× Redis Sentinel", while ADR-0003 §8 declared "single-node Redis acceptable v1, HA trigger >1000 active users").
 
 DSO-53 (originally "Accept ADR-0003: deployment topology DS Platform") is migrated to ADR-0012 in order to:
 
@@ -47,7 +47,7 @@ A dedicated VPS with Coolify (or Dokploy — operator choice is fixed in DSO-10,
 
 ### 3. Permanent staging — deferred to pilot transition
 
-Pre-pilot has 0 real users: permanent staging is not justified for smoke testing (covered by per-PR previews) nor for load testing (no baseline data). Permanent staging spin-up happens synchronously with the pre-pilot → pilot transition (same trigger as in ADR-0002 Amendment A1 / OQ-D7 ADR-0003). The permanent staging topology will be a separate Amendment to this ADR at the moment of introduction.
+Pre-pilot has 0 real users: permanent staging is not justified for smoke testing (covered by per-PR previews) nor for load testing (no baseline data). Permanent staging spin-up happens synchronously with the pre-pilot → pilot transition (same trigger as in ADR-0002 §5.6 / OQ-D7 ADR-0003). The permanent staging topology will be added to this ADR at the moment of introduction.
 
 ### 4. Orchestrator: docker-compose
 
@@ -55,7 +55,7 @@ Rejected alternatives — see §Rejected below. docker-compose is selected as th
 
 ### 5. Maintenance window
 
-Weekly window 02:00–06:00 MSK (one slot) is excluded from SLO calculation (inherited from ADR-0002 Amendment A1). The concrete schedule (day of week, duration of each window) is an operational detail anchored in the DSO-10 readiness checklist.
+Weekly window 02:00–06:00 MSK (one slot) is excluded from SLO calculation (inherited from ADR-0002 §5.6). The concrete schedule (day of week, duration of each window) is an operational detail anchored in the DSO-10 readiness checklist.
 
 ### 6. Dependencies on the shared-tooling VPS (out of scope of this ADR)
 
@@ -167,23 +167,23 @@ The shared-tooling VPS (Verdaccio + observability + IdP + Vault) is shared infra
 
 ### Negative
 
-- 2-VPS = 2 separate failure domains (vs 1 on single-VPS), but 1 SPOF per plane (vs an HA cluster). Accepted within the 99.0% v1 SLO (ADR-0002 Amendment A1).
+- 2-VPS = 2 separate failure domains (vs 1 on single-VPS), but 1 SPOF per plane (vs an HA cluster). Accepted within the 99.0% v1 SLO (ADR-0002 §5.6).
 - docker-compose has no built-in rolling-update — deploy via `docker compose up -d` with an image-tag bump = short downtime (<60s) OR a manual blue-green with an nginx upstream switch. Blue-green automation is a pilot trigger — engineering-readiness §1.
 - No automated failover: data-prod VPS down = manual restore from ADR-0003 §2.4 backup (RTO ≤2 h). Compliant with the SLO.
 - preview-vps shared pool — with 5+ concurrent PRs resources run out (OQ-T4 trigger).
 
 ### Architectural qualities (metrics, not declarations)
 
-| Quality                 | Metric                                      | v1              | v2                 |
-| ----------------------- | ------------------------------------------- | --------------- | ------------------ |
-| Availability            | uptime SLO (inherits ADR-0002 Amendment A1) | 99.0%           | 99.5% (HA trigger) |
-| Recoverability          | RTO (manual restore, ADR-0003 §2.4)         | ≤2 h            | ≤5 min (HA)        |
-| Data integrity          | RPO (WAL gap, ADR-0003 §2.4)                | ≤15 min         | ≤5 min             |
-| Deploy frequency        | target                                      | ≥1/week         | ≥1/day             |
-| Deploy duration         | from merge to prod                          | ≤30 min         | ≤10 min            |
-| Maintenance window      | weekly                                      | 02:00–06:00 MSK | same or narrower   |
-| Preview env spin-up     | from PR-open to URL                         | ≤5 min          | ≤2 min             |
-| PR-throughput supported | concurrent PR environments                  | ≤3 without OOM  | scaled per OQ-T4   |
+| Quality                 | Metric                              | v1              | v2                 |
+| ----------------------- | ----------------------------------- | --------------- | ------------------ |
+| Availability            | uptime SLO (inherits ADR-0002 §5.6) | 99.0%           | 99.5% (HA trigger) |
+| Recoverability          | RTO (manual restore, ADR-0003 §2.4) | ≤2 h            | ≤5 min (HA)        |
+| Data integrity          | RPO (WAL gap, ADR-0003 §2.4)        | ≤15 min         | ≤5 min             |
+| Deploy frequency        | target                              | ≥1/week         | ≥1/day             |
+| Deploy duration         | from merge to prod                  | ≤30 min         | ≤10 min            |
+| Maintenance window      | weekly                              | 02:00–06:00 MSK | same or narrower   |
+| Preview env spin-up     | from PR-open to URL                 | ≤5 min          | ≤2 min             |
+| PR-throughput supported | concurrent PR environments          | ≤3 without OOM  | scaled per OQ-T4   |
 
 ---
 
@@ -191,9 +191,9 @@ The shared-tooling VPS (Verdaccio + observability + IdP + Vault) is shared infra
 
 - **ADR-0002 OQ10** — CLOSED 2026-05-18 (DSO-53), see this ADR.
 - **ADR-0003 §8** — content lifted here; the original section is now a stub pointer.
-- **ADR-0002 Amendment A1** (DSO-59) — v1 availability 99.0% + maintenance window source.
+- **ADR-0002 §5.6** (DSO-59) — v1 availability 99.0% + maintenance window source.
 - **ADR-0003 §2.4** — canonical backup topology (inherited).
-- **ADR-0003 §8** (Amendment A2) — Redis single-node v1 policy + HA trigger.
+- **ADR-0003 §8** — Redis single-node v1 policy + HA trigger.
 - **Backend-core-design §5.8** — capacity table; Redis count fixed synchronously with this ADR.
 - **Engineering-readiness §1** — CI/CD, preview-env tooling (Coolify/Dokploy), blue-green pilot.
 - **DSO-10** — infra readiness checklist (maintenance schedule, shared-tooling sizing, Verdaccio + observability deploy).

@@ -22,7 +22,7 @@ mode: inline
    - **Made an architectural call** that the spec didn't pre-resolve (e.g., chose Vitest config layout pattern that the spec didn't dictate).
 2. **For each item**, choose one of:
    - **Open a follow-up Issue** with label `decision-debt` and a clear title (`gh issue create --label decision-debt --title "..." --body "..."`).
-   - **Open an ADR amendment task** via `do-adr-amendment` (if the deviation should retroactively become the convention).
+   - **Open an ADR-revision task** via `do-adr-revision` (if the deviation should retroactively become the convention).
    - **Log it in the iteration summary** with rationale (if the deviation is genuinely one-off and not worth tracking further).
 3. **Return the list.** Either a list of opened follow-ups (with Issue numbers / amendment links) or an explicit empty list `[]`. The list goes into `write-iteration-summary`.
 

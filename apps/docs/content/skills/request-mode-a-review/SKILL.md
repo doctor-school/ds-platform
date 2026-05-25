@@ -64,7 +64,7 @@ The `VERDICT:` line is mandatory. `APPROVE` is allowed only when there are zero 
 
 ### Failure mode
 
-- Returning a free-form review without the `VERDICT:` line — the orchestration skill (`do-feature-iteration` / `do-hotfix-pr` / `do-adr-amendment`) cannot parse the verdict and must re-dispatch. This is the primary enforcement for G11 finding F-14 — the agent forgot to dispatch review at all, then forgot again, until the human prompted. The verdict line is the artifact that proves review happened.
+- Returning a free-form review without the `VERDICT:` line — the orchestration skill (`do-feature-iteration` / `do-hotfix-pr` / `do-adr-revision`) cannot parse the verdict and must re-dispatch. This is the primary enforcement for G11 finding F-14 — the agent forgot to dispatch review at all, then forgot again, until the human prompted. The verdict line is the artifact that proves review happened.
 - Approving a PR with unaddressed `[BLOCKER]` findings — process violation.
 
 > **Cannot proceed without** — the lead agent MUST NOT invoke `merge-when-green` while the latest verdict is `REQUEST_CHANGES` or absent.

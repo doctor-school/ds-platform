@@ -21,7 +21,7 @@ lang: en
 DS Platform is a standalone platform replacing Bubble + Directual + Supabase. The backend core must serve all clients (Web, Mobile, Admin, partner integrations) and support:
 
 - ~10–65k existing doctors (migration from Directual) + growth to 1M MAU by v3.
-- API p95 ≤500ms (v1) → ≤300ms (v3); availability 99.0% (v1) → 99.5% (v2, HA trigger per ADR-0003 OQ-D7) → 99.95% (v3). Fixed by Amendment A1 (2026-05-18, DSO-59).
+- API p95 ≤500ms (v1) → ≤300ms (v3); availability 99.0% (v1, single-node single-AZ) → 99.5% (v2, HA trigger per ADR-0003 OQ-D7) → 99.95% (v3).
 - Append-only ledger with anti-fraud deduplication by `event_id`, audit log ≥3 years.
 - Async tasks (notifications, AI pipeline, PDF, marketing blasts 10k ≤10 min).
 - Webhooks for payments, video hosting, AI service, SMS callback.
@@ -165,7 +165,7 @@ Doc-first cycle, auto-generation wherever possible, CI gates for consistency REA
 - Two runtimes in the system (Node main + Go Centrifugo + potentially Python AI in DSO-30) — two CI pipelines, requires discipline.
 - Lock-in on NestJS decorators — mitigation: ≥60% of business logic in pure services without decorators.
 - `nestjs-zod` + OpenAPI generation — mainstream since 2024 (relatively recent). Mitigation: explicit eslint rule, fallback to classic `@nestjs/swagger` + class-validator if issues arise.
-- **v1 availability = 99.0% single-AZ** (resolved 2026-05-18, Amendment A1 / DSO-59). 99.5% requires HA Postgres (+15-25k ₽/month) — deferred to v2 per OQ-D7 in ADR-0003 (trigger: pre-pilot → pilot transition). Backup topology / RPO / RTO inherited from ADR-0003 §2.4 + §9. Maintenance window 02:00–06:00 MSK excluded from SLO.
+- **v1 availability = 99.0% single-node single-AZ.** 99.5% requires HA Postgres (+15-25k ₽/month) — deferred to v2 per OQ-D7 in ADR-0003 (trigger: pre-pilot → pilot transition). Backup topology / RPO / RTO inherited from ADR-0003 §2.4 + §9. Maintenance window 02:00–06:00 MSK excluded from SLO. Cost envelope v1 ≤30k ₽/month. Quarterly restore drill — part of DSO-10 AC (engineering-readiness §4).
 - **Outbox at-least-once** requires idempotency on the side of ALL consumers (details — spec §7.4). Cost: additional code complexity + UNIQUE indexes in DB.
 
 ### Architectural qualities (metrics, not declarations)
@@ -181,57 +181,21 @@ Doc-first cycle, auto-generation wherever possible, CI gates for consistency REA
 
 ---
 
-## Amendment A1 — v1 availability target resolved (2026-05-18, DSO-59)
-
-**Source:** Plane DSO-59. Closes OQ11.
-
-**Context.** The original ADR-0002 (2026-05-13) performance budget declared availability 99.5% v1, while the cons section acknowledged that 99.0% single-AZ without HA Postgres was realistic. OQ11 left the choice open. After DSO-63 external validation, backup topology and RPO/RTO for single-node v1 were fixed in ADR-0003 §2.4 + §9. This amendment synchronises ADR-0002 with already-accepted decisions and formally closes OQ11.
-
-**Decision.**
-
-1. **v1 availability target = 99.0% single-node single-AZ.** No external SLA commitments to partners at decision time (Phase 0 pre-pilot).
-2. **Maintenance window:** one weekly window 02:00–06:00 MSK is excluded from SLO calculation. Concrete schedule — operational detail, anchored in DSO-10 readiness checklist, not in the ADR.
-3. **RPO / RTO** inherited from ADR-0003 §2.4 (canonical backup topology): RPO ≤15 min (WAL gap), RTO ≤2 h (manual restore by runbook). Quarterly restore drill — part of DSO-10 AC (cross-link to engineering-readiness §4).
-4. **Cost envelope:** v1 infra ≤30k ₽/month total. HA Postgres (+15-25k ₽/month) out of scope for v1.
-5. **Review trigger:** pre-pilot → pilot transition. At that review, OQ-D7 (Postgres HA — Patroni vs managed) from ADR-0003 is evaluated. Until then — single-node + WAL archiving + multi-provider offsite per ADR-0003 §2.4.
-
-**Locations changed in this ADR.**
-
-- §Context (L18): performance budget line rewritten with three points (v1/v2/v3).
-- §Consequences/Negative: availability line rewritten from "trade-off open" to "resolved".
-- §Architectural qualities: table extended with a v2 column; Availability / RTO / RPO rows synchronised with ADR-0003.
-- §Open questions: OQ11 → CLOSED + cross-ref.
-
-**Cross-references.**
-
-- ADR-0003 §2.4 (canonical backup topology), §9 (architectural qualities v1/v2/v3), OQ-D7 (v2 HA trigger).
-- Design spec `2026-05-13-ds-platform-data-layer-design-{ru,en}.md` §2.4 + §9.
-- Engineering-readiness spec §4 (quarterly restore drill — operationally anchored on DSO-10).
-- ADR-0002 OQ10 (deployment topology) — separate, but now has a fixed SLO target for cost estimate.
-
-**Verification.** After applying the amendment, use grep to confirm that any mention of `99.5%` in `0002-backend-core-stack-{ru,en}.md` either refers to v2 (HA trigger), the v3 context, or the historical explanation of why this amendment exists. Command:
-
-```bash
-grep -n "99\." apps/docs/content/adr/0002-backend-core-stack-ru.md apps/docs/content/adr/0002-backend-core-stack-en.md
-```
-
----
-
 ## Open questions (deferred)
 
-| OQ                                 | Review trigger                                                                                                                  |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| OQ1. Bun as runtime                | Production support for NestJS on Bun + successful cases in RF                                                                   |
-| OQ2. GraphQL BFF                   | v2: ≥3 heavy mobile views with traffic advantage ≥30% or RTT ≥100ms                                                             |
-| OQ3. Temporal                      | When long-running flows appear                                                                                                  |
-| OQ4. gRPC internal                 | When monolith splits into ≥3 services                                                                                           |
-| OQ5. Persisted queries             | If CDN cache is insufficient                                                                                                    |
-| OQ6. PDF engine                    | When implementing CertificatesModule v2                                                                                         |
-| OQ7. Coverage minimums             | v2 review                                                                                                                       |
-| OQ8. Contract testing              | Pact vs OpenAPI snapshot — at first v1 integration                                                                              |
-| OQ9. AI reverts to class-validator | eslint no-class-validator rule >5 false-positives/week → reconsider                                                             |
-| OQ10. Deployment topology          | **CLOSED 2026-05-18 (DSO-53)** — see ADR-0012 "Deployment Topology v1".                                                         |
-| OQ11. v1 availability target       | **CLOSED 2026-05-18 (Amendment A1 / DSO-59)** — 99.0% v1 single-node single-AZ; see ADR-0003 §2.4 + §9 + OQ-D7 (v2 HA trigger). |
+| OQ                                 | Review trigger                                                                                                   |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| OQ1. Bun as runtime                | Production support for NestJS on Bun + successful cases in RF                                                    |
+| OQ2. GraphQL BFF                   | v2: ≥3 heavy mobile views with traffic advantage ≥30% or RTT ≥100ms                                              |
+| OQ3. Temporal                      | When long-running flows appear                                                                                   |
+| OQ4. gRPC internal                 | When monolith splits into ≥3 services                                                                            |
+| OQ5. Persisted queries             | If CDN cache is insufficient                                                                                     |
+| OQ6. PDF engine                    | When implementing CertificatesModule v2                                                                          |
+| OQ7. Coverage minimums             | v2 review                                                                                                        |
+| OQ8. Contract testing              | Pact vs OpenAPI snapshot — at first v1 integration                                                               |
+| OQ9. AI reverts to class-validator | eslint no-class-validator rule >5 false-positives/week → reconsider                                              |
+| OQ10. Deployment topology          | **CLOSED 2026-05-18 (DSO-53)** — see ADR-0012 "Deployment Topology v1".                                          |
+| OQ11. v1 availability target       | **CLOSED 2026-05-18 (DSO-59)** — 99.0% v1 single-node single-AZ; see ADR-0003 §2.4 + §9 + OQ-D7 (v2 HA trigger). |
 
 ## Delegated
 
@@ -242,7 +206,7 @@ grep -n "99\." apps/docs/content/adr/0002-backend-core-stack-ru.md apps/docs/con
 - **Mobile stack** — DSO-29.
 - **AI runtime, LLM middleware, AI providers** — DSO-30.
 - **Repo layout** — DSO-31.
-- **Final IdP (Authentik vs Zitadel)** — Phase 0 spike.
+- **IdP** — **closed 2026-05-25 (DSP-209):** Zitadel (see ADR-0001 §8).
 - **SMS/email providers, bot-protection** — separate tasks (manual failover in RF).
 - **Deployment topology** — **closed 2026-05-18 (DSO-53):** see **ADR-0012 "Deployment Topology v1"** (2-VPS docker-compose; K3s / Nomad / Swarm / single-VPS / multi-VPS-LB rejected; preview environments + permanent staging deferred).
 - **npm + Docker registry mirroring (Verdaccio + Harbor/Nexus)** — **DSO-10 (infra-readiness)**. Hard requirement v1 — without mirrors CI risks breaking on RF npm/Docker Hub blocks.

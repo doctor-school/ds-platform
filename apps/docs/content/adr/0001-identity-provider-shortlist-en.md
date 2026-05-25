@@ -8,7 +8,7 @@ lang: en
 
 # ADR-0001 — Identity / Auth / RBAC for DS Platform
 
-**Date:** 2026-05-12 (v2 — after independent architecture review); amended 2026-05-25 (§8 rewritten — IdP closed: Zitadel, DSP-209). Previous amendments: 2026-05-18 (Amendment A2, DSO-63 #2/#4; A3 — PD lifecycle → ADR-0009; A4 — step-up auth).
+**Date:** 2026-05-25 (current revision; full evolution history in `git log`).
 **Status:** Accepted — IdP = Zitadel
 **Related to:** Plane DSO-25 (`0a8f2276-956f-4f4e-9134-2f197ff4bab8`), milestone DSO-24, DSO-63 (external validation), DSP-209 (final IdP selection)
 **Design spec:** `apps/docs/content/adr/0001-identity-provider-shortlist-design-en.md`
@@ -36,6 +36,7 @@ DS Platform is a standalone platform replacing the current Bubble + Directual + 
 - The target admin/operational role model is a parallel product track (not a blocker for the identity layer).
 - Backend stores fine-grained and object-level permissions + domain audit log (append-only, 3-year retention).
 - JWT claims are minimal: `sub`, `roles[]`, `mfa`, `sid`, `iat`, `exp`, `jti`. No `permissions[]` in the token.
+- PD lifecycle, consent, retention, erasure — see ADR-0009.
 
 ### 2. UI — headless for credentials, near-headless for social
 
@@ -77,8 +78,9 @@ Rationale for deferral: v1 user base ≤200 from the existing Doctor.School data
 - **Sender-constrained refresh for mobile:** device-id binding in v1, DPoP (RFC 9449) — in v2.
 - Session store: Redis, server-side. Force-logout = DELETE session.
 - **Two-tier validation:** JWT fast-path for ≥99% of requests (read + low-stakes write); IdP `/introspect` (RFC 7662) for <1% high-stakes endpoints (payments, AU withdrawal, role-change, admin mutations, PD export).
-- **Step-up authentication** for elevated-risk actions (admin user-management writes, account/erasure execution, payment-method change, MFA change, role grant/revoke, logout-all) — a separate elevated session with fresh MFA, TTL 30 min, claim `acr=mfa-fresh`. See Amendment A4.
-- Mobile storage — Keychain/Keystore; web — HttpOnly + Secure + SameSite=Lax cookie with `__Host-` prefix (NOT localStorage). **Each app (portal, admin, promo) holds its own host-only session cookie**; cross-app SSO continuity is achieved via OIDC silent re-auth (`prompt=none`) at the IdP — see Amendment A2 (which supersedes the earlier Amendment A1.1 about a shared `__Secure-ds_session` cookie on `.doctor.school`).
+- **Step-up authentication** for elevated-risk actions (admin user-management writes, account/erasure execution, payment-method change, MFA change, role grant/revoke, logout-all) — a separate elevated session with fresh MFA, TTL 30 min, claim `acr=mfa-fresh`. Full policy — §10.
+- Mobile storage — Keychain/Keystore; web — HttpOnly + Secure + SameSite=Lax cookie with `__Host-` prefix (NOT localStorage). **Each app (portal, admin, promo) holds its own host-only session cookie**, scoped to that app's origin; cross-app SSO continuity is achieved via OIDC silent re-auth (`prompt=none`) at the IdP. A shared cookie spanning trust-zone boundaries (e.g. `__Secure-ds_session` on `.doctor.school`) is rejected: same-origin XSS or subdomain takeover under any subdomain would compromise the admin session, and the usual mitigations (fingerprint binding, CSRF double-submit) are bypassed by same-origin XSS.
+- **Fingerprint binding (mandatory):** session metadata MUST include a stable client fingerprint = hash(UA + IP /24 + accept-language); on mismatch the session is invalidated and the user is forced through re-auth via the IdP. Not a defence against same-origin XSS (see above), but a baseline against cookie theft replayed from a different network/UA.
 - JWKS rotation — graceful overlap window 24h.
 
 ### 7. Security baseline (mandatory for v1)
@@ -89,8 +91,19 @@ Rationale for deferral: v1 user base ≤200 from the existing Doctor.School data
 - Refresh token theft detection: re-use → invalidate the chain (RFC 6819).
 - Email/phone enumeration protection: idempotent responses on login/reset/register with timing delta ≤50ms.
 - CAPTCHA: **Yandex SmartCaptcha** (RF-accessible; hCaptcha/reCAPTCHA deprecated in RF).
-- CSRF protection + cookie security profile (`__Host-` per app, no shared cookies across subdomains — see Amendment A2; full security profile described here, not duplicated in the frontend spec).
-- **Content Security Policy (CSP) profile-per-zone** — mandatory protection against XSS/clickjacking, differentiated by zone sensitivity level: admin (strictest, no inline, no unsafe-eval), portal (standard, allow specific 3rd-party origins), promo (relaxed, allow analytics/marketing pixels), docs (default Fumadocs profile). Specific directives — Amendment A1 + frontend design spec §3.2.
+- CSRF protection + cookie security profile (`__Host-` per app, no shared cookies across subdomains — see §6; full security profile described here, not duplicated in the frontend spec).
+- **Content Security Policy (CSP) profile-per-zone** — mandatory protection against XSS/clickjacking, differentiated by zone sensitivity level:
+
+| Zone                          | Profile              | Notes                                                                                                                                                           |
+| ----------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `admin.doctor.school`         | strictest            | `default-src 'self'`; no `unsafe-inline`, no `unsafe-eval`, no 3rd-party origins (including analytics); strict nonce-based script-src; `frame-ancestors 'none'` |
+| `portal.doctor.school` (app)  | standard             | `default-src 'self'`; allow Centrifugo WS endpoint, Timeweb CDN, Sentry, permitted embed origins (video providers from CMS); nonce-based scripts                |
+| `doctor.school` (promo SSG)   | relaxed              | allows analytics (Plausible self-hosted), pixel-marketing endpoints (if any); still no `unsafe-eval`; `frame-ancestors 'none'`                                  |
+| `docs.doctor.school`          | Fumadocs default     | plus our `report-uri`; no exceptions for admin/portal/promo                                                                                                     |
+| `cms.doctor.school` (Payload) | strict (admin-level) | analogous to admin; editors inside VPN/IdP only                                                                                                                 |
+
+Cross-zone constraints: all profiles ship `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`. CSP violations from every zone go to a unified `csp-report-collector` endpoint (`apps/api/`-level), written to `audit_log` + Sentry alerting on pattern-spikes. Admin zone additionally ships `Permissions-Policy: geolocation=(), microphone=(), camera=()`. Specific `default-src` / `script-src` / `style-src` / `img-src` / `connect-src` / `frame-ancestors` / `form-action` / `report-uri` directives live in frontend design spec §3.2 + §3.2.2 — they may evolve as an operational change, but changing zone profiles or relaxation levels requires a new ADR revision.
+
 - PD in logs is masked; full values only in encrypted audit log with RF-resident KMS.
 - Full list of mandatory auth audit events — spec §7.3.
 
@@ -146,6 +159,29 @@ Authentik's wins (D1 v1 OOB functionality, D4 self-hosted maturity, D6 MIT licen
 
 **MFA bootstrap for legacy admin** — a separate elevated-session magic-link flow → mandatory TOTP/SMS enrollment within a 7-day window, otherwise manual unlock via support (spec §8.5).
 
+### 10. Step-up authentication for high-risk actions
+
+The base session issued after primary login (§6) carries a single security level, uniform across read and write operations of any kind. For elevated-risk actions — destructive admin operations against users (role grant/revoke, lock, erasure-execute), account-level deletion / erasure-request by the subject, payment-method change, MFA changes, initiating PD export, logout-all — that uniform level is insufficient: an attacker holding a stolen long-lived session MUST NOT be able to execute a catastrophic action immediately without fresh re-authentication.
+
+The list of endpoint classes that require step-up is normatively fixed in **endpoint-authorization-matrix-design §8.1** (`auth: 'step-up'` declaration on `@Authz`). The step-up trigger is OIDC `prompt=login` + `acr_values=urn:ds:acr:mfa-fresh` at the IdP. After successful step-up, the IdP MUST issue an access token with an additional claim `acr=mfa-fresh` and a `mfa_fresh_at` timestamp; the fresh step-up TTL is **30 minutes** (see identity-auth-rbac-design §7.1).
+
+The backend MUST verify `acr=mfa-fresh` AND `mfa_fresh_at ≥ now − 30 min` on every endpoint with `auth: 'step-up'` via a single `StepUpGuard` middleware (see endpoint-authorization-matrix-design §8.2 + backend-core middleware checklist). On failure — `401 Unauthorized` with body `{ error: 'step_up_required', step_up_url: '<IdP authorize URL with prompt=login + acr_values + redirect_uri + state>' }`. This error contract is normative (endpoint-authz-matrix-design §8.2); frontend and mobile MUST handle it.
+
+**Session lifetime after step-up.** The elevated state is a **separate claim in the access token**, not a separate session. The base session (refresh token web 30d / mobile 14d, §6) continues to exist independently: the elevated TTL of 30 min expires faster than the access-token TTL (15 min), but refreshing an access token via refresh token does NOT re-issue `acr=mfa-fresh` automatically — once the elevated window expires, the next high-risk action requires step-up again. Step-up does not extend the base session expiration.
+
+**IdP requirements.** `prompt=login` + custom `acr_values` are supported by Zitadel (§8).
+
+**UX implications.** Frontend (portal/admin/cms) MUST intercept `401 step_up_required`, redirect to `step_up_url` without losing the current context (preserved via the `state` parameter + client-side route restoration after returning with an auth code), exchange the code for a refreshed access token, and retry the original request. Mobile follows the same flow via `ASWebAuthenticationSession` (iOS) / `Custom Tabs` (Android). A series of step-up operations within the 30-minute window does not require repeated authentication (UX-critical for the admin console).
+
+**Audit.** Every step-up attempt (success + fail) MUST be written to `audit_ledger` (ADR-0003 §6, ADR-0009 §2.4 — audit class `auth.step_up.{requested,succeeded,failed}`) with fields `user_id`, `endpoint`, `acr_before`, `acr_after`, `mfa_method`, `ip`, `ua`. The full list of auth audit events — identity-auth-rbac-design §7.3.
+
+**Forward references:**
+
+- **endpoint-authorization-matrix-design §8** — step-up policy, endpoint list, 401-response mechanics, `StepUpGuard` checklist.
+- **backend-core-design** — middleware stack for `auth: 'step-up'` (CI rule asserting `StepUpGuard` is present on every endpoint with an `auth: 'step-up'` declaration).
+- **identity-auth-rbac-design §7.1** — `acr=mfa-fresh` claim, TTL, MFA-elevated session.
+- **ADR-0009 §2.4** — audit class registration for step-up events.
+
 ## Consequences
 
 ### Positive
@@ -162,7 +198,7 @@ Authentik's wins (D1 v1 OOB functionality, D4 self-hosted maturity, D6 MIT licen
 
 - Users table duplication (IdP + backend mirror via webhook + reconciliation cron). Requires eventual-consistency handling (spec §3.2).
 - Two-tier validation: backend must correctly classify high-stakes endpoints; misclassification → security gap or performance hit.
-- Hard cutover from Directual (amendment per DSO-63 #4): pre-cutover PD export requires encrypted-at-rest staging + restricted access; Directual sunset after 50% migration or 120 days (see §9).
+- Hard cutover from Directual (see §9): pre-cutover PD export requires encrypted-at-rest staging + restricted access; Directual sunset after 50% migration or 120 days.
 - Final IdP selection deferred to ~3 days of spike → milestone DSO-24 closure shifts by the duration of the spike.
 - MFA SMS for `moderator`/`support` in v1 — a known downgrade against NIST SP 800-63B; mitigation planned for v2.
 
@@ -191,156 +227,3 @@ Authentik's wins (D1 v1 OOB functionality, D4 self-hosted maturity, D6 MIT licen
 | DPoP / sender-constrained refresh for mobile | DSO-26                          | v2 (v1 — device-id binding) | (unchanged)                                                                                   |
 | WebAuthn / Passkeys                          | DSO-26                          | v2                          | (unchanged)                                                                                   |
 | MFA upgrade `moderator`/`support` SMS→TOTP   | DSO-26                          | v2                          | (unchanged)                                                                                   |
-
----
-
-## Amendments
-
-### A1 (2026-05-15, DSO-61) — SSO cookie carve-out + CSP profile-per-zone
-
-This amendment consolidates two related security baseline clarifications identified during the cross-spec consistency analysis (DSO-61).
-
-#### A1.1 — `__Secure-` carve-out for cross-subdomain SSO cookie [SUPERSEDED 2026-05-18 by Amendment A2]
-
-> **Status: Superseded by Amendment A2 (DSO-63 #2).** The decision to use a shared `__Secure-ds_session` cookie on `.doctor.school` for cross-app SSO is revoked following the external architecture validation. The current model is host-only `__Host-` cookies per app + OIDC silent re-auth for cross-app continuity. See Amendment A2.
-
-**Historical content (for context):** Amendment A1.1 previously introduced a carve-out — for the SSO cookie between portal and promo a `__Secure-` prefix was allowed instead of `__Host-`. Mitigations included: SameSite=Lax, fingerprint binding, CSRF double-submit, subdomain takeover protection.
-
-**Reason for reversal (DSO-63 #2):** a shared cookie spanning trust-zone boundaries (admin/portal vs promo/marketing) makes admin security depend on the quality of the weakest subdomain. XSS or subdomain takeover under promo/docs compromises the admin session. The mitigations (fingerprint binding, CSRF) are bypassed by same-origin XSS. For a medical platform under 152-FZ this is a structural defect, not an acceptable compromise.
-
-#### A1.2 — CSP profile-per-zone (new requirement §7)
-
-**What is added:** §7 Security baseline did not previously include Content Security Policy. ADR-0004 §Context referenced "ADR-0001 §7 CSP profile-per-zone" — which reflected intent, but CSP was not actually present in §7. This amendment closes the gap.
-
-**Profiles (minimum baseline; specific `default-src`, `script-src`, `style-src`, `img-src`, `connect-src`, `frame-ancestors`, `form-action`, `report-uri` directives — frontend design spec §3.2):**
-
-| Zone                          | Profile              | Notes                                                                                                                                                           |
-| ----------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `admin.doctor.school`         | strictest            | `default-src 'self'`; no `unsafe-inline`, no `unsafe-eval`, no 3rd-party origins (including analytics); strict nonce-based script-src; `frame-ancestors 'none'` |
-| `portal.doctor.school` (app)  | standard             | `default-src 'self'`; allow Centrifugo WS endpoint, Timeweb CDN, Sentry, permitted embed origins (video providers from CMS); nonce-based scripts                |
-| `doctor.school` (promo SSG)   | relaxed              | allows analytics (Plausible self-hosted), pixel-marketing endpoints (if any); still no `unsafe-eval`; `frame-ancestors 'none'`                                  |
-| `docs.doctor.school`          | Fumadocs default     | plus our `report-uri`; no exceptions for admin/portal/promo                                                                                                     |
-| `cms.doctor.school` (Payload) | strict (admin-level) | analogous to admin; editors inside VPN/IdP only                                                                                                                 |
-
-**Cross-zone constraints:**
-
-- All profiles: `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`.
-- All profiles: CSP violations are sent to a unified `csp-report-collector` endpoint (`apps/api/`-level), written to `audit_log` + alerting in Sentry on pattern-spikes.
-- Admin zone: additionally `Permissions-Policy: geolocation=(), microphone=(), camera=()` (lock down browser API surface).
-
-**Authoritative implementation reference:** frontend design spec §3.2 + §3.2.2 (new sub-section); specific CSP directives may evolve without an amendment to this ADR (operational change), but changing zone profiles or relaxation levels requires a new amendment.
-
-**Closes:** B5 + B7 from DSO-61 consistency report.
-
-### A2 (2026-05-18, DSO-63 #2) — Host-only sessions + OIDC silent re-auth
-
-This amendment reverses A1.1 and fixes the architecturally correct model of cross-app SSO following the external validation (DSO-63).
-
-#### Context
-
-The external reviewer (Claude) raised the following High-severity finding #2: the shared `__Secure-ds_session` cookie on `.doctor.school` is incompatible with zero-trust principles between trust zones:
-
-> "Cross-subdomain `__Secure-ds_session` is an accepted downgrade. XSS or subdomain takeover anywhere under `.doctor.school` can threaten the shared session."
-
-On analysis it became clear that:
-
-- The UX rationale of A1.1 ("login state continuity between portal and promo") is solved by standard OIDC SSO (silent re-auth with `prompt=none`), without a shared cookie.
-- The A1.1 mitigations (fingerprint binding, CSRF double-submit, short TTL) do not close the root threat — same-origin XSS uses the victim's browser (matching fingerprint) and reads the cookie directly.
-- The architecture already provides two-tier JWT + IdP (§1, §6) — the base for OIDC silent re-auth is already there.
-
-#### Decision
-
-**Each app holds its own host-only session cookie:**
-
-- `portal.doctor.school` — its own `__Host-` cookie, scoped to the portal origin.
-- `admin.doctor.school` — its own `__Host-` cookie.
-- `promo.doctor.school` / root `doctor.school` — its own `__Host-` cookie (if authenticated state is required for lead forms).
-- `docs.doctor.school`, `cms.doctor.school` — their own `__Host-` cookies.
-- IdP (`auth.doctor.school`) — its own host-only session (the IdP's own DB, see ADR-0002 §3).
-
-**Cross-app login continuity is achieved via OIDC silent re-auth:**
-
-- When a user lands on subdomain X without a valid local session, app X performs a silent redirect → IdP with `prompt=none`.
-- If the user has an active IdP session (cookie on `auth.doctor.school` host-only) — IdP immediately issues an authorization code → app X exchanges it for its own app-specific session token.
-- Without an active IdP session — normal login flow.
-- UX: the user sees an instantaneous transparent redirect (≤300ms), no explicit login.
-
-**Mandatory IdP requirements** (for DSO-25 spike):
-
-- Support `prompt=none` (silent re-auth).
-- Allow multiple `redirect_uri` per OAuth client (or multiple clients, one per subdomain).
-- Cookie configured as host-only (not SameSite=None cross-site).
-
-**Authentik / Zitadel / Keycloak** all support these requirements. Amendment A2 does not narrow the IdP shortlist.
-
-#### Session security profile (consolidated — single source of truth)
-
-All cookie-based session rules live **here, in §6 + Amendment A2**. Frontend / mobile / API specs forward-reference ADR-0001 §6 instead of duplicating:
-
-- **Prefix:** `__Host-` mandatory. No `Domain` attribute. `Path=/`, `Secure`, `HttpOnly`, `SameSite=Lax` (minimum; `Strict` for admin/cms).
-- **TTL:** matches refresh-token web TTL §6 (30d web, 14d mobile).
-- **Rotation:** based on refresh-token rotation (RFC 9700), §6.
-- **CSRF protection:** double-submit pattern (cookie + header) on every state-changing API endpoint.
-- **Fingerprint binding:** UA + IP /24 + accept-language hash in session metadata; mismatch → re-auth via IdP.
-- **Force-logout:** session-store DELETE → cookie invalidated on next request.
-
-#### Frontend / mobile alignment
-
-- **frontend-stack-design §3.2.1** — rewritten under the "host-only per app + OIDC silent re-auth" model. Contains the silent-redirect UX flow.
-- **identity-auth-rbac-design §3.2** — adds a "Cross-app SSO via OIDC silent re-auth" subsection with a flow diagram.
-- **mobile-stack-design** — unchanged (mobile already uses token-based auth + Keychain/Keystore, not cookies).
-
-#### Closes
-
-- DSO-63 finding #2 (cross-subdomain `__Secure-ds_session`).
-- DSO-63 finding #3 (cookie security profile split between ADR-0001 §6 and frontend-design §3.2.1 — now single source of truth in ADR-0001 §6).
-- DSO-63 mini-F (domain naming normalization — all subdomains used as config constants).
-
-### A3 (2026-05-18, DSO-63 #5+#6) — PD lifecycle moved to ADR-0009
-
-PD lifecycle, consent management, retention, right-to-erasure — previously spread across §134-141 of this ADR + engineering-readiness §5 + data-layer-design §2.5 — are now architecturally consolidated in **ADR-0009 "PD Lifecycle, Consent, Retention, Erasure"** + the associated design spec.
-
-**Forward references:** the consent capture flow at first-login (see §9 hard cutover) uses `consent_versions` v1 from ADR-0009 §2.1. Right-to-erasure endpoints under `/me/*` — from ADR-0009 §2.2. Audit-log tombstoning compatibility — ADR-0009 §2.4.
-
-**Closes:** DSO-63 finding #5 (separate ADR for PD lifecycle), #6 (retention matrix).
-
-### A4 (2026-05-18, DSO-63 follow-up) — Step-up authentication for high-risk actions
-
-**Status:** Accepted (2026-05-18, DSO-63 follow-up / DSO-67).
-
-#### Context
-
-The base session issued after primary login (§6 + Amendment A2) carries a single security level, uniform across read and write operations of any kind. For elevated-risk actions — destructive admin operations against users (role grant/revoke, lock, erasure-execute), account-level deletion / erasure-request by the subject, payment-method change, MFA changes, initiating PD export, logout-all — that uniform level is insufficient: an attacker holding a stolen long-lived session MUST NOT be able to execute a catastrophic action immediately without fresh re-authentication.
-
-#### Decision
-
-The list of endpoint classes that require step-up is normatively fixed in **endpoint-authorization-matrix-design §8.1** (`auth: 'step-up'` declaration on `@Authz`). The step-up trigger is OIDC `prompt=login` + `acr_values=urn:ds:acr:mfa-fresh` at the IdP. After successful step-up, the IdP MUST issue an access token with an additional claim `acr=mfa-fresh` and a `mfa_fresh_at` timestamp; the fresh step-up TTL is **30 minutes** (see identity-auth-rbac-design §7.1).
-
-The backend MUST verify `acr=mfa-fresh` AND `mfa_fresh_at ≥ now − 30 min` on every endpoint with `auth: 'step-up'` via a single `StepUpGuard` middleware (see endpoint-authorization-matrix-design §8.2 + backend-core middleware checklist). On failure — `401 Unauthorized` with body `{ error: 'step_up_required', step_up_url: '<IdP authorize URL with prompt=login + acr_values + redirect_uri + state>' }`. This error contract is normative (endpoint-authz-matrix-design §8.2); frontend and mobile MUST handle it.
-
-#### Session lifetime after step-up
-
-The elevated state is a **separate claim in the access token**, not a separate session. The base session (refresh token web 30d / mobile 14d, §6) continues to exist independently: the elevated TTL of 30 min expires faster than the access-token TTL (15 min), but refreshing an access token via refresh token does NOT re-issue `acr=mfa-fresh` automatically — once the elevated window expires, the next high-risk action requires step-up again. Step-up does not extend the base session expiration.
-
-#### IdP requirements
-
-`prompt=login` + custom `acr_values` are supported by **Authentik, Zitadel, and Keycloak** — all three candidates from §8. Amendment A4 does not narrow the IdP shortlist; the requirement is added to the Phase 0 spike checklist (DSO-25).
-
-#### UX implications
-
-Frontend (portal/admin/cms) MUST intercept `401 step_up_required`, redirect to `step_up_url` without losing the current context (preserved via the `state` parameter + client-side route restoration after returning with an auth code), exchange the code for a refreshed access token, and retry the original request. Mobile follows the same flow via `ASWebAuthenticationSession` (iOS) / `Custom Tabs` (Android). A series of step-up operations within the 30-minute window does not require repeated authentication (UX-critical for the admin console).
-
-#### Audit
-
-Every step-up attempt (success + fail) MUST be written to `audit_ledger` (ADR-0003 §6, ADR-0009 §2.4 — audit class `auth.step_up.{requested,succeeded,failed}`) with fields `user_id`, `endpoint`, `acr_before`, `acr_after`, `mfa_method`, `ip`, `ua`. The full list of auth audit events — identity-auth-rbac-design §7.3.
-
-#### Forward references
-
-- **endpoint-authorization-matrix-design §8** — step-up policy, endpoint list, 401-response mechanics, `StepUpGuard` checklist.
-- **backend-core-design** — middleware stack for `auth: 'step-up'` (CI rule asserting `StepUpGuard` is present on every endpoint with an `auth: 'step-up'` declaration).
-- **identity-auth-rbac-design §7.1** — `acr=mfa-fresh` claim, TTL, MFA-elevated session.
-- **ADR-0009 §2.4** — audit class registration for step-up events.
-
-#### Closes
-
-- DSO-63 follow-up / DSO-67 — normative anchoring of step-up auth at the ADR level (previously lived in design specs only).

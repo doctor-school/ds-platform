@@ -8,11 +8,11 @@ lang: ru
 
 # ADR-0008 — DS Platform Repository Strategy + Dev Workflow
 
-**Дата:** 2026-05-15 (last amended 2026-05-19 — Amendment A3, см. §7)
-**Статус:** Accepted (+ Amendment A2 — `agent-review` check удалён; + Amendment A3 — server-side branch protection отложен до смены plan/visibility)
+**Дата:** 2026-05-19 (текущая редакция; полная история эволюции — в `git log`)
+**Статус:** Accepted
 **Связан с:** Plane DSO-31 (`fae57ab6-f09b-4a4d-9ede-9a4f1ca504c0`), milestone DSO-24
 **Design spec:** `apps/docs/content/adr/0008-repo-strategy-and-dev-workflow-design-ru.md`
-**Наследует:** ADR-0001 (Authentik/Zitadel), ADR-0002 (NestJS+BullMQ), ADR-0003 (Postgres17+Drizzle), ADR-0004 (Next.js 15+Refine), ADR-0005 (RN+Expo), ADR-0006 (Fumadocs+Keystatic+GitHub Issues), ADR-0007 (AI loop + cross-vendor reviewer + 14-step migration)
+**Наследует:** ADR-0001 (Zitadel), ADR-0002 (NestJS+BullMQ), ADR-0003 (Postgres17+Drizzle), ADR-0004 (Next.js 15+Refine), ADR-0005 (RN+Expo), ADR-0006 (Fumadocs+Keystatic+GitHub Issues), ADR-0007 (AI loop + интерактивные режимы ревью)
 
 ---
 
@@ -28,7 +28,7 @@ DSO-25..30 + DSO-60 зафиксировали технологический с
 - **CODEOWNERS bootstrap** — кто ответственен за что в Phase 0 (team-of-1+AI)
 - **Версии Node/pnpm** — pin strategy, чтобы AI-агент и человек видели одно окружение
 
-AI-stack design spec §11 уже перечислил 14 шагов AI-loop tooling (bootstrap, reviewer-agent, cost-ledger, lint guards, agents-config kill switch, branch protection). Эти шаги остаются authoritative; ADR-0008 их обрамляет: создаёт repo skeleton, в котором §11 шаги выполнимы.
+AI-stack design spec §11 уже перечислил шаги AI-loop tooling (bootstrap, lint guards, branch protection). Эти шаги остаются authoritative; ADR-0008 их обрамляет: создаёт repo skeleton, в котором §11 шаги выполнимы.
 
 **Hard requirements:**
 
@@ -67,8 +67,7 @@ ds-platform/
 ├── .nvmrc, .editorconfig, .gitignore, .gitattributes, .npmrc
 ├── .changeset/                  # release tooling state
 ├── .github/
-│   ├── workflows/{ci,agent-review,cost-ledger,release}.yml
-│   ├── agents-config.json       # kill switch (ADR-0007 §2.11)
+│   ├── workflows/{ci,release}.yml
 │   ├── CODEOWNERS
 │   ├── pull_request_template.md
 │   ├── ISSUE_TEMPLATE/{feature,bug,chore}.md
@@ -113,8 +112,6 @@ ds-platform/
 │   └── llm-utils/               # buildContext.ts и др. (ADR-0007 §2.5)
 └── tools/
     ├── agent-bootstrap.ts       # ADR-0007 §2.5
-    ├── reviewer-agent/          # workspace package (ADR-0007 §2.8)
-    ├── cost-ledger-sync.ts      # ADR-0007 §2.10
     └── lint/
         ├── spec-link-lint.ts          # ADR-0007 §2.6
         ├── ears-test-lint.ts          # ADR-0007 §2.6
@@ -124,7 +121,7 @@ ds-platform/
         └── generated-artifacts-check.ts  # ADR-0006 §7
 ```
 
-**Источник правды для layout — ADR-0006 §10.** ADR-0008 ничего не переименовывает; добавляет только root-level manifest файлы и `.github/`-skeleton. Расхождение между ADR-0003 §4 (original location: `apps/api/src/db/schema/`) и ADR-0006 §1 SSOT-row (master в `packages/db/schema/`) разрешено ADR-0003 Amendment A1: канонический master — `packages/db/schema/`, ADR-0006 §1 SSOT-row prevails; `packages/db/` enables read-only консьюмерам (`apps/admin`, `apps/cms`) ImageRecord schema без cross-app import. `apps/api/drizzle/` (миграции) остаётся unchanged per ADR-0003 §4.
+**Источник правды для layout — ADR-0006 §10.** ADR-0008 ничего не переименовывает; добавляет только root-level manifest файлы и `.github/`-skeleton. Канонический master Drizzle-схем — `packages/db/schema/` (по ADR-0006 §1 SSOT-row); `packages/db/` позволяет read-only потребителям (`apps/admin`, `apps/cms`) импортировать ImageRecord schema без cross-app import. `apps/api/drizzle/` (миграции) — без изменений.
 
 **No top-level `docs/`** — вся документация рендерится через Fumadocs из `apps/docs/content/`. Это сохраняет один SSOT для рендера и совпадает с ADR-0006 §1, §10 топологией.
 
@@ -152,28 +149,46 @@ ds-platform/
 ### 2.6 Branch strategy + protection
 
 - **Trunk-based:** `main` — единственная long-lived ветка. Feature branches `feat/DSO-NN-<slug>` или `fix/<issue-N>-<slug>` короткие, мержатся squash'ем, удаляются после merge.
-- **Repository settings** (отдельно от branch protection, через `gh api /repos/{owner}/{repo}`):
-- `allow_squash_merge: true`
-- `allow_rebase_merge: false`
-- `allow_merge_commit: false`
-- `delete_branch_on_merge: true`
-  Без этого `required_linear_history` ниже не enforce'ит squash-only — rebase merge тоже даёт linear history и ломает changesets parsing.
+- **Repository settings** (отдельно от branch protection, применяются через `gh api /repos/{owner}/{repo}`):
+  - `allow_squash_merge: true`
+  - `allow_rebase_merge: false`
+  - `allow_merge_commit: false`
+  - `delete_branch_on_merge: true`
 
-- **Branch protection rule на `main`** (admin-applied через GitHub UI или `gh api`, см. AI-stack design spec §11 step 13):
+  Эти настройки **не** платные и применены сегодня. Сами по себе они enforce'ят squash-only независимо от состояния branch protection.
 
-1.  Require pull request before merging
-2.  Require ≥1 approving review (`required_approving_review_count: 1`)
-3.  Dismiss stale reviews on new commits
-4.  Require status check `ci` — passing
-5.  Require status check `agent-review` — passing (ADR-0007 §2.8)
-6.  Require branches up-to-date before merging
-7.  Require linear history (squash-only когда merge enabled только squash)
-8.  Include administrators (Tech Lead не может byпасить себя)
-9.  No force pushes
-10. No deletions
-11. Require conversation resolution before merge
+- **Branch protection rule на `main` — target state, deferred enforcement.** GitHub Free + private repo блокирует branch-protection API с HTTP 403 (`"Upgrade to GitHub Pro or make this repository public to enable this feature"`). То же ограничение касается GitHub Rulesets. Организация `doctor-school` — на Free plan; репо — private; в Phase 0 платный upgrade не планируется. Поэтому правила ниже — **target contract**, на сервере сейчас не enforce'ятся:
+  1.  Require pull request before merging
+  2.  Require ≥1 approving review (`required_approving_review_count: 1`)
+  3.  Dismiss stale reviews on new commits
+  4.  Require status check `ci` — passing (один контекст — meta-job из §2.8)
+  5.  Require branches up-to-date before merging
+  6.  Require linear history (squash-only когда разрешён только squash)
+  7.  Include administrators (Tech Lead не может байпасить себя)
+  8.  No force pushes
+  9.  No deletions
+  10. Require conversation resolution before merge
 
-- **`agents-config.json` kill switch** (ADR-0007 §2.11) live в `.github/agents-config.json`, изменяется обычным PR + human merge.
+  Payload для применения на trigger закоммичен в `branch-protection.json` в корне репо (как документация; ни одна автоматизация его сейчас не потребляет).
+
+- **Interim (Phase 0) merge gate — process-level, не server-side.** Та же intent, другой механизм:
+
+  | Target rule                             | Phase 0 process-level substitute                                                                                                                                                      |
+  | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | 1. PR обязателен перед merge в `main`   | Convention: Tech Lead никогда не `git push origin main` напрямую; все изменения идут через PR. AGENTS.md hard rule + compliance AI-агента.                                            |
+  | 2. ≥1 approving review                  | Convention: Tech Lead читает diff перед кликом merge (single-developer flow; «self-review = read-the-diff»). При наличии второго human-ревьювера — запрашивается через PR sidebar.    |
+  | 3. Dismiss stale reviews on new commits | Вручную: Tech Lead перечитывает diff после любого push'а, следующего за ранее прочитанным состоянием.                                                                                 |
+  | 4. Required status check `ci` — passing | `gh pr merge --auto --squash` — стандартная merge-команда. GitHub держит merge до прохождения всех checks; эквивалент required-status-check семантики на single-developer happy path. |
+  | 5. Branches up-to-date before merging   | `gh pr merge --auto --squash` rebases-or-fails в зависимости от repo setting; ручной `git pull --rebase origin main` перед push — convention.                                         |
+  | 6. Linear history (squash-only)         | Enforce'ится на уровне repo settings выше — уже применено, не платно.                                                                                                                 |
+  | 7. `include administrators`             | В interim неприменимо — server-side rule нет, обходить нечего. Convention: Tech Lead не пушит в `main` напрямую даже когда технически может.                                          |
+  | 8. No force pushes / 9. No deletions    | Только convention. Hard rule Tech Lead'а: никогда `git push --force` в `main`; никогда `git push --delete origin main`. После reactivation становится server-side.                    |
+  | 10. Required conversation resolution    | Только convention — GitHub всё равно подсвечивает unresolved threads в merge button UI; Tech Lead читает перед merge.                                                                 |
+
+- **Reactivation trigger.** Target rule list из 10 пунктов применяется verbatim через `gh api PUT …/branches/main/protection` (или эквивалентный ruleset) при первом наступлении **любого** из условий:
+  - Организация `doctor-school` апгрейдится на GitHub Team или Enterprise (даёт branch protection на private repos).
+  - Репо `doctor-school/ds-platform` переводится в public (даёт branch protection на public repos на Free plan).
+  - Репо переезжает на другой forge (Forgejo / GitLab self-hosted и т.п.), где эквивалентный feature бесплатен — отдельный ADR в этом случае.
 
 ### 2.7 CODEOWNERS
 
@@ -184,7 +199,7 @@ Phase 0 (team-of-1+AI):
 *    @sidorovanthon
 ```
 
-Trigger на split: первый наём инженера. Тогда CODEOWNERS разрезается per `apps/<name>/` и `packages/<name>/`, владельцы привязываются к GitHub Teams (если будет ≥3 человека). До этого все PR ревьюит Tech Lead + reviewer-bot.
+Trigger на split: первый наём инженера. Тогда CODEOWNERS разрезается per `apps/<name>/` и `packages/<name>/`, владельцы привязываются к GitHub Teams (если будет ≥3 человека). До этого все PR ревьюит Tech Lead через интерактивные режимы ревью из ADR-0007 §2.10.
 
 ### 2.8 CI topology
 
@@ -214,8 +229,6 @@ Trigger на split: первый наём инженера. Тогда CODEOWNER
 | `spec-status-fresh`     | merged feature-PR с spec.status=Draft                                           | ADR-0007 §2.6 | WARN v1            |
 | `prior-decisions-cited` | new spec без ADR-link если категория ≠ docs-only                                | ADR-0007 §2.6 | WARN v1            |
 
-- **`agent-review.yml`** — отдельный workflow per ADR-0007 §2.8, выставляет status check `agent-review`.
-- **`cost-ledger.yml`** — weekly cron per ADR-0007 §2.10.
 - **`release.yml`** — changesets action runs on push to `main`, opens "Version Packages" PR или publishes если PR уже merged.
 - **Trigger на self-hosted runner (Timeweb):** (a) исчерпан 2000-min cloud limit два месяца подряд, (b) появилась нужда CI-job'у иметь доступ в RF-private network (deploy to staging). До любого из триггеров — cloud-only.
 
@@ -225,7 +238,7 @@ Trigger на split: первый наём инженера. Тогда CODEOWNER
 - `npm` ecosystem, root + workspace packages, weekly schedule (понедельник 03:00 UTC)
 - `github-actions` ecosystem, weekly
 - Group minor + patch updates в один PR per package-type (reduces noise)
-- Auto-merge через reviewer-bot + human (Phase 2 autonomy, ADR-0007 §2.11).
+- Ревью через те же интерактивные режимы, что и feature-PR (ADR-0007 §2.10).
 - SBOM генерация (Syft) — engineering-readiness spec §1 Pre-pilot, реализуется в follow-up; в Phase 0 CI её ещё нет (deferred trigger: first prod build).
 - Container signing (cosign) — там же, deferred trigger.
 - **Dependency freshness baseline (DSO-63 mini-G):** при repo bootstrap (step 19) — dependency freshness pass, pin exact versions в lockfile (`pnpm-lock.yaml`). **Recurring task в Plane:** quarterly dependency review (Dependabot + manual audit для major bumps + security advisories review). Это не реактивный fix-on-bump, а proactive cadence.
@@ -238,18 +251,19 @@ Pre-DSO-31 admin (Tech Lead, ≤10 минут, ручной):
 
 Phase 0 implementation steps — extends AI-stack design spec §11. Шаги 1–14 из AI-stack design spec §11 unchanged. Additional шаги (DSO-32 children или новый work-item):
 
-| Step | Action                                                                                                                                                                                                                                                                                                                                                                                                 | Output                                    |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
-| 15   | Initialise root `package.json` + `pnpm-workspace.yaml` + `turbo.json` + `tsconfig.base.json` + `.changeset/config.json` + `.editorconfig` + `.gitignore` + `.gitattributes` + `.npmrc` + `.nvmrc`                                                                                                                                                                                                      | repo bootstraps locally                   |
-| 16a  | Создать `.github/` minimal skeleton: `workflows/{ci,cost-ledger,release}.yml`, `CODEOWNERS`, `pull_request_template.md`, `ISSUE_TEMPLATE/{feature,bug,chore}.md`, `dependabot.yml`, `agents-config.json`. CI references только tools которые уже существуют (steps 1–8 AI-stack design spec §11) или skip'аются gracefully                                                                             | CI runs на первом push без `agent-review` |
-| 16b  | После AI-stack design spec §11 steps 4–5 (`packages/llm-utils/buildContext.ts` + `tools/reviewer-agent/`) — добавить `.github/workflows/agent-review.yml`                                                                                                                                                                                                                                              | reviewer-bot активируется                 |
-| 17   | Установить `simple-git-hooks` + `lint-staged` в root `package.json` + конфиг `simple-git-hooks` section                                                                                                                                                                                                                                                                                                | pre-commit работает                       |
-| 19   | Initialise empty workspace stubs: `apps/{api,promo,portal,admin,cms,docs,docs-cms,mobile}/` + `packages/{schemas,api-client,db,glossary,hooks,design-system,observability,utils,eslint-config,tsconfig,llm-utils}/` + `tools/reviewer-agent/`, каждый с минимальным `package.json` (`name: @ds/<name>`, `version: 0.0.0`, `private: true`) + опциональным per-package `turbo.json` для script-stub map | workspace discoverable                    |
-| 20   | Initialise `apps/docs/` как Fumadocs Next.js app (см. ADR-0006 §2) — ADR-контент + парные design-спеки лежат в `content/adr/`. Initialise `apps/docs-cms/` как Keystatic Next.js app (ADR-0006 §3)                                                                                                                                                                                                     | doc portal builds                         |
-| 21   | **[Manual, admin]** Apply repository settings (`allow_squash_merge=true`, `allow_rebase_merge=false`, `allow_merge_commit=false`) + branch protection rule per §2.6 через `gh api`. См. design spec §4 для точных команд                                                                                                                                                                               | merge gated, squash-only enforced         |
-| 22   | Smoke test: создать первую feature-spec (`NNN-onboarding` или подобная) и пройти 8-step cycle ADR-0007 §2.4 end-to-end                                                                                                                                                                                                                                                                                 | proof of concept                          |
+| Step | Action                                                                                                                                                                                                                                                                                                                                                             | Output                                           |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| 15   | Initialise root `package.json` + `pnpm-workspace.yaml` + `turbo.json` + `tsconfig.base.json` + `.changeset/config.json` + `.editorconfig` + `.gitignore` + `.gitattributes` + `.npmrc` + `.nvmrc`                                                                                                                                                                  | repo bootstraps locally                          |
+| 16   | Создать `.github/` minimal skeleton: `workflows/{ci,release}.yml`, `CODEOWNERS`, `pull_request_template.md`, `ISSUE_TEMPLATE/{feature,bug,chore}.md`, `dependabot.yml`. CI references только tools которые уже существуют или skip'аются gracefully                                                                                                                | CI runs на первом push                           |
+| 17   | Установить `simple-git-hooks` + `lint-staged` в root `package.json` + конфиг `simple-git-hooks` section                                                                                                                                                                                                                                                            | pre-commit работает                              |
+| 19   | Initialise empty workspace stubs: `apps/{api,promo,portal,admin,cms,docs,docs-cms,mobile}/` + `packages/{schemas,api-client,db,glossary,hooks,design-system,observability,utils,eslint-config,tsconfig}/`, каждый с минимальным `package.json` (`name: @ds/<name>`, `version: 0.0.0`, `private: true`) + опциональным per-package `turbo.json` для script-stub map | workspace discoverable                           |
+| 20   | Initialise `apps/docs/` как Fumadocs Next.js app (см. ADR-0006 §2) — ADR-контент + парные design-спеки лежат в `content/adr/`. Initialise `apps/docs-cms/` как Keystatic Next.js app (ADR-0006 §3)                                                                                                                                                                 | doc portal builds                                |
+| 21   | **[Manual, admin]** Apply repository settings (`allow_squash_merge=true`, `allow_rebase_merge=false`, `allow_merge_commit=false`, `delete_branch_on_merge=true`) через `gh api`. Закоммитить target-state branch-protection payload в `branch-protection.json` в корне репо. См. design spec §4 для точных команд и reactivation trigger (§2.6)                    | squash-only enforced; target rule документирован |
+| 22   | Smoke test: создать первую feature-spec (`NNN-onboarding` или подобная) и пройти iteration cycle ADR-0007 §2.4 end-to-end                                                                                                                                                                                                                                          | proof of concept                                 |
 
-Dependency graph: 15 → 16a → 17 → 19 параллельно с 15. 20 depends on 19. 16b depends on AI-stack design spec §11 step 5. 21 depends on 16a (branch protection требует existing CI workflow). 22 depends на всё.
+Dependency graph: 15 → 16 → 17 → 19 параллельно с 15. 20 depends on 19. 21 depends on 16. 22 depends на всё.
+
+> Step 18 намеренно отсутствует — исторический gap, исходный шаг был свёрнут в step 16 (`.github/` skeleton). Перенумерация downstream шагов не делалась, чтобы сохранить cross-refs из соседних спек (OQ-R4, AI-stack §11).
 
 Step 21 — admin-only. Step 22 — joint Tech Lead+AI.
 
@@ -259,7 +273,7 @@ Step 21 — admin-only. Step 22 — joint Tech Lead+AI.
 
 ### 2.11 Accepted risks (DSO-63 mini-#14, 2026-05-18)
 
-**GitHub vendor risk.** GitHub принят как single hub (repo + CI + issues + reviewer-bot trigger + cost-ledger PR target + agent bootstrap source). Mirror / continuity infrastructure (self-hosted Gitea/GitLab + scheduled mirror) **не строится в pre-pilot** из YAGNI-соображений.
+**GitHub vendor risk.** GitHub принят как single hub (repo + CI + issues + agent bootstrap source). Mirror / continuity infrastructure (self-hosted Gitea/GitLab + scheduled mirror) **не строится в pre-pilot** из YAGNI-соображений.
 
 **Mitigation surface для accepted risk:**
 
@@ -309,18 +323,18 @@ Step 21 — admin-only. Step 22 — joint Tech Lead+AI.
 | **DS Platform code в shared strategy + code monorepo**       | Mixed strategy/code workspace = слабая граница для AI-агента: cognitive bleed между бизнес/PRD-материалом и implementation. Выделенный application-repo держит контекст агента сфокусированным. Rejected.                             |
 | **Polyrepo** (один repo на app: ds-portal, ds-api, ds-admin) | Дублирует tooling в каждом (ESLint, TS config, CI yaml), теряет Turborepo cross-package cache, atomic refactors через ≥2 apps требуют orchestration. Phase 0 размер не оправдывает overhead. Rejected.                                |
 | **Гибрид: backend polyrepo, frontend monorepo**              | Backend = один NestJS app (ADR-0002), нет нужды в polyrepo. Rejected.                                                                                                                                                                 |
-| **Self-host Git (Gitea/Forgejo) с самого старта**            | Premature ops overhead: VPS + admin + backup + DNS + SSO с Authentik (которое само ещё не deployed). GitHub.com покрывает Phase 0 use cases без ops cost. Trigger на mirror (см. Risks): первая блокировка. Deferred.                 |
+| **Self-host Git (Gitea/Forgejo) с самого старта**            | Premature ops overhead: VPS + admin + backup + DNS + SSO с Zitadel (которое само ещё не deployed). GitHub.com покрывает Phase 0 use cases без ops cost. Trigger на mirror (см. Risks): первая блокировка. Deferred.                   |
 | **Personal account как owner** (`sidorovanthon/ds-platform`) | Personal-account-as-team anti-pattern: transfer в org позже ломает PR/Issue cross-refs (хотя redirect работает), CODEOWNERS без teams = list of usernames. Rejected.                                                                  |
 | **changesets в favour release-please** (Google project)      | release-please tighter coupled to conventional-commits (no opt-out); требует `release-please-action` который медленнее эволюционирует. changesets — incumbent for pnpm-monorepos 2026. Deferred (можно мигрировать позже без потерь). |
 | **changesets в favour semantic-release**                     | semantic-release одна version per repo, не fits multi-app independent versioning. Rejected.                                                                                                                                           |
 | **conventional-commits-only (no changesets)**                | Не поддерживает intentful version bumps (e.g., "this fix is also breaking on app-X но не на app-Y"); changeset = explicit dev statement. Rejected.                                                                                    |
 | **Husky для pre-commit**                                     | Deprecated его собственным author (typicode) 2024-09 в пользу simple-git-hooks. Использование = добавлять техдолг с момента создания. Rejected.                                                                                       |
 | **lefthook для pre-commit**                                  | Go binary как dependency: AI-агенты работают в varied CI containers (Vercel, GitHub Actions, locally) без Go runtime. Friction. Rejected.                                                                                             |
-| **GitLab CI вместо GitHub Actions**                          | Mismatch с уже-выбранным GitHub Issues (ADR-0006 §9): cross-repo refs, PR-issue auto-close, agent-review через `gh` CLI — всё построено на GitHub. Rejected.                                                                          |
+| **GitLab CI вместо GitHub Actions**                          | Mismatch с уже-выбранным GitHub Issues (ADR-0006 §9): cross-repo refs, PR-issue auto-close, `gh` CLI tooling — всё построено на GitHub. Rejected.                                                                                     |
 | **Self-hosted Forgejo Actions / Drone / Woodpecker**         | Ops overhead в Phase 0 без value (см. §2.8). Deferred trigger.                                                                                                                                                                        |
 | **GitFlow** (develop + main + release branches)              | Tooling weight для team-of-1+AI; squash-merge на main + short-lived feature branches покрывает все use-cases. Rejected.                                                                                                               |
 | **Allow merge commits + rebase merge**                       | Mixed merge styles ломают changesets parsing и AI-agent reasoning о history. Rejected.                                                                                                                                                |
-| **Optional CODEOWNERS**                                      | Без CODEOWNERS = нет автоматического PR-reviewer assignment, reviewer-bot не знает кого pинговать (хотя bot — non-human). Стартуем с минимальным `* @sidorovanthon` чтобы файл существовал. Accepted (см. §2.7).                      |
+| **Optional CODEOWNERS**                                      | Без CODEOWNERS = нет автоматического PR-reviewer assignment в GitHub UI. Стартуем с минимальным `* @sidorovanthon` чтобы файл существовал. Accepted (см. §2.7).                                                                       |
 | **GitHub Teams plan ($4/user/mo) с самого старта**           | $4/мес × 1 user = $4/мес, не cost-issue, но bringing-up без необходимости. Free plan покрывает private repo + CI 2000 min. Trigger на upgrade: исчерпан CI лимит или > 3 коллабораторов которым нужны Teams для CODEOWNERS. Deferred. |
 | **Top-level `docs/` folder в ds-platform**                   | Дублирует с `apps/docs/content/` где Fumadocs serves документацию. Два места хранения = drift risk + AI-agent не знает где master. Rejected (см. §2.3).                                                                               |
 
@@ -328,20 +342,22 @@ Step 21 — admin-only. Step 22 — joint Tech Lead+AI.
 
 ## 5. Open follow-ups (DSO-32+ и beyond)
 
-| ID     | Q                                                                                                                                                                                                                                                | Где решается                                                                               |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| OQ-R1  | Точная версия pnpm pin (10.x — какая minor)                                                                                                                                                                                                      | На момент step 15 implementation; берётся latest stable на дату                            |
-| OQ-R2  | Turborepo remote cache server (self-host vs Vercel-managed)                                                                                                                                                                                      | Phase 1 trigger: локальный кеш недостаточен (>50% CI time на cold cache)                   |
-| OQ-R3  | `tools/lint/glossary-drift.ts` импл — какой парсер MDX (gray-matter? remark?)                                                                                                                                                                    | Step 8 (AI-stack design spec §11) implementation                                           |
-| OQ-R4  | Dependabot grouping rules — все minor+patch в один PR vs per-ecosystem                                                                                                                                                                           | Step 16 implementation, calibrate после первых 4 weeks                                     |
-| OQ-R5  | Squash commit title template (по умолчанию = PR title; custom?)                                                                                                                                                                                  | Phase 1 enhancement если AI-agent тяжело парсит history                                    |
-| OQ-R6  | Phase 1 CODEOWNERS split granularity (per-app vs per-folder вглубь)                                                                                                                                                                              | На момент второго инженера hired                                                           |
-| OQ-R7  | Container signing (cosign) trigger                                                                                                                                                                                                               | First prod-build (Phase 1)                                                                 |
-| OQ-R8  | SBOM (Syft) trigger                                                                                                                                                                                                                              | Same as OQ-R7                                                                              |
-| OQ-R9  | GitHub Team plan upgrade trigger thresholds (точные min/мес)                                                                                                                                                                                     | После 2 месяцев Phase 0 telemetry                                                          |
-| OQ-R10 | Mirror на Gitea/Forgejo failover plan                                                                                                                                                                                                            | Trigger: GitHub.com sustained downtime > 24h из РФ                                         |
-| OQ-R12 | Self-host GHA runner на Timeweb — конкретный setup (k8s? plain VPS? которой версии actions/runner?)                                                                                                                                              | Trigger из §2.8; отдельный ADR на момент                                                   |
-| OQ-R13 | `packages/db/` vs `apps/api/src/db/schema/` — формальное разрешение ADR-0003 §4 ↔ ADR-0006 §1 conflict; здесь ADR-0008 фиксирует `packages/db/` per ADR-0006 как master, но требуется amendment ADR-0003 чтобы официально пометить §4 superseded | Step 19 implementation (когда первая schema создаётся); либо короткий ADR-amendment 0003-A |
+| ID     | Q                                                                                                                                                                                                                    | Где решается                                                                                                                             |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| OQ-R1  | Точная версия pnpm pin (10.x — какая minor)                                                                                                                                                                          | На момент step 15 implementation; берётся latest stable на дату                                                                          |
+| OQ-R2  | Turborepo remote cache server (self-host vs Vercel-managed)                                                                                                                                                          | Phase 1 trigger: локальный кеш недостаточен (>50% CI time на cold cache)                                                                 |
+| OQ-R3  | `tools/lint/glossary-drift.ts` импл — какой парсер MDX (gray-matter? remark?)                                                                                                                                        | Step 8 (AI-stack design spec §11) implementation                                                                                         |
+| OQ-R4  | Dependabot grouping rules — все minor+patch в один PR vs per-ecosystem                                                                                                                                               | Step 16 implementation, calibrate после первых 4 weeks                                                                                   |
+| OQ-R5  | Squash commit title template (по умолчанию = PR title; custom?)                                                                                                                                                      | Phase 1 enhancement если AI-agent тяжело парсит history                                                                                  |
+| OQ-R6  | Phase 1 CODEOWNERS split granularity (per-app vs per-folder вглубь)                                                                                                                                                  | На момент второго инженера hired                                                                                                         |
+| OQ-R7  | Container signing (cosign) trigger                                                                                                                                                                                   | First prod-build (Phase 1)                                                                                                               |
+| OQ-R8  | SBOM (Syft) trigger                                                                                                                                                                                                  | Same as OQ-R7                                                                                                                            |
+| OQ-R9  | GitHub Team plan upgrade trigger thresholds (точные min/мес)                                                                                                                                                         | После 2 месяцев Phase 0 telemetry                                                                                                        |
+| OQ-R10 | Mirror на Gitea/Forgejo failover plan                                                                                                                                                                                | Trigger: GitHub.com sustained downtime > 24h из РФ                                                                                       |
+| OQ-R12 | Self-host GHA runner на Timeweb — конкретный setup (k8s? plain VPS? которой версии actions/runner?)                                                                                                                  | Trigger из §2.8; отдельный ADR на момент                                                                                                 |
+| OQ-R13 | `packages/db/` vs `apps/api/src/db/schema/` — формальное разрешение ADR-0003 §4 ↔ ADR-0006 §1 conflict                                                                                                               | **CLOSED** — ADR-0003 §4 теперь читает `packages/db/schema/` как канонический master, в согласии с ADR-0006 §1                           |
+| OQ-R14 | Reactivation discipline owner — когда срабатывает trigger §2.6 (org upgrade или смена visibility репозитория), кто отвечает за re-apply полного branch-protection контракта?                                         | Default owner: Tech Lead. Трекается под той же Plane issue, что обрабатывает trigger event.                                              |
+| OQ-R15 | Периодический process-level аудит compliance с merge-gate intent — нужен ли регулярный (ежемесячный?) self-audit, подтверждающий, что merges Tech Lead'а реально удовлетворили §2.6 intent (CI green, diff прочитан) | Deferred — добавляет overhead без очевидной ценности в single-developer Phase 0; пересмотреть при найме второго инженера (OQ-R6 trigger) |
 
 ---
 
@@ -349,16 +365,16 @@ Step 21 — admin-only. Step 22 — joint Tech Lead+AI.
 
 **Наследуется от:**
 
-- ADR-0001 — Authentik/Zitadel: SSO для GitHub.com не нужен в Phase 0 (Enterprise plan only); решение revisit при росте команды.
+- ADR-0001 — Zitadel: SSO для GitHub.com не нужен в Phase 0 (Enterprise plan only); решение revisit при росте команды.
 - ADR-0002 §6 — BullMQ async queue: живёт как часть `apps/api/`.
 - ADR-0002 §3-5 — Zod schemas + openapi-typescript: `packages/schemas/` + `packages/api-client/` (последний — generated артефакт).
-- ADR-0003 §4 (Drizzle ORM + drizzle-kit migrations) + §7 (pgvector): Drizzle schemas в `packages/db/schema/` per ADR-0003 Amendment A1 (supersedes §4 original location); миграции в `apps/api/drizzle/` per ADR-0003 §4.
+- ADR-0003 §4 (Drizzle ORM + drizzle-kit migrations) + §7 (pgvector): Drizzle schemas в `packages/db/schema/`; миграции в `apps/api/drizzle/`.
 - ADR-0004 §2 — 4 frontend apps: promo, portal, admin, cms (Payload v3). Все в `apps/`.
 - ADR-0004 §7 — Payload v3 content-only: `apps/cms/`, marketing-content в `cms.*` schema namespace shared Postgres.
 - ADR-0004 §13 — ESLint `no-vercel-only-api` rule: `packages/eslint-config/` экспортирует.
 - ADR-0005 — RN/Expo mobile: `apps/mobile/` workspace, отдельный build с Expo EAS.
 - ADR-0006 §1, §2, §3, §9 — doc topology, Fumadocs, Keystatic, task-tracker split: все воплощаются в layout §2.3.
-- ADR-0007 §2.5, §2.6, §2.8, §2.10, §2.11 — bootstrap, drift guards, reviewer-bot, cost-ledger, kill switch; AI-stack design spec §11 — 14-step migration plan: воплощается в `tools/` + `.github/workflows/` + `.github/agents-config.json`.
+- ADR-0007 §2.5, §2.6, §2.10 — bootstrap, lint drift guards, autonomy ladder (интерактивные режимы ревью); AI-stack design spec §11 — migration plan: воплощается в `tools/` + `.github/workflows/`.
 
 **Делегировано в другие задачи:**
 
@@ -375,97 +391,3 @@ Step 21 — admin-only. Step 22 — joint Tech Lead+AI.
 - **Все feature-specs DS Platform** — живут в `apps/docs/content/specs/features/NNN-<slug>/` (фиксируется §2.3).
 - **AGENTS.md + CLAUDE.md в `ds-platform`** — bootstraps из §2.10 step 11 (AI-stack design spec §11), включают reference на этот ADR-0008 в "Repository conventions" section.
 - **Engineering-readiness spec** (`../specs/tech/2026-05-12-engineering-readiness-design-ru.md`) — runtime tooling decisions inherited; референсируется из README.md ds-platform.
-
----
-
-## 7. Amendments
-
-### Amendment A2 — Branch protection simplified — remove agent-review check (2026-05-19, follow-up to ADR-0007 Amendment A1)
-
-**Контекст:** ADR-0007 Amendment A1 (2026-05-19) drop'ает automated cross-vendor reviewer-bot (`tools/reviewer-agent/` + `.github/workflows/agent-review.yml` не реализуются в Phase 0). Status check `agent-review`, исходно требуемый ADR-0008 §2.6 branch protection rule item 5, теперь **без producer'а**. Required status check без producer'а будет блокировать все merge'и в `main` бессрочно.
-
-**Решение (амендмент):**
-
-**A2.1 — §2.6 branch protection rule item 5 убран.** Пункт, который читался:
-
-> 5. Require status check `agent-review` — passing (ADR-0007 §2.8)
-
-**убран** из списка §2.6 branch protection.
-
-**A2.2 — Required status checks list сведён к `[ci]`.** Branch protection rule на `main` теперь требует ровно один status check context: `ci` (мета-job из §2.8, зависящий от всех blocking sub-job'ов). Context `agent-review` **не** в required-листе.
-
-**A2.3 — Остальные пункты без изменений.** Все остальные §2.6 branch protection items остаются в силе: PR обязателен, ≥1 approving review, dismiss stale reviews on new commits, branches up-to-date before merge, linear history, include administrators, no force pushes, no deletions, require conversation resolution.
-
-**Consequences:**
-
-- Вызов `gh api` в repo-strategy design spec §4.2 (применяющий branch protection через `gh api PUT /repos/{owner}/{repo}/branches/main/protection`) требует **убрать** строку `required_status_checks[contexts][]=agent-review` до выполнения в G10 Phase A orchestration plan.
-- **Plane sub-issues description-updated** — DSP-180 (Step 13: branch protection apply) и DSP-189 (Step 21: repo settings + protection) — описания должны отразить новый контракт `required_status_checks = [ci]`.
-- Семантика merge gate с точки зрения человека не меняется: CI green + ≥1 human approval. Амендмент только убирает required check, чей producer удалён ADR-0007 Amendment A1.
-
-**Why now (timing):** Branch protection **ещё не применён** (G10 — manual gate, не выполнен). Правка списка правил сейчас стоит ≤1 минуты (text edit). Правка после применения потребует пере-запуска `gh api` вызова.
-
-**Open follow-up:** нет — это механический follow-up к ADR-0007 Amendment A1 без дальнейших unknowns.
-
-**Affects (downstream):**
-
-- ADR-0007 §2.6 строка «cross-vendor review visited» уже SUPERSEDED через ADR-0007 Amendment A1 — она ссылалась на тот же status check `agent-review`.
-- Repo-strategy design spec §4.2 — параметры `gh api` invocation должны убрать context `agent-review`.
-- Plane DSP-180, DSP-189 — обновления описаний (отдельная Plane-работа).
-
-### Amendment A3 — Server-side branch protection отложен (GitHub Free + private блокирует enforcement) (2026-05-19)
-
-**Контекст:** Когда G10 Phase A orchestration plan попытался применить branch protection на `doctor-school/ds-platform` через `gh api PUT /repos/{owner}/{repo}/branches/main/protection` (список правил §2.6, после A2), GitHub вернул HTTP 403: `"Upgrade to GitHub Pro or make this repository public to enable this feature"`. Тот же paywall применяется и к GitHub Rulesets (более новый ruleset API тоже 403'ит на private-репо в Free-plan org'е). Организация `doctor-school` — на GitHub Free plan; репо приватный (per §2 «Repository: private до Pre-pilot launch»). Tech Lead решил: **никаких платных апгрейдов в Phase 0**.
-
-Это делает весь rule-list §2.6 — required status checks, required approving review, dismiss stale reviews, linear history, conversation resolution, `include administrators`, force-push prevention, deletion prevention — **неприменимым как server-side enforcement** до тех пор, пока (a) org plan не апгрейдится (Team/Enterprise) или (b) репо не станет public. Payload `gh api` сам по себе технически корректен (проверен в G10 dry-run); GitHub просто отказывается ставить protection rule на этот репо в этом billing-тиере.
-
-**Решение (амендмент):**
-
-**A3.1 — §2.6 переформулирован как _target state_, не current state.** 8-item rule list в §2.6 (post-A2: 7 items, без `agent-review`) сохраняется дословно как **target branch-protection contract**, который будет применён, когда сработает reactivation trigger. Это не текущее operational state.
-
-**A3.2 — Interim (Phase 0) merge gate — _process-level_, не server-side.** Пока §2.6 нельзя enforce'ить server-side, тот же merge-gate intent сохраняется через local + convention-level substitute'ы:
-
-| §2.6 target rule (post-A2)                          | Phase 0 process-level substitute                                                                                                                                                                                                                                                                                  |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. PR required до merge в `main`                    | Convention: Tech Lead никогда не делает `git push origin main` напрямую; все изменения через PR. Нет технического блока — опирается на AGENTS.md hard rule + AI-agent compliance.                                                                                                                                 |
-| 2. ≥1 approving review                              | Convention: Tech Lead читает diff перед нажатием merge (single-developer flow; «self-review = read-the-diff»). Когда доступен второй человек — запрашивается через PR sidebar; не enforce'ится.                                                                                                                   |
-| 3. Dismiss stale reviews on new commits             | Manual: Tech Lead перечитывает diff после любого push'а после прежнего чтения. Только convention.                                                                                                                                                                                                                 |
-| 4. Required status check `ci` — passing             | `gh pr merge --auto --squash` — стандартная команда merge (см. AGENTS.md). GitHub держит merge до прохождения всех check'ов; эквивалентно семантике required-status-check для single-developer happy path. CI всё равно прогоняется на каждом PR и виден в check-runs UI.                                         |
-| 5. Branches up-to-date перед merge (`strict: true`) | `gh pr merge --auto --squash` ребейзит-или-падает в зависимости от repo-setting; ручной `git pull --rebase origin main` перед push — convention.                                                                                                                                                                  |
-| 6. Linear history (squash-only)                     | Enforce'ится на repo-level через «Allow squash merging» + disable merge-commits + disable rebase-merge в `Settings → General → Pull Requests` (это **не** branch protection и **не** paywall'ится; применяется в рамках A3 closure).                                                                              |
-| 7. `include administrators`                         | Не применимо в interim — нет server-side rule, который можно bypass'ить. Convention: Tech Lead не push'ит в `main` напрямую, даже когда технически может.                                                                                                                                                         |
-| 8. No force pushes / no deletions                   | Только convention. G3 поставил simple-git-hooks (pre-commit + lint-staged) — pre-push hook'а нет; force-push и branch-delete технически не блокируются. Hard rule Tech Lead'а: никогда не `git push --force` против `main`; никогда не `git push --delete origin main`. Reactivation переводит это в server-side. |
-| 9. Required conversation resolution                 | Только convention — GitHub всё равно показывает unresolved threads в merge-button UI; Tech Lead читает перед merge.                                                                                                                                                                                               |
-
-**A3.3 — Lint guards (ADR-0007 §2.6 BLOCK/WARN table) семантика под interim.** Строки `BLOCK` в ADR-0007 §2.6 предполагают required `ci` status check, который hard-rejects merge. Под A3 `BLOCK` означает **CI job выходит red, и Tech Lead трактует это как merge-blocker по convention'у** — тот же operational outcome на single-developer happy path, без server-side гарантии. См. footnote к ADR-0007 §2.6 (добавлен в том же change set, что и этот amendment) для явного уточнения.
-
-**A3.4 — Reactivation trigger.** Rule-list §2.6 (post-A2: 7 items) применяется дословно через `gh api PUT …/branches/main/protection` (или эквивалентный ruleset) в первый раз, когда становится истинным **любое** из условий:
-
-- Org `doctor-school` апгрейдится до GitHub Team или Enterprise plan (даёт branch protection на private-репо).
-- Репо `doctor-school/ds-platform` становится public (даёт branch protection на public-репо на Free plan).
-- Репо мигрирует на другой forge (Forgejo / GitLab self-hosted и т.д.), где эквивалентная фича бесплатна — отдельный ADR, если это произойдёт.
-
-Payload для применения на trigger закоммичен в `branch-protection.json` в корне репо (хранится в дереве как документация; не consumed никакой текущей automation).
-
-**Consequences:**
-
-- **Нормативный статус §2.6:** target-state contract, не current state. Implementer'ы и reviewer'ы не должны предполагать, что какой-либо item §2.6 в данный момент enforce'ится server-side на `main`.
-- **Merge-gate семантика для человека:** не меняется по **intent'у** (CI green + human read-the-diff до merge); меняется по **mechanism'у** (нет server-side block; convention + `gh pr merge --auto`).
-- **`enforce_admins: true` семантика теряется в interim.** Когда §2.6 reactivate'ится, Tech Lead намеренно не exempt; пока этого нет, нет и admin-bypass'а, о котором можно беспокоиться, потому что нет правила.
-- **G10 Phase A orchestration plan переклассифицирован.** Изначально «Apply branch protection». Теперь: «Apply repo settings (squash-only merge, auto-delete head branches) + document reactivation trigger.» Plane DSP-180 / DSP-189 cancelled с reactivation trigger в комментарии (см. Plane). Новой pre-push инструментации в interim не вводим — существующий G3 pre-commit hook (simple-git-hooks + lint-staged на staged-файлах) + `gh pr merge --auto --squash` покрывают intent merge-gate'а без дублирования CI локально.
-- **AGENTS.md обновлён** в том же change set: `gh pr merge --auto --squash` зафиксирован как стандартная merge-команда; Tech Lead human-merge gate сделан явным.
-- **Audit trail не затронут.** Git history + GitHub PR record + Plane work-item history остаются audit surface; A3 не меняет что записывается, только что _enforce'ится_.
-
-**Why now (timing):** G10 вскрыл paywall во время dry-run. Применить §2.6 невозможно; переклассифицировать — 30-минутный amendment, который предотвращает обращение будущих agent'ов к §2.6 как к current operational truth и трату циклов на повторные попытки применения. Дёшево amend'ить сейчас; дорого оставлять silently сломанным.
-
-**Open follow-up:**
-
-- **OQ-R15 (reactivation discipline).** Когда trigger срабатывает, кто отвечает за re-application §2.6? Default owner: Tech Lead. Трекается под той же Plane-задачей, которая обрабатывает trigger event (org upgrade или repo visibility change).
-- **OQ-R16 (process-level audit).** Есть ли смысл в периодическом (раз в месяц?) self-audit, что недавние merge'и Tech Lead'а реально удовлетворили intent §2.6 (CI был зелёный, diff прочитан)? Deferred — добавляет overhead без очевидного value в single-developer Phase 0.
-
-**Affects (downstream):**
-
-- ADR-0007 §2.6 BLOCK/WARN table — footnote добавлен, уточняющий interim семантику (см. update ADR-0007 в том же change set).
-- AGENTS.md root — добавлен interim merge-flow section.
-- Plane DSP-180 и DSP-189 — Cancelled с reactivation trigger в комментариях.
-- Repo-strategy design spec §4.2 — добавлен Amendment SD3, зеркалирующий A3 (snippet `gh api` сохраняется как target-state payload; не удаляется).
-- `branch-protection.json` в корне репо — закоммичен как дословный target-state payload, готовый к применению на trigger.

@@ -8,7 +8,7 @@ lang: ru
 
 # ADR-0003 — Data Layer Stack (Primary DB / ORM / Migrations / Policy engine / FTS / Vector / Cache) для DS Platform
 
-**Дата:** 2026-05-13; последняя правка 2026-05-18 (Amendment A2, DSO-63 #10)
+**Дата:** 2026-05-18 (текущая редакция; полная история эволюции — в `git log`)
 **Статус:** Accepted
 **Связан с:** Plane DSO-27 (`bb877d3b-e922-4d8d-8e7b-9b33b4c941ee`), milestone DSO-24, DSO-63 (внешняя валидация)
 **Design spec:** `apps/docs/content/adr/0003-data-layer-stack-design-ru.md`
@@ -43,7 +43,19 @@ ADR-0002 наследует: outbox pattern для cross-system event emit (де
 - Реляционная, single-engine, single-node v1.
 - Self-hosted (не managed) — extensions без провайдер-переговоров (pgvector, `pg_cron`, logical replication, любой кастом для DSO-30); 152-ФЗ — меньше data-processors; cost saving 60-180k ₽/год; vendor-неутрально.
 - Версия 17 — лучшая logical replication (для будущего ClickHouse fan-out), incremental backups, vacuum memory-efficient, JSON_TABLE, extensions compatibility подтверждена.
-- Backup: канонизированная топология (см. Amendment A2/§B + data-layer-design §2.4): pgbackrest daily full + 15-min WAL → **Timeweb Object Storage primary** (30d retention) + **Beget S3 offsite cold copy** (90d retention, weekly sync) + **encryption keys в Vault на отдельной VM** (separation of custody) + quarterly restore drill в operational runbook.
+- Backup: каноническая топология (полные детали — data-layer-design §2.4) — same-provider backup не даёт disaster isolation, поэтому backups распределены между двумя RF S3-провайдерами + независимое key-custody:
+
+| Слой                         | Локация                                                       | Retention                                   | Цель                              |
+| ---------------------------- | ------------------------------------------------------------- | ------------------------------------------- | --------------------------------- |
+| PITR / streaming WAL         | Timeweb Object Storage (primary RF)                           | 7-30d                                       | RPO ≤15min                        |
+| Daily full backups           | Timeweb Object Storage                                        | 30d                                         | RTO ≤2h                           |
+| **Weekly offsite cold copy** | **Beget S3** (RF, отдельный provider, отдельный legal entity) | 90d                                         | provider-level disaster isolation |
+| Quarterly archive            | Beget S3                                                      | 1y (или per retention matrix ADR-0009 §2.6) | long-term compliance              |
+| **Encryption keys**          | Vault на отдельной VM (не Timeweb и не Beget)                 | —                                           | separation of custody             |
+| **Restore drill**            | Quarterly, документировано в operational runbook (DSO-10)     | —                                           | RTO validation                    |
+
+Crypto-shred compatibility: per-subject DEK ключи (ADR-0009 §5) хранятся в Vault. При erasure request — zeroization DEK → encrypted PD в backup'ах становится нечитаемым immediately. KEK rotation quarterly уничтожает старые KEKs → 90d offsite retention обеспечивает de facto erasure within 152-ФЗ SLA (30d).
+
 - RTO/RPO v1: ≤2 часа / ≤15 мин.
 
 **Отвергнуто:**
@@ -75,7 +87,7 @@ Retention duration **не зафиксирован в этом ADR** — это 
 
 - TS schema как single source of truth, doc-as-SSOT принцип.
 - pgvector first-class (`vector(...)` type из коробки).
-- Schema-файлы по доменам в `packages/db/schema/` (см. Amendment A1 ниже; ранее в `apps/api/src/db/schema/` — superseded ADR-0006 §1 SSOT-table + ADR-0008 §2.3).
+- Schema-файлы по доменам в `packages/db/schema/` — общая SSOT для всей платформы (ADR-0006 §1 SSOT-table + ADR-0008 §2.3), так read-only потребители (`apps/admin`, `apps/cms`, mobile sync) импортируют типы без cross-app boundary violation. Все PD-bearing таблицы (`consent_*`, `data_export_requests`, `erasure_requests`, `idempotency_keys`, `job_outbox`, `subject_keys` по ADR-0009 §5) живут здесь. drizzle-kit конфиг в `packages/db/drizzle.config.ts` указывает `out: '../../apps/api/drizzle'` — миграционная директория остаётся `apps/api/drizzle/`.
 - drizzle-kit generate → SQL-diff-файлы в `apps/api/drizzle/`, human-editable для сложных миграций (concurrent index, partition manipulation, RLS).
 - В CI — migration dry-run против staging БД перед merge.
 
@@ -129,17 +141,32 @@ Retention duration **не зафиксирован в этом ADR** — это 
 
 **Триггер на Qdrant standalone:** vector count >5M или ANN p95 >100ms.
 
-### 8. Cache: **один Redis 7+ instance с Redis responsibilities matrix** (расширено Amendment A2/§A, 2026-05-18)
+### 8. Cache: **один Redis 7+ instance с явной матрицей ответственностей**
 
-См. **Amendment A2/§A** и `data-layer-design §8` для полной матрицы. Краткий вид:
+Один Redis, обслуживающий cache + sessions + idempotency + rate-limit + queues одновременно, — это multi-purpose SPOF: падение Redis ломает auth, idempotency и очереди разом. Критичные данные (idempotency keys, critical jobs) не должны зависеть от volatile cache. Поэтому ответственности разнесены по durability-классам:
 
-- **В Redis** (volatile): application cache (`cache:`), rate limiting (`rl:`), OIDC nonces/PKCE (`oidc:`, TTL ≤5min), non-critical BullMQ jobs (`bull:`), JWKS cache (`jwks:`), introspection cache (`intro:` TTL 60s).
-- **В Postgres** (durable, DSO-63 #10): idempotency keys (UNIQUE constraint), critical jobs (outbox pattern → BullMQ worker), audit_ledger, all PD per ADR-0009.
-- **Не в Redis после ADR-0001 Amendment A2:** session state — живёт у IdP (auth.doctor.school), не в нашем Redis.
+| Concern                                        | Storage                                     | Durability  | Failure behavior                       |
+| ---------------------------------------------- | ------------------------------------------- | ----------- | -------------------------------------- |
+| Application cache (`cache:`)                   | Redis                                       | volatile    | Re-fetch из Postgres                   |
+| Rate limiting (`rl:`)                          | Redis                                       | volatile    | Reset window (acceptable)              |
+| OIDC nonces / PKCE (`oidc:`)                   | Redis (TTL ≤5min)                           | volatile    | Re-issue (acceptable)                  |
+| JWKS cache (`jwks:`)                           | Redis (TTL 10min)                           | volatile    | Re-fetch (acceptable)                  |
+| Introspection cache (`intro:`)                 | Redis (TTL 60s)                             | volatile    | Re-fetch (acceptable)                  |
+| **Idempotency keys**                           | **Postgres** (UNIQUE constraint)            | durable     | n/a                                    |
+| **Critical jobs**                              | **Postgres outbox** → BullMQ worker         | durable     | Replay from outbox после Redis restart |
+| Non-critical jobs (email send, webhook fanout) | BullMQ (Redis) + retry policy               | best-effort | At-least-once retry                    |
+| **Session state**                              | **IdP** (по ADR-0001 §6 — не в нашем Redis) | IdP's DB    | IdP handles                            |
 
-**Persistence v1:** AOF `appendonly yes appendfsync everysec` + daily RDB → backup в Timeweb Object Storage. Per-namespace eviction policy: `allkeys-lru` для cache namespace, `noeviction` для idempotency/queue namespaces.
+**Schema impact:**
 
-**HA-триггер pre-pilot (изменено по DSO-63 #10):** Redis Sentinel / managed HA активируется ПРИ ЛИБО `>1000 active users` ЛИБО `>1 unplanned restart за месяц` (не ждём v2). Cluster mode — v3 (memory >32GB или throughput >50k ops/s).
+- Таблица `idempotency_keys (key text PRIMARY KEY, scope text, created_at timestamptz, expires_at timestamptz)` в `packages/db/schema/` — TTL через cron cleanup.
+- Таблица `job_outbox (id uuid PK, kind text, payload jsonb, status text, created_at, claimed_at, completed_at, attempt int)` для critical jobs.
+- BullMQ драйнер читает `job_outbox` для critical job kinds; non-critical jobs шлются напрямую в BullMQ.
+- Queue contract, имена очередей, idempotency-key policy, classification critical vs non-critical — см. `2026-05-18-ds-platform-bullmq-queue-contract-design`.
+
+**Persistence v1:** AOF `appendonly yes appendfsync everysec` + daily RDB → backup в Timeweb Object Storage. Per-namespace eviction policy: `allkeys-lru` для cache namespace, `noeviction` для idempotency/queue namespaces. Health check + alerting обязательны pre-pilot.
+
+**HA-триггер pre-pilot:** Redis Sentinel / managed HA активируется ПРИ ЛИБО `>1000 active users` ЛИБО `>1 unplanned restart за месяц` (не ждём v2). Cluster mode — v3 (memory >32GB или throughput >50k ops/s).
 
 ### 9. Cluster topology v1 — lifted to ADR-0012
 
@@ -211,95 +238,3 @@ Data-layer-relevant параметры, которые ADR-0012 наследуе
 - **Right-to-erasure flow + consent management** — **ADR-0009 «PD Lifecycle, Consent, Retention, Erasure»** (2026-05-18, DSO-63 #5+#6) фиксирует архитектуру: consent_versions/acceptances/withdrawals + three erasure levels + per-subject crypto-shred. Реализация — design spec ADR-0009.
 - **DSO-30 (AI runtime)** наследует pgvector decision; конкретные embeddings-модели — в DSO-30.
 - **Frontend / Mobile** — DSO-28 / DSO-29 могут стартовать параллельно.
-
----
-
-## Amendments
-
-### A1 (2026-05-15, DSO-61) — Schema master location → `packages/db/`
-
-**Что меняется:** §4 location для Drizzle TS schemas — `apps/api/src/db/schema/` → `packages/db/schema/`. Миграции (`apps/api/drizzle/`) — без изменений.
-
-**Почему:** ADR-0006 §1 SSOT-table и ADR-0008 §2.3 (более поздние решения) формируют общую SSOT-таблицу для всей платформы и помещают schema-master в shared `packages/db/`. Это enables read-only консьюмерам (`apps/admin`, `apps/cms`, mobile sync) импортировать types без cross-app boundary violation. ADR-0003 §4 location был зафиксирован до того, как ADR-0006 ввёл SSOT-table; OQ-R13 в ADR-0008 явно отметил необходимость этой поправки.
-
-**Что обновлено:** §4 inline-note; data-layer design spec (`0003-data-layer-stack-design-ru.md`) обновляется в том же коммите — все упоминания `apps/api/src/db/schema/` → `packages/db/schema/`; pre-commit hook на ERD генерирует `packages/db/erd.svg` и `packages/db/README.md` вместо `apps/api/src/db/README.md`.
-
-**Что НЕ меняется:** §4 миграционная директория — остаётся `apps/api/drizzle/` (см. ADR-0008 §2.3). drizzle-kit конфиг в `packages/db/drizzle.config.ts` указывает `out: '../../apps/api/drizzle'`.
-
-**Closes:** OQ-R13 (ADR-0008 §Open follow-ups).
-
-### A2 (2026-05-18, DSO-63 #9+#10) — Redis responsibilities matrix + canonical backup topology
-
-Amendment устраняет два архитектурных gap'а из внешней валидации (DSO-63): Redis SPOF (multi-purpose без явной классификации durability) и backup topology inconsistency между data-layer-design §2.4 (Timeweb) и engineering-readiness §4 (offsite at another provider).
-
-#### A2/§A — Redis responsibilities matrix
-
-ADR-0003 §8 ранее описывал «один Redis для cache, sessions, idempotency, rate limit, BullMQ» — это **multi-purpose SPOF**: падение Redis ломает auth (sessions), idempotency, очереди. Внешний валидатор справедливо указал, что критичные данные (idempotency keys, critical jobs) не должны зависеть от volatile cache.
-
-**Решение:** разнесение по durability-classes.
-
-| Concern                                        | Storage                                            | Durability  | Failure behavior                       |
-| ---------------------------------------------- | -------------------------------------------------- | ----------- | -------------------------------------- |
-| Application cache (`cache:`)                   | Redis                                              | volatile    | Re-fetch из Postgres                   |
-| Rate limiting (`rl:`)                          | Redis                                              | volatile    | Reset window (acceptable)              |
-| OIDC nonces / PKCE (`oidc:`)                   | Redis (TTL ≤5min)                                  | volatile    | Re-issue (acceptable)                  |
-| JWKS cache (`jwks:`)                           | Redis (TTL 10min)                                  | volatile    | Re-fetch (acceptable)                  |
-| Introspection cache (`intro:`)                 | Redis (TTL 60s)                                    | volatile    | Re-fetch (acceptable)                  |
-| **Idempotency keys**                           | **Postgres** (UNIQUE constraint)                   | durable     | n/a                                    |
-| **Critical jobs**                              | **Postgres outbox** → BullMQ worker                | durable     | Replay from outbox после Redis restart |
-| Non-critical jobs (email send, webhook fanout) | BullMQ (Redis) + retry policy                      | best-effort | At-least-once retry                    |
-| **Session state**                              | **IdP** (после ADR-0001 Amendment A2 — не в Redis) | IdP's DB    | IdP handles                            |
-
-**Что меняется в коде/схеме:**
-
-- Новая таблица `idempotency_keys (key text PRIMARY KEY, scope text, created_at timestamptz, expires_at timestamptz)` в `packages/db/schema/` — TTL через cron cleanup.
-- Новая таблица `job_outbox (id uuid PK, kind text, payload jsonb, status text, created_at, claimed_at, completed_at, attempt int)` для critical jobs.
-- BullMQ драйнер читает `job_outbox` для critical job kinds; non-critical jobs шлются напрямую в BullMQ.
-- Forward-ref: queue contract, имена очередей, idempotency-keys policy, classification critical vs non-critical — см. `2026-05-18-ds-platform-bullmq-queue-contract-design`.
-- Сессии больше не хранятся в Redis (ADR-0001 Amendment A2 переносит state в IdP).
-
-**Redis ops baseline (mandatory pre-pilot):**
-
-- `appendonly yes`, `appendfsync everysec` (AOF persistence).
-- Daily RDB snapshot → Timeweb Object Storage backup.
-- `maxmemory-policy` per-namespace: `allkeys-lru` для cache, `noeviction` для idempotency/queue.
-- Health check + alerting.
-
-**HA trigger (изменён, pre-pilot):** Sentinel / managed HA активируется ПРИ ЛИБО `>1000 active users` ЛИБО `>1 unplanned restart за месяц`. До этого — single-node + AOF + daily backup acceptable.
-
-**Закрывает:** DSO-63 finding #10.
-
-#### A2/§B — Canonical backup topology (Timeweb + Beget S3 + Vault)
-
-ADR-0003 §1 и data-layer-design §2.4 ранее говорили «pgbackrest → Timeweb Object Storage», engineering-readiness §4 — «offsite at another provider». Inconsistency. Same-provider backup не даёт disaster isolation (Timeweb-level outage / банкротство / regulatory block уносит и primary, и backup).
-
-**Канонизированная топология:**
-
-| Слой                         | Локация                                                       | Retention                                   | Цель                              |
-| ---------------------------- | ------------------------------------------------------------- | ------------------------------------------- | --------------------------------- |
-| PITR / streaming WAL         | Timeweb Object Storage (primary RF)                           | 7-30d                                       | RPO ≤15min                        |
-| Daily full backups           | Timeweb Object Storage                                        | 30d                                         | RTO ≤2h                           |
-| **Weekly offsite cold copy** | **Beget S3** (RF, отдельный provider, отдельный legal entity) | 90d                                         | provider-level disaster isolation |
-| Quarterly archive            | Beget S3                                                      | 1y (или per retention matrix ADR-0009 §2.6) | long-term compliance              |
-| **Encryption keys**          | Vault на отдельной VM (не Timeweb и не Beget)                 | —                                           | separation of custody             |
-| **Restore drill**            | Quarterly, документировано в operational runbook (DSO-10)     | —                                           | RTO validation                    |
-
-**Why Beget specifically:** RF, S3-compatible, отдельная legal entity (нет аффилиации с Timeweb), уже выбран как DNS provider ([[reference_beget_dns]]).
-
-**Crypto-shred compatibility:** per-subject DEK ключи (ADR-0009 §5) хранятся в Vault. При erasure request — zeroization DEK → encrypted PD в backup'ах становится нечитаемым immediately. KEK rotation quarterly уничтожает старые KEKs → 90d offsite retention обеспечивает de facto erasure within 152-ФЗ SLA (30d).
-
-**Что обновляется:**
-
-- `data-layer-design §2.4` — расширяется до полной топологии (single source of truth).
-- `engineering-readiness §4` — заменяется forward-ref'ом на data-layer-design §2.4.
-- Operational runbook для restore drill — DSO-задача под DSO-10.
-
-**Закрывает:** DSO-63 finding #9.
-
-### A3 (2026-05-18, DSO-63 #5+#6, #I) — Schema location reaffirmed + PD lifecycle linkage
-
-**A3/§A — Schema location** (mini-I, DSO-63): подтверждаем Amendment A1 — все PD-bearing schemas, включая `consent_*`, `data_export_requests`, `erasure_requests`, `idempotency_keys`, `job_outbox`, `subject_keys` (см. ADR-0009 §5) — живут в `packages/db/schema/`. `apps/api` импортирует. Снимает OQ-R13 definitively.
-
-**A3/§B — Forward-refs на ADR-0009:** retention matrix (DSO-63 #6 → ADR-0009 §2.6), erasure semantics (ADR-0009 §2.3), audit_ledger tombstoning compatibility (ADR-0009 §2.4), backup erasure через crypto-shred (ADR-0009 §2.5 + Amendment A2/§B этого ADR).
-
-**Closes:** DSO-63 findings #5, #6 (на стороне data-layer ADR) + mini-I.

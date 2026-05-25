@@ -57,7 +57,7 @@ Dependabot branches (`dependabot/...`) — leave as-is, do not rename.
 
 **PR template required** — set label (`feature` / `bug` / `chore` / `refactor` / `docs` / `tooling`), link Issue (`Closes #N`), mark author (`author:claude` / `author:codex` / `author:human`).
 
-**Branch protection.** Target-state contract (ADR-0008 §2.6) is enforced by convention + local hooks during Phase 0; server-side enforcement is deferred per ADR-0008 Amendment A3 (GitHub Free + private repo blocks the branch-protection API). Verbatim payload at `branch-protection.json`. See ADR-0008 §2.6 + A3 for the full contract and reactivation trigger.
+**Branch protection.** Target-state contract (ADR-0008 §2.6) is enforced by convention + local hooks during Phase 0; server-side enforcement is deferred — GitHub Free + private repo blocks the branch-protection API. Verbatim payload at `branch-protection.json`. See ADR-0008 §2.6 for the full contract, the interim process-level substitutes, and the reactivation trigger.
 
 **Merge command (single, mandatory):**
 
@@ -89,7 +89,7 @@ Every agent session, regardless of vendor, follows this three-step entry — **i
 | ----------------- | ------------------------------------------------------------- | ------------------------------------------------------------- |
 | feature-iteration | One EARS handler inside an existing feature-spec              | `apps/docs/content/skills/do-feature-iteration/SKILL.md`      |
 | hotfix-pr         | Code-level bug; no feature-spec required                      | `apps/docs/content/skills/do-hotfix-pr/SKILL.md`              |
-| adr-amendment     | Edit to an existing ADR                                       | `apps/docs/content/skills/do-adr-amendment/SKILL.md`          |
+| adr-revision      | Edit to an existing ADR (inline rewrite by default)           | `apps/docs/content/skills/do-adr-revision/SKILL.md`           |
 | decision-debt     | Closing a silent-decision artifact surfaced earlier           | `apps/docs/content/skills/do-decision-debt-followup/SKILL.md` |
 | engineering-task  | Phase A bootstrap (DSP-160 sub-issue), CI hardening, scaffold | No skill — follow the task spec directly                      |
 | spec-authoring    | New feature-spec / new ADR / new design-spec                  | `superpowers:brainstorming` (sole allowed exception)          |
@@ -134,7 +134,7 @@ If the active task is a Plane work-item (DSP-XXX / DSO-XXX), the very first acti
 
 ## 4. Review modes
 
-Per ADR-0007 Amendment A1.3 (2026-05-19). Three modes:
+Per ADR-0007 §2.10. Three modes:
 
 - **Mode (a)** — same-session subagent dispatch with `request-mode-a-review` skill. Lead agent finishes work → dispatches subagent with the reviewer prompt → subagent reads diff + spec + ADRs and returns a structured verdict (APPROVE / REQUEST_CHANGES).
 - **Mode (b)** — parallel Codex CLI session reviewing the PR independently.
@@ -142,26 +142,26 @@ Per ADR-0007 Amendment A1.3 (2026-05-19). Three modes:
 
 LLM credentials live in the human's terminal, not in CI secrets. **No automated reviewer-bot.**
 
-**Merge gate.** A positive Mode (a) or Mode (b) verdict + green CI is sufficient to merge via `gh pr merge --auto --squash --delete-branch`; human-merge is **not** required (ADR-0007 Amendment A1.4 refined + Amendment A2). Mode (c) reviews remain a single human decision. Procedure detail: `apps/docs/content/skills/request-mode-a-review/SKILL.md` and `apps/docs/content/skills/merge-when-green/SKILL.md`.
+**Merge gate.** A positive Mode (a) or Mode (b) verdict + green CI is sufficient to merge via `gh pr merge --auto --squash --delete-branch`; human-merge is **not** required (ADR-0007 §2.4, §2.10). Mode (c) reviews remain a single human decision. Procedure detail: `apps/docs/content/skills/request-mode-a-review/SKILL.md` and `apps/docs/content/skills/merge-when-green/SKILL.md`.
 
 ---
 
 ## 5. Lint guards
 
-The CI lint guards from ADR-0007 §2.6 (Amendment A1.5) act as nudges visible in the PR Checks UI for the human reviewer and the author-agent. Full table lives in **ADR-0007 §2.6**. `spec-link` is BLOCK; others are WARN in Phase 0.
+The CI lint guards from ADR-0007 §2.6 act as nudges visible in the PR Checks UI for the human reviewer and the author-agent. Full table lives in **ADR-0007 §2.6**. `spec-link` is BLOCK; others are WARN in Phase 0.
 
 ---
 
 ## 6. Hard rules
 
 - **SDD.** No production code without a feature spec at `apps/docs/content/specs/features/NNN-<slug>/`. If absent, invoke `superpowers:brainstorming` per §3.4 to author one.
-- **TDD.** No production code without a failing test. Naming: `it('EARS-N: ...')`. Flat numbering per ADR-0006 Amendment A1; nested `N.M` only when a single handler carries multiple shall-clauses.
+- **TDD.** No production code without a failing test. Naming: `it('EARS-N: ...')`. Flat numbering per ADR-0006 §4; nested `N.M` only when a single handler carries multiple shall-clauses.
 - **Trackers.** Code-level → GitHub Issues here; strategic / cross-team → Plane workspace `doctor-school`. Never both.
 - **Plane lifecycle.** When the task is a Plane work-item: move to `In Progress` with a start comment before code work; on completion, move to `Done` with a result comment containing artifacts (links to files/PRs/pages), what was done, open questions, and what is unblocked. If the task stays incomplete, leave a status comment with "where we stopped / what remains" instead of dropping it silently. Tooling: `plane-pp-cli` for reads; Plane MCP (`mcp__plane-pp-mcp__*`) for state changes and comments (see §3.7).
 - **Roles, not names** in any spec / ADR / design doc.
 - **Direct push to `main` is forbidden.** Single merge command: `gh pr merge <N> --auto --squash --delete-branch`.
 - **Project skill catalog.** Only `apps/docs/content/skills/`. Vendor-specific skill auto-discovery is not used to dispatch project work. The path is the contract.
-- **Discipline gates.** `run-iteration-end-checklist` and `request-mode-a-review` produce artifacts the lead agent cannot bypass — whether dispatched by an orchestration skill or run directly for an engineering-task (§3.8). Without their outputs, merge is forbidden (ADR-0007 Amendment A2).
+- **Discipline gates.** `run-iteration-end-checklist` and `request-mode-a-review` produce artifacts the lead agent cannot bypass — whether dispatched by an orchestration skill or run directly for an engineering-task (§3.8). Without their outputs, merge is forbidden (ADR-0007 §2.4 — verdict-gated cycle).
 - **Decision-debt.** Any silent deviation from a documented convention MUST surface via `surface-decision-debt`. The output may be `[]`, but the invocation is required before the iteration summary — or, for an engineering-task, before the Plane / Issue result comment (§3.8).
 - **Amendment vs inline rewrite discipline.** In pre-pilot (paper-architecture, no production code), there are NO amendment blocks in ADR / spec / design docs. An amendment is justified ONLY when the original decision is running in production. In all other cases — inline rewrite: the body reads as if the current decision were always the decision. "SUPERSEDED по Amendment X" callouts in the body are forbidden; references to "Amendment X" / "per Amendment" / "see Amendment" as the source of a prose rule are forbidden. The history of paper-architecture evolution lives in `git log`, not in the document body. Precedents: DSP-209 closed ADR-0001 §8 (Zitadel) inline as the correct pattern; DSP-211 Pass 1 (reverted) added "SUPERSEDED по Amendment X" callouts as the anti-pattern this rule exists to prevent.
 

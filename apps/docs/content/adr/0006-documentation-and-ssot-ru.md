@@ -135,6 +135,8 @@ UI-слой над теми же `.md` / `.mdx` / `.yaml` файлами в Git.
 - Если у фичи есть длинная транзакция с компенсациями — добавляется секция «Saga» в `requirements.md` (reference doc §5.6) с явным compensate-mapping per step и failure policy.
 - Decomposition на атомарные задачи (один EARS-handler ≈ один Issue) делается **в GitHub Issues** (см. §9), не в Git-файле. Git хранит intent (EARS-N), GitHub Issues хранит execution state (assignee, status, PR-link, comments).
 
+**Нумерация EARS — плоская по умолчанию.** EARS-требования в `requirements.md` нумеруются `EARS-1`, `EARS-2`, `EARS-3`, …, без под-компоненты `.M`, независимо от общего числа. Имя Vitest-теста соответствует: `it('EARS-N: when <trigger>, system shall <behavior>', () => { … })`. Вложенный `EARS-N.M` допустим **только** тогда, когда один обработчик действительно несёт несколько shall-выражений (например, OIDC-callback, который и upsert'ит профиль врача, и эмитит событие `DoctorRegistered` — `EARS-3.1` create/upsert + `EARS-3.2` emit). Триггер для вложенности — «одно EARS-предложение становится трудно сформулировать без 'and' или 'while'»; если плоский номер вытягивает, используем плоский. Lint-guard `ears-tests` (ADR-0007 §2.6) читает обе формы.
+
 Outputs Spec-Driven Development:
 
 - EARS-handlers → unit tests (Vitest), один EARS ≈ один test.
@@ -373,36 +375,3 @@ ds-platform/
 - **DSO-31** — структура `apps/docs/`, `apps/docs-cms/`, `packages/glossary/`, `tools/lint/`.
 - **Payload Phase 0 implementation** — Payload Glossary Collection requires canonical glossary as SSOT.
 - **Feature-specs DS Platform code** — spec-format зафиксирован, можно начинать `docs/content/specs/features/001-*/` для первой product-фичи.
-
----
-
-## 7. Amendments
-
-### Amendment A1 — Плоская нумерация EARS-N (2026-05-20, follow-up к DSP-194)
-
-**Контекст:** §4 этой ADR зафиксировал формат SDD feature-spec, но оставил нумерацию EARS-требований недостаточно специфицированной: исходный текст использует примеры `EARS-N.M` (например, `EARS-3.1`) без явного указания, когда `.M` обязательно, а когда косметика. G11 smoke (DSP-181) сначала пронумеровал единственное shall-выражение в обработчике как `EARS-1.1` в первом feature-spec'е (`001-api-bootstrap-health`), затем spec был сплющен до `EARS-1` коммитом `073d6da`. G11 smoke retrospective (находка F-5) рекомендовал кодифицировать плоскую нумерацию как дефолт.
-
-**Решение (amendment):**
-
-**A1.1 — Плоская нумерация по умолчанию.** EARS-требования в `requirements.md` нумеруются `EARS-1`, `EARS-2`, `EARS-3`, …, без под-компоненты `.M`, независимо от общего числа. Имя Vitest-теста соответствует: `it('EARS-N: when <trigger>, system shall <behavior>', () => { … })`.
-
-**A1.2 — Вложенный `EARS-N.M` допустим только тогда, когда один обработчик действительно несёт несколько shall-выражений.** Пример: обработчик OIDC-callback'а, который и создаёт/upsert'ит профиль врача, и эмитит событие `DoctorRegistered` — может быть записан как `EARS-3.1` (create/upsert) + `EARS-3.2` (emit). Триггер для вложенности — «одно EARS-предложение становится трудно сформулировать без 'and' или 'while'»; если плоский номер вытягивает, используем плоский.
-
-**A1.3 — Существующие spec'и.** Ретроактивная перенумерация не делается. Spec'и, написанные до этого amendment'а, могут нести шаблон `EARS-N.M`; они остаются валидны как есть. Новые spec'и используют плоскую нумерацию. Spec `001-api-bootstrap-health`, уже сплющенный коммитом `073d6da`, служит референсом.
-
-**Последствия:**
-
-- Skill `author-ears-spec` (deliverable DSP-194, `apps/docs/content/skills/author-ears-spec/SKILL.md`) цитирует этот amendment как контракт нумерации.
-- Lint-guard `ears-tests` (ADR-0007 §2.6) читает имена тестов в обоих форматах `EARS-N` и `EARS-N.M`; изменения lint'а не требуется.
-- F-5 закрыта.
-
-**Почему сейчас (timing):**
-
-Рефакторинг DSP-194 (agent instructions → тонкий оркестратор + каталог skill'ов) нуждается в однозначном правиле нумерации EARS, чтобы закодировать его в subagent-prompt'е `author-ears-spec`. Кодификация правила в ADR-0006 держит SSOT для формата SDD в одном месте; skill ссылается на ADR.
-
-**Открытый follow-up:** нет.
-
-**Влияет на (downstream):**
-
-- `apps/docs/content/skills/author-ears-spec/SKILL.md` — цитирует ADR-0006 Amendment A1.
-- `AGENTS.md` §6 (Hard rules / TDD) — цитирует ADR-0006 Amendment A1.

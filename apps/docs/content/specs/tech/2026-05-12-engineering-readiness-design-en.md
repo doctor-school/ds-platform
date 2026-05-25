@@ -51,7 +51,7 @@ The brainstorm research confirmed that under AI-agent driven development the 202
 - **NestJS API** (ADR-0002).
 - **Postgres 17 + Drizzle** (ADR-0003).
 - **Redis** (single-node + AOF, see ADR-0003 §8 responsibilities matrix; not for sessions or critical jobs).
-- **Postgres outbox** for critical jobs (ADR-0003 Amendment A2/§A).
+- **Postgres outbox** for critical jobs (ADR-0003 §8).
 - **Portal Next.js app** (`app.doctor.school`).
 - **Admin Next.js app** (`admin.doctor.school`).
 - **Docs (Fumadocs)** — internal SSOT for the team (ADR-0006).
@@ -250,7 +250,7 @@ Without an explicit slice, AI agents reading ADRs read "target architecture" as 
 - **152-FZ data subject rights**: API endpoints `/me/data-export` + `/me/erasure-request` — **closed by ADR-0009 §2.2** (Pre-pilot mandatory).
 - **Privacy policy, public offer agreement, cookie consent UI** — static on site + JS banner; consent capture via `/me/consent/accept` (ADR-0009 §2.1, per-purpose versioning).
 - **RKN notification** of PD processing — DSO-X2 (legal track), launch gate.
-- TLS headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options). CSP profile-per-zone — ADR-0001 Amendment A1.2.
+- TLS headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options). CSP profile-per-zone — ADR-0001 §7.
 - **Dual-LLM pattern** for UGC — pre-pilot BLOCKER. Closed by **ADR-0010 (dual-LLM mandatory pattern)** + design spec **`2026-05-18-ds-platform-dual-llm-pattern-design`**. Quarantined LLM → symbolic references → privileged LLM. ADR-0011 channel #4 (reviewer agent prompts) — related controls.
 - **Endpoint authorization matrix as a CI gate** — pre-pilot BLOCKER. Closed by **`2026-05-18-ds-platform-endpoint-authorization-matrix-design`** (CI gate `tools/lint-endpoint-authz` — fails on missing metadata).
 - **Worker readiness (BullMQ queue contract)** — pre-pilot BLOCKER. Closed by **`2026-05-18-ds-platform-bullmq-queue-contract-design`** (queue names, retry/DLQ/idempotency, critical vs non-critical, queue→worker mapping).
@@ -415,14 +415,14 @@ Without these items **we do not onboard the first real doctor to prod**:
 10. **Separate API tokens** agent/user/CI with least privilege; no agent write to prod-DB or main-branch.
 11. **TLS + security headers** configured (HSTS, CSP profile-per-zone per ADR-0001 A1.2).
 12. **Email deliverability** (SPF/DKIM/DMARC) configured for doctor.school.
-13. **Host-only `__Host-` cookie per app + OIDC silent re-auth** (ADR-0001 §6 + Amendment A2) — no shared cross-subdomain cookies.
+13. **Host-only `__Host-` cookie per app + OIDC silent re-auth** (ADR-0001 §6) — no shared cross-subdomain cookies.
 
 ### Operational
 
 14. **Canonical backup topology** — Timeweb primary + Beget S3 offsite + Vault keys on a dedicated VM (data-layer-design §2.4).
 15. **Restore drill** documented in the operational runbook (DSO-10) + tested end-to-end once before pre-pilot.
 16. **Per-subject crypto-shred** operational (ADR-0009 §5) — erasure compatible with the 30-day 152-FZ SLA.
-17. **Redis ops baseline** — AOF + daily RDB backup + per-namespace eviction policy + alerting (ADR-0003 Amendment A2/§A).
+17. **Redis ops baseline** — AOF + daily RDB backup + per-namespace eviction policy + alerting (ADR-0003 §8).
 18. **Global agent kill switch** is operational.
 19. **Autonomy ladder document** written; current agent level recorded.
 

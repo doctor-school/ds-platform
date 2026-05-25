@@ -20,29 +20,29 @@ This document is the implementation detail for ADR-0008. The ADR fixes "what and
 
 ## 1. Decision summary (cross-ref ADR-0008)
 
-| Decision               | Choice                                                                                                                                | ADR-0008 §                  |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| GitHub org             | `doctor-school` (GitHub Free plan)                                                                                                    | §2.1                        |
-| Repo name + visibility | `doctor-school/ds-platform`, private                                                                                                  | §2.1                        |
-| Monorepo orchestrator  | Turborepo 2.x + pnpm 10.x workspaces                                                                                                  | §2.2                        |
-| Node version pin       | `.nvmrc` (`22`) + `packageManager: pnpm@10.x` + `engines` + `engine-strict=true`                                                      | §2.2                        |
-| Repo layout root       | `apps/`, `packages/`, `tools/`, `.github/`, `.changeset/`, manifest files                                                             | §2.3                        |
-| Apps inventory         | api (NestJS) + promo + portal + admin + cms (Payload v3) + docs (Fumadocs) + docs-cms (Keystatic) + mobile (Expo). 8 apps.            | §2.3                        |
-| Packages inventory     | schemas, api-client, db, glossary, hooks, design-system, observability, utils, eslint-config, tsconfig, llm-utils                     | §2.3                        |
-| ADR location           | `apps/docs/content/adr/NNNN-<slug>.md` + companion `NNNN-<slug>-design.md`                                                            | §2.3                        |
-| Feature spec location  | `apps/docs/content/specs/features/NNN-<slug>/{requirements,design,scenarios}.md`                                                      | §2.3 (inherits ADR-0006)    |
-| Tech spec location     | `apps/docs/content/specs/tech/<topic>.md`                                                                                             | §2.3 (inherits ADR-0006 §4) |
-| Drizzle schema master  | `packages/db/schema/` per ADR-0006 §1 (supersedes ADR-0003 §4 location); migrations in `apps/api/drizzle/`                            | §2.3                        |
-| Release tooling        | changesets + `changesets/action` GitHub workflow                                                                                      | §2.4                        |
-| Commit convention      | conventional-commits (light, no enforce)                                                                                              | §2.4                        |
-| Merge style            | squash-only                                                                                                                           | §2.4                        |
-| Pre-commit hooks       | simple-git-hooks + lint-staged                                                                                                        | §2.5                        |
-| Branch strategy        | trunk-based, branches `feat/DSO-NN-<slug>` short-lived                                                                                | §2.6                        |
-| Branch protection rule | 9-item list (PR required, ≥1 review, dismiss stale, status checks `ci` + `agent-review`, up-to-date, include admins, no force/delete) | §2.6                        |
-| CODEOWNERS Phase 0     | `* @sidorovanthon`                                                                                                                    | §2.7                        |
-| CI runner              | GitHub-hosted `ubuntu-latest` only                                                                                                    | §2.8                        |
-| Dependabot             | weekly, grouped, ecosystems npm + github-actions                                                                                      | §2.9                        |
-| Bootstrap steps        | extends AI-stack design spec §11 + steps 15–22                                                                                        | §2.10                       |
+| Decision               | Choice                                                                                                                     | ADR-0008 §                  |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| GitHub org             | `doctor-school` (GitHub Free plan)                                                                                         | §2.1                        |
+| Repo name + visibility | `doctor-school/ds-platform`, private                                                                                       | §2.1                        |
+| Monorepo orchestrator  | Turborepo 2.x + pnpm 10.x workspaces                                                                                       | §2.2                        |
+| Node version pin       | `.nvmrc` (`22`) + `packageManager: pnpm@10.x` + `engines` + `engine-strict=true`                                           | §2.2                        |
+| Repo layout root       | `apps/`, `packages/`, `tools/`, `.github/`, `.changeset/`, manifest files                                                  | §2.3                        |
+| Apps inventory         | api (NestJS) + promo + portal + admin + cms (Payload v3) + docs (Fumadocs) + docs-cms (Keystatic) + mobile (Expo). 8 apps. | §2.3                        |
+| Packages inventory     | schemas, api-client, db, glossary, hooks, design-system, observability, utils, eslint-config, tsconfig, llm-utils          | §2.3                        |
+| ADR location           | `apps/docs/content/adr/NNNN-<slug>.md` + companion `NNNN-<slug>-design.md`                                                 | §2.3                        |
+| Feature spec location  | `apps/docs/content/specs/features/NNN-<slug>/{requirements,design,scenarios}.md`                                           | §2.3 (inherits ADR-0006)    |
+| Tech spec location     | `apps/docs/content/specs/tech/<topic>.md`                                                                                  | §2.3 (inherits ADR-0006 §4) |
+| Drizzle schema master  | `packages/db/schema/` per ADR-0006 §1 (supersedes ADR-0003 §4 location); migrations in `apps/api/drizzle/`                 | §2.3                        |
+| Release tooling        | changesets + `changesets/action` GitHub workflow                                                                           | §2.4                        |
+| Commit convention      | conventional-commits (light, no enforce)                                                                                   | §2.4                        |
+| Merge style            | squash-only                                                                                                                | §2.4                        |
+| Pre-commit hooks       | simple-git-hooks + lint-staged                                                                                             | §2.5                        |
+| Branch strategy        | trunk-based, branches `feat/DSO-NN-<slug>` short-lived                                                                     | §2.6                        |
+| Branch protection rule | Target-state contract per ADR-0008 §2.6 (deferred enforcement; required status check `ci` only)                            | §2.6                        |
+| CODEOWNERS Phase 0     | `* @sidorovanthon`                                                                                                         | §2.7                        |
+| CI runner              | GitHub-hosted `ubuntu-latest` only                                                                                         | §2.8                        |
+| Dependabot             | weekly, grouped, ecosystems npm + github-actions                                                                           | §2.9                        |
+| Bootstrap steps        | extends AI-stack design spec §11 + steps 15–22                                                                             | §2.10                       |
 
 ---
 
@@ -434,7 +434,9 @@ jobs:
 
 ### 3.2 `.github/workflows/agent-review.yml`
 
-Per ADR-0007 §2.8. Sketch:
+> **Reference design only — not implemented in Phase 0.** ADR-0007 §2.10 establishes interactive review modes (Mode (a)/(b)/(c)) instead of an automated reviewer-bot, so `agent-review.yml` and `cost-ledger.yml` (§3.3) are not present in the repo (`agents-config.json` (§3.5) remains as a stub from earlier scaffolding and is unused while §3.2 stays dormant). The sketches below are kept as the starting point if a future ADR reinstates an automated reviewer.
+
+Sketch (kept here as reference design only — no longer anchored in ADR-0007 after the §2 restructure that removed automated reviewer-bot from Phase 0):
 
 ```yaml
 name: agent-review
@@ -681,7 +683,7 @@ No per-directory npm sub-configs are configured — pnpm-monorepo single root in
 
 ## 4. Branch protection + repo settings — concrete `gh api` calls
 
-Per ADR-0008 §2.6, step 21. Admin runs both calls once:
+Per ADR-0008 §2.6, step 21. Admin runs §4.1 once. **§4.2 is target-state**, not currently applied: GitHub Free + private repo blocks the branch-protection API (HTTP 403 from both the legacy endpoint and the rulesets API). The payload below is committed verbatim to `branch-protection.json` at repo root as documentation; it is applied via `gh api` only when any reactivation trigger in ADR-0008 §2.6 fires. Required status checks contain `ci` only (single meta-job from §3.1); there is no automated reviewer-bot in Phase 0 (ADR-0007 §2.10 dropped that flow).
 
 **4.1 Repository settings — enforce squash-only:**
 
@@ -868,7 +870,7 @@ Concrete workflow when a trigger fires (any of OQ-R1..R12):
 - **ADR-0001** §8 — IdP shortlist (Authentik **or Zitadel** — TBD per §8 spike): when team SSO for GitHub Enterprise plan appears — reuse the same tenant, not a separate one.
 - **ADR-0002** §6 — `apps/api/` implements NestJS + BullMQ.
 - **ADR-0002** §3-5 — `packages/schemas/` (Zod SSOT) + `packages/api-client/` (openapi-typescript generated SDK).
-- **ADR-0003** §4 — Drizzle TS schemas (location: `packages/db/schema/` per ADR-0003 Amendment A1, supersedes §4 original location) + drizzle-kit SQL diff migrations in `apps/api/drizzle/`; §7 — pgvector in the same Postgres.
+- **ADR-0003** §4 — Drizzle TS schemas in `packages/db/schema/` + drizzle-kit SQL diff migrations in `apps/api/drizzle/`; §7 — pgvector in the same Postgres.
 - **ADR-0004** §2 — 4 frontend Next.js apps (`apps/promo/`, `apps/portal/`, `apps/admin/`, `apps/cms/`).
 - **ADR-0004** §7 — Payload v3 in `apps/cms/` (content-only, `cms.*` schema namespace shared Postgres).
 - **ADR-0004** §13 — `packages/eslint-config/` exports the `no-vercel-only-api` rule.
@@ -885,32 +887,3 @@ Concrete workflow when a trigger fires (any of OQ-R1..R12):
 - Inherited decisions: ADR-0001..0007 (DSO-25..30 + DSO-60)
 - Plane DSO-31 ticket scope (open decisions + scope-notes)
 - Current ds-platform repo context: `doctor-school/ds-platform`
-
----
-
-## 10. Amendments
-
-### Amendment SD2 — agent-review check removed per ADR-0008 Amendment A2 (2026-05-19)
-
-**Context:** ADR-0007 Amendment A1 (2026-05-19) dropped the automated cross-vendor reviewer-bot (`tools/reviewer-agent/` + `.github/workflows/agent-review.yml` not implemented in Phase 0). ADR-0008 Amendment A2 reduced branch-protection required checks to `[ci]` only. This spec is the implementation detail for those checks, so the §4.2 `gh api` payload had to follow.
-
-**Change:** §4.2 branch-protection `gh api` snippet — line `-f required_status_checks[contexts][]=agent-review` removed (EN + RU). No other content changes in this amendment. §1 summary row and §3.2 (`agent-review.yml` skeleton) / §3.3 (`cost-ledger.yml`) and §3.5 (`agents-config.json`) remain in the spec as inherited reference material — their producers were dropped by ADR-0007 Amendment A1 and their semantics are vestigial. They will be revisited if a future ADR reinstates an automated reviewer.
-
-**Effect:** Plane sub-issues DSP-180 (`gh api` branch-protection call) and DSP-189 (manual gate setup) now consume the corrected payload upstream — no separate change request needed on those tickets.
-
-**Cross-refs:** ADR-0007 §Amendment A1, ADR-0008 §Amendment A2, AI-stack design spec §6/§7/§10 SUPERSEDED callouts.
-
-### Amendment SD3 — `gh api` payload preserved as target-state; not applied in Phase 0 (2026-05-19, follow-up to ADR-0008 Amendment A3)
-
-**Context:** ADR-0008 Amendment A3 (2026-05-19) reframes §2.6 as target-state, not current state — branch protection cannot be applied on `doctor-school/ds-platform` while the org is on GitHub Free and the repo is private (HTTP 403 from both the legacy branch-protection API and the rulesets API). This spec's §4.2 documents the `gh api` invocation that implements §2.6; A3 changes what we do with that invocation, not its content.
-
-**Change:** §4.2 `gh api PUT …/branches/main/protection` snippet — **preserved verbatim** (post-SD2: without `agent-review`). It is now annotated as the target-state payload, to be applied once any reactivation trigger fires (ADR-0008 A3.4). The snippet is **not executed in G10**; G10 is reclassified per A3 (apply repo settings + commit `branch-protection.json` + cancel DSP-180/DSP-189). No new pre-push instrumentation in interim — covered in A3 Consequences.
-
-**Reactivation procedure (when trigger fires):**
-
-1. Re-read ADR-0008 §2.6 (post-A2) and confirm the 7-item list still represents desired contract.
-2. Run the §4.2 `gh api` call (payload already captured in `branch-protection.json` at repo root).
-3. Verify with `gh api repos/doctor-school/ds-platform/branches/main/protection` (200 OK + matching payload).
-4. Open a follow-up to flip §2.6 back to current-state and drop the A3 interim-substitute table.
-
-**Cross-refs:** ADR-0008 §Amendment A3, AGENTS.md root (interim merge-flow), `branch-protection.json` at repo root.

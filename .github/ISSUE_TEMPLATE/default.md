@@ -23,7 +23,7 @@ labels: []
 ## Spec reference
 
 <!-- For a single EARS-handler: link to `requirements.md#EARS-N`.
-     For an ADR-amendment: link to the ADR plus the Amendment letter.
+     For an ADR revision: link to the ADR (and the specific § being changed).
      For scaffolding / tooling without a spec: write "no spec". -->
 
 ## Acceptance criteria

@@ -29,7 +29,7 @@ You are authoring a 3-file SDD triplet for a new feature in the DS Platform mono
 2. **Write `requirements.md`:**
    - Frontmatter: `tracker:` (GitHub Milestone URL placeholder if the milestone isn't created yet), `status: Draft`.
    - Sections: Outcomes / Scope / Constraints / Prior decisions (cite ADRs) / Event Model (Commands / Events / Read models / Policies) / **EARS requirements** / Invariants / Verification.
-   - **EARS numbering: flat (`EARS-1`, `EARS-2`, …) per ADR-0006 Amendment A1**, closing G11 finding F-5. Use nested `N.M` **only** when a single handler genuinely carries multiple shall-clauses (rare).
+   - **EARS numbering: flat (`EARS-1`, `EARS-2`, …) per ADR-0006 §4** (closing G11 finding F-5). Use nested `N.M` **only** when a single handler genuinely carries multiple shall-clauses (rare).
 3. **Write `design.md`** — Mermaid sequence diagrams of cascades, state diagrams of lifecycles, ER fragments.
 4. **Write `scenarios.feature`** — Gherkin, happy path + 2–3 failure branches.
 5. **Issue body** — when the lead agent opens the parent Issue, the body must explicitly list the scope of any **stub packages** being graduated (e.g., "this feature graduates `packages/foo` from stub to first concrete export"). Closing G11 finding F-20.

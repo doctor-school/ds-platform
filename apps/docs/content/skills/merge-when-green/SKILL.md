@@ -23,9 +23,9 @@ Run exactly one command:
 gh pr merge <N> --auto --squash --delete-branch
 ```
 
-`--auto` instructs GitHub to hold the merge until all required checks pass — functionally equivalent to a required `ci` status check on the single-developer happy path (per ADR-0008 §2.6 + Amendment A3). `--squash` enforces linear history. `--delete-branch` cleans up the head branch.
+`--auto` instructs GitHub to hold the merge until all required checks pass — functionally equivalent to a required `ci` status check on the single-developer happy path (per ADR-0008 §2.6; server-side branch protection is the target-state contract, deferred while the repo is on GitHub Free + private). `--squash` enforces linear history. `--delete-branch` cleans up the head branch.
 
-Per ADR-0007 Amendment A2 (closing G11 finding F-10): a positive Mode (a) or Mode (b) verdict + green CI is sufficient to merge. **Human-merge is not required.** Mode (c) reviews remain a single human decision.
+Per ADR-0007 §2.4 + §2.10: a positive Mode (a) or Mode (b) verdict + green CI is sufficient to merge. **Human-merge is not required.** Mode (c) reviews remain a single human decision.
 
 ## Output
 
@@ -34,5 +34,5 @@ Per ADR-0007 Amendment A2 (closing G11 finding F-10): a positive Mode (a) or Mod
 
 ## Failure mode
 
-- Any other merge command (`gh pr merge <N>` without `--auto`, with `--merge` instead of `--squash`, without `--delete-branch`, or `git push origin main` directly) is a process violation per ADR-0008 §2.6 + Amendment A3 interim contract.
+- Any other merge command (`gh pr merge <N>` without `--auto`, with `--merge` instead of `--squash`, without `--delete-branch`, or `git push origin main` directly) is a process violation per ADR-0008 §2.6 (interim process-level merge contract).
 - Invoking this skill while the latest review verdict is `REQUEST_CHANGES` or absent — process violation per `request-mode-a-review`'s `Cannot proceed without` clause.

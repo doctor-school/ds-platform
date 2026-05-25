@@ -138,11 +138,11 @@ apps/
 - `cms.doctor.school` (cms) — `__Host-ds_cms_session`, host-only, для маркетинг-team.
 - `docs.doctor.school` (docs) — `__Host-ds_docs_session` если требуется auth (внутренняя SSOT для команды, обычно через VPN).
 
-Полный security profile cookie (TTL, rotation, CSRF, fingerprint binding) — **ADR-0001 §6 + Amendment A2** (single source of truth). Этот документ — implementation reference только для Next.js-specific деталей (см. §3.2.1).
+Полный security profile cookie (TTL, rotation, CSRF, fingerprint binding) — **ADR-0001 §6** (single source of truth). Этот документ — implementation reference только для Next.js-specific деталей (см. §3.2.1).
 
-#### 3.2.1. Cross-app SSO via OIDC silent re-auth — frontend implementation (DSO-63 #2, ADR-0001 Amendment A2)
+#### 3.2.1. Cross-app SSO via OIDC silent re-auth — frontend implementation (DSO-63 #2)
 
-> **History note:** ранее (до 2026-05-18) §3.2.1 описывал shared cookie `__Secure-ds_session` на `.doctor.school` (ADR-0001 Amendment A1.1). По результатам внешней валидации архитектуры (DSO-63 #2) shared cookie признан архитектурным дефектом и отменён. Текущая модель — host-only per app + OIDC silent re-auth. См. ADR-0001 §6 + Amendment A2 для полного обоснования.
+Cross-app login continuity между portal, admin, promo, docs, cms — через OIDC silent re-auth (`prompt=none`) у IdP, не через shared cookie на `.doctor.school`. Shared cookie отвергнут per ADR-0001 §6 — same-origin XSS или subdomain takeover скомпрометировали бы admin-сессию, а CSRF / fingerprint mitigations обходятся same-origin XSS. См. ADR-0001 §6 для полного обоснования.
 
 **Frontend pattern для каждого Next.js app:**
 
@@ -870,7 +870,7 @@ Custom ESLint rule `no-vercel-only-api` блокирует следующие im
 ### 20.1. ADR-0001 (Identity/Auth/RBAC)
 
 - JWT auth-flow через Authentik/Zitadel/Keycloak (выбор финализируется Phase 0 spike, DSO-25).
-- **Host-only `__Host-` cookie per app** (portal, admin, promo, docs, cms) — каждое приложение имеет свой scope. Полный security profile — ADR-0001 §6 + Amendment A2.
+- **Host-only `__Host-` cookie per app** (portal, admin, promo, docs, cms) — каждое приложение имеет свой scope. Полный security profile — ADR-0001 §6.
 - **Cross-app SSO continuity** — через OIDC silent re-auth (`prompt=none`), не через shared cookie. Implementation details — §3.2.1.
 - Two-tier validation: JWT fast-path для ≥99% запросов, IdP `/introspect` для high-stakes (payments, AU withdrawal, role-change, admin mutations, PD export).
 - Hybrid RBAC: IdP coarse roles в JWT, backend fine-grained через Cerbos.

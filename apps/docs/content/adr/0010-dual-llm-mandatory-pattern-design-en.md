@@ -186,9 +186,9 @@ Resolution: **per-tool trust check** on the S-Orch side:
 
 Resolution: content that entered the DB through a user-input path **inherits the untrusted flag**. When such a field is read into the LLM pipeline, it MUST be routed through a Q-LLM. Implemented via **PD/trust-classification fields** in the schema (cross-ref pd-lifecycle §3 retention matrix + pd-lifecycle-design §10 lint-retention).
 
-**(c) Reviewer-agent (ai-stack §6) — toolless as of today.**
+**(c) Reviewer-agent — not implemented in Phase 0.**
 
-Resolution: the Phase 0 reviewer-agent is a single-Q-LLM-equivalent (no tools, output is only `gh pr review --comment`). This is **deliberately** not a P-LLM. Any attempt to give the reviewer-agent write tools (auto-approve, auto-merge, auto-fix-commit) **MUST** redesign it into a dual-LLM (Q-LLM reads PR/comments → P-LLM with a merge tool operates on trusted refs). Until that evolution — single Q-LLM is sufficient, and this is explicitly recorded in §11 migration plan as an inherited contract.
+The automated GitHub-Actions reviewer-bot referenced in earlier drafts is not part of Phase 0; ADR-0007 §2.10 replaced it with interactive review modes (Mode (a) subagent dispatch, Mode (b) parallel Codex CLI, Mode (c) human). Interactive modes are local developer tooling, not a backend AI flow with side-effect tools, so the dual-LLM mandate does not apply to them. If a future ADR reinstates an automated reviewer with write tools (auto-approve, auto-merge, auto-fix-commit), it MUST be designed as a dual-LLM from the start (Q-LLM reads PR/comments → P-LLM with a merge tool operates on trusted refs) — §5.4 below is the reference flow for that case.
 
 **(d) RAG retrieval without tools.**
 
@@ -270,11 +270,11 @@ Key point: the P-LLM **never** sees raw file content. If the author hid "System:
 
 ### 5.4 Reviewer bot reads PR comments + body
 
-**Untrusted source:** PR body + comments (vector 8). The current Phase 0 reviewer (ai-stack §6) is toolless, hence single-LLM. This flow describes the **future evolution** (if the reviewer gains write tools).
+**Reference flow only — no automated reviewer in Phase 0** (ADR-0007 §2.10 uses interactive review modes instead). **Untrusted source:** PR body + comments (vector 8). This flow describes the design that any future automated reviewer with write tools would have to follow.
 
 - **Q-LLM step:** extract `{file_refs: [...], reviewer_asks: [...], sentiment: "...", suggested_label_changes: [...]}`.
 - **P-LLM step:** input = the extracted struct; tools: `post_comment(prId, body)`, `create_followup_issue(spec)`, `request_changes(prId, reason)`. **Never** `merge` or `approve` without a human gate (ai-stack §6.1 — preserved).
-- **Inherited contract:** at the moment the reviewer migrates to dual-LLM (trigger in ai-stack §9), `agent-review.yml` + the soft-reject hook MUST be updated (see §11).
+- **Trigger to implement:** any future ADR reinstating an automated reviewer with write tools makes this flow normative.
 
 ---
 
@@ -457,7 +457,6 @@ See §6.4 — full audit row schema. Emitted on every Q-LLM + P-LLM + tool call;
 
 - The pattern is locked in by this spec (Phase 0 deliverable, DSO-68).
 - AGENTS.md / CLAUDE.md are updated with the explicit "no single-LLM-with-tools" rule (§7.4).
-- The reviewer-agent (ai-stack §6) is inventoried as a single-Q-LLM equivalent **without tools** (compliant with the pattern). Any subsequent attempt to give it write tools triggers a redesign under dual-LLM.
 - Any new AI flow in the backlog (Content Pipeline v2, AI assistant, recommendations) starts its design under dual-LLM, not "retrofit later".
 
 ### 11.2 Pilot gate
@@ -519,22 +518,3 @@ Before merging any PR that adds an LLM-with-tools endpoint:
 - **Plane:** DSO-68 (parent: DSO-24); inputs DSO-63 mini-H, #12, #13.
 - **External:** Simon Willison "Dual LLM pattern" (concept origin); OWASP LLM Top-10 LLM01 Prompt Injection.
 - **Memory:** [[feedback_docs_as_ssot]], [[feedback_rf_blocked_services]], [[feedback_tech_stack_criteria_no_team_skill]].
-
----
-
-## 15. Amendments
-
-### Amendment DL1 — Reviewer-bot example (§5.4) is vestigial; §4.2 "inherited contract" SUPERSEDED in part (2026-05-19, follow-up to ADR-0007 Amendment A1 + ADR-0010 Amendment A1)
-
-**Context:** ADR-0007 Amendment A1 (2026-05-19) dropped the automated GitHub-Actions reviewer-bot entirely. This spec referenced the reviewer-bot in two places: §4.2 ("inherited contract — Phase 0 reviewer-agent is a single-Q-LLM-equivalent…") and §5.4 ("Reviewer bot reads PR comments + body" — one of four reference flows). Vectors 3 (course-content) and 8/9 (transitive — §2.2) name the reviewer-agent as the receiving LLM.
-
-**Effect:**
-
-- **§4.2 "inherited contract" SUPERSEDED** for the reviewer-agent specifically — there is no Phase 0 reviewer-agent to inherit a contract on. The general principle (any new LLM-with-tools-on-untrusted-input flow MUST be designed as dual-LLM) is unchanged and remains the spec's load-bearing mandate.
-- **§5.4 (Reviewer bot reference flow) — vestigial:** the flow is not implemented in Phase 0. Kept inline as a reference design for the case where a future ADR reinstates an automated reviewer with write-tools — at that point §5.4 becomes the normative starting point.
-- **§2.2 vectors 3 / 8 / 9 (reviewer-agent as receiver) — vestigial in Phase 0**, but the vectors themselves remain relevant for runtime AI flows (chat assistant reads doctor messages → vector 1; content-pipeline reads author uploads → vector 2; web-search agent reads external pages → vector 7). No threat-model edit required.
-- **§11.1 (migration plan, pre-pilot) bullet "reviewer-agent inventoried as single-Q-LLM equivalent without tools" — vestigial.** Pre-pilot remaining task list (sanitizer, `packages/llm-utils/dual-llm/`, red-team corpus baseline, observability) is unchanged.
-- **§3 (Pattern definition), §6 (sanitization), §7 (provider selection), §8 (failure modes), §9 (testing), §10 (observability), §12 (acceptance criteria) — unchanged**, load-bearing for runtime AI features (Content Pipeline v2 → §5.1; NMO-assistant → §5.2; web-search agent → §5.3).
-- **Interactive review modes** (subagent `/review` skill, parallel Codex CLI per ADR-0007 Amendment A1) — out of scope for this spec; they are local developer tooling, not backend AI flows with side-effect tools.
-
-**Cross-refs:** ADR-0007 §Amendment A1, ADR-0008 §Amendment A2, ADR-0010 §Amendment A1, repo-strategy-design §Amendment SD2, AI-stack design spec §6/§7/§10 SUPERSEDED callouts.

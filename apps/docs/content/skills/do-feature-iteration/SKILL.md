@@ -9,7 +9,7 @@ mode: inline
 
 **Kind:** orchestration · **Mode:** inline (the lead agent executes this procedure itself; it dispatches subagents only at the sub-steps explicitly marked dispatch).
 
-> **Cannot proceed without** — the artifacts produced by `run-iteration-end-checklist` (PASS verdict), `request-mode-a-review` (APPROVE verdict), and `surface-decision-debt` (list, may be `[]`). The lead agent does not advance past these gates without the artifact in hand. This is the primary enforcement for G11 findings F-14 (review forgotten) and F-15 (decorative checklist) — see ADR-0007 Amendment A2.
+> **Cannot proceed without** — the artifacts produced by `run-iteration-end-checklist` (PASS verdict), `request-mode-a-review` (APPROVE verdict), and `surface-decision-debt` (list, may be `[]`). The lead agent does not advance past these gates without the artifact in hand. ADR-0007 §2.4 codifies this as the verdict-gated iteration cycle (G11 findings F-14 review-forgotten and F-15 decorative-checklist).
 
 ## Input
 
@@ -23,7 +23,7 @@ Execute the steps in order. Each `→` is a hard gate: the next step does not be
 
 1. **`read-relevant-adrs`** (inline) — load ADRs cited in `requirements.md` "Prior decisions" plus any architecturally adjacent ADRs. Cite them in the first user-facing reply.
 2. **`verify-base-ci-green`** (inline) — `gh run list --branch main --limit 1`. If red, note in PR description that baseline was already red.
-3. **RED** — write one failing Vitest test per EARS-N. Naming: `it('EARS-N: when <trigger>, system shall <behavior>')`. Flat numbering per ADR-0006 Amendment A1; nest to `N.M` only when one handler carries multiple shall-clauses.
+3. **RED** — write one failing Vitest test per EARS-N. Naming: `it('EARS-N: when <trigger>, system shall <behavior>')`. Flat numbering per ADR-0006 §4; nest to `N.M` only when one handler carries multiple shall-clauses.
 4. **GREEN** — minimum code to pass the failing test.
 5. **REFACTOR** — clean up while staying green.
 6. **`run-iteration-end-checklist`** (dispatch) — verdict-gated. If `BLOCKED on #X`, fix item X and re-dispatch. Do **not** continue past a BLOCKED verdict.
@@ -32,7 +32,7 @@ Execute the steps in order. Each `→` is a hard gate: the next step does not be
 9. **`request-mode-a-review`** (dispatch) — verdict-gated. If `REQUEST_CHANGES`, route to `respond-to-review`. Re-dispatch until APPROVE.
 10. **`respond-to-review`** (inline) — fix or reject-with-rationale per finding. Loop with step 9 until APPROVE + green CI.
 11. **`write-iteration-summary`** (inline) — Issue comment with file paths, decisions taken, decision-debt items, links.
-12. **`merge-when-green`** (inline) — `gh pr merge <N> --auto --squash --delete-branch`. Per ADR-0007 Amendment A2, a positive Mode (a) verdict + green CI is sufficient; human-merge is not required.
+12. **`merge-when-green`** (inline) — `gh pr merge <N> --auto --squash --delete-branch`. Per ADR-0007 §2.4 + §2.10, a positive Mode (a) verdict + green CI is sufficient; human-merge is not required.
 
 ## Output
 

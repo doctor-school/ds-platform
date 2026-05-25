@@ -135,6 +135,8 @@ Two adjacent templates, each with its own discipline:
 - If a feature has a long transaction with compensations — a "Saga" section is added to `requirements.md` (reference doc §5.6) with an explicit compensate-mapping per step and failure policy.
 - Decomposition into atomic tasks (one EARS-handler ≈ one Issue) is done **in GitHub Issues** (see §9), not in a Git file. Git holds intent (EARS-N), GitHub Issues hold execution state (assignee, status, PR-link, comments).
 
+**EARS numbering — flat by default.** EARS requirements in `requirements.md` are numbered `EARS-1`, `EARS-2`, `EARS-3`, … without a `.M` sub-component, regardless of total count. The Vitest test naming follows: `it('EARS-N: when <trigger>, system shall <behavior>', () => { … })`. Nested `EARS-N.M` is allowed **only** when a single handler genuinely carries multiple shall-clauses (e.g., an OIDC-callback handler that both upserts a doctor profile and emits a `DoctorRegistered` event — `EARS-3.1` create/upsert + `EARS-3.2` emit). The trigger for nesting is "one EARS sentence becomes hard to write without 'and' or 'while'"; if a flat number suffices, use a flat number. The `ears-tests` lint guard (ADR-0007 §2.6) reads both forms.
+
 Outputs of Spec-Driven Development:
 
 - EARS-handlers → unit tests (Vitest), one EARS ≈ one test.
@@ -373,36 +375,3 @@ ds-platform/
 - **DSO-31** — structure of `apps/docs/`, `apps/docs-cms/`, `packages/glossary/`, `tools/lint/`.
 - **Payload Phase 0 implementation** — Payload Glossary Collection requires canonical glossary as SSOT.
 - **Feature specs DS Platform code** — spec format is locked, work can begin on `docs/content/specs/features/001-*/` for the first product feature.
-
----
-
-## 7. Amendments
-
-### Amendment A1 — EARS-N flat numbering (2026-05-20, DSP-194 follow-up)
-
-**Context:** §4 of this ADR fixed the SDD feature-spec format but left EARS requirement numbering underspecified: the original text shows `EARS-N.M` examples (e.g., `EARS-3.1`) without explicit guidance on when `.M` is required vs. cosmetic. The G11 smoke test (DSP-181) authored the first feature-spec (`001-api-bootstrap-health`) with a single-shall-clause handler initially numbered `EARS-1.1`; the spec was subsequently flattened to `EARS-1` in commit `073d6da`. The G11 smoke retrospective (finding F-5) recommended codifying flat numbering as the default.
-
-**Decision (amendment):**
-
-**A1.1 — Flat numbering is the default.** EARS requirements in `requirements.md` are numbered `EARS-1`, `EARS-2`, `EARS-3`, … without a `.M` sub-component, regardless of total count. The Vitest test naming follows: `it('EARS-N: when <trigger>, system shall <behavior>', () => { … })`.
-
-**A1.2 — Nested `EARS-N.M` is allowed only when a single handler genuinely carries multiple shall-clauses.** Example: an OIDC-callback handler that both creates-or-upserts a doctor profile and emits a `DoctorRegistered` event might be written as `EARS-3.1` (create/upsert) + `EARS-3.2` (emit event). The trigger for nesting is "one EARS sentence becomes hard to write without 'and' or 'while'"; if a flat number suffices, use a flat number.
-
-**A1.3 — Existing specs.** No retroactive renumbering. Specs authored before this amendment may carry `EARS-N.M` patterns; those remain valid in place. New specs use flat numbering. The `001-api-bootstrap-health` spec, already flattened in commit `073d6da`, serves as the reference.
-
-**Consequences:**
-
-- The `author-ears-spec` SKILL.md (DSP-194 deliverable, `apps/docs/content/skills/author-ears-spec/SKILL.md`) cites this amendment as the numbering contract.
-- The `ears-tests` lint guard (ADR-0007 §2.6) reads both `EARS-N` and `EARS-N.M` test names; no lint change needed.
-- F-5 closed.
-
-**Why now (timing):**
-
-The DSP-194 refactor (agent instructions → thin orchestrator + skill catalog) needs an unambiguous EARS numbering rule to encode in the `author-ears-spec` subagent prompt. Codifying the rule in ADR-0006 keeps the SSOT for SDD format in one place; the skill cites the ADR.
-
-**Open follow-up:** none.
-
-**Affects (downstream):**
-
-- `apps/docs/content/skills/author-ears-spec/SKILL.md` — cites ADR-0006 Amendment A1.
-- `AGENTS.md` §6 (Hard rules / TDD) — cites ADR-0006 Amendment A1.

@@ -109,17 +109,7 @@ Cross-zone constraints: все профили отдают `Strict-Transport-Sec
 
 ### 8. IdP — Zitadel
 
-**Decision.** IdP для DS Platform — **Zitadel** (2026-05-25, DSP-209). Hands-on спайк не выполнялся: все различия и требования верифицируются по официальной документации, release notes и community-фактуре — hands-on на этой стадии не давал дополнительной информации.
-
-**Методология (полная фактура — design-spec §9).** Критерии разделены на гейты (оба кандидата проходят равно — в scoring не идут, иначе ложно стягивают итог) и дифференциаторы (где кандидаты реально различаются). Веса дифференциаторов — по принципу impact × probability × duration: пожизненная/повторяющаяся боль > разовая/хвостовая.
-
-**Scoring.** По 7 взвешенным дифференциаторам: **Zitadel 408 / 500 = 81.6%** vs Authentik 379 / 500 = 75.8% (+5.8 п.п.). Три самых тяжёлых веса (52% scoring'а) уходят Zitadel:
-
-- **D2 Headless API ergonomics (22).** v2 Session API explicit resource-oriented vs Authentik flow-executor server-driven state machine, спроектированный под outposts. Это пожизненная поверхность интеграции 6 приложений.
-- **D3 Эксплуатационный налог (22).** Stateless Go-binary + автоматические Postgres-миграции vs Authentik multi-service + breaking changes ~каждый релиз (нельзя пропускать версии, downgrade нет, документированы upgrade-падения #14501, #20634). Повторяющаяся боль для команды 1–2.
-- **D7 Compliance posture (8).** ISO 27001 + SOC 2 Type II вендор, SIEM-export OOB, full PII-min — облегчает narrative готовящегося УЗ-3 audit. Authentik — без own certifications, audit-export CSV gated в Enterprise.
-
-Победы Authentik (D1 OOB-функциональность v1, D4 зрелость self-hosted, D6 MIT-лицензия) структурно «легче»: разовый билд-кост, слабо давит в v1 ≤200 юзеров, контролируемая лицензионная дисциплина.
+**Решение.** IdP для DS Platform — **Zitadel** (2026-05-25, DSP-209). Закрыто desk-research'ем; hands-on спайк не выполнялся.
 
 **License discipline (AGPL 3.0).** Zitadel сменил лицензию Apache 2.0 → AGPL 3.0 в 2025. Source-disclosure обязательство (§13 AGPL) срабатывает ТОЛЬКО при патче исходников Zitadel с network-доступом для юзеров. Для self-host без модификаций практическая разница с MIT = 0. Норма:
 
@@ -130,13 +120,13 @@ Cross-zone constraints: все профили отдают `Strict-Transport-Sec
 **Known trade-offs.**
 
 - Magic-link строится кастомом на session API (~1–2 дня; не core-фича Zitadel, GitHub #2075). Security-review обязателен.
-- Меньшая self-hosted база vs Authentik (13.4k★ vs 20.7k★) — в v1 ≤200 юзеров не давит; пересмотр триггерится только если в v2+ возникнут production-проблемы зрелости.
+- Self-hosted база Zitadel ~13.4k★ — в v1 ≤200 юзеров не давит; пересмотр триггерится только если в v2+ возникнут production-проблемы зрелости.
 
 #### Отвергнутые кандидаты
 
-Keycloak, Authentik, Ory Kratos, Authelia, Logto, FusionAuth, SuperTokens рассматривались. Полное обоснование по каждому кандидату, методология scoring и evidence — в bbm `decisions-log.md` [2026-05-25]. Краткие trade-offs: Keycloak — fallback при критических проблемах с Zitadel (наиболее зрелая OSS-альтернатива); Authentik — ближайший конкурент (D2/D3/D7 дали Zitadel +5.8 п.п.); остальные — категориальные несоответствия или пробелы зрелости.
+Keycloak, Authentik, Ory Kratos, Authelia, Logto, FusionAuth, SuperTokens рассматривались. Полное обоснование по каждому кандидату, методология scoring (гейты / 7 взвешенных дифференциаторов / evidence URLs) и история решения — в bbm `decisions-log.md` [2026-05-25]. Операционный fallback: Keycloak при критических проблемах с Zitadel (наиболее зрелая OSS-альтернатива).
 
-**Consequences для других ADR/spec'ов.** ADR-0004 §3, local-dev design-spec §3.1 и другие документы исторически держали «Authentik» как placeholder/default — sweep выполнен в рамках DSP-210. DSP-157 (local-dev compose IDP) разблокирован.
+**Consequences.** DSP-157 (local-dev compose IDP) разблокирован.
 
 ### 9. Миграция из Directual — hard domain cutover (изменено 2026-05-18, DSO-63 #4)
 

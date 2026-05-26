@@ -532,7 +532,7 @@ Postgres (общий с domain):
 
 ⚠️ **Намеренное усиление:** namespace separation `cms.*` vs `public.*` — недостаточно как security boundary. Это **naming convention** на уровне query patterns, не privilege enforcement. Без role-level разделения Payload migration runner (или misconfigured тест) может случайно операционировать вне `cms.*`.
 
-Решение — **dedicated Postgres roles** (фиксируется как требование к DSO-10 / ADR-0003 amendment):
+Решение — **dedicated Postgres roles** (фиксируется как требование к DSO-10; ADR-0003 §1 обновляется inline, чтобы зафиксировать multi-role privilege separation наряду с single-instance топологией):
 
 ```sql
 -- DDL для Postgres (выполняется при provisioning, DSO-10 / DSO-27 follow-up)
@@ -566,7 +566,7 @@ REVOKE ALL   ON SCHEMA public FROM cms_owner;
 
 **Read-cross-schema (если потребуется):** портал может SELECT из `cms.pages` для рендеринга промо-контента → добавляется `GRANT SELECT ON ALL TABLES IN SCHEMA cms TO app_owner;` точечно. Write — никогда cross-schema.
 
-Это требование фиксируется как amendment к ADR-0003 §1 (single Postgres instance, **multi-role privilege separation** обязательна с появлением `cms.*` namespace).
+Это требование расширяет ADR-0003 §1: single Postgres instance теперь обязывает **multi-role privilege separation** с появлением `cms.*` namespace. ADR-0003 §1 обновляется inline, чтобы это отразить.
 
 ### 10.3. SSOT enforcement via Glossary
 

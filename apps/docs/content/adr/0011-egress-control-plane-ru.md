@@ -43,7 +43,7 @@ lang: ru
 ### 2.1 Принципы
 
 1. **PD / секреты не покидают RF-зону**, кроме явно одобренных каналов из §2.2.
-2. **Default deny:** новый external API / SaaS / outbound channel — отдельное решение (mini-ADR или amendment к этому ADR). Не «agent решает на ходу».
+2. **Default deny:** новый external API / SaaS / outbound channel — отдельное решение (mini-ADR или ревизия этого ADR). Не «agent решает на ходу».
 3. **Каждый одобренный канал имеет три гарантии:**
 
 - **Sanitizer** (что именно сейчас можно отправить) — реализация в коде, не на доверии.
@@ -151,7 +151,7 @@ Forward-ref для канала #1 (AI provider egress): любой runtime LLM-
 
 - `@ds/pii-filter` + sanitizer тулинг — implementation cost, ≈ 1 неделя backend + 1 неделя CI tooling.
 - Quarterly audit job — operational cost (4 часа квартал).
-- Каждый new external endpoint требует amendment к этому ADR (overhead, но это by design).
+- Каждый new external endpoint требует ревизии этого ADR (overhead, но это by design).
 
 ### Downstream dependencies
 

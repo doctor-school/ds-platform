@@ -127,7 +127,7 @@ Forward-ref: контракт исполнения erasure (BullMQ-задача 
 
 ### 2.9 Schema location
 
-Все PD-lifecycle таблицы (`consent_*`, `data_export_requests`, `erasure_requests`) живут в `packages/db/schema/pd/` (ADR-0003 amendment по DSO-63 #10/I — schemas в `packages/db/`, не в `apps/api`).
+Все PD-lifecycle таблицы (`consent_*`, `data_export_requests`, `erasure_requests`) живут в `packages/db/schema/pd/`. По DSO-63 #10/I, schemas живут в `packages/db/`, а не в `apps/api`; ADR-0003 §4 (ORM + Migrations) обновляется inline, чтобы зафиксировать этот layout.
 
 ---
 
@@ -168,7 +168,7 @@ Forward-ref: контракт исполнения erasure (BullMQ-задача 
 
 ### Дальнейшие зависимости
 
-- **DSO-X1 (Directual cutover, DSO-63 #4)** — first-login flow должен capture consent v1 (см. ADR-0001 §9 amendment по DSO-63 #4).
+- **DSO-X1 (Directual cutover, DSO-63 #4)** — first-login flow должен capture consent v1 (требование к ADR-0001 §9: first-login flow, определённый там, обязан реализовать capture consent v1 по DSO-63 #4).
 - **DSO-X2 (РКН + ФСТЭК-21, DSO-63 #7)** — Privacy Notice ссылается на consent versions + retention matrix.
 - **ADR-0011 (Egress control plane)** — пропагирует erasure в AI-zone.
 

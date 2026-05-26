@@ -165,6 +165,6 @@ Every AI flow MUST carry a CI-readable annotation:
 
 ## 7. Open Questions
 
-- **OQ-DL10-1:** Hard rule vs recommendation on cross-vendor between Q-LLM and P-LLM in a single flow. Pre-pilot — a recommendation (see dual-llm-pattern-design §7.3). Pilot+ — revisit after the first real injection incident; may be promoted to a hard rule via a separate amendment.
+- **OQ-DL10-1:** Hard rule vs recommendation on cross-vendor between Q-LLM and P-LLM in a single flow. Pre-pilot — a recommendation (see dual-llm-pattern-design §7.3). Pilot+ — revisit after the first real injection incident; may be promoted to a hard rule via a separate ADR revision.
 - **OQ-DL10-2:** Applicability of the pattern to future non-backend AI flows (mobile-side on-device inference, browser-side classification). Pre-pilot — out of scope (all AI logic is server-side per ADR-0007). Revisit at the first on-device feature.
 - **OQ-DL10-3:** P-LLM streaming mode and preserving fail-closed semantics on partial streams — resolved in the first streaming flow design (see dual-llm-pattern-design §13 OQ-DL-6).

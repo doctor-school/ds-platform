@@ -364,7 +364,7 @@ Storage — append-only Postgres table or event-store (if IdP = Zitadel — nati
 
 ### 7.4. Open question (Phase 0 implementation)
 
-Where the session store lives — inside the IdP or shared backend Redis. Default — inside the IdP. The decision depends on the headless API ergonomics of both candidates (determined during the spike). This is **not a design blocker** — the force-logout guarantee is the same in both cases (15-min window for access + introspection for high-stakes).
+Where the session store lives — inside the IdP or shared backend Redis. Default — inside the IdP. The decision depends on the headless API ergonomics of both candidates (determined during Phase 0 implementation). This is **not a design blocker** — the force-logout guarantee is the same in both cases (15-min window for access + introspection for high-stakes).
 
 ### 7.5. Cross-app SSO via OIDC silent re-auth (DSO-63 #2)
 
@@ -382,10 +382,10 @@ Cross-app login continuity between portal, admin, promo, docs, cms is **not a sh
 
 **If there is no IdP session** (user not logged in anywhere): IdP returns `error=login_required` → admin Next.js redirects to the standard login flow (auth.doctor.school/login).
 
-**IdP requirements** (criteria for DSO-25 spike):
+**IdP requirements:**
 
 - `prompt=none` supported (silent re-auth).
-- Multiple `redirect_uri` allowed per OAuth client, **or** multiple OAuth clients (one per subdomain) — design choice during spike. Multiple clients cleaner for blast-radius isolation.
+- Multiple `redirect_uri` allowed per OAuth client, **or** multiple OAuth clients (one per subdomain). Multiple clients cleaner for blast-radius isolation.
 - IdP session cookie — host-only (no `Domain=`), `SameSite=Lax` or `Strict`.
 
 Zitadel supports these natively (`prompt=none` silent re-auth, multiple redirect_uri/clients, host-only session cookie).
@@ -502,7 +502,7 @@ This is a closed flow with audit events `mfa_enrolled` + `lockout_triggered (mfa
 | Risk                                                             | Impact                                              | Mitigation                                                                         |
 | ---------------------------------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | Directual password hash format is custom / SHA-256               | Forced reset, reactivation 20–40% in 30 days        | 90-day window + three email waves; explicit expectation of 30–50% dormant          |
-| Telegram Login Widget HMAC custom — bug in implementation        | Telegram auth does not work / security hole         | Spike includes Telegram flow; reference implementations                            |
+| Telegram Login Widget HMAC custom — bug in implementation        | Telegram auth does not work / security hole         | Phase 0 implementation includes Telegram flow + reference implementations          |
 | Apple Developer Program registration for an RF legal entity      | Blocks v3 mobile SIWA                               | Parallel legal track                                                               |
 | RF SMS provider rate-limited / failure                           | Phone-OTP login unavailable                         | Failover 2 SMS providers (digest §2) + global circuit-breaker (§5.5)               |
 | Actual doctor count in Directual turns out to be 65k+            | Migration logistics larger                          | Phase 0 discovery gives exact count                                                |

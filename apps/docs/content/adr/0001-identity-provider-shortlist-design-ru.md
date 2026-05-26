@@ -365,7 +365,7 @@ Storage — append-only Postgres table или event-store (если IdP = Zitade
 
 ### 7.4. Открытый вопрос (Phase 0 implementation)
 
-Где живёт session store — внутри IdP или общий backend Redis. Default — внутри IdP. Решение зависит от headless API ergonomics обоих кандидатов (выясняется в спайке). Это **не блокер дизайна** — force-logout гарантия одинакова в обоих вариантах (15-мин window для access + introspection для high-stakes).
+Где живёт session store — внутри IdP или общий backend Redis. Default — внутри IdP. Решение зависит от headless API ergonomics обоих кандидатов (определяется в Phase 0 implementation). Это **не блокер дизайна** — force-logout гарантия одинакова в обоих вариантах (15-мин window для access + introspection для high-stakes).
 
 ### 7.5. Cross-app SSO via OIDC silent re-auth (DSO-63 #2)
 
@@ -383,10 +383,10 @@ Cross-app login continuity между portal, admin, promo, docs, cms — **не
 
 **Если IdP-сессии нет** (пользователь не залогинен где-либо вообще): IdP возвращает `error=login_required` → admin Next.js redirects к стандартному login flow (auth.doctor.school/login).
 
-**Требования к IdP** (критерии для DSO-25 spike):
+**Требования к IdP:**
 
 - `prompt=none` поддерживается (silent re-auth).
-- Multiple `redirect_uri` allowed per OAuth client, **или** multiple OAuth clients (по одному на subdomain) — design choice in spike. Multiple clients чище для blast-radius isolation.
+- Multiple `redirect_uri` allowed per OAuth client, **или** multiple OAuth clients (по одному на subdomain). Multiple clients чище для blast-radius isolation.
 - Cookie IdP-сессии — host-only (без `Domain=`), `SameSite=Lax` или `Strict`.
 
 Zitadel поддерживает это нативно (`prompt=none` silent re-auth, multiple redirect_uri/clients, host-only session cookie).
@@ -500,7 +500,7 @@ Flow:
 | Risk                                                           | Impact                                          | Mitigation                                                                        |
 | -------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------- |
 | Directual password hash формат самописный / SHA-256            | Forced reset, reactivation 20–40% в 30 дней     | 90-дневное окно + три волны email; explicit ожидание dormant 30–50%               |
-| Telegram Login Widget HMAC custom — баг в реализации           | Telegram auth не работает / security hole       | Спайк включает Telegram-flow; reference implementations                           |
+| Telegram Login Widget HMAC custom — баг в реализации           | Telegram auth не работает / security hole       | Phase 0 implementation включает Telegram-flow + reference implementations         |
 | Apple Developer Program registration для РФ-юрлица             | Блокирует v3 mobile SIWA                        | Параллельный legal-track                                                          |
 | SMS-провайдер РФ rate-limited / отказ                          | Phone-OTP login недоступен                      | Failover 2 SMS-провайдера (digest §2) + global circuit-breaker (§5.5)             |
 | Реальное число врачей в Directual оказывается 65k+             | Migration logistics больше                      | Phase 0 discovery даёт точный count                                               |

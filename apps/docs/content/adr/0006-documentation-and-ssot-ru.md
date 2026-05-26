@@ -128,14 +128,14 @@ UI-слой над теми же `.md` / `.mdx` / `.yaml` файлами в Git.
 
 **Feature specs** — `docs/content/specs/features/NNN-<feature-name>/`.
 
-- SDD-структура (3 файла, без `tasks.md` — задачи живут в GitHub Issues, не в Git, см. §9 ниже):
-- `requirements.md` — frontmatter с `tracker:` (URL GitHub milestone) + Outcomes / Scope / Constraints / Prior decisions / **Event Model (Commands/Events/Read models/Policies)** / **EARS requirements** (one per handler) / Invariants / Verification.
-- `design.md` — Mermaid sequence-диаграммы каскадов, state-диаграммы lifecycle, ER-фрагменты.
-- `scenarios.feature` — Gherkin, happy path + 2-3 failure branches.
-- Если у фичи есть длинная транзакция с компенсациями — добавляется секция «Saga» в `requirements.md` (reference doc §5.6) с явным compensate-mapping per step и failure policy.
+- SDD-структура (3 файла, без `tasks.md` — задачи живут в GitHub Issues, не в Git, см. §9 ниже). Каждый файл внутри per-spec директории **именуется с префиксом номера спеки**, чтобы имена оставались глобально уникальными в IDE-вкладках, fuzzy file picker, выводе `grep -l` и diff-обзорах:
+- `NNN-requirements.md` — frontmatter с `tracker:` (URL GitHub milestone) + Outcomes / Scope / Constraints / Prior decisions / **Event Model (Commands/Events/Read models/Policies)** / **EARS requirements** (one per handler) / Invariants / Verification.
+- `NNN-design.md` — Mermaid sequence-диаграммы каскадов, state-диаграммы lifecycle, ER-фрагменты.
+- `NNN-scenarios.feature` — Gherkin, happy path + 2-3 failure branches.
+- Если у фичи есть длинная транзакция с компенсациями — добавляется секция «Saga» в `NNN-requirements.md` (reference doc §5.6) с явным compensate-mapping per step и failure policy.
 - Decomposition на атомарные задачи (один EARS-handler ≈ один Issue) делается **в GitHub Issues** (см. §9), не в Git-файле. Git хранит intent (EARS-N), GitHub Issues хранит execution state (assignee, status, PR-link, comments).
 
-**Нумерация EARS — плоская по умолчанию.** EARS-требования в `requirements.md` нумеруются `EARS-1`, `EARS-2`, `EARS-3`, …, без под-компоненты `.M`, независимо от общего числа. Имя Vitest-теста соответствует: `it('EARS-N: when <trigger>, system shall <behavior>', () => { … })`. Вложенный `EARS-N.M` допустим **только** тогда, когда один обработчик действительно несёт несколько shall-выражений (например, OIDC-callback, который и upsert'ит профиль врача, и эмитит событие `DoctorRegistered` — `EARS-3.1` create/upsert + `EARS-3.2` emit). Триггер для вложенности — «одно EARS-предложение становится трудно сформулировать без 'and' или 'while'»; если плоский номер вытягивает, используем плоский. Lint-guard `ears-tests` (ADR-0007 §2.6) читает обе формы.
+**Нумерация EARS — плоская по умолчанию.** EARS-требования в `NNN-requirements.md` нумеруются `EARS-1`, `EARS-2`, `EARS-3`, …, без под-компоненты `.M`, независимо от общего числа. Имя Vitest-теста соответствует: `it('EARS-N: when <trigger>, system shall <behavior>', () => { … })`. Вложенный `EARS-N.M` допустим **только** тогда, когда один обработчик действительно несёт несколько shall-выражений (например, OIDC-callback, который и upsert'ит профиль врача, и эмитит событие `DoctorRegistered` — `EARS-3.1` create/upsert + `EARS-3.2` emit). Триггер для вложенности — «одно EARS-предложение становится трудно сформулировать без 'and' или 'while'»; если плоский номер вытягивает, используем плоский. Lint-guard `ears-tests` (ADR-0007 §2.6) читает обе формы.
 
 Outputs Spec-Driven Development:
 
@@ -212,8 +212,8 @@ Sequence / state / ER / C4Context — все Mermaid в MDX. Rendering — Fumad
 
 **Convention GitHub Issues для feature-implementation:**
 
-- **One Milestone per feature** (например `001-doctor-onboarding`), description содержит link на `apps/docs/content/specs/features/001-doctor-onboarding/requirements.md`.
-- **One Issue per EARS-handler** — title `[001] EARS-3: When OIDC callback received, the system shall ...`, body содержит link на specific EARS-ID в requirements.md.
+- **One Milestone per feature** (например `001-doctor-onboarding`), description содержит link на `apps/docs/content/specs/features/001-doctor-onboarding/001-requirements.md`.
+- **One Issue per EARS-handler** — title `[001] EARS-3: When OIDC callback received, the system shall ...`, body содержит link на specific EARS-ID в `NNN-requirements.md`.
 - **Labels** — `feature:NNN-name`, `kind:ears-handler` / `kind:bug` / `kind:refactor` / `kind:dep-upgrade`.
 - **GitHub Project v2** — «DS Platform Implementation» board с swimlanes by feature.
 
@@ -221,7 +221,7 @@ Sequence / state / ER / C4Context — все Mermaid в MDX. Rendering — Fumad
 
 - Plane Issue → GitHub: URL в description или comment.
 - GitHub Issue → Plane: URL в body, optional label `plane:DSO-N`.
-- Feature spec → GitHub Milestone: frontmatter поле `tracker: <github-milestone-url>` в `requirements.md`.
+- Feature spec → GitHub Milestone: frontmatter поле `tracker: <github-milestone-url>` в `NNN-requirements.md`.
 
 **AI-агент workflow:**
 

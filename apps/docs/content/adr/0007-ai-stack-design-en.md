@@ -129,7 +129,7 @@ Hard rule, enforced via AGENTS.md + TDD-signal CI guard (§5.2 WARN v1 → BLOCK
 
 - **No production code without a failing test** that motivates that code.
 - One Vitest test per EARS requirement; naming: `it('EARS-N.M: ...', ...)`.
-- Playwright tests are generated from `scenarios.feature` via playwright-bdd (test code ≠ production code).
+- Playwright tests are generated from `NNN-scenarios.feature` via playwright-bdd (test code ≠ production code).
 - Property-based tests for invariants — opt-in from the first feature with invariants (ledger reconciliation, for example).
 - superpowers:test-driven-development skill — mandatory invocation for any implementation task.
 
@@ -419,7 +419,7 @@ Before `git push` the agent goes through each item. If even one is false — do 
 | 3   | TypeScript compiles                                                           | `pnpm typecheck`                                              |
 | 4   | Lint clean                                                                    | `pnpm lint` (incl. `@ds/glossary-canonical-ids`, events-lint) |
 | 5   | Module README updated if exports changed                                      | `pnpm lint:module-readme`                                     |
-| 6   | Spec `status` frontmatter updated (Draft → In dev → Shipped)                  | manual edit in `requirements.md`                              |
+| 6   | Spec `status` frontmatter updated (Draft → In dev → Shipped)                  | manual edit in `NNN-requirements.md`                          |
 | 7   | Glossary terms added if new domain vocabulary appeared in code/spec           | `pnpm lint:glossary-mdx`                                      |
 | 8   | ADR created if an architectural decision was made                             | judgment; interactive reviewer (AGENTS.md §4) catches misses  |
 | 9   | Linked Issue received a summary comment (file paths, decisions, what remains) | `gh issue comment <N> --body-file <summary>`                  |
@@ -433,7 +433,7 @@ Before `git push` the agent goes through each item. If even one is false — do 
 | **EARS ↔ test linkage**   | EARS requirement without `it('EARS-N: ...')`                             | Custom lint `tools/lint/ears-test-lint.ts`: parses EARS IDs in requirements.md, checks for it-descriptions with the same ID in the module.                               | WARN v1 → BLOCK v2    |
 | **Gherkin coverage**      | scenarios without Playwright step implementation                         | playwright-bdd native error — test fails if step is undefined.                                                                                                           | BLOCK (via test fail) |
 | **Spec status freshness** | Merged PR with spec:NNN but spec status='Draft'                          | Custom lint: at merge — check `status: In dev` minimum.                                                                                                                  | WARN v1               |
-| **Prior decisions cited** | New spec without cited ADRs in "Prior decisions" if category ≠ docs-only | Spec lint: `requirements.md` has a section with ≥1 ADR-link.                                                                                                             | WARN v1               |
+| **Prior decisions cited** | New spec without cited ADRs in "Prior decisions" if category ≠ docs-only | Spec lint: `NNN-requirements.md` has a section with ≥1 ADR-link.                                                                                                         | WARN v1               |
 
 > **Interim semantics note:** rows marked `BLOCK` assume a server-side required status check on `main`. While ADR-0008 §2.6 branch protection is deferred (GitHub Free + private repo blocks the branch-protection API — ADR-0008 §2.6), `BLOCK` is read operationally as **"CI job exits red and the Tech Lead treats it as a merge-blocker by convention"** — same outcome on the single-developer happy path, no server-side guarantee.
 
@@ -452,7 +452,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 async function main() {
   const specs = await glob(
-    "apps/docs/content/specs/features/*/requirements.md",
+    "apps/docs/content/specs/features/*/*-requirements.md",
     {
       cwd: REPO_ROOT,
       absolute: true,
@@ -947,7 +947,7 @@ Per ADR-0006 §9 conventions (title format `[NNN] EARS-N.M: ...`, label `kind:ea
   gh issue create --title "Feature NNN: <name>" \
    --milestone "NNN-<slug>" --label "feature:NNN-<slug>" \
    --body-file .github/issue_templates/feature.md
-  Then for each EARS-handler from `requirements.md`:
+  Then for each EARS-handler from `NNN-requirements.md`:
   gh issue create --title "[NNN] EARS-N.M: <description>" \
    --milestone "NNN-<slug>" --label "feature:NNN-<slug>,kind:ears-handler,agent-ready" \
    --body "Spec: apps/docs/content/specs/features/NNN-<slug>/. Parent: #<parent-issue>."

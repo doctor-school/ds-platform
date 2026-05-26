@@ -63,7 +63,7 @@ All harnesses follow the same 8-step iteration cycle (see §2.4).
 ### 2.3 SDD + TDD as hard rules
 
 - **SDD:** no production code without a feature spec in `apps/docs/content/specs/features/NNN-<slug>/` (3 files: requirements/design/scenarios — format from ADR-0006 §4). If there is no spec, the agent first writes one via superpowers:brainstorming.
-- **TDD:** no production code without a failing test. One Vitest test per EARS requirement, naming `it('EARS-N.M: ...', ...)`. Playwright tests are generated from `scenarios.feature` via `playwright-bdd`.
+- **TDD:** no production code without a failing test. One Vitest test per EARS requirement, naming `it('EARS-N.M: ...', ...)`. Playwright tests are generated from `NNN-scenarios.feature` via `playwright-bdd`.
 - **Narrow exceptions** (typo / doc-only / dep-bumps / regenerated artifacts) are documented in the PR description.
 
 Enforcement: AGENTS.md hard rules + machine-checkable CI guards (§2.6).

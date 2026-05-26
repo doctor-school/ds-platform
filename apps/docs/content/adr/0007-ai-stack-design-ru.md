@@ -128,7 +128,7 @@ Hard rule, enforce'ится через AGENTS.md + TDD-signal CI guard (§5.2 WA
 
 - **Никакого production-кода без failing test'а**, который этот код motivates.
 - One Vitest test per EARS requirement; naming: `it('EARS-N.M: ...', ...)`.
-- Playwright tests генерируются из `scenarios.feature` через playwright-bdd (test code != production code).
+- Playwright tests генерируются из `NNN-scenarios.feature` через playwright-bdd (test code != production code).
 - Property-based tests для invariants — opt-in от первой фичи с инвариантами (ledger reconciliation, например).
 - superpowers:test-driven-development skill — обязательный invocation для любого implementation task.
 
@@ -418,7 +418,7 @@ main().catch((e) => {
 | 3   | TypeScript compiles                                                        | `pnpm typecheck`                                              |
 | 4   | Lint clean                                                                 | `pnpm lint` (incl. `@ds/glossary-canonical-ids`, events-lint) |
 | 5   | Module README updated если exports changed                                 | `pnpm lint:module-readme`                                     |
-| 6   | Spec `status` frontmatter обновлён (Draft → In dev → Shipped)              | manual edit в `requirements.md`                               |
+| 6   | Spec `status` frontmatter обновлён (Draft → In dev → Shipped)              | manual edit в `NNN-requirements.md`                           |
 | 7   | Glossary terms добавлены если в коде/spec появилась новая доменная лексика | `pnpm lint:glossary-mdx`                                      |
 | 8   | ADR создан если было архитектурное решение                                 | judgment; интерактивный reviewer (AGENTS.md §4) ловит miss'ы  |
 | 9   | Linked Issue получил summary comment (file paths, decisions, что осталось) | `gh issue comment <N> --body-file <summary>`                  |
@@ -432,7 +432,7 @@ main().catch((e) => {
 | **EARS ↔ test linkage**   | EARS-требование без `it('EARS-N: ...')`                                     | Custom lint `tools/lint/ears-test-lint.ts`: парсит EARS IDs в requirements.md, проверяет наличие it-описаний с тем же ID в модуле.                                          | WARN v1 → BLOCK v2      |
 | **Gherkin coverage**      | scenarios без Playwright step реализации                                    | playwright-bdd native error — test fails если step undefined.                                                                                                               | BLOCK (через test fail) |
 | **Spec status freshness** | Merged PR со spec:NNN, но spec status='Draft'                               | Custom lint: при merge — проверить `status: In dev` minimum.                                                                                                                | WARN v1                 |
-| **Prior decisions cited** | Новый spec без указанных ADR в "Prior decisions" если категория ≠ docs-only | Spec lint: `requirements.md` имеет секцию с ≥1 ADR-link.                                                                                                                    | WARN v1                 |
+| **Prior decisions cited** | Новый spec без указанных ADR в "Prior decisions" если категория ≠ docs-only | Spec lint: `NNN-requirements.md` имеет секцию с ≥1 ADR-link.                                                                                                                | WARN v1                 |
 
 > **Interim semantics note:** строки `BLOCK` предполагают server-side required status check на `main`. Пока branch protection (ADR-0008 §2.6) отложен (GitHub Free + private repo блокирует branch-protection API — ADR-0008 §2.6), `BLOCK` читается операционально как **«CI job выходит red, и Tech Lead трактует это как merge-blocker по convention'у»** — тот же outcome на single-developer happy path, без server-side гарантии.
 
@@ -451,7 +451,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 async function main() {
   const specs = await glob(
-    "apps/docs/content/specs/features/*/requirements.md",
+    "apps/docs/content/specs/features/*/*-requirements.md",
     {
       cwd: REPO_ROOT,
       absolute: true,
@@ -946,7 +946,7 @@ Per ADR-0006 §9 conventions (title format `[NNN] EARS-N.M: ...`, label `kind:ea
   gh issue create --title "Feature NNN: <name>" \
    --milestone "NNN-<slug>" --label "feature:NNN-<slug>" \
    --body-file .github/issue_templates/feature.md
-  Then for each EARS-handler from `requirements.md`:
+  Then for each EARS-handler from `NNN-requirements.md`:
   gh issue create --title "[NNN] EARS-N.M: <description>" \
    --milestone "NNN-<slug>" --label "feature:NNN-<slug>,kind:ears-handler,agent-ready" \
    --body "Spec: apps/docs/content/specs/features/NNN-<slug>/. Parent: #<parent-issue>."

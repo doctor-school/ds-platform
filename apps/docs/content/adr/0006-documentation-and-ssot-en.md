@@ -128,14 +128,14 @@ Two adjacent templates, each with its own discipline:
 
 **Feature specs** — `docs/content/specs/features/NNN-<feature-name>/`.
 
-- SDD structure (3 files, no `tasks.md` — tasks live in GitHub Issues, not in Git, see §9 below):
-- `requirements.md` — frontmatter with `tracker:` (GitHub milestone URL) + Outcomes / Scope / Constraints / Prior decisions / **Event Model (Commands/Events/Read models/Policies)** / **EARS requirements** (one per handler) / Invariants / Verification.
-- `design.md` — Mermaid sequence diagrams of cascades, state diagrams of lifecycles, ER fragments.
-- `scenarios.feature` — Gherkin, happy path + 2–3 failure branches.
-- If a feature has a long transaction with compensations — a "Saga" section is added to `requirements.md` (reference doc §5.6) with an explicit compensate-mapping per step and failure policy.
+- SDD structure (3 files, no `tasks.md` — tasks live in GitHub Issues, not in Git, see §9 below). Each file inside the per-spec directory is **prefixed with the spec number** so filenames stay globally unique in IDE tabs, fuzzy file pickers, `grep -l` output, and diff views:
+- `NNN-requirements.md` — frontmatter with `tracker:` (GitHub milestone URL) + Outcomes / Scope / Constraints / Prior decisions / **Event Model (Commands/Events/Read models/Policies)** / **EARS requirements** (one per handler) / Invariants / Verification.
+- `NNN-design.md` — Mermaid sequence diagrams of cascades, state diagrams of lifecycles, ER fragments.
+- `NNN-scenarios.feature` — Gherkin, happy path + 2–3 failure branches.
+- If a feature has a long transaction with compensations — a "Saga" section is added to `NNN-requirements.md` (reference doc §5.6) with an explicit compensate-mapping per step and failure policy.
 - Decomposition into atomic tasks (one EARS-handler ≈ one Issue) is done **in GitHub Issues** (see §9), not in a Git file. Git holds intent (EARS-N), GitHub Issues hold execution state (assignee, status, PR-link, comments).
 
-**EARS numbering — flat by default.** EARS requirements in `requirements.md` are numbered `EARS-1`, `EARS-2`, `EARS-3`, … without a `.M` sub-component, regardless of total count. The Vitest test naming follows: `it('EARS-N: when <trigger>, system shall <behavior>', () => { … })`. Nested `EARS-N.M` is allowed **only** when a single handler genuinely carries multiple shall-clauses (e.g., an OIDC-callback handler that both upserts a doctor profile and emits a `DoctorRegistered` event — `EARS-3.1` create/upsert + `EARS-3.2` emit). The trigger for nesting is "one EARS sentence becomes hard to write without 'and' or 'while'"; if a flat number suffices, use a flat number. The `ears-tests` lint guard (ADR-0007 §2.6) reads both forms.
+**EARS numbering — flat by default.** EARS requirements in `NNN-requirements.md` are numbered `EARS-1`, `EARS-2`, `EARS-3`, … without a `.M` sub-component, regardless of total count. The Vitest test naming follows: `it('EARS-N: when <trigger>, system shall <behavior>', () => { … })`. Nested `EARS-N.M` is allowed **only** when a single handler genuinely carries multiple shall-clauses (e.g., an OIDC-callback handler that both upserts a doctor profile and emits a `DoctorRegistered` event — `EARS-3.1` create/upsert + `EARS-3.2` emit). The trigger for nesting is "one EARS sentence becomes hard to write without 'and' or 'while'"; if a flat number suffices, use a flat number. The `ears-tests` lint guard (ADR-0007 §2.6) reads both forms.
 
 Outputs of Spec-Driven Development:
 
@@ -212,8 +212,8 @@ To avoid false-SSOT in Git (`tasks.md`), task execution state lives in task trac
 
 **GitHub Issues convention for feature implementation:**
 
-- **One Milestone per feature** (e.g., `001-doctor-onboarding`), description contains a link to `apps/docs/content/specs/features/001-doctor-onboarding/requirements.md`.
-- **One Issue per EARS-handler** — title `[001] EARS-3: When OIDC callback received, the system shall ...`, body contains a link to the specific EARS-ID in requirements.md.
+- **One Milestone per feature** (e.g., `001-doctor-onboarding`), description contains a link to `apps/docs/content/specs/features/001-doctor-onboarding/001-requirements.md`.
+- **One Issue per EARS-handler** — title `[001] EARS-3: When OIDC callback received, the system shall ...`, body contains a link to the specific EARS-ID in `NNN-requirements.md`.
 - **Labels** — `feature:NNN-name`, `kind:ears-handler` / `kind:bug` / `kind:refactor` / `kind:dep-upgrade`.
 - **GitHub Project v2** — "DS Platform Implementation" board with swimlanes by feature.
 
@@ -221,7 +221,7 @@ To avoid false-SSOT in Git (`tasks.md`), task execution state lives in task trac
 
 - Plane Issue → GitHub: URL in description or comment.
 - GitHub Issue → Plane: URL in body, optional label `plane:DSO-N`.
-- Feature spec → GitHub Milestone: frontmatter field `tracker: <github-milestone-url>` in `requirements.md`.
+- Feature spec → GitHub Milestone: frontmatter field `tracker: <github-milestone-url>` in `NNN-requirements.md`.
 
 **AI agent workflow:**
 

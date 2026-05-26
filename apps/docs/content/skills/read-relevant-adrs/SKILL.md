@@ -15,7 +15,7 @@ mode: inline
 
 ## Procedure
 
-1. If a feature-spec path is given, read its `requirements.md` frontmatter and "Prior decisions" section. Collect the ADR numbers cited there.
+1. If a feature-spec path is given, read its `NNN-requirements.md` frontmatter and "Prior decisions" section. Collect the ADR numbers cited there.
 2. `Grep` ADR titles in `apps/docs/content/adr/*-en.md` for the technical domain of the task (e.g., a task touching the API layer pulls in ADR-0002; a task touching the data layer pulls in ADR-0003).
 3. Read the cited sections (not the whole ADR) — the section heading is the unit. Per AGENTS.md §6, in pre-pilot every ADR is inline-rewritten; an amendment block exists only when the original decision is running in production. If a cited section refers to such a block, read it too.
 4. Carry the cited sections in the lead agent's context.

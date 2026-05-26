@@ -12,7 +12,7 @@ mode: inline
 ## Input
 
 - Feature-spec path `apps/docs/content/specs/features/NNN-<slug>/`.
-- Extracted list of `EARS-N` requirements from `requirements.md`.
+- Extracted list of `EARS-N` requirements from `NNN-requirements.md`.
 
 ## Procedure
 
@@ -26,7 +26,7 @@ mode: inline
 
    Closing G11 findings F-8 and F-19: do **not** silently substitute a generic label like `enhancement` when the project-specific label is missing. Either the label set is created up front, or `surface-decision-debt` is invoked to record the substitution as a follow-up.
 
-2. **Open the parent Issue** (if not already open) with the feature milestone and link to `requirements.md`.
+2. **Open the parent Issue** (if not already open) with the feature milestone and link to `NNN-requirements.md`.
 3. **For each EARS-N**, open a child Issue:
 
    ```bash
@@ -39,12 +39,12 @@ mode: inline
 
    Always pass `--body` — `gh issue create` without `--body`/`--body-file` opens an editor and hangs in non-interactive contexts.
 
-4. **Record the Issue numbers** in the feature-branch commit message and add an `issues:` block to the `requirements.md` frontmatter (`issues: [N1, N2, N3, …]`).
+4. **Record the Issue numbers** in the feature-branch commit message and add an `issues:` block to the `NNN-requirements.md` frontmatter (`issues: [N1, N2, N3, …]`).
 
 ## Output
 
 - Parent Issue + N child Issues open.
-- `requirements.md` frontmatter updated with the Issue numbers.
+- `NNN-requirements.md` frontmatter updated with the Issue numbers.
 
 ## Failure mode
 

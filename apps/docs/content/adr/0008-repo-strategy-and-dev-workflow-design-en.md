@@ -30,7 +30,7 @@ This document is the implementation detail for ADR-0008. The ADR fixes "what and
 | Apps inventory         | api (NestJS) + promo + portal + admin + cms (Payload v3) + docs (Fumadocs) + docs-cms (Keystatic) + mobile (Expo). 8 apps. | §2.3                        |
 | Packages inventory     | schemas, api-client, db, glossary, hooks, design-system, observability, utils, eslint-config, tsconfig, llm-utils          | §2.3                        |
 | ADR location           | `apps/docs/content/adr/NNNN-<slug>.md` + companion `NNNN-<slug>-design.md`                                                 | §2.3                        |
-| Feature spec location  | `apps/docs/content/specs/features/NNN-<slug>/{requirements,design,scenarios}.md`                                           | §2.3 (inherits ADR-0006)    |
+| Feature spec location  | `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}`                  | §2.3 (inherits ADR-0006)    |
 | Tech spec location     | `apps/docs/content/specs/tech/<topic>.md`                                                                                  | §2.3 (inherits ADR-0006 §4) |
 | Drizzle schema master  | `packages/db/schema/` per ADR-0006 §1 (supersedes ADR-0003 §4 location); migrations in `apps/api/drizzle/`                 | §2.3                        |
 | Release tooling        | changesets + `changesets/action` GitHub workflow                                                                           | §2.4                        |

@@ -30,7 +30,7 @@ You are a code reviewer for the DS Platform monorepo. You operate in Mode (a) pe
 
 1. **Read the PR diff:** `gh pr diff <N>`.
 2. **Read the PR description:** `gh pr view <N> --json title,body,labels`.
-3. **Read the feature-spec triplet** (`requirements.md` + `design.md` + `scenarios.feature`) if one is in scope.
+3. **Read the feature-spec triplet** (`NNN-requirements.md` + `NNN-design.md` + `NNN-scenarios.feature`) if one is in scope.
 4. **Read the cited ADRs** (the specific sections cited, not the whole file).
 5. **Read the CI lint output:** `gh run list --branch <branch> --limit 1 --json conclusion,jobs -q '.[0]'` and inspect failing jobs.
 6. **Two-pass review:**

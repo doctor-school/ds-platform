@@ -63,7 +63,7 @@ ADR фиксирует:
 ### 2.3 SDD + TDD как hard rules
 
 - **SDD:** никакого production-кода без feature-spec'а в `apps/docs/content/specs/features/NNN-<slug>/` (3 файла: requirements/design/scenarios — формат из ADR-0006 §4). Если spec'а нет — агент сначала пишет через superpowers:brainstorming.
-- **TDD:** никакого production-кода без failing test'а. One Vitest test per EARS-требование, naming `it('EARS-N.M: ...', ...)`. Playwright tests генерируются из `scenarios.feature` через `playwright-bdd`.
+- **TDD:** никакого production-кода без failing test'а. One Vitest test per EARS-требование, naming `it('EARS-N.M: ...', ...)`. Playwright tests генерируются из `NNN-scenarios.feature` через `playwright-bdd`.
 - **Узкие исключения** (typo / doc-only / dep-bumps / regenerated artifacts) документируются в PR description.
 
 Enforcement: AGENTS.md hard rules + machine-checkable CI guards (§2.6).

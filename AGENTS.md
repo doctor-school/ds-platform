@@ -69,7 +69,7 @@ gh pr merge <PR-number> --auto --squash --delete-branch
 
 **ADRs** live in `apps/docs/content/adr/`, rendered at `/adr/<slug>`. Paired design spec — `NNNN-<slug>-design.md`.
 
-**Feature specs** live in `apps/docs/content/specs/features/NNN-<slug>/` (3 files: `requirements.md`, `design.md`, `scenarios.feature`). One spec → multiple Issues (one per EARS-handler). Milestones are used independently of specs: a Milestone tracks a long-lived product theme (`Auth foundations v1`, `Directual cutover`, `Doctor portal MVP`) that typically spans multiple specs and lives weeks–months. Specs themselves do not become Milestones. Format spec moved into `apps/docs/content/skills/author-ears-spec/SKILL.md`.
+**Feature specs** live in `apps/docs/content/specs/features/NNN-<slug>/` (3 files: `NNN-requirements.md`, `NNN-design.md`, `NNN-scenarios.feature`). One spec → multiple Issues (one per EARS-handler). Milestones are used independently of specs: a Milestone tracks a long-lived product theme (`Auth foundations v1`, `Directual cutover`, `Doctor portal MVP`) that typically spans multiple specs and lives weeks–months. Specs themselves do not become Milestones. Format spec moved into `apps/docs/content/skills/author-ears-spec/SKILL.md`.
 
 ---
 
@@ -106,7 +106,7 @@ In the first user-facing reply, state: kind, active artifact (Issue #N / spec pa
 
 ### 3.4 Superpowers whitelist (single exception)
 
-`superpowers:brainstorming` is the only `superpowers:*` skill allowed for project work, and only for spec-authoring. After brainstorming concludes, **do not chain into `superpowers:writing-plans`** — the `requirements.md` / `design.md` triplet is the plan (ADR-0007 §2.4 via `do-feature-iteration`). All other `superpowers:*` skills, and any chain initiated internally by a superpowers skill, are explicitly disallowed for project work. They may be referenced as implementation patterns inside project SKILL.md content, but not as the orchestrator.
+`superpowers:brainstorming` is the only `superpowers:*` skill allowed for project work, and only for spec-authoring. After brainstorming concludes, **do not chain into `superpowers:writing-plans`** — the `NNN-requirements.md` / `NNN-design.md` triplet is the plan (ADR-0007 §2.4 via `do-feature-iteration`). All other `superpowers:*` skills, and any chain initiated internally by a superpowers skill, are explicitly disallowed for project work. They may be referenced as implementation patterns inside project SKILL.md content, but not as the orchestrator.
 
 ### 3.5 Bootstrap
 
@@ -183,22 +183,22 @@ In **Phase 0**, Tech Lead is the **single CODEOWNERS owner** (ADR-0008 §2.7) an
 
 ## 8. Where things live
 
-| Thing                             | Location                                                                              |
-| --------------------------------- | ------------------------------------------------------------------------------------- |
-| ADRs                              | `apps/docs/content/adr/NNNN-<slug>.md`                                                |
-| Companion design specs            | `apps/docs/content/adr/NNNN-<slug>-design.md`                                         |
-| Feature specs                     | `apps/docs/content/specs/features/NNN-<slug>/{requirements,design,scenarios.feature}` |
-| Tech specs (brainstorm)           | `apps/docs/content/specs/tech/<topic>.md`                                             |
-| **Project skill catalog**         | **`apps/docs/content/skills/<name>/SKILL.md`**                                        |
-| Glossary                          | `apps/docs/content/product/glossary/` (file-per-term, Keystatic-managed)              |
-| API contract SSOT                 | `packages/schemas/` (Zod)                                                             |
-| DB schema SSOT                    | `packages/db/schema/` (Drizzle)                                                       |
-| Generated SDK                     | `packages/api-client/` (do not edit by hand)                                          |
-| Generated glossary IDs            | `packages/glossary/ids.ts` (do not edit by hand)                                      |
-| Lint tools                        | `tools/lint/*.ts`                                                                     |
-| Bootstrap script                  | `tools/agent-bootstrap.ts` (run via `pnpm bootstrap`)                                 |
-| Strategic / cross-team work-items | Plane workspace `doctor-school` (projects DSP, DSC, DSM, DSO)                         |
-| DS Platform code-level Issues     | **GitHub Issues** in this repo                                                        |
+| Thing                             | Location                                                                                                  |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| ADRs                              | `apps/docs/content/adr/NNNN-<slug>.md`                                                                    |
+| Companion design specs            | `apps/docs/content/adr/NNNN-<slug>-design.md`                                                             |
+| Feature specs                     | `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}` |
+| Tech specs (brainstorm)           | `apps/docs/content/specs/tech/<topic>.md`                                                                 |
+| **Project skill catalog**         | **`apps/docs/content/skills/<name>/SKILL.md`**                                                            |
+| Glossary                          | `apps/docs/content/product/glossary/` (file-per-term, Keystatic-managed)                                  |
+| API contract SSOT                 | `packages/schemas/` (Zod)                                                                                 |
+| DB schema SSOT                    | `packages/db/schema/` (Drizzle)                                                                           |
+| Generated SDK                     | `packages/api-client/` (do not edit by hand)                                                              |
+| Generated glossary IDs            | `packages/glossary/ids.ts` (do not edit by hand)                                                          |
+| Lint tools                        | `tools/lint/*.ts`                                                                                         |
+| Bootstrap script                  | `tools/agent-bootstrap.ts` (run via `pnpm bootstrap`)                                                     |
+| Strategic / cross-team work-items | Plane workspace `doctor-school` (projects DSP, DSC, DSM, DSO)                                             |
+| DS Platform code-level Issues     | **GitHub Issues** in this repo                                                                            |
 
 **Tracker rule** (ADR-0006 §9): `gh` CLI first for code-level Issues; `pp-plane` only for cross-tracker references (e.g., a Plane DSO-XXX milestone cited from an ADR or spec).
 

@@ -109,7 +109,7 @@ Cross-zone constraints: all profiles ship `Strict-Transport-Security: max-age=31
 
 ### 8. IdP — Zitadel
 
-**Decision.** The DS Platform IdP is **Zitadel** (2026-05-25, DSP-209). Closed via desk-research; no hands-on spike was run.
+**Decision.** The DS Platform IdP is **Zitadel** (2026-05-25, DSP-209).
 
 **License discipline (AGPL 3.0).** Zitadel relicensed Apache 2.0 → AGPL 3.0 in 2025. The source-disclosure obligation (AGPL §13) triggers ONLY when patching Zitadel source with network access for users. For self-host without modifications the practical difference vs MIT = 0. Rule:
 
@@ -122,9 +122,7 @@ Cross-zone constraints: all profiles ship `Strict-Transport-Security: max-age=31
 - Magic-link is a custom build on the session API (~1–2 days; not a Zitadel core feature, GitHub #2075). Mandatory security review.
 - Zitadel self-hosted base ~13.4k★ — does not bite in v1 ≤200 users; re-evaluation triggers only if v2+ uncovers production maturity issues.
 
-#### Rejected candidates
-
-Keycloak, Authentik, Ory Kratos, Authelia, Logto, FusionAuth, SuperTokens were considered. Full per-candidate rationale, scoring methodology (gates / 7 weighted differentiators / evidence URLs) and decision history — bbm `decisions-log.md` [2026-05-25]. Operational fallback: Keycloak if Zitadel hits critical issues (most mature OSS alternative).
+**Operational fallback.** Keycloak if Zitadel hits critical issues in v1 (most mature OSS alternative).
 
 **Consequences.** DSP-157 (local-dev compose IDP) is unblocked.
 
@@ -183,7 +181,6 @@ The backend MUST verify `acr=mfa-fresh` AND `mfa_fresh_at ≥ now − 30 min` on
 - Users table duplication (IdP + backend mirror via webhook + reconciliation cron). Requires eventual-consistency handling (spec §3.2).
 - Two-tier validation: backend must correctly classify high-stakes endpoints; misclassification → security gap or performance hit.
 - Hard cutover from Directual (see §9): pre-cutover PD export requires encrypted-at-rest staging + restricted access; Directual sunset after 50% migration or 120 days.
-- Decision closed via desk-research (no hands-on validation); remaining known trade-offs enumerated in §8 (custom magic-link, smaller self-hosted base).
 - MFA SMS for `moderator`/`support` in v1 — a known downgrade against NIST SP 800-63B; mitigation planned for v2.
 
 ## Open questions (deferred)

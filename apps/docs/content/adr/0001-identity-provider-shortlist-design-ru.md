@@ -487,9 +487,7 @@ Flow:
 
 ## 9. IdP — Zitadel (закрыто 2026-05-25, DSP-209)
 
-**Решение:** IdP для DS Platform — **Zitadel** (закрыто 2026-05-25, DSP-209). Обоснование, методология scoring и сводка отвергнутых кандидатов — см. ADR-0001 §8.
-
-**Методология выбора и полная история обсуждения** — гейты, weighted scoring table, evidence URLs, лог сессии — зафиксированы в bbm `decisions-log.md` [2026-05-25] (bbm-репозиторий — SSOT для методологии шортлиста; ds-platform-документация описывает только текущую архитектуру).
+**Решение:** IdP для DS Platform — **Zitadel** (закрыто 2026-05-25, DSP-209). См. ADR-0001 §8 — decision body, AGPL discipline, known trade-offs.
 
 ---
 

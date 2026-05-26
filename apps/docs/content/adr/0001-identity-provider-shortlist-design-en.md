@@ -25,7 +25,7 @@ lang: en
 5. **OAuth — phased rollout.** v1: no social. v2: VK ID + Yandex ID + Telegram Login. v3: Apple Sign-In if iOS App Store. Max / Google — on demand. **Account linking requires a verified email on both sides** (protection against pre-auth account takeover).
 6. **Tokens:** OAuth 2.0 BCP (RFC 9700). Access JWT 15min + opaque refresh 30d (web) / 14d (mobile), rotating single-use. PKCE for public clients. Sender-constrained refresh for mobile (DPoP / device-id binding). Server-side session store (Redis). Force-logout via DELETE session. IdP introspection — only for high-stakes endpoints (admin/payments/AU withdrawal/role-change), not on the hot path.
 7. **Security baseline (§5.5):** rate limiting per-user/IP/ASN, enumeration protection (idempotent responses on login/reset), SMS toll-fraud protection (global budget circuit-breaker + IP/ASN limits), RF-accessible CAPTCHA (Yandex SmartCaptcha), account-lockout policy, refresh token theft detection. **Cookie default — `__Host-` prefix per app**; cross-app SSO continuity via OIDC silent re-auth (ADR-0001 §6).
-8. **IdP shortlist:** **Authentik** and **Zitadel** — equal candidates, final selection — spike of 2 working days in Phase 0. Alternatives (Keycloak, Logto, FusionAuth, Ory Kratos, Authelia) explicitly rejected in the ADR.
+8. **IdP selection** — closed in §9 (Zitadel; ADR-0001 §8, DSP-209).
 9. **Directual migration:** Phase 0 discovery (hash format + actual count + consent re-acquisition plan) → bulk import (hash-compatible → as-is; otherwise magic-link reset) → **90-day** soft-migration window (not 30) with a realistic target reactivation rate of 50–70% (not 95%) → sunset Directual auth.
 10. **Deferred gaps** (§10.3) — an explicit registry of what is not closed in DSO-25 and must go in the backlog: consent management, right-to-erasure, Federal Law 187-FZ/FSTEC-17, anomaly detection, HIBP credential check, OWASP ASVS pen-test gates.
 
@@ -60,7 +60,7 @@ lang: en
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ IdP (Authentik / Zitadel)                                  │
+│ IdP (Zitadel)                                              │
 │ — Stores: users, credentials, groups (coarse roles),       │
 │   MFA-policy per group, sessions, auth audit log.          │
 │ — Issues: OIDC tokens with claims {sub, roles[], mfa, sid}.│
@@ -163,8 +163,8 @@ Backend `users` — **mirror** based on IdP user-events. **This handshake is a c
 
 - **Primary channel — webhook** (IdP → backend `POST /internal/idp/events`). Events: `user.created`, `user.updated`, `user.deleted`, `user.group_changed`. Delivery — HMAC-signed payload.
 - **Idempotency** — webhook-receiver stores a `processed_events` table with `(event_id, processed_at)`; duplicates are no-ops.
-- **Outbox in IdP** — if the IdP does not support a built-in outbox (Authentik/Zitadel — it does not), compensated via retry on the webhook-receiver side: 5xx response = IdP retries with exponential backoff (Authentik webhook policy / Zitadel actions).
-- **Reconciliation cron** — once per hour the backend polls the IdP admin API (`GET /api/v3/core/users/` with `?last_modified__gte=`), compares with the `users` mirror, fixes drift. Any drift event is written to `audit_events` as `idp_sync_drift_detected`.
+- **Outbox in IdP** — Zitadel does not support a built-in outbox; compensated via retry on the webhook-receiver side: 5xx response = Zitadel retries with exponential backoff (Zitadel actions).
+- **Reconciliation cron** — once per hour the backend polls the Zitadel admin API (user list with `?last_modified__gte=` filter), compares with the `users` mirror, fixes drift. Any drift event is written to `audit_events` as `idp_sync_drift_detected`.
 - **On webhook loss** — reconciliation cron closes the gap within ≤1 hour. This is an acceptable trade-off for a medical platform (≠ fintech, where <1 minute is required).
 
 ### 3.3. UX priorities for identifiers
@@ -188,12 +188,7 @@ Backend `users` — **mirror** based on IdP user-events. **This handshake is a c
 
 ### 4.2. By provider
 
-| IdP           | Headless mechanism                                                            |
-| ------------- | ----------------------------------------------------------------------------- |
-| **Authentik** | `POST /api/v3/flows/executor/<flow-slug>/` — step-by-step via `flow executor` |
-| **Zitadel**   | gRPC + REST sessions API, native headless-first                               |
-
-Both cover login / register / password reset / magic-link / SMS-OTP / MFA prompts OOB.
+Zitadel exposes a native headless-first **v2 Session API** (gRPC + REST) — explicit, resource-oriented session creation and step transitions. Covers login / register / password reset / magic-link / SMS-OTP / MFA prompts (magic-link is a custom build over the session API — see ADR-0001 §8 known trade-offs).
 
 ### 4.3. Social login flow
 
@@ -271,10 +266,10 @@ Minimum set of protections for production launch. Implementation — partly IdP,
 
 > **Rationale for deferring social in v1:** v1 user base ≤200 users from the existing Doctor.School database (digest §0). All of them already have email accounts in Directual → magic-link/password covers 100%. The reviewer argues "VK will give +15-25% conversion in the medical audience" — this is valid for the **growth phase (v2)**, when mass-funnel acquisition is connected. In v1 social = pure cost without benefit. If the product team provides evidence (A/B on the landing pages of the `doctor-school-mobile-app-proto/` prototype showed uplift) — VK ID/Telegram may be forced into v1; the decision remains reopenable.
 
-### 6.1. Implementation (identical for Authentik and Zitadel)
+### 6.1. Implementation (Zitadel)
 
 - VK ID, Yandex ID, Max — generic OAuth2 source via config + **PKCE mandatory** (RFC 7636).
-- Telegram Login — NOT OAuth2, requires a custom flow stage / action that validates the HMAC-signed callback from the Telegram Login Widget. Solved identically in both IdPs: ~50 lines of custom Python (Authentik) or Go (Zitadel) + webhook.
+- Telegram Login — NOT OAuth2, requires a custom Zitadel Action that validates the HMAC-signed callback from the Telegram Login Widget. ~50 lines of Go + webhook.
 - Apple Sign-In — Apple Developer Program registration ($99/year) + Services ID + JWT signing key. Standard provider config in IdP.
 
 ### 6.2. Account linking — protection against pre-auth account takeover
@@ -393,7 +388,7 @@ Cross-app login continuity between portal, admin, promo, docs, cms is **not a sh
 - Multiple `redirect_uri` allowed per OAuth client, **or** multiple OAuth clients (one per subdomain) — design choice during spike. Multiple clients cleaner for blast-radius isolation.
 - IdP session cookie — host-only (no `Domain=`), `SameSite=Lax` or `Strict`.
 
-**Authentik / Zitadel / Keycloak** — all three support these. Does not narrow the shortlist.
+Zitadel supports these natively (`prompt=none` silent re-auth, multiple redirect_uri/clients, host-only session cookie).
 
 **Logout:**
 
@@ -450,13 +445,13 @@ Phase 4: Sunset (after 95% or 120 days — revised from 60)
 
 ### 8.2. Hash-format compatibility
 
-| Hash in Directual             | Authentik                             | Zitadel             |
-| ----------------------------- | ------------------------------------- | ------------------- |
-| bcrypt                        | ✅ Native                             | ✅ Native           |
-| argon2                        | ✅ Native                             | ✅ Native           |
-| PBKDF2                        | ✅ Native                             | ✅ Native           |
-| scrypt                        | ✅ Native                             | ⚠️ Migration plugin |
-| SHA-256 without salt / custom | ❌ — "magic-link reset" option forced | ❌ — same           |
+| Hash in Directual             | Zitadel                               |
+| ----------------------------- | ------------------------------------- |
+| bcrypt                        | ✅ Native                             |
+| argon2                        | ✅ Native                             |
+| PBKDF2                        | ✅ Native                             |
+| scrypt                        | ⚠️ Migration plugin                   |
+| SHA-256 without salt / custom | ❌ — "magic-link reset" option forced |
 
 Share of "zero-friction" migration = determined in Phase 0. **Reviewer note accepted: the optimistic scenario of 90%+ bcrypt is not guaranteed. The pessimistic scenario (everything via magic-link reset) gives a reactivation rate of ~20–40% in the first 30-day window, which is why the base plan is a 90-day window + three email waves.**
 
@@ -494,35 +489,9 @@ This is a closed flow with audit events `mfa_enrolled` + `lockout_triggered (mfa
 
 ## 9. IdP — Zitadel (closed 2026-05-25, DSP-209)
 
-**Decision summary:** desk-research analysis closed the choice in favor of **Zitadel** (81.6% vs Authentik 75.8% across 7 weighted differentiators). No hands-on spike was performed — all requirements and differences are verifiable from official documentation, release notes, and community evidence. Full decision text and consequences — ADR-0001 §8.
+**Decision:** IdP for DS Platform is **Zitadel** (81.6% vs Authentik 75.8% across 7 weighted differentiators). Decision rationale, AGPL discipline and rejected-candidates summary — see ADR-0001 §8.
 
-**Key Zitadel facts (as of 2026-05-25):** license is **AGPL 3.0** (relicensed from Apache 2.0 in 2025; copyleft + network clause — for self-host without modifications no obligations arise, see ADR §8 «License discipline»). The binary is **stateless**; the event store consists of plain Postgres tables → DR = standard Postgres backup (pgbackrest), identical to Authentik. **Magic-link is not a core feature** (GitHub #2075) — must be built custom over the session API (~1–2 days work; factored into D1 scoring); in Authentik it is covered by the Email-stage inside a flow.
-
-### 9.1. Gates (both candidates pass equally — not part of scoring)
-
-Headless API for custom UI · OIDC issuer + PKCE + JWKS rotation · `prompt=none` silent re-auth · `prompt=login`+`acr_values` step-up · multiple redirect_uri/clients · OAuth2 generic sources (VK / Yandex / Max via config) · TOTP MFA (RFC 6238 — Google Authenticator / Authy / Yandex Key) + per-group enforcement · SMS-OTP (Authentik — SMS Authenticator stage; Zitadel — session API SMS challenge; RF provider is custom in both) · Telegram custom integration (~50 lines in both) · Multi-group + multi-role · Admin UI · «1 service + Postgres» deployable · bulk-import API · webhook (neither has a built-in outbox — compensated by retry, §3.2).
-
-### 9.2. Differentiators and final scoring
-
-Methodology: impact × probability × duration. Gates do not carry weight (see §9.1).
-
-| #               | Criterion                                                                                                                   | Weight | Authentik       | Zitadel         | Key evidence                                                                                                                                                                                                                                                                                                               |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------- | ------ | --------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D1              | Volume of custom auth dev for v1 (magic-link, phone SMS-OTP with RF provider, Telegram HMAC, account-linking anti-takeover) | 20     | 4 → 80          | 3 → 60          | A: flow engine handles declaratively; Z: magic-link and orchestration are imperative                                                                                                                                                                                                                                       |
-| D2              | Headless API ergonomics (integration surface for 6 apps on our domain)                                                      | 22     | 4 → 88          | 5 → 110         | A: flow-executor server-driven state machine, designed for outposts; Z: v2 Session API explicit resource-oriented                                                                                                                                                                                                          |
-| D3              | Operational tax (footprint, upgrade discipline, breaking changes)                                                           | 22     | 3 → 66          | 4.5 → 99        | A: multi-service ~1 GB, calendar releases ~monthly, breaking changes ~every release (2025.12 RBAC overhaul + storage mount; 2026.2 SCIM filter, `ak_groups` rename), cannot skip versions, no downgrade, documented upgrade failures (#14501, #20634). Z: stateless Go binary ~512 MB, upgrade = tag swap, auto migrations |
-| D5              | AI-agent buildability (LLM-friendly stack)                                                                                  | 10     | 4 → 40          | 4 → 40          | A: larger community corpus (~20.7k★), but flows/stages/providers model with «non-obvious relationships» (HN); Z: smaller corpus, but protobuf-defined API is explicit and predictable. Wash                                                                                                                                |
-| D4              | Maturity / self-hosted track record                                                                                         | 8      | 4.5 → 36        | 3.5 → 28        | A: 20.7k★, large battle-tested base; Z: 13.4k★, younger in self-host, cloud-leaning. In v1 ≤200 users — barely loads                                                                                                                                                                                                       |
-| D6              | License and vendor risk                                                                                                     | 10     | 4.5 → 45        | 3.5 → 35        | A: MIT core (all v1 needs in OSS); Z: AGPL 3.0 + active commercial cloud push. Both EU/CH, OSS code remains accessible                                                                                                                                                                                                     |
-| D7              | Compliance posture for PD under 152-FZ/UZ-3                                                                                 | 8      | 3 → 24          | 4.5 → 36        | A: no own certifications, audit-export CSV in Enterprise, partial PII-min; Z: ISO 27001 + SOC 2 Type II vendor, SIEM-export OOB, full PII-min                                                                                                                                                                              |
-| **Total / 500** |                                                                                                                             | 100    | **379 (75.8%)** | **408 (81.6%)** | **Zitadel +5.8 pp**                                                                                                                                                                                                                                                                                                        |
-
-### 9.3. Research sources
-
-- ZITADEL docs — [Requirements](https://zitadel.com/docs/self-hosting/manage/requirements), [Database](https://zitadel.com/docs/self-hosting/manage/database), [Backup & restore (zitadel-helper)](https://github.com/zitadel/zitadel-helper/blob/main/db/backup-and-restore.md), [MFA in custom login UI](https://zitadel.com/docs/guides/integrate/login-ui/mfa)
-- Authentik docs — [Headless flow executor](https://docs.goauthentik.io/add-secure-apps/flows-stages/flow/executors/headless/), [SMS Authenticator stage](https://docs.goauthentik.io/add-secure-apps/flows-stages/stages/authenticator_sms/), [Brands](https://docs.goauthentik.io/brands/), [Enterprise features](https://docs.goauthentik.io/enterprise/enterprise-features/), upgrade issues [#14501](https://github.com/goauthentik/authentik/issues/14501), [#20634](https://github.com/goauthentik/authentik/issues/20634)
-- Comparative reviews — [wz-it Authentik vs Zitadel 2026](https://wz-it.com/en/blog/authentik-vs-zitadel-identity-provider-comparison/) · [House of FOSS Keycloak/Authentik/Zitadel 2026](https://blog.houseoffoss.com/post/keycloak-vs-authentik-vs-zitadel-2026-which-open-source-login-tool-should-you-use) · [Gupta Deepak CIAM Compass Authentik vs Zitadel](https://guptadeepak.com/ciam-compass/compare/authentik-vs-zitadel/)
-- Community evidence — [HN 41600896 (enterprise-y over-complexity)](https://news.ycombinator.com/item?id=41600896), [Zitadel magic-link discussion #2075](https://github.com/zitadel/zitadel/discussions/2075)
+**Choice methodology and full deliberation history** — gates, weighted scoring table, evidence URLs, session log — recorded in bbm `decisions-log.md` [2026-05-25] (the bbm repo is the SSOT for shortlist methodology; ds-platform docs describe current architecture only).
 
 ---
 
@@ -530,20 +499,20 @@ Methodology: impact × probability × duration. Gates do not carry weight (see �
 
 ### 10.1. Risks
 
-| Risk                                                                | Impact                                              | Mitigation                                                                         |
-| ------------------------------------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Directual password hash format is custom / SHA-256                  | Forced reset, reactivation 20–40% in 30 days        | 90-day window + three email waves; explicit expectation of 30–50% dormant          |
-| Telegram Login Widget HMAC custom — bug in implementation           | Telegram auth does not work / security hole         | Spike includes Telegram flow; reference implementations                            |
-| Apple Developer Program registration for an RF legal entity         | Blocks v3 mobile SIWA                               | Parallel legal track                                                               |
-| RF SMS provider rate-limited / failure                              | Phone-OTP login unavailable                         | Failover 2 SMS providers (digest §2) + global circuit-breaker (§5.5)               |
-| Actual doctor count in Directual turns out to be 65k+               | Migration logistics larger                          | Phase 0 discovery gives exact count                                                |
-| Webhook IdP → backend missed → audit-actor mismatch                 | Compliance incident                                 | Reconciliation cron §3.2 + audit `idp_sync_drift_detected`                         |
-| SMS toll-fraud attack (compromised IP × mass numbers)               | Budget losses up to tens of thousands ₽/hour        | Multi-layer rate limit + global budget circuit-breaker (§5.5)                      |
-| Pre-auth account takeover via OAuth email-claim                     | CVSS 9.0+, hijacking 10k+ accounts                  | §6.2 guards (verified-verified requirement), audit `account_link_attempt_rejected` |
-| MFA bootstrap for legacy admin stuck (7 days without enrollment)    | Broken cutover for critical operators               | §8.5 manual unlock flow via support / Tech Lead                                    |
-| Consent re-acquisition refusals at first login                      | Loss of access for compliant pool                   | Legal review in Phase 0; UI-flow with recovery option                              |
-| Yandex SmartCaptcha rate limit / downtime                           | Login without bot-protection                        | Fallback: temporary login endpoint block when captcha is unavailable + alert       |
-| Sanctions tightening → Authentik/Zitadel commercial support revoked | Self-host remains (OSS), but without vendor support | Recorded in ADR as known risk; fork-ready strategy                                 |
+| Risk                                                             | Impact                                              | Mitigation                                                                         |
+| ---------------------------------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Directual password hash format is custom / SHA-256               | Forced reset, reactivation 20–40% in 30 days        | 90-day window + three email waves; explicit expectation of 30–50% dormant          |
+| Telegram Login Widget HMAC custom — bug in implementation        | Telegram auth does not work / security hole         | Spike includes Telegram flow; reference implementations                            |
+| Apple Developer Program registration for an RF legal entity      | Blocks v3 mobile SIWA                               | Parallel legal track                                                               |
+| RF SMS provider rate-limited / failure                           | Phone-OTP login unavailable                         | Failover 2 SMS providers (digest §2) + global circuit-breaker (§5.5)               |
+| Actual doctor count in Directual turns out to be 65k+            | Migration logistics larger                          | Phase 0 discovery gives exact count                                                |
+| Webhook IdP → backend missed → audit-actor mismatch              | Compliance incident                                 | Reconciliation cron §3.2 + audit `idp_sync_drift_detected`                         |
+| SMS toll-fraud attack (compromised IP × mass numbers)            | Budget losses up to tens of thousands ₽/hour        | Multi-layer rate limit + global budget circuit-breaker (§5.5)                      |
+| Pre-auth account takeover via OAuth email-claim                  | CVSS 9.0+, hijacking 10k+ accounts                  | §6.2 guards (verified-verified requirement), audit `account_link_attempt_rejected` |
+| MFA bootstrap for legacy admin stuck (7 days without enrollment) | Broken cutover for critical operators               | §8.5 manual unlock flow via support / Tech Lead                                    |
+| Consent re-acquisition refusals at first login                   | Loss of access for compliant pool                   | Legal review in Phase 0; UI-flow with recovery option                              |
+| Yandex SmartCaptcha rate limit / downtime                        | Login without bot-protection                        | Fallback: temporary login endpoint block when captcha is unavailable + alert       |
+| Sanctions tightening → Zitadel commercial support revoked        | Self-host remains (OSS), but without vendor support | Recorded in ADR as known risk; fork-ready strategy                                 |
 
 ### 10.2. Open questions (closed outside DSO-25)
 

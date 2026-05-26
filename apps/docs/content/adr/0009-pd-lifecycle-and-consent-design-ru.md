@@ -454,7 +454,7 @@ Paged. Response per row:
 - **Tab «Data export requests»:** monitoring; ручное вмешательство только при `status = 'failed'`.
 - **Tab «Consent versions»:** view + create new version (requires legal review checkbox before publishing).
 
-Access control: только роль `pd_officer` (новая; ADR-0001 §2 RBAC catalog обновляется inline, когда DSO-26 возьмёт работу по consent / right-to-erasure).
+Access control: только роль `pd_officer` (новая; ADR-0001 §1 RBAC catalog обновляется inline, когда DSO-26 возьмёт работу по consent / right-to-erasure).
 
 ---
 

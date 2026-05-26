@@ -127,7 +127,7 @@ Forward-ref: контракт исполнения erasure (BullMQ-задача 
 
 ### 2.9 Schema location
 
-Все PD-lifecycle таблицы (`consent_*`, `data_export_requests`, `erasure_requests`) живут в `packages/db/schema/pd/`. По DSO-63 #10/I, schemas живут в `packages/db/`, а не в `apps/api`; ADR-0003 §3 (ORM + Migrations) обновляется inline, чтобы зафиксировать этот layout.
+Все PD-lifecycle таблицы (`consent_*`, `data_export_requests`, `erasure_requests`) живут в `packages/db/schema/pd/`. По DSO-63 #10/I, schemas живут в `packages/db/`, а не в `apps/api`; ADR-0003 §4 (ORM + Migrations) обновляется inline, чтобы зафиксировать этот layout.
 
 ---
 

@@ -73,7 +73,7 @@ The 8-step cycle (`do-feature-iteration` orchestrates these):
        it('EARS-3.1: ...', () => { ... })
      (flat `EARS-N` is the default; `EARS-N.M` only when a single
       handler carries multiple shall-clauses — ADR-0006 §TDD)
-   - Playwright tests are compiled from scenarios.feature
+   - Playwright tests are compiled from NNN-scenarios.feature
      via playwright-bdd (ADR-0006 §4 + §7 generated artifacts)
 
 4. GREEN
@@ -168,7 +168,7 @@ Any agent at the start of a session (sync or async) runs the script and receives
 
 3. Active spec(s)
    - For each agent-working Issue: parses milestone name → spec folder path
-   - Reads requirements.md frontmatter: status, Prior decisions (list of ADRs)
+   - Reads NNN-requirements.md frontmatter: status, Prior decisions (list of ADRs)
    - Extracts glossary terms from spec body via [[term-id]] directives
 
 4. Context files to load (paths only)
@@ -252,7 +252,12 @@ async function readSpecMeta(milestoneName: string) {
     milestoneName,
   );
   try {
-    const raw = await readFile(resolve(specDir, "requirements.md"), "utf-8");
+    const numMatch = milestoneName.match(/^(\d{3})-/);
+    if (!numMatch) return null;
+    const raw = await readFile(
+      resolve(specDir, `${numMatch[1]}-requirements.md`),
+      "utf-8",
+    );
     const { data, content } = matter(raw);
     const adrs = (content.match(/ADR-\d{4}/g) ?? []).filter(
       (v, i, a) => a.indexOf(v) === i,
@@ -371,7 +376,7 @@ async function main() {
   activeSpecs.filter(Boolean).forEach(({ spec }) => {
     if (!spec) return;
     console.log(
-      `- @${spec.path}/requirements.md  @${spec.path}/design.md  @${spec.path}/scenarios.feature`,
+      `- @${spec.path}/${spec.prefix}-requirements.md  @${spec.path}/${spec.prefix}-design.md  @${spec.path}/${spec.prefix}-scenarios.feature`,
     );
     spec.adrs.forEach((a: string) =>
       console.log(`- @docs/adr/${a.toLowerCase().replace("adr-", "")}-*.md`),
@@ -430,7 +435,7 @@ Before `git push` the agent goes through each item. If even one is false — do 
 | ------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- |
 | **spec-link required**    | PR without a link to an Issue whose milestone = spec                     | GH Action: PR body contains `Closes #N`; Issue `#N` has milestone `NNN-<slug>`; spec folder `apps/docs/content/specs/features/NNN-<slug>/` exists.                       | BLOCK                 |
 | **TDD signal**            | implementation-only commit without a test file                           | GH Action: for each modified `src/**/*.ts` — `*.test.ts` is either in the diff, or commit history shows a test-commit preceding it. Heuristic; false positives possible. | WARN v1               |
-| **EARS ↔ test linkage**   | EARS requirement without `it('EARS-N: ...')`                             | Custom lint `tools/lint/ears-test-lint.ts`: parses EARS IDs in requirements.md, checks for it-descriptions with the same ID in the module.                               | WARN v1 → BLOCK v2    |
+| **EARS ↔ test linkage**   | EARS requirement without `it('EARS-N: ...')`                             | Custom lint `tools/lint/ears-test-lint.ts`: parses EARS IDs in `NNN-requirements.md`, checks for it-descriptions with the same ID in the module.                         | WARN v1 → BLOCK v2    |
 | **Gherkin coverage**      | scenarios without Playwright step implementation                         | playwright-bdd native error — test fails if step is undefined.                                                                                                           | BLOCK (via test fail) |
 | **Spec status freshness** | Merged PR with spec:NNN but spec status='Draft'                          | Custom lint: at merge — check `status: In dev` minimum.                                                                                                                  | WARN v1               |
 | **Prior decisions cited** | New spec without cited ADRs in "Prior decisions" if category ≠ docs-only | Spec lint: `NNN-requirements.md` has a section with ≥1 ADR-link.                                                                                                         | WARN v1               |
@@ -672,7 +677,17 @@ export async function buildSystemBlocks(
   // ---- Tier 2: active spec (3 files concat) ----
   if (input.specPath) {
     const parts: string[] = [];
-    for (const f of ["requirements.md", "design.md", "scenarios.feature"]) {
+    const dirName = input.specPath.split(/[\\/]/).filter(Boolean).pop() ?? "";
+    const numMatch = dirName.match(/^(\d{3})-/);
+    const prefix = numMatch?.[1];
+    const files = prefix
+      ? [
+          `${prefix}-requirements.md`,
+          `${prefix}-design.md`,
+          `${prefix}-scenarios.feature`,
+        ]
+      : [];
+    for (const f of files) {
       const c = await readOptional(resolve(REPO_ROOT, input.specPath, f));
       if (c) parts.push(`# ${f}\n\n${c}`);
     }
@@ -933,9 +948,9 @@ Run `pnpm bootstrap` (alias for `tsx tools/agent-bootstrap.ts`). Read its output
 - AGENTS.md (this file) — already in your context
 - CLAUDE.md if you are Claude Code
 - Active spec at `apps/docs/content/specs/features/NNN-<slug>/`:
-  - requirements.md
-  - design.md
-  - scenarios.feature
+  - `NNN-requirements.md`
+  - `NNN-design.md`
+  - `NNN-scenarios.feature`
 - ADRs from spec's "Prior decisions" section
 - `gh issue view <N>` for current Issue context and history
 

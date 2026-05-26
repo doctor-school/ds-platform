@@ -639,7 +639,7 @@ labels: ["feature"]
 
 **Linked feature spec:** apps/docs/content/specs/features/NNN-<slug>/
 
-**EARS reference:** EARS-N.M (link to requirements.md line)
+**EARS reference:** EARS-N (link to `NNN-requirements.md` line)
 
 **Acceptance criteria:**
 

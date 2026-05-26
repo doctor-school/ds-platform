@@ -1,6 +1,6 @@
 ---
 title: "author-ears-spec"
-description: "Procedural skill (dispatch): subagent authors a 3-file SDD triplet (requirements.md + design.md + scenarios.feature) for a new feature."
+description: "Procedural skill (dispatch): subagent authors a 3-file SDD triplet (NNN-requirements.md + NNN-design.md + NNN-scenarios.feature) for a new feature."
 name: author-ears-spec
 mode: dispatch
 ---

@@ -220,7 +220,7 @@ rare exception, Plane DSP-XXX.>
 
 ## Spec reference
 
-<For a single EARS-handler: link to `requirements.md#EARS-N`.
+<For a single EARS-handler: link to `NNN-requirements.md#EARS-N`.
 For an ADR revision: link to the ADR (and the specific § being changed).
 For scaffolding / tooling without a spec: write "no spec".>
 

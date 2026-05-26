@@ -171,7 +171,7 @@ async function main(): Promise<void> {
     const numMatch = issue.milestone.title.match(/^(\d{3})-/);
     if (!numMatch) {
       failures.push(
-        `Milestone \`${issue.milestone.title}\` does not start with a 3-digit prefix (expected \`NNN-<slug>\`).`,
+        `Milestone \`${issue.milestone.title}\` does not start with a 3-digit prefix (expected \`NNN-<slug>\` per ADR-0006 §4).`,
       );
       continue;
     }

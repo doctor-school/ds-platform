@@ -111,12 +111,27 @@ export async function buildSystemBlocks(input: ContextInput): Promise<CachedBloc
     cache_control: { type: 'ephemeral' }, // breakpoint 1/4
   });
 
-  // Tier 2: active spec (3 files)
+  // Tier 2: active spec (3 files) — filenames carry the NNN- prefix derived
+  // from the spec directory's leading 3-digit token (ADR-0006 §4).
   if (input.specPath) {
     const parts: string[] = [];
-    for (const f of ['requirements.md', 'design.md', 'scenarios.feature']) {
-      const c = await readOptional(resolve(REPO_ROOT, input.specPath, f), `spec/${f}`);
-      if (c) parts.push(`# ${f}\n\n${c}`);
+    const dirName = input.specPath.split(/[\\/]/).filter(Boolean).pop() ?? '';
+    const numMatch = dirName.match(/^(\d{3})-/);
+    if (!numMatch) {
+      // Spec path does not follow the NNN-<slug> convention; skip Tier 2.
+      // The caller should always pass a conforming path; fail-open here so
+      // the LLM still gets AGENTS.md without crashing the context build.
+    } else {
+      const prefix = numMatch[1];
+      const files = [
+        `${prefix}-requirements.md`,
+        `${prefix}-design.md`,
+        `${prefix}-scenarios.feature`,
+      ];
+      for (const f of files) {
+        const c = await readOptional(resolve(REPO_ROOT, input.specPath, f), `spec/${f}`);
+        if (c) parts.push(`# ${f}\n\n${c}`);
+      }
     }
     if (parts.length > 0) {
       blocks.push({

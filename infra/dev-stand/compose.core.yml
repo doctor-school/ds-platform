@@ -15,10 +15,10 @@
 # file (see README -> Container isolation port table; .env.example -> Host port
 # overrides).
 #
-# The idp service (Authentik|Zitadel) is intentionally absent — pending the
-# ADR-0001 §8 spike; it lands as a separate task. Observability services
-# (loki/grafana/glitchtip/promtail) live in a separate compose.observability.yml
-# started on demand only (setup-design §3.2).
+# The idp service (Zitadel, closed per ADR-0001 §8 / DSP-209) is intentionally
+# absent here — it lands via DSP-157 (local-dev compose IdP). Observability
+# services (loki/grafana/glitchtip/promtail) live in a separate
+# compose.observability.yml started on demand only (setup-design §3.2).
 name: ds-platform-dev
 
 services:

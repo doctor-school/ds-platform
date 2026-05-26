@@ -77,7 +77,7 @@ This document is the implementation detail for ADR-0006. The ADR records "what a
 ### 2.2 Deployment topology
 
 - `docs.doctor.school` — Fumadocs (public read-only).
-- `docs-cms.doctor.school` — Keystatic admin (Authentik-protected — same tenant as `apps/admin` per ADR-0001/0004).
+- `docs-cms.doctor.school` — Keystatic admin (Zitadel-protected — same tenant as `apps/admin` per ADR-0001/0004).
 - `apps/docs` and `apps/docs-cms` live as the 5th and 6th Next.js app in the `apps/` directory of the monorepo (see §4 layout).
 - Build: one Turborepo task `pnpm docs:build` rebuilds both.
 
@@ -357,7 +357,7 @@ export default config({
 });
 ```
 
-**Authentication:** Keystatic admin is protected by Authentik **or Zitadel** (final IdP — pending ADR-0001 §8 spike), the same tenant as `apps/admin`. Group `docs-editors` (Tech Lead + Product Lead) grants access. Commits are made by the GitHub App (`ds-docs-bot`), with `Co-authored-by: <oidc-user-email>` in the commit message.
+**Authentication:** Keystatic admin is protected by Zitadel (closed per ADR-0001 §8, DSP-209), the same tenant as `apps/admin`. Group `docs-editors` (Tech Lead + Product Lead) grants access. Commits are made by the GitHub App (`ds-docs-bot`), with `Co-authored-by: <oidc-user-email>` in the commit message.
 
 **Immutability of `id`:** not enforced in the Keystatic UI (the slugField is editable in Keystatic). Instead:
 
@@ -1150,7 +1150,7 @@ Decomposition of the spec into atomic tasks happens in GitHub Issues (one EARS-h
 - Mobile: React Native 0.78 + Expo SDK 53 (ADR-0005)
 - DB: PostgreSQL 17 + Drizzle ORM (ADR-0003)
 - Schema/Validation: Zod (single SSOT — ADR-0002 §3)
-- Auth/RBAC: Authentik or Zitadel OIDC (final IdP pending — ADR-0001 §8 spike) + Cerbos RBAC (ADR-0003 §5)
+- Auth/RBAC: Zitadel OIDC (closed per ADR-0001 §8, DSP-209) + Cerbos RBAC (ADR-0003 §5)
 - Realtime: Centrifugo (ADR-0002 §7)
 - CMS: Payload v3 content-only (ADR-0004 §7)
 - Test: Vitest + Playwright + Maestro (mobile)
@@ -1303,7 +1303,7 @@ Phase 1 (production):
 
 ## 11. Related decisions (cross-ref)
 
-- **ADR-0001** — OIDC tenant (Authentik **or Zitadel** — final choice pending ADR-0001 §8 spike): `docs-cms.doctor.school` uses the same OIDC client as `apps/admin`. Group `docs-editors`.
+- **ADR-0001** — OIDC tenant: Zitadel (closed per ADR-0001 §8, DSP-209); `docs-cms.doctor.school` uses the same OIDC client as `apps/admin`. Group `docs-editors`.
 - **ADR-0002 §3-5** — Zod as API SSOT, openapi-typescript as codegen. Confirmed as Master in the SSOT table in §3 of this spec.
 - **ADR-0003 §4** — Drizzle as DB SSOT, drizzle-kit as migrations. drizzle-kit check replaces atlas schema diff.
 - **ADR-0004 §7, §10.3** — Payload v3 content-only + Glossary Collection. §10.3 hard dep — this spec resolves it: Payload Glossary Collection is synced FROM glossary.yaml, not the other way around.

@@ -12,7 +12,7 @@ lang: ru
 **Статус:** Accepted
 **Связан с:** Plane DSO-29 (`8ecbe6ff-9c29-489c-9cae-d704b1ee7211`), milestone DSO-24
 **Design spec:** `apps/docs/content/adr/0005-mobile-stack-design-ru.md`
-**Наследует:** ADR-0001 (Identity/Auth: IdP shortlist Authentik/Zitadel — TBD per §8 spike), ADR-0002 (Backend: NestJS+REST+Centrifugo+BullMQ+Timeweb storage), ADR-0003 (Postgres17+Drizzle, Cerbos RBAC §5, Redis), ADR-0004 (Frontend: Next.js 15 App Router + 4 apps + Refine + Payload v3)
+**Наследует:** ADR-0001 (Identity/Auth: IdP = Zitadel, закрыт по §8 / DSP-209), ADR-0002 (Backend: NestJS+REST+Centrifugo+BullMQ+Timeweb storage), ADR-0003 (Postgres17+Drizzle, Cerbos RBAC §5, Redis), ADR-0004 (Frontend: Next.js 15 App Router + 4 apps + Refine + Payload v3)
 
 ---
 
@@ -246,7 +246,7 @@ DSO-31 финализирует tooling (Turborepo/Nx/pnpm workspaces), CI matri
 
 **Наследуется от:**
 
-- ADR-0001 — IdP shortlist (Authentik/Zitadel TBD per §8 spike), OIDC/OAuth2; Cerbos RBAC живёт в ADR-0003 §5; refresh token TTL=14d (mobile per §6)
+- ADR-0001 — IdP = Zitadel (закрыт по §8, DSP-209), OIDC/OAuth2; Cerbos RBAC живёт в ADR-0003 §5; refresh token TTL=14d (mobile per §6)
 - ADR-0002 — NestJS REST + Centrifugo + BullMQ + openapi-typescript codegen
 - ADR-0003 — Postgres17 + Drizzle + Redis (`pending_credits` table — schema extension через DSO-31)
 - ADR-0004 — Tailwind tokens + lucide icons + RHF+Zod + GlitchTip (mobile использует тот же GlitchTip-инстанс)

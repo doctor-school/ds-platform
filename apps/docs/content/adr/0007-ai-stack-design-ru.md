@@ -834,7 +834,7 @@ Single config flag в `.github/agents-config.json`:
 - Обе instance делят один Postgres (replication из A в B; A — primary для virtual key state) для unified accounting/budgets
 - PII Filter applies к обоим маршрутам unconditionally — даже для YandexGPT внутри РФ (152-ФЗ требует обезличивания при отправке третьему лицу, даже российскому)
 
-**LiteLLM admin UI protection:** LiteLLM admin не имеет native OIDC; protect через nginx forward-auth proxy с Authentik / Zitadel (ADR-0001 OIDC tenant). Это не trivial и оформляется отдельным дизайн-блоком в trigger-ADR.
+**LiteLLM admin UI protection:** LiteLLM admin не имеет native OIDC; protect через nginx forward-auth proxy с Zitadel (ADR-0001 OIDC tenant, закрыто по §8 / DSP-209). Это не trivial и оформляется отдельным дизайн-блоком в trigger-ADR.
 
 **Capacity Phase 0+1:** instance A — одна VM (Hetzner EU, ~€20/мес); instance B — одна VM в существующем Timeweb (~₽1000/мес). HA-пара через keepalived — Phase Pilot+.
 

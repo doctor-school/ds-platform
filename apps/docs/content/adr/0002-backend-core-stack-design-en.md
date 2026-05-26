@@ -56,7 +56,7 @@ lang: en
 - Mobile stack — DSO-29.
 - AI runtime (LangGraph etc.) — DSO-30.
 - Repo layout (monorepo vs polyrepo) — DSO-31.
-- Final IdP (Authentik vs Zitadel) — Phase 0 spike.
+- IdP — Zitadel (closed per ADR-0001 §8, DSP-209).
 - SMS / email provider with failover scheme, bot-protection — separate tasks.
 
 ---
@@ -466,7 +466,7 @@ k6 load tests — manual pre-release (v1), CI gate from v2 when staging-mirror i
 | LLM cost middleware                                | DSO-30                                                            | Portkey / Bifrost / Helicone                                                                                                    |
 | AI providers                                       | DSO-30                                                            | Anthropic / OpenAI / Yandex GPT / Sber GigaChat / Saiga2                                                                        |
 | Repo layout                                        | DSO-31                                                            | Turborepo / Nx / pnpm workspaces / polyrepo                                                                                     |
-| Final IdP                                          | Phase 0 spike                                                     | Authentik vs Zitadel                                                                                                            |
+| IdP                                                | Closed per ADR-0001 §8 (DSP-209)                                  | Zitadel                                                                                                                         |
 | SMS provider RF + failover                         | Separate task                                                     | SMS.ru / SMSC.ru / Devino — **in RF failover is manual (balancing with different semantics), not Twilio-style auto**            |
 | Email provider + failover                          | Separate task                                                     | Mailgun / Postmark / Yandex.Postbox / RF-accessible alternatives                                                                |
 | Bot-protection                                     | Separate task                                                     | Yandex SmartCaptcha (default)                                                                                                   |

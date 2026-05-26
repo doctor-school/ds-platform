@@ -77,7 +77,7 @@ lang: ru
 ### 2.2 Топология deploy
 
 - `docs.doctor.school` — Fumadocs (public read-only).
-- `docs-cms.doctor.school` — Keystatic admin (Authentik-protected — same tenant as `apps/admin` per ADR-0001/0004).
+- `docs-cms.doctor.school` — Keystatic admin (Zitadel-protected — same tenant as `apps/admin` per ADR-0001/0004).
 - `apps/docs` и `apps/docs-cms` живут как 5-й и 6-й Next.js app в `apps/` директории monorepo (см. §4 layout).
 - Build: один Turborepo task `pnpm docs:build` пересобирает оба.
 
@@ -357,7 +357,7 @@ export default config({
 });
 ```
 
-**Authentication:** Keystatic admin защищён Authentik **или Zitadel** (финальный IdP — pending ADR-0001 §8 spike) тем же tenant что `apps/admin`. Group `docs-editors` (Tech Lead + Product Lead) даёт access. Commits идут от GitHub App (`ds-docs-bot`), в commit message — `Co-authored-by: <oidc-user-email>`.
+**Authentication:** Keystatic admin защищён Zitadel (закрыто по ADR-0001 §8, DSP-209) тем же tenant что `apps/admin`. Group `docs-editors` (Tech Lead + Product Lead) даёт access. Commits идут от GitHub App (`ds-docs-bot`), в commit message — `Co-authored-by: <oidc-user-email>`.
 
 **Immutability of `id`:** не enforce'ится в Keystatic UI (slugField field в Keystatic editable). Вместо этого:
 
@@ -1150,7 +1150,7 @@ Decomposition spec'а на атомарные задачи происходит 
 - Mobile: React Native 0.78 + Expo SDK 53 (ADR-0005)
 - DB: PostgreSQL 17 + Drizzle ORM (ADR-0003)
 - Schema/Validation: Zod (single SSOT — ADR-0002 §3)
-- Auth/RBAC: Authentik or Zitadel OIDC (final IdP pending — ADR-0001 §8 spike) + Cerbos RBAC (ADR-0003 §5)
+- Auth/RBAC: Zitadel OIDC (закрыто по ADR-0001 §8, DSP-209) + Cerbos RBAC (ADR-0003 §5)
 - Realtime: Centrifugo (ADR-0002 §7)
 - CMS: Payload v3 content-only (ADR-0004 §7)
 - Test: Vitest + Playwright + Maestro (mobile)
@@ -1303,7 +1303,7 @@ Phase 1 (продакшн):
 
 ## 11. Связанные decisions (cross-ref)
 
-- **ADR-0001** — OIDC tenant (Authentik **или Zitadel** — финальный выбор pending ADR-0001 §8 spike): `docs-cms.doctor.school` использует тот же OIDC client что `apps/admin`. Group `docs-editors`.
+- **ADR-0001** — OIDC tenant: Zitadel (закрыто по ADR-0001 §8, DSP-209); `docs-cms.doctor.school` использует тот же OIDC client что `apps/admin`. Group `docs-editors`.
 - **ADR-0002 §3-5** — Zod как API SSOT, openapi-typescript как codegen. Подтверждено как Master в SSOT-таблице §3 этого spec'а.
 - **ADR-0003 §4** — Drizzle как DB SSOT, drizzle-kit как migrations. drizzle-kit check заменяет atlas schema diff.
 - **ADR-0004 §7, §10.3** — Payload v3 content-only + Glossary Collection. §10.3 hard dep — этот spec разрешает: Payload Glossary Collection синхронизируется FROM glossary.yaml, не наоборот.

@@ -38,7 +38,7 @@ DS Platform is a medical education platform. The doctor mobile app is the primar
 ### Constraints inherited
 
 - Federal Law 152-FZ — personal data (PD) within RF zone
-- ADR-0001 — IdP shortlist (Authentik/Zitadel — TBD per §8 spike), OIDC/OAuth2; Cerbos RBAC lives in ADR-0003 §5
+- ADR-0001 — IdP = Zitadel (closed per §8, DSP-209), OIDC/OAuth2; Cerbos RBAC lives in ADR-0003 §5
 - ADR-0002 — REST API from NestJS, Centrifugo for realtime, BullMQ for async
 - ADR-0003 — Postgres17 single instance, Drizzle ORM
 - ADR-0004 — Next.js 15 for web; Tailwind/shadcn design-system; Zod schemas as SSOT

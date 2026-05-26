@@ -82,7 +82,7 @@ lang: en
 
 **Arguments for self-hosted:**
 
-1. The team already self-hosts Plane, Authentik, GlitchTip on Timeweb — Postgres is incremental, not a new discipline.
+1. The team already self-hosts Plane, Zitadel, GlitchTip on Timeweb — Postgres is incremental, not a new discipline.
 2. Extensions without provider negotiations (pgvector, `pg_cron`, logical replication, any custom for DSO-30 AI-pipeline). Managed providers typically restrict extensions to an allowlist.
 3. 152-FZ — fewer data processors; managed = Timeweb becomes a processor, requiring a separate DPA + audit.
 4. Cost: managed Postgres tier with replica on Timeweb 5–15k ₽/month; VPS already paid. At v1 the saved 60–180k ₽/year is real for the startup phase.

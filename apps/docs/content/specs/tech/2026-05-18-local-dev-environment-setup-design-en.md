@@ -20,7 +20,7 @@ lang: en
 
 ## 1. Context
 
-DS Platform tech stack is fixed in ADR-0001..0011: NestJS+Fastify api+worker, Postgres17+Drizzle+pgvector, Redis, MinIO-compatible object storage, Authentik|Zitadel (TBD spike), Centrifugo, Cerbos, four Next.js 15 apps (promo/portal/admin/cms), RN+Expo (Pre-pilot phased to PWA), observability stack (Loki+Grafana+GlitchTip+Outline+Unleash, Pre-pilot).
+DS Platform tech stack is fixed in ADR-0001..0011: NestJS+Fastify api+worker, Postgres17+Drizzle+pgvector, Redis, MinIO-compatible object storage, Zitadel (closed per ADR-0001 §8 / DSP-209), Centrifugo, Cerbos, four Next.js 15 apps (promo/portal/admin/cms), RN+Expo (Pre-pilot phased to PWA), observability stack (Loki+Grafana+GlitchTip+Outline+Unleash, Pre-pilot).
 
 ADR-0008 §2.10 covers repo bootstrap (Sprint 3), but **where this stack physically runs on a developer's machine — no ADR addresses this.** Prod deploys are built by CI on dedicated servers per ADR-0008 §2.8 and engineering-readiness spec; "local → prod" as a deploy pattern is not supported. This spec covers **the developer workstation during Phase 0–Pre-pilot**, not production.
 
@@ -97,15 +97,15 @@ This is the part **in git**. Identical for every developer. Volumes use **env-dr
 
 ### 3.1 Core stack (always-on in any recipe)
 
-| Service                                                 | Image                                                            | External port (for host access) | Container          | RAM (typical)                                  | Host-side consumer                                                  |
-| ------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------- | ------------------ | ---------------------------------------------- | ------------------------------------------------------------------- |
-| `postgres`                                              | `pgvector/pgvector:pg17` (Postgres 17 base + pgvector extension) | 5432                            | 5432               | 1–4 GB                                         | api, worker, admin, cms, payload                                    |
-| `redis`                                                 | `redis:7-alpine`                                                 | 6379                            | 6379               | 256 MB                                         | api (cache + sessions), worker (BullMQ broker), Centrifugo (PubSub) |
-| `minio`                                                 | `minio/minio:latest`                                             | 9000 (S3) + 9001 (console)      | 9000+9001          | 512 MB                                         | api (uploads), Payload (media), mobile (offline cache target)       |
-| `idp` (`authentik` or `zitadel`, TBD ADR-0001 §8 spike) | placeholder service named `idp` now                              | 9080 (HTTP), 9443 (HTTPS)       | 9000/9443 internal | 1–2 GB + internal Postgres + Redis (or shared) | api (JWT issuer), all web apps (OIDC login)                         |
-| `centrifugo`                                            | `centrifugo/centrifugo:v6`                                       | 8000                            | 8000               | 128 MB                                         | api (publish), web/mobile (WS subscribe)                            |
-| `cerbos`                                                | `ghcr.io/cerbos/cerbos:latest`                                   | 3592 (HTTP), 3593 (gRPC)        | 3592/3593          | 128 MB                                         | api (PDP queries)                                                   |
-| `mailpit`                                               | `axllent/mailpit:latest`                                         | 1025 (SMTP), 8025 (UI)          | 1025/8025          | 64 MB                                          | api (email dev catch-all)                                           |
+| Service                          | Image                                                            | External port (for host access) | Container | RAM (typical)                         | Host-side consumer                                                  |
+| -------------------------------- | ---------------------------------------------------------------- | ------------------------------- | --------- | ------------------------------------- | ------------------------------------------------------------------- |
+| `postgres`                       | `pgvector/pgvector:pg17` (Postgres 17 base + pgvector extension) | 5432                            | 5432      | 1–4 GB                                | api, worker, admin, cms, payload                                    |
+| `redis`                          | `redis:7-alpine`                                                 | 6379                            | 6379      | 256 MB                                | api (cache + sessions), worker (BullMQ broker), Centrifugo (PubSub) |
+| `minio`                          | `minio/minio:latest`                                             | 9000 (S3) + 9001 (console)      | 9000+9001 | 512 MB                                | api (uploads), Payload (media), mobile (offline cache target)       |
+| `idp` (Zitadel, per ADR-0001 §8) | `ghcr.io/zitadel/zitadel:latest` (single Go binary)              | 8080 (HTTP+gRPC h2c)            | 8080      | 256–512 MB (binary) + shared Postgres | api (JWT issuer), all web apps (OIDC login)                         |
+| `centrifugo`                     | `centrifugo/centrifugo:v6`                                       | 8000                            | 8000      | 128 MB                                | api (publish), web/mobile (WS subscribe)                            |
+| `cerbos`                         | `ghcr.io/cerbos/cerbos:latest`                                   | 3592 (HTTP), 3593 (gRPC)        | 3592/3593 | 128 MB                                | api (PDP queries)                                                   |
+| `mailpit`                        | `axllent/mailpit:latest`                                         | 1025 (SMTP), 8025 (UI)          | 1025/8025 | 64 MB                                 | api (email dev catch-all)                                           |
 
 **Total core RAM:** ≈ 4–8 GB working set. Recipe-specific: whether this fits on your machine is your check. On Tech Lead's recipe (TrueNAS hybrid) — OK (≈18–20 GB usable).
 
@@ -228,7 +228,7 @@ Daily SSD pool (900 GB)
 ├── Daily SSD/dev-postgres        # Postgres pgdata,   mountpoint /mnt/dev-stand/postgres
 ├── Daily SSD/dev-redis           # Redis AOF/RDB dumps,         /mnt/dev-stand/redis
 ├── Daily SSD/dev-minio           # MinIO buckets storage,       /mnt/dev-stand/minio
-├── Daily SSD/dev-idp             # Authentik|Zitadel media,     /mnt/dev-stand/idp
+├── Daily SSD/dev-idp             # Zitadel media,               /mnt/dev-stand/idp
 ├── Daily SSD/dev-centrifugo      # Centrifugo state (small),    /mnt/dev-stand/centrifugo
 ├── Daily SSD/dev-cerbos-policies # Cerbos PDP policies,         /mnt/dev-stand/cerbos-policies
 └── Daily SSD/dev-observability   # Loki/Grafana/GlitchTip,      /mnt/dev-stand/observability
@@ -502,7 +502,7 @@ If the snapshot fails → migrate does not run. This is a soft guardrail, not ha
 
 Phase 0 secrets:
 
-- `infra/dev-stand/.env` on TrueNAS — contains `POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`, `IDP_SECRET_KEY` (Authentik `AUTHENTIK_SECRET_KEY` or Zitadel `ZITADEL_MASTERKEY` depending on the ADR-0001 §8 outcome), etc. Manually created from `.env.example` at bootstrap. **Not committed** (gitignore).
+- `infra/dev-stand/.env` on TrueNAS — contains `POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`, `ZITADEL_MASTERKEY` (32-char secret for Zitadel encryption-at-rest per ADR-0001 §8 / DSP-209), etc. Manually created from `.env.example` at bootstrap. **Not committed** (gitignore).
 - `ds-platform/.env.local` on host — connection strings + IdP client secret. **Not committed.**
 - Vault is not used in Phase 0 (per engineering-readiness spec). Activation trigger: first shared developer (see §11 OQ-3).
 
@@ -532,7 +532,7 @@ Phase 0 secrets:
 
 - Second developer joins → §6.3 + OQ-2 + OQ-6 reopen.
 - Prod servers deployed → §1 clarifies "local is not the path to prod", update CI references.
-- IdP spike closes (Authentik vs Zitadel) → concrete service replaces `idp` placeholder in §3.1.
+- IdP service lands in compose (DSP-157) → `idp` row in §3.1 becomes an active Zitadel service (closed per ADR-0001 §8, DSP-209).
 - TrueNAS Scale major upgrade (25.x) → verify Apps Docker still works.
 - Observability stack activates (DSO-32) → `compose.observability.yml` promoted from "optional" into the regular flow.
 - Core RAM on TrueNAS > 18 GB sustained → OQ-8 trigger.
@@ -639,7 +639,7 @@ Implementation timeline — Sprint 2 (target 29.05, see Plane DSP-150).
 
 **Delegated:**
 
-- Concrete IdP (Authentik vs Zitadel) — ADR-0001 §8 spike.
+- Concrete IdP wiring into dev-stand compose (DSP-157) — Zitadel per ADR-0001 §8 (DSP-209).
 - Prod-deploy compose (Coolify / k3s / manual) — separate ADR in pre-pilot.
 - Local LLM compose fragment — OQ-5.
 - Multi-developer namespace pattern — OQ-2.

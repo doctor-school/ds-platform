@@ -38,7 +38,7 @@ DS Platform — медицинская образовательная платф
 ### Constraints inherited
 
 - 152-ФЗ — ПДн в РФ-периметре
-- ADR-0001 — IdP shortlist (Authentik/Zitadel — TBD per §8 spike), OIDC/OAuth2; Cerbos RBAC живёт в ADR-0003 §5
+- ADR-0001 — IdP = Zitadel (закрыт по §8, DSP-209), OIDC/OAuth2; Cerbos RBAC живёт в ADR-0003 §5
 - ADR-0002 — REST-API из NestJS, Centrifugo для realtime, BullMQ для async
 - ADR-0003 — Postgres17 single instance, Drizzle ORM
 - ADR-0004 — Next.js 15 для web; Tailwind/shadcn design-system; Zod-схемы как SSOT

@@ -47,7 +47,7 @@ Releases as artifacts are produced **continuously** via changesets — every mer
 
 - Iterations / sprint cycles. Explicitly out of scope per Plane DSP-198 description (team = 1+AI, no sprint cadence).
 - A `Release` field on the board. Releases happen continuously via changesets — there is no planning value in pre-allocating items to release buckets.
-- A `Phase` field on the board. Phase 0 / v1 / v2 / v3 are product-trajectory landmarks, not active filtering axes for the working set; if a future need emerges, it is added as an amendment to this spec.
+- A `Phase` field on the board. Phase 0 / v1 / v2 / v3 are product-trajectory landmarks, not active filtering axes for the working set; if a future need emerges, it is added as a revision of this spec.
 - Pre-creating Milestones at setup. Milestones are created by the PM when an actual long-lived product theme emerges (e.g. "Auth foundations v1", "Directual cutover", "Doctor portal MVP"). Empty Milestone is the legitimate default.
 - Cross-linking GitHub items with Plane DSP-XXX as a default pattern. Trackers stay strictly separated. DSP-198 itself is a rare exception (a Plane work-item about GitHub infrastructure).
 - Per-app / per-module separate boards. Single board with views serves the current scale; split triggers documented in §13.
@@ -250,7 +250,7 @@ The template is English-only (consistent with `AGENTS.md`, ADRs, and existing sp
 
 ## 8. AGENTS.md edits
 
-Two direct edits — no amendment/append semantics. `AGENTS.md` is a living convention doc; outdated text is replaced in place.
+Two direct edits — no append-only / superseded-block semantics. `AGENTS.md` is a living convention doc; outdated text is replaced in place.
 
 ### 8.1 Invert Milestone semantics in §2
 
@@ -308,7 +308,7 @@ Flag `--dry-run` prints every intended mutation to stdout without executing. Use
 
 ## 10. Acceptance criteria
 
-1. Org-level Projects v2 board `DS Platform` exists in org `doctor-school`, visibility = private. URL recorded as an amendment to this spec.
+1. Org-level Projects v2 board `DS Platform` exists in org `doctor-school`, visibility = private. URL recorded inline in this spec via a follow-up edit after the script's first successful run.
 2. Fields configured: `Status` (4 options), `Area` (13 options). Built-in `Type`, `Milestone`, `Labels` fields are enabled (no objects created at setup).
 3. All six workflows (§3.3) are enabled and active.
 4. All three views (§3.4) are configured with the correct filter / group / layout.
@@ -347,9 +347,9 @@ The single-board design holds until any of the following triggers fire:
 - v1 implementation crosses ~50 concurrently open items — at that point a separate `v1 — pilot` board might reduce noise on the operational view.
 - More than 100 open items concurrently — the single Todo column drag-reorder UX breaks down.
 - A second org-repo with an independent lifecycle joins the board.
-- A real demand for a Roadmap-timeline view emerges (then date fields per Milestone, and a Roadmap view added — amendment, not redesign).
+- A real demand for a Roadmap-timeline view emerges (then date fields per Milestone, and a Roadmap view added — spec revision, not redesign).
 
-Each trigger reopens this spec as an amendment, not as a fresh design.
+Each trigger reopens this spec as a revision, not as a fresh design.
 
 ## 14. Out of scope
 

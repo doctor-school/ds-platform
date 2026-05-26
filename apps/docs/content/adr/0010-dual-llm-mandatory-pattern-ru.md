@@ -165,6 +165,6 @@ DS Platform — медицинская образовательная платф
 
 ## 7. Открытые вопросы
 
-- **OQ-DL10-1:** Hard rule vs рекомендация на cross-vendor для Q-LLM и P-LLM в одном flow. Pre-pilot — рекомендация (см. dual-llm-pattern-design §7.3). Pilot+ — пересмотреть после первого реального injection incident'а; возможно превратить в hard rule отдельным amendment'ом.
+- **OQ-DL10-1:** Hard rule vs рекомендация на cross-vendor для Q-LLM и P-LLM в одном flow. Pre-pilot — рекомендация (см. dual-llm-pattern-design §7.3). Pilot+ — пересмотреть после первого реального injection incident'а; возможно превратить в hard rule отдельной ADR-ревизией.
 - **OQ-DL10-2:** Применимость pattern'а к будущим non-backend AI-flows (mobile-side on-device inference, browser-side classification). Pre-pilot — out of scope (вся AI-логика server-side per ADR-0007). Пересмотр при первом on-device feature.
 - **OQ-DL10-3:** Streaming-режим P-LLM и сохранение fail-closed semantics при partial-stream'е — резолюция в первом streaming flow design'е (см. dual-llm-pattern-design §13 OQ-DL-6).

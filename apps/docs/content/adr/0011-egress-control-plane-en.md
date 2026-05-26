@@ -43,7 +43,7 @@ In parallel, ADR-0009 introduced cross-zone erasure propagation (PD lifecycle �
 ### 2.1 Principles
 
 1. **PD / secrets do not leave the RF zone**, except via explicitly approved channels from §2.2.
-2. **Default deny:** a new external API / SaaS / outbound channel is a separate decision (mini-ADR or amendment to this ADR). Not "agent decides ad hoc."
+2. **Default deny:** a new external API / SaaS / outbound channel is a separate decision (mini-ADR or revision of this ADR). Not "agent decides ad hoc."
 3. **Every approved channel has three guarantees:**
 
 - **Sanitizer** (what may be sent right now) — implementation in code, not on trust.
@@ -151,7 +151,7 @@ See **ADR-0009 §2.7 + design spec §8** for PD lifecycle. Common principles:
 
 - `@ds/pii-filter` + sanitizer tooling — implementation cost ≈ 1 week backend + 1 week CI tooling.
 - Quarterly audit job — operational cost (4 hours / quarter).
-- Every new external endpoint requires an amendment to this ADR (overhead, but by design).
+- Every new external endpoint requires a revision of this ADR (overhead, but by design).
 
 ### Downstream dependencies
 

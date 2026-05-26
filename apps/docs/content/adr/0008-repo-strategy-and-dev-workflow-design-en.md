@@ -758,7 +758,7 @@ Beyond the baseline from ADR-0006/0007, add a repository conventions section:
 
 **ADRs live in `apps/docs/content/adr/`**, rendered by Fumadocs at `/adr/<slug>`. Paired design spec — `NNNN-<slug>-design.md` alongside.
 
-**Feature specs live in `apps/docs/content/specs/features/NNN-<slug>/`** (3 files: requirements.md, design.md, scenarios.feature). One spec → one GitHub Milestone → multiple Issues per EARS-handler.
+**Feature specs live in `apps/docs/content/specs/features/NNN-<slug>/`** (3 files: `NNN-requirements.md`, `NNN-design.md`, `NNN-scenarios.feature`). One spec → one GitHub Milestone → multiple Issues per EARS-handler.
 ```
 
 ### 5.2 CLAUDE.md "Repository conventions" overlay (Claude Code-specific)

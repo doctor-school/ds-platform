@@ -43,7 +43,7 @@ This document is the implementation detail for ADR-0007. The ADR establishes "wh
 
 ### 2.1 Iteration unit
 
-One iteration = one feature spec → one or more related PRs. Source of intent — `apps/docs/content/specs/features/NNN-<slug>/{requirements.md, design.md, scenarios.feature}` (3 files, ADR-0006 §4). Source of execution state — GitHub Milestone `NNN-<slug>` + Issues per EARS handler (ADR-0006 §9). No `tasks.md` file.
+One iteration = one feature spec → one or more related PRs. Source of intent — `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}` (3 files, ADR-0006 §4). Source of execution state — GitHub Milestone `NNN-<slug>` + Issues per EARS handler (ADR-0006 §9). No `tasks.md` file.
 
 ### 2.2 Canonical procedure — skill catalog at `apps/docs/content/skills/<name>/SKILL.md`
 

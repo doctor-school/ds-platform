@@ -758,7 +758,7 @@ gh api \
 
 **ADRs live in `apps/docs/content/adr/`**, render через Fumadocs at `/adr/<slug>`. Парный design spec — `NNNN-<slug>-design.md` рядом.
 
-**Feature specs live in `apps/docs/content/specs/features/NNN-<slug>/`** (3 файла: requirements.md, design.md, scenarios.feature). One spec → one GitHub Milestone → multiple Issues per EARS-handler.
+**Feature specs live in `apps/docs/content/specs/features/NNN-<slug>/`** (3 файла: `NNN-requirements.md`, `NNN-design.md`, `NNN-scenarios.feature`). One spec → one GitHub Milestone → multiple Issues per EARS-handler.
 ```
 
 ### 5.2 CLAUDE.md "Repository conventions" overlay (Claude Code-specific)

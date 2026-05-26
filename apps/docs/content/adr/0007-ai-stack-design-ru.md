@@ -43,7 +43,7 @@ lang: ru
 
 ### 2.1 Iteration unit
 
-Один iteration = одна feature-spec → один или несколько связанных PR. Источник intent — `apps/docs/content/specs/features/NNN-<slug>/{requirements.md, design.md, scenarios.feature}` (3 файла, ADR-0006 §4). Источник execution state — GitHub Milestone `NNN-<slug>` + Issues per EARS-handler (ADR-0006 §9). Никакого `tasks.md` файла.
+Один iteration = одна feature-spec → один или несколько связанных PR. Источник intent — `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}` (3 файла, ADR-0006 §4). Источник execution state — GitHub Milestone `NNN-<slug>` + Issues per EARS-handler (ADR-0006 §9). Никакого `tasks.md` файла.
 
 ### 2.2 Каноническая процедура — skill-каталог в `apps/docs/content/skills/<name>/SKILL.md`
 

@@ -489,9 +489,7 @@ This is a closed flow with audit events `mfa_enrolled` + `lockout_triggered (mfa
 
 ## 9. IdP — Zitadel (closed 2026-05-25, DSP-209)
 
-**Decision:** IdP for DS Platform is **Zitadel** (closed 2026-05-25, DSP-209). Decision rationale, scoring methodology and rejected-candidates summary — see ADR-0001 §8.
-
-**Choice methodology and full deliberation history** — gates, weighted scoring table, evidence URLs, session log — recorded in bbm `decisions-log.md` [2026-05-25] (the bbm repo is the SSOT for shortlist methodology; ds-platform docs describe current architecture only).
+**Decision:** IdP for DS Platform is **Zitadel** (closed 2026-05-25, DSP-209). See ADR-0001 §8 for decision body, AGPL discipline and known trade-offs.
 
 ---
 

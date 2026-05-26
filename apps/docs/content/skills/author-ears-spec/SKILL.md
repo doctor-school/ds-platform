@@ -1,6 +1,6 @@
 ---
 title: "author-ears-spec"
-description: "Procedural skill (dispatch): subagent authors a 3-file SDD triplet (requirements.md + design.md + scenarios.feature) for a new feature."
+description: "Procedural skill (dispatch): subagent authors a 3-file SDD triplet (NNN-requirements.md + NNN-design.md + NNN-scenarios.feature) for a new feature."
 name: author-ears-spec
 mode: dispatch
 ---
@@ -26,12 +26,12 @@ You are authoring a 3-file SDD triplet for a new feature in the DS Platform mono
 ### Procedure
 
 1. **Read sources** — PRD section + listed ADRs + any prior feature-spec in the same domain (for tone and structure precedent).
-2. **Write `requirements.md`:**
+2. **Write `NNN-requirements.md`** (filename prefixed with the spec number per ADR-0006 §4):
    - Frontmatter: `tracker:` (GitHub Milestone URL placeholder if the milestone isn't created yet), `status: Draft`.
    - Sections: Outcomes / Scope / Constraints / Prior decisions (cite ADRs) / Event Model (Commands / Events / Read models / Policies) / **EARS requirements** / Invariants / Verification.
    - **EARS numbering: flat (`EARS-1`, `EARS-2`, …) per ADR-0006 §4** (closing G11 finding F-5). Use nested `N.M` **only** when a single handler genuinely carries multiple shall-clauses (rare).
-3. **Write `design.md`** — Mermaid sequence diagrams of cascades, state diagrams of lifecycles, ER fragments.
-4. **Write `scenarios.feature`** — Gherkin, happy path + 2–3 failure branches.
+3. **Write `NNN-design.md`** — Mermaid sequence diagrams of cascades, state diagrams of lifecycles, ER fragments.
+4. **Write `NNN-scenarios.feature`** — Gherkin, happy path + 2–3 failure branches.
 5. **Issue body** — when the lead agent opens the parent Issue, the body must explicitly list the scope of any **stub packages** being graduated (e.g., "this feature graduates `packages/foo` from stub to first concrete export"). Closing G11 finding F-20.
 6. **Commit the triplet** to a feature branch `feat/spec-NNN-<slug>`.
 

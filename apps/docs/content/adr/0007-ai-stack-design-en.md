@@ -43,7 +43,7 @@ This document is the implementation detail for ADR-0007. The ADR establishes "wh
 
 ### 2.1 Iteration unit
 
-One iteration = one feature spec → one or more related PRs. Source of intent — `apps/docs/content/specs/features/NNN-<slug>/{requirements.md, design.md, scenarios.feature}` (3 files, ADR-0006 §4). Source of execution state — GitHub Milestone `NNN-<slug>` + Issues per EARS handler (ADR-0006 §9). No `tasks.md` file.
+One iteration = one feature spec → one or more related PRs. Source of intent — `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}` (3 files, ADR-0006 §4). Source of execution state — GitHub Milestone `NNN-<slug>` + Issues per EARS handler (ADR-0006 §9). No `tasks.md` file.
 
 ### 2.2 Canonical procedure — skill catalog at `apps/docs/content/skills/<name>/SKILL.md`
 
@@ -73,7 +73,7 @@ The 8-step cycle (`do-feature-iteration` orchestrates these):
        it('EARS-3.1: ...', () => { ... })
      (flat `EARS-N` is the default; `EARS-N.M` only when a single
       handler carries multiple shall-clauses — ADR-0006 §TDD)
-   - Playwright tests are compiled from scenarios.feature
+   - Playwright tests are compiled from NNN-scenarios.feature
      via playwright-bdd (ADR-0006 §4 + §7 generated artifacts)
 
 4. GREEN
@@ -129,7 +129,7 @@ Hard rule, enforced via AGENTS.md + TDD-signal CI guard (§5.2 WARN v1 → BLOCK
 
 - **No production code without a failing test** that motivates that code.
 - One Vitest test per EARS requirement; naming: `it('EARS-N.M: ...', ...)`.
-- Playwright tests are generated from `scenarios.feature` via playwright-bdd (test code ≠ production code).
+- Playwright tests are generated from `NNN-scenarios.feature` via playwright-bdd (test code ≠ production code).
 - Property-based tests for invariants — opt-in from the first feature with invariants (ledger reconciliation, for example).
 - superpowers:test-driven-development skill — mandatory invocation for any implementation task.
 
@@ -168,7 +168,7 @@ Any agent at the start of a session (sync or async) runs the script and receives
 
 3. Active spec(s)
    - For each agent-working Issue: parses milestone name → spec folder path
-   - Reads requirements.md frontmatter: status, Prior decisions (list of ADRs)
+   - Reads NNN-requirements.md frontmatter: status, Prior decisions (list of ADRs)
    - Extracts glossary terms from spec body via [[term-id]] directives
 
 4. Context files to load (paths only)
@@ -252,7 +252,12 @@ async function readSpecMeta(milestoneName: string) {
     milestoneName,
   );
   try {
-    const raw = await readFile(resolve(specDir, "requirements.md"), "utf-8");
+    const numMatch = milestoneName.match(/^(\d{3})-/);
+    if (!numMatch) return null;
+    const raw = await readFile(
+      resolve(specDir, `${numMatch[1]}-requirements.md`),
+      "utf-8",
+    );
     const { data, content } = matter(raw);
     const adrs = (content.match(/ADR-\d{4}/g) ?? []).filter(
       (v, i, a) => a.indexOf(v) === i,
@@ -371,7 +376,7 @@ async function main() {
   activeSpecs.filter(Boolean).forEach(({ spec }) => {
     if (!spec) return;
     console.log(
-      `- @${spec.path}/requirements.md  @${spec.path}/design.md  @${spec.path}/scenarios.feature`,
+      `- @${spec.path}/${spec.prefix}-requirements.md  @${spec.path}/${spec.prefix}-design.md  @${spec.path}/${spec.prefix}-scenarios.feature`,
     );
     spec.adrs.forEach((a: string) =>
       console.log(`- @docs/adr/${a.toLowerCase().replace("adr-", "")}-*.md`),
@@ -419,7 +424,7 @@ Before `git push` the agent goes through each item. If even one is false — do 
 | 3   | TypeScript compiles                                                           | `pnpm typecheck`                                              |
 | 4   | Lint clean                                                                    | `pnpm lint` (incl. `@ds/glossary-canonical-ids`, events-lint) |
 | 5   | Module README updated if exports changed                                      | `pnpm lint:module-readme`                                     |
-| 6   | Spec `status` frontmatter updated (Draft → In dev → Shipped)                  | manual edit in `requirements.md`                              |
+| 6   | Spec `status` frontmatter updated (Draft → In dev → Shipped)                  | manual edit in `NNN-requirements.md`                          |
 | 7   | Glossary terms added if new domain vocabulary appeared in code/spec           | `pnpm lint:glossary-mdx`                                      |
 | 8   | ADR created if an architectural decision was made                             | judgment; interactive reviewer (AGENTS.md §4) catches misses  |
 | 9   | Linked Issue received a summary comment (file paths, decisions, what remains) | `gh issue comment <N> --body-file <summary>`                  |
@@ -430,10 +435,10 @@ Before `git push` the agent goes through each item. If even one is false — do 
 | ------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- |
 | **spec-link required**    | PR without a link to an Issue whose milestone = spec                     | GH Action: PR body contains `Closes #N`; Issue `#N` has milestone `NNN-<slug>`; spec folder `apps/docs/content/specs/features/NNN-<slug>/` exists.                       | BLOCK                 |
 | **TDD signal**            | implementation-only commit without a test file                           | GH Action: for each modified `src/**/*.ts` — `*.test.ts` is either in the diff, or commit history shows a test-commit preceding it. Heuristic; false positives possible. | WARN v1               |
-| **EARS ↔ test linkage**   | EARS requirement without `it('EARS-N: ...')`                             | Custom lint `tools/lint/ears-test-lint.ts`: parses EARS IDs in requirements.md, checks for it-descriptions with the same ID in the module.                               | WARN v1 → BLOCK v2    |
+| **EARS ↔ test linkage**   | EARS requirement without `it('EARS-N: ...')`                             | Custom lint `tools/lint/ears-test-lint.ts`: parses EARS IDs in `NNN-requirements.md`, checks for it-descriptions with the same ID in the module.                         | WARN v1 → BLOCK v2    |
 | **Gherkin coverage**      | scenarios without Playwright step implementation                         | playwright-bdd native error — test fails if step is undefined.                                                                                                           | BLOCK (via test fail) |
 | **Spec status freshness** | Merged PR with spec:NNN but spec status='Draft'                          | Custom lint: at merge — check `status: In dev` minimum.                                                                                                                  | WARN v1               |
-| **Prior decisions cited** | New spec without cited ADRs in "Prior decisions" if category ≠ docs-only | Spec lint: `requirements.md` has a section with ≥1 ADR-link.                                                                                                             | WARN v1               |
+| **Prior decisions cited** | New spec without cited ADRs in "Prior decisions" if category ≠ docs-only | Spec lint: `NNN-requirements.md` has a section with ≥1 ADR-link.                                                                                                         | WARN v1               |
 
 > **Interim semantics note:** rows marked `BLOCK` assume a server-side required status check on `main`. While ADR-0008 §2.6 branch protection is deferred (GitHub Free + private repo blocks the branch-protection API — ADR-0008 §2.6), `BLOCK` is read operationally as **"CI job exits red and the Tech Lead treats it as a merge-blocker by convention"** — same outcome on the single-developer happy path, no server-side guarantee.
 
@@ -452,7 +457,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 async function main() {
   const specs = await glob(
-    "apps/docs/content/specs/features/*/requirements.md",
+    "apps/docs/content/specs/features/*/*-requirements.md",
     {
       cwd: REPO_ROOT,
       absolute: true,
@@ -672,7 +677,17 @@ export async function buildSystemBlocks(
   // ---- Tier 2: active spec (3 files concat) ----
   if (input.specPath) {
     const parts: string[] = [];
-    for (const f of ["requirements.md", "design.md", "scenarios.feature"]) {
+    const dirName = input.specPath.split(/[\\/]/).filter(Boolean).pop() ?? "";
+    const numMatch = dirName.match(/^(\d{3})-/);
+    const prefix = numMatch?.[1];
+    const files = prefix
+      ? [
+          `${prefix}-requirements.md`,
+          `${prefix}-design.md`,
+          `${prefix}-scenarios.feature`,
+        ]
+      : [];
+    for (const f of files) {
       const c = await readOptional(resolve(REPO_ROOT, input.specPath, f));
       if (c) parts.push(`# ${f}\n\n${c}`);
     }
@@ -933,9 +948,9 @@ Run `pnpm bootstrap` (alias for `tsx tools/agent-bootstrap.ts`). Read its output
 - AGENTS.md (this file) — already in your context
 - CLAUDE.md if you are Claude Code
 - Active spec at `apps/docs/content/specs/features/NNN-<slug>/`:
-  - requirements.md
-  - design.md
-  - scenarios.feature
+  - `NNN-requirements.md`
+  - `NNN-design.md`
+  - `NNN-scenarios.feature`
 - ADRs from spec's "Prior decisions" section
 - `gh issue view <N>` for current Issue context and history
 
@@ -947,7 +962,7 @@ Per ADR-0006 §9 conventions (title format `[NNN] EARS-N.M: ...`, label `kind:ea
   gh issue create --title "Feature NNN: <name>" \
    --milestone "NNN-<slug>" --label "feature:NNN-<slug>" \
    --body-file .github/issue_templates/feature.md
-  Then for each EARS-handler from `requirements.md`:
+  Then for each EARS-handler from `NNN-requirements.md`:
   gh issue create --title "[NNN] EARS-N.M: <description>" \
    --milestone "NNN-<slug>" --label "feature:NNN-<slug>,kind:ears-handler,agent-ready" \
    --body "Spec: apps/docs/content/specs/features/NNN-<slug>/. Parent: #<parent-issue>."

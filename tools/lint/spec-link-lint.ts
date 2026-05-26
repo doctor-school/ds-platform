@@ -10,7 +10,7 @@
  *   1. Has `Closes #N` (or equivalent auto-close keyword) in the body
  *   2. Each linked Issue has a milestone
  *   3. The milestone's spec folder exists: apps/docs/content/specs/features/<title>/
- *   4. requirements.md is present in that folder
+ *   4. <NNN>-requirements.md is present in that folder (NNN = leading number of the milestone title)
  *
  * Non-PR runs and non-feature PRs → exit 0 with skip note.
  * Failures: stderr, exit 1. Success: stdout summary, exit 0.
@@ -168,10 +168,18 @@ async function main(): Promise<void> {
       );
       continue;
     }
-    const reqs = resolve(folder, 'requirements.md');
+    const numMatch = issue.milestone.title.match(/^(\d{3})-/);
+    if (!numMatch) {
+      failures.push(
+        `Milestone \`${issue.milestone.title}\` does not start with a 3-digit prefix (expected \`NNN-<slug>\` per ADR-0006 §4).`,
+      );
+      continue;
+    }
+    const reqsFilename = `${numMatch[1]}-requirements.md`;
+    const reqs = resolve(folder, reqsFilename);
     if (!(await exists(reqs))) {
       failures.push(
-        `Spec folder \`${issue.milestone.title}\` exists but lacks \`requirements.md\`. Cannot validate EARS coverage.`,
+        `Spec folder \`${issue.milestone.title}\` exists but lacks \`${reqsFilename}\`. Cannot validate EARS coverage.`,
       );
       continue;
     }

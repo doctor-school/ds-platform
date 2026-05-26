@@ -21,7 +21,7 @@ mode: inline
 
 Execute the steps in order. Each `→` is a hard gate: the next step does not begin until the prior step's output exists.
 
-1. **`read-relevant-adrs`** (inline) — load ADRs cited in `requirements.md` "Prior decisions" plus any architecturally adjacent ADRs. Cite them in the first user-facing reply.
+1. **`read-relevant-adrs`** (inline) — load ADRs cited in `NNN-requirements.md` "Prior decisions" plus any architecturally adjacent ADRs. Cite them in the first user-facing reply.
 2. **`verify-base-ci-green`** (inline) — `gh run list --branch main --limit 1`. If red, note in PR description that baseline was already red.
 3. **RED** — write one failing Vitest test per EARS-N. Naming: `it('EARS-N: when <trigger>, system shall <behavior>')`. Flat numbering per ADR-0006 §4; nest to `N.M` only when one handler carries multiple shall-clauses.
 4. **GREEN** — minimum code to pass the failing test.

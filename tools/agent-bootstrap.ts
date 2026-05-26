@@ -155,8 +155,10 @@ interface SpecMeta {
 
 async function readSpecMeta(milestoneName: string): Promise<SpecMeta | null> {
   const specDir = resolve(REPO_ROOT, 'apps/docs/content/specs/features', milestoneName);
+  const numMatch = milestoneName.match(/^(\d{3})-/);
+  if (!numMatch) return null;
   try {
-    const raw = await readFile(resolve(specDir, 'requirements.md'), 'utf-8');
+    const raw = await readFile(resolve(specDir, `${numMatch[1]}-requirements.md`), 'utf-8');
     const parsed = matter(raw);
     const content = parsed.content;
     const data = parsed.data as Record<string, unknown>;

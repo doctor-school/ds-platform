@@ -5,7 +5,7 @@
  * Spec: docs/superpowers/specs/2026-05-15-ds-platform-ai-stack-design-en.md §5
  * ADR:  apps/docs/content/adr/0007-ai-stack-en.md §2.6 (CI nudges for humans).
  *
- * Scans `apps/docs/content/specs/features/<slug>/requirements.md` for
+ * Scans `apps/docs/content/specs/features/<slug>/<NNN>-requirements.md` for
  * EARS-N.M identifiers, then scans `apps/**\/*.test.{ts,tsx}` and
  * `packages/**\/*.test.{ts,tsx}` for the same IDs. Emits warnings on:
  *   - EARS IDs in specs not referenced by any test (uncovered)
@@ -42,13 +42,13 @@ async function extractIds(file: string): Promise<Set<string>> {
 }
 
 async function main(): Promise<void> {
-  const specFiles = await fg('apps/docs/content/specs/features/*/requirements.md', {
+  const specFiles = await fg('apps/docs/content/specs/features/*/*-requirements.md', {
     cwd: REPO_ROOT,
     absolute: true,
   });
 
   if (specFiles.length === 0) {
-    info('no specs found (apps/docs/content/specs/features/*/requirements.md), skipping');
+    info('no specs found (apps/docs/content/specs/features/*/*-requirements.md), skipping');
     process.exit(0);
   }
 

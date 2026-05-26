@@ -85,20 +85,20 @@ This document is the implementation detail for ADR-0006. The ADR records "what a
 
 ## 3. SSOT topology — full table with propagation rules
 
-| Type of truth           | Master file/source                                                                                                                                                          | Generated artifacts                                                                                     | Propagation script                                                                                   | Validation                                    |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| API contract            | `packages/schemas/**/*.ts` (Zod)                                                                                                                                            | `openapi.snapshot.json`, `packages/api-client/` (typed SDK)                                             | `pnpm generate:openapi` (NestJS boot → export); `pnpm generate:sdk` (`openapi-typescript`)           | Spectral lint + snapshot diff                 |
-| DB schema               | `packages/db/schema/**/*.ts` (Drizzle)                                                                                                                                      | `apps/api/drizzle/*.sql` (migrations per ADR-0008 §2.3), `packages/db/erd.svg`                          | `pnpm db:generate` (drizzle-kit; `out: ../../apps/api/drizzle`); `pnpm db:erd` (introspect → render) | `drizzle-kit check`                           |
-| Domain IDs              | `apps/docs/content/product/glossary/*.md` (per-term YAML frontmatter)                                                                                                       | `packages/glossary/ids.ts` (TS const)                                                                   | `pnpm generate:glossary`                                                                             | ESLint custom rule + roundtrip check          |
-| Domain labels (ru/en)   | same glossary frontmatter                                                                                                                                                   | `packages/i18n/messages/{ru,en}/glossary.json`; Payload Glossary Collection rows                        | `pnpm generate:glossary`; `pnpm sync:glossary-payload` (on staging+prod)                             | Payload Lexical AST glossary-ref check        |
-| Business content        | Payload collections (`apps/cms` DB)                                                                                                                                         | Build-time fetch / runtime API                                                                          | Payload native                                                                                       | Lexical glossary-ref check                    |
-| Architectural decisions | `docs/adr/NNNN-*.md` Git, immutable                                                                                                                                         | Rendered Fumadocs                                                                                       | (none — content as-is)                                                                               | Manual review on PR                           |
-| Tech specs              | `docs/content/specs/tech/YYYY-MM-DD-*.md`                                                                                                                                   | Rendered Fumadocs                                                                                       | (none — content as-is)                                                                               | Manual review                                 |
-| Feature specs           | `apps/docs/content/specs/features/NNN-<slug>/` (3 files: requirements.md, design.md, scenarios.feature — per ADR-0006 §4 + §9; tasks tracked in GitHub Issues, not in file) | Vitest tests (EARS hints), Playwright tests (Gherkin via `playwright-bdd`), NestJS scaffolding (manual) | `pnpm generate:tests:playwright` (gherkin → playwright)                                              | Tests pass; EARS-ID ↔ Vitest describe linkage |
-| Module README           | `apps/*/src/modules/*/README.md`                                                                                                                                            | Rendered Fumadocs                                                                                       | (none)                                                                                               | `module-readme-lint.ts`                       |
-| Prose narrative         | `apps/docs/content/product/{vision,prd/*,business-rules,user-journeys}.md`                                                                                                  | Rendered Fumadocs                                                                                       | (none)                                                                                               | Markdown link check; glossary-mdx-lint        |
-| Operations              | `apps/docs/content/operations/*.md`, `runbooks/*.md`                                                                                                                        | Rendered Fumadocs                                                                                       | (none)                                                                                               | Markdown link check                           |
-| AI constitution         | `AGENTS.md` (root), `CLAUDE.md` (root)                                                                                                                                      | (none — read directly by AI)                                                                            | (none)                                                                                               | Manual review                                 |
+| Type of truth           | Master file/source                                                                                                                                                                            | Generated artifacts                                                                                     | Propagation script                                                                                   | Validation                                    |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| API contract            | `packages/schemas/**/*.ts` (Zod)                                                                                                                                                              | `openapi.snapshot.json`, `packages/api-client/` (typed SDK)                                             | `pnpm generate:openapi` (NestJS boot → export); `pnpm generate:sdk` (`openapi-typescript`)           | Spectral lint + snapshot diff                 |
+| DB schema               | `packages/db/schema/**/*.ts` (Drizzle)                                                                                                                                                        | `apps/api/drizzle/*.sql` (migrations per ADR-0008 §2.3), `packages/db/erd.svg`                          | `pnpm db:generate` (drizzle-kit; `out: ../../apps/api/drizzle`); `pnpm db:erd` (introspect → render) | `drizzle-kit check`                           |
+| Domain IDs              | `apps/docs/content/product/glossary/*.md` (per-term YAML frontmatter)                                                                                                                         | `packages/glossary/ids.ts` (TS const)                                                                   | `pnpm generate:glossary`                                                                             | ESLint custom rule + roundtrip check          |
+| Domain labels (ru/en)   | same glossary frontmatter                                                                                                                                                                     | `packages/i18n/messages/{ru,en}/glossary.json`; Payload Glossary Collection rows                        | `pnpm generate:glossary`; `pnpm sync:glossary-payload` (on staging+prod)                             | Payload Lexical AST glossary-ref check        |
+| Business content        | Payload collections (`apps/cms` DB)                                                                                                                                                           | Build-time fetch / runtime API                                                                          | Payload native                                                                                       | Lexical glossary-ref check                    |
+| Architectural decisions | `docs/adr/NNNN-*.md` Git, immutable                                                                                                                                                           | Rendered Fumadocs                                                                                       | (none — content as-is)                                                                               | Manual review on PR                           |
+| Tech specs              | `docs/content/specs/tech/YYYY-MM-DD-*.md`                                                                                                                                                     | Rendered Fumadocs                                                                                       | (none — content as-is)                                                                               | Manual review                                 |
+| Feature specs           | `apps/docs/content/specs/features/NNN-<slug>/` (3 files: `NNN-requirements.md`, `NNN-design.md`, `NNN-scenarios.feature` — per ADR-0006 §4 + §9; tasks tracked in GitHub Issues, not in file) | Vitest tests (EARS hints), Playwright tests (Gherkin via `playwright-bdd`), NestJS scaffolding (manual) | `pnpm generate:tests:playwright` (gherkin → playwright)                                              | Tests pass; EARS-ID ↔ Vitest describe linkage |
+| Module README           | `apps/*/src/modules/*/README.md`                                                                                                                                                              | Rendered Fumadocs                                                                                       | (none)                                                                                               | `module-readme-lint.ts`                       |
+| Prose narrative         | `apps/docs/content/product/{vision,prd/*,business-rules,user-journeys}.md`                                                                                                                    | Rendered Fumadocs                                                                                       | (none)                                                                                               | Markdown link check; glossary-mdx-lint        |
+| Operations              | `apps/docs/content/operations/*.md`, `runbooks/*.md`                                                                                                                                          | Rendered Fumadocs                                                                                       | (none)                                                                                               | Markdown link check                           |
+| AI constitution         | `AGENTS.md` (root), `CLAUDE.md` (root)                                                                                                                                                        | (none — read directly by AI)                                                                            | (none)                                                                                               | Manual review                                 |
 
 **No other "source of truth."** If a value appears in two places outside this table, it is a false-SSOT.
 
@@ -157,9 +157,9 @@ ds-platform/                          # repo root
 │   │       │   │   └── 2026-05-14-frontend-stack-design.md
 │   │       │   └── features/           # SDD-style
 │   │       │       └── 001-doctor-registration/
-│   │       │           ├── requirements.md   # incl. frontmatter `tracker:` (GitHub Milestone URL)
-│   │       │           ├── design.md
-│   │       │           └── scenarios.feature
+│   │       │           ├── NNN-requirements.md   # incl. frontmatter `tracker:` (GitHub Milestone URL)
+│   │       │           ├── NNN-design.md
+│   │       │           └── NNN-scenarios.feature
 │   │       │           # (NO tasks.md — task state lives in GitHub Issues, not in Git;
 │   │       │            see ADR-0006 §9 tracker split)
 │   │       └── user-guides/            # Diátaxis
@@ -956,7 +956,7 @@ sync-glossary:
 
 Each feature is created as a folder `apps/docs/content/specs/features/NNN-<slug>/` with **3 files** (no `tasks.md` — tasks live in GitHub Issues, see ADR-0006 §9). Template in `apps/docs/content/specs/features/_template/`:
 
-### 8.1 `requirements.md`
+### 8.1 `NNN-requirements.md`
 
 ```markdown
 ---
@@ -1034,11 +1034,11 @@ Step 1: <action> → compensate: <reverse>
 ## 9. Verification
 
 - Unit tests: one per EARS
-- Integration tests: scenarios.feature
+- Integration tests: `NNN-scenarios.feature`
 - Property-based (if invariants): packages/<module>/test/<feature>.property.test.ts
 ```
 
-### 8.2 `design.md`
+### 8.2 `NNN-design.md`
 
 ```markdown
 # Design — Feature NNN
@@ -1069,7 +1069,7 @@ erDiagram
 - ...
 ```
 
-### 8.3 `scenarios.feature`
+### 8.3 `NNN-scenarios.feature`
 
 ```gherkin
 Feature: <Feature name>
@@ -1095,7 +1095,7 @@ Decomposition of the spec into atomic tasks happens in GitHub Issues (one EARS-h
 1. **Create GitHub Milestone** `NNN-<feature-slug>` with description:
 
    ```
-   Feature spec: apps/docs/content/specs/features/NNN-<slug>/requirements.md
+   Feature spec: apps/docs/content/specs/features/NNN-<slug>/NNN-requirements.md
    ```
 
 2. **Create Issues** — one per EARS-handler + cross-cutting tasks (DB migration, OpenAPI snapshot update, Playwright tests, Module README, glossary updates if new terms):
@@ -1105,7 +1105,7 @@ Decomposition of the spec into atomic tasks happens in GitHub Issues (one EARS-h
      --milestone "001-doctor-onboarding" \
      --title "[001] EARS-3: When OIDC callback received, the system shall ..." \
      --label "feature:001-doctor-onboarding,kind:ears-handler" \
-     --body "Spec: apps/docs/content/specs/features/001-doctor-onboarding/requirements.md#ears-3
+     --body "Spec: apps/docs/content/specs/features/001-doctor-onboarding/001-requirements.md#ears-3
 
    ## Implementation
    - Handler: `apps/api/src/modules/auth/oidc-callback.handler.ts`
@@ -1113,7 +1113,7 @@ Decomposition of the spec into atomic tasks happens in GitHub Issues (one EARS-h
    "
    ```
 
-3. **Update `requirements.md` frontmatter** `tracker:` field → URL of created milestone.
+3. **Update `NNN-requirements.md` frontmatter** `tracker:` field → URL of created milestone.
 
 4. **AI agent workflow when working:**
    ```bash
@@ -1173,7 +1173,7 @@ Decomposition of the spec into atomic tasks happens in GitHub Issues (one EARS-h
 ## Before any task
 
 1. `gh issue view <N>` — read the Issue (it links to feature spec + EARS-ID).
-2. Read the feature spec at `apps/docs/content/specs/features/<NNN>/requirements.md` — full EARS context.
+2. Read the feature spec at `apps/docs/content/specs/features/<NNN>/<NNN>-requirements.md` — full EARS context.
 3. Read related ADRs listed in spec's "Prior decisions" section.
 4. Check `packages/schemas/<module>/*.ts` for current Zod contract.
 5. Check `packages/db/schema/<module>.ts` for current DB schema.
@@ -1190,7 +1190,7 @@ Decomposition of the spec into atomic tasks happens in GitHub Issues (one EARS-h
 
 ## After implementation
 
-- Update `requirements.md` if behaviour diverged from spec
+- Update `NNN-requirements.md` if behaviour diverged from spec
 - Run `pnpm generate:all` and commit generated artifacts
 - Update module README if module boundaries changed
 - Update glossary if new domain terms appeared
@@ -1289,7 +1289,7 @@ Phase 0.5 (after Phase 0 is ready):
 
 - Product Lead pilot-edits Vision in Keystatic (UX smoke test).
 - Tech Lead writes the first feature spec in SDD format (`docs/content/specs/features/001-doctor-onboarding/` — 3 files, no tasks.md).
-- **Create GitHub Milestone `001-doctor-onboarding`** + Issues per EARS-handler via `gh issue create`. Fill in the `tracker:` URL frontmatter in requirements.md.
+- **Create GitHub Milestone `001-doctor-onboarding`** + Issues per EARS-handler via `gh issue create`. Fill in the `tracker:` URL frontmatter in `NNN-requirements.md`.
 - **Setup GitHub Project v2 "DS Platform Implementation"** with swimlanes by feature label.
 - Drift detection in CI begins blocking merge.
 

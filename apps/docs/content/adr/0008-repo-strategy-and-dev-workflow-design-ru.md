@@ -30,7 +30,7 @@ lang: ru
 | Apps inventory         | api (NestJS) + promo + portal + admin + cms (Payload v3) + docs (Fumadocs) + docs-cms (Keystatic) + mobile (Expo). 8 apps. | §2.3                        |
 | Packages inventory     | schemas, api-client, db, glossary, hooks, design-system, observability, utils, eslint-config, tsconfig, llm-utils          | §2.3                        |
 | ADR location           | `apps/docs/content/adr/NNNN-<slug>.md` + companion `NNNN-<slug>-design.md`                                                 | §2.3                        |
-| Feature spec location  | `apps/docs/content/specs/features/NNN-<slug>/{requirements,design,scenarios}.md`                                           | §2.3 (inherits ADR-0006)    |
+| Feature spec location  | `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}`                  | §2.3 (inherits ADR-0006)    |
 | Tech spec location     | `apps/docs/content/specs/tech/<topic>.md`                                                                                  | §2.3 (inherits ADR-0006 §4) |
 | Drizzle schema master  | `packages/db/schema/` per ADR-0006 §1 (supersedes ADR-0003 §4 location); migrations в `apps/api/drizzle/`                  | §2.3                        |
 | Release tooling        | changesets + `changesets/action` GitHub workflow                                                                           | §2.4                        |
@@ -639,7 +639,7 @@ labels: ["feature"]
 
 **Linked feature spec:** apps/docs/content/specs/features/NNN-<slug>/
 
-**EARS reference:** EARS-N.M (link to requirements.md line)
+**EARS reference:** EARS-N (link to `NNN-requirements.md` line)
 
 **Acceptance criteria:**
 
@@ -758,7 +758,7 @@ gh api \
 
 **ADRs live in `apps/docs/content/adr/`**, render через Fumadocs at `/adr/<slug>`. Парный design spec — `NNNN-<slug>-design.md` рядом.
 
-**Feature specs live in `apps/docs/content/specs/features/NNN-<slug>/`** (3 файла: requirements.md, design.md, scenarios.feature). One spec → one GitHub Milestone → multiple Issues per EARS-handler.
+**Feature specs live in `apps/docs/content/specs/features/NNN-<slug>/`** (3 файла: `NNN-requirements.md`, `NNN-design.md`, `NNN-scenarios.feature`). One spec → one GitHub Milestone → multiple Issues per EARS-handler.
 ```
 
 ### 5.2 CLAUDE.md "Repository conventions" overlay (Claude Code-specific)

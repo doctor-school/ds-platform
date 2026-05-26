@@ -43,7 +43,7 @@ lang: ru
 
 ### 2.1 Iteration unit
 
-Один iteration = одна feature-spec → один или несколько связанных PR. Источник intent — `apps/docs/content/specs/features/NNN-<slug>/{requirements.md, design.md, scenarios.feature}` (3 файла, ADR-0006 §4). Источник execution state — GitHub Milestone `NNN-<slug>` + Issues per EARS-handler (ADR-0006 §9). Никакого `tasks.md` файла.
+Один iteration = одна feature-spec → один или несколько связанных PR. Источник intent — `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}` (3 файла, ADR-0006 §4). Источник execution state — GitHub Milestone `NNN-<slug>` + Issues per EARS-handler (ADR-0006 §9). Никакого `tasks.md` файла.
 
 ### 2.2 Каноническая процедура — skill-каталог в `apps/docs/content/skills/<name>/SKILL.md`
 
@@ -72,7 +72,7 @@ lang: ru
        it('EARS-3.1: ...', () => { ... })
      (плоская нумерация `EARS-N` по умолчанию; `EARS-N.M` только если
       один handler несёт несколько shall-выражений — ADR-0006 §TDD)
-   - Playwright tests транспилируются из scenarios.feature
+   - Playwright tests транспилируются из NNN-scenarios.feature
      через playwright-bdd (ADR-0006 §4 + §7 generated artifacts)
 
 4. GREEN
@@ -128,7 +128,7 @@ Hard rule, enforce'ится через AGENTS.md + TDD-signal CI guard (§5.2 WA
 
 - **Никакого production-кода без failing test'а**, который этот код motivates.
 - One Vitest test per EARS requirement; naming: `it('EARS-N.M: ...', ...)`.
-- Playwright tests генерируются из `scenarios.feature` через playwright-bdd (test code != production code).
+- Playwright tests генерируются из `NNN-scenarios.feature` через playwright-bdd (test code != production code).
 - Property-based tests для invariants — opt-in от первой фичи с инвариантами (ledger reconciliation, например).
 - superpowers:test-driven-development skill — обязательный invocation для любого implementation task.
 
@@ -167,7 +167,7 @@ Hard rule, enforce'ится через AGENTS.md + TDD-signal CI guard (§5.2 WA
 
 3. Active spec(s)
    - Для каждого agent-working Issue: парсит milestone name → spec folder path
-   - Читает requirements.md frontmatter: status, Prior decisions (list of ADRs)
+   - Читает NNN-requirements.md frontmatter: status, Prior decisions (list of ADRs)
    - Извлекает glossary terms из spec body через [[term-id]] directives
 
 4. Context files to load (paths only)
@@ -251,7 +251,12 @@ async function readSpecMeta(milestoneName: string) {
     milestoneName,
   );
   try {
-    const raw = await readFile(resolve(specDir, "requirements.md"), "utf-8");
+    const numMatch = milestoneName.match(/^(\d{3})-/);
+    if (!numMatch) return null;
+    const raw = await readFile(
+      resolve(specDir, `${numMatch[1]}-requirements.md`),
+      "utf-8",
+    );
     const { data, content } = matter(raw);
     const adrs = (content.match(/ADR-\d{4}/g) ?? []).filter(
       (v, i, a) => a.indexOf(v) === i,
@@ -370,7 +375,7 @@ async function main() {
   activeSpecs.filter(Boolean).forEach(({ spec }) => {
     if (!spec) return;
     console.log(
-      `- @${spec.path}/requirements.md  @${spec.path}/design.md  @${spec.path}/scenarios.feature`,
+      `- @${spec.path}/${spec.prefix}-requirements.md  @${spec.path}/${spec.prefix}-design.md  @${spec.path}/${spec.prefix}-scenarios.feature`,
     );
     spec.adrs.forEach((a: string) =>
       console.log(`- @docs/adr/${a.toLowerCase().replace("adr-", "")}-*.md`),
@@ -418,7 +423,7 @@ main().catch((e) => {
 | 3   | TypeScript compiles                                                        | `pnpm typecheck`                                              |
 | 4   | Lint clean                                                                 | `pnpm lint` (incl. `@ds/glossary-canonical-ids`, events-lint) |
 | 5   | Module README updated если exports changed                                 | `pnpm lint:module-readme`                                     |
-| 6   | Spec `status` frontmatter обновлён (Draft → In dev → Shipped)              | manual edit в `requirements.md`                               |
+| 6   | Spec `status` frontmatter обновлён (Draft → In dev → Shipped)              | manual edit в `NNN-requirements.md`                           |
 | 7   | Glossary terms добавлены если в коде/spec появилась новая доменная лексика | `pnpm lint:glossary-mdx`                                      |
 | 8   | ADR создан если было архитектурное решение                                 | judgment; интерактивный reviewer (AGENTS.md §4) ловит miss'ы  |
 | 9   | Linked Issue получил summary comment (file paths, decisions, что осталось) | `gh issue comment <N> --body-file <summary>`                  |
@@ -429,10 +434,10 @@ main().catch((e) => {
 | ------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
 | **spec-link required**    | PR без link на Issue, у которого milestone = spec                           | GH Action: PR body содержит `Closes #N`; Issue `#N` имеет milestone `NNN-<slug>`; spec folder `apps/docs/content/specs/features/NNN-<slug>/` существует.                    | BLOCK                   |
 | **TDD signal**            | implementation-only commit без test-файла                                   | GH Action: для каждого изменённого `src/**/*.ts` — `*.test.ts` либо в diff, либо commit history показывает test-commit предшествующим. Heuristic, false positives возможны. | WARN v1                 |
-| **EARS ↔ test linkage**   | EARS-требование без `it('EARS-N: ...')`                                     | Custom lint `tools/lint/ears-test-lint.ts`: парсит EARS IDs в requirements.md, проверяет наличие it-описаний с тем же ID в модуле.                                          | WARN v1 → BLOCK v2      |
+| **EARS ↔ test linkage**   | EARS-требование без `it('EARS-N: ...')`                                     | Custom lint `tools/lint/ears-test-lint.ts`: парсит EARS IDs в `NNN-requirements.md`, проверяет наличие it-описаний с тем же ID в модуле.                                    | WARN v1 → BLOCK v2      |
 | **Gherkin coverage**      | scenarios без Playwright step реализации                                    | playwright-bdd native error — test fails если step undefined.                                                                                                               | BLOCK (через test fail) |
 | **Spec status freshness** | Merged PR со spec:NNN, но spec status='Draft'                               | Custom lint: при merge — проверить `status: In dev` minimum.                                                                                                                | WARN v1                 |
-| **Prior decisions cited** | Новый spec без указанных ADR в "Prior decisions" если категория ≠ docs-only | Spec lint: `requirements.md` имеет секцию с ≥1 ADR-link.                                                                                                                    | WARN v1                 |
+| **Prior decisions cited** | Новый spec без указанных ADR в "Prior decisions" если категория ≠ docs-only | Spec lint: `NNN-requirements.md` имеет секцию с ≥1 ADR-link.                                                                                                                | WARN v1                 |
 
 > **Interim semantics note:** строки `BLOCK` предполагают server-side required status check на `main`. Пока branch protection (ADR-0008 §2.6) отложен (GitHub Free + private repo блокирует branch-protection API — ADR-0008 §2.6), `BLOCK` читается операционально как **«CI job выходит red, и Tech Lead трактует это как merge-blocker по convention'у»** — тот же outcome на single-developer happy path, без server-side гарантии.
 
@@ -451,7 +456,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 async function main() {
   const specs = await glob(
-    "apps/docs/content/specs/features/*/requirements.md",
+    "apps/docs/content/specs/features/*/*-requirements.md",
     {
       cwd: REPO_ROOT,
       absolute: true,
@@ -671,7 +676,17 @@ export async function buildSystemBlocks(
   // ---- Tier 2: active spec (3 files concat) ----
   if (input.specPath) {
     const parts: string[] = [];
-    for (const f of ["requirements.md", "design.md", "scenarios.feature"]) {
+    const dirName = input.specPath.split(/[\\/]/).filter(Boolean).pop() ?? "";
+    const numMatch = dirName.match(/^(\d{3})-/);
+    const prefix = numMatch?.[1];
+    const files = prefix
+      ? [
+          `${prefix}-requirements.md`,
+          `${prefix}-design.md`,
+          `${prefix}-scenarios.feature`,
+        ]
+      : [];
+    for (const f of files) {
       const c = await readOptional(resolve(REPO_ROOT, input.specPath, f));
       if (c) parts.push(`# ${f}\n\n${c}`);
     }
@@ -932,9 +947,9 @@ Run `pnpm bootstrap` (alias for `tsx tools/agent-bootstrap.ts`). Read its output
 - AGENTS.md (this file) — already in your context
 - CLAUDE.md if you are Claude Code
 - Active spec at `apps/docs/content/specs/features/NNN-<slug>/`:
-  - requirements.md
-  - design.md
-  - scenarios.feature
+  - `NNN-requirements.md`
+  - `NNN-design.md`
+  - `NNN-scenarios.feature`
 - ADRs from spec's "Prior decisions" section
 - `gh issue view <N>` for current Issue context and history
 
@@ -946,7 +961,7 @@ Per ADR-0006 §9 conventions (title format `[NNN] EARS-N.M: ...`, label `kind:ea
   gh issue create --title "Feature NNN: <name>" \
    --milestone "NNN-<slug>" --label "feature:NNN-<slug>" \
    --body-file .github/issue_templates/feature.md
-  Then for each EARS-handler from `requirements.md`:
+  Then for each EARS-handler from `NNN-requirements.md`:
   gh issue create --title "[NNN] EARS-N.M: <description>" \
    --milestone "NNN-<slug>" --label "feature:NNN-<slug>,kind:ears-handler,agent-ready" \
    --body "Spec: apps/docs/content/specs/features/NNN-<slug>/. Parent: #<parent-issue>."

@@ -77,7 +77,7 @@ This feature exposes a synchronous query handler, not an aggregate. No commands,
 
 ## Verification
 
-| EARS | Test type     | File                               | Notes                                                                                                                                                                            |
-| ---- | ------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | Vitest e2e    | `apps/api/test/health.e2e-spec.ts` | `it('EARS-1: ...')`; uses supertest against booted Fastify app; asserts status 200 + `HealthResponseSchema.parse(body)` + `uptime >= 0` + `Date.parse(timestamp) > 0`.           |
-| 1    | Gherkin (e2e) | `scenarios.feature`                | Happy-path scenario; translated to Playwright via `playwright-bdd` once that runner exists (out of scope here — `scenarios.feature` is authored now to satisfy the SDD triplet). |
+| EARS | Test type     | File                               | Notes                                                                                                                                                                                |
+| ---- | ------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1    | Vitest e2e    | `apps/api/test/health.e2e-spec.ts` | `it('EARS-1: ...')`; uses supertest against booted Fastify app; asserts status 200 + `HealthResponseSchema.parse(body)` + `uptime >= 0` + `Date.parse(timestamp) > 0`.               |
+| 1    | Gherkin (e2e) | `001-scenarios.feature`            | Happy-path scenario; translated to Playwright via `playwright-bdd` once that runner exists (out of scope here — `001-scenarios.feature` is authored now to satisfy the SDD triplet). |

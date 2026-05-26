@@ -142,7 +142,7 @@ Authentik's wins (D1 v1 OOB functionality, D4 self-hosted maturity, D6 MIT licen
 - **FusionAuth.** One of the best headless APIs, single-binary deploy, free self-hosted edition. Rejected: (a) free edition has limits on advanced policy features (multi-tenancy, advanced threat detection) — may become a blocker in v2/v3; (b) Java/JVM stack with the same ops costs as Keycloak; (c) commercial vendor (FusionAuth Inc, US) — higher sanctions exposure than EU/CH-based.
 - **SuperTokens.** Headless, MIT, but a fragmented SDK approach (auth-core separate from per-language SDK) — adds complexity to our custom form-flows. Less mature admin UI.
 
-**Consequences for other ADRs / specs.** ADR-0004 §3, the local-dev design-spec §3.1, and arch-viz v2 historically used «Authentik» as a placeholder/default — sweep via a separate follow-up (DSP-210 under DSP-160). DSP-157 (local-dev compose IDP) is unblocked.
+**Consequences for other ADRs / specs.** ADR-0004 §3, the local-dev design-spec §3.1, and other documents historically used «Authentik» as a placeholder/default — swept under DSP-210. DSP-157 (local-dev compose IDP) is unblocked.
 
 ### 9. Migration from Directual — hard domain cutover (changed 2026-05-18, DSO-63 #4)
 

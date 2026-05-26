@@ -47,7 +47,7 @@ Brainstorm-исследование подтвердило, что под AI-age
 
 ### In-slice (must have для pre-pilot, mandatory)
 
-- **IdP** (выбранный по DSO-25 spike — Authentik / Zitadel / Keycloak).
+- **IdP** — Zitadel (закрыто по ADR-0001 §8, DSP-209).
 - **NestJS API** (ADR-0002).
 - **Postgres 17 + Drizzle** (ADR-0003).
 - **Redis** (single-node + AOF, see ADR-0003 §8 responsibilities matrix; not for sessions or critical jobs).

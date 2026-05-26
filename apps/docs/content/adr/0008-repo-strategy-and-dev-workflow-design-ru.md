@@ -820,7 +820,7 @@ Phase 0 (greenfield, brainstorm complete). Pre-pilot target: 2026 Q3 (TBD).
 - **Docs:** Fumadocs (`apps/docs/`) + Keystatic editor (`apps/docs-cms/`) + glossary.yaml в `apps/docs/content/product/glossary/` (ADR-0006)
 - **AI dev loop:** Claude Code + Codex async + reviewer-bot (ADR-0007)
 - **Repo:** pnpm workspaces + Turborepo + changesets + GitHub-hosted CI (ADR-0008)
-- **Identity:** Authentik/Zitadel (ADR-0001 §8 — TBD per spike) + Cerbos RBAC (ADR-0003 §5)
+- **Identity:** Zitadel (ADR-0001 §8, закрыто по DSP-209) + Cerbos RBAC (ADR-0003 §5)
 
 Full reference: `apps/docs/content/adr/`.
 
@@ -867,7 +867,7 @@ See AGENTS.md (universal constitution) и CLAUDE.md (Claude Code overlay).
 
 ## 8. Cross-refs
 
-- **ADR-0001** §8 — IdP shortlist (Authentik **или Zitadel** — TBD per §8 spike): при появлении team SSO для GitHub Enterprise plan — reuse того же tenant, не отдельный.
+- **ADR-0001** §8 — IdP = Zitadel (закрыто по §8 / DSP-209): при появлении team SSO для GitHub Enterprise plan — reuse того же tenant, не отдельный.
 - **ADR-0002** §6 — `apps/api/` имплементирует NestJS + BullMQ.
 - **ADR-0002** §3-5 — `packages/schemas/` (Zod SSOT) + `packages/api-client/` (openapi-typescript generated SDK).
 - **ADR-0003** §4 — Drizzle TS schemas в `packages/db/schema/` + drizzle-kit SQL diff migrations в `apps/api/drizzle/`; §7 — pgvector в той же Postgres.

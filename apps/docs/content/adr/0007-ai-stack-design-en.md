@@ -835,7 +835,7 @@ This section is **a design for the future, not a Phase 0 implementation**. Each 
 - Both instances share one Postgres (replication from A to B; A is primary for virtual key state) for unified accounting/budgets
 - PII Filter applies to both routes unconditionally — even for YandexGPT inside RF (Federal Law 152-FZ requires anonymization when sending to any third party, even a Russian one)
 
-**LiteLLM admin UI protection:** LiteLLM admin has no native OIDC; protect via nginx forward-auth proxy with Authentik / Zitadel (ADR-0001 OIDC tenant). This is non-trivial and is documented as a separate design block in the trigger-ADR.
+**LiteLLM admin UI protection:** LiteLLM admin has no native OIDC; protect via nginx forward-auth proxy with Zitadel (ADR-0001 OIDC tenant, closed per §8 / DSP-209). This is non-trivial and is documented as a separate design block in the trigger-ADR.
 
 **Capacity Phase 0+1:** instance A — one VM (Hetzner EU, ~€20/mo); instance B — one VM on existing Timeweb (~₽1,000/mo). HA pair via keepalived — Phase Pilot+.
 

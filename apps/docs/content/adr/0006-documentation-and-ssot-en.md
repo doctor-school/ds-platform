@@ -12,7 +12,7 @@ lang: en
 **Status:** Accepted
 **Related to:** Plane DSO-60 (`55222f0b-ba97-4b2f-ac91-194fed38ea18`), milestone DSO-24
 **Design spec:** `apps/docs/content/adr/0006-documentation-and-ssot-design-en.md`
-**Inherits:** ADR-0001 (IdP shortlist Authentik/Zitadel — TBD per §8 spike; Cerbos RBAC lives in ADR-0003 §5), ADR-0002 (NestJS+Zod+REST+openapi-typescript), ADR-0003 (Postgres17+Drizzle+drizzle-kit), ADR-0004 (Next.js 15 + 4 apps + Refine + Payload v3), ADR-0005 (RN+Expo+WatermelonDB+GlitchTip)
+**Inherits:** ADR-0001 (IdP = Zitadel, closed per §8 / DSP-209; Cerbos RBAC lives in ADR-0003 §5), ADR-0002 (NestJS+Zod+REST+openapi-typescript), ADR-0003 (Postgres17+Drizzle+drizzle-kit), ADR-0004 (Next.js 15 + 4 apps + Refine + Payload v3), ADR-0005 (RN+Expo+WatermelonDB+GlitchTip)
 **Reference:** `docs/documentation-pattern/documentation-framework-final.md` (general best-practices spec; not authoritative — individual decisions here diverge from the reference doc by rationale)
 
 ---
@@ -358,7 +358,7 @@ ds-platform/
 
 **Inherited from:**
 
-- ADR-0001 — single OIDC tenant (Authentik **or Zitadel** — final choice pending ADR-0001 §8 spike) for Keystatic admin login, same tenant as Refine admin (`apps/admin`)
+- ADR-0001 — single OIDC tenant: Zitadel (closed per ADR-0001 §8, DSP-209) for Keystatic admin login, same tenant as Refine admin (`apps/admin`)
 - ADR-0002 — Zod schemas + nestjs-zod + openapi-typescript → SDK
 - ADR-0003 — Drizzle schemas + drizzle-kit
 - ADR-0004 — Payload v3 Glossary Collection, Next.js 15 + Tailwind + shadcn for all apps

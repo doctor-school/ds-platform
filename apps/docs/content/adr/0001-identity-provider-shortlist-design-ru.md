@@ -40,7 +40,7 @@ lang: ru
 
 ### Не в scope DSO-25 (deferred)
 
-- **Финальный выбор Authentik vs Zitadel** — спайк в Phase 0 implementation.
+- **Финальный выбор IdP** — закрыт в §9 (Zitadel; ADR-0001 §8, DSP-209).
 - Конкретный SMS-провайдер (SMSC.ru / SMS.ru / др.) — DSO-26 (backend integrations) с failover-2-провайдера requirement из digest §2.
 - Policy engine для backend RBAC (Cerbos / OPA / OpenFGA / SQL-based) — DSO-26.
 - Где живёт session store (внутри IdP или общий backend Redis) — Phase 0 implementation (см. §7.4).
@@ -545,7 +545,7 @@ Headless API для custom UI · OIDC issuer + PKCE + JWKS rotation · `prompt=n
 
 ### 10.2. Open questions (закрываются вне DSO-25)
 
-1. Финальный выбор Authentik vs Zitadel — Phase 0 spike (~3 дня).
+1. Финальный выбор IdP — закрыт в §9 (Zitadel; ADR-0001 §8, DSP-209).
 2. Конкретный SMS-провайдер РФ + failover-схема — DSO-26.
 3. Session store: внутри IdP или общий backend Redis — Phase 0 implementation.
 4. Policy engine для backend RBAC (Cerbos / OPA / OpenFGA / SQL) — DSO-26.

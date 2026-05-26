@@ -57,7 +57,7 @@ lang: ru
 - Mobile-стек — DSO-29.
 - AI runtime (LangGraph и т.п.) — DSO-30.
 - Repo layout (monorepo vs polyrepo) — DSO-31.
-- Финальный IdP (Authentik vs Zitadel) — Phase 0 spike.
+- IdP — Zitadel (закрыт по ADR-0001 §8, DSP-209).
 - SMS / email-провайдер с failover-схемой, bot-protection — отдельные задачи.
 
 ---
@@ -467,7 +467,7 @@ k6 нагрузочные тесты — manual pre-release (v1), CI-gate с v2 
 | LLM cost middleware                             | DSO-30                                                             | Portkey / Bifrost / Helicone                                                                                            |
 | AI-провайдеры                                   | DSO-30                                                             | Anthropic / OpenAI / Yandex GPT / Sber GigaChat / Saiga2                                                                |
 | Repo layout                                     | DSO-31                                                             | Turborepo / Nx / pnpm workspaces / polyrepo                                                                             |
-| Финальный IdP                                   | Phase 0 spike                                                      | Authentik vs Zitadel                                                                                                    |
+| IdP                                             | Закрыто по ADR-0001 §8 (DSP-209)                                   | Zitadel                                                                                                                 |
 | SMS provider РФ + failover                      | Отдельная задача                                                   | SMS.ru / SMSC.ru / Devino — **в РФ failover ручной (балансировка с разной семантикой), не Twilio-style auto**           |
 | Email provider + failover                       | Отдельная задача                                                   | Mailgun / Postmark / Yandex.Postbox / RF-доступные альтернативы                                                         |
 | Bot-protection                                  | Отдельная задача                                                   | Yandex SmartCaptcha (default)                                                                                           |

@@ -64,14 +64,14 @@ Cookies: **host-only `__Host-` cookie per app** (`__Host-ds_portal_session`, `__
 
 Deployment v1-v2: one VPS "frontend-prod" + 4 Docker containers + nginx reverse-proxy. v3+ trigger — split at 1M MAU.
 
-### 3. Admin framework: **Refine** + custom data/auth/access providers → NestJS+Cerbos+Authentik
+### 3. Admin framework: **Refine** + custom data/auth/access providers → NestJS+Cerbos+Zitadel
 
 Refine — admin-UI framework on top of the **existing backend** (ADR-0002 NestJS). Not a headless CMS (that would duplicate the backend). UI-agnostic — works natively with shadcn/ui (our design system).
 
 Custom providers:
 
 - Data provider (~100 lines) → NestJS REST API (cursor-pagination, RFC 7807, Idempotency-Key)
-- Auth provider (~50 lines) → Authentik/Zitadel JWT
+- Auth provider (~50 lines) → Zitadel JWT
 - Access provider (~50–100 lines) → custom adapter on top of `@cerbos/embedded` SDK. Cerbos — **documented community pattern** in Refine docs, not a packaged `@refinedev/cerbos`. Adapter is local (inherits ADR-0003 §5).
 
 ### 4. Design system: **Tailwind CSS 4 + shadcn/ui + lucide-react** (shared `packages/design-system`)
@@ -94,7 +94,7 @@ shadcn `<Form>` primitive is **built on RHF**. Refine officially uses RHF. Zod s
 
 Payload v3 lives inside Next.js in `apps/cms`. Owns only marketing-content tables (`cms.*` schema namespace in the shared Postgres from ADR-0003). Does NOT own domain data (domain → NestJS+Drizzle via `public.*`).
 
-SSOT enforcement via custom Lexical features ("Insert glossary term" button in rich-text toolbar → relation reference, not a literal) + CI-lint on canonical terms. Custom Auth Strategy → Authentik/Zitadel. MCP server for AI agents.
+SSOT enforcement via custom Lexical features ("Insert glossary term" button in rich-text toolbar → relation reference, not a literal) + CI-lint on canonical terms. Custom Auth Strategy → Zitadel. MCP server for AI agents.
 
 ### 8. Image optimization: **hybrid**
 
@@ -155,7 +155,7 @@ GlitchTip MIT, self-host, RF-compliant. SDK is official Sentry — maximum LLM d
 
 - Vercel-bias in Next.js DX/docs requires discipline (ESLint rule + explicit prohibition list + review).
 - Payload has its own migration system alongside Drizzle (two migration tools in the codebase, both in the monorepo). **Namespace separation `cms.*` vs `public.*` is insufficient as a security/operational boundary** — it is only a naming convention. Mitigation — **Postgres role-level privilege separation**: `cms_owner` has USAGE only on the `cms.*` schema, `app_owner` only on `public.*`. This is enforced at the Postgres role level, not by convention. See design spec §10.2.1; ADR-0003 §1 mandates multi-role privilege separation alongside the single Postgres instance.
-- Payload integration with Authentik requires a custom Auth Strategy ~50 lines. Not trivial, but a straightforward pattern.
+- Payload integration with Zitadel requires a custom Auth Strategy ~50 lines. Not trivial, but a straightforward pattern.
 - Single VPS for 4 frontend containers v1-v2 — single point of failure for all frontend. SLO 99.0% v1 permits this. v3 — split.
 - **Composite end-to-end SLO v1 ≈ 98.0%** (frontend 99.0% × backend 99.0% from ADR-0002), not the sum of individual SLOs. This is materially worse than the declared individual SLOs. Mitigation v1: Docker `restart: always` + watchdog alerts + manual failover SOP (DSO-10). v2/v3 — active-passive HA or multi-VPS split.
 - **Webinar 10k concurrent failure scenario**: if the frontend-prod VPS goes down during a live webinar, all 10k viewers lose web access regardless of Centrifugo health. Mitigation v1: pre-warmed cold-standby snapshot, manual failover ≤15 min.
@@ -178,20 +178,20 @@ GlitchTip MIT, self-host, RF-compliant. SDK is official Sentry — maximum LLM d
 
 ## Open questions (deferred)
 
-| OQ                                       | Review trigger                                                                                                                                                                                                                                                        |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OQ-F1. Migrate promo to Astro            | Marketing ≥3 developers, promo PageSpeed <90 mobile, demand for visual-CMS workflow                                                                                                                                                                                   |
-| OQ-F2. Portal split into multiple apps   | Portal bundle >500KB gzipped, expert-CMS has separate threat model                                                                                                                                                                                                    |
-| OQ-F3. v3 topology scaling               | 1M MAU reached, or Centrifugo+SSR on one VPS becomes bottleneck                                                                                                                                                                                                       |
-| OQ-F4. Migration Payload → Keystatic     | Marketing scope narrows to 3–5 landing pages AND inline-glossary not needed                                                                                                                                                                                           |
-| OQ-F5. Auth perimeter cms vs admin merge | Threat models converge (currently separate: marketing ≠ moderators)                                                                                                                                                                                                   |
-| ~~OQ-F6~~                                | ~~Timeweb CDN native image transforms~~ — closed 2026-05-14: feature does not exist on Timeweb CDN                                                                                                                                                                    |
-| OQ-F7. Offline lessons in PWA web        | DSO-29 mobile sync-strategy fixes the pattern; web follows                                                                                                                                                                                                            |
-| OQ-F8. Migration to Biome                | ESLint CI >5 min/PR, Prettier plugin ecosystem falls behind                                                                                                                                                                                                           |
-| OQ-F9. Storybook for design system       | Team grows to ≥2 frontend, design system >20 components                                                                                                                                                                                                               |
-| OQ-F10. imgproxy for image CPU           | Node CPU >70% at peak, Sharp p99 >500ms                                                                                                                                                                                                                               |
-| OQ-F11. Self-hosted Plausible Analytics  | v2+ marketing analytics with RF residency                                                                                                                                                                                                                             |
-| OQ-F12. Payload native auth fallback     | DSO-25 spike (Authentik vs Zitadel) showed that the headless API does not support a clean custom-strategy for Payload v3. Consequence: Payload native auth + email-mirror via webhook outbox; SSO between cms and portal/admin breaks (marketer has a separate login) |
+| OQ                                       | Review trigger                                                                                                                                                                                                                                                                                      |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OQ-F1. Migrate promo to Astro            | Marketing ≥3 developers, promo PageSpeed <90 mobile, demand for visual-CMS workflow                                                                                                                                                                                                                 |
+| OQ-F2. Portal split into multiple apps   | Portal bundle >500KB gzipped, expert-CMS has separate threat model                                                                                                                                                                                                                                  |
+| OQ-F3. v3 topology scaling               | 1M MAU reached, or Centrifugo+SSR on one VPS becomes bottleneck                                                                                                                                                                                                                                     |
+| OQ-F4. Migration Payload → Keystatic     | Marketing scope narrows to 3–5 landing pages AND inline-glossary not needed                                                                                                                                                                                                                         |
+| OQ-F5. Auth perimeter cms vs admin merge | Threat models converge (currently separate: marketing ≠ moderators)                                                                                                                                                                                                                                 |
+| ~~OQ-F6~~                                | ~~Timeweb CDN native image transforms~~ — closed 2026-05-14: feature does not exist on Timeweb CDN                                                                                                                                                                                                  |
+| OQ-F7. Offline lessons in PWA web        | DSO-29 mobile sync-strategy fixes the pattern; web follows                                                                                                                                                                                                                                          |
+| OQ-F8. Migration to Biome                | ESLint CI >5 min/PR, Prettier plugin ecosystem falls behind                                                                                                                                                                                                                                         |
+| OQ-F9. Storybook for design system       | Team grows to ≥2 frontend, design system >20 components                                                                                                                                                                                                                                             |
+| OQ-F10. imgproxy for image CPU           | Node CPU >70% at peak, Sharp p99 >500ms                                                                                                                                                                                                                                                             |
+| OQ-F11. Self-hosted Plausible Analytics  | v2+ marketing analytics with RF residency                                                                                                                                                                                                                                                           |
+| OQ-F12. Payload native auth fallback     | Trigger: if a Zitadel-backed custom auth strategy for Payload v3 proves infeasible during Phase 0 implementation (ADR-0001 §8 closed Zitadel; DSP-209). Consequence: Payload native auth + email-mirror via webhook outbox; SSO between cms and portal/admin breaks (marketer has a separate login) |
 
 ## Delegated
 

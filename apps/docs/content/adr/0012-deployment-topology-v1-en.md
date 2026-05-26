@@ -51,7 +51,7 @@ Pre-pilot has 0 real users: permanent staging is not justified for smoke testing
 
 ### 4. Orchestrator: docker-compose
 
-Rejected alternatives — see §Rejected below. docker-compose is selected as the mainstream standard for a 1–2-person team without kubernetes discipline; all existing infra (Plane on DSO-13, Authentik, KB) already runs on docker-compose, and AI agents write it better than any alternative.
+Rejected alternatives — see §Rejected below. docker-compose is selected as the mainstream standard for a 1–2-person team without kubernetes discipline; all existing infra (Plane on DSO-13, Zitadel, KB) already runs on docker-compose, and AI agents write it better than any alternative.
 
 ### 5. Maintenance window
 
@@ -65,7 +65,7 @@ DS Platform prod depends on services hosted on a separate `shared-tooling` VPS (
 - **Harbor / Nexus** — Docker registry mirror.
 - **Loki + Tempo + Prometheus + Grafana** — observability bundle (data-prod and api-prod ship logs/metrics/traces).
 - **GlitchTip** — error tracking.
-- **Authentik / Zitadel** — IdP (ADR-0001).
+- **Zitadel** — IdP (ADR-0001 §8, closed per DSP-209).
 - **Vault** — KEK storage for encrypted backups (ADR-0003 §2.4).
 
 These services are shared infra (also used by Plane / KB / Mattermost / Outline). Their sizing and cost are in DSO-10, not duplicated here.
@@ -159,7 +159,7 @@ The shared-tooling VPS (Verdaccio + observability + IdP + Vault) is shared infra
 
 ### Positive
 
-- Minimal ops overhead for a 1–2-person team: docker-compose is already used in shared-tooling / Plane / Authentik, the discipline is the same.
+- Minimal ops overhead for a 1–2-person team: docker-compose is already used in shared-tooling / Plane / Zitadel, the discipline is the same.
 - AI agents write docker-compose YAML consistently across sessions (mainstream + a large training dataset).
 - Isolation api ⟷ data: OOM/IO in one plane does not destroy the other.
 - The ≤30k ₽/month cost envelope is met with buffer (~20–25k ₽/month).

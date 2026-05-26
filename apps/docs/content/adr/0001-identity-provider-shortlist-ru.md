@@ -142,7 +142,7 @@ Cross-zone constraints: все профили отдают `Strict-Transport-Sec
 - **FusionAuth.** Headless API один из лучших, single-binary deploy, free self-hosted edition. Отвергнут: (а) free edition имеет limits на advanced policy features (multi-tenancy, advanced threat detection) — может стать блокером на v2/v3; (б) Java/JVM-стек с теми же ops-costs что Keycloak; (в) commercial vendor (FusionAuth Inc, US) — sanctions exposure выше чем EU/CH-based.
 - **SuperTokens.** Headless, MIT, но фрагментированный SDK подход (auth-core отдельно от SDK-per-language) — приращивает complexity на наши custom форм-flows. Менее зрелый admin UI.
 
-**Consequences для других ADR/spec'ов.** ADR-0004 §3, local-dev design-spec §3.1 и arch-viz v2 исторически держали «Authentik» как placeholder/default — sweep отдельным follow-up'ом (DSP-210 под DSP-160). DSP-157 (local-dev compose IDP) разблокирован.
+**Consequences для других ADR/spec'ов.** ADR-0004 §3, local-dev design-spec §3.1 и другие документы исторически держали «Authentik» как placeholder/default — sweep выполнен в рамках DSP-210. DSP-157 (local-dev compose IDP) разблокирован.
 
 ### 9. Миграция из Directual — hard domain cutover (изменено 2026-05-18, DSO-63 #4)
 

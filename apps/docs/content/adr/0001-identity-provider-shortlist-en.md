@@ -134,13 +134,7 @@ Authentik's wins (D1 v1 OOB functionality, D4 self-hosted maturity, D6 MIT licen
 
 #### Rejected candidates
 
-- **Keycloak.** Enormous maturity, RedHat-backed, significant local expertise in the RF sector. However: magic-link and SMS-OTP are not OOB — only via Java SPI extensions; JVM operation (2GB+ heap, GC tuning) is more resource-intensive for a 1–2 team; admin API ergonomics are heavier. On the «headless-first + low-ops budget» scenario Zitadel wins more cleanly. Fallback in case of critical issues with Zitadel — Keycloak (the most mature OSS alternative).
-- **Authentik.** See scoring above — loses to Zitadel on the two heaviest criteria (D2 headless ergonomics, D3 operational tax) and on D7 compliance posture. Authentik's wins (D1, D4, D6) are structurally overridden: one-time build cost vs lifetime/recurring pain.
-- **Ory Kratos.** Best-in-class headless-first API. However: no built-in admin UI — for a 1–2 team this means writing admin tooling from scratch; multi-service deployment (Kratos + optional Hydra/Oathkeeper/Keto) complicates ops; vendor Ory Inc actively pushes managed Ory Network.
-- **Authelia.** Wrong category — this is a forward-auth proxy for protecting services behind nginx/Traefik, not a full IdP. No self-signup, magic-link, SMS-OTP, social OAuth client, or admin UI for users. May be used separately to protect internal tooling (Plane / Grafana / GlitchTip).
-- **Logto.** TS/Node, headless-first, MIT, lightweight self-host. A strong candidate on paper. Rejected: (a) less battle-tested in self-hosted production (younger than Zitadel/Authentik/Keycloak); (b) SMS-OTP support is less mature — requires a custom connector; (c) admin UI is less feature-rich. Possible reconsideration in v2.
-- **FusionAuth.** One of the best headless APIs, single-binary deploy, free self-hosted edition. Rejected: (a) free edition has limits on advanced policy features (multi-tenancy, advanced threat detection) — may become a blocker in v2/v3; (b) Java/JVM stack with the same ops costs as Keycloak; (c) commercial vendor (FusionAuth Inc, US) — higher sanctions exposure than EU/CH-based.
-- **SuperTokens.** Headless, MIT, but a fragmented SDK approach (auth-core separate from per-language SDK) — adds complexity to our custom form-flows. Less mature admin UI.
+Keycloak, Authentik, Ory Kratos, Authelia, Logto, FusionAuth, SuperTokens were considered. Full per-candidate rationale, scoring methodology and evidence — bbm `decisions-log.md` [2026-05-25]. Headline trade-offs: Keycloak — fallback if Zitadel hits critical issues (most mature OSS alternative); Authentik — strongest near-peer (D2/D3/D7 swung Zitadel +5.8 pp); others — categorical mismatches or maturity gaps.
 
 **Consequences for other ADRs / specs.** ADR-0004 §3, the local-dev design-spec §3.1, and other documents historically used «Authentik» as a placeholder/default — swept under DSP-210. DSP-157 (local-dev compose IDP) is unblocked.
 
@@ -199,7 +193,7 @@ The backend MUST verify `acr=mfa-fresh` AND `mfa_fresh_at ≥ now − 30 min` on
 - Users table duplication (IdP + backend mirror via webhook + reconciliation cron). Requires eventual-consistency handling (spec §3.2).
 - Two-tier validation: backend must correctly classify high-stakes endpoints; misclassification → security gap or performance hit.
 - Hard cutover from Directual (see §9): pre-cutover PD export requires encrypted-at-rest staging + restricted access; Directual sunset after 50% migration or 120 days.
-- Final IdP selection deferred to ~3 days of spike → milestone DSO-24 closure shifts by the duration of the spike.
+- Decision closed via desk-research (no hands-on validation); remaining known trade-offs enumerated in §8 (custom magic-link, smaller self-hosted base).
 - MFA SMS for `moderator`/`support` in v1 — a known downgrade against NIST SP 800-63B; mitigation planned for v2.
 
 ## Open questions (deferred)

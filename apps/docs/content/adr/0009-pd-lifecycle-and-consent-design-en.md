@@ -454,7 +454,7 @@ See **ADR-0011 §3 (Egress control plane)** for the full contract. Outline:
 - **Tab "Data export requests":** monitoring; manual intervention only when `status = 'failed'`.
 - **Tab "Consent versions":** view + create new version (requires legal review checkbox before publishing).
 
-Access control: role `pd_officer` only (a new role, added in an ADR-0001 amendment when we get there).
+Access control: role `pd_officer` only (a new role; ADR-0001 §2 RBAC catalog is updated inline to include it when DSO-26 picks up consent / right-to-erasure work).
 
 ---
 

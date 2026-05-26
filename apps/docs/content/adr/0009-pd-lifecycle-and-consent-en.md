@@ -127,7 +127,7 @@ See ADR-0011 §3 (Egress control plane). Erasure request in RF-zone backend → 
 
 ### 2.9 Schema location
 
-All PD-lifecycle tables (`consent_*`, `data_export_requests`, `erasure_requests`) live in `packages/db/schema/pd/` (ADR-0003 amendment per DSO-63 #10/I — schemas in `packages/db/`, not `apps/api`).
+All PD-lifecycle tables (`consent_*`, `data_export_requests`, `erasure_requests`) live in `packages/db/schema/pd/`. Per DSO-63 #10/I, schemas live in `packages/db/`, not `apps/api`; ADR-0003 §3 (ORM + Migrations) is updated inline to reflect this layout.
 
 ---
 
@@ -168,7 +168,7 @@ All PD-lifecycle tables (`consent_*`, `data_export_requests`, `erasure_requests`
 
 ### Downstream dependencies
 
-- **DSO-X1 (Directual cutover, DSO-63 #4)** — first-login flow must capture consent v1 (see ADR-0001 §9 amendment per DSO-63 #4).
+- **DSO-X1 (Directual cutover, DSO-63 #4)** — first-login flow must capture consent v1 (a requirement on ADR-0001 §9; the first-login flow defined there must implement consent v1 capture per DSO-63 #4).
 - **DSO-X2 (РКН + ФСТЭК-21, DSO-63 #7)** — Privacy Notice references consent versions + retention matrix.
 - **ADR-0011 (Egress control plane)** — propagates erasure to AI zone.
 

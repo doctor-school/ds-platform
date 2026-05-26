@@ -193,7 +193,7 @@ The backend MUST verify `acr=mfa-fresh` AND `mfa_fresh_at ≥ now − 30 min` on
 - Users table duplication (IdP + backend mirror via webhook + reconciliation cron). Requires eventual-consistency handling (spec §3.2).
 - Two-tier validation: backend must correctly classify high-stakes endpoints; misclassification → security gap or performance hit.
 - Hard cutover from Directual (see §9): pre-cutover PD export requires encrypted-at-rest staging + restricted access; Directual sunset after 50% migration or 120 days.
-- Final IdP selection deferred to ~3 days of spike → milestone DSO-24 closure shifts by the duration of the spike.
+- Decision closed via desk-research (no hands-on validation); remaining known trade-offs enumerated in §8 (custom magic-link, smaller self-hosted base).
 - MFA SMS for `moderator`/`support` in v1 — a known downgrade against NIST SP 800-63B; mitigation planned for v2.
 
 ## Open questions (deferred)

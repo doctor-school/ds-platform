@@ -193,7 +193,7 @@ Backend обязан проверять `acr=mfa-fresh` AND `mfa_fresh_at ≥ no
 - Дублирование users-таблицы (IdP + backend mirror через webhook + reconciliation cron). Требуется обработка eventual-consistency (spec §3.2).
 - Two-tier validation: backend должен правильно классифицировать high-stakes endpoints; ошибка классификации → security gap или performance hit.
 - Hard cutover Directual (см. §9): pre-cutover PD export требует encrypted-at-rest staging + restricted access; sunset Directual после 50% migration или 120 дней.
-- Финальный выбор IdP отложен на ~3 дня спайка → milestone DSO-24 closure сдвигается на длительность спайка.
+- Решение закрыто desk-research'ем (без hands-on валидации); оставшиеся known trade-offs перечислены в §8 (custom magic-link, меньшая self-hosted база).
 - MFA SMS для `moderator`/`support` в v1 — известный downgrade против NIST SP 800-63B; mitigation планируется в v2.
 
 ## Open questions (deferred)

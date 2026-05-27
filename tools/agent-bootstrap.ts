@@ -233,16 +233,14 @@ async function readSpecMeta(milestoneName: string): Promise<SpecMeta | null> {
   }
 }
 
-const OTHER_PR_BACKLOG_THRESHOLD = 5;
-
 function recommend(
   activeWorking: GhIssue[],
   awaitingReview: GhIssue[],
   prs: GhPRGroups,
   readyQueue: GhIssue[],
 ): string {
-  if (prs.others.length >= OTHER_PR_BACKLOG_THRESHOLD) {
-    return `Dependabot/other-author PR backlog ≥ ${OTHER_PR_BACKLOG_THRESHOLD} (${prs.others.length} open) — triage before product work.`;
+  if (prs.others.length > 0) {
+    return `${prs.others.length} non-author PR(s) open (Dependabot et al.) — triage before product work.`;
   }
   if (awaitingReview.length > 0) {
     return `Address review on Issue #${awaitingReview[0]!.number}.`;

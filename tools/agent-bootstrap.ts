@@ -95,7 +95,43 @@ interface GhPR {
   reviewDecision?: string | null;
   updatedAt?: string;
   headRefName?: string;
+  author?: { login: string };
+  statusCheckRollup?: Array<{ conclusion?: string | null; status?: string | null }>;
 }
+
+interface GhPRGroups {
+  mine: GhPR[];
+  others: GhPR[];
+}
+
+type CiState = 'red' | 'yellow' | 'green' | 'none';
+
+function ciState(p: GhPR): CiState {
+  const rollup = p.statusCheckRollup ?? [];
+  if (rollup.length === 0) return 'none';
+  if (
+    rollup.some(
+      (c) =>
+        c.conclusion === 'FAILURE' ||
+        c.conclusion === 'TIMED_OUT' ||
+        c.conclusion === 'CANCELLED' ||
+        c.conclusion === 'STARTUP_FAILURE',
+    )
+  ) {
+    return 'red';
+  }
+  if (rollup.some((c) => c.status !== 'COMPLETED')) return 'yellow';
+  return 'green';
+}
+
+const CI_BADGE: Record<CiState, string> = {
+  red: 'CI ❌',
+  yellow: 'CI ⏳',
+  green: 'CI ✅',
+  none: 'CI —',
+};
+
+const CI_RANK: Record<CiState, number> = { red: 0, yellow: 1, green: 2, none: 3 };
 
 async function ghIssues(args: string[]): Promise<GhIssue[]> {
   try {
@@ -123,26 +159,47 @@ async function ghUnassignedIssues(args: string[]): Promise<GhIssue[]> {
   return all.filter((i) => !i.assignees || i.assignees.length === 0);
 }
 
-async function ghPRs(): Promise<GhPR[]> {
+async function meLogin(): Promise<string> {
   try {
-    const { stdout } = await execa(
-      'gh',
-      [
-        'pr',
-        'list',
-        '--author',
-        '@me',
-        '--state',
-        'open',
-        '--json',
-        'number,title,reviewDecision,updatedAt,headRefName',
-      ],
-      { cwd: REPO_ROOT },
-    );
-    return JSON.parse(stdout) as GhPR[];
+    const { stdout } = await execa('gh', ['api', 'user', '--jq', '.login'], { cwd: REPO_ROOT });
+    return stdout.trim();
+  } catch (e) {
+    note('gh api user', e);
+    return '';
+  }
+}
+
+async function ghPRs(): Promise<GhPRGroups> {
+  try {
+    const [{ stdout }, me] = await Promise.all([
+      execa(
+        'gh',
+        [
+          'pr',
+          'list',
+          '--state',
+          'open',
+          '--limit',
+          '50',
+          '--json',
+          'number,title,reviewDecision,updatedAt,headRefName,author,statusCheckRollup',
+        ],
+        { cwd: REPO_ROOT },
+      ),
+      meLogin(),
+    ]);
+    const all = JSON.parse(stdout) as GhPR[];
+    const mine: GhPR[] = [];
+    const others: GhPR[] = [];
+    for (const p of all) {
+      if (me && p.author?.login === me) mine.push(p);
+      else others.push(p);
+    }
+    others.sort((a, b) => CI_RANK[ciState(a)] - CI_RANK[ciState(b)]);
+    return { mine, others };
   } catch (e) {
     note('gh pr list', e);
-    return [];
+    return { mine: [], others: [] };
   }
 }
 
@@ -176,16 +233,21 @@ async function readSpecMeta(milestoneName: string): Promise<SpecMeta | null> {
   }
 }
 
+const OTHER_PR_BACKLOG_THRESHOLD = 5;
+
 function recommend(
   activeWorking: GhIssue[],
   awaitingReview: GhIssue[],
-  openPRs: GhPR[],
+  prs: GhPRGroups,
   readyQueue: GhIssue[],
 ): string {
+  if (prs.others.length >= OTHER_PR_BACKLOG_THRESHOLD) {
+    return `Dependabot/other-author PR backlog ≥ ${OTHER_PR_BACKLOG_THRESHOLD} (${prs.others.length} open) — triage before product work.`;
+  }
   if (awaitingReview.length > 0) {
     return `Address review on Issue #${awaitingReview[0]!.number}.`;
   }
-  if (openPRs.some((pr) => pr.reviewDecision === 'CHANGES_REQUESTED')) {
+  if (prs.mine.some((pr) => pr.reviewDecision === 'CHANGES_REQUESTED')) {
     return `You have a PR with CHANGES_REQUESTED — address feedback first.`;
   }
   if (activeWorking.length > 0) {
@@ -261,13 +323,28 @@ async function main(): Promise<void> {
   out.push('');
 
   out.push('## PRs');
-  if (prs.length === 0) {
+  if (prs.mine.length === 0 && prs.others.length === 0) {
     out.push('(none)');
   } else {
-    for (const p of prs) {
-      out.push(
-        `- PR #${p.number} ${p.title} (${p.reviewDecision ?? 'pending'}) branch \`${p.headRefName ?? '?'}\``,
-      );
+    out.push(`### Yours (${prs.mine.length})`);
+    if (prs.mine.length === 0) {
+      out.push('(none)');
+    } else {
+      for (const p of prs.mine) {
+        out.push(
+          `- #${p.number} ${p.title} — ${p.reviewDecision ?? 'pending'} · ${CI_BADGE[ciState(p)]}`,
+        );
+      }
+    }
+    out.push('');
+    out.push(`### Others (${prs.others.length})`);
+    if (prs.others.length === 0) {
+      out.push('(none)');
+    } else {
+      for (const p of prs.others) {
+        const who = p.author?.login ?? '?';
+        out.push(`- #${p.number} [@${who}] ${p.title} — ${CI_BADGE[ciState(p)]}`);
+      }
     }
   }
   out.push('');

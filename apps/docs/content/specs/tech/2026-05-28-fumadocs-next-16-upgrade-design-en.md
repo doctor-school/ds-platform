@@ -2,7 +2,7 @@
 title: "fumadocs 15→16 + Next 15→16 cascade upgrade (Design)"
 description: "Single bundled PR upgrading apps/docs (fumadocs-mdx 14→15, fumadocs-core 15→16, fumadocs-ui 15→16, next 15→16) and apps/docs-cms (next 15→16), locked together by peer-dep coupling. Captures peer-cascade rationale, breaking-change matrix against actual usage surface, and verification plan."
 slug: fumadocs-next-16-upgrade
-status: Proposed
+status: Implemented
 tracker: GitHub Issue #56
 parent_issue: 56
 predecessor_pr: 57
@@ -135,7 +135,30 @@ If only `apps/docs-cms` fails (R1) but `apps/docs` is healthy, the **first** rol
 - Adopting `dynamicIO` or `cacheLife` / `cacheTag` for `apps/docs` — purely additive features, separate follow-up Issue if value emerges.
 - Fumadocs search / typed-routes adapters that pull in `zod@4` — none currently in use.
 
-## 10. References
+## 10. Implementation notes (post-execution)
+
+Two surprises materialised during implementation; both were within the predicted risk envelope.
+
+### 10.1 `fumadocs-ui/provider` → `fumadocs-ui/provider/next` (R2 materialised)
+
+`fumadocs-ui@16` split the `provider` entry point per host framework: `provider/next`, `provider/react-router`, `provider/tanstack`, `provider/waku`, `provider/base`. The bare `fumadocs-ui/provider` path no longer resolves.
+
+Single-line fix in `apps/docs/app/layout.tsx`:
+
+```diff
+-import { RootProvider } from 'fumadocs-ui/provider';
++import { RootProvider } from 'fumadocs-ui/provider/next';
+```
+
+### 10.2 Turbopack incompatible with fumadocs-mdx@15 SSG pipeline (R3 materialised)
+
+`next build` with the new Next 16 default (Turbopack) failed during static prerender on `/adr/0006-documentation-and-ssot-en` with an opaque "Server Components render" digest error; webpack build of the same content succeeded. Symptom is consistent with fumadocs-mdx@15's dynamic-import-driven loader (`import(url.href)` in `dist/load-from-file-*.js`) not being supported by Turbopack's SSG worker.
+
+Mitigation per §5: pin `--webpack` in `apps/docs` scripts (`dev` and `build`). `apps/docs-cms` keeps the Turbopack default since Keystatic does not exercise the same pattern (verified — clean Turbopack build).
+
+To revisit when fumadocs-mdx publishes a Turbopack-compatible loader or Next.js Turbopack widens its SSG dynamic-import support.
+
+## 11. References
 
 - Predecessor: PR #57 (Issue #54) — `fumadocs-mdx` 11 → 14
 - Parent Issue: #56

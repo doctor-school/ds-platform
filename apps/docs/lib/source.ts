@@ -1,4 +1,4 @@
-import { docs } from '@/.source';
+import { docs } from '@/.source/server';
 import { loader } from 'fumadocs-core/source';
 
 // Single loader rooted at site root '/'. ADRs land at /adr/<slug>,

@@ -4,18 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "next lint || true",
     "typecheck": "tsc --noEmit",
     "postinstall": "fumadocs-mdx"
   },
   "dependencies": {
-    "fumadocs-core": "15.7.13",
-    "fumadocs-ui": "15.7.13",
-    "fumadocs-mdx": "14.2.14",
-    "next": "15.5.18",
+    "fumadocs-core": "16.9.2",
+    "fumadocs-ui": "16.9.2",
+    "fumadocs-mdx": "15.0.9",
+    "next": "16.2.6",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },

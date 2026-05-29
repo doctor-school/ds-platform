@@ -11,15 +11,19 @@
     "start": "node dist/main.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist .tsbuildinfo"
+    "clean": "rm -rf dist .tsbuildinfo",
+    "drizzle:generate": "drizzle-kit generate --config ../../packages/db/drizzle.config.ts",
+    "drizzle:migrate": "pnpm -w run dev:snapshot pre-mig-auto && drizzle-kit migrate --config ../../packages/db/drizzle.config.ts"
   },
   "dependencies": {
+    "@ds/db": "workspace:*",
     "@ds/schemas": "workspace:*",
     "@nestjs/common": "^11.1.23",
     "@nestjs/core": "^11.1.23",
     "@nestjs/platform-fastify": "^11.1.23",
     "fastify": "^5.0.0",
     "nestjs-zod": "^5.4.0",
+    "pg": "^8.13.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0",
     "zod": "^3.23.0"
@@ -28,7 +32,10 @@
     "@nestjs/cli": "^11.0.0",
     "@nestjs/testing": "^11.1.23",
     "@types/node": "^25.9.1",
+    "@types/pg": "^8.11.0",
     "@types/supertest": "^6.0.0",
+    "drizzle-kit": "^0.30.0",
+    "esbuild": "^0.28.0",
     "supertest": "^7.0.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.7"

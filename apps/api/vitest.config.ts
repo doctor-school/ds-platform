@@ -5,5 +5,6 @@ export default defineConfig({
     environment: 'node',
     include: ['test/**/*.e2e-spec.ts', 'src/**/*.spec.ts'],
     globals: false,
+    globalSetup: ['./test/setup/migrate.ts'],
   },
 });

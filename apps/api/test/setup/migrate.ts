@@ -9,6 +9,14 @@ import { spawnSync } from "node:child_process";
 // pass through a shell unconditionally. `shell: true` on Windows is required
 // because pnpm is pnpm.cmd and Node's spawnSync does not resolve .cmd without it.
 export default function globalSetup(): void {
+  // No dev-stand configured (e.g. CI) — skip the migration instead of failing.
+  // The DB-dependent e2e suites self-skip via describe.skipIf(!DATABASE_URL).
+  // Spec 002 §9: apps/api e2e runs locally only until the CI Postgres-service
+  // follow-up (#64 notes).
+  if (!process.env.DATABASE_URL) {
+    return;
+  }
+
   const result = spawnSync("pnpm", ["drizzle:migrate"], {
     stdio: "inherit",
     shell: process.platform === "win32",

@@ -479,10 +479,12 @@ Wrapper scripts in `tools/dev/`: portable Node.js launcher `tools/dev/run.mjs` (
 ```json
 {
   "scripts": {
-    "drizzle:migrate": "pnpm dev:snapshot pre-mig-auto && drizzle-kit migrate"
+    "drizzle:migrate": "pnpm -w run dev:snapshot pre-mig-auto && drizzle-kit migrate"
   }
 }
 ```
+
+`pnpm -w run dev:snapshot` (corrected during spec 002 / #59 implementation): `dev:snapshot` lives in the workspace-root `package.json`, but `drizzle:migrate` runs with cwd = the consuming package (`apps/api`), and pnpm does not resolve scripts up the workspace tree. `-w` runs the script from the workspace-root package. The bare `pnpm dev:snapshot` form errors with "Command 'dev:snapshot' not found" from a sub-package.
 
 `tools/dev/recipes/truenas-hybrid/snapshot.sh` (streamed to TrueNAS via `ssh.exe`) appends the timestamp on the Linux side:
 

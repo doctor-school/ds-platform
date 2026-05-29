@@ -405,12 +405,14 @@ export default function globalSetup(): void {
 {
   "scripts": {
     "drizzle:generate": "drizzle-kit generate --config ../../packages/db/drizzle.config.ts",
-    "drizzle:migrate": "pnpm dev:snapshot pre-mig-auto && drizzle-kit migrate --config ../../packages/db/drizzle.config.ts"
+    "drizzle:migrate": "pnpm -w run dev:snapshot pre-mig-auto && drizzle-kit migrate --config ../../packages/db/drizzle.config.ts"
   }
 }
 ```
 
-Verbatim per local-dev-environment setup-design §9.2. The snapshot-then-migrate chain is a soft guardrail — if the snapshot step fails, migration does not proceed.
+Adapted from local-dev-environment setup-design §9.2. The snapshot-then-migrate chain is a soft guardrail — if the snapshot step fails, migration does not proceed.
+
+`pnpm -w run dev:snapshot` (not the bare `pnpm dev:snapshot` of setup-design §9.2): `dev:snapshot` is defined in the **workspace-root** `package.json`, but these scripts run with cwd = `apps/api`, and pnpm does not resolve a script up the workspace tree. `-w` targets the root package where `dev:snapshot` lives. Surfaced as decision-debt during #59; setup-design §9.2 is corrected to match.
 
 ## 6. Dependency manifest deltas
 

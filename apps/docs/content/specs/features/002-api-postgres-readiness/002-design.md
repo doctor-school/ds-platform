@@ -2,7 +2,7 @@
 title: "002 — apps/api Postgres wiring + GET /v1/ready (Design)"
 description: "Design: graduate packages/db from stub (Drizzle config + idempotency-keys schema + createDrizzle factory), first migration (CREATE EXTENSION vector + idempotency_keys), DatabaseModule with @Global() DI tokens for pg.Pool + Drizzle, ReadinessService with Promise.allSettled probes, ReadinessController emitting HTTP 200/503 with schema-conforming body, Vitest e2e + unit + globalSetup migration smoke."
 slug: 002-api-postgres-readiness
-status: Draft
+status: Shipped
 tracker: https://github.com/doctor-school/ds-platform/milestone/2
 parent_issue: https://github.com/doctor-school/ds-platform/issues/29
 lang: en

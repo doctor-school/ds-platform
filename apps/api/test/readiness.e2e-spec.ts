@@ -19,7 +19,7 @@ describe("Readiness (e2e)", () => {
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter(),
     );
-    app.enableVersioning({ type: VersioningType.URI });
+    app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
   });

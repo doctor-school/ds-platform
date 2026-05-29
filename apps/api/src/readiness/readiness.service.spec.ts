@@ -28,4 +28,20 @@ describe("ReadinessService", () => {
     expect(body.checks.postgres).toBe("down");
     expect(body.checks.pgvector).toBe("ok");
   });
+
+  it("EARS-2: responds status=down when the pgvector extension is missing, postgres staying 'ok'", async () => {
+    // Postgres connectivity probe succeeds; pgvector probe reports absent.
+    const pool = poolStub((sql) =>
+      sql.includes("to_regtype")
+        ? Promise.resolve({ rows: [{ ok: false }] })
+        : Promise.resolve({ rows: [{ ok: 1 }] }),
+    );
+
+    const service = new ReadinessService(pool);
+    const body = ReadinessResponseSchema.parse(await service.check());
+
+    expect(body.status).toBe("down");
+    expect(body.checks.postgres).toBe("ok");
+    expect(body.checks.pgvector).toBe("down");
+  });
 });

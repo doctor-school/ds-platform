@@ -8,9 +8,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ReadinessResponseSchema } from "@ds/schemas";
 import { AppModule } from "../src/app.module.js";
 
-// The readiness probes hit a real Postgres + pgvector — run only when a
-// dev-stand DATABASE_URL is configured (skipped on CI; spec 002 §9, #64).
-describe.skipIf(!process.env.DATABASE_URL)("Readiness (e2e)", () => {
+// The readiness probes hit a real Postgres + pgvector — provided locally by the
+// dev-stand and on CI by the `api-e2e` job's pgvector service container (#66).
+describe("Readiness (e2e)", () => {
   let app: NestFastifyApplication;
 
   beforeAll(async () => {

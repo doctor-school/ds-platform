@@ -1,5 +1,22 @@
 # @ds/api
 
+## 0.2.0
+
+### Minor Changes
+
+- [#62](https://github.com/doctor-school/ds-platform/pull/62) [`275d575`](https://github.com/doctor-school/ds-platform/commit/275d575a0a5878c8a077146971b6e4cc7ce88d11) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(api): GET /v1/ready with Postgres + pgvector probes
+
+  Adds a readiness endpoint that probes Postgres (`SELECT 1`) and the pgvector
+  extension (`to_regtype('vector')`) via `Promise.allSettled`, returning a
+  Zod-validated body (HTTP 200 when both pass, HTTP 503 — same shape — when any
+  probe fails). `@ds/schemas` gains `ReadinessResponseSchema` + `CheckStatusSchema`
+  (reusable building block for future Redis/MinIO/Centrifugo probes). Closes [#60](https://github.com/doctor-school/ds-platform/issues/60).
+
+### Patch Changes
+
+- Updated dependencies [[`275d575`](https://github.com/doctor-school/ds-platform/commit/275d575a0a5878c8a077146971b6e4cc7ce88d11)]:
+  - @ds/schemas@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes

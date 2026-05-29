@@ -9,9 +9,10 @@ import request from 'supertest';
 import { HealthResponseSchema } from '@ds/schemas';
 import { AppModule } from '../src/app.module.js';
 
-// Booting AppModule now constructs DatabaseModule, which requires DATABASE_URL.
-// Skip without a dev-stand (CI) until the CI Postgres-service follow-up (#64).
-describe.skipIf(!process.env.DATABASE_URL)('GET /v1/health (EARS-1)', () => {
+// Booting AppModule constructs DatabaseModule, which requires DATABASE_URL —
+// provided locally by the dev-stand and on CI by the `api-e2e` job's pgvector
+// service container (#66).
+describe('GET /v1/health (EARS-1)', () => {
   let app: NestFastifyApplication;
 
   beforeAll(async () => {

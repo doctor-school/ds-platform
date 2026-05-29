@@ -50,6 +50,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
 
+  # Pure-unit tests for every package EXCEPT @ds/api. @ds/api's suites boot
+  # DatabaseModule / hit Postgres + pgvector, so they run in the `api-e2e` job
+  # against a service container (#66). Keeping them out here lets `unit` stay
+  # service-free and fast.
   unit:
     needs: setup
     runs-on: ubuntu-latest
@@ -59,7 +63,37 @@ jobs:
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test
+      - run: pnpm exec turbo run test --filter='!@ds/api'
+
+  # apps/api e2e (readiness EARS-1, health EARS-1) + unit specs against a real
+  # Postgres 17 + pgvector. The Vitest globalSetup runs `drizzle:migrate:ci`
+  # (drizzle-kit migrate, no dev-stand snapshot) before the suite (#66).
+  api-e2e:
+    needs: setup
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: ds
+          POSTGRES_PASSWORD: ds
+          POSTGRES_DB: ds_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ds -d ds_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://ds:ds@localhost:5432/ds_test
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec turbo run test --filter=@ds/api
 
   build:
     needs: setup
@@ -250,7 +284,8 @@ jobs:
   # §2.6 item 4) requires exactly one status check context named `ci`.
   # Renaming this job breaks merge gating.
   ci:
-    needs: [lint, types, unit, build, docs-build, markdown-links, spec-link]
+    needs:
+      [lint, types, unit, api-e2e, build, docs-build, markdown-links, spec-link]
     if: always()
     runs-on: ubuntu-latest
     steps:

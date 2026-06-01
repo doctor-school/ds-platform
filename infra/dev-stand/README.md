@@ -80,15 +80,24 @@ The stack is driven by `pnpm dev:*` scripts — a cross-platform Node launcher
 | `pnpm dev:snapshot <desc>`   | Pre-migration snapshot — recipe-specific.                           |
 | `pnpm dev:rollback <name>`   | Roll the database back to a snapshot — recipe-specific.             |
 | `pnpm dev:reset-db`          | Drop + recreate the database volume, then start.                    |
+| `pnpm dev:config`            | Validate compose + `${SECRET}` interpolation, without an `up`.      |
 
 **Transport.** The launcher reads `DEV_SSH_HOST` / `DEV_DOCKER_SUDO` /
 `DEV_REMOTE_DIR` from `.env.local` (see `.env.example`). With `DEV_SSH_HOST` set
 it runs `sudo docker compose` on the box over `ssh.exe`; with it empty it uses
-the local Docker daemon. `dev:up` and `dev:reset-db` first sync
+the local Docker daemon. `dev:up`, `dev:reset-db` and `dev:config` first sync
 `infra/dev-stand/` to `DEV_REMOTE_DIR` on the box — staged into a temp dir and
 swapped in only once fully transferred, so a failed transfer never disturbs a
 running stack. The other commands run against that already-synced dir, so
 `dev:up` is what keeps the box in step with the contract in git.
+
+**Secrets.** `.env.local` is the single secret source for compose
+interpolation (`POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`, `IDP_SECRET_KEY`, …).
+The SSH recipe ships it verbatim to `DEV_REMOTE_DIR/.env` on every sync (compose
+auto-loads it from the project dir); the host-only recipe passes the parsed
+values through the `docker compose` subprocess environment. Either way the stack
+comes up with real secrets from one local file — no manual `docker compose` on
+the box, no secret committed to git.
 
 **Before a migration.** Always run `pnpm dev:snapshot pre-mig-<desc>` before
 `pnpm drizzle:migrate`. The portable agent rules for the stand — snapshot-before-migrate,

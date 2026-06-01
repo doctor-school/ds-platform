@@ -15,10 +15,14 @@
 # file (see README -> Container isolation port table; .env.example -> Host port
 # overrides).
 #
-# The idp service (Zitadel, closed per ADR-0001 §8 / DSP-209) is intentionally
-# absent here — it lands via DSP-157 (local-dev compose IdP). Observability
-# services (loki/grafana/glitchtip/promtail) live in a separate
-# compose.observability.yml started on demand only (setup-design §3.2).
+# The idp service (Zitadel, closed per ADR-0001 §8 / DSP-209) runs OIDC/JWT
+# auth. Its state is DB-backed — config, users, orgs, signing keys and uploaded
+# assets all live in the shared Postgres — so it carries no named volume of its
+# own; reboot-persistence rides on the postgres dataset. The OIDC application
+# (client_id/secret, redirect URIs) is bootstrapped manually per recipe, a
+# follow-up to this infra wiring (see idp/bootstrap.md). Observability services
+# (loki/grafana/glitchtip/promtail) live in a separate compose.observability.yml
+# started on demand only (setup-design §3.2).
 name: ds-platform-dev
 
 services:
@@ -130,6 +134,52 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # --- Zitadel — OIDC identity provider / JWT issuer (ADR-0001 §8, DSP-209) ---
+  # Single Go binary, DB-backed (no named volume — see header). ExternalDomain
+  # and ExternalPort are env-driven so this contract stays recipe-agnostic: they
+  # MUST match the host:port clients actually reach, or OIDC discovery advertises
+  # a wrong issuer. TLS is disabled via ZITADEL_TLS_ENABLED (env, not the
+  # start-only --tlsMode flag) so every subcommand shares it — notably the
+  # distroless-image healthcheck `/app/zitadel ready`, which probes the local
+  # /debug/ready over the same scheme (no shell or curl in the image). Zitadel
+  # connects to the shared postgres as admin `ds` and creates its own `zitadel`
+  # database on first boot. The masterkey (IDP_SECRET_KEY) must be exactly 32
+  # characters.
+  idp:
+    image: ghcr.io/zitadel/zitadel:latest
+    restart: unless-stopped
+    command:
+      - start-from-init
+      - --masterkey
+      - ${IDP_SECRET_KEY}
+    environment:
+      ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_TLS_ENABLED: "false"
+      ZITADEL_EXTERNALDOMAIN: ${IDP_EXTERNAL_DOMAIN:-localhost}
+      ZITADEL_EXTERNALPORT: ${IDP_PORT:-9080}
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: ds
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${POSTGRES_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ds
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+    ports:
+      - "${IDP_PORT:-9080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app/zitadel", "ready"]
+      interval: 10s
+      timeout: 30s
+      retries: 12
+      # start-from-init runs DB migrations inline on a fresh database, so the
+      # first boot needs a longer grace than the upstream init-container split.
+      start_period: 60s
 
 # Named volumes — Docker-managed, isolated per machine. A personal
 # compose.override.yml may swap these for bind mounts (setup-design §7.2).

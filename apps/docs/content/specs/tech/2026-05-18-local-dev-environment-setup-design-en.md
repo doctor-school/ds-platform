@@ -102,7 +102,7 @@ This is the part **in git**. Identical for every developer. Volumes use **env-dr
 | `postgres`                       | `pgvector/pgvector:pg17` (Postgres 17 base + pgvector extension) | 5432                            | 5432      | 1–4 GB                                | api, worker, admin, cms, payload                                    |
 | `redis`                          | `redis:7-alpine`                                                 | 6379                            | 6379      | 256 MB                                | api (cache + sessions), worker (BullMQ broker), Centrifugo (PubSub) |
 | `minio`                          | `minio/minio:latest`                                             | 9000 (S3) + 9001 (console)      | 9000+9001 | 512 MB                                | api (uploads), Payload (media), mobile (offline cache target)       |
-| `idp` (Zitadel, per ADR-0001 §8) | `ghcr.io/zitadel/zitadel:latest` (single Go binary)              | 8080 (HTTP+gRPC h2c)            | 8080      | 256–512 MB (binary) + shared Postgres | api (JWT issuer), all web apps (OIDC login)                         |
+| `idp` (Zitadel, per ADR-0001 §8) | `ghcr.io/zitadel/zitadel:latest` (single Go binary)              | 9080 (HTTP+gRPC h2c)            | 8080      | 256–512 MB (binary) + shared Postgres | api (JWT issuer), all web apps (OIDC login)                         |
 | `centrifugo`                     | `centrifugo/centrifugo:v6`                                       | 8000                            | 8000      | 128 MB                                | api (publish), web/mobile (WS subscribe)                            |
 | `cerbos`                         | `ghcr.io/cerbos/cerbos:latest`                                   | 3592 (HTTP), 3593 (gRPC)        | 3592/3593 | 128 MB                                | api (PDP queries)                                                   |
 | `mailpit`                        | `axllent/mailpit:latest`                                         | 1025 (SMTP), 8025 (UI)          | 1025/8025 | 64 MB                                 | api (email dev catch-all)                                           |
@@ -159,7 +159,8 @@ S3_REGION=us-east-1
 S3_BUCKET_UPLOADS=ds-uploads-dev
 S3_ACCESS_KEY=minioadmin
 S3_SECRET_KEY=CHANGE_ME
-IDP_ISSUER=http://HOST:9080/application/o/ds-platform/
+IDP_ISSUER=http://HOST:9080
+IDP_EXTERNAL_DOMAIN=localhost
 IDP_CLIENT_ID=ds-platform-dev
 IDP_CLIENT_SECRET=CHANGE_ME
 CENTRIFUGO_URL=http://HOST:8000
@@ -228,7 +229,6 @@ Daily SSD pool (900 GB)
 ├── Daily SSD/dev-postgres        # Postgres pgdata,   mountpoint /mnt/dev-stand/postgres
 ├── Daily SSD/dev-redis           # Redis AOF/RDB dumps,         /mnt/dev-stand/redis
 ├── Daily SSD/dev-minio           # MinIO buckets storage,       /mnt/dev-stand/minio
-├── Daily SSD/dev-idp             # Zitadel media,               /mnt/dev-stand/idp
 ├── Daily SSD/dev-centrifugo      # Centrifugo state (small),    /mnt/dev-stand/centrifugo
 ├── Daily SSD/dev-cerbos-policies # Cerbos PDP policies,         /mnt/dev-stand/cerbos-policies
 └── Daily SSD/dev-observability   # Loki/Grafana/GlitchTip,      /mnt/dev-stand/observability
@@ -238,6 +238,8 @@ Media (7.14 TiB) — off-host ZFS replication target.
 ```
 
 > **Note (DSP-155 implementation):** the SSD pool is named `Daily SSD` (with a space), not `Daily` — datasets are `Daily SSD/dev-*`. The space stays only inside `zfs` commands (always quoted); each dataset carries an explicit `mountpoint=/mnt/dev-stand/<name>`, so Docker bind-mount paths are space-free.
+
+> **Note (DSP-157):** `idp` (Zitadel) has no dataset of its own — it is DB-backed (config, users, orgs, signing keys, assets all live in the shared Postgres), so its reboot-persistence rides on `dev-postgres`.
 
 **Recordsize tuning:**
 
@@ -354,9 +356,10 @@ volumes:
   ds-postgres:
   ds-redis:
   ds-minio:
-  ds-idp:
   ds-centrifugo:
 ```
+
+`idp` (Zitadel) carries no named volume — it is DB-backed, so its state persists in `ds-postgres` (§3.1, §5.3 note).
 
 **Tech Lead's personal `compose.override.yml`** replaces named volumes with bind mounts to ZFS datasets:
 
@@ -504,7 +507,7 @@ If the snapshot fails → migrate does not run. This is a soft guardrail, not ha
 
 Phase 0 secrets:
 
-- `infra/dev-stand/.env` on TrueNAS — contains `POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`, `ZITADEL_MASTERKEY` (32-char secret for Zitadel encryption-at-rest per ADR-0001 §8 / DSP-209), etc. Manually created from `.env.example` at bootstrap. **Not committed** (gitignore).
+- `infra/dev-stand/.env` on TrueNAS — contains `POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`, `IDP_SECRET_KEY` (Zitadel masterkey — a 32-char secret for encryption-at-rest, per ADR-0001 §8 / DSP-209), etc. Manually created from `.env.example` at bootstrap. **Not committed** (gitignore).
 - `ds-platform/.env.local` on host — connection strings + IdP client secret. **Not committed.**
 - Vault is not used in Phase 0 (per engineering-readiness spec). Activation trigger: first shared developer (see §11 OQ-3).
 
@@ -534,7 +537,7 @@ Phase 0 secrets:
 
 - Second developer joins → §6.3 + OQ-2 + OQ-6 reopen.
 - Prod servers deployed → §1 clarifies "local is not the path to prod", update CI references.
-- IdP service lands in compose (DSP-157) → `idp` row in §3.1 becomes an active Zitadel service (closed per ADR-0001 §8, DSP-209).
+- IdP OIDC application bootstrap (DSP-157 follow-up) → the `idp` Zitadel service is wired into compose (DSP-157, per ADR-0001 §8 / DSP-209); creating the OIDC application (`ds-platform-dev` client, redirect URIs, scope/claim mapping) is deferred until the first OIDC consumer lands (see `infra/dev-stand/idp/bootstrap.md`).
 - TrueNAS Scale major upgrade (25.x) → verify Apps Docker still works.
 - Observability stack activates (DSO-32) → `compose.observability.yml` promoted from "optional" into the regular flow.
 - Core RAM on TrueNAS > 18 GB sustained → OQ-8 trigger.

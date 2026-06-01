@@ -199,11 +199,21 @@ function syncToRemote() {
   // (raw bytes, not a re-serialised parse) preserves quoting and comments, and
   // keeps the whole file — secrets, ports and transport keys — as one source of
   // truth on the trusted box. DOCKER_HOST/DEV_* keys in it are inert: compose
-  // reads `.env` for interpolation only, not for the daemon connection.
-  const envPush = spawnSync("ssh", [sshHost, `cat > ${remoteDir}/.env`], {
-    input: readFileSync(envFile),
-    stdio: ["pipe", "inherit", "inherit"],
-  });
+  // reads `.env` for interpolation only, not for the daemon connection. Write to
+  // a temp then `mv` so an interrupted transfer never leaves a half-written
+  // `.env` for the next `compose` to read (the bind-mount swap above is atomic
+  // for the same reason).
+  const envPush = spawnSync(
+    "ssh",
+    [
+      sshHost,
+      `cat > ${remoteDir}/.env.tmp && mv ${remoteDir}/.env.tmp ${remoteDir}/.env`,
+    ],
+    {
+      input: readFileSync(envFile),
+      stdio: ["pipe", "inherit", "inherit"],
+    },
+  );
   if (envPush.error) fail(`could not spawn ssh: ${envPush.error.message}`);
   if (envPush.status !== 0) fail("provisioning the remote compose .env failed");
 
@@ -237,9 +247,14 @@ function compose(sub, { tty = false } = {}) {
   // Host-only has no remote `.env` to auto-load, so feed the parsed `.env.local`
   // through the subprocess env for compose interpolation (and a recipe-set
   // DOCKER_HOST, which here legitimately retargets the local docker client).
+  // Skip blank values so a commented-out template key (e.g. DOCKER_HOST=) does
+  // not clobber a real one already exported in the caller's shell.
+  const composeEnv = { ...process.env };
+  for (const [k, v] of Object.entries(serviceEnv))
+    if (v !== "") composeEnv[k] = v;
   return run("docker", ["compose", ...flags, ...sub], {
     cwd: STAND_DIR,
-    env: { ...process.env, ...serviceEnv },
+    env: composeEnv,
   });
 }
 
@@ -307,16 +322,43 @@ function cmdResetDb() {
   return code;
 }
 
-// Dry-validate the resolved compose config (schema + `${SECRET}` interpolation)
-// without starting anything. Ships the contract + `.env` first, like `up`, so
-// the SSH recipe validates the real remote inputs. `config --quiet` exits
-// non-zero on an unresolved var or schema error and prints nothing on success —
-// so secrets never hit stdout (a bare `config` would render them).
+// Compose vars referenced without a default — `${VAR}`, not `${VAR:-x}` /
+// `${VAR-x}` / `${VAR:?x}` — are the required ones. Parsed from the contract so
+// the list tracks compose.core.yml automatically (no hardcoded secret names).
+function requiredComposeVars() {
+  const text = readFileSync(join(STAND_DIR, "compose.core.yml"), "utf8");
+  const required = new Set();
+  for (const m of text.matchAll(
+    /\$\{([A-Za-z_][A-Za-z0-9_]*)([:-]?[-?][^}]*)?\}/g,
+  )) {
+    if (!m[2]) required.add(m[1]); // no `:-default` / `:?err` suffix → required
+  }
+  return [...required];
+}
+
+// Dry-validate the resolved compose config without starting anything. Ships the
+// contract + `.env` first, like `up`, so the SSH recipe validates the real
+// remote inputs. `config --quiet` catches schema and `${VAR}` *syntax* errors —
+// but docker compose substitutes a *blank* for a missing/empty required var and
+// still exits 0, so a secretless stack would pass it. We assert the required
+// vars resolve non-empty up front to catch exactly the empty-secret failure this
+// command exists to surface (#70: empty POSTGRES_PASSWORD / IDP_SECRET_KEY).
 function cmdConfig() {
-  if (cfg().sshHost) syncToRemote();
+  const { sshHost, serviceEnv } = cfg();
+  const missing = requiredComposeVars().filter(
+    (k) => !(serviceEnv[k] || "").trim(),
+  );
+  if (missing.length)
+    fail(
+      `compose .env is missing required value(s): ${missing.join(", ")} — ` +
+        "fill them in your .env.local (see infra/dev-stand/.env.example).",
+    );
+  if (sshHost) syncToRemote();
   const code = compose(["config", "--quiet"]);
   if (code === 0)
-    console.log("dev:config: compose config valid — all variables resolved.");
+    console.log(
+      "dev:config: compose config valid — required variables resolved.",
+    );
   return code;
 }
 

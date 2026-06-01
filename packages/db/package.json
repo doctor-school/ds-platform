@@ -26,12 +26,12 @@
     "clean": "rm -rf dist .tsbuildinfo"
   },
   "dependencies": {
-    "drizzle-orm": "^0.36.0",
+    "drizzle-orm": "^0.45.2",
     "pg": "^8.13.0"
   },
   "devDependencies": {
     "@types/pg": "^8.11.0",
-    "drizzle-kit": "^0.30.0",
+    "drizzle-kit": "^0.31.10",
     "typescript": "^6.0.3"
   }
 }

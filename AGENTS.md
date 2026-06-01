@@ -229,6 +229,7 @@ The stack is driven by `pnpm dev:*` (env-driven launcher `tools/dev/run.mjs`, DS
 | `pnpm dev:snapshot <desc>`   | Pre-migration snapshot (recipe-specific; no-ops if unsupported). |
 | `pnpm dev:rollback <name>`   | Roll the database back to a snapshot (recipe-specific).          |
 | `pnpm dev:reset-db`          | Drop + recreate the database volume, then start.                 |
+| `pnpm dev:config`            | Validate compose + `${SECRET}` interpolation, without an `up`.   |
 
 ### 9.3 Rules for agents
 

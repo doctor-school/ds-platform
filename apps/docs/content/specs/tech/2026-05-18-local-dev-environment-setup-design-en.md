@@ -2,7 +2,7 @@
 title: "DS Platform — Local Developer Environment (Design)"
 description: "Portable contract (in git, for all developers) + personal deployment recipes for the local dev stand — Compose stack, container isolation, TrueNAS hybrid reference recipe."
 slug: local-dev-environment-setup
-status: Draft
+status: Implemented
 lang: en
 ---
 
@@ -11,10 +11,23 @@ lang: en
 # DS Platform — Local Developer Environment (Portable Contract + Personal Recipes) — Design
 
 **Date:** 2026-05-18 (rewritten 2026-05-18 evening after challenge: split portable contract vs personal deployment)
-**Status:** Draft → User Review
+**Status:** Implemented (Phase-0 scope shipped 2026-06-01 — see "Implementation status" below)
 **Type:** Platform-level design (portable contract — in git, for all developers) + reference recipe (Tech Lead's TrueNAS hybrid — runbook, personal topology outside git). The platform-level part may become an ADR on first shared use; Tech Lead's recipe is a runbook, not architecture.
 **Linked:** Plane DSO-70 (`8c4b69c2-7df6-45b5-8d7c-34c8b682eda8`), milestone DSO-10
 **Applies (not inherits — this is a setup document):** ADR-0001 (Identity), ADR-0002 (NestJS+Fastify+BullMQ), ADR-0003 (Postgres17+Drizzle+Redis), ADR-0004 (Next.js 15 + 4 apps), ADR-0005 (RN+Expo), ADR-0007 (AI loop), ADR-0008 (repo strategy), ADR-0011 (egress control plane), engineering-readiness spec
+
+---
+
+## 0. Implementation status
+
+**Phase-0 scope — Implemented (2026-06-01).**
+
+- **Layer A — portable contract (§14.1):** shipped to `infra/dev-stand/` (`compose.core.yml` with all seven core services — postgres/redis/minio/idp/centrifugo/cerbos/mailpit — `.env.example`, `postgres/`, `centrifugo/`, `cerbos/`, `idp/bootstrap.md`, README) and `tools/dev/run.mjs`. Tracked under Plane milestone DSP-150 (sub-issues DSP-152..159).
+- **Layer B — TrueNAS Hybrid reference recipe (§14.2):** recipe scripts in `tools/dev/recipes/truenas-hybrid/` (`snapshot.sh`, `rollback.sh`); personal `.env.local` / `compose.override.yml` kept outside git.
+- **Contract smoke test (§14.3):** `pnpm dev:smoke` (DSP-159).
+- **AGENTS.md §9 "Local Dev Stand":** portable rules + DX-command cheat sheet shipped.
+
+**Deferred by design** (revisit triggers in §11, not gaps): `compose.observability.yml` → DSO-32; `compose.future.yml.example` (outline/unleash/vault) → by trigger; Zitadel OIDC-application bootstrap → first OIDC consumer.
 
 ---
 
@@ -470,6 +483,8 @@ All scripts are **env-driven**: they read `.env.local` (HOST, DOCKER_HOST, paths
 | `pnpm dev:rollback <name>`   | **Recipe-specific.** Tech Lead: `zfs rollback`. Host-only: restore from pg_dump.                                                                                              |
 | `pnpm dev:reset-db`          | `dev:down` → drop+recreate volume (per recipe) → `dev:up` → `drizzle:migrate` → seed                                                                                          |
 | `pnpm dev:status`            | `docker compose ps`                                                                                                                                                           |
+| `pnpm dev:config`            | Dry-validate the resolved compose config + `${VAR}` interpolation (`docker compose config --quiet`) — no `up`.                                                                |
+| `pnpm dev:smoke`             | Contract-level smoke probe — reaches the core services to confirm the stand converged (DSP-159).                                                                              |
 
 Wrapper scripts in `tools/dev/`: portable Node.js launcher `tools/dev/run.mjs` (cross-platform), reads env and dispatches. Recipe-specific logic (`snapshot.sh` / `rollback.sh`) lives **in personal overlay** or loads from `tools/dev/recipes/<recipe-name>/*.sh` (published reference recipes).
 
@@ -519,19 +534,19 @@ Phase 0 secrets:
 
 ## 11. Open questions / Revisit triggers
 
-| ID    | Q                                                                                      | Decide when                                                                                    |
-| ----- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| OQ-1  | `DOCKER_HOST=ssh://...` vs manual SSH wrappers                                         | After first week of use: if SSH wrappers become frictionful, migrate to Docker context         |
-| OQ-2  | Per-developer Postgres namespace (`ds_dev_anton`, `ds_dev_eduard`) vs single shared DB | When a second dev joins                                                                        |
-| OQ-3  | Vault for dev secrets                                                                  | When first shared developer arrives OR when secrets live in > 3 places                         |
-| OQ-4  | Drizzle pre-migration hook integration                                                 | At first working migration in `apps/api` (after ADR-0008 step 22)                              |
-| OQ-5  | Local LLM compose fragment (Ollama/vLLM)                                               | If Pre-pilot dev needs offline LLM tests                                                       |
-| OQ-6  | Replace SSH wrappers with TrueNAS Apps UI                                              | If a second dev is not an SSH power user                                                       |
-| OQ-7  | Off-site backup of dev data                                                            | NOT needed (dev data is recreatable). Do not open.                                             |
-| OQ-8  | Replace TrueNAS with newer hardware                                                    | If Haswell i5-4670K becomes a bottleneck even for core services (Postgres CPU > 50% sustained) |
-| OQ-9  | mDNS resolution in WSL2 (if api runs in WSL instead of native Windows Node)            | At first API run, if WSL2 cannot see `truenas.local` — fallback to IP                          |
-| OQ-10 | Static IP / mDNS reliability                                                           | At first fallback                                                                              |
-| OQ-11 | What to do with `dev-stand/` (Next.js mobile prototype)                                | Unrelated to this dev stand; nothing changes                                                   |
+| ID    | Q                                                                                      | Decide when                                                                                                 |
+| ----- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| OQ-1  | `DOCKER_HOST=ssh://...` vs manual SSH wrappers                                         | After first week of use: if SSH wrappers become frictionful, migrate to Docker context                      |
+| OQ-2  | Per-developer Postgres namespace (`ds_dev_anton`, `ds_dev_eduard`) vs single shared DB | When a second dev joins                                                                                     |
+| OQ-3  | Vault for dev secrets                                                                  | When first shared developer arrives OR when secrets live in > 3 places                                      |
+| OQ-4  | Drizzle pre-migration hook integration                                                 | **CLOSED** — implemented (§9.2): `apps/api` `drizzle:migrate` wraps `pnpm -w run dev:snapshot pre-mig-auto` |
+| OQ-5  | Local LLM compose fragment (Ollama/vLLM)                                               | If Pre-pilot dev needs offline LLM tests                                                                    |
+| OQ-6  | Replace SSH wrappers with TrueNAS Apps UI                                              | If a second dev is not an SSH power user                                                                    |
+| OQ-7  | Off-site backup of dev data                                                            | NOT needed (dev data is recreatable). Do not open.                                                          |
+| OQ-8  | Replace TrueNAS with newer hardware                                                    | If Haswell i5-4670K becomes a bottleneck even for core services (Postgres CPU > 50% sustained)              |
+| OQ-9  | mDNS resolution in WSL2 (if api runs in WSL instead of native Windows Node)            | At first API run, if WSL2 cannot see `truenas.local` — fallback to IP                                       |
+| OQ-10 | Static IP / mDNS reliability                                                           | At first fallback                                                                                           |
+| OQ-11 | What to do with `dev-stand/` (Next.js mobile prototype)                                | Unrelated to this dev stand; nothing changes                                                                |
 
 **Revisit triggers (when to re-open this ADR):**
 

@@ -2,7 +2,7 @@
 title: "DS Platform — Local Developer Environment (Design)"
 description: "Portable contract (в git, для всех разработчиков) + персональные deployment-рецепты для local dev stand — Compose-стек, изоляция контейнеров, TrueNAS hybrid reference recipe."
 slug: local-dev-environment-setup
-status: Draft
+status: Implemented
 lang: ru
 ---
 
@@ -11,10 +11,23 @@ lang: ru
 # DS Platform — Local Developer Environment (Portable Contract + Personal Recipes) — Design
 
 **Дата:** 2026-05-18 (rewritten 2026-05-18 evening после challenge: разделение portable contract vs personal deployment)
-**Статус:** Draft → User Review
+**Статус:** Implemented (Phase-0 scope зашипплен 2026-06-01 — см. «Implementation status» ниже)
 **Тип:** Platform-level design (portable contract — в git, для всех разработчиков) + reference recipe (Tech Lead's TrueNAS hybrid — runbook, личная топология вне git). Platform-level часть может стать ADR при первом shared use; Tech Lead's recipe — это runbook, не архитектура.
 **Связан с:** Plane DSO-70 (`8c4b69c2-7df6-45b5-8d7c-34c8b682eda8`), milestone DSO-10
 **Применяет (не наследует — это setup-документ):** ADR-0001 (Identity), ADR-0002 (NestJS+Fastify+BullMQ), ADR-0003 (Postgres17+Drizzle+Redis), ADR-0004 (Next.js 15 + 4 apps), ADR-0005 (RN+Expo), ADR-0007 (AI loop), ADR-0008 (repo strategy), ADR-0011 (egress control plane), engineering-readiness spec
+
+---
+
+## 0. Implementation status
+
+**Phase-0 scope — Implemented (2026-06-01).**
+
+- **Layer A — portable contract (§14.1):** зашипплен в `infra/dev-stand/` (`compose.core.yml` со всеми семью core-сервисами — postgres/redis/minio/idp/centrifugo/cerbos/mailpit — `.env.example`, `postgres/`, `centrifugo/`, `cerbos/`, `idp/bootstrap.md`, README) и `tools/dev/run.mjs`. Трекинг — Plane milestone DSP-150 (sub-issues DSP-152..159).
+- **Layer B — reference recipe «TrueNAS Hybrid» (§14.2):** recipe-скрипты в `tools/dev/recipes/truenas-hybrid/` (`snapshot.sh`, `rollback.sh`); персональные `.env.local` / `compose.override.yml` — вне git.
+- **Contract smoke test (§14.3):** `pnpm dev:smoke` (DSP-159).
+- **AGENTS.md §9 «Local Dev Stand»:** portable-правила + DX-cheat sheet зашипплены.
+
+**Отложено by design** (revisit-триггеры в §11, это не пробелы): `compose.observability.yml` → DSO-32; `compose.future.yml.example` (outline/unleash/vault) → по триггеру; bootstrap OIDC-приложения Zitadel → первый OIDC-консьюмер.
 
 ---
 
@@ -467,6 +480,8 @@ Quarantine LLM workload (per ADR-0010 mandatory pattern) в Pre-pilot работ
 | `pnpm dev:rollback <name>`   | **Recipe-specific.** Tech Lead: `zfs rollback`. Host-only: restore from pg_dump.                                                                                           |
 | `pnpm dev:reset-db`          | `dev:down` → drop+recreate volume (per recipe) → `dev:up` → `drizzle:migrate` → seed                                                                                       |
 | `pnpm dev:status`            | `docker compose ps`                                                                                                                                                        |
+| `pnpm dev:config`            | Dry-валидация собранного compose-конфига + интерполяции `${VAR}` (`docker compose config --quiet`) — без `up`.                                                             |
+| `pnpm dev:smoke`             | Contract-level smoke-проба — достукивается до core-сервисов и подтверждает, что стенд сошёлся (DSP-159).                                                                   |
 
 Скрипты-обёртки в `tools/dev/`: portable Node.js launcher `tools/dev/run.mjs` (cross-platform), который читает env и диспатчит. Recipe-specific логика (`snapshot.sh` / `rollback.sh`) живёт **в personal overlay** или загружается из `tools/dev/recipes/<recipe-name>/*.sh` (опубликованные референсные recipe'ы).
 
@@ -514,19 +529,19 @@ Phase 0 secrets:
 
 ## 11. Open questions / Revisit triggers
 
-| ID    | Q                                                                                        | Когда решать                                                                                              |
-| ----- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| OQ-1  | `DOCKER_HOST=ssh://...` vs ручной SSH-wrapper                                            | После первой недели использования: если SSH-wrapper'ы становятся frictionful, мигрируем на Docker context |
-| OQ-2  | Per-developer namespace в Postgres (`ds_dev_anton`, `ds_dev_eduard`) vs single shared DB | При присоединении второго dev'а                                                                           |
-| OQ-3  | Vault для dev secrets                                                                    | При первом shared developer ИЛИ когда secrets живут в > 3 местах                                          |
-| OQ-4  | Drizzle pre-migration hook integration                                                   | На момент первой работающей миграции в `apps/api` (после ADR-0008 step 22)                                |
-| OQ-5  | Local LLM compose-фрагмент (Ollama/vLLM)                                                 | Если Pre-pilot dev нуждается в offline-LLM тестах                                                         |
-| OQ-6  | Замена SSH-wrapper'ов на TrueNAS Apps UI                                                 | Если второй dev не SSH-power-user                                                                         |
-| OQ-7  | Off-site backup dev-data                                                                 | НЕ нужен (dev-data recreatable). Не открывать.                                                            |
-| OQ-8  | Замена TrueNAS на более новое железо                                                     | Если Haswell i5-4670K становится bottleneck даже для core-сервисов (Postgres CPU usage > 50% sustained)   |
-| OQ-9  | mDNS-резолвинг в WSL2 (если api запускается из WSL вместо native Windows Node)           | На момент первого API run, если WSL2 не видит `truenas.local` — fallback на IP                            |
-| OQ-10 | Static IP / mDNS reliability                                                             | На момент первого falback'а                                                                               |
-| OQ-11 | Что делать с `dev-stand/` (Next.js mobile prototype)                                     | Этот dev-stand prototype не связан с DS Platform dev environment; ничего не меняется по нему              |
+| ID    | Q                                                                                        | Когда решать                                                                                                      |
+| ----- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| OQ-1  | `DOCKER_HOST=ssh://...` vs ручной SSH-wrapper                                            | После первой недели использования: если SSH-wrapper'ы становятся frictionful, мигрируем на Docker context         |
+| OQ-2  | Per-developer namespace в Postgres (`ds_dev_anton`, `ds_dev_eduard`) vs single shared DB | При присоединении второго dev'а                                                                                   |
+| OQ-3  | Vault для dev secrets                                                                    | При первом shared developer ИЛИ когда secrets живут в > 3 местах                                                  |
+| OQ-4  | Drizzle pre-migration hook integration                                                   | **CLOSED** — реализовано (§9.2): `apps/api` `drizzle:migrate` оборачивает `pnpm -w run dev:snapshot pre-mig-auto` |
+| OQ-5  | Local LLM compose-фрагмент (Ollama/vLLM)                                                 | Если Pre-pilot dev нуждается в offline-LLM тестах                                                                 |
+| OQ-6  | Замена SSH-wrapper'ов на TrueNAS Apps UI                                                 | Если второй dev не SSH-power-user                                                                                 |
+| OQ-7  | Off-site backup dev-data                                                                 | НЕ нужен (dev-data recreatable). Не открывать.                                                                    |
+| OQ-8  | Замена TrueNAS на более новое железо                                                     | Если Haswell i5-4670K становится bottleneck даже для core-сервисов (Postgres CPU usage > 50% sustained)           |
+| OQ-9  | mDNS-резолвинг в WSL2 (если api запускается из WSL вместо native Windows Node)           | На момент первого API run, если WSL2 не видит `truenas.local` — fallback на IP                                    |
+| OQ-10 | Static IP / mDNS reliability                                                             | На момент первого falback'а                                                                                       |
+| OQ-11 | Что делать с `dev-stand/` (Next.js mobile prototype)                                     | Этот dev-stand prototype не связан с DS Platform dev environment; ничего не меняется по нему                      |
 
 **Revisit triggers (когда переоткрывать этот ADR):**
 

@@ -149,11 +149,15 @@ services:
   idp:
     image: ghcr.io/zitadel/zitadel:latest
     restart: unless-stopped
+    # --masterkeyFromEnv reads the secret from ZITADEL_MASTERKEY (below) rather
+    # than taking it as a CLI value, so the masterkey never lands in
+    # `docker inspect` / the process list — matching how the other secrets here
+    # are passed. The flag is required; the env var alone is not read.
     command:
       - start-from-init
-      - --masterkey
-      - ${IDP_SECRET_KEY}
+      - --masterkeyFromEnv
     environment:
+      ZITADEL_MASTERKEY: ${IDP_SECRET_KEY}
       ZITADEL_EXTERNALSECURE: "false"
       ZITADEL_TLS_ENABLED: "false"
       ZITADEL_EXTERNALDOMAIN: ${IDP_EXTERNAL_DOMAIN:-localhost}

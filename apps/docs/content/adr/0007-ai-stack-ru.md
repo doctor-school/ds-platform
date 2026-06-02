@@ -96,14 +96,14 @@ Sketch и edge cases — design spec §4.
 
 ### 2.6 AI-specific CI drift guards (поверх ADR-0006 §7)
 
-| Guard                     | Что ловит                                                                                                                 | Severity Phase 0        |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| **spec-link required**    | PR с label `feature:*` без `Closes #N` на Issue с matching milestone и spec folder. Non-feature PR (bug/chore) — skipped. | BLOCK                   |
-| **TDD signal**            | implementation-only commit без test-файла                                                                                 | WARN v1                 |
-| **EARS ↔ test linkage**   | EARS-требование без `it('EARS-N.M: ...')` теста (content-search across all `apps/**/*.test.ts`)                           | WARN v1 → BLOCK v2      |
-| **Gherkin coverage**      | scenarios без Playwright step реализации                                                                                  | BLOCK (через test fail) |
-| **Spec status freshness** | merged PR с label `feature:*`, но spec status='Draft'                                                                     | WARN v1                 |
-| **Prior decisions cited** | новый spec без ADR-link в "Prior decisions" если категория ≠ docs-only                                                    | WARN v1                 |
+| Guard                     | Что ловит                                                                                                                                                                                                                           | Severity Phase 0        |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| **spec-link required**    | PR с label `feature:NNN-<slug>`, не связанный со своей спекой: нет `Closes #N`, у связанного Issue нет (product-тема) milestone, либо отсутствует spec-папка лейбла (`features/NNN-<slug>/`). Non-feature PR (bug/chore) — skipped. | BLOCK                   |
+| **TDD signal**            | implementation-only commit без test-файла                                                                                                                                                                                           | WARN v1                 |
+| **EARS ↔ test linkage**   | EARS-требование без `it('EARS-N.M: ...')` теста (content-search across all `apps/**/*.test.ts`)                                                                                                                                     | WARN v1 → BLOCK v2      |
+| **Gherkin coverage**      | scenarios без Playwright step реализации                                                                                                                                                                                            | BLOCK (через test fail) |
+| **Spec status freshness** | merged PR с label `feature:*`, но spec status='Draft'                                                                                                                                                                               | WARN v1                 |
+| **Prior decisions cited** | новый spec без ADR-link в "Prior decisions" если категория ≠ docs-only                                                                                                                                                              | WARN v1                 |
 
 Реализация в `tools/lint/spec-link-lint.ts`, `tools/lint/ears-test-lint.ts`. Эти guard'ы — CI-сигналы, видимые прямо человеку-ревьюверу в PR UI: WARN-guard'ы — non-blocking checks, BLOCK-guard'ы — блокируют merge. Их роль — «подсказать человеку-ревьюверу»; они вход для human review, а не для автоматического ревьювера.
 

@@ -204,24 +204,24 @@ Sequence / state / ER / C4Context — all Mermaid in MDX. Rendering — Fumadocs
 
 To avoid false-SSOT in Git (`tasks.md`), task execution state lives in task trackers. **Two trackers — two distinct zones of responsibility**, cross-linked via URL.
 
-| What we track                                                                          | Where                                             | Why                                                                                                                                          |
-| -------------------------------------------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stack ADRs, infra milestones, product/PM decisions, hiring, fundraising                | Plane workspace `doctor-school` (DSP/DSC/DSM/DSO) | Strategic level, cross-team, Product Lead works in Plane natively, CLAUDE.md pp-plane-first rule                                             |
-| Implementation tasks for DS Platform code (EARS handlers, bugs, refactors, deps, perf) | **GitHub Issues** in DS Platform repo             | PR-native (auto-close, mention, sub-issues, GitHub Projects v2), AI works with `gh` CLI in the repo, milestones cleanly map to feature specs |
-| Cross-cutting initiatives (release planning, infrastructure milestone)                 | Plane parent + GitHub Milestone children          | Strategic owner = Plane, implementation details = GitHub                                                                                     |
+| What we track                                                                          | Where                                             | Why                                                                                                                                                         |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stack ADRs, infra milestones, product/PM decisions, hiring, fundraising                | Plane workspace `doctor-school` (DSP/DSC/DSM/DSO) | Strategic level, cross-team, Product Lead works in Plane natively, CLAUDE.md pp-plane-first rule                                                            |
+| Implementation tasks for DS Platform code (EARS handlers, bugs, refactors, deps, perf) | **GitHub Issues** in DS Platform repo             | PR-native (auto-close, mention, sub-issues, GitHub Projects v2), AI works with `gh` CLI in the repo, `feature:NNN-<slug>` labels bind Issues to their specs |
+| Cross-cutting initiatives (release planning, infrastructure milestone)                 | Plane parent + GitHub Milestone children          | Strategic owner = Plane, implementation details = GitHub                                                                                                    |
 
 **GitHub Issues convention for feature implementation:**
 
-- **One Milestone per feature** (e.g., `001-doctor-onboarding`), description contains a link to `apps/docs/content/specs/features/001-doctor-onboarding/001-requirements.md`.
+- **Milestone = product theme** (e.g., `Doctor onboarding v1`) — a long-lived theme that may span several feature specs (AGENTS.md §2). A Milestone is **not** a spec folder; the spec an Issue implements is bound by its `feature:NNN-<slug>` label.
 - **One Issue per EARS-handler** — title `[001] EARS-3: When OIDC callback received, the system shall ...`, body contains a link to the specific EARS-ID in `NNN-requirements.md`.
-- **Labels** — `feature:NNN-name`, `kind:ears-handler` / `kind:bug` / `kind:refactor` / `kind:dep-upgrade`.
+- **Labels** — `feature:NNN-<slug>` (binds the Issue to `apps/docs/content/specs/features/NNN-<slug>/`), `kind:ears-handler` / `kind:bug` / `kind:refactor` / `kind:dep-upgrade`.
 - **GitHub Project v2** — "DS Platform Implementation" board with swimlanes by feature.
 
 **Cross-linking:**
 
 - Plane Issue → GitHub: URL in description or comment.
 - GitHub Issue → Plane: URL in body, optional label `plane:DSO-N`.
-- Feature spec → GitHub Milestone: frontmatter field `tracker: <github-milestone-url>` in `NNN-requirements.md`.
+- Feature spec → its product-theme GitHub Milestone: frontmatter field `tracker: <github-milestone-url>` in `NNN-requirements.md` (several specs under one theme share the URL).
 
 **AI agent workflow:**
 

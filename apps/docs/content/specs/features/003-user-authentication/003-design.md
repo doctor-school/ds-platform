@@ -196,7 +196,7 @@ Policy (which surfaces, when) is EARS-17; mechanism lives behind the interface s
 
 ## 11. Open questions / known frictions
 
-- **Endpoint-authz matrix bootstrap** — does 003 establish `tools/lint-endpoint-authz` + the metadata convention (ADR-0001 §2.5), or is a preceding engineering-task required? Lead-agent decision before child-Issue planning (requirements §Dependencies).
+- **Endpoint-authz matrix bootstrap** — does 003 establish `tools/lint-endpoint-authz` + the metadata convention (ADR-0001 design §2.5), or is a preceding engineering-task required? Lead-agent decision before child-Issue planning (requirements §Dependencies).
 - **Consent capture surface** — confirm the ADR-0009 capture API shape; 003 ships a minimal `consent_records` slice if the subsystem is not yet built.
 - **Reconciliation depth** — 003 ships webhook upsert + a simple sweep; the full eventual-consistency reconciliation (conflict resolution, soft-delete handling) is deferred.
 - **Zitadel Action webhook auth** — the webhook endpoint must authenticate Zitadel (shared secret / mTLS); confirm against the dev-stand Zitadel Actions config.

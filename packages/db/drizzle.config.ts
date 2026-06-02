@@ -11,7 +11,11 @@ export default defineConfig({
   // barrel's NodeNext-mandated `.js` re-export (`./idempotency-keys.js`) does
   // not resolve back to the `.ts` source under that loader. Append new table
   // files here as they land.
-  schema: ["../../packages/db/src/schema/idempotency-keys.ts"],
+  schema: [
+    "../../packages/db/src/schema/idempotency-keys.ts",
+    "../../packages/db/src/schema/users.ts",
+    "../../packages/db/src/schema/consent-records.ts",
+  ],
   out: "../../apps/api/drizzle",
   dialect: "postgresql",
   dbCredentials: {

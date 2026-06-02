@@ -96,14 +96,14 @@ Sketch and edge cases — design spec §4.
 
 ### 2.6 AI-specific CI drift guards (on top of ADR-0006 §7)
 
-| Guard                     | What it catches                                                                                                                            | Severity Phase 0      |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- |
-| **spec-link required**    | PR with label `feature:*` without `Closes #N` on an Issue with a matching milestone and spec folder. Non-feature PR (bug/chore) — skipped. | BLOCK                 |
-| **TDD signal**            | implementation-only commit without a test file                                                                                             | WARN v1               |
-| **EARS ↔ test linkage**   | EARS requirement without an `it('EARS-N.M: ...')` test (content-search across all `apps/**/*.test.ts`)                                     | WARN v1 → BLOCK v2    |
-| **Gherkin coverage**      | scenarios without Playwright step implementation                                                                                           | BLOCK (via test fail) |
-| **Spec status freshness** | merged PR with label `feature:*`, but spec status='Draft'                                                                                  | WARN v1               |
-| **Prior decisions cited** | new spec without an ADR-link in "Prior decisions" if category ≠ docs-only                                                                  | WARN v1               |
+| Guard                     | What it catches                                                                                                                                                                                                                | Severity Phase 0      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- |
+| **spec-link required**    | PR labeled `feature:NNN-<slug>` not linked to its spec: no `Closes #N`, a linked Issue without a (product-theme) milestone, or the label's spec folder (`features/NNN-<slug>/`) missing. Non-feature PR (bug/chore) — skipped. | BLOCK                 |
+| **TDD signal**            | implementation-only commit without a test file                                                                                                                                                                                 | WARN v1               |
+| **EARS ↔ test linkage**   | EARS requirement without an `it('EARS-N.M: ...')` test (content-search across all `apps/**/*.test.ts`)                                                                                                                         | WARN v1 → BLOCK v2    |
+| **Gherkin coverage**      | scenarios without Playwright step implementation                                                                                                                                                                               | BLOCK (via test fail) |
+| **Spec status freshness** | merged PR with label `feature:*`, but spec status='Draft'                                                                                                                                                                      | WARN v1               |
+| **Prior decisions cited** | new spec without an ADR-link in "Prior decisions" if category ≠ docs-only                                                                                                                                                      | WARN v1               |
 
 Implementation in `tools/lint/spec-link-lint.ts`, `tools/lint/ears-test-lint.ts`. These guards are CI signals visible directly to the human reviewer in the PR UI: WARN-only guards appear as non-blocking checks; BLOCK guards prevent merge. Their role is "nudge the human reviewer" — they are inputs to human review, not inputs to an automated reviewer.
 

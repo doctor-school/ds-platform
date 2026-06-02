@@ -3,7 +3,9 @@ title: "003 — Аутентификация пользователя (net-new w
 description: "Требования: самостоятельная веб-аутентификация для портала врача — регистрация, верификация email/телефона, вход по паролю и беспарольно (email-OTP / SMS-OTP), BFF-сессия поверх __Host- cookie, ротация токенов, выход и сброс пароля. Создаёт backend-зеркало doctor_guest поверх Zitadel как IdP. Первая продуктовая feature-спека."
 slug: 003-user-authentication
 status: Draft
-tracker: https://github.com/doctor-school/ds-platform/milestone/3 # placeholder — milestone «Auth foundations v1» ещё не создан
+tracker: https://github.com/doctor-school/ds-platform/milestone/3
+parent_issue: https://github.com/doctor-school/ds-platform/issues/80
+issues: [81, 82, 83, 84, 85, 86, 87, 88, 89, 90]
 prior_decisions:
   - ADR-0001 — Identity / Auth / RBAC (IdP = Zitadel; §1 hybrid RBAC, §3 dual identifiers, §4 auth methods, §6 tokens, §7 security baseline, §7.3 audit)
   - ADR-0002 — Backend Core Stack (§3 nestjs-zod + URI versioning + Vitest)

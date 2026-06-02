@@ -3,7 +3,9 @@ title: "003 — User authentication (net-new web → doctor_guest)"
 description: "Requirements: net-new self-service web authentication for the doctor portal — registration, email/phone verification, password + passwordless (email-OTP / SMS-OTP) login, BFF session over a __Host- cookie, token rotation, logout, and password reset. Produces a backend doctor_guest mirror over Zitadel as the IdP. First product feature-spec."
 slug: 003-user-authentication
 status: Draft
-tracker: https://github.com/doctor-school/ds-platform/milestone/3 # placeholder — "Auth foundations v1" milestone not yet created
+tracker: https://github.com/doctor-school/ds-platform/milestone/3
+parent_issue: https://github.com/doctor-school/ds-platform/issues/80
+issues: [81, 82, 83, 84, 85, 86, 87, 88, 89, 90]
 prior_decisions:
   - ADR-0001 — Identity / Auth / RBAC (IdP = Zitadel; §1 hybrid RBAC, §3 dual identifiers, §4 auth methods, §6 tokens, §7 security baseline, §7.3 audit)
   - ADR-0002 — Backend Core Stack (§3 nestjs-zod + URI versioning + Vitest)

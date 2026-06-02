@@ -174,7 +174,7 @@ Zitadel ships a self-hostable MIT Login v2 (Next.js, on the Session API) runnabl
 Surfaced per AGENTS.md §6; **not** changed inside this spec-authoring:
 
 1. **§8 magic-link wording** — "custom build ~1–2 days" predates native email-OTP. The one-time secret is now native (`otp_email`); only the clickable-link transport is custom. Refine the wording; keep the mandatory security review for the link form.
-2. **§7 enumeration/lockout** — record the Zitadel "ignore unknown usernames" CVE bypasses (incl. the reset-flow bypass, CVE-2025-57770) and pin a patched Zitadel release in the DoD; our rate-limit + idempotent responses are the documented backstop (already consistent with §7).
+2. **§7 enumeration/lockout** — record the Zitadel "ignore unknown usernames" CVE bypasses (CVE-2024-41952 flag bypass, CVE-2025-57770 "select account" page, CVE-2026-23511 reset-flow + Login UI V2) and pin a patched Zitadel release (≥ 4.9.1 / ≥ 3.4.6) in the DoD; our rate-limit + idempotent responses are the documented backstop (already consistent with §7).
 3. **§2 Login v2** — note Login v2 as considered-and-rejected for credentials, so the choice is not re-opened by future contributors.
 
 ## 10. Error handling & security notes

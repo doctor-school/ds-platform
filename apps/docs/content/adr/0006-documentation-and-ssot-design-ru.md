@@ -1090,19 +1090,21 @@ Feature: <Feature name>
 
 Decomposition spec'а на атомарные задачи происходит в GitHub Issues (один EARS-handler ≈ один Issue), не в Git-файле. Spec удерживает intent (EARS-N requirement), Issues — execution state.
 
+**Milestone vs spec.** GitHub Milestone — это долгоживущая **product-тема** (например `Doctor onboarding v1`, `Auth foundations v1`), которая обычно охватывает несколько feature-спек и живёт недели–месяцы. Milestone — это **не** spec-папка. Спека, которую реализует конкретная работа, привязывается к ней **лейблом** `feature:NNN-<slug>`, slug которого и есть имя spec-папки (`apps/docs/content/specs/features/NNN-<slug>/`). Несколько спек могут жить под одним Milestone.
+
 **Setup для каждого feature:**
 
-1. **Create GitHub Milestone** `NNN-<feature-slug>` с описанием:
+1. **Назначить product-тему Milestone.** Переиспользовать существующий Milestone-тему, к которой относится feature, либо создать, если тема новая (имя темы, не `NNN-<slug>`):
 
    ```
-   Feature spec: apps/docs/content/specs/features/NNN-<slug>/NNN-requirements.md
+   Doctor onboarding v1 — net-new onboarding theme; spans 001-doctor-onboarding and later onboarding verticals.
    ```
 
-2. **Create Issues** — один per EARS-handler + cross-cutting tasks (DB migration, OpenAPI snapshot update, Playwright tests, Module README, glossary updates если новые термины):
+2. **Create Issues** — один per EARS-handler + cross-cutting tasks (DB migration, OpenAPI snapshot update, Playwright tests, Module README, glossary updates если новые термины). Лейбл `feature:NNN-<slug>` привязывает Issue к его спеке; Milestone группирует execution под темой:
 
    ```bash
    gh issue create \
-     --milestone "001-doctor-onboarding" \
+     --milestone "Doctor onboarding v1" \
      --title "[001] EARS-3: When OIDC callback received, the system shall ..." \
      --label "feature:001-doctor-onboarding,kind:ears-handler" \
      --body "Spec: apps/docs/content/specs/features/001-doctor-onboarding/001-requirements.md#ears-3
@@ -1113,11 +1115,11 @@ Decomposition spec'а на атомарные задачи происходит 
    "
    ```
 
-3. **Update `NNN-requirements.md` frontmatter** `tracker:` field → URL of created milestone.
+3. **Update `NNN-requirements.md` frontmatter** `tracker:` field → URL Milestone-темы, под которой сидит feature.
 
 4. **AI agent workflow при работе:**
    ```bash
-   gh issue list --milestone "001-doctor-onboarding" --state open
+   gh issue list --milestone "Doctor onboarding v1" --label "feature:001-doctor-onboarding" --state open
    gh issue view N    # read Issue + linked spec
    # implement → commit → push → PR auto-closes Issue on merge
    ```
@@ -1289,7 +1291,7 @@ Phase 0.5 (после Phase 0 готов):
 
 - Product Lead pilot edit Vision в Keystatic (smoke test UX).
 - Tech Lead пишет первый feature-spec в SDD-формате (`docs/content/specs/features/001-doctor-onboarding/` — 3 файла, без tasks.md).
-- **Создать GitHub Milestone `001-doctor-onboarding`** + Issues per EARS-handler через `gh issue create`. Заполнить frontmatter `tracker:` URL в `NNN-requirements.md`.
+- **Создать (или переиспользовать) product-тему GitHub Milestone** (например `Doctor onboarding v1`) + Issues per EARS-handler через `gh issue create`, каждый с лейблом `feature:001-doctor-onboarding`. Заполнить frontmatter `tracker:` URL в `NNN-requirements.md`.
 - **Setup GitHub Project v2 «DS Platform Implementation»** с swimlanes by feature label.
 - Drift detection в CI начинает блокировать merge.
 

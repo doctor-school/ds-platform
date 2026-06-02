@@ -25,7 +25,7 @@ This document is the implementation detail for ADR-0007. The ADR establishes "wh
 | Scope ADR-0007                   | Phase 0 = AI-loop methodology (dev-time); runtime AI infra — deferred with triggers                                                              | §1                |
 | Coding agent harnesses Pre-pilot | Claude Code (primary, sync) + Codex (opt-in async). Cursor deferred.                                                                             | §2                |
 | Agent loop discipline            | SDD + TDD as hard rules; iteration-end checklist machine-checkable                                                                               | §3                |
-| Task tracking source             | GitHub Issues (per ADR-0006 §9), milestone per feature-spec                                                                                      | inherits ADR-0006 |
+| Task tracking source             | GitHub Issues (per ADR-0006 §9), grouped under product-theme milestones                                                                          | inherits ADR-0006 |
 | Session bootstrap                | `tools/agent-bootstrap.ts` — deterministic script, output = live state snapshot                                                                  | §4                |
 | AI-specific drift guards         | Additional CI checks on top of ADR-0006 §7 (spec-link, TDD signal, EARS↔test linkage, etc.)                                                      | §5                |
 | LLM-assisted PR review           | Interactive only (three modes — subagent `/review`, parallel Codex CLI, pure human). No automated reviewer-bot, no LLM API keys in repo secrets. | §6, AGENTS.md §4  |
@@ -43,7 +43,7 @@ This document is the implementation detail for ADR-0007. The ADR establishes "wh
 
 ### 2.1 Iteration unit
 
-One iteration = one feature spec → one or more related PRs. Source of intent — `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}` (3 files, ADR-0006 §4). Source of execution state — GitHub Milestone `NNN-<slug>` + Issues per EARS handler (ADR-0006 §9). No `tasks.md` file.
+One iteration = one feature spec → one or more related PRs. Source of intent — `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}` (3 files, ADR-0006 §4). Source of execution state — Issues per EARS handler, each carrying the `feature:NNN-<slug>` label (which binds the Issue to its spec) and grouped under a long-lived product-theme GitHub Milestone (ADR-0006 §9; AGENTS.md §2 — the Milestone is a theme, not a spec folder). No `tasks.md` file.
 
 ### 2.2 Canonical procedure — skill catalog at `apps/docs/content/skills/<name>/SKILL.md`
 
@@ -63,7 +63,7 @@ The 8-step cycle (`do-feature-iteration` orchestrates these):
 2. PLAN
    - If no parent Issue for the spec yet → create +
      sub-issues per EARS handler via `gh issue create`
-       --milestone "NNN-<slug>" --label "feature:NNN-<slug>"
+       --milestone "<product theme>" --label "feature:NNN-<slug>"
    - If parent exists → pick an open sub-issue or open a new one
      (if a gap is discovered during the work)
 
@@ -167,7 +167,7 @@ Any agent at the start of a session (sync or async) runs the script and receives
    - gh pr list --author @me --state open --json number,title,reviewDecision,updatedAt
 
 3. Active spec(s)
-   - For each agent-working Issue: parses milestone name → spec folder path
+   - For each agent-working Issue: reads its feature:NNN-<slug> label → spec folder path
    - Reads NNN-requirements.md frontmatter: status, Prior decisions (list of ADRs)
    - Extracts glossary terms from spec body via [[term-id]] directives
 
@@ -244,15 +244,16 @@ async function ghPRs(): Promise<any[]> {
   return JSON.parse(stdout);
 }
 
-async function readSpecMeta(milestoneName: string) {
-  // milestone name = "NNN-slug" → spec path
+async function readSpecMeta(featureSlug: string) {
+  // feature:NNN-<slug> label slug = "NNN-slug" → spec path (NOT the milestone,
+  // which is a product theme; AGENTS.md §2)
   const specDir = resolve(
     REPO_ROOT,
     "apps/docs/content/specs/features",
-    milestoneName,
+    featureSlug,
   );
   try {
-    const numMatch = milestoneName.match(/^(\d{3})-/);
+    const numMatch = featureSlug.match(/^(\d{3})-/);
     if (!numMatch) return null;
     const raw = await readFile(
       resolve(specDir, `${numMatch[1]}-requirements.md`),
@@ -305,8 +306,13 @@ async function main() {
 
   const activeSpecs = await Promise.all(
     working.map(async (i) => {
-      const ms = i.milestone?.title;
-      return ms ? { issue: i, spec: await readSpecMeta(ms) } : null;
+      const slug = (i.labels ?? [])
+        .map(
+          (l: { name: string }) =>
+            l.name.match(/^feature:(\d{3}-[\w-]+)$/)?.[1],
+        )
+        .find(Boolean);
+      return slug ? { issue: i, spec: await readSpecMeta(slug) } : null;
     }),
   );
 
@@ -431,14 +437,14 @@ Before `git push` the agent goes through each item. If even one is false — do 
 
 ### 5.2 CI gates — AI-specific extensions (on top of ADR-0006 §7)
 
-| Guard                     | What it catches                                                          | Implementation                                                                                                                                                           | Severity Phase 0      |
-| ------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- |
-| **spec-link required**    | PR without a link to an Issue whose milestone = spec                     | GH Action: PR body contains `Closes #N`; Issue `#N` has milestone `NNN-<slug>`; spec folder `apps/docs/content/specs/features/NNN-<slug>/` exists.                       | BLOCK                 |
-| **TDD signal**            | implementation-only commit without a test file                           | GH Action: for each modified `src/**/*.ts` — `*.test.ts` is either in the diff, or commit history shows a test-commit preceding it. Heuristic; false positives possible. | WARN v1               |
-| **EARS ↔ test linkage**   | EARS requirement without `it('EARS-N: ...')`                             | Custom lint `tools/lint/ears-test-lint.ts`: parses EARS IDs in `NNN-requirements.md`, checks for it-descriptions with the same ID in the module.                         | WARN v1 → BLOCK v2    |
-| **Gherkin coverage**      | scenarios without Playwright step implementation                         | playwright-bdd native error — test fails if step is undefined.                                                                                                           | BLOCK (via test fail) |
-| **Spec status freshness** | Merged PR with spec:NNN but spec status='Draft'                          | Custom lint: at merge — check `status: In dev` minimum.                                                                                                                  | WARN v1               |
-| **Prior decisions cited** | New spec without cited ADRs in "Prior decisions" if category ≠ docs-only | Spec lint: `NNN-requirements.md` has a section with ≥1 ADR-link.                                                                                                         | WARN v1               |
+| Guard                     | What it catches                                                          | Implementation                                                                                                                                                                                                                               | Severity Phase 0      |
+| ------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| **spec-link required**    | PR labeled `feature:NNN-<slug>` not properly linked to its spec          | GH Action: PR body contains `Closes #N`; each linked Issue carries a (product-theme) milestone; the `feature:NNN-<slug>` label's spec folder `apps/docs/content/specs/features/NNN-<slug>/` exists with `NNN-requirements.md` (or `-en.md`). | BLOCK                 |
+| **TDD signal**            | implementation-only commit without a test file                           | GH Action: for each modified `src/**/*.ts` — `*.test.ts` is either in the diff, or commit history shows a test-commit preceding it. Heuristic; false positives possible.                                                                     | WARN v1               |
+| **EARS ↔ test linkage**   | EARS requirement without `it('EARS-N: ...')`                             | Custom lint `tools/lint/ears-test-lint.ts`: parses EARS IDs in `NNN-requirements.md`, checks for it-descriptions with the same ID in the module.                                                                                             | WARN v1 → BLOCK v2    |
+| **Gherkin coverage**      | scenarios without Playwright step implementation                         | playwright-bdd native error — test fails if step is undefined.                                                                                                                                                                               | BLOCK (via test fail) |
+| **Spec status freshness** | Merged PR with spec:NNN but spec status='Draft'                          | Custom lint: at merge — check `status: In dev` minimum.                                                                                                                                                                                      | WARN v1               |
+| **Prior decisions cited** | New spec without cited ADRs in "Prior decisions" if category ≠ docs-only | Spec lint: `NNN-requirements.md` has a section with ≥1 ADR-link.                                                                                                                                                                             | WARN v1               |
 
 > **Interim semantics note:** rows marked `BLOCK` assume a server-side required status check on `main`. While ADR-0008 §2.6 branch protection is deferred (GitHub Free + private repo blocks the branch-protection API — ADR-0008 §2.6), `BLOCK` is read operationally as **"CI job exits red and the Tech Lead treats it as a merge-blocker by convention"** — same outcome on the single-developer happy path, no server-side guarantee.
 
@@ -564,20 +570,36 @@ async function main() {
       l.name?.startsWith("feature:"),
     );
     if (!issueIsFeature) continue; // bug/chore Issue — skip spec-folder check
-    const ms = issue.milestone?.title;
-    if (!ms) {
+    // Milestone must be present (a product theme — any title; grouping only,
+    // ADR-0006 §9 / AGENTS.md §2). Its title is NOT a path.
+    if (!issue.milestone?.title) {
       throw new Error(
-        `Issue #${issueNum} has feature:* label but no milestone. Per ADR-0006 §9, every feature-Issue must have milestone NNN-<slug>.`,
+        `Issue #${issueNum} has feature:* label but no milestone. Every feature-Issue sits under a product-theme milestone.`,
       );
     }
-    const specDir = resolve(REPO_ROOT, "apps/docs/content/specs/features", ms);
+    // The spec folder is the slug of the feature:NNN-<slug> label.
+    const slug = issue.labels
+      .map((l) => l.name.match(/^feature:(\d{3}-[\w-]+)$/)?.[1])
+      .find(Boolean);
+    if (!slug) {
+      throw new Error(
+        `Issue #${issueNum} has a feature:* label but no valid feature:NNN-<slug> area label.`,
+      );
+    }
+    const specDir = resolve(
+      REPO_ROOT,
+      "apps/docs/content/specs/features",
+      slug,
+    );
     if (!existsSync(specDir)) {
       throw new Error(
-        `Issue #${issueNum} milestone '${ms}' does not match any spec folder at ${specDir}.`,
+        `Issue #${issueNum} label feature:${slug} does not match any spec folder at ${specDir}.`,
       );
     }
   }
-  console.log(`✓ PR #${prNum} correctly linked to spec via milestone.`);
+  console.log(
+    `✓ PR #${prNum} correctly linked to spec via feature:NNN-<slug> label.`,
+  );
 }
 
 main().catch((e) => {
@@ -960,11 +982,11 @@ Per ADR-0006 §9 conventions (title format `[NNN] EARS-N.M: ...`, label `kind:ea
 
 - If no parent Issue exists for the spec: create one with `--body-file` (a `--body` flag must be provided in non-interactive contexts; `gh issue create` without it opens an editor and hangs in CI/Codex):
   gh issue create --title "Feature NNN: <name>" \
-   --milestone "NNN-<slug>" --label "feature:NNN-<slug>" \
+   --milestone "<product theme>" --label "feature:NNN-<slug>" \
    --body-file .github/issue_templates/feature.md
   Then for each EARS-handler from `NNN-requirements.md`:
   gh issue create --title "[NNN] EARS-N.M: <description>" \
-   --milestone "NNN-<slug>" --label "feature:NNN-<slug>,kind:ears-handler,agent-ready" \
+   --milestone "<product theme>" --label "feature:NNN-<slug>,kind:ears-handler,agent-ready" \
    --body "Spec: apps/docs/content/specs/features/NNN-<slug>/. Parent: #<parent-issue>."
 - Use superpowers:writing-plans skill only if the task is multi-step within a single Issue.
 

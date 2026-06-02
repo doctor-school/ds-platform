@@ -1090,19 +1090,21 @@ Feature: <Feature name>
 
 Decomposition of the spec into atomic tasks happens in GitHub Issues (one EARS-handler ≈ one Issue), not in a Git file. The spec holds intent (EARS-N requirement), Issues hold execution state.
 
+**Milestones vs specs.** A GitHub Milestone is a long-lived **product theme** (e.g. `Doctor onboarding v1`, `Auth foundations v1`) that typically spans several feature specs and lives weeks–months. A Milestone is **not** a spec folder. The spec a piece of work implements is bound to it by the `feature:NNN-<slug>` **label**, whose slug is the spec folder name (`apps/docs/content/specs/features/NNN-<slug>/`). Several specs can sit under the same Milestone.
+
 **Setup for each feature:**
 
-1. **Create GitHub Milestone** `NNN-<feature-slug>` with description:
+1. **Assign the product-theme Milestone.** Reuse the existing theme Milestone the feature belongs to, or create one if the theme is new (theme name, not `NNN-<slug>`):
 
    ```
-   Feature spec: apps/docs/content/specs/features/NNN-<slug>/NNN-requirements.md
+   Doctor onboarding v1 — net-new onboarding theme; spans 001-doctor-onboarding and later onboarding verticals.
    ```
 
-2. **Create Issues** — one per EARS-handler + cross-cutting tasks (DB migration, OpenAPI snapshot update, Playwright tests, Module README, glossary updates if new terms):
+2. **Create Issues** — one per EARS-handler + cross-cutting tasks (DB migration, OpenAPI snapshot update, Playwright tests, Module README, glossary updates if new terms). The `feature:NNN-<slug>` label binds the Issue to its spec; the Milestone groups execution under the theme:
 
    ```bash
    gh issue create \
-     --milestone "001-doctor-onboarding" \
+     --milestone "Doctor onboarding v1" \
      --title "[001] EARS-3: When OIDC callback received, the system shall ..." \
      --label "feature:001-doctor-onboarding,kind:ears-handler" \
      --body "Spec: apps/docs/content/specs/features/001-doctor-onboarding/001-requirements.md#ears-3
@@ -1113,11 +1115,11 @@ Decomposition of the spec into atomic tasks happens in GitHub Issues (one EARS-h
    "
    ```
 
-3. **Update `NNN-requirements.md` frontmatter** `tracker:` field → URL of created milestone.
+3. **Update `NNN-requirements.md` frontmatter** `tracker:` field → URL of the theme Milestone the feature sits under.
 
 4. **AI agent workflow when working:**
    ```bash
-   gh issue list --milestone "001-doctor-onboarding" --state open
+   gh issue list --milestone "Doctor onboarding v1" --label "feature:001-doctor-onboarding" --state open
    gh issue view N    # read Issue + linked spec
    # implement → commit → push → PR auto-closes Issue on merge
    ```
@@ -1289,7 +1291,7 @@ Phase 0.5 (after Phase 0 is ready):
 
 - Product Lead pilot-edits Vision in Keystatic (UX smoke test).
 - Tech Lead writes the first feature spec in SDD format (`docs/content/specs/features/001-doctor-onboarding/` — 3 files, no tasks.md).
-- **Create GitHub Milestone `001-doctor-onboarding`** + Issues per EARS-handler via `gh issue create`. Fill in the `tracker:` URL frontmatter in `NNN-requirements.md`.
+- **Create (or reuse) the product-theme GitHub Milestone** (e.g. `Doctor onboarding v1`) + Issues per EARS-handler via `gh issue create`, each carrying the `feature:001-doctor-onboarding` label. Fill in the `tracker:` URL frontmatter in `NNN-requirements.md`.
 - **Setup GitHub Project v2 "DS Platform Implementation"** with swimlanes by feature label.
 - Drift detection in CI begins blocking merge.
 

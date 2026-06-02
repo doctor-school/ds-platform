@@ -204,24 +204,24 @@ Sequence / state / ER / C4Context — все Mermaid в MDX. Rendering — Fumad
 
 Чтобы избежать false-SSOT в Git (`tasks.md`), state работы живёт в task-tracker'ах. **Два tracker'а — две разные зоны ответственности**, cross-link через URL.
 
-| Что трекаем                                                                            | Где                                               | Почему                                                                                                                                           |
-| -------------------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Stack ADRs, infra milestones, product/PM decisions, hiring, fundraising                | Plane workspace `doctor-school` (DSP/DSC/DSM/DSO) | Strategic-уровень, cross-team, Product Lead работает в Plane native, CLAUDE.md pp-plane-first rule                                               |
-| Implementation tasks для DS Platform code (EARS handlers, bugs, refactors, deps, perf) | **GitHub Issues** в DS Platform repo              | PR-native (auto-close, mention, sub-issues, GitHub Projects v2), AI работает с `gh` CLI в репо, milestone-cleanly разбивается по feature-spec'ам |
-| Cross-cutting initiatives (release planning, infrastructure milestone)                 | Plane parent + GitHub Milestone children          | Strategic owner = Plane, implementation детали = GitHub                                                                                          |
+| Что трекаем                                                                            | Где                                               | Почему                                                                                                                                                     |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stack ADRs, infra milestones, product/PM decisions, hiring, fundraising                | Plane workspace `doctor-school` (DSP/DSC/DSM/DSO) | Strategic-уровень, cross-team, Product Lead работает в Plane native, CLAUDE.md pp-plane-first rule                                                         |
+| Implementation tasks для DS Platform code (EARS handlers, bugs, refactors, deps, perf) | **GitHub Issues** в DS Platform repo              | PR-native (auto-close, mention, sub-issues, GitHub Projects v2), AI работает с `gh` CLI в репо, лейблы `feature:NNN-<slug>` привязывают Issues к их спекам |
+| Cross-cutting initiatives (release planning, infrastructure milestone)                 | Plane parent + GitHub Milestone children          | Strategic owner = Plane, implementation детали = GitHub                                                                                                    |
 
 **Convention GitHub Issues для feature-implementation:**
 
-- **One Milestone per feature** (например `001-doctor-onboarding`), description содержит link на `apps/docs/content/specs/features/001-doctor-onboarding/001-requirements.md`.
+- **Milestone = product-тема** (например `Doctor onboarding v1`) — долгоживущая тема, может охватывать несколько feature-спек (AGENTS.md §2). Milestone — это **не** spec-папка; спека, которую реализует Issue, привязывается лейблом `feature:NNN-<slug>`.
 - **One Issue per EARS-handler** — title `[001] EARS-3: When OIDC callback received, the system shall ...`, body содержит link на specific EARS-ID в `NNN-requirements.md`.
-- **Labels** — `feature:NNN-name`, `kind:ears-handler` / `kind:bug` / `kind:refactor` / `kind:dep-upgrade`.
+- **Labels** — `feature:NNN-<slug>` (привязывает Issue к `apps/docs/content/specs/features/NNN-<slug>/`), `kind:ears-handler` / `kind:bug` / `kind:refactor` / `kind:dep-upgrade`.
 - **GitHub Project v2** — «DS Platform Implementation» board с swimlanes by feature.
 
 **Cross-linking:**
 
 - Plane Issue → GitHub: URL в description или comment.
 - GitHub Issue → Plane: URL в body, optional label `plane:DSO-N`.
-- Feature spec → GitHub Milestone: frontmatter поле `tracker: <github-milestone-url>` в `NNN-requirements.md`.
+- Feature spec → его product-тема GitHub Milestone: frontmatter поле `tracker: <github-milestone-url>` в `NNN-requirements.md` (несколько спек под одной темой делят URL).
 
 **AI-агент workflow:**
 

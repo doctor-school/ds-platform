@@ -69,7 +69,7 @@ gh pr merge <PR-number> --auto --squash --delete-branch
 
 **ADRs** live in `apps/docs/content/adr/`, rendered at `/adr/<slug>`. Paired design spec — `NNNN-<slug>-design.md`.
 
-**Feature specs** live in `apps/docs/content/specs/features/NNN-<slug>/` (3 files: `NNN-requirements.md`, `NNN-design.md`, `NNN-scenarios.feature`). One spec → multiple Issues (one per EARS-handler). Milestones are used independently of specs: a Milestone tracks a long-lived product theme (`Auth foundations v1`, `Directual cutover`, `Doctor portal MVP`) that typically spans multiple specs and lives weeks–months. Specs themselves do not become Milestones. Format spec moved into `apps/docs/content/skills/author-ears-spec/SKILL.md`.
+**Feature specs** live in `apps/docs/content/specs/features/NNN-<slug>/` (3 files: `NNN-requirements.md`, `NNN-design.md`, `NNN-scenarios.feature`). One spec → multiple Issues (one per EARS-handler), in a fixed order: the spec triplet ships as **one docs-PR**; the child Issues are opened on that same branch and their numbers written back into the `issues:` frontmatter, so the spec PR carries both; it merges on a Mode (a) verdict + green CI; per-iteration **code** PRs start only **after** the spec is on `main` (the `spec-link` BLOCK guard, §5, requires it). Recipe: `author-ears-spec/SKILL.md` step 7. Milestones are used independently of specs: a Milestone tracks a long-lived product theme (`Auth foundations v1`, `Directual cutover`, `Doctor portal MVP`) that typically spans multiple specs and lives weeks–months. Specs themselves do not become Milestones. Format spec moved into `apps/docs/content/skills/author-ears-spec/SKILL.md`.
 
 ---
 

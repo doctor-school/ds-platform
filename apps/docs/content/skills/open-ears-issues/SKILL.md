@@ -37,19 +37,45 @@ mode: inline
      --body "Spec: apps/docs/content/specs/features/NNN-<slug>/. Parent: #<parent-issue>."
    ```
 
-   Always pass `--body` — `gh issue create` without `--body`/`--body-file` opens an editor and hangs in non-interactive contexts.
+   Always pass `--body` — `gh issue create` without `--body`/`--body-file` opens an editor and hangs in non-interactive contexts. Fill the body's **Dependencies** field (`Blocked by:` / `Blocks:`) with the human-readable graph — prose alone is **not** sufficient; it must be backed by the native links set in step 4.
 
-4. **Record the Issue numbers** in the feature-branch commit message and add an `issues:` block to the `NNN-requirements.md` frontmatter (`issues: [N1, N2, N3, …]`).
+4. **Wire the native relationships** (mandatory — prose in the body is not machine-readable, and the board ordering procedure reads only the native graph). Two relationship types, set via the GitHub REST API through `gh api`:
+   - **Sub-issue hierarchy** — attach every child as a sub-issue of the parent.
+   - **Blocked-by / blocking** — set the dependency edges between children (and on the parent where it applies).
+
+   Both endpoints take the target's **numeric database id** (not the issue number). Resolve it first:
+
+   ```bash
+   OWNER=doctor-school; REPO=ds-platform
+   # DB id of issue #N:
+   gh api "repos/$OWNER/$REPO/issues/<N>" --jq .id
+   ```
+
+   ```bash
+   # Attach child #C as a sub-issue of parent #P (sub_issue_id = DB id of #C):
+   gh api --method POST "repos/$OWNER/$REPO/issues/<P>/sub_issues" \
+     -F sub_issue_id="$(gh api "repos/$OWNER/$REPO/issues/<C>" --jq .id)"
+
+   # Mark child #B as blocked by #A (issue_id = DB id of #A, the blocker):
+   gh api --method POST "repos/$OWNER/$REPO/issues/<B>/dependencies/blocked_by" \
+     -F issue_id="$(gh api "repos/$OWNER/$REPO/issues/<A>" --jq .id)"
+   ```
+
+   Verify with the read endpoints: `gh api repos/$OWNER/$REPO/issues/<P>/sub_issues` and `gh api repos/$OWNER/$REPO/issues/<B>/dependencies/blocked_by`. Worked example: 003's parent #80 + children #81–#90 are wired this way.
+
+5. **Record the Issue numbers** in the feature-branch commit message and add an `issues:` block to the `NNN-requirements.md` frontmatter (`issues: [N1, N2, N3, …]`).
 
 ## Output
 
 - Parent Issue + N child Issues open.
+- Native links set: each child is a sub-issue of the parent, and the blocked-by graph is wired; every body's **Dependencies** field matches the native graph.
 - `NNN-requirements.md` frontmatter updated with the Issue numbers.
 
 ## Failure mode
 
 - Substituting `enhancement` (or any other generic label) without a follow-up via `surface-decision-debt` — F-8 / F-19 pattern.
 - Forgetting `--body` and letting the CLI hang — defensive fix at the call site.
+- Recording dependencies only as prose in the body and skipping the native links (step 4) — the board ordering procedure reads the native graph, so prose-only dependencies leave the operational surface blind. This is the gap #93 closes.
 
 ## Related skills
 

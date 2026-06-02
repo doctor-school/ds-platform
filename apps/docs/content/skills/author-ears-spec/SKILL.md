@@ -32,7 +32,7 @@ You are authoring a 3-file SDD triplet for a new feature in the DS Platform mono
    - **EARS numbering: flat (`EARS-1`, `EARS-2`, …) per ADR-0006 §4** (closing G11 finding F-5). Use nested `N.M` **only** when a single handler genuinely carries multiple shall-clauses (rare).
 3. **Write `NNN-design.md`** — Mermaid sequence diagrams of cascades, state diagrams of lifecycles, ER fragments.
 4. **Write `NNN-scenarios.feature`** — Gherkin, happy path + 2–3 failure branches.
-5. **Issue body** — when the lead agent opens the parent Issue, the body must explicitly list the scope of any **stub packages** being graduated (e.g., "this feature graduates `packages/foo` from stub to first concrete export"). Closing G11 finding F-20.
+5. **Issue body** — when the lead agent opens the parent Issue, the body must explicitly list the scope of any **stub packages** being graduated (e.g., "this feature graduates `packages/foo` from stub to first concrete export"). Closing G11 finding F-20. Issue creation itself is handled by [`open-ears-issues`](../open-ears-issues/SKILL.md), which **must** wire the native sub-issue hierarchy and blocked-by graph (its step 4) — not just record dependencies as prose.
 6. **Commit the triplet** to a feature branch `feat/spec-NNN-<slug>`.
 
 ### Output

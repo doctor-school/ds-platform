@@ -75,7 +75,7 @@ gh pr merge <PR-number> --auto --squash --delete-branch
 
 ## 2.1 Issue conventions
 
-New Issues use the `.github/ISSUE_TEMPLATE/default.md` skeleton (Context / Scope / Spec reference / Acceptance criteria / Dependencies / Notes). Agents resuming In Progress items read the latest stop-state comment first. Stop-state comments follow a fixed four-field shape — see `apps/docs/content/specs/tech/2026-05-21-dsp-198-github-projects-v2-board-design.md` §6 for the canonical form. The board ordering procedure (resume → rework → fresh → unblock) is documented in §5 of the same spec.
+New Issues use the `.github/ISSUE_TEMPLATE/default.md` skeleton (Context / Scope / Spec reference / Acceptance criteria / Dependencies / Notes). When opening an Issue set from a spec, native GitHub relationships are **mandatory, not optional prose**: attach each child as a **sub-issue** of the parent and set the **blocked-by/blocking** links between children — the board ordering procedure reads only this native graph (board-design §5). The recipe lives in `apps/docs/content/skills/open-ears-issues/SKILL.md` step 4. Agents resuming In Progress items read the latest stop-state comment first. Stop-state comments follow a fixed four-field shape — see `apps/docs/content/specs/tech/2026-05-21-dsp-198-github-projects-v2-board-design.md` §6 for the canonical form. The board ordering procedure (resume → rework → fresh → unblock) is documented in §5 of the same spec.
 
 ---
 

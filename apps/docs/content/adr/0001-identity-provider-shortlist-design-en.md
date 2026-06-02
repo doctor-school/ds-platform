@@ -185,10 +185,11 @@ Backend `users` — **mirror** based on IdP user-events. **This handshake is a c
 
 - **Headless for credentials:** all login/register/reset/MFA/magic-link forms — on our domain (`doctor.school`, `app.doctor.school`, mobile native), sending JSON to the IdP headless API and receiving a next-step JSON response. The user never sees the IdP UI.
 - **Near-headless for social:** social login is a **classic OAuth Authorization Code Flow with PKCE** (RFC 7636), which by specification requires a browser redirect to the provider. The visible hop through our subdomain `auth.doctor.school` under our brand — ~1 second. Not "headless" in the strict sense, but also not "third-party IdP UI".
+- **Zitadel Login v2 — considered and rejected for credentials** (ADR-0001 §2): it would cut custom UI code but forces a redirect hop to an auth subdomain, contradicting the headless-inline choice for credentials (redirect is accepted only for social). Recorded so it is not re-litigated.
 
 ### 4.2. By provider
 
-Zitadel exposes a native headless-first **v2 Session API** (gRPC + REST) — explicit, resource-oriented session creation and step transitions. Covers login / register / password reset / magic-link / SMS-OTP / MFA prompts (magic-link is a custom build over the session API — see ADR-0001 §8 known trade-offs).
+Zitadel exposes a native headless-first **v2 Session API** (gRPC + REST) — explicit, resource-oriented session creation and step transitions. Covers login / register / password reset / magic-link / SMS-OTP / MFA prompts (only the clickable-link transport of magic-link is a custom build over the session API — the one-time secret is native; see ADR-0001 §8 known trade-offs).
 
 ### 4.3. Social login flow
 
@@ -252,6 +253,8 @@ Minimum set of protections for production launch. Implementation — partly IdP,
 | Cookie security                    | Backend           | `Secure; HttpOnly; SameSite=Lax; __Host-` prefix per app; **no tokens in localStorage**. Cross-app continuity via OIDC silent re-auth (ADR-0001 §6). Full session security profile — ADR-0001 §6 (single source of truth). |
 | Session fixation protection        | IdP               | Regenerate session-id on login and on MFA elevation                                                                                                                                                                        |
 | PD in logs                         | Backend           | Email/phone masked in logs (`a***@example.com`, `+7***1234`); full values only in encrypted audit log with RF-resident KMS                                                                                                 |
+
+> **Zitadel enumeration bypasses — operational note.** Zitadel's own "ignore unknown usernames" protection has been bypassed repeatedly (CVE-2024-41952 — flag not consistently honoured; CVE-2025-57770 — "select account" page; CVE-2026-23511 — password-reset endpoints + Login UI V2). The idempotent-response + rate-limit rows above are our backstop; in addition, **pin a Zitadel release patched against all three (≥ 4.9.1 / ≥ 3.4.6)** as part of the Definition of Done (ADR-0001 §7–§8).
 
 ---
 

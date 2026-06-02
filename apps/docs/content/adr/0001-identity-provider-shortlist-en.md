@@ -8,7 +8,7 @@ lang: en
 
 # ADR-0001 — Identity / Auth / RBAC for DS Platform
 
-**Date:** 2026-05-25 (current revision; full evolution history in `git log`).
+**Date:** 2026-06-02 (current revision; full evolution history in `git log`).
 **Status:** Accepted — IdP = Zitadel
 **Related to:** Plane DSO-25 (`0a8f2276-956f-4f4e-9134-2f197ff4bab8`), milestone DSO-24, DSO-63 (external validation), DSP-209 (final IdP selection)
 **Design spec:** `apps/docs/content/adr/0001-identity-provider-shortlist-design-en.md`
@@ -42,6 +42,7 @@ DS Platform is a standalone platform replacing the current Bubble + Directual + 
 
 - Credentials (login/register/reset/MFA/magic-link) — forms on `doctor.school` via IdP headless API.
 - Social — classic OAuth Authorization Code Flow + PKCE with redirect via `auth.doctor.school` (our subdomain). ~1-second visible hop under our brand.
+- **Zitadel Login v2 — considered and rejected for credentials.** Zitadel ships a self-hostable MIT Login v2 (Next.js on the Session API) that would cut custom UI code, but it requires a redirect hop to an auth subdomain — contradicting the seamless inline-forms choice above for _credentials_ (the redirect model is accepted only for _social_). The headless inline forms keep the chosen UX, and the auth primitives stay native either way. Recorded so the choice is not re-litigated; reopening it would revise this section.
 
 ### 3. Identifiers = dual + UUID PK
 
@@ -89,7 +90,7 @@ Rationale for deferral: v1 user base ≤200 from the existing Doctor.School data
 - SMS toll-fraud protection: per-phone (3/hour) + per-IP (10/hour) + per-ASN (100/hour) + **global daily budget circuit-breaker** (≤2000 SMS/day).
 - Account lockout: 10 failed logins / 30 min → soft-lock + email notification.
 - Refresh token theft detection: re-use → invalidate the chain (RFC 6819).
-- Email/phone enumeration protection: idempotent responses on login/reset/register with timing delta ≤50ms.
+- Email/phone enumeration protection: idempotent responses on login/reset/register with timing delta ≤50ms. This (plus the rate limits above) is **our** backstop, not the only line of defence — Zitadel has shipped repeated login-UI enumeration bypasses where its own "ignore unknown usernames" guard failed: the flag not consistently honoured (CVE-2024-41952), the "select account" page (CVE-2025-57770), and the password-reset endpoints + Login UI V2 (CVE-2026-23511). **Definition of Done for any Zitadel deployment: pin a release patched against all three — ≥ 4.9.1 (v4 line) or ≥ 3.4.6 (v3 line).**
 - CAPTCHA: **Yandex SmartCaptcha** (RF-accessible; hCaptcha/reCAPTCHA deprecated in RF).
 - CSRF protection + cookie security profile (`__Host-` per app, no shared cookies across subdomains — see §6; full security profile described here, not duplicated in the frontend spec).
 - **Content Security Policy (CSP) profile-per-zone** — mandatory protection against XSS/clickjacking, differentiated by zone sensitivity level:
@@ -119,7 +120,7 @@ Cross-zone constraints: all profiles ship `Strict-Transport-Security: max-age=31
 
 **Known trade-offs.**
 
-- Magic-link is a custom build on the session API (~1–2 days; not a Zitadel core feature, GitHub #2075). Mandatory security review.
+- Magic-link: only the clickable-link transport is a custom build over the session API — the one-time secret itself is native (`otp_email`); the custom part is the link wrapper and its email delivery (not a Zitadel core feature, GitHub #2075). Mandatory security review for the link form.
 - Zitadel self-hosted base ~13.4k★ — does not bite in v1 ≤200 users; re-evaluation triggers only if v2+ uncovers production maturity issues.
 
 **Operational fallback.** Keycloak if Zitadel hits critical issues in v1 (most mature OSS alternative).

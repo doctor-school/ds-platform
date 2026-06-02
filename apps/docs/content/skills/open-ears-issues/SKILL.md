@@ -43,25 +43,20 @@ mode: inline
    - **Sub-issue hierarchy** — attach every child as a sub-issue of the parent.
    - **Blocked-by / blocking** — set the dependency edges between children (and on the parent where it applies).
 
-   Both endpoints take the target's **numeric database id** (not the issue number). Resolve it first:
+   Both endpoints take the target's **numeric database id** (not the issue number) — `gh api repos/$OWNER/$REPO/issues/<n> --jq .id`. Resolve the ids once (a `number → id` lookup); avoid a fresh round-trip per edge when wiring a whole set.
 
    ```bash
-   OWNER=doctor-school; REPO=ds-platform
-   # DB id of issue #N:
-   gh api "repos/$OWNER/$REPO/issues/<N>" --jq .id
-   ```
+   OWNER=doctor-school; REPO=ds-platform                     # set once; reused by every call below
+   id() { gh api "repos/$OWNER/$REPO/issues/$1" --jq .id; }  # number → DB id
 
-   ```bash
    # Attach child #C as a sub-issue of parent #P (sub_issue_id = DB id of #C):
-   gh api --method POST "repos/$OWNER/$REPO/issues/<P>/sub_issues" \
-     -F sub_issue_id="$(gh api "repos/$OWNER/$REPO/issues/<C>" --jq .id)"
+   gh api --method POST "repos/$OWNER/$REPO/issues/<P>/sub_issues" -F sub_issue_id="$(id <C>)"
 
    # Mark child #B as blocked by #A (issue_id = DB id of #A, the blocker):
-   gh api --method POST "repos/$OWNER/$REPO/issues/<B>/dependencies/blocked_by" \
-     -F issue_id="$(gh api "repos/$OWNER/$REPO/issues/<A>" --jq .id)"
+   gh api --method POST "repos/$OWNER/$REPO/issues/<B>/dependencies/blocked_by" -F issue_id="$(id <A>)"
    ```
 
-   Verify with the read endpoints: `gh api repos/$OWNER/$REPO/issues/<P>/sub_issues` and `gh api repos/$OWNER/$REPO/issues/<B>/dependencies/blocked_by`. Worked example: 003's parent #80 + children #81–#90 are wired this way.
+   GitHub derives the reciprocal edge automatically — setting `blocked_by` on #B makes #A "blocks" #B; do **not** double-wire the other direction. Verify with the read endpoints: `gh api repos/$OWNER/$REPO/issues/<P>/sub_issues` and `gh api repos/$OWNER/$REPO/issues/<B>/dependencies/blocked_by`. Worked example: 003's parent #80 + children #81–#90 are wired this way.
 
 5. **Record the Issue numbers** in the feature-branch commit message and add an `issues:` block to the `NNN-requirements.md` frontmatter (`issues: [N1, N2, N3, …]`).
 

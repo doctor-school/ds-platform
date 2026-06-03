@@ -34,8 +34,12 @@ export class UserMirrorService {
    * a default false.
    */
   async upsert(input: MirrorUpsert): Promise<void> {
+    // `role` is intentionally NOT in the conflict `set`: a new row is granted
+    // `doctor_guest` (via `values` below), but an existing row's role is
+    // preserved on update so a reconcile/webhook pass never downgrades a future
+    // elevated role back to `doctor_guest`. F1 only has `doctor_guest`, so this
+    // is a forward-looking seam, not a behaviour change today.
     const set: Record<string, unknown> = {
-      role: "doctor_guest",
       updatedAt: new Date(),
     };
     if (input.email !== undefined) set["email"] = input.email;

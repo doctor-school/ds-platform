@@ -157,4 +157,30 @@ describe.skipIf(!process.env.DATABASE_URL)("Register (e2e)", () => {
     );
     expect(rows).toHaveLength(1);
   });
+
+  it("EARS-16: when the identifier exists under a divergent mirror row, the system shall stay enumeration-safe (generic failure, no duplicate)", async () => {
+    const email = uniqueEmail("16div");
+    // Mirror↔IdP divergence: the mirror already holds this email under one sub,
+    // but the fake IdP does not know it and will mint a NEW sub on register —
+    // so the insert collides on the email unique constraint, not zitadel_sub.
+    await pool.query(
+      "INSERT INTO users (zitadel_sub, email, role) VALUES ($1, $2, 'doctor_guest')",
+      [`divergent-${runId}`, email],
+    );
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/auth/register",
+      payload: { email, password: "sufficiently-long-pw", consent },
+    });
+
+    // Generic 400 (not a 500) — indistinguishable from any other failure.
+    expect(res.statusCode).toBe(400);
+    const { rows } = await pool.query(
+      "SELECT zitadel_sub FROM users WHERE email = $1",
+      [email],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].zitadel_sub).toBe(`divergent-${runId}`);
+  });
 });

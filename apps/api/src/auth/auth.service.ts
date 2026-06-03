@@ -26,6 +26,27 @@ type Db = DrizzleHandle["db"];
 // (F6). Same string, same 400, for every failure branch.
 const GENERIC_FAILURE = "the request could not be completed";
 
+/** Postgres unique-constraint violation SQLSTATE (`unique_violation`). */
+const PG_UNIQUE_VIOLATION = "23505";
+
+/**
+ * True when the error is a Postgres unique-constraint violation. node-postgres
+ * sets `.code` on the error, but drizzle wraps it (e.g. `DrizzleQueryError`)
+ * with the pg error on `.cause`, so walk the cause chain.
+ */
+function isUniqueViolation(err: unknown): boolean {
+  for (let e: unknown = err, depth = 0; e != null && depth < 5; depth++) {
+    if (
+      typeof e === "object" &&
+      (e as { code?: unknown }).code === PG_UNIQUE_VIOLATION
+    ) {
+      return true;
+    }
+    e = (e as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
 /**
  * BFF auth orchestration for F1 (#85): registration cascade (EARS-1/2), the
  * consent gate (EARS-20), verification (EARS-3/4), and webhook mirror sync
@@ -70,33 +91,47 @@ export class AuthService {
       // Consent-before-PD invariant (EARS-20): the mirror row and its consent
       // records commit atomically, so no PD-bearing row can exist without
       // consent even under a mid-write failure.
-      await this.db.transaction(async (tx) => {
-        const [row] = await tx
-          .insert(users)
-          .values({
-            zitadelSub: created.sub,
-            email: req.email,
-            phone: req.phone,
-            role: "doctor_guest",
-          })
-          .onConflictDoUpdate({
-            target: users.zitadelSub,
-            set: { updatedAt: new Date() },
-          })
-          .returning({ id: users.id });
+      try {
+        await this.db.transaction(async (tx) => {
+          const [row] = await tx
+            .insert(users)
+            .values({
+              zitadelSub: created.sub,
+              email: req.email,
+              phone: req.phone,
+              role: "doctor_guest",
+            })
+            .onConflictDoUpdate({
+              target: users.zitadelSub,
+              set: { updatedAt: new Date() },
+            })
+            .returning({ id: users.id });
 
-        // The insert always yields a row (new sub, or the conflict update);
-        // the guard satisfies the type and would catch a silent no-op.
-        if (!row) throw new Error("mirror upsert returned no row");
+          // The insert always yields a row (new sub, or the conflict update);
+          // the guard satisfies the type and would catch a silent no-op.
+          if (!row) throw new Error("mirror upsert returned no row");
 
-        await tx.insert(consentRecords).values(
-          req.consent.map((c) => ({
-            userId: row.id,
-            purpose: c.purpose,
-            version: c.version,
-          })),
-        );
-      });
+          await tx.insert(consentRecords).values(
+            req.consent.map((c) => ({
+              userId: row.id,
+              purpose: c.purpose,
+              version: c.version,
+            })),
+          );
+        });
+      } catch (err) {
+        // A unique-constraint violation here means the identifier already
+        // exists under a *different* zitadel_sub (mirror↔IdP divergence: the
+        // IdP reported a new user, our mirror disagrees). The onConflict target
+        // is zitadel_sub, so an email/phone collision is not absorbed and would
+        // surface as a 500 — a distinguishable signal. Map it to the same
+        // generic failure so the response stays enumeration-safe (EARS-16); the
+        // reconciliation sweep (EARS-19) is the path that heals the divergence.
+        if (isUniqueViolation(err)) {
+          throw new BadRequestException(GENERIC_FAILURE);
+        }
+        throw err;
+      }
 
       // Trigger the Zitadel verification code for the registered channel.
       if (req.email) await this.idp.requestEmailVerification(created.sub);

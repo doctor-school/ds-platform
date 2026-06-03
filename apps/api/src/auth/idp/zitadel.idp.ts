@@ -78,19 +78,25 @@ export class ZitadelIdpClient implements IdpClient {
   }
 
   async requestEmailVerification(sub: string): Promise<void> {
-    await this.fetchImpl(this.url(`/v2/users/${sub}/email/_send_code`), {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify({}),
-    });
+    const res = await this.fetchImpl(
+      this.url(`/v2/users/${sub}/email/_send_code`),
+      { method: "POST", headers: this.headers(), body: JSON.stringify({}) },
+    );
+    // Surface a failed send instead of silently looking like success
+    // (consistent with createUser); the caller decides the user-facing message.
+    if (!res.ok) {
+      throw new Error(`zitadel email send_code failed: HTTP ${res.status}`);
+    }
   }
 
   async requestPhoneVerification(sub: string): Promise<void> {
-    await this.fetchImpl(this.url(`/v2/users/${sub}/phone/_send_code`), {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify({}),
-    });
+    const res = await this.fetchImpl(
+      this.url(`/v2/users/${sub}/phone/_send_code`),
+      { method: "POST", headers: this.headers(), body: JSON.stringify({}) },
+    );
+    if (!res.ok) {
+      throw new Error(`zitadel phone send_code failed: HTTP ${res.status}`);
+    }
   }
 
   async verifyEmail(sub: string, code: string): Promise<boolean> {

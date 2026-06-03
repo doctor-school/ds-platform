@@ -72,6 +72,12 @@ export interface IdpClaims {
 export interface IdpTokens {
   accessToken: string;
   refreshToken: string;
+  /**
+   * The **access-token** lifetime (≈15 min, ADR-0001 §6) — NOT the session/cookie
+   * lifetime. The web session lives as long as the refresh token (30 d), so the
+   * cookie `Max-Age` and the store TTL are driven by that, not by this value
+   * (which F4/EARS-9 uses to decide when to rotate). Do not wire it to the cookie.
+   */
   expiresInSeconds: number;
   claims: IdpClaims;
 }

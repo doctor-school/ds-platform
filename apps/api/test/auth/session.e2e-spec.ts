@@ -98,7 +98,7 @@ describe.skipIf(!process.env.DATABASE_URL)("BFF session (e2e)", () => {
     expect(setCookieHeader).not.toMatch(/Domain=/i);
   });
 
-  it("EARS-8: the session read returns the minimal claim set (sub, roles[], mfa, sid) and never a token", async () => {
+  it("EARS-8: the session read returns the minimal principal claim set (sub, roles[], mfa) and never a token or sid", async () => {
     const { cookieValue } = await login(uniqueEmail());
 
     const res = await app.inject({

@@ -228,6 +228,25 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
 
+  # ─── Endpoint authorization completeness gate (BLOCK) ────────────────
+  # Spec: 2026-05-18-ds-platform-endpoint-authorization-matrix-design-en.md §6.
+  # Deliberate exception to the Phase-0 WARN posture (ADR-0007 §2.6 / spec §6.3):
+  # ADR-0001 §2.5 and engineering-readiness §3 both mandate hard failure on
+  # missing @Authz metadata, and the matrix is a named pre-pilot security
+  # BLOCKER. Vacuously green when there are no routes to classify. No Postgres
+  # service: the gate boots a Nest application *context* (no listen) with a
+  # placeholder DATABASE_URL and never issues a query (the pool is lazy).
+  endpoint-authz:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:endpoint-authz
+
   ears-tests:
     needs: setup
     continue-on-error: true # WARN v1
@@ -285,7 +304,17 @@ jobs:
   # Renaming this job breaks merge gating.
   ci:
     needs:
-      [lint, types, unit, api-e2e, build, docs-build, markdown-links, spec-link]
+      [
+        lint,
+        types,
+        unit,
+        api-e2e,
+        build,
+        docs-build,
+        markdown-links,
+        spec-link,
+        endpoint-authz,
+      ]
     if: always()
     runs-on: ubuntu-latest
     steps:

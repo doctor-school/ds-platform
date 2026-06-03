@@ -1,0 +1,36 @@
+import { Global, Module } from "@nestjs/common";
+import { loadEnv } from "../../config/env.schema.js";
+import { FakeIdpClient } from "./idp.fake.js";
+import { IDP_CLIENT, type IdpClient } from "./idp.types.js";
+import { ZitadelIdpClient } from "./zitadel.idp.js";
+
+/**
+ * Binds the {@link IDP_CLIENT} port (design §2). The single place the concrete
+ * IdP adapter is chosen: a real {@link ZitadelIdpClient} when both an issuer and
+ * a service token are configured, otherwise the in-memory {@link FakeIdpClient}
+ * (the dev-stand default — `IDP_CLIENT_SECRET` is empty, so no live IdP is
+ * required to boot or to exercise the F1 cascade against a real Postgres).
+ *
+ * `@Global` so feature modules (003 F1/F2/F3/F5) inject the port without
+ * re-importing — mirrors `BotProtectionModule`.
+ */
+@Global()
+@Module({
+  providers: [
+    {
+      provide: IDP_CLIENT,
+      useFactory: (): IdpClient => {
+        const env = loadEnv();
+        if (env.IDP_ISSUER && env.IDP_SERVICE_TOKEN) {
+          return new ZitadelIdpClient({
+            baseUrl: env.IDP_ISSUER,
+            serviceToken: env.IDP_SERVICE_TOKEN,
+          });
+        }
+        return new FakeIdpClient();
+      },
+    },
+  ],
+  exports: [IDP_CLIENT],
+})
+export class IdpModule {}

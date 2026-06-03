@@ -146,9 +146,9 @@ Cross-zone constraints: all profiles ship `Strict-Transport-Security: max-age=31
 
 The base session issued after primary login (§6) carries a single security level, uniform across read and write operations of any kind. For elevated-risk actions — destructive admin operations against users (role grant/revoke, lock, erasure-execute), account-level deletion / erasure-request by the subject, payment-method change, MFA changes, initiating PD export, logout-all — that uniform level is insufficient: an attacker holding a stolen long-lived session MUST NOT be able to execute a catastrophic action immediately without fresh re-authentication.
 
-The list of endpoint classes that require step-up is normatively fixed in **endpoint-authorization-matrix-design §8.1** (`auth: 'step-up'` declaration on `@Authz`). The step-up trigger is OIDC `prompt=login` + `acr_values=urn:ds:acr:mfa-fresh` at the IdP. After successful step-up, the IdP MUST issue an access token with an additional claim `acr=mfa-fresh` and a `mfa_fresh_at` timestamp; the fresh step-up TTL is **30 minutes** (see identity-auth-rbac-design §7.1).
+Each step-up endpoint is flagged in the **endpoint-authorization-matrix** via the `@Authz({ step_up: true })` declaration; the normative list of step-up endpoints is the matrix projection of the rows carrying that flag (`step_up` is orthogonal to the `auth_check` kind, so it is an independent boolean, not an auth-check mode). The step-up trigger is OIDC `prompt=login` + `acr_values=urn:ds:acr:mfa-fresh` at the IdP. After successful step-up, the IdP MUST issue an access token with an additional claim `acr=mfa-fresh` and a `mfa_fresh_at` timestamp; the fresh step-up TTL is **30 minutes** (see identity-auth-rbac-design §7.1).
 
-The backend MUST verify `acr=mfa-fresh` AND `mfa_fresh_at ≥ now − 30 min` on every endpoint with `auth: 'step-up'` via a single `StepUpGuard` middleware (see endpoint-authorization-matrix-design §8.2 + backend-core middleware checklist). On failure — `401 Unauthorized` with body `{ error: 'step_up_required', step_up_url: '<IdP authorize URL with prompt=login + acr_values + redirect_uri + state>' }`. This error contract is normative (endpoint-authz-matrix-design §8.2); frontend and mobile MUST handle it.
+The backend MUST verify `acr=mfa-fresh` AND `mfa_fresh_at ≥ now − 30 min` on every endpoint flagged `step_up: true` via a single `StepUpGuard` middleware (see identity-auth-rbac-design — step-up mechanism — + backend-core middleware checklist). On failure — `401 Unauthorized` with body `{ error: 'step_up_required', step_up_url: '<IdP authorize URL with prompt=login + acr_values + redirect_uri + state>' }`. This error contract is normative (identity-auth-rbac-design); frontend and mobile MUST handle it.
 
 **Session lifetime after step-up.** The elevated state is a **separate claim in the access token**, not a separate session. The base session (refresh token web 30d / mobile 14d, §6) continues to exist independently: the elevated TTL of 30 min expires faster than the access-token TTL (15 min), but refreshing an access token via refresh token does NOT re-issue `acr=mfa-fresh` automatically — once the elevated window expires, the next high-risk action requires step-up again. Step-up does not extend the base session expiration.
 
@@ -160,9 +160,9 @@ The backend MUST verify `acr=mfa-fresh` AND `mfa_fresh_at ≥ now − 30 min` on
 
 **Forward references:**
 
-- **endpoint-authorization-matrix-design §8** — step-up policy, endpoint list, 401-response mechanics, `StepUpGuard` checklist.
-- **backend-core-design** — middleware stack for `auth: 'step-up'` (CI rule asserting `StepUpGuard` is present on every endpoint with an `auth: 'step-up'` declaration).
-- **identity-auth-rbac-design §7.1** — `acr=mfa-fresh` claim, TTL, MFA-elevated session.
+- **endpoint-authorization-matrix-design** — the per-endpoint `step_up` flag (`@Authz({ step_up: true })`); the step-up endpoint list is the matrix projection of flagged rows.
+- **identity-auth-rbac-design** — the step-up mechanism: `StepUpGuard`, the `401 step_up_required` response contract, the OIDC `prompt=login` + `acr_values` trigger, the `acr=mfa-fresh` claim + TTL + MFA-elevated session (§7.1).
+- **backend-core-design** — middleware stack for step-up (CI rule asserting `StepUpGuard` is present on every endpoint flagged `step_up: true`).
 - **ADR-0009 §2.4** — audit class registration for step-up events.
 
 ## Consequences

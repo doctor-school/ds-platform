@@ -156,7 +156,7 @@ The NestJS application is divided into modules. **The specific module list is no
 
 #### 3.2.1. Mandatory NestJS middlewares (DSO-63 mini-L, 2026-05-18)
 
-> **Forward reference:** the policy-enforcement middleware `endpointAuthzGuard` (validates that every decorated endpoint has full authz metadata from the matrix) and the CI gate `tools/lint-endpoint-authz` are specified in **`2026-05-18-ds-platform-endpoint-authorization-matrix-design`**.
+> **Forward reference:** the global policy-enforcement guard `AuthzGuard` (an `APP_GUARD` that reads each handler's `@Authz` metadata and fails closed when a handler carries none) and the CI completeness gate `tools/lint-endpoint-authz` are specified in **`2026-05-18-ds-platform-endpoint-authorization-matrix-design`**.
 
 Bootstrap of the NestJS app **must** load the following middlewares in a fixed order (see `apps/api/src/main.ts`):
 
@@ -288,11 +288,21 @@ All mutating endpoints accept an `Idempotency-Key: <uuid>` header. Backend store
 
 ```ts
 @Controller({ path: "courses", version: "1" })
-@UseGuards(JwtAuthGuard)
 export class CoursesController {
   @Get(":id")
-  @UseInterceptors(AuditInterceptor)
-  @Permission("courses:read")
+  // `@Authz` is the single authoring surface for endpoint authorization.
+  // Via `applyDecorators` it desugars into the RbacModule primitives —
+  // it sets the authz metadata read by the global `AuthzGuard`, applies
+  // `AuditInterceptor`, and the matrix generator emits the OpenAPI
+  // `x-authz` extension from the same metadata. One annotation, one SSOT.
+  // Full contract: endpoint-authorization-matrix-design.
+  @Authz({
+    access: "authenticated",
+    roles: ["doctor_guest"],
+    check: "fast-path",
+    audit: "low-stakes",
+    tests: ["EARS-30"], // covering scenario(s), by EARS id (illustrative)
+  })
   @ApiOperation({ summary: "Get course" })
   async getOne(
     @Param("id", new ZodValidationPipe(z.string().uuid())) id: string,
@@ -301,6 +311,8 @@ export class CoursesController {
   }
 }
 ```
+
+Public (unauthenticated) entry points use `@Public()` + `@Authz({ access: "public", check: "none", … })`: the global `AuthzGuard` skips authentication, but the handler still carries `@Authz` so it appears in the matrix with its audit class. A handler with **no** `@Authz` metadata is denied by the global guard (fail-closed) and fails the `endpoint-authz` CI gate.
 
 ---
 

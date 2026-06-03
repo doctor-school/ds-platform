@@ -267,10 +267,10 @@ ADR-0010 §6 forward-references this spec for the rule that PD-accessible tool c
 
 ---
 
-## 8. Open items and deferred decisions
+## 8. Cross-spec resolutions
 
-- **Audit-table name (deferred).** This spec and 003-design §5 use `auth_audit`; ADR-0001 §2.5/§7.3 use `auth_audit_events`. The name is unsettled and is **not** pinned here — it belongs to the audit subsystem (ADR-0003 §6) / `identity-auth-rbac-design` naming. The `audit` column's semantics (§3) do not depend on the table name.
-- **`identity-auth-rbac-design` (not yet authored).** The step-up _mechanism_ that the `step_up` flag (§3) points at — `StepUpGuard`, the `401 { error: 'step_up_required', step_up_url }` contract, the `acr=mfa-fresh` claim + TTL, the `auth.step_up.*` audit class — lives in `identity-auth-rbac-design`, a forward-reference to a spec that does not yet exist (triaged separately). The matrix owns only the per-endpoint flag.
+- **Audit-table name.** The table is `auth_audit` across this spec, 003-design §5, and ADR-0001 §2.5/§7.3; the name is pinned by `identity-auth-rbac-design §8` (the audit-subsystem home, over ADR-0003 §6's ledger). The `audit` column's semantics (§3) do not depend on the table name.
+- **`identity-auth-rbac-design`.** The step-up _mechanism_ that the `step_up` flag (§3) points at — `StepUpGuard`, the `401 { error: 'step_up_required', step_up_url }` contract, the `acr=mfa-fresh` claim + TTL, the `auth.step_up.*` audit class — is specified in `identity-auth-rbac-design` (§7.1/§7.2/§7.3). The matrix owns only the per-endpoint flag.
 
 ---
 

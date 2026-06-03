@@ -29,9 +29,11 @@ async register() {}
 
 The guard pulls the widget token from the `x-smartcaptcha-token` header (or the
 `captchaToken` body field), reads the client IP, and delegates to the bound
-provider. A missing or rejected token is a **generic** `ForbiddenException`; the
-specific reason lives only in the provider result for the audit ledger and never
-reaches the client (timing-equalized generic failures, EARS-16).
+provider — including a **missing** token (passed as `""`), so the missing-token
+decision lives in the provider, not the guard: a disabled provider still passes,
+an enabled one rejects. A rejected result is a **generic** `ForbiddenException`;
+the specific reason lives only in the provider result for the audit ledger and
+never reaches the client (timing-equalized generic failures, EARS-16).
 
 ## Swapping the provider (DSO-26)
 

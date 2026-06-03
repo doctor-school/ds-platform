@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useRef } from "react";
 
 /**
  * Yandex SmartCaptcha widget (003 design §10.1, ADR-0001 open-q #7).
@@ -54,6 +54,12 @@ function loadScript(): Promise<SmartCaptchaApi> {
     };
     const existing = document.getElementById(SCRIPT_ID);
     if (existing) {
+      // The script may already have fired `load` before this listener attaches
+      // (a second widget mounting after the first loaded it) — resolve eagerly.
+      if (window.smartCaptcha) {
+        resolve(window.smartCaptcha);
+        return;
+      }
       existing.addEventListener("load", onReady, { once: true });
       existing.addEventListener(
         "error",
@@ -94,11 +100,10 @@ export function SmartCaptcha({
   hl = "ru",
 }: SmartCaptchaProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const labelId = useId();
 
   useEffect(() => {
     let widgetId: number | undefined;
-    let unsubscribe: (() => void) | undefined;
+    const unsubscribers: Array<() => void> = [];
     let cancelled = false;
     const container = containerRef.current;
     if (!container) return;
@@ -111,8 +116,11 @@ export function SmartCaptcha({
           hl,
           callback: (token) => onToken(token),
         });
-        unsubscribe = api.subscribe(widgetId, "token-expired", () =>
-          onToken(null),
+        // Expiry or a mid-challenge network error invalidates the solve — clear
+        // the token so the gate stays closed (fail-closed) until it re-solves.
+        unsubscribers.push(
+          api.subscribe(widgetId, "token-expired", () => onToken(null)),
+          api.subscribe(widgetId, "network-error", () => onToken(null)),
         );
       })
       .catch(() => {
@@ -123,10 +131,10 @@ export function SmartCaptcha({
 
     return () => {
       cancelled = true;
-      unsubscribe?.();
+      for (const off of unsubscribers) off();
       if (widgetId !== undefined) window.smartCaptcha?.destroy(widgetId);
     };
   }, [sitekey, hl, onToken]);
 
-  return <div ref={containerRef} aria-labelledby={labelId} />;
+  return <div ref={containerRef} />;
 }

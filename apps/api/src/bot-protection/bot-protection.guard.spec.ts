@@ -54,13 +54,29 @@ describe("BotProtectionGuard (additive, fail-closed)", () => {
     expect(calls).toHaveLength(0); // provider never consulted
   });
 
-  it("rejects a guarded request with no token", async () => {
-    const { provider, calls } = fakeProvider({ ok: true });
+  it("delegates a missing token to the provider as an empty string (enabled provider rejects)", async () => {
+    const { provider, calls } = fakeProvider({
+      ok: false,
+      reason: "missing-token",
+    });
     const guard = new BotProtectionGuard(provider, reflector);
     await expect(
       guard.canActivate(ctx("register", { headers: {}, body: {} })),
     ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(calls).toHaveLength(0); // missing token never reaches the provider
+    // The empty token reaches the provider — the missing-token decision lives
+    // there (so a disabled provider can still pass), not in the guard.
+    expect(calls).toEqual([["", "register", ""]]);
+  });
+
+  it("lets a missing token through when the provider accepts it (disabled provider in dev)", async () => {
+    const { provider } = fakeProvider({
+      ok: true,
+      reason: "bot-protection-disabled",
+    });
+    const guard = new BotProtectionGuard(provider, reflector);
+    await expect(
+      guard.canActivate(ctx("register", { headers: {}, body: {} })),
+    ).resolves.toBe(true);
   });
 
   it("rejects a guarded request whose token the provider invalidates", async () => {

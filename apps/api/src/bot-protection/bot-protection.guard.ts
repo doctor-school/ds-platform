@@ -56,10 +56,12 @@ export class BotProtectionGuard implements CanActivate {
     if (!action) return true;
 
     const request = context.switchToHttp().getRequest<GuardRequest>();
-    const token = this.extractToken(request);
-    if (!token) {
-      throw new ForbiddenException("bot-protection challenge required");
-    }
+    // A missing token is delegated to the provider (passed as ""), not
+    // short-circuited here: a disabled provider (BOT_PROTECTION_ENABLED=false,
+    // the dev-stand default) must pass even with no token, while an enabled
+    // provider rejects the empty token (adapter `missing-token`). The decision
+    // stays in one place — the provider — so "disabled" means disabled.
+    const token = this.extractToken(request) ?? "";
 
     const result = await this.provider.verify(token, action, request.ip ?? "");
     if (!result.ok) {

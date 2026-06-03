@@ -2,7 +2,7 @@
 title: "003 — User authentication (Design)"
 description: "Design: BFF over Zitadel Session/User v2 API; native-vs-custom boundary; registration + consent + mirror cascade; password / email-OTP / SMS-OTP login; __Host- cookie + server-side refresh rotation; password reset; security baseline; seams (MFA, legacy, mobile, social, step-up); decision-debt for ADR-0001."
 slug: 003-user-authentication
-status: Draft
+status: In dev
 tracker: https://github.com/doctor-school/ds-platform/milestone/3
 lang: en
 ---

@@ -245,6 +245,10 @@ jobs:
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      # The gate boots the real AppModule, which imports the workspace packages
+      # @ds/db + @ds/schemas by their built `dist/` (their package `exports`).
+      # @ds/api itself runs from source via tsx, so only its deps need building.
+      - run: pnpm exec turbo run build --filter=@ds/api^...
       - run: pnpm lint:endpoint-authz
 
   ears-tests:

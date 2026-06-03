@@ -137,7 +137,11 @@ function cells(row: MatrixRow): string[] {
  * committed file matches lint-staged formatting.
  */
 export function renderMatrix(rows: MatrixRow[]): string {
-  const sorted = [...rows].sort((a, b) => a.endpoint.localeCompare(b.endpoint));
+  // Code-point sort (not localeCompare): the result feeds a byte-exact drift
+  // gate, so ordering must not depend on the runner's locale/ICU.
+  const sorted = [...rows].sort((a, b) =>
+    a.endpoint < b.endpoint ? -1 : a.endpoint > b.endpoint ? 1 : 0,
+  );
   const lines = [
     BANNER,
     "",

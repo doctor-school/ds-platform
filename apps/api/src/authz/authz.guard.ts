@@ -45,6 +45,11 @@ export class AuthzGuard implements CanActivate {
       );
     }
 
+    // `access: "public"` is the SSOT for skipping authorization here. The
+    // separate `@Public()` / IS_PUBLIC_KEY flag is read by the 003 (F2)
+    // authentication layer to skip the *authentication* step it adds; it is not
+    // a second source for the authz decision, so it is intentionally not read
+    // in this guard.
     if (meta.access === "public") return true;
 
     // access: authenticated — a valid session subject is required.

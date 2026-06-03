@@ -174,7 +174,7 @@ Resolves ADR-0001 §10's step-up _mechanism_ reference. The per-endpoint `step_u
 
 ### 7.3 Canonical auth audit-event taxonomy
 
-Resolves ADR-0001 §10's "full list of auth audit events — identity-auth-rbac-design §7.3" and the §10 `auth.step_up.*` audit class. This is the canonical superset; ADR-0001 design §7.3's list is folded in (see compatibility note).
+Resolves ADR-0001 §10's "full list of auth audit events — identity-auth-rbac-design §7.3" and the §10 `auth.step_up.*` audit class. This is the canonical superset; ADR-0001 design §7.3 mirrors the v1-mandatory subset of it (see the corpus-alignment note below).
 
 **Two-level model.** Every auditable auth event has an **audit class** (a dotted namespace, the unit registered per ADR-0009 §2.4) and an **event** within it. The **canonical wire identifier is `<class>.<event>`**, where `<event>` is the outcome segment. This aligns with the form ADR-0001 §10 already publishes (`auth.step_up.{requested,succeeded,failed}`) and extends it across the whole list. ADR-0001 design §7.3's flat names (`login_success`, `mfa_used`, …) map 1:1 onto these ids (`auth.login.success`, `auth.mfa.used`) — the same events, normalized spelling.
 

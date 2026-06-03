@@ -1,0 +1,12 @@
+# Generated lockfiles — never reformat. The lockfile serializer (pnpm) owns the
+# layout; running Prettier over it produces an enormous, meaningless diff and
+# fights Dependabot, which regenerates it in pnpm's native style with no local
+# hooks. Keeping it out of Prettier keeps lock diffs to the actual dependency
+# delta. (lint-staged globs *.yaml, so this exclusion is what spares the lock.)
+pnpm-lock.yaml
+
+# Build / generated output (already gitignored, listed for any ad-hoc runs).
+**/.next/**
+**/dist/**
+**/.source/**
+**/coverage/**

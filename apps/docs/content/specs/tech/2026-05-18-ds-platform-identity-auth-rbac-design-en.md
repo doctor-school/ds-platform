@@ -85,11 +85,11 @@ The elevated MFA-fresh state (§7.1) is layered **on top of** this base session 
 
 ## 5. SMS provider circuit-breaker & failover
 
-Resolves engineering-readiness §5.bis (SMS row: "Circuit-breaker pattern in identity-auth-rbac-design §5"); links 003 EARS-14 (SMS toll-fraud guard) and 003-design §10/§5.5.
+Resolves engineering-readiness §5.bis (SMS row: "Circuit-breaker pattern in identity-auth-rbac-design §5"); links 003 EARS-14 (SMS toll-fraud guard) and 003-design §10 (the budget-breaker error path).
 
 ### 5.1 What this spec owns
 
-The **four-layer toll-fraud rate-limit** is owned by ADR-0001 §7 / 003-design §5.5 and is referenced, not redefined: per-phone **3/hour**, per-IP **10/hour**, per-ASN **100/hour**, plus a **global daily budget of ≤2000 SMS/day** at launch. This spec owns the **circuit-breaker mechanism** that enforces the global budget and the **provider failover** that sits in front of it.
+The **four-layer toll-fraud rate-limit** is owned by ADR-0001 §7 (narrative) / design §5.5 (security baseline) and is referenced, not redefined: per-phone **3/hour**, per-IP **10/hour**, per-ASN **100/hour**, plus a **global daily budget of ≤2000 SMS/day** at launch. This spec owns the **circuit-breaker mechanism** that enforces the global budget and the **provider failover** that sits in front of it.
 
 ### 5.2 Two distinct breakers
 
@@ -195,7 +195,7 @@ Resolves ADR-0001 §10's "full list of auth audit events — identity-auth-rbac-
 | `auth.erasure`      | `executed`                                    | user_id, scope, ts                                                       |
 
 - **Storage:** the `auth_audit` table (§8) is the auth-domain **projection of the append-only `audit_ledger`** (ADR-0003 §6); PD columns store masked values, full values only in the encrypted ledger (003-design §5). Append-only — `INSERT` only, `UPDATE`/`DELETE` blocked at the DB level (ADR-0003 §2.7 ledger pattern). Read access: `platform_admin` + DPO only; deletion is impossible even for them.
-- **Retention:** ≥3 years (ADR-0001 design §7.3 / PRD §31); the platform retention matrix sets `audit_log` at **5 years** with crypto-shred at term (ADR-0009 §2.6, OQ-D3 CLOSED).
+- **Retention:** ≥3 years (ADR-0001 design §7.3 / PRD §31); the platform retention matrix sets the audit ledger at **5 years** with crypto-shred at term (ADR-0009 §2.6, OQ-D3 CLOSED). (ADR-0003's OQ-D3 spells this table `audit_log`; ADR-0009 §2.6 spells the same table `audit_ledger` — one table, two corpus spellings.)
 - **Audit-class registration:** each class above is registered per ADR-0009 §2.4; the `@Authz({ audit: 'low-stakes' | 'high-stakes' })` classification (matrix §3) determines whether a given route's outcome _must_ produce a row, while this taxonomy fixes the event's identity and fields.
 - **Compatibility note:** ADR-0001 design §2.5/§7.3 currently spell the table `auth_audit_events` and list the flat event names without the class prefix. Both refer to the same events under this taxonomy. Reconciling ADR-0001 to the pinned name + class-qualified ids is tracked as follow-up (§8).
 

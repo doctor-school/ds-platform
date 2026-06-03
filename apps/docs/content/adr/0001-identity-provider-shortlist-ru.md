@@ -146,9 +146,9 @@ Cross-zone constraints: все профили отдают `Strict-Transport-Sec
 
 Базовая session, выданная после первичного login (§6), несёт общий security level, единый для read- и write-операций любого назначения. Для действий повышенного риска — деструктивных admin-операций над пользователями (role grant/revoke, lock, erasure-execute), account-level deletion / erasure-request от subject'а, payment-method change, изменения MFA, инициирования PD export, logout-all — общего level недостаточно: атакующий с украденной long-lived session не должен иметь возможности немедленно выполнить катастрофическое действие без свежей re-аутентификации.
 
-Список endpoint-классов, требующих step-up, нормативно зафиксирован в **endpoint-authorization-matrix-design §8.1** (`auth: 'step-up'` декларация в `@Authz`). Триггер step-up — OIDC `prompt=login` + `acr_values=urn:ds:acr:mfa-fresh` на IdP. После успешного step-up IdP issues access-token с дополнительным claim `acr=mfa-fresh` и `mfa_fresh_at` timestamp; TTL свежего step-up — **30 минут** (см. identity-auth-rbac-design §7.1).
+Каждый step-up endpoint помечен в **endpoint-authorization-matrix** декларацией `@Authz({ step_up: true })`; нормативный список step-up endpoints — это проекция matrix по строкам с этим флагом (`step_up` ортогонален виду `auth_check`, поэтому это независимый boolean, а не режим auth-check). Триггер step-up — OIDC `prompt=login` + `acr_values=urn:ds:acr:mfa-fresh` на IdP. После успешного step-up IdP issues access-token с дополнительным claim `acr=mfa-fresh` и `mfa_fresh_at` timestamp; TTL свежего step-up — **30 минут** (см. identity-auth-rbac-design §7.1).
 
-Backend обязан проверять `acr=mfa-fresh` AND `mfa_fresh_at ≥ now − 30 мин` на всех endpoints с `auth: 'step-up'` через единый `StepUpGuard` middleware (см. endpoint-authorization-matrix-design §8.2 + backend-core middleware checklist). При неуспехе — `401 Unauthorized` с телом `{ error: 'step_up_required', step_up_url: '<IdP authorize URL с prompt=login + acr_values + redirect_uri + state>' }`. Этот контракт ошибки — нормативный (endpoint-authz-matrix-design §8.2), frontend и mobile обязаны его обрабатывать.
+Backend обязан проверять `acr=mfa-fresh` AND `mfa_fresh_at ≥ now − 30 мин` на всех endpoints, помеченных `step_up: true`, через единый `StepUpGuard` middleware (см. identity-auth-rbac-design — механизм step-up — + backend-core middleware checklist). При неуспехе — `401 Unauthorized` с телом `{ error: 'step_up_required', step_up_url: '<IdP authorize URL с prompt=login + acr_values + redirect_uri + state>' }`. Этот контракт ошибки — нормативный (identity-auth-rbac-design), frontend и mobile обязаны его обрабатывать.
 
 **Session lifetime после step-up.** Elevated state — это **отдельный claim в access-token**, не отдельная session. Базовая session (refresh-token web 30d / mobile 14d, §6) продолжает существовать независимо: elevated TTL 30 мин истекает быстрее access-token TTL (15 мин), но обновление access-token через refresh-token не возвращает `acr=mfa-fresh` автоматически — после истечения elevated окна следующий high-risk action заново требует step-up. Step-up не продлевает базовую session expiration.
 
@@ -160,9 +160,9 @@ Backend обязан проверять `acr=mfa-fresh` AND `mfa_fresh_at ≥ no
 
 **Forward references:**
 
-- **endpoint-authorization-matrix-design §8** — step-up policy, список endpoints, механика 401-ответа, `StepUpGuard` checklist.
-- **backend-core-design** — middleware-stack для `auth: 'step-up'` (CI rule на наличие `StepUpGuard` для каждого endpoint с `auth: 'step-up'` декларацией).
-- **identity-auth-rbac-design §7.1** — `acr=mfa-fresh` claim, TTL, MFA-elevated session.
+- **endpoint-authorization-matrix-design** — per-endpoint флаг `step_up` (`@Authz({ step_up: true })`); список step-up endpoints — это проекция matrix по помеченным строкам.
+- **identity-auth-rbac-design** — механизм step-up: `StepUpGuard`, контракт ответа `401 step_up_required`, OIDC-триггер `prompt=login` + `acr_values`, claim `acr=mfa-fresh` + TTL + MFA-elevated session (§7.1).
+- **backend-core-design** — middleware-stack для step-up (CI rule на наличие `StepUpGuard` для каждого endpoint, помеченного `step_up: true`).
 - **ADR-0009 §2.4** — audit class регистрация для step-up событий.
 
 ## Consequences

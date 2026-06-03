@@ -1,9 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ShieldCheck } from "lucide-react";
+
+import { BotProtectionField } from "@/components/bot-protection";
 
 import { Button } from "@ds/design-system/button";
 import { Input } from "@ds/design-system/input";
@@ -49,9 +52,16 @@ export default function LoginPage() {
     defaultValues: { email: "", password: "" },
   });
 
+  // SmartCaptcha solve token (#84). F2 (#86) sends it to the guarded BFF
+  // endpoint as the `x-smartcaptcha-token` header; the backend
+  // `BotProtectionGuard` verifies it.
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+
   function onSubmit(values: SignInValues) {
     // Wired to the BFF in 003 F2 (#86). Scaffold only — no network call yet.
-    console.log("sign-in scaffold submit", values.email);
+    console.log("sign-in scaffold submit", values.email, {
+      captcha: captchaToken !== null,
+    });
   }
 
   return (
@@ -106,6 +116,13 @@ export default function LoginPage() {
                   </FormItem>
                 )}
               />
+              {/*
+                Bot-protection MECHANISM bootstrapped by #84. EARS-17 POLICY
+                (show on registration / reset, and on login only after a failed
+                attempt) is wired in 003 F6 (#90); here it renders unconditionally
+                so the scaffold proves the widget→token→guard path end to end.
+              */}
+              <BotProtectionField onToken={setCaptchaToken} />
               <Button type="submit" className="w-full">
                 Sign in
               </Button>

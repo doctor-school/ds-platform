@@ -1,0 +1,7 @@
+/*
+ * Portal global stylesheet. Pulls in the shared design-system tokens, which in
+ * turn import Tailwind and declare the `:root` / `.dark` theme variables
+ * (including `--radius`). The portal owns no tokens of its own — single source
+ * of truth lives in @ds/design-system (ADR-0004 §6.3).
+ */
+@import "@ds/design-system/globals.css";

@@ -1,6 +1,20 @@
-import { Body, Controller, Headers, HttpCode, Post } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  Ip,
+  Post,
+  Req,
+  Res,
+  UnauthorizedException,
+} from "@nestjs/common";
+import type { FastifyReply } from "fastify";
 import type {
+  LoginResponse,
   RegisterResponse,
+  SessionClaims,
   VerifyResponse,
   ZitadelWebhookResponse,
 } from "@ds/schemas";
@@ -8,11 +22,18 @@ import { Authz, Public } from "../authz/index.js";
 import { BotProtected } from "../bot-protection/index.js";
 import { AuthService } from "./auth.service.js";
 import {
+  LoginRequestDto,
   RegisterRequestDto,
   VerifyRequestDto,
   ZitadelWebhookDto,
 } from "./auth.dto.js";
 import { WEBHOOK_SECRET_HEADER } from "./auth.tokens.js";
+import { computeFingerprint } from "./session/session.cookie.js";
+
+// One generic message for every login failure (unknown identifier, wrong
+// password): the specific reason is an enumeration/oracle channel (EARS-16) and
+// lives only in the audit ledger (F6). Same 401, same body, for every branch.
+const GENERIC_LOGIN_FAILURE = "invalid credentials";
 
 /**
  * F1 auth surface (#85). All three routes are `public` in the authz sense (no
@@ -43,6 +64,62 @@ export class AuthController {
   })
   register(@Body() dto: RegisterRequestDto): Promise<RegisterResponse> {
     return this.auth.register(dto);
+  }
+
+  /**
+   * EARS-5 + EARS-8. Public (unauthenticated entry point that mints a session).
+   * On success it sets the `__Host-` cookie and returns a token-free body; every
+   * failure is the same generic 401 (EARS-16). The fingerprint is derived here —
+   * the controller is the only layer with the request — and bound into the
+   * session by the service. The login captcha-after-N-failures policy (EARS-17
+   * login surface) is owned by F6 (#90), so `login` is intentionally not yet
+   * `@BotProtected`.
+   */
+  @Post("login")
+  @Public()
+  @HttpCode(200)
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "high-stakes",
+    tests: ["EARS-5", "EARS-8"],
+  })
+  async login(
+    @Body() dto: LoginRequestDto,
+    @Headers("user-agent") userAgent: string | undefined,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @Ip() ip: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<LoginResponse> {
+    const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
+    const result = await this.auth.loginWithPassword(
+      dto.identifier,
+      dto.password,
+      fingerprint,
+    );
+    if (!result) throw new UnauthorizedException(GENERIC_LOGIN_FAILURE);
+
+    reply.header("set-cookie", result.cookie);
+    return { status: "authenticated" };
+  }
+
+  /**
+   * EARS-8 read side: the authenticated principal (`sub, roles[], mfa`). Protected
+   * — `doctor_guest` is the v1 authenticated baseline (design §7.2); the subject
+   * is populated by `SessionAuthHook` from the `__Host-` cookie and the `AuthzGuard`
+   * guarantees its presence before this handler runs. The access/refresh tokens
+   * stay server-side and are never echoed here.
+   */
+  @Get("session")
+  @Authz({
+    access: "authenticated",
+    roles: ["doctor_guest"],
+    check: "fast-path",
+    audit: "low-stakes",
+    tests: ["EARS-8"],
+  })
+  session(@Req() req: { user?: SessionClaims }): SessionClaims {
+    return req.user as SessionClaims;
   }
 
   @Post("verify")

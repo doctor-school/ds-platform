@@ -2,6 +2,8 @@ import type {
   CreatedUser,
   CreateUserInput,
   IdpClient,
+  IdpSession,
+  IdpTokens,
   IdpUser,
 } from "./idp.types.js";
 
@@ -17,6 +19,8 @@ interface FakeRecord {
   phone?: string | undefined;
   emailVerified: boolean;
   phoneVerified: boolean;
+  /** The BFF forwards the password to the IdP at create; the fake keeps it so the password check (EARS-5) is exercised. Never stored by `apps/api` itself (design §2). */
+  password?: string | undefined;
 }
 
 /**
@@ -34,6 +38,10 @@ export class FakeIdpClient implements IdpClient {
   private readonly byEmail = new Map<string, FakeRecord>();
   private readonly byPhone = new Map<string, FakeRecord>();
   private readonly bySub = new Map<string, FakeRecord>();
+  /** Checked sessions awaiting their OIDC exchange: zitadelSessionId → sub. */
+  private readonly sessions = new Map<string, string>();
+  /** Per-identifier failed-check tally — the fake's stand-in for the native Zitadel lockout counter (EARS-15), asserted by EARS-5 tests. */
+  private readonly failed = new Map<string, number>();
   private seq = 0;
 
   createUser(input: CreateUserInput): Promise<CreatedUser> {
@@ -54,6 +62,7 @@ export class FakeIdpClient implements IdpClient {
       phone,
       emailVerified: false,
       phoneVerified: false,
+      password: input.password,
     };
     this.bySub.set(sub, record);
     if (email) this.byEmail.set(email, record);
@@ -81,6 +90,45 @@ export class FakeIdpClient implements IdpClient {
     if (!record || code !== FAKE_VALID_CODE) return Promise.resolve(false);
     record.phoneVerified = true;
     return Promise.resolve(true);
+  }
+
+  passwordLogin(
+    identifier: string,
+    password: string,
+  ): Promise<IdpSession | null> {
+    const record =
+      this.byEmail.get(identifier.toLowerCase()) ?? this.byPhone.get(identifier);
+    // Unknown identifier and wrong password are indistinguishable (EARS-16); a
+    // failed check is tallied (the native Zitadel lockout counter, EARS-15).
+    if (!record || record.password !== password) {
+      this.failed.set(identifier, (this.failed.get(identifier) ?? 0) + 1);
+      return Promise.resolve(null);
+    }
+    const zitadelSessionId = `fake-session-${++this.seq}`;
+    this.sessions.set(zitadelSessionId, record.sub);
+    return Promise.resolve({ zitadelSessionId, sub: record.sub });
+  }
+
+  exchangeSessionForTokens(zitadelSessionId: string): Promise<IdpTokens> {
+    const sub = this.sessions.get(zitadelSessionId);
+    if (!sub) {
+      // Exchanging an unknown/consumed session is a programming error in the
+      // BFF, not a user-facing path — fail loud rather than mint a token.
+      return Promise.reject(new Error("unknown zitadel session"));
+    }
+    return Promise.resolve({
+      accessToken: `fake-access-${zitadelSessionId}`,
+      refreshToken: `fake-refresh-${++this.seq}`,
+      expiresInSeconds: 900,
+      // v1 grants every self-serve principal the single `doctor_guest` role; the
+      // `mfa` claim is present-but-false (the enforcement seam, design §7).
+      claims: { sub, roles: ["doctor_guest"], mfa: false },
+    });
+  }
+
+  /** Test accessor: how many failed password checks the fake recorded for `identifier`. */
+  failedAttempts(identifier: string): number {
+    return this.failed.get(identifier) ?? 0;
   }
 
   listUsers(): Promise<IdpUser[]> {

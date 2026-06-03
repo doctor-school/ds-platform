@@ -41,6 +41,41 @@ export interface IdpUser {
   phoneVerified: boolean;
 }
 
+/**
+ * A Zitadel session that has passed its required check (design §3, EARS-5/8).
+ * `passwordLogin` returns one on a successful password check; the BFF then trades
+ * it for tokens via {@link IdpClient.exchangeSessionForTokens}.
+ */
+export interface IdpSession {
+  /** Opaque Zitadel session id, bound to the BFF session record (design §3). */
+  zitadelSessionId: string;
+  sub: string;
+}
+
+/**
+ * The principal claims Zitadel asserts for the authenticated subject. These are
+ * the identity claims the BFF mirrors into its session record and surfaces via
+ * the session-read route; the full signed JWT (adding `sid, iat, exp, jti`) is
+ * Zitadel's — `apps/api` signs nothing (Constraints, design §2).
+ */
+export interface IdpClaims {
+  sub: string;
+  roles: string[];
+  mfa: boolean;
+}
+
+/**
+ * Result of the OIDC exchange (design §3, EARS-8): the short-lived access JWT,
+ * the opaque rotating refresh token (stored server-side, never sent to the
+ * browser), the access-token lifetime, and the parsed principal claims.
+ */
+export interface IdpTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresInSeconds: number;
+  claims: IdpClaims;
+}
+
 export interface IdpClient {
   /** Create a user; a duplicate identifier returns `alreadyExisted: true`, not a throw. */
   createUser(input: CreateUserInput): Promise<CreatedUser>;
@@ -54,6 +89,19 @@ export interface IdpClient {
   verifyPhone(sub: string, code: string): Promise<boolean>;
   /** Enumerate users for the reconciliation sweep (EARS-19). */
   listUsers(): Promise<IdpUser[]>;
+  /**
+   * EARS-5: create a Zitadel session with a password check for `identifier`
+   * (email or phone). Resolves to the session on success and to `null` on any
+   * failure — unknown identifier and wrong password are indistinguishable so the
+   * caller stays enumeration-safe (EARS-16); a failed check is counted by the
+   * native Zitadel lockout policy (EARS-15), not by the BFF.
+   */
+  passwordLogin(identifier: string, password: string): Promise<IdpSession | null>;
+  /**
+   * EARS-8: complete the OIDC exchange against a checked session, yielding the
+   * access JWT, the rotating opaque refresh token, and the principal claims.
+   */
+  exchangeSessionForTokens(zitadelSessionId: string): Promise<IdpTokens>;
 }
 
 /** DI token the port is bound to — rebound to the real Zitadel adapter in prod. */

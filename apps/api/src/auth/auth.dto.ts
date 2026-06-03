@@ -1,5 +1,6 @@
 import { createZodDto } from "nestjs-zod";
 import {
+  LoginRequestSchema,
   RegisterRequestSchema,
   VerifyRequestSchema,
   ZitadelWebhookSchema,
@@ -10,5 +11,6 @@ import {
 // `ZodValidationPipe` so a malformed request is a 400 before the handler runs.
 
 export class RegisterRequestDto extends createZodDto(RegisterRequestSchema) {}
+export class LoginRequestDto extends createZodDto(LoginRequestSchema) {}
 export class VerifyRequestDto extends createZodDto(VerifyRequestSchema) {}
 export class ZitadelWebhookDto extends createZodDto(ZitadelWebhookSchema) {}

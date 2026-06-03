@@ -2,6 +2,8 @@ import type {
   CreatedUser,
   CreateUserInput,
   IdpClient,
+  IdpSession,
+  IdpTokens,
   IdpUser,
 } from "./idp.types.js";
 
@@ -121,6 +123,53 @@ export class ZitadelIdpClient implements IdpClient {
       },
     );
     return res.ok;
+  }
+
+  async passwordLogin(
+    identifier: string,
+    password: string,
+  ): Promise<IdpSession | null> {
+    // Zitadel Session v2: POST /v2/sessions with a user + password check. A
+    // failed check (unknown loginName / wrong password) is a non-2xx — resolve
+    // it to `null` so the caller stays enumeration-safe (EARS-16); Zitadel's
+    // native lockout policy counts the failure (EARS-15). The session that comes
+    // back has already passed its check (design §3).
+    const res = await this.fetchImpl(this.url("/v2/sessions"), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({
+        checks: {
+          user: { loginName: identifier },
+          password: { password },
+        },
+      }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      sessionId?: string;
+      factors?: { user?: { id?: string } };
+    };
+    const zitadelSessionId = data.sessionId;
+    const sub = data.factors?.user?.id;
+    if (!zitadelSessionId || !sub) return null;
+    return { zitadelSessionId, sub };
+  }
+
+  exchangeSessionForTokens(_zitadelSessionId: string): Promise<IdpTokens> {
+    // INTEGRATION SEAM (design §3, §11): turning a checked Zitadel session into
+    // OIDC tokens is the authorize-with-session → code → token-endpoint dance,
+    // which needs the per-recipe OIDC application config (IDP_CLIENT_ID /
+    // redirect URI), created against the dev-stand Zitadel console as a recipe
+    // follow-up (the dev-stand ships `IDP_CLIENT_SECRET=CHANGE_ME`). Until that
+    // config is plumbed and verifiable against a live instance, fail closed —
+    // mint nothing — rather than ship an unverifiable token-exchange path. The
+    // BFF domain logic (EARS-5/8) is proven against FakeIdpClient; this adapter's
+    // session-create path above is faithful to the documented Session v2 API.
+    return Promise.reject(
+      new Error(
+        "zitadel OIDC session→token exchange is not wired against the dev-stand yet (design §11)",
+      ),
+    );
   }
 
   async listUsers(): Promise<IdpUser[]> {

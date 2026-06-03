@@ -87,6 +87,48 @@ export const VerifyResponseSchema = z.strictObject({
 export type VerifyResponse = z.infer<typeof VerifyResponseSchema>;
 
 /**
+ * Login request (EARS-5). A single `identifier` box (email or phone) + password
+ * — the user types one credential and Zitadel resolves it (the IdP owns the
+ * credential, design §2), so the BFF does not branch on the identifier shape the
+ * way registration does. `captchaToken` is the bot-protection widget token read
+ * by the guard after repeated failures (EARS-17 login surface, owned by F6); it
+ * is optional here because the policy that requires it is not part of F2.
+ */
+export const LoginRequestSchema = z.object({
+  identifier: z.string().min(1),
+  password: Password,
+  captchaToken: z.string().optional(),
+});
+export type LoginRequest = z.infer<typeof LoginRequestSchema>;
+
+/**
+ * Login response. Carries **no token** — the session lives only in the `__Host-`
+ * cookie the BFF sets (EARS-8 invariant; ADR-0001 §6). A successful login is
+ * `authenticated`; every failure (unknown identifier, wrong password) is the
+ * same generic 401 so the response does not disclose account existence (EARS-16).
+ */
+export const LoginResponseSchema = z.strictObject({
+  status: z.literal("authenticated"),
+});
+export type LoginResponse = z.infer<typeof LoginResponseSchema>;
+
+/**
+ * The authenticated principal as read back through `GET /v1/auth/session` — the
+ * minimal claim subset the BFF surfaces to its own forms (`sub`, `roles[]`,
+ * `mfa`). The full access JWT (`sub, roles[], mfa, sid, iat, exp, jti`) is minted
+ * and signed by Zitadel and held server-side; the BFF never echoes the token or
+ * the token-internal claims (`iat/exp/jti`) — `sid` is the cookie itself
+ * (ADR-0001 §6; invariant "no token signing in apps/api"). The `mfa` claim is
+ * always present even though no `doctor_guest` flow requires it (MFA seam).
+ */
+export const SessionClaimsSchema = z.strictObject({
+  sub: z.string(),
+  roles: z.array(z.string()),
+  mfa: z.boolean(),
+});
+export type SessionClaims = z.infer<typeof SessionClaimsSchema>;
+
+/**
  * Zitadel Action webhook payload (EARS-19). Zitadel fires this on user
  * create/update; the BFF upserts the corresponding `doctor_guest` mirror row.
  * Loose by design — Zitadel owns the shape and may add fields; the BFF reads

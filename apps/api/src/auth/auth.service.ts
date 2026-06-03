@@ -13,10 +13,12 @@ import type {
   ZitadelWebhook,
   ZitadelWebhookResponse,
 } from "@ds/schemas";
+import type { SessionClaims } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { IDP_CLIENT, type IdpClient } from "./idp/idp.types.js";
 import { AUTH_WEBHOOK_SECRET } from "./auth.tokens.js";
 import { UserMirrorService } from "./user-mirror.service.js";
+import { SessionService } from "./session/session.service.js";
 
 type Db = DrizzleHandle["db"];
 
@@ -67,7 +69,27 @@ export class AuthService {
     @Inject(AUTH_WEBHOOK_SECRET)
     private readonly webhookSecret: string | undefined,
     private readonly mirror: UserMirrorService,
+    private readonly sessions: SessionService,
   ) {}
+
+  /**
+   * EARS-5: password login. Delegates the credential check to the IdP port
+   * (which is where the native Zitadel lockout counter increments on failure,
+   * EARS-15) and, on success, establishes the BFF session (EARS-8). Returns
+   * `null` for every failure — unknown identifier and wrong password are
+   * indistinguishable so the controller responds enumeration-resistantly
+   * (EARS-16). The `fingerprint` is computed by the controller from the request
+   * (the only request-coupled input) and bound into the session here.
+   */
+  async loginWithPassword(
+    identifier: string,
+    password: string,
+    fingerprint: string,
+  ): Promise<{ cookie: string; claims: SessionClaims } | null> {
+    const session = await this.idp.passwordLogin(identifier, password);
+    if (!session) return null;
+    return this.sessions.establish(session.zitadelSessionId, fingerprint);
+  }
 
   /**
    * EARS-1 (email) / EARS-2 (phone). Consent-gated (EARS-20) and

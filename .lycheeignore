@@ -14,3 +14,10 @@
 # exists. The URL is useful for owner / agent navigation; verified
 # manually rather than by CI. DSP-198 board #1 is the current example.
 ^https://github\.com/orgs/doctor-school/projects/.*$
+
+# npmjs.com scoped-package pages: the registry returns 403 Forbidden to
+# lychee's unauthenticated user-agent for scoped packages (e.g.
+# @stoplight/spectral-owasp-ruleset, cited in the endpoint-authz-matrix
+# design spec). The page exists and is content-addressed; verified
+# manually. Same false-positive class as the nestjs-zod entry above.
+^https://www\.npmjs\.com/package/@stoplight/spectral-owasp-ruleset($|/.*$)

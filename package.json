@@ -12,6 +12,7 @@
   },
   "scripts": {
     "bootstrap": "tsx tools/agent-bootstrap.ts",
+    "lint:endpoint-authz": "tsx --tsconfig apps/api/tsconfig.json tools/lint/endpoint-authz-lint.ts",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "eslint . && turbo run lint",

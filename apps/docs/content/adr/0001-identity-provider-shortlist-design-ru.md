@@ -128,7 +128,7 @@ Admin/operational роли DS Platform — **продуктовая задача
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `endpoint`       | HTTP method + path, или RPC name (derived из роута)                                                                                                                                     |
 | `access`         | `public` (нет аутентифицированного субъекта) или `authenticated`                                                                                                                        |
-| `required_roles` | minimum role(s) для доступа, из shipped role-модели (`packages/db`; v1 baseline `doctor_guest`); `—` при `access: public`                                                               |
+| `required_roles` | minimum role(s) для доступа, из §2.2 IdP group-модели (`guest`, `doctor_guest`, `doctor`, `platform_admin`, …); `—` при `access: public`                                                |
 | `auth_check`     | `none` (public), `fast-path` (JWT/role only) или `policy` (полная policy-engine оценка — **engine-neutral**; конкретный движок, по умолчанию Cerbos, за `IPolicyEngine`, ADR-0002 §3.2) |
 | `object_attrs`   | object-level checks (например, `course.author_id == actor.id`); только при `auth_check: policy`                                                                                         |
 | `step_up`        | boolean — требует свежий step-up (`acr=mfa-fresh`); сам _механизм_ step-up живёт в `identity-auth-rbac-design` (§10), matrix несёт только флаг                                          |

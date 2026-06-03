@@ -112,7 +112,7 @@ These rules are part of the "complete and valid metadata" definition the gate en
 
 ### 3.2 Relationship to the ADR-0001 §2.5 stub
 
-ADR-0001 §2.5 describes the row as six fields (`endpoint`, `required_roles`, `auth_check`, `object_attrs`, `audit`, `test_coverage`) with `auth_check ∈ {fast-path, cerbos}` and an illustrative role list `guest/doctor/expert/platform_admin`. This spec is the authoritative contract that stub forward-references; it sharpens that text in three deliberate ways — engine-neutral `auth_check`, an explicit `access` discriminator plus the `step_up` field, and `required_roles` pinned to the §2.2 IdP group model (the §2.5 illustrative list is correct — those are real groups — it just predates the v1 baseline `doctor_guest`). The ADR-0001 stub text should be aligned to match (§8, decision-debt).
+ADR-0001 §2.5 is the normative **stub**: it carries a condensed row and forward-references this spec for the full contract, which this spec owns — the engine-neutral `auth_check` (`none | fast-path | policy`), the explicit `access` discriminator, the `step_up` flag, and `required_roles` drawn from the §2.2 IdP group model (the backend `users.role` in `packages/db` is only a mirror). ADR-0001 §2.5/§7.1 and ADR-0002 §4.8/§3.2.1 mirror this contract.
 
 ---
 
@@ -171,7 +171,7 @@ export class AuthController {
 
 - **`@Public()`** marks unauthenticated entry points. The global `AuthzGuard` skips authentication for them, but a `@Public()` handler **still must carry `@Authz({ access: "public", … })`** so it appears in the matrix with its audit classification and test coverage. `@Public()` without `@Authz` is a gate failure.
 - **Global `AuthzGuard` (`APP_GUARD`)** reads `AUTHZ_KEY` and enforces: authenticate (unless `@Public`), check `required_roles`, and for `check: "policy"` delegate to `IPolicyEngine`. A handler with **no** `AUTHZ_KEY` metadata is **denied** (fail-closed) — the runtime mirror of the Layer-2 gate.
-- **Relationship to ADR-0002 §4.8.** That section illustrates the raw primitives (`@UseGuards`, `@Permission`, `@UseInterceptors(AuditInterceptor)`). `@Authz` is the consolidating wrapper over them: one annotation, one source of truth, mechanically equivalent. ADR-0002 §4.8 should be aligned to show `@Authz` as the authoring surface (§8, decision-debt).
+- **Relationship to ADR-0002 §4.8.** `@Authz` is the single authoring surface; it consolidates the underlying primitives (the role/permission metadata, the guard, and `AuditInterceptor`) into one annotation — one source of truth, mechanically equivalent. ADR-0002 §4.8 shows `@Authz` in this form, desugaring into those RbacModule primitives.
 
 ---
 
@@ -267,13 +267,10 @@ ADR-0010 §6 forward-references this spec for the rule that PD-accessible tool c
 
 ---
 
-## 8. Decision-debt (separate adr-revision follow-ups)
+## 8. Open items and deferred decisions
 
-Surfaced per AGENTS.md §6; **not** changed inside this spec-authoring. Each is a paper-architecture alignment (inline rewrite, no amendment block — AGENTS.md §6):
-
-1. **ADR-0001 §2.5** — the stub's six-field row and `auth_check ∈ {fast-path, cerbos}` are superseded by this spec's eight-column row with engine-neutral `auth_check ∈ {none, fast-path, policy}` and the explicit `access` discriminator. Align the stub wording, and point its role list at the §2.2 IdP group model (the SSOT for the role vocabulary; the backend `users.role` is only a mirror) — the `guest/doctor/...` examples are correct, they just predate the v1 baseline `doctor_guest`. (The audit-table name divergence — `auth_audit` in 003-design §5 / this spec vs `auth_audit_events` in ADR-0001 §2.5/§7.3 — is **left unsettled here**; it belongs to the audit-subsystem / `identity-auth-rbac-design` naming, not this reconciliation.)
-2. **ADR-0001 §7.1 + §10 (step-up).** Three places name the step-up field three ways — `step_up_required` (design §7.1), `auth: 'step-up'` (narrative §10), and this spec's boolean `step_up` column. Reconcile all to the boolean `step_up` — step-up is **orthogonal** to `auth_check` (a `fast-path` or a `policy` endpoint may equally require it), so it cannot be a value of that enum. Additionally, narrative §10 forward-references "endpoint-authorization-matrix-design §8.1/§8.2" for the step-up endpoint list and the mechanism (`StepUpGuard`, the `401 step_up_url` contract); redirect those: the matrix owns only the per-endpoint **flag** (and the endpoint list as its projection), while the step-up **mechanism** belongs to `identity-auth-rbac-design`. (§7.1's "ADR-0001 §10" reference is itself correct — the _narrative_ §10 step-up section exists; only the _design_ file's §10 is "Risks and open questions".)
-3. **ADR-0002 §4.8 / §3.2.1** — align the minimal-endpoint example to show `@Authz` as the single authoring surface (desugaring into the existing primitives), and point §3.2.1's `endpointAuthzGuard` at the global `AuthzGuard` described here.
+- **Audit-table name (deferred).** This spec and 003-design §5 use `auth_audit`; ADR-0001 §2.5/§7.3 use `auth_audit_events`. The name is unsettled and is **not** pinned here — it belongs to the audit subsystem (ADR-0003 §6) / `identity-auth-rbac-design` naming. The `audit` column's semantics (§3) do not depend on the table name.
+- **`identity-auth-rbac-design` (not yet authored).** The step-up _mechanism_ that the `step_up` flag (§3) points at — `StepUpGuard`, the `401 { error: 'step_up_required', step_up_url }` contract, the `acr=mfa-fresh` claim + TTL, the `auth.step_up.*` audit class — lives in `identity-auth-rbac-design`, a forward-reference to a spec that does not yet exist (triaged separately). The matrix owns only the per-endpoint flag.
 
 ---
 
@@ -283,7 +280,7 @@ Surfaced per AGENTS.md §6; **not** changed inside this spec-authoring. Each is 
 | ------------------------------------------------------------------------ | --------------------- |
 | ADR-0001 §2.5 (row contract, `.md` format, CI gate, samples)             | §3, §5, §6, §7        |
 | ADR-0001 §7.1 (`step_up` field)                                          | §3 (`step_up` column) |
-| ADR-0002 §3.2.1 (`endpointAuthzGuard` + lint)                            | §4 (`AuthzGuard`), §6 |
+| ADR-0002 §3.2.1 (`AuthzGuard` + lint)                                    | §4 (`AuthzGuard`), §6 |
 | ADR-0010 §6 (authz on tool calls)                                        | §7.4                  |
 | engineering-readiness §3 + BLOCKERs (CI gate, fails on missing metadata) | §6 (BLOCK, §6.2/§6.3) |
 

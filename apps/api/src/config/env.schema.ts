@@ -32,6 +32,13 @@ export const ApiEnvSchema = z.looseObject({
   // webhook fails closed when this is unset — an unauthenticated mirror-write
   // surface is never opened by default.
   IDP_WEBHOOK_SECRET: z.string().optional(),
+
+  // Server-side BFF session store (design §3, ADR-0001 §6: refresh stored
+  // server-side in Redis). Bound to the Redis adapter when set; with no
+  // REDIS_URL (the shared CI / dev-stand-without-redis default) the in-memory
+  // session store is used, so the F2 flows run without a live Redis — mirroring
+  // the IdP fake/real split.
+  REDIS_URL: z.url().optional(),
 });
 
 export type ApiEnv = z.infer<typeof ApiEnvSchema>;

@@ -132,7 +132,7 @@ Admin/operational роли DS Platform — **продуктовая задача
 | `auth_check`     | `none` (public), `fast-path` (JWT/role only) или `policy` (полная policy-engine оценка — **engine-neutral**; конкретный движок, по умолчанию Cerbos, за `IPolicyEngine`, ADR-0002 §3.2) |
 | `object_attrs`   | object-level checks (например, `course.author_id == actor.id`); только при `auth_check: policy`                                                                                         |
 | `step_up`        | boolean — требует свежий step-up (`acr=mfa-fresh`); сам _механизм_ step-up живёт в `identity-auth-rbac-design` (§10), matrix несёт только флаг                                          |
-| `audit`          | `none` / `low-stakes` / `high-stakes` — определяет, требуется ли запись в `auth_audit_events`                                                                                           |
+| `audit`          | `none` / `low-stakes` / `high-stakes` — определяет, требуется ли запись в `auth_audit`                                                                                                  |
 | `test_coverage`  | covering EARS id(s); генератор резолвит их в ссылки на тесты                                                                                                                            |
 
 **Pre-pilot scope:** matrix создаётся **до первого endpoint'а**; AI-агенты при генерации новых endpoints обязаны заполнять row. Mismatch (endpoint без metadata) — блокирующий CI gate. DSO-задача (DSO-X4) на initial setup + tooling.
@@ -338,33 +338,33 @@ Reviewer-замечание: «JWT 15min + introspection — внутренне 
 
 ### 7.3. Audit log auth-событий (mandatory)
 
-3-летняя ретенция (PRD §31). Список событий, которые **обязаны** писаться в `auth_audit_events`:
+3-летняя ретенция (PRD §31). События, которые **обязаны** писаться в `auth_audit` (auth-доменная проекция append-only леджера). **Каноническая таксономия событий принадлежит `identity-auth-rbac-design §7.3`** — двухуровневая схема `<class>.<event>` плюс классы `auth.step_up.*` и `auth.sms.*`, не перечисленные здесь; эта таблица отражает её для событий, обязательных на v1, с каноническим wire-id в каждой строке:
 
-| Событие                         | Поля                                                                                    |
-| ------------------------------- | --------------------------------------------------------------------------------------- |
-| `login_success`                 | user_id, method (password/magic-link/SMS-OTP/social/biometric), ip, user_agent, geo, ts |
-| `login_failure`                 | identifier_hash, reason (wrong_password, no_user, lock, captcha_failed), ip, ts         |
-| `mfa_enrolled`                  | user_id, method (totp/sms), ts                                                          |
-| `mfa_used`                      | user_id, method, ts                                                                     |
-| `mfa_failure`                   | user_id, method, reason, ts                                                             |
-| `mfa_reset`                     | user_id, by_admin (uuid or null), ts                                                    |
-| `password_changed`              | user_id, by_self/by_admin, ts                                                           |
-| `password_reset_requested`      | user_id (or null), identifier_hash, ip, ts                                              |
-| `magic_link_sent`               | user_id, channel (email), ts                                                            |
-| `magic_link_used`               | user_id, ts                                                                             |
-| `session_created`               | user_id, sid, device_id, ts                                                             |
-| `session_terminated`            | user_id, sid, reason (logout/force/expiry/theft_detected), ts                           |
-| `refresh_token_rotated`         | user_id, sid, ts                                                                        |
-| `refresh_token_theft_detected`  | user_id, sid, ts                                                                        |
-| `account_linked_auto`           | user_id, provider, ts                                                                   |
-| `account_link_attempt_rejected` | user_id, provider, reason, ts                                                           |
-| `account_unlinked`              | user_id, provider, by_self/by_admin, ts                                                 |
-| `role_granted`                  | user_id, role, by_admin, ts                                                             |
-| `role_revoked`                  | user_id, role, by_admin, ts                                                             |
-| `lockout_triggered`             | user_id, reason, ts                                                                     |
-| `lockout_released`              | user_id, by_admin/auto, ts                                                              |
-| `idp_sync_drift_detected`       | user_id, diff, ts                                                                       |
-| `right_to_erasure_executed`     | user_id, scope, ts                                                                      |
+| Событие (`<class>.<event>`)          | Поля                                                                                    |
+| ------------------------------------ | --------------------------------------------------------------------------------------- |
+| `auth.login.success`                 | user_id, method (password/magic-link/SMS-OTP/social/biometric), ip, user_agent, geo, ts |
+| `auth.login.failure`                 | identifier_hash, reason (wrong_password, no_user, lock, captcha_failed), ip, ts         |
+| `auth.mfa.enrolled`                  | user_id, method (totp/sms), ts                                                          |
+| `auth.mfa.used`                      | user_id, method, ts                                                                     |
+| `auth.mfa.failure`                   | user_id, method, reason, ts                                                             |
+| `auth.mfa.reset`                     | user_id, by_admin (uuid or null), ts                                                    |
+| `auth.password.changed`              | user_id, by_self/by_admin, ts                                                           |
+| `auth.password.reset_requested`      | user_id (or null), identifier_hash, ip, ts                                              |
+| `auth.magic_link.sent`               | user_id, channel (email), ts                                                            |
+| `auth.magic_link.used`               | user_id, ts                                                                             |
+| `auth.session.created`               | user_id, sid, device_id, ts                                                             |
+| `auth.session.terminated`            | user_id, sid, reason (logout/force/expiry/theft_detected), ts                           |
+| `auth.token.rotated`                 | user_id, sid, ts                                                                        |
+| `auth.token.theft_detected`          | user_id, sid, ts                                                                        |
+| `auth.account_link.linked_auto`      | user_id, provider, ts                                                                   |
+| `auth.account_link.attempt_rejected` | user_id, provider, reason, ts                                                           |
+| `auth.account_link.unlinked`         | user_id, provider, by_self/by_admin, ts                                                 |
+| `auth.role.granted`                  | user_id, role, by_admin, ts                                                             |
+| `auth.role.revoked`                  | user_id, role, by_admin, ts                                                             |
+| `auth.lockout.triggered`             | user_id, reason, ts                                                                     |
+| `auth.lockout.released`              | user_id, by_admin/auto, ts                                                              |
+| `auth.sync.drift_detected`           | user_id, diff, ts                                                                       |
+| `auth.erasure.executed`              | user_id, scope, ts                                                                      |
 
 Storage — append-only Postgres table или event-store (если IdP = Zitadel — нативно event-sourced). Read access — только `platform_admin` + DPO; delete не разрешён даже им (enforced на DB-уровне).
 

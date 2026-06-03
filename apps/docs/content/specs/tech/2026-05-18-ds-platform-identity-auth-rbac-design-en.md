@@ -197,7 +197,7 @@ Resolves ADR-0001 §10's "full list of auth audit events — identity-auth-rbac-
 - **Storage:** the `auth_audit` table (§8) is the auth-domain **projection of the append-only `audit_ledger`** (ADR-0003 §6); PD columns store masked values, full values only in the encrypted ledger (003-design §5). Append-only — `INSERT` only, `UPDATE`/`DELETE` blocked at the DB level (ADR-0003 §2.7 ledger pattern). Read access: `platform_admin` + DPO only; deletion is impossible even for them.
 - **Retention:** ≥3 years (ADR-0001 design §7.3 / PRD §31); the platform retention matrix sets the audit ledger at **5 years** with crypto-shred at term (ADR-0009 §2.6, OQ-D3 CLOSED). (ADR-0003's OQ-D3 spells this table `audit_log`; ADR-0009 §2.6 spells the same table `audit_ledger` — one table, two corpus spellings.)
 - **Audit-class registration:** each class above is registered per ADR-0009 §2.4; the `@Authz({ audit: 'low-stakes' | 'high-stakes' })` classification (matrix §3) determines whether a given route's outcome _must_ produce a row, while this taxonomy fixes the event's identity and fields.
-- **Compatibility note:** ADR-0001 design §2.5/§7.3 currently spell the table `auth_audit_events` and list the flat event names without the class prefix. Both refer to the same events under this taxonomy. Reconciling ADR-0001 to the pinned name + class-qualified ids is tracked as follow-up (§8).
+- **Corpus alignment:** the `auth_audit` table name and these class-qualified ids are used consistently across ADR-0001 design §2.5/§7.3, the endpoint-authorization-matrix spec, and 003-design §5 (ADR-0001 reconciled to this taxonomy in #111). This §7.3 is the canonical taxonomy of record; ADR-0001 §7.3 mirrors the v1-mandatory subset.
 
 ### 7.4 JWT fast-path vs introspection for step-up
 
@@ -216,10 +216,9 @@ Resolves ADR-0004 design (CSRF): "double-submit pattern (cookie + header) on all
 
 ---
 
-## 8. Naming resolution & deferred decisions
+## 8. Naming resolution
 
-- **Audit table name — `auth_audit` (pinned).** `endpoint-authorization-matrix-design §8` and 003-design §5 already use `auth_audit`; ADR-0001 design §2.5/§7.3 use `auth_audit_events`. **This spec pins `auth_audit`** as canonical: it is the spelling the two implementation-facing specs (the matrix and 003) build against, and the `_events` suffix is redundant for a table whose every row is an event. `auth_audit` is the auth-domain projection of the append-only `audit_ledger` (ADR-0003 §6); the matrix `audit` column's semantics (none/low-stakes/high-stakes) are unchanged by the name.
-- **ADR-0001 reconciliation (follow-up, tracked).** Pinning `auth_audit` + the class-qualified event ids (§7.3) leaves ADR-0001 design §2.5/§7.3 on the older spelling. A separate triage Issue (**#111**) tracks the reconciliation PR (the #104/#105 adr-revision pattern) — kept out of this spec PR so the new-spec change and the ADR edit are reviewed independently.
+- **Audit table name — `auth_audit` (pinned).** **This spec pins `auth_audit`** as canonical: it is the spelling the implementation-facing specs (`endpoint-authorization-matrix-design §3`, 003-design §5) build against, and the `_events` suffix is redundant for a table whose every row is an event. `auth_audit` is the auth-domain projection of the append-only `audit_ledger` (ADR-0003 §6); the matrix `audit` column's semantics (none/low-stakes/high-stakes) are unchanged by the name. ADR-0001 design §2.5/§7.3 were reconciled to this name + the class-qualified event ids (§7.3) in #111, so the corpus is consistent end-to-end.
 
 ---
 
@@ -245,4 +244,3 @@ No forward reference to `identity-auth-rbac-design` remains dangling.
 - **The role model, RBAC enforcement engine, and session/token parameters** — owned by ADR-0001 / ADR-0002 / `endpoint-authorization-matrix-design`; referenced in §3/§4, never redefined.
 - **The full backend-core middleware chain** beyond the auth-relevant ordering in §6 — owned by `backend-core-design`.
 - **Concrete SMS / email provider selection** — owned by engineering-readiness §5.bis (an implementation moment).
-- **The ADR-0001 §2.5/§7.3 reconciliation to `auth_audit` + class-qualified ids** — a separate triage Issue (#111, §8).

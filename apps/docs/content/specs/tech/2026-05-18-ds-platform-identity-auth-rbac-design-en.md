@@ -219,7 +219,7 @@ Resolves ADR-0004 design (CSRF): "double-submit pattern (cookie + header) on all
 ## 8. Naming resolution & deferred decisions
 
 - **Audit table name — `auth_audit` (pinned).** `endpoint-authorization-matrix-design §8` and 003-design §5 already use `auth_audit`; ADR-0001 design §2.5/§7.3 use `auth_audit_events`. **This spec pins `auth_audit`** as canonical: it is the spelling the two implementation-facing specs (the matrix and 003) build against, and the `_events` suffix is redundant for a table whose every row is an event. `auth_audit` is the auth-domain projection of the append-only `audit_ledger` (ADR-0003 §6); the matrix `audit` column's semantics (none/low-stakes/high-stakes) are unchanged by the name.
-- **ADR-0001 reconciliation (follow-up, tracked).** Pinning `auth_audit` + the class-qualified event ids (§7.3) leaves ADR-0001 design §2.5/§7.3 on the older spelling. A separate triage Issue tracks the reconciliation PR (the #104/#105 adr-revision pattern) — kept out of this spec PR so the new-spec change and the ADR edit are reviewed independently.
+- **ADR-0001 reconciliation (follow-up, tracked).** Pinning `auth_audit` + the class-qualified event ids (§7.3) leaves ADR-0001 design §2.5/§7.3 on the older spelling. A separate triage Issue (**#111**) tracks the reconciliation PR (the #104/#105 adr-revision pattern) — kept out of this spec PR so the new-spec change and the ADR edit are reviewed independently.
 
 ---
 
@@ -245,4 +245,4 @@ No forward reference to `identity-auth-rbac-design` remains dangling.
 - **The role model, RBAC enforcement engine, and session/token parameters** — owned by ADR-0001 / ADR-0002 / `endpoint-authorization-matrix-design`; referenced in §3/§4, never redefined.
 - **The full backend-core middleware chain** beyond the auth-relevant ordering in §6 — owned by `backend-core-design`.
 - **Concrete SMS / email provider selection** — owned by engineering-readiness §5.bis (an implementation moment).
-- **The ADR-0001 §2.5/§7.3 reconciliation to `auth_audit` + class-qualified ids** — a separate triage Issue (§8).
+- **The ADR-0001 §2.5/§7.3 reconciliation to `auth_audit` + class-qualified ids** — a separate triage Issue (#111, §8).

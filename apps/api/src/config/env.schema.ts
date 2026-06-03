@@ -21,6 +21,17 @@ export const ApiEnvSchema = z.looseObject({
     .default(false),
   SMARTCAPTCHA_SERVER_KEY: z.string().optional(),
   SMARTCAPTCHA_VALIDATE_URL: z.url().default(SMARTCAPTCHA_VALIDATE_URL),
+
+  // Identity provider (Zitadel — design §1/§2). The BFF binds the real Zitadel
+  // adapter only when a service token is present; with no token (the dev-stand
+  // default — `IDP_CLIENT_SECRET` is empty) it falls back to the in-memory fake
+  // so the F1 flows run end-to-end against a real Postgres without a live IdP.
+  IDP_ISSUER: z.string().optional(),
+  IDP_SERVICE_TOKEN: z.string().optional(),
+  // Shared secret authenticating the Zitadel Action webhook (EARS-19). The
+  // webhook fails closed when this is unset — an unauthenticated mirror-write
+  // surface is never opened by default.
+  IDP_WEBHOOK_SECRET: z.string().optional(),
 });
 
 export type ApiEnv = z.infer<typeof ApiEnvSchema>;

@@ -101,12 +101,17 @@ export function toLedgerRow(event: AuthAuditEvent): MappedRow {
         metadata: { identifier_hash: hashIdentifier(event.identifier) },
       };
     case "PasswordResetCompleted":
+      // Canonical class is `auth.password.{changed, reset_requested}` (ADR-0001
+      // §7.3, the taxonomy owner) — a completed self-service reset is a password
+      // change `by_self`; `reason: "reset"` distinguishes it from an in-session
+      // change. (EARS-18's prose list says `password.reset.completed`, but §7.3
+      // is authoritative and every other event here is normalized to it.)
       return {
-        eventType: "auth.password.reset.completed",
+        eventType: "auth.password.changed",
         subjectId: event.sub,
         sid: null,
-        reason: null,
-        metadata: {},
+        reason: "reset",
+        metadata: { by: "self" },
       };
     case "AccountLocked":
       return {

@@ -246,6 +246,56 @@ export class ZitadelIdpClient implements IdpClient {
     return res.ok ? { sub: userId } : null;
   }
 
+  // ── Passwordless login OTP (EARS-6/7) — INTEGRATION SEAM (design §3, §6, §11) ──
+  // Zitadel login OTP is Session v2: create a session with a `user` check and an
+  // `otpEmail`/`otpSms` challenge (Zitadel sends the code), then update the same
+  // session with the submitted code, then exchange the checked session for tokens.
+  // The challenge is bound to a server-side session that must be carried between
+  // the request and verify calls, and the final hop is the same authorize-with-
+  // session → token exchange that `exchangeSessionForTokens` still lacks the
+  // OIDC-application config for (IDP_CLIENT_ID / redirect, created against the
+  // dev-stand console as a recipe follow-up). Until that config is plumbed and
+  // verifiable against a live instance, fail closed — send/verify nothing — rather
+  // than ship an unverifiable OTP-login path. The BFF orchestration (EARS-6/7) and
+  // the SMS toll-fraud budget (EARS-14) are proven against FakeIdpClient.
+  requestEmailOtp(_identifier: string): Promise<void> {
+    return Promise.reject(
+      new Error(
+        "zitadel email-OTP login is not wired against the dev-stand yet (design §11)",
+      ),
+    );
+  }
+
+  loginWithEmailOtp(
+    _identifier: string,
+    _code: string,
+  ): Promise<IdpSession | null> {
+    return Promise.reject(
+      new Error(
+        "zitadel email-OTP login is not wired against the dev-stand yet (design §11)",
+      ),
+    );
+  }
+
+  requestSmsOtp(_identifier: string): Promise<void> {
+    return Promise.reject(
+      new Error(
+        "zitadel SMS-OTP login is not wired against the dev-stand yet (design §11)",
+      ),
+    );
+  }
+
+  loginWithSmsOtp(
+    _identifier: string,
+    _code: string,
+  ): Promise<IdpSession | null> {
+    return Promise.reject(
+      new Error(
+        "zitadel SMS-OTP login is not wired against the dev-stand yet (design §11)",
+      ),
+    );
+  }
+
   async listUsers(): Promise<IdpUser[]> {
     const res = await this.fetchImpl(this.url("/v2/users"), {
       method: "POST",

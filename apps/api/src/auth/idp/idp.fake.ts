@@ -49,6 +49,12 @@ export class FakeIdpClient implements IdpClient {
   private readonly failed = new Map<string, number>();
   /** Subs with a live reset code → the code that completes it (EARS-11/12). Models Zitadel's forgot-password code flow; single-use, cleared on completion. */
   private readonly resetCodes = new Map<string, string>();
+  /** Subs with a live email login-OTP challenge (EARS-6). Set on request, cleared on a successful verify — models Zitadel requiring a challenge before the check. */
+  private readonly emailOtpChallenges = new Set<string>();
+  /** Subs with a live SMS login-OTP challenge (EARS-7). */
+  private readonly smsOtpChallenges = new Set<string>();
+  /** How many times the BFF asked the (native) provider to send an SMS login code — the EARS-14 assertion hinge: a budget-refused send never reaches here. */
+  private smsSends = 0;
   private seq = 0;
 
   createUser(input: CreateUserInput): Promise<CreatedUser> {
@@ -159,6 +165,75 @@ export class FakeIdpClient implements IdpClient {
         claims: { sub, roles: ["doctor_guest"], mfa: false },
       },
     });
+  }
+
+  private findByIdentifier(identifier: string): FakeRecord | undefined {
+    return (
+      this.byEmail.get(identifier.toLowerCase()) ?? this.byPhone.get(identifier)
+    );
+  }
+
+  /** Mint a checked session for a sub that just passed an OTP login check (EARS-6/7). */
+  private checkedSession(sub: string): IdpSession {
+    const zitadelSessionId = `fake-session-${++this.seq}`;
+    this.sessions.set(zitadelSessionId, sub);
+    return { zitadelSessionId, sub };
+  }
+
+  requestEmailOtp(identifier: string): Promise<void> {
+    // A challenge is armed only for an existing identifier, but the resolution is
+    // identical either way (enumeration-safe, EARS-6/16) — an unknown identifier
+    // is a silent no-op, never a throw.
+    const record = this.findByIdentifier(identifier);
+    if (record) this.emailOtpChallenges.add(record.sub);
+    return Promise.resolve();
+  }
+
+  loginWithEmailOtp(
+    identifier: string,
+    code: string,
+  ): Promise<IdpSession | null> {
+    const record = this.findByIdentifier(identifier);
+    // Unknown identifier, no live challenge, and wrong/expired code are all
+    // indistinguishable (EARS-16): every miss resolves to null.
+    if (
+      !record ||
+      !this.emailOtpChallenges.has(record.sub) ||
+      code !== FAKE_VALID_CODE
+    ) {
+      return Promise.resolve(null);
+    }
+    this.emailOtpChallenges.delete(record.sub); // single-use
+    return Promise.resolve(this.checkedSession(record.sub));
+  }
+
+  requestSmsOtp(identifier: string): Promise<void> {
+    // The BFF calls this only after the EARS-14 budget allows the send, so every
+    // call here is a real provider send — count it (the budget-refused path never
+    // reaches this method). Whether a challenge is armed still depends on the
+    // identifier existing, but the BFF cannot tell (enumeration-safe, EARS-7/16).
+    this.smsSends++;
+    const record = this.findByIdentifier(identifier);
+    if (record) this.smsOtpChallenges.add(record.sub);
+    return Promise.resolve();
+  }
+
+  loginWithSmsOtp(identifier: string, code: string): Promise<IdpSession | null> {
+    const record = this.findByIdentifier(identifier);
+    if (
+      !record ||
+      !this.smsOtpChallenges.has(record.sub) ||
+      code !== FAKE_VALID_CODE
+    ) {
+      return Promise.resolve(null);
+    }
+    this.smsOtpChallenges.delete(record.sub);
+    return Promise.resolve(this.checkedSession(record.sub));
+  }
+
+  /** Test accessor: how many SMS login codes the BFF asked the provider to send. */
+  smsOtpSendCount(): number {
+    return this.smsSends;
   }
 
   requestPasswordReset(identifier: string): Promise<void> {

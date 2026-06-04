@@ -14,6 +14,7 @@ import type { FastifyReply } from "fastify";
 import type {
   LoginResponse,
   LogoutResponse,
+  OtpRequestResponse,
   PasswordResetCompleteResponse,
   PasswordResetResponse,
   RefreshResponse,
@@ -27,6 +28,8 @@ import { BotProtected } from "../bot-protection/index.js";
 import { AuthService } from "./auth.service.js";
 import {
   LoginRequestDto,
+  OtpRequestDto,
+  OtpVerifyDto,
   PasswordResetCompleteRequestDto,
   PasswordResetRequestDto,
   RegisterRequestDto,
@@ -108,6 +111,66 @@ export class AuthController {
       dto.password,
       fingerprint,
     );
+    if (!result) throw new UnauthorizedException(GENERIC_LOGIN_FAILURE);
+
+    reply.header("set-cookie", result.cookie);
+    return { status: "authenticated" };
+  }
+
+  /**
+   * EARS-6/7 step 1: request a passwordless login code (email-OTP or SMS-OTP).
+   * Public (unauthenticated entry point that mints no session yet). The SMS
+   * channel is gated by the toll-fraud budget (EARS-14) in the service: the IP is
+   * taken here (the only request-coupled input) and the ASN from the edge-supplied
+   * `x-asn` header (the per-ASN limit is an edge/BFF concern, design §2; absent in
+   * dev, the budget degrades to phone/IP/global). A budget-refused SMS is a
+   * generic 429 thrown by the service — no SMS reaches the provider. The success
+   * body is the same enumeration-safe `otp_sent` for both channels (EARS-16).
+   * `audit: high-stakes` — a credential-channel side-effect (code send / SMS spend).
+   */
+  @Post("login/otp/request")
+  @Public()
+  @HttpCode(200)
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "high-stakes",
+    tests: ["EARS-6", "EARS-7", "EARS-14"],
+  })
+  requestLoginOtp(
+    @Body() dto: OtpRequestDto,
+    @Ip() ip: string,
+    @Headers("x-asn") asn: string | undefined,
+  ): Promise<OtpRequestResponse> {
+    return this.auth.requestLoginOtp(dto, { ip, asn });
+  }
+
+  /**
+   * EARS-6/7 step 2 + EARS-8: submit a passwordless login code. Public (the code
+   * is the authenticator; the user holds no session yet). On success it sets the
+   * `__Host-` cookie and returns a token-free body — the identical convergence
+   * point as password login (design §6); every failure is the same generic 401
+   * (EARS-16). The fingerprint is derived here (the only layer with the request)
+   * and bound into the session by the service.
+   */
+  @Post("login/otp")
+  @Public()
+  @HttpCode(200)
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "high-stakes",
+    tests: ["EARS-6", "EARS-7", "EARS-8"],
+  })
+  async loginWithOtp(
+    @Body() dto: OtpVerifyDto,
+    @Headers("user-agent") userAgent: string | undefined,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @Ip() ip: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<LoginResponse> {
+    const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
+    const result = await this.auth.loginWithOtp(dto, fingerprint);
     if (!result) throw new UnauthorizedException(GENERIC_LOGIN_FAILURE);
 
     reply.header("set-cookie", result.cookie);

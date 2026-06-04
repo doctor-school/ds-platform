@@ -418,21 +418,24 @@ main().catch((e) => {
 
 ## 5. Iteration-end checklist + AI-specific drift guards
 
-### 5.1 9-item checklist (AGENTS.md hard rules)
+### 5.1 12-item checklist (AGENTS.md hard rules)
 
 Перед `git push` агент проходит каждый пункт. Если хоть один false — не push, либо чинит, либо escalate.
 
-| #   | Check                                                                      | Команда / условие                                             |
-| --- | -------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| 1   | All tests green                                                            | `pnpm test:unit && pnpm test:e2e`                             |
-| 2   | Generated artifacts up-to-date                                             | `pnpm generate:all && git diff --exit-code`                   |
-| 3   | TypeScript compiles                                                        | `pnpm typecheck`                                              |
-| 4   | Lint clean                                                                 | `pnpm lint` (incl. `@ds/glossary-canonical-ids`, events-lint) |
-| 5   | Module README updated если exports changed                                 | `pnpm lint:module-readme`                                     |
-| 6   | Spec `status` frontmatter обновлён (Draft → In dev → Shipped)              | manual edit в `NNN-requirements.md`                           |
-| 7   | Glossary terms добавлены если в коде/spec появилась новая доменная лексика | `pnpm lint:glossary-mdx`                                      |
-| 8   | ADR создан если было архитектурное решение                                 | judgment; интерактивный reviewer (AGENTS.md §4) ловит miss'ы  |
-| 9   | Linked Issue получил summary comment (file paths, decisions, что осталось) | `gh issue comment <N> --body-file <summary>`                  |
+| #   | Check                                                                                                                                  | Команда / условие                                                   |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 1   | All tests green                                                                                                                        | `pnpm test:unit && pnpm test:e2e`                                   |
+| 2   | Generated artifacts up-to-date                                                                                                         | `pnpm generate:all && git diff --exit-code`                         |
+| 3   | TypeScript compiles                                                                                                                    | `pnpm typecheck`                                                    |
+| 4   | Lint clean                                                                                                                             | `pnpm lint` (incl. `@ds/glossary-canonical-ids`, events-lint)       |
+| 5   | Module README updated если exports changed                                                                                             | `pnpm lint:module-readme`                                           |
+| 6   | Spec `status` frontmatter обновлён (Draft → In dev → Shipped)                                                                          | manual edit в `NNN-requirements.md`                                 |
+| 7   | Glossary terms добавлены если в коде/spec появилась новая доменная лексика                                                             | `pnpm lint:glossary-mdx`                                            |
+| 8   | ADR создан если было архитектурное решение                                                                                             | judgment; интерактивный reviewer (AGENTS.md §4) ловит miss'ы        |
+| 9   | Linked Issue получил summary comment (file paths, decisions, что осталось)                                                             | `gh issue comment <N> --body-file <summary>`                        |
+| 10  | `apps/docs/content/architecture/` обновлён если появился новый app/package или изменилась структура                                    | manual edit (closes F-3)                                            |
+| 11  | `apps/docs/content/operations/` runbook добавлен если появился новый операционный concern                                              | manual edit (closes F-3)                                            |
+| 12  | Vertical-slice DoD (conditional, F-22) — последний handler спеки `surface: user-facing`: путь проходится end-to-end либо tracked Issue | browser/E2E green; N/A для `backend-only` / не-финального handler'а |
 
 ### 5.2 CI gates — AI-specific extensions (поверх ADR-0006 §7)
 

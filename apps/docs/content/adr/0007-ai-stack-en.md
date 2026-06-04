@@ -74,7 +74,7 @@ Every implementation iteration follows an orchestrated cycle: READ relevant ADRs
 
 The procedural source of truth is **`apps/docs/content/skills/do-feature-iteration/SKILL.md`**. The orchestration skill carries the discipline gates — checklist verdict, review verdict, decision-debt invocation — that an inline narrative checklist cannot enforce: an agent reading a narrative bullet list will skip silently, but an agent that cannot proceed without an artifact returned by a subagent cannot skip. Concretely:
 
-- **`run-iteration-end-checklist`** runs in dispatch mode; the subagent returns a structured verdict line `VERDICT: N of 11 — <PASS | BLOCKED on #X>`. The lead agent cannot proceed past the checklist gate while the verdict is `BLOCKED`.
+- **`run-iteration-end-checklist`** runs in dispatch mode; the subagent returns a structured verdict line `VERDICT: N of 12 — <PASS | BLOCKED on #X>`. The lead agent cannot proceed past the checklist gate while the verdict is `BLOCKED`.
 - **`request-mode-a-review`** runs in dispatch mode; the subagent reviewer returns a structured verdict line `VERDICT: <APPROVE | REQUEST_CHANGES>`. The lead agent cannot invoke `merge-when-green` while the latest verdict is `REQUEST_CHANGES` or absent.
 - **`surface-decision-debt`** is required before `write-iteration-summary`. The skill's output may be `[]`, but the invocation itself is required.
 
@@ -109,7 +109,7 @@ Implementation in `tools/lint/spec-link-lint.ts`, `tools/lint/ears-test-lint.ts`
 
 > **Interim semantics note (per ADR-0008 §2.6 deferred branch protection):** while ADR-0008 §2.6 branch protection is deferred until org plan upgrade or the repo is made public, `BLOCK` is read operationally as **"CI job exits red and the Tech Lead treats it as a merge-blocker by convention"** — same outcome on the single-developer happy path, no server-side guarantee.
 
-### 2.7 11-item iteration-end checklist (dispatched via `run-iteration-end-checklist`)
+### 2.7 12-item iteration-end checklist (dispatched via `run-iteration-end-checklist`)
 
 Before `git push` the agent dispatches the `run-iteration-end-checklist` skill to a fresh-context subagent (§2.4). The subagent verifies:
 
@@ -124,8 +124,9 @@ Before `git push` the agent dispatches the `run-iteration-end-checklist` skill t
 9. `apps/docs/content/architecture/` updated for cross-cutting changes
 10. `apps/docs/content/operations/` runbook updated for ops-relevant changes
 11. Linked Issue received a summary comment (file paths, decisions, what remains)
+12. Vertical-slice DoD (conditional, F-22) — when this iteration closes the **last** open handler of a `surface: user-facing` spec, the user journey is completable end-to-end (browser/E2E green) or the gap is a tracked Issue; N/A for `surface: backend-only` or a non-final handler
 
-The subagent returns `VERDICT: N of 11 — <PASS | BLOCKED on #X>`. Failure of any item → no push; either fix or escalate.
+The subagent returns `VERDICT: N of 12 — <PASS | BLOCKED on #X>`. Failure of any item → no push; either fix or escalate.
 
 ### 2.8 Prompt-caching policy
 

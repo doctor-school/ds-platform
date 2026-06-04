@@ -1,6 +1,6 @@
 ---
 title: "run-iteration-end-checklist"
-description: "Procedural skill (dispatch): subagent verifies the 12-item iteration-end checklist and returns a PASS/BLOCKED verdict. Primary enforcement for F-15."
+description: "Procedural skill (dispatch): subagent verifies the 12-item iteration-end checklist and returns a PASS/BLOCKED verdict. Primary enforcement for F-15; item 12 enforces F-22 (vertical-slice DoD)."
 name: run-iteration-end-checklist
 mode: dispatch
 ---

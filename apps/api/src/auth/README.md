@@ -1,4 +1,4 @@
-# `auth` — BFF over Zitadel (003 F1 + F2 + F3 + F4 + F5)
+# `auth` — BFF over Zitadel (003 F1 + F2 + F3 + F4 + F5 + F6)
 
 The Backend-for-Frontend for the doctor-portal auth vertical (003-design §1).
 `apps/api` owns the domain mirror, consent, RBAC grant, server-side sessions, and
@@ -7,8 +7,10 @@ abuse guards; it delegates **every** credential operation to Zitadel through the
 consent capture, mirror sync), **F2** (#86: password login + BFF session
 establishment + token exchange), **F3** (#87: passwordless login — email-OTP +
 SMS-OTP + SMS toll-fraud budget), **F4** (#88: session refresh rotation +
-logout), and **F5** (#89: password reset — enumeration-safe initiate + complete
-with global session revocation).
+logout), **F5** (#89: password reset — enumeration-safe initiate + complete with
+global session revocation), and **F6** (#90: cross-cutting security — rate limit,
+timing equalization, login captcha policy, native-lockout observation, and the
+durable `audit_ledger` writer).
 
 ## What's here
 
@@ -21,11 +23,14 @@ with global session revocation).
 | Password-reset routes                           | `auth.controller.ts`     | 11, 12                  |
 | Cascade + login + OTP + reset orchestration     | `auth.service.ts`        | 1–7, 11, 12, 14, 16, 20 |
 | SMS toll-fraud budget                           | `sms-budget/`            | 14                      |
+| Rate limiter (per-user/IP/ASN)                  | `rate-limit/`            | 13                      |
+| Timing equalization                             | `timing/`                | 16                      |
+| Login captcha-after-N policy                    | `login-challenge/`       | 17                      |
+| Durable audit_ledger writer                     | `session/auth-audit.*`   | 9, 10, 12, 15, 18       |
 | `doctor_guest` mirror row                       | `user-mirror.service.ts` | 3, 4, 19                |
 | Reconciliation sweep                            | `reconcile.service.ts`   | 19                      |
 | IdP port + adapters                             | `idp/`                   | (design §2)             |
 | BFF session establish/refresh/logout/revoke-all | `session/`               | 5, 8, 9, 10, 12         |
-| Auth security-event sink (seam)                 | `session/auth-audit.*`   | 9, 10, 12               |
 
 ## BFF session model (`session/`, design §3, ADR-0001 §6)
 

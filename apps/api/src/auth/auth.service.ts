@@ -1,11 +1,16 @@
 import {
   BadRequestException,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
 import { consentRecords, users, type DrizzleHandle } from "@ds/db";
 import type {
+  OtpRequest,
+  OtpRequestResponse,
+  OtpVerify,
   PasswordResetCompleteResponse,
   PasswordResetResponse,
   RegisterRequest,
@@ -20,6 +25,7 @@ import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { IDP_CLIENT, type IdpClient } from "./idp/idp.types.js";
 import { AUTH_WEBHOOK_SECRET } from "./auth.tokens.js";
 import { UserMirrorService } from "./user-mirror.service.js";
+import { SmsBudgetService } from "./sms-budget/sms-budget.service.js";
 import {
   SessionService,
   type RefreshOutcome,
@@ -32,6 +38,12 @@ type Db = DrizzleHandle["db"];
 // an enumeration / oracle channel (EARS-16); reasons live in the audit ledger
 // (F6). Same string, same 400, for every failure branch.
 const GENERIC_FAILURE = "the request could not be completed";
+
+// EARS-14: one generic throttled message for every SMS-budget refusal (per-phone
+// / per-IP / per-ASN ceiling or the global daily breaker). It names no threshold
+// and no account — a refusal is not an existence oracle and not an attacker's
+// budget read-out (design §10: breaker-open returns a generic "try later").
+const GENERIC_THROTTLED = "too many requests, please try again later";
 
 /** Postgres unique-constraint violation SQLSTATE (`unique_violation`). */
 const PG_UNIQUE_VIOLATION = "23505";
@@ -75,6 +87,7 @@ export class AuthService {
     private readonly webhookSecret: string | undefined,
     private readonly mirror: UserMirrorService,
     private readonly sessions: SessionService,
+    private readonly smsBudget: SmsBudgetService,
   ) {}
 
   /**
@@ -92,6 +105,60 @@ export class AuthService {
     fingerprint: string,
   ): Promise<{ cookie: string; claims: SessionClaims } | null> {
     const session = await this.idp.passwordLogin(identifier, password);
+    if (!session) return null;
+    return this.sessions.establish(session.zitadelSessionId, fingerprint);
+  }
+
+  /**
+   * EARS-6/7 step 1: request a passwordless login code. Email delegates straight
+   * to the IdP's native `otp_email` send. SMS first passes the EARS-14 toll-fraud
+   * budget (per-phone/IP/ASN + global daily breaker): a refused send reaches
+   * neither Zitadel nor the user — it returns a generic throttled error (design
+   * §10), so no SMS costs money and the refusal leaks nothing. Both channels'
+   * success is the same enumeration-safe `otp_sent` acknowledgement (EARS-16) —
+   * the IdP send resolves identically whether or not the identifier exists.
+   * `ctx` carries the request-coupled SMS-budget dimensions (the controller is the
+   * only layer with the IP and the edge-supplied ASN).
+   */
+  async requestLoginOtp(
+    req: OtpRequest,
+    ctx: { ip: string; asn?: string | undefined },
+  ): Promise<OtpRequestResponse> {
+    if (req.channel === "email") {
+      await this.idp.requestEmailOtp(req.identifier);
+    } else {
+      const allowed = this.smsBudget.tryConsume({
+        phone: req.identifier,
+        ip: ctx.ip,
+        asn: ctx.asn,
+      });
+      if (!allowed) {
+        throw new HttpException(
+          GENERIC_THROTTLED,
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+      await this.idp.requestSmsOtp(req.identifier);
+    }
+    return { status: "otp_sent" };
+  }
+
+  /**
+   * EARS-6/7 step 2: verify a passwordless login code and, on success, establish
+   * the BFF session (EARS-8) — the identical convergence point as password login
+   * (design §6), so the cookie/token logic exists once. Returns `null` for every
+   * failure (unknown identifier, wrong/expired code) so the controller answers
+   * with the same generic 401 (EARS-16). The `fingerprint` is computed by the
+   * controller from the request and bound into the session here.
+   */
+  async loginWithOtp(
+    req: OtpVerify,
+    fingerprint: string,
+  ): Promise<{ cookie: string; claims: SessionClaims } | null> {
+    const session =
+      req.channel === "email"
+        ? await this.idp.loginWithEmailOtp(req.identifier, req.code)
+        : await this.idp.loginWithSmsOtp(req.identifier, req.code);
     if (!session) return null;
     return this.sessions.establish(session.zitadelSessionId, fingerprint);
   }

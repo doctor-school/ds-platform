@@ -1,6 +1,8 @@
 import { createZodDto } from "nestjs-zod";
 import {
   LoginRequestSchema,
+  OtpRequestSchema,
+  OtpVerifySchema,
   PasswordResetCompleteRequestSchema,
   PasswordResetRequestSchema,
   RegisterRequestSchema,
@@ -14,6 +16,8 @@ import {
 
 export class RegisterRequestDto extends createZodDto(RegisterRequestSchema) {}
 export class LoginRequestDto extends createZodDto(LoginRequestSchema) {}
+export class OtpRequestDto extends createZodDto(OtpRequestSchema) {}
+export class OtpVerifyDto extends createZodDto(OtpVerifySchema) {}
 export class VerifyRequestDto extends createZodDto(VerifyRequestSchema) {}
 export class ZitadelWebhookDto extends createZodDto(ZitadelWebhookSchema) {}
 export class PasswordResetRequestDto extends createZodDto(

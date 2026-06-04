@@ -9,6 +9,13 @@ import { AuthService } from "./auth.service.js";
 import { UserMirrorService } from "./user-mirror.service.js";
 import { ReconcileService } from "./reconcile.service.js";
 import { AUTH_WEBHOOK_SECRET } from "./auth.tokens.js";
+import { SmsBudgetService } from "./sms-budget/sms-budget.service.js";
+import {
+  DEFAULT_SMS_BUDGET_THRESHOLDS,
+  SMS_BUDGET_CLOCK,
+  SMS_BUDGET_THRESHOLDS,
+  type Clock,
+} from "./sms-budget/sms-budget.types.js";
 
 /**
  * Auth module: F1 (#85) registration + verification + mirror sync + consent, and
@@ -33,6 +40,13 @@ import { AUTH_WEBHOOK_SECRET } from "./auth.tokens.js";
       provide: AUTH_WEBHOOK_SECRET,
       useFactory: (): string | undefined => loadEnv().IDP_WEBHOOK_SECRET,
     },
+    // EARS-14 SMS toll-fraud budget. Thresholds are the EARS-14 defaults bound as
+    // an injectable value (a deployment can rebind to tighten them; the e2e
+    // rebinds to drive the breaker boundary). The clock is `Date.now`, rebound to
+    // a fake in the unit spec for deterministic window-reset testing.
+    SmsBudgetService,
+    { provide: SMS_BUDGET_THRESHOLDS, useValue: DEFAULT_SMS_BUDGET_THRESHOLDS },
+    { provide: SMS_BUDGET_CLOCK, useValue: (() => Date.now()) satisfies Clock },
   ],
 })
 export class AuthModule {}

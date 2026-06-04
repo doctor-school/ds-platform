@@ -113,6 +113,55 @@ export const LoginResponseSchema = z.strictObject({
 export type LoginResponse = z.infer<typeof LoginResponseSchema>;
 
 /**
+ * The passwordless login channel (EARS-6 email / EARS-7 SMS). Both are native
+ * Zitadel one-time-code flows (`otp_email` / `otp_sms`, design §2) that converge
+ * on the same session-establishment step (design §6); the discriminator selects
+ * which native channel the BFF asks Zitadel to use and, for `sms`, engages the
+ * toll-fraud budget (EARS-14) before the send.
+ */
+export const OtpChannelSchema = z.enum(["email", "sms"]);
+export type OtpChannel = z.infer<typeof OtpChannelSchema>;
+
+/**
+ * Request a passwordless login code (EARS-6 step 1 / EARS-7 step 1). A single
+ * `identifier` box (email or phone) like {@link LoginRequestSchema} — Zitadel
+ * resolves it (design §2) and sends the code. `captchaToken` is the bot-protection
+ * token (EARS-17, owned by F6); optional here as the guard no-ops when disabled.
+ */
+export const OtpRequestSchema = z.object({
+  identifier: z.string().min(1),
+  channel: OtpChannelSchema,
+  captchaToken: z.string().optional(),
+});
+export type OtpRequest = z.infer<typeof OtpRequestSchema>;
+
+/**
+ * Response to a code request (EARS-6/7). Deliberately identical whether or not the
+ * identifier exists — a code is sent only if it does, but the response discloses
+ * nothing (enumeration-resistant, EARS-16). Always `otp_sent`. A send refused by
+ * the SMS toll-fraud budget (EARS-14) is *not* this response — it is a generic
+ * throttled error, so a budget refusal never masquerades as a delivered code.
+ */
+export const OtpRequestResponseSchema = z.strictObject({
+  status: z.literal("otp_sent"),
+});
+export type OtpRequestResponse = z.infer<typeof OtpRequestResponseSchema>;
+
+/**
+ * Submit a passwordless login code (EARS-6 step 2 / EARS-7 step 2). On success
+ * the BFF establishes a session exactly as password login does (design §6),
+ * returning {@link LoginResponseSchema} with a `__Host-` cookie and no token;
+ * every failure (unknown identifier, wrong/expired code) is the same generic 401
+ * (EARS-16).
+ */
+export const OtpVerifySchema = z.object({
+  identifier: z.string().min(1),
+  code: z.string().min(1),
+  channel: OtpChannelSchema,
+});
+export type OtpVerify = z.infer<typeof OtpVerifySchema>;
+
+/**
  * Refresh response (EARS-9). Carries **no token** — the rotation happens
  * server-side and the session is still carried only by the unchanged `__Host-`
  * cookie (ADR-0001 §6). A successful rotation is `refreshed`; reuse detection or

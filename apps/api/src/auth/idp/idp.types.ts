@@ -107,6 +107,35 @@ export interface IdpClient {
   /** Enumerate users for the reconciliation sweep (EARS-19). */
   listUsers(): Promise<IdpUser[]>;
   /**
+   * EARS-6: trigger a Zitadel `otp_email` **login** code for `identifier`.
+   * Resolves identically whether or not the identifier exists — a code is sent
+   * only if it does, but the result never reveals which (enumeration-safe,
+   * EARS-16). Resolves rather than throws on an unknown identifier or a provider
+   * hiccup, so the caller's acknowledgement cannot become an existence oracle.
+   */
+  requestEmailOtp(identifier: string): Promise<void>;
+  /**
+   * EARS-6: verify an email login OTP and, on success, return the **checked**
+   * Zitadel session — the same `IdpSession` shape `passwordLogin` yields, so the
+   * BFF trades it for tokens via {@link exchangeSessionForTokens} and every login
+   * variant converges on one session-establishment step (design §6). Resolves to
+   * `null` on any failure (unknown identifier / wrong-or-expired code), which are
+   * indistinguishable so the caller stays enumeration-safe (EARS-16).
+   */
+  loginWithEmailOtp(identifier: string, code: string): Promise<IdpSession | null>;
+  /**
+   * EARS-7: trigger a Zitadel `otp_sms` **login** code. Same enumeration-safe
+   * contract as {@link requestEmailOtp}. The SMS toll-fraud budget (EARS-14) is
+   * the caller's gate **before** this method — a refused send never reaches here,
+   * so this method always attempts the (native) send.
+   */
+  requestSmsOtp(identifier: string): Promise<void>;
+  /**
+   * EARS-7: verify an SMS login OTP → checked {@link IdpSession} or `null`. Same
+   * contract as {@link loginWithEmailOtp} (design §6 convergence; EARS-16).
+   */
+  loginWithSmsOtp(identifier: string, code: string): Promise<IdpSession | null>;
+  /**
    * EARS-5: create a Zitadel session with a password check for `identifier`
    * (email or phone). Resolves to the session on success and to `null` on any
    * failure — unknown identifier and wrong password are indistinguishable so the

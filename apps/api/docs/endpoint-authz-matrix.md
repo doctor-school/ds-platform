@@ -6,6 +6,8 @@
 | GET /v1/health                        | public        | —              | none       | —            | false   | none        | EARS-1                           |
 | GET /v1/ready                         | public        | —              | none       | —            | false   | none        | EARS-1, EARS-2                   |
 | POST /v1/auth/login                   | public        | —              | none       | —            | false   | high-stakes | EARS-5, EARS-8                   |
+| POST /v1/auth/login/otp               | public        | —              | none       | —            | false   | high-stakes | EARS-6, EARS-7, EARS-8           |
+| POST /v1/auth/login/otp/request       | public        | —              | none       | —            | false   | high-stakes | EARS-6, EARS-7, EARS-14          |
 | POST /v1/auth/logout                  | authenticated | doctor_guest   | fast-path  | —            | false   | high-stakes | EARS-10                          |
 | POST /v1/auth/password/reset          | public        | —              | none       | —            | false   | high-stakes | EARS-11, EARS-16                 |
 | POST /v1/auth/password/reset/complete | public        | —              | none       | —            | false   | high-stakes | EARS-12                          |

@@ -58,12 +58,12 @@ ADR фиксирует:
 - **Opt-in async: Codex (cloud)** — активируется по решению Tech Lead запустить первую параллельную задачу. AGENTS.md уже совместим с Codex (универсальный constitution из ADR-0006).
 - **Deferred: Cursor.** Trigger: наём второго инженера с inline-AI workflow preference.
 
-Все harness'ы проходят один и тот же 8-step iteration cycle (см. §2.4).
+Все harness'ы проходят один и тот же orchestrated iteration cycle (см. §2.4).
 
 ### 2.3 SDD + TDD как hard rules
 
 - **SDD:** никакого production-кода без feature-spec'а в `apps/docs/content/specs/features/NNN-<slug>/` (3 файла: requirements/design/scenarios — формат из ADR-0006 §4). Если spec'а нет — агент сначала пишет через superpowers:brainstorming.
-- **TDD:** никакого production-кода без failing test'а. One Vitest test per EARS-требование, naming `it('EARS-N.M: ...', ...)`. Playwright tests генерируются из `NNN-scenarios.feature` через `playwright-bdd`.
+- **TDD:** никакого production-кода без failing test'а. One Vitest test per EARS-требование, naming `it('EARS-N: ...', ...)`. Playwright tests генерируются из `NNN-scenarios.feature` через `playwright-bdd`.
 - **Узкие исключения** (typo / doc-only / dep-bumps / regenerated artifacts) документируются в PR description.
 
 Enforcement: AGENTS.md hard rules + machine-checkable CI guards (§2.6).
@@ -100,7 +100,7 @@ Sketch и edge cases — design spec §4.
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
 | **spec-link required**    | PR с label `feature:NNN-<slug>`, не связанный со своей спекой: нет `Closes #N`, у связанного Issue нет (product-тема) milestone, либо отсутствует spec-папка лейбла (`features/NNN-<slug>/`). Non-feature PR (bug/chore) — skipped. | BLOCK                   |
 | **TDD signal**            | implementation-only commit без test-файла                                                                                                                                                                                           | WARN v1                 |
-| **EARS ↔ test linkage**   | EARS-требование без `it('EARS-N.M: ...')` теста (content-search across all `apps/**/*.test.ts`)                                                                                                                                     | WARN v1 → BLOCK v2      |
+| **EARS ↔ test linkage**   | EARS-требование без `it('EARS-N: ...')` теста (content-search across all `apps/**/*.test.ts`)                                                                                                                                       | WARN v1 → BLOCK v2      |
 | **Gherkin coverage**      | scenarios без Playwright step реализации                                                                                                                                                                                            | BLOCK (через test fail) |
 | **Spec status freshness** | merged PR с label `feature:*`, но spec status='Draft'                                                                                                                                                                               | WARN v1                 |
 | **Prior decisions cited** | новый spec без ADR-link в "Prior decisions" если категория ≠ docs-only                                                                                                                                                              | WARN v1                 |

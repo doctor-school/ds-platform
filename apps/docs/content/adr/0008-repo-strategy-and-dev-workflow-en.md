@@ -224,7 +224,7 @@ Trigger to split: first engineer hired. At that point CODEOWNERS is split per `a
 | `glossary-ids`          | ESLint `glossary-canonical-ids` rule (from `packages/eslint-config/`)           | ADR-0006 §6   | BLOCK              |
 | `glossary-roundtrip`    | YAML ↔ Payload Glossary Collection sync drift                                   | ADR-0006 §6   | BLOCK              |
 | `spec-link`             | `tools/lint/spec-link-lint.ts` (PR feature:\* requires Closes #N + spec folder) | ADR-0007 §2.6 | BLOCK              |
-| `ears-tests`            | `tools/lint/ears-test-lint.ts` (EARS-N.M ↔ test linkage)                        | ADR-0007 §2.6 | WARN v1 → BLOCK v2 |
+| `ears-tests`            | `tools/lint/ears-test-lint.ts` (EARS-N ↔ test linkage)                          | ADR-0007 §2.6 | WARN v1 → BLOCK v2 |
 | `tdd-signal`            | implementation commit without test-file (heuristic)                             | ADR-0007 §2.6 | WARN v1            |
 | `spec-status-fresh`     | merged feature-PR with spec.status=Draft                                        | ADR-0007 §2.6 | WARN v1            |
 | `prior-decisions-cited` | new spec without ADR-link when category ≠ docs-only                             | ADR-0007 §2.6 | WARN v1            |

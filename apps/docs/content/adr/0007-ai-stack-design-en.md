@@ -49,7 +49,7 @@ One iteration = one feature spec → one or more related PRs. Source of intent �
 
 The procedural source of truth for an AI feature iteration is the **project skill catalog** at `apps/docs/content/skills/<name>/SKILL.md` (AGENTS.md §3.3 — "the path is the contract"). Orchestration skills (`do-feature-iteration`, `do-hotfix-pr`, `do-adr-revision`, `do-decision-debt-followup`) compose procedural skills (`read-relevant-adrs`, `verify-base-ci-green`, `author-ears-spec`, `open-ears-issues`, `run-iteration-end-checklist`, `request-mode-a-review`, `respond-to-review`, `write-iteration-summary`, `surface-decision-debt`, `merge-when-green`). Discipline gates are expressed as "Cannot proceed without" clauses on each orchestration skill — the agent cannot bypass them with narrative reading. The inline summary below mirrors the catalog; the catalog is authoritative.
 
-The 8-step cycle (`do-feature-iteration` orchestrates these):
+The orchestrated iteration cycle (`do-feature-iteration` orchestrates these):
 
 ```
 1. READ
@@ -128,7 +128,7 @@ Hard rule, enforced via AGENTS.md + spec-link CI guard (§5.2):
 Hard rule, enforced via AGENTS.md + TDD-signal CI guard (§5.2 WARN v1 → BLOCK v2):
 
 - **No production code without a failing test** that motivates that code.
-- One Vitest test per EARS requirement; naming: `it('EARS-N.M: ...', ...)`.
+- One Vitest test per EARS requirement; naming: `it('EARS-N: ...', ...)`.
 - Playwright tests are generated from `NNN-scenarios.feature` via playwright-bdd (test code ≠ production code).
 - Property-based tests for invariants — opt-in from the first feature with invariants (ledger reconciliation, for example).
 - superpowers:test-driven-development skill — mandatory invocation for any implementation task.
@@ -951,7 +951,7 @@ In Phase 0 — no in-repo semconv collector; cost and token usage are read from 
 
 ## 10. AGENTS.md / CLAUDE.md — sketches for DS Platform
 
-These sketches show the AI-loop-specific overlays added on top of the ADR-0006 §9 baseline. Sections unrelated to review/cost (8-step cycle wording, SDD/TDD discipline, prompt-caching, SessionStart hook, skill priorities) are the authoritative parts of these sketches. Review-related lines describe the interactive three-mode review per AGENTS.md §4 — no automated reviewer-bot, no headless LLM CI workflow.
+These sketches show the AI-loop-specific overlays added on top of the ADR-0006 §9 baseline. Sections unrelated to review/cost (orchestrated iteration cycle wording, SDD/TDD discipline, prompt-caching, SessionStart hook, skill priorities) are the authoritative parts of these sketches. Review-related lines describe the interactive three-mode review per AGENTS.md §4 — no automated reviewer-bot, no headless LLM CI workflow.
 
 ### 10.1 AGENTS.md (root)
 
@@ -964,7 +964,7 @@ ADR-0006 §9.1 already established the core structure. DSO-30 adds an AI-loop se
 
 ## AI-loop discipline (ADR-0007)
 
-Every implementation iteration follows the 8-step cycle:
+Every implementation iteration follows the orchestrated iteration cycle:
 
 ### Step 1 — READ (always first)
 
@@ -981,14 +981,14 @@ Run `pnpm bootstrap` (alias for `tsx tools/agent-bootstrap.ts`). Read its output
 
 ### Step 2 — PLAN
 
-Per ADR-0006 §9 conventions (title format `[NNN] EARS-N.M: ...`, label `kind:ears-handler` / `kind:policy` / `kind:saga-step` / `kind:bug` / `kind:refactor`).
+Per ADR-0006 §9 conventions (title format `[NNN] EARS-N: ...`, label `kind:ears-handler` / `kind:policy` / `kind:saga-step` / `kind:bug` / `kind:refactor`).
 
 - If no parent Issue exists for the spec: create one with `--body-file` (a `--body` flag must be provided in non-interactive contexts; `gh issue create` without it opens an editor and hangs in CI/Codex):
   gh issue create --title "Feature NNN: <name>" \
    --milestone "<product theme>" --label "feature:NNN-<slug>" \
    --body-file .github/issue_templates/feature.md
   Then for each EARS-handler from `NNN-requirements.md`:
-  gh issue create --title "[NNN] EARS-N.M: <description>" \
+  gh issue create --title "[NNN] EARS-N: <description>" \
    --milestone "<product theme>" --label "feature:NNN-<slug>,kind:ears-handler,agent-ready" \
    --body "Spec: apps/docs/content/specs/features/NNN-<slug>/. Parent: #<parent-issue>."
 - Use superpowers:writing-plans skill only if the task is multi-step within a single Issue.
@@ -1038,7 +1038,7 @@ If the feature has no spec, invoke superpowers:brainstorming first.
 ## TDD — hard rule
 
 No production code without a failing test that motivates it.
-Naming convention: `it('EARS-N.M: ...', ...)`.
+Naming convention: `it('EARS-N: ...', ...)`.
 
 ## Prompt-caching
 
@@ -1106,7 +1106,7 @@ Phase 0 (Tech Lead + AI, sequential — after DSO-31 creates the `ds-platform` r
 | 7    | Add `.github/agents-config.json` kill switch                                                                                                                                                   | kill switch active                                   | —                         |
 | 8    | Create `tools/lint/spec-link-lint.ts` + `ears-test-lint.ts`                                                                                                                                    | AI-specific guards available                         | —                         |
 | 9    | Add steps to `.github/workflows/ci.yml` for guards (WARN/BLOCK per §5.2)                                                                                                                       | CI executes guards                                   | step 8                    |
-| 11   | Update `AGENTS.md` (root) with AI-loop discipline section                                                                                                                                      | agents follow 8-step cycle                           | DSO-31 baseline AGENTS.md |
+| 11   | Update `AGENTS.md` (root) with AI-loop discipline section                                                                                                                                      | agents follow orchestrated iteration cycle           | DSO-31 baseline AGENTS.md |
 | 12   | Update `CLAUDE.md` (root) with SessionStart hook reference + skill priorities                                                                                                                  | Claude Code aligned                                  | step 11                   |
 | 13   | **[Manual GitHub UI / `gh api`]** Add branch protection rule: ≥1 human approval required, no direct push to main. Deferred per ADR-0008 §2.6 / A3 (GitHub Free + private repo blocks the API). | merge gated server-side once protection is reachable | step 9                    |
 | 14   | Smoke test: first feature spec through the cycle (superpowers:brainstorming → spec → Issues → PR → review → merge)                                                                             | proof of concept                                     | steps 1–13                |

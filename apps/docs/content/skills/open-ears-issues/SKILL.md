@@ -21,6 +21,7 @@ mode: inline
    ```bash
    gh label create "feature:NNN-<slug>" --color BFD4F2 --description "Feature NNN <slug>"
    gh label create "kind:ears-handler" --color D4C5F9 --description "Single EARS handler"
+   gh label create "kind:integration" --color D4C5F9 --description "Vertical-slice / integration work (not a single EARS handler)"
    gh label create "agent-ready" --color 0E8A16 --description "Ready for an AI agent to pick up"
    ```
 
@@ -38,6 +39,11 @@ mode: inline
    ```
 
    Always pass `--body` — `gh issue create` without `--body`/`--body-file` opens an editor and hangs in non-interactive contexts. Fill the body's **Dependencies** field (`Blocked by:` / `Blocks:`) with the human-readable graph — prose alone is **not** sufficient; it must be backed by the native links set in step 4.
+
+3a. **Open integration / vertical-slice Issues — `surface: user-facing` specs only** (closing F-22). The "1 EARS = 1 child Issue" rule of step 3 covers **handlers only**; for a `user-facing` spec it mechanically produces a backend-only Issue set (this is exactly how 003 left the portal forms unowned). Read the spec's `surface:` frontmatter:
+
+- **`surface: backend-only`** → skip this step; the handler Issues are the complete WBS.
+- **`surface: user-facing`** → for every user-facing slice that **no handler Issue owns** (the form/page existence, the request→enter-code two-step UX, error display, redirect-after-auth, the portal↔BFF wiring), open an **integration Issue** with `kind:integration` (not `kind:ears-handler`) and the browser/E2E acceptance baked into its AC. If the slice is a **named** out-of-scope deferral from the spec, open a tracked follow-up Issue for it rather than leaving it implicit. Wire it into the native graph in step 4 like any child. A scaffold/stub whose code comment promises future wiring ("wired in F2/F3") **MUST** have a corresponding open Issue — a code comment is not a tracked obligation.
 
 4. **Wire the native relationships** (mandatory — prose in the body is not machine-readable, and the board ordering procedure reads only the native graph). Two relationship types, set via the GitHub REST API through `gh api`:
    - **Sub-issue hierarchy** — attach every child as a sub-issue of the parent.
@@ -71,6 +77,7 @@ mode: inline
 - Substituting `enhancement` (or any other generic label) without a follow-up via `surface-decision-debt` — F-8 / F-19 pattern.
 - Forgetting `--body` and letting the CLI hang — defensive fix at the call site.
 - Recording dependencies only as prose in the body and skipping the native links (step 4) — the board ordering procedure reads the native graph, so prose-only dependencies leave the operational surface blind. This is the gap #93 closes.
+- Opening only handler Issues for a `surface: user-facing` spec and skipping step 3a — the user-facing slices (forms, wiring, browser E2E) stay unowned and the "five green features over a non-functional product" failure recurs. This is the F-22 gap (#132); precedent #131 had to be created retroactively for 003.
 
 ## Related skills
 

@@ -27,9 +27,13 @@ You are authoring a 3-file SDD triplet for a new feature in the DS Platform mono
 
 1. **Read sources** — PRD section + listed ADRs + any prior feature-spec in the same domain (for tone and structure precedent).
 2. **Write `NNN-requirements.md`** (filename prefixed with the spec number per ADR-0006 §4):
-   - Frontmatter: `tracker:` (GitHub Milestone URL placeholder if the milestone isn't created yet), `status: Draft`.
+   - Frontmatter: `tracker:` (GitHub Milestone URL placeholder if the milestone isn't created yet), `status: Draft`, **`surface:`** (required — see below).
    - Sections: Outcomes / Scope / Constraints / Prior decisions (cite ADRs) / Event Model (Commands / Events / Read models / Policies) / **EARS requirements** / Invariants / Verification.
    - **EARS numbering: flat (`EARS-1`, `EARS-2`, …) per ADR-0006 §4** (closing G11 finding F-5). Use nested `N.M` **only** when a single handler genuinely carries multiple shall-clauses (rare).
+   - **Frontmatter `surface:` (required): `backend-only` | `user-facing`.** Declares whether the feature ships a user-facing deliverable (a screen in portal / admin / promo / mobile). The classification is **explicit and review-checked** — a silent backend-only default is exactly the **F-22** failure (003 shipped auth login as backend-only EARS-handlers, leaving the portal forms unowned and no flow completable in a browser). A `mixed` feature (backend + UI) classifies as `user-facing`: any UI deliverable fires the four user-facing rules below. UI is **not** required of every spec — a genuine backend-only spec (internal API, webhook, pipeline, reconcile sweep) declares `backend-only` and the user-facing rules are N/A.
+     - **Anti-hide guard.** If any EARS _trigger_ references a UI surface (form, page, button, link — e.g. "when a visitor submits the registration form…"), `surface: backend-only` is **invalid → return error**. A UI in the trigger means a user-facing deliverable exists; it cannot be classified away.
+   - **User-journey completeness — `surface: user-facing` only** (N/A for `backend-only`). For every EARS whose trigger references a UI surface, the spec must EITHER carry a requirement that owns the UI behaviour **and** its wiring to the backend, OR name the deferral explicitly in Scope → Out of scope (e.g. "portal wiring → F7"). A UI surface that appears only in a trigger, with no owning requirement and no named deferral, is a defect → **return error**.
+   - **Verification matrix — `surface: user-facing` only** (N/A for `backend-only`). The matrix must carry ≥1 browser / E2E row (Playwright / playwright-bdd) exercising the user journey end-to-end. "Translated once the runner exists / out of scope here" is acceptable ONLY when it points to a named, tracked out-of-scope Issue — never as a bare footnote (003's `all → Gherkin` row was a bare footnote, and that is the F-22 amplifier). Absence of a browser/E2E row given a user-facing deliverable → **return error**. For `backend-only`, Vitest e2e against `apps/api` plus unit tests is complete coverage — do **not** add a browser row.
 3. **Write `NNN-design.md`** — Mermaid sequence diagrams of cascades, state diagrams of lifecycles, ER fragments.
 4. **Write `NNN-scenarios.feature`** — Gherkin, happy path + 2–3 failure branches.
 5. **Issue body** — when the lead agent opens the parent Issue, the body must explicitly list the scope of any **stub packages** being graduated (e.g., "this feature graduates `packages/foo` from stub to first concrete export"). Closing G11 finding F-20. Issue creation itself is handled by [`open-ears-issues`](../open-ears-issues/SKILL.md), which **must** wire the native sub-issue hierarchy and blocked-by graph (its step 4) — not just record dependencies as prose.
@@ -45,3 +49,7 @@ You are authoring a 3-file SDD triplet for a new feature in the DS Platform mono
 
 - EARS numbering inconsistent with the flat convention — return an error and let the lead agent decide whether to fix or accept (nested `N.M` is allowed but must be justified).
 - Triplet missing a file — return error.
+- `surface:` frontmatter missing or not one of `backend-only` / `user-facing` — return error (F-22).
+- `surface: backend-only` while an EARS trigger references a UI surface (anti-hide guard) — return error (F-22).
+- `surface: user-facing` with a UI-triggered EARS that has no owning requirement and no named out-of-scope deferral — return error (F-22).
+- `surface: user-facing` with no browser/E2E row in the Verification matrix (and no named, tracked deferral Issue) — return error (F-22).

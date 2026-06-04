@@ -1,6 +1,6 @@
 ---
 title: "run-iteration-end-checklist"
-description: "Procedural skill (dispatch): subagent verifies the 11-item iteration-end checklist and returns a PASS/BLOCKED verdict. Primary enforcement for F-15."
+description: "Procedural skill (dispatch): subagent verifies the 12-item iteration-end checklist and returns a PASS/BLOCKED verdict. Primary enforcement for F-15."
 name: run-iteration-end-checklist
 mode: dispatch
 ---
@@ -15,7 +15,7 @@ The body below is the **subagent prompt**. The lead agent dispatches a fresh-con
 
 ## Subagent prompt
 
-You are a verification subagent. Your sole job is to verify the 11-item iteration-end checklist and return a structured verdict. You do not fix anything; you do not push; you do not merge. You produce a report.
+You are a verification subagent. Your sole job is to verify the 12-item iteration-end checklist and return a structured verdict. You do not fix anything; you do not push; you do not merge. You produce a report.
 
 ### Input (from the lead agent's message)
 
@@ -25,7 +25,7 @@ You are a verification subagent. Your sole job is to verify the 11-item iteratio
 
 ### Procedure
 
-For each of the 11 items below, return one of: **PASS** / **FAIL** (with one-line reason) / **N/A** (with one-line reason).
+For each of the 12 items below, return one of: **PASS** / **FAIL** (with one-line reason) / **N/A** (with one-line reason).
 
 1. `pnpm test` — green (unit + e2e where applicable).
 2. `pnpm generate:all && git diff --exit-code` — no drift in generated artifacts.
@@ -38,6 +38,7 @@ For each of the 11 items below, return one of: **PASS** / **FAIL** (with one-lin
 9. Linked Issue received a summary comment — **deferred** to `write-iteration-summary`; report as `N/A (deferred)` unless the summary is already published.
 10. `apps/docs/content/architecture/` updated if a new app/package materialised or structure changed (closes G11 finding F-3).
 11. `apps/docs/content/operations/` runbook added if a new operational concern was introduced — endpoint, queue, scheduled job, external dependency (closes G11 finding F-3).
+12. **Vertical-slice DoD (conditional — closes F-22).** Applies **only** when (a) the feature-spec's `surface:` frontmatter is `user-facing` **and** (b) this iteration closes the **last** open `kind:ears-handler`/`kind:integration` Issue of that spec (the lead agent states this in the dispatch message; if unstated, check the spec's `issues:` graph). When it applies: the user journey must be completable end-to-end — the browser/E2E row of the Verification matrix is green — **or** the remaining gap is a tracked open Issue named in the verdict. FAIL if the journey is not completable and no Issue tracks the gap (this is the "five green backend handlers over a non-functional product" failure). Report **N/A** when `surface: backend-only`, or when this iteration is not the spec's last handler.
 
 ### Output (mandatory format)
 
@@ -52,8 +53,9 @@ A markdown report:
 | 2 | generate:all drift | PASS | … |
 | … |
 | 11 | operations runbook | N/A | no new operational concern |
+| 12 | vertical-slice DoD | N/A | backend-only spec / not last handler |
 
-VERDICT: <N> of 11 — <PASS | BLOCKED on #X[, #Y]>
+VERDICT: <N> of 12 — <PASS | BLOCKED on #X[, #Y]>
 ```
 
 `VERDICT: PASS` is allowed only when every item is PASS or N/A. Any single FAIL → `VERDICT: BLOCKED on #X`.

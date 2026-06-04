@@ -1,5 +1,48 @@
 # @ds/api
 
+## 0.6.0
+
+### Minor Changes
+
+- [#127](https://github.com/doctor-school/ds-platform/pull/127) [`cad6ad3`](https://github.com/doctor-school/ds-platform/commit/cad6ad3c7d1297ecc5a2e05a37d4b2d4b161b9ab) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(api): [#89](https://github.com/doctor-school/ds-platform/issues/89) password reset (003 F5)
+
+  Implements EARS-11 (enumeration-resistant reset initiate → Zitadel
+  forgot-password code flow; identical response whether or not the identifier
+  exists) and EARS-12 (complete → IdP sets the new password against the reset
+  code, every existing session of the subject is revoked, `PasswordResetCompleted`
+  emitted), per 003-design §6/§10 and ADR-0001 §6/§7.
+
+  `@ds/api`: `IdpClient.requestPasswordReset` / `completePasswordReset` (fake +
+  Zitadel User v2 adapter, both enumeration-safe / fail-closed), a new
+  `SessionStore.deleteBySub` global-revocation primitive backed by a `sub → sids`
+  index (in-memory + Redis), `SessionService.revokeAllForSub`, and the public
+  `POST /v1/auth/password/reset` (`@BotProtected`) + `POST
+/v1/auth/password/reset/complete` routes.
+
+  `@ds/schemas`: adds the `PasswordResetRequest`/`PasswordResetResponse`
+  (`reset_requested`) and `PasswordResetCompleteRequest`/`PasswordResetCompleteResponse`
+  (`reset_completed`) contracts.
+
+- [#125](https://github.com/doctor-school/ds-platform/pull/125) [`03d5d2e`](https://github.com/doctor-school/ds-platform/commit/03d5d2e79ffc84f13b88eac2e34c043e0b3ee294) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(api): [#88](https://github.com/doctor-school/ds-platform/issues/88) session refresh rotation + logout (003 F4)
+
+  Implements EARS-9 (single-use refresh rotation; RFC-6819 reuse → chain
+  invalidation + session revoke + `RefreshReuseDetected`) and EARS-10 (logout →
+  server-side session DELETE + `__Host-` cookie cleared + `SessionRevoked`), per
+  003-design §3 and ADR-0001 §6/§7.
+
+  `@ds/api`: `IdpClient.refreshTokens` (IdP-owned reuse detection), `SessionStore`
+  `rotate` + `delete`, `SessionService.refresh` / `.logout`, an `AuthAuditLog`
+  seam (`AUTH_AUDIT`, in-memory until the F6 durable writer), and the
+  `doctor_guest`-protected `POST /v1/auth/refresh` + `POST /v1/auth/logout` routes.
+
+  `@ds/schemas`: adds the token-free `RefreshResponse` (`refreshed`) and
+  `LogoutResponse` (`logged_out`) contracts.
+
+### Patch Changes
+
+- Updated dependencies [[`cad6ad3`](https://github.com/doctor-school/ds-platform/commit/cad6ad3c7d1297ecc5a2e05a37d4b2d4b161b9ab), [`03d5d2e`](https://github.com/doctor-school/ds-platform/commit/03d5d2e79ffc84f13b88eac2e34c043e0b3ee294)]:
+  - @ds/schemas@0.5.0
+
 ## 0.5.0
 
 ### Minor Changes

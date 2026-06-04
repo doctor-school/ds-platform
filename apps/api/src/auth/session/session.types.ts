@@ -39,6 +39,19 @@ export interface SessionStore {
   create(record: SessionRecord): Promise<void>;
   /** Look a session up by `sid`; `undefined` if absent or expired. */
   get(sid: string): Promise<SessionRecord | undefined>;
+  /**
+   * EARS-9: replace the stored tokens after a single-use refresh rotation,
+   * keeping the `sid`, principal, fingerprint, and expiry. No-op if the session
+   * is absent. The session lifetime is unchanged — rotation refreshes the
+   * access/refresh pair *within* the session, not the session's TTL.
+   */
+  rotate(sid: string, accessToken: string, refreshToken: string): Promise<void>;
+  /**
+   * EARS-9/10: delete the session, which invalidates its refresh chain (the
+   * tokens live only inside the record). The force-logout / chain-revoke
+   * primitive (ADR-0001 §6). Idempotent — deleting an absent `sid` is a no-op.
+   */
+  delete(sid: string): Promise<void>;
 }
 
 /** DI token the {@link SessionStore} port is bound to (fake or Redis adapter). */

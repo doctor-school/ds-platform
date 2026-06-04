@@ -13,6 +13,8 @@ import {
 import type { FastifyReply } from "fastify";
 import type {
   LoginResponse,
+  LogoutResponse,
+  RefreshResponse,
   RegisterResponse,
   SessionClaims,
   VerifyResponse,
@@ -28,7 +30,12 @@ import {
   ZitadelWebhookDto,
 } from "./auth.dto.js";
 import { WEBHOOK_SECRET_HEADER } from "./auth.tokens.js";
-import { computeFingerprint } from "./session/session.cookie.js";
+import {
+  clearSessionCookie,
+  computeFingerprint,
+  parseCookies,
+  SESSION_COOKIE_NAME,
+} from "./session/session.cookie.js";
 
 // One generic message for every login failure (unknown identifier, wrong
 // password): the specific reason is an enumeration/oracle channel (EARS-16) and
@@ -120,6 +127,68 @@ export class AuthController {
   })
   session(@Req() req: { user?: SessionClaims }): SessionClaims {
     return req.user as SessionClaims;
+  }
+
+  /**
+   * EARS-9: rotate the session's refresh token. Authenticated — the `__Host-`
+   * cookie still resolves to a live session even when its server-side access
+   * token has expired (the cookie lifetime is the 30-day refresh lifetime, not
+   * the 15-min access lifetime), so the auth hook populates the subject and the
+   * guard admits the request; the rotation happens entirely server-side and no
+   * token is returned. On reuse detection the chain is already invalidated and
+   * the session revoked, so the now-dead cookie is cleared and the request is
+   * denied. `audit: low-stakes` — rotation is routine and high-frequency
+   * (canonical `auth.token.rotated`, ADR-0001 §7.3), not an introspection-tier
+   * event.
+   */
+  @Post("refresh")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["doctor_guest"],
+    check: "fast-path",
+    audit: "low-stakes",
+    tests: ["EARS-9"],
+  })
+  async refresh(
+    @Headers("cookie") cookieHeader: string | undefined,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<RefreshResponse> {
+    const sid = parseCookies(cookieHeader)[SESSION_COOKIE_NAME];
+    const outcome = sid
+      ? await this.auth.refreshSession(sid)
+      : ({ status: "no_session" } as const);
+    if (outcome.status === "rotated") return { status: "refreshed" };
+    // reuse_detected (session already revoked) or no_session: clear the dead
+    // cookie and deny. The generic 401 leaks nothing about which it was.
+    reply.header("set-cookie", clearSessionCookie());
+    throw new UnauthorizedException(GENERIC_LOGIN_FAILURE);
+  }
+
+  /**
+   * EARS-10: log out. Authenticated (`doctor_guest` baseline, design §7.2) — you
+   * must hold a live session to revoke it. Deletes the server-side session
+   * (invalidating its refresh chain), clears the `__Host-` cookie, and records
+   * `SessionRevoked` (canonical `auth.session.terminated`, reason `logout`).
+   * `audit: high-stakes` — an explicit session-lifecycle command, like login.
+   */
+  @Post("logout")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["doctor_guest"],
+    check: "fast-path",
+    audit: "high-stakes",
+    tests: ["EARS-10"],
+  })
+  async logout(
+    @Headers("cookie") cookieHeader: string | undefined,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<LogoutResponse> {
+    const sid = parseCookies(cookieHeader)[SESSION_COOKIE_NAME];
+    const { cookie } = await this.auth.logout(sid ?? "");
+    reply.header("set-cookie", cookie);
+    return { status: "logged_out" };
   }
 
   @Post("verify")

@@ -1,23 +1,26 @@
-# `auth` — BFF over Zitadel (003 F1 + F2)
+# `auth` — BFF over Zitadel (003 F1 + F2 + F4)
 
 The Backend-for-Frontend for the doctor-portal auth vertical (003-design §1).
 `apps/api` owns the domain mirror, consent, RBAC grant, server-side sessions, and
 abuse guards; it delegates **every** credential operation to Zitadel through the
 `IdpClient` port. This module ships **F1** (#85: registration, verification,
-consent capture, mirror sync) and **F2** (#86: password login + BFF session
-establishment + token exchange).
+consent capture, mirror sync), **F2** (#86: password login + BFF session
+establishment + token exchange), and **F4** (#88: session refresh rotation +
+logout).
 
 ## What's here
 
-| Concern                       | File                     | EARS                  |
-| ----------------------------- | ------------------------ | --------------------- |
-| Registration + verify routes  | `auth.controller.ts`     | 1, 2, 3, 4, 19        |
-| Login + session-read routes   | `auth.controller.ts`     | 5, 8                  |
-| Cascade + login orchestration | `auth.service.ts`        | 1, 2, 3, 4, 5, 16, 20 |
-| `doctor_guest` mirror row     | `user-mirror.service.ts` | 3, 4, 19              |
-| Reconciliation sweep          | `reconcile.service.ts`   | 19                    |
-| IdP port + adapters           | `idp/`                   | (design §2)           |
-| BFF session establishment     | `session/`               | 5, 8                  |
+| Concern                              | File                     | EARS                  |
+| ------------------------------------ | ------------------------ | --------------------- |
+| Registration + verify routes         | `auth.controller.ts`     | 1, 2, 3, 4, 19        |
+| Login + session-read routes          | `auth.controller.ts`     | 5, 8                  |
+| Refresh + logout routes              | `auth.controller.ts`     | 9, 10                 |
+| Cascade + login orchestration        | `auth.service.ts`        | 1, 2, 3, 4, 5, 16, 20 |
+| `doctor_guest` mirror row            | `user-mirror.service.ts` | 3, 4, 19              |
+| Reconciliation sweep                 | `reconcile.service.ts`   | 19                    |
+| IdP port + adapters                  | `idp/`                   | (design §2)           |
+| BFF session establish/refresh/logout | `session/`               | 5, 8, 9, 10           |
+| Auth security-event sink (seam)      | `session/auth-audit.*`   | 9, 10                 |
 
 ## BFF session model (`session/`, design §3, ADR-0001 §6)
 
@@ -35,7 +38,14 @@ keyed by the cookie's `sid`. No token is ever in a response body (EARS-8).
   split).
 - **`SessionService`** — the single session-establishment step (OIDC exchange →
   `sid` → server-side record → `__Host-` cookie); every login variant (password
-  F2, OTP F3) converges here (design §6).
+  F2, OTP F3) converges here (design §6). Also owns **refresh rotation**
+  (`refresh` → single-use IdP exchange + `SessionStore.rotate`; RFC-6819 reuse →
+  `SessionStore.delete` + `RefreshReuseDetected`, EARS-9) and **logout**
+  (`logout` → `SessionStore.delete` + cleared cookie + `SessionRevoked`, EARS-10).
+- **`AuthAuditLog` port** (`auth-audit.types.ts` / `auth-audit.fake.ts`) — the F4
+  slice of the audit ledger: records the `RefreshReuseDetected` / `SessionRevoked`
+  security events. In-memory default now; the durable `audit_ledger` writer
+  (EARS-18) rebinds `AUTH_AUDIT` in F6 (#90) without touching call sites.
 - **`SessionAuthHook`** — a Fastify `onRequest` hook that populates the request
   subject the global `AuthzGuard` reads (the seam in `authz/authz.guard.ts`). It
   is a hook, not a Nest middleware, because Fastify middleware sees the _raw_
@@ -71,12 +81,15 @@ belongs in the audit ledger).
 
 ## Seams (not built yet)
 
-- **Refresh rotation + logout** (EARS-9,10) → F4 (#88). The `SessionRecord`
-  already carries the refresh token; F4 adds the single-use rotation + DELETE.
 - **Login captcha-after-N-failures** (EARS-17 login surface) → F6 (#90). `login`
   is intentionally not yet `@BotProtected` — the failure-count policy is F6's.
-- **Audit ledger** (EARS-18) → F6 (#90). `@Authz({ audit: … })` already records
-  the intent per route; the `auth_audit` writer + interceptor land with F6.
+- **Audit ledger** (EARS-18) → F6 (#90). Two halves: (a) `@Authz({ audit: … })`
+  records the per-route terminal-audit intent — the `auth_audit` writer +
+  interceptor land with F6; (b) F4's `AuthAuditLog` port (`AUTH_AUDIT`) already
+  emits the `RefreshReuseDetected` / `SessionRevoked` security events into an
+  in-memory sink — F6 rebinds it to the durable writer and reconciles the
+  EARS-name → canonical `<class>.<event>` wire ids (`auth.token.theft_detected` /
+  `auth.session.terminated`, ADR-0001 §7.3).
 - **Periodic reconcile schedule** — `ReconcileService.sweep()` is the unit a
   `@nestjs/schedule` cron will call; wiring the trigger is deferred (design §11).
 

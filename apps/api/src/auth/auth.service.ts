@@ -18,7 +18,10 @@ import { DRIZZLE_DB } from "../database/database.tokens.js";
 import { IDP_CLIENT, type IdpClient } from "./idp/idp.types.js";
 import { AUTH_WEBHOOK_SECRET } from "./auth.tokens.js";
 import { UserMirrorService } from "./user-mirror.service.js";
-import { SessionService } from "./session/session.service.js";
+import {
+  SessionService,
+  type RefreshOutcome,
+} from "./session/session.service.js";
 
 type Db = DrizzleHandle["db"];
 
@@ -89,6 +92,20 @@ export class AuthService {
     const session = await this.idp.passwordLogin(identifier, password);
     if (!session) return null;
     return this.sessions.establish(session.zitadelSessionId, fingerprint);
+  }
+
+  /**
+   * EARS-9: rotate the BFF session's refresh token single-use (delegates to the
+   * session layer, which owns the IdP exchange + reuse handling). Thin pass-through
+   * mirroring `loginWithPassword` — the controller layer holds the cookie/HTTP.
+   */
+  refreshSession(sid: string): Promise<RefreshOutcome> {
+    return this.sessions.refresh(sid);
+  }
+
+  /** EARS-10: revoke the BFF session and return the cookie that clears it. */
+  logout(sid: string): Promise<{ cookie: string }> {
+    return this.sessions.logout(sid);
   }
 
   /**

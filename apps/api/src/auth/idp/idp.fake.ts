@@ -2,6 +2,7 @@ import type {
   CreatedUser,
   CreateUserInput,
   IdpClient,
+  IdpRefreshResult,
   IdpSession,
   IdpTokens,
   IdpUser,
@@ -40,6 +41,10 @@ export class FakeIdpClient implements IdpClient {
   private readonly bySub = new Map<string, FakeRecord>();
   /** Checked sessions awaiting their OIDC exchange: zitadelSessionId → sub. */
   private readonly sessions = new Map<string, string>();
+  /** Live (rotatable) refresh tokens → sub. Models the IdP-side refresh chain. */
+  private readonly liveRefresh = new Map<string, string>();
+  /** Refresh tokens already rotated once — replaying one is RFC-6819 reuse (EARS-9). */
+  private readonly consumedRefresh = new Set<string>();
   /** Per-identifier failed-check tally — the fake's stand-in for the native Zitadel lockout counter (EARS-15), asserted by EARS-5 tests. */
   private readonly failed = new Map<string, number>();
   private seq = 0;
@@ -116,13 +121,41 @@ export class FakeIdpClient implements IdpClient {
       // BFF, not a user-facing path — fail loud rather than mint a token.
       return Promise.reject(new Error("unknown zitadel session"));
     }
+    const refreshToken = `fake-refresh-${++this.seq}`;
+    this.liveRefresh.set(refreshToken, sub);
     return Promise.resolve({
       accessToken: `fake-access-${zitadelSessionId}`,
-      refreshToken: `fake-refresh-${++this.seq}`,
+      refreshToken,
       expiresInSeconds: 900,
       // v1 grants every self-serve principal the single `doctor_guest` role; the
       // `mfa` claim is present-but-false (the enforcement seam, design §7).
       claims: { sub, roles: ["doctor_guest"], mfa: false },
+    });
+  }
+
+  refreshTokens(refreshToken: string): Promise<IdpRefreshResult> {
+    // RFC-6819 reuse detection (EARS-9): replaying an already-consumed token —
+    // or any token this IdP never issued — fails closed, so the BFF invalidates
+    // the chain + revokes the session rather than minting a fresh one. The IdP
+    // owns this detection (ADR-0001 §7).
+    if (this.consumedRefresh.has(refreshToken))
+      return Promise.resolve({ reuseDetected: true });
+    const sub = this.liveRefresh.get(refreshToken);
+    if (!sub) return Promise.resolve({ reuseDetected: true });
+
+    // Single-use rotation: consume the presented token and mint a new chain link.
+    this.liveRefresh.delete(refreshToken);
+    this.consumedRefresh.add(refreshToken);
+    const next = `fake-refresh-${++this.seq}`;
+    this.liveRefresh.set(next, sub);
+    return Promise.resolve({
+      reuseDetected: false,
+      tokens: {
+        accessToken: `fake-access-r-${this.seq}`,
+        refreshToken: next,
+        expiresInSeconds: 900,
+        claims: { sub, roles: ["doctor_guest"], mfa: false },
+      },
     });
   }
 

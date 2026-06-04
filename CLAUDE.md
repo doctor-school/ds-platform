@@ -24,20 +24,15 @@ The `pnpm bootstrap` alias (defined in root `package.json` as `tsx tools/agent-b
 
 ## Plane vs GitHub Issues split (ADR-0006 §9)
 
-- **DS Platform code-level tasks** → GitHub Issues in this repo (`gh issue ...`)
-- **Strategic / cross-team milestones** → Plane workspace `doctor-school` (projects DSP / DSC / DSM / DSO)
-
-**Do not invoke `pp-plane` CLI for code tasks** — duplicate sources of truth break AI reasoning. `pp-plane` is reserved for cross-tracker references only (e.g., linking a Plane DSO-XXX milestone from an ADR or commit message).
+Canon: **AGENTS.md §6 (Trackers) + §8**. Code-level tasks → GitHub Issues here (`gh issue ...`); strategic / cross-team milestones → Plane workspace `doctor-school`. **Do not invoke `pp-plane` for code tasks** — duplicate sources of truth break AI reasoning; `pp-plane` is for cross-tracker references only (e.g., linking a Plane DSO-XXX milestone from an ADR or commit message).
 
 ---
 
 ## Skill priorities
 
-For DS Platform project work, the catalog is **`apps/docs/content/skills/<name>/SKILL.md`** — see AGENTS.md §3 (Work protocol). The lead agent identifies task kind, cites the entry point, then `Read`s the corresponding SKILL.md.
+Canon: **AGENTS.md §3 (Work protocol) + §3.4 superpowers whitelist**. Project work uses the catalog `apps/docs/content/skills/<name>/SKILL.md` — identify task kind → cite entry point → `Read` the SKILL.md.
 
-**Single allowed `superpowers:*` exception:** `superpowers:brainstorming` — only for spec-authoring (new feature-spec, new ADR, new design-spec). After brainstorming concludes, do **not** chain into `superpowers:writing-plans` — the SDD triplet (`NNN-requirements.md` / `NNN-design.md` / `NNN-scenarios.feature`) is the plan.
-
-**All other `superpowers:*` chains are disallowed for project work**, including (non-exhaustive): `writing-plans`, `executing-plans`, `subagent-driven-development`, `dispatching-parallel-agents`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `requesting-code-review`, `receiving-code-review`, `finishing-a-development-branch`, `using-git-worktrees`. Their procedures are absorbed by the project skill catalog (e.g., TDD lives inside `do-feature-iteration/SKILL.md`; review dispatch lives inside `request-mode-a-review/SKILL.md`). They may be referenced as implementation patterns inside SKILL.md content, but never as the orchestrator.
+**Claude-Code-specific reminder** (because these `superpowers:*` skills are auto-discoverable here): `superpowers:brainstorming` is the only one allowed, for spec-authoring only, and must **not** chain into `writing-plans` (the SDD triplet is the plan). Every other `superpowers:*` skill — `executing-plans`, `subagent-driven-development`, `dispatching-parallel-agents`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `requesting-code-review`, `receiving-code-review`, `finishing-a-development-branch`, `using-git-worktrees`, … — is disallowed as an orchestrator; their procedures are absorbed by the project catalog (TDD inside `do-feature-iteration`, review dispatch inside `request-mode-a-review`). Full rule: AGENTS.md §3.4.
 
 ---
 

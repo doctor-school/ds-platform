@@ -8,15 +8,7 @@ Universal AI-agent constitution for the DS Platform monorepo. Vendor-agnostic �
 
 DS Platform is the medical-education platform for Doctor.School (B2B pharma sponsor → B2D doctor audience). Greenfield monorepo in **Phase 0** — architectural ADRs (0001–0008) accepted, engineering scaffolding in progress. Pre-pilot target: **2026 Q3**.
 
-Stack at a glance (see `apps/docs/content/adr/` for full reference):
-
-- **Backend:** NestJS + Zod + REST + openapi-typescript SDK (ADR-0002)
-- **Data:** Postgres 17 + Drizzle + pgvector (ADR-0003)
-- **Frontend:** Next.js 15 + Refine — 4 apps (promo / portal / admin / cms-Payload-v3) (ADR-0004)
-- **Mobile:** React Native + Expo + WatermelonDB (ADR-0005)
-- **Docs:** Fumadocs + Keystatic + glossary.yaml (ADR-0006)
-
-Long-form context: `README.md`.
+Stack at a glance (full reference in `apps/docs/content/adr/`): **Backend** NestJS + Zod + REST + openapi-typescript SDK (ADR-0002); **Data** Postgres 17 + Drizzle + pgvector (ADR-0003); **Frontend** Next.js 15 + Refine — 4 apps: promo / portal / admin / cms-Payload-v3 (ADR-0004); **Mobile** React Native + Expo + WatermelonDB (ADR-0005); **Docs** Fumadocs + Keystatic + glossary.yaml (ADR-0006). Long-form context: `README.md`.
 
 ---
 
@@ -26,16 +18,7 @@ Long-form context: `README.md`.
 
 **Apps live in `apps/<name>/`:** api, promo, portal, admin, cms, docs, docs-cms, mobile. Shared code in `packages/<name>/`. Build/dev tooling in `tools/`.
 
-**Branch strategy:** trunk-based; short-lived branches off `main`, squash-merge back. Naming (`<prefix>/<N>-<slug>`, `N` = GitHub Issue # — or `<TRACKER-ID>` for Plane-driven work without a GitHub Issue, e.g. `chore/dsp-193-repo-hygiene`):
-
-- `feat/` — new feature
-- `fix/` — bug fix
-- `chore/` — maintenance task
-- `refactor/` — code restructure without behavior change
-- `docs/` — documentation-only changes
-- `tooling/` — build / CI / dev-tooling changes
-
-Dependabot branches (`dependabot/...`) — leave as-is, do not rename.
+**Branch strategy:** trunk-based; short-lived branches off `main`, squash-merge back. Naming `<prefix>/<N>-<slug>` (`N` = GitHub Issue #, or `<TRACKER-ID>` for Plane-driven work without an Issue, e.g. `chore/dsp-193-repo-hygiene`). Prefixes: `feat/` (feature), `fix/` (bug), `chore/` (maintenance), `refactor/` (restructure, no behavior change), `docs/` (docs-only), `tooling/` (build / CI / dev-tooling). Dependabot branches (`dependabot/...`) — leave as-is, do not rename.
 
 **Stale branches.** Auto-deleted on merge via `--delete-branch` in the squash-merge command. For PRs closed **without** merge, delete the branch in the same step (`gh pr close <N> --delete-branch`). Do not leave un-merged branches alive longer than the PR they came from. Dependabot branches Dependabot owns — closing the PR is enough; Dependabot will recreate when a new bump arrives.
 
@@ -45,13 +28,7 @@ Dependabot branches (`dependabot/...`) — leave as-is, do not rename.
 
 **Versioning:** changesets. User-facing PR → `pnpm changeset`. Internal-only (refactor/docs/chore) — no changeset.
 
-**Bump letter** (semver, per package):
-
-- `patch` — bugfix; no API change; no new exports; no consumer-visible behavior change.
-- `minor` — additive change: new feature, new exports, new optional fields, new endpoints; no breaking change.
-- `major` — breaking change: removed or renamed exports, changed function signatures, changed return shapes, changed semantics of an existing field, raised minimum runtime/Node version, removed support for an option.
-- Pre-1.0 (`0.x.y`) follows the same rule: `0.x → 0.(x+1)` is `minor` only if no breaking change; if there is a breaking change, bump `major` (`0.x → 1.0`). We don't reuse `0.x` minors to hide breakage.
-- When unsure between `minor` and `major`, default to `major` — consumers can pin loosely against minor but cannot recover from an undetected breaking change shipped as minor.
+**Bump letter** (semver, per package): `patch` = bugfix, no API or consumer-visible behavior change; `minor` = additive (new feature / exports / optional fields / endpoints), no breaking change; `major` = breaking (removed or renamed exports, changed signatures, return shapes, or field semantics, raised runtime floor, removed option). Pre-1.0 follows the same rule — a breaking `0.x` goes to `1.0`, never a hidden `0.x` minor. When unsure between `minor` and `major`, default to `major`: consumers can pin loosely but cannot recover from an undetected breaking change shipped as minor.
 
 **Pre-commit:** simple-git-hooks runs `lint-staged` (ESLint `--fix` + Prettier). `--no-verify` is a valid escape hatch — log the reason in the PR description.
 
@@ -59,17 +36,11 @@ Dependabot branches (`dependabot/...`) — leave as-is, do not rename.
 
 **Branch protection.** Target-state contract (ADR-0008 §2.6) is enforced by convention + local hooks during Phase 0; server-side enforcement is deferred — GitHub Free + private repo blocks the branch-protection API. Verbatim payload at `branch-protection.json`. See ADR-0008 §2.6 for the full contract, the interim process-level substitutes, and the reactivation trigger.
 
-**Merge command (single, mandatory):**
-
-```bash
-gh pr merge <PR-number> --auto --squash --delete-branch
-```
-
-`--auto` waits for CI; `--squash` enforces linear history; `--delete-branch` cleans up.
+**Merge** — single mandatory command; the command itself is the §6 Hard rule (Direct push to `main` is forbidden), and `merge-when-green` carries the flag rationale and violation list.
 
 **ADRs** live in `apps/docs/content/adr/`, rendered at `/adr/<slug>`. Paired design spec — `NNNN-<slug>-design.md`.
 
-**Feature specs** live in `apps/docs/content/specs/features/NNN-<slug>/` (3 files: `NNN-requirements.md`, `NNN-design.md`, `NNN-scenarios.feature`). One spec → multiple Issues (one per EARS-handler), in a fixed order: the spec triplet ships as **one docs-PR**; the child Issues are opened on that same branch and their numbers written back into the `issues:` frontmatter, so the spec PR carries both; it merges on a Mode (a) verdict + green CI; per-iteration **code** PRs start only **after** the spec is on `main` (the `spec-link` BLOCK guard, §5, requires it). Recipe: `author-ears-spec/SKILL.md` step 7. Milestones are used independently of specs: a Milestone tracks a long-lived product theme (`Auth foundations v1`, `Directual cutover`, `Doctor portal MVP`) that typically spans multiple specs and lives weeks–months. Specs themselves do not become Milestones. Format spec moved into `apps/docs/content/skills/author-ears-spec/SKILL.md`.
+**Feature specs** live in `apps/docs/content/specs/features/NNN-<slug>/` (3 files: `NNN-requirements.md`, `NNN-design.md`, `NNN-scenarios.feature`). One spec → multiple Issues (one per EARS-handler): the triplet ships as **one docs-PR**, child Issues open on that branch with their numbers written back into the `issues:` frontmatter, merging on a Mode (a) verdict + green CI; per-iteration **code** PRs start only **after** the spec is on `main` (the `spec-link` BLOCK guard, §5). Milestones are independent of specs — a Milestone tracks a long-lived product theme (e.g. `Auth foundations v1`) spanning multiple specs; specs do not become Milestones. Full format + recipe: `author-ears-spec/SKILL.md` (step 7).
 
 ---
 
@@ -155,8 +126,8 @@ The CI lint guards from ADR-0007 §2.6 act as nudges visible in the PR Checks UI
 ## 6. Hard rules
 
 - **SDD.** No production code without a feature spec at `apps/docs/content/specs/features/NNN-<slug>/`. If absent, invoke `superpowers:brainstorming` per §3.4 to author one.
-- **Vertical slices over horizontal layers (F-22).** Every feature-spec declares `surface: backend-only | user-facing` in `NNN-requirements.md` frontmatter — not all features have UI, and a genuine backend-only spec (internal API, webhook, pipeline) is verified by Vitest e2e alone. But a `user-facing` feature owns its UI deliverable in the same WBS as its backend: the slice "user logs in end-to-end in the browser" owns both the BFF route and the portal form. Backend-first is allowed **only** as an explicit, tracked out-of-scope deferral named in the spec ("portal wiring → F7"), never as a silent default. A UI surface referenced in any EARS _trigger_ forbids `surface: backend-only` (anti-hide guard). Enforced by `author-ears-spec`, `open-ears-issues` step 3a, and `run-iteration-end-checklist` item 12. Precedent: 003 shipped F1–F5 backend-only with the portal forms unowned (#131 created retroactively).
-- **No untracked seam / scaffold (F-22).** A scaffold, stub, fake, or fail-closed seam that stands in for a real deliverable (an unwired portal form; `FakeIdpClient` standing in for real Zitadel) is decision-debt and MUST be a tracked open Issue with an explicit "done against the real dependency" criterion — never only a code comment ("wired in F2/F3"). A code comment is not an obligation the tracker can see. An epic / milestone's Definition of Done for a `user-facing` theme is "a vertical slice is completable end-to-end", not "all backend handlers merged". Precedents: #131 (UI wiring), #122 (real Zitadel exchange).
+- **Vertical slices over horizontal layers (F-22).** Every feature-spec declares `surface: backend-only | user-facing` in `NNN-requirements.md` frontmatter; a genuine backend-only spec is verified by Vitest e2e alone, but a `user-facing` feature owns its UI deliverable in the **same** WBS as its backend. Backend-first is allowed only as an explicit, tracked out-of-scope deferral named in the spec — never a silent default. A UI surface in any EARS _trigger_ forbids `surface: backend-only` (anti-hide guard). Rule + precedents enforced by `author-ears-spec`, `open-ears-issues` step 3a, `run-iteration-end-checklist` item 12.
+- **No untracked seam / scaffold (F-22).** A scaffold, stub, fake, or fail-closed seam standing in for a real deliverable is decision-debt: it MUST be a tracked open Issue with an explicit "done against the real dependency" criterion — a code comment ("wired in F2/F3") is not an obligation the tracker can see. A `user-facing` theme's Definition of Done is "a vertical slice is completable end-to-end", not "all backend handlers merged". Detail: `open-ears-issues` step 3a.
 - **TDD.** No production code without a failing test. Naming: `it('EARS-N: ...')`. Flat numbering per ADR-0006 §4; nested `N.M` only when a single handler carries multiple shall-clauses.
 - **Trackers.** Code-level → GitHub Issues here; strategic / cross-team → Plane workspace `doctor-school`. Never both.
 - **Plane lifecycle.** When the task is a Plane work-item: move to `In Progress` with a start comment before code work; on completion, move to `Done` with a result comment containing artifacts (links to files/PRs/pages), what was done, open questions, and what is unblocked. If the task stays incomplete, leave a status comment with "where we stopped / what remains" instead of dropping it silently. Tooling: `plane-pp-cli` for reads; Plane MCP (`mcp__plane-pp-mcp__*`) for state changes and comments (see §3.7).
@@ -165,7 +136,7 @@ The CI lint guards from ADR-0007 §2.6 act as nudges visible in the PR Checks UI
 - **Project skill catalog.** Only `apps/docs/content/skills/`. Vendor-specific skill auto-discovery is not used to dispatch project work. The path is the contract.
 - **Discipline gates.** `run-iteration-end-checklist` and `request-mode-a-review` produce artifacts the lead agent cannot bypass — whether dispatched by an orchestration skill or run directly for an engineering-task (§3.8). Without their outputs, merge is forbidden (ADR-0007 §2.4 — verdict-gated cycle).
 - **Decision-debt.** Any silent deviation from a documented convention MUST surface via `surface-decision-debt`. The output may be `[]`, but the invocation is required before the iteration summary — or, for an engineering-task, before the Plane / Issue result comment (§3.8).
-- **Amendment vs inline rewrite discipline.** In pre-pilot (paper-architecture, no production code), there are NO amendment blocks in ADR / spec / design docs. An amendment is justified ONLY when the original decision is running in production. In all other cases — inline rewrite: the body reads as if the current decision were always the decision. "SUPERSEDED по Amendment X" callouts in the body are forbidden; references to "Amendment X" / "per Amendment" / "see Amendment" as the source of a prose rule are forbidden. The history of paper-architecture evolution lives in `git log`, not in the document body. Precedents: DSP-209 closed ADR-0001 §8 (Zitadel) inline as the correct pattern; DSP-211 Pass 1 (reverted) added "SUPERSEDED по Amendment X" callouts as the anti-pattern this rule exists to prevent.
+- **Amendment vs inline rewrite discipline.** In pre-pilot (paper-architecture, no production code) there are NO amendment blocks in ADR / spec / design docs — an amendment is justified only when the original decision is running in production. Everywhere else: inline rewrite, the body reading as if the current decision were always the decision. "SUPERSEDED / per Amendment X" callouts as the source of a prose rule are forbidden; the history of paper-architecture evolution lives in `git log`, not the document body.
 
 ---
 
@@ -218,20 +189,7 @@ Service endpoints (`DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT`, `CENTRIFUGO_URL`,
 
 ### 9.2 DX commands
 
-The stack is driven by `pnpm dev:*` (env-driven launcher `tools/dev/run.mjs`, DSP-156). The launcher reads `.env.local`, picks the transport, and runs `docker compose` against the stand.
-
-| Command                      | Does                                                             |
-| ---------------------------- | ---------------------------------------------------------------- |
-| `pnpm dev:up`                | Start the stack (detached); syncs the contract to the box.       |
-| `pnpm dev:down`              | Stop the stack; named volumes preserved.                         |
-| `pnpm dev:status`            | List dev-stand containers.                                       |
-| `pnpm dev:logs [service]`    | Follow logs — all services, or one.                              |
-| `pnpm dev:restart [service]` | Restart all services, or one.                                    |
-| `pnpm dev:psql`              | Open a `psql` shell on `ds_dev`.                                 |
-| `pnpm dev:snapshot <desc>`   | Pre-migration snapshot (recipe-specific; no-ops if unsupported). |
-| `pnpm dev:rollback <name>`   | Roll the database back to a snapshot (recipe-specific).          |
-| `pnpm dev:reset-db`          | Drop + recreate the database volume, then start.                 |
-| `pnpm dev:config`            | Validate compose + `${SECRET}` interpolation, without an `up`.   |
+The stack is driven by `pnpm dev:*` (env-driven launcher `tools/dev/run.mjs`, DSP-156): it reads `.env.local`, picks the transport, and runs `docker compose` against the stand. Full cheat sheet (`dev:up` / `down` / `status` / `logs` / `restart` / `psql` / `snapshot` / `rollback` / `reset-db` / `config`) with per-command behavior: [`infra/dev-stand/README.md` → DX commands](./infra/dev-stand/README.md#dx-commands).
 
 ### 9.3 Rules for agents
 

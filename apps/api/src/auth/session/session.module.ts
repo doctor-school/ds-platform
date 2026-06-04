@@ -5,7 +5,7 @@ import { SESSION_STORE, type SessionStore } from "./session.types.js";
 import { InMemorySessionStore } from "./session-store.fake.js";
 import { RedisSessionStore } from "./session-store.redis.js";
 import { AUTH_AUDIT } from "./auth-audit.types.js";
-import { InMemoryAuthAuditLog } from "./auth-audit.fake.js";
+import { DrizzleAuthAuditLog } from "./auth-audit.ledger.js";
 import { SessionService } from "./session.service.js";
 import { SessionAuthHook } from "./session-auth.hook.js";
 
@@ -19,13 +19,13 @@ import { SessionAuthHook } from "./session-auth.hook.js";
  *   exported for the login orchestration in `AuthService`;
  * - registers {@link SessionAuthHook}, which populates the request subject the
  *   global `AuthzGuard` reads;
- * - binds the {@link AUTH_AUDIT} security-event sink to its in-memory default
- *   (EARS-9/10). The durable `audit_ledger` writer (EARS-18) rebinds this token
- *   in F6 (#90) without touching the `SessionService` call sites.
+ * - binds the {@link AUTH_AUDIT} sink to the durable `audit_ledger` writer
+ *   (EARS-18, F6 #90) — the app always has a DB handle; the in-memory fake stays
+ *   the unit-spec double (constructed directly, not through this token).
  */
 @Module({
   providers: [
-    { provide: AUTH_AUDIT, useClass: InMemoryAuthAuditLog },
+    { provide: AUTH_AUDIT, useClass: DrizzleAuthAuditLog },
     {
       provide: SESSION_STORE,
       useFactory: (): SessionStore => {
@@ -47,6 +47,8 @@ import { SessionAuthHook } from "./session-auth.hook.js";
     SessionService,
     SessionAuthHook,
   ],
-  exports: [SessionService],
+  // AUTH_AUDIT is exported so AuthService (AuthModule) shares the one durable
+  // ledger binding the session layer already uses (EARS-18) — not a second sink.
+  exports: [SessionService, AUTH_AUDIT],
 })
 export class SessionModule {}

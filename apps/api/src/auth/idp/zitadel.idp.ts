@@ -6,6 +6,7 @@ import type {
   IdpSession,
   IdpTokens,
   IdpUser,
+  PasswordLoginResult,
 } from "./idp.types.js";
 
 /** Subset of `fetch` the adapter needs — narrowed so it can be faked in tests. */
@@ -129,12 +130,19 @@ export class ZitadelIdpClient implements IdpClient {
   async passwordLogin(
     identifier: string,
     password: string,
-  ): Promise<IdpSession | null> {
+  ): Promise<PasswordLoginResult> {
     // Zitadel Session v2: POST /v2/sessions with a user + password check. A
     // failed check (unknown loginName / wrong password) is a non-2xx — resolve
-    // it to `null` so the caller stays enumeration-safe (EARS-16); Zitadel's
+    // it to `rejected` so the caller stays enumeration-safe (EARS-16); Zitadel's
     // native lockout policy counts the failure (EARS-15). The session that comes
     // back has already passed its check (design §3).
+    //
+    // Native-lockout *observation* (the `locked` verdict, EARS-15) is not
+    // distinguished here: the BFF's lockout audit is a best-effort observation
+    // and Zitadel owns the authoritative lock + its own notification + audit.
+    // Mapping a specific locked-account error to `locked` is a refinement for
+    // when this adapter is exercised against the live dev-stand instance (the
+    // token-exchange paths below are still integration seams, design §11).
     const res = await this.fetchImpl(this.url("/v2/sessions"), {
       method: "POST",
       headers: this.headers(),
@@ -145,15 +153,15 @@ export class ZitadelIdpClient implements IdpClient {
         },
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { outcome: "rejected" };
     const data = (await res.json()) as {
       sessionId?: string;
       factors?: { user?: { id?: string } };
     };
     const zitadelSessionId = data.sessionId;
     const sub = data.factors?.user?.id;
-    if (!zitadelSessionId || !sub) return null;
-    return { zitadelSessionId, sub };
+    if (!zitadelSessionId || !sub) return { outcome: "rejected" };
+    return { outcome: "authenticated", session: { zitadelSessionId, sub } };
   }
 
   exchangeSessionForTokens(_zitadelSessionId: string): Promise<IdpTokens> {

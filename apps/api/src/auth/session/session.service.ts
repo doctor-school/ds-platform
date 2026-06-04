@@ -111,6 +111,10 @@ export class SessionService {
       result.tokens.accessToken,
       result.tokens.refreshToken,
     );
+    // EARS-18 terminal event for the rotation command (`auth.token.rotated`).
+    // F4 deferred this happy-path emission to F6 (the reuse/`theft_detected`
+    // branch above already emitted); both now land in the durable ledger.
+    await this.audit.record({ type: "RefreshRotated", sub: record.sub, sid });
     return {
       status: "rotated",
       claims: { sub: record.sub, roles: record.roles, mfa: record.mfa },

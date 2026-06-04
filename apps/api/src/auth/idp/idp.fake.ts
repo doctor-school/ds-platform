@@ -6,6 +6,7 @@ import type {
   IdpSession,
   IdpTokens,
   IdpUser,
+  PasswordLoginResult,
 } from "./idp.types.js";
 
 /**
@@ -13,6 +14,13 @@ import type {
  * path and anything else for the invalid/expired path (EARS-3/4).
  */
 export const FAKE_VALID_CODE = "424242";
+
+/**
+ * Failed-password attempts that trip the native lockout (EARS-15: 10 / 30 min).
+ * The fake models the threshold (not the 30-min window — that is Zitadel's), so
+ * the BFF's lockout *observation* (`auth.lockout.triggered`) is testable.
+ */
+export const FAKE_LOCKOUT_THRESHOLD = 10;
 
 interface FakeRecord {
   sub: string;
@@ -108,18 +116,45 @@ export class FakeIdpClient implements IdpClient {
   passwordLogin(
     identifier: string,
     password: string,
-  ): Promise<IdpSession | null> {
+  ): Promise<PasswordLoginResult> {
     const record =
       this.byEmail.get(identifier.toLowerCase()) ?? this.byPhone.get(identifier);
+
+    // An existing account whose failure tally has reached the threshold is
+    // soft-locked (EARS-15) — even a correct password is refused while locked,
+    // matching the native policy. `justLocked` is false here (the lock already
+    // tripped on an earlier attempt), so no duplicate `lockout.triggered`.
+    if (record && (this.failed.get(identifier) ?? 0) >= FAKE_LOCKOUT_THRESHOLD) {
+      return Promise.resolve({
+        outcome: "locked",
+        sub: record.sub,
+        justLocked: false,
+      });
+    }
+
     // Unknown identifier and wrong password are indistinguishable (EARS-16); a
     // failed check is tallied (the native Zitadel lockout counter, EARS-15).
     if (!record || record.password !== password) {
-      this.failed.set(identifier, (this.failed.get(identifier) ?? 0) + 1);
-      return Promise.resolve(null);
+      const count = (this.failed.get(identifier) ?? 0) + 1;
+      this.failed.set(identifier, count);
+      // The attempt that reaches the threshold trips the lock — but only for a
+      // real account (an unknown identifier cannot be locked).
+      if (record && count >= FAKE_LOCKOUT_THRESHOLD) {
+        return Promise.resolve({
+          outcome: "locked",
+          sub: record.sub,
+          justLocked: count === FAKE_LOCKOUT_THRESHOLD,
+        });
+      }
+      return Promise.resolve({ outcome: "rejected" });
     }
+
     const zitadelSessionId = `fake-session-${++this.seq}`;
     this.sessions.set(zitadelSessionId, record.sub);
-    return Promise.resolve({ zitadelSessionId, sub: record.sub });
+    return Promise.resolve({
+      outcome: "authenticated",
+      session: { zitadelSessionId, sub: record.sub },
+    });
   }
 
   exchangeSessionForTokens(zitadelSessionId: string): Promise<IdpTokens> {

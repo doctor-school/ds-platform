@@ -74,7 +74,7 @@ Enforcement: AGENTS.md hard rules + machine-checkable CI guards (§2.6).
 
 Procedural source of truth — **`apps/docs/content/skills/do-feature-iteration/SKILL.md`**. Orchestration skill несёт discipline-gate'ы (verdict checklist'а, verdict review, обязательная invocation decision-debt), которые inline narrative checklist обеспечить не может: агент, читающий narrative bullet list, молча пропустит, а агент, который не может пройти дальше без артефакта от subagent'а, пропустить не может. Конкретно:
 
-- **`run-iteration-end-checklist`** работает в dispatch-mode; subagent возвращает строку `VERDICT: N of 11 — <PASS | BLOCKED on #X>`. Lead agent не может пройти дальше checklist gate, пока verdict — `BLOCKED`.
+- **`run-iteration-end-checklist`** работает в dispatch-mode; subagent возвращает строку `VERDICT: N of 12 — <PASS | BLOCKED on #X>`. Lead agent не может пройти дальше checklist gate, пока verdict — `BLOCKED`.
 - **`request-mode-a-review`** работает в dispatch-mode; subagent-ревьювер возвращает строку `VERDICT: <APPROVE | REQUEST_CHANGES>`. Lead agent не может invocate'нуть `merge-when-green`, пока последний verdict — `REQUEST_CHANGES` или отсутствует.
 - **`surface-decision-debt`** обязателен перед `write-iteration-summary`. Output может быть `[]`, но invocation сам по себе обязателен.
 
@@ -109,7 +109,7 @@ Sketch и edge cases — design spec §4.
 
 > **Interim semantics note (per ADR-0008 §2.6 deferred branch protection):** пока ADR-0008 §2.6 branch protection отложен до апгрейда плана org'а или перевода репо в public, `BLOCK` читается операционально как **«CI job выходит red, и Tech Lead трактует это как merge-blocker по convention'у»** — тот же outcome на single-developer happy path, без server-side гарантии.
 
-### 2.7 11-item iteration-end checklist (dispatch через `run-iteration-end-checklist`)
+### 2.7 12-item iteration-end checklist (dispatch через `run-iteration-end-checklist`)
 
 Перед `git push` агент диспатчит skill `run-iteration-end-checklist` fresh-context subagent'у (§2.4). Subagent verify'ет:
 
@@ -124,8 +124,9 @@ Sketch и edge cases — design spec §4.
 9. `apps/docs/content/architecture/` обновлён для cross-cutting изменений
 10. `apps/docs/content/operations/` runbook обновлён для ops-relevant изменений
 11. Linked Issue получил summary comment (file paths, decisions, что осталось)
+12. Vertical-slice DoD (conditional, F-22) — когда итерация закрывает **последний** открытый handler спеки `surface: user-facing`, пользовательский путь проходится end-to-end (browser/E2E green) либо gap — tracked Issue; N/A для `surface: backend-only` или не-финального handler'а
 
-Subagent возвращает `VERDICT: N of 11 — <PASS | BLOCKED on #X>`. Failure любого пункта → no push, либо fix, либо escalate.
+Subagent возвращает `VERDICT: N of 12 — <PASS | BLOCKED on #X>`. Failure любого пункта → no push, либо fix, либо escalate.
 
 ### 2.8 Prompt-caching policy
 

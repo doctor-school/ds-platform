@@ -25,6 +25,12 @@ import type {
 } from "@ds/schemas";
 import { Authz, Public } from "../authz/index.js";
 import { BotProtected } from "../bot-protection/index.js";
+import { RateLimited } from "./rate-limit/index.js";
+import { TimingEqualized } from "./timing/index.js";
+import {
+  LoginChallenged,
+  LoginChallengePolicy,
+} from "./login-challenge/index.js";
 import { AuthService } from "./auth.service.js";
 import {
   LoginRequestDto,
@@ -64,10 +70,18 @@ const GENERIC_LOGIN_FAILURE = "invalid credentials";
  */
 @Controller({ path: "auth", version: "1" })
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  // Both deps are type-inferred (no `@Inject`), so the tsx/esbuild
+  // `design:paramtypes` ordering hazard (a type-inferred param preceding an
+  // `@Inject` one) does not apply — see the class doc above.
+  constructor(
+    private readonly auth: AuthService,
+    private readonly loginChallenge: LoginChallengePolicy,
+  ) {}
 
   @Post("register")
   @Public()
+  @RateLimited()
+  @TimingEqualized()
   @BotProtected("register")
   @HttpCode(200)
   @Authz({
@@ -85,18 +99,24 @@ export class AuthController {
    * On success it sets the `__Host-` cookie and returns a token-free body; every
    * failure is the same generic 401 (EARS-16). The fingerprint is derived here —
    * the controller is the only layer with the request — and bound into the
-   * session by the service. The login captcha-after-N-failures policy (EARS-17
-   * login surface) is owned by F6 (#90), so `login` is intentionally not yet
-   * `@BotProtected`.
+   * session by the service. The login captcha-after-N-failures policy (EARS-17)
+   * is enforced by `LoginChallengeGuard` via `@LoginChallenged()`: a normal first
+   * login is unburdened, but once this origin has failed N times the guard
+   * requires a bot-protection token. The controller feeds the policy the outcome
+   * (the guard runs before the result is known) — a failure tallies, a success
+   * clears the window.
    */
   @Post("login")
   @Public()
+  @RateLimited()
+  @TimingEqualized()
+  @LoginChallenged()
   @HttpCode(200)
   @Authz({
     access: "public",
     check: "none",
     audit: "high-stakes",
-    tests: ["EARS-5", "EARS-8"],
+    tests: ["EARS-5", "EARS-8", "EARS-17"],
   })
   async login(
     @Body() dto: LoginRequestDto,
@@ -111,8 +131,15 @@ export class AuthController {
       dto.password,
       fingerprint,
     );
-    if (!result) throw new UnauthorizedException(GENERIC_LOGIN_FAILURE);
+    if (!result) {
+      // EARS-17: tally the failure for this origin; the N+1-th attempt is then
+      // challenged by the guard. (The generic 401 is unchanged — EARS-16.)
+      this.loginChallenge.recordFailure(ip);
+      throw new UnauthorizedException(GENERIC_LOGIN_FAILURE);
+    }
 
+    // A successful login clears the origin's failure window (no lingering challenge).
+    this.loginChallenge.reset(ip);
     reply.header("set-cookie", result.cookie);
     return { status: "authenticated" };
   }
@@ -130,6 +157,9 @@ export class AuthController {
    */
   @Post("login/otp/request")
   @Public()
+  @RateLimited()
+  @TimingEqualized()
+  @BotProtected("otp-request")
   @HttpCode(200)
   @Authz({
     access: "public",
@@ -155,6 +185,8 @@ export class AuthController {
    */
   @Post("login/otp")
   @Public()
+  @RateLimited()
+  @TimingEqualized()
   @HttpCode(200)
   @Authz({
     access: "public",
@@ -260,6 +292,7 @@ export class AuthController {
 
   @Post("verify")
   @Public()
+  @RateLimited()
   @HttpCode(200)
   @Authz({
     access: "public",
@@ -280,6 +313,8 @@ export class AuthController {
    */
   @Post("password/reset")
   @Public()
+  @RateLimited()
+  @TimingEqualized()
   @BotProtected("password-reset")
   @HttpCode(200)
   @Authz({
@@ -303,6 +338,7 @@ export class AuthController {
    */
   @Post("password/reset/complete")
   @Public()
+  @RateLimited()
   @HttpCode(200)
   @Authz({
     access: "public",

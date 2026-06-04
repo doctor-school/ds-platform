@@ -9,6 +9,10 @@ import type pg from "pg";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
+import {
+  RATE_LIMIT_THRESHOLDS,
+  RELAXED_RATE_LIMIT,
+} from "../setup/rate-limit.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { ReconcileService } from "../../src/auth/reconcile.service.js";
 
@@ -32,6 +36,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Mirror sync (e2e)", () => {
     })
       .overrideProvider(IDP_CLIENT)
       .useValue(fake)
+      .overrideProvider(RATE_LIMIT_THRESHOLDS)
+      .useValue(RELAXED_RATE_LIMIT)
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(

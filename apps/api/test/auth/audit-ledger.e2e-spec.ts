@@ -10,6 +10,10 @@ import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import {
+  RATE_LIMIT_THRESHOLDS,
+  RELAXED_RATE_LIMIT,
+} from "../setup/rate-limit.js";
+import {
   FakeIdpClient,
   FAKE_LOCKOUT_THRESHOLD,
 } from "../../src/auth/idp/idp.fake.js";
@@ -68,6 +72,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth audit ledger (e2e)", () => {
     })
       .overrideProvider(IDP_CLIENT)
       .useValue(new FakeIdpClient())
+      .overrideProvider(RATE_LIMIT_THRESHOLDS)
+      .useValue(RELAXED_RATE_LIMIT)
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
@@ -95,10 +101,9 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth audit ledger (e2e)", () => {
     const email = uniqueEmail("reg");
     await register(email);
 
-    const { rows } = await pool.query(
-      "SELECT id FROM users WHERE email = $1",
-      [email],
-    );
+    const { rows } = await pool.query("SELECT id FROM users WHERE email = $1", [
+      email,
+    ]);
     expect(rows).toHaveLength(1);
 
     // Resolve the Zitadel sub the BFF audited under, via the subject's session.
@@ -143,10 +148,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth audit ledger (e2e)", () => {
     });
     expect(res.statusCode).toBe(401);
 
-    const failures = await rowsFor(
-      "event_type = $1",
-      "auth.login.failure",
-    );
+    const failures = await rowsFor("event_type = $1", "auth.login.failure");
     const mine = failures.filter(
       (r) => typeof r.metadata.identifier_hash === "string",
     );

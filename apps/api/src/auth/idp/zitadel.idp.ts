@@ -189,6 +189,63 @@ export class ZitadelIdpClient implements IdpClient {
     );
   }
 
+  /**
+   * Resolve an identifier (email or phone) to a Zitadel `userId`, or `null` if no
+   * user matches. Uses the User v2 search with an EQUALS query on the matching
+   * channel. Fails closed — any non-2xx or empty result is `null` — so the reset
+   * paths below stay enumeration-safe (an unknown identifier looks like a hiccup).
+   */
+  private async resolveUserId(identifier: string): Promise<string | null> {
+    const query = identifier.startsWith("+")
+      ? { phoneQuery: { number: identifier } }
+      : { emailQuery: { emailAddress: identifier } };
+    const res = await this.fetchImpl(this.url("/v2/users"), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ queries: [query] }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { result?: Array<{ userId?: string }> };
+    return data.result?.[0]?.userId ?? null;
+  }
+
+  async requestPasswordReset(identifier: string): Promise<void> {
+    // Zitadel User v2: POST /v2/users/{userId}/password_reset triggers the
+    // forgot-password code (Zitadel sends it via the configured notifier). Every
+    // step is best-effort and swallowed: an unknown identifier, or any provider
+    // error, must produce the IDENTICAL outcome as success so the BFF response is
+    // not an existence oracle (EARS-11/16). We therefore never throw here.
+    const userId = await this.resolveUserId(identifier);
+    if (!userId) return;
+    await this.fetchImpl(this.url(`/v2/users/${userId}/password_reset`), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({}),
+    }).catch(() => undefined);
+  }
+
+  async completePasswordReset(
+    identifier: string,
+    code: string,
+    newPassword: string,
+  ): Promise<{ sub: string } | null> {
+    // Zitadel User v2: POST /v2/users/{userId}/password with the verificationCode
+    // from the reset flow sets the new password. A non-2xx (bad/expired code) or
+    // an unknown identifier both resolve to `null` — indistinguishable, generic
+    // (EARS-16). The IdP owns the password and the code check (design §2).
+    const userId = await this.resolveUserId(identifier);
+    if (!userId) return null;
+    const res = await this.fetchImpl(this.url(`/v2/users/${userId}/password`), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({
+        newPassword: { password: newPassword },
+        verificationCode: code,
+      }),
+    });
+    return res.ok ? { sub: userId } : null;
+  }
+
   async listUsers(): Promise<IdpUser[]> {
     const res = await this.fetchImpl(this.url("/v2/users"), {
       method: "POST",

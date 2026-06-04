@@ -149,6 +149,58 @@ export const SessionClaimsSchema = z.strictObject({
 export type SessionClaims = z.infer<typeof SessionClaimsSchema>;
 
 /**
+ * Password-reset initiation (EARS-11). A single `identifier` box (email or phone)
+ * — like login, the user types one credential and Zitadel resolves it (design §2)
+ * — triggers the Zitadel forgot-password code flow. `captchaToken` is the
+ * bot-protection widget token read by the guard (EARS-17; reset is an abuse-prone
+ * unauthenticated surface, design §10.1); optional here because the guard no-ops
+ * when the provider is disabled (the dev-stand default).
+ */
+export const PasswordResetRequestSchema = z.object({
+  identifier: z.string().min(1),
+  captchaToken: z.string().optional(),
+});
+export type PasswordResetRequest = z.infer<typeof PasswordResetRequestSchema>;
+
+/**
+ * Password-reset initiation response (EARS-11). Deliberately identical whether or
+ * not the identifier exists — a code is sent only if it does, but the response
+ * discloses nothing (enumeration-resistant, EARS-16). Always `reset_requested`.
+ */
+export const PasswordResetResponseSchema = z.strictObject({
+  status: z.literal("reset_requested"),
+});
+export type PasswordResetResponse = z.infer<typeof PasswordResetResponseSchema>;
+
+/**
+ * Password-reset completion (EARS-12). The user submits the identifier they
+ * requested the reset for, the reset code Zitadel sent, and a policy-conforming
+ * new password. The IdP owns the real password policy and the code verification
+ * (design §2); `newPassword` carries the same shape guard as registration/login.
+ */
+export const PasswordResetCompleteRequestSchema = z.object({
+  identifier: z.string().min(1),
+  code: z.string().min(1),
+  newPassword: Password,
+});
+export type PasswordResetCompleteRequest = z.infer<
+  typeof PasswordResetCompleteRequestSchema
+>;
+
+/**
+ * Password-reset completion response (EARS-12). `reset_completed` on success
+ * (the new password is set and every existing session for the user is revoked);
+ * every failure — invalid/expired code, unknown identifier — is the same generic
+ * 4xx so the response stays enumeration-resistant (EARS-16).
+ */
+export const PasswordResetCompleteResponseSchema = z.strictObject({
+  status: z.literal("reset_completed"),
+});
+export type PasswordResetCompleteResponse = z.infer<
+  typeof PasswordResetCompleteResponseSchema
+>;
+
+/**
  * Zitadel Action webhook payload (EARS-19). Zitadel fires this on user
  * create/update; the BFF upserts the corresponding `doctor_guest` mirror row.
  * Loose by design — Zitadel owns the shape and may add fields; the BFF reads

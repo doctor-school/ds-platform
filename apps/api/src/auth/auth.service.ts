@@ -6,6 +6,8 @@ import {
 } from "@nestjs/common";
 import { consentRecords, users, type DrizzleHandle } from "@ds/db";
 import type {
+  PasswordResetCompleteResponse,
+  PasswordResetResponse,
   RegisterRequest,
   RegisterResponse,
   VerifyRequest,
@@ -106,6 +108,42 @@ export class AuthService {
   /** EARS-10: revoke the BFF session and return the cookie that clears it. */
   logout(sid: string): Promise<{ cookie: string }> {
     return this.sessions.logout(sid);
+  }
+
+  /**
+   * EARS-11: initiate a password reset. Delegates to the IdP's forgot-password
+   * code flow and returns the same `reset_requested` acknowledgement no matter
+   * whether the identifier exists — the port resolves identically either way, so
+   * the response discloses nothing (enumeration-resistant, EARS-16). Timing
+   * equalization across the existing/unknown paths (EARS-16's ≤50 ms budget) is
+   * the cross-cutting concern owned by F6 (#90).
+   */
+  async requestPasswordReset(identifier: string): Promise<PasswordResetResponse> {
+    await this.idp.requestPasswordReset(identifier);
+    return { status: "reset_requested" };
+  }
+
+  /**
+   * EARS-12: complete a password reset. The IdP sets the new password against the
+   * reset code (design §2); on success every existing session of that subject is
+   * revoked (global force-logout) and `PasswordResetCompleted` is recorded — both
+   * owned by the session layer. An invalid/expired code or unknown identifier is
+   * the same generic failure (EARS-16); the specific reason lives only in the
+   * audit ledger (F6).
+   */
+  async completePasswordReset(
+    identifier: string,
+    code: string,
+    newPassword: string,
+  ): Promise<PasswordResetCompleteResponse> {
+    const result = await this.idp.completePasswordReset(
+      identifier,
+      code,
+      newPassword,
+    );
+    if (!result) throw new BadRequestException(GENERIC_FAILURE);
+    await this.sessions.revokeAllForSub(result.sub);
+    return { status: "reset_completed" };
   }
 
   /**

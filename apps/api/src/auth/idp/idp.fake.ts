@@ -47,6 +47,8 @@ export class FakeIdpClient implements IdpClient {
   private readonly consumedRefresh = new Set<string>();
   /** Per-identifier failed-check tally — the fake's stand-in for the native Zitadel lockout counter (EARS-15), asserted by EARS-5 tests. */
   private readonly failed = new Map<string, number>();
+  /** Subs with a live reset code → the code that completes it (EARS-11/12). Models Zitadel's forgot-password code flow; single-use, cleared on completion. */
+  private readonly resetCodes = new Map<string, string>();
   private seq = 0;
 
   createUser(input: CreateUserInput): Promise<CreatedUser> {
@@ -157,6 +159,34 @@ export class FakeIdpClient implements IdpClient {
         claims: { sub, roles: ["doctor_guest"], mfa: false },
       },
     });
+  }
+
+  requestPasswordReset(identifier: string): Promise<void> {
+    const record =
+      this.byEmail.get(identifier.toLowerCase()) ?? this.byPhone.get(identifier);
+    // A code is issued only for an existing identifier, but the resolution is
+    // identical either way — an unknown identifier is a silent no-op, never a
+    // throw, so the caller's response stays enumeration-safe (EARS-11/16).
+    if (record) this.resetCodes.set(record.sub, FAKE_VALID_CODE);
+    return Promise.resolve();
+  }
+
+  completePasswordReset(
+    identifier: string,
+    code: string,
+    newPassword: string,
+  ): Promise<{ sub: string } | null> {
+    const record =
+      this.byEmail.get(identifier.toLowerCase()) ?? this.byPhone.get(identifier);
+    // Unknown identifier and invalid/expired code are indistinguishable (EARS-16).
+    if (!record) return Promise.resolve(null);
+    const expected = this.resetCodes.get(record.sub);
+    if (!expected || expected !== code) return Promise.resolve(null);
+    // The IdP is the only party that sets the password (design §2); the fake
+    // updates its stored credential so a subsequent passwordLogin proves it.
+    record.password = newPassword;
+    this.resetCodes.delete(record.sub); // single-use code
+    return Promise.resolve({ sub: record.sub });
   }
 
   /** Test accessor: how many failed password checks the fake recorded for `identifier`. */

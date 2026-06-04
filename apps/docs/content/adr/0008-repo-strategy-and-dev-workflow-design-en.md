@@ -876,7 +876,7 @@ Concrete workflow when a trigger fires (any of OQ-R1..R12):
 - **ADR-0004** §13 — `packages/eslint-config/` exports the `no-vercel-only-api` rule.
 - **ADR-0005** — `apps/mobile/` — Expo SDK 53, separate build/release pipeline (Expo EAS).
 - **ADR-0006** §1, §2, §3, §6, §7, §9, §10 — doc topology, Fumadocs, Keystatic, glossary, drift guards, task-tracker split: materialised in layout §2.3 + tooling §3.
-- **ADR-0007** §2.4 (8-step cycle), §2.5 (bootstrap), §2.6 (drift guards), §2.8 (reviewer-bot), §2.10 (cost-ledger), §2.11 (autonomy + kill switch); **AI-stack design spec §11** (14-step migration plan): this ADR-0008 + spec — operational ground for §11 migration steps.
+- **ADR-0007** §2.4 (orchestrated iteration cycle), §2.5 (bootstrap), §2.6 (drift guards), §2.8 (reviewer-bot), §2.10 (cost-ledger), §2.11 (autonomy + kill switch); **AI-stack design spec §11** (14-step migration plan): this ADR-0008 + spec — operational ground for §11 migration steps.
 - **Engineering-readiness spec** (`../specs/tech/2026-05-12-engineering-readiness-design-en.md`) — runtime tooling defaults: Caddy/Traefik, Coolify, GlitchTip, Loki+Prometheus+Tempo, Vault, Unleash, Beget DNS. Referenced from `README.md` § Runtime tooling. Not duplicated in ADR-0008.
 
 ---

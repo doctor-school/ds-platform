@@ -1,6 +1,6 @@
 ---
 title: "do-feature-iteration"
-description: "Orchestration skill: drive one EARS-handler iteration end-to-end against an existing feature-spec. Replaces ADR-0007 §2.4 8-step cycle as the procedural source of truth."
+description: "Orchestration skill: drive one EARS-handler iteration end-to-end against an existing feature-spec. Replaces ADR-0007 §2.4 orchestrated iteration cycle as the procedural source of truth."
 name: do-feature-iteration
 mode: inline
 ---
@@ -44,7 +44,7 @@ Execute the steps in order. Each `→` is a hard gate: the next step does not be
 ## Failure mode
 
 - Skipping any of the three discipline gates (`run-iteration-end-checklist`, `request-mode-a-review`, `surface-decision-debt`) — process violation. This is the F-14 / F-15 / F-19 / F-21 pattern documented in G11 findings; the gate-artifact contract exists specifically to prevent silent skip.
-- Direct `gh pr merge` without `--auto --squash --delete-branch` — process violation per ADR-0008 §2.6 + A3.
+- Direct `gh pr merge` without `--auto --squash --delete-branch` — process violation per ADR-0008 §2.6.
 
 ## Related skills
 

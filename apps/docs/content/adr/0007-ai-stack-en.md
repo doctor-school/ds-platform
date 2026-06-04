@@ -58,12 +58,12 @@ Does not establish:
 - **Opt-in async: Codex (cloud)** — activated by Tech Lead's decision to launch the first parallel task. AGENTS.md is already Codex-compatible (universal constitution from ADR-0006).
 - **Deferred: Cursor.** Trigger: hiring of a second engineer with inline-AI workflow preference.
 
-All harnesses follow the same 8-step iteration cycle (see §2.4).
+All harnesses follow the same orchestrated iteration cycle (see §2.4).
 
 ### 2.3 SDD + TDD as hard rules
 
 - **SDD:** no production code without a feature spec in `apps/docs/content/specs/features/NNN-<slug>/` (3 files: requirements/design/scenarios — format from ADR-0006 §4). If there is no spec, the agent first writes one via superpowers:brainstorming.
-- **TDD:** no production code without a failing test. One Vitest test per EARS requirement, naming `it('EARS-N.M: ...', ...)`. Playwright tests are generated from `NNN-scenarios.feature` via `playwright-bdd`.
+- **TDD:** no production code without a failing test. One Vitest test per EARS requirement, naming `it('EARS-N: ...', ...)`. Playwright tests are generated from `NNN-scenarios.feature` via `playwright-bdd`.
 - **Narrow exceptions** (typo / doc-only / dep-bumps / regenerated artifacts) are documented in the PR description.
 
 Enforcement: AGENTS.md hard rules + machine-checkable CI guards (§2.6).
@@ -100,7 +100,7 @@ Sketch and edge cases — design spec §4.
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- |
 | **spec-link required**    | PR labeled `feature:NNN-<slug>` not linked to its spec: no `Closes #N`, a linked Issue without a (product-theme) milestone, or the label's spec folder (`features/NNN-<slug>/`) missing. Non-feature PR (bug/chore) — skipped. | BLOCK                 |
 | **TDD signal**            | implementation-only commit without a test file                                                                                                                                                                                 | WARN v1               |
-| **EARS ↔ test linkage**   | EARS requirement without an `it('EARS-N.M: ...')` test (content-search across all `apps/**/*.test.ts`)                                                                                                                         | WARN v1 → BLOCK v2    |
+| **EARS ↔ test linkage**   | EARS requirement without an `it('EARS-N: ...')` test (content-search across all `apps/**/*.test.ts`)                                                                                                                           | WARN v1 → BLOCK v2    |
 | **Gherkin coverage**      | scenarios without Playwright step implementation                                                                                                                                                                               | BLOCK (via test fail) |
 | **Spec status freshness** | merged PR with label `feature:*`, but spec status='Draft'                                                                                                                                                                      | WARN v1               |
 | **Prior decisions cited** | new spec without an ADR-link in "Prior decisions" if category ≠ docs-only                                                                                                                                                      | WARN v1               |

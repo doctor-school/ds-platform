@@ -72,6 +72,23 @@ export function serializeSessionCookie(
   ].join("; ");
 }
 
+/**
+ * Serialize the cookie that **clears** the session (EARS-10 logout). It carries
+ * the identical `__Host-` attribute set with an empty value and `Max-Age=0`, so
+ * the user agent drops the cookie — the attributes must match (esp. `Path=/`, no
+ * `Domain`) or some agents ignore the deletion.
+ */
+export function clearSessionCookie(): string {
+  return [
+    `${SESSION_COOKIE_NAME}=`,
+    "Path=/",
+    "HttpOnly",
+    "Secure",
+    "SameSite=Lax",
+    "Max-Age=0",
+  ].join("; ");
+}
+
 /** Parse a `Cookie` request header into a name→value map; absent/empty ⇒ `{}`. */
 export function parseCookies(header: string | undefined): Record<string, string> {
   const out: Record<string, string> = {};

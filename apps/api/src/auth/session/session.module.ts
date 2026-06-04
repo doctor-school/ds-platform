@@ -4,6 +4,8 @@ import { loadEnv } from "../../config/env.schema.js";
 import { SESSION_STORE, type SessionStore } from "./session.types.js";
 import { InMemorySessionStore } from "./session-store.fake.js";
 import { RedisSessionStore } from "./session-store.redis.js";
+import { AUTH_AUDIT } from "./auth-audit.types.js";
+import { InMemoryAuthAuditLog } from "./auth-audit.fake.js";
 import { SessionService } from "./session.service.js";
 import { SessionAuthHook } from "./session-auth.hook.js";
 
@@ -16,10 +18,14 @@ import { SessionAuthHook } from "./session-auth.hook.js";
  * - provides {@link SessionService} (the OIDC-exchange → cookie + record step),
  *   exported for the login orchestration in `AuthService`;
  * - registers {@link SessionAuthHook}, which populates the request subject the
- *   global `AuthzGuard` reads.
+ *   global `AuthzGuard` reads;
+ * - binds the {@link AUTH_AUDIT} security-event sink to its in-memory default
+ *   (EARS-9/10). The durable `audit_ledger` writer (EARS-18) rebinds this token
+ *   in F6 (#90) without touching the `SessionService` call sites.
  */
 @Module({
   providers: [
+    { provide: AUTH_AUDIT, useClass: InMemoryAuthAuditLog },
     {
       provide: SESSION_STORE,
       useFactory: (): SessionStore => {

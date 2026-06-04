@@ -2,6 +2,7 @@ import type {
   CreatedUser,
   CreateUserInput,
   IdpClient,
+  IdpRefreshResult,
   IdpSession,
   IdpTokens,
   IdpUser,
@@ -168,6 +169,22 @@ export class ZitadelIdpClient implements IdpClient {
     return Promise.reject(
       new Error(
         "zitadel OIDC session→token exchange is not wired against the dev-stand yet (design §11)",
+      ),
+    );
+  }
+
+  refreshTokens(_refreshToken: string): Promise<IdpRefreshResult> {
+    // INTEGRATION SEAM (design §3, §11): the OAuth refresh-token grant against
+    // Zitadel's token endpoint shares the OIDC-application config that
+    // `exchangeSessionForTokens` above still lacks (IDP_CLIENT_ID / secret /
+    // redirect). Until that config is plumbed and verifiable against a live
+    // instance, fail closed — rotate nothing — rather than ship an unverifiable
+    // rotation path. RFC-6819 reuse detection (EARS-9) is native to Zitadel's
+    // rotating refresh tokens; this adapter only relays its verdict. The BFF
+    // rotation/reuse logic (EARS-9) is proven against FakeIdpClient.
+    return Promise.reject(
+      new Error(
+        "zitadel refresh-token rotation is not wired against the dev-stand yet (design §11)",
       ),
     );
   }

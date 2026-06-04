@@ -82,6 +82,17 @@ export interface IdpTokens {
   claims: IdpClaims;
 }
 
+/**
+ * Result of a refresh exchange (design §3, EARS-9). The refresh token is
+ * single-use: a successful exchange yields fresh token material; presenting an
+ * already-consumed token is RFC-6819 **reuse**, which the IdP detects (ADR-0001
+ * §7 — "refresh token theft detection", owner = IdP) and the BFF answers by
+ * invalidating the chain + revoking the session.
+ */
+export type IdpRefreshResult =
+  | { reuseDetected: false; tokens: IdpTokens }
+  | { reuseDetected: true };
+
 export interface IdpClient {
   /** Create a user; a duplicate identifier returns `alreadyExisted: true`, not a throw. */
   createUser(input: CreateUserInput): Promise<CreatedUser>;
@@ -108,6 +119,13 @@ export interface IdpClient {
    * access JWT, the rotating opaque refresh token, and the principal claims.
    */
   exchangeSessionForTokens(zitadelSessionId: string): Promise<IdpTokens>;
+  /**
+   * EARS-9: rotate a single-use refresh token. On success the old token is
+   * consumed and fresh access + refresh tokens are returned; a replay of an
+   * already-consumed token resolves to `{ reuseDetected: true }` (RFC 6819,
+   * ADR-0001 §7) — the BFF then invalidates the chain and revokes the session.
+   */
+  refreshTokens(refreshToken: string): Promise<IdpRefreshResult>;
 }
 
 /** DI token the port is bound to — rebound to the real Zitadel adapter in prod. */

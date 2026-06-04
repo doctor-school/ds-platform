@@ -14,6 +14,7 @@ export interface RedisLike {
     ttlSeconds: number,
   ): Promise<unknown>;
   get(key: string): Promise<string | null>;
+  del(key: string): Promise<unknown>;
 }
 
 /** Key namespace for BFF session records. */
@@ -51,5 +52,33 @@ export class RedisSessionStore implements SessionStore {
     const raw = await this.redis.get(`${KEY_PREFIX}${sid}`);
     if (!raw) return undefined;
     return JSON.parse(raw) as SessionRecord;
+  }
+
+  async rotate(
+    sid: string,
+    accessToken: string,
+    refreshToken: string,
+  ): Promise<void> {
+    // Re-`set` the record with its tokens replaced, under a TTL recomputed from
+    // the unchanged `expiresAtMs` — so rotation refreshes the token pair without
+    // extending (or resetting) the session's key expiry. No-op if the session is
+    // gone (expired key / revoked) — rotation never resurrects a session.
+    const record = await this.get(sid);
+    if (!record) return;
+    const next: SessionRecord = { ...record, accessToken, refreshToken };
+    const ttlSeconds = Math.max(
+      1,
+      Math.ceil((record.expiresAtMs - Date.now()) / 1000),
+    );
+    await this.redis.set(
+      `${KEY_PREFIX}${sid}`,
+      JSON.stringify(next),
+      "EX",
+      ttlSeconds,
+    );
+  }
+
+  async delete(sid: string): Promise<void> {
+    await this.redis.del(`${KEY_PREFIX}${sid}`);
   }
 }

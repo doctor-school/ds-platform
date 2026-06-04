@@ -113,6 +113,26 @@ export const LoginResponseSchema = z.strictObject({
 export type LoginResponse = z.infer<typeof LoginResponseSchema>;
 
 /**
+ * Refresh response (EARS-9). Carries **no token** — the rotation happens
+ * server-side and the session is still carried only by the unchanged `__Host-`
+ * cookie (ADR-0001 §6). A successful rotation is `refreshed`; reuse detection or
+ * a missing session is a `401` (the cookie is cleared on reuse), not a body.
+ */
+export const RefreshResponseSchema = z.strictObject({
+  status: z.literal("refreshed"),
+});
+export type RefreshResponse = z.infer<typeof RefreshResponseSchema>;
+
+/**
+ * Logout response (EARS-10). The server-side session is deleted and the
+ * `__Host-` cookie cleared via `Set-Cookie`; the body just acknowledges.
+ */
+export const LogoutResponseSchema = z.strictObject({
+  status: z.literal("logged_out"),
+});
+export type LogoutResponse = z.infer<typeof LogoutResponseSchema>;
+
+/**
  * The authenticated principal as read back through `GET /v1/auth/session` — the
  * minimal claim subset the BFF surfaces to its own forms (`sub`, `roles[]`,
  * `mfa`). The full access JWT (`sub, roles[], mfa, sid, iat, exp, jti`) is minted

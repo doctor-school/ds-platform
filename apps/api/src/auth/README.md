@@ -51,11 +51,14 @@ keyed by the cookie's `sid`. No token is ever in a response body (EARS-8).
   `PasswordResetCompleted`, the EARS-12 session-side effect of a completed reset —
   a credential change must leave no live session behind, ADR-0001 §6/§7). The
   store keeps a `sub → sids` index so the revoke is targeted, not a scan.
-- **`AuthAuditLog` port** (`auth-audit.types.ts` / `auth-audit.fake.ts`) — the
-  audit-ledger slice for session-security events: `RefreshReuseDetected` /
-  `SessionRevoked` (F4) and the user-level `PasswordResetCompleted` (F5/EARS-12).
-  In-memory default now; the durable `audit_ledger` writer (EARS-18) rebinds
-  `AUTH_AUDIT` in F6 (#90) without touching call sites.
+- **`AuthAuditLog` port** (`auth-audit.types.ts`) — the EARS-18 audit-ledger
+  seam. F6 (#90) expanded the event vocabulary to the full taxonomy (register,
+  login success/failure, otp.sent, rotate, reuse, logout, reset
+  requested/completed, lockout), reconciled each internal name to its canonical
+  `auth.<class>.<event>` wire id in one place (`auth-audit.ledger.ts:toLedgerRow`,
+  ADR-0001 §7.3), and bound `AUTH_AUDIT` to the durable `DrizzleAuthAuditLog`
+  writer (append-only `audit_ledger`, PD masked to `identifier_hash`). The
+  in-memory `auth-audit.fake.ts` stays the unit-spec double.
 - **`SessionAuthHook`** — a Fastify `onRequest` hook that populates the request
   subject the global `AuthzGuard` reads (the seam in `authz/authz.guard.ts`). It
   is a hook, not a Nest middleware, because Fastify middleware sees the _raw_
@@ -108,9 +111,10 @@ IdP to send, so a refused send never reaches the provider and never costs money.
   limit is an edge/BFF concern, design §2); absent it, the budget degrades to
   phone/IP/global.
 - **State** — in-memory (correct for a single instance, proven by the unit spec +
-  OTP e2e). Multi-instance sharing rides the same Redis as the session store and
-  is the F6 (#90) rate-limit concern (EARS-13); rebinding it leaves the call sites
-  untouched (the SESSION_STORE fake/Redis pattern). Thresholds are an injectable
+  OTP e2e). Multi-instance sharing rides the same Redis as the session store; the
+  EARS-13 `RateLimitService` (F6 #90) is the parallel request-rate limiter sharing
+  that same in-memory→Redis seam. Rebinding either leaves the call sites untouched
+  (the SESSION_STORE fake/Redis pattern). Thresholds are an injectable
   value (`SMS_BUDGET_THRESHOLDS`) so a deployment can tighten them and the e2e can
   drive the breaker boundary without 2000 round-trips; the clock
   (`SMS_BUDGET_CLOCK`) is `Date.now`, faked in the unit spec for window-reset
@@ -127,20 +131,33 @@ with no duplicate account; the distinguishing reason never reaches the client (i
 belongs in the audit ledger). **Password-reset initiate** (EARS-11) is the same
 shape: `reset_requested` whether or not the identifier exists (a code is sent
 only if it does), and **complete** returns one generic 400 for a bad/expired
-code. Cross-path _timing_ equalization (EARS-16's ≤50 ms budget) is the
-cross-cutting concern owned by F6 (#90).
+code. Cross-path _timing_ equalization (EARS-16's ≤50 ms budget) is enforced by
+the `@TimingEqualized` `TimingEqualizationInterceptor` (`timing/`), which floors
+register/login/otp/reset to a fixed minimum on success **and** failure so the
+existing/unknown delta collapses to jitter (F6 #90).
+
+## Cross-cutting security (F6 #90)
+
+The mandatory v1 baseline (ADR-0001 §7) is enforced as additive global guards /
+interceptor that no-op on unmarked handlers (the `@BotProtected` pattern), so each
+gate touches no other call site:
+
+- **Rate limiting** (EARS-13) — `rate-limit/`: `@RateLimited` + a global guard
+  over `RateLimitService` (per-user 5/15 min, per-IP 20/15 min, per-ASN 100/h),
+  on register/login/otp/verify/reset; a refusal is a generic `429`.
+- **Timing equalization** (EARS-16) — `timing/` (see above).
+- **Login captcha-after-N-failures** (EARS-17) — `login-challenge/`:
+  `LoginChallengePolicy` tallies failures per origin; `@LoginChallenged` +
+  guard requires a `BotProtection` token once the threshold is crossed (cleared
+  on a successful login). The OTP-request surface is now statically
+  `@BotProtected("otp-request")` (closes #129's email-OTP abuse gap).
+- **Account lockout** (EARS-15) — native Zitadel policy; the BFF only _observes_
+  the `locked` verdict from `IdpClient.passwordLogin` and emits
+  `auth.lockout.triggered`. The counter, lock, and notification email are native.
+- **Audit ledger** (EARS-18) — see the `AuthAuditLog` port above.
 
 ## Seams (not built yet)
 
-- **Login captcha-after-N-failures** (EARS-17 login surface) → F6 (#90). `login`
-  is intentionally not yet `@BotProtected` — the failure-count policy is F6's.
-- **Audit ledger** (EARS-18) → F6 (#90). Two halves: (a) `@Authz({ audit: … })`
-  records the per-route terminal-audit intent — the `auth_audit` writer +
-  interceptor land with F6; (b) F4's `AuthAuditLog` port (`AUTH_AUDIT`) already
-  emits the `RefreshReuseDetected` / `SessionRevoked` security events into an
-  in-memory sink — F6 rebinds it to the durable writer and reconciles the
-  EARS-name → canonical `<class>.<event>` wire ids (`auth.token.theft_detected` /
-  `auth.session.terminated`, ADR-0001 §7.3).
 - **Periodic reconcile schedule** — `ReconcileService.sweep()` is the unit a
   `@nestjs/schedule` cron will call; wiring the trigger is deferred (design §11).
 

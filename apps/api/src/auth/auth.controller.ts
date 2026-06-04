@@ -166,7 +166,7 @@ export class AuthController {
   }
 
   /**
-   * EARS-10: log out. Authenticated (`doctor_guest` baseline, design §7.2) — you
+   * EARS-10: log out. Authenticated (`doctor_guest` baseline, ADR-0001 §7.2) — you
    * must hold a live session to revoke it. Deletes the server-side session
    * (invalidating its refresh chain), clears the `__Host-` cookie, and records
    * `SessionRevoked` (canonical `auth.session.terminated`, reason `logout`).

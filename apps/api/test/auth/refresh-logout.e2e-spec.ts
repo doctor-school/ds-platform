@@ -15,7 +15,7 @@ import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 // Refresh rotation + logout over HTTP (EARS-9, EARS-10) — the controller wiring
 // on top of the session-layer logic unit-tested in
 // src/auth/session/session.service.spec.ts. Both routes are
-// `doctor_guest`-protected (design §7.2): a live `__Host-` cookie is required.
+// `doctor_guest`-protected (ADR-0001 §7.2): a live `__Host-` cookie is required.
 //
 // The EARS-9 *reuse* path is intentionally NOT exercised here: the refresh token
 // lives only server-side, so no HTTP client can replay it — reuse is a store/IdP

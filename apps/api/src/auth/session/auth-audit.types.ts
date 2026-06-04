@@ -1,32 +1,67 @@
 /**
- * Auth security-event sink (the F4 slice of the EARS-18 audit ledger).
+ * Auth-audit port + the EARS-18 event taxonomy.
  *
- * F4 must record two session-security events — refresh-token reuse detection
- * (EARS-9) and session revocation on logout (EARS-10). The full `audit_ledger`
- * writer + per-request terminal-audit interceptor (EARS-18) is **F6 (#90)**, so
- * F4 introduces this as a narrow port with an in-memory default binding (mirrors
- * the {@link IdpClient} / {@link SessionStore} fake-vs-real split). F6 binds the
- * durable writer to {@link AUTH_AUDIT} without touching these call sites.
+ * F4 introduced this as a narrow port with an in-memory default; F6 (#90) makes
+ * it the EARS-18 audit-ledger seam: the full event vocabulary, the canonical
+ * `<class>.<event>` wire-id reconciliation (one place — {@link toLedgerRow}),
+ * and the durable `audit_ledger` writer ({@link DrizzleAuthAuditLog}). The
+ * in-memory {@link InMemoryAuthAuditLog} stays the unit-test double.
  *
- * The event `type`s are the spec/EARS names (`RefreshReuseDetected`,
- * `SessionRevoked`). Their canonical `<class>.<event>` wire ids — owned by
- * `identity-auth-rbac-design §7.3` / ADR-0001 §7.3 — are `auth.token.theft_detected`
- * and `auth.session.terminated` (reason `logout`); reconciling the name → wire-id
- * mapping is F6's job (recorded as decision-debt for this iteration).
+ * Discipline (003 invariant): every state-changing auth command emits **exactly
+ * one** terminal event here, and the writer masks PD (no raw identifier — only a
+ * hash) before it touches the ledger (ADR-0001 §7, ADR-0003 §6).
+ */
+
+/** A masked OTP / verification channel, carried into the ledger metadata. */
+export type AuthChannel = "email" | "sms";
+
+/** The login method, recorded on a login success (ADR-0001 §7.3 `method`). */
+export type LoginMethod = "password" | "email-otp" | "sms-otp";
+
+/** Why a login failed — the `auth.login.failure` reason (ADR-0001 §7.3). Audit-only; never surfaced (EARS-16). */
+export type LoginFailureReason =
+  | "wrong_password"
+  | "no_user"
+  | "lock"
+  | "captcha_failed";
+
+/**
+ * The auth-event taxonomy (EARS-18). The `type` is the internal (spec/EARS)
+ * name; its canonical `auth.<class>.<event>` wire id — owned by
+ * identity-auth-rbac-design §7.3 / ADR-0001 §7.3 — is assigned in exactly one
+ * place, {@link toLedgerRow}. Events keyed by an `identifier` carry the **raw**
+ * identifier here (the writer masks it to an `identifier_hash`); events keyed by
+ * a `sub` carry the opaque Zitadel subject (not PD).
  */
 export type AuthAuditEvent =
+  // Registration (EARS-1/2/20). Consent versions ride in the metadata rather
+  // than a separate `consent.captured` row — the one-terminal-entry invariant
+  // (the standalone consent event belongs to the ADR-0009 subsystem, not 003).
+  | { type: "Registered"; sub: string; channel: AuthChannel; consent: { purpose: string; version: string }[] }
+  // Login (EARS-5/6/7). Success carries the subject + method; failure carries
+  // the (to-be-masked) identifier + reason — the enumeration/oracle detail that
+  // lives only here (EARS-16).
+  | { type: "LoginSucceeded"; sub: string; method: LoginMethod }
+  | { type: "LoginFailed"; identifier: string; reason: LoginFailureReason }
+  // EARS-6/7 OTP send (email or SMS). Identifier masked.
+  | { type: "OtpSent"; identifier: string; channel: AuthChannel }
+  // EARS-9 rotation happy path (F4 deferred this to F6's terminal audit).
+  | { type: "RefreshRotated"; sub: string; sid: string }
+  // EARS-9 reuse / EARS-10 logout (F4 seam — wire ids reconciled here now).
   | { type: "RefreshReuseDetected"; sub: string; sid: string }
   | { type: "SessionRevoked"; sub: string; sid: string }
-  // EARS-12: a completed password reset. User-level (no `sid`) — it spans every
-  // session of the subject, all of which are revoked as part of the same step.
-  // Canonical wire id `auth.password.reset.completed` (EARS-18 taxonomy);
-  // name → wire-id reconciliation stays F6's job (decision-debt, as for F4).
-  | { type: "PasswordResetCompleted"; sub: string };
+  // EARS-11 reset initiate (identifier masked; no subject — pre-identity).
+  | { type: "PasswordResetRequested"; identifier: string }
+  // EARS-12 reset complete (user-level; spans every session of the subject).
+  | { type: "PasswordResetCompleted"; sub: string }
+  // EARS-15 native-lockout observation. Subject-level; the BFF records it when
+  // the IdP reports the account soft-locked (the counter itself is Zitadel's).
+  | { type: "AccountLocked"; sub: string };
 
 export interface AuthAuditLog {
-  /** Append one auth security event (append-only; never updated or deleted). */
+  /** Append one auth event (append-only; never updated or deleted). */
   record(event: AuthAuditEvent): Promise<void>;
 }
 
-/** DI token the {@link AuthAuditLog} port is bound to (in-memory now, durable in F6). */
+/** DI token the {@link AuthAuditLog} port is bound to (durable Drizzle writer with DB; in-memory fake otherwise). */
 export const AUTH_AUDIT = Symbol("AUTH_AUDIT");

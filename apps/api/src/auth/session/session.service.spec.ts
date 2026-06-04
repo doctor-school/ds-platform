@@ -28,13 +28,14 @@ describe("SessionService — refresh rotation + logout", () => {
   }> {
     const idp = new FakeIdpClient();
     await idp.createUser({ email: "user@ds.test", password: "pw-12345678" });
-    const session = await idp.passwordLogin("user@ds.test", "pw-12345678");
+    const login = await idp.passwordLogin("user@ds.test", "pw-12345678");
+    if (login.outcome !== "authenticated") throw new Error("login setup failed");
     const store = new InMemorySessionStore();
     const audit = new InMemoryAuthAuditLog();
     const svc = new SessionService(idp, store, audit);
 
     const { cookie, claims } = await svc.establish(
-      session!.zitadelSessionId,
+      login.session.zitadelSessionId,
       FP,
     );
     const sid = parseCookies(cookie)[SESSION_COOKIE_NAME] as string;
@@ -108,7 +109,8 @@ describe("SessionService — refresh rotation + logout", () => {
 
     async function establishFor(email: string): Promise<string> {
       const s = await idp.passwordLogin(email, "pw-12345678");
-      const { cookie } = await svc.establish(s!.zitadelSessionId, FP);
+      if (s.outcome !== "authenticated") throw new Error("login setup failed");
+      const { cookie } = await svc.establish(s.session.zitadelSessionId, FP);
       return parseCookies(cookie)[SESSION_COOKIE_NAME] as string;
     }
 

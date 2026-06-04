@@ -58,9 +58,14 @@ the gate boots the real Nest app, whose DI decorators need
 are tracked so they are filled, not forgotten:
 
 - **Audit interceptor.** ADR-0002 §4.8 composes `@Authz` with
-  `UseInterceptors(AuditInterceptor)`. The `auth_audit` ledger lands with the
-  003 audit subsystem; the `audit` field already records the requirement, and
-  the interceptor is wired into `Authz()` when that subsystem exists.
+  `UseInterceptors(AuditInterceptor)`. The `audit_ledger` writer landed with 003
+  F6 (#90, EARS-18) — but as **explicit emission** at each command site (the
+  `AuthAuditLog` port; `auth/session/auth-audit.*`), not as an `@Authz`-composed
+  interceptor: the auth events carry heterogeneous subjects/reasons that a generic
+  per-route interceptor cannot derive uniformly. Folding the terminal-audit
+  emission into an `@Authz({ audit })`-driven interceptor is a tracked refactor
+  (decision-debt #90), not a missing capability — the `audit` field already
+  records the per-route intent.
 - **Authentication.** Populating the request subject (BFF session / JWT) is 003
   F2 (#86). Until then the guard denies every `access: authenticated` route
   (fail-closed); no such route ships before F2.

@@ -15,6 +15,7 @@ export default defineConfig({
     "../../packages/db/src/schema/idempotency-keys.ts",
     "../../packages/db/src/schema/users.ts",
     "../../packages/db/src/schema/consent-records.ts",
+    "../../packages/db/src/schema/audit-ledger.ts",
   ],
   out: "../../apps/api/drizzle",
   dialect: "postgresql",

@@ -26,6 +26,7 @@ import { IDP_CLIENT, type IdpClient } from "./idp/idp.types.js";
 import { AUTH_WEBHOOK_SECRET } from "./auth.tokens.js";
 import { UserMirrorService } from "./user-mirror.service.js";
 import { SmsBudgetService } from "./sms-budget/sms-budget.service.js";
+import { AUTH_AUDIT, type AuthAuditLog } from "./session/auth-audit.types.js";
 import {
   SessionService,
   type RefreshOutcome,
@@ -85,6 +86,7 @@ export class AuthService {
     @Inject(DRIZZLE_DB) private readonly db: Db,
     @Inject(AUTH_WEBHOOK_SECRET)
     private readonly webhookSecret: string | undefined,
+    @Inject(AUTH_AUDIT) private readonly audit: AuthAuditLog,
     private readonly mirror: UserMirrorService,
     private readonly sessions: SessionService,
     private readonly smsBudget: SmsBudgetService,
@@ -104,9 +106,40 @@ export class AuthService {
     password: string,
     fingerprint: string,
   ): Promise<{ cookie: string; claims: SessionClaims } | null> {
-    const session = await this.idp.passwordLogin(identifier, password);
-    if (!session) return null;
-    return this.sessions.establish(session.zitadelSessionId, fingerprint);
+    const result = await this.idp.passwordLogin(identifier, password);
+
+    // EARS-15: observe the native lockout verdict. The terminal failure event is
+    // `auth.login.failure` (reason `lock`); the state-transition `lockout.triggered`
+    // fires exactly once, on the attempt that tripped it. Both stay enumeration-safe
+    // — the controller still answers the same generic 401 (`null`) as a rejection.
+    if (result.outcome === "locked") {
+      await this.audit.record({ type: "LoginFailed", identifier, reason: "lock" });
+      if (result.justLocked) {
+        await this.audit.record({ type: "AccountLocked", sub: result.sub });
+      }
+      return null;
+    }
+    if (result.outcome === "rejected") {
+      // EARS-18: `auth.login.failure` (reason `wrong_password`) — unknown
+      // identifier and wrong password are one indistinguishable reason here.
+      await this.audit.record({
+        type: "LoginFailed",
+        identifier,
+        reason: "wrong_password",
+      });
+      return null;
+    }
+
+    const established = await this.sessions.establish(
+      result.session.zitadelSessionId,
+      fingerprint,
+    );
+    await this.audit.record({
+      type: "LoginSucceeded",
+      sub: result.session.sub,
+      method: "password",
+    });
+    return established;
   }
 
   /**
@@ -140,6 +173,13 @@ export class AuthService {
       }
       await this.idp.requestSmsOtp(req.identifier);
     }
+    // EARS-18: `auth.otp.sent` (identifier masked). A budget-refused SMS threw
+    // above and never reaches here, so a row exists only for an actual send.
+    await this.audit.record({
+      type: "OtpSent",
+      identifier: req.identifier,
+      channel: req.channel,
+    });
     return { status: "otp_sent" };
   }
 
@@ -159,8 +199,26 @@ export class AuthService {
       req.channel === "email"
         ? await this.idp.loginWithEmailOtp(req.identifier, req.code)
         : await this.idp.loginWithSmsOtp(req.identifier, req.code);
-    if (!session) return null;
-    return this.sessions.establish(session.zitadelSessionId, fingerprint);
+    if (!session) {
+      // EARS-18: a wrong/expired code (or unknown identifier) is one generic
+      // `auth.login.failure`; the controller still answers the same 401 (EARS-16).
+      await this.audit.record({
+        type: "LoginFailed",
+        identifier: req.identifier,
+        reason: "wrong_password",
+      });
+      return null;
+    }
+    const established = await this.sessions.establish(
+      session.zitadelSessionId,
+      fingerprint,
+    );
+    await this.audit.record({
+      type: "LoginSucceeded",
+      sub: session.sub,
+      method: req.channel === "email" ? "email-otp" : "sms-otp",
+    });
+    return established;
   }
 
   /**
@@ -187,6 +245,9 @@ export class AuthService {
    */
   async requestPasswordReset(identifier: string): Promise<PasswordResetResponse> {
     await this.idp.requestPasswordReset(identifier);
+    // EARS-18: `auth.password.reset_requested` (identifier masked; no subject —
+    // resolving one would itself be an existence oracle, EARS-16).
+    await this.audit.record({ type: "PasswordResetRequested", identifier });
     return { status: "reset_requested" };
   }
 
@@ -280,6 +341,22 @@ export class AuthService {
       // Trigger the Zitadel verification code for the registered channel.
       if (req.email) await this.idp.requestEmailVerification(created.sub);
       else await this.idp.requestPhoneVerification(created.sub);
+
+      // EARS-18: one terminal `auth.register` row for the created account. The
+      // accepted consent versions (EARS-20, not PD) ride in the metadata rather
+      // than a separate `consent.captured` row (one terminal entry per command;
+      // the standalone consent event is the ADR-0009 subsystem's, not 003's). The
+      // already-existed path creates nothing and audits nothing — its response is
+      // identical (EARS-16), but no account was registered, so no row is owed.
+      await this.audit.record({
+        type: "Registered",
+        sub: created.sub,
+        channel: req.email ? "email" : "sms",
+        consent: req.consent.map((c) => ({
+          purpose: c.purpose,
+          version: c.version,
+        })),
+      });
     }
 
     return { status: "pending_verification" };

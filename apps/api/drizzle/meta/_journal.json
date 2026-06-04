@@ -15,6 +15,13 @@
       "when": 1780392891967,
       "tag": "0001_users_consent",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780560550034,
+      "tag": "0002_audit_ledger",
+      "breakpoints": true
     }
   ]
 }

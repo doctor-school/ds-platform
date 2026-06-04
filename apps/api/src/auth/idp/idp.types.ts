@@ -53,6 +53,25 @@ export interface IdpSession {
 }
 
 /**
+ * Outcome of a password check (EARS-5/15/18). The BFF stays enumeration-safe by
+ * collapsing every non-success to the same generic 401 (EARS-16) at the
+ * controller, but the IdP's verdict is richer than a bare `null` so the audit
+ * ledger can record the real reason (EARS-18) and the native lockout can be
+ * observed (EARS-15):
+ * - `authenticated` — checked session to trade for tokens.
+ * - `rejected` — unknown identifier or wrong password (indistinguishable).
+ * - `locked` — the native Zitadel lockout policy has soft-locked the account
+ *   (EARS-15); `justLocked` is true only on the attempt that tripped it, so the
+ *   BFF emits `auth.lockout.triggered` exactly once. The counter, the lock, and
+ *   the notification email are all native Zitadel (Constraints); the BFF only
+ *   *observes* the verdict here — it never counts failures itself.
+ */
+export type PasswordLoginResult =
+  | { outcome: "authenticated"; session: IdpSession }
+  | { outcome: "rejected" }
+  | { outcome: "locked"; sub: string; justLocked: boolean };
+
+/**
  * The principal claims Zitadel asserts for the authenticated subject. These are
  * the identity claims the BFF mirrors into its session record and surfaces via
  * the session-read route; the full signed JWT (adding `sid, iat, exp, jti`) is
@@ -137,12 +156,13 @@ export interface IdpClient {
   loginWithSmsOtp(identifier: string, code: string): Promise<IdpSession | null>;
   /**
    * EARS-5: create a Zitadel session with a password check for `identifier`
-   * (email or phone). Resolves to the session on success and to `null` on any
-   * failure — unknown identifier and wrong password are indistinguishable so the
-   * caller stays enumeration-safe (EARS-16); a failed check is counted by the
-   * native Zitadel lockout policy (EARS-15), not by the BFF.
+   * (email or phone). Resolves to a {@link PasswordLoginResult} — `authenticated`
+   * on success, or `rejected` / `locked` on failure (the two failure variants are
+   * indistinguishable to the *client* per EARS-16, but the BFF uses the verdict
+   * for the audit ledger and the EARS-15 lockout observation). A failed check is
+   * counted by the native Zitadel lockout policy (EARS-15), never by the BFF.
    */
-  passwordLogin(identifier: string, password: string): Promise<IdpSession | null>;
+  passwordLogin(identifier: string, password: string): Promise<PasswordLoginResult>;
   /**
    * EARS-8: complete the OIDC exchange against a checked session, yielding the
    * access JWT, the rotating opaque refresh token, and the principal claims.

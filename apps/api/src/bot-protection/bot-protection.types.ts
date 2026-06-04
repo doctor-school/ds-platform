@@ -19,7 +19,11 @@
 export type BotProtectionAction =
   | "register"
   | "password-reset"
-  | "login-challenge";
+  | "login-challenge"
+  // EARS-17 (F6 #90): the passwordless OTP-request surface. It is a pre-session
+  // message-spending endpoint (resolves the #129 decision-debt: SMS has the
+  // EARS-14 budget, but email-OTP had no abuse gate) — gated like register/reset.
+  | "otp-request";
 
 /**
  * Outcome of a verification. `ok` is the only value a call site branches on;

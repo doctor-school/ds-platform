@@ -10,6 +10,10 @@ import { RegisterResponseSchema } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
+import {
+  RATE_LIMIT_THRESHOLDS,
+  RELAXED_RATE_LIMIT,
+} from "../setup/rate-limit.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 
 // Registration cascade (EARS-1 email / EARS-2 phone), the consent gate
@@ -46,6 +50,8 @@ describe.skipIf(!process.env.DATABASE_URL)("Register (e2e)", () => {
     })
       .overrideProvider(IDP_CLIENT)
       .useValue(new FakeIdpClient())
+      .overrideProvider(RATE_LIMIT_THRESHOLDS)
+      .useValue(RELAXED_RATE_LIMIT)
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(
@@ -126,10 +132,9 @@ describe.skipIf(!process.env.DATABASE_URL)("Register (e2e)", () => {
     });
 
     expect(res.statusCode).toBe(400);
-    const { rows } = await pool.query(
-      "SELECT 1 FROM users WHERE email = $1",
-      [email],
-    );
+    const { rows } = await pool.query("SELECT 1 FROM users WHERE email = $1", [
+      email,
+    ]);
     expect(rows).toHaveLength(0);
   });
 
@@ -151,10 +156,9 @@ describe.skipIf(!process.env.DATABASE_URL)("Register (e2e)", () => {
     expect(second.statusCode).toBe(first.statusCode);
     expect(second.json()).toEqual(first.json());
 
-    const { rows } = await pool.query(
-      "SELECT 1 FROM users WHERE email = $1",
-      [email],
-    );
+    const { rows } = await pool.query("SELECT 1 FROM users WHERE email = $1", [
+      email,
+    ]);
     expect(rows).toHaveLength(1);
   });
 

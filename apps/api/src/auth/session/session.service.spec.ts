@@ -95,4 +95,36 @@ describe("SessionService — refresh rotation + logout", () => {
     // The SessionRevoked event is recorded.
     expect(audit.events).toContainEqual({ type: "SessionRevoked", sub, sid });
   });
+
+  it("EARS-12: when a password reset completes, the system shall revoke every session for that subject and emit PasswordResetCompleted", async () => {
+    // Establish two sessions for the SAME subject (e.g. two devices), plus one
+    // for a different subject that must survive the targeted revocation.
+    const idp = new FakeIdpClient();
+    await idp.createUser({ email: "victim@ds.test", password: "pw-12345678" });
+    await idp.createUser({ email: "other@ds.test", password: "pw-12345678" });
+    const store = new InMemorySessionStore();
+    const audit = new InMemoryAuthAuditLog();
+    const svc = new SessionService(idp, store, audit);
+
+    async function establishFor(email: string): Promise<string> {
+      const s = await idp.passwordLogin(email, "pw-12345678");
+      const { cookie } = await svc.establish(s!.zitadelSessionId, FP);
+      return parseCookies(cookie)[SESSION_COOKIE_NAME] as string;
+    }
+
+    const sidA = await establishFor("victim@ds.test");
+    const sidB = await establishFor("victim@ds.test");
+    const sidOther = await establishFor("other@ds.test");
+    const sub = (await store.get(sidA))!.sub;
+
+    await svc.revokeAllForSub(sub);
+
+    // Every session belonging to the subject is gone (global force-logout)…
+    expect(await store.get(sidA)).toBeUndefined();
+    expect(await store.get(sidB)).toBeUndefined();
+    // …while another subject's session is untouched (revocation is sub-scoped).
+    expect(await store.get(sidOther)).toBeDefined();
+    // The user-level PasswordResetCompleted event is recorded exactly once.
+    expect(audit.events).toContainEqual({ type: "PasswordResetCompleted", sub });
+  });
 });

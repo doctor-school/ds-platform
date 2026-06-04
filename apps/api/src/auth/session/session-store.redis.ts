@@ -14,11 +14,21 @@ export interface RedisLike {
     ttlSeconds: number,
   ): Promise<unknown>;
   get(key: string): Promise<string | null>;
-  del(key: string): Promise<unknown>;
+  del(...keys: string[]): Promise<unknown>;
+  /** Add `sid`s to the `sub → sids` index set (EARS-12 revoke-all). */
+  sadd(key: string, ...members: string[]): Promise<unknown>;
+  /** Remove a `sid` from the index set when a single session ends. */
+  srem(key: string, ...members: string[]): Promise<unknown>;
+  /** Read every `sid` currently indexed for a `sub`. */
+  smembers(key: string): Promise<string[]>;
+  /** Bound the index set's lifetime so stale entries cannot leak unboundedly. */
+  expire(key: string, ttlSeconds: number): Promise<unknown>;
 }
 
 /** Key namespace for BFF session records. */
 const KEY_PREFIX = "ds:session:";
+/** Key namespace for the `sub → sids` index used by {@link RedisSessionStore.deleteBySub}. */
+const SUB_INDEX_PREFIX = "ds:session:sub:";
 
 /**
  * Redis-backed {@link SessionStore} — the production binding (ADR-0001 §6:
@@ -46,6 +56,13 @@ export class RedisSessionStore implements SessionStore {
       "EX",
       ttlSeconds,
     );
+    // Maintain the `sub → sids` index (EARS-12). The set is bumped to the
+    // longest-lived member's TTL so it cannot outlive every session it tracks;
+    // any sid that expires by key-TTL while still listed is harmlessly skipped on
+    // revoke (its `del` no-ops), and `deleteBySub` prunes the index afterwards.
+    const indexKey = `${SUB_INDEX_PREFIX}${record.sub}`;
+    await this.redis.sadd(indexKey, record.sid);
+    await this.redis.expire(indexKey, ttlSeconds);
   }
 
   async get(sid: string): Promise<SessionRecord | undefined> {
@@ -79,6 +96,21 @@ export class RedisSessionStore implements SessionStore {
   }
 
   async delete(sid: string): Promise<void> {
+    // Read first to find the owning `sub` so the index entry is pruned with the
+    // record; if the key is already gone we still issue the del (idempotent).
+    const record = await this.get(sid);
     await this.redis.del(`${KEY_PREFIX}${sid}`);
+    if (record) await this.redis.srem(`${SUB_INDEX_PREFIX}${record.sub}`, sid);
+  }
+
+  async deleteBySub(sub: string): Promise<void> {
+    // Revoke every session of the subject (EARS-12): read the index, delete each
+    // session key (a TTL-expired sid simply no-ops), then drop the index set.
+    const indexKey = `${SUB_INDEX_PREFIX}${sub}`;
+    const sids = await this.redis.smembers(indexKey);
+    if (sids.length > 0) {
+      await this.redis.del(...sids.map((sid) => `${KEY_PREFIX}${sid}`));
+    }
+    await this.redis.del(indexKey);
   }
 }

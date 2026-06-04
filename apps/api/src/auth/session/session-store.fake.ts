@@ -12,9 +12,14 @@ import type { SessionRecord, SessionStore } from "./session.types.js";
  */
 export class InMemorySessionStore implements SessionStore {
   private readonly bySid = new Map<string, SessionRecord>();
+  /** Secondary index `sub → live sids`, so `deleteBySub` (EARS-12) is targeted and does not scan. */
+  private readonly bySub = new Map<string, Set<string>>();
 
   create(record: SessionRecord): Promise<void> {
     this.bySid.set(record.sid, record);
+    let sids = this.bySub.get(record.sub);
+    if (!sids) this.bySub.set(record.sub, (sids = new Set()));
+    sids.add(record.sid);
     return Promise.resolve();
   }
 
@@ -22,7 +27,7 @@ export class InMemorySessionStore implements SessionStore {
     const record = this.bySid.get(sid);
     if (!record) return Promise.resolve(undefined);
     if (record.expiresAtMs <= Date.now()) {
-      this.bySid.delete(sid);
+      this.unlink(record);
       return Promise.resolve(undefined);
     }
     return Promise.resolve(record);
@@ -36,7 +41,28 @@ export class InMemorySessionStore implements SessionStore {
   }
 
   delete(sid: string): Promise<void> {
-    this.bySid.delete(sid);
+    const record = this.bySid.get(sid);
+    if (record) this.unlink(record);
     return Promise.resolve();
+  }
+
+  deleteBySub(sub: string): Promise<void> {
+    // Revoke every session of the subject (EARS-12). Snapshot the sid set first
+    // — `unlink` mutates it — then drop each record and the now-empty index entry.
+    for (const sid of [...(this.bySub.get(sub) ?? [])]) {
+      const record = this.bySid.get(sid);
+      if (record) this.unlink(record);
+    }
+    return Promise.resolve();
+  }
+
+  /** Drop a record from both the primary map and the `sub` index, pruning the empty set. */
+  private unlink(record: SessionRecord): void {
+    this.bySid.delete(record.sid);
+    const sids = this.bySub.get(record.sub);
+    if (sids) {
+      sids.delete(record.sid);
+      if (sids.size === 0) this.bySub.delete(record.sub);
+    }
   }
 }

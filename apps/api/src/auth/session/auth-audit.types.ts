@@ -16,7 +16,12 @@
  */
 export type AuthAuditEvent =
   | { type: "RefreshReuseDetected"; sub: string; sid: string }
-  | { type: "SessionRevoked"; sub: string; sid: string };
+  | { type: "SessionRevoked"; sub: string; sid: string }
+  // EARS-12: a completed password reset. User-level (no `sid`) — it spans every
+  // session of the subject, all of which are revoked as part of the same step.
+  // Canonical wire id `auth.password.reset.completed` (EARS-18 taxonomy);
+  // name → wire-id reconciliation stays F6's job (decision-debt, as for F4).
+  | { type: "PasswordResetCompleted"; sub: string };
 
 export interface AuthAuditLog {
   /** Append one auth security event (append-only; never updated or deleted). */

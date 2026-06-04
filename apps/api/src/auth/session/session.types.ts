@@ -52,6 +52,14 @@ export interface SessionStore {
    * primitive (ADR-0001 §6). Idempotent — deleting an absent `sid` is a no-op.
    */
   delete(sid: string): Promise<void>;
+  /**
+   * EARS-12: delete **every** session belonging to `sub` — the global
+   * force-logout primitive a completed password reset invokes (ADR-0001 §6/§7:
+   * a credential change revokes all live sessions). Idempotent: a subject with no
+   * live sessions is a no-op. Scoped strictly to `sub`; other subjects' sessions
+   * are untouched.
+   */
+  deleteBySub(sub: string): Promise<void>;
 }
 
 /** DI token the {@link SessionStore} port is bound to (fake or Redis adapter). */

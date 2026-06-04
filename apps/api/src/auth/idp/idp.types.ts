@@ -126,6 +126,27 @@ export interface IdpClient {
    * ADR-0001 §7) — the BFF then invalidates the chain and revokes the session.
    */
   refreshTokens(refreshToken: string): Promise<IdpRefreshResult>;
+  /**
+   * EARS-11: trigger Zitadel's forgot-password code flow for `identifier` (email
+   * or phone). Resolves **identically regardless of whether the identifier
+   * exists** — a code is sent only if it does, but the result never reveals which
+   * (enumeration-safe, EARS-16). Resolves rather than throws even on an unknown
+   * identifier or a provider hiccup, so the caller's response cannot become a
+   * distinguishable oracle.
+   */
+  requestPasswordReset(identifier: string): Promise<void>;
+  /**
+   * EARS-12: set a new password using a reset code. Resolves to the subject on
+   * success (so the BFF can revoke that user's sessions and emit the audit event)
+   * and to `null` on an invalid/expired code or unknown identifier — the two are
+   * indistinguishable so the caller answers with the same generic failure
+   * (EARS-16). The IdP is the only party that sets the password (design §2).
+   */
+  completePasswordReset(
+    identifier: string,
+    code: string,
+    newPassword: string,
+  ): Promise<{ sub: string } | null>;
 }
 
 /** DI token the port is bound to — rebound to the real Zitadel adapter in prod. */

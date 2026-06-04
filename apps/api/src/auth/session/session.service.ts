@@ -136,4 +136,19 @@ export class SessionService {
     }
     return { cookie: clearSessionCookie() };
   }
+
+  /**
+   * EARS-12 session-side effect of a completed password reset: revoke **every**
+   * session belonging to `sub` (global force-logout — a credential change must
+   * not leave a live session behind, ADR-0001 §6/§7) and record the user-level
+   * `PasswordResetCompleted` event. The password itself is set at the IdP by the
+   * orchestrating {@link AuthService}; this method owns only the session-store +
+   * audit half, keeping the audit seam consolidated in this service (as logout
+   * and refresh-reuse already are). Idempotent — a subject with no live sessions
+   * still records the event (the reset did complete).
+   */
+  async revokeAllForSub(sub: string): Promise<void> {
+    await this.store.deleteBySub(sub);
+    await this.audit.record({ type: "PasswordResetCompleted", sub });
+  }
 }

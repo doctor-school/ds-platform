@@ -14,6 +14,8 @@ import type { FastifyReply } from "fastify";
 import type {
   LoginResponse,
   LogoutResponse,
+  PasswordResetCompleteResponse,
+  PasswordResetResponse,
   RefreshResponse,
   RegisterResponse,
   SessionClaims,
@@ -25,6 +27,8 @@ import { BotProtected } from "../bot-protection/index.js";
 import { AuthService } from "./auth.service.js";
 import {
   LoginRequestDto,
+  PasswordResetCompleteRequestDto,
+  PasswordResetRequestDto,
   RegisterRequestDto,
   VerifyRequestDto,
   ZitadelWebhookDto,
@@ -202,6 +206,55 @@ export class AuthController {
   })
   verify(@Body() dto: VerifyRequestDto): Promise<VerifyResponse> {
     return this.auth.verify(dto);
+  }
+
+  /**
+   * EARS-11: initiate a password reset. Public (unauthenticated entry point) and
+   * `@BotProtected("password-reset")` — reset is an abuse-prone unauthenticated
+   * surface (design §10.1, EARS-17), and the guard no-ops until a provider is
+   * configured. The body is the same `reset_requested` acknowledgement whether or
+   * not the identifier exists (enumeration-resistant, EARS-16).
+   */
+  @Post("password/reset")
+  @Public()
+  @BotProtected("password-reset")
+  @HttpCode(200)
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "high-stakes",
+    tests: ["EARS-11", "EARS-16"],
+  })
+  requestPasswordReset(
+    @Body() dto: PasswordResetRequestDto,
+  ): Promise<PasswordResetResponse> {
+    return this.auth.requestPasswordReset(dto.identifier);
+  }
+
+  /**
+   * EARS-12: complete a password reset. Public — the reset code is the
+   * authenticator, not a session (the user has none yet). On success the IdP sets
+   * the new password and the BFF revokes every existing session of that subject
+   * (global force-logout) and records `PasswordResetCompleted`; a bad/expired code
+   * is the same generic 400 (EARS-16), thrown by the service.
+   */
+  @Post("password/reset/complete")
+  @Public()
+  @HttpCode(200)
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "high-stakes",
+    tests: ["EARS-12"],
+  })
+  completePasswordReset(
+    @Body() dto: PasswordResetCompleteRequestDto,
+  ): Promise<PasswordResetCompleteResponse> {
+    return this.auth.completePasswordReset(
+      dto.identifier,
+      dto.code,
+      dto.newPassword,
+    );
   }
 
   @Post("zitadel/webhook")

@@ -25,6 +25,13 @@ import { ZitadelIdpClient } from "./zitadel.idp.js";
           return new ZitadelIdpClient({
             baseUrl: env.IDP_ISSUER,
             serviceToken: env.IDP_SERVICE_TOKEN,
+            // OIDC application config (design §3, §11) for the session→token
+            // exchange (EARS-8) and refresh rotation (EARS-9). Optional — absent
+            // ⇒ those two paths fail closed; the rest of the adapter still works.
+            clientId: env.IDP_CLIENT_ID,
+            clientSecret: env.IDP_CLIENT_SECRET,
+            redirectUri: env.IDP_REDIRECT_URI,
+            scopes: env.IDP_SCOPES?.split(/\s+/).filter(Boolean),
           });
         }
         return new FakeIdpClient();

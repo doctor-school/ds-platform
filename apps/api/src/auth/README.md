@@ -90,13 +90,24 @@ once in `idp/idp.module.ts`:
 - **`FakeIdpClient`** (`idp/idp.fake.ts`) — in-memory, the default when no
   service token is configured (the dev-stand). Lets the full cascade + login run
   against a real Postgres without a live IdP, which is exactly what the e2e
-  suites do (the credential side is not reachable in the shared CI unit job). The
-  real adapter's `exchangeSessionForTokens` fails closed until the per-recipe
-  OIDC app config is plumbed against the dev-stand Zitadel (design §11, #122).
-  The real adapter's four OTP-login methods are documented seams of the **same**
-  kind: Zitadel login OTP is a session-bound challenge + the same token exchange,
-  so they fail closed too until that OIDC config lands. The BFF OTP orchestration
-  (EARS-6/7) and the SMS budget (EARS-14) are proven against `FakeIdpClient`.
+  suites do (the credential side is not reachable in the shared CI unit job).
+
+The real adapter's `exchangeSessionForTokens` (EARS-8) and `refreshTokens`
+(EARS-9) implement the full OIDC dance — authorize-with-session → link the
+checked session (`POST /v2/oidc/auth_requests/{id}`) → `authorization_code` token
+exchange, and the `refresh_token` grant — parsing `roles[]` (the
+`urn:zitadel:iam:org:project:roles` claim) and `mfa` (from `amr`) from the
+id_token. They require the OIDC **application** config (`IDP_CLIENT_ID` /
+`IDP_REDIRECT_URI` / optional secret + scopes); absent that config those two
+paths fail closed (throw, mint nothing) while the rest of the adapter still
+works. The wire shape and claim parsing are pinned by `idp/zitadel.idp.spec.ts`;
+`test/auth/zitadel-token-exchange.e2e-spec.ts` asserts the live path, gated on
+`IDP_ISSUER` (skips in CI / until the dev-stand `ds-platform-dev` OIDC app is
+provisioned — `infra/dev-stand/idp/bootstrap.md`, #122). The four OTP-login
+methods remain documented seams of the **same** kind (a session-bound challenge
+plus the same exchange) and fail closed until exercised against a live instance;
+the BFF OTP orchestration (EARS-6/7) and the SMS budget (EARS-14) are proven
+against `FakeIdpClient`.
 
 ## SMS toll-fraud budget (`sms-budget/`, EARS-14, design §10)
 

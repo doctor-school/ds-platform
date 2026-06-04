@@ -1,0 +1,256 @@
+import { describe, expect, it } from "vitest";
+import type { FetchLike } from "./zitadel.idp.js";
+import { ZitadelIdpClient } from "./zitadel.idp.js";
+
+/**
+ * Unit coverage for the real Zitadel adapter's OIDC session→token exchange
+ * (EARS-8, design §3) against a scripted `fetch` double — no live instance. It
+ * pins the three-hop dance (authorize → link checked session → token endpoint)
+ * and the claim parsing (`roles[]` from the Zitadel project-roles claim, `mfa`
+ * from `amr`). The live-instance contract is asserted by the `IDP_ISSUER`-gated
+ * integration spec; here we prove the wire shape and the parsing deterministically.
+ */
+
+/** Build a base64url JWT body (no signature verification — the IdP signs). */
+function jwt(payload: Record<string, unknown>): string {
+  const b64 = (o: unknown) =>
+    Buffer.from(JSON.stringify(o)).toString("base64url");
+  return `${b64({ alg: "none" })}.${b64(payload)}.`;
+}
+
+interface ScriptedCall {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  body?: string | undefined;
+}
+
+/**
+ * A fetch double scripting the authorize redirect, the auth-request callback,
+ * and the token response. Records every call so the test can assert the wire.
+ */
+function scriptedFetch(opts: {
+  authRequestId?: string;
+  callbackUrl?: string;
+  token?: { ok: boolean; status: number; body: unknown };
+}): { fetchImpl: FetchLike; calls: ScriptedCall[] } {
+  const calls: ScriptedCall[] = [];
+  const fetchImpl: FetchLike = (url, init) => {
+    calls.push({
+      url,
+      method: init.method,
+      headers: init.headers,
+      body: init.body,
+    });
+    // 1. authorize → 302 with `authRequest=<id>` in the Location.
+    if (url.includes("/oauth/v2/authorize")) {
+      return Promise.resolve({
+        ok: false,
+        status: 302,
+        headers: {
+          location: `/ui/login/login?authRequest=${opts.authRequestId ?? "AR-1"}`,
+        },
+        json: () => Promise.resolve({}),
+      });
+    }
+    // 2. link the checked session → { callbackUrl } carrying the code.
+    if (url.includes("/v2/oidc/auth_requests/")) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            callbackUrl:
+              opts.callbackUrl ?? "http://app/callback?code=THE_CODE&state=xyz",
+          }),
+      });
+    }
+    // 3. token endpoint.
+    if (url.includes("/oauth/v2/token")) {
+      const t = opts.token ?? { ok: true, status: 200, body: {} };
+      return Promise.resolve({
+        ok: t.ok,
+        status: t.status,
+        json: () => Promise.resolve(t.body),
+      });
+    }
+    return Promise.resolve({
+      ok: false,
+      status: 404,
+      json: () => Promise.resolve({}),
+    });
+  };
+  return { fetchImpl, calls };
+}
+
+const BASE_CONFIG = {
+  baseUrl: "http://idp.test:9080",
+  serviceToken: "svc-token",
+  clientId: "ds-platform-dev",
+  clientSecret: "client-secret",
+  redirectUri: "http://localhost:3000/auth/callback",
+  scopes: ["openid", "profile", "urn:zitadel:iam:org:project:roles"],
+};
+
+const ROLES_CLAIM = "urn:zitadel:iam:org:project:roles";
+
+describe("ZitadelIdpClient OIDC session→token exchange", () => {
+  it("EARS-8: completes authorize → link-session → token and parses roles[]/mfa from the id_token", async () => {
+    const { fetchImpl, calls } = scriptedFetch({
+      token: {
+        ok: true,
+        status: 200,
+        body: {
+          access_token: "ACCESS",
+          refresh_token: "REFRESH",
+          expires_in: 900,
+          id_token: jwt({
+            sub: "zid-user-1",
+            amr: ["pwd", "mfa"],
+            [ROLES_CLAIM]: { doctor_guest: { org1: "doctor.school" } },
+          }),
+        },
+      },
+    });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+
+    client.rememberSessionToken("sess-1", "session-token-1");
+    const tokens = await client.exchangeSessionForTokens("sess-1");
+
+    expect(tokens.accessToken).toBe("ACCESS");
+    expect(tokens.refreshToken).toBe("REFRESH");
+    expect(tokens.expiresInSeconds).toBe(900);
+    expect(tokens.claims.sub).toBe("zid-user-1");
+    expect(tokens.claims.roles).toEqual(["doctor_guest"]);
+    expect(tokens.claims.mfa).toBe(true);
+
+    // Wire assertions: authorize carried the OIDC app params; the link hop sent
+    // the checked session; the token hop used the authorization_code grant.
+    const authorize = calls.find((c) => c.url.includes("/oauth/v2/authorize"));
+    expect(authorize?.url).toContain("client_id=ds-platform-dev");
+    expect(authorize?.url).toContain("response_type=code");
+    const link = calls.find((c) => c.url.includes("/v2/oidc/auth_requests/"));
+    expect(link?.body).toContain("sess-1");
+    expect(link?.body).toContain("session-token-1");
+    const token = calls.find((c) => c.url.includes("/oauth/v2/token"));
+    expect(token?.body).toContain("grant_type=authorization_code");
+    expect(token?.body).toContain("code=THE_CODE");
+  });
+
+  it("EARS-8: mfa is false when amr carries only a single primary factor", async () => {
+    const { fetchImpl } = scriptedFetch({
+      token: {
+        ok: true,
+        status: 200,
+        body: {
+          access_token: "ACCESS",
+          refresh_token: "REFRESH",
+          expires_in: 900,
+          id_token: jwt({
+            sub: "zid-user-2",
+            amr: ["pwd"],
+            [ROLES_CLAIM]: { doctor_guest: {} },
+          }),
+        },
+      },
+    });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    client.rememberSessionToken("sess-2", "session-token-2");
+    const tokens = await client.exchangeSessionForTokens("sess-2");
+    expect(tokens.claims.mfa).toBe(false);
+    expect(tokens.claims.roles).toEqual(["doctor_guest"]);
+  });
+
+  it("EARS-8: parses multiple project roles; otp in amr counts as mfa", async () => {
+    const { fetchImpl } = scriptedFetch({
+      token: {
+        ok: true,
+        status: 200,
+        body: {
+          access_token: "A",
+          refresh_token: "R",
+          expires_in: 900,
+          id_token: jwt({
+            sub: "zid-user-3",
+            amr: ["otp"],
+            [ROLES_CLAIM]: { doctor_guest: {}, expert: {} },
+          }),
+        },
+      },
+    });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    client.rememberSessionToken("sess-3", "t3");
+    const tokens = await client.exchangeSessionForTokens("sess-3");
+    expect(tokens.claims.roles.sort()).toEqual(["doctor_guest", "expert"]);
+    expect(tokens.claims.mfa).toBe(true);
+  });
+
+  it("EARS-8: rejects when the token endpoint fails (no token minted on a non-2xx)", async () => {
+    const { fetchImpl } = scriptedFetch({
+      token: { ok: false, status: 400, body: { error: "invalid_grant" } },
+    });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    client.rememberSessionToken("sess-4", "t4");
+    await expect(client.exchangeSessionForTokens("sess-4")).rejects.toThrow();
+  });
+
+  it("EARS-8: rejects when the checked session token was never captured", async () => {
+    const { fetchImpl } = scriptedFetch({});
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    await expect(
+      client.exchangeSessionForTokens("unknown-session"),
+    ).rejects.toThrow();
+  });
+
+  it("EARS-8: fails closed when the OIDC application config is absent (no clientId)", async () => {
+    const { fetchImpl } = scriptedFetch({});
+    const client = new ZitadelIdpClient({
+      baseUrl: "http://idp.test:9080",
+      serviceToken: "svc",
+      fetchImpl,
+    });
+    client.rememberSessionToken("s", "t");
+    await expect(client.exchangeSessionForTokens("s")).rejects.toThrow(
+      /OIDC application/i,
+    );
+  });
+
+  it("EARS-9: refresh-token rotation hits the token endpoint with the refresh grant and parses claims", async () => {
+    const { fetchImpl, calls } = scriptedFetch({
+      token: {
+        ok: true,
+        status: 200,
+        body: {
+          access_token: "A2",
+          refresh_token: "R2",
+          expires_in: 900,
+          id_token: jwt({
+            sub: "zid-user-1",
+            amr: ["pwd"],
+            [ROLES_CLAIM]: { doctor_guest: {} },
+          }),
+        },
+      },
+    });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    const result = await client.refreshTokens("OLD_REFRESH");
+    expect(result.reuseDetected).toBe(false);
+    if (!result.reuseDetected) {
+      expect(result.tokens.accessToken).toBe("A2");
+      expect(result.tokens.refreshToken).toBe("R2");
+      expect(result.tokens.claims.roles).toEqual(["doctor_guest"]);
+    }
+    const token = calls.find((c) => c.url.includes("/oauth/v2/token"));
+    expect(token?.body).toContain("grant_type=refresh_token");
+    expect(token?.body).toContain("refresh_token=OLD_REFRESH");
+  });
+
+  it("EARS-9: a rejected refresh grant resolves to reuseDetected (RFC-6819)", async () => {
+    const { fetchImpl } = scriptedFetch({
+      token: { ok: false, status: 400, body: { error: "invalid_grant" } },
+    });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    const result = await client.refreshTokens("REUSED");
+    expect(result.reuseDetected).toBe(true);
+  });
+});

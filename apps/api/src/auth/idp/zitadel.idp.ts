@@ -187,7 +187,23 @@ export class ZitadelIdpClient implements IdpClient {
   async createUser(input: CreateUserInput): Promise<CreatedUser> {
     // Zitadel POST /v2/users/human — duplicate identifier returns 409, which is
     // the enumeration-safety hinge: surface it as `alreadyExisted`, not a throw.
+    //
+    // Zitadel v4 requires a `profile` object (`givenName`/`familyName`) on
+    // human-user creation; the 400 it returns without one was masked until the
+    // adapter ran against a real instance (#145 — every auth e2e overrides
+    // IDP_CLIENT with the fake). Self-service registration (EARS-1/2) collects
+    // NO name — the `users` mirror has no name column (design §5) — so we send a
+    // sensible minimal placeholder the domain never sees: `givenName` = the
+    // email local-part (or `"doctor"` for a phone-only registrant) and a fixed
+    // `familyName` = `"guest"` (the `doctor_guest` role, ADR-0001 §1). This is a
+    // pure adapter detail, NOT a product field: it is never read back, mirrored,
+    // or surfaced. Collecting a real name would be a registration-form/product
+    // change (flagged on #145); the placeholder unblocks the live flow now.
+    const givenName = input.email
+      ? (input.email.split("@")[0] ?? "doctor")
+      : "doctor";
     const body: Record<string, unknown> = {
+      profile: { givenName, familyName: "guest" },
       password: { password: input.password },
     };
     if (input.email) body["email"] = { email: input.email };
@@ -285,12 +301,40 @@ export class ZitadelIdpClient implements IdpClient {
       factors?: { user?: { id?: string } };
     };
     const zitadelSessionId = data.sessionId;
-    const sub = data.factors?.user?.id;
-    if (!zitadelSessionId || !sub) return { outcome: "rejected" };
+    if (!zitadelSessionId) return { outcome: "rejected" };
+    // Live wire-shape delta (#145, vs Zitadel v4.15): the `POST /v2/sessions`
+    // RESPONSE carries only `sessionId`/`sessionToken` — it does NOT echo the
+    // `factors` object (that was assumed by the merged #86/#122 code). The
+    // checked user's id (our `sub`) lives on the session resource, read via a
+    // follow-up `GET /v2/sessions/{id}`. We prefer the POST body when present
+    // (kept for the unit fake) and fall back to the GET for the real instance.
+    let sub = data.factors?.user?.id;
+    if (!sub) sub = await this.fetchSessionUserId(zitadelSessionId);
+    if (!sub) return { outcome: "rejected" };
     // Cache the session token for the OIDC exchange (see `sessionTokens`).
     if (data.sessionToken)
       this.rememberSessionToken(zitadelSessionId, data.sessionToken);
     return { outcome: "authenticated", session: { zitadelSessionId, sub } };
+  }
+
+  /**
+   * Read the checked user's id (`factors.user.id`) off an existing session via
+   * `GET /v2/sessions/{id}` — needed because the `POST /v2/sessions` response
+   * omits `factors` on the live Zitadel v4 (#145). Returns `null` on any non-2xx
+   * so `passwordLogin` stays enumeration-safe (falls through to `rejected`).
+   */
+  private async fetchSessionUserId(
+    zitadelSessionId: string,
+  ): Promise<string | undefined> {
+    const res = await this.fetchImpl(
+      this.url(`/v2/sessions/${zitadelSessionId}`),
+      { method: "GET", headers: this.headers() },
+    );
+    if (!res.ok) return undefined;
+    const data = (await res.json()) as {
+      session?: { factors?: { user?: { id?: string } } };
+    };
+    return data.session?.factors?.user?.id;
   }
 
   /** OIDC-application config the token/refresh grants require, or throw if absent. */
@@ -379,9 +423,18 @@ export class ZitadelIdpClient implements IdpClient {
         { method: "GET", headers: this.headers(), redirect: "manual" },
       );
       const location = this.readLocation(authorizeRes);
-      const authRequestId = location
-        ? new URLSearchParams(location.split("?")[1] ?? "").get("authRequest")
+      // Live wire-shape delta (#145, vs Zitadel v4.15): the authorize 302
+      // redirects to the login-UI page carrying `authRequestID` (capital `ID`,
+      // e.g. `/ui/login/login?authRequestID=<id>`), not the lowercase
+      // `authRequest` the merged #122 code parsed. Read both (the canonical live
+      // `authRequestID` first, `authRequest` kept for back-compat / the fake).
+      const locationParams = location
+        ? new URLSearchParams(location.split("?")[1] ?? "")
         : null;
+      const authRequestId =
+        locationParams?.get("authRequestID") ??
+        locationParams?.get("authRequest") ??
+        null;
       if (!authRequestId) {
         throw new Error("zitadel authorize did not yield an authRequest id");
       }

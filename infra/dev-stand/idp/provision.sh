@@ -180,6 +180,47 @@ else
   echo "created OIDC app (appId $(echo "$CREATED" | jq -r '.appId'))" >&2
 fi
 
+# ── 4. ensure Login V2 instance feature ──────────────────────────────────────
+# The headless BFF session->token exchange (EARS-8) links a checked session to a
+# pending OIDC auth request via POST /v2/oidc/auth_requests/{id}. That API only
+# resolves an auth request CREATED UNDER LOGIN V2 — with the feature off the
+# authorize hop files a v1 auth request the v2 API can't see (404 "Auth Request
+# does not exist", proven live #146). compose.core.yml turns it on at instance
+# init (ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED); this converges it on
+# any instance initialised before that default (idempotent). No baseUri is set:
+# the BFF never renders the v2 login UI, it only drives the auth_requests + token
+# endpoints served by the core binary.
+api_idempotent PUT /v2/features/instance '{"loginV2":{"required":true}}' >/dev/null \
+  && echo "loginV2 feature ensured (required)" >&2
+
+# ── 5. grant IAM_LOGIN_CLIENT to the bootstrap machine user ───────────────────
+# Calling /v2/oidc/auth_requests/{id} needs the dedicated IAM_LOGIN_CLIENT role —
+# IAM_OWNER alone is NOT sufficient (Zitadel returns 403 "No matching permissions
+# found", AUTH-AWfge). Grant it to the machine user this PAT belongs to (the
+# FIRSTINSTANCE `ds-bootstrap`, override via IDP_BOOTSTRAP_USERNAME) on top of its
+# existing roles. Idempotent: re-running yields "No changes".
+BOOTSTRAP_USERNAME="${IDP_BOOTSTRAP_USERNAME:-ds-bootstrap}"
+BOOTSTRAP_UID="$(api POST /v2/users \
+  "$(jq -nc --arg u "$BOOTSTRAP_USERNAME" '{queries:[{userNameQuery:{userName:$u,method:"TEXT_QUERY_METHOD_EQUALS"}}]}')" \
+  | jq -r '.result[0].userId // empty')"
+if [[ -n "$BOOTSTRAP_UID" ]]; then
+  EXISTING_ROLES="$(api POST /admin/v1/members/_search '{}' \
+    | jq -r --arg u "$BOOTSTRAP_UID" '.result[]? | select(.userId==$u) | .roles[]' 2>/dev/null | sort -u)"
+  if grep -qx "IAM_LOGIN_CLIENT" <<< "$EXISTING_ROLES"; then
+    echo "IAM_LOGIN_CLIENT already granted to ${BOOTSTRAP_USERNAME}" >&2
+  else
+    ROLES_JSON="$(printf '%s\nIAM_LOGIN_CLIENT\n' "$EXISTING_ROLES" \
+      | grep -v '^$' | sort -u | jq -R . | jq -sc .)"
+    api_idempotent PUT "/admin/v1/members/${BOOTSTRAP_UID}" \
+      "$(jq -nc --argjson r "$ROLES_JSON" '{roles:$r}')" >/dev/null \
+      && echo "granted IAM_LOGIN_CLIENT to ${BOOTSTRAP_USERNAME}" >&2
+  fi
+else
+  echo "WARN: machine user ${BOOTSTRAP_USERNAME} not found; cannot grant" >&2
+  echo "      IAM_LOGIN_CLIENT — the EARS-8 session-link will 403 until it is" >&2
+  echo "      granted (set IDP_BOOTSTRAP_USERNAME if the PAT user differs)." >&2
+fi
+
 # ── output (machine-parseable; secret only when freshly created) ─────────────
 echo "PROJECT_ID=${PROJECT_ID}"
 echo "IDP_CLIENT_ID=${CLIENT_ID}"

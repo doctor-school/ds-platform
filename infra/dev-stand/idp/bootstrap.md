@@ -54,9 +54,20 @@ instance does nothing — you must re-init.
 
 `compose.core.yml` carries an opt-in FIRSTINSTANCE block, gated on `IDP_BOOTSTRAP`.
 When set, the init step creates an IAM-owner machine user `ds-bootstrap`, a console
-admin `zitadel-admin` with a known password, and disables the v2 login feature so
-the single-binary stand serves its built-in login (the v4 v2-login UI is a
-separate container this stand does not run).
+admin `zitadel-admin` with a known password, writes the machine user's PAT to a
+readable file, and enables the **Login V2** feature.
+
+> **Login V2 is required — do not disable it.** The api BFF uses a headless
+> Variant-B exchange (apps/api auth design §3, EARS-8): it links a server-checked
+> session to a pending OIDC auth request via `POST /v2/oidc/auth_requests/{id}`.
+> That session-link API only resolves an auth request **created under Login V2**;
+> with the feature off the authorize hop files a v1 auth request the v2 API can't
+> see and the link 404s (`Auth Request does not exist`, proven live #146). The v2
+> login _UI_ ships as a separate Next.js `login` container — but the BFF never
+> renders it (no `baseUri` is configured), so the single-binary stand needs no
+> extra service: the `auth_requests` + token endpoints live in the core binary.
+> An earlier revision of this bootstrap forced Login V2 off; that was wrong and is
+> reverted.
 
 In your `.env.local` (synced to the remote `.env` on `dev:up`):
 
@@ -88,57 +99,28 @@ curl -s http://truenas.local:9080/.well-known/openid-configuration | jq -r .issu
 # -> http://truenas.local:9080
 ```
 
-### Obtaining the bootstrap PAT
+### Obtaining the bootstrap PAT (fully scriptable — no console)
 
-> **v4.15 caveat.** `ZITADEL_FIRSTINSTANCE_PATPATH` (PAT-to-file) is wired in the
-> compose but does **not** reliably emit a readable file under `start-from-init`
-> in the distroless image — the machine user + PAT row land in the DB, but the
-> file is not written to the mount. Until that upstream behaviour is sorted, mint
-> the PAT once via the (now working) built-in console, using the deterministic
-> admin the bootstrap created:
+`ZITADEL_FIRSTINSTANCE_PATPATH` writes the machine user's PAT to `/pat/pat.txt`
+on init. The earlier "the file is never written" claim was a **mount-ownership**
+bug, not an init bug: the distroless image runs as the non-root `zitadel` user
+(uid/gid 1000), and a default tmpfs / named volume is root-owned, so the process
+couldn't create the file. `compose.core.yml` now mounts the PAT tmpfs owned by
+uid/gid 1000 (`tmpfs: /pat:uid=1000,gid=1000,mode=0700`), so the file lands
+readable. Copy it straight out of the container — no console, no devtools:
 
-1. Open `http://<HOST>:9080/ui/console`, log in as
-   `zitadel-admin@zitadel.<HOST>` with `IDP_BOOTSTRAP_ADMIN_PASSWORD`, skip MFA.
-2. The console's session token can mint the PAT without further clicks — in the
-   browser devtools console:
+```bash
+ssh truenas 'PID=$(sudo docker inspect ds-platform-dev-idp-1 --format "{{.State.Pid}}"); \
+  sudo cat /proc/$PID/root/pat/pat.txt' > ~/.ds-platform/idp-bootstrap-pat.txt
+# (distroless has no shell, so read the file through the host /proc view of the
+# container rootfs rather than `docker exec cat`.)
+```
 
-   ```js
-   const tok = JSON.parse(sessionStorage.getItem("zitadel:access_token"));
-   const B = location.origin,
-     H = { Authorization: "Bearer " + tok, "Content-Type": "application/json" };
-   const u = await (
-     await fetch(B + "/management/v1/users/_search", {
-       method: "POST",
-       headers: H,
-       body: JSON.stringify({
-         queries: [
-           {
-             userNameQuery: {
-               userName: "ds-bootstrap",
-               method: "TEXT_QUERY_METHOD_EQUALS",
-             },
-           },
-         ],
-       }),
-     })
-   ).json();
-   const pat = await (
-     await fetch(B + "/management/v1/users/" + u.result[0].id + "/pats", {
-       method: "POST",
-       headers: H,
-       body: JSON.stringify({ expirationDate: "2099-12-31T23:59:59Z" }),
-     })
-   ).json();
-   console.log(pat.token); // <-- the PAT, shown ONCE
-   ```
-
-3. Save it to a **gitignored** file — never commit it:
-
-   ```bash
-   printf '%s' '<PAT>' > ~/.ds-platform/idp-bootstrap-pat.txt
-   ```
-
+The file is gitignored by living under `~/.ds-platform/` — **never** commit it.
 Then flip `IDP_BOOTSTRAP=` back off (so normal boots don't re-trigger init).
+
+> The deterministic `zitadel-admin` console user is still created (handy for
+> interactive console work), but the PAT no longer needs it.
 
 ---
 
@@ -148,7 +130,11 @@ Then flip `IDP_BOOTSTRAP=` back off (so normal boots don't re-trigger init).
 web/OIDC application (`authorization_code` + `refresh_token`, BASIC auth, dev-mode
 http redirect URIs), the project-role assertion so
 `urn:zitadel:iam:org:project:roles` is emitted in the token, and seeds the
-`doctor_guest` role. Re-running it converges — it never duplicates.
+`doctor_guest` role. It also **ensures the Login V2 instance feature** (a no-op if
+the FIRSTINSTANCE default already set it — converges instances created before that
+default) and **grants `IAM_LOGIN_CLIENT`** to the `ds-bootstrap` machine user —
+without it the EARS-8 session-link call returns `403 No matching permissions found`
+(`IAM_OWNER` alone is not sufficient). Re-running converges — it never duplicates.
 
 ```bash
 # Runs on a box with bash + curl + jq (the TrueNAS box has all three):
@@ -174,29 +160,58 @@ IDP_EXTERNAL_DOMAIN=truenas.local
 IDP_PORT=9080
 IDP_CLIENT_ID=<from provision.sh>             # the numeric Zitadel client id
 IDP_CLIENT_SECRET=<from provision.sh>
+IDP_REDIRECT_URI=http://truenas.local:3000/auth/callback  # must match a redirect
+                                              # URI provision.sh registers
 IDP_SERVICE_TOKEN=<the ds-bootstrap PAT>      # the api binds the real adapter on
                                               # IDP_ISSUER + IDP_SERVICE_TOKEN
 ```
 
 > The api's `IdpModule` selects the real `ZitadelIdpClient` when **both**
 > `IDP_ISSUER` and `IDP_SERVICE_TOKEN` are set; otherwise it falls back to the
-> in-memory `FakeIdpClient`. The OIDC `client_secret` is for the
-> authorize→token-exchange leg (003 F2 follow-up), not for adapter selection.
+> in-memory `FakeIdpClient`. The OIDC `client_id` / `client_secret` /
+> `redirect_uri` are the confidential-client creds the BFF presents on the
+> authorize→token-exchange leg (EARS-8) and the refresh-rotation leg (EARS-9), not
+> for adapter selection.
+
+To prove the live exchange end-to-end, run the integration spec with the OIDC env
+exported (it `describe.skipIf`s without `IDP_ISSUER`/`IDP_CLIENT_ID`/
+`IDP_SERVICE_TOKEN`/`IDP_REDIRECT_URI`):
+
+```bash
+# from apps/api, with the five IDP_* keys + DATABASE_URL exported from .env.local
+npx vitest run test/auth/zitadel-token-exchange.e2e-spec.ts
+# -> EARS-8 (session→token) + EARS-9 (refresh rotation) GREEN
+```
 
 ---
 
-## 5. Known live wire-shape deltas (v4.15)
+## 5. Live wire-shape deltas (v4.15) — all resolved in the adapter
 
-A smoke test of the merged real adapter against the live instance surfaced
-deltas — tracked as follow-up, **not** silently patched here:
+Running the real adapter against the live instance surfaced wire-shape deltas vs
+the merged code. The EARS-8/9 token-exchange spec
+(`apps/api/test/auth/zitadel-token-exchange.e2e-spec.ts`) now passes GREEN against
+the dev-stand; the deltas it forced are fixed in `src/auth/idp/zitadel.idp.ts`:
 
 - `POST /v2/users/human` **requires** a `profile` object (`givenName` /
-  `familyName`); the merged `ZitadelIdpClient.createUser` omits it → 400.
-- The default password policy requires an upper-case character; the fixtures'
-  lowercase-only password is rejected.
+  `familyName`) — fixed in `createUser` (#145, a placeholder profile the domain
+  never reads).
+- `POST /v2/sessions` does **not** echo `factors` in its response — the checked
+  user's id is read via a follow-up `GET /v2/sessions/{id}` (#145).
+- The authorize 302 redirects to `…?authRequest=V2_<id>` (lowercase `authRequest`,
+  `V2_` prefix) under Login V2 — the adapter reads both `authRequestID` and
+  `authRequest` (#122/#145).
+- The **refresh** grant rejects the reserved `urn:zitadel:iam:org:project:roles`
+  scope with `invalid_scope`; per RFC 6749 §6 a refresh may only narrow scope, so
+  `refreshTokens` now sends **no** `scope` param (the roles claim still rides the
+  rotated id_token via the app's role-assertion config). This was the EARS-9 fix.
 - Duplicate-email create returns **409** (the adapter's enumeration hinge is
-  correct), and the happy path returns `{ userId, details }` (parsed correctly).
+  correct); the happy path returns `{ userId, details }` (parsed correctly).
+- The default password policy requires an upper-case character; live test
+  fixtures use a mixed-case password accordingly.
 
-The session→token-exchange / refresh / OTP-login legs remain fail-closed seams
-(GitHub #122 scope was never implemented); there is no live integration test for
-them yet.
+Two instance-level prerequisites for the exchange (both applied by `provision.sh`,
+documented in §2/§3): **Login V2 enabled**, and **`IAM_LOGIN_CLIENT`** on the
+machine user the PAT belongs to.
+
+The OTP-login legs (`requestEmailOtp` / `loginWith*Otp`) remain fail-closed seams
+(tracked separately); they are not exercised by the token-exchange spec.

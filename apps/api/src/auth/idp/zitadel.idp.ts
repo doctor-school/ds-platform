@@ -515,10 +515,19 @@ export class ZitadelIdpClient implements IdpClient {
         "zitadel OIDC application config (IDP_CLIENT_ID) is not set; cannot rotate (design §3, §11)",
       );
     }
+    // Send NO `scope` on the refresh grant. Per RFC 6749 §6 a refresh request
+    // may only narrow to a subset of the originally-granted scopes; Zitadel v4.15
+    // rejects the reserved project-roles URN scope here with `invalid_scope`
+    // (proven live against the dev-stand — the authorize hop grants it, the
+    // refresh hop refuses to re-request it). Omitting `scope` re-issues the full
+    // originally-granted set, and the project-roles claim still rides the rotated
+    // id_token via the app's role-assertion config (provision.sh sets
+    // accessTokenRoleAssertion/idTokenRoleAssertion + projectRoleAssertion), so
+    // `parseIdpClaims` still recovers `roles[]`. This is the EARS-9 wire-shape fix
+    // on top of the merged #122 adapter (which sent the full scope and 400'd).
     const body = new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
-      scope: (this.config.scopes ?? DEFAULT_OIDC_SCOPES).join(" "),
       ...this.tokenAuthParams(),
     });
     const res = await this.fetchImpl(this.url("/oauth/v2/token"), {

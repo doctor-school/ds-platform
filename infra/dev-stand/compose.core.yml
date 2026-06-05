@@ -162,6 +162,20 @@ services:
       ZITADEL_TLS_ENABLED: "false"
       ZITADEL_EXTERNALDOMAIN: ${IDP_EXTERNAL_DOMAIN:-localhost}
       ZITADEL_EXTERNALPORT: ${IDP_PORT:-9080}
+      # Login V2 — REQUIRED for the headless BFF session->token exchange (EARS-8).
+      # The api's Variant-B flow (apps/api auth design §3) does NOT render any login
+      # UI; it links a server-checked session to a pending OIDC auth request via
+      # POST /v2/oidc/auth_requests/{id}. That session-link API only resolves an
+      # auth request CREATED UNDER LOGIN V2 — with the feature off, the authorize
+      # hop files a v1 auth request the v2 API can't see and the link 404s
+      # ("Auth Request does not exist", proven live #146). Enabling the feature is
+      # enough: the v2 login UI ships as a SEPARATE Next.js `login` container, but
+      # the BFF never hits it (no baseUri set), and the auth_requests + token
+      # endpoints are served by THIS core binary. The org-owner machine user also
+      # needs the IAM_LOGIN_CLIENT role to call the link API — granted by
+      # idp/provision.sh, not here. Read at init, stored on the instance. Default
+      # true; do NOT disable it (that was the reverted #144 workaround).
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: ${IDP_LOGIN_V2_REQUIRED:-true}
       ZITADEL_DATABASE_POSTGRES_HOST: postgres
       ZITADEL_DATABASE_POSTGRES_PORT: 5432
       ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
@@ -171,6 +185,34 @@ services:
       ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ds
       ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_PASSWORD}
       ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      # First-instance bootstrap (recipe-opt-in, read ONLY on a fresh init — a
+      # re-init drops the `zitadel` DB so start-from-init re-runs the init step).
+      # When IDP_BOOTSTRAP=1 the setup creates an IAM-owner machine user
+      # (`ds-bootstrap`, the credential idp/provision.sh authenticates with) plus a
+      # deterministic console admin (`zitadel-admin`), and writes the machine user's
+      # PAT to PatPath. The PAT file IS written and is readable (the earlier #144
+      # "file never written" claim was wrong: the blocker was a root-owned mount,
+      # not the init step — with a tmpfs owned by the Zitadel uid the file lands as
+      # /pat/pat.txt owned 1000:1000, no console mint needed; see idp/bootstrap.md
+      # §2). Empty (the default) -> standard init, every var below is inert.
+      ZITADEL_FIRSTINSTANCE_PATPATH: ${IDP_BOOTSTRAP:+/pat/pat.txt}
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: ${IDP_BOOTSTRAP:+ds-bootstrap}
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: ${IDP_BOOTSTRAP:+ds-bootstrap}
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: ${IDP_BOOTSTRAP:+2099-12-31T23:59:59Z}
+      # Deterministic console admin (only created when IDP_BOOTSTRAP is set, since
+      # USERNAME gates it). Password is dev-only on a trusted LAN; never reuse it
+      # off the dev-stand.
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: ${IDP_BOOTSTRAP:+zitadel-admin}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${IDP_BOOTSTRAP:+${IDP_BOOTSTRAP_ADMIN_PASSWORD:-}}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: ${IDP_BOOTSTRAP:+false}
+    # Writable tmpfs for the FIRSTINSTANCE PatPath file. The distroless image has
+    # no writable /tmp and runs as the non-root `zitadel` user (uid/gid 1000); a
+    # named volume or a default tmpfs is root-owned, so the process can't create
+    # the PAT file there. Owning the tmpfs by uid/gid 1000 lets the init step write
+    # /pat/pat.txt directly (root-cause fix for the #144 manual-mint workaround).
+    # Inert unless IDP_BOOTSTRAP is set.
+    tmpfs:
+      - /pat:uid=1000,gid=1000,mode=0700
     ports:
       - "${IDP_PORT:-9080}:8080"
     depends_on:

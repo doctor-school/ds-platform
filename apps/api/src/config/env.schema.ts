@@ -28,6 +28,18 @@ export const ApiEnvSchema = z.looseObject({
   // so the F1 flows run end-to-end against a real Postgres without a live IdP.
   IDP_ISSUER: z.string().optional(),
   IDP_SERVICE_TOKEN: z.string().optional(),
+  // OIDC application config (design §3, §11) — the `ds-platform-dev` app created
+  // in the Zitadel console (per-recipe follow-up, `infra/dev-stand/idp/bootstrap.md`).
+  // Required for the session→token exchange (EARS-8) and refresh rotation
+  // (EARS-9); absent ⇒ those two adapter paths fail closed. The dev-stand ships
+  // `IDP_CLIENT_SECRET=CHANGE_ME` until the app is provisioned.
+  IDP_CLIENT_ID: z.string().optional(),
+  IDP_CLIENT_SECRET: z.string().optional(),
+  // OIDC redirect URI registered on the application; the token exchange echoes it.
+  IDP_REDIRECT_URI: z.url().optional(),
+  // Space-separated OIDC scopes; the project-roles claim needs its scope, so the
+  // adapter's default includes `urn:zitadel:iam:org:project:roles` when unset.
+  IDP_SCOPES: z.string().optional(),
   // Shared secret authenticating the Zitadel Action webhook (EARS-19). The
   // webhook fails closed when this is unset — an unauthenticated mirror-write
   // surface is never opened by default.

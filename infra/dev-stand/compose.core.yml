@@ -162,6 +162,13 @@ services:
       ZITADEL_TLS_ENABLED: "false"
       ZITADEL_EXTERNALDOMAIN: ${IDP_EXTERNAL_DOMAIN:-localhost}
       ZITADEL_EXTERNALPORT: ${IDP_PORT:-9080}
+      # Zitadel v4 defaults to the v2 login UI, which ships as a SEPARATE Next.js
+      # `login` container not deployed in this single-binary dev-stand. Forcing it
+      # off makes the core binary serve its built-in (v1) login at /ui/login, so
+      # the dev-stand has a working interactive login + Console without a second
+      # service. Read at init time and stored on the instance; a recipe that later
+      # adds the login container can flip this back. Default true = upstream.
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: ${IDP_LOGIN_V2_REQUIRED:-false}
       ZITADEL_DATABASE_POSTGRES_HOST: postgres
       ZITADEL_DATABASE_POSTGRES_PORT: 5432
       ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
@@ -171,6 +178,31 @@ services:
       ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ds
       ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_PASSWORD}
       ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      # First-instance bootstrap (recipe-opt-in, read ONLY on a fresh init — a
+      # re-init drops the `zitadel` DB so start-from-init re-runs the init step).
+      # When IDP_BOOTSTRAP=1 the setup creates an IAM-owner machine user
+      # (`ds-bootstrap`, the credential idp/provision.sh authenticates with) plus a
+      # deterministic console admin (`zitadel-admin`) so the bootstrap can mint the
+      # machine user's PAT without console guesswork. The PatPath file output is
+      # also requested, but on v4.15 start-from-init it does NOT reliably write a
+      # readable file (the PAT row lands in the DB, the file does not) — so the
+      # documented PAT acquisition is via the console admin (idp/bootstrap.md §2).
+      # Empty (the default) -> standard init, every var below is inert.
+      ZITADEL_FIRSTINSTANCE_PATPATH: ${IDP_BOOTSTRAP:+/pat/pat.txt}
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: ${IDP_BOOTSTRAP:+ds-bootstrap}
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: ${IDP_BOOTSTRAP:+ds-bootstrap}
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: ${IDP_BOOTSTRAP:+2099-12-31T23:59:59Z}
+      # Deterministic console admin (only created when IDP_BOOTSTRAP is set, since
+      # USERNAME gates it). Password is dev-only on a trusted LAN; never reuse it
+      # off the dev-stand.
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: ${IDP_BOOTSTRAP:+zitadel-admin}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${IDP_BOOTSTRAP:+${IDP_BOOTSTRAP_ADMIN_PASSWORD:-}}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: ${IDP_BOOTSTRAP:+false}
+    # Writable tmpfs for the FIRSTINSTANCE PatPath file (distroless has no writable
+    # /tmp; a named volume is root-owned and the non-root Zitadel process can't
+    # write it). Inert unless IDP_BOOTSTRAP is set.
+    tmpfs:
+      - /pat:mode=1777
     ports:
       - "${IDP_PORT:-9080}:8080"
     depends_on:

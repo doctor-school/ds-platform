@@ -161,7 +161,11 @@ describe("ZitadelIdpClient OIDC session→token exchange", () => {
     expect(tokens.claims.roles).toEqual(["doctor_guest"]);
   });
 
-  it("EARS-8: parses multiple project roles; otp in amr counts as mfa", async () => {
+  it("EARS-8: parses multiple project roles; single-factor otp in amr is NOT mfa", async () => {
+    // EARS-6/7 passwordless OTP logins are single factor: Zitadel emits
+    // `amr:["otp"]`. That must derive `mfa:false` (only the dedicated RFC 8176
+    // `"mfa"` reference means multi-factor) so the `role → mfa_required` seam
+    // (design §7) does not fail-open on a passwordless login.
     const { fetchImpl } = scriptedFetch({
       token: {
         ok: true,
@@ -182,7 +186,53 @@ describe("ZitadelIdpClient OIDC session→token exchange", () => {
     client.rememberSessionToken("sess-3", "t3");
     const tokens = await client.exchangeSessionForTokens("sess-3");
     expect(tokens.claims.roles.sort()).toEqual(["doctor_guest", "expert"]);
-    expect(tokens.claims.mfa).toBe(true);
+    expect(tokens.claims.mfa).toBe(false);
+  });
+
+  it("EARS-8: mfa is false when the id_token carries no amr claim", async () => {
+    const { fetchImpl } = scriptedFetch({
+      token: {
+        ok: true,
+        status: 200,
+        body: {
+          access_token: "A",
+          refresh_token: "R",
+          expires_in: 900,
+          // No `amr` claim at all.
+          id_token: jwt({
+            sub: "zid-user-5",
+            [ROLES_CLAIM]: { doctor_guest: {} },
+          }),
+        },
+      },
+    });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    client.rememberSessionToken("sess-5", "t5");
+    const tokens = await client.exchangeSessionForTokens("sess-5");
+    expect(tokens.claims.mfa).toBe(false);
+  });
+
+  it("EARS-8: mfa is false when amr is empty", async () => {
+    const { fetchImpl } = scriptedFetch({
+      token: {
+        ok: true,
+        status: 200,
+        body: {
+          access_token: "A",
+          refresh_token: "R",
+          expires_in: 900,
+          id_token: jwt({
+            sub: "zid-user-6",
+            amr: [],
+            [ROLES_CLAIM]: { doctor_guest: {} },
+          }),
+        },
+      },
+    });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    client.rememberSessionToken("sess-6", "t6");
+    const tokens = await client.exchangeSessionForTokens("sess-6");
+    expect(tokens.claims.mfa).toBe(false);
   });
 
   it("EARS-8: rejects when the token endpoint fails (no token minted on a non-2xx)", async () => {

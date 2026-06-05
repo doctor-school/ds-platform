@@ -66,22 +66,6 @@ export interface ZitadelConfig {
 /** Zitadel project-roles claim key (design §3, ADR-0001 §6 — `roles[]`). */
 const ZITADEL_PROJECT_ROLES_CLAIM = "urn:zitadel:iam:org:project:roles";
 
-/**
- * `amr` (authentication-methods-references) values that denote a *second*
- * factor — their presence means the login satisfied MFA (design §7, EARS-8).
- * A primary `pwd` alone is NOT in this set.
- */
-const MFA_AMR_VALUES = new Set([
-  "mfa",
-  "otp",
-  "sms",
-  "hwk",
-  "swk",
-  "totp",
-  "webauthn",
-  "u2f",
-]);
-
 const DEFAULT_OIDC_SCOPES = [
   "openid",
   "profile",
@@ -120,6 +104,13 @@ function decodeJwtPayload(jwt: string): Record<string, unknown> {
  * Parse the principal claims (design §3, EARS-8) from an OIDC id_token: `sub`,
  * the Zitadel project-roles claim → `roles[]`, and `amr` → `mfa`. The roles
  * claim is a map `{ roleKey: { orgId: orgDomain } }`; we surface the role keys.
+ *
+ * `mfa` is derived from the RFC 8176 dedicated multi-factor reference `"mfa"`
+ * alone — NOT from the presence of any single second-factor method name. The
+ * passwordless email-OTP (EARS-6) and SMS-OTP (EARS-7) logins are *single*
+ * factor and emit `amr:["otp"]`; treating that as `mfa:true` would fail-open
+ * the future `role → mfa_required` seam (design §7) whose verdict
+ * `SessionService.establish` persists.
  */
 function parseIdpClaims(idToken: string): IdpClaims {
   const payload = decodeJwtPayload(idToken);
@@ -130,10 +121,8 @@ function parseIdpClaims(idToken: string): IdpClaims {
     rolesClaim && typeof rolesClaim === "object" && !Array.isArray(rolesClaim)
       ? Object.keys(rolesClaim as Record<string, unknown>)
       : [];
-  const amr = Array.isArray(payload["amr"])
-    ? (payload["amr"] as unknown[])
-    : [];
-  const mfa = amr.some((m) => typeof m === "string" && MFA_AMR_VALUES.has(m));
+  const amr = payload["amr"];
+  const mfa = Array.isArray(amr) && amr.includes("mfa");
   return { sub, roles, mfa };
 }
 
@@ -371,83 +360,91 @@ export class ZitadelIdpClient implements IdpClient {
       );
     }
 
-    // 1. Start the OIDC auth request; read (do not follow) the redirect.
-    const scopes = (this.config.scopes ?? DEFAULT_OIDC_SCOPES).join(" ");
-    const authorizeQuery = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      response_type: "code",
-      scope: scopes,
-      prompt: "none",
-    });
-    const authorizeRes = await this.fetchImpl(
-      this.url(`/oauth/v2/authorize?${authorizeQuery.toString()}`),
-      { method: "GET", headers: this.headers(), redirect: "manual" },
-    );
-    const location = this.readLocation(authorizeRes);
-    const authRequestId = location
-      ? new URLSearchParams(location.split("?")[1] ?? "").get("authRequest")
-      : null;
-    if (!authRequestId) {
-      throw new Error("zitadel authorize did not yield an authRequest id");
-    }
-
-    // 2. Link the checked session → callbackUrl with the code.
-    const linkRes = await this.fetchImpl(
-      this.url(`/v2/oidc/auth_requests/${authRequestId}`),
-      {
-        method: "POST",
-        headers: this.headers(),
-        body: JSON.stringify({
-          session: { sessionId: zitadelSessionId, sessionToken },
-        }),
-      },
-    );
-    if (!linkRes.ok) {
-      throw new Error(
-        `zitadel auth_request link failed: HTTP ${linkRes.status}`,
+    // Consume the captured session token — single-use, on EVERY exit path
+    // (success or a throw in any of steps 1–3). Leaving it in the Map on an
+    // early throw would leak sensitive Zitadel session material indefinitely on
+    // this global singleton adapter, so the delete lives in a `finally`.
+    try {
+      // 1. Start the OIDC auth request; read (do not follow) the redirect.
+      const scopes = (this.config.scopes ?? DEFAULT_OIDC_SCOPES).join(" ");
+      const authorizeQuery = new URLSearchParams({
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope: scopes,
+        prompt: "none",
+      });
+      const authorizeRes = await this.fetchImpl(
+        this.url(`/oauth/v2/authorize?${authorizeQuery.toString()}`),
+        { method: "GET", headers: this.headers(), redirect: "manual" },
       );
-    }
-    const linkData = (await linkRes.json()) as { callbackUrl?: string };
-    const code = linkData.callbackUrl
-      ? new URLSearchParams(linkData.callbackUrl.split("?")[1] ?? "").get(
-          "code",
-        )
-      : null;
-    if (!code) {
-      throw new Error("zitadel auth_request callback carried no code");
-    }
+      const location = this.readLocation(authorizeRes);
+      const authRequestId = location
+        ? new URLSearchParams(location.split("?")[1] ?? "").get("authRequest")
+        : null;
+      if (!authRequestId) {
+        throw new Error("zitadel authorize did not yield an authRequest id");
+      }
 
-    // 3. Exchange the code for tokens.
-    const tokenBody = new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: redirectUri,
-      ...this.tokenAuthParams(),
-    });
-    const tokenRes = await this.fetchImpl(this.url("/oauth/v2/token"), {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${this.config.serviceToken}`,
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: tokenBody.toString(),
-    });
-    // Consume the session token — single-use, regardless of outcome.
-    this.sessionTokens.delete(zitadelSessionId);
-    if (!tokenRes.ok) {
-      throw new Error(`zitadel token endpoint failed: HTTP ${tokenRes.status}`);
+      // 2. Link the checked session → callbackUrl with the code.
+      const linkRes = await this.fetchImpl(
+        this.url(`/v2/oidc/auth_requests/${authRequestId}`),
+        {
+          method: "POST",
+          headers: this.headers(),
+          body: JSON.stringify({
+            session: { sessionId: zitadelSessionId, sessionToken },
+          }),
+        },
+      );
+      if (!linkRes.ok) {
+        throw new Error(
+          `zitadel auth_request link failed: HTTP ${linkRes.status}`,
+        );
+      }
+      const linkData = (await linkRes.json()) as { callbackUrl?: string };
+      const code = linkData.callbackUrl
+        ? new URLSearchParams(linkData.callbackUrl.split("?")[1] ?? "").get(
+            "code",
+          )
+        : null;
+      if (!code) {
+        throw new Error("zitadel auth_request callback carried no code");
+      }
+
+      // 3. Exchange the code for tokens.
+      const tokenBody = new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: redirectUri,
+        ...this.tokenAuthParams(),
+      });
+      const tokenRes = await this.fetchImpl(this.url("/oauth/v2/token"), {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${this.config.serviceToken}`,
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: tokenBody.toString(),
+      });
+      if (!tokenRes.ok) {
+        throw new Error(
+          `zitadel token endpoint failed: HTTP ${tokenRes.status}`,
+        );
+      }
+      const data = (await tokenRes.json()) as OidcTokenResponse;
+      if (!data.access_token || !data.refresh_token) {
+        throw new Error("zitadel token response missing access/refresh token");
+      }
+      return {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        expiresInSeconds: data.expires_in ?? 0,
+        claims: parseIdpClaims(data.id_token ?? ""),
+      };
+    } finally {
+      this.sessionTokens.delete(zitadelSessionId);
     }
-    const data = (await tokenRes.json()) as OidcTokenResponse;
-    if (!data.access_token || !data.refresh_token) {
-      throw new Error("zitadel token response missing access/refresh token");
-    }
-    return {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-      expiresInSeconds: data.expires_in ?? 0,
-      claims: parseIdpClaims(data.id_token ?? ""),
-    };
   }
 
   /**

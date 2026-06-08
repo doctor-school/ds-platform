@@ -1,5 +1,146 @@
 # @ds/api
 
+## 0.7.0
+
+### Minor Changes
+
+- [#129](https://github.com/doctor-school/ds-platform/pull/129) [`6109639`](https://github.com/doctor-school/ds-platform/commit/610963971ea88b65796b80b59a571e92def6d9ca) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(api): [#87](https://github.com/doctor-school/ds-platform/issues/87) passwordless login — email-OTP + SMS-OTP + SMS budget (003 F3)
+
+  Implements EARS-6 (email-OTP login via Zitadel `otp_email`), EARS-7 (SMS-OTP
+  login via `otp_sms`), and EARS-14 (SMS toll-fraud budget circuit-breaker), per
+  003-design §2/§6/§10 and ADR-0001 §4/§7. Both OTP variants converge on the F2
+  session-establishment step (`SessionService.establish`), so the `__Host-`
+  cookie / token logic exists exactly once across every login variant.
+
+  `@ds/api`: extends the `IdpClient` port with `requestEmailOtp` /
+  `loginWithEmailOtp` / `requestSmsOtp` / `loginWithSmsOtp` (the verify methods
+  return a checked `IdpSession`, the same shape `passwordLogin` yields; fake is
+  fully exercised, the Zitadel adapter carries them as documented design-§11
+  integration seams alongside the existing token-exchange seam). Adds a
+  `SmsBudgetService` — four fixed-window counters (per-phone 3/h, per-IP 10/h,
+  per-ASN 100/h, global daily ≤2000) that gate before the provider send and refuse
+  fail-closed with a generic throttled response, consuming nothing on refusal. New
+  public routes `POST /v1/auth/login/otp/request` and `POST /v1/auth/login/otp`
+  (channel discriminator; SMS request budget-gated, ASN from the edge `x-asn`
+  header). Enumeration-safe throughout (EARS-16): unknown identifier and
+  wrong/expired code are indistinguishable; budget refusals leak no threshold.
+
+  `@ds/schemas`: adds the `OtpChannel`, `OtpRequest` / `OtpRequestResponse`
+  (`otp_sent`) and `OtpVerify` contracts (verify reuses the `authenticated`
+  `LoginResponse`).
+
+- [#142](https://github.com/doctor-school/ds-platform/pull/142) [`6c955c0`](https://github.com/doctor-school/ds-platform/commit/6c955c0c08177a7a86167f6f70d038a5b7599572) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(api): [#122](https://github.com/doctor-school/ds-platform/issues/122) wire real Zitadel OIDC session→token exchange (003 F2 decision-debt)
+
+  Replaces the fail-closed seam in `ZitadelIdpClient.exchangeSessionForTokens`
+  (EARS-8) and `refreshTokens` (EARS-9) with the real OIDC dance against a live
+  Zitadel: authorize-with-session → link the checked session
+  (`POST /v2/oidc/auth_requests/{id}`) → `authorization_code` token exchange, plus
+  the `refresh_token` grant. Principal claims are parsed from the id_token —
+  `roles[]` from the Zitadel project-roles claim
+  (`urn:zitadel:iam:org:project:roles`) and `mfa` from `amr` — per 003-design §3.
+
+  The exchange requires the OIDC **application** config, now plumbed end-to-end:
+  `IDP_CLIENT_ID` / `IDP_CLIENT_SECRET` / `IDP_REDIRECT_URI` / `IDP_SCOPES`
+  (`apps/api/src/config/env.schema.ts` → the `IdpModule` factory →
+  `ZitadelConfig`). When that config is absent, both paths still fail closed (throw,
+  mint nothing) — never an open gate (ADR-0001 §7) — while the rest of the adapter
+  is unaffected. `FakeIdpClient` is unchanged (the dev/unit seam). Claim parsing
+  and the three-hop wire shape are pinned by `idp/zitadel.idp.spec.ts`; the live
+  path is asserted by an `IDP_ISSUER`-gated integration spec that skips in CI and
+  until the dev-stand `ds-platform-dev` OIDC app is provisioned. Also records the
+  003-design §11 decision that the Zitadel Action webhook authenticates with a
+  shared secret (mTLS rejected for v1), feeding [#119](https://github.com/doctor-school/ds-platform/issues/119).
+
+### Patch Changes
+
+- [#152](https://github.com/doctor-school/ds-platform/pull/152) [`2f56c78`](https://github.com/doctor-school/ds-platform/commit/2f56c7853f670808fb50033f7821201bb2197162) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - fix(schemas): [#147](https://github.com/doctor-school/ds-platform/issues/147) raise creation password contract to mirror Zitadel policy
+
+  The `@ds/schemas` creation-password contract was weaker than the live Zitadel
+  default complexity policy (`min8 + upper/lower/digit/symbol`), so a registrant
+  could pass schema validation with a password Zitadel rejects (400 inside
+  `createUser`) — a divergence that was neither aligned nor enumeration-checked.
+
+  `@ds/schemas`: a new `NewPassword` (creation) schema adds the four-class
+  complexity requirement and applies it to `RegisterRequest.password` and
+  `PasswordResetCompleteRequest.newPassword`, mirroring the Zitadel default as a
+  **baseline, not a ceiling** (Zitadel remains the credential authority and may be
+  configured stricter). `LoginPassword` (login) stays permissive — no complexity —
+  so legacy credentials that predate the policy can still authenticate. This is a
+  consumer-visible contract tightening (a password that previously validated may
+  now be rejected), hence a pre-1.0 minor bump.
+
+  `@ds/api`: closes the enumeration-safe residual race where a live Zitadel
+  configured stricter than baseline 400s inside `createUser`. The adapter raises a
+  typed `IdpPasswordPolicyError` only on a password/complexity 400 (any other 4xx
+  stays opaque → 500, fail-closed), and `AuthService.register` maps it to a generic
+  **422** identical regardless of account existence — never a 500, never an oracle.
+  The existing 409→`alreadyExisted` enumeration hinge is untouched.
+
+- [#146](https://github.com/doctor-school/ds-platform/pull/146) [`177eaf8`](https://github.com/doctor-school/ds-platform/commit/177eaf88f33718f6f78d5b7dabc04d90d914159a) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - fix(api): [#145](https://github.com/doctor-school/ds-platform/issues/145) send a `profile` on Zitadel `createUser` + live login wire-shape fixes (003)
+
+  First live smoke-test of the real `ZitadelIdpClient` against a dev-stand Zitadel
+  v4.15 surfaced three wire-shape deltas masked by the `FakeIdpClient` override in
+  every auth e2e:
+  1. **`createUser` → 400**: Zitadel v4 requires a `profile` object
+     (`givenName`/`familyName`) on `POST /v2/users/human`. Self-service
+     registration (EARS-1/2) collects no name (the `users` mirror has no name
+     column, design §5), so the adapter now sends a minimal placeholder profile
+     (`givenName` = email local-part or `"doctor"`, `familyName` = `"guest"`) —
+     a pure adapter detail the domain never reads, mirrors, or surfaces.
+  2. **`passwordLogin` rejected**: the `POST /v2/sessions` response does not echo
+     the `factors` object live, so the checked user's id (our `sub`) is now read
+     via a follow-up `GET /v2/sessions/{id}`.
+  3. **OIDC authorize param**: the authorize 302 carries `authRequestID` (capital
+     `ID`) live, not the lowercase `authRequest` the merged [#122](https://github.com/doctor-school/ds-platform/issues/122) code parsed.
+
+  No portal-facing contract change — internal Zitadel-adapter fixes only.
+
+  Adds an `IDP_ISSUER`-gated live integration spec
+  (`test/auth/zitadel-create-user.e2e-spec.ts`) pinning the `createUser` wire
+  shape (creation + the 409 duplicate→`alreadyExisted` enumeration hinge) so the
+  delta cannot regress silently; it skips in CI (no `IDP_ISSUER`).
+
+- [#152](https://github.com/doctor-school/ds-platform/pull/152) [`2f56c78`](https://github.com/doctor-school/ds-platform/commit/2f56c7853f670808fb50033f7821201bb2197162) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - fix(api): [#148](https://github.com/doctor-school/ds-platform/issues/148) email/phone-verify resend wire-shape vs live Zitadel v4.15
+
+  First live smoke-test of `ZitadelIdpClient` email/phone verification against a
+  dev-stand Zitadel v4.15 surfaced four 404 wire-shape deltas masked by the
+  `FakeIdpClient` and the scripted unit double (same class as [#145](https://github.com/doctor-school/ds-platform/issues/145)/[#122](https://github.com/doctor-school/ds-platform/issues/122)). The
+  custom-verb paths were renamed to the live REST shapes:
+
+  | Op           | Was (404 live)                         | Now (200 live)                     | Body                          |
+  | ------------ | -------------------------------------- | ---------------------------------- | ----------------------------- |
+  | email send   | `POST /v2/users/{id}/email/_send_code` | `POST /v2/users/{id}/email/resend` | `{ "sendCode": {} }`          |
+  | phone send   | `POST /v2/users/{id}/phone/_send_code` | `POST /v2/users/{id}/phone/resend` | `{ "sendCode": {} }`          |
+  | email verify | `POST /v2/users/{id}/email/_verify`    | `POST /v2/users/{id}/email/verify` | `{ "verificationCode": "…" }` |
+  | phone verify | `POST /v2/users/{id}/phone/_verify`    | `POST /v2/users/{id}/phone/verify` | `{ "verificationCode": "…" }` |
+
+  The send body is a oneof: `sendCode` routes the code through Zitadel's SMTP
+  notifier (→ Mailpit on the dev-stand) and never echoes the secret inline.
+  Fail-closed discipline is preserved — a non-2xx send still throws. Email send +
+  verify are live-verified via a new `IDP_ISSUER`-gated round-trip e2e (send →
+  fetch from Mailpit → verify) that skips in CI; phone paths are aligned by parity
+  (the dev-stand has no SMS provider). No portal-facing contract change — internal
+  Zitadel-adapter fixes only.
+
+- [#144](https://github.com/doctor-school/ds-platform/pull/144) [`bd74198`](https://github.com/doctor-school/ds-platform/commit/bd74198215d88708092c42656485df6e75509234) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - fix(api): [#122](https://github.com/doctor-school/ds-platform/issues/122) EARS-9 refresh grant omits the project-roles scope (live wire-shape)
+
+  Proving the EARS-8/9 token exchange against a live dev-stand Zitadel (v4.15)
+  surfaced a refresh-grant delta in the merged `ZitadelIdpClient.refreshTokens`: it
+  sent the full default scope set — including the reserved
+  `urn:zitadel:iam:org:project:roles` scope — on the refresh request, which Zitadel
+  rejects with `invalid_scope` (per RFC 6749 §6 a refresh may only narrow to a
+  subset of the originally-granted scopes). The fix sends **no** `scope` param on the
+  refresh grant, which re-issues the full originally-granted set; the project-roles
+  claim still rides the rotated id_token via the app's role-assertion config
+  (`accessTokenRoleAssertion` / `idTokenRoleAssertion` + `projectRoleAssertion`), so
+  `parseIdpClaims` still recovers `roles[]`. With this, the
+  `zitadel-token-exchange.e2e-spec.ts` integration spec passes GREEN (EARS-8 + EARS-9)
+  against the provisioned dev-stand OIDC app. Unit spec unchanged (it does not assert
+  the refresh scope param).
+
+- Updated dependencies [[`2f56c78`](https://github.com/doctor-school/ds-platform/commit/2f56c7853f670808fb50033f7821201bb2197162), [`6109639`](https://github.com/doctor-school/ds-platform/commit/610963971ea88b65796b80b59a571e92def6d9ca)]:
+  - @ds/schemas@0.6.0
+
 ## 0.6.0
 
 ### Minor Changes

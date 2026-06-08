@@ -1,5 +1,57 @@
 # @ds/schemas
 
+## 0.6.0
+
+### Minor Changes
+
+- [#152](https://github.com/doctor-school/ds-platform/pull/152) [`2f56c78`](https://github.com/doctor-school/ds-platform/commit/2f56c7853f670808fb50033f7821201bb2197162) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - fix(schemas): [#147](https://github.com/doctor-school/ds-platform/issues/147) raise creation password contract to mirror Zitadel policy
+
+  The `@ds/schemas` creation-password contract was weaker than the live Zitadel
+  default complexity policy (`min8 + upper/lower/digit/symbol`), so a registrant
+  could pass schema validation with a password Zitadel rejects (400 inside
+  `createUser`) — a divergence that was neither aligned nor enumeration-checked.
+
+  `@ds/schemas`: a new `NewPassword` (creation) schema adds the four-class
+  complexity requirement and applies it to `RegisterRequest.password` and
+  `PasswordResetCompleteRequest.newPassword`, mirroring the Zitadel default as a
+  **baseline, not a ceiling** (Zitadel remains the credential authority and may be
+  configured stricter). `LoginPassword` (login) stays permissive — no complexity —
+  so legacy credentials that predate the policy can still authenticate. This is a
+  consumer-visible contract tightening (a password that previously validated may
+  now be rejected), hence a pre-1.0 minor bump.
+
+  `@ds/api`: closes the enumeration-safe residual race where a live Zitadel
+  configured stricter than baseline 400s inside `createUser`. The adapter raises a
+  typed `IdpPasswordPolicyError` only on a password/complexity 400 (any other 4xx
+  stays opaque → 500, fail-closed), and `AuthService.register` maps it to a generic
+  **422** identical regardless of account existence — never a 500, never an oracle.
+  The existing 409→`alreadyExisted` enumeration hinge is untouched.
+
+- [#129](https://github.com/doctor-school/ds-platform/pull/129) [`6109639`](https://github.com/doctor-school/ds-platform/commit/610963971ea88b65796b80b59a571e92def6d9ca) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(api): [#87](https://github.com/doctor-school/ds-platform/issues/87) passwordless login — email-OTP + SMS-OTP + SMS budget (003 F3)
+
+  Implements EARS-6 (email-OTP login via Zitadel `otp_email`), EARS-7 (SMS-OTP
+  login via `otp_sms`), and EARS-14 (SMS toll-fraud budget circuit-breaker), per
+  003-design §2/§6/§10 and ADR-0001 §4/§7. Both OTP variants converge on the F2
+  session-establishment step (`SessionService.establish`), so the `__Host-`
+  cookie / token logic exists exactly once across every login variant.
+
+  `@ds/api`: extends the `IdpClient` port with `requestEmailOtp` /
+  `loginWithEmailOtp` / `requestSmsOtp` / `loginWithSmsOtp` (the verify methods
+  return a checked `IdpSession`, the same shape `passwordLogin` yields; fake is
+  fully exercised, the Zitadel adapter carries them as documented design-§11
+  integration seams alongside the existing token-exchange seam). Adds a
+  `SmsBudgetService` — four fixed-window counters (per-phone 3/h, per-IP 10/h,
+  per-ASN 100/h, global daily ≤2000) that gate before the provider send and refuse
+  fail-closed with a generic throttled response, consuming nothing on refusal. New
+  public routes `POST /v1/auth/login/otp/request` and `POST /v1/auth/login/otp`
+  (channel discriminator; SMS request budget-gated, ASN from the edge `x-asn`
+  header). Enumeration-safe throughout (EARS-16): unknown identifier and
+  wrong/expired code are indistinguishable; budget refusals leak no threshold.
+
+  `@ds/schemas`: adds the `OtpChannel`, `OtpRequest` / `OtpRequestResponse`
+  (`otp_sent`) and `OtpVerify` contracts (verify reuses the `authenticated`
+  `LoginResponse`).
+
 ## 0.5.0
 
 ### Minor Changes

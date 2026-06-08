@@ -304,3 +304,91 @@ describe("ZitadelIdpClient OIDC session→token exchange", () => {
     expect(result.reuseDetected).toBe(true);
   });
 });
+
+/**
+ * Wire-shape pins for the email/phone verification-code send + verify hops
+ * (EARS-3, design §4) against a scripted `fetch` double. These lock the Zitadel
+ * v4 User-v2 paths the live dev-stand actually serves (#148): the send is
+ * `POST /v2/users/{id}/email/resend` with the `{ sendCode: {} }` oneof (the old
+ * `/email/_send_code` 404s live), and the verify is `POST /v2/users/{id}/email/verify`
+ * (the old `/email/_verify` also 404s live). The `IDP_ISSUER`-gated integration
+ * spec proves the Mailpit round-trip; here we pin the wire deterministically.
+ */
+describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
+  /** A fetch double that records calls and returns a scripted ok/status. */
+  function recordingFetch(result: { ok: boolean; status: number }): {
+    fetchImpl: FetchLike;
+    calls: ScriptedCall[];
+  } {
+    const calls: ScriptedCall[] = [];
+    const fetchImpl: FetchLike = (url, init) => {
+      calls.push({
+        url,
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
+      });
+      return Promise.resolve({
+        ok: result.ok,
+        status: result.status,
+        json: () => Promise.resolve({}),
+      });
+    };
+    return { fetchImpl, calls };
+  }
+
+  const SEND_CONFIG = {
+    baseUrl: "http://idp.test:9080",
+    serviceToken: "svc-token",
+  };
+
+  it("EARS-3: requestEmailVerification POSTs /email/resend with the sendCode oneof", async () => {
+    const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
+    const client = new ZitadelIdpClient({ ...SEND_CONFIG, fetchImpl });
+    await client.requestEmailVerification("user-1");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe("http://idp.test:9080/v2/users/user-1/email/resend");
+    expect(calls[0]?.method).toBe("POST");
+    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({ sendCode: {} });
+  });
+
+  it("EARS-3: requestEmailVerification throws fail-closed on a non-2xx send", async () => {
+    const { fetchImpl } = recordingFetch({ ok: false, status: 404 });
+    const client = new ZitadelIdpClient({ ...SEND_CONFIG, fetchImpl });
+    await expect(client.requestEmailVerification("user-1")).rejects.toThrow(
+      /email send_code failed: HTTP 404/,
+    );
+  });
+
+  it("EARS-3: requestPhoneVerification POSTs /phone/resend with the sendCode oneof", async () => {
+    const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
+    const client = new ZitadelIdpClient({ ...SEND_CONFIG, fetchImpl });
+    await client.requestPhoneVerification("user-1");
+    expect(calls[0]?.url).toBe("http://idp.test:9080/v2/users/user-1/phone/resend");
+    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({ sendCode: {} });
+  });
+
+  it("EARS-3: verifyEmail POSTs /email/verify and returns true on 2xx", async () => {
+    const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
+    const client = new ZitadelIdpClient({ ...SEND_CONFIG, fetchImpl });
+    const ok = await client.verifyEmail("user-1", "ABC123");
+    expect(ok).toBe(true);
+    expect(calls[0]?.url).toBe("http://idp.test:9080/v2/users/user-1/email/verify");
+    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({
+      verificationCode: "ABC123",
+    });
+  });
+
+  it("EARS-3: verifyEmail returns false on a non-2xx (bad/expired code)", async () => {
+    const { fetchImpl } = recordingFetch({ ok: false, status: 400 });
+    const client = new ZitadelIdpClient({ ...SEND_CONFIG, fetchImpl });
+    expect(await client.verifyEmail("user-1", "BAD")).toBe(false);
+  });
+
+  it("EARS-3: verifyPhone POSTs /phone/verify", async () => {
+    const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
+    const client = new ZitadelIdpClient({ ...SEND_CONFIG, fetchImpl });
+    await client.verifyPhone("user-1", "ABC123");
+    expect(calls[0]?.url).toBe("http://idp.test:9080/v2/users/user-1/phone/verify");
+  });
+});

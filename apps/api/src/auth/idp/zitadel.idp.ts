@@ -223,10 +223,20 @@ export class ZitadelIdpClient implements IdpClient {
   }
 
   async requestEmailVerification(sub: string): Promise<void> {
-    const res = await this.fetchImpl(
-      this.url(`/v2/users/${sub}/email/_send_code`),
-      { method: "POST", headers: this.headers(), body: JSON.stringify({}) },
-    );
+    // Live wire-shape delta (#148, vs Zitadel v4.15): the verification-code
+    // **resend** is `POST /v2/users/{id}/email/resend` — the merged code's
+    // `/email/_send_code` (the gRPC-transcoded custom-verb spelling assumed by
+    // #86/#122) 404s against the live instance (proven on the dev-stand). The
+    // request body is the Zitadel `SendEmailVerificationCode` oneof: `sendCode`
+    // routes the code through the configured SMTP notifier (→ Mailpit on the
+    // dev-stand), whereas `returnCode` echoes it in the HTTP response. We send
+    // `{ sendCode: {} }` so the code is delivered by email (EARS-3, design §4),
+    // matching the production notifier path — never returning the secret inline.
+    const res = await this.fetchImpl(this.url(`/v2/users/${sub}/email/resend`), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ sendCode: {} }),
+    });
     // Surface a failed send instead of silently looking like success
     // (consistent with createUser); the caller decides the user-facing message.
     if (!res.ok) {
@@ -235,36 +245,46 @@ export class ZitadelIdpClient implements IdpClient {
   }
 
   async requestPhoneVerification(sub: string): Promise<void> {
-    const res = await this.fetchImpl(
-      this.url(`/v2/users/${sub}/phone/_send_code`),
-      { method: "POST", headers: this.headers(), body: JSON.stringify({}) },
-    );
+    // Same #148 wire-shape delta as the email send, on the analogous phone hop:
+    // `POST /v2/users/{id}/phone/resend` with the `{ sendCode: {} }` oneof (the
+    // old `/phone/_send_code` is the same 404 bug class). `sendCode` routes the
+    // code through the configured SMS notifier. Path-aligned by parity with the
+    // email fix; the dev-stand has no SMS provider, so this hop is not live-
+    // verified here (no Mailpit equivalent for SMS) — flagged on #148.
+    const res = await this.fetchImpl(this.url(`/v2/users/${sub}/phone/resend`), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ sendCode: {} }),
+    });
     if (!res.ok) {
       throw new Error(`zitadel phone send_code failed: HTTP ${res.status}`);
     }
   }
 
   async verifyEmail(sub: string, code: string): Promise<boolean> {
-    const res = await this.fetchImpl(
-      this.url(`/v2/users/${sub}/email/_verify`),
-      {
-        method: "POST",
-        headers: this.headers(),
-        body: JSON.stringify({ verificationCode: code }),
-      },
-    );
+    // Live wire-shape delta (#148, same bug class as the send): the verify hop
+    // is `POST /v2/users/{id}/email/verify` — the merged `/email/_verify` also
+    // 404s against Zitadel v4.15 (proven on the dev-stand). #148 is scoped to
+    // the send, but the verify path is corrected in the same change because the
+    // round-trip the live test asserts (send → fetch code from Mailpit → verify)
+    // is otherwise unprovable; the identical custom-verb→REST-verb rename applies.
+    const res = await this.fetchImpl(this.url(`/v2/users/${sub}/email/verify`), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ verificationCode: code }),
+    });
     return res.ok;
   }
 
   async verifyPhone(sub: string, code: string): Promise<boolean> {
-    const res = await this.fetchImpl(
-      this.url(`/v2/users/${sub}/phone/_verify`),
-      {
-        method: "POST",
-        headers: this.headers(),
-        body: JSON.stringify({ verificationCode: code }),
-      },
-    );
+    // #148 wire-shape delta on the phone verify hop, by parity with email:
+    // `POST /v2/users/{id}/phone/verify` (the old `/phone/_verify` is the same
+    // 404 bug class). Not live-verified (no SMS provider on the dev-stand).
+    const res = await this.fetchImpl(this.url(`/v2/users/${sub}/phone/verify`), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ verificationCode: code }),
+    });
     return res.ok;
   }
 

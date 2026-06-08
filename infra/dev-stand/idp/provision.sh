@@ -221,6 +221,37 @@ else
   echo "      granted (set IDP_BOOTSTRAP_USERNAME if the PAT user differs)." >&2
 fi
 
+# ── 6. ensure SMTP provider → Mailpit (dev notifier) ─────────────────────────
+# Email verification (EARS-3) and password-reset codes are delivered by Zitadel's
+# SMTP notifier. The dev-stand routes mail to Mailpit (compose.core.yml) — but
+# Zitadel ships with NO SMTP provider, so `POST /v2/users/{id}/email/resend`
+# `{sendCode:{}}` accepts (200) yet nothing is ever delivered, and the live
+# email-verify round-trip (#148, zitadel-email-verify.e2e-spec) cannot pass.
+# This step creates + activates an SMTP provider aimed at Mailpit. The host is
+# the in-network service name (`mailpit:1025`), not the published host port. TLS
+# is off (Mailpit is a plaintext dev catch-all). Idempotent: if an SMTP provider
+# already exists we leave it (Zitadel's create is not name-keyed, so we only add
+# one when none is configured), avoiding duplicates on re-runs.
+SMTP_HOST_PORT="${IDP_SMTP_HOST:-mailpit:1025}"
+SMTP_SENDER_ADDRESS="${IDP_SMTP_SENDER_ADDRESS:-no-reply@ds.test}"
+SMTP_SENDER_NAME="${IDP_SMTP_SENDER_NAME:-DS Platform Dev}"
+EXISTING_SMTP="$(api POST /admin/v1/smtp/_search '{}' \
+  | jq -r '.result[]?.id' | head -n1 || true)"
+if [[ -n "$EXISTING_SMTP" && "$EXISTING_SMTP" != "null" ]]; then
+  echo "SMTP provider already configured (${EXISTING_SMTP})" >&2
+else
+  SMTP_ID="$(api POST /admin/v1/smtp \
+    "$(jq -nc \
+       --arg h "$SMTP_HOST_PORT" \
+       --arg a "$SMTP_SENDER_ADDRESS" \
+       --arg n "$SMTP_SENDER_NAME" \
+       '{description:"dev-stand mailpit", senderAddress:$a, senderName:$n,
+         tls:false, host:$h, user:"", password:""}')" \
+    | jq -r '.id')"
+  api POST "/admin/v1/smtp/${SMTP_ID}/_activate" '{}' >/dev/null
+  echo "created + activated SMTP provider ${SMTP_ID} -> ${SMTP_HOST_PORT}" >&2
+fi
+
 # ── output (machine-parseable; secret only when freshly created) ─────────────
 echo "PROJECT_ID=${PROJECT_ID}"
 echo "IDP_CLIENT_ID=${CLIENT_ID}"

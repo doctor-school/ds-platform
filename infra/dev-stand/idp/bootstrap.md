@@ -132,9 +132,13 @@ http redirect URIs), the project-role assertion so
 `urn:zitadel:iam:org:project:roles` is emitted in the token, and seeds the
 `doctor_guest` role. It also **ensures the Login V2 instance feature** (a no-op if
 the FIRSTINSTANCE default already set it — converges instances created before that
-default) and **grants `IAM_LOGIN_CLIENT`** to the `ds-bootstrap` machine user —
+default), **grants `IAM_LOGIN_CLIENT`** to the `ds-bootstrap` machine user —
 without it the EARS-8 session-link call returns `403 No matching permissions found`
-(`IAM_OWNER` alone is not sufficient). Re-running converges — it never duplicates.
+(`IAM_OWNER` alone is not sufficient) — and **configures + activates an SMTP
+provider aimed at Mailpit** (`mailpit:1025`) so verification/reset codes (EARS-3)
+are actually delivered (Zitadel ships with no SMTP provider, so `email/resend`
+200s but mails nothing until this is set; the live email-verify test #148 depends
+on it). Re-running converges — it never duplicates.
 
 ```bash
 # Runs on a box with bash + curl + jq (the TrueNAS box has all three):
@@ -147,7 +151,8 @@ It prints `PROJECT_ID`, `IDP_CLIENT_ID`, and — **only on first creation** —
 with the `_generate_client_secret` call the script prints if you lose it.)
 
 Override defaults via env / flags: `IDP_REDIRECT_URIS`, `IDP_POST_LOGOUT_URIS`,
-`IDP_SEED_ROLE`, `--project-name`, `--app-name`. Defaults target the api BFF
+`IDP_SEED_ROLE`, `IDP_SMTP_HOST` (default `mailpit:1025`), `IDP_SMTP_SENDER_ADDRESS`,
+`IDP_SMTP_SENDER_NAME`, `--project-name`, `--app-name`. Defaults target the api BFF
 callback (`:3000/auth/callback`) and the portal (`:3100/auth/callback`).
 
 ---

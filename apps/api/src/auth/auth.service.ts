@@ -313,9 +313,12 @@ export class AuthService {
       // call, independent of whether the account exists (no oracle). If a *live*
       // Zitadel configured stricter than baseline rejects the password here, the
       // adapter raises IdpPasswordPolicyError; map it to a generic, non-enumerating
-      // "weak password" 422 — identical regardless of account existence (a
-      // duplicate is the 409 → `alreadyExisted` path, which never throws), never a
-      // 500, never correlated with existence (EARS-16; ADR-0001 §7 fail-closed).
+      // "weak password" 422 — identical regardless of account existence. Zitadel
+      // v4.15 checks complexity BEFORE uniqueness (verified live on the dev-stand:
+      // a duplicate-email createUser with a no-uppercase password 400s "Password
+      // must contain upper case", NOT 409), so existing+weak and new+weak both reach
+      // this 422; a *valid* duplicate is the 409 → `alreadyExisted` path that never
+      // throws. Never a 500, never correlated with existence (EARS-16; ADR-0001 §7).
       if (err instanceof IdpPasswordPolicyError) {
         throw new UnprocessableEntityException(GENERIC_WEAK_PASSWORD);
       }

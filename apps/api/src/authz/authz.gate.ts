@@ -26,6 +26,11 @@ export async function scanRealRouteSet(): Promise<AuthzScanResult> {
   // gate never touches the database.
   process.env.DATABASE_URL ??=
     "postgres://authz-lint@127.0.0.1:5432/authz_lint";
+  // SessionModule → DrizzleAuthAuditLog fails closed without an HMAC identifier
+  // pepper (#141). This gate only enumerates routes — it never calls record(),
+  // so nothing is ever masked; a placeholder satisfies the fail-closed
+  // construction check exactly as the DATABASE_URL stub satisfies pool config.
+  process.env.AUDIT_IDENTIFIER_PEPPER ??= "authz-lint-placeholder-pepper";
 
   const app = await NestFactory.createApplicationContext(AuthzGateModule, {
     logger: false,

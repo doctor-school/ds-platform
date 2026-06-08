@@ -1,20 +1,33 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { auditLedger, type DrizzleHandle, type NewAuditLedgerRow } from "@ds/db";
 import { DRIZZLE_DB } from "../../database/database.tokens.js";
+import { loadEnv } from "../../config/env.schema.js";
 import type { AuthAuditEvent, AuthAuditLog } from "./auth-audit.types.js";
 
 type Db = DrizzleHandle["db"];
 
 /**
+ * Fixed, deterministic pepper used ONLY under the test runtime (VITEST), so the
+ * DB-gated e2e suite runs without provisioning a secret. Never reached in any
+ * non-test runtime — the writer fails closed there when no real pepper is set.
+ */
+const TEST_FALLBACK_PEPPER = "test-only-insecure-audit-identifier-pepper";
+
+/**
  * Mask a raw identifier (email / phone) for the ledger (ADR-0001 §7, ADR-0003
  * §6): the `auth.login.failure` / `auth.password.reset_requested` /
- * `auth.otp.sent` rows record an `identifier_hash`, never the raw PD. SHA-256 is
- * one-way; a keyed HMAC pepper (so the access-controlled ledger is not itself an
- * existence oracle for a guessed identifier) is a documented hardening follow-up.
+ * `auth.otp.sent` rows record an `identifier_hash`, never the raw PD. The mask is
+ * a keyed **HMAC-SHA256** over the lowercased identifier: a bare digest over a
+ * low-entropy identifier space is a reproducible existence oracle (a rainbow
+ * table over a phone range), so without the server-side `pepper` the masked value
+ * is not reproducible. The pepper is threaded in explicitly (resolved once in the
+ * writer's constructor) — this function never reads the environment.
  */
-export function hashIdentifier(identifier: string): string {
-  return createHash("sha256").update(identifier.toLowerCase()).digest("hex");
+export function hashIdentifier(identifier: string, pepper: string): string {
+  return createHmac("sha256", pepper)
+    .update(identifier.toLowerCase())
+    .digest("hex");
 }
 
 /** The ledger-row shape an event maps to, minus the generated `eventId`/`id`/`createdAt`. */
@@ -28,8 +41,15 @@ type MappedRow = Pick<
  * `auth.<class>.<event>` wire id (ADR-0001 §7.3, owned by
  * identity-auth-rbac-design §7.3) and its PD is masked. F4 deferred this mapping
  * to F6 as decision-debt; it lives here so there is no second source to drift.
+ *
+ * `mask` is the bound identifier-masking function (HMAC-SHA256 over a
+ * pepper, {@link hashIdentifier}) — injected so this stays a pure, unit-testable
+ * mapping that never reads the environment.
  */
-export function toLedgerRow(event: AuthAuditEvent): MappedRow {
+export function toLedgerRow(
+  event: AuthAuditEvent,
+  mask: (identifier: string) => string,
+): MappedRow {
   switch (event.type) {
     case "Registered":
       return {
@@ -55,7 +75,7 @@ export function toLedgerRow(event: AuthAuditEvent): MappedRow {
         subjectId: null,
         sid: null,
         reason: event.reason,
-        metadata: { identifier_hash: hashIdentifier(event.identifier) },
+        metadata: { identifier_hash: mask(event.identifier) },
       };
     case "OtpSent":
       return {
@@ -65,7 +85,7 @@ export function toLedgerRow(event: AuthAuditEvent): MappedRow {
         reason: null,
         metadata: {
           channel: event.channel,
-          identifier_hash: hashIdentifier(event.identifier),
+          identifier_hash: mask(event.identifier),
         },
       };
     case "RefreshRotated":
@@ -98,7 +118,7 @@ export function toLedgerRow(event: AuthAuditEvent): MappedRow {
         subjectId: null,
         sid: null,
         reason: null,
-        metadata: { identifier_hash: hashIdentifier(event.identifier) },
+        metadata: { identifier_hash: mask(event.identifier) },
       };
     case "PasswordResetCompleted":
       // Canonical class is `auth.password.{changed, reset_requested}` (ADR-0001
@@ -133,13 +153,45 @@ export function toLedgerRow(event: AuthAuditEvent): MappedRow {
  * Bound to {@link AUTH_AUDIT} in {@link SessionModule} when a database handle is
  * present — replacing the F4 in-memory default without touching any call site,
  * exactly as `RedisSessionStore` replaces the in-memory store.
+ *
+ * The HMAC pepper ({@link AUDIT_IDENTIFIER_PEPPER}) is resolved **once** here via
+ * the inline `loadEnv()` pattern (as `SessionModule` reads `REDIS_URL`), and the
+ * mask is bound from it. Fail-closed: if no pepper is configured and the process
+ * is not a test runtime (`VITEST` unset), construction throws — masking with no
+ * secret would silently reintroduce the existence oracle (#141). Under VITEST a
+ * fixed {@link TEST_FALLBACK_PEPPER} keeps the DB-gated e2e suite runnable
+ * without provisioning a secret.
  */
 @Injectable()
 export class DrizzleAuthAuditLog implements AuthAuditLog {
-  constructor(@Inject(DRIZZLE_DB) private readonly db: Db) {}
+  private readonly mask: (identifier: string) => string;
+
+  constructor(@Inject(DRIZZLE_DB) private readonly db: Db) {
+    const pepper = resolveAuditPepper();
+    this.mask = (identifier: string): string =>
+      hashIdentifier(identifier, pepper);
+  }
 
   async record(event: AuthAuditEvent): Promise<void> {
-    const row = toLedgerRow(event);
+    const row = toLedgerRow(event, this.mask);
     await this.db.insert(auditLedger).values({ eventId: randomUUID(), ...row });
   }
+}
+
+/**
+ * Resolve the ledger HMAC pepper, applying the fail-closed / test-fallback rule
+ * (#141). Returns the configured `AUDIT_IDENTIFIER_PEPPER`; falls back to the
+ * fixed test pepper under VITEST; throws otherwise so a misconfigured non-test
+ * runtime never masks with a missing secret.
+ */
+function resolveAuditPepper(): string {
+  const pepper = loadEnv().AUDIT_IDENTIFIER_PEPPER;
+  if (pepper) return pepper;
+  if (process.env.VITEST) return TEST_FALLBACK_PEPPER;
+  throw new Error(
+    "AUDIT_IDENTIFIER_PEPPER is not configured — the audit ledger refuses to " +
+      "mask identifiers without a keyed HMAC pepper (an unkeyed digest over a " +
+      "low-entropy identifier space is a reproducible existence oracle, #141). " +
+      "Set AUDIT_IDENTIFIER_PEPPER to a server-side secret.",
+  );
 }

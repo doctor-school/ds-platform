@@ -767,10 +767,6 @@ export class ZitadelIdpClient implements IdpClient {
     // No prior `request*Otp` for this identifier (or an unknown identifier, which
     // armed nothing) → null, indistinguishable from a wrong code (EARS-16).
     if (!challenge) return null;
-    // Single-attempt: drop the challenge now regardless of outcome, so a wrong
-    // code cannot be retried against the same live challenge (the caller must
-    // re-request). Single-use on success is the same discipline as the fake.
-    this.otpChallenges.delete(key);
     // Verify the code by updating the session. Asserted-by-unit-test /
     // awaiting-live-confirmation: `POST /v2/sessions/{sessionId}` body
     // `{ sessionToken, checks: { otpEmail: { code } } }` (SMS: `{ otpSms: { code } }`).
@@ -784,7 +780,17 @@ export class ZitadelIdpClient implements IdpClient {
         checks: { [check]: { code } },
       }),
     });
+    // Drop the challenge ONLY on a successful verify (single-use, mirroring the
+    // fake's `loginWith*Otp`). On a failure we KEEP the cached challenge so the
+    // user can retry the SAME already-delivered code against the SAME Zitadel
+    // session: Zitadel natively owns the attempt-limit, lockout, and code expiry
+    // (never reimplement an IdP primitive, EARS-15), so dropping our cache after
+    // one wrong digit would re-implement an attempt-limit the IdP already enforces.
+    // It would also force a brand-new `requestSmsOtp` per typo, burning a paid SMS
+    // send and the EARS-14 toll-fraud budget on every mistake; keeping the
+    // challenge lets the retry reuse the already-sent code for free.
     if (!res.ok) return null;
+    this.otpChallenges.delete(key);
     const data = (await res.json()) as { sessionToken?: string };
     // Feed the OIDC exchange: cache the CHECKED-session token under the sessionId
     // so the downstream `exchangeSessionForTokens(sessionId)` finds it (mirrors

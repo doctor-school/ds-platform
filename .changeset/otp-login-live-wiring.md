@@ -19,7 +19,12 @@ oracle. The verify hop updates the same session with the submitted code
 (`POST /v2/sessions/{id}`) and, on a 2xx, caches the checked-session token via
 `rememberSessionToken` so the shared `exchangeSessionForTokens` hop mints tokens;
 any miss (no live challenge / wrong-or-expired code / unknown identifier) returns
-`null`, all indistinguishable (EARS-16). The challenge is carried between the two
+`null`, all indistinguishable (EARS-16). The cached challenge is deleted only on
+a successful verify (single-use); a failed verify KEEPS it so the user retries
+the SAME already-delivered code against the SAME Zitadel session — matching the
+fake, letting Zitadel natively own the attempt-limit / lockout / code expiry
+(EARS-15), and avoiding a fresh `requestSmsOtp` that would burn a paid SMS send
+and the EARS-14 budget on every typo. The challenge is carried between the two
 port calls by a new `otpChallenges` Map keyed by the lowercased identifier,
 mirroring the existing `sessionTokens` cache — a second hidden cross-request
 state on the singleton adapter that openly ADDS to the #143 (IdpSession port

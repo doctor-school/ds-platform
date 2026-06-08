@@ -29,7 +29,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Refresh + logout (e2e)", () => {
   let app: NestFastifyApplication;
   let pool: pg.Pool;
   const consent = [{ purpose: "tos", version: "2026-01" }];
-  const password = "sufficiently-long-pw";
+  const password = "Aa1!ufficiently-long-pw";
   const device = { "user-agent": "Test/1.0", "accept-language": "en-US" };
   const createdEmails: string[] = [];
 

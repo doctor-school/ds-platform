@@ -34,10 +34,10 @@ const MAILPIT_BASE = (
 ).replace(/\/$/, "");
 
 /**
- * Mints a password that satisfies BOTH the `@ds/schemas` shape guard
- * (`min(8)`) AND the live Zitadel default policy (≥1 upper-case) — see the
- * #145 create-user spec for the rationale (the schema is deliberately weaker
- * than the IdP policy).
+ * Mints a password that satisfies the `@ds/schemas` creation baseline
+ * (`NewPassword`: ≥8 + upper + lower + digit + symbol) — which since #147 mirrors
+ * the live Zitadel default complexity policy, so the same fixture clears both the
+ * BFF contract and the IdP (Zitadel remains the authority and may be stricter).
  */
 function livePassword(): string {
   return `Int-${Date.now()}-aA1!`;

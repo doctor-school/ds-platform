@@ -1,13 +1,14 @@
-import type {
-  CreatedUser,
-  CreateUserInput,
-  IdpClaims,
-  IdpClient,
-  IdpRefreshResult,
-  IdpSession,
-  IdpTokens,
-  IdpUser,
-  PasswordLoginResult,
+import {
+  IdpPasswordPolicyError,
+  type CreatedUser,
+  type CreateUserInput,
+  type IdpClaims,
+  type IdpClient,
+  type IdpRefreshResult,
+  type IdpSession,
+  type IdpTokens,
+  type IdpUser,
+  type PasswordLoginResult,
 } from "./idp.types.js";
 
 /** Subset of `fetch` the adapter needs — narrowed so it can be faked in tests. */
@@ -216,10 +217,44 @@ export class ZitadelIdpClient implements IdpClient {
     });
     if (res.status === 409) return { sub: "", alreadyExisted: true };
     if (!res.ok) {
+      // #147 residual race: the BFF creation schema mirrors the deployed Zitadel
+      // default complexity policy as a baseline, so a baseline-violating password
+      // is rejected at the DTO layer before this call. If a *stricter* live policy
+      // rejects the password here it is a 400 whose body names the password/policy
+      // — surface it as the typed {@link IdpPasswordPolicyError} so the service can
+      // answer with a generic, non-enumerating "weak password" 422 (never a 500,
+      // never an existence oracle; a duplicate is the 409 handled above). Any other
+      // 400/4xx/5xx stays an opaque Error → a 500 server fault, as before.
+      if (res.status === 400 && (await this.isPasswordPolicyRejection(res))) {
+        throw new IdpPasswordPolicyError(
+          "zitadel createUser rejected the password (policy)",
+        );
+      }
       throw new Error(`zitadel createUser failed: HTTP ${res.status}`);
     }
     const data = (await res.json()) as { userId?: string };
     return { sub: data.userId ?? "", alreadyExisted: false };
+  }
+
+  /**
+   * Inspect a `createUser` 400 body to decide whether it is a password-policy
+   * rejection (#147). Zitadel's error envelope carries a human `message` (and
+   * may add `details`); a policy failure names the password / complexity. We match
+   * loosely on those tokens and FAIL CLOSED to `false` (an unreadable body is
+   * treated as a non-password fault → opaque 500) so we never mislabel an unknown
+   * 400 as "weak password". The signal only ever *narrows* one specific 400 into
+   * the enumeration-safe client error; it never widens a server fault.
+   */
+  private async isPasswordPolicyRejection(res: {
+    json: () => Promise<unknown>;
+  }): Promise<boolean> {
+    try {
+      const body = await res.json();
+      const text = JSON.stringify(body).toLowerCase();
+      return text.includes("password") || text.includes("complexity");
+    } catch {
+      return false;
+    }
   }
 
   async requestEmailVerification(sub: string): Promise<void> {

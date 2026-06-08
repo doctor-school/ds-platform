@@ -27,7 +27,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Login with password (e2e)", () => {
   let pool: pg.Pool;
   let idp: FakeIdpClient;
   const consent = [{ purpose: "tos", version: "2026-01" }];
-  const password = "sufficiently-long-pw";
+  const password = "Aa1!ufficiently-long-pw";
   const createdEmails: string[] = [];
 
   function uniqueEmail(tag: string): string {

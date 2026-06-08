@@ -129,7 +129,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
         url: "/v1/auth/register",
         payload: {
           email: "timing-known@ds.test",
-          password: "sufficiently-long-pw",
+          password: "Aa1!ufficiently-long-pw",
           consent: [{ purpose: "tos", version: "2026-01" }],
         },
       });
@@ -202,7 +202,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
 
     it("EARS-17: a successful login clears the challenge for that origin", async () => {
       const email = "challenge-clear@ds.test";
-      const password = "sufficiently-long-pw";
+      const password = "Aa1!ufficiently-long-pw";
       // Register is @BotProtected, and this block binds an ENABLED stub provider,
       // so the registration must carry the captcha token too.
       await app.inject({

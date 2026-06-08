@@ -466,3 +466,335 @@ describe("ZitadelIdpClient createUser failure mapping (#147)", () => {
     });
   });
 });
+
+/**
+ * #153 — passwordless OTP-login (EARS-6 email / EARS-7 SMS) against the real
+ * Zitadel Session v2 wire, pinned deterministically by a scripted `fetch`. The
+ * request hop arms a session+challenge (`POST /v2/sessions`
+ * `{ checks: { user: { userId } }, challenges: { otpEmail|otpSms: {} } }`); the
+ * verify hop updates that session with the code (`POST /v2/sessions/{id}`
+ * `{ sessionToken, checks: { otpEmail|otpSms: { code } } }`) and, on a 2xx,
+ * caches the checked-session token so the shared OIDC exchange completes. These
+ * exact field names/paths are the same live-wire-shape risk class that bit #122
+ * and was corrected by #145/#148 — unit-pinned here, live-confirmed later.
+ */
+describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
+  /**
+   * A fetch double scripting the whole OTP-login surface: the User v2 search
+   * (`resolveUserId`), the Session v2 create-with-challenge and verify hops, AND
+   * the three OIDC exchange hops (reusing the same authorize→link→token shapes as
+   * the exchange double above) so a test can assert request→login→exchange
+   * end-to-end. Records every call for wire assertions.
+   */
+  function otpFetch(opts: {
+    /** `resolveUserId` result (the User v2 search `result[0].userId`); null ⇒ unknown. */
+    userId?: string | null;
+    /** Status of the session create-with-challenge hop. */
+    createStatus?: number;
+    /**
+     * Status of the session verify hop (non-2xx ⇒ wrong/expired code). A single
+     * number applies to every verify; an array scripts successive verify hops by
+     * call order (e.g. `[403, 200]` = first attempt fails, retry succeeds) so a
+     * test can prove the challenge survives a failed verify and a later correct
+     * code still succeeds against the SAME cached session.
+     */
+    verifyStatus?: number | number[];
+    /** Fresh session token the verify hop returns on success. */
+    verifiedToken?: string;
+    /** Token-endpoint response for the downstream exchange. */
+    token?: { ok: boolean; status: number; body: unknown };
+  }): { fetchImpl: FetchLike; calls: ScriptedCall[] } {
+    const calls: ScriptedCall[] = [];
+    // How many verify hops have run, so an array `verifyStatus` can vary the
+    // response by call order (fail-then-succeed retry proof).
+    let verifyCount = 0;
+    const fetchImpl: FetchLike = (url, init) => {
+      calls.push({
+        url,
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
+      });
+      // User v2 search (resolveUserId) — a POST to /v2/users carrying `queries`.
+      if (url.endsWith("/v2/users") && init.method === "POST") {
+        const uid = opts.userId === undefined ? "otp-user-1" : opts.userId;
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({ result: uid ? [{ userId: uid }] : [] }),
+        });
+      }
+      // Session verify hop — POST /v2/sessions/{id} (has a path segment after).
+      if (/\/v2\/sessions\/[^/]+$/.test(url) && init.method === "POST") {
+        const scripted = opts.verifyStatus;
+        const status = Array.isArray(scripted)
+          ? (scripted[verifyCount] ?? scripted[scripted.length - 1] ?? 200)
+          : (scripted ?? 200);
+        verifyCount++;
+        return Promise.resolve({
+          ok: status >= 200 && status < 300,
+          status,
+          json: () =>
+            Promise.resolve({
+              sessionToken: opts.verifiedToken ?? "checked-token",
+            }),
+        });
+      }
+      // Session create-with-challenge — POST /v2/sessions (no path segment).
+      if (url.endsWith("/v2/sessions") && init.method === "POST") {
+        const status = opts.createStatus ?? 201;
+        return Promise.resolve({
+          ok: status >= 200 && status < 300,
+          status,
+          json: () =>
+            Promise.resolve({
+              sessionId: "otp-sess-1",
+              sessionToken: "unchecked-token",
+            }),
+        });
+      }
+      // OIDC exchange hops (same shapes as the exchange double above).
+      if (url.includes("/oauth/v2/authorize")) {
+        return Promise.resolve({
+          ok: false,
+          status: 302,
+          headers: { location: `/ui/login/login?authRequestID=AR-otp` },
+          json: () => Promise.resolve({}),
+        });
+      }
+      if (url.includes("/v2/oidc/auth_requests/")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              callbackUrl: "http://app/callback?code=OTP_CODE&state=xyz",
+            }),
+        });
+      }
+      if (url.includes("/oauth/v2/token")) {
+        const t = opts.token ?? { ok: true, status: 200, body: {} };
+        return Promise.resolve({
+          ok: t.ok,
+          status: t.status,
+          json: () => Promise.resolve(t.body),
+        });
+      }
+      return Promise.resolve({
+        ok: false,
+        status: 404,
+        json: () => Promise.resolve({}),
+      });
+    };
+    return { fetchImpl, calls };
+  }
+
+  it("EARS-6: requestEmailOtp creates a session with the user check + otpEmail challenge and caches it", async () => {
+    const { fetchImpl, calls } = otpFetch({ userId: "otp-user-1" });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+
+    await expect(client.requestEmailOtp("Doc@ds.test")).resolves.toBeUndefined();
+
+    const create = calls.find(
+      (c) => c.url.endsWith("/v2/sessions") && c.method === "POST",
+    );
+    expect(create, "a session create hop was issued").toBeTruthy();
+    expect(JSON.parse(create!.body ?? "{}")).toEqual({
+      checks: { user: { userId: "otp-user-1" } },
+      challenges: { otpEmail: {} },
+    });
+  });
+
+  it("EARS-7: requestSmsOtp uses the otpSms challenge", async () => {
+    const { fetchImpl, calls } = otpFetch({ userId: "otp-user-1" });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    await client.requestSmsOtp("+15551230000");
+    const create = calls.find(
+      (c) => c.url.endsWith("/v2/sessions") && c.method === "POST",
+    );
+    expect(JSON.parse(create!.body ?? "{}")).toEqual({
+      checks: { user: { userId: "otp-user-1" } },
+      challenges: { otpSms: {} },
+    });
+  });
+
+  it("EARS-6/16: an unknown identifier sends NOTHING and still resolves void", async () => {
+    const { fetchImpl, calls } = otpFetch({ userId: null });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    await expect(
+      client.requestEmailOtp("nobody@ds.test"),
+    ).resolves.toBeUndefined();
+    // Only the User v2 search ran; no session was created (enumeration-safe).
+    expect(calls.some((c) => c.url.endsWith("/v2/sessions"))).toBe(false);
+  });
+
+  it("EARS-6/16: a provider hiccup on the request hop still resolves void (no throw)", async () => {
+    // The session-create hop 500s — must be swallowed exactly like the unknown
+    // identifier so the acknowledgement is not a health/existence oracle.
+    const { fetchImpl } = otpFetch({ userId: "otp-user-1", createStatus: 500 });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    await expect(client.requestEmailOtp("doc@ds.test")).resolves.toBeUndefined();
+  });
+
+  it("EARS-6/16: a thrown fetch on the request hop still resolves void", async () => {
+    const fetchImpl: FetchLike = () => Promise.reject(new Error("network down"));
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    await expect(client.requestEmailOtp("doc@ds.test")).resolves.toBeUndefined();
+  });
+
+  it("EARS-6: loginWithEmailOtp verifies the code, feeds rememberSessionToken, then exchange yields tokens", async () => {
+    const { fetchImpl, calls } = otpFetch({
+      userId: "otp-user-1",
+      verifiedToken: "checked-token-1",
+      token: {
+        ok: true,
+        status: 200,
+        body: {
+          access_token: "ACCESS",
+          refresh_token: "REFRESH",
+          expires_in: 900,
+          id_token: jwt({ sub: "otp-user-1", amr: ["otp"] }),
+        },
+      },
+    });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+
+    await client.requestEmailOtp("doc@ds.test");
+    const session = await client.loginWithEmailOtp("Doc@ds.test", "123456");
+    expect(session).toEqual({ zitadelSessionId: "otp-sess-1", sub: "otp-user-1" });
+
+    // The verify hop hit /v2/sessions/{id} with the unchecked token + the otpEmail code.
+    const verify = calls.find((c) => /\/v2\/sessions\/otp-sess-1$/.test(c.url));
+    expect(verify, "a session verify hop was issued").toBeTruthy();
+    expect(JSON.parse(verify!.body ?? "{}")).toEqual({
+      sessionToken: "unchecked-token",
+      checks: { otpEmail: { code: "123456" } },
+    });
+
+    // End-to-end linchpin: the checked-session token was remembered, so the
+    // downstream OIDC exchange (which consumes sessionTokens.get(sessionId))
+    // completes and mints real tokens.
+    const tokens = await client.exchangeSessionForTokens(session!.zitadelSessionId);
+    expect(tokens.accessToken).toBe("ACCESS");
+    expect(tokens.refreshToken).toBe("REFRESH");
+    expect(tokens.claims.sub).toBe("otp-user-1");
+    // Single-factor passwordless OTP is NOT mfa (design §7).
+    expect(tokens.claims.mfa).toBe(false);
+  });
+
+  it("EARS-7: loginWithSmsOtp happy path verifies with the otpSms check", async () => {
+    const { fetchImpl, calls } = otpFetch({
+      userId: "otp-user-2",
+      token: {
+        ok: true,
+        status: 200,
+        body: {
+          access_token: "A",
+          refresh_token: "R",
+          expires_in: 900,
+          id_token: jwt({ sub: "otp-user-2", amr: ["otp"] }),
+        },
+      },
+    });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    await client.requestSmsOtp("+15551230000");
+    const session = await client.loginWithSmsOtp("+15551230000", "654321");
+    expect(session?.sub).toBe("otp-user-2");
+    const verify = calls.find((c) => /\/v2\/sessions\/otp-sess-1$/.test(c.url));
+    expect(JSON.parse(verify!.body ?? "{}")).toEqual({
+      sessionToken: "unchecked-token",
+      checks: { otpSms: { code: "654321" } },
+    });
+    await expect(
+      client.exchangeSessionForTokens(session!.zitadelSessionId),
+    ).resolves.toMatchObject({ accessToken: "A" });
+  });
+
+  it("EARS-16: login with no prior challenge for the identifier returns null", async () => {
+    const { fetchImpl, calls } = otpFetch({ userId: "otp-user-1" });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    // No requestEmailOtp first → no cached challenge.
+    const session = await client.loginWithEmailOtp("doc@ds.test", "123456");
+    expect(session).toBeNull();
+    // Nothing was even sent (the miss is decided from the cache, no verify hop).
+    expect(calls.some((c) => /\/v2\/sessions\/[^/]+$/.test(c.url))).toBe(false);
+  });
+
+  it("EARS-16: a wrong/expired code (non-2xx on verify) returns null", async () => {
+    const { fetchImpl } = otpFetch({ userId: "otp-user-1", verifyStatus: 403 });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    await client.requestEmailOtp("doc@ds.test");
+    expect(await client.loginWithEmailOtp("doc@ds.test", "000000")).toBeNull();
+  });
+
+  it("EARS-15: a failed verify KEEPS the challenge so the user retries the same delivered code (parity with the fake; Zitadel owns the attempt-limit, no SMS re-burn)", async () => {
+    // First verify 403s (wrong/expired code), the retry 200s — the cached
+    // challenge must survive the failure so the SAME Zitadel session accepts the
+    // correct code WITHOUT a fresh `request*Otp` (which would burn the EARS-14 SMS
+    // budget). Mirrors `FakeIdpClient.loginWithEmailOtp`, which leaves the
+    // challenge armed on a wrong code and only deletes it on success.
+    const { fetchImpl, calls } = otpFetch({
+      userId: "otp-user-1",
+      verifyStatus: [403, 200],
+      verifiedToken: "checked-token-retry",
+      token: {
+        ok: true,
+        status: 200,
+        body: {
+          access_token: "ACCESS",
+          refresh_token: "REFRESH",
+          expires_in: 900,
+          id_token: jwt({ sub: "otp-user-1", amr: ["otp"] }),
+        },
+      },
+    });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+
+    await client.requestEmailOtp("doc@ds.test");
+    // Wrong code → null, but the challenge stays armed (no re-request).
+    expect(await client.loginWithEmailOtp("doc@ds.test", "000000")).toBeNull();
+    // Exactly one session-create (request) hop ran — the failed verify did NOT
+    // force a new `request*Otp` / `POST /v2/sessions`.
+    expect(
+      calls.filter((c) => c.url.endsWith("/v2/sessions") && c.method === "POST")
+        .length,
+    ).toBe(1);
+    // The retry with the correct code verifies against the SAME session and wins.
+    const session = await client.loginWithEmailOtp("doc@ds.test", "123456");
+    expect(session).toEqual({
+      zitadelSessionId: "otp-sess-1",
+      sub: "otp-user-1",
+    });
+    // Both verify hops hit the same cached session id.
+    const verifyHops = calls.filter((c) =>
+      /\/v2\/sessions\/otp-sess-1$/.test(c.url),
+    );
+    expect(verifyHops).toHaveLength(2);
+    // The retried checked-session token feeds the downstream OIDC exchange.
+    const tokens = await client.exchangeSessionForTokens(
+      session!.zitadelSessionId,
+    );
+    expect(tokens.accessToken).toBe("ACCESS");
+  });
+
+  it("EARS-6: a SUCCESSFUL verify consumes the challenge (single-use) — a second correct attempt is null", async () => {
+    const { fetchImpl } = otpFetch({ userId: "otp-user-1" });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    await client.requestEmailOtp("doc@ds.test");
+    // First correct code succeeds and deletes the challenge.
+    expect(await client.loginWithEmailOtp("doc@ds.test", "123456")).toEqual({
+      zitadelSessionId: "otp-sess-1",
+      sub: "otp-user-1",
+    });
+    // The challenge was consumed on success → a second attempt finds nothing.
+    expect(await client.loginWithEmailOtp("doc@ds.test", "123456")).toBeNull();
+  });
+
+  it("EARS-16: login for an unknown identifier (nothing armed) returns null", async () => {
+    const { fetchImpl } = otpFetch({ userId: null });
+    const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
+    await client.requestEmailOtp("nobody@ds.test"); // arms nothing
+    expect(await client.loginWithEmailOtp("nobody@ds.test", "123456")).toBeNull();
+  });
+});

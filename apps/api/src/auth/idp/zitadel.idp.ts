@@ -160,6 +160,30 @@ export class ZitadelIdpClient implements IdpClient {
    */
   private readonly sessionTokens = new Map<string, string>();
 
+  /**
+   * Live OTP-login challenges captured between the two port calls, keyed by the
+   * lowercased `identifier`. The {@link IdpClient} port passes ONLY `identifier`
+   * to both `requestEmailOtp`/`requestSmsOtp` (which arms the challenge) and the
+   * matching `loginWith*Otp` (which verifies the code) — no Zitadel session
+   * handle crosses the port — so this adapter must carry the server-side session
+   * (`sessionId` + the still-unchecked `sessionToken`) between the two calls
+   * itself. We stash it here on the request hop and consume it (single-use,
+   * deleted on the verify hop) on the same singleton adapter within the request
+   * lifecycle, exactly mirroring the {@link sessionTokens} pattern.
+   *
+   * NB: this is the **second** hidden cross-request state on this singleton
+   * adapter — the exact concern #143 (IdpSession port widening: thread an
+   * explicit end-to-end session handle through the port instead of caching it in
+   * the adapter) tracks. #153 directs mirroring the existing `sessionTokens`
+   * pattern here because #143 has not landed; doing so ADDS one more entry to the
+   * #143 debt openly rather than deepening the hidden state silently. When #143
+   * lands, both Maps fold into the explicit port handle.
+   */
+  private readonly otpChallenges = new Map<
+    string,
+    { sessionId: string; sessionToken: string; sub: string }
+  >();
+
   constructor(private readonly config: ZitadelConfig) {
     this.fetchImpl = config.fetchImpl ?? (globalThis.fetch as FetchLike);
   }
@@ -667,54 +691,142 @@ export class ZitadelIdpClient implements IdpClient {
     return res.ok ? { sub: userId } : null;
   }
 
-  // ── Passwordless login OTP (EARS-6/7) — INTEGRATION SEAM (design §3, §6, §11) ──
+  // ── Passwordless login OTP (EARS-6/7) — design §3, §6; live-wired #153 ──
   // Zitadel login OTP is Session v2: create a session with a `user` check and an
-  // `otpEmail`/`otpSms` challenge (Zitadel sends the code), then update the same
-  // session with the submitted code, then exchange the checked session for tokens.
-  // The challenge is bound to a server-side session that must be carried between
-  // the request and verify calls, and the final hop is the same authorize-with-
-  // session → token exchange that `exchangeSessionForTokens` still lacks the
-  // OIDC-application config for (IDP_CLIENT_ID / redirect, created against the
-  // dev-stand console as a recipe follow-up). Until that config is plumbed and
-  // verifiable against a live instance, fail closed — send/verify nothing — rather
-  // than ship an unverifiable OTP-login path. The BFF orchestration (EARS-6/7) and
-  // the SMS toll-fraud budget (EARS-14) are proven against FakeIdpClient.
-  requestEmailOtp(_identifier: string): Promise<void> {
-    return Promise.reject(
-      new Error(
-        "zitadel email-OTP login is not wired against the dev-stand yet (design §11)",
-      ),
+  // `otpEmail`/`otpSms` challenge (Zitadel sends the code through its notifier),
+  // then update the same session with the submitted code, then exchange the
+  // checked session for tokens (the shared `exchangeSessionForTokens` hop). The
+  // challenge is bound to a server-side session carried between the request and
+  // verify calls via the `otpChallenges` cache (mirroring `sessionTokens`).
+  //
+  // Wire-shape risk note (same class as #122 → corrected by #145/#148 live): the
+  // exact Session-v2 field names/paths below are PINNED DETERMINISTICALLY BY THE
+  // UNIT SPEC but AWAIT LIVE CONFIRMATION against the dev-stand — a follow-up may
+  // adjust the precise shape (the accepted #122→#145/#148 precedent). Fail-closed
+  // discipline holds throughout: request* never throws (enumeration-safe),
+  // loginWith* returns null on any miss.
+
+  /** The `otpEmail`/`otpSms` challenge oneof Zitadel's `POST /v2/sessions` accepts. */
+  private async requestOtpChallenge(
+    identifier: string,
+    challenge: "otpEmail" | "otpSms",
+  ): Promise<void> {
+    // Enumeration-safe like `requestPasswordReset`: an unknown identifier (no
+    // user) is a silent no-op, and ANY provider error still resolves void — the
+    // caller's acknowledgement must never become an existence/health oracle
+    // (EARS-6/7/16). A code is sent only if the user exists, but the caller can't
+    // tell which.
+    try {
+      const userId = await this.resolveUserId(identifier);
+      if (!userId) return;
+      // Create-with-challenge. Asserted-by-unit-test / awaiting-live-confirmation:
+      // `POST /v2/sessions` body `{ checks: { user: { userId } }, challenges: {
+      // otpEmail: {} } }` (SMS: `{ otpSms: {} }`) — Zitadel arms the challenge and
+      // dispatches the code via its notifier; the response carries `sessionId` +
+      // `sessionToken` (the not-yet-checked session, same response shape as the
+      // password-check create, #145).
+      const res = await this.fetchImpl(this.url("/v2/sessions"), {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({
+          checks: { user: { userId } },
+          challenges: { [challenge]: {} },
+        }),
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        sessionId?: string;
+        sessionToken?: string;
+      };
+      if (!data.sessionId || !data.sessionToken) return;
+      this.otpChallenges.set(identifier.toLowerCase(), {
+        sessionId: data.sessionId,
+        sessionToken: data.sessionToken,
+        sub: userId,
+      });
+    } catch {
+      // A thrown fetch (network hiccup) is indistinguishable from success to the
+      // caller — swallow it, exactly like `requestPasswordReset`'s `.catch`.
+      return;
+    }
+  }
+
+  /**
+   * Verify a login OTP against the cached challenge for `identifier` and, on
+   * success, hand the now-checked session to the OIDC exchange. Returns the
+   * checked {@link IdpSession} or `null` on any miss (no live challenge /
+   * wrong-or-expired code), all indistinguishable (EARS-16).
+   */
+  private async loginWithOtpChallenge(
+    identifier: string,
+    code: string,
+    check: "otpEmail" | "otpSms",
+  ): Promise<IdpSession | null> {
+    const key = identifier.toLowerCase();
+    const challenge = this.otpChallenges.get(key);
+    // No prior `request*Otp` for this identifier (or an unknown identifier, which
+    // armed nothing) → null, indistinguishable from a wrong code (EARS-16).
+    if (!challenge) return null;
+    // Verify the code by updating the session. Asserted-by-unit-test /
+    // awaiting-live-confirmation: `POST /v2/sessions/{sessionId}` body
+    // `{ sessionToken, checks: { otpEmail: { code } } }` (SMS: `{ otpSms: { code } }`).
+    // A non-2xx (wrong/expired code) resolves to null (EARS-16); a 2xx returns a
+    // FRESH `sessionToken` proving the session passed its OTP check.
+    const res = await this.fetchImpl(this.url(`/v2/sessions/${challenge.sessionId}`), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({
+        sessionToken: challenge.sessionToken,
+        checks: { [check]: { code } },
+      }),
+    });
+    // Drop the challenge ONLY on a successful verify (single-use, mirroring the
+    // fake's `loginWith*Otp`). On a failure we KEEP the cached challenge so the
+    // user can retry the SAME already-delivered code against the SAME Zitadel
+    // session: Zitadel natively owns the attempt-limit, lockout, and code expiry
+    // (never reimplement an IdP primitive, EARS-15), so dropping our cache after
+    // one wrong digit would re-implement an attempt-limit the IdP already enforces.
+    // It would also force a brand-new `requestSmsOtp` per typo, burning a paid SMS
+    // send and the EARS-14 toll-fraud budget on every mistake; keeping the
+    // challenge lets the retry reuse the already-sent code for free.
+    if (!res.ok) return null;
+    this.otpChallenges.delete(key);
+    const data = (await res.json()) as { sessionToken?: string };
+    // Feed the OIDC exchange: cache the CHECKED-session token under the sessionId
+    // so the downstream `exchangeSessionForTokens(sessionId)` finds it (mirrors
+    // how `passwordLogin` captures `sessionToken`). Prefer the fresh token from
+    // the verify response; fall back to the challenge token if the live response
+    // omits it (awaiting-live-confirmation — the update may not re-issue a token).
+    this.rememberSessionToken(
+      challenge.sessionId,
+      data.sessionToken ?? challenge.sessionToken,
     );
+    return { zitadelSessionId: challenge.sessionId, sub: challenge.sub };
+  }
+
+  async requestEmailOtp(identifier: string): Promise<void> {
+    await this.requestOtpChallenge(identifier, "otpEmail");
   }
 
   loginWithEmailOtp(
-    _identifier: string,
-    _code: string,
+    identifier: string,
+    code: string,
   ): Promise<IdpSession | null> {
-    return Promise.reject(
-      new Error(
-        "zitadel email-OTP login is not wired against the dev-stand yet (design §11)",
-      ),
-    );
+    return this.loginWithOtpChallenge(identifier, code, "otpEmail");
   }
 
-  requestSmsOtp(_identifier: string): Promise<void> {
-    return Promise.reject(
-      new Error(
-        "zitadel SMS-OTP login is not wired against the dev-stand yet (design §11)",
-      ),
-    );
+  async requestSmsOtp(identifier: string): Promise<void> {
+    // The EARS-14 SMS toll-fraud budget is gated by the CALLER before this hop —
+    // a refused send never reaches here, so this method always attempts the
+    // native send (no budget logic here, by contract).
+    await this.requestOtpChallenge(identifier, "otpSms");
   }
 
   loginWithSmsOtp(
-    _identifier: string,
-    _code: string,
+    identifier: string,
+    code: string,
   ): Promise<IdpSession | null> {
-    return Promise.reject(
-      new Error(
-        "zitadel SMS-OTP login is not wired against the dev-stand yet (design §11)",
-      ),
-    );
+    return this.loginWithOtpChallenge(identifier, code, "otpSms");
   }
 
   async listUsers(): Promise<IdpUser[]> {

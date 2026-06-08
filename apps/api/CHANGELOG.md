@@ -1,5 +1,66 @@
 # @ds/api
 
+## 0.8.0
+
+### Minor Changes
+
+- [#156](https://github.com/doctor-school/ds-platform/pull/156) [`0de3290`](https://github.com/doctor-school/ds-platform/commit/0de32903ae781ec5f5663807c6e0e3a28fc33c77) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(api): [#153](https://github.com/doctor-school/ds-platform/issues/153) wire EARS-6/7 OTP-login against real Zitadel Session v2
+
+  The real Zitadel adapter's four passwordless-login methods — `requestEmailOtp`,
+  `loginWithEmailOtp`, `requestSmsOtp`, `loginWithSmsOtp` — were fail-closed seams
+  that rejected, so no passwordless login (EARS-6 email / EARS-7 SMS) could
+  complete against a real Zitadel; only password login ([#122](https://github.com/doctor-school/ds-platform/issues/122)) and verification
+  ([#148](https://github.com/doctor-school/ds-platform/issues/148)) were live-wired. They are now real Session v2 wire calls, the twin of
+  [#122](https://github.com/doctor-school/ds-platform/issues/122)/[#148](https://github.com/doctor-school/ds-platform/issues/148).
+
+  The request hop creates a Zitadel session with a `user` check plus an
+  `otpEmail`/`otpSms` challenge (`POST /v2/sessions`) so Zitadel dispatches the
+  code via its notifier; it is enumeration-safe like `requestPasswordReset` — an
+  unknown identifier or any provider error still resolves void, never an existence
+  oracle. The verify hop updates the same session with the submitted code
+  (`POST /v2/sessions/{id}`) and, on a 2xx, caches the checked-session token via
+  `rememberSessionToken` so the shared `exchangeSessionForTokens` hop mints tokens;
+  any miss (no live challenge / wrong-or-expired code / unknown identifier) returns
+  `null`, all indistinguishable (EARS-16). The cached challenge is deleted only on
+  a successful verify (single-use); a failed verify KEEPS it so the user retries
+  the SAME already-delivered code against the SAME Zitadel session — matching the
+  fake, letting Zitadel natively own the attempt-limit / lockout / code expiry
+  (EARS-15), and avoiding a fresh `requestSmsOtp` that would burn a paid SMS send
+  and the EARS-14 budget on every typo. The challenge is carried between the two
+  port calls by a new `otpChallenges` Map keyed by the lowercased identifier,
+  mirroring the existing `sessionTokens` cache — a second hidden cross-request
+  state on the singleton adapter that openly ADDS to the [#143](https://github.com/doctor-school/ds-platform/issues/143) (IdpSession port
+  widening) debt rather than deepening it silently.
+
+  The exact Session-v2 field names/paths are pinned deterministically by the
+  adapter unit spec and AWAIT live confirmation against the dev-stand (the accepted
+  [#122](https://github.com/doctor-school/ds-platform/issues/122)→[#145](https://github.com/doctor-school/ds-platform/issues/145)/[#148](https://github.com/doctor-school/ds-platform/issues/148) precedent). A new `IDP_ISSUER`-gated integration spec proves the
+  email path end-to-end (request → Mailpit → login → token exchange) and SKIPS in
+  CI; the SMS path has no dev-stand provider and is declared honestly as
+  unit-pinned-only, not faked green. The `FakeIdpClient`-backed BFF suites are
+  unchanged.
+
+### Patch Changes
+
+- [#154](https://github.com/doctor-school/ds-platform/pull/154) [`02773bd`](https://github.com/doctor-school/ds-platform/commit/02773bd6d66c59e8060b50c8768a7e0ac110d724) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - fix(api): [#141](https://github.com/doctor-school/ds-platform/issues/141) keyed HMAC-SHA256 + pepper for audit_ledger identifier_hash
+
+  The `audit_ledger` masked raw identifiers (email / phone) with a bare
+  `createHash("sha256")`. Because the identifier space is low-entropy and an
+  unkeyed digest is reproducible, the access-controlled ledger became an existence
+  oracle — a rainbow table over a phone range trivially confirms whether a given
+  identifier appears in a `auth.login.failure` / `auth.otp.sent` /
+  `auth.password.reset_requested` row (ADR-0001 §7, ADR-0003 §6).
+
+  `hashIdentifier` is now `HMAC-SHA256(pepper, identifier.toLowerCase())`, so the
+  masked value is not reproducible without the server-side secret. The pepper is a
+  new optional `AUDIT_IDENTIFIER_PEPPER` env key threaded explicitly into the pure
+  mapping (`toLedgerRow` takes the bound mask), resolved once in the
+  `DrizzleAuthAuditLog` constructor. The writer **fails closed**: construction
+  throws if no pepper is configured in a non-test runtime; under VITEST a fixed
+  deterministic test pepper keeps the DB-gated e2e suite runnable without
+  provisioning a secret. Per-event ledger behaviour is unchanged — `identifier_hash`
+  stays a hex string and no raw identifier ever reaches a row.
+
 ## 0.7.0
 
 ### Minor Changes

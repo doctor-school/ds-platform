@@ -9,7 +9,10 @@ import type pg from "pg";
 import { RegisterResponseSchema } from "@ds/schemas";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
-import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
+import {
+  IDP_CLIENT,
+  IdpPasswordPolicyError,
+} from "../../src/auth/idp/idp.types.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -79,7 +82,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Register (e2e)", () => {
     const res = await app.inject({
       method: "POST",
       url: "/v1/auth/register",
-      payload: { email, password: "sufficiently-long-pw", consent },
+      payload: { email, password: "Aa1!ufficiently-long-pw", consent },
     });
 
     expect(res.statusCode).toBe(200);
@@ -106,7 +109,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Register (e2e)", () => {
     const res = await app.inject({
       method: "POST",
       url: "/v1/auth/register",
-      payload: { phone, password: "sufficiently-long-pw", consent },
+      payload: { phone, password: "Aa1!ufficiently-long-pw", consent },
     });
 
     expect(res.statusCode).toBe(200);
@@ -128,7 +131,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Register (e2e)", () => {
     const res = await app.inject({
       method: "POST",
       url: "/v1/auth/register",
-      payload: { email, password: "sufficiently-long-pw", consent: [] },
+      payload: { email, password: "Aa1!ufficiently-long-pw", consent: [] },
     });
 
     expect(res.statusCode).toBe(400);
@@ -140,7 +143,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Register (e2e)", () => {
 
   it("EARS-16: when an already-registered email registers again, the system shall respond indistinguishably and create no duplicate account", async () => {
     const email = uniqueEmail("16");
-    const payload = { email, password: "sufficiently-long-pw", consent };
+    const payload = { email, password: "Aa1!ufficiently-long-pw", consent };
 
     const first = await app.inject({
       method: "POST",
@@ -175,7 +178,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Register (e2e)", () => {
     const res = await app.inject({
       method: "POST",
       url: "/v1/auth/register",
-      payload: { email, password: "sufficiently-long-pw", consent },
+      payload: { email, password: "Aa1!ufficiently-long-pw", consent },
     });
 
     // Generic 400 (not a 500) — indistinguishable from any other failure.
@@ -188,3 +191,94 @@ describe.skipIf(!process.env.DATABASE_URL)("Register (e2e)", () => {
     expect(rows[0].zitadel_sub).toBe(`divergent-${runId}`);
   });
 });
+
+/**
+ * #147 residual race through the full stack. The creation schema mirrors the
+ * deployed Zitadel default policy, so a baseline-violating password is rejected
+ * at the DTO layer (400 ValidationPipe) before any IdP call. This suite proves
+ * the *residual*: a live Zitadel stricter than baseline 400s inside createUser →
+ * the adapter raises IdpPasswordPolicyError → the service answers a generic 422
+ * "weak password", NOT a 500 and NOT an existence oracle. The IdP port is bound
+ * to a fake whose createUser always raises the policy error.
+ */
+describe.skipIf(!process.env.DATABASE_URL)(
+  "Register weak-password residual (#147, e2e)",
+  () => {
+    let app: NestFastifyApplication;
+    let pool: pg.Pool;
+    const consent = [{ purpose: "tos", version: "2026-01" }];
+    const runId = Date.now();
+
+    class PolicyRejectingIdp extends FakeIdpClient {
+      override createUser(): never {
+        throw new IdpPasswordPolicyError();
+      }
+    }
+
+    beforeAll(async () => {
+      const moduleRef = await Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(IDP_CLIENT)
+        .useValue(new PolicyRejectingIdp())
+        .overrideProvider(RATE_LIMIT_THRESHOLDS)
+        .useValue(RELAXED_RATE_LIMIT)
+        .compile();
+
+      app = moduleRef.createNestApplication<NestFastifyApplication>(
+        new FastifyAdapter(),
+      );
+      app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
+      await app.init();
+      await app.getHttpAdapter().getInstance().ready();
+      pool = app.get<pg.Pool>(DRIZZLE_POOL);
+    });
+
+    afterAll(async () => {
+      await app.close();
+    });
+
+    it("#147: a baseline-compliant password the live policy still rejects yields a generic 422, no row, no 500", async () => {
+      const email = `weakpw-${runId}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        // Baseline-compliant (passes the DTO), so the rejection comes from the IdP
+        // path — the residual race, not a DTO ValidationPipe 400.
+        payload: { email, password: "Aa1!aaaa", consent },
+      });
+
+      expect(res.statusCode).toBe(422);
+      const { rows } = await pool.query("SELECT 1 FROM users WHERE email = $1", [
+        email,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("#147: the 422 is identical for email and phone registrants (no existence oracle)", async () => {
+      const emailRes = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: {
+          email: `wk-e-${runId}-${Math.random().toString(36).slice(2, 8)}@ds.test`,
+          password: "Aa1!aaaa",
+          consent,
+        },
+      });
+      const phoneRes = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: {
+          phone: `+1999${Math.floor(10_000_000 + Math.random() * 89_999_999)}`,
+          password: "Aa1!aaaa",
+          consent,
+        },
+      });
+
+      expect(emailRes.statusCode).toBe(422);
+      expect(phoneRes.statusCode).toBe(phoneRes.statusCode);
+      expect(phoneRes.statusCode).toBe(422);
+      expect(phoneRes.json()).toEqual(emailRes.json());
+    });
+  },
+);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FetchLike } from "./zitadel.idp.js";
 import { ZitadelIdpClient } from "./zitadel.idp.js";
+import { IdpPasswordPolicyError } from "./idp.types.js";
 
 /**
  * Unit coverage for the real Zitadel adapter's OIDC session→token exchange
@@ -390,5 +391,78 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
     const client = new ZitadelIdpClient({ ...SEND_CONFIG, fetchImpl });
     await client.verifyPhone("user-1", "ABC123");
     expect(calls[0]?.url).toBe("http://idp.test:9080/v2/users/user-1/phone/verify");
+  });
+});
+
+/**
+ * #147 — createUser failure mapping. The enumeration-safety hinge stays a 409 →
+ * `alreadyExisted`. A 400 whose body names the password/policy is the residual
+ * race (the creation schema mirrors the deployed baseline, but a stricter live
+ * policy rejects) — it must surface as the typed {@link IdpPasswordPolicyError}
+ * so the service answers a generic non-enumerating 422. Any OTHER non-2xx stays
+ * an opaque Error (→ 500), so an unknown 400 is never mislabeled "weak password".
+ */
+describe("ZitadelIdpClient createUser failure mapping (#147)", () => {
+  function bodyFetch(result: {
+    status: number;
+    body?: unknown;
+  }): FetchLike {
+    return () =>
+      Promise.resolve({
+        ok: result.status >= 200 && result.status < 300,
+        status: result.status,
+        json: () => Promise.resolve(result.body ?? {}),
+      });
+  }
+
+  const CONFIG = { baseUrl: "http://idp.test:9080", serviceToken: "svc-token" };
+  const INPUT = { email: "user@ds.test", password: "Aa1!aaaa" };
+
+  it("maps a 409 duplicate to alreadyExisted (not a throw)", async () => {
+    const client = new ZitadelIdpClient({
+      ...CONFIG,
+      fetchImpl: bodyFetch({ status: 409 }),
+    });
+    await expect(client.createUser(INPUT)).resolves.toEqual({
+      sub: "",
+      alreadyExisted: true,
+    });
+  });
+
+  it("maps a 400 password-policy rejection to IdpPasswordPolicyError", async () => {
+    const client = new ZitadelIdpClient({
+      ...CONFIG,
+      fetchImpl: bodyFetch({
+        status: 400,
+        body: { message: "Password does not match complexity policy" },
+      }),
+    });
+    await expect(client.createUser(INPUT)).rejects.toBeInstanceOf(
+      IdpPasswordPolicyError,
+    );
+  });
+
+  it("keeps a non-password 400 an opaque Error (→ 500, not 'weak password')", async () => {
+    const client = new ZitadelIdpClient({
+      ...CONFIG,
+      fetchImpl: bodyFetch({
+        status: 400,
+        body: { message: "invalid email format" },
+      }),
+    });
+    const err = await client.createUser(INPUT).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(IdpPasswordPolicyError);
+  });
+
+  it("succeeds on 2xx, returning the new sub", async () => {
+    const client = new ZitadelIdpClient({
+      ...CONFIG,
+      fetchImpl: bodyFetch({ status: 201, body: { userId: "u-99" } }),
+    });
+    await expect(client.createUser(INPUT)).resolves.toEqual({
+      sub: "u-99",
+      alreadyExisted: false,
+    });
   });
 });

@@ -5,6 +5,7 @@ import {
   Inject,
   Injectable,
   UnauthorizedException,
+  UnprocessableEntityException,
 } from "@nestjs/common";
 import { consentRecords, users, type DrizzleHandle } from "@ds/db";
 import type {
@@ -22,7 +23,11 @@ import type {
 } from "@ds/schemas";
 import type { SessionClaims } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
-import { IDP_CLIENT, type IdpClient } from "./idp/idp.types.js";
+import {
+  IDP_CLIENT,
+  IdpPasswordPolicyError,
+  type IdpClient,
+} from "./idp/idp.types.js";
 import { AUTH_WEBHOOK_SECRET } from "./auth.tokens.js";
 import { UserMirrorService } from "./user-mirror.service.js";
 import { SmsBudgetService } from "./sms-budget/sms-budget.service.js";
@@ -45,6 +50,15 @@ const GENERIC_FAILURE = "the request could not be completed";
 // and no account — a refusal is not an existence oracle and not an attacker's
 // budget read-out (design §10: breaker-open returns a generic "try later").
 const GENERIC_THROTTLED = "too many requests, please try again later";
+
+// #147: one generic, non-enumerating message for a residual IdP password-policy
+// rejection (the creation schema passed but a live Zitadel stricter than the
+// baseline 400'd inside createUser). It names the password requirement, NOT the
+// account — the same 422 fires whether or not the identifier exists (a duplicate
+// is the 409 → `alreadyExisted` path and never reaches it), so it is not an
+// existence oracle (EARS-16).
+const GENERIC_WEAK_PASSWORD =
+  "the password does not meet the security requirements";
 
 /** Postgres unique-constraint violation SQLSTATE (`unique_violation`). */
 const PG_UNIQUE_VIOLATION = "23505";
@@ -285,11 +299,28 @@ export class AuthService {
       throw new BadRequestException(GENERIC_FAILURE);
     }
 
-    const created = await this.idp.createUser({
-      email: req.email,
-      phone: req.phone,
-      password: req.password,
-    });
+    let created;
+    try {
+      created = await this.idp.createUser({
+        email: req.email,
+        phone: req.phone,
+        password: req.password,
+      });
+    } catch (err) {
+      // #147 residual race: the creation schema (@ds/schemas NewPassword) mirrors
+      // the deployed Zitadel default complexity policy, so a baseline-violating
+      // password is already rejected at the DTO layer — uniformly, before this
+      // call, independent of whether the account exists (no oracle). If a *live*
+      // Zitadel configured stricter than baseline rejects the password here, the
+      // adapter raises IdpPasswordPolicyError; map it to a generic, non-enumerating
+      // "weak password" 422 — identical regardless of account existence (a
+      // duplicate is the 409 → `alreadyExisted` path, which never throws), never a
+      // 500, never correlated with existence (EARS-16; ADR-0001 §7 fail-closed).
+      if (err instanceof IdpPasswordPolicyError) {
+        throw new UnprocessableEntityException(GENERIC_WEAK_PASSWORD);
+      }
+      throw err;
+    }
 
     // EARS-16: existing identifier — respond identically, create nothing.
     if (!created.alreadyExisted) {

@@ -28,7 +28,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Password reset (e2e)", () => {
   let app: NestFastifyApplication;
   let pool: pg.Pool;
   const consent = [{ purpose: "tos", version: "2026-01" }];
-  const password = "sufficiently-long-pw";
+  const password = "Aa1!ufficiently-long-pw";
   const device = { "user-agent": "Test/1.0", "accept-language": "en-US" };
   const createdEmails: string[] = [];
 
@@ -142,7 +142,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Password reset (e2e)", () => {
       headers: device,
       payload: { identifier: email },
     });
-    const newPassword = "brand-new-password-9";
+    const newPassword = "Brand-new-password-9!";
     const complete = await app.inject({
       method: "POST",
       url: "/v1/auth/password/reset/complete",
@@ -185,7 +185,9 @@ describe.skipIf(!process.env.DATABASE_URL)("Password reset (e2e)", () => {
       payload: {
         identifier: email,
         code: "000000",
-        newPassword: "another-pw-1",
+        // Policy-conforming (#147) so the DTO passes and the *bad code* is the
+        // rejection reason under test, not a password-complexity 400.
+        newPassword: "Another-pw-1!",
       },
     });
     expect(res.statusCode).toBe(400);

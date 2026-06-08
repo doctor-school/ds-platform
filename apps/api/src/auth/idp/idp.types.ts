@@ -12,6 +12,27 @@
  * (F2 session, F3 OTP login, F5 reset) extend the same port.
  */
 
+/**
+ * The IdP rejected the supplied password as too weak for its configured policy
+ * (#147). The {@link IdpClient.createUser} contract maps a duplicate identifier
+ * to `alreadyExisted` and treats every other failure as an opaque throw — but a
+ * password-policy rejection is special: it is the residual race where the BFF
+ * creation schema (which mirrors the deployed Zitadel default policy as a
+ * baseline) passed, yet the *live* Zitadel is configured stricter than that
+ * baseline and 400s inside `createUser`. The service catches THIS type and maps
+ * it to a generic, non-enumerating "weak password" client error (422) — never a
+ * 500, and identical regardless of whether the account exists (a duplicate is a
+ * 409 → `alreadyExisted`, so it never reaches this throw). Any OTHER non-2xx from
+ * `createUser` stays an opaque `Error` (a real server fault → 500), so this type
+ * is the only password-correlated signal that crosses the port.
+ */
+export class IdpPasswordPolicyError extends Error {
+  constructor(message = "password rejected by IdP policy") {
+    super(message);
+    this.name = "IdpPasswordPolicyError";
+  }
+}
+
 /** Input to create a Zitadel user with a single primary identifier. */
 export interface CreateUserInput {
   email?: string | undefined;

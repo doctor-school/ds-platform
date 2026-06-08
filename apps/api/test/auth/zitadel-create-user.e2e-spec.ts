@@ -25,11 +25,11 @@ import { ZitadelIdpClient } from "../../src/auth/idp/zitadel.idp.js";
 const LIVE_IDP = !!process.env.IDP_ISSUER && !!process.env.IDP_SERVICE_TOKEN;
 
 /**
- * Mints a password that satisfies BOTH the `@ds/schemas` shape guard
- * (`min(8)`) AND the live Zitadel default policy (≥1 upper-case). The schema is
- * deliberately weaker than the IdP policy (Zitadel owns the real policy,
- * `auth.schema.ts`), so a live fixture MUST carry the upper-case the schema
- * does not require.
+ * Mints a password that satisfies the `@ds/schemas` creation baseline
+ * (`NewPassword`: ≥8 + upper + lower + digit + symbol) — which since #147 mirrors
+ * the live Zitadel default complexity policy, so the same fixture clears both the
+ * BFF contract and the IdP. Zitadel remains the ultimate authority and may be
+ * configured stricter (`auth.schema.ts`).
  */
 function livePassword(): string {
   return `Int-${Date.now()}-aA1!`;

@@ -26,7 +26,7 @@ describe.skipIf(!process.env.DATABASE_URL)("BFF session (e2e)", () => {
   let app: NestFastifyApplication;
   let pool: pg.Pool;
   const consent = [{ purpose: "tos", version: "2026-01" }];
-  const password = "sufficiently-long-pw";
+  const password = "Aa1!ufficiently-long-pw";
   // A fixed device fingerprint surface — login and the matching session read
   // must present the same headers or the binding (correctly) rejects the read.
   const device = { "user-agent": "Test/1.0", "accept-language": "en-US" };

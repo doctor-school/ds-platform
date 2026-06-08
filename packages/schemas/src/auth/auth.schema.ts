@@ -14,12 +14,40 @@ import { z } from "zod";
 const E164 = /^\+[1-9]\d{6,14}$/;
 
 /**
- * Password shape guard only. Zitadel owns the real password policy (length,
- * complexity, breach checks) — the BFF never stores or hashes a password
- * (Constraints / design §2). This bound just rejects obviously-empty input
- * before the IdP call; Zitadel rejects anything its policy disallows.
+ * **Login** password guard — deliberately permissive (#147). A minimal shape
+ * guard (≥8, ≤256) with NO complexity rules: it must accept whatever a user
+ * stored, including legacy credentials that predate the current complexity
+ * policy, and let Zitadel be the sole authenticator (the IdP owns the credential,
+ * design §2). Applying the creation-time complexity here would lock those users
+ * out of their own valid accounts at the DTO layer, which is a regression, not a
+ * security gain. Zitadel still rejects a genuinely wrong password.
  */
-const Password = z.string().min(8).max(256);
+const LoginPassword = z.string().min(8).max(256);
+
+/**
+ * **Creation** password schema (#147) — registration and password-reset. It
+ * mirrors the deployed Zitadel default complexity policy as the BFF *baseline*
+ * (min 8 + at least one upper-case, one lower-case, one digit, and one symbol)
+ * so the contract is honest and the portal (#131) can pre-validate client-side
+ * before submit. This is a baseline, not a ceiling: Zitadel remains the ultimate
+ * credential authority (design §2, ADR-0001 §7) and may be configured stricter —
+ * the residual race (schema passes, a stricter live policy 400s inside Zitadel's
+ * `createUser`) is mapped to a generic, non-enumerating "weak password" failure
+ * in the auth service, never a 500 and never an existence oracle (EARS-16). The
+ * BFF still never stores or hashes a password (Constraints / design §2).
+ *
+ * Encoded as four positive look-aheads + the length bound; the message is generic
+ * (it names the requirement, not which class is missing) and identical for every
+ * violation so the field-level error discloses nothing account-specific.
+ */
+const NewPassword = z
+  .string()
+  .min(8)
+  .max(256)
+  .regex(
+    /^(?=.*\p{Ll})(?=.*\p{Lu})(?=.*\d)(?=.*[^\p{L}\d]).*$/u,
+    "password must include an upper-case letter, a lower-case letter, a digit, and a symbol",
+  );
 
 /**
  * One accepted per-purpose consent version (ADR-0009). Captured at registration
@@ -44,7 +72,7 @@ export const RegisterRequestSchema = z
   .object({
     email: z.email().optional(),
     phone: z.string().regex(E164).optional(),
-    password: Password,
+    password: NewPassword,
     consent: z.array(ConsentAcceptanceSchema),
     captchaToken: z.string().optional(),
   })
@@ -96,7 +124,9 @@ export type VerifyResponse = z.infer<typeof VerifyResponseSchema>;
  */
 export const LoginRequestSchema = z.object({
   identifier: z.string().min(1),
-  password: Password,
+  // Permissive guard (#147): no complexity — never lock out a legacy credential
+  // at the DTO layer; Zitadel authenticates it. See {@link LoginPassword}.
+  password: LoginPassword,
   captchaToken: z.string().optional(),
 });
 export type LoginRequest = z.infer<typeof LoginRequestSchema>;
@@ -225,12 +255,14 @@ export type PasswordResetResponse = z.infer<typeof PasswordResetResponseSchema>;
  * Password-reset completion (EARS-12). The user submits the identifier they
  * requested the reset for, the reset code Zitadel sent, and a policy-conforming
  * new password. The IdP owns the real password policy and the code verification
- * (design §2); `newPassword` carries the same shape guard as registration/login.
+ * (design §2); `newPassword` carries the same creation-time complexity baseline
+ * as registration (#147; {@link NewPassword}) so a reset cannot set a password
+ * weaker than the policy and the portal can pre-validate it.
  */
 export const PasswordResetCompleteRequestSchema = z.object({
   identifier: z.string().min(1),
   code: z.string().min(1),
-  newPassword: Password,
+  newPassword: NewPassword,
 });
 export type PasswordResetCompleteRequest = z.infer<
   typeof PasswordResetCompleteRequestSchema

@@ -34,7 +34,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     let pool: pg.Pool;
     let idp: FakeIdpClient;
     const consent = [{ purpose: "tos", version: "2026-01" }];
-    const password = "sufficiently-long-pw";
+    const password = "Aa1!ufficiently-long-pw";
     const createdEmails: string[] = [];
     const createdPhones: string[] = [];
 

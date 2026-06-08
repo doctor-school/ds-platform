@@ -32,7 +32,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
     const res = await app.inject({
       method: "POST",
       url: "/v1/auth/register",
-      payload: { password: "sufficiently-long-pw", consent, ...payload },
+      payload: { password: "Aa1!ufficiently-long-pw", consent, ...payload },
     });
     expect(res.statusCode).toBe(200);
   }

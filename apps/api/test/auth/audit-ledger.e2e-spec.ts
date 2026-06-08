@@ -31,7 +31,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth audit ledger (e2e)", () => {
   // across runs. Scope every assertion to rows this run appended.
   let since: string;
   const consent = [{ purpose: "tos", version: "2026-01" }];
-  const password = "sufficiently-long-pw";
+  const password = "Aa1!ufficiently-long-pw";
   const device = { "user-agent": "Test/1.0", "accept-language": "en-US" };
   const createdEmails: string[] = [];
 

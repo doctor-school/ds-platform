@@ -51,6 +51,16 @@ export const ApiEnvSchema = z.looseObject({
   // session store is used, so the F2 flows run without a live Redis — mirroring
   // the IdP fake/real split.
   REDIS_URL: z.url().optional(),
+
+  // Keyed HMAC pepper for ledger identifier masking (ADR-0001 §7, ADR-0003 §6).
+  // The `audit_ledger` records an `identifier_hash`, never raw PD; a bare digest
+  // over a low-entropy identifier space is a reproducible existence oracle (a
+  // rainbow table over a phone range), so the mask is HMAC-SHA256 keyed by this
+  // server-side secret. Optional at the schema level only so the dev-stand / test
+  // runtime boot without a configured secret; the audit writer fails closed when
+  // it is unset in a non-test runtime (a deterministic test pepper is used under
+  // VITEST so the e2e suite runs without provisioning one).
+  AUDIT_IDENTIFIER_PEPPER: z.string().optional(),
 });
 
 export type ApiEnv = z.infer<typeof ApiEnvSchema>;

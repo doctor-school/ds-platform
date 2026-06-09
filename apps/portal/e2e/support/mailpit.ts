@@ -28,13 +28,24 @@ function extractCode(msg: { Text?: string; HTML?: string }): string | null {
 /**
  * Poll Mailpit for the mail to `email` delivered AFTER `afterIso` and pull the
  * code. Polled (not a fixed sleep) because SMTP delivery is async after the BFF's
- * 2xx. The `afterIso` cutoff lets a caller skip an earlier mail (e.g. read the
- * login-OTP code, not the registration-verification code) by passing the wall
- * clock captured just before the triggering action.
+ * 2xx. The `afterIso` cutoff lets a caller skip an earlier mail by passing the
+ * wall clock captured just before the triggering action.
+ *
+ * `subject` disambiguates the TWO Zitadel mails a single address receives in the
+ * email-OTP journey, which Zitadel sends < 1 s apart so the time cutoff alone
+ * cannot separate them (proven live, #131): registration sends a `Verify email`
+ * mail (a 6-char alphanumeric code, e.g. `L3VMNK`) and the login-OTP request
+ * sends a `Verify OTP` mail (an 8-digit code, e.g. `47787462`). Because the
+ * registration mail can land INSIDE the OTP window, the OTP-login step must
+ * select by subject (`Verify OTP`), not by timestamp — otherwise it reads the
+ * stale registration code and login fails with a wrong-code. The default (no
+ * `subject`) preserves the timestamp-only behaviour the registration-verify
+ * callers rely on.
  */
 export async function fetchOtpCode(
   email: string,
   afterIso: string,
+  subject?: string,
 ): Promise<string | null> {
   const after = Date.parse(afterIso);
   for (let attempt = 0; attempt < 30; attempt++) {
@@ -43,10 +54,13 @@ export async function fetchOtpCode(
     );
     if (res.ok) {
       const data = (await res.json()) as {
-        messages?: Array<{ ID?: string; Created?: string }>;
+        messages?: Array<{ ID?: string; Created?: string; Subject?: string }>;
       };
       const hit = (data.messages ?? []).find(
-        (m) => m.Created && Date.parse(m.Created) >= after,
+        (m) =>
+          m.Created &&
+          Date.parse(m.Created) >= after &&
+          (!subject || m.Subject === subject),
       );
       if (hit?.ID) {
         const msgRes = await fetch(`${MAILPIT_BASE}/api/v1/message/${hit.ID}`);

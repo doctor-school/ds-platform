@@ -88,7 +88,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await page.waitForURL(/\/verify/);
 
     // ── Verify (EARS-3) — read the real code from Mailpit ────────────────
-    const verifyCode = await fetchOtpCode(email, sentAt);
+    const verifyCode = await fetchOtpCode(email, sentAt, "Verify email");
     expect(verifyCode, "registration code should reach Mailpit").toBeTruthy();
     await page.locator('input[autocomplete="one-time-code"]').fill(verifyCode!);
     await page.getByRole("button", { name: "Confirm" }).click();
@@ -134,7 +134,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await page.getByLabel("Password").fill(password);
     await page.getByRole("button", { name: "Create account" }).click();
     await page.waitForURL(/\/verify/);
-    const verifyCode = await fetchOtpCode(email, regAt);
+    const verifyCode = await fetchOtpCode(email, regAt, "Verify email");
     expect(verifyCode).toBeTruthy();
     await page.locator('input[autocomplete="one-time-code"]').fill(verifyCode!);
     await page.getByRole("button", { name: "Confirm" }).click();
@@ -148,7 +148,11 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await page.getByRole("button", { name: "Send code" }).click();
 
     // ── Read the login OTP from Mailpit + submit (EARS-6 step 2 / EARS-8) ─
-    const otpCode = await fetchOtpCode(email, otpSentAt);
+    // Select by the `Verify OTP` subject, NOT timestamp: Zitadel sends the
+    // registration `Verify email` mail and this login `Verify OTP` mail < 1 s
+    // apart, so the registration code can fall inside the OTP window and be read
+    // instead (login then fails on the wrong code) — #131 live.
+    const otpCode = await fetchOtpCode(email, otpSentAt, "Verify OTP");
     expect(otpCode, "login OTP should reach Mailpit").toBeTruthy();
     await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
     await page.getByRole("button", { name: "Verify & sign in" }).click();

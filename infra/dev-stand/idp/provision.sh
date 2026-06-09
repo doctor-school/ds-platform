@@ -261,3 +261,18 @@ else
   echo "# IDP_CLIENT_SECRET not re-emitted (app already existed); rotate via:" >&2
   echo "#   POST /management/v1/projects/${PROJECT_ID}/apps/${EXISTING_APP:-<appId>}/oidc_config/_generate_client_secret" >&2
 fi
+
+# Echo the redirect URIs actually registered on the app so IDP_REDIRECT_URI is
+# discoverable on every (re)provision — the BFF must echo a byte-matching value at
+# the token exchange or Zitadel's authorize returns 400 (#159). The api/portal run
+# on the dev machine, so these are localhost callbacks regardless of where Zitadel
+# itself runs (the IDP_ISSUER HOST). The api BFF callback (:3000) is the canonical
+# IDP_REDIRECT_URI; the portal (:3100) uses its own.
+echo "# registered redirect URIs (set IDP_REDIRECT_URI to the api BFF :3000 callback):" >&2
+echo "$REDIRECT_JSON" | jq -r '.[]' | while IFS= read -r _uri; do
+  echo "#   ${_uri}" >&2
+done
+echo "# IDP_REDIRECT_URI=$(echo "$REDIRECT_JSON" | jq -r '.[0]')" >&2
+echo "# NOTE: a full @ds/api boot also needs AUDIT_IDENTIFIER_PEPPER in .env.local" >&2
+echo "#   (fail-closed #141 gate; NOT a Zitadel artifact). Generate once + keep" >&2
+echo "#   stable: openssl rand -hex 32. See .env.example / idp/bootstrap.md §4." >&2

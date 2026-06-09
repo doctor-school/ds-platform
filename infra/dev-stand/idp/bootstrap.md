@@ -16,8 +16,18 @@ substitute your own `HOST`/ports; the values shown are the reference recipe's.
 > byte-identical or every OIDC client rejects the issuer. The reference recipe
 > uses `truenas.local` (mDNS resolves from Windows to `192.168.1.115`); fall back
 > to the static IP only if mDNS fails. Use the SAME value for
-> `IDP_EXTERNAL_DOMAIN`, `IDP_ISSUER` (bare origin, **no path**), and the
-> provisioner's redirect URIs.
+> `IDP_EXTERNAL_DOMAIN` and `IDP_ISSUER` (bare origin, **no path**).
+>
+> **Redirect URI is NOT the HOST.** `IDP_REDIRECT_URI` (and the URIs
+> `provision.sh` registers) point at the **api/portal callback**, and those
+> processes run on your **dev machine**, not on the Zitadel host. So the redirect
+> URI is `http://localhost:3000/auth/callback` (api BFF) / `:3100/auth/callback`
+> (portal) regardless of where Zitadel runs — even on the TrueNAS recipe, where
+> `IDP_ISSUER` is `truenas.local` but the api still binds locally. The value in
+> `IDP_REDIRECT_URI` must byte-match a redirect URI registered on the OIDC app
+> (`provision.sh` step 3); a `truenas.local` redirect URI is **not** registered
+> and Zitadel's `/oauth/v2/authorize` returns `400 invalid_request` ("redirect_uri
+> is missing in the client configuration"), failing every login (#159).
 
 ---
 
@@ -149,7 +159,11 @@ ssh truenas 'cd ~/ds-platform-dev-stand/idp && \
 It prints `IDP_PROJECT_ID`, `IDP_CLIENT_ID`, and — **only on first creation** —
 `IDP_CLIENT_SECRET`, each already prefixed with its `.env.local` key so the lines
 append straight in. Capture them. (Re-runs do not re-emit the secret; rotate it
-with the `_generate_client_secret` call the script prints if you lose it.)
+with the `_generate_client_secret` call the script prints if you lose it.) On every
+run it also echoes (to stderr) the **redirect URIs it registered** and the
+`IDP_REDIRECT_URI=` line to copy (the api BFF `:3000` callback), plus a reminder
+that a full api boot additionally needs `AUDIT_IDENTIFIER_PEPPER` — so both #159
+values are discoverable on each (re)provision.
 
 Override defaults via env / flags: `IDP_REDIRECT_URIS`, `IDP_POST_LOGOUT_URIS`,
 `IDP_SEED_ROLE`, `IDP_SMTP_HOST` (default `mailpit:1025`), `IDP_SMTP_SENDER_ADDRESS`,
@@ -175,11 +189,25 @@ IDP_PROJECT_ID=<from provision.sh>            # the IDP_PROJECT_ID= line the scr
                                               # the authz source the guard reads; absent
                                               # it grantProjectRole fails closed and a
                                               # registered user 403s on protected routes.
-IDP_REDIRECT_URI=http://truenas.local:3000/auth/callback  # must match a redirect
-                                              # URI provision.sh registers
+IDP_REDIRECT_URI=http://localhost:3000/auth/callback  # api BFF callback — runs
+                                              # on the dev machine, so it is
+                                              # localhost even on the truenas.local
+                                              # recipe. MUST byte-match a redirect
+                                              # URI provision.sh registers (it
+                                              # echoes them on completion); a
+                                              # truenas.local value is not
+                                              # registered -> authorize 400 (#159).
 IDP_SERVICE_TOKEN=<the ds-bootstrap PAT>      # the api binds the real adapter on
                                               # IDP_ISSUER + IDP_SERVICE_TOKEN
 ```
+
+> **`AUDIT_IDENTIFIER_PEPPER` (separate from the OIDC wiring).** A full `@ds/api`
+> boot also needs `AUDIT_IDENTIFIER_PEPPER` in `.env.local` — the #141 audit-ledger
+> HMAC gate is fail-closed, so an unset pepper makes `DrizzleAuthAuditLog` DI throw
+> and `node dist/main.js` never finishes boot (surfaced live by #158). It is **not**
+> a Zitadel artifact (`provision.sh` does not emit it). Generate one high-entropy
+> value once and keep it stable across dev restarts — see the `.env.example`
+> comment. Mint with `openssl rand -hex 32`.
 
 > The api's `IdpModule` selects the real `ZitadelIdpClient` when **both**
 > `IDP_ISSUER` and `IDP_SERVICE_TOKEN` are set; otherwise it falls back to the

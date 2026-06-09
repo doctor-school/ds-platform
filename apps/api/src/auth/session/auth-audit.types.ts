@@ -61,7 +61,13 @@ export type AuthAuditEvent =
   | { type: "PasswordResetCompleted"; sub: string }
   // EARS-15 native-lockout observation. Subject-level; the BFF records it when
   // the IdP reports the account soft-locked (the counter itself is Zitadel's).
-  | { type: "AccountLocked"; sub: string };
+  | { type: "AccountLocked"; sub: string }
+  // EARS-3 (email) / EARS-4 (phone) verification success: the identifier reached
+  // verified state (the account is activated). One unified event carrying the
+  // opaque subject + the verified `channel` — mirroring `Registered`'s shape (a
+  // single channel-discriminated row, not split Email/Phone variants), per the
+  // §7.3 single-event-per-outcome convention. No raw PD: keyed by `sub` only.
+  | { type: "IdentifierVerified"; sub: string; channel: AuthChannel };
 
 /**
  * The runtime-enumerable taxonomy of event `type` discriminants — the same set
@@ -82,6 +88,7 @@ export const AUTH_AUDIT_EVENT_TYPES = [
   "PasswordResetRequested",
   "PasswordResetCompleted",
   "AccountLocked",
+  "IdentifierVerified",
 ] as const satisfies readonly AuthAuditEvent["type"][];
 
 export type AuthAuditEventType = (typeof AUTH_AUDIT_EVENT_TYPES)[number];

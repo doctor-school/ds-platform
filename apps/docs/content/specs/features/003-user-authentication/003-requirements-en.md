@@ -120,8 +120,8 @@ The auth vertical is the platform's first real aggregate cluster (unlike the que
 
 - **EARS-1:** When a visitor submits the registration form with a valid email and a policy-conforming password, the system shall create a Zitadel user, record the accepted per-purpose consent versions (ADR-0009), upsert a `doctor_guest` `UserMirror` row, trigger an email verification code, and respond without disclosing whether the email pre-existed (enumeration-resistant, EARS-16).
 - **EARS-2:** When a visitor submits the registration form with a valid phone and a policy-conforming password, the system shall create a Zitadel user, record consent, upsert a `doctor_guest` `UserMirror` row, trigger an SMS verification code, and respond enumeration-resistantly.
-- **EARS-3:** When a registrant submits the email verification code, the system shall verify it via Zitadel `otp_email`, mark `email_verified` on the mirror, and emit `EmailVerified` to `audit_ledger`; an invalid/expired code shall return a generic failure and count against the OTP attempt limit.
-- **EARS-4:** When a registrant submits the SMS verification code, the system shall verify it via Zitadel `otp_sms`, mark `phone_verified`, and emit `PhoneVerified`; invalid/expired codes behave as in EARS-3.
+- **EARS-3:** When a registrant submits the email verification code, the system shall verify it via Zitadel `otp_email`, mark `email_verified` on the mirror, and emit one terminal `auth.account.verified` (channel `email`) row to `audit_ledger`; an invalid/expired code shall return a generic failure, emit no terminal row, and count against the OTP attempt limit.
+- **EARS-4:** When a registrant submits the SMS verification code, the system shall verify it via Zitadel `otp_sms`, mark `phone_verified`, and emit one terminal `auth.account.verified` (channel `sms`) row; invalid/expired codes behave as in EARS-3.
 
 **Login**
 
@@ -147,7 +147,7 @@ The auth vertical is the platform's first real aggregate cluster (unlike the que
 - **EARS-15:** When a user reaches 10 failed password attempts within 30 min, the system shall soft-lock the account (native Zitadel lockout policy) and send a notification email; the account unlocks per policy.
 - **EARS-16:** The system shall return idempotent, enumeration-resistant responses on register / login / reset with a timing delta ≤ 50 ms between the existing-account and unknown-account paths (ADR-0001 §7).
 - **EARS-17:** When a request originates from an unauthenticated abuse-prone surface (registration, password reset, or login after N failures), the system shall require a valid bot-protection token — verified through the `BotProtection` provider interface (Yandex SmartCaptcha is the v1 adapter) — before processing.
-- **EARS-18:** The system shall append every auth event — `auth.{register, login.succeeded, login.failed, logout, token.refresh, token.reuse_detected, password.reset.requested, password.reset.completed, otp.sent, otp.verified, otp.failed, lockout, consent.captured}` — to `audit_ledger` (ADR-0003 §6) with PD masked.
+- **EARS-18:** The system shall append every auth event — `auth.{register, account.verified, login.succeeded, login.failed, logout, token.refresh, token.reuse_detected, password.reset.requested, password.reset.completed, otp.sent, otp.verified, otp.failed, lockout, consent.captured}` — to `audit_ledger` (ADR-0003 §6) with PD masked.
 - **EARS-19:** When Zitadel emits a user create/update Action webhook, the system shall upsert the corresponding `UserMirror` row, ensure the `doctor_guest` role grant, and reconcile divergence on a periodic sweep (eventual consistency, ADR-0001 Consequences).
 - **EARS-20:** When a registration is processed, the system shall record the registrant's accepted per-purpose consent versions (ADR-0009) and shall refuse to activate the PD-bearing mirror row if consent is absent.
 

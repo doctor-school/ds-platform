@@ -181,6 +181,7 @@ Resolves ADR-0001 §10's "full list of auth audit events — identity-auth-rbac-
 | Class               | Events (wire id `<class>.<event>`)            | Key fields                                                               |
 | ------------------- | --------------------------------------------- | ------------------------------------------------------------------------ |
 | `auth.login`        | `success`, `failure`                          | user_id / identifier_hash, method, reason, ip, user_agent, geo, ts       |
+| `auth.account`      | `verified`                                    | user_id, channel (email/sms), ts                                         |
 | `auth.mfa`          | `enrolled`, `used`, `failure`, `reset`        | user_id, method (totp/sms), reason, by_admin, ts                         |
 | `auth.password`     | `changed`, `reset_requested`                  | user_id (or null), identifier_hash, by_self/by_admin, ip, ts             |
 | `auth.magic_link`   | `sent`, `used`                                | user_id, channel, ts                                                     |

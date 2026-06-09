@@ -460,6 +460,19 @@ export class AuthService {
     if (req.email) await this.mirror.markEmailVerified(row.zitadelSub);
     else await this.mirror.markPhoneVerified(row.zitadelSub);
 
+    // EARS-18: one terminal `auth.account.verified` row for this state-changing
+    // command (the mirror flag just flipped — the account is activated). Keyed
+    // by the opaque subject; the writer carries no raw PD. A FAILED verify (no
+    // mirror row, or a bad/expired code) changes no state and completes no
+    // command, so it emits nothing — consistent with the generic-failure /
+    // EARS-16 enumeration-safe path above and EARS-18's "per state-changing
+    // command" invariant.
+    await this.audit.record({
+      type: "IdentifierVerified",
+      sub: row.zitadelSub,
+      channel: req.email ? "email" : "sms",
+    });
+
     return { status: "verified" };
   }
 

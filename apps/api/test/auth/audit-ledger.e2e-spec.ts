@@ -16,6 +16,7 @@ import {
 import {
   FakeIdpClient,
   FAKE_LOCKOUT_THRESHOLD,
+  FAKE_VALID_CODE,
 } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 
@@ -117,6 +118,50 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth audit ledger (e2e)", () => {
     });
     // PD masking: the raw email appears nowhere in the row.
     expect(JSON.stringify(registerRows[0])).not.toContain(email);
+  });
+
+  it("EARS-18: when an email verification succeeds, the system shall append exactly one auth.account.verified row carrying the subject (channel email), with no raw identifier", async () => {
+    const email = uniqueEmail("verify");
+    await register(email);
+    const sub = await subjectForEmail(email);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/auth/verify",
+      payload: { email, code: FAKE_VALID_CODE },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const ledger = await rowsFor("subject_id = $1", sub);
+    const verified = ledger.filter(
+      (r) => r.event_type === "auth.account.verified",
+    );
+    // Exactly one terminal row for the state-changing command.
+    expect(verified).toHaveLength(1);
+    expect(verified[0]?.metadata).toMatchObject({ channel: "email" });
+    expect(verified[0]?.subject_id).toBe(sub);
+    // PD masking: the raw email appears nowhere in the row.
+    expect(JSON.stringify(verified[0])).not.toContain(email);
+  });
+
+  it("EARS-18: when a verify fails (wrong code), the system shall append no auth.account.verified row", async () => {
+    const email = uniqueEmail("verifybad");
+    await register(email);
+    const sub = await subjectForEmail(email);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/auth/verify",
+      payload: { email, code: "000000" },
+    });
+    expect(res.statusCode).toBe(400);
+
+    const ledger = await rowsFor("subject_id = $1", sub);
+    const verified = ledger.filter(
+      (r) => r.event_type === "auth.account.verified",
+    );
+    // A failed verify changes no state and completes no command — no row owed.
+    expect(verified).toHaveLength(0);
   });
 
   it("EARS-18: when a login succeeds, the system shall append auth.login.success with the method", async () => {

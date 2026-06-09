@@ -23,7 +23,7 @@
 # Outputs (stdout, machine-parseable):
 #   IDP_CLIENT_ID=<oidc client id>
 #   IDP_CLIENT_SECRET=<oidc client secret>   # printed ONCE on creation only
-#   PROJECT_ID=<project id>
+#   IDP_PROJECT_ID=<project id>
 set -euo pipefail
 
 # ── args / env ───────────────────────────────────────────────────────────────
@@ -253,7 +253,7 @@ else
 fi
 
 # ── output (machine-parseable; secret only when freshly created) ─────────────
-echo "PROJECT_ID=${PROJECT_ID}"
+echo "IDP_PROJECT_ID=${PROJECT_ID}"
 echo "IDP_CLIENT_ID=${CLIENT_ID}"
 if [[ -n "$CLIENT_SECRET" ]]; then
   echo "IDP_CLIENT_SECRET=${CLIENT_SECRET}"

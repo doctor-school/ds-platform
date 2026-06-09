@@ -4,7 +4,7 @@ import {
   METHOD_METADATA,
   PATH_METADATA,
   VERSION_METADATA,
-} from "@nestjs/common/constants";
+} from "@nestjs/common/constants.js";
 import { DiscoveryService, MetadataScanner, Reflector } from "@nestjs/core";
 import {
   assembleEndpoint,

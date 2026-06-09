@@ -106,6 +106,27 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
+  # apps/api build smoke (#158). The plain `build` job above runs a single COLD
+  # `pnpm build`, so it cannot catch either Issue-#158 defect: (1) a stale
+  # external tsbuildinfo surviving `deleteOutDir` makes a WARM `nest build` emit
+  # an empty `dist/`, and (2) an extensionless `@nestjs/common/constants` subpath
+  # is unresolvable for built ESM on Node (only tsx/Vitest/webpack tolerate it).
+  # This guard builds twice + does a real Node `import()` of the built module.
+  # Infra-free: both defects fail before any DB/Redis/Zitadel I/O — no services.
+  api-build-smoke:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # The built AppModule imports the workspace packages @ds/db + @ds/schemas
+      # by their built `dist/` (their package `exports`), so build deps first.
+      - run: pnpm exec turbo run build --filter=@ds/api^...
+      - run: pnpm --filter @ds/api build:smoke
+
   docs-build:
     needs: setup
     runs-on: ubuntu-latest
@@ -314,6 +335,7 @@ jobs:
         unit,
         api-e2e,
         build,
+        api-build-smoke,
         docs-build,
         markdown-links,
         spec-link,

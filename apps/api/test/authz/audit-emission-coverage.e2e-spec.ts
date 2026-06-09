@@ -104,13 +104,10 @@ const HIGH_STAKES_AUDIT_COVERAGE: Record<string, Coverage> = {
       "password-reset.e2e (EARS-12); completion records auth.password.changed (reset)",
   },
   "POST /v1/auth/verify": {
-    deferred: {
-      reason:
-        "EARS-3/4 verify flips the mirror verified flag but emits no terminal " +
-        "row — there is no auth.*.verified event in the taxonomy yet. Tracked: " +
-        "either add the event or downgrade the audit class.",
-      issue: 164,
-    },
+    // #164: EARS-3/4 verify now emits its terminal row at the command site.
+    emits: ["IdentifierVerified"],
+    coveredBy:
+      "audit-ledger.e2e: EARS-18 email verification appends one auth.account.verified row",
   },
 };
 

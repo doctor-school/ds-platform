@@ -141,6 +141,20 @@ export function toLedgerRow(
         reason: "lock",
         metadata: {},
       };
+    case "IdentifierVerified":
+      // EARS-3/4 verification success — the account's identifier reached the
+      // verified state. Canonical wire id `auth.account.verified` (ADR-0001
+      // §7.3): the `auth.account` class is the account-lifecycle namespace, and
+      // `verified` is the activation outcome (not an OTP *send* — that is the
+      // separate `auth.otp.sent`). Keyed by the opaque subject; the verified
+      // channel rides in the metadata. No raw PD.
+      return {
+        eventType: "auth.account.verified",
+        subjectId: event.sub,
+        sid: null,
+        reason: null,
+        metadata: { channel: event.channel },
+      };
   }
 }
 

@@ -343,6 +343,7 @@ Reviewer note: "JWT 15min + introspection — internally contradictory". Accepte
 | ------------------------------------ | --------------------------------------------------------------------------------------- |
 | `auth.login.success`                 | user_id, method (password/magic-link/SMS-OTP/social/biometric), ip, user_agent, geo, ts |
 | `auth.login.failure`                 | identifier_hash, reason (wrong_password, no_user, lock, captcha_failed), ip, ts         |
+| `auth.account.verified`              | user_id, channel (email/sms), ts                                                        |
 | `auth.mfa.enrolled`                  | user_id, method (totp/sms), ts                                                          |
 | `auth.mfa.used`                      | user_id, method, ts                                                                     |
 | `auth.mfa.failure`                   | user_id, method, reason, ts                                                             |

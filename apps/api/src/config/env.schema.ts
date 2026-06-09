@@ -40,6 +40,13 @@ export const ApiEnvSchema = z.looseObject({
   // Space-separated OIDC scopes; the project-roles claim needs its scope, so the
   // adapter's default includes `urn:zitadel:iam:org:project:roles` when unset.
   IDP_SCOPES: z.string().optional(),
+  // #157: the Zitadel project that owns the `doctor_guest` role — the `PROJECT_ID`
+  // emitted by `infra/dev-stand/idp/provision.sh`. Required to grant the project
+  // role per user on register / webhook / reconcile (the OIDC token's project-roles
+  // claim, asserted only for granted roles, is the authz source the guard reads;
+  // the `users.role` mirror is a downstream projection). Absent ⇒ `grantProjectRole`
+  // fails closed, like the other OIDC-config-gated adapter paths.
+  IDP_PROJECT_ID: z.string().optional(),
   // Shared secret authenticating the Zitadel Action webhook (EARS-19). The
   // webhook fails closed when this is unset — an unauthenticated mirror-write
   // surface is never opened by default.

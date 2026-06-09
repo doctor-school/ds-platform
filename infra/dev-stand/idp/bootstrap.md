@@ -165,6 +165,14 @@ IDP_EXTERNAL_DOMAIN=truenas.local
 IDP_PORT=9080
 IDP_CLIENT_ID=<from provision.sh>             # the numeric Zitadel client id
 IDP_CLIENT_SECRET=<from provision.sh>
+IDP_PROJECT_ID=<from provision.sh>            # PROJECT_ID the script emits; the
+                                              # project owning the doctor_guest role.
+                                              # Required to grant the project role per
+                                              # user on register/webhook/reconcile (#157)
+                                              # — the OIDC token's project-roles claim is
+                                              # the authz source the guard reads; absent
+                                              # it grantProjectRole fails closed and a
+                                              # registered user 403s on protected routes.
 IDP_REDIRECT_URI=http://truenas.local:3000/auth/callback  # must match a redirect
                                               # URI provision.sh registers
 IDP_SERVICE_TOKEN=<the ds-bootstrap PAT>      # the api binds the real adapter on

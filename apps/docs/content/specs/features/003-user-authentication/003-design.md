@@ -116,6 +116,8 @@ sequenceDiagram
 
 The Action webhook is the authoritative sync trigger; the inline upsert is an optimization so the mirror exists immediately. The periodic reconciliation sweep (EARS-19) closes any webhook-miss divergence.
 
+**`doctor_guest` RBAC grant — Zitadel project-role authorization (#157).** The "RBAC role grant" (§3, §5) is performed as a **Zitadel project-role grant**: on register the BFF authorizes the new user for the `doctor_guest` project role via `POST /management/v1/users/{sub}/grants` (`{ projectId, roleKeys:["doctor_guest"] }`), and re-grants it idempotently on the EARS-19 Action webhook and on the reconciliation sweep. The OIDC token's `urn:zitadel:iam:org:project:roles` claim — which Zitadel asserts **only for granted roles** — is the authz source of truth the `AuthzGuard` reads (ADR-0001: Zitadel is the identity/authz authority). The `users.role` column written into the mirror is a **downstream projection**, not the authz authority: it must never be read for authorization. Without the grant a registered+verified user's token carries an empty roles claim and the guard denies with 403. The project that owns the role is configured via `IDP_PROJECT_ID` (the `PROJECT_ID` emitted by `infra/dev-stand/idp/provision.sh`); absent it the grant fails closed, consistent with the other OIDC-config-gated adapter paths.
+
 ## 5. Data model (mirror + consent + audit)
 
 ```mermaid

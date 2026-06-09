@@ -8,10 +8,11 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
+    "build:smoke": "node scripts/build-smoke.mjs",
     "start": "node dist/main.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist .tsbuildinfo",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "drizzle:generate": "drizzle-kit generate --config ../../packages/db/drizzle.config.ts",
     "drizzle:migrate": "pnpm -w run dev:snapshot pre-mig-auto && drizzle-kit migrate --config ../../packages/db/drizzle.config.ts",
     "drizzle:migrate:ci": "drizzle-kit migrate --config ../../packages/db/drizzle.config.ts"

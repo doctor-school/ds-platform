@@ -7,9 +7,15 @@
     "target": "ES2022",
     "outDir": "./dist",
     "rootDir": "./src",
-    "composite": true,
-    "declaration": true,
-    "declarationMap": true,
+    // Leaf app: no tsconfig `references` anywhere in the repo point at @ds/api,
+    // so `composite` buys nothing and only creates the stale-buildinfo trap
+    // below. Override the base's `incremental: true` so tsc writes NO buildinfo
+    // file at all. With `deleteOutDir: true` (nest-cli.json) every build is a
+    // full clean emit anyway; an external (outside-`dist/`) buildinfo would
+    // survive `deleteOutDir`, go stale, and make a warm build emit nothing —
+    // leaving `dist/` empty and `node dist/main.js` unrunnable (Issue #158).
+    "incremental": false,
+    // Leaf app emits no consumed types, so skip declaration output.
     "sourceMap": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true

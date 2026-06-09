@@ -37,9 +37,11 @@ export type AuthzAccess = "public" | "authenticated";
 export type AuthzCheck = "none" | "fast-path" | "policy";
 
 /**
- * Audit requirement (spec §3). `high-stakes` ⇒ an `auth_audit` ledger entry is
- * mandatory (the ledger lands with the 003 audit subsystem; this field records
- * the intent the interceptor will enforce — see authz/README.md seam).
+ * Audit requirement (spec §3). `high-stakes` ⇒ a terminal `auth_audit` ledger
+ * entry is mandatory. For auth/security routes that entry is emitted explicitly
+ * at the command site (the `AuthAuditLog` port), by design (#135); a CI guard
+ * enforces emission completeness over the `high-stakes` route set — see
+ * authz/README.md.
  */
 export type AuthzAudit = "none" | "low-stakes" | "high-stakes";
 

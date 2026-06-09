@@ -8,10 +8,14 @@ import { AUTHZ_KEY, IS_PUBLIC_KEY, type AuthzMeta } from "./authz.types.js";
  * `AuthzGuard`, the completeness gate, and the matrix generator all read the
  * SAME metadata, so there is no second source to drift.
  *
- * SEAM — audit: ADR-0002 §4.8 shows `@Authz` also composing `UseInterceptors(
- * AuditInterceptor)`. The audit subsystem (`auth_audit`) lands with 003; the
- * `audit` field already records the intent, and the interceptor is wired in here
- * when that subsystem exists. See authz/README.md.
+ * Audit: the `audit` class records that a route owes a terminal audit row. For
+ * auth/security events that row is emitted **explicitly** at the command site
+ * (the `AuthAuditLog` port; `auth/session/auth-audit.*`), by design — their
+ * subjects/reasons are heterogeneous and a generic per-route interceptor cannot
+ * build them uniformly (#135, resolving #90). An `@Authz({ audit })`-driven
+ * interceptor (ADR-0002 §4.8) applies only to uniform-subject resource routes.
+ * Emission completeness for `high-stakes` routes is enforced by a CI guard, not
+ * composed here. See authz/README.md.
  */
 export function Authz(meta: AuthzMeta): MethodDecorator & ClassDecorator {
   return applyDecorators(SetMetadata(AUTHZ_KEY, meta));

@@ -118,7 +118,7 @@ ADR-0001 §2.5 is the normative **stub**: it carries a condensed row and forward
 
 ## 4. The `@Authz` decorator (Layer 1)
 
-`@Authz()` is a **single composite decorator** built with NestJS `applyDecorators()`. It is the only authoring surface; it desugars into the enforcement primitives ADR-0002 already defines, so the runtime mechanism (`RbacModule` guards + `IPolicyEngine` + `AuditInterceptor`) is unchanged.
+`@Authz()` is a **single composite decorator** built with NestJS `applyDecorators()`. It is the only authoring surface; it desugars into the enforcement primitives ADR-0002 already defines, so the runtime mechanism (`RbacModule` guards + `IPolicyEngine`) is unchanged. The `audit` class records that a route owes a terminal `auth_audit` row; **how** that row is emitted depends on the route kind (see the `audit` note below).
 
 ```ts
 // illustrative shape — exact implementation is E3 (#83)
@@ -137,8 +137,10 @@ export const AUTHZ_KEY = "ds:authz";
 export function Authz(meta: AuthzMeta): MethodDecorator & ClassDecorator {
   return applyDecorators(
     SetMetadata(AUTHZ_KEY, meta), // read by AuthzGuard, the gate, the generator
-    UseInterceptors(AuditInterceptor), // ADR-0002 §4.8 audit primitive
-    // OpenAPI x-authz extension is emitted by the generator from the same meta
+    // OpenAPI x-authz extension is emitted by the generator from the same meta.
+    // No audit interceptor is composed here: auth/security events are emitted
+    // explicitly at the command site (ADR-0002 §4.8); a `@Authz({ audit })`-
+    // driven interceptor applies only to uniform-subject resource routes.
   );
 }
 ```
@@ -171,7 +173,8 @@ export class AuthController {
 
 - **`@Public()`** marks unauthenticated entry points. The global `AuthzGuard` skips authentication for them, but a `@Public()` handler **still must carry `@Authz({ access: "public", … })`** so it appears in the matrix with its audit classification and test coverage. `@Public()` without `@Authz` is a gate failure.
 - **Global `AuthzGuard` (`APP_GUARD`)** reads `AUTHZ_KEY` and enforces: authenticate (unless `@Public`), check `required_roles`, and for `check: "policy"` delegate to `IPolicyEngine`. A handler with **no** `AUTHZ_KEY` metadata is **denied** (fail-closed) — the runtime mirror of the Layer-2 gate.
-- **Relationship to ADR-0002 §4.8.** `@Authz` is the single authoring surface; it consolidates the underlying primitives (the role/permission metadata, the guard, and `AuditInterceptor`) into one annotation — one source of truth, mechanically equivalent. ADR-0002 §4.8 shows `@Authz` in this form, desugaring into those RbacModule primitives.
+- **`audit` emission.** The `audit` class records that a route owes a terminal `auth_audit` row, not how it is written. **Auth & security events emit explicitly at the command site** (the `AuthAuditLog` port; `auth/session/auth-audit.*`) — their subjects/reasons are heterogeneous (`login.failure` has no subject and a masked identifier; `lockout` fires once on the tripping transition; `otp.sent` has no subject yet), so a generic per-route interceptor cannot build them uniformly. A `@Authz({ audit })`-driven interceptor applies only to **uniform-subject resource routes**, where the terminal access row is the resolved request subject. Emission completeness over the `audit: high-stakes` set is enforced by a CI guard (`apps/api/test/authz/audit-emission-coverage.e2e-spec.ts`), not by the decorator.
+- **Relationship to ADR-0002 §4.8.** `@Authz` is the single authoring surface; it consolidates the underlying primitives (the role/permission metadata and the guard) into one annotation — one source of truth, mechanically equivalent. ADR-0002 §4.8 shows `@Authz` in this form, desugaring into those RbacModule primitives.
 
 ---
 

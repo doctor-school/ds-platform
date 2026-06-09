@@ -128,7 +128,11 @@ export class AuthService {
     // fires exactly once, on the attempt that tripped it. Both stay enumeration-safe
     // — the controller still answers the same generic 401 (`null`) as a rejection.
     if (result.outcome === "locked") {
-      await this.audit.record({ type: "LoginFailed", identifier, reason: "lock" });
+      await this.audit.record({
+        type: "LoginFailed",
+        identifier,
+        reason: "lock",
+      });
       if (result.justLocked) {
         await this.audit.record({ type: "AccountLocked", sub: result.sub });
       }
@@ -258,7 +262,9 @@ export class AuthService {
    * equalization across the existing/unknown paths (EARS-16's ≤50 ms budget) is
    * the cross-cutting concern owned by F6 (#90).
    */
-  async requestPasswordReset(identifier: string): Promise<PasswordResetResponse> {
+  async requestPasswordReset(
+    identifier: string,
+  ): Promise<PasswordResetResponse> {
     await this.idp.requestPasswordReset(identifier);
     // EARS-18: `auth.password.reset_requested` (identifier masked; no subject —
     // resolving one would itself be an existence oracle, EARS-16).
@@ -293,8 +299,23 @@ export class AuthService {
    * EARS-1 (email) / EARS-2 (phone). Consent-gated (EARS-20) and
    * enumeration-resistant (EARS-16): an already-registered identifier produces
    * the identical response with no duplicate account and no consent row.
+   *
+   * EARS-14: the phone branch's SMS verification send passes the same toll-fraud
+   * budget as the login SMS send. `ctx` carries the request-coupled SMS-budget
+   * dimensions (the controller is the only layer with the IP and the edge-supplied
+   * ASN), mirroring `requestLoginOtp`. Unlike login — which throws a 429 because no
+   * account exists yet — the account, mirror, and consent rows are ALREADY
+   * committed when the send is attempted, so a budget refusal here is **silent**:
+   * skip the send, do not throw, still return `pending_verification`. The terminal
+   * `Registered` audit row (EARS-18) is still owed and still emitted; the
+   * `SmsBudgetService` counters are the toll-fraud accounting authority, so no
+   * second/refusal audit event is added (one terminal event per command). The user
+   * re-triggers the code via the existing resend path.
    */
-  async register(req: RegisterRequest): Promise<RegisterResponse> {
+  async register(
+    req: RegisterRequest,
+    ctx: { ip: string; asn?: string | undefined },
+  ): Promise<RegisterResponse> {
     // EARS-20: refuse before any IdP side-effect or PD row exists.
     if (req.consent.length === 0) {
       throw new BadRequestException(GENERIC_FAILURE);
@@ -385,9 +406,24 @@ export class AuthService {
       // path still returns the identical always-`pending_verification` response.
       await this.idp.grantProjectRole(created.sub, DOCTOR_GUEST_ROLE);
 
-      // Trigger the Zitadel verification code for the registered channel.
-      if (req.email) await this.idp.requestEmailVerification(created.sub);
-      else await this.idp.requestPhoneVerification(created.sub);
+      // Trigger the Zitadel verification code for the registered channel. The
+      // email branch is unmetered (no SMS). The phone branch is gated by the
+      // EARS-14 toll-fraud budget: a refused send is SILENT — the account is
+      // already committed above, so we skip the send (no SMS reaches the
+      // provider, none costs money) and fall through to the terminal audit row
+      // and `pending_verification` response, unlike login which throws a 429.
+      // The user re-triggers via the existing resend path.
+      if (req.email) {
+        await this.idp.requestEmailVerification(created.sub);
+      } else if (
+        this.smsBudget.tryConsume({
+          phone: req.phone as string,
+          ip: ctx.ip,
+          asn: ctx.asn,
+        })
+      ) {
+        await this.idp.requestPhoneVerification(created.sub);
+      }
 
       // EARS-18: one terminal `auth.register` row for the created account. The
       // accepted consent versions (EARS-20, not PD) ride in the metadata rather

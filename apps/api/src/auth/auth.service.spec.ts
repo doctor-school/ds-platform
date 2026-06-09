@@ -4,6 +4,9 @@ import { AuthService } from "./auth.service.js";
 import { FakeIdpClient } from "./idp/idp.fake.js";
 import { IdpPasswordPolicyError, type IdpClient } from "./idp/idp.types.js";
 import type { RegisterRequest } from "@ds/schemas";
+import { InMemoryAuthAuditLog } from "./session/auth-audit.fake.js";
+import { SmsBudgetService } from "./sms-budget/sms-budget.service.js";
+import { DEFAULT_SMS_BUDGET_THRESHOLDS } from "./sms-budget/sms-budget.types.js";
 
 // #147 residual handling (no DB). The creation schema (@ds/schemas NewPassword)
 // already rejects baseline-violating passwords at the DTO layer, uniformly and
@@ -59,7 +62,9 @@ describe("AuthService.register — residual password-policy rejection (#147)", (
       consent,
     };
 
-    const err = await service.register(req).catch((e: unknown) => e);
+    const err = await service
+      .register(req, { ip: "203.0.113.1" })
+      .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(UnprocessableEntityException);
     expect((err as UnprocessableEntityException).getStatus()).toBe(422);
   });
@@ -68,10 +73,16 @@ describe("AuthService.register — residual password-policy rejection (#147)", (
     const service = buildService(policyRejectingIdp());
 
     const emailErr = await service
-      .register({ email: "a@ds.test", password: "Aa1!aaaa", consent })
+      .register(
+        { email: "a@ds.test", password: "Aa1!aaaa", consent },
+        { ip: "203.0.113.1" },
+      )
       .catch((e: unknown) => e);
     const phoneErr = await service
-      .register({ phone: "+19998887777", password: "Aa1!aaaa", consent })
+      .register(
+        { phone: "+19998887777", password: "Aa1!aaaa", consent },
+        { ip: "203.0.113.1" },
+      )
       .catch((e: unknown) => e);
 
     expect(emailErr).toBeInstanceOf(UnprocessableEntityException);
@@ -79,5 +90,136 @@ describe("AuthService.register — residual password-policy rejection (#147)", (
     expect((emailErr as UnprocessableEntityException).getResponse()).toEqual(
       (phoneErr as UnprocessableEntityException).getResponse(),
     );
+  });
+});
+
+// EARS-14: the registration phone-verification SMS send (`register` phone
+// branch → `idp.requestPhoneVerification`) is gated by the SAME toll-fraud budget
+// as the login SMS send (design §10; EARS-14 covers "verification or login OTP").
+// But unlike login — which throws a 429 because no account exists yet — the
+// register account + mirror + consent rows are ALREADY committed at the send
+// point, so a budget refusal MUST be silent: skip the send, do NOT throw, still
+// return `pending_verification`, and STILL emit the owed terminal `Registered`
+// audit row (one terminal event per command — no extra refusal event; the
+// `SmsBudgetService` counters are the toll-fraud accounting authority).
+
+/**
+ * Minimal in-memory DB double satisfying the `register` success-path transaction:
+ * the mirror upsert (`.returning([{ id }])`) and the consent insert. No real
+ * Postgres — the DB-bound assertions live in the e2e suite; here we isolate the
+ * EARS-14 send-gate decision.
+ */
+function stubDb() {
+  const insertChain = {
+    values: () => insertChain,
+    onConflictDoUpdate: () => insertChain,
+    returning: () => Promise.resolve([{ id: "stub-user-id" }]),
+    then: (resolve: (v: unknown) => void) => resolve(undefined),
+  };
+  return {
+    transaction: (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({ insert: () => insertChain }),
+  };
+}
+
+function buildRegisterService(
+  idp: IdpClient,
+  audit: InMemoryAuthAuditLog,
+  budget: SmsBudgetService,
+): AuthService {
+  return new AuthService(
+    idp,
+    stubDb() as never,
+    undefined,
+    audit,
+    {} as never,
+    {} as never,
+    budget,
+  );
+}
+
+const phoneConsent = [{ purpose: "tos", version: "2026-01" }];
+
+describe("AuthService.register — EARS-14 phone-verify SMS budget gate", () => {
+  it("EARS-14: when the SMS budget is exhausted, the system shall skip the registration phone-verification send, still create the account (pending_verification), and still record the terminal Registered audit row", async () => {
+    const idp = new FakeIdpClient();
+    const audit = new InMemoryAuthAuditLog();
+    // Breaker already open: the daily SMS budget is exhausted, so tryConsume → false.
+    const budget = new SmsBudgetService(
+      { ...DEFAULT_SMS_BUDGET_THRESHOLDS, globalPerDay: 0 },
+      () => Date.now(),
+    );
+    const service = buildRegisterService(idp, audit, budget);
+    const req: RegisterRequest = {
+      phone: "+19998887777",
+      password: "Aa1!ufficiently-long-pw",
+      consent: phoneConsent,
+    };
+
+    const res = await service.register(req, {
+      ip: "203.0.113.7",
+      asn: "AS65000",
+    });
+
+    // Silent refusal: no throw, the account is still created.
+    expect(res).toEqual({ status: "pending_verification" });
+    // The send was skipped — no SMS reached the provider.
+    expect(idp.phoneVerificationSendCount()).toBe(0);
+    // EARS-18: the owed terminal Registered row still fires (account was created),
+    // and there is exactly ONE terminal event (no extra refusal event).
+    expect(audit.events).toEqual([
+      {
+        type: "Registered",
+        sub: expect.stringMatching(/^fake-sub-/),
+        channel: "sms",
+        consent: [{ purpose: "tos", version: "2026-01" }],
+      },
+    ]);
+  });
+
+  it("EARS-14: when the SMS budget has room, the system shall send the registration phone-verification code as today", async () => {
+    const idp = new FakeIdpClient();
+    const audit = new InMemoryAuthAuditLog();
+    const budget = new SmsBudgetService(DEFAULT_SMS_BUDGET_THRESHOLDS, () =>
+      Date.now(),
+    );
+    const service = buildRegisterService(idp, audit, budget);
+
+    const res = await service.register(
+      {
+        phone: "+19998887778",
+        password: "Aa1!ufficiently-long-pw",
+        consent: phoneConsent,
+      },
+      { ip: "203.0.113.8", asn: "AS65000" },
+    );
+
+    expect(res).toEqual({ status: "pending_verification" });
+    expect(idp.phoneVerificationSendCount()).toBe(1);
+    expect(audit.events).toHaveLength(1);
+    expect(audit.events[0]?.type).toBe("Registered");
+  });
+
+  it("EARS-14: the email registration branch is never gated by the SMS budget (no SMS), even when the budget is exhausted", async () => {
+    const idp = new FakeIdpClient();
+    const audit = new InMemoryAuthAuditLog();
+    const budget = new SmsBudgetService(
+      { ...DEFAULT_SMS_BUDGET_THRESHOLDS, globalPerDay: 0 },
+      () => Date.now(),
+    );
+    const service = buildRegisterService(idp, audit, budget);
+
+    const res = await service.register(
+      {
+        email: "ears14@ds.test",
+        password: "Aa1!ufficiently-long-pw",
+        consent: phoneConsent,
+      },
+      { ip: "203.0.113.9", asn: "AS65000" },
+    );
+
+    expect(res).toEqual({ status: "pending_verification" });
+    expect(audit.events).toHaveLength(1);
+    expect(audit.events[0]?.type).toBe("Registered");
   });
 });

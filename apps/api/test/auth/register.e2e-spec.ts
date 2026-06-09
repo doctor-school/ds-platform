@@ -18,6 +18,10 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
+import {
+  DEFAULT_SMS_BUDGET_THRESHOLDS,
+  SMS_BUDGET_THRESHOLDS,
+} from "../../src/auth/sms-budget/sms-budget.types.js";
 
 // Registration cascade (EARS-1 email / EARS-2 phone), the consent gate
 // (EARS-20), and enumeration resistance (EARS-16). Runs against a real Postgres
@@ -249,9 +253,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
       });
 
       expect(res.statusCode).toBe(422);
-      const { rows } = await pool.query("SELECT 1 FROM users WHERE email = $1", [
-        email,
-      ]);
+      const { rows } = await pool.query(
+        "SELECT 1 FROM users WHERE email = $1",
+        [email],
+      );
       expect(rows).toHaveLength(0);
     });
 
@@ -279,6 +284,95 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(phoneRes.statusCode).toBe(phoneRes.statusCode);
       expect(phoneRes.statusCode).toBe(422);
       expect(phoneRes.json()).toEqual(emailRes.json());
+    });
+  },
+);
+
+/**
+ * EARS-14 register-gate: the registration phone-verification SMS send is gated by
+ * the toll-fraud budget, exactly like the login SMS send. But the account is
+ * already committed when the send is attempted, so a budget refusal is SILENT —
+ * the response is still 200 `pending_verification`, the account+mirror are still
+ * committed, and the only difference is that no SMS reached the provider (the
+ * user re-triggers via the resend path). This is the asymmetry with login, which
+ * throws a 429 because no account exists yet (proven in login-otp.e2e-spec.ts).
+ * A dedicated app whose global daily SMS budget is exhausted (breaker open).
+ */
+describe.skipIf(!process.env.DATABASE_URL)(
+  "Register phone-verify SMS budget (e2e, EARS-14)",
+  () => {
+    let app: NestFastifyApplication;
+    let pool: pg.Pool;
+    let idp: FakeIdpClient;
+    const consent = [{ purpose: "tos", version: "2026-01" }];
+    const createdPhones: string[] = [];
+
+    function uniquePhone(): string {
+      const phone = `+1999${Math.floor(10_000_000 + Math.random() * 89_999_999)}`;
+      createdPhones.push(phone);
+      return phone;
+    }
+
+    beforeAll(async () => {
+      idp = new FakeIdpClient();
+      const moduleRef = await Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(IDP_CLIENT)
+        .useValue(idp)
+        // Breaker already open: the daily SMS budget is exhausted.
+        .overrideProvider(SMS_BUDGET_THRESHOLDS)
+        .useValue({ ...DEFAULT_SMS_BUDGET_THRESHOLDS, globalPerDay: 0 })
+        .overrideProvider(RATE_LIMIT_THRESHOLDS)
+        .useValue(RELAXED_RATE_LIMIT)
+        .compile();
+
+      app = moduleRef.createNestApplication<NestFastifyApplication>(
+        new FastifyAdapter(),
+      );
+      app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
+      await app.init();
+      await app.getHttpAdapter().getInstance().ready();
+      pool = app.get<pg.Pool>(DRIZZLE_POOL);
+    });
+
+    afterEach(async () => {
+      // The fake's deterministic fake-sub-N collides on users.zitadel_sub across
+      // serial e2e files; delete the created users by phone in teardown.
+      for (const phone of createdPhones.splice(0))
+        await pool.query("DELETE FROM users WHERE phone = $1", [phone]);
+    });
+
+    afterAll(async () => {
+      await app.close();
+    });
+
+    it("EARS-14: when the SMS budget is exhausted, a phone registration sends no verification SMS yet still returns 200 pending_verification and commits the account", async () => {
+      const phone = uniquePhone();
+      const before = idp.phoneVerificationSendCount();
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: { phone, password: "Aa1!ufficiently-long-pw", consent },
+      });
+
+      // Silent refusal: the account is created regardless (no 429, unlike login).
+      expect(res.statusCode).toBe(200);
+      expect(RegisterResponseSchema.parse(res.json()).status).toBe(
+        "pending_verification",
+      );
+      // The toll-fraud breaker tripped BEFORE the provider call: no SMS went out.
+      expect(idp.phoneVerificationSendCount()).toBe(before);
+
+      // The account + mirror are still committed (the rows pre-exist the send).
+      const { rows } = await pool.query(
+        "SELECT role, phone_verified FROM users WHERE phone = $1",
+        [phone],
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].role).toBe("doctor_guest");
+      expect(rows[0].phone_verified).toBe(false);
     });
   },
 );

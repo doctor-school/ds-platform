@@ -73,6 +73,8 @@ export class FakeIdpClient implements IdpClient {
   private readonly smsOtpChallenges = new Set<string>();
   /** How many times the BFF asked the (native) provider to send an SMS login code — the EARS-14 assertion hinge: a budget-refused send never reaches here. */
   private smsSends = 0;
+  /** How many times the BFF asked the provider to send a registration phone-verification SMS — the EARS-14 register-gate hinge: a budget-refused send never reaches here. */
+  private phoneVerificationSends = 0;
   private seq = 0;
 
   createUser(input: CreateUserInput): Promise<CreatedUser> {
@@ -106,6 +108,10 @@ export class FakeIdpClient implements IdpClient {
   }
 
   requestPhoneVerification(_sub: string): Promise<void> {
+    // The BFF calls this only after the EARS-14 budget allows the send, so every
+    // call here is a real provider send — count it (the budget-refused register
+    // path never reaches this method).
+    this.phoneVerificationSends++;
     return Promise.resolve();
   }
 
@@ -128,13 +134,17 @@ export class FakeIdpClient implements IdpClient {
     password: string,
   ): Promise<PasswordLoginResult> {
     const record =
-      this.byEmail.get(identifier.toLowerCase()) ?? this.byPhone.get(identifier);
+      this.byEmail.get(identifier.toLowerCase()) ??
+      this.byPhone.get(identifier);
 
     // An existing account whose failure tally has reached the threshold is
     // soft-locked (EARS-15) — even a correct password is refused while locked,
     // matching the native policy. `justLocked` is false here (the lock already
     // tripped on an earlier attempt), so no duplicate `lockout.triggered`.
-    if (record && (this.failed.get(identifier) ?? 0) >= FAKE_LOCKOUT_THRESHOLD) {
+    if (
+      record &&
+      (this.failed.get(identifier) ?? 0) >= FAKE_LOCKOUT_THRESHOLD
+    ) {
       return Promise.resolve({
         outcome: "locked",
         sub: record.sub,
@@ -286,7 +296,10 @@ export class FakeIdpClient implements IdpClient {
     return Promise.resolve();
   }
 
-  loginWithSmsOtp(identifier: string, code: string): Promise<IdpSession | null> {
+  loginWithSmsOtp(
+    identifier: string,
+    code: string,
+  ): Promise<IdpSession | null> {
     const record = this.findByIdentifier(identifier);
     if (
       !record ||
@@ -304,9 +317,15 @@ export class FakeIdpClient implements IdpClient {
     return this.smsSends;
   }
 
+  /** Test accessor: how many registration phone-verification SMS the BFF asked the provider to send (EARS-14 register gate). */
+  phoneVerificationSendCount(): number {
+    return this.phoneVerificationSends;
+  }
+
   requestPasswordReset(identifier: string): Promise<void> {
     const record =
-      this.byEmail.get(identifier.toLowerCase()) ?? this.byPhone.get(identifier);
+      this.byEmail.get(identifier.toLowerCase()) ??
+      this.byPhone.get(identifier);
     // A code is issued only for an existing identifier, but the resolution is
     // identical either way — an unknown identifier is a silent no-op, never a
     // throw, so the caller's response stays enumeration-safe (EARS-11/16).
@@ -320,7 +339,8 @@ export class FakeIdpClient implements IdpClient {
     newPassword: string,
   ): Promise<{ sub: string } | null> {
     const record =
-      this.byEmail.get(identifier.toLowerCase()) ?? this.byPhone.get(identifier);
+      this.byEmail.get(identifier.toLowerCase()) ??
+      this.byPhone.get(identifier);
     // Unknown identifier and invalid/expired code are indistinguishable (EARS-16).
     if (!record) return Promise.resolve(null);
     const expected = this.resetCodes.get(record.sub);

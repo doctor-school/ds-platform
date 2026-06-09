@@ -52,20 +52,40 @@ The `--tsconfig apps/api/tsconfig.json` flag (baked into the script) is required
 the gate boots the real Nest app, whose DI decorators need
 `experimentalDecorators`.
 
+## The `audit` field: explicit emission for auth/security events (settled)
+
+The `audit` class (`low-stakes` / `high-stakes`) records that a route owes a
+terminal audit row. **How that row is emitted is settled by #135** (resolving
+the #90 decision-debt): for **auth and security events it is explicit emission
+at the command site** — the `AuthAuditLog` port (`auth/session/auth-audit.*`),
+called directly from `AuthService` / `SessionService` — **not** an
+`@Authz`-composed `AuditInterceptor`.
+
+This is by design, not a deferred fold. Auth events are heterogeneous and cannot
+be built uniformly by a generic per-route interceptor that derives the subject
+from the response: `login.success` carries a subject + method; `login.failure`
+carries a masked identifier + reason and **no** subject; `lockout` fires exactly
+once, on the attempt that trips the native counter; `otp.sent` carries a masked
+identifier and no subject yet. A hybrid (interceptor for the happy path, explicit
+for the rest) would be worse — it splits the single "exactly one terminal row per
+command" invariant across two mechanisms. The interceptor pattern that ADR-0002
+§4.8 describes applies to **uniform-subject resource routes**, where the terminal
+access row is the resolved request subject and a generic interceptor _can_ build
+it.
+
+The only real benefit an interceptor offered — "no command can silently skip its
+row" — is delivered instead by a **completeness guard**: the high-stakes-route
+emission-coverage test (`test/authz/audit-emission-coverage.e2e-spec.ts`)
+cross-checks the `audit: high-stakes` routes discovered over the real router
+against an explicit, reviewed coverage registry. Adding a new high-stakes handler
+without accounting for its terminal emission fails CI. See that file's header for
+the mechanism.
+
 ## Seams filled by later work (not E3)
 
 `@Authz` deliberately records intent that downstream subsystems enforce. These
 are tracked so they are filled, not forgotten:
 
-- **Audit interceptor.** ADR-0002 §4.8 composes `@Authz` with
-  `UseInterceptors(AuditInterceptor)`. The `audit_ledger` writer landed with 003
-  F6 (#90, EARS-18) — but as **explicit emission** at each command site (the
-  `AuthAuditLog` port; `auth/session/auth-audit.*`), not as an `@Authz`-composed
-  interceptor: the auth events carry heterogeneous subjects/reasons that a generic
-  per-route interceptor cannot derive uniformly. Folding the terminal-audit
-  emission into an `@Authz({ audit })`-driven interceptor is a tracked refactor
-  (decision-debt #90), not a missing capability — the `audit` field already
-  records the per-route intent.
 - **Authentication.** Populating the request subject (BFF session / JWT) is 003
   F2 (#86). Until then the guard denies every `access: authenticated` route
   (fail-closed); no such route ships before F2.

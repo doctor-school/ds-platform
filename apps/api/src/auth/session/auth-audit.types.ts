@@ -37,7 +37,12 @@ export type AuthAuditEvent =
   // Registration (EARS-1/2/20). Consent versions ride in the metadata rather
   // than a separate `consent.captured` row — the one-terminal-entry invariant
   // (the standalone consent event belongs to the ADR-0009 subsystem, not 003).
-  | { type: "Registered"; sub: string; channel: AuthChannel; consent: { purpose: string; version: string }[] }
+  | {
+      type: "Registered";
+      sub: string;
+      channel: AuthChannel;
+      consent: { purpose: string; version: string }[];
+    }
   // Login (EARS-5/6/7). Success carries the subject + method; failure carries
   // the (to-be-masked) identifier + reason — the enumeration/oracle detail that
   // lives only here (EARS-16).
@@ -57,6 +62,37 @@ export type AuthAuditEvent =
   // EARS-15 native-lockout observation. Subject-level; the BFF records it when
   // the IdP reports the account soft-locked (the counter itself is Zitadel's).
   | { type: "AccountLocked"; sub: string };
+
+/**
+ * The runtime-enumerable taxonomy of event `type` discriminants — the same set
+ * carried by {@link AuthAuditEvent}, in a form the emission-completeness guard
+ * (`test/authz/audit-emission-coverage.e2e-spec.ts`) can iterate (a TS union is
+ * erased at runtime). The two `satisfies`/assignment checks below keep this array
+ * and the union in lockstep: adding a variant to one without the other is a
+ * compile error.
+ */
+export const AUTH_AUDIT_EVENT_TYPES = [
+  "Registered",
+  "LoginSucceeded",
+  "LoginFailed",
+  "OtpSent",
+  "RefreshRotated",
+  "RefreshReuseDetected",
+  "SessionRevoked",
+  "PasswordResetRequested",
+  "PasswordResetCompleted",
+  "AccountLocked",
+] as const satisfies readonly AuthAuditEvent["type"][];
+
+export type AuthAuditEventType = (typeof AUTH_AUDIT_EVENT_TYPES)[number];
+
+// Bidirectional exhaustiveness: if a new AuthAuditEvent variant is added without
+// extending AUTH_AUDIT_EVENT_TYPES (or vice versa), one of these assignments
+// fails to type-check — so the runtime list can never silently drift from the
+// union the writer maps.
+const _eventTypeExhaustive: AuthAuditEventType =
+  null as unknown as AuthAuditEvent["type"];
+void _eventTypeExhaustive;
 
 export interface AuthAuditLog {
   /** Append one auth event (append-only; never updated or deleted). */

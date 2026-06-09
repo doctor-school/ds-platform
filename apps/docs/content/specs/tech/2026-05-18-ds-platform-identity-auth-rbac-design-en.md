@@ -11,7 +11,7 @@ authors: Tech Lead (with AI agent, authored 2026-06-03)
 **Date:** 2026-05-18 (authored 2026-06-03 under GitHub Issue #106)
 **Status:** Draft
 **Type:** Platform-level design spec (cross-cutting identity/auth mechanisms). Referenced by ADR-0001, ADR-0004, the engineering-readiness spec, and `endpoint-authorization-matrix-design`.
-**Applies (not inherits):** ADR-0001 (Identity & authorization), ADR-0002 (NestJS + Fastify + OpenAPI — RbacModule, AuditInterceptor), ADR-0003 (data layer — append-only ledger), ADR-0004 (frontend stack — CSRF), ADR-0009 (PD lifecycle / 152-FZ — audit-class registration, retention), engineering-readiness spec (§5.bis comms providers).
+**Applies (not inherits):** ADR-0001 (Identity & authorization), ADR-0002 (NestJS + Fastify + OpenAPI — RbacModule, `AuditModule` / explicit auth-audit emission §4.8), ADR-0003 (data layer — append-only ledger), ADR-0004 (frontend stack — CSRF), ADR-0009 (PD lifecycle / 152-FZ — audit-class registration, retention), engineering-readiness spec (§5.bis comms providers).
 
 ---
 
@@ -131,7 +131,7 @@ For an authenticated, state-changing request the auth guards run in this order:
 5. **`AuthzGuard`** (`endpoint-authorization-matrix-design §4`) — fail-closed on missing `@Authz`; checks `required_roles`; delegates `auth_check: policy` to `IPolicyEngine`.
 6. **`StepUpGuard`** (§7.2) — only on routes flagged `@Authz({ step_up: true })`; verifies the fresh-MFA claim (§7.1).
 7. **Handler.**
-8. **`AuditInterceptor`** (ADR-0002 §4.8) — writes the `auth_audit` row for any route whose `@Authz` audit stakes are `low-stakes`/`high-stakes` (§7.3).
+8. **Terminal audit emission** (§7.3) — the auth/security command emits its terminal `auth_audit` row **explicitly**, at the command site (the `AuthAuditLog` port; `auth/session/auth-audit.*`), not via a generic interceptor: these events are heterogeneous (a `login.failure` has no subject and a masked identifier; a `lockout` fires once on the tripping transition; an `otp.sent` has no subject yet) and cannot be built uniformly from the response. The `@Authz` `audit` class records that the route owes a row; emission completeness over the `high-stakes` set is enforced by a CI guard. The `@Authz({ audit })`-driven `AuditInterceptor` (ADR-0002 §4.8) applies to uniform-subject resource routes elsewhere, not to this domain.
 
 For the **public SMS-OTP-send** endpoint the chain is shorter (no authn/authz — it is `access: public`), and the **SMS budget breaker (§5)** sits inside the send-service path after the toll-fraud rate-limit (step 1) and before the provider call.
 

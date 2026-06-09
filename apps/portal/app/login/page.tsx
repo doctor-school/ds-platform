@@ -38,11 +38,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@ds/design-system/form";
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSlot,
-} from "@ds/design-system/input-otp";
 
 /*
  * Sign-in surface (#131). Wires the live BFF (003 F2 password / F3 OTP) into the
@@ -183,19 +178,15 @@ function PasswordLogin() {
 
 /** EARS-6/7 passwordless OTP login: request a code, then submit it. */
 function OtpLogin() {
-  const router = useRouter();
   const [channel, setChannel] = useState<OtpChannel>("email");
   const [sent, setSent] = useState(false);
+  const [identifier, setIdentifier] = useState("");
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const requestForm = useForm<OtpRequest>({
     resolver: zodResolver(OtpRequestSchema),
     defaultValues: { identifier: "", channel: "email" },
-  });
-  const verifyForm = useForm<OtpVerify>({
-    resolver: zodResolver(OtpVerifySchema),
-    defaultValues: { identifier: "", code: "", channel: "email" },
   });
 
   async function onRequest(values: OtpRequest) {
@@ -206,21 +197,19 @@ function OtpLogin() {
         channel,
         ...(captchaToken ? { captchaToken } : {}),
       });
-      // Carry identifier+channel into the verify step (the BFF re-resolves them).
-      verifyForm.reset({ identifier: values.identifier, code: "", channel });
+      // Carry the identifier into the verify step (the BFF re-resolves it). The
+      // verify form is a SEPARATE component (<OtpVerifyForm/>) that mounts only
+      // once `sent` flips, so its own useForm registers the `code` field on its
+      // first render — no late-mounted/detached Controller. A prior attempt kept
+      // the verify form in this component and seeded it with reset()/setValue()
+      // after the request→verify toggle; because the `code` Controller mounted
+      // AFTER the form was created, RHF never bound it and every keystroke was
+      // dropped (the field stayed "" and login never fired). Owning the verify
+      // form in a freshly-mounted child is the idiomatic fix (#131/#153 live).
+      setIdentifier(values.identifier);
       setSent(true);
     } catch {
       setError("Could not send the code. Try again.");
-    }
-  }
-
-  async function onVerify(values: OtpVerify) {
-    setError(null);
-    try {
-      await authClient.loginWithOtp({ ...values, channel });
-      router.push("/account");
-    } catch {
-      setError("That code did not work. Request a new one.");
     }
   }
 
@@ -298,60 +287,102 @@ function OtpLogin() {
           </form>
         </Form>
       ) : (
-        <Form {...verifyForm}>
-          <form
-            onSubmit={verifyForm.handleSubmit(onVerify)}
-            className="space-y-4"
-            noValidate
-          >
-            <FormField
-              control={verifyForm.control}
-              name="code"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Enter the 6-digit code</FormLabel>
-                  <FormControl>
-                    <InputOTP
-                      maxLength={6}
-                      autoComplete="one-time-code"
-                      value={field.value}
-                      onChange={field.onChange}
-                    >
-                      <InputOTPGroup>
-                        {[0, 1, 2, 3, 4, 5].map((i) => (
-                          <InputOTPSlot key={i} index={i} />
-                        ))}
-                      </InputOTPGroup>
-                    </InputOTP>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
-            <div className="flex gap-2">
-              <Button
-                type="submit"
-                className="flex-1"
-                disabled={verifyForm.formState.isSubmitting}
-              >
-                Verify &amp; sign in
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setSent(false)}
-              >
-                Back
-              </Button>
-            </div>
-          </form>
-        </Form>
+        <OtpVerifyForm
+          identifier={identifier}
+          channel={channel}
+          onBack={() => setSent(false)}
+        />
       )}
     </div>
+  );
+}
+
+/**
+ * EARS-6/7 verify step. Its OWN `useForm` lives here so the `code` field is
+ * registered on this component's first render: the component mounts only once
+ * the request step has fired, so there is no late-mounted Controller and no
+ * post-hoc `reset()`/`setValue()` seeding (both of which left the field detached
+ * and dropped every keystroke — #131/#153 live). `identifier`+`channel` come in
+ * as props (the BFF re-resolves them); the user only types the code.
+ */
+function OtpVerifyForm({
+  identifier,
+  channel,
+  onBack,
+}: {
+  identifier: string;
+  channel: OtpChannel;
+  onBack: () => void;
+}) {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+
+  const verifyForm = useForm<OtpVerify>({
+    resolver: zodResolver(OtpVerifySchema),
+    defaultValues: { identifier, code: "", channel },
+  });
+
+  async function onVerify(values: OtpVerify) {
+    setError(null);
+    try {
+      await authClient.loginWithOtp({ ...values, identifier, channel });
+      router.push("/account");
+    } catch {
+      setError("That code did not work. Request a new one.");
+    }
+  }
+
+  return (
+    <Form {...verifyForm}>
+      <form
+        onSubmit={verifyForm.handleSubmit(onVerify)}
+        className="space-y-4"
+        noValidate
+      >
+        <FormField
+          control={verifyForm.control}
+          name="code"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Enter the code</FormLabel>
+              <FormControl>
+                {/* A plain one-time-code input, NOT the fixed-width slotted
+                    `InputOTP`. Zitadel's login email/SMS OTP codes are 8 digits
+                    (verified live on the dev-stand, #153) — longer than the
+                    6-char registration code on /verify and variable enough that a
+                    fixed-slot widget is the wrong control here. A standard numeric
+                    input takes the full code in one shot, keeps
+                    `autocomplete="one-time-code"` for OS autofill, and is what the
+                    BFF's `code: z.string().min(1)` expects. */}
+                <Input
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="12345678"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        <div className="flex gap-2">
+          <Button
+            type="submit"
+            className="flex-1"
+            disabled={verifyForm.formState.isSubmitting}
+          >
+            Verify &amp; sign in
+          </Button>
+          <Button type="button" variant="ghost" onClick={onBack}>
+            Back
+          </Button>
+        </div>
+      </form>
+    </Form>
   );
 }

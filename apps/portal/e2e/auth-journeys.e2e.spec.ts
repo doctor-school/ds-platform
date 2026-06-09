@@ -141,7 +141,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await page.waitForURL(/\/login/);
 
     // ── Request an email OTP (EARS-6 step 1) ─────────────────────────────
-    const otpForm = page.getByRole("group", { name: "OTP channel" });
+    const otpForm = page.getByRole("radiogroup", { name: "OTP channel" });
     await otpForm.getByRole("radio", { name: "Email code" }).click();
     await page.getByLabel("Email", { exact: true }).fill(email);
     const otpSentAt = new Date().toISOString();

@@ -18,7 +18,7 @@ import {
 } from "@ds/schemas";
 
 import { BotProtectionField } from "@/components/bot-protection";
-import { authClient, AuthError } from "@/lib/auth-client";
+import { authClient } from "@/lib/auth-client";
 
 import { Button } from "@ds/design-system/button";
 import { Input } from "@ds/design-system/input";
@@ -110,9 +110,11 @@ function PasswordLogin() {
       });
       // The BFF set the `__Host-` cookie; the session shell reads it server-side.
       router.push("/account");
-    } catch (err) {
-      // EARS-16: every login failure is one generic message — no oracle.
-      setError(err instanceof AuthError ? GENERIC_FAILURE : GENERIC_FAILURE);
+    } catch {
+      // EARS-16: ALL login failures — typed AuthError responses AND untyped
+      // network/programming errors alike — deliberately collapse to one generic
+      // message, so the UI never leaks an existence/error oracle.
+      setError(GENERIC_FAILURE);
     }
   }
 

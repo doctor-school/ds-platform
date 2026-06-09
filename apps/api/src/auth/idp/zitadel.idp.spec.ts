@@ -525,8 +525,18 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
             Promise.resolve({ result: uid ? [{ userId: uid }] : [] }),
         });
       }
-      // Session verify hop — POST /v2/sessions/{id} (has a path segment after).
-      if (/\/v2\/sessions\/[^/]+$/.test(url) && init.method === "POST") {
+      // OTP factor registration — POST /v2/users/{id}/otp_email|otp_sms (#153).
+      // The challenge presupposes the factor; we register it (idempotent) before
+      // the create hop. A 201 here = freshly registered.
+      if (/\/v2\/users\/[^/]+\/otp_(email|sms)$/.test(url) && init.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          status: 201,
+          json: () => Promise.resolve({}),
+        });
+      }
+      // Session verify hop — PATCH /v2/sessions/{id} (has a path segment after).
+      if (/\/v2\/sessions\/[^/]+$/.test(url) && init.method === "PATCH") {
         const scripted = opts.verifyStatus;
         const status = Array.isArray(scripted)
           ? (scripted[verifyCount] ?? scripted[scripted.length - 1] ?? 200)
@@ -596,6 +606,13 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
 
     await expect(client.requestEmailOtp("Doc@ds.test")).resolves.toBeUndefined();
 
+    // #153 live delta: the email OTP factor is registered before the challenge
+    // (else Zitadel rejects the challenge with COMMAND-JKLJ3 "OTP isn't ready").
+    const factor = calls.find(
+      (c) => /\/v2\/users\/otp-user-1\/otp_email$/.test(c.url) && c.method === "POST",
+    );
+    expect(factor, "the otp_email factor was registered first").toBeTruthy();
+
     const create = calls.find(
       (c) => c.url.endsWith("/v2/sessions") && c.method === "POST",
     );
@@ -610,6 +627,10 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
     const { fetchImpl, calls } = otpFetch({ userId: "otp-user-1" });
     const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
     await client.requestSmsOtp("+15551230000");
+    const factor = calls.find(
+      (c) => /\/v2\/users\/otp-user-1\/otp_sms$/.test(c.url) && c.method === "POST",
+    );
+    expect(factor, "the otp_sms factor was registered first").toBeTruthy();
     const create = calls.find(
       (c) => c.url.endsWith("/v2/sessions") && c.method === "POST",
     );
@@ -664,9 +685,11 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
     const session = await client.loginWithEmailOtp("Doc@ds.test", "123456");
     expect(session).toEqual({ zitadelSessionId: "otp-sess-1", sub: "otp-user-1" });
 
-    // The verify hop hit /v2/sessions/{id} with the unchecked token + the otpEmail code.
+    // The verify hop hit /v2/sessions/{id} with the unchecked token + the otpEmail
+    // code. #153 live delta: the session update is a PATCH (a POST 405s live).
     const verify = calls.find((c) => /\/v2\/sessions\/otp-sess-1$/.test(c.url));
     expect(verify, "a session verify hop was issued").toBeTruthy();
+    expect(verify!.method, "session update verb is PATCH (#153)").toBe("PATCH");
     expect(JSON.parse(verify!.body ?? "{}")).toEqual({
       sessionToken: "unchecked-token",
       checks: { otpEmail: { code: "123456" } },

@@ -241,8 +241,22 @@ export class ZitadelIdpClient implements IdpClient {
       profile: { givenName, familyName: "guest" },
       password: { password: input.password },
     };
-    if (input.email) body["email"] = { email: input.email };
-    if (input.phone) body["phone"] = { phone: input.phone };
+    // Live wire-shape delta (#153, vs Zitadel v4.15): `POST /v2/users/human` with
+    // a bare `email: { email }` (no verification directive) makes Zitadel
+    // AUTO-SEND a verification code on creation. The BFF then sends its OWN code
+    // via `requestEmailVerification` (design §4), so the registrant receives TWO
+    // emails carrying TWO different codes — and the auto-sent first code is
+    // immediately INVALIDATED by the second, so a registrant who opens the earlier
+    // mail enters a dead code (proven live on the dev-stand: two `Verify email`
+    // mails, only the latest verifies). `returnCode: {}` suppresses the auto-send
+    // (the code is echoed in the create RESPONSE instead — server-side only, never
+    // surfaced to the client), leaving the BFF's single deliberate
+    // `requestEmailVerification` as the ONE delivered code. Same directive on the
+    // phone object for the symmetric phone-registration case.
+    if (input.email)
+      body["email"] = { email: input.email, returnCode: {} };
+    if (input.phone)
+      body["phone"] = { phone: input.phone, returnCode: {} };
 
     const res = await this.fetchImpl(this.url("/v2/users/human"), {
       method: "POST",
@@ -716,6 +730,32 @@ export class ZitadelIdpClient implements IdpClient {
   // discipline holds throughout: request* never throws (enumeration-safe),
   // loginWith* returns null on any miss.
 
+  /**
+   * Ensure the user carries the email/SMS one-time-code factor the `otpEmail`/
+   * `otpSms` session challenge requires. Live wire-shape delta (#153, vs Zitadel
+   * v4.15): a `POST /v2/sessions` `otpEmail` challenge on a user who has only a
+   * password rejects with `COMMAND-JKLJ3 "Multifactor OTP (OneTimePassword) isn't
+   * ready"` — the challenge presupposes the factor is registered. Registering it
+   * is `POST /v2/users/{id}/{otp_email|otp_sms}`; a 409 means it already exists,
+   * which is the converged state we want (idempotent). Enumeration-safe by
+   * inheritance: any non-2xx other than 409 is left for the create hop to handle
+   * (it will then no-op), and the caller still resolves void.
+   */
+  private async ensureOtpFactor(
+    userId: string,
+    challenge: "otpEmail" | "otpSms",
+  ): Promise<void> {
+    const factor = challenge === "otpEmail" ? "otp_email" : "otp_sms";
+    await this.fetchImpl(this.url(`/v2/users/${userId}/${factor}`), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({}),
+    });
+    // 2xx (just registered) and 409 (already present) are both the desired
+    // converged state; any other status simply leaves the factor unregistered and
+    // the following challenge create no-ops — still enumeration-safe.
+  }
+
   /** The `otpEmail`/`otpSms` challenge oneof Zitadel's `POST /v2/sessions` accepts. */
   private async requestOtpChallenge(
     identifier: string,
@@ -729,6 +769,9 @@ export class ZitadelIdpClient implements IdpClient {
     try {
       const userId = await this.resolveUserId(identifier);
       if (!userId) return;
+      // The `otpEmail`/`otpSms` challenge requires the matching factor to be
+      // registered on the user first (#153 live delta) — register it (idempotent).
+      await this.ensureOtpFactor(userId, challenge);
       // Create-with-challenge. Asserted-by-unit-test / awaiting-live-confirmation:
       // `POST /v2/sessions` body `{ checks: { user: { userId } }, challenges: {
       // otpEmail: {} } }` (SMS: `{ otpSms: {} }`) — Zitadel arms the challenge and
@@ -777,13 +820,16 @@ export class ZitadelIdpClient implements IdpClient {
     // No prior `request*Otp` for this identifier (or an unknown identifier, which
     // armed nothing) → null, indistinguishable from a wrong code (EARS-16).
     if (!challenge) return null;
-    // Verify the code by updating the session. Asserted-by-unit-test /
-    // awaiting-live-confirmation: `POST /v2/sessions/{sessionId}` body
-    // `{ sessionToken, checks: { otpEmail: { code } } }` (SMS: `{ otpSms: { code } }`).
-    // A non-2xx (wrong/expired code) resolves to null (EARS-16); a 2xx returns a
-    // FRESH `sessionToken` proving the session passed its OTP check.
+    // Verify the code by updating the session: `PATCH /v2/sessions/{sessionId}`
+    // body `{ sessionToken, checks: { otpEmail: { code } } }` (SMS: `{ otpSms: {
+    // code } }`). Live wire-shape delta (#153, vs Zitadel v4.15): the session
+    // *update* verb is PATCH, not POST — a POST to an existing session resource
+    // returns `405 Method Not Allowed` (proven on the dev-stand), so a real OTP
+    // code never verified. A non-2xx (wrong/expired code) resolves to null
+    // (EARS-16); a 2xx returns a FRESH `sessionToken` proving the session passed
+    // its OTP check.
     const res = await this.fetchImpl(this.url(`/v2/sessions/${challenge.sessionId}`), {
-      method: "POST",
+      method: "PATCH",
       headers: this.headers(),
       body: JSON.stringify({
         sessionToken: challenge.sessionToken,

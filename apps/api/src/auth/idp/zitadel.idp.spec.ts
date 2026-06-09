@@ -798,3 +798,92 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
     expect(await client.loginWithEmailOtp("nobody@ds.test", "123456")).toBeNull();
   });
 });
+
+/**
+ * #157 — `grantProjectRole` authorizes a subject for a Zitadel project role
+ * (`POST /management/v1/users/{sub}/grants` `{ projectId, roleKeys }`). The OIDC
+ * token's `urn:zitadel:iam:org:project:roles` claim is asserted only for granted
+ * roles, so without this grant a registered user's token carries empty roles and
+ * the `doctor_guest`-requiring guard 403s. The grant must be idempotent (the
+ * webhook + reconcile sweep re-grant): an ALREADY_EXISTS / 409 is SUCCESS; any
+ * other non-2xx is a real failure and throws. Absent `projectId` fails closed.
+ */
+describe("ZitadelIdpClient grantProjectRole (#157)", () => {
+  function recordingFetch(result: { ok: boolean; status: number; body?: unknown }): {
+    fetchImpl: FetchLike;
+    calls: ScriptedCall[];
+  } {
+    const calls: ScriptedCall[] = [];
+    const fetchImpl: FetchLike = (url, init) => {
+      calls.push({
+        url,
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
+      });
+      return Promise.resolve({
+        ok: result.ok,
+        status: result.status,
+        json: () => Promise.resolve(result.body ?? {}),
+      });
+    };
+    return { fetchImpl, calls };
+  }
+
+  const CONFIG = {
+    baseUrl: "http://idp.test:9080",
+    serviceToken: "svc-token",
+    projectId: "proj-1",
+  };
+
+  it("POSTs /management/v1/users/{sub}/grants with the projectId + roleKeys on success", async () => {
+    const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+    await expect(
+      client.grantProjectRole("user-1", "doctor_guest"),
+    ).resolves.toBeUndefined();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe(
+      "http://idp.test:9080/management/v1/users/user-1/grants",
+    );
+    expect(calls[0]?.method).toBe("POST");
+    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({
+      projectId: "proj-1",
+      roleKeys: ["doctor_guest"],
+    });
+  });
+
+  it("treats an already-existing grant (409 ALREADY_EXISTS) as success (idempotent)", async () => {
+    const { fetchImpl } = recordingFetch({
+      ok: false,
+      status: 409,
+      body: { message: "User grant already exists" },
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+    await expect(
+      client.grantProjectRole("user-1", "doctor_guest"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("throws on any other non-2xx (a real failure surfaces loudly)", async () => {
+    const { fetchImpl } = recordingFetch({ ok: false, status: 500 });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+    await expect(
+      client.grantProjectRole("user-1", "doctor_guest"),
+    ).rejects.toThrow(/grant.*HTTP 500/i);
+  });
+
+  it("fails closed when projectId is not configured", async () => {
+    const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
+    const client = new ZitadelIdpClient({
+      baseUrl: "http://idp.test:9080",
+      serviceToken: "svc-token",
+      fetchImpl,
+    });
+    await expect(
+      client.grantProjectRole("user-1", "doctor_guest"),
+    ).rejects.toThrow(/project/i);
+    // Nothing was sent — the fail-closed gate is before the HTTP hop.
+    expect(calls).toHaveLength(0);
+  });
+});

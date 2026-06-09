@@ -24,6 +24,7 @@ import type {
 import type { SessionClaims } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 import {
+  DOCTOR_GUEST_ROLE,
   IDP_CLIENT,
   IdpPasswordPolicyError,
   type IdpClient,
@@ -372,6 +373,18 @@ export class AuthService {
         throw err;
       }
 
+      // #157: authorize the new user for the `doctor_guest` project role in
+      // Zitadel — the OIDC token's project-roles claim is the authz source the
+      // guard reads (ADR-0001; the `users.role` mirror written above is a
+      // downstream projection, NOT the authz authority). Without this grant a
+      // registered+verified user gets 403 on every protected route (empty roles
+      // claim). Awaited and NOT swallowed: in the live portal flow nothing else
+      // heals it (the Action webhook is #119, the sweep unscheduled), so the grant
+      // must be reliable here. A grant failure is infra, not existence-correlated,
+      // so letting it surface preserves enumeration-safety (EARS-16) — the success
+      // path still returns the identical always-`pending_verification` response.
+      await this.idp.grantProjectRole(created.sub, DOCTOR_GUEST_ROLE);
+
       // Trigger the Zitadel verification code for the registered channel.
       if (req.email) await this.idp.requestEmailVerification(created.sub);
       else await this.idp.requestPhoneVerification(created.sub);
@@ -428,6 +441,13 @@ export class AuthService {
       throw new UnauthorizedException("invalid webhook secret");
     }
     await this.mirror.upsert(payload);
+    // #157: idempotently (re)grant the `doctor_guest` project role on every
+    // webhook — the authoritative sync trigger (EARS-19) backstops the register
+    // grant, so a user whose register-time grant failed (or who Zitadel created
+    // out-of-band) is authorized once the webhook lands. Idempotent: an
+    // already-granted role is a no-op (the adapter treats ALREADY_EXISTS as
+    // success).
+    await this.idp.grantProjectRole(payload.zitadelSub, DOCTOR_GUEST_ROLE);
     return { status: "synced" };
   }
 }

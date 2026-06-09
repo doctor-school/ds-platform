@@ -146,8 +146,9 @@ ssh truenas 'cd ~/ds-platform-dev-stand/idp && \
   IDP_BASE_URL=http://truenas.local:9080 ./provision.sh --pat-file /tmp/idp-pat.txt'
 ```
 
-It prints `PROJECT_ID`, `IDP_CLIENT_ID`, and — **only on first creation** —
-`IDP_CLIENT_SECRET`. Capture both. (Re-runs do not re-emit the secret; rotate it
+It prints `IDP_PROJECT_ID`, `IDP_CLIENT_ID`, and — **only on first creation** —
+`IDP_CLIENT_SECRET`, each already prefixed with its `.env.local` key so the lines
+append straight in. Capture them. (Re-runs do not re-emit the secret; rotate it
 with the `_generate_client_secret` call the script prints if you lose it.)
 
 Override defaults via env / flags: `IDP_REDIRECT_URIS`, `IDP_POST_LOGOUT_URIS`,
@@ -165,6 +166,15 @@ IDP_EXTERNAL_DOMAIN=truenas.local
 IDP_PORT=9080
 IDP_CLIENT_ID=<from provision.sh>             # the numeric Zitadel client id
 IDP_CLIENT_SECRET=<from provision.sh>
+IDP_PROJECT_ID=<from provision.sh>            # the IDP_PROJECT_ID= line the script
+                                              # emits; the project owning the
+                                              # doctor_guest role.
+                                              # Required to grant the project role per
+                                              # user on register/webhook/reconcile (#157)
+                                              # — the OIDC token's project-roles claim is
+                                              # the authz source the guard reads; absent
+                                              # it grantProjectRole fails closed and a
+                                              # registered user 403s on protected routes.
 IDP_REDIRECT_URI=http://truenas.local:3000/auth/callback  # must match a redirect
                                               # URI provision.sh registers
 IDP_SERVICE_TOKEN=<the ds-bootstrap PAT>      # the api binds the real adapter on

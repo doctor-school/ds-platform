@@ -222,7 +222,32 @@ export interface IdpClient {
     code: string,
     newPassword: string,
   ): Promise<{ sub: string } | null>;
+  /**
+   * #157: authorize `sub` for the Zitadel **project role** `roleKey` (the v1
+   * authenticated baseline is `doctor_guest`, {@link DOCTOR_GUEST_ROLE}). This is
+   * the authz source of truth the guard reads: the OIDC token's
+   * `urn:zitadel:iam:org:project:roles` claim is asserted ONLY for roles actually
+   * granted in Zitadel (ADR-0001 — Zitadel is the identity/authz authority; the
+   * `users.role` column is a downstream **mirror** projection, NOT an authz
+   * authority). Granting nothing here leaves the token's roles claim empty → the
+   * `AuthzGuard` (which requires `doctor_guest`) denies with 403.
+   *
+   * **Idempotent:** granting an already-granted role resolves (never throws) — the
+   * webhook (EARS-19) and the reconcile sweep re-grant on every pass, so the call
+   * must converge, not duplicate or fail. Any *other* failure (transient infra,
+   * missing project config) is a real fault and throws, so it surfaces loudly
+   * rather than silently leaving a registered user un-authorized.
+   */
+  grantProjectRole(sub: string, roleKey: string): Promise<void>;
 }
+
+/**
+ * #157: the v1 authenticated-baseline project role (ADR-0001 §1; matches
+ * `authz.types.ts` ROLES and the `provision.sh` `SEED_ROLE`). The single literal
+ * the three write paths (register / webhook / reconcile sweep) grant, so the
+ * role key is never scattered as a bare string.
+ */
+export const DOCTOR_GUEST_ROLE = "doctor_guest";
 
 /** DI token the port is bound to — rebound to the real Zitadel adapter in prod. */
 export const IDP_CLIENT = Symbol("IDP_CLIENT");

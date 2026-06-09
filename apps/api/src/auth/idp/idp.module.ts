@@ -32,6 +32,10 @@ import { ZitadelIdpClient } from "./zitadel.idp.js";
             clientSecret: env.IDP_CLIENT_SECRET,
             redirectUri: env.IDP_REDIRECT_URI,
             scopes: env.IDP_SCOPES?.split(/\s+/).filter(Boolean),
+            // #157: the project owning `doctor_guest`, for the per-user role
+            // grant on register/webhook/reconcile. Absent ⇒ grantProjectRole
+            // fails closed.
+            projectId: env.IDP_PROJECT_ID,
           });
         }
         return new FakeIdpClient();

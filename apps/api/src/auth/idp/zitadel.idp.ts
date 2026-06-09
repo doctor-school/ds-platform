@@ -60,6 +60,16 @@ export interface ZitadelConfig {
    * the default includes it alongside `openid profile offline_access`.
    */
   scopes?: string[] | undefined;
+  /**
+   * #157: the Zitadel **project** that owns the `doctor_guest` role (the
+   * `PROJECT_ID` emitted by `infra/dev-stand/idp/provision.sh`). Required by
+   * {@link ZitadelIdpClient.grantProjectRole} — it is the project the per-user
+   * grant authorizes, which is what the OIDC token's project-roles claim then
+   * asserts. Absent ⇒ `grantProjectRole` fails closed, consistent with the
+   * adapter's other OIDC-config-gated paths (clientId/redirectUri). Plumbed from
+   * `IDP_PROJECT_ID` (`apps/api/src/config/env.schema.ts`).
+   */
+  projectId?: string | undefined;
   /** Injected for tests; defaults to the global `fetch`. */
   fetchImpl?: FetchLike | undefined;
 }
@@ -827,6 +837,46 @@ export class ZitadelIdpClient implements IdpClient {
     code: string,
   ): Promise<IdpSession | null> {
     return this.loginWithOtpChallenge(identifier, code, "otpSms");
+  }
+
+  /**
+   * #157: authorize `sub` for the project role `roleKey` via the Zitadel
+   * Management API `POST /management/v1/users/{sub}/grants`
+   * `{ projectId, roleKeys: [roleKey] }`, service-token auth.
+   *
+   * This is the authz source of truth the guard reads: Zitadel asserts
+   * `urn:zitadel:iam:org:project:roles` in the OIDC token ONLY for roles the
+   * subject was granted here (ADR-0001 — the `users.role` mirror is a downstream
+   * projection, not an authz authority). Without this grant the token's roles
+   * claim is empty and the `doctor_guest`-requiring `AuthzGuard` 403s.
+   *
+   * **Idempotent:** Zitadel returns 409 / `ALREADY_EXISTS` ("User grant already
+   * exists") when the grant is present — treated as SUCCESS so the webhook
+   * (EARS-19) and the reconcile sweep can re-grant on every pass without error.
+   * Any OTHER non-2xx is a real failure → throw (a transient fault is loud; the
+   * webhook + sweep are idempotent backstops that re-grant). Absent `projectId`
+   * fails closed, consistent with the other OIDC-config-gated paths.
+   */
+  async grantProjectRole(sub: string, roleKey: string): Promise<void> {
+    if (!this.config.projectId) {
+      throw new Error(
+        "zitadel project config (IDP_PROJECT_ID) is not set; cannot grant the project role (design §3/§5, #157)",
+      );
+    }
+    const res = await this.fetchImpl(this.url(`/management/v1/users/${sub}/grants`), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({
+        projectId: this.config.projectId,
+        roleKeys: [roleKey],
+      }),
+    });
+    // Idempotency: an already-existing grant is the converged state, not a
+    // failure — Zitadel signals it with 409 (ALREADY_EXISTS). Resolve.
+    if (res.ok || res.status === 409) return;
+    throw new Error(
+      `zitadel grant project role failed: HTTP ${res.status}`,
+    );
   }
 
   async listUsers(): Promise<IdpUser[]> {

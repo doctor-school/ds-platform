@@ -1,5 +1,9 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { IDP_CLIENT, type IdpClient } from "./idp/idp.types.js";
+import {
+  DOCTOR_GUEST_ROLE,
+  IDP_CLIENT,
+  type IdpClient,
+} from "./idp/idp.types.js";
 import { UserMirrorService } from "./user-mirror.service.js";
 
 /**
@@ -31,6 +35,12 @@ export class ReconcileService {
         emailVerified: u.emailVerified,
         phoneVerified: u.phoneVerified,
       });
+      // #157: idempotently ensure the `doctor_guest` grant — the sweep is the
+      // eventual-consistency backstop that closes a webhook-miss divergence, so
+      // a user whose register/webhook grant never landed becomes authorized here
+      // (the OIDC token's project-roles claim is the authz source the guard reads;
+      // the mirror row is a downstream projection). Idempotent re-grant.
+      await this.idp.grantProjectRole(u.sub, DOCTOR_GUEST_ROLE);
     }
     return { reconciled: idpUsers.length };
   }

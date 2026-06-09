@@ -57,6 +57,16 @@ export class FakeIdpClient implements IdpClient {
   private readonly failed = new Map<string, number>();
   /** Subs with a live reset code → the code that completes it (EARS-11/12). Models Zitadel's forgot-password code flow; single-use, cleared on completion. */
   private readonly resetCodes = new Map<string, string>();
+  /**
+   * #157: project roles actually granted per `sub`, recorded by
+   * {@link grantProjectRole}. The token/refresh claims surface ONLY these roles
+   * (empty if never granted) — modelling Zitadel asserting
+   * `urn:zitadel:iam:org:project:roles` only for granted roles. This replaces the
+   * old hardcoded `roles:["doctor_guest"]`, which masked the missing real grant:
+   * with this Map the default e2e/unit matrix only sees `doctor_guest` once one
+   * of the three write paths (register / webhook / sweep) has actually granted it.
+   */
+  private readonly grants = new Map<string, Set<string>>();
   /** Subs with a live email login-OTP challenge (EARS-6). Set on request, cleared on a successful verify — models Zitadel requiring a challenge before the check. */
   private readonly emailOtpChallenges = new Set<string>();
   /** Subs with a live SMS login-OTP challenge (EARS-7). */
@@ -170,9 +180,10 @@ export class FakeIdpClient implements IdpClient {
       accessToken: `fake-access-${zitadelSessionId}`,
       refreshToken,
       expiresInSeconds: 900,
-      // v1 grants every self-serve principal the single `doctor_guest` role; the
+      // #157: roles reflect ONLY what was actually granted via grantProjectRole
+      // for this sub (empty if never granted) — not a hardcoded literal. The
       // `mfa` claim is present-but-false (the enforcement seam, design §7).
-      claims: { sub, roles: ["doctor_guest"], mfa: false },
+      claims: { sub, roles: this.grantedRoles(sub), mfa: false },
     });
   }
 
@@ -197,9 +208,31 @@ export class FakeIdpClient implements IdpClient {
         accessToken: `fake-access-r-${this.seq}`,
         refreshToken: next,
         expiresInSeconds: 900,
-        claims: { sub, roles: ["doctor_guest"], mfa: false },
+        // #157: granted roles only (see exchangeSessionForTokens) — a rotated
+        // token carries exactly what the original did.
+        claims: { sub, roles: this.grantedRoles(sub), mfa: false },
       },
     });
+  }
+
+  /**
+   * #157: authorize `sub` for `roleKey` — idempotent (a repeated grant is a
+   * no-op, mirroring Zitadel's ALREADY_EXISTS). After this the sub's exchanged /
+   * refreshed token claims carry `roleKey`; before any grant they are empty.
+   */
+  grantProjectRole(sub: string, roleKey: string): Promise<void> {
+    let roles = this.grants.get(sub);
+    if (!roles) {
+      roles = new Set<string>();
+      this.grants.set(sub, roles);
+    }
+    roles.add(roleKey);
+    return Promise.resolve();
+  }
+
+  /** Test accessor: the project roles granted to `sub` (empty if none). */
+  grantedRoles(sub: string): string[] {
+    return [...(this.grants.get(sub) ?? [])];
   }
 
   private findByIdentifier(identifier: string): FakeRecord | undefined {

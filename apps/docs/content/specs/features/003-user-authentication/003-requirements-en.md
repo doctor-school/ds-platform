@@ -114,7 +114,7 @@ The auth vertical is the platform's first real aggregate cluster (unlike the que
 
 ## EARS requirements
 
-> **Numbering convention:** flat (`EARS-1`, `EARS-2`, …) per ADR-0006 §4. EARS-1…12 are the functional handlers (each becomes a child Issue); EARS-13…20 are cross-cutting ubiquitous / unwanted-behavior requirements enforced across the surface. The `ears-tests` CI guard is content-match WARN in Phase 0.
+> **Numbering convention:** flat (`EARS-1`, `EARS-2`, …) per ADR-0006 §4. EARS-1…12 are the functional handlers (each becomes a child Issue); EARS-13…21 are cross-cutting ubiquitous / unwanted-behavior requirements enforced across the surface. The `ears-tests` CI guard is content-match WARN in Phase 0.
 
 **Registration & verification**
 
@@ -150,6 +150,7 @@ The auth vertical is the platform's first real aggregate cluster (unlike the que
 - **EARS-18:** The system shall append every auth event — `auth.{register, account.verified, login.succeeded, login.failed, logout, token.refresh, token.reuse_detected, password.reset.requested, password.reset.completed, otp.sent, otp.verified, otp.failed, lockout, consent.captured}` — to `audit_ledger` (ADR-0003 §6) with PD masked.
 - **EARS-19:** When Zitadel emits a user create/update Action webhook, the system shall upsert the corresponding `UserMirror` row, ensure the `doctor_guest` role grant, and reconcile divergence on a periodic sweep (eventual consistency, ADR-0001 Consequences).
 - **EARS-20:** When a registration is processed, the system shall record the registrant's accepted per-purpose consent versions (ADR-0009) and shall refuse to activate the PD-bearing mirror row if consent is absent.
+- **EARS-21:** The portal auth UI shall render in **Russian (primary)** with **no hardcoded user-facing strings** — all copy (labels, descriptions, buttons, placeholders, the consent line, and error messages) sourced from a typed message catalog over an i18n-ready structure, so a future locale can be added without re-touching components; **RU-only ships now with no user-facing language switcher** (the i18n infrastructure is present for a later locale). (Design §8.1.)
 
 ## Invariants
 

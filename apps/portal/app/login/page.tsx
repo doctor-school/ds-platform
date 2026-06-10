@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useTranslations } from "next-intl";
 import { ShieldCheck } from "lucide-react";
 
 import {
@@ -19,6 +19,7 @@ import {
 
 import { BotProtectionField } from "@/components/bot-protection";
 import { authClient } from "@/lib/auth-client";
+import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
 import { Input } from "@ds/design-system/input";
@@ -53,18 +54,17 @@ import {
  *     provider, but the UI is built for both channels.
  */
 
-const GENERIC_FAILURE = "Sign-in failed. Check your details and try again.";
-
 export default function LoginPage() {
+  const t = useTranslations("login");
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-6 py-16">
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
             <ShieldCheck className="text-primary" aria-hidden />
-            <CardTitle>Sign in</CardTitle>
+            <CardTitle>{t("title")}</CardTitle>
           </div>
-          <CardDescription>Access your Doctor.School account.</CardDescription>
+          <CardDescription>{t("description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">
           <PasswordLogin />
@@ -74,10 +74,10 @@ export default function LoginPage() {
         </CardContent>
         <CardFooter className="flex-col items-start gap-1 text-sm">
           <Link href="/register" className="underline">
-            Create an account
+            {t("createAccount")}
           </Link>
           <Link href="/reset" className="underline">
-            Forgot your password?
+            {t("forgotPassword")}
           </Link>
         </CardFooter>
       </Card>
@@ -88,11 +88,14 @@ export default function LoginPage() {
 /** EARS-5 password login. */
 function PasswordLogin() {
   const router = useRouter();
+  const t = useTranslations("login");
+  const tc = useTranslations("common");
+  const te = useTranslations("errors");
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm<LoginRequest>({
-    resolver: zodResolver(LoginRequestSchema),
+    resolver: useLocalizedResolver(LoginRequestSchema),
     defaultValues: { identifier: "", password: "" },
   });
 
@@ -109,7 +112,7 @@ function PasswordLogin() {
       // EARS-16: ALL login failures — typed AuthError responses AND untyped
       // network/programming errors alike — deliberately collapse to one generic
       // message, so the UI never leaks an existence/error oracle.
-      setError(GENERIC_FAILURE);
+      setError(te("loginFailed"));
     }
   }
 
@@ -119,18 +122,19 @@ function PasswordLogin() {
         onSubmit={form.handleSubmit(onSubmit)}
         className="space-y-4"
         noValidate
-        aria-label="Password sign-in"
+        aria-label={t("passwordFormLabel")}
+        data-testid="password-login-form"
       >
         <FormField
           control={form.control}
           name="identifier"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email or phone</FormLabel>
+              <FormLabel>{tc("emailOrPhone")}</FormLabel>
               <FormControl>
                 <Input
                   autoComplete="username"
-                  placeholder="doctor@example.com or +7…"
+                  placeholder={tc("identifierPlaceholder")}
                   {...field}
                 />
               </FormControl>
@@ -143,7 +147,7 @@ function PasswordLogin() {
           name="password"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Password</FormLabel>
+              <FormLabel>{tc("password")}</FormLabel>
               <FormControl>
                 <Input
                   type="password"
@@ -168,8 +172,9 @@ function PasswordLogin() {
           type="submit"
           className="w-full"
           disabled={form.formState.isSubmitting}
+          data-testid="password-login-submit"
         >
-          Sign in
+          {t("submit")}
         </Button>
       </form>
     </Form>
@@ -178,6 +183,9 @@ function PasswordLogin() {
 
 /** EARS-6/7 passwordless OTP login: request a code, then submit it. */
 function OtpLogin() {
+  const t = useTranslations("login");
+  const tc = useTranslations("common");
+  const te = useTranslations("errors");
   const [channel, setChannel] = useState<OtpChannel>("email");
   const [sent, setSent] = useState(false);
   const [identifier, setIdentifier] = useState("");
@@ -185,7 +193,7 @@ function OtpLogin() {
   const [error, setError] = useState<string | null>(null);
 
   const requestForm = useForm<OtpRequest>({
-    resolver: zodResolver(OtpRequestSchema),
+    resolver: useLocalizedResolver(OtpRequestSchema),
     defaultValues: { identifier: "", channel: "email" },
   });
 
@@ -209,21 +217,23 @@ function OtpLogin() {
       setIdentifier(values.identifier);
       setSent(true);
     } catch {
-      setError("Could not send the code. Try again.");
+      setError(te("otpSendFailed"));
     }
   }
 
   return (
-    <div className="space-y-4" aria-label="One-time-code sign-in">
+    <div className="space-y-4" aria-label={t("otpFormLabel")}>
       <div className="space-y-1">
-        <p className="text-sm font-medium">Sign in with a one-time code</p>
-        <p className="text-xs text-muted-foreground">
-          We send a code to your email or phone (email-OTP / SMS-OTP).
-        </p>
+        <p className="text-sm font-medium">{t("otpHeading")}</p>
+        <p className="text-xs text-muted-foreground">{t("otpDescription")}</p>
       </div>
 
       {/* Channel selector — drives EARS-6 (email) vs EARS-7 (sms). */}
-      <div className="flex gap-2" role="radiogroup" aria-label="OTP channel">
+      <div
+        className="flex gap-2"
+        role="radiogroup"
+        aria-label={t("otpChannelGroupLabel")}
+      >
         {(["email", "sms"] as const).map((c) => (
           <Button
             key={c}
@@ -232,12 +242,13 @@ function OtpLogin() {
             size="sm"
             role="radio"
             aria-checked={channel === c}
+            data-testid={`otp-channel-${c}`}
             onClick={() => {
               setChannel(c);
               setSent(false);
             }}
           >
-            {c === "email" ? "Email code" : "SMS code"}
+            {c === "email" ? t("otpChannelEmail") : t("otpChannelSms")}
           </Button>
         ))}
       </div>
@@ -255,14 +266,17 @@ function OtpLogin() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>
-                    {channel === "email" ? "Email" : "Phone"}
+                    {channel === "email" ? tc("email") : tc("phone")}
                   </FormLabel>
                   <FormControl>
                     <Input
                       autoComplete={channel === "email" ? "email" : "tel"}
                       placeholder={
-                        channel === "email" ? "doctor@example.com" : "+7…"
+                        channel === "email"
+                          ? tc("emailPlaceholder")
+                          : tc("shortPhonePlaceholder")
                       }
+                      data-testid="otp-identifier"
                       {...field}
                     />
                   </FormControl>
@@ -281,8 +295,9 @@ function OtpLogin() {
               variant="secondary"
               className="w-full"
               disabled={requestForm.formState.isSubmitting}
+              data-testid="otp-send"
             >
-              Send code
+              {t("sendCode")}
             </Button>
           </form>
         </Form>
@@ -315,10 +330,13 @@ function OtpVerifyForm({
   onBack: () => void;
 }) {
   const router = useRouter();
+  const t = useTranslations("login");
+  const tc = useTranslations("common");
+  const te = useTranslations("errors");
   const [error, setError] = useState<string | null>(null);
 
   const verifyForm = useForm<OtpVerify>({
-    resolver: zodResolver(OtpVerifySchema),
+    resolver: useLocalizedResolver(OtpVerifySchema),
     defaultValues: { identifier, code: "", channel },
   });
 
@@ -328,7 +346,7 @@ function OtpVerifyForm({
       await authClient.loginWithOtp({ ...values, identifier, channel });
       router.push("/account");
     } catch {
-      setError("That code did not work. Request a new one.");
+      setError(te("otpVerifyFailed"));
     }
   }
 
@@ -344,7 +362,7 @@ function OtpVerifyForm({
           name="code"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Enter the code</FormLabel>
+              <FormLabel>{t("enterCode")}</FormLabel>
               <FormControl>
                 {/* A plain one-time-code input, NOT the fixed-width slotted
                     `InputOTP`. Zitadel's login email/SMS OTP codes are 8 digits
@@ -357,7 +375,7 @@ function OtpVerifyForm({
                 <Input
                   inputMode="numeric"
                   autoComplete="one-time-code"
-                  placeholder="12345678"
+                  placeholder={t("codePlaceholder")}
                   {...field}
                 />
               </FormControl>
@@ -375,11 +393,12 @@ function OtpVerifyForm({
             type="submit"
             className="flex-1"
             disabled={verifyForm.formState.isSubmitting}
+            data-testid="otp-verify"
           >
-            Verify &amp; sign in
+            {t("verifyAndSignIn")}
           </Button>
           <Button type="button" variant="ghost" onClick={onBack}>
-            Back
+            {tc("back")}
           </Button>
         </div>
       </form>

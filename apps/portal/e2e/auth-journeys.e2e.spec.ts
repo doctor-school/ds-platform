@@ -93,11 +93,14 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     const password = livePassword();
 
     // ── Register (EARS-1) ────────────────────────────────────────────────
+    // Selectors are LOCALE-AGNOSTIC (#177): the portal copy is Russian, so the
+    // journeys key off stable `autocomplete` attributes, `data-testid`s, and
+    // ARIA roles — never the visible English text the EN-first scaffold used.
     await page.goto("/register");
     const sentAt = new Date().toISOString();
-    await page.getByLabel("Email").fill(email);
-    await page.getByLabel("Password").fill(password);
-    await page.getByRole("button", { name: "Create account" }).click();
+    await page.locator('input[autocomplete="email"]').fill(email);
+    await page.locator('input[autocomplete="new-password"]').fill(password);
+    await page.getByTestId("register-submit").click();
 
     // The portal routes to /verify carrying the identifier on the pending ack.
     await page.waitForURL(/\/verify/);
@@ -106,22 +109,16 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     const verifyCode = await fetchOtpCode(email, sentAt, "Verify email");
     expect(verifyCode, "registration code should reach Mailpit").toBeTruthy();
     await page.locator('input[autocomplete="one-time-code"]').fill(verifyCode!);
-    await page.getByRole("button", { name: "Confirm" }).click();
+    await page.getByTestId("verify-submit").click();
     await page.waitForURL(/\/login/);
 
     // ── Login with password (EARS-5/8) ───────────────────────────────────
-    await page
-      .getByRole("form", { name: "Password sign-in" })
-      .getByLabel("Email or phone")
-      .fill(email);
-    await page
-      .getByRole("form", { name: "Password sign-in" })
-      .getByLabel("Password")
+    const passwordForm = page.getByTestId("password-login-form");
+    await passwordForm.locator('input[autocomplete="username"]').fill(email);
+    await passwordForm
+      .locator('input[autocomplete="current-password"]')
       .fill(password);
-    await page
-      .getByRole("form", { name: "Password sign-in" })
-      .getByRole("button", { name: "Sign in" })
-      .click();
+    await page.getByTestId("password-login-submit").click();
 
     // ── Session visible (EARS-8 read side) ───────────────────────────────
     await page.waitForURL(/\/account/);
@@ -129,7 +126,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await assertNoTokenInClient(page);
 
     // ── Logout (EARS-10) ─────────────────────────────────────────────────
-    await page.getByRole("button", { name: "Sign out" }).click();
+    await page.getByTestId("logout").click();
     await page.waitForURL(/\/login/);
     const after = await page.context().cookies();
     expect(after.find((c) => c.name === SESSION_COOKIE)?.value || "").toBe("");
@@ -145,22 +142,21 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     // reuse the password journey's front half to provision it.
     await page.goto("/register");
     const regAt = new Date().toISOString();
-    await page.getByLabel("Email").fill(email);
-    await page.getByLabel("Password").fill(password);
-    await page.getByRole("button", { name: "Create account" }).click();
+    await page.locator('input[autocomplete="email"]').fill(email);
+    await page.locator('input[autocomplete="new-password"]').fill(password);
+    await page.getByTestId("register-submit").click();
     await page.waitForURL(/\/verify/);
     const verifyCode = await fetchOtpCode(email, regAt, "Verify email");
     expect(verifyCode).toBeTruthy();
     await page.locator('input[autocomplete="one-time-code"]').fill(verifyCode!);
-    await page.getByRole("button", { name: "Confirm" }).click();
+    await page.getByTestId("verify-submit").click();
     await page.waitForURL(/\/login/);
 
     // ── Request an email OTP (EARS-6 step 1) ─────────────────────────────
-    const otpForm = page.getByRole("radiogroup", { name: "OTP channel" });
-    await otpForm.getByRole("radio", { name: "Email code" }).click();
-    await page.getByLabel("Email", { exact: true }).fill(email);
+    await page.getByTestId("otp-channel-email").click();
+    await page.getByTestId("otp-identifier").fill(email);
     const otpSentAt = new Date().toISOString();
-    await page.getByRole("button", { name: "Send code" }).click();
+    await page.getByTestId("otp-send").click();
 
     // ── Read the login OTP from Mailpit + submit (EARS-6 step 2 / EARS-8) ─
     // Select by the `Verify OTP` subject, NOT timestamp: Zitadel sends the
@@ -170,7 +166,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     const otpCode = await fetchOtpCode(email, otpSentAt, "Verify OTP");
     expect(otpCode, "login OTP should reach Mailpit").toBeTruthy();
     await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
-    await page.getByRole("button", { name: "Verify & sign in" }).click();
+    await page.getByTestId("otp-verify").click();
 
     await page.waitForURL(/\/account/);
     await expect(page.getByTestId("session-sub")).not.toBeEmpty();
@@ -217,11 +213,10 @@ test.describe("portal auth journeys (real Zitadel)", () => {
 
       // ── Request an SMS OTP (EARS-7 step 1) ───────────────────────────────
       await page.goto("/login");
-      const otpForm = page.getByRole("radiogroup", { name: "OTP channel" });
-      await otpForm.getByRole("radio", { name: "SMS code" }).click();
-      await page.getByLabel("Phone", { exact: true }).fill(phone);
+      await page.getByTestId("otp-channel-sms").click();
+      await page.getByTestId("otp-identifier").fill(phone);
       const otpSentAt = new Date().toISOString();
-      await page.getByRole("button", { name: "Send code" }).click();
+      await page.getByTestId("otp-send").click();
 
       // ── Read the login OTP from the sink + submit (EARS-7 step 2 / EARS-8) ─
       // Select by the `session.otp.sms.challenged` event, NOT timestamp alone:
@@ -234,7 +229,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
       );
       expect(otpCode, "login OTP should reach the sink").toBeTruthy();
       await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
-      await page.getByRole("button", { name: "Verify & sign in" }).click();
+      await page.getByTestId("otp-verify").click();
 
       // ── Session visible + EARS-8 no-token invariant ──────────────────────
       await page.waitForURL(/\/account/);

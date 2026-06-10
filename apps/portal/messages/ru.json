@@ -1,0 +1,100 @@
+{
+  "common": {
+    "email": "Электронная почта",
+    "phone": "Телефон",
+    "password": "Пароль",
+    "emailOrPhone": "Электронная почта или телефон",
+    "passwordPolicy": "Не менее 8 символов: заглавная буква, строчная буква, цифра и спецсимвол.",
+    "emailPlaceholder": "doctor@example.com",
+    "phonePlaceholder": "+79991234567",
+    "identifierPlaceholder": "doctor@example.com или +7…",
+    "shortPhonePlaceholder": "+7…",
+    "back": "Назад"
+  },
+  "home": {
+    "title": "Портал Doctor.School",
+    "description": "Каркас приложения (ADR-0004 §3 / §7). Сценарии аутентификации (пароль / email-код / SMS-код) появляются в составе функции 003 — эта страница подтверждает, что приложение собирается на общей дизайн-системе.",
+    "goToSignIn": "Перейти ко входу"
+  },
+  "botProtection": {
+    "inactiveNote": "Защита от ботов отключена (не задан <code>NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY</code>) — задайте ключ, чтобы включить виджет SmartCaptcha."
+  },
+  "register": {
+    "title": "Создайте аккаунт",
+    "description": "Зарегистрируйтесь по электронной почте или телефону — мы отправим код для подтверждения.",
+    "identifierGroupLabel": "Идентификатор",
+    "channelEmail": "Эл. почта",
+    "channelPhone": "Телефон",
+    "consent": "Регистрируясь, вы принимаете Условия использования Doctor.School.",
+    "submit": "Создать аккаунт",
+    "haveAccount": "Уже есть аккаунт? Войти"
+  },
+  "login": {
+    "title": "Вход",
+    "description": "Доступ к вашему аккаунту Doctor.School.",
+    "passwordFormLabel": "Вход по паролю",
+    "submit": "Войти",
+    "createAccount": "Создать аккаунт",
+    "forgotPassword": "Забыли пароль?",
+    "otpFormLabel": "Вход по одноразовому коду",
+    "otpHeading": "Вход по одноразовому коду",
+    "otpDescription": "Мы отправим код на вашу электронную почту или телефон (email-код / SMS-код).",
+    "otpChannelGroupLabel": "Канал кода",
+    "otpChannelEmail": "Код на почту",
+    "otpChannelSms": "Код по SMS",
+    "sendCode": "Отправить код",
+    "enterCode": "Введите код",
+    "codePlaceholder": "12345678",
+    "verifyAndSignIn": "Подтвердить и войти"
+  },
+  "verify": {
+    "title": "Подтвердите аккаунт",
+    "description": "Введите код, отправленный на адрес <strong>{identifier}</strong>.",
+    "fallbackIdentifier": "ваш аккаунт",
+    "codeLabel": "Код подтверждения",
+    "submit": "Подтвердить",
+    "backToSignIn": "Вернуться ко входу"
+  },
+  "reset": {
+    "title": "Сброс пароля",
+    "descriptionRequest": "Укажите электронную почту или телефон — мы отправим код для сброса.",
+    "descriptionComplete": "Введите код, отправленный на {identifier}, и задайте новый пароль.",
+    "codeLabel": "Код для сброса",
+    "newPasswordLabel": "Новый пароль",
+    "sendResetCode": "Отправить код для сброса",
+    "setNewPassword": "Задать новый пароль",
+    "backToSignIn": "Вернуться ко входу"
+  },
+  "account": {
+    "loading": "Загружаем вашу сессию…",
+    "title": "Вы вошли в систему",
+    "description": "Ваша активная сессия Doctor.School.",
+    "subject": "Идентификатор",
+    "roles": "Роли",
+    "rolesEmpty": "—",
+    "mfa": "MFA",
+    "mfaEnabled": "включена",
+    "mfaDisabled": "отключена",
+    "signOut": "Выйти"
+  },
+  "errors": {
+    "registerFailed": "Не удалось завершить регистрацию. Проверьте введённые данные.",
+    "loginFailed": "Не удалось войти. Проверьте данные и попробуйте снова.",
+    "otpSendFailed": "Не удалось отправить код. Попробуйте ещё раз.",
+    "otpVerifyFailed": "Код не подошёл. Запросите новый.",
+    "verifyFailed": "Код не подошёл. Попробуйте ещё раз.",
+    "resetRequestFailed": "Не удалось начать сброс. Попробуйте ещё раз.",
+    "resetCompleteFailed": "Код не подошёл или пароль отклонён.",
+    "validation": {
+      "required": "Заполните это поле.",
+      "email": "Введите корректный адрес электронной почты.",
+      "phone": "Введите телефон в формате +79991234567.",
+      "passwordTooShort": "Не менее 8 символов.",
+      "passwordTooLong": "Не более 256 символов.",
+      "passwordComplexity": "Пароль должен содержать заглавную и строчную буквы, цифру и спецсимвол.",
+      "identifierRequired": "Укажите электронную почту или телефон.",
+      "codeRequired": "Введите код.",
+      "fallback": "Проверьте введённое значение."
+    }
+  }
+}

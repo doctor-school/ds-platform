@@ -135,6 +135,40 @@ services:
       timeout: 5s
       retries: 5
 
+  # --- sms-sink — dev SMS catch-all (the SMS analogue of Mailpit) ---
+  # Zitadel's generic HTTP SMS provider (configured by idp/provision.sh) POSTs
+  # every outbound SMS here instead of a real gateway — exactly as the SMTP
+  # provider points at Mailpit rather than a real SMTP. SMS-Aero is the PRODUCTION
+  # sender (recorded in the specs); the dev-stand never reaches it. The catcher
+  # stores each webhook body and exposes a small REST API so the live SMS-OTP e2e
+  # (EARS-7) reads the delivered code back by recipient phone, mirroring the
+  # email-OTP test reading codes from Mailpit. Production code path is untouched
+  # (no returnCode leak, no test backdoor — AGENTS.md §6). Dependency-free: the
+  # stock node image runs a bind-mounted script, so there is no bespoke image to
+  # build (same "plain upstream image" shape as mailpit). Zitadel reaches it on
+  # the bridge as `sms-sink:8090`; the test reaches it on the published host port.
+  sms-sink:
+    image: node:22-alpine
+    restart: unless-stopped
+    command: ["node", "/srv/server.mjs"]
+    environment:
+      SMS_SINK_PORT: "8090"
+    ports:
+      - "${SMS_SINK_PORT:-8090}:8090"
+    volumes:
+      - ./sms-sink/server.mjs:/srv/server.mjs:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:8090/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # --- Zitadel — OIDC identity provider / JWT issuer (ADR-0001 §8, DSP-209) ---
   # Single Go binary, DB-backed (no named volume — see header). ExternalDomain
   # and ExternalPort are env-driven so this contract stays recipe-agnostic: they

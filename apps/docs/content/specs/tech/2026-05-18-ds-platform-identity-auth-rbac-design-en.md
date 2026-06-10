@@ -104,7 +104,7 @@ The **budget breaker is global and provider-agnostic** — failing over to a sec
 
 ### 5.3 Failover (provider chain)
 
-The primary → secondary SMS provider chain is the engineering-readiness §5.bis registry (e.g. SMS.ru / SMSC.ru / MTT / BeelineBusiness, all RF, all 152-FZ-compliant). Failover is driven by the **provider-health breaker**: when the primary's breaker is OPEN, sends route to the secondary; the budget breaker (§5.2) still gates the combined volume. Provider selection is an implementation moment (ER §5.bis), not a contract here.
+The primary → secondary SMS provider chain is the engineering-readiness §5.bis registry: the **primary is SMS-Aero** (smsaero.ru Gate API v2 — HTTP Basic `email:api_key`, `POST https://gate.smsaero.ru/v2/sms/send`, params `number`/`text`/`sign`, default sign `SMS Aero`; env `SMSAERO_EMAIL`/`SMSAERO_API_KEY`/`SMSAERO_SIGN`), with SMSC.ru / SMS.ru as the interchangeable RF fallback (all RF, all 152-FZ-compliant). Failover is driven by the **provider-health breaker**: when the primary's breaker is OPEN, sends route to the secondary; the budget breaker (§5.2) still gates the combined volume. The provider is now **decided** (SMS-Aero — supersedes the prior "implementation moment"; Plane DSO-26/57/58 are cross-tracker references only). **Dev-stand note:** the local dev-stand never reaches SMS-Aero — Zitadel's generic HTTP SMS provider posts to a local `sms-sink` catcher (the SMS analogue of Mailpit; `infra/dev-stand`), so the SMS-OTP login round-trip (003 EARS-7) is proven against real Zitadel without a real send.
 
 ### 5.4 State store and OPEN behavior
 

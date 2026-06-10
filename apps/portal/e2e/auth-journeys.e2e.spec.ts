@@ -1,5 +1,13 @@
 import { test, expect, type Page } from "@playwright/test";
 import { fetchOtpCode } from "./support/mailpit";
+import { fetchSmsOtpCode } from "./support/sms-sink";
+import {
+  createUserWithPhone,
+  deleteUser,
+  grantDoctorGuest,
+  requestPhoneVerification,
+  verifyPhone,
+} from "./support/zitadel-admin";
 
 /**
  * Portal auth browser-E2E (#131 DoD) — the REAL-Zitadel tier (NOT FakeIdpClient).
@@ -34,6 +42,13 @@ const livePassword = (): string => `Prt-${Date.now()}-aA1!`;
 
 const newEmail = (): string =>
   `e2e-131-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
+
+/**
+ * A unique E.164-ish phone for the SMS-OTP journey. The dev-stand SMS provider is
+ * the local sink (no real delivery), so any well-formed number Zitadel accepts
+ * works; uniqueness avoids collisions across reruns (Zitadel uniques the phone).
+ */
+const newPhone = (): string => `+1555${String(Date.now()).slice(-7)}`;
 
 /**
  * Assert the EARS-8 no-token invariant from the live browser: the auth identity
@@ -162,12 +177,71 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await assertNoTokenInClient(page);
   });
 
-  // EARS-7 SMS-OTP: the dev-stand has NO SMS provider, so the SMS code cannot be
-  // delivered or read (no Mailpit equivalent for SMS). The SMS-OTP UI IS built
-  // (the channel selector + request/verify forms on /login), but a live round-trip
-  // is impossible here — declared as a parity-only skip exactly like the api spec.
-  // NOT faked green; live-verifiable only once a real SMS provider is configured.
-  test.skip("sms-OTP: parity-only — no SMS provider on the dev-stand", () => {
-    // Intentionally skipped — see the comment block above and the api EARS-7 skip.
+  // EARS-7 SMS-OTP — the live browser round-trip, the SAME bar the email-OTP
+  // journey above sets (#170). The dev-stand Zitadel now has a generic HTTP SMS
+  // provider pointing at the local `sms-sink` (the SMS analogue of Mailpit;
+  // compose.core.yml + provision.sh), so the code Zitadel renders is delivered to
+  // the sink and read back here — never surfaced through any api/BFF response
+  // (that would make the EARS-8/16 ack a code oracle, or need a banned backdoor).
+  // SMS-Aero is the PRODUCTION sender (recorded in the specs); the dev-stand never
+  // reaches it. NOT faked green — proven against REAL Zitadel.
+  test("sms-OTP: provisioned phone → request code → login → session", async ({
+    page,
+  }) => {
+    const email = newEmail();
+    const phone = newPhone();
+    const password = livePassword();
+    let userId = "";
+
+    try {
+      // ── Fixture: provision an account with a VERIFIED phone ──────────────
+      // The portal register form collects only email+password (no phone field —
+      // a separate product slice), so the SMS-OTP precondition (a verified phone)
+      // is set up out-of-band via the Zitadel service API, exactly as the api-tier
+      // e2e provisions its fixtures. This is setup, not the path under test; the
+      // path under test is the live BROWSER round-trip on /login below.
+      userId = await createUserWithPhone({ email, password, phone });
+      const verifyAt = new Date().toISOString();
+      await requestPhoneVerification(userId);
+      const verifyCode = await fetchSmsOtpCode(
+        phone,
+        verifyAt,
+        "user.human.phone.code.added",
+      );
+      expect(verifyCode, "phone-verify SMS should reach the sink").toBeTruthy();
+      await verifyPhone(userId, verifyCode!);
+      // Replicate the register-time #157 grant: the `doctor_guest` project role is
+      // what the OIDC token's roles claim carries, and `/auth/session` is gated on
+      // it — without the grant the SMS-OTP session would 403 on the /account read.
+      await grantDoctorGuest(userId);
+
+      // ── Request an SMS OTP (EARS-7 step 1) ───────────────────────────────
+      await page.goto("/login");
+      const otpForm = page.getByRole("radiogroup", { name: "OTP channel" });
+      await otpForm.getByRole("radio", { name: "SMS code" }).click();
+      await page.getByLabel("Phone", { exact: true }).fill(phone);
+      const otpSentAt = new Date().toISOString();
+      await page.getByRole("button", { name: "Send code" }).click();
+
+      // ── Read the login OTP from the sink + submit (EARS-7 step 2 / EARS-8) ─
+      // Select by the `session.otp.sms.challenged` event, NOT timestamp alone:
+      // the registration phone-verify SMS lands close enough that the time cutoff
+      // cannot separate it (the SMS twin of the email `Verify OTP` subject fix).
+      const otpCode = await fetchSmsOtpCode(
+        phone,
+        otpSentAt,
+        "session.otp.sms.challenged",
+      );
+      expect(otpCode, "login OTP should reach the sink").toBeTruthy();
+      await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
+      await page.getByRole("button", { name: "Verify & sign in" }).click();
+
+      // ── Session visible + EARS-8 no-token invariant ──────────────────────
+      await page.waitForURL(/\/account/);
+      await expect(page.getByTestId("session-sub")).not.toBeEmpty();
+      await assertNoTokenInClient(page);
+    } finally {
+      if (userId) await deleteUser(userId);
+    }
   });
 });

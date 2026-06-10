@@ -232,12 +232,12 @@ with the compose stack in DSP-154; the rules are fixed here so DSP-154 implement
 - **Host ports** — the setup-design port list collides with ports already bound on
   TrueNAS. DSP-154 must remap these:
 
-  | Service (spec port)                                                                    | Status on TrueNAS                                             | Action for DSP-154                |
-  | -------------------------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------- |
-  | Postgres `5432`                                                                        | **in use** — `home-budgeting-system-db-1` (`5433` also taken) | remap host side, e.g. `5442:5432` |
-  | `8000`                                                                                 | **in use**                                                    | remap, e.g. `8100:8000`           |
-  | `8001`                                                                                 | **in use**                                                    | remap, e.g. `8101:8001`           |
-  | `6379`, `9000`, `9001`, `9080`, `9443`, `3100`, `4000`, `1025`, `8025`, `3592`, `3593` | free                                                          | keep as-is                        |
+  | Service (spec port)                                                                            | Status on TrueNAS                                             | Action for DSP-154                |
+  | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------- |
+  | Postgres `5432`                                                                                | **in use** — `home-budgeting-system-db-1` (`5433` also taken) | remap host side, e.g. `5442:5432` |
+  | `8000`                                                                                         | **in use**                                                    | remap, e.g. `8100:8000`           |
+  | `8001`                                                                                         | **in use**                                                    | remap, e.g. `8101:8001`           |
+  | `6379`, `9000`, `9001`, `9080`, `9443`, `3100`, `4000`, `1025`, `8025`, `8090`, `3592`, `3593` | free                                                          | keep as-is                        |
 
   Prefer **not publishing** internal-only ports at all and reaching services over the
   Docker network / SSH tunnel; publish only what the host apps genuinely need.
@@ -246,7 +246,7 @@ with the compose stack in DSP-154; the rules are fixed here so DSP-154 implement
 
 ```powershell
 ssh truenas "sudo ss -tlnH | awk '{print \$4}' | sed 's/.*://' | sort -nu" |
-  Select-String -Pattern '^(5432|8000|8001|6379|9000|9001|9080|9443|3100|4000|1025|8025|3592|3593)$'
+  Select-String -Pattern '^(5432|8000|8001|6379|9000|9001|9080|9443|3100|4000|1025|8025|8090|3592|3593)$'
 ```
 
 ---

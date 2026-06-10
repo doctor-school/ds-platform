@@ -11,7 +11,12 @@ import { RegisterRequestSchema, type RegisterRequest } from "@ds/schemas";
 
 import { BotProtectionField } from "@/components/bot-protection";
 import { authClient } from "@/lib/auth-client";
+import { authErrorMessage } from "@/lib/auth-error-message";
 import { REQUIRED_CONSENT } from "@/lib/consent";
+import {
+  clearPendingRegistration,
+  setPendingRegistration,
+} from "@/lib/pending-registration";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
@@ -64,11 +69,17 @@ export default function RegisterPage() {
 
   async function onSubmit(values: RegisterRequest) {
     setError(null);
+    // Drop any password held from a prior (e.g. failed-then-retried) registration
+    // before we re-stash, so the single in-memory slot never carries a stale
+    // credential into this attempt (#175 — explicit single-slot replace).
+    clearPendingRegistration();
     // Send exactly one identifier field (the schema's dual-identifier invariant).
     const identifier =
       channel === "email"
         ? { email: values.email }
         : { phone: values.phone };
+    const identifierValue =
+      (channel === "email" ? values.email : values.phone) ?? "";
     try {
       await authClient.register({
         ...identifier,
@@ -76,15 +87,28 @@ export default function RegisterPage() {
         consent: REQUIRED_CONSENT.slice(),
         ...(captchaToken ? { captchaToken } : {}),
       } as RegisterRequest);
+      // Hand the entered credential to the verify step IN MEMORY ONLY (#175):
+      // module-scoped state survives this SPA `router.push` so `/verify` can
+      // replay the EARS-5 password login on success and land the user signed-in
+      // on `/account` — but it never touches the URL or any persisted store, and
+      // a hard reload of `/verify` drops it (then falls back to `/login`). The
+      // identifier is NOT secret and still rides the query as before; only the
+      // password is held in memory.
+      setPendingRegistration({
+        channel,
+        identifier: identifierValue,
+        password: values.password,
+      });
       // Carry the identifier into verification (the BFF infers the channel).
       const q =
         channel === "email"
-          ? `email=${encodeURIComponent(values.email ?? "")}`
-          : `phone=${encodeURIComponent(values.phone ?? "")}`;
+          ? `email=${encodeURIComponent(identifierValue)}`
+          : `phone=${encodeURIComponent(identifierValue)}`;
       router.push(`/verify?${q}`);
-    } catch {
-      // EARS-16: identical ack for new vs already-registered — generic on error.
-      setError(te("registerFailed"));
+    } catch (err) {
+      // EARS-16: identical ack for new vs already-registered — the auth OUTCOME
+      // stays the generic ack; only 429/5xx/network get a specific message.
+      setError(authErrorMessage(err, te, te("registerFailed")));
     }
   }
 

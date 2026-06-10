@@ -19,6 +19,7 @@ import {
 
 import { BotProtectionField } from "@/components/bot-protection";
 import { authClient } from "@/lib/auth-client";
+import { authErrorMessage } from "@/lib/auth-error-message";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
@@ -108,11 +109,12 @@ function PasswordLogin() {
       });
       // The BFF set the `__Host-` cookie; the session shell reads it server-side.
       router.push("/account");
-    } catch {
-      // EARS-16: ALL login failures — typed AuthError responses AND untyped
-      // network/programming errors alike — deliberately collapse to one generic
-      // message, so the UI never leaks an existence/error oracle.
-      setError(te("loginFailed"));
+    } catch (err) {
+      // EARS-16: the login OUTCOME (wrong credential / unknown account) stays the
+      // generic message so the UI never leaks an existence/error oracle. Only the
+      // non-oracle statuses get a specific message: 429 → too-many-attempts,
+      // 5xx/network → temporarily-unavailable.
+      setError(authErrorMessage(err, te, te("loginFailed")));
     }
   }
 
@@ -216,8 +218,8 @@ function OtpLogin() {
       // form in a freshly-mounted child is the idiomatic fix (#131/#153 live).
       setIdentifier(values.identifier);
       setSent(true);
-    } catch {
-      setError(te("otpSendFailed"));
+    } catch (err) {
+      setError(authErrorMessage(err, te, te("otpSendFailed")));
     }
   }
 
@@ -345,8 +347,8 @@ function OtpVerifyForm({
     try {
       await authClient.loginWithOtp({ ...values, identifier, channel });
       router.push("/account");
-    } catch {
-      setError(te("otpVerifyFailed"));
+    } catch (err) {
+      setError(authErrorMessage(err, te, te("otpVerifyFailed")));
     }
   }
 

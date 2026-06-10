@@ -86,7 +86,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     "dev-stand env absent (IDP_* + E2E_PORTAL_URL) — manual gate, skipped in CI",
   );
 
-  test("password: register → verify → login → session → logout", async ({
+  test("password: register → verify auto-submits → auto-login → session → logout", async ({
     page,
   }) => {
     const email = newEmail();
@@ -103,24 +103,22 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await page.getByTestId("register-submit").click();
 
     // The portal routes to /verify carrying the identifier on the pending ack.
+    // The entered password is NOT in the URL (it rides only the in-memory store).
     await page.waitForURL(/\/verify/);
+    expect(page.url()).not.toContain(password);
 
     // ── Verify (EARS-3) — read the real code from Mailpit ────────────────
+    // #175: entering the final digit AUTO-SUBMITS (InputOTP `onComplete`). We
+    // fill the 6-digit code and do NOT click the button — the journey must
+    // advance on its own. On success the held password is replayed into the real
+    // EARS-5 password login and the user lands DIRECTLY on /account (no manual
+    // /login round-trip).
     const verifyCode = await fetchOtpCode(email, sentAt, "Verify email");
     expect(verifyCode, "registration code should reach Mailpit").toBeTruthy();
     await page.locator('input[autocomplete="one-time-code"]').fill(verifyCode!);
-    await page.getByTestId("verify-submit").click();
-    await page.waitForURL(/\/login/);
+    // No `getByTestId("verify-submit").click()` — auto-submit carries the flow.
 
-    // ── Login with password (EARS-5/8) ───────────────────────────────────
-    const passwordForm = page.getByTestId("password-login-form");
-    await passwordForm.locator('input[autocomplete="username"]').fill(email);
-    await passwordForm
-      .locator('input[autocomplete="current-password"]')
-      .fill(password);
-    await page.getByTestId("password-login-submit").click();
-
-    // ── Session visible (EARS-8 read side) ───────────────────────────────
+    // ── Session visible (EARS-8 read side) — set by the EARS-5 login replay ──
     await page.waitForURL(/\/account/);
     await expect(page.getByTestId("session-sub")).not.toBeEmpty();
     await assertNoTokenInClient(page);
@@ -139,7 +137,8 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     const password = livePassword();
 
     // The account must exist+be verified before an OTP login challenge fires —
-    // reuse the password journey's front half to provision it.
+    // reuse the password journey's front half to provision it. #175: verify
+    // auto-submits and auto-logs-in, so provisioning now lands on /account.
     await page.goto("/register");
     const regAt = new Date().toISOString();
     await page.locator('input[autocomplete="email"]').fill(email);
@@ -149,7 +148,11 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     const verifyCode = await fetchOtpCode(email, regAt, "Verify email");
     expect(verifyCode).toBeTruthy();
     await page.locator('input[autocomplete="one-time-code"]').fill(verifyCode!);
-    await page.getByTestId("verify-submit").click();
+    // Auto-submit + auto-login (#175) — no button click, lands on /account.
+    await page.waitForURL(/\/account/);
+
+    // Sign out so the OTP-login challenge below starts from a clean session.
+    await page.getByTestId("logout").click();
     await page.waitForURL(/\/login/);
 
     // ── Request an email OTP (EARS-6 step 1) ─────────────────────────────

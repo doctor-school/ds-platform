@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useTranslations } from "next-intl";
 import { UserPlus } from "lucide-react";
 
 import { RegisterRequestSchema, type RegisterRequest } from "@ds/schemas";
@@ -12,6 +12,7 @@ import { RegisterRequestSchema, type RegisterRequest } from "@ds/schemas";
 import { BotProtectionField } from "@/components/bot-protection";
 import { authClient } from "@/lib/auth-client";
 import { REQUIRED_CONSENT } from "@/lib/consent";
+import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
 import { Input } from "@ds/design-system/input";
@@ -49,12 +50,15 @@ type Channel = "email" | "phone";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const t = useTranslations("register");
+  const tc = useTranslations("common");
+  const te = useTranslations("errors");
   const [channel, setChannel] = useState<Channel>("email");
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm<RegisterRequest>({
-    resolver: zodResolver(RegisterRequestSchema),
+    resolver: useLocalizedResolver(RegisterRequestSchema),
     defaultValues: { email: "", password: "", consent: REQUIRED_CONSENT.slice() },
   });
 
@@ -80,7 +84,7 @@ export default function RegisterPage() {
       router.push(`/verify?${q}`);
     } catch {
       // EARS-16: identical ack for new vs already-registered — generic on error.
-      setError("Could not complete registration. Check your details.");
+      setError(te("registerFailed"));
     }
   }
 
@@ -100,15 +104,16 @@ export default function RegisterPage() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <UserPlus className="text-primary" aria-hidden />
-            <CardTitle>Create your account</CardTitle>
+            <CardTitle>{t("title")}</CardTitle>
           </div>
-          <CardDescription>
-            Register with your email or phone — we&apos;ll send a code to confirm
-            it.
-          </CardDescription>
+          <CardDescription>{t("description")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="mb-4 flex gap-2" role="radiogroup" aria-label="Identifier">
+          <div
+            className="mb-4 flex gap-2"
+            role="radiogroup"
+            aria-label={t("identifierGroupLabel")}
+          >
             {(["email", "phone"] as const).map((c) => (
               <Button
                 key={c}
@@ -119,7 +124,7 @@ export default function RegisterPage() {
                 aria-checked={channel === c}
                 onClick={() => switchChannel(c)}
               >
-                {c === "email" ? "Email" : "Phone"}
+                {c === "email" ? t("channelEmail") : t("channelPhone")}
               </Button>
             ))}
           </div>
@@ -136,12 +141,12 @@ export default function RegisterPage() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email</FormLabel>
+                      <FormLabel>{tc("email")}</FormLabel>
                       <FormControl>
                         <Input
                           type="email"
                           autoComplete="email"
-                          placeholder="doctor@example.com"
+                          placeholder={tc("emailPlaceholder")}
                           {...field}
                           value={field.value ?? ""}
                         />
@@ -156,12 +161,12 @@ export default function RegisterPage() {
                   name="phone"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Phone</FormLabel>
+                      <FormLabel>{tc("phone")}</FormLabel>
                       <FormControl>
                         <Input
                           type="tel"
                           autoComplete="tel"
-                          placeholder="+79991234567"
+                          placeholder={tc("phonePlaceholder")}
                           {...field}
                           value={field.value ?? ""}
                         />
@@ -177,7 +182,7 @@ export default function RegisterPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
+                    <FormLabel>{tc("password")}</FormLabel>
                     <FormControl>
                       <Input
                         type="password"
@@ -185,18 +190,13 @@ export default function RegisterPage() {
                         {...field}
                       />
                     </FormControl>
-                    <FormDescription>
-                      At least 8 characters with an upper-case letter, a
-                      lower-case letter, a digit, and a symbol.
-                    </FormDescription>
+                    <FormDescription>{tc("passwordPolicy")}</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
-              <p className="text-xs text-muted-foreground">
-                By registering you accept the Doctor.School Terms of Service.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("consent")}</p>
 
               <BotProtectionField onToken={setCaptchaToken} />
               {error && (
@@ -208,15 +208,16 @@ export default function RegisterPage() {
                 type="submit"
                 className="w-full"
                 disabled={form.formState.isSubmitting}
+                data-testid="register-submit"
               >
-                Create account
+                {t("submit")}
               </Button>
             </form>
           </Form>
         </CardContent>
         <CardFooter className="text-sm">
           <Link href="/login" className="underline">
-            Already have an account? Sign in
+            {t("haveAccount")}
           </Link>
         </CardFooter>
       </Card>

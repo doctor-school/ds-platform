@@ -4,12 +4,13 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useTranslations } from "next-intl";
 import { MailCheck } from "lucide-react";
 
 import { VerifyRequestSchema, type VerifyRequest } from "@ds/schemas";
 
 import { authClient } from "@/lib/auth-client";
+import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
 import {
@@ -57,13 +58,15 @@ export default function VerifyPage() {
 
 function VerifyCard() {
   const router = useRouter();
+  const t = useTranslations("verify");
+  const te = useTranslations("errors");
   const params = useSearchParams();
   const email = params.get("email") ?? undefined;
   const phone = params.get("phone") ?? undefined;
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm<VerifyRequest>({
-    resolver: zodResolver(VerifyRequestSchema),
+    resolver: useLocalizedResolver(VerifyRequestSchema),
     // Seed exactly one identifier from the query (the channel the user registered
     // with); the field is not user-editable here — they only type the code.
     defaultValues: email ? { email, code: "" } : { phone, code: "" },
@@ -75,21 +78,24 @@ function VerifyCard() {
       await authClient.verify(values);
       router.push("/login");
     } catch {
-      setError("That code did not work. Please try again.");
+      setError(te("verifyFailed"));
     }
   }
 
-  const identifierLabel = email ?? phone ?? "your account";
+  const identifierLabel = email ?? phone ?? t("fallbackIdentifier");
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
           <MailCheck className="text-primary" aria-hidden />
-          <CardTitle>Confirm your account</CardTitle>
+          <CardTitle>{t("title")}</CardTitle>
         </div>
         <CardDescription>
-          Enter the code we sent to <strong>{identifierLabel}</strong>.
+          {t.rich("description", {
+            identifier: identifierLabel,
+            strong: (chunks) => <strong>{chunks}</strong>,
+          })}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -104,7 +110,7 @@ function VerifyCard() {
               name="code"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Verification code</FormLabel>
+                  <FormLabel>{t("codeLabel")}</FormLabel>
                   <FormControl>
                     <InputOTP
                       maxLength={6}
@@ -132,15 +138,16 @@ function VerifyCard() {
               type="submit"
               className="w-full"
               disabled={form.formState.isSubmitting}
+              data-testid="verify-submit"
             >
-              Confirm
+              {t("submit")}
             </Button>
           </form>
         </Form>
       </CardContent>
       <CardFooter className="text-sm">
         <Link href="/login" className="underline">
-          Back to sign-in
+          {t("backToSignIn")}
         </Link>
       </CardFooter>
     </Card>

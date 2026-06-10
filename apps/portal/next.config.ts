@@ -1,4 +1,12 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
+
+/**
+ * next-intl plugin (#177). Points at the single-locale request config
+ * (`i18n/request.ts`, fixed `ru`). No `[locale]` routing or middleware — the
+ * portal is RU-only with no switcher, so this is the minimal non-routing setup.
+ */
+const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
 
 /**
  * Same-origin BFF proxy upstream (#131, EARS-8 invariant). The session is carried
@@ -31,4 +39,4 @@ const config: NextConfig = {
   },
 };
 
-export default config;
+export default withNextIntl(config);

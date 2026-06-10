@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { SmartCaptcha } from "./smart-captcha";
 
 /**
@@ -22,6 +24,7 @@ export interface BotProtectionFieldProps {
 }
 
 export function BotProtectionField({ onToken }: BotProtectionFieldProps) {
+  const t = useTranslations("botProtection");
   const sitekey = process.env.NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY;
 
   if (!sitekey) {
@@ -30,9 +33,9 @@ export function BotProtectionField({ onToken }: BotProtectionFieldProps) {
         className="rounded-md border border-dashed border-muted-foreground/40 bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
         role="note"
       >
-        Bot protection inactive (no{" "}
-        <code>NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY</code> configured) — set it to
-        enable the SmartCaptcha widget.
+        {t.rich("inactiveNote", {
+          code: (chunks) => <code>{chunks}</code>,
+        })}
       </div>
     );
   }

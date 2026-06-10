@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { LogOut, ShieldCheck } from "lucide-react";
 
 import type { SessionClaims } from "@ds/schemas";
@@ -39,6 +40,7 @@ type State =
 
 export default function AccountPage() {
   const router = useRouter();
+  const t = useTranslations("account");
   const [state, setState] = useState<State>({ kind: "loading" });
 
   const loadSession = useCallback(async () => {
@@ -76,7 +78,7 @@ export default function AccountPage() {
     return (
       <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-16">
         <p className="text-sm text-muted-foreground" role="status">
-          Loading your session…
+          {t("loading")}
         </p>
       </main>
     );
@@ -90,27 +92,29 @@ export default function AccountPage() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <ShieldCheck className="text-primary" aria-hidden />
-            <CardTitle>You&apos;re signed in</CardTitle>
+            <CardTitle>{t("title")}</CardTitle>
           </div>
-          <CardDescription>Your active Doctor.School session.</CardDescription>
+          <CardDescription>{t("description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <dl className="space-y-2 text-sm">
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Subject</dt>
+              <dt className="text-muted-foreground">{t("subject")}</dt>
               <dd className="font-mono break-all" data-testid="session-sub">
                 {claims.sub}
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Roles</dt>
+              <dt className="text-muted-foreground">{t("roles")}</dt>
               <dd data-testid="session-roles">
-                {claims.roles.length ? claims.roles.join(", ") : "—"}
+                {claims.roles.length
+                  ? claims.roles.join(", ")
+                  : t("rolesEmpty")}
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">MFA</dt>
-              <dd>{claims.mfa ? "enabled" : "disabled"}</dd>
+              <dt className="text-muted-foreground">{t("mfa")}</dt>
+              <dd>{claims.mfa ? t("mfaEnabled") : t("mfaDisabled")}</dd>
             </div>
           </dl>
           <Button
@@ -118,8 +122,9 @@ export default function AccountPage() {
             variant="outline"
             className="w-full"
             onClick={onLogout}
+            data-testid="logout"
           >
-            <LogOut aria-hidden /> Sign out
+            <LogOut aria-hidden /> {t("signOut")}
           </Button>
         </CardContent>
       </Card>

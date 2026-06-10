@@ -171,6 +171,14 @@ Each seam is a documented insertion point so the consuming vertical is additive,
 
 Zitadel ships a self-hostable MIT Login v2 (Next.js, on the Session API) runnable on a custom domain. It would minimize custom UI code. It was **rejected for v1** because it implies a redirect hop to an auth subdomain, which contradicts ADR-0001 §2's deliberate choice of seamless inline forms for _credentials_ (the redirect model is accepted only for _social_ in §2). Variant B (headless inline forms over the BFF) keeps the chosen UX; the auth **primitives** stay native regardless of which UI shell is used, so "headless inline" is not "reinventing native". Login v2 remains a fallback note if the custom form layer proves more expensive than expected (would require an ADR-0001 §2 revision).
 
+### 8.1 UI language & i18n structure (EARS-21)
+
+The portal UI renders in **Russian (primary)** — Doctor.School is an RF/Russian-speaking product (EARS-21). The auth surface carries **no hardcoded user-facing strings**: every label, description, button, placeholder, the consent line, the bot-protection note, and the inline error copy live in a typed message catalog (`apps/portal/messages/ru.json`), consumed through `next-intl` (Next-16-compatible — declares `next ^16` as a peer). `next-intl`'s `getRequestConfig` is pinned to a **fixed `ru` locale**; `<html lang>` is driven by that resolved locale.
+
+Decision recorded: **RU-only now, no user-facing language switcher.** The i18n infrastructure is present so a future locale is **purely additive** — drop a `messages/<locale>.json`, resolve the locale from a cookie/header in `i18n/request.ts`, and surface a switcher; **no auth component is re-touched** because all copy already comes from the catalog. Because it is single-locale with no switcher, we deliberately **do not** adopt `next-intl`'s `[locale]` segment routing or locale middleware (that would churn every route for a capability not yet shipped) — the minimal non-routing `NextIntlClientProvider` + fixed-locale request config is the framework-idiomatic fit.
+
+Validation messages from the `@ds/schemas` zod SSOT are English (the package is shared with `apps/api`, where a Russian DTO error would be wrong), so the portal localizes them at the form boundary: a small zod **error map** (`apps/portal/lib/use-localized-resolver.ts`) keys off the structured zod **issue code/shape** (not the English text) and resolves it to the `errors.validation.*` RU catalog. The canonical RU error copy authored in `errors.*` is the source consumed by the error-display rule (#175). Decision-debt seam: if `@ds/schemas` later adopts a first-class i18n message strategy, the resolver collapses to a pass-through.
+
 ## 9. Decision-debt for ADR-0001 (separate adr-revision follow-up)
 
 Surfaced per AGENTS.md §6; **not** changed inside this spec-authoring:

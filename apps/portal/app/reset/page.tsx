@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useTranslations } from "next-intl";
 import { KeyRound } from "lucide-react";
 
 import {
@@ -16,6 +16,7 @@ import {
 
 import { BotProtectionField } from "@/components/bot-protection";
 import { authClient } from "@/lib/auth-client";
+import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
 import { Input } from "@ds/design-system/input";
@@ -56,17 +57,20 @@ import {
 
 export default function ResetPage() {
   const router = useRouter();
+  const t = useTranslations("reset");
+  const tc = useTranslations("common");
+  const te = useTranslations("errors");
   const [stage, setStage] = useState<"request" | "complete">("request");
   const [identifier, setIdentifier] = useState("");
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const requestForm = useForm<PasswordResetRequest>({
-    resolver: zodResolver(PasswordResetRequestSchema),
+    resolver: useLocalizedResolver(PasswordResetRequestSchema),
     defaultValues: { identifier: "" },
   });
   const completeForm = useForm<PasswordResetCompleteRequest>({
-    resolver: zodResolver(PasswordResetCompleteRequestSchema),
+    resolver: useLocalizedResolver(PasswordResetCompleteRequestSchema),
     defaultValues: { identifier: "", code: "", newPassword: "" },
   });
 
@@ -83,7 +87,7 @@ export default function ResetPage() {
       completeForm.reset({ identifier: values.identifier, code: "", newPassword: "" });
       setStage("complete");
     } catch {
-      setError("Could not start the reset. Please try again.");
+      setError(te("resetRequestFailed"));
     }
   }
 
@@ -93,7 +97,7 @@ export default function ResetPage() {
       await authClient.completePasswordReset(values);
       router.push("/login");
     } catch {
-      setError("That code did not work, or the password was rejected.");
+      setError(te("resetCompleteFailed"));
     }
   }
 
@@ -103,12 +107,12 @@ export default function ResetPage() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <KeyRound className="text-primary" aria-hidden />
-            <CardTitle>Reset your password</CardTitle>
+            <CardTitle>{t("title")}</CardTitle>
           </div>
           <CardDescription>
             {stage === "request"
-              ? "Enter your email or phone and we'll send a reset code."
-              : `Enter the code we sent to ${identifier} and choose a new password.`}
+              ? t("descriptionRequest")
+              : t("descriptionComplete", { identifier })}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -124,11 +128,11 @@ export default function ResetPage() {
                   name="identifier"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email or phone</FormLabel>
+                      <FormLabel>{tc("emailOrPhone")}</FormLabel>
                       <FormControl>
                         <Input
                           autoComplete="username"
-                          placeholder="doctor@example.com or +7…"
+                          placeholder={tc("identifierPlaceholder")}
                           {...field}
                         />
                       </FormControl>
@@ -147,7 +151,7 @@ export default function ResetPage() {
                   className="w-full"
                   disabled={requestForm.formState.isSubmitting}
                 >
-                  Send reset code
+                  {t("sendResetCode")}
                 </Button>
               </form>
             </Form>
@@ -163,7 +167,7 @@ export default function ResetPage() {
                   name="code"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Reset code</FormLabel>
+                      <FormLabel>{t("codeLabel")}</FormLabel>
                       <FormControl>
                         <InputOTP
                           maxLength={6}
@@ -187,7 +191,7 @@ export default function ResetPage() {
                   name="newPassword"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>New password</FormLabel>
+                      <FormLabel>{t("newPasswordLabel")}</FormLabel>
                       <FormControl>
                         <Input
                           type="password"
@@ -195,10 +199,7 @@ export default function ResetPage() {
                           {...field}
                         />
                       </FormControl>
-                      <FormDescription>
-                        At least 8 characters with an upper-case letter, a
-                        lower-case letter, a digit, and a symbol.
-                      </FormDescription>
+                      <FormDescription>{tc("passwordPolicy")}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -213,7 +214,7 @@ export default function ResetPage() {
                   className="w-full"
                   disabled={completeForm.formState.isSubmitting}
                 >
-                  Set new password
+                  {t("setNewPassword")}
                 </Button>
               </form>
             </Form>
@@ -221,7 +222,7 @@ export default function ResetPage() {
         </CardContent>
         <CardFooter className="text-sm">
           <Link href="/login" className="underline">
-            Back to sign-in
+            {t("backToSignIn")}
           </Link>
         </CardFooter>
       </Card>

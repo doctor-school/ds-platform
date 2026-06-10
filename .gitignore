@@ -38,6 +38,7 @@ pnpm-debug.log*
 .vitest-cache/
 playwright-report/
 test-results/
+.playwright-mcp/
 
 # Tooling state
 .changeset/.changeset-version

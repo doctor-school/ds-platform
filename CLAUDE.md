@@ -49,3 +49,9 @@ Runtime / operational tooling defaults (Coolify, Caddy, GlitchTip, Loki + Promet
 Compose stack for Postgres / Redis / etc. → `infra/dev-stand/`. See the [local-dev-environment setup-design spec][lds].
 
 [lds]: ./apps/docs/content/specs/tech/2026-05-18-local-dev-environment-setup-design-en.md
+
+---
+
+## UI verification (mandatory)
+
+Any feature that can be checked in the UI MUST be verified in the **actual running UI** before it is called done: bring up the dev-stand (`infra/dev-stand/`, TrueNAS not 24/7), run api + portal locally, and drive the journey in a browser (Playwright MCP). `typecheck` + `build` + `lint` + Mode-a review are necessary but **not** sufficient — they never prove the rendered result, and live-gated E2E that does not run in CI is not a substitute. Keep the stand up by default during UI work — it is also what your own Playwright testing needs. A user-facing dev placeholder (e.g. a "set this env var" note shown to end users) is a banned stub, not an affordance — render the real thing or nothing.

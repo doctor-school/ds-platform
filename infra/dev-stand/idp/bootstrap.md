@@ -171,10 +171,13 @@ that a full api boot additionally needs `AUDIT_IDENTIFIER_PEPPER` — so both #1
 values are discoverable on each (re)provision.
 
 Override defaults via env / flags: `IDP_REDIRECT_URIS`, `IDP_POST_LOGOUT_URIS`,
-`IDP_SEED_ROLE`, `IDP_SMTP_HOST` (default `mailpit:1025`), `IDP_SMTP_SENDER_ADDRESS`,
-`IDP_SMTP_SENDER_NAME`, `IDP_SMS_HTTP_ENDPOINT` (default `http://sms-sink:8090/`),
-`--project-name`, `--app-name`. Defaults target the api BFF callback
-(`:3000/auth/callback`) and the portal (`:3100/auth/callback`).
+`IDP_SEED_ROLE`, `EMAIL_DELIVERY_MODE` (default `mailpit`; see §3.bis),
+`SMS_DELIVERY_MODE` (default `sink`; see §3.bis), `IDP_SMTP_HOST` (default
+`mailpit:1025`), `IDP_SMTP_SENDER_ADDRESS`, `IDP_SMTP_SENDER_NAME`,
+`IDP_SMS_HTTP_ENDPOINT` (default `http://sms-sink:8090/` in `sink` mode,
+`http://sms-aero-adapter:8091/` in `real` mode), `--project-name`, `--app-name`.
+Defaults target the api BFF callback (`:3000/auth/callback`) and the portal
+(`:3100/auth/callback`).
 
 > **SMS on the dev-stand = a local catcher, never a real gateway.** The HTTP SMS
 > provider points at the `sms-sink` service (compose.core.yml) — the SMS analogue
@@ -190,6 +193,64 @@ Override defaults via env / flags: `IDP_REDIRECT_URIS`, `IDP_POST_LOGOUT_URIS`,
 > (`SMS_SINK_URL`, default `http://truenas.local:8090`). No OTP code is ever
 > surfaced through an api/BFF response (that would make the EARS-8/16 ack a code
 > oracle) — the sink side-channel is the only readback, mirroring Mailpit.
+
+### 3.bis. Switching to REAL delivery (email + paid SMS) — #176
+
+The dev sinks above are the **default**. Both providers are switchable to the
+**real** route by two env flags (the env-flag precedent of apps/api's
+`BOT_PROTECTION_ENABLED`), read by `provision.sh` which **converges** the active
+provider on every run — flip a flag, re-run `provision.sh`, and Zitadel's
+provider is re-pointed (no console). Steps 6/7 are idempotent: re-running in the
+same mode yields Zitadel's "No changes" (a no-op), so it is always safe to re-run.
+
+| Flag                  | Default   | `real` value                                              |
+| --------------------- | --------- | --------------------------------------------------------- |
+| `EMAIL_DELIVERY_MODE` | `mailpit` | the real transactional sender (`IDP_SMTP_REAL_*`, TLS on) |
+| `SMS_DELIVERY_MODE`   | `sink`    | `sms-aero-adapter` → SMS-Aero (smsaero.ru Gate API v2)    |
+
+> **Real SMS costs money — that is why it is OFF by default.** `SMS_DELIVERY_MODE`
+> stays `sink` (the free local catch-all) for all day-to-day work; flip it to
+> `real` only for **one supervised paid SMS** to confirm the live route, then flip
+> it back. When `real`, Zitadel POSTs each outbound SMS to the in-network
+> `sms-aero-adapter:8091` service (compose.core.yml), which forwards it to SMS-Aero
+> using **HTTP Basic** auth + a form-urlencoded body (it faithfully mirrors the
+> production PHP client `bbm/dev-stand/server/lib/smsaero-client.php`). Zitadel
+> never reaches SMS-Aero directly — the adapter holds the creds and does the
+> egress, and **fails closed** (logs a structured `smsaero.*` event, returns a
+> non-2xx, never crashes, never logs the OTP or creds) if the phone can't be
+> parsed, the creds are missing, or SMS-Aero errors.
+>
+> **Where the creds come from — never the repo.** The SMS-Aero keys
+> (`SMSAERO_EMAIL` / `SMSAERO_API_KEY` / `SMSAERO_SIGN`) live in **production**
+> only in Beget `~/.env`. For the dev-stand paid test, copy them into your
+> gitignored `.env.local` (synced to the remote compose `.env`), run the test,
+> then remove them / set `SMS_DELIVERY_MODE=sink` again. They must **never** be
+> committed — `.env.example` carries commented `CHANGE_ME` placeholders only.
+
+To flip a flag (TrueNAS recipe — set the flag in `.env.local`, sync, re-run):
+
+```bash
+# in ~/.ds-platform/.env.local: EMAIL_DELIVERY_MODE=real (and IDP_SMTP_REAL_*),
+#   and/or SMS_DELIVERY_MODE=real (and SMSAERO_* for the supervised paid test)
+pnpm dev:up   # syncs .env.local -> remote .env so the adapter sees the creds
+ssh truenas 'cd ~/ds-platform-dev-stand/idp && \
+  IDP_BASE_URL=http://truenas.local:9080 \
+  EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real \
+  ./provision.sh --pat-file /tmp/idp-pat.txt'
+# provision.sh converges the SMTP + HTTP-SMS providers onto the real route.
+# Re-run with the defaults (or omit the vars) to converge straight back to the
+# sinks — the providers are repointed in place, never duplicated.
+```
+
+`provision.sh` **fails loudly** (exit 4) if `EMAIL_DELIVERY_MODE=real` but a
+required `IDP_SMTP_REAL_*` var is unset — it never silently falls back to Mailpit,
+so a misconfigured paid path is caught before it masks a delivery failure.
+
+> **DoD note (operator-verified live).** The two live checks — a real verification
+> email actually arriving, and one supervised paid SMS arriving on a real handset —
+> require the running stand (TrueNAS, not 24/7) and real creds, so they are
+> confirmed by the operator after merge; the code + provisioning here is what makes
+> them reachable.
 
 ---
 

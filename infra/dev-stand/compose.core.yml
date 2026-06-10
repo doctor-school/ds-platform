@@ -169,6 +169,49 @@ services:
       timeout: 5s
       retries: 5
 
+  # --- sms-aero-adapter — REAL outbound SMS route (opt-in, COSTS MONEY) ---
+  # The production counterpart to sms-sink. sms-sink is the free dev catch-all
+  # Zitadel POSTs to by DEFAULT; this adapter is the opt-in route that forwards
+  # each outbound SMS to SMS-Aero (smsaero.ru Gate API v2, the production sender
+  # recorded in the specs). idp/provision.sh decides which one Zitadel's HTTP SMS
+  # provider points at from SMS_DELIVERY_MODE (sink|real, default sink) — exactly
+  # the BOT_PROTECTION_ENABLED env-flag precedent. Harmless when unused: Zitadel
+  # only ever POSTs here when the operator selects `real` and re-runs the
+  # provisioner. Real SMS COSTS MONEY, so the flag is OFF by default and the real
+  # route is exercised by one supervised paid test only (#176; idp/bootstrap.md
+  # §3.bis). The SMS-Aero creds (SMSAERO_EMAIL / SMSAERO_API_KEY / SMSAERO_SIGN)
+  # arrive via the .env.local -> remote `.env` sync and are read ONLY from env —
+  # never committed (production keys live in Beget ~/.env). Dependency-free: the
+  # stock node image runs a bind-mounted script, so there is no bespoke image to
+  # build (same "plain upstream image" shape as sms-sink). Zitadel reaches it on
+  # the bridge as `sms-aero-adapter:8091`.
+  sms-aero-adapter:
+    image: node:22-alpine
+    restart: unless-stopped
+    command: ["node", "/srv/server.mjs"]
+    environment:
+      SMS_AERO_ADAPTER_PORT: "8091"
+      # Read from the compose `.env` (synced from .env.local); unset on a stand
+      # that never selects `real`, which is fine — the adapter just isn't used.
+      SMSAERO_EMAIL: ${SMSAERO_EMAIL:-}
+      SMSAERO_API_KEY: ${SMSAERO_API_KEY:-}
+      SMSAERO_SIGN: ${SMSAERO_SIGN:-SMS Aero}
+    ports:
+      - "${SMS_AERO_ADAPTER_PORT:-8091}:8091"
+    volumes:
+      - ./sms-aero-adapter/server.mjs:/srv/server.mjs:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:8091/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # --- Zitadel — OIDC identity provider / JWT issuer (ADR-0001 §8, DSP-209) ---
   # Single Go binary, DB-backed (no named volume — see header). ExternalDomain
   # and ExternalPort are env-driven so this contract stays recipe-agnostic: they

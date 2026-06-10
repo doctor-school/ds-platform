@@ -16,6 +16,7 @@ import {
 
 import { BotProtectionField } from "@/components/bot-protection";
 import { authClient } from "@/lib/auth-client";
+import { authErrorMessage } from "@/lib/auth-error-message";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
@@ -86,8 +87,8 @@ export default function ResetPage() {
       setIdentifier(values.identifier);
       completeForm.reset({ identifier: values.identifier, code: "", newPassword: "" });
       setStage("complete");
-    } catch {
-      setError(te("resetRequestFailed"));
+    } catch (err) {
+      setError(authErrorMessage(err, te, te("resetRequestFailed")));
     }
   }
 
@@ -96,8 +97,8 @@ export default function ResetPage() {
     try {
       await authClient.completePasswordReset(values);
       router.push("/login");
-    } catch {
-      setError(te("resetCompleteFailed"));
+    } catch (err) {
+      setError(authErrorMessage(err, te, te("resetCompleteFailed")));
     }
   }
 

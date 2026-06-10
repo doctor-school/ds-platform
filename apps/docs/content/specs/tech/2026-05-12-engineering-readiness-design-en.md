@@ -70,7 +70,7 @@ The brainstorm research confirmed that under AI-agent driven development the 202
 - **Mobile (RN + Expo)** — pre-pilot = responsive web / PWA. Native mobile — pilot trigger.
 - **Centrifugo** (real-time) — unless the first pilot school runs live webinars.
 - **Tempo** (distributed tracing) — after GlitchTip + Loki.
-- **Unleash** (feature flags) — pre-pilot scale does not require it; config via env / DB.
+- **Unleash** (feature flags) — originally deferred (pre-pilot ran on env / DB config). **Update (2026-06): pulled forward.** 003 prod-readiness surfaced a concrete operator need — flip the delivery-mode (`EMAIL_DELIVERY_MODE` / `SMS_DELIVERY_MODE`) and captcha (`BOT_PROTECTION_ENABLED`) flags at **runtime** via a UI, not by editing `.env` + restarting. Deploying Unleash self-hosted and migrating those env flags onto its admin UI is now an active backlog track (infra). Env config remains the **interim bootstrap default + fail-closed fallback** until it lands.
 - **Glossary YAML sync / Keystatic editorial UI** — pre-pilot: pure markdown in repo.
 - **Cross-vendor reviewer bot** — pre-pilot: one primary LLM reviewer is enough.
 - **Cost ledger automation** — pre-pilot: manual tracking.
@@ -82,7 +82,7 @@ The brainstorm research confirmed that under AI-agent driven development the 202
 
 ### Why this matters
 
-Without an explicit slice, AI agents reading ADRs read "target architecture" as "everything at once" and try to spin up Payload + Centrifugo + Tempo + Unleash alongside the base stack. Wasted work + operational load. Every ADR (0002, 0003, 0004, 0005, 0006, 0007, 0008) forward-refs here to filter its scope under pre-pilot.
+Without an explicit slice, AI agents reading ADRs read "target architecture" as "everything at once" and try to spin up Payload + Centrifugo + Tempo + Unleash alongside the base stack. Wasted work + operational load. Every ADR (0002, 0003, 0004, 0005, 0006, 0007, 0008) forward-refs here to filter its scope under pre-pilot. (Exception (2026-06): **Unleash is pulled forward** per the operator need recorded in "Deferred to pilot" above — Payload / Centrifugo / Tempo remain deferred.)
 
 ## 9 categories × 3 phases
 

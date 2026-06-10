@@ -70,7 +70,7 @@ Brainstorm-исследование подтвердило, что под AI-age
 - **Mobile (RN + Expo)** — pre-pilot = responsive web / PWA. Mobile native — pilot trigger.
 - **Centrifugo** (real-time) — если первая pilot школа не делает live webinars.
 - **Tempo** (distributed tracing) — после GlitchTip + Loki.
-- **Unleash** (feature flags) — pre-pilot масштаб не требует, конфиг через env / DB.
+- **Unleash** (feature flags) — изначально отложен (pre-pilot работал на конфиге через env / DB). **Обновление (2026-06): вынесен вперёд.** 003 prod-readiness выявил конкретную операторскую потребность — переключать флаги доставки (`EMAIL_DELIVERY_MODE` / `SMS_DELIVERY_MODE`) и капчи (`BOT_PROTECTION_ENABLED`) в **рантайме** через UI, а не правкой `.env` + рестартом. Развёртывание Unleash self-hosted и перенос этих env-флагов в его админ-UI теперь активный трек бэклога (infra). Конфиг через env остаётся **промежуточным bootstrap-дефолтом + fail-closed fallback'ом**, пока это не приземлится.
 - **Glossary YAML sync / Keystatic editorial UI** — pre-pilot: pure markdown в repo.
 - **Cross-vendor reviewer bot** — pre-pilot: один primary LLM-reviewer достаточно.
 - **Cost ledger automation** — pre-pilot: manual tracking.
@@ -82,7 +82,7 @@ Brainstorm-исследование подтвердило, что под AI-age
 
 ### Why this matters
 
-Без явного slice AI-агенты при чтении ADR'ов читают «целевую архитектуру» как «всё сразу» и пытаются поднять Payload + Centrifugo + Tempo + Unleash параллельно с базовым стеком. Бесполезная работа + операционная нагрузка. Каждое ADR (0002, 0003, 0004, 0005, 0006, 0007, 0008) forward-refs сюда, фильтруя свой scope под pre-pilot.
+Без явного slice AI-агенты при чтении ADR'ов читают «целевую архитектуру» как «всё сразу» и пытаются поднять Payload + Centrifugo + Tempo + Unleash параллельно с базовым стеком. Бесполезная работа + операционная нагрузка. Каждое ADR (0002, 0003, 0004, 0005, 0006, 0007, 0008) forward-refs сюда, фильтруя свой scope под pre-pilot. (Исключение (2026-06): **Unleash вынесен вперёд** по операторской потребности, зафиксированной в «Deferred to pilot» выше — Payload / Centrifugo / Tempo остаются отложенными.)
 
 ## 9 категорий × 3 фазы
 

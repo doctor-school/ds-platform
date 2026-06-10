@@ -13,7 +13,8 @@
     "./label": "./src/components/label.tsx",
     "./card": "./src/components/card.tsx",
     "./form": "./src/components/form.tsx",
-    "./input-otp": "./src/components/input-otp.tsx"
+    "./input-otp": "./src/components/input-otp.tsx",
+    "./tabs": "./src/components/tabs.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -22,6 +23,7 @@
   "dependencies": {
     "@radix-ui/react-label": "^2.1.9",
     "@radix-ui/react-slot": "^1.2.5",
+    "@radix-ui/react-tabs": "^1.1.14",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "input-otp": "^1.4.2",

@@ -40,6 +40,12 @@ import {
   FormLabel,
   FormMessage,
 } from "@ds/design-system/form";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@ds/design-system/tabs";
 
 /*
  * Sign-in surface (#131). Wires the live BFF (003 F2 password / F3 OTP) into the
@@ -67,11 +73,30 @@ export default function LoginPage() {
           </div>
           <CardDescription>{t("description")}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-8">
-          <PasswordLogin />
-          <div className="border-t pt-6">
-            <OtpLogin />
-          </div>
+        <CardContent>
+          {/* #179: pick a sign-in method first (segmented control) and render
+              ONLY that method's fields — Radix Tabs unmounts the inactive
+              `TabsContent`, so the password fields are absent from the DOM while
+              the OTP tab is active and vice-versa. Defaults to Password (no
+              "last-used" persistence — not persisting auth UI state matches the
+              security posture). Each method's component is unchanged; this is a
+              COMPOSITION-only change. */}
+          <Tabs defaultValue="password">
+            <TabsList aria-label={t("methodSwitcherLabel")}>
+              <TabsTrigger value="password" data-testid="login-method-password">
+                {t("methodPassword")}
+              </TabsTrigger>
+              <TabsTrigger value="otp" data-testid="login-method-otp">
+                {t("methodOtp")}
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="password">
+              <PasswordLogin />
+            </TabsContent>
+            <TabsContent value="otp">
+              <OtpLogin />
+            </TabsContent>
+          </Tabs>
         </CardContent>
         <CardFooter className="flex-col items-start gap-1 text-sm">
           <Link href="/register" className="underline">

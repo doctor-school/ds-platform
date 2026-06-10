@@ -32,6 +32,9 @@
   "login": {
     "title": "Вход",
     "description": "Доступ к вашему аккаунту Doctor.School.",
+    "methodSwitcherLabel": "Способ входа",
+    "methodPassword": "Пароль",
+    "methodOtp": "Одноразовый код",
     "passwordFormLabel": "Вход по паролю",
     "submit": "Войти",
     "createAccount": "Создать аккаунт",

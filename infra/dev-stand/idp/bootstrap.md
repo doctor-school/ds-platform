@@ -144,11 +144,16 @@ http redirect URIs), the project-role assertion so
 the FIRSTINSTANCE default already set it — converges instances created before that
 default), **grants `IAM_LOGIN_CLIENT`** to the `ds-bootstrap` machine user —
 without it the EARS-8 session-link call returns `403 No matching permissions found`
-(`IAM_OWNER` alone is not sufficient) — and **configures + activates an SMTP
+(`IAM_OWNER` alone is not sufficient) — **configures + activates an SMTP
 provider aimed at Mailpit** (`mailpit:1025`) so verification/reset codes (EARS-3)
 are actually delivered (Zitadel ships with no SMTP provider, so `email/resend`
 200s but mails nothing until this is set; the live email-verify test #148 depends
-on it). Re-running converges — it never duplicates.
+on it) — and **configures + activates a generic HTTP SMS provider aimed at the
+`sms-sink` service** (`http://sms-sink:8090/`) so SMS-OTP login (EARS-7) and phone
+verification (EARS-13) codes are delivered to the dev SMS catch-all (Zitadel ships
+with no SMS provider either, so the `otpSms` challenge / `phone/resend` 200 but
+deliver nothing until this is set; the live SMS-OTP test #170 depends on it).
+Re-running converges — it never duplicates.
 
 ```bash
 # Runs on a box with bash + curl + jq (the TrueNAS box has all three):
@@ -167,8 +172,24 @@ values are discoverable on each (re)provision.
 
 Override defaults via env / flags: `IDP_REDIRECT_URIS`, `IDP_POST_LOGOUT_URIS`,
 `IDP_SEED_ROLE`, `IDP_SMTP_HOST` (default `mailpit:1025`), `IDP_SMTP_SENDER_ADDRESS`,
-`IDP_SMTP_SENDER_NAME`, `--project-name`, `--app-name`. Defaults target the api BFF
-callback (`:3000/auth/callback`) and the portal (`:3100/auth/callback`).
+`IDP_SMTP_SENDER_NAME`, `IDP_SMS_HTTP_ENDPOINT` (default `http://sms-sink:8090/`),
+`--project-name`, `--app-name`. Defaults target the api BFF callback
+(`:3000/auth/callback`) and the portal (`:3100/auth/callback`).
+
+> **SMS on the dev-stand = a local catcher, never a real gateway.** The HTTP SMS
+> provider points at the `sms-sink` service (compose.core.yml) — the SMS analogue
+> of Mailpit. Zitadel POSTs every outbound SMS there as JSON; the sink stores it
+> and exposes a tiny REST API (`GET /api/messages?to=<phone>&after=<iso>&event=
+<eventType>`, `DELETE /api/messages`) so the live SMS-OTP e2e reads the
+> delivered code back by recipient phone — exactly as the email e2e reads codes
+> from Mailpit. **SMS-Aero** (smsaero.ru Gate API v2) is the **production** sender
+> recorded in the specs (engineering-readiness §5.bis, identity-auth-rbac-design
+> §5, ADR-0001 design); the dev-stand never reaches it, and real delivery to a
+> real phone is out of scope. The provider URL uses the in-network service name
+> (`sms-sink:8090`); the e2e reaches the sink on the published host port
+> (`SMS_SINK_URL`, default `http://truenas.local:8090`). No OTP code is ever
+> surfaced through an api/BFF response (that would make the EARS-8/16 ack a code
+> oracle) — the sink side-channel is the only readback, mirroring Mailpit.
 
 ---
 

@@ -22,11 +22,15 @@ import { ZitadelIdpClient } from "../../src/auth/idp/zitadel.idp.js";
  * (FakeIdpClient's deterministic fake-sub collides on `users.zitadel_sub`
  * otherwise).
  *
- * SMS path (EARS-7): the dev-stand has NO SMS provider, so the `otpSms` challenge
- * cannot be delivered/read here — there is no Mailpit equivalent for SMS. We do
- * NOT fake it green. The SMS path is unit-pinned (`zitadel.idp.spec.ts`) and
- * declared here as a parity-only skip; it is live-verifiable only once a real SMS
- * provider is configured (same honest gap as `requestPhoneVerification`, #148).
+ * SMS path (EARS-7): the dev-stand Zitadel now has a generic HTTP SMS provider
+ * pointing at the local `sms-sink` service (the SMS analogue of Mailpit;
+ * infra/dev-stand/compose.core.yml + idp/provision.sh), so the `otpSms` challenge
+ * code IS delivered to the sink and read back over its REST API — the exact mirror
+ * of the email/Mailpit side-channel above (#170). We do NOT surface the code
+ * through any api/BFF response (that would make the EARS-8/16 ack a code oracle,
+ * or need a banned backdoor). SMS-Aero is the PRODUCTION sender (recorded in the
+ * specs); the dev-stand never reaches it. NOT faked green — proven against REAL
+ * Zitadel, with the same token-exchange convergence the email test asserts.
  */
 const LIVE_OIDC =
   !!process.env.IDP_ISSUER &&
@@ -37,6 +41,11 @@ const LIVE_OIDC =
 /** Mailpit REST base — the dev-stand catch-all UI/API (recipe default :8025). */
 const MAILPIT_BASE = (
   process.env.MAILPIT_URL ?? "http://truenas.local:8025"
+).replace(/\/$/, "");
+
+/** SMS-sink REST base — the dev-stand SMS catch-all (recipe default :8090). */
+const SMS_SINK_BASE = (
+  process.env.SMS_SINK_URL ?? "http://truenas.local:8090"
 ).replace(/\/$/, "");
 
 /**
@@ -93,6 +102,71 @@ async function fetchOtpCode(
           );
           if (code) return code;
         }
+      }
+    }
+    await sleep(500);
+  }
+  return null;
+}
+
+/**
+ * Extract the OTP code from a stored SMS-sink webhook body. The login OTP
+ * (`session.otp.sms.challenged`) renders an 8-digit code in the SMS text and in
+ * `args.oTP`; the phone-verify code (`user.human.phone.code.added`) is a 6-char
+ * alphanumeric in `args.code` and the rendered `… code to verify it VBX53M.` text
+ * (proven live, #170). Prefer the structured args field, then scan the text —
+ * same belt-and-suspenders shape as `extractCode` for Mailpit.
+ */
+function extractSmsCode(msg: {
+  body?: string;
+  json?: { args?: { code?: string; oTP?: string } } | null;
+}): string | null {
+  const fromArgs = msg.json?.args?.oTP ?? msg.json?.args?.code;
+  if (fromArgs) return String(fromArgs);
+  const s = msg.body ?? "";
+  return (
+    s.match(/code to verify it ([A-Z0-9]{4,12})/)?.[1] ??
+    s.match(/\bCode\s+([A-Z0-9]{4,12})\b/)?.[1] ??
+    s.match(/\b([0-9]{6,8})\b/)?.[1] ??
+    null
+  );
+}
+
+/**
+ * Poll the SMS sink for the message to `phone` delivered AFTER `afterIso` and
+ * pull the code — the SMS analogue of `fetchOtpCode`. Polled because the Zitadel
+ * HTTP-SMS webhook fires async after the 2xx. The sink indexes by recipient phone
+ * (raw substring) and returns newest-first; the `afterIso` cutoff skips an earlier
+ * message and `event` restricts to a `contextInfo.eventType` (the SMS analogue of
+ * Mailpit's subject filter). This matters: the phone-verify SMS
+ * (`user.human.phone.code.added`, a 6-char alphanumeric) and the login OTP
+ * (`session.otp.sms.challenged`, 8 digits) can land within the same poll window,
+ * and Zitadel re-renders the verify code AROUND the login send — without the
+ * event filter the login step can read the stale verify code and never verify
+ * (proven live, #170, the SMS twin of the email `Verify OTP` subject fix).
+ */
+async function fetchSmsCode(
+  phone: string,
+  afterIso: string,
+  event?: string,
+): Promise<string | null> {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const res = await fetch(
+      `${SMS_SINK_BASE}/api/messages?to=${encodeURIComponent(phone)}` +
+        `&after=${encodeURIComponent(afterIso)}` +
+        (event ? `&event=${encodeURIComponent(event)}` : ""),
+    );
+    if (res.ok) {
+      const data = (await res.json()) as {
+        messages?: Array<{
+          body?: string;
+          json?: { args?: { code?: string; oTP?: string } } | null;
+        }>;
+      };
+      const hit = (data.messages ?? [])[0]; // newest-first
+      if (hit) {
+        const code = extractSmsCode(hit);
+        if (code) return code;
       }
     }
     await sleep(500);
@@ -161,7 +235,10 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
 
   it("EARS-6: request email OTP → Mailpit → login → exchange yields real tokens", async () => {
     const email = newEmail();
-    const created = await client.createUser({ email, password: livePassword() });
+    const created = await client.createUser({
+      email,
+      password: livePassword(),
+    });
     expect(created.alreadyExisted).toBe(false);
     expect(created.sub).toBeTruthy();
 
@@ -179,14 +256,18 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     await sleep(1000);
 
     // EARS-6 step 1: arm the login challenge — Zitadel mails the code.
-    let tokens: Awaited<ReturnType<typeof client.exchangeSessionForTokens>> | null =
-      null;
+    let tokens: Awaited<
+      ReturnType<typeof client.exchangeSessionForTokens>
+    > | null = null;
     for (let attempt = 0; attempt < 3 && !tokens; attempt++) {
       const sentAt = new Date().toISOString();
       await expect(client.requestEmailOtp(email)).resolves.toBeUndefined();
 
       const code = await fetchOtpCode(email, sentAt);
-      expect(code, "login OTP code should be delivered to Mailpit").toBeTruthy();
+      expect(
+        code,
+        "login OTP code should be delivered to Mailpit",
+      ).toBeTruthy();
 
       // EARS-6 step 2: verify the code → checked session.
       const session = await client.loginWithEmailOtp(email, code!);
@@ -205,11 +286,74 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     expect(tokens!.claims.sub).toBe(created.sub);
   }, 45_000);
 
-  // EARS-7 SMS path: the dev-stand has no SMS provider, so the otpSms challenge
-  // cannot be delivered or read here. Declared honestly as skipped — NOT faked
-  // green. The wire shape is unit-pinned in zitadel.idp.spec.ts; this becomes a
-  // live round-trip only once a real SMS provider is configured (#148 gap class).
-  it.skip("EARS-7: SMS OTP login (no SMS provider on the dev-stand — unit-pinned only)", () => {
-    // Intentionally skipped — see the block above and zitadel.idp.spec.ts.
-  });
+  // EARS-7 SMS path — the live round-trip, the SAME bar the EARS-6 email test
+  // sets (#170). The dev-stand's generic HTTP SMS provider delivers the code to
+  // the local sink (the SMS analogue of Mailpit), so the otpSms challenge is read
+  // back over the sink REST API and verified end-to-end. The code never rides any
+  // api/BFF response (no EARS-8/16 oracle, no backdoor). Proven against REAL
+  // Zitadel — NOT faked green.
+  it("EARS-7: request SMS OTP → sink → login → exchange yields real tokens", async () => {
+    const email = newEmail();
+    const phone = `+1555${String(Date.now()).slice(-7)}`;
+    const created = await client.createUser({
+      email,
+      password: livePassword(),
+      phone,
+    });
+    expect(created.alreadyExisted).toBe(false);
+    expect(created.sub).toBeTruthy();
+
+    // The otpSms challenge requires a VERIFIED phone (live delta, #170: an
+    // unverified phone yields a phone-verify SMS, not a login OTP). Verify the
+    // phone first: read the deliberate phone-verify SMS from the sink and confirm.
+    await sleep(2000);
+    const verifyAt = new Date().toISOString();
+    await client.requestPhoneVerification(created.sub);
+    const verifyCode = await fetchSmsCode(
+      phone,
+      verifyAt,
+      "user.human.phone.code.added",
+    );
+    expect(verifyCode, "phone-verify SMS should reach the sink").toBeTruthy();
+    const verified = await client.verifyPhone(created.sub, verifyCode!);
+    expect(verified).toBe(true);
+    await sleep(1000);
+
+    // EARS-7 step 1: arm the SMS login challenge — Zitadel sends the code.
+    let tokens: Awaited<
+      ReturnType<typeof client.exchangeSessionForTokens>
+    > | null = null;
+    for (let attempt = 0; attempt < 3 && !tokens; attempt++) {
+      const sentAt = new Date().toISOString();
+      await expect(client.requestSmsOtp(phone)).resolves.toBeUndefined();
+
+      const code = await fetchSmsCode(
+        phone,
+        sentAt,
+        "session.otp.sms.challenged",
+      );
+      expect(
+        code,
+        "login OTP code should be delivered to the sink",
+      ).toBeTruthy();
+
+      // EARS-7 step 2: verify the code → checked session.
+      const session = await client.loginWithSmsOtp(phone, code!);
+      if (!session) {
+        await sleep(2000);
+        continue;
+      }
+      expect(session.sub).toBe(created.sub);
+
+      // EARS-8 convergence: trade the checked session for real tokens.
+      tokens = await client.exchangeSessionForTokens(session.zitadelSessionId);
+    }
+    expect(
+      tokens,
+      "exchange should mint tokens after SMS-OTP login",
+    ).toBeTruthy();
+    expect(tokens!.accessToken).toBeTruthy();
+    expect(tokens!.refreshToken).toBeTruthy();
+    expect(tokens!.claims.sub).toBe(created.sub);
+  }, 45_000);
 });

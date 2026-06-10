@@ -252,6 +252,41 @@ else
   echo "created + activated SMTP provider ${SMTP_ID} -> ${SMTP_HOST_PORT}" >&2
 fi
 
+# ── 7. ensure HTTP SMS provider → sms-sink (dev SMS catch-all) ───────────────
+# SMS-OTP login (EARS-7) and phone verification (EARS-13) deliver their codes via
+# Zitadel's SMS notifier — and Zitadel ships with NO SMS provider, so the
+# `otpSms` session challenge / `phone/resend` accept (200) yet nothing is ever
+# delivered, and the live SMS-OTP round-trip (#170, zitadel-otp-login.e2e-spec
+# EARS-7 + the portal sms-OTP browser journey) cannot pass. This step creates +
+# activates a GENERIC HTTP SMS provider whose webhook targets the dev-stand
+# `sms-sink` service (the SMS analogue of Mailpit, compose.core.yml) — the in-
+# network service name (`sms-sink:8090`), NOT a real gateway. SMS-Aero is the
+# PRODUCTION sender (recorded in the specs: engineering-readiness §5.bis,
+# identity-auth-rbac-design §5, ADR-0001 design) — the dev-stand never reaches a
+# real provider, exactly as the SMTP step targets Mailpit, not a real SMTP. The
+# sink stores each webhook body so the live e2e reads the delivered code back by
+# recipient phone (no `returnCode` leak, no test backdoor — AGENTS.md §6).
+# Idempotent: Zitadel's SMS create is not name-keyed, so — like the SMTP step —
+# we only add a provider when none exists, avoiding duplicates on re-runs.
+SMS_SINK_ENDPOINT="${IDP_SMS_HTTP_ENDPOINT:-http://sms-sink:8090/}"
+EXISTING_SMS="$(api POST /admin/v1/sms/_search '{}' \
+  | jq -r '.result[]?.id' | head -n1 || true)"
+if [[ -n "$EXISTING_SMS" && "$EXISTING_SMS" != "null" ]]; then
+  echo "SMS provider already configured (${EXISTING_SMS})" >&2
+else
+  SMS_ID="$(api POST /admin/v1/sms/http \
+    "$(jq -nc --arg e "$SMS_SINK_ENDPOINT" \
+       '{endpoint:$e, description:"dev-stand sms-sink"}')" \
+    | jq -r '.id // .details.id // empty')"
+  if [[ -n "$SMS_ID" && "$SMS_ID" != "null" ]]; then
+    api POST "/admin/v1/sms/${SMS_ID}/_activate" '{}' >/dev/null
+    echo "created + activated HTTP SMS provider ${SMS_ID} -> ${SMS_SINK_ENDPOINT}" >&2
+  else
+    echo "WARN: HTTP SMS provider create returned no id; SMS-OTP (EARS-7) will" >&2
+    echo "      not deliver until a provider is configured." >&2
+  fi
+fi
+
 # ── output (machine-parseable; secret only when freshly created) ─────────────
 echo "IDP_PROJECT_ID=${PROJECT_ID}"
 echo "IDP_CLIENT_ID=${CLIENT_ID}"

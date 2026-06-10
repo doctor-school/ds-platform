@@ -40,7 +40,7 @@ lang: en
 ### Not in scope of DSO-25 (deferred)
 
 - **Final IdP selection** — closed in §9 (Zitadel; ADR-0001 §8, DSP-209).
-- Specific RF SMS provider (SMSC.ru / SMS.ru / other) — DSO-26 (backend integrations) with failover-2-provider requirement from digest §2.
+- Specific RF SMS provider — **decided: SMS-Aero** (smsaero.ru Gate API v2; SMSC.ru / SMS.ru as the failover-2-provider per digest §2). Wiring + circuit-breaker contract in identity-auth-rbac-design §5 and engineering-readiness §5.bis. (Plane DSO-26/57/58 are cross-tracker references only — superseded by this decision.)
 - Policy engine for backend RBAC (Cerbos / OPA / OpenFGA / SQL-based) — DSO-26.
 - Where the session store lives (inside IdP or shared backend Redis) — Phase 0 implementation (see §7.4).
 - EGRUL API verification for clinics (v3) — DSO-26.
@@ -521,7 +521,7 @@ This is a closed flow with audit events `mfa_enrolled` + `lockout_triggered (mfa
 ### 10.2. Open questions (closed outside DSO-25)
 
 1. Final IdP choice — closed in §9 (Zitadel; ADR-0001 §8, DSP-209).
-2. Specific RF SMS provider + failover scheme — DSO-26.
+2. Specific RF SMS provider + failover scheme — **decided: SMS-Aero primary** (smsaero.ru Gate API v2), SMSC.ru / SMS.ru failover; contract in identity-auth-rbac-design §5 / engineering-readiness §5.bis. (Plane DSO-26/57/58 cross-tracker only.)
 3. Session store: inside IdP or shared backend Redis — Phase 0 implementation.
 4. Policy engine for backend RBAC (Cerbos / OPA / OpenFGA / SQL) — DSO-26.
 5. Actual count + hash format in Directual — Phase 0 discovery.

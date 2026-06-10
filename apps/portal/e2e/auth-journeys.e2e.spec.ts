@@ -156,6 +156,10 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await page.waitForURL(/\/login/);
 
     // ── Request an email OTP (EARS-6 step 1) ─────────────────────────────
+    // #179: /login now starts on the Password method tab; select the
+    // "One-time code" method before the channel selector / request fields
+    // exist (Radix unmounts the inactive panel, so they're absent until then).
+    await page.getByTestId("login-method-otp").click();
     await page.getByTestId("otp-channel-email").click();
     await page.getByTestId("otp-identifier").fill(email);
     const otpSentAt = new Date().toISOString();
@@ -216,6 +220,8 @@ test.describe("portal auth journeys (real Zitadel)", () => {
 
       // ── Request an SMS OTP (EARS-7 step 1) ───────────────────────────────
       await page.goto("/login");
+      // #179: select the "One-time code" method tab first (defaults to Password).
+      await page.getByTestId("login-method-otp").click();
       await page.getByTestId("otp-channel-sms").click();
       await page.getByTestId("otp-identifier").fill(phone);
       const otpSentAt = new Date().toISOString();

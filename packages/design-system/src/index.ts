@@ -26,3 +26,9 @@ export {
   InputOTPSlot,
   InputOTPSeparator,
 } from "./components/input-otp";
+export {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "./components/tabs";

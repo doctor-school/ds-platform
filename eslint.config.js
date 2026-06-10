@@ -54,6 +54,9 @@ export default [
         clearTimeout: 'readonly',
         setInterval: 'readonly',
         clearInterval: 'readonly',
+        // Node 18+ runtime globals (also global in browsers).
+        fetch: 'readonly',
+        AbortController: 'readonly',
       },
     },
   },

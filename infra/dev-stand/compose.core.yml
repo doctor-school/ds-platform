@@ -304,6 +304,79 @@ services:
       # first boot needs a longer grace than the upstream init-container split.
       start_period: 60s
 
+  # --- Unleash — self-hosted runtime feature-flag service + admin UI (#184) ---
+  # Pulled forward from "deferred" (engineering-readiness design picked Unleash
+  # self-hosted as the default flag tool; pre-pilot scope said "config via env / DB").
+  # The concrete driver: the env-based runtime flags (EMAIL_DELIVERY_MODE,
+  # SMS_DELIVERY_MODE #176; BOT_PROTECTION_ENABLED #178) need a file edit + service
+  # restart to flip — operators need to toggle them at runtime, with a UI. This
+  # issue is the DEPLOYMENT only; wiring the api/portal SDKs onto these tokens and
+  # migrating the env flags is the follow-up (#185).
+  #
+  # DB-backed, no named volume (state lives in Postgres, like idp). Unleash shares
+  # the existing `ds_dev` database but isolates its tables in a DEDICATED schema
+  # (`unleash`) rather than a separate database — init.sql only runs on a fresh
+  # cluster and the dev-stand volume already exists, so a CREATE DATABASE there
+  # would never fire. The `unleash` schema is created by postgres/init.sql on a
+  # fresh cluster; on an existing volume the operator pre-creates it once (see
+  # README → Feature flags).
+  #
+  # CRITICAL: DATABASE_SCHEMA alone is NOT enough on Unleash 8.x — its db-migrate
+  # step still resolves unqualified tables against the role's default search_path
+  # (`"$user", public`), so with the api's `public.users` table already present the
+  # very first migration dies with `relation "users" already exists` (verified
+  # live, #184). The fix is to FORCE the connection search_path to `unleash` via the
+  # DATABASE_URL `options` param (`-c search_path=unleash`, URL-encoded); migrations
+  # then land in `unleash`. DATABASE_SCHEMA is kept too (it scopes Unleash's own
+  # runtime queries + documents intent).
+  #
+  # Tokens are SEEDED at boot from env (INIT_*_API_TOKENS): a backend/server token
+  # the api SDK will use (client API) and a frontend token the portal will use.
+  # Real values live ONLY in ~/.ds-platform/.env.local (dev) / Beget ~/.env (prod)
+  # → Vault later — never committed (.env.example carries CHANGE_ME placeholders).
+  # Token format is `*:development.<hex>` — `*` = all projects, `development` = the
+  # default environment.
+  #
+  # Admin UI auth: Unleash's built-in default admin (admin / unleash4all) — dev-only
+  # on the trusted LAN, mirroring the Zitadel dev-admin precedent. For prod this is
+  # replaced with real auth (SSO / a rotated admin) behind Caddy; never expose the
+  # default credential off the dev-stand.
+  unleash:
+    image: unleashorg/unleash-server:8.0.0
+    restart: unless-stopped
+    environment:
+      # Connect as the owner user `ds` (has perms on the `unleash` schema). The
+      # `options=-c search_path=unleash` query param pins the connection search_path
+      # to the dedicated schema so migrations don't collide with `public.users`
+      # (see the CRITICAL note above). `%20` = space, `%3D` = `=` (URL-encoded).
+      DATABASE_URL: postgres://ds:${POSTGRES_PASSWORD}@postgres:5432/ds_dev?options=-c%20search_path%3Dunleash
+      DATABASE_SSL: "false"
+      DATABASE_SCHEMA: unleash
+      # Seeded API tokens (empty on a stand that hasn't set them — Unleash just
+      # starts without pre-seeded tokens, which is fine for the deploy itself).
+      INIT_CLIENT_API_TOKENS: ${UNLEASH_INIT_CLIENT_API_TOKEN:-}
+      INIT_FRONTEND_API_TOKENS: ${UNLEASH_INIT_FRONTEND_API_TOKEN:-}
+      LOG_LEVEL: warn
+    ports:
+      - "${UNLEASH_PORT:-4242}:4242"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # Node-based fetch against /health (the image is node-based; Node 22 has
+      # global fetch) — mirrors the sms-sink pattern, no curl/wget needed.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:4242/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
 # Named volumes — Docker-managed, isolated per machine. A personal
 # compose.override.yml may swap these for bind mounts (setup-design §7.2).
 volumes:

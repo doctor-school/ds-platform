@@ -77,10 +77,23 @@ function extractCode(msg: { Text?: string; HTML?: string }): string | null {
  * the code. Polled (not a fixed sleep) because SMTP delivery is async after the
  * 2xx send. The `afterIso` cutoff skips `createUser`'s own initial verification
  * mail so we only read the login-OTP code.
+ *
+ * `subject` disambiguates the TWO mails a single address receives here — the
+ * registration `Verify email` (a 6-char alphanumeric, e.g. `JS5CIC`) and the
+ * login `Verify OTP` (an 8-digit code) — exactly as the portal `support/mailpit`
+ * helper does (#131). The `afterIso` cutoff ALONE is not enough: `afterIso` is
+ * the test host's `new Date()` while Mailpit's `Created` is the dev-stand's
+ * server clock, and any host↔stand skew (the TrueNAS box is not 24/7, so NTP
+ * drifts) can pull the stale `Verify email` mail into the `Created >= after`
+ * window — the login step then reads the registration code and never verifies
+ * (proven live, #170 triage). Selecting by subject makes the read deterministic
+ * regardless of clock skew. The default (no `subject`) preserves timestamp-only
+ * behaviour for callers that receive a single mail.
  */
 async function fetchOtpCode(
   email: string,
   afterIso: string,
+  subject?: string,
 ): Promise<string | null> {
   const after = Date.parse(afterIso);
   for (let attempt = 0; attempt < 30; attempt++) {
@@ -89,10 +102,13 @@ async function fetchOtpCode(
     );
     if (res.ok) {
       const data = (await res.json()) as {
-        messages?: Array<{ ID?: string; Created?: string }>;
+        messages?: Array<{ ID?: string; Created?: string; Subject?: string }>;
       };
       const hit = (data.messages ?? []).find(
-        (m) => m.Created && Date.parse(m.Created) >= after,
+        (m) =>
+          m.Created &&
+          Date.parse(m.Created) >= after &&
+          (!subject || m.Subject === subject),
       );
       if (hit?.ID) {
         const msgRes = await fetch(`${MAILPIT_BASE}/api/v1/message/${hit.ID}`);
@@ -249,7 +265,7 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     await sleep(3000);
     const verifySentAt = new Date().toISOString();
     await client.requestEmailVerification(created.sub);
-    const verifyCode = await fetchOtpCode(email, verifySentAt);
+    const verifyCode = await fetchOtpCode(email, verifySentAt, "Verify email");
     if (verifyCode) {
       await client.verifyEmail(created.sub, verifyCode);
     }
@@ -263,7 +279,7 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
       const sentAt = new Date().toISOString();
       await expect(client.requestEmailOtp(email)).resolves.toBeUndefined();
 
-      const code = await fetchOtpCode(email, sentAt);
+      const code = await fetchOtpCode(email, sentAt, "Verify OTP");
       expect(
         code,
         "login OTP code should be delivered to Mailpit",

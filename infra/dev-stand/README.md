@@ -63,6 +63,42 @@ directory) — they hold per-machine secrets and must never be committed.
 
 ---
 
+## Feature flags (Unleash)
+
+[Unleash](https://www.getunleash.io/) self-hosted (#184) is the runtime
+feature-flag service — operators toggle flags at runtime, with a UI, without
+editing `.env.local` and restarting services. It is Postgres-backed (no named
+volume; its tables live in a dedicated `unleash` schema inside the shared `ds_dev`
+database, like `idp`) and published on `${UNLEASH_PORT:-4242}`. The connection
+pins its search_path to that schema (`DATABASE_URL …?options=-c search_path=unleash`)
+so Unleash's migrations don't collide with the api's `public.users` table —
+`DATABASE_SCHEMA` alone is not enough on Unleash 8.x.
+
+> **Existing volume?** `postgres/init.sql` creates the `unleash` schema only on a
+> **fresh** cluster. On a dev-stand whose Postgres volume already exists, create it
+> once before first boot:
+>
+> ```powershell
+> ssh truenas "sudo docker exec ds-platform-dev-postgres-1 psql -U ds -d ds_dev -c 'CREATE SCHEMA IF NOT EXISTS unleash AUTHORIZATION ds;'"
+> ```
+
+- **Admin UI** — `http://<HOST>:4242` (e.g. `http://truenas.local:4242`).
+  Operators create / toggle flags here.
+- **Dev admin** — the built-in default account `admin` / `unleash4all`. This is
+  **dev-only on the trusted LAN**, mirroring the Zitadel dev-admin precedent. For
+  prod it is replaced with real auth (SSO / a rotated admin) behind Caddy — never
+  expose the default credential off the dev-stand.
+- **API tokens** — two tokens are seeded at boot from env (`INIT_*_API_TOKENS`):
+  a **client/server** token the api SDK consumes and a **frontend** token the
+  portal consumes (`UNLEASH_INIT_CLIENT_API_TOKEN` /
+  `UNLEASH_INIT_FRONTEND_API_TOKEN`). Real values live ONLY in `.env.local` (dev) /
+  Beget `~/.env` (prod) → Vault later — never committed. The SDK wiring + the
+  migration of the env flags (`EMAIL_DELIVERY_MODE`, `SMS_DELIVERY_MODE`,
+  `BOT_PROTECTION_ENABLED`) onto Unleash is the follow-up (#185); this is the
+  deployment only.
+
+---
+
 ## DX commands
 
 The stack is driven by `pnpm dev:*` scripts — a cross-platform Node launcher
@@ -232,12 +268,12 @@ with the compose stack in DSP-154; the rules are fixed here so DSP-154 implement
 - **Host ports** — the setup-design port list collides with ports already bound on
   TrueNAS. DSP-154 must remap these:
 
-  | Service (spec port)                                                                            | Status on TrueNAS                                             | Action for DSP-154                |
-  | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------- |
-  | Postgres `5432`                                                                                | **in use** — `home-budgeting-system-db-1` (`5433` also taken) | remap host side, e.g. `5442:5432` |
-  | `8000`                                                                                         | **in use**                                                    | remap, e.g. `8100:8000`           |
-  | `8001`                                                                                         | **in use**                                                    | remap, e.g. `8101:8001`           |
-  | `6379`, `9000`, `9001`, `9080`, `9443`, `3100`, `4000`, `1025`, `8025`, `8090`, `3592`, `3593` | free                                                          | keep as-is                        |
+  | Service (spec port)                                                                                    | Status on TrueNAS                                             | Action for DSP-154                |
+  | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- | --------------------------------- |
+  | Postgres `5432`                                                                                        | **in use** — `home-budgeting-system-db-1` (`5433` also taken) | remap host side, e.g. `5442:5432` |
+  | `8000`                                                                                                 | **in use**                                                    | remap, e.g. `8100:8000`           |
+  | `8001`                                                                                                 | **in use**                                                    | remap, e.g. `8101:8001`           |
+  | `6379`, `9000`, `9001`, `9080`, `9443`, `3100`, `4000`, `1025`, `8025`, `8090`, `4242`, `3592`, `3593` | free                                                          | keep as-is                        |
 
   Prefer **not publishing** internal-only ports at all and reaching services over the
   Docker network / SSH tunnel; publish only what the host apps genuinely need.

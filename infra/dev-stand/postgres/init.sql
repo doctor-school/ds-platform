@@ -8,3 +8,11 @@
 -- Idempotent — IF NOT EXISTS guards a manual re-run against an existing volume.
 
 CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Unleash (#184) keeps its tables in a dedicated `unleash` schema inside this
+-- shared database (no separate database; see compose.core.yml → unleash). Create
+-- it up-front on a fresh cluster so the very first Unleash boot migrates cleanly
+-- (Unleash pins its connection search_path to this schema). On an EXISTING volume
+-- this script does not re-run, so the operator pre-creates the schema once by hand
+-- (README → Feature flags); the IF NOT EXISTS guard makes that safe.
+CREATE SCHEMA IF NOT EXISTS unleash AUTHORIZATION ds;

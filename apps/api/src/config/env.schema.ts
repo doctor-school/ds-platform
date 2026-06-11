@@ -59,6 +59,45 @@ export const ApiEnvSchema = z.looseObject({
   // the IdP fake/real split.
   REDIS_URL: z.url().optional(),
 
+  // Runtime feature flags (Unleash — #185). The api reads dev-stand runtime flags
+  // (`bot-protection`, `email-delivery-real`, `sms-delivery-real`) from Unleash so
+  // an operator toggles them in the admin UI without editing `.env.local` and
+  // restarting. The SDK is bound ONLY when both URL + token are set (the dev-stand
+  // recipe); with either unset (shared CI / Unleash-less default) every flag read
+  // falls back to the env bootstrap default below — fail-closed for the security
+  // flag (design of record §4). UNLEASH_URL carries the `/api` suffix the SDK
+  // consumes (the bare origin is the admin UI). UNLEASH_API_TOKEN is the seeded
+  // backend/client token (`UNLEASH_INIT_CLIENT_API_TOKEN` in `.env.local`).
+  UNLEASH_URL: z.url().optional(),
+  UNLEASH_API_TOKEN: z.string().optional(),
+  // App name + environment the SDK reports to Unleash (the seeded tokens are
+  // scoped to the `development` environment, #184). Defaulted so the dev-stand
+  // recipe sets only URL + token.
+  UNLEASH_APP_NAME: z.string().default("ds-api"),
+  UNLEASH_ENVIRONMENT: z.string().default("development"),
+  // SDK poll interval (ms) — short on the dev-stand so a UI toggle lands within
+  // seconds (the per-request captcha read and the delivery `changed` reconcile
+  // both ride this poll).
+  UNLEASH_REFRESH_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(5_000),
+
+  // Delivery bootstrap defaults (#185) — the boot-time / Unleash-unreachable mode
+  // for which Zitadel provider is active. Unleash's `email-delivery-real` /
+  // `sms-delivery-real` override these when reachable; the api reconcile reacts to
+  // a flag change and `_activate`s the matching pre-configured Zitadel provider
+  // (it holds NO SMTP/SMS secrets — only flips which provider is active). `false`
+  // (the default) = intercept via Mailpit/sms-sink; `true` = the real provider.
+  // These mirror provision.sh's EMAIL_DELIVERY_MODE/SMS_DELIVERY_MODE boot choice.
+  EMAIL_DELIVERY_REAL: z
+    .stringbool({ truthy: ["true", "1"], falsy: ["false", "0", ""] })
+    .default(false),
+  SMS_DELIVERY_REAL: z
+    .stringbool({ truthy: ["true", "1"], falsy: ["false", "0", ""] })
+    .default(false),
+
   // Keyed HMAC pepper for ledger identifier masking (ADR-0001 §7, ADR-0003 §6).
   // The `audit_ledger` records an `identifier_hash`, never raw PD; a bare digest
   // over a low-entropy identifier space is a reproducible existence oracle (a

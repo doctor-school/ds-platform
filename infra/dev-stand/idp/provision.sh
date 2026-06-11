@@ -258,139 +258,160 @@ else
   echo "      granted (set IDP_BOOTSTRAP_USERNAME if the PAT user differs)." >&2
 fi
 
-# ── 6. converge SMTP provider → Mailpit (dev) | real transactional sender ────
+# ── 6. ensure BOTH SMTP providers → Mailpit (intercept) + real sender ────────
 # Email verification (EARS-3) and password-reset codes are delivered by Zitadel's
 # SMTP notifier. Zitadel ships with NO SMTP provider, so `email/resend` accepts
 # (200) yet nothing is delivered until one is configured + activated (the live
-# email-verify round-trip #148 depends on it). EMAIL_DELIVERY_MODE selects the
-# target and this step CONVERGES the active provider to it on every run (so a
-# mode flip actually re-points delivery — a create-if-absent step never could):
-#   mailpit → host `mailpit:1025` (in-network service name, NOT the host port),
-#             TLS off, no auth — the plaintext dev catch-all (current default).
-#   real    → the real transactional sender from env (TLS on, SMTP AUTH). Fails
-#             with a clear message if any required real-SMTP var is unset — we do
-#             NOT silently fall back to Mailpit (that would mask a misconfigured
-#             paid path), and no real cred is ever committed.
-# Convergence uses the update API `PUT /admin/v1/smtp/{id}` (the create endpoint
-# is `POST /admin/v1/smtp`; payload shape is identical), then (re)activates so
-# the converged provider is the active one. Idempotent: a re-run in the same mode
-# yields Zitadel's "No changes" 400, swallowed by api_idempotent.
-if [[ "$EMAIL_DELIVERY_MODE" == "real" ]]; then
-  # Real transactional sender — every value from env, none defaulted/committed.
-  SMTP_HOST_PORT="${IDP_SMTP_REAL_HOST:-}"
-  # Allow either a combined host:port (IDP_SMTP_REAL_HOST="smtp.example.com:587")
-  # or a separate IDP_SMTP_REAL_PORT joined onto a bare host.
-  if [[ -n "$SMTP_HOST_PORT" && "$SMTP_HOST_PORT" != *:* && -n "${IDP_SMTP_REAL_PORT:-}" ]]; then
-    SMTP_HOST_PORT="${SMTP_HOST_PORT}:${IDP_SMTP_REAL_PORT}"
+# email-verify round-trip #148 depends on it).
+#
+# #185 (runtime delivery toggle): instead of converging to ONE provider, this step
+# ensures BOTH the Mailpit (intercept) AND the real-sender provider EXIST, each
+# stamped with a STABLE recognizable `description` the api matches on:
+#   "dev-stand mailpit"          → host `mailpit:1025` (in-network service name,
+#                                  NOT the host port), TLS off, no auth — the
+#                                  plaintext dev catch-all.
+#   "real transactional sender"  → the real sender from env (TLS on, SMTP AUTH),
+#                                  configured ONLY when its creds (IDP_SMTP_REAL_*)
+#                                  are present (else SKIPPED with a clear note —
+#                                  you cannot test real email without creds anyway;
+#                                  no real cred is ever committed).
+# Activation is left to runtime: the api's delivery reconcile reads the Unleash
+# `email-delivery-real` flag and `_activate`s the matching provider by description
+# (no .env edit + restart). At boot we activate the one selected by EMAIL_DELIVERY_MODE
+# so a stand without the api still has a working active provider (the bootstrap
+# default). ensure_smtp_provider creates-or-updates by description; activation uses
+# api_activate (tolerates the already-active precondition on a same-mode re-run).
+#
+# ensure_smtp_provider <description> <host:port> <senderAddr> <senderName> <user> <pw> <tls-bool>
+#   echoes the provider id on stdout.
+ensure_smtp_provider() {
+  local desc="$1" host="$2" addr="$3" name="$4" user="$5" pw="$6" tls="$7" payload id
+  payload="$(jq -nc --arg d "$desc" --arg h "$host" --arg a "$addr" \
+    --arg n "$name" --arg u "$user" --arg p "$pw" --argjson tls "$tls" \
+    '{description:$d, senderAddress:$a, senderName:$n, tls:$tls, host:$h, user:$u, password:$p}')"
+  # Match an existing provider by its stable description (the #185 contract).
+  id="$(api POST /admin/v1/smtp/_search '{}' \
+    | jq -r --arg d "$desc" '.result[]? | select(.description==$d) | .id' | head -n1 || true)"
+  if [[ -n "$id" && "$id" != "null" ]]; then
+    api_idempotent PUT "/admin/v1/smtp/${id}" "$payload" >/dev/null
+    echo "ensured SMTP provider ${id} (${desc})" >&2
+  else
+    id="$(api POST /admin/v1/smtp "$payload" | jq -r '.id')"
+    echo "created SMTP provider ${id} (${desc})" >&2
   fi
-  SMTP_USER="${IDP_SMTP_REAL_USER:-}"
-  SMTP_PASSWORD="${IDP_SMTP_REAL_PASSWORD:-}"
-  SMTP_SENDER_ADDRESS="${IDP_SMTP_REAL_SENDER_ADDRESS:-}"
-  SMTP_SENDER_NAME="${IDP_SMTP_REAL_SENDER_NAME:-DS Platform}"
-  SMTP_TLS=true
-  SMTP_DESC="real transactional sender"
-  # Fail closed: a `real` selection with missing creds must be loud, never a
-  # silent Mailpit fallback.
-  _missing=""
-  [[ -z "$SMTP_HOST_PORT" ]] && _missing+=" IDP_SMTP_REAL_HOST(+IDP_SMTP_REAL_PORT)" || true
-  [[ -z "$SMTP_USER" ]] && _missing+=" IDP_SMTP_REAL_USER" || true
-  [[ -z "$SMTP_PASSWORD" ]] && _missing+=" IDP_SMTP_REAL_PASSWORD" || true
-  [[ -z "$SMTP_SENDER_ADDRESS" ]] && _missing+=" IDP_SMTP_REAL_SENDER_ADDRESS" || true
-  if [[ -n "$_missing" ]]; then
-    echo "EMAIL_DELIVERY_MODE=real but missing required env:${_missing}" >&2
-    echo "  set them in .env.local (see .env.example) or use EMAIL_DELIVERY_MODE=mailpit" >&2
-    exit 4
-  fi
+  printf '%s' "$id"
+}
+
+# Mailpit (intercept) — always ensured.
+SMTP_MAILPIT_ID="$(ensure_smtp_provider \
+  "dev-stand mailpit" \
+  "${IDP_SMTP_HOST:-mailpit:1025}" \
+  "${IDP_SMTP_SENDER_ADDRESS:-no-reply@ds.test}" \
+  "${IDP_SMTP_SENDER_NAME:-DS Platform Dev}" \
+  "" "" false)"
+
+# Real transactional sender — ensured ONLY when its creds are present. Missing
+# creds is NOT fatal here (unlike the old converge-to-real path): the intercept
+# provider stands, the real one is simply absent, and the api reconcile will skip
+# `email-delivery-real` with a clear note (you cannot test real email without creds).
+SMTP_REAL_ID=""
+SMTP_REAL_HOST_PORT="${IDP_SMTP_REAL_HOST:-}"
+if [[ -n "$SMTP_REAL_HOST_PORT" && "$SMTP_REAL_HOST_PORT" != *:* && -n "${IDP_SMTP_REAL_PORT:-}" ]]; then
+  SMTP_REAL_HOST_PORT="${SMTP_REAL_HOST_PORT}:${IDP_SMTP_REAL_PORT}"
+fi
+if [[ -n "$SMTP_REAL_HOST_PORT" && -n "${IDP_SMTP_REAL_USER:-}" \
+   && -n "${IDP_SMTP_REAL_PASSWORD:-}" && -n "${IDP_SMTP_REAL_SENDER_ADDRESS:-}" ]]; then
+  SMTP_REAL_ID="$(ensure_smtp_provider \
+    "real transactional sender" \
+    "$SMTP_REAL_HOST_PORT" \
+    "${IDP_SMTP_REAL_SENDER_ADDRESS}" \
+    "${IDP_SMTP_REAL_SENDER_NAME:-DS Platform}" \
+    "${IDP_SMTP_REAL_USER}" \
+    "${IDP_SMTP_REAL_PASSWORD}" \
+    true)"
 else
-  # Mailpit (default) — plaintext dev catch-all, no auth.
-  SMTP_HOST_PORT="${IDP_SMTP_HOST:-mailpit:1025}"
-  SMTP_USER=""
-  SMTP_PASSWORD=""
-  SMTP_SENDER_ADDRESS="${IDP_SMTP_SENDER_ADDRESS:-no-reply@ds.test}"
-  SMTP_SENDER_NAME="${IDP_SMTP_SENDER_NAME:-DS Platform Dev}"
-  SMTP_TLS=false
-  SMTP_DESC="dev-stand mailpit"
+  echo "real SMTP creds (IDP_SMTP_REAL_*) absent — skipping the real SMTP provider." >&2
+  echo "  'email-delivery-real' will have no provider to activate; the api reconcile" >&2
+  echo "  leaves email on Mailpit and warns. Set IDP_SMTP_REAL_* to enable real email." >&2
 fi
 
-SMTP_PAYLOAD="$(jq -nc \
-  --arg d "$SMTP_DESC" \
-  --arg h "$SMTP_HOST_PORT" \
-  --arg a "$SMTP_SENDER_ADDRESS" \
-  --arg n "$SMTP_SENDER_NAME" \
-  --arg u "$SMTP_USER" \
-  --arg p "$SMTP_PASSWORD" \
-  --argjson tls "$SMTP_TLS" \
-  '{description:$d, senderAddress:$a, senderName:$n, tls:$tls, host:$h, user:$u, password:$p}')"
-
-EXISTING_SMTP="$(api POST /admin/v1/smtp/_search '{}' \
-  | jq -r '.result[]?.id' | head -n1 || true)"
-if [[ -n "$EXISTING_SMTP" && "$EXISTING_SMTP" != "null" ]]; then
-  # Converge the existing provider to the selected mode, then (re)activate it.
-  api_idempotent PUT "/admin/v1/smtp/${EXISTING_SMTP}" "$SMTP_PAYLOAD" >/dev/null
-  # api_activate (not api_idempotent): a same-mode re-run finds the provider
-  # already active, which Zitadel rejects with a precondition error, not "No
-  # changes" — tolerate it so the re-run converges to a no-op.
-  api_activate POST "/admin/v1/smtp/${EXISTING_SMTP}/_activate" '{}' >/dev/null
-  echo "converged SMTP provider ${EXISTING_SMTP} -> ${SMTP_DESC} (${SMTP_HOST_PORT})" >&2
+# Activate the boot-time default (EMAIL_DELIVERY_MODE) so a stand has a working
+# active SMTP provider even before the api reconcile runs. If `real` is requested
+# but its provider was skipped (no creds), fall back to Mailpit with a loud note —
+# a `real` boot default with no creds must not leave delivery unconfigured.
+if [[ "$EMAIL_DELIVERY_MODE" == "real" && -n "$SMTP_REAL_ID" ]]; then
+  api_activate POST "/admin/v1/smtp/${SMTP_REAL_ID}/_activate" '{}' >/dev/null
+  echo "activated SMTP provider ${SMTP_REAL_ID} (real transactional sender) [boot default]" >&2
 else
-  SMTP_ID="$(api POST /admin/v1/smtp "$SMTP_PAYLOAD" | jq -r '.id')"
-  api POST "/admin/v1/smtp/${SMTP_ID}/_activate" '{}' >/dev/null
-  echo "created + activated SMTP provider ${SMTP_ID} -> ${SMTP_DESC} (${SMTP_HOST_PORT})" >&2
+  if [[ "$EMAIL_DELIVERY_MODE" == "real" ]]; then
+    echo "WARN: EMAIL_DELIVERY_MODE=real but no real SMTP provider (creds absent) —" >&2
+    echo "      activating Mailpit instead. Set IDP_SMTP_REAL_* or use mailpit." >&2
+  fi
+  api_activate POST "/admin/v1/smtp/${SMTP_MAILPIT_ID}/_activate" '{}' >/dev/null
+  echo "activated SMTP provider ${SMTP_MAILPIT_ID} (dev-stand mailpit) [boot default]" >&2
 fi
 
-# ── 7. converge HTTP SMS provider → sms-sink (dev) | sms-aero-adapter (real) ──
+# ── 7. ensure BOTH HTTP SMS providers → sms-sink (intercept) + sms-aero (real) ─
 # SMS-OTP login (EARS-7) and phone verification (EARS-13) deliver their codes via
 # Zitadel's SMS notifier — and Zitadel ships with NO SMS provider, so the
 # `otpSms` session challenge / `phone/resend` accept (200) yet nothing is
 # delivered until a generic HTTP SMS provider is configured + activated (the live
 # SMS-OTP round-trip #170, zitadel-otp-login.e2e-spec EARS-7 + the portal sms-OTP
-# browser journey depend on it). SMS_DELIVERY_MODE selects the webhook target and
-# this step CONVERGES the active provider's endpoint to it on every run:
-#   sink → `http://sms-sink:8090/` — the dev SMS catch-all (the SMS analogue of
-#          Mailpit, compose.core.yml). The sink stores each webhook body so the
-#          live e2e reads the delivered code back by recipient phone (no
-#          `returnCode` leak, no test backdoor — AGENTS.md §6). Default.
-#   real → `http://sms-aero-adapter:8091/` — the adapter that forwards to SMS-Aero
-#          (smsaero.ru Gate API v2), the PRODUCTION sender recorded in the specs
-#          (engineering-readiness §5.bis, identity-auth-rbac-design §5, ADR-0001
-#          design). Real SMS COSTS MONEY — opt-in, OFF by default (#176).
-# Both targets are in-network service names, NOT a real gateway reached from
-# Zitadel directly (the adapter holds the SMS-Aero creds + does the egress).
-# Override the endpoint explicitly with IDP_SMS_HTTP_ENDPOINT. Convergence uses
-# the update API `PUT /admin/v1/sms/{id}/http` (create is `POST /admin/v1/sms/http`),
-# then (re)activates. Idempotent: a re-run in the same mode yields "No changes".
-if [[ "$SMS_DELIVERY_MODE" == "real" ]]; then
-  SMS_DEFAULT_ENDPOINT="http://sms-aero-adapter:8091/"
-  SMS_DESC="real sms-aero-adapter"
-else
-  SMS_DEFAULT_ENDPOINT="http://sms-sink:8090/"
-  SMS_DESC="dev-stand sms-sink"
-fi
-SMS_ENDPOINT="${IDP_SMS_HTTP_ENDPOINT:-$SMS_DEFAULT_ENDPOINT}"
-SMS_HTTP_PAYLOAD="$(jq -nc --arg e "$SMS_ENDPOINT" --arg d "$SMS_DESC" \
-  '{endpoint:$e, description:$d}')"
-
-EXISTING_SMS="$(api POST /admin/v1/sms/_search '{}' \
-  | jq -r '.result[]?.id' | head -n1 || true)"
-if [[ -n "$EXISTING_SMS" && "$EXISTING_SMS" != "null" ]]; then
-  # Repoint the existing HTTP SMS provider to the selected target, then
-  # (re)activate so the converged provider is the active one.
-  api_idempotent PUT "/admin/v1/sms/${EXISTING_SMS}/http" "$SMS_HTTP_PAYLOAD" >/dev/null
-  # api_activate (not api_idempotent): a same-mode re-run finds the provider
-  # already active, which Zitadel rejects with a precondition error, not "No
-  # changes" — tolerate it so the re-run converges to a no-op.
-  api_activate POST "/admin/v1/sms/${EXISTING_SMS}/_activate" '{}' >/dev/null
-  echo "converged HTTP SMS provider ${EXISTING_SMS} -> ${SMS_DESC} (${SMS_ENDPOINT})" >&2
-else
-  SMS_ID="$(api POST /admin/v1/sms/http "$SMS_HTTP_PAYLOAD" \
-    | jq -r '.id // .details.id // empty')"
-  if [[ -n "$SMS_ID" && "$SMS_ID" != "null" ]]; then
-    api POST "/admin/v1/sms/${SMS_ID}/_activate" '{}' >/dev/null
-    echo "created + activated HTTP SMS provider ${SMS_ID} -> ${SMS_DESC} (${SMS_ENDPOINT})" >&2
+# browser journey depend on it).
+#
+# #185 (runtime delivery toggle): both SMS providers are HTTP providers with
+# STATIC in-network endpoints, so this step ensures BOTH EXIST (no creds gate —
+# unlike SMTP, neither endpoint needs a secret here; the sms-aero-adapter holds
+# the SMS-Aero creds and does the egress), each stamped with a STABLE description:
+#   "dev-stand sms-sink"      → `http://sms-sink:8090/` — the dev SMS catch-all
+#                               (the SMS analogue of Mailpit, compose.core.yml).
+#                               The sink stores each webhook body so the live e2e
+#                               reads the delivered code back by recipient phone
+#                               (no `returnCode` leak, no test backdoor — AGENTS.md §6).
+#   "real sms-aero-adapter"   → `http://sms-aero-adapter:8091/` — the adapter that
+#                               forwards to SMS-Aero (smsaero.ru Gate API v2), the
+#                               PRODUCTION sender. Real SMS COSTS MONEY — opt-in.
+# Activation is left to runtime: the api's delivery reconcile reads the Unleash
+# `sms-delivery-real` flag and `_activate`s the matching provider by description.
+# At boot we activate the one selected by SMS_DELIVERY_MODE (the bootstrap default).
+#
+# ensure_sms_provider <description> <endpoint> — echoes the provider id.
+ensure_sms_provider() {
+  local desc="$1" endpoint="$2" payload id
+  payload="$(jq -nc --arg e "$endpoint" --arg d "$desc" '{endpoint:$e, description:$d}')"
+  # The id lives on the provider root; the description may sit on the root or
+  # nested under `.http` (Zitadel returns the HTTP provider object there). Match
+  # on either, then read the sibling root `.id` (the #185 description contract).
+  id="$(api POST /admin/v1/sms/_search '{}' \
+    | jq -r --arg d "$desc" '.result[]? | select((.http.description // .description)==$d) | .id' \
+    | head -n1 || true)"
+  if [[ -n "$id" && "$id" != "null" ]]; then
+    # Update verb is `PUT /admin/v1/sms/http/{id}` (id AFTER `http`); the
+    # `/admin/v1/sms/{id}/http` spelling 404s on Zitadel v4 (proven live, #185).
+    api_idempotent PUT "/admin/v1/sms/http/${id}" "$payload" >/dev/null
+    echo "ensured HTTP SMS provider ${id} (${desc})" >&2
   else
-    echo "WARN: HTTP SMS provider create returned no id; SMS-OTP (EARS-7) will" >&2
-    echo "      not deliver until a provider is configured." >&2
+    id="$(api POST /admin/v1/sms/http "$payload" | jq -r '.id // .details.id // empty')"
+    echo "created HTTP SMS provider ${id} (${desc})" >&2
   fi
+  printf '%s' "$id"
+}
+
+SMS_SINK_ID="$(ensure_sms_provider "dev-stand sms-sink" \
+  "${IDP_SMS_SINK_ENDPOINT:-http://sms-sink:8090/}")"
+SMS_AERO_ID="$(ensure_sms_provider "real sms-aero-adapter" \
+  "${IDP_SMS_AERO_ENDPOINT:-http://sms-aero-adapter:8091/}")"
+
+# Activate the boot-time default (SMS_DELIVERY_MODE) so a stand has a working
+# active SMS provider even before the api reconcile runs.
+if [[ "$SMS_DELIVERY_MODE" == "real" && -n "$SMS_AERO_ID" && "$SMS_AERO_ID" != "null" ]]; then
+  api_activate POST "/admin/v1/sms/${SMS_AERO_ID}/_activate" '{}' >/dev/null
+  echo "activated HTTP SMS provider ${SMS_AERO_ID} (real sms-aero-adapter) [boot default]" >&2
+elif [[ -n "$SMS_SINK_ID" && "$SMS_SINK_ID" != "null" ]]; then
+  api_activate POST "/admin/v1/sms/${SMS_SINK_ID}/_activate" '{}' >/dev/null
+  echo "activated HTTP SMS provider ${SMS_SINK_ID} (dev-stand sms-sink) [boot default]" >&2
+else
+  echo "WARN: no HTTP SMS provider id to activate; SMS-OTP (EARS-7) will not deliver." >&2
 fi
 
 # ── output (machine-parseable; secret only when freshly created) ─────────────

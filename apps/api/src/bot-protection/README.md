@@ -43,17 +43,22 @@ token indirection.
 
 ## Configuration
 
-| Env var                     | Default                                         | Meaning                                                               |
-| --------------------------- | ----------------------------------------------- | --------------------------------------------------------------------- |
-| `BOT_PROTECTION_ENABLED`    | `false`                                         | Master switch. `false` ⇒ `verify` short-circuits to `ok` (dev-stand). |
-| `SMARTCAPTCHA_SERVER_KEY`   | —                                               | Yandex SmartCaptcha **server** key. Required when enabled.            |
-| `SMARTCAPTCHA_VALIDATE_URL` | `https://smartcaptcha.yandexcloud.net/validate` | Validation endpoint.                                                  |
+| Env var / flag              | Default                                         | Meaning                                                                                                                                                                      |
+| --------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bot-protection` (Unleash)  | —                                               | Master switch, read **live per request** (#185). Overrides the env default when Unleash is reachable; an operator toggles it in the Unleash UI with no restart.              |
+| `BOT_PROTECTION_ENABLED`    | `false`                                         | Bootstrap default **and fail-closed fallback** for the flag above — used at boot and whenever Unleash is unreachable. `false` ⇒ `verify` short-circuits to `ok` (dev-stand). |
+| `SMARTCAPTCHA_SERVER_KEY`   | —                                               | Yandex SmartCaptcha **server** key. Required when enabled.                                                                                                                   |
+| `SMARTCAPTCHA_VALIDATE_URL` | `https://smartcaptcha.yandexcloud.net/validate` | Validation endpoint.                                                                                                                                                         |
 
-Disabled by default so the dev-stand runs without a Yandex account; the guard
-and the portal widget stay wired end to end, only the server-to-server
-validation is skipped. **Fail-closed when enabled:** a missing server key, a
-non-2xx response, or a transport error all resolve to `ok: false` — never an
-open gate (ADR-0001 §5.5 risk row: captcha downtime ⇒ block + alert).
+The master switch is read live on every `verify` from the Unleash `bot-protection`
+flag (#185), so a toggle takes effect without a restart; `BOT_PROTECTION_ENABLED`
+is the bootstrap default and the **fail-closed** fallback when Unleash is
+unreachable (an outage never silently opens the gate). Disabled by default so the
+dev-stand runs without a Yandex account; the guard and the portal widget stay
+wired end to end, only the server-to-server validation is skipped. **Fail-closed
+when enabled:** a missing server key, a non-2xx response, or a transport error all
+resolve to `ok: false` — never an open gate (ADR-0001 §5.5 risk row: captcha
+downtime ⇒ block + alert).
 
 ## Frontend half
 

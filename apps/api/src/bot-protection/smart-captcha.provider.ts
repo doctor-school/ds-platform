@@ -12,11 +12,17 @@ export type FetchLike = (
 
 export interface SmartCaptchaConfig {
   /**
-   * Master switch. When `false` (the dev-stand default — no Yandex account
-   * required) every verification short-circuits to `ok`. The widget and guard
-   * are still wired end to end; only the server-to-server validation is skipped.
+   * Master switch, read **live per verification** (#185). When it returns `false`
+   * (the dev-stand default — no Yandex account required) the verification
+   * short-circuits to `ok`. The widget and guard stay wired end to end; only the
+   * server-to-server validation is skipped. It is a callback (not a static
+   * boolean) so the value comes from the live Unleash `bot-protection` flag on
+   * every request — an operator toggle in the admin UI takes effect without a
+   * restart. The callback owns the fail-closed fallback: when Unleash is
+   * unreachable it returns the env bootstrap default (`BOT_PROTECTION_ENABLED`),
+   * never an implicit "open". The unit fake passes a constant.
    */
-  enabled: boolean;
+  isEnabled: () => boolean;
   /** Yandex Cloud SmartCaptcha *server* key (the secret half of the keypair). */
   serverKey?: string | undefined;
   /** Validation endpoint; defaults to the Yandex Cloud SmartCaptcha service. */
@@ -57,7 +63,7 @@ export class SmartCaptchaProvider implements BotProtection {
     action: BotProtectionAction,
     clientIp: string,
   ): Promise<BotProtectionResult> {
-    if (!this.config.enabled) {
+    if (!this.config.isEnabled()) {
       return { ok: true, reason: "bot-protection-disabled" };
     }
     if (!this.config.serverKey) {

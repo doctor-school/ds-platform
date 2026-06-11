@@ -92,10 +92,45 @@ so Unleash's migrations don't collide with the api's `public.users` table —
   a **client/server** token the api SDK consumes and a **frontend** token the
   portal consumes (`UNLEASH_INIT_CLIENT_API_TOKEN` /
   `UNLEASH_INIT_FRONTEND_API_TOKEN`). Real values live ONLY in `.env.local` (dev) /
-  Beget `~/.env` (prod) → Vault later — never committed. The SDK wiring + the
-  migration of the env flags (`EMAIL_DELIVERY_MODE`, `SMS_DELIVERY_MODE`,
-  `BOT_PROTECTION_ENABLED`) onto Unleash is the follow-up (#185); this is the
-  deployment only.
+  Beget `~/.env` (prod) → Vault later — never committed. The api SDK reads its
+  token from `UNLEASH_API_TOKEN` (mirror the seeded client token) and its base URL
+  from `UNLEASH_URL` (note the `/api` suffix).
+
+### Runtime flags the api reads (#185)
+
+The api reads three **dev-stand-only** flags from Unleash. Create them once in the
+`development` environment (default OFF) and toggle them in the admin UI — no
+`.env.local` edit + restart:
+
+| Flag                  | OFF (default)                   | ON                                         | How the api applies it                                                     |
+| --------------------- | ------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------- |
+| `bot-protection`      | captcha gate open (dev)         | `@BotProtected` endpoints enforce captcha  | **per request** — the guard reads the flag live on every call              |
+| `email-delivery-real` | email OTP → Mailpit (intercept) | email OTP → real SMTP sender               | **reconcile** — flag change → Zitadel `_activate` of the matching provider |
+| `sms-delivery-real`   | SMS OTP → sms-sink (intercept)  | SMS OTP → SMS-Aero (real, **costs money**) | **reconcile** — flag change → Zitadel `_activate` of the matching provider |
+
+**Precedence + fallback.** When Unleash is reachable its flag value wins. When it
+is unreachable (or `UNLEASH_URL`/`UNLEASH_API_TOKEN` are unset, the shared-CI
+default) every flag falls back to its **env bootstrap default**
+(`BOT_PROTECTION_ENABLED` / `EMAIL_DELIVERY_REAL` / `SMS_DELIVERY_REAL`). The
+`bot-protection` fallback is **fail-closed** — an Unleash outage never silently
+opens the gate. The env defaults also seed the boot-time state before the first
+SDK poll.
+
+**The delivery reconcile path.** The api does **not** send OTP email/SMS —
+**Zitadel** does, via its currently **active** provider. So a delivery flag cannot
+branch in our code; it must repoint Zitadel. `idp/provision.sh` pre-configures
+**both** providers per channel (Mailpit + real SMTP; sms-sink + SMS-Aero), each
+with a stable `description`. On a flag change the api's reconcile finds the
+provider whose description matches the desired mode and calls the admin
+`…/_activate` (it holds **no** SMTP/SMS secrets — it only flips which
+pre-configured provider is active). It is idempotent (already-active ⇒ no-op) and
+safe: if the desired provider is not provisioned (e.g. real SMTP with no
+`IDP_SMTP_REAL_*` creds, so `provision.sh` skipped it) it leaves the active
+provider unchanged and logs a clear note — it never activates the wrong provider.
+
+**Dev-stand only.** In production the providers are always real and there is no
+delivery toggle; these flags are a dev-stand affordance for testing the full
+registration cycle against live vs intercepted email/SMS.
 
 ---
 

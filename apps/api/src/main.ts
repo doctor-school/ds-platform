@@ -13,6 +13,10 @@ async function bootstrap(): Promise<void> {
     new FastifyAdapter(),
   );
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
+  // Enable shutdown hooks so OnModuleDestroy fires on SIGTERM/SIGINT — the
+  // Unleash SDK poll timer (FeatureFlagsService) and the delivery-reconcile
+  // subscription are cleaned up on a graceful stop (#185).
+  app.enableShutdownHooks();
   const port = Number(process.env.PORT ?? 3000);
   await app.listen({ port, host: '0.0.0.0' });
 }

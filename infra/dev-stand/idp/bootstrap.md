@@ -196,14 +196,26 @@ Defaults target the api BFF callback (`:3000/auth/callback`) and the portal
 
 ### 3.bis. Switching to REAL delivery (email + paid SMS) — #176
 
-The dev sinks above are the **default**. Both providers are switchable to the
-**real** route by two env flags (the env-flag precedent of apps/api's
-`BOT_PROTECTION_ENABLED`), read by `provision.sh` which **converges** the active
-provider on every run — flip a flag, re-run `provision.sh`, and Zitadel's
-provider is re-pointed (no console). Steps 6/7 are idempotent: re-running in the
-same mode yields Zitadel's "No changes" (a no-op), so it is always safe to re-run.
+The dev sinks above are the **default**. Since #185 there are TWO ways to switch
+to the **real** route, and you should prefer the first:
 
-| Flag                  | Default   | `real` value                                              |
+1. **Runtime, in the Unleash UI (preferred, #185).** `provision.sh` now ensures
+   **BOTH** providers per channel EXIST in Zitadel (Mailpit + real SMTP; sms-sink +
+   SMS-Aero), each with a stable `description`. The api's delivery reconcile reads
+   the Unleash flags `email-delivery-real` / `sms-delivery-real` and `_activate`s
+   the matching provider on a flag change — **no `.env.local` edit, no
+   `provision.sh` re-run, no restart**. Toggle the flag in the admin UI
+   (`http://<HOST>:4242`) and the next Zitadel-sent OTP goes real vs intercepted.
+   (Real SMTP must have its `IDP_SMTP_REAL_*` creds set at provision time, else
+   that provider is skipped and the reconcile leaves email on Mailpit with a note.)
+
+2. **Boot-time, via env (the original #176 mechanism).** `EMAIL_DELIVERY_MODE` /
+   `SMS_DELIVERY_MODE` now select which of the two pre-configured providers
+   `provision.sh` **activates at boot** (the bootstrap default the api reconcile
+   then overrides when Unleash is reachable). Use this only to change the boot mode
+   or on a stand with no running api. Steps 6/7 are idempotent — safe to re-run.
+
+| Boot flag             | Default   | `real` value                                              |
 | --------------------- | --------- | --------------------------------------------------------- |
 | `EMAIL_DELIVERY_MODE` | `mailpit` | the real transactional sender (`IDP_SMTP_REAL_*`, TLS on) |
 | `SMS_DELIVERY_MODE`   | `sink`    | `sms-aero-adapter` → SMS-Aero (smsaero.ru Gate API v2)    |
@@ -237,14 +249,18 @@ ssh truenas 'cd ~/ds-platform-dev-stand/idp && \
   IDP_BASE_URL=http://truenas.local:9080 \
   EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real \
   ./provision.sh --pat-file /tmp/idp-pat.txt'
-# provision.sh converges the SMTP + HTTP-SMS providers onto the real route.
-# Re-run with the defaults (or omit the vars) to converge straight back to the
-# sinks — the providers are repointed in place, never duplicated.
+# provision.sh ensures BOTH providers per channel exist and ACTIVATES the `real`
+# one as the boot default. Re-run with the defaults (or omit the vars) to activate
+# the sinks again — both providers always exist, only the active one changes. At
+# runtime, prefer toggling the Unleash flags (option 1 above) instead of re-running.
 ```
 
-`provision.sh` **fails loudly** (exit 4) if `EMAIL_DELIVERY_MODE=real` but a
-required `IDP_SMTP_REAL_*` var is unset — it never silently falls back to Mailpit,
-so a misconfigured paid path is caught before it masks a delivery failure.
+If `EMAIL_DELIVERY_MODE=real` but the real SMTP provider was **skipped** (its
+`IDP_SMTP_REAL_*` creds were absent at provision time), `provision.sh` activates
+Mailpit instead with a loud WARN — you cannot test real email without creds, and
+it never silently leaves email unconfigured. Set `IDP_SMTP_REAL_*` to provision and
+activate the real sender. (The SMS providers need no creds in Zitadel — the
+`sms-aero-adapter` holds the SMS-Aero keys and does the egress.)
 
 > **DoD note (operator-verified live).** The two live checks — a real verification
 > email actually arriving, and one supervised paid SMS arriving on a real handset —

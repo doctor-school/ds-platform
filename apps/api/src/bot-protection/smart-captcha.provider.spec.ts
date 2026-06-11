@@ -34,7 +34,7 @@ describe("SmartCaptchaProvider", () => {
     const { fetchImpl, calls } = fakeFetch({ ok: true, status: 200, body: {} });
     const provider = new SmartCaptchaProvider({
       ...base,
-      enabled: false,
+      isEnabled: () => false,
       fetchImpl,
     });
     const result = await provider.verify("tok", "register", "203.0.113.1");
@@ -42,9 +42,33 @@ describe("SmartCaptchaProvider", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("#185: reads the enabled switch LIVE per verify (a toggle takes effect with no rebuild)", async () => {
+    // The switch is a callback (the live Unleash `bot-protection` read), so the
+    // same provider instance honours a flip between calls — the runtime-toggle
+    // contract the migration delivers.
+    const { fetchImpl } = fakeFetch({
+      ok: true,
+      status: 200,
+      body: { status: "ok" },
+    });
+    let live = false;
+    const provider = new SmartCaptchaProvider({
+      ...base,
+      isEnabled: () => live,
+      fetchImpl,
+    });
+    // Disabled → short-circuits ok with no server call.
+    expect((await provider.verify("t", "register", "1.1.1.1")).reason).toBe(
+      "bot-protection-disabled",
+    );
+    // Operator flips the flag ON; the very next verify now validates.
+    live = true;
+    expect((await provider.verify("t", "register", "1.1.1.1")).ok).toBe(true);
+  });
+
   it("fails closed when enabled with no server key", async () => {
     const provider = new SmartCaptchaProvider({
-      enabled: true,
+      isEnabled: () => true,
       validateUrl: SMARTCAPTCHA_VALIDATE_URL,
     });
     const result = await provider.verify("tok", "register", "203.0.113.1");
@@ -60,7 +84,7 @@ describe("SmartCaptchaProvider", () => {
     });
     const provider = new SmartCaptchaProvider({
       ...base,
-      enabled: true,
+      isEnabled: () => true,
       fetchImpl,
     });
     const result = await provider.verify(
@@ -85,7 +109,7 @@ describe("SmartCaptchaProvider", () => {
     });
     const provider = new SmartCaptchaProvider({
       ...base,
-      enabled: true,
+      isEnabled: () => true,
       fetchImpl,
     });
     const result = await provider.verify("tok", "register", "203.0.113.1");
@@ -97,7 +121,7 @@ describe("SmartCaptchaProvider", () => {
     const { fetchImpl } = fakeFetch({ ok: false, status: 503, body: {} });
     const provider = new SmartCaptchaProvider({
       ...base,
-      enabled: true,
+      isEnabled: () => true,
       fetchImpl,
     });
     const result = await provider.verify("tok", "register", "203.0.113.1");
@@ -109,7 +133,7 @@ describe("SmartCaptchaProvider", () => {
     const { fetchImpl } = fakeFetch({ throws: new Error("ECONNRESET") });
     const provider = new SmartCaptchaProvider({
       ...base,
-      enabled: true,
+      isEnabled: () => true,
       fetchImpl,
     });
     const result = await provider.verify("tok", "register", "203.0.113.1");

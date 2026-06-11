@@ -84,19 +84,16 @@ export const ApiEnvSchema = z.looseObject({
     .positive()
     .default(5_000),
 
-  // Delivery bootstrap defaults (#185) — the boot-time / Unleash-unreachable mode
-  // for which Zitadel provider is active. Unleash's `email-delivery-real` /
-  // `sms-delivery-real` override these when reachable; the api reconcile reacts to
-  // a flag change and `_activate`s the matching pre-configured Zitadel provider
-  // (it holds NO SMTP/SMS secrets — only flips which provider is active). `false`
-  // (the default) = intercept via Mailpit/sms-sink; `true` = the real provider.
-  // These mirror provision.sh's EMAIL_DELIVERY_MODE/SMS_DELIVERY_MODE boot choice.
-  EMAIL_DELIVERY_REAL: z
-    .stringbool({ truthy: ["true", "1"], falsy: ["false", "0", ""] })
-    .default(false),
-  SMS_DELIVERY_REAL: z
-    .stringbool({ truthy: ["true", "1"], falsy: ["false", "0", ""] })
-    .default(false),
+  // Delivery boot mode (#185) — the SINGLE source of truth for which Zitadel
+  // notification provider is active at boot. provision.sh reads these and
+  // activates the matching provider on boot; the api uses `mode === "real"` as its
+  // Unleash-unreachable fallback for the `email-delivery-real` / `sms-delivery-real`
+  // flags (the reconcile reacts to a flag change and `_activate`s the matching
+  // pre-configured Zitadel provider — it holds NO SMTP/SMS secrets, only flips
+  // which provider is active). `mailpit`/`sink` (the defaults) = intercept via
+  // Mailpit/sms-sink; `real` = the real provider. One knob, no parallel boolean.
+  EMAIL_DELIVERY_MODE: z.enum(["mailpit", "real"]).default("mailpit"),
+  SMS_DELIVERY_MODE: z.enum(["sink", "real"]).default("sink"),
 
   // Keyed HMAC pepper for ledger identifier masking (ADR-0001 §7, ADR-0003 §6).
   // The `audit_ledger` records an `identifier_hash`, never raw PD; a bare digest

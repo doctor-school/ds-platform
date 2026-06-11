@@ -111,7 +111,9 @@ The api reads three **dev-stand-only** flags from Unleash. Create them once in t
 **Precedence + fallback.** When Unleash is reachable its flag value wins. When it
 is unreachable (or `UNLEASH_URL`/`UNLEASH_API_TOKEN` are unset, the shared-CI
 default) every flag falls back to its **env bootstrap default**
-(`BOT_PROTECTION_ENABLED` / `EMAIL_DELIVERY_REAL` / `SMS_DELIVERY_REAL`). The
+(`BOT_PROTECTION_ENABLED` for `bot-protection`; `EMAIL_DELIVERY_MODE` /
+`SMS_DELIVERY_MODE` `=== real` for the two delivery flags — the same knobs
+`provision.sh` reads, so boot intent and the api fallback share one source). The
 `bot-protection` fallback is **fail-closed** — an Unleash outage never silently
 opens the gate. The env defaults also seed the boot-time state before the first
 SDK poll.

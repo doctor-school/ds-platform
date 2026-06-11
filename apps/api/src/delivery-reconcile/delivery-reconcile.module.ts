@@ -41,8 +41,8 @@ export const DELIVERY_RECONCILE = Symbol("DELIVERY_RECONCILE");
           serviceToken: env.IDP_SERVICE_TOKEN,
         });
         return new DeliveryReconcileService(flags, admin, {
-          emailReal: env.EMAIL_DELIVERY_REAL,
-          smsReal: env.SMS_DELIVERY_REAL,
+          emailReal: env.EMAIL_DELIVERY_MODE === "real",
+          smsReal: env.SMS_DELIVERY_MODE === "real",
         });
       },
     },

@@ -26,6 +26,9 @@ The api now reads three dev-stand runtime flags from Unleash (server SDK,
 A new `FeatureFlagsService` wraps the SDK behind a `FEATURE_FLAGS` port: reads are
 fail-soft (env default when Unleash is unreachable / the flag is unknown), with a
 clean SDK shutdown on `OnModuleDestroy` (shutdown hooks enabled in `main.ts`). New
-env: `UNLEASH_URL`, `UNLEASH_API_TOKEN`, `EMAIL_DELIVERY_REAL`, `SMS_DELIVERY_REAL`.
+env: `UNLEASH_URL`, `UNLEASH_API_TOKEN`. The delivery flags' boot/Unleash-unreachable
+fallback derives from the existing `EMAIL_DELIVERY_MODE` / `SMS_DELIVERY_MODE` knobs
+(`mode === "real"`) — the SAME vars `provision.sh` uses to activate the boot provider,
+so boot intent and the api fallback share one source of truth (no parallel boolean).
 The SDK + reconcile bind only when their env is present (the shared-CI / fake-IdP
 default runs env-only), so the api test topology is unchanged.

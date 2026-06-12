@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import {
   EmailIdentifierSchema,
-  NewPasswordSchema,
+  NEW_PASSWORD_COMPLEXITY,
   PhoneIdentifierSchema,
 } from "@ds/schemas";
 
@@ -52,14 +52,28 @@ export const IdentifierFieldSchema = z.union(
 export const OtpCodeFieldSchema = z.string().min(1);
 
 /**
- * Creation-password field shape — registration / reset "new password". This is the
- * EXACT `@ds/schemas` `NewPasswordSchema` baseline (#147: min 8, ≤256, and the
- * upper/lower/digit/symbol complexity), re-exported rather than re-declared (#197):
- * `@ds/schemas` now exports the per-field fragment, so the portal composes from the
- * SSOT and the complexity regex can no longer drift out of lockstep with the BFF.
- * Zitadel remains the ultimate authority; this is only the pre-submit client guard.
+ * Creation-password field shape — registration / reset "new password". Composed
+ * from the `@ds/schemas` `NEW_PASSWORD_COMPLEXITY` SSOT regex (#147: the
+ * upper/lower/digit/symbol baseline) plus the min 8 / ≤256 bounds, re-using the
+ * shared pattern rather than re-declaring it (#197 anti-drift) — but, crucially,
+ * with NO message on the `.regex()` (#200).
+ *
+ * Why message-less and NOT `= NewPasswordSchema`: in zod v4 a schema-level
+ * `.regex(pattern, message)` message outranks the contextual error map that
+ * `useLocalizedResolver` installs, so reusing `NewPasswordSchema` (which carries the
+ * generic English DTO message) leaked that English onto `/register` and `/reset`
+ * instead of the RU `errors.validation.passwordComplexity` copy. Omitting the
+ * message lets the resulting `invalid_format` issue fall through to the resolver's
+ * error map, which maps a `password`/`newPassword` format issue → `passwordComplexity`
+ * (see `translateIssue`). `@ds/schemas` keeps its generic message for API DTO
+ * honesty; the portal owns the localized rendering. Zitadel remains the ultimate
+ * authority; this is only the pre-submit client guard.
  */
-export const NewPasswordFieldSchema = NewPasswordSchema;
+export const NewPasswordFieldSchema = z
+  .string()
+  .min(8)
+  .max(256)
+  .regex(NEW_PASSWORD_COMPLEXITY);
 
 /**
  * Login (current) password field shape — deliberately permissive (#147): min 8,

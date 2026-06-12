@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { useTranslations } from "next-intl";
 import { UserPlus } from "lucide-react";
 
-import { RegisterRequestSchema, type RegisterRequest } from "@ds/schemas";
+import { type RegisterRequest } from "@ds/schemas";
 
 import { BotProtectionField } from "@/components/bot-protection";
 import { EmailField, PasswordField, PhoneField } from "@/components/fields";
@@ -18,6 +18,7 @@ import {
   clearPendingRegistration,
   setPendingRegistration,
 } from "@/lib/pending-registration";
+import { registerFormSchema } from "@/lib/identifier-validation";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
@@ -53,8 +54,23 @@ export default function RegisterPage() {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // #200: validate with a channel-specific portal resolver built from the field
+  // primitives, NOT the loose `RegisterRequestSchema`. Two reasons: (1) the request
+  // schema keeps both identifiers optional behind a dual-identifier `.refine`, which
+  // cannot flag a malformed value in the ONE channel the user is editing; (2) its
+  // `password` is the message-carrying `NewPasswordSchema`, whose baked-in English
+  // outranks the localized error map in zod v4 and leaked onto the field — the
+  // channel schema uses the message-less `NewPasswordFieldSchema` so a weak password
+  // renders the RU `passwordComplexity` copy. Rebuilt per channel (memoized) so the
+  // channel toggle re-validates against the right identifier shape, like the OTP-login
+  // form. The submitted body still goes through `authClient.register(...)` and the API
+  // still enforces the full `RegisterRequestSchema` (dual-identifier refine + consent).
+  const resolverSchema = useMemo(() => registerFormSchema(channel), [channel]);
   const form = useForm<RegisterRequest>({
-    resolver: useLocalizedResolver(RegisterRequestSchema),
+    // `onTouched` (#200 defect 2): validate on blur and re-validate on change, so a
+    // malformed email/phone/password is surfaced before the user clicks submit.
+    mode: "onTouched",
+    resolver: useLocalizedResolver(resolverSchema),
     defaultValues: {
       email: "",
       password: "",

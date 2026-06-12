@@ -28,6 +28,14 @@ const BAD_NUMERIC = "99545545445";
 const VALID_EMAIL = "doctor@example.com";
 const VALID_PHONE = "+79991234567";
 const VALID_PASSWORD = "sufficiently-long-pw";
+// A creation password that fails the #147 complexity baseline (no upper/digit/
+// symbol) — the /register + /reset-complete "new password" must flag it.
+const WEAK_NEW_PASSWORD = "weakpassword";
+// The RU complexity copy (apps/portal/messages/ru.json → errors.validation.
+// passwordComplexity). The English baked into `@ds/schemas` `NewPasswordSchema`
+// ("password must include …") must NEVER reach the rendered field (#200).
+const RU_PASSWORD_COMPLEXITY =
+  "Пароль должен содержать заглавную и строчную буквы, цифру и спецсимвол.";
 
 /** The identifier input is flagged invalid (aria-invalid) when validation fails. */
 async function expectInvalid(
@@ -186,5 +194,79 @@ test.describe("#196 portal /reset identifier validation (client-side, ungated)",
     await expect(id).toHaveValue(VALID_PHONE);
     await page.getByTestId("reset-request-submit").click();
     await expectValidOrAbsent(id);
+  });
+});
+
+/**
+ * #200 — two creation-password / on-blur quality gaps surfaced by the #197/#199
+ * migration, on the SAME ungated, backend-free tier (client-side RHF validation,
+ * no api/Zitadel/Mailpit needed):
+ *
+ *  1. A weak NEW password on `/register` (and `/reset` complete) must render the RU
+ *     `errors.validation.passwordComplexity` copy — NOT the English baked into the
+ *     `@ds/schemas` `NewPasswordSchema` `.regex()` message. In zod v4 a schema-level
+ *     message outranks the contextual error map the localized resolver installs, so
+ *     the leak only disappears once the portal field schema composes the bare
+ *     complexity regex WITHOUT a message (issue #200, defect 1).
+ *  2. The auth forms must validate on BLUR (`mode: "onTouched"`), so an obviously
+ *     malformed email is flagged before the user clicks submit (defect 2).
+ *
+ * Selectors stay locale-agnostic where possible (`data-testid` / `autocomplete`),
+ * but the RU-copy assertion is intentionally exact — proving the localized string
+ * (not the English) is what renders is the whole point of defect 1.
+ */
+test.describe("#200 creation-password RU copy + on-blur validation (client-side, ungated)", () => {
+  test.use({ baseURL: BASE });
+
+  test("register: a weak new password renders the RU complexity copy, never English", async ({
+    page,
+  }) => {
+    await page.goto("/register");
+    const pw = page.locator('input[autocomplete="new-password"]');
+
+    await pw.fill(WEAK_NEW_PASSWORD);
+    await page.getByTestId("register-submit").click();
+
+    // The field is flagged invalid …
+    await expectInvalid(pw);
+    // … and the visible message is the RU copy, with NO English leak.
+    await expect(page.getByText(RU_PASSWORD_COMPLEXITY)).toBeVisible();
+    await expect(page.getByText(/password must include/i)).toHaveCount(0);
+  });
+
+  test("register: a malformed email is flagged on blur, before submit", async ({
+    page,
+  }) => {
+    await page.goto("/register");
+    const email = page.locator('input[autocomplete="email"]');
+    const pw = page.locator('input[autocomplete="new-password"]');
+
+    // Type a malformed email, then blur by focusing another field — NO submit click.
+    await email.fill("not-an-email");
+    await pw.focus();
+
+    // `mode: "onTouched"` validates the touched email field on blur, so it is
+    // flagged invalid without ever clicking the submit button.
+    await expectInvalid(email);
+  });
+
+  test("reset complete: a weak new password renders the RU complexity copy", async ({
+    page,
+  }) => {
+    await page.goto("/reset");
+    // Advance to the complete step with a valid identifier (the request submit only
+    // needs a well-formed identifier — the ack is identical regardless of existence).
+    const id = page.locator('input[autocomplete="username"]');
+    await id.fill(VALID_EMAIL);
+    await page.getByTestId("reset-request-submit").click();
+
+    const pw = page.locator('input[autocomplete="new-password"]');
+    await expect(pw).toBeVisible();
+    await pw.fill(WEAK_NEW_PASSWORD);
+    // Blur to trigger on-touched validation without needing the code field.
+    await pw.blur();
+
+    await expect(page.getByText(RU_PASSWORD_COMPLEXITY)).toBeVisible();
+    await expect(page.getByText(/password must include/i)).toHaveCount(0);
   });
 });

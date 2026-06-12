@@ -46,6 +46,12 @@ describe("no-raw-auth-field-input", () => {
         {
           code: `function F(){ return <Input name="displayName" placeholder="Имя" />; }`,
         },
+        // …and the same for a native lowercase <input>: gating the element by casing
+        // alone would over-fire on ordinary HTML inputs, so a free-form lowercase
+        // <input> with no credential hint must still pass.
+        {
+          code: `function F(){ return <input name="displayName" placeholder="Имя" />; }`,
+        },
         // NOTE on the escape hatch: a genuine free-form field is silenced with a
         // standard `// eslint-disable-next-line local/no-raw-auth-field-input -- <reason>`.
         // That is ESLint-core directive processing, not rule logic, so it is not
@@ -85,6 +91,17 @@ describe("no-raw-auth-field-input", () => {
         },
         {
           code: `function F(){ return <Input data-testid="otp-identifier" />; }`,
+          errors: [{ messageId: "rawAuthField" }],
+        },
+        // A native lowercase <input> used as a credential field is the real hole the
+        // gate closes (#197 NIT): hand-rolling the HTML element must NOT escape the
+        // guarantee. Same heuristic, lowercase tag → still flagged.
+        {
+          code: `function F(){ return <input type="password" name="password" />; }`,
+          errors: [{ messageId: "rawAuthField" }],
+        },
+        {
+          code: `function F(){ return <input autoComplete="one-time-code" />; }`,
           errors: [{ messageId: "rawAuthField" }],
         },
       ],

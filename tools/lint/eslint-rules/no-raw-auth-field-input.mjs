@@ -15,10 +15,14 @@
  * `<PasswordField>`, `<IdentifierField>`), which bake the validation/mask/a11y in.
  *
  * SCOPE: wired in `eslint.config.js` to apply ONLY to the auth surfaces
- * (`apps/portal/app/{login,register,verify,reset,account}/**` .tsx). It flags a
- * raw `<Input>` (the design-system component, used uppercase) whose props read as a
- * credential field. A genuinely free-form `<Input>` (a search/name box) that
- * matches none of the heuristics is intentionally NOT flagged.
+ * (`apps/portal/app/{login,register,verify,reset,account}/**` .tsx). It flags both
+ * a raw design-system `<Input>` (uppercase component) AND a raw lowercase HTML
+ * `<input>` whose props read as a credential field — a lowercase `<input>` would
+ * otherwise be an open hole in the "impossible to render" guarantee (the
+ * design-system `<Input>` ultimately renders one, so hand-rolling the native
+ * element must not be an escape from the gate). A genuinely free-form input
+ * (a search/name box) that matches none of the heuristics is intentionally NOT
+ * flagged, whichever casing it uses.
  *
  * HEURISTIC — a raw `<Input>` is treated as a credential field when ANY holds:
  *   • `type="password"`
@@ -51,9 +55,11 @@ const CREDENTIAL_INPUTMODE = new Set(["email", "tel", "numeric"]);
 const CREDENTIAL_NAME_PATTERN =
   /(identifier|e-?mail|phone|tel|otp|one-?time|password|passwd|\bcode\b|newpassword)/i;
 
-/** The local element name we gate. The design-system export is `Input` (uppercase);
- * the literal lowercase `<input>` is never used directly on these surfaces. */
-const GATED_ELEMENT = "Input";
+/** The element names we gate: the design-system export `Input` (uppercase) and the
+ * native HTML `input` (lowercase). Either can carry a credential field, so both
+ * must be checked — gating only `Input` would let a hand-rolled `<input>` bypass
+ * the guarantee. */
+const GATED_ELEMENTS = new Set(["Input", "input"]);
 
 /** Read a JSX attribute's static string value, or null if absent / non-literal. */
 function attrStringValue(attr) {
@@ -109,12 +115,12 @@ const rule = {
     type: "problem",
     docs: {
       description:
-        "Forbid a raw design-system <Input> for a credential field (identifier/email/phone/otp/password) on the portal auth surfaces; use the semantic field primitives instead (EARS-22, #197).",
+        "Forbid a raw design-system <Input> or native <input> for a credential field (identifier/email/phone/otp/password) on the portal auth surfaces; use the semantic field primitives instead (EARS-22, #197).",
     },
     schema: [],
     messages: {
       rawAuthField:
-        "Credential field rendered with a raw <Input>: validation/mask is hand-wired and can be forgotten (#192/#196). Use the semantic primitive from `@/components/fields` (EmailField / PhoneField / OtpField / PasswordField / IdentifierField). A genuinely free-form field needs `// eslint-disable-next-line local/no-raw-auth-field-input -- <reason>`.",
+        "Credential field rendered with a raw <Input>/<input>: validation/mask is hand-wired and can be forgotten (#192/#196). Use the semantic primitive from `@/components/fields` (EmailField / PhoneField / OtpField / PasswordField / IdentifierField). A genuinely free-form field needs `// eslint-disable-next-line local/no-raw-auth-field-input -- <reason>`.",
     },
   },
 
@@ -123,7 +129,7 @@ const rule = {
       JSXOpeningElement(node) {
         if (
           node.name.type !== "JSXIdentifier" ||
-          node.name.name !== GATED_ELEMENT
+          !GATED_ELEMENTS.has(node.name.name)
         ) {
           return;
         }

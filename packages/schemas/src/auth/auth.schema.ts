@@ -52,8 +52,16 @@ const LoginPassword = z.string().min(8).max(256);
  * Encoded as four positive look-aheads + the length bound; the message is generic
  * (it names the requirement, not which class is missing) and identical for every
  * violation so the field-level error discloses nothing account-specific.
+ *
+ * Exported (#197) as the reusable creation-password fragment so the portal's
+ * `NewPasswordFieldSchema` (`apps/portal/components/fields`) composes from THIS
+ * SSOT instead of re-declaring the complexity regex — same rationale as the
+ * `EmailIdentifierSchema` / `PhoneIdentifierSchema` shape fragments above: the
+ * client pre-validation cannot silently drift from the BFF baseline. This is the
+ * per-field fragment, NOT a request schema — the loose REQUEST schemas are
+ * unaffected; they keep composing `NewPasswordSchema` exactly as before.
  */
-const NewPassword = z
+export const NewPasswordSchema = z
   .string()
   .min(8)
   .max(256)
@@ -85,7 +93,7 @@ export const RegisterRequestSchema = z
   .object({
     email: z.email().optional(),
     phone: z.string().regex(E164).optional(),
-    password: NewPassword,
+    password: NewPasswordSchema,
     consent: z.array(ConsentAcceptanceSchema),
     captchaToken: z.string().optional(),
   })
@@ -269,13 +277,13 @@ export type PasswordResetResponse = z.infer<typeof PasswordResetResponseSchema>;
  * requested the reset for, the reset code Zitadel sent, and a policy-conforming
  * new password. The IdP owns the real password policy and the code verification
  * (design §2); `newPassword` carries the same creation-time complexity baseline
- * as registration (#147; {@link NewPassword}) so a reset cannot set a password
- * weaker than the policy and the portal can pre-validate it.
+ * as registration (#147; {@link NewPasswordSchema}) so a reset cannot set a
+ * password weaker than the policy and the portal can pre-validate it.
  */
 export const PasswordResetCompleteRequestSchema = z.object({
   identifier: z.string().min(1),
   code: z.string().min(1),
-  newPassword: NewPassword,
+  newPassword: NewPasswordSchema,
 });
 export type PasswordResetCompleteRequest = z.infer<
   typeof PasswordResetCompleteRequestSchema

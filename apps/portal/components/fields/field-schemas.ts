@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { EmailIdentifierSchema, PhoneIdentifierSchema } from "@ds/schemas";
+import {
+  EmailIdentifierSchema,
+  NewPasswordSchema,
+  PhoneIdentifierSchema,
+} from "@ds/schemas";
 
 /**
  * Per-field RHF resolver fragments, co-located with the semantic field primitives
@@ -48,21 +52,14 @@ export const IdentifierFieldSchema = z.union(
 export const OtpCodeFieldSchema = z.string().min(1);
 
 /**
- * Creation-password field shape — registration / reset "new password". Mirrors the
- * `@ds/schemas` NewPassword baseline (#147): min 8, ≤256, and the
- * upper/lower/digit/symbol complexity. Re-declared here (rather than imported — the
- * `@ds/schemas` `NewPassword` is not exported) so the portal pre-validates the same
- * baseline before submit; Zitadel remains the ultimate authority. The complexity
- * regex must stay in lockstep with `@ds/schemas`' `NewPassword`.
+ * Creation-password field shape — registration / reset "new password". This is the
+ * EXACT `@ds/schemas` `NewPasswordSchema` baseline (#147: min 8, ≤256, and the
+ * upper/lower/digit/symbol complexity), re-exported rather than re-declared (#197):
+ * `@ds/schemas` now exports the per-field fragment, so the portal composes from the
+ * SSOT and the complexity regex can no longer drift out of lockstep with the BFF.
+ * Zitadel remains the ultimate authority; this is only the pre-submit client guard.
  */
-export const NewPasswordFieldSchema = z
-  .string()
-  .min(8)
-  .max(256)
-  .regex(
-    /^(?=.*\p{Ll})(?=.*\p{Lu})(?=.*\d)(?=.*[^\p{L}\d]).*$/u,
-    "password must include an upper-case letter, a lower-case letter, a digit, and a symbol",
-  );
+export const NewPasswordFieldSchema = NewPasswordSchema;
 
 /**
  * Login (current) password field shape — deliberately permissive (#147): min 8,

@@ -120,6 +120,9 @@ export function registerFormSchema(
   return z.object({
     ...identifier,
     password: NewPasswordFieldSchema,
+    // Deliberately NOT `.min(1)`: consent is supplied by the form (the canonical
+    // `REQUIRED_CONSENT` pair on submit), never user-typed, and the API enforces the
+    // non-empty gate (EARS-20) — a client length-check here would guard nothing.
     consent: z.array(ConsentAcceptanceSchema),
     captchaToken: z.string().optional(),
   }) as unknown as z.ZodType<RegisterRequest, RegisterRequest>;

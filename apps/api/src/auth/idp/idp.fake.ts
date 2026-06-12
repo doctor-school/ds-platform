@@ -1,12 +1,13 @@
-import type {
-  CreatedUser,
-  CreateUserInput,
-  IdpClient,
-  IdpRefreshResult,
-  IdpSession,
-  IdpTokens,
-  IdpUser,
-  PasswordLoginResult,
+import {
+  IdpInvalidArgumentError,
+  type CreatedUser,
+  type CreateUserInput,
+  type IdpClient,
+  type IdpRefreshResult,
+  type IdpSession,
+  type IdpTokens,
+  type IdpUser,
+  type PasswordLoginResult,
 } from "./idp.types.js";
 
 /**
@@ -73,12 +74,25 @@ export class FakeIdpClient implements IdpClient {
   private readonly smsOtpChallenges = new Set<string>();
   /** How many times the BFF asked the (native) provider to send an SMS login code — the EARS-14 assertion hinge: a budget-refused send never reaches here. */
   private smsSends = 0;
-  /** How many times the BFF asked the provider to send a registration phone-verification SMS — the EARS-14 register-gate hinge: a budget-refused send never reaches here. */
-  private phoneVerificationSends = 0;
   private seq = 0;
 
   createUser(input: CreateUserInput): Promise<CreatedUser> {
-    const email = input.email?.toLowerCase();
+    // #202 fake/real parity (the regression net): real Zitadel hard-rejects a
+    // human-user create with no email (`invalid AddHumanUserRequest.Email: value
+    // is required`), so the fake MUST be no more permissive — a no-email create
+    // raises the SAME typed deterministic-invalid-argument error the real adapter
+    // raises, exercising the service's enumeration-safe mapping (never a 500) and
+    // failing a future phone-only-registration regression in unit tests, not only
+    // live. (Before #202 the fake accepted phone-only, which masked the broken
+    // vertical that shipped register-by-phone 500-broken.)
+    if (input.email == null || input.email === "") {
+      return Promise.reject(
+        new IdpInvalidArgumentError(
+          "fake createUser: email is required (mirrors Zitadel)",
+        ),
+      );
+    }
+    const email = input.email.toLowerCase();
     const phone = input.phone;
     const existing =
       (email && this.byEmail.get(email)) ||
@@ -108,10 +122,9 @@ export class FakeIdpClient implements IdpClient {
   }
 
   requestPhoneVerification(_sub: string): Promise<void> {
-    // The BFF calls this only after the EARS-14 budget allows the send, so every
-    // call here is a real provider send — count it (the budget-refused register
-    // path never reaches this method).
-    this.phoneVerificationSends++;
+    // #202: registration is email-only, so the BFF never calls this at register.
+    // The method stays on the port for the future post-registration
+    // secondary-phone verification path; the fake is a no-op.
     return Promise.resolve();
   }
 
@@ -317,9 +330,19 @@ export class FakeIdpClient implements IdpClient {
     return this.smsSends;
   }
 
-  /** Test accessor: how many registration phone-verification SMS the BFF asked the provider to send (EARS-14 register gate). */
-  phoneVerificationSendCount(): number {
-    return this.phoneVerificationSends;
+  /**
+   * #202 test helper: attach a phone to an already-created user, modelling the
+   * future post-registration secondary-identifier flow. Registration is
+   * email-primary (no phone at create), but login-by-phone + SMS-OTP login
+   * (EARS-7) operate on an attached phone — tests register by email, then attach
+   * a phone here so the phone resolves for the login paths. Mirrors a real
+   * `users/{id}/phone` add without exercising the (removed) phone-register branch.
+   */
+  attachPhone(sub: string, phone: string): void {
+    const record = this.bySub.get(sub);
+    if (!record) throw new Error(`attachPhone: unknown sub ${sub}`);
+    record.phone = phone;
+    this.byPhone.set(phone, record);
   }
 
   requestPasswordReset(identifier: string): Promise<void> {

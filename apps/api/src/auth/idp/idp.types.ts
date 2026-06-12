@@ -38,6 +38,44 @@ export class IdpPasswordPolicyError extends Error {
   }
 }
 
+/**
+ * The IdP **deterministically** rejected the create request as
+ * `invalid_argument` (#202) — a malformed / unacceptable request the IdP refuses
+ * BEFORE creating anything, for any caller, every time (not an infra fault and
+ * not existence-correlated). The canonical case is a create with no email:
+ * Zitadel hard-requires an email on human-user creation (invariant across
+ * `AddHumanUser` v1/v2 and `CreateUser` `/v2/users/new`), so a phone-only create
+ * 400s `invalid AddHumanUserRequest.Email: value is required`. The service maps
+ * this to the generic, enumeration-safe failure (a 4xx, NOT a 500 and NOT an
+ * existence oracle, EARS-16) — the same taxonomy precedent as
+ * {@link IdpPasswordPolicyError}. A duplicate identifier is NOT this error (it is
+ * the 409 → `alreadyExisted` hinge); a password-policy 400 is NOT this error (it
+ * is the more-specific {@link IdpPasswordPolicyError} → 422). This is the
+ * residual "deterministic 4xx that is neither" so it can never surface as a 500.
+ */
+export class IdpInvalidArgumentError extends Error {
+  constructor(message = "IdP rejected the request (invalid argument)") {
+    super(message);
+    this.name = "IdpInvalidArgumentError";
+  }
+}
+
+/**
+ * The IdP could not be reached or returned a genuine **infra fault** (5xx /
+ * network) (#202) — transient and not the caller's fault. The service maps this
+ * to a 503 "service temporarily unavailable" (the project's actionable-errors
+ * rule: 5xx/net → "unavailable"), distinct from a deterministic 4xx
+ * ({@link IdpInvalidArgumentError} → generic 4xx) so a real outage is reported
+ * honestly rather than masqueraded as a client error — while still never a bare,
+ * unhandled 500.
+ */
+export class IdpUnavailableError extends Error {
+  constructor(message = "IdP is temporarily unavailable") {
+    super(message);
+    this.name = "IdpUnavailableError";
+  }
+}
+
 /** Input to create a Zitadel user with a single primary identifier. */
 export interface CreateUserInput {
   email?: string | undefined;

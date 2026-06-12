@@ -1,5 +1,7 @@
 import {
+  IdpInvalidArgumentError,
   IdpPasswordPolicyError,
+  IdpUnavailableError,
   type CreatedUser,
   type CreateUserInput,
   type IdpClaims,
@@ -258,11 +260,21 @@ export class ZitadelIdpClient implements IdpClient {
     if (input.phone)
       body["phone"] = { phone: input.phone, returnCode: {} };
 
-    const res = await this.fetchImpl(this.url("/v2/users/human"), {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify(body),
-    });
+    let res;
+    try {
+      res = await this.fetchImpl(this.url("/v2/users/human"), {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      // A network/transport failure (fetch rejects) is an infra fault, not a
+      // deterministic rejection — surface it as {@link IdpUnavailableError} so the
+      // service answers a 503, never a bare 500 (#202).
+      throw new IdpUnavailableError(
+        `zitadel createUser unreachable: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
     if (res.status === 409) return { sub: "", alreadyExisted: true };
     if (!res.ok) {
       // #147 residual race: the BFF creation schema mirrors the deployed Zitadel
@@ -271,14 +283,27 @@ export class ZitadelIdpClient implements IdpClient {
       // rejects the password here it is a 400 whose body names the password/policy
       // — surface it as the typed {@link IdpPasswordPolicyError} so the service can
       // answer with a generic, non-enumerating "weak password" 422 (never a 500,
-      // never an existence oracle; a duplicate is the 409 handled above). Any other
-      // 400/4xx/5xx stays an opaque Error → a 500 server fault, as before.
+      // never an existence oracle; a duplicate is the 409 handled above).
       if (res.status === 400 && (await this.isPasswordPolicyRejection(res))) {
         throw new IdpPasswordPolicyError(
           "zitadel createUser rejected the password (policy)",
         );
       }
-      throw new Error(`zitadel createUser failed: HTTP ${res.status}`);
+      // #202 error taxonomy: a deterministic 4xx `invalid_argument` (any other bad
+      // request the IdP refuses before creating anything — e.g. the removed
+      // phone-only/no-email shape: `invalid AddHumanUserRequest.Email: value is
+      // required`) maps to the generic, enumeration-safe failure (a 4xx, NOT a
+      // 500, NOT an existence oracle). A genuine infra fault (5xx) maps to a 503
+      // "unavailable". This is what guarantees a deterministic IdP rejection never
+      // surfaces as a bare 500.
+      if (res.status >= 400 && res.status < 500) {
+        throw new IdpInvalidArgumentError(
+          `zitadel createUser rejected the request: HTTP ${res.status}`,
+        );
+      }
+      throw new IdpUnavailableError(
+        `zitadel createUser failed: HTTP ${res.status}`,
+      );
     }
     const data = (await res.json()) as { userId?: string };
     return { sub: data.userId ?? "", alreadyExisted: false };

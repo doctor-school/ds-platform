@@ -144,8 +144,18 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("EARS-7: when a user under all SMS thresholds requests an SMS login code and submits the correct code, the system shall verify it via otp_sms and establish a BFF session", async () => {
+      // #202: registration is email-primary, so register by email, then attach the
+      // phone as the post-registration secondary identifier (login-by-phone +
+      // SMS-OTP login operate on an attached phone). The fake's createUser rejects
+      // a no-email create, so the seed MUST carry an email.
+      const email = uniqueEmail("sms");
       const phone = uniquePhone();
-      await register({ phone });
+      await register({ email });
+      const { rows } = await pool.query(
+        "SELECT zitadel_sub FROM users WHERE email = $1",
+        [email],
+      );
+      idp.attachPhone(rows[0].zitadel_sub as string, phone);
       const before = idp.smsOtpSendCount();
 
       const requested = await app.inject({

@@ -4,6 +4,7 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  ServiceUnavailableException,
   UnauthorizedException,
   UnprocessableEntityException,
 } from "@nestjs/common";
@@ -26,7 +27,9 @@ import { DRIZZLE_DB } from "../database/database.tokens.js";
 import {
   DOCTOR_GUEST_ROLE,
   IDP_CLIENT,
+  IdpInvalidArgumentError,
   IdpPasswordPolicyError,
+  IdpUnavailableError,
   type IdpClient,
 } from "./idp/idp.types.js";
 import { AUTH_WEBHOOK_SECRET } from "./auth.tokens.js";
@@ -60,6 +63,12 @@ const GENERIC_THROTTLED = "too many requests, please try again later";
 // existence oracle (EARS-16).
 const GENERIC_WEAK_PASSWORD =
   "the password does not meet the security requirements";
+
+// #202: one message for a genuine IdP infra fault (5xx / network) on the
+// registration path. Per the project's actionable-errors rule (5xx/net →
+// "unavailable") this is a 503, distinct from the deterministic-rejection generic
+// 4xx — a real outage is reported honestly, but never as a bare unhandled 500.
+const GENERIC_UNAVAILABLE = "the service is temporarily unavailable";
 
 /** Postgres unique-constraint violation SQLSTATE (`unique_violation`). */
 const PG_UNIQUE_VIOLATION = "23505";
@@ -296,26 +305,15 @@ export class AuthService {
   }
 
   /**
-   * EARS-1 (email) / EARS-2 (phone). Consent-gated (EARS-20) and
-   * enumeration-resistant (EARS-16): an already-registered identifier produces
-   * the identical response with no duplicate account and no consent row.
-   *
-   * EARS-14: the phone branch's SMS verification send passes the same toll-fraud
-   * budget as the login SMS send. `ctx` carries the request-coupled SMS-budget
-   * dimensions (the controller is the only layer with the IP and the edge-supplied
-   * ASN), mirroring `requestLoginOtp`. Unlike login — which throws a 429 because no
-   * account exists yet — the account, mirror, and consent rows are ALREADY
-   * committed when the send is attempted, so a budget refusal here is **silent**:
-   * skip the send, do not throw, still return `pending_verification`. The terminal
-   * `Registered` audit row (EARS-18) is still owed and still emitted; the
-   * `SmsBudgetService` counters are the toll-fraud accounting authority, so no
-   * second/refusal audit event is added (one terminal event per command). The user
-   * re-triggers the code via the existing resend path.
+   * EARS-1: email-primary registration (#202). Email is the sole registration
+   * identifier — Zitadel cannot create a login-capable human without one — so the
+   * dual-identifier phone-register branch (and its EARS-14 register-time SMS-budget
+   * gate) is gone; `SmsBudgetService` still gates the SMS-OTP *login* send. Phone is
+   * a future post-registration secondary identifier. Consent-gated (EARS-20) and
+   * enumeration-resistant (EARS-16): an already-registered email produces the
+   * identical response with no duplicate account and no consent row.
    */
-  async register(
-    req: RegisterRequest,
-    ctx: { ip: string; asn?: string | undefined },
-  ): Promise<RegisterResponse> {
+  async register(req: RegisterRequest): Promise<RegisterResponse> {
     // EARS-20: refuse before any IdP side-effect or PD row exists.
     if (req.consent.length === 0) {
       throw new BadRequestException(GENERIC_FAILURE);
@@ -325,7 +323,6 @@ export class AuthService {
     try {
       created = await this.idp.createUser({
         email: req.email,
-        phone: req.phone,
         password: req.password,
       });
     } catch (err) {
@@ -335,14 +332,24 @@ export class AuthService {
       // call, independent of whether the account exists (no oracle). If a *live*
       // Zitadel configured stricter than baseline rejects the password here, the
       // adapter raises IdpPasswordPolicyError; map it to a generic, non-enumerating
-      // "weak password" 422 — identical regardless of account existence. Zitadel
-      // v4.15 checks complexity BEFORE uniqueness (verified live on the dev-stand:
-      // a duplicate-email createUser with a no-uppercase password 400s "Password
-      // must contain upper case", NOT 409), so existing+weak and new+weak both reach
-      // this 422; a *valid* duplicate is the 409 → `alreadyExisted` path that never
-      // throws. Never a 500, never correlated with existence (EARS-16; ADR-0001 §7).
+      // "weak password" 422 — identical regardless of account existence. A *valid*
+      // duplicate is the 409 → `alreadyExisted` path that never throws.
       if (err instanceof IdpPasswordPolicyError) {
         throw new UnprocessableEntityException(GENERIC_WEAK_PASSWORD);
+      }
+      // #202 robustness fix: a deterministic IdP 4xx `invalid_argument` (any other
+      // bad request the IdP refuses before creating anything) must NOT surface as a
+      // bare 500. Map it to the same generic, enumeration-safe failure used
+      // elsewhere (a 4xx, NOT an existence oracle, EARS-16) — same precedent as the
+      // password-policy mapping above.
+      if (err instanceof IdpInvalidArgumentError) {
+        throw new BadRequestException(GENERIC_FAILURE);
+      }
+      // A genuine infra fault (5xx / network) is a 503 "unavailable" (the
+      // actionable-errors rule: 5xx/net → "unavailable"), distinct from the
+      // deterministic 4xx above — honest about an outage, still never a 500.
+      if (err instanceof IdpUnavailableError) {
+        throw new ServiceUnavailableException(GENERIC_UNAVAILABLE);
       }
       throw err;
     }
@@ -359,7 +366,6 @@ export class AuthService {
             .values({
               zitadelSub: created.sub,
               email: req.email,
-              phone: req.phone,
               role: "doctor_guest",
             })
             .onConflictDoUpdate({
@@ -406,24 +412,11 @@ export class AuthService {
       // path still returns the identical always-`pending_verification` response.
       await this.idp.grantProjectRole(created.sub, DOCTOR_GUEST_ROLE);
 
-      // Trigger the Zitadel verification code for the registered channel. The
-      // email branch is unmetered (no SMS). The phone branch is gated by the
-      // EARS-14 toll-fraud budget: a refused send is SILENT — the account is
-      // already committed above, so we skip the send (no SMS reaches the
-      // provider, none costs money) and fall through to the terminal audit row
-      // and `pending_verification` response, unlike login which throws a 429.
-      // The user re-triggers via the existing resend path.
-      if (req.email) {
-        await this.idp.requestEmailVerification(created.sub);
-      } else if (
-        this.smsBudget.tryConsume({
-          phone: req.phone as string,
-          ip: ctx.ip,
-          asn: ctx.asn,
-        })
-      ) {
-        await this.idp.requestPhoneVerification(created.sub);
-      }
+      // #202: registration is email-only — trigger the Zitadel email verification
+      // code (unmetered, no SMS). Phone verification is a future post-registration
+      // secondary-identifier concern, so there is no register-time SMS send and no
+      // EARS-14 budget gate here (the budget still gates the SMS-OTP login send).
+      await this.idp.requestEmailVerification(created.sub);
 
       // EARS-18: one terminal `auth.register` row for the created account. The
       // accepted consent versions (EARS-20, not PD) ride in the metadata rather
@@ -434,7 +427,7 @@ export class AuthService {
       await this.audit.record({
         type: "Registered",
         sub: created.sub,
-        channel: req.email ? "email" : "sms",
+        channel: "email",
         consent: req.consent.map((c) => ({
           purpose: c.purpose,
           version: c.version,
@@ -445,20 +438,20 @@ export class AuthService {
     return { status: "pending_verification" };
   }
 
-  /** EARS-3 (email) / EARS-4 (phone): verify the OTP code and flip the mirror flag. */
+  /**
+   * EARS-3: verify the registration email OTP code and flip `email_verified`.
+   * Registration verification is email-only (#202 — registration is
+   * email-primary); EARS-4 phone verification is a future post-registration
+   * secondary-identifier concern, so there is no phone branch here.
+   */
   async verify(req: VerifyRequest): Promise<VerifyResponse> {
-    const row = req.email
-      ? await this.mirror.findByEmail(req.email)
-      : await this.mirror.findByPhone(req.phone as string);
+    const row = await this.mirror.findByEmail(req.email);
     if (!row) throw new BadRequestException(GENERIC_FAILURE);
 
-    const ok = req.email
-      ? await this.idp.verifyEmail(row.zitadelSub, req.code)
-      : await this.idp.verifyPhone(row.zitadelSub, req.code);
+    const ok = await this.idp.verifyEmail(row.zitadelSub, req.code);
     if (!ok) throw new BadRequestException(GENERIC_FAILURE);
 
-    if (req.email) await this.mirror.markEmailVerified(row.zitadelSub);
-    else await this.mirror.markPhoneVerified(row.zitadelSub);
+    await this.mirror.markEmailVerified(row.zitadelSub);
 
     // EARS-18: one terminal `auth.account.verified` row for this state-changing
     // command (the mirror flag just flipped — the account is activated). Keyed
@@ -470,7 +463,7 @@ export class AuthService {
     await this.audit.record({
       type: "IdentifierVerified",
       sub: row.zitadelSub,
-      channel: req.email ? "email" : "sms",
+      channel: "email",
     });
 
     return { status: "verified" };

@@ -44,12 +44,8 @@
  * is the right lifetime here.
  */
 
-export type RegistrationChannel = "email" | "phone";
-
 export interface PendingRegistration {
-  /** Which identifier field the user registered with. */
-  readonly channel: RegistrationChannel;
-  /** The email or phone the user registered with (also echoed in the URL — not secret). */
+  /** The email the user registered with (also echoed in the URL — not secret). Registration is email-only (#202). */
   readonly identifier: string;
   /** The plaintext password, held in memory ONLY for the in-flight replay. */
   readonly password: string;

@@ -11,19 +11,17 @@ import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import {
   IDP_CLIENT,
+  IdpInvalidArgumentError,
   IdpPasswordPolicyError,
+  IdpUnavailableError,
 } from "../../src/auth/idp/idp.types.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
-import {
-  DEFAULT_SMS_BUDGET_THRESHOLDS,
-  SMS_BUDGET_THRESHOLDS,
-} from "../../src/auth/sms-budget/sms-budget.types.js";
 
-// Registration cascade (EARS-1 email / EARS-2 phone), the consent gate
+// Registration cascade (EARS-1, email-primary per #202), the consent gate
 // (EARS-20), and enumeration resistance (EARS-16). Runs against a real Postgres
 // (the `api-e2e` CI job + the local dev-stand) with the IdP port bound to the
 // in-memory fake — the credential side is Zitadel's (design §2) and is not
@@ -108,7 +106,14 @@ describe.skipIf(!process.env.DATABASE_URL)("Register (e2e)", () => {
     expect(consentRows.rows).toEqual([{ purpose: "tos", version: "2026-01" }]);
   });
 
-  it("EARS-2: when a visitor registers with a valid phone + password, the system shall create the user, record consent, and upsert a doctor_guest mirror", async () => {
+  it("EARS-2 (#202): a phone-only register attempt is a handled enumeration-safe failure, NOT a 500, and creates no account", async () => {
+    // Email is the primary (and only) registration identifier — Zitadel cannot
+    // create a login-capable human without an email. A phone-only register is
+    // rejected by the DTO (RegisterRequestSchema requires email) → a generic 400
+    // ValidationPipe error, never a 500 and never an oracle. (The fake/real
+    // create-time parity — a no-email createUser → IdpInvalidArgumentError → the
+    // service's generic 4xx — is exercised by the dedicated suite below, which
+    // bypasses the DTO to drive createUser directly.)
     const phone = uniquePhone();
     const res = await app.inject({
       method: "POST",
@@ -116,18 +121,12 @@ describe.skipIf(!process.env.DATABASE_URL)("Register (e2e)", () => {
       payload: { phone, password: "Aa1!ufficiently-long-pw", consent },
     });
 
-    expect(res.statusCode).toBe(200);
-    expect(RegisterResponseSchema.parse(res.json()).status).toBe(
-      "pending_verification",
-    );
-
-    const { rows } = await pool.query(
-      "SELECT role, phone_verified FROM users WHERE phone = $1",
-      [phone],
-    );
-    expect(rows).toHaveLength(1);
-    expect(rows[0].role).toBe("doctor_guest");
-    expect(rows[0].phone_verified).toBe(false);
+    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).not.toBe(500);
+    const { rows } = await pool.query("SELECT 1 FROM users WHERE phone = $1", [
+      phone,
+    ]);
+    expect(rows).toHaveLength(0);
   });
 
   it("EARS-20: when a registration carries no accepted consent version, the system shall refuse it and commit no PD-bearing mirror row", async () => {
@@ -260,73 +259,74 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(rows).toHaveLength(0);
     });
 
-    it("#147: the 422 is identical for email and phone registrants (no existence oracle)", async () => {
+    it("#147: the 422 is identical for any two email registrants (no existence oracle)", async () => {
+      // #202: registration is email-only, so both registrants use email (the
+      // phone-only variant no longer reaches the IdP — it 400s at the DTO).
       const emailRes = await app.inject({
         method: "POST",
         url: "/v1/auth/register",
         payload: {
-          email: `wk-e-${runId}-${Math.random().toString(36).slice(2, 8)}@ds.test`,
+          email: `wk-a-${runId}-${Math.random().toString(36).slice(2, 8)}@ds.test`,
           password: "Aa1!aaaa",
           consent,
         },
       });
-      const phoneRes = await app.inject({
+      const otherRes = await app.inject({
         method: "POST",
         url: "/v1/auth/register",
         payload: {
-          phone: `+1999${Math.floor(10_000_000 + Math.random() * 89_999_999)}`,
+          email: `wk-b-${runId}-${Math.random().toString(36).slice(2, 8)}@ds.test`,
           password: "Aa1!aaaa",
           consent,
         },
       });
 
       expect(emailRes.statusCode).toBe(422);
-      expect(phoneRes.statusCode).toBe(phoneRes.statusCode);
-      expect(phoneRes.statusCode).toBe(422);
-      expect(phoneRes.json()).toEqual(emailRes.json());
+      expect(otherRes.statusCode).toBe(422);
+      expect(otherRes.json()).toEqual(emailRes.json());
     });
   },
 );
 
 /**
- * EARS-14 register-gate: the registration phone-verification SMS send is gated by
- * the toll-fraud budget, exactly like the login SMS send. But the account is
- * already committed when the send is attempted, so a budget refusal is SILENT —
- * the response is still 200 `pending_verification`, the account+mirror are still
- * committed, and the only difference is that no SMS reached the provider (the
- * user re-triggers via the resend path). This is the asymmetry with login, which
- * throws a 429 because no account exists yet (proven in login-otp.e2e-spec.ts).
- * A dedicated app whose global daily SMS budget is exhausted (breaker open).
+ * #202 robustness: a deterministic IdP rejection (or infra fault) inside
+ * createUser must NEVER surface as a bare 500. A baseline-compliant request (so it
+ * passes the DTO and reaches the IdP path) hits a fake whose createUser raises a
+ * typed error; the service maps each to its enumeration-safe response:
+ *   - IdpInvalidArgumentError → generic 400 (NOT a 500, NOT an existence oracle).
+ *     This is exactly the no-email/phone-only create the real adapter raises, so
+ *     this suite is the fake/real parity regression net (a future phone-only
+ *     register regression fails here, not only live).
+ *   - IdpUnavailableError → 503 "service unavailable" (5xx/net → "unavailable").
  */
 describe.skipIf(!process.env.DATABASE_URL)(
-  "Register phone-verify SMS budget (e2e, EARS-14)",
+  "Register IdP-failure robustness (#202, e2e)",
   () => {
     let app: NestFastifyApplication;
     let pool: pg.Pool;
-    let idp: FakeIdpClient;
     const consent = [{ purpose: "tos", version: "2026-01" }];
-    const createdPhones: string[] = [];
+    const runId = Date.now();
 
-    function uniquePhone(): string {
-      const phone = `+1999${Math.floor(10_000_000 + Math.random() * 89_999_999)}`;
-      createdPhones.push(phone);
-      return phone;
+    class InvalidArgRejectingIdp extends FakeIdpClient {
+      override createUser(): never {
+        throw new IdpInvalidArgumentError();
+      }
+    }
+    class UnavailableIdp extends FakeIdpClient {
+      override createUser(): never {
+        throw new IdpUnavailableError();
+      }
     }
 
-    beforeAll(async () => {
-      idp = new FakeIdpClient();
+    async function bootWith(idp: FakeIdpClient): Promise<void> {
       const moduleRef = await Test.createTestingModule({
         imports: [AppModule],
       })
         .overrideProvider(IDP_CLIENT)
         .useValue(idp)
-        // Breaker already open: the daily SMS budget is exhausted.
-        .overrideProvider(SMS_BUDGET_THRESHOLDS)
-        .useValue({ ...DEFAULT_SMS_BUDGET_THRESHOLDS, globalPerDay: 0 })
         .overrideProvider(RATE_LIMIT_THRESHOLDS)
         .useValue(RELAXED_RATE_LIMIT)
         .compile();
-
       app = moduleRef.createNestApplication<NestFastifyApplication>(
         new FastifyAdapter(),
       );
@@ -334,45 +334,57 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await app.init();
       await app.getHttpAdapter().getInstance().ready();
       pool = app.get<pg.Pool>(DRIZZLE_POOL);
-    });
+    }
 
     afterEach(async () => {
-      // The fake's deterministic fake-sub-N collides on users.zitadel_sub across
-      // serial e2e files; delete the created users by phone in teardown.
-      for (const phone of createdPhones.splice(0))
-        await pool.query("DELETE FROM users WHERE phone = $1", [phone]);
+      if (app) await app.close();
     });
 
-    afterAll(async () => {
-      await app.close();
-    });
-
-    it("EARS-14: when the SMS budget is exhausted, a phone registration sends no verification SMS yet still returns 200 pending_verification and commits the account", async () => {
-      const phone = uniquePhone();
-      const before = idp.phoneVerificationSendCount();
-
+    it("#202: a deterministic IdP invalid_argument yields a generic 400, no row, NEVER a 500", async () => {
+      await bootWith(new InvalidArgRejectingIdp());
+      const email = `inv-${runId}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
       const res = await app.inject({
         method: "POST",
         url: "/v1/auth/register",
-        payload: { phone, password: "Aa1!ufficiently-long-pw", consent },
+        payload: { email, password: "Aa1!ufficiently-long-pw", consent },
       });
 
-      // Silent refusal: the account is created regardless (no 429, unlike login).
-      expect(res.statusCode).toBe(200);
-      expect(RegisterResponseSchema.parse(res.json()).status).toBe(
-        "pending_verification",
-      );
-      // The toll-fraud breaker tripped BEFORE the provider call: no SMS went out.
-      expect(idp.phoneVerificationSendCount()).toBe(before);
-
-      // The account + mirror are still committed (the rows pre-exist the send).
-      const { rows } = await pool.query(
-        "SELECT role, phone_verified FROM users WHERE phone = $1",
-        [phone],
-      );
-      expect(rows).toHaveLength(1);
-      expect(rows[0].role).toBe("doctor_guest");
-      expect(rows[0].phone_verified).toBe(false);
+      expect(res.statusCode).toBe(400);
+      expect(res.statusCode).not.toBe(500);
+      const { rows } = await pool.query("SELECT 1 FROM users WHERE email = $1", [
+        email,
+      ]);
+      expect(rows).toHaveLength(0);
     });
+
+    it("#202: a genuine IdP infra fault yields a 503, no row, NEVER a 500", async () => {
+      await bootWith(new UnavailableIdp());
+      const email = `unv-${runId}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: { email, password: "Aa1!ufficiently-long-pw", consent },
+      });
+
+      expect(res.statusCode).toBe(503);
+      expect(res.statusCode).not.toBe(500);
+      const { rows } = await pool.query("SELECT 1 FROM users WHERE email = $1", [
+        email,
+      ]);
+      expect(rows).toHaveLength(0);
+    });
+
+    // NOTE: the no-DB fake/real parity unit assertion (FakeIdpClient.createUser
+    // rejects a no-email create with IdpInvalidArgumentError) lives in the unit
+    // spec `src/auth/auth.service.spec.ts` — it needs no app/DB, so keeping it
+    // here would only risk the shared-app teardown.
   },
 );
+
+// #202 OBSOLETES the former "Register phone-verify SMS budget (EARS-14)" suite
+// (memory #128: register phone-verify returned pending_verification + counted a
+// phoneVerificationSend on a budget refusal). Registration is now email-only, so
+// there is no register-time SMS send, no register-time SMS-budget gate, and no
+// phoneVerificationSends counter — the suite (and the fake's counter/accessor) are
+// removed. The SMS toll-fraud budget still gates the SMS-OTP *login* send
+// (login-otp.e2e-spec.ts, EARS-14).

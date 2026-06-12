@@ -35,10 +35,10 @@ import { Form, FormField } from "@ds/design-system/form";
 const VERIFY_OTP_LENGTH = 6;
 
 /*
- * Verification surface (#131, EARS-3 email / EARS-4 phone). Step 2 of register:
- * the registrant lands here from `/register` with their identifier in the query
- * and submits the OTP code Zitadel sent. Validates with `VerifyRequestSchema`
- * (the same exactly-one-identifier refine), submits same-origin to
+ * Verification surface (#131, EARS-3). Step 2 of register: the registrant lands
+ * here from `/register` with their email in the query and submits the OTP code
+ * Zitadel sent. Registration verification is email-only (#202 — registration is
+ * email-primary). Validates with `VerifyRequestSchema`, submits same-origin to
  * `/v1/auth/verify`.
  *
  * Auto-login on success (#175): the verify API proves channel ownership (EARS-3)
@@ -78,19 +78,18 @@ function VerifyCard() {
   const te = useTranslations("errors");
   const params = useSearchParams();
   const email = params.get("email") ?? undefined;
-  const phone = params.get("phone") ?? undefined;
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm<VerifyRequest>({
     resolver: useLocalizedResolver(VerifyRequestSchema),
-    // Seed exactly one identifier from the query (the channel the user registered
-    // with); the field is not user-editable here — they only type the code.
-    defaultValues: email ? { email, code: "" } : { phone, code: "" },
+    // Seed the email from the query (registration is email-only, #202); the field
+    // is not user-editable here — they only type the code.
+    defaultValues: { email, code: "" },
   });
 
   async function onSubmit(values: VerifyRequest) {
     setError(null);
-    const identifier = email ?? phone ?? "";
+    const identifier = email ?? "";
     try {
       await authClient.verify(values);
       // EARS-3 verify proved channel ownership but mints no session. Consume the
@@ -132,7 +131,7 @@ function VerifyCard() {
     void submit();
   }, [form.formState.isSubmitting, submit]);
 
-  const identifierLabel = email ?? phone ?? t("fallbackIdentifier");
+  const identifierLabel = email ?? t("fallbackIdentifier");
 
   return (
     <Card>

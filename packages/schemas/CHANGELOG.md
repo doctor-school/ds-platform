@@ -1,5 +1,49 @@
 # @ds/schemas
 
+## 0.7.0
+
+### Minor Changes
+
+- [#201](https://github.com/doctor-school/ds-platform/pull/201) [`1e45957`](https://github.com/doctor-school/ds-platform/commit/1e45957ac70d20c67b80b7f612d85d8421fafb67) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Localize the creation-password complexity error to RU and validate auth forms on blur ([#200](https://github.com/doctor-school/ds-platform/issues/200), 003).
+
+  `@ds/schemas` now exports `NEW_PASSWORD_COMPLEXITY`, the bare creation-password
+  complexity regex, as the single SSOT for the pattern. `NewPasswordSchema` is
+  rebuilt from it and keeps its deliberately-generic English DTO message unchanged
+  (no API behavior change). The portal's `NewPasswordFieldSchema` composes the regex
+  **without** a message so the localized resolver maps the resulting `invalid_format`
+  issue to the RU `errors.validation.passwordComplexity` copy — in zod v4 a
+  schema-level message would otherwise outrank the contextual error map and leak
+  English on `/register` and `/reset`.
+
+  `/register` and `/reset` (complete step) now resolve from portal-composed,
+  channel-specific schemas built from the field primitives (mirroring the existing
+  OTP-login pattern) instead of the request schemas; the submitted body and the API
+  contract are unchanged. All auth forms run in `mode: "onTouched"` so a malformed
+  email/phone/password is flagged on blur, before submit.
+
+- [#199](https://github.com/doctor-school/ds-platform/pull/199) [`a381363`](https://github.com/doctor-school/ds-platform/commit/a38136342b366df2dcbac73f674e8f806cd3b6e9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(portal): [#197](https://github.com/doctor-school/ds-platform/issues/197) enforce field validation/mask by construction — semantic field primitives + ESLint gate (003)
+
+  Portal auth forms were assembled from raw design-system `<Input>` + a per-form
+  loose resolver, so validation/mask was hand-wired field-by-field and easy to
+  forget — the root cause of the live defects [#192](https://github.com/doctor-school/ds-platform/issues/192) (`/login` identifier) and [#196](https://github.com/doctor-school/ds-platform/issues/196)
+  (`/reset` identifier). This lands the enforced-by-construction layer of EARS-22
+  (003 design §8.2):
+  - **Five semantic field primitives** (`apps/portal/components/fields`):
+    `EmailField`, `PhoneField`, `OtpField`, `PasswordField`, and `IdentifierField`
+    (the email-or-phone union box). Each bakes in validation + (where relevant) the
+    E.164 phone mask + a11y + RU copy and co-locates its zod resolver fragment, so
+    no per-call wiring. The loose `@ds/schemas` request contracts are unchanged.
+  - **A custom ESLint gate** (`local/no-raw-auth-field-input`) that makes a raw
+    credential `<Input>` — or a hand-rolled native `<input>` — impossible to render
+    on the auth surfaces; the field must come from the primitives. Rides the
+    existing `lint` CI job.
+  - **All auth surfaces migrated** with behavior preserved ([#192](https://github.com/doctor-school/ds-platform/issues/192)/[#175](https://github.com/doctor-school/ds-platform/issues/175) intact), and
+    **/reset identifier now validated + masked-aware** — the [#196](https://github.com/doctor-school/ds-platform/issues/196) fix.
+  - **`@ds/schemas`** now exports the creation-password fragment as
+    `NewPasswordSchema` (was a private `NewPassword`), so the portal composes the
+    complexity baseline from the SSOT instead of re-declaring the regex — additive,
+    the request schemas are unchanged.
+
 ## 0.6.0
 
 ### Minor Changes

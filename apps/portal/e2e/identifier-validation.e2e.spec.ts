@@ -148,3 +148,43 @@ test.describe("#192 portal identifier validation (client-side, ungated)", () => 
     await expectInvalid(id);
   });
 });
+
+/**
+ * #196 — the `/reset` identifier had NO validation/mask: the exact #192 defect on
+ * an adjacent surface. #197 migrates it onto the shared `<IdentifierField>`, so the
+ * same union guard (email OR E.164 phone, unmasked like the login-password box —
+ * `/reset` is not a phone-only channel) now applies. Same ungated, backend-free
+ * tier: the resolver rejects a bare-numeric identifier before any network call.
+ */
+test.describe("#196 portal /reset identifier validation (client-side, ungated)", () => {
+  test.use({ baseURL: BASE });
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/reset");
+  });
+
+  test("reset request: rejects a bare-numeric identifier, accepts email + phone", async ({
+    page,
+  }) => {
+    const id = page.locator('input[autocomplete="username"]');
+
+    // ── reject the bare numeric (#196 bug report) ───────────────────────
+    await id.fill(BAD_NUMERIC);
+    await page.getByTestId("reset-request-submit").click();
+    await expect(page).toHaveURL(/\/reset/);
+    await expectInvalid(id);
+
+    // ── accept a valid email ─────────────────────────────────────────────
+    await id.fill(VALID_EMAIL);
+    await expectValidOrAbsent(id);
+
+    // ── accept a valid E.164 phone ───────────────────────────────────────
+    // The reset identifier is the union box (like login-password), and it is
+    // UNMASKED — only the OTP sms channel masks. So a typed `+7…` phone is left
+    // exactly as typed and passes the union resolver.
+    await id.fill(VALID_PHONE);
+    await expect(id).toHaveValue(VALID_PHONE);
+    await page.getByTestId("reset-request-submit").click();
+    await expectValidOrAbsent(id);
+  });
+});

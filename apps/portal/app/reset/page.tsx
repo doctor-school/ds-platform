@@ -8,19 +8,19 @@ import { useTranslations } from "next-intl";
 import { KeyRound } from "lucide-react";
 
 import {
-  PasswordResetRequestSchema,
   PasswordResetCompleteRequestSchema,
   type PasswordResetRequest,
   type PasswordResetCompleteRequest,
 } from "@ds/schemas";
 
 import { BotProtectionField } from "@/components/bot-protection";
+import { IdentifierField, OtpField, PasswordField } from "@/components/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
+import { ResetIdentifierFormSchema } from "@/lib/identifier-validation";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
-import { Input } from "@ds/design-system/input";
 import {
   Card,
   CardContent,
@@ -29,20 +29,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@ds/design-system/card";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@ds/design-system/form";
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSlot,
-} from "@ds/design-system/input-otp";
+import { Form, FormField } from "@ds/design-system/form";
+
+/** The reset code is a FIXED 6 digits (Zitadel default), like the registration
+ * verify code — `<OtpField>` uses its slotted variant. */
+const RESET_OTP_LENGTH = 6;
 
 /*
  * Password-reset surface (#131, EARS-11 initiate / EARS-12 complete). Two steps on
@@ -59,15 +50,20 @@ import {
 export default function ResetPage() {
   const router = useRouter();
   const t = useTranslations("reset");
-  const tc = useTranslations("common");
   const te = useTranslations("errors");
   const [stage, setStage] = useState<"request" | "complete">("request");
   const [identifier, setIdentifier] = useState("");
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // #196: validate the identifier with the union guard (email OR E.164 phone), NOT
+  // the loose `PasswordResetRequestSchema` (which stays `identifier:
+  // z.string().min(1)` so Zitadel remains the credential authority). Before #197
+  // this form used the loose schema as its resolver, so a bare numeric string sailed
+  // through unvalidated — the exact #196 defect. The submitted body still matches
+  // the loose `@ds/schemas` contract.
   const requestForm = useForm<PasswordResetRequest>({
-    resolver: useLocalizedResolver(PasswordResetRequestSchema),
+    resolver: useLocalizedResolver(ResetIdentifierFormSchema),
     defaultValues: { identifier: "" },
   });
   const completeForm = useForm<PasswordResetCompleteRequest>({
@@ -85,7 +81,11 @@ export default function ResetPage() {
       // EARS-16: the ack is identical whether or not the identifier exists; we
       // always advance to the code step. Carry the identifier into completion.
       setIdentifier(values.identifier);
-      completeForm.reset({ identifier: values.identifier, code: "", newPassword: "" });
+      completeForm.reset({
+        identifier: values.identifier,
+        code: "",
+        newPassword: "",
+      });
       setStage("complete");
     } catch (err) {
       setError(authErrorMessage(err, te, te("resetRequestFailed")));
@@ -124,22 +124,15 @@ export default function ResetPage() {
                 className="space-y-4"
                 noValidate
               >
+                {/* #196 fix: the reset identifier is the same union box as
+                    login-password — `<IdentifierField>` bakes in the email-OR-phone
+                    validation, so a bare numeric is rejected before submit. UNMASKED
+                    (the default), matching the login-password box — only the OTP-sms
+                    channel masks. */}
                 <FormField
                   control={requestForm.control}
                   name="identifier"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{tc("emailOrPhone")}</FormLabel>
-                      <FormControl>
-                        <Input
-                          autoComplete="username"
-                          placeholder={tc("identifierPlaceholder")}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                  render={({ field }) => <IdentifierField field={field} />}
                 />
                 <BotProtectionField onToken={setCaptchaToken} />
                 {error && (
@@ -151,6 +144,7 @@ export default function ResetPage() {
                   type="submit"
                   className="w-full"
                   disabled={requestForm.formState.isSubmitting}
+                  data-testid="reset-request-submit"
                 >
                   {t("sendResetCode")}
                 </Button>
@@ -163,46 +157,30 @@ export default function ResetPage() {
                 className="space-y-4"
                 noValidate
               >
+                {/* Slotted 6-digit code (no auto-submit here — the complete step
+                    pairs the code with a new password, so the user submits both
+                    together; `onComplete` is intentionally omitted). */}
                 <FormField
                   control={completeForm.control}
                   name="code"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("codeLabel")}</FormLabel>
-                      <FormControl>
-                        <InputOTP
-                          maxLength={6}
-                          autoComplete="one-time-code"
-                          value={field.value}
-                          onChange={field.onChange}
-                        >
-                          <InputOTPGroup>
-                            {[0, 1, 2, 3, 4, 5].map((i) => (
-                              <InputOTPSlot key={i} index={i} />
-                            ))}
-                          </InputOTPGroup>
-                        </InputOTP>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
+                    <OtpField
+                      field={field}
+                      length={RESET_OTP_LENGTH}
+                      variant="slotted"
+                      label={t("codeLabel")}
+                    />
                   )}
                 />
                 <FormField
                   control={completeForm.control}
                   name="newPassword"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("newPasswordLabel")}</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="password"
-                          autoComplete="new-password"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormDescription>{tc("passwordPolicy")}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
+                    <PasswordField
+                      field={field}
+                      purpose="new"
+                      label={t("newPasswordLabel")}
+                    />
                   )}
                 />
                 {error && (

@@ -38,6 +38,27 @@ export const PhoneIdentifierSchema = z.string().regex(E164);
 const LoginPassword = z.string().min(8).max(256);
 
 /**
+ * **Creation** password complexity rule (#147, #200) — the bare regex, exported as
+ * the single SSOT for the *pattern* (min-length bounds are applied alongside it).
+ * Four positive look-aheads: at least one lower-case letter, one upper-case letter,
+ * one digit, and one non-letter/non-digit "symbol" character (Unicode-aware, `u`).
+ *
+ * Why the regex is split out from {@link NewPasswordSchema} (the message-carrying
+ * field schema): the *rule* is the SSOT, but the *message* is layer-specific. The
+ * API DTO ({@link NewPasswordSchema}) keeps a generic, non-enumerating English
+ * message (see its doc-comment); the portal composes a **message-less** field
+ * schema from THIS constant so its localized resolver
+ * (`apps/portal/lib/use-localized-resolver.ts`) can map the resulting
+ * `invalid_format` issue to the RU `errors.validation.passwordComplexity` copy. In
+ * zod v4 a schema-level `.regex()` message outranks the contextual error map, so a
+ * baked-in message would leak English on the portal — hence the rule (this regex)
+ * is shared while each layer owns its own message. Re-using this constant keeps the
+ * pattern from drifting between the two layers (the #197 anti-drift rationale).
+ */
+export const NEW_PASSWORD_COMPLEXITY =
+  /^(?=.*\p{Ll})(?=.*\p{Lu})(?=.*\d)(?=.*[^\p{L}\d]).*$/u;
+
+/**
  * **Creation** password schema (#147) — registration and password-reset. It
  * mirrors the deployed Zitadel default complexity policy as the BFF *baseline*
  * (min 8 + at least one upper-case, one lower-case, one digit, and one symbol)
@@ -65,8 +86,12 @@ export const NewPasswordSchema = z
   .string()
   .min(8)
   .max(256)
+  // Built from the {@link NEW_PASSWORD_COMPLEXITY} SSOT rule so the pattern has a
+  // single source; the generic English MESSAGE is owned here at the DTO layer (the
+  // portal composes its own message-less field schema from the same constant —
+  // #200, the rule-vs-message split documented on the constant above).
   .regex(
-    /^(?=.*\p{Ll})(?=.*\p{Lu})(?=.*\d)(?=.*[^\p{L}\d]).*$/u,
+    NEW_PASSWORD_COMPLEXITY,
     "password must include an upper-case letter, a lower-case letter, a digit, and a symbol",
   );
 

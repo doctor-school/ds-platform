@@ -8,7 +8,6 @@ import { useTranslations } from "next-intl";
 import { KeyRound } from "lucide-react";
 
 import {
-  PasswordResetCompleteRequestSchema,
   type PasswordResetRequest,
   type PasswordResetCompleteRequest,
 } from "@ds/schemas";
@@ -17,7 +16,10 @@ import { BotProtectionField } from "@/components/bot-protection";
 import { IdentifierField, OtpField, PasswordField } from "@/components/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
-import { ResetIdentifierFormSchema } from "@/lib/identifier-validation";
+import {
+  ResetCompleteFormSchema,
+  ResetIdentifierFormSchema,
+} from "@/lib/identifier-validation";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
@@ -63,11 +65,21 @@ export default function ResetPage() {
   // through unvalidated — the exact #196 defect. The submitted body still matches
   // the loose `@ds/schemas` contract.
   const requestForm = useForm<PasswordResetRequest>({
+    // `onTouched` (#200): flag a malformed identifier on blur, before submit.
+    mode: "onTouched",
     resolver: useLocalizedResolver(ResetIdentifierFormSchema),
     defaultValues: { identifier: "" },
   });
+  // #200: resolve the complete step from the portal `ResetCompleteFormSchema` (field
+  // primitives), NOT `PasswordResetCompleteRequestSchema`. The request schema's
+  // `newPassword` is the message-carrying `NewPasswordSchema`, whose baked-in English
+  // outranks the localized error map in zod v4 and leaked onto the field; the portal
+  // schema's message-less `NewPasswordFieldSchema` renders the RU `passwordComplexity`
+  // copy instead. The submitted body still matches the loose `@ds/schemas` contract;
+  // the API enforces the real policy.
   const completeForm = useForm<PasswordResetCompleteRequest>({
-    resolver: useLocalizedResolver(PasswordResetCompleteRequestSchema),
+    mode: "onTouched",
+    resolver: useLocalizedResolver(ResetCompleteFormSchema),
     defaultValues: { identifier: "", code: "", newPassword: "" },
   });
 

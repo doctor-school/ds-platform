@@ -127,6 +127,9 @@ function PasswordLogin() {
   // like `99545545445` is now rejected before submit. The request body still
   // matches the loose `@ds/schemas` contract.
   const form = useForm<LoginRequest>({
+    // `onTouched` (#200): flag a malformed identifier on blur, before submit —
+    // applied consistently across every auth form.
+    mode: "onTouched",
     resolver: useLocalizedResolver(LoginIdentifierFormSchema),
     defaultValues: { identifier: "", password: "" },
   });
@@ -217,6 +220,7 @@ function OtpLogin() {
     [channel],
   );
   const requestForm = useForm<OtpRequest>({
+    mode: "onTouched", // #200: flag a malformed identifier on blur, before submit.
     resolver: useLocalizedResolver(requestResolverSchema),
     defaultValues: { identifier: "", channel: "email" },
   });
@@ -378,6 +382,7 @@ function OtpVerifyForm({
   const [error, setError] = useState<string | null>(null);
 
   const verifyForm = useForm<OtpVerify>({
+    mode: "onTouched", // #200: consistent on-blur validation across the auth forms.
     resolver: useLocalizedResolver(OtpVerifySchema),
     defaultValues: { identifier, code: "", channel },
   });

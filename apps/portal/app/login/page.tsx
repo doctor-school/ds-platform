@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -8,8 +8,6 @@ import { useTranslations } from "next-intl";
 import { ShieldCheck } from "lucide-react";
 
 import {
-  LoginRequestSchema,
-  OtpRequestSchema,
   OtpVerifySchema,
   type LoginRequest,
   type OtpChannel,
@@ -20,6 +18,11 @@ import {
 import { BotProtectionField } from "@/components/bot-protection";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
+import {
+  LoginIdentifierFormSchema,
+  maskPhoneInput,
+  otpIdentifierFormSchema,
+} from "@/lib/identifier-validation";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
@@ -120,8 +123,14 @@ function PasswordLogin() {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // #192: validate with a portal-side per-channel guard, NOT the loose
+  // `LoginRequestSchema` (which stays `identifier: z.string().min(1)` so Zitadel
+  // remains the credential authority). The identifier box accepts a valid email
+  // OR an E.164 phone — Zitadel resolves whichever — so a bare numeric string
+  // like `99545545445` is now rejected before submit. The request body still
+  // matches the loose `@ds/schemas` contract.
   const form = useForm<LoginRequest>({
-    resolver: useLocalizedResolver(LoginRequestSchema),
+    resolver: useLocalizedResolver(LoginIdentifierFormSchema),
     defaultValues: { identifier: "", password: "" },
   });
 
@@ -219,8 +228,17 @@ function OtpLogin() {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // #192: the resolver tracks the ACTIVE channel — email channel requires a valid
+  // email, SMS channel requires an E.164 phone. Rebuilt per channel so switching
+  // re-validates against the right shape. The loose `OtpRequestSchema` is NOT used
+  // as the form guard (it stays the BFF contract); the submitted body still matches
+  // it.
+  const requestResolverSchema = useMemo(
+    () => otpIdentifierFormSchema(channel),
+    [channel],
+  );
   const requestForm = useForm<OtpRequest>({
-    resolver: useLocalizedResolver(OtpRequestSchema),
+    resolver: useLocalizedResolver(requestResolverSchema),
     defaultValues: { identifier: "", channel: "email" },
   });
 
@@ -273,6 +291,10 @@ function OtpLogin() {
             onClick={() => {
               setChannel(c);
               setSent(false);
+              // Clear the identifier on channel switch so a value typed for the
+              // previous channel (e.g. an email left in the box) does not linger
+              // into the other channel's stricter shape (#192).
+              requestForm.reset({ identifier: "", channel: c });
             }}
           >
             {c === "email" ? t("otpChannelEmail") : t("otpChannelSms")}
@@ -298,6 +320,7 @@ function OtpLogin() {
                   <FormControl>
                     <Input
                       autoComplete={channel === "email" ? "email" : "tel"}
+                      inputMode={channel === "email" ? "email" : "tel"}
                       placeholder={
                         channel === "email"
                           ? tc("emailPlaceholder")
@@ -305,6 +328,16 @@ function OtpLogin() {
                       }
                       data-testid="otp-identifier"
                       {...field}
+                      // #192 phone mask: on the SMS channel, coerce keystrokes into
+                      // an E.164-valid `+<digits>` value as the user types (RU `8…`
+                      // → `+7…`), so the stored value is always submit-shaped and
+                      // the box can only hold a phone. Email channel is unmasked.
+                      onChange={
+                        channel === "sms"
+                          ? (e) =>
+                              field.onChange(maskPhoneInput(e.target.value))
+                          : field.onChange
+                      }
                     />
                   </FormControl>
                   <FormMessage />

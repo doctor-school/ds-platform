@@ -86,8 +86,18 @@ function translateIssue(issue: ZodIssueLike, t: Translator): string {
       if (field === "password" || field === "newPassword") {
         return t("passwordComplexity");
       }
-      if (field === "phone") return t("phone");
+      // E.164 phone guard — the `phone` registration field, or the portal-side
+      // `identifier` box in the OTP SMS channel (#192). Both surface as a regex
+      // format issue and want the same "+79991234567" guidance.
+      if (field === "phone" || field === "identifier") return t("phone");
       return t("fallback");
+
+    case "invalid_union":
+      // The portal-side password-login identifier guard (#192): `identifier`
+      // accepts EITHER a valid email OR an E.164 phone, so a malformed value (a
+      // bare numeric string / free text) fails the union. Render the same
+      // "email or phone" copy the dual-identifier refine uses.
+      return t("identifierRequired");
 
     case "custom":
       // The dual-identifier `.refine` ("exactly one of email or phone").

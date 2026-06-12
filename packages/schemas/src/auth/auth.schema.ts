@@ -11,7 +11,20 @@ import { z } from "zod";
  * design §2); this is the BFF-side shape guard so a malformed identifier is
  * rejected before any IdP round-trip.
  */
-const E164 = /^\+[1-9]\d{6,14}$/;
+export const E164 = /^\+[1-9]\d{6,14}$/;
+
+/**
+ * Identifier-shape validators (#192) for **client-side, per-channel** UX guards in
+ * the portal. They are NOT applied to {@link LoginRequestSchema} /
+ * {@link OtpRequestSchema} — those keep a deliberately-loose `identifier`
+ * (`z.string().min(1)`) because Zitadel is the credential authority and resolves
+ * the identifier itself (design §2). These are exported so the portal can reject a
+ * plainly-malformed identifier (e.g. a bare numeric string in the email channel)
+ * before submit, while the BFF contract stays unchanged. Same `z.email()` / `E164`
+ * shapes registration already uses, so the two surfaces agree.
+ */
+export const EmailIdentifierSchema = z.email();
+export const PhoneIdentifierSchema = z.string().regex(E164);
 
 /**
  * **Login** password guard — deliberately permissive (#147). A minimal shape

@@ -35,6 +35,18 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the response is indistinguishable in status, body, and timing from the never-registered case
     And no duplicate account is created
 
+  @EARS-2 @EARS-16 @failure
+  Scenario: Phone-only registration is not offered and never 500s
+    # Zitadel cannot create a login-capable human without an email (GH #202);
+    # email is the primary registration identifier, phone is a post-registration
+    # secondary identifier. A phone-only register attempt is rejected as a
+    # handled, enumeration-safe failure — never an opaque 500.
+    Given a visitor who submits the registration form with a phone but no email
+    When the request reaches the BFF
+    Then the request is rejected with a generic, enumeration-safe failure
+    And the response is not a 500 server error
+    And no account is created
+
   @EARS-3 @happy
   Scenario: Verify email with the OTP code
     Given a registrant who received an email verification code

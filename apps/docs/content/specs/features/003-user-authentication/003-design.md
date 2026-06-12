@@ -93,7 +93,9 @@ sequenceDiagram
 - **Refresh rotation** (EARS-9): each refresh is single-use; rotation issues a new refresh and revokes the old. A replay of a consumed refresh invalidates the whole chain (RFC 6819) and revokes the session.
 - **No cross-subdomain cookie**: each app holds its own `__Host-` cookie; cross-app SSO continuity (future) is OIDC silent re-auth at the IdP, not a shared cookie (ADR-0001 §6).
 
-## 4. Registration cascade (EARS-1/2, 19, 20, 3/4)
+## 4. Registration cascade (EARS-1/2, 19, 20, 3)
+
+**Email-primary registration (GH #202).** Registration takes **email + password** only — email is the primary registration identifier. Zitadel cannot create a login-capable human user without an email: the constraint is invariant across `AddHumanUser` v1/v2 and the newer `CreateUser` `/v2/users/new` (confirmed live and in `main` — `SetHumanEmail email … [(validate.rules).message.required = true]`, phone optional), and an empty-string email is rejected too. There is therefore **no phone-only registration channel** (it is removed, not hidden — no synthetic/derived email workaround). Phone is a **post-registration secondary identifier** (attach + verify after the account exists — a future increment); phone as a _login_ identifier (EARS-5) and SMS-OTP _login_ (EARS-7) are unaffected, operating on an already-attached verified phone. Registration verification is consequently **email-only** (EARS-3); EARS-4 phone verification is reserved for the future secondary-identifier path. The `register()` SMS-budget gate (the old phone-verify-at-register branch) is removed; `SmsBudgetService` still gates the SMS-OTP _login_ send (EARS-14).
 
 ```mermaid
 sequenceDiagram
@@ -101,20 +103,22 @@ sequenceDiagram
   participant API as apps/api
   participant Z as Zitadel
   participant PG as Postgres
-  B->>API: POST /v1/auth/register {email|phone, password, consent[]}
+  B->>API: POST /v1/auth/register {email, password, consent[]}
   API->>API: captcha + rate-limit guards
   API->>API: validate consent versions present (EARS-20)
-  API->>Z: create user (email|phone, password)
+  API->>Z: create user (email, password)
   Z-->>API: user {sub}
   API->>PG: ConsentCaptured (per-purpose versions)
   API->>PG: upsert UserMirror {id, sub, role=doctor_guest} (EARS-19)
-  API->>Z: trigger otp_email | otp_sms (verification)
+  API->>Z: trigger otp_email (email verification)
   API->>PG: audit auth.register, auth.consent.captured (EARS-18)
   API-->>B: 200 enumeration-safe (EARS-16)
   Note over Z,API: Zitadel Action webhook (user.created) → MirrorSync reconciles
 ```
 
 The Action webhook is the authoritative sync trigger; the inline upsert is an optimization so the mirror exists immediately. The periodic reconciliation sweep (EARS-19) closes any webhook-miss divergence.
+
+**`createUser` failure taxonomy — never a 500 for a deterministic IdP rejection (GH #202).** The IdP `createUser` port distinguishes three outcomes so `register()` can map each to an enumeration-safe client response: (a) a duplicate identifier → `alreadyExisted` (the EARS-16 hinge, no throw); (b) a **deterministic 4xx `invalid_argument`** (a malformed/unacceptable request the IdP rejects before creating anything — e.g. the now-removed phone-only shape, or any future bad-argument) → the typed `IdpInvalidArgumentError`, which `register()` maps to the generic, enumeration-safe `GENERIC_FAILURE` (a 4xx, NOT an existence oracle, EARS-16) — the same precedent as the password-policy → 422 mapping; (c) a genuine infra fault (5xx / network) → the typed `IdpUnavailableError`, mapped to a 503 "service temporarily unavailable" (actionable-errors rule: 5xx/net → "unavailable"). Any rejection that is deterministic and client-shaped must never surface as a bare 500. The in-memory `FakeIdpClient` mirrors the real adapter's create-time invariants — a no-email create raises the same `IdpInvalidArgumentError` — so a future phone-only regression fails in unit tests, not only live (fake no more permissive than real).
 
 **Post-verify auto-login — client orchestration, no new session path (#175).** The EARS-1/3 journey is register → verify-channel-ownership → signed-in. `/v1/auth/verify` (EARS-3/4) proves the registrant controls the email/phone and mints **no session** — by contract it is a channel-verification primitive, not an authentication check, and the BFF holds no credential at verify time. To carry the freshly-registered user straight into `/account` without re-typing what they just set, the **portal** (not the BFF) orchestrates a replay: the password entered at `/register` is held in a **volatile, module-scoped in-memory store** in the client (`apps/portal/lib/pending-registration.ts`) across the `/register → /verify` SPA navigation, and on a successful verify the portal replays the **real EARS-5 password login** (`POST /v1/auth/login`) — which is what establishes the EARS-8 `__Host-ds_session` cookie. The session therefore still comes from the EARS-5 login, **not** from any new `/auth/verify` session-minting path; the `/v1/auth/verify` API contract is unchanged. Security envelope: the held password lives in client memory **only** for the in-flight registration; is **never** written to the URL, `localStorage`/`sessionStorage`, a cookie, or any persisted store (only the non-secret identifier rides the `/verify` query as before); is **atomically consumed-and-wiped on verify success** (the take is single-shot — the slot is cleared whether the replayed EARS-5 login then succeeds or throws); **self-expires after a short TTL** (5 min), which deterministically bounds how long an abandoned hold can linger; is **overwritten by a new registration** (single slot, cleared at the top of the register submit); and is **dropped on a hard reload** of `/verify` (re-loading the bundle clears the module store) — the latter being the desired property, after which the portal falls back to routing to `/login` for a manual sign-in. Abandonment is bounded by the TTL rather than an unmount handler: the password is stashed before the `/verify` navigation, so a `/verify`-mount cleanup would (under React Strict Mode's double-invoked effects in dev) wipe the slot before the user types the code and break the auto-login; the age-based TTL has no such hazard. (A server-side verify-session was analysed and rejected: the verify code is a user-email/phone-verification primitive and no credential is available BFF-side at verify time, so the clean path is the client replay.)
 

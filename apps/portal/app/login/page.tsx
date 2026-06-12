@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -373,6 +373,23 @@ function OtpLogin() {
 }
 
 /**
+ * Zitadel's login email/SMS OTP codes are a FIXED 8 digits (verified live on the
+ * dev-stand, #153 — see the `Input` note below). #175: that fixed length is what
+ * lets the plain numeric input auto-submit the moment the final digit lands,
+ * mirroring the `/verify` registration `InputOTP onComplete` semantics without a
+ * slotted widget (rejected here because the code is longer/looser than the 6-char
+ * registration code). The placeholder (`login.codePlaceholder` = `12345678`)
+ * already advertises this length.
+ */
+const LOGIN_OTP_LENGTH = 8;
+
+/** Digits only — strip the formatting an OS autofill / paste might carry so the
+ * completion check sees the true code length. */
+function otpDigits(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+/**
  * EARS-6/7 verify step. Its OWN `useForm` lives here so the `code` field is
  * registered on this component's first render: the component mounts only once
  * the request step has fired, so there is no late-mounted Controller and no
@@ -410,13 +427,23 @@ function OtpVerifyForm({
     }
   }
 
+  // #175: auto-submit once the fixed-length login OTP is fully entered, mirroring
+  // the `/verify` `InputOTP onComplete` semantics for the plain numeric input
+  // here. The same in-flight guard (`isSubmitting`) prevents a double network
+  // call if the completion-trigger races a manual click or the Enter key, and it
+  // stops a re-fire if a later keystroke/paste keeps the value at full length.
+  const submit = verifyForm.handleSubmit(onVerify);
+  const maybeAutoSubmit = useCallback(
+    (value: string) => {
+      if (verifyForm.formState.isSubmitting) return;
+      if (otpDigits(value).length === LOGIN_OTP_LENGTH) void submit();
+    },
+    [verifyForm.formState.isSubmitting, submit],
+  );
+
   return (
     <Form {...verifyForm}>
-      <form
-        onSubmit={verifyForm.handleSubmit(onVerify)}
-        className="space-y-4"
-        noValidate
-      >
+      <form onSubmit={submit} className="space-y-4" noValidate>
         <FormField
           control={verifyForm.control}
           name="code"
@@ -431,12 +458,18 @@ function OtpVerifyForm({
                     fixed-slot widget is the wrong control here. A standard numeric
                     input takes the full code in one shot, keeps
                     `autocomplete="one-time-code"` for OS autofill, and is what the
-                    BFF's `code: z.string().min(1)` expects. */}
+                    BFF's `code: z.string().min(1)` expects. #175: it auto-submits
+                    once `LOGIN_OTP_LENGTH` digits land (button kept for a11y). */}
                 <Input
                   inputMode="numeric"
                   autoComplete="one-time-code"
+                  maxLength={LOGIN_OTP_LENGTH}
                   placeholder={t("codePlaceholder")}
                   {...field}
+                  onChange={(e) => {
+                    field.onChange(e);
+                    maybeAutoSubmit(e.target.value);
+                  }}
                 />
               </FormControl>
               <FormMessage />

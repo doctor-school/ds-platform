@@ -172,8 +172,10 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     // instead (login then fails on the wrong code) — #131 live.
     const otpCode = await fetchOtpCode(email, otpSentAt, "Verify OTP");
     expect(otpCode, "login OTP should reach Mailpit").toBeTruthy();
+    // #175: the login-OTP input AUTO-SUBMITS once the final (8th) digit lands —
+    // we fill the code and do NOT click `otp-verify`; the flow must advance on
+    // its own (the explicit button stays for a11y but is not exercised here).
     await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
-    await page.getByTestId("otp-verify").click();
 
     await page.waitForURL(/\/account/);
     await expect(page.getByTestId("session-sub")).not.toBeEmpty();
@@ -237,8 +239,9 @@ test.describe("portal auth journeys (real Zitadel)", () => {
         "session.otp.sms.challenged",
       );
       expect(otpCode, "login OTP should reach the sink").toBeTruthy();
+      // #175: auto-submit on completion (no `otp-verify` click) — same as the
+      // email-OTP journey above; the SMS code is the same fixed 8-digit length.
       await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
-      await page.getByTestId("otp-verify").click();
 
       // ── Session visible + EARS-8 no-token invariant ──────────────────────
       await page.waitForURL(/\/account/);

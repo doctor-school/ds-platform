@@ -3,6 +3,7 @@ import {
   LoginRequestSchema,
   PasswordResetCompleteRequestSchema,
   RegisterRequestSchema,
+  VerifyRequestSchema,
 } from "./auth.schema.js";
 
 // #147 — password-policy SSOT. The creation schemas (register / reset-complete)
@@ -81,6 +82,66 @@ describe("creation password complexity (#147, mirrors Zitadel default policy)", 
           }).success,
         ).toBe(false);
       },
+    );
+  });
+});
+
+// #202 — email-primary registration. Email is the only registration identifier
+// (Zitadel cannot create a login-capable human without an email); the
+// dual-identifier "register with email OR phone" model + its `phone` field and
+// exactly-one `.refine` were removed. Verify is likewise email-only. Phone stays
+// a first-class LOGIN identifier (LoginRequestSchema is untouched).
+describe("email-primary registration shape (#202)", () => {
+  it("RegisterRequestSchema requires an email", () => {
+    expect(
+      RegisterRequestSchema.safeParse({ password: COMPLIANT, consent }).success,
+    ).toBe(false);
+  });
+
+  it("RegisterRequestSchema rejects an invalid email", () => {
+    expect(
+      RegisterRequestSchema.safeParse({
+        email: "not-an-email",
+        password: COMPLIANT,
+        consent,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("RegisterRequestSchema no longer accepts a phone-only registration", () => {
+    expect(
+      RegisterRequestSchema.safeParse({
+        phone: "+79991234567",
+        password: COMPLIANT,
+        consent,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("RegisterRequestSchema strips an extra phone field (email-only contract)", () => {
+    const parsed = RegisterRequestSchema.safeParse({
+      email: "user@ds.test",
+      phone: "+79991234567",
+      password: COMPLIANT,
+      consent,
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect("phone" in parsed.data).toBe(false);
+    }
+  });
+
+  it("VerifyRequestSchema is email-only (no phone branch)", () => {
+    expect(
+      VerifyRequestSchema.safeParse({ email: "user@ds.test", code: "424242" })
+        .success,
+    ).toBe(true);
+    expect(
+      VerifyRequestSchema.safeParse({ phone: "+79991234567", code: "424242" })
+        .success,
+    ).toBe(false);
+    expect(VerifyRequestSchema.safeParse({ code: "424242" }).success).toBe(
+      false,
     );
   });
 });

@@ -16,17 +16,18 @@ import {
 } from "../setup/rate-limit.js";
 import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
 
-// Verification (EARS-3 email / EARS-4 phone): a correct OTP code flips the mirror
-// flag via Zitadel; an invalid/expired code returns a generic failure and leaves
-// the flag unchanged. Real Postgres + fake IdP (the fake treats FAKE_VALID_CODE
-// as the only correct code).
+// Verification (EARS-3, email-only per #202): a correct email OTP code flips
+// `email_verified` via Zitadel; an invalid/expired code returns a generic failure
+// and leaves the flag unchanged. Registration is email-primary, so there is no
+// phone verification at registration (EARS-4 is a future post-registration
+// secondary-identifier concern). Real Postgres + fake IdP (the fake treats
+// FAKE_VALID_CODE as the only correct code).
 describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
   let app: NestFastifyApplication;
   let pool: pg.Pool;
   const consent = [{ purpose: "tos", version: "2026-01" }];
   const runId = Date.now();
   const createdEmails: string[] = [];
-  const createdPhones: string[] = [];
 
   async function register(payload: Record<string, unknown>): Promise<void> {
     const res = await app.inject({
@@ -59,8 +60,6 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
   afterEach(async () => {
     for (const email of createdEmails.splice(0))
       await pool.query("DELETE FROM users WHERE email = $1", [email]);
-    for (const phone of createdPhones.splice(0))
-      await pool.query("DELETE FROM users WHERE phone = $1", [phone]);
   });
 
   afterAll(async () => {
@@ -107,22 +106,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Verify (e2e)", () => {
     expect(rows[0].email_verified).toBe(false);
   });
 
-  it("EARS-4: when a registrant submits the correct SMS code, the system shall verify it via Zitadel and flip phone_verified on the mirror", async () => {
-    const phone = `+1999${Math.floor(10_000_000 + Math.random() * 89_999_999)}`;
-    createdPhones.push(phone);
-    await register({ phone });
-
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/auth/verify",
-      payload: { phone, code: FAKE_VALID_CODE },
-    });
-
-    expect(res.statusCode).toBe(200);
-    const { rows } = await pool.query(
-      "SELECT phone_verified FROM users WHERE phone = $1",
-      [phone],
-    );
-    expect(rows[0].phone_verified).toBe(true);
-  });
+  // #202: EARS-4 phone verification at registration is REMOVED — registration is
+  // email-primary, so there is no phone to verify at registration. Phone
+  // verification becomes a future post-registration secondary-identifier path.
 });

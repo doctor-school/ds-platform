@@ -90,35 +90,30 @@ export function otpIdentifierFormSchema(
 }
 
 /**
- * Registration (EARS-1 email / EARS-2 phone) portal resolver — channel-specific,
- * built from the field primitives (#197/#200). The active channel decides the
- * identifier shape: the email channel requires a valid email, the phone channel an
- * E.164 phone — exactly like {@link otpIdentifierFormSchema}, and rebuilt per channel
- * so switching re-validates against the right shape (the register page memoizes it on
- * `channel`). The password uses {@link NewPasswordFieldSchema} (the message-less
- * complexity fragment) so a weak password renders the RU `passwordComplexity` copy
- * rather than the English baked into `@ds/schemas` `NewPasswordSchema` (#200 — zod v4
- * schema-level messages outrank the localized error map).
+ * Registration (EARS-1) portal resolver — **email-only** (#202), built from the
+ * field primitives (#197/#200). Registration is email-primary: Zitadel cannot
+ * create a login-capable human without an email, so the dual-identifier
+ * email/phone toggle was removed (phone is a future post-registration secondary
+ * identifier; it stays on login / OTP-login / reset). The password uses
+ * {@link NewPasswordFieldSchema} (the message-less complexity fragment) so a weak
+ * password renders the RU `passwordComplexity` copy rather than the English baked
+ * into `@ds/schemas` `NewPasswordSchema` (#200 — zod v4 schema-level messages
+ * outrank the localized error map).
  *
- * Why channel-specific instead of `RegisterRequestSchema`: the request schema keeps
- * BOTH `email`/`phone` optional behind a dual-identifier `.refine` (+ consent), which
- * is the right API contract but the wrong client RHF resolver — it cannot flag a
- * malformed value in the ONE channel the user is editing. This composes the single
- * active channel's primitive instead. The submitted body STILL goes through
- * `authClient.register(...)` and the API STILL enforces the full
- * `RegisterRequestSchema` (dual-identifier refine + consent); this is only the client
- * guard. `consent`/`captchaToken` stay loose here (the form supplies the canonical
- * consent pair and the API enforces non-empty — EARS-20).
+ * Why a portal-composed schema instead of `RegisterRequestSchema`: the request
+ * schema's `password` is the message-carrying `NewPasswordSchema` (leaks English
+ * on the field, #200), so the form resolves against this message-less composition
+ * instead. The submitted body STILL goes through `authClient.register(...)` and the
+ * API STILL enforces the full `RegisterRequestSchema` (email required + consent);
+ * this is only the client guard. `consent`/`captchaToken` stay loose here (the form
+ * supplies the canonical consent pair and the API enforces non-empty — EARS-20).
  */
-export function registerFormSchema(
-  channel: "email" | "phone",
-): z.ZodType<RegisterRequest, RegisterRequest> {
-  const identifier =
-    channel === "email"
-      ? { email: EmailIdentifierSchema }
-      : { phone: PhoneIdentifierSchema };
+export function registerFormSchema(): z.ZodType<
+  RegisterRequest,
+  RegisterRequest
+> {
   return z.object({
-    ...identifier,
+    email: EmailIdentifierSchema,
     password: NewPasswordFieldSchema,
     // Deliberately NOT `.min(1)`: consent is supplied by the form (the canonical
     // `REQUIRED_CONSENT` pair on submit), never user-typed, and the API enforces the

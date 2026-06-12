@@ -106,25 +106,28 @@ export const ConsentAcceptanceSchema = z.strictObject({
 export type ConsentAcceptance = z.infer<typeof ConsentAcceptanceSchema>;
 
 /**
- * Registration request (EARS-1 email path / EARS-2 phone path). Exactly one of
- * `email` / `phone` is supplied — the dual-identifier invariant (ADR-0001 §3).
+ * Registration request (EARS-1). **Email is the primary — and only —
+ * registration identifier.** The dual-identifier "register with email OR phone"
+ * model (and its `phone` field + exactly-one `.refine`) was removed per #202:
+ * Zitadel cannot create a login-capable human user without an email (invariant
+ * across `AddHumanUser` v1/v2 and `CreateUser` `/v2/users/new`, confirmed in
+ * `main`), so a phone-only registration is unbuildable. Phone is a
+ * post-registration secondary identifier (future) — it stays a first-class
+ * identifier for *login* (`LoginRequestSchema`) and SMS-OTP login
+ * (`OtpRequestSchema`, EARS-7), just not for registration.
+ *
  * `captchaToken` is the bot-protection widget token read by `BotProtectionGuard`
  * (EARS-17); it is optional here because the guard no-ops when the provider is
  * disabled (the dev-stand default). The consent gate (non-empty) is a domain
  * rule enforced in the service (EARS-20), not a shape rule, so the array is
  * permitted to be empty by the schema and refused with a generic failure later.
  */
-export const RegisterRequestSchema = z
-  .object({
-    email: z.email().optional(),
-    phone: z.string().regex(E164).optional(),
-    password: NewPasswordSchema,
-    consent: z.array(ConsentAcceptanceSchema),
-    captchaToken: z.string().optional(),
-  })
-  .refine((d) => (d.email == null) !== (d.phone == null), {
-    message: "exactly one of email or phone is required",
-  });
+export const RegisterRequestSchema = z.object({
+  email: z.email(),
+  password: NewPasswordSchema,
+  consent: z.array(ConsentAcceptanceSchema),
+  captchaToken: z.string().optional(),
+});
 export type RegisterRequest = z.infer<typeof RegisterRequestSchema>;
 
 /**
@@ -139,19 +142,17 @@ export const RegisterResponseSchema = z.strictObject({
 export type RegisterResponse = z.infer<typeof RegisterResponseSchema>;
 
 /**
- * Verification request (EARS-3 email / EARS-4 phone). The registrant submits the
- * identifier they registered with plus the OTP code Zitadel sent. Exactly one of
- * `email` / `phone` is supplied (the channel is inferred from which is present).
+ * Verification request (EARS-3). Registration verification is **email-only**:
+ * registration is email-primary (#202), so the registrant submits the email they
+ * registered with plus the OTP code Zitadel sent. The dual-identifier `phone`
+ * field + exactly-one `.refine` were removed with the phone-only registration
+ * channel; EARS-4 phone verification is a future post-registration
+ * secondary-identifier concern, not a registration step.
  */
-export const VerifyRequestSchema = z
-  .object({
-    email: z.email().optional(),
-    phone: z.string().regex(E164).optional(),
-    code: z.string().min(1),
-  })
-  .refine((d) => (d.email == null) !== (d.phone == null), {
-    message: "exactly one of email or phone is required",
-  });
+export const VerifyRequestSchema = z.object({
+  email: z.email(),
+  code: z.string().min(1),
+});
 export type VerifyRequest = z.infer<typeof VerifyRequestSchema>;
 
 /** Verification response — `verified` on success; failures are a generic 4xx. */

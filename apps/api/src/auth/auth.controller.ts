@@ -79,12 +79,12 @@ export class AuthController {
   ) {}
 
   /**
-   * EARS-1 (email) / EARS-2 (phone). Public (unauthenticated entry point that
-   * mints identity). The phone branch triggers an SMS verification code, gated by
-   * the toll-fraud budget (EARS-14) in the service — so the IP (the only
-   * request-coupled input) and the edge-supplied `x-asn` ASN are threaded in, the
-   * same shape as `login/otp/request`. Unlike login, a budget-refused registration
-   * SMS is silent (the account is already created at that point), not a 429.
+   * EARS-1: email-primary registration (#202). Public (unauthenticated entry point
+   * that mints identity). Registration is email + password only — the phone-only
+   * register channel and its register-time SMS-budget gate (EARS-14) were removed
+   * (Zitadel cannot create a login-capable human without an email), so this no
+   * longer threads the IP / ASN budget dimensions. Phone is a future
+   * post-registration secondary identifier; SMS-OTP *login* still uses the budget.
    */
   @Post("register")
   @Public()
@@ -96,14 +96,10 @@ export class AuthController {
     access: "public",
     check: "none",
     audit: "high-stakes",
-    tests: ["EARS-1", "EARS-2", "EARS-20", "EARS-16", "EARS-14"],
+    tests: ["EARS-1", "EARS-20", "EARS-16"],
   })
-  register(
-    @Body() dto: RegisterRequestDto,
-    @Ip() ip: string,
-    @Headers("x-asn") asn: string | undefined,
-  ): Promise<RegisterResponse> {
-    return this.auth.register(dto, { ip, asn });
+  register(@Body() dto: RegisterRequestDto): Promise<RegisterResponse> {
+    return this.auth.register(dto);
   }
 
   /**

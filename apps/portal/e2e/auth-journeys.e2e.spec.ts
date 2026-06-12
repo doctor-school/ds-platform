@@ -251,4 +251,42 @@ test.describe("portal auth journeys (real Zitadel)", () => {
       if (userId) await deleteUser(userId);
     }
   });
+
+  // #200 defect 1 on the `/reset` COMPLETE step — relocated here from the ungated
+  // `identifier-validation.e2e.spec.ts` because, unlike the `/register` variant that
+  // stays there, reaching the complete step is NOT backend-free: the stage flips only
+  // after a live BFF reset ack (`reset-request-submit` →
+  // `authClient.requestPasswordReset()` → `POST /password/reset`). So the new-password
+  // field that renders the complexity copy does not exist until the api round-trips —
+  // it belongs in this live-gated suite, not the portal-only tier. The assertion is
+  // the same: a weak new password must render the RU `passwordComplexity` copy, with
+  // NO English leak from the `@ds/schemas` `NewPasswordSchema` `.regex()` message.
+  test("reset complete: a weak new password renders the RU complexity copy, never English", async ({
+    page,
+  }) => {
+    // The RU copy (apps/portal/messages/ru.json → errors.validation.passwordComplexity);
+    // the English `NewPasswordSchema` message ("password must include …") must never
+    // reach the rendered field (#200 defect 1).
+    const ruPasswordComplexity =
+      "Пароль должен содержать заглавную и строчную буквы, цифру и спецсимвол.";
+    // A new password failing the #147 complexity baseline (no upper/digit/symbol).
+    const weakNewPassword = "weakpassword";
+
+    // ── Advance to the complete step via the live BFF reset ack ──────────────
+    // The request only needs a well-formed identifier; EARS-16 makes the ack
+    // identical regardless of existence, so the stage flips and the new-password
+    // field mounts. Selectors stay locale-agnostic (`autocomplete` / `data-testid`).
+    await page.goto("/reset");
+    await page.locator('input[autocomplete="username"]').fill(newEmail());
+    await page.getByTestId("reset-request-submit").click();
+
+    const pw = page.locator('input[autocomplete="new-password"]');
+    await expect(pw).toBeVisible();
+    await pw.fill(weakNewPassword);
+    // Blur to trigger on-touched validation without needing the code field.
+    await pw.blur();
+
+    await expect(page.getByText(ruPasswordComplexity)).toBeVisible();
+    await expect(page.getByText(/password must include/i)).toHaveCount(0);
+  });
 });

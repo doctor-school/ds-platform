@@ -250,23 +250,12 @@ test.describe("#200 creation-password RU copy + on-blur validation (client-side,
     await expectInvalid(email);
   });
 
-  test("reset complete: a weak new password renders the RU complexity copy", async ({
-    page,
-  }) => {
-    await page.goto("/reset");
-    // Advance to the complete step with a valid identifier (the request submit only
-    // needs a well-formed identifier — the ack is identical regardless of existence).
-    const id = page.locator('input[autocomplete="username"]');
-    await id.fill(VALID_EMAIL);
-    await page.getByTestId("reset-request-submit").click();
-
-    const pw = page.locator('input[autocomplete="new-password"]');
-    await expect(pw).toBeVisible();
-    await pw.fill(WEAK_NEW_PASSWORD);
-    // Blur to trigger on-touched validation without needing the code field.
-    await pw.blur();
-
-    await expect(page.getByText(RU_PASSWORD_COMPLEXITY)).toBeVisible();
-    await expect(page.getByText(/password must include/i)).toHaveCount(0);
-  });
+  // NOTE: the `/reset` *complete*-step variant of the weak-password RU-copy
+  // assertion lives in the live-gated `auth-journeys.e2e.spec.ts`, NOT here:
+  // reaching the complete step requires a real BFF reset ack
+  // (`reset-request-submit` → `authClient.requestPasswordReset()` →
+  // `POST /password/reset`) to flip the stage, so it is NOT backend-free and would
+  // silently depend on a running api in this ungated tier. The `/register` test
+  // above proves the SAME defect-1 mechanism (message-less complexity regex → RU
+  // copy) purely client-side, which is why it belongs in this tier.
 });

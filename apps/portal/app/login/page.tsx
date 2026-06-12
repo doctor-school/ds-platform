@@ -463,6 +463,7 @@ function OtpVerifyForm({
                 <Input
                   inputMode="numeric"
                   autoComplete="one-time-code"
+                  maxLength={LOGIN_OTP_LENGTH}
                   placeholder={t("codePlaceholder")}
                   {...field}
                   onChange={(e) => {

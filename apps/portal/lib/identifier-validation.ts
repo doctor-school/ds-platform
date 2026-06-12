@@ -6,10 +6,14 @@ import {
   type LoginRequest,
   type OtpRequest,
   type OtpChannel,
+  type PasswordResetRequest,
 } from "@ds/schemas";
 
+import { IdentifierFieldSchema } from "@/components/fields/field-schemas";
+
 /**
- * Portal-side, per-channel identifier UX validation (#192).
+ * Portal-side, per-channel identifier UX validation (#192), now composed from the
+ * semantic field-schema fragments that the field primitives own (#197).
  *
  * The BFF/Zitadel is the credential authority and resolves the identifier itself,
  * so `LoginRequestSchema` / `OtpRequestSchema` keep a deliberately-loose
@@ -20,33 +24,51 @@ import {
  * sailed through to a pointless round-trip and an opaque generic failure.
  *
  * These schemas re-use the EXACT `z.email()` / `E164` shapes from `@ds/schemas`
- * (so the portal agrees with registration), but are applied ONLY as the form
- * resolver — never to the request body. The submitted body still matches the loose
- * `@ds/schemas` request schemas.
+ * (via `field-schemas.ts`, so the portal agrees with registration), but are applied
+ * ONLY as the form resolver — never to the request body. The submitted body still
+ * matches the loose `@ds/schemas` request schemas.
  *
  * The resolver maps these issues to localized copy by zod issue *code/shape*
  * (`lib/use-localized-resolver.ts`), so no English message text leaks.
  */
 
+// Re-export the phone mask from its primitive-co-located home so existing call
+// sites keep importing `maskPhoneInput` from here unchanged (#197 refactor).
+export { maskPhoneInput } from "@/components/fields/phone-mask";
+
 /**
  * Password login (EARS-5) — a single identifier box that accepts EITHER a valid
  * email OR an E.164 phone (Zitadel resolves whichever was typed). A bare numeric
- * string is neither, so it is rejected before submit. The union surfaces a single
- * `invalid_format` issue with `format: "email"` for the field so the localized
- * resolver renders the same "email or phone" guidance.
+ * string is neither, so it is rejected before submit. Composed from the shared
+ * `IdentifierFieldSchema` union so the login box and the `<IdentifierField>`
+ * primitive validate identically.
  */
 export const LoginIdentifierFormSchema = z.object({
-  identifier: z.union([EmailIdentifierSchema, PhoneIdentifierSchema], {
-    error: "enter a valid email address or phone number",
-  }),
+  identifier: IdentifierFieldSchema,
   password: z.string().min(8).max(256),
   captchaToken: z.string().optional(),
 }) as unknown as z.ZodType<LoginRequest, LoginRequest>;
 
 /**
+ * Password-reset initiate (EARS-11) identifier guard (#196). Same union box as
+ * password login — the reset identifier accepts EITHER a valid email OR an E.164
+ * phone (Zitadel resolves it), so the bare numeric `99545545445` that #196 reported
+ * is rejected before submit. Before #197 the reset form used the loose
+ * `PasswordResetRequestSchema` as its resolver (no union, no guard) — that is the
+ * exact defect this closes. The submitted body still matches the loose
+ * `@ds/schemas` `PasswordResetRequestSchema` (identifier stays `z.string().min(1)`).
+ */
+export const ResetIdentifierFormSchema = z.object({
+  identifier: IdentifierFieldSchema,
+  captchaToken: z.string().optional(),
+}) as unknown as z.ZodType<PasswordResetRequest, PasswordResetRequest>;
+
+/**
  * OTP-login request (EARS-6 email / EARS-7 SMS) — the active channel decides which
  * shape is required: the email channel demands an email; the SMS channel demands an
  * E.164 phone. Built per active channel because the same identifier box serves both.
+ * Reuses the `EmailField` / `PhoneField` shapes directly (the channel-specific case
+ * of the union — the SMS box is phone-only and masked, the email box is email-only).
  */
 export function otpIdentifierFormSchema(
   channel: OtpChannel,
@@ -58,38 +80,4 @@ export function otpIdentifierFormSchema(
     channel: z.enum(["email", "sms"]),
     captchaToken: z.string().optional(),
   }) as unknown as z.ZodType<OtpRequest, OtpRequest>;
-}
-
-/**
- * Phone input mask (#192): coerce free-typing into an E.164-valid `+<digits>`
- * string as the user types, so the stored form value is always submit-shaped (no
- * spaces — `E164` forbids them) and the SMS channel can only ever hold a phone.
- *
- *  - Empty stays empty (lets the required/format error fire, not a stray `+`).
- *  - A domestic-length (11-digit) leading `8` (the common RU domestic prefix) and a
- *    leading bare `7` are both rewritten to the `+7` country code, so `89991234567` /
- *    `79991234567` → `+79991234567`. The `8→7` rewrite is gated to 11 digits so a
- *    pasted international `8…` number of another length is not mangled.
- *  - Any other input is normalised to `+` followed by its digits, capped at the
- *    E.164 maximum of 15 digits.
- *
- * Display grouping (spaces) is intentionally NOT applied to the stored value; the
- * placeholder (`+7…`) communicates the expected shape without desyncing the value
- * from what the BFF receives.
- */
-export function maskPhoneInput(raw: string): string {
-  const digits = raw.replace(/\D/g, "");
-  if (digits === "" && !raw.startsWith("+")) return "";
-
-  let normalized = digits;
-  // RU domestic `8…` → `7…`, but ONLY for a domestic-length (11-digit) number, so a
-  // pasted international number that starts with `8` and is NOT 11 digits (e.g. a
-  // 12-digit `+81 90…` Japan mobile) is not corrupted into `+71…`. An international
-  // number that is itself exactly 11 digits starting with `8` is genuinely
-  // indistinguishable from a RU domestic number under this length heuristic and still
-  // reads as `+7…` — an accepted limit. A bare leading `7` is already the country code.
-  if (normalized.length === 11 && normalized.startsWith("8")) {
-    normalized = `7${normalized.slice(1)}`;
-  }
-  return `+${normalized.slice(0, 15)}`;
 }

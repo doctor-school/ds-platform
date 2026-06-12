@@ -113,6 +113,14 @@ test.describe("#192 portal identifier validation (client-side, ungated)", () => 
     await id.fill("89991234567");
     await expect(id).toHaveValue("+79991234567");
 
+    // …but the RU `8→7` convenience is gated to the domestic 11-digit length, so an
+    // international number that starts with `8` but is NOT 11 digits (e.g. a 12-digit
+    // Japan mobile `+81 90…`) passes through untouched and is NOT corrupted into
+    // `+71…`. (An 11-digit `8…` is genuinely ambiguous and still reads as RU domestic
+    // — that collision is an accepted limit of the length heuristic.)
+    await id.fill("+81 90 1234 5678");
+    await expect(id).toHaveValue("+819012345678");
+
     // A bare numeric (no country logic) is masked to a `+`-prefixed value but, if
     // too short / malformed, still fails the E.164 resolver on submit.
     await id.fill("12");

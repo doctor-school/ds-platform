@@ -232,7 +232,7 @@ function OtpLogin() {
   // email, SMS channel requires an E.164 phone. Rebuilt per channel so switching
   // re-validates against the right shape. The loose `OtpRequestSchema` is NOT used
   // as the form guard (it stays the BFF contract); the submitted body still matches
-  // it. `reValidateMode` keeps the live error in sync after the channel flips.
+  // it.
   const requestResolverSchema = useMemo(
     () => otpIdentifierFormSchema(channel),
     [channel],

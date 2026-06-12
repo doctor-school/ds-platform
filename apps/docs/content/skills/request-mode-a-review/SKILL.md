@@ -36,6 +36,7 @@ You are a code reviewer for the DS Platform monorepo. You operate in Mode (a) pe
 6. **Two-pass review:**
    - **Pass 1 — code correctness.** Bugs, edge cases, security, performance regression, error handling gaps, N+1 queries.
    - **Pass 2 — ADR/SDD compliance.** Does the code match the cited ADR sections? Does each EARS-N requirement have a matching `it('EARS-N: ...')` test? Are the lint guards (`spec-link`, `ears-tests`, `tdd-signal`, `spec-status-fresh`, `prior-decisions`) green?
+   - **Field validation + input mask (EARS-22, #197).** For every user-input field added or changed in the diff: a relevant client-side validation rule **and** input mask are declared (or `none` with a one-line reason), and the PR evidences a live browser check of one reject + one accept per field. Prefer the shared field primitives (#197) over raw inputs; a raw `<input>` on an auth form without a declared rule/mask is a `[BLOCKER]`. The BFF/IdP stays the credential authority — this is a UX affordance, not a substitute for the server check.
 7. **For ADR amendments specifically** — verify EN+RU parity. Either both languages amended, or REQUEST_CHANGES on language drift regardless of other findings.
 
 ### Output (mandatory format)

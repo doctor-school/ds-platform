@@ -47,6 +47,15 @@ export const ApiEnvSchema = z.looseObject({
   // the `users.role` mirror is a downstream projection). Absent ⇒ `grantProjectRole`
   // fails closed, like the other OIDC-config-gated adapter paths.
   IDP_PROJECT_ID: z.string().optional(),
+  // #203: the Zitadel **organization** that owns the registered users + the
+  // project-role grant. The current resource API `CreateUser` (`POST /v2/users/new`)
+  // and `CreateAuthorization` both REQUIRE an explicit `organizationId` in the
+  // request body — the deprecated `AddHumanUser`/management-v1 grant inferred it
+  // from the service token's own org, the resource API does not. Optional: when
+  // unset the adapter resolves it once at runtime from the service account's own
+  // org (`GET /management/v1/orgs/me`) and caches it, so the dev-stand needs no new
+  // env; pin it explicitly in any multi-org deployment.
+  IDP_ORG_ID: z.string().optional(),
   // Shared secret authenticating the Zitadel Action webhook (EARS-19). The
   // webhook fails closed when this is unset — an unauthenticated mirror-write
   // surface is never opened by default.

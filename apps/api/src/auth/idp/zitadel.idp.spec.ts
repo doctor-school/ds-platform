@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { FetchLike } from "./zitadel.idp.js";
 import { ZitadelIdpClient } from "./zitadel.idp.js";
-import { IdpPasswordPolicyError } from "./idp.types.js";
+import {
+  IdpInvalidArgumentError,
+  IdpPasswordPolicyError,
+  IdpUnavailableError,
+} from "./idp.types.js";
 
 /**
  * Unit coverage for the real Zitadel adapter's OIDC session→token exchange
@@ -395,75 +399,173 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
 });
 
 /**
- * #147 — createUser failure mapping. The enumeration-safety hinge stays a 409 →
- * `alreadyExisted`. A 400 whose body names the password/policy is the residual
- * race (the creation schema mirrors the deployed baseline, but a stricter live
- * policy rejects) — it must surface as the typed {@link IdpPasswordPolicyError}
- * so the service answers a generic non-enumerating 422. Any OTHER non-2xx stays
- * an opaque Error (→ 500), so an unknown 400 is never mislabeled "weak password".
+ * #203 — createUser migrated to the CURRENT resource API `CreateUser`
+ * (`POST /v2/users/new`), which REPLACES the deprecated `AddHumanUser`
+ * (`POST /v2/users/human`). These pins lock the new wire shape proven live
+ * against the v4.15 dev-stand:
+ *   • URL `POST /v2/users/new` (the old `/v2/users/human` is gone).
+ *   • body `{ organizationId, username, human: { profile, email:{ email,
+ *     returnCode:{} }, password:{ password } } }` — the human fields nest under
+ *     `human`, and `organizationId` is a NEW required field (the old RPC inferred
+ *     it from the token; CreateUser 400s `invalid CreateUserRequest.OrganizationId`
+ *     without it).
+ *   • the new-user id is read from the response `id` (CreateUserResponse), NOT
+ *     `userId`.
+ *   • `returnCode: {}` under `human.email` suppresses the auto-send (the code is
+ *     echoed as `emailCode` in the response instead — the #153 single-delivered-
+ *     code invariant).
+ *
+ * The #147 failure-mapping contract is preserved: the enumeration-safety hinge
+ * stays a 409 → `alreadyExisted`; a password-policy 400 → typed
+ * {@link IdpPasswordPolicyError} (→ generic 422); any other deterministic 4xx →
+ * {@link IdpInvalidArgumentError} (#202, → generic 4xx); 5xx → opaque (→ 503).
+ * The password-policy signal now matches Zitadel's locale-independent `COMMA-`
+ * error-id prefix (the live dev-stand answers in Russian, #195/#203 — the old
+ * English `"password"`/`"complexity"` body-token match no longer fires).
  */
-describe("ZitadelIdpClient createUser failure mapping (#147)", () => {
-  function bodyFetch(result: {
-    status: number;
-    body?: unknown;
-  }): FetchLike {
-    return () =>
-      Promise.resolve({
-        ok: result.status >= 200 && result.status < 300,
-        status: result.status,
-        json: () => Promise.resolve(result.body ?? {}),
+describe("ZitadelIdpClient createUser → CreateUser /v2/users/new (#203)", () => {
+  /** A fetch double that records calls and answers per-URL (orgs/me + create). */
+  function createFetch(create: { status: number; body?: unknown }): {
+    fetchImpl: FetchLike;
+    calls: ScriptedCall[];
+  } {
+    const calls: ScriptedCall[] = [];
+    const fetchImpl: FetchLike = (url, init) => {
+      calls.push({ url, method: init.method, headers: init.headers, body: init.body });
+      // Org resolution hop (only hit when `orgId` is not configured).
+      if (url.endsWith("/management/v1/orgs/me")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ org: { id: "org-resolved" } }),
+        });
+      }
+      return Promise.resolve({
+        ok: create.status >= 200 && create.status < 300,
+        status: create.status,
+        json: () => Promise.resolve(create.body ?? {}),
       });
+    };
+    return { fetchImpl, calls };
   }
 
-  const CONFIG = { baseUrl: "http://idp.test:9080", serviceToken: "svc-token" };
+  // Org id configured ⇒ no orgs/me round-trip; keeps the failure-mapping tests
+  // focused on the create hop. The org-resolution fallback has its own test below.
+  const CONFIG = {
+    baseUrl: "http://idp.test:9080",
+    serviceToken: "svc-token",
+    orgId: "org-1",
+  };
   const INPUT = { email: "user@ds.test", password: "Aa1!aaaa" };
 
-  it("maps a 409 duplicate to alreadyExisted (not a throw)", async () => {
-    const client = new ZitadelIdpClient({
-      ...CONFIG,
-      fetchImpl: bodyFetch({ status: 409 }),
+  it("POSTs /v2/users/new with the organizationId + nested human{profile,email{returnCode},password} body and reads the response `id`", async () => {
+    const { fetchImpl, calls } = createFetch({
+      status: 201,
+      body: { id: "u-99", creationDate: "2026-06-12T00:00:00Z", emailCode: "ABC123" },
     });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+    await expect(client.createUser(INPUT)).resolves.toEqual({
+      sub: "u-99",
+      alreadyExisted: false,
+    });
+    const create = calls.find((c) => c.url.endsWith("/v2/users/new"));
+    expect(create, "create hit /v2/users/new (not /v2/users/human)").toBeTruthy();
+    expect(create!.method).toBe("POST");
+    expect(JSON.parse(create!.body ?? "{}")).toEqual({
+      organizationId: "org-1",
+      username: "user@ds.test",
+      human: {
+        profile: { givenName: "user", familyName: "guest" },
+        password: { password: "Aa1!aaaa" },
+        email: { email: "user@ds.test", returnCode: {} },
+      },
+    });
+  });
+
+  it("resolves the org id from /management/v1/orgs/me when IDP_ORG_ID is not configured (#203)", async () => {
+    const { fetchImpl, calls } = createFetch({ status: 201, body: { id: "u-1" } });
+    const client = new ZitadelIdpClient({
+      baseUrl: "http://idp.test:9080",
+      serviceToken: "svc-token",
+      fetchImpl,
+    });
+    await expect(client.createUser(INPUT)).resolves.toEqual({
+      sub: "u-1",
+      alreadyExisted: false,
+    });
+    expect(
+      calls.some((c) => c.url.endsWith("/management/v1/orgs/me")),
+      "the org was resolved from orgs/me",
+    ).toBe(true);
+    const create = calls.find((c) => c.url.endsWith("/v2/users/new"));
+    expect(JSON.parse(create!.body ?? "{}")).toMatchObject({
+      organizationId: "org-resolved",
+    });
+  });
+
+  it("maps a 409 duplicate to alreadyExisted (not a throw) — the enumeration-safety hinge", async () => {
+    const { fetchImpl } = createFetch({
+      status: 409,
+      body: { code: 6, message: "Пользователь уже существует (V3-DKcYh)" },
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
     await expect(client.createUser(INPUT)).resolves.toEqual({
       sub: "",
       alreadyExisted: true,
     });
   });
 
-  it("maps a 400 password-policy rejection to IdpPasswordPolicyError", async () => {
-    const client = new ZitadelIdpClient({
-      ...CONFIG,
-      fetchImpl: bodyFetch({
-        status: 400,
-        body: { message: "Password does not match complexity policy" },
-      }),
+  it("maps a RU-localized password-policy 400 (COMMA- error id) to IdpPasswordPolicyError (#203 locale-independent)", async () => {
+    // The live dev-stand answers in Russian (#195) — the old English body-token
+    // match would miss this; the `COMMA-` id is the stable signal.
+    const { fetchImpl } = createFetch({
+      status: 400,
+      body: {
+        code: 3,
+        message: "Пароль слишком короткий (COMMA-HuJf6)",
+        details: [{ id: "COMMA-HuJf6", message: "Пароль слишком короткий" }],
+      },
     });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
     await expect(client.createUser(INPUT)).rejects.toBeInstanceOf(
       IdpPasswordPolicyError,
     );
   });
 
-  it("keeps a non-password 400 an opaque Error (→ 500, not 'weak password')", async () => {
-    const client = new ZitadelIdpClient({
-      ...CONFIG,
-      fetchImpl: bodyFetch({
-        status: 400,
-        body: { message: "invalid email format" },
-      }),
+  it("still maps an English password-policy 400 to IdpPasswordPolicyError (fallback for an EN instance)", async () => {
+    const { fetchImpl } = createFetch({
+      status: 400,
+      body: { message: "Password does not match complexity policy" },
     });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+    await expect(client.createUser(INPUT)).rejects.toBeInstanceOf(
+      IdpPasswordPolicyError,
+    );
+  });
+
+  it("maps a non-password deterministic 4xx (e.g. invalid email) to IdpInvalidArgumentError, not password-policy (#202)", async () => {
+    // The live invalid-email 400 carries NO `COMMA-` id, so it is NOT mislabeled
+    // as a password rejection — it is the generic enumeration-safe 4xx.
+    const { fetchImpl } = createFetch({
+      status: 400,
+      body: {
+        code: 3,
+        message:
+          "invalid CreateUserRequest.Human: ... invalid SetHumanEmail.Email: value must be a valid email address",
+      },
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
     const err = await client.createUser(INPUT).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(Error);
+    expect(err).toBeInstanceOf(IdpInvalidArgumentError);
     expect(err).not.toBeInstanceOf(IdpPasswordPolicyError);
   });
 
-  it("succeeds on 2xx, returning the new sub", async () => {
-    const client = new ZitadelIdpClient({
-      ...CONFIG,
-      fetchImpl: bodyFetch({ status: 201, body: { userId: "u-99" } }),
-    });
-    await expect(client.createUser(INPUT)).resolves.toEqual({
-      sub: "u-99",
-      alreadyExisted: false,
-    });
+  it("maps a 5xx to IdpUnavailableError (a real infra fault → 503, never a bare 500)", async () => {
+    const { fetchImpl } = createFetch({ status: 503 });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+    await expect(client.createUser(INPUT)).rejects.toBeInstanceOf(
+      IdpUnavailableError,
+    );
   });
 });
 
@@ -823,16 +925,27 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
 });
 
 /**
- * #157 — `grantProjectRole` authorizes a subject for a Zitadel project role
- * (`POST /management/v1/users/{sub}/grants` `{ projectId, roleKeys }`). The OIDC
- * token's `urn:zitadel:iam:org:project:roles` claim is asserted only for granted
- * roles, so without this grant a registered user's token carries empty roles and
- * the `doctor_guest`-requiring guard 403s. The grant must be idempotent (the
+ * #157/#203 — `grantProjectRole` migrated to the CURRENT resource API, the v2
+ * **AuthorizationService.CreateAuthorization** ("Role Assignment"), which
+ * REPLACES the deprecated management-v1 user-grant `POST
+ * /management/v1/users/{sub}/grants`. The OIDC token's
+ * `urn:zitadel:iam:org:project:roles` claim is asserted only for granted roles,
+ * so without this assignment a registered user's token carries empty roles and
+ * the `doctor_guest`-requiring guard 403s. The assignment must be idempotent (the
  * webhook + reconcile sweep re-grant): an ALREADY_EXISTS / 409 is SUCCESS; any
  * other non-2xx is a real failure and throws. Absent `projectId` fails closed.
+ *
+ * #203 wire deltas (proven live, v4.15 dev-stand):
+ *   • URL = the GA connect-RPC path
+ *     `POST /zitadel.authorization.v2.AuthorizationService/CreateAuthorization`
+ *     (the `/v2/authorizations` REST alias is not served by v4.15.0 — it 404s).
+ *   • body = `{ userId, projectId, organizationId, roleKeys }` — the v2 RPC
+ *     requires `organizationId` (resolved via orgs/me when not configured), which
+ *     the v1 grant inferred from the token.
  */
-describe("ZitadelIdpClient grantProjectRole (#157)", () => {
-  function recordingFetch(result: { ok: boolean; status: number; body?: unknown }): {
+describe("ZitadelIdpClient grantProjectRole → v2 CreateAuthorization (#157/#203)", () => {
+  /** A fetch double answering the orgs/me hop + the CreateAuthorization hop. */
+  function grantFetch(result: { ok: boolean; status: number; body?: unknown }): {
     fetchImpl: FetchLike;
     calls: ScriptedCall[];
   } {
@@ -844,6 +957,13 @@ describe("ZitadelIdpClient grantProjectRole (#157)", () => {
         headers: init.headers,
         body: init.body,
       });
+      if (url.endsWith("/management/v1/orgs/me")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ org: { id: "org-resolved" } }),
+        });
+      }
       return Promise.resolve({
         ok: result.ok,
         status: result.status,
@@ -853,34 +973,61 @@ describe("ZitadelIdpClient grantProjectRole (#157)", () => {
     return { fetchImpl, calls };
   }
 
+  const AUTHZ_URL =
+    "http://idp.test:9080/zitadel.authorization.v2.AuthorizationService/CreateAuthorization";
+
+  // Org id configured ⇒ no orgs/me round-trip in these focused assertions.
   const CONFIG = {
     baseUrl: "http://idp.test:9080",
     serviceToken: "svc-token",
     projectId: "proj-1",
+    orgId: "org-1",
   };
 
-  it("POSTs /management/v1/users/{sub}/grants with the projectId + roleKeys on success", async () => {
-    const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
+  it("POSTs the v2 CreateAuthorization RPC with userId + projectId + organizationId + roleKeys on success", async () => {
+    const { fetchImpl, calls } = grantFetch({
+      ok: true,
+      status: 200,
+      body: { id: "auth-1" },
+    });
     const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
     await expect(
       client.grantProjectRole("user-1", "doctor_guest"),
     ).resolves.toBeUndefined();
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.url).toBe(
-      "http://idp.test:9080/management/v1/users/user-1/grants",
-    );
+    expect(calls[0]?.url).toBe(AUTHZ_URL);
     expect(calls[0]?.method).toBe("POST");
     expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({
+      userId: "user-1",
       projectId: "proj-1",
+      organizationId: "org-1",
       roleKeys: ["doctor_guest"],
     });
   });
 
-  it("treats an already-existing grant (409 ALREADY_EXISTS) as success (idempotent)", async () => {
-    const { fetchImpl } = recordingFetch({
+  it("resolves the org from orgs/me when IDP_ORG_ID is not configured", async () => {
+    const { fetchImpl, calls } = grantFetch({ ok: true, status: 200, body: { id: "a" } });
+    const client = new ZitadelIdpClient({
+      baseUrl: "http://idp.test:9080",
+      serviceToken: "svc-token",
+      projectId: "proj-1",
+      fetchImpl,
+    });
+    await expect(
+      client.grantProjectRole("user-1", "doctor_guest"),
+    ).resolves.toBeUndefined();
+    expect(calls.some((c) => c.url.endsWith("/management/v1/orgs/me"))).toBe(true);
+    const grant = calls.find((c) => c.url === AUTHZ_URL);
+    expect(JSON.parse(grant!.body ?? "{}")).toMatchObject({
+      organizationId: "org-resolved",
+    });
+  });
+
+  it("treats an already-existing assignment (409 ALREADY_EXISTS) as success (idempotent)", async () => {
+    const { fetchImpl } = grantFetch({
       ok: false,
       status: 409,
-      body: { message: "User grant already exists" },
+      body: { code: "already_exists", message: "Допуск пользователя уже существует (V3-DKcYh)" },
     });
     const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
     await expect(
@@ -889,7 +1036,7 @@ describe("ZitadelIdpClient grantProjectRole (#157)", () => {
   });
 
   it("throws on any other non-2xx (a real failure surfaces loudly)", async () => {
-    const { fetchImpl } = recordingFetch({ ok: false, status: 500 });
+    const { fetchImpl } = grantFetch({ ok: false, status: 500 });
     const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
     await expect(
       client.grantProjectRole("user-1", "doctor_guest"),
@@ -897,10 +1044,11 @@ describe("ZitadelIdpClient grantProjectRole (#157)", () => {
   });
 
   it("fails closed when projectId is not configured", async () => {
-    const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
+    const { fetchImpl, calls } = grantFetch({ ok: true, status: 200 });
     const client = new ZitadelIdpClient({
       baseUrl: "http://idp.test:9080",
       serviceToken: "svc-token",
+      orgId: "org-1",
       fetchImpl,
     });
     await expect(

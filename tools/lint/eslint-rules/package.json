@@ -1,0 +1,20 @@
+{
+  "name": "@ds/eslint-rules-local",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local flat-config ESLint plugin for DS Platform repo-specific lint gates (auth field-primitive enforcement, #197). Plain ESM so the root `eslint .` path needs no build/tsx step.",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@typescript-eslint/parser": "^8.60.1",
+    "eslint": "^10.4.1",
+    "typescript-eslint": "^8.60.1",
+    "vitest": "^4.1.8"
+  }
+}

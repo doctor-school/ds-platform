@@ -2,3 +2,4 @@ packages:
   - "apps/*"
   - "packages/*"
   - "tools/reviewer-agent"
+  - "tools/lint/eslint-rules"

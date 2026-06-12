@@ -462,11 +462,23 @@ fi
 #       Russian once `allowedLanguages=[ru]`. This is the product reality for a
 #       Russian-only audience — and it keeps the fix entirely Zitadel-side (no BFF
 #       per-user `preferredLanguage` plumbing required). A restricted instance also
-#       means the default MUST be in the allowed set, which is why (a) precedes (b)
-#       (a default outside the allowed set is rejected — INST-class precondition).
-# Override the locale via IDP_NOTIFICATION_LANGUAGE; set IDP_RESTRICT_LANGUAGES=0
-# to skip lever (b) (e.g. a multi-locale instance) and rely on the default + the
-# BFF stamping `preferredLanguage` instead.
+#       means the default MUST be in the allowed set, which is why (a) precedes (b):
+#       setting the default to `ru` first guarantees `ru` is a valid default before
+#       (b) locks the allowed set to `[ru]`.
+#       NOTE ON ORDERING: (a)'s `PUT default/ru` only succeeds when the instance's
+#       CURRENT allowed set already includes `ru`. That holds for a fresh/unrestricted
+#       instance, and for one already including `ru` in its allowed set (which this
+#       script guarantees on every prior run, since (b) locks to `[ru]`). It does NOT
+#       hold for an instance pre-restricted out-of-band to a `ru`-less set (e.g.
+#       `[en]`): there (a) would be rejected and, running under `set -e`, would wedge
+#       this step. provision.sh never creates that state itself, so it is not a real
+#       failure path here — but the ordering is NOT a "converges from any state"
+#       guarantee, only a "fresh/unrestricted-or-already-includes-ru" one.
+# Override the locale via IDP_NOTIFICATION_LANGUAGE. Lever (b) is ON by default
+# (unset → locked to [ru]); a truthy IDP_RESTRICT_LANGUAGES (1/true/yes/on, case-
+# insensitive) keeps it on, any other value (e.g. 0/false) skips lever (b) for a
+# multi-locale instance and relies on the default + the BFF stamping
+# `preferredLanguage` instead.
 #
 # Idempotency: re-setting the SAME default / restriction returns a precondition
 # 400 ("Instance not changed" INST-DS3rq) which — once the default IS ru — Zitadel
@@ -474,7 +486,14 @@ fi
 # therefore read-before-write (the step-2/5 precedent): GET current state and PUT
 # only on a real delta. A second run finds ru already set/allowed and no-ops.
 NOTIF_LANG="${IDP_NOTIFICATION_LANGUAGE:-ru}"
+# Lock allowed languages to [ru] by default (unset → enabled). Accept common truthy
+# spellings (1/true/yes/on, case-insensitive) as "enable the lock"; any other value
+# is an explicit opt-out. The default stays enabled.
 RESTRICT_LANGS="${IDP_RESTRICT_LANGUAGES:-1}"
+case "$(printf '%s' "$RESTRICT_LANGS" | tr '[:upper:]' '[:lower:]')" in
+  1|true|yes|on) RESTRICT_LANGS=1 ;;
+  *)             RESTRICT_LANGS=0 ;;
+esac
 SUPPORTED_LANGS="$(api GET /admin/v1/languages | jq -r '.languages[]?' 2>/dev/null)"
 if ! grep -qx "$NOTIF_LANG" <<< "$SUPPORTED_LANGS"; then
   echo "WARN: '${NOTIF_LANG}' is not a Zitadel-supported language; skipping notification-" >&2

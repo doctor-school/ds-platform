@@ -186,8 +186,10 @@ Override defaults via env / flags: `IDP_REDIRECT_URIS`, `IDP_POST_LOGOUT_URIS`,
 `IDP_SMS_HTTP_ENDPOINT` (default `http://sms-sink:8090/` in `sink` mode,
 `http://sms-aero-adapter:8091/` in `real` mode), `IDP_NOTIFICATION_LANGUAGE`
 (default `ru`; the notification + login-UI locale), `IDP_RESTRICT_LANGUAGES`
-(default `1`; set `0` to leave the instance multi-locale and rely on the default
-language + per-user `preferredLanguage` instead of the `[ru]` lock),
+(default enabled — unset locks the allowed languages to `[ru]`; truthy values
+`1`/`true`/`yes`/`on` (case-insensitive) keep the lock, any other value e.g. `0`
+leaves the instance multi-locale and relies on the default language + per-user
+`preferredLanguage` instead of the `[ru]` lock),
 `--project-name`, `--app-name`.
 Defaults target the api BFF callback (`:3000/auth/callback`) and the portal
 (`:3100/auth/callback`).

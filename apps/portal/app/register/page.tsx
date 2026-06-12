@@ -10,6 +10,7 @@ import { UserPlus } from "lucide-react";
 import { RegisterRequestSchema, type RegisterRequest } from "@ds/schemas";
 
 import { BotProtectionField } from "@/components/bot-protection";
+import { EmailField, PasswordField, PhoneField } from "@/components/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import { REQUIRED_CONSENT } from "@/lib/consent";
@@ -20,7 +21,6 @@ import {
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
-import { Input } from "@ds/design-system/input";
 import {
   Card,
   CardContent,
@@ -29,15 +29,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@ds/design-system/card";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@ds/design-system/form";
+import { Form, FormField } from "@ds/design-system/form";
 
 /*
  * Registration surface (#131, EARS-1 email / EARS-2 phone). Validates with the
@@ -56,7 +48,6 @@ type Channel = "email" | "phone";
 export default function RegisterPage() {
   const router = useRouter();
   const t = useTranslations("register");
-  const tc = useTranslations("common");
   const te = useTranslations("errors");
   const [channel, setChannel] = useState<Channel>("email");
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
@@ -64,7 +55,11 @@ export default function RegisterPage() {
 
   const form = useForm<RegisterRequest>({
     resolver: useLocalizedResolver(RegisterRequestSchema),
-    defaultValues: { email: "", password: "", consent: REQUIRED_CONSENT.slice() },
+    defaultValues: {
+      email: "",
+      password: "",
+      consent: REQUIRED_CONSENT.slice(),
+    },
   });
 
   async function onSubmit(values: RegisterRequest) {
@@ -75,9 +70,7 @@ export default function RegisterPage() {
     clearPendingRegistration();
     // Send exactly one identifier field (the schema's dual-identifier invariant).
     const identifier =
-      channel === "email"
-        ? { email: values.email }
-        : { phone: values.phone };
+      channel === "email" ? { email: values.email } : { phone: values.phone };
     const identifierValue =
       (channel === "email" ? values.email : values.phone) ?? "";
     try {
@@ -159,45 +152,22 @@ export default function RegisterPage() {
               className="space-y-4"
               noValidate
             >
+              {/* One identifier channel at a time (the schema's exactly-one
+                  refine). Each uses its semantic primitive, so the validation +
+                  (for phone) the E.164 mask are baked in — the phone box now masks
+                  `8…`→`+7…` like the OTP-sms box, so a domestic number no longer
+                  fails the `E164` shape for want of a manual `+7`. */}
               {channel === "email" ? (
                 <FormField
                   control={form.control}
                   name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{tc("email")}</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="email"
-                          autoComplete="email"
-                          placeholder={tc("emailPlaceholder")}
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                  render={({ field }) => <EmailField field={field} />}
                 />
               ) : (
                 <FormField
                   control={form.control}
                   name="phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{tc("phone")}</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="tel"
-                          autoComplete="tel"
-                          placeholder={tc("phonePlaceholder")}
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                  render={({ field }) => <PhoneField field={field} />}
                 />
               )}
 
@@ -205,18 +175,7 @@ export default function RegisterPage() {
                 control={form.control}
                 name="password"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{tc("password")}</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="password"
-                        autoComplete="new-password"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>{tc("passwordPolicy")}</FormDescription>
-                    <FormMessage />
-                  </FormItem>
+                  <PasswordField field={field} purpose="new" />
                 )}
               />
 

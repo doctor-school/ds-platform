@@ -16,17 +16,22 @@ import {
 } from "@ds/schemas";
 
 import { BotProtectionField } from "@/components/bot-protection";
+import {
+  EmailField,
+  IdentifierField,
+  OtpField,
+  PasswordField,
+  PhoneField,
+} from "@/components/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import {
   LoginIdentifierFormSchema,
-  maskPhoneInput,
   otpIdentifierFormSchema,
 } from "@/lib/identifier-validation";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
-import { Input } from "@ds/design-system/input";
 import {
   Card,
   CardContent,
@@ -35,14 +40,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@ds/design-system/card";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@ds/design-system/form";
+import { Form, FormField } from "@ds/design-system/form";
 import {
   Tabs,
   TabsContent,
@@ -118,7 +116,6 @@ export default function LoginPage() {
 function PasswordLogin() {
   const router = useRouter();
   const t = useTranslations("login");
-  const tc = useTranslations("common");
   const te = useTranslations("errors");
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -161,38 +158,20 @@ function PasswordLogin() {
         aria-label={t("passwordFormLabel")}
         data-testid="password-login-form"
       >
+        {/* Union identifier box (email OR E.164 phone — Zitadel resolves it).
+            UNMASKED, preserving the prior behavior (#192): only the OTP-sms channel
+            masks. `<IdentifierField>` bakes in the union validation so a bare
+            numeric string is rejected before submit. */}
         <FormField
           control={form.control}
           name="identifier"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{tc("emailOrPhone")}</FormLabel>
-              <FormControl>
-                <Input
-                  autoComplete="username"
-                  placeholder={tc("identifierPlaceholder")}
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+          render={({ field }) => <IdentifierField field={field} />}
         />
         <FormField
           control={form.control}
           name="password"
           render={({ field }) => (
-            <FormItem>
-              <FormLabel>{tc("password")}</FormLabel>
-              <FormControl>
-                <Input
-                  type="password"
-                  autoComplete="current-password"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
+            <PasswordField field={field} purpose="current" />
           )}
         />
         {/* Bot-protection mechanism (#84); the EARS-17 after-N-failures policy is
@@ -309,40 +288,32 @@ function OtpLogin() {
             className="space-y-4"
             noValidate
           >
+            {/* The OTP request box is channel-specific: the email channel is a pure
+                email, the sms channel a pure (masked) phone — so it uses the
+                channel-appropriate primitive, not the union box. Both keep the
+                `otp-identifier` test id the e2e queries (via the primitive `testId`
+                prop) and the masked-vs-unmasked behavior (#192 — sms masks via
+                `<PhoneField>`, email is unmasked via `<EmailField>`). */}
             <FormField
               control={requestForm.control}
               name="identifier"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    {channel === "email" ? tc("email") : tc("phone")}
-                  </FormLabel>
-                  <FormControl>
-                    <Input
-                      autoComplete={channel === "email" ? "email" : "tel"}
-                      inputMode={channel === "email" ? "email" : "tel"}
-                      placeholder={
-                        channel === "email"
-                          ? tc("emailPlaceholder")
-                          : tc("shortPhonePlaceholder")
-                      }
-                      data-testid="otp-identifier"
-                      {...field}
-                      // #192 phone mask: on the SMS channel, coerce keystrokes into
-                      // an E.164-valid `+<digits>` value as the user types (RU `8…`
-                      // → `+7…`), so the stored value is always submit-shaped and
-                      // the box can only hold a phone. Email channel is unmasked.
-                      onChange={
-                        channel === "sms"
-                          ? (e) =>
-                              field.onChange(maskPhoneInput(e.target.value))
-                          : field.onChange
-                      }
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) =>
+                channel === "email" ? (
+                  <EmailField
+                    field={field}
+                    testId="otp-identifier"
+                    label={tc("email")}
+                    placeholder={tc("emailPlaceholder")}
+                  />
+                ) : (
+                  <PhoneField
+                    field={field}
+                    testId="otp-identifier"
+                    label={tc("phone")}
+                    placeholder={tc("shortPhonePlaceholder")}
+                  />
+                )
+              }
             />
             <BotProtectionField onToken={setCaptchaToken} />
             {error && (
@@ -383,12 +354,6 @@ function OtpLogin() {
  */
 const LOGIN_OTP_LENGTH = 8;
 
-/** Digits only — strip the formatting an OS autofill / paste might carry so the
- * completion check sees the true code length. */
-function otpDigits(value: string): string {
-  return value.replace(/\D/g, "");
-}
-
 /**
  * EARS-6/7 verify step. Its OWN `useForm` lives here so the `code` field is
  * registered on this component's first render: the component mounts only once
@@ -427,53 +392,37 @@ function OtpVerifyForm({
     }
   }
 
-  // #175: auto-submit once the fixed-length login OTP is fully entered, mirroring
-  // the `/verify` `InputOTP onComplete` semantics for the plain numeric input
-  // here. The same in-flight guard (`isSubmitting`) prevents a double network
-  // call if the completion-trigger races a manual click or the Enter key, and it
-  // stops a re-fire if a later keystroke/paste keeps the value at full length.
+  // #175: auto-submit once the fixed-length login OTP is fully entered. `<OtpField
+  // variant="plain">` fires `onComplete` when `LOGIN_OTP_LENGTH` digits land; the
+  // in-flight guard (`isSubmitting`) here prevents a double network call if
+  // completion races a manual click / the Enter key, and stops a re-fire if a later
+  // keystroke/paste keeps the value at full length.
   const submit = verifyForm.handleSubmit(onVerify);
-  const maybeAutoSubmit = useCallback(
-    (value: string) => {
-      if (verifyForm.formState.isSubmitting) return;
-      if (otpDigits(value).length === LOGIN_OTP_LENGTH) void submit();
-    },
-    [verifyForm.formState.isSubmitting, submit],
-  );
+  const onCodeComplete = useCallback(() => {
+    if (verifyForm.formState.isSubmitting) return;
+    void submit();
+  }, [verifyForm.formState.isSubmitting, submit]);
 
   return (
     <Form {...verifyForm}>
       <form onSubmit={submit} className="space-y-4" noValidate>
+        {/* Plain (non-slotted) one-time-code box: the Zitadel login OTP is 8 digits
+            (verified live, #153) — longer than the 6-slot registration code on
+            /verify, so `<OtpField>` uses its `plain` variant here (a numeric Input
+            that takes the whole code in one shot, keeps `autocomplete="one-time-code"`
+            for OS autofill, and auto-submits at length — button kept for a11y). */}
         <FormField
           control={verifyForm.control}
           name="code"
           render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t("enterCode")}</FormLabel>
-              <FormControl>
-                {/* A plain one-time-code input, NOT the fixed-width slotted
-                    `InputOTP`. Zitadel's login email/SMS OTP codes are 8 digits
-                    (verified live on the dev-stand, #153) — longer than the
-                    6-char registration code on /verify and variable enough that a
-                    fixed-slot widget is the wrong control here. A standard numeric
-                    input takes the full code in one shot, keeps
-                    `autocomplete="one-time-code"` for OS autofill, and is what the
-                    BFF's `code: z.string().min(1)` expects. #175: it auto-submits
-                    once `LOGIN_OTP_LENGTH` digits land (button kept for a11y). */}
-                <Input
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={LOGIN_OTP_LENGTH}
-                  placeholder={t("codePlaceholder")}
-                  {...field}
-                  onChange={(e) => {
-                    field.onChange(e);
-                    maybeAutoSubmit(e.target.value);
-                  }}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
+            <OtpField
+              field={field}
+              length={LOGIN_OTP_LENGTH}
+              variant="plain"
+              label={t("enterCode")}
+              placeholder={t("codePlaceholder")}
+              onComplete={onCodeComplete}
+            />
           )}
         />
         {error && (

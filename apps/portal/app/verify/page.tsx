@@ -13,6 +13,7 @@ import {
   type VerifyRequest,
 } from "@ds/schemas";
 
+import { OtpField } from "@/components/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import { takePendingRegistration } from "@/lib/pending-registration";
@@ -27,19 +28,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@ds/design-system/card";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@ds/design-system/form";
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSlot,
-} from "@ds/design-system/input-otp";
+import { Form, FormField } from "@ds/design-system/form";
+
+/** The registration verification code is a FIXED 6 digits (Zitadel default),
+ * shorter than the 8-digit login OTP — so `<OtpField>` uses its slotted variant. */
+const VERIFY_OTP_LENGTH = 6;
 
 /*
  * Verification surface (#131, EARS-3 email / EARS-4 phone). Step 2 of register:
@@ -162,25 +155,13 @@ function VerifyCard() {
               control={form.control}
               name="code"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("codeLabel")}</FormLabel>
-                  <FormControl>
-                    <InputOTP
-                      maxLength={6}
-                      autoComplete="one-time-code"
-                      value={field.value}
-                      onChange={field.onChange}
-                      onComplete={onComplete}
-                    >
-                      <InputOTPGroup>
-                        {[0, 1, 2, 3, 4, 5].map((i) => (
-                          <InputOTPSlot key={i} index={i} />
-                        ))}
-                      </InputOTPGroup>
-                    </InputOTP>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+                <OtpField
+                  field={field}
+                  length={VERIFY_OTP_LENGTH}
+                  variant="slotted"
+                  label={t("codeLabel")}
+                  onComplete={onComplete}
+                />
               )}
             />
             {error && (

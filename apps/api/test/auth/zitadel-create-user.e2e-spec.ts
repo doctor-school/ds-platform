@@ -5,12 +5,15 @@ import { ZitadelIdpClient } from "../../src/auth/idp/zitadel.idp.js";
  * EARS-1/2 real-adapter integration spec (design §2, §4 — the registration
  * cascade's first IdP hop): `createUser` against a **running** Zitadel v4.
  *
- * This pins the live wire shape of `POST /v2/users/human` that the
- * FakeIdpClient masks — Zitadel v4 requires a `profile` object
- * (`givenName`/`familyName`) on human-user creation, and the default password
- * policy requires an upper-case character. Both are invisible to the unit spec
+ * This pins the live wire shape of the resource API `CreateUser`
+ * (`POST /v2/users/new`, #203 — which REPLACES the deprecated `AddHumanUser`
+ * `POST /v2/users/human`) that the FakeIdpClient masks — Zitadel requires a
+ * `human.profile` object (`givenName`/`familyName`) and an explicit
+ * `organizationId` on creation (the adapter resolves the latter from the service
+ * account's own org when `IDP_ORG_ID` is unset), and the default password policy
+ * requires an upper-case character. All are invisible to the unit spec
  * (`src/auth/idp/zitadel.idp.spec.ts`, scripted fetch) and to every auth e2e
- * (which overrides `IDP_CLIENT` with the fake). #145.
+ * (which overrides `IDP_CLIENT` with the fake). #145/#203.
  *
  * Gated on the live-IdP env (`IDP_ISSUER` + `IDP_SERVICE_TOKEN`), mirroring the
  * F1/F2 real-adapter pattern — it SKIPS in the shared CI `api-e2e` job (which

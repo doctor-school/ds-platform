@@ -72,6 +72,20 @@ export interface ZitadelConfig {
    * `IDP_PROJECT_ID` (`apps/api/src/config/env.schema.ts`).
    */
   projectId?: string | undefined;
+  /**
+   * #203: the Zitadel **organization** id the resource API requires in the body
+   * of {@link ZitadelIdpClient.createUser} (`CreateUser` `POST /v2/users/new`) and
+   * {@link ZitadelIdpClient.grantProjectRole} (`CreateAuthorization`). The
+   * deprecated `AddHumanUser` / management-v1 grant inferred the org from the
+   * service token; the resource API does NOT — `organizationId` is a required
+   * request field (proven live: a `CreateUser` without it 400s
+   * `invalid CreateUserRequest.OrganizationId: value length must be between 1 and
+   * 200`). Optional here: absent, the adapter resolves the service account's own
+   * org once via `GET /management/v1/orgs/me` and caches it (see
+   * {@link ZitadelIdpClient.resolveOrgId}), so the dev-stand needs no new env.
+   * Plumbed from `IDP_ORG_ID`.
+   */
+  orgId?: string | undefined;
   /** Injected for tests; defaults to the global `fetch`. */
   fetchImpl?: FetchLike | undefined;
 }
@@ -196,8 +210,65 @@ export class ZitadelIdpClient implements IdpClient {
     { sessionId: string; sessionToken: string; sub: string }
   >();
 
+  /**
+   * #203: the resolved org id the resource API (`CreateUser` /
+   * `CreateAuthorization`) needs in the request body. Seeded from
+   * `config.orgId` when configured; otherwise resolved once on first need from
+   * the service account's own org and memoised here (a single in-flight promise
+   * so concurrent first-calls share one round-trip). See {@link resolveOrgId}.
+   */
+  private orgIdPromise: Promise<string> | undefined;
+
   constructor(private readonly config: ZitadelConfig) {
     this.fetchImpl = config.fetchImpl ?? (globalThis.fetch as FetchLike);
+  }
+
+  /**
+   * #203: resolve the Zitadel org id the resource API requires in the body of
+   * `CreateUser` / `CreateAuthorization`. Prefers the explicitly-configured
+   * `config.orgId`; otherwise asks the instance for the service account's own org
+   * (`GET /management/v1/orgs/me` → `{ org: { id } }`, proven live) and caches it.
+   * The lookup is memoised in a single shared promise so the first concurrent
+   * creates issue ONE round-trip. Throws {@link IdpUnavailableError} if the org
+   * cannot be resolved (no configured id and the lookup failed) — a create that
+   * cannot name its org must fail closed as "unavailable", never a bare 500.
+   */
+  private resolveOrgId(): Promise<string> {
+    if (this.config.orgId) return Promise.resolve(this.config.orgId);
+    if (!this.orgIdPromise) {
+      this.orgIdPromise = (async () => {
+        let res;
+        try {
+          res = await this.fetchImpl(this.url("/management/v1/orgs/me"), {
+            method: "GET",
+            headers: this.headers(),
+          });
+        } catch (err) {
+          throw new IdpUnavailableError(
+            `zitadel orgs/me unreachable: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+        if (!res.ok) {
+          throw new IdpUnavailableError(
+            `zitadel orgs/me failed: HTTP ${res.status}`,
+          );
+        }
+        const data = (await res.json()) as { org?: { id?: string } };
+        const id = data.org?.id;
+        if (!id) {
+          throw new IdpUnavailableError(
+            "zitadel orgs/me returned no org id",
+          );
+        }
+        return id;
+      })().catch((err: unknown) => {
+        // Do not cache a failed resolution — a transient outage must not poison
+        // every later create; clear the memo so the next call retries.
+        this.orgIdPromise = undefined;
+        throw err;
+      });
+    }
+    return this.orgIdPromise;
   }
 
   /**
@@ -222,47 +293,85 @@ export class ZitadelIdpClient implements IdpClient {
   }
 
   async createUser(input: CreateUserInput): Promise<CreatedUser> {
-    // Zitadel POST /v2/users/human — duplicate identifier returns 409, which is
-    // the enumeration-safety hinge: surface it as `alreadyExisted`, not a throw.
+    // #203: the CURRENT resource API `CreateUser` — `POST /v2/users/new` — which
+    // REPLACES the deprecated `AddHumanUser` (`POST /v2/users/human`). A duplicate
+    // identifier still returns 409 (proven live: `Пользователь уже существует
+    // (V3-DKcYh)`), the enumeration-safety hinge: surface it as `alreadyExisted`,
+    // not a throw.
     //
-    // Zitadel v4 requires a `profile` object (`givenName`/`familyName`) on
-    // human-user creation; the 400 it returns without one was masked until the
-    // adapter ran against a real instance (#145 — every auth e2e overrides
-    // IDP_CLIENT with the fake). Self-service registration (EARS-1/2) collects
-    // NO name — the `users` mirror has no name column (design §5) — so we send a
-    // sensible minimal placeholder the domain never sees: `givenName` = the
-    // email local-part (or `"doctor"` for a phone-only registrant) and a fixed
-    // `familyName` = `"guest"` (the `doctor_guest` role, ADR-0001 §1). This is a
-    // pure adapter detail, NOT a product field: it is never read back, mirrored,
-    // or surfaced. Collecting a real name would be a registration-form/product
-    // change (flagged on #145); the placeholder unblocks the live flow now.
+    // CreateUser wire-shape deltas vs AddHumanUser (all proven live against the
+    // v4.15 dev-stand, #203):
+    //   • `organizationId` is a REQUIRED top-level body field — AddHumanUser
+    //     inferred the org from the service token; CreateUser does not (omitting
+    //     it 400s `invalid CreateUserRequest.OrganizationId`). Resolved via
+    //     {@link resolveOrgId} (configured `IDP_ORG_ID`, else the service
+    //     account's own org).
+    //   • the human fields nest under a `human` object (`human.profile`,
+    //     `human.email`, `human.phone`, `human.password`) — AddHumanUser had them
+    //     at the top level.
+    //   • the new-user id is returned as `id` (not `userId`).
+    //   • the email auto-send-suppression directive is unchanged: `returnCode: {}`
+    //     under `human.email` still suppresses the auto-send (the code is echoed
+    //     in the response as `emailCode` instead — proven live), preserving the
+    //     #153 single-delivered-code invariant below.
+    //
+    // The `profile` placeholder (#145) is unchanged: self-service registration
+    // (EARS-1) collects NO name — the `users` mirror has no name column (design
+    // §5) — so we send a minimal placeholder the domain never sees: `givenName` =
+    // the email local-part (or `"doctor"`) and a fixed `familyName` = `"guest"`
+    // (the `doctor_guest` role, ADR-0001 §1). A pure adapter detail, never read
+    // back, mirrored, or surfaced.
     const givenName = input.email
       ? (input.email.split("@")[0] ?? "doctor")
       : "doctor";
-    const body: Record<string, unknown> = {
+    const human: Record<string, unknown> = {
       profile: { givenName, familyName: "guest" },
       password: { password: input.password },
     };
-    // Live wire-shape delta (#153, vs Zitadel v4.15): `POST /v2/users/human` with
-    // a bare `email: { email }` (no verification directive) makes Zitadel
-    // AUTO-SEND a verification code on creation. The BFF then sends its OWN code
-    // via `requestEmailVerification` (design §4), so the registrant receives TWO
-    // emails carrying TWO different codes — and the auto-sent first code is
-    // immediately INVALIDATED by the second, so a registrant who opens the earlier
-    // mail enters a dead code (proven live on the dev-stand: two `Verify email`
-    // mails, only the latest verifies). `returnCode: {}` suppresses the auto-send
-    // (the code is echoed in the create RESPONSE instead — server-side only, never
-    // surfaced to the client), leaving the BFF's single deliberate
-    // `requestEmailVerification` as the ONE delivered code. Same directive on the
-    // phone object for the symmetric phone-registration case.
+    // Live wire-shape (#153, carried onto CreateUser): a bare `email: { email }`
+    // (no verification directive) makes Zitadel AUTO-SEND a verification code on
+    // creation. The BFF then sends its OWN code via `requestEmailVerification`
+    // (design §4), so the registrant would receive TWO emails with TWO different
+    // codes — and the auto-sent first code is immediately INVALIDATED by the
+    // second, leaving a registrant who opens the earlier mail with a dead code.
+    // `returnCode: {}` suppresses the auto-send (the code is echoed in the create
+    // RESPONSE as `emailCode` instead — server-side only, never surfaced),
+    // leaving the BFF's single deliberate `requestEmailVerification` as the ONE
+    // delivered code. Confirmed live on CreateUser: `returnCode: {}` ⇒ the
+    // response carries `emailCode` and Mailpit receives no auto-send. Same
+    // directive on the phone object for the symmetric phone case.
     if (input.email)
-      body["email"] = { email: input.email, returnCode: {} };
+      human["email"] = { email: input.email, returnCode: {} };
     if (input.phone)
-      body["phone"] = { phone: input.phone, returnCode: {} };
+      human["phone"] = { phone: input.phone, returnCode: {} };
+
+    let orgId: string;
+    try {
+      orgId = await this.resolveOrgId();
+    } catch (err) {
+      // The org could not be resolved (no configured id and the lookup failed) —
+      // fail closed as "unavailable", never a bare 500 (#202). `resolveOrgId`
+      // already throws {@link IdpUnavailableError}; re-throw as-is.
+      if (err instanceof IdpUnavailableError) throw err;
+      throw new IdpUnavailableError(
+        `zitadel createUser could not resolve org: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    const body: Record<string, unknown> = {
+      organizationId: orgId,
+      human,
+    };
+    // Set `username` to the email/phone for a stable, human-readable login name
+    // (CreateUser's `username` is optional and defaults to the user id otherwise);
+    // matches what AddHumanUser derived implicitly and keeps `loginNames` aligned
+    // with the identifier the user registers with.
+    if (input.email) body["username"] = input.email;
+    else if (input.phone) body["username"] = input.phone;
 
     let res;
     try {
-      res = await this.fetchImpl(this.url("/v2/users/human"), {
+      res = await this.fetchImpl(this.url("/v2/users/new"), {
         method: "POST",
         headers: this.headers(),
         body: JSON.stringify(body),
@@ -291,8 +400,9 @@ export class ZitadelIdpClient implements IdpClient {
       }
       // #202 error taxonomy: a deterministic 4xx `invalid_argument` (any other bad
       // request the IdP refuses before creating anything — e.g. the removed
-      // phone-only/no-email shape: `invalid AddHumanUserRequest.Email: value is
-      // required`) maps to the generic, enumeration-safe failure (a 4xx, NOT a
+      // phone-only/no-email shape, which on CreateUser 400s `invalid
+      // CreateUserRequest.Human: ... invalid CreateUserRequest_Human.Email: value
+      // is required`) maps to the generic, enumeration-safe failure (a 4xx, NOT a
       // 500, NOT an existence oracle). A genuine infra fault (5xx) maps to a 503
       // "unavailable". This is what guarantees a deterministic IdP rejection never
       // surfaces as a bare 500.
@@ -305,16 +415,28 @@ export class ZitadelIdpClient implements IdpClient {
         `zitadel createUser failed: HTTP ${res.status}`,
       );
     }
-    const data = (await res.json()) as { userId?: string };
-    return { sub: data.userId ?? "", alreadyExisted: false };
+    // #203: CreateUser returns the new id as `id` (CreateUserResponse), NOT the
+    // `userId` AddHumanUser returned. Proven live: a successful create responds
+    // `{ id, creationDate, emailCode }`.
+    const data = (await res.json()) as { id?: string };
+    return { sub: data.id ?? "", alreadyExisted: false };
   }
 
   /**
    * Inspect a `createUser` 400 body to decide whether it is a password-policy
-   * rejection (#147). Zitadel's error envelope carries a human `message` (and
-   * may add `details`); a policy failure names the password / complexity. We match
-   * loosely on those tokens and FAIL CLOSED to `false` (an unreadable body is
-   * treated as a non-password fault → opaque 500) so we never mislabel an unknown
+   * rejection (#147). Zitadel's error envelope carries a stable, machine-readable
+   * error `id` (e.g. `COMMA-HuJf6`) plus a human `message`. We match PRIMARILY on
+   * the language-independent `COMMA-` id prefix, because the live dev-stand now
+   * answers in **Russian** (#195 localised the notification/error texts to RU):
+   * every password-complexity rejection carries `COMMA-…` regardless of UI
+   * language, while the human message no longer contains the English tokens
+   * "password"/"complexity" (proven live on CreateUser, #203: a short password
+   * 400s `Пароль слишком короткий (COMMA-HuJf6)`, an upper-case-missing one
+   * `Пароль должен содержать верхний регистр (COMMA-VoaRj)`, etc.). The English
+   * tokens are kept as a fallback for an English-configured instance. We FAIL
+   * CLOSED to `false` (an unreadable body, or a non-password 400 such as the
+   * invalid-email 400 which carries no `COMMA-` id, is treated as a non-password
+   * fault → the generic enumeration-safe path) so we never mislabel an unknown
    * 400 as "weak password". The signal only ever *narrows* one specific 400 into
    * the enumeration-safe client error; it never widens a server fault.
    */
@@ -323,8 +445,12 @@ export class ZitadelIdpClient implements IdpClient {
   }): Promise<boolean> {
     try {
       const body = await res.json();
-      const text = JSON.stringify(body).toLowerCase();
-      return text.includes("password") || text.includes("complexity");
+      const text = JSON.stringify(body);
+      // Zitadel's password-complexity command errors share the `COMMA-` id
+      // namespace — the stable, locale-independent signal.
+      if (text.includes("COMMA-")) return true;
+      const lower = text.toLowerCase();
+      return lower.includes("password") || lower.includes("complexity");
     } catch {
       return false;
     }
@@ -911,9 +1037,26 @@ export class ZitadelIdpClient implements IdpClient {
   }
 
   /**
-   * #157: authorize `sub` for the project role `roleKey` via the Zitadel
-   * Management API `POST /management/v1/users/{sub}/grants`
-   * `{ projectId, roleKeys: [roleKey] }`, service-token auth.
+   * #157/#203: authorize `sub` for the project role `roleKey` via the CURRENT
+   * resource API — the v2 **AuthorizationService.CreateAuthorization** (Zitadel's
+   * "Role Assignment", which REPLACES the deprecated management-v1 user-grant
+   * `POST /management/v1/users/{sub}/grants`). The deprecated v1 RPC and its whole
+   * management-v1 user surface are marked `deprecated = true` in the v4.15 proto;
+   * the GA v2 replacement is live and functional on the dev-stand (proven #203:
+   * a CreateAuthorization for a fresh user returns `{ id, creationDate }` HTTP 200,
+   * and the subsequent v1 grant then 409s "already exists" — confirming the v2
+   * call genuinely created the assignment).
+   *
+   * Wire note (#203): in v4.15.0 the GA AuthorizationService is reachable via its
+   * connect/gRPC-transcoded URL `POST
+   * /zitadel.authorization.v2.AuthorizationService/CreateAuthorization` — the
+   * clean `/v2/authorizations` REST alias is NOT yet served by this version's
+   * gateway (it 404s, proven live). We call the GA RPC path it actually serves; a
+   * later Zitadel may add the REST alias, at which point this URL can be swapped
+   * with no body/semantics change. The body is `{ userId, projectId,
+   * organizationId, roleKeys: [roleKey] }` — note the v2 RPC requires
+   * `organizationId` (resolved via {@link resolveOrgId}), which the v1 grant
+   * inferred from the token.
    *
    * This is the authz source of truth the guard reads: Zitadel asserts
    * `urn:zitadel:iam:org:project:roles` in the OIDC token ONLY for roles the
@@ -922,7 +1065,7 @@ export class ZitadelIdpClient implements IdpClient {
    * claim is empty and the `doctor_guest`-requiring `AuthzGuard` 403s.
    *
    * **Idempotent:** Zitadel returns 409 / `ALREADY_EXISTS` ("User grant already
-   * exists") when the grant is present — treated as SUCCESS so the webhook
+   * exists") when the assignment is present — treated as SUCCESS so the webhook
    * (EARS-19) and the reconcile sweep can re-grant on every pass without error.
    * Any OTHER non-2xx is a real failure → throw (a transient fault is loud; the
    * webhook + sweep are idempotent backstops that re-grant). Absent `projectId`
@@ -934,15 +1077,23 @@ export class ZitadelIdpClient implements IdpClient {
         "zitadel project config (IDP_PROJECT_ID) is not set; cannot grant the project role (design §3/§5, #157)",
       );
     }
-    const res = await this.fetchImpl(this.url(`/management/v1/users/${sub}/grants`), {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify({
-        projectId: this.config.projectId,
-        roleKeys: [roleKey],
-      }),
-    });
-    // Idempotency: an already-existing grant is the converged state, not a
+    const orgId = await this.resolveOrgId();
+    const res = await this.fetchImpl(
+      this.url(
+        "/zitadel.authorization.v2.AuthorizationService/CreateAuthorization",
+      ),
+      {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({
+          userId: sub,
+          projectId: this.config.projectId,
+          organizationId: orgId,
+          roleKeys: [roleKey],
+        }),
+      },
+    );
+    // Idempotency: an already-existing assignment is the converged state, not a
     // failure — Zitadel signals it with 409 (ALREADY_EXISTS). Resolve.
     if (res.ok || res.status === 409) return;
     throw new Error(

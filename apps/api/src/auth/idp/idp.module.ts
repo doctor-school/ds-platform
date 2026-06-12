@@ -36,6 +36,10 @@ import { ZitadelIdpClient } from "./zitadel.idp.js";
             // grant on register/webhook/reconcile. Absent ⇒ grantProjectRole
             // fails closed.
             projectId: env.IDP_PROJECT_ID,
+            // #203: the org the resource-API `CreateUser` / `CreateAuthorization`
+            // require in the request body. Absent ⇒ the adapter resolves it once
+            // from the service account's own org and caches it.
+            orgId: env.IDP_ORG_ID,
           });
         }
         return new FakeIdpClient();

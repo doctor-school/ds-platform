@@ -114,7 +114,7 @@ The auth vertical is the platform's first real aggregate cluster (unlike the que
 
 ## EARS requirements
 
-> **Numbering convention:** flat (`EARS-1`, `EARS-2`, …) per ADR-0006 §4. EARS-1…12 are the functional handlers (each becomes a child Issue); EARS-13…21 are cross-cutting ubiquitous / unwanted-behavior requirements enforced across the surface. The `ears-tests` CI guard is content-match WARN in Phase 0.
+> **Numbering convention:** flat (`EARS-1`, `EARS-2`, …) per ADR-0006 §4. EARS-1…12 are the functional handlers (each becomes a child Issue); EARS-13…22 are cross-cutting ubiquitous / unwanted-behavior requirements enforced across the surface. The `ears-tests` CI guard is content-match WARN in Phase 0.
 
 **Registration & verification**
 
@@ -151,6 +151,7 @@ The auth vertical is the platform's first real aggregate cluster (unlike the que
 - **EARS-19:** When Zitadel emits a user create/update Action webhook, the system shall upsert the corresponding `UserMirror` row, ensure the `doctor_guest` role grant, and reconcile divergence on a periodic sweep (eventual consistency, ADR-0001 Consequences).
 - **EARS-20:** When a registration is processed, the system shall record the registrant's accepted per-purpose consent versions (ADR-0009) and shall refuse to activate the PD-bearing mirror row if consent is absent.
 - **EARS-21:** The portal auth UI shall render in **Russian (primary)** with **no hardcoded user-facing strings** — all copy (labels, descriptions, buttons, placeholders, the consent line, and error messages) sourced from a typed message catalog over an i18n-ready structure, so a future locale can be added without re-touching components; **RU-only ships now with no user-facing language switcher** (the i18n infrastructure is present for a later locale). (Design §8.1.)
+- **EARS-22:** Each portal user-input field shall apply the client-side validation rule and input mask relevant to its data type — email shape, E.164 phone with mask, fixed-length numeric OTP, password policy — before submit, surfacing obviously-malformed input with localized (RU) copy from the message catalog (EARS-21); this is a UX affordance only — the BFF/IdP remains the credential authority (Constraints) and the request schemas stay loose, so a field that declares no relevant rule states "none" with a one-line reason. (Defects #192 (`/login` identifier) and #196 (`/reset` identifier) motivate this; enforcement — semantic field primitives + an ESLint gate — is tracked in #197. Design §8.2.)
 
 ## Invariants
 

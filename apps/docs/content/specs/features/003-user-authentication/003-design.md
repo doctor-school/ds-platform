@@ -183,6 +183,12 @@ Decision recorded: **RU-only now, no user-facing language switcher.** The i18n i
 
 Validation messages from the `@ds/schemas` zod SSOT are English (the package is shared with `apps/api`, where a Russian DTO error would be wrong), so the portal localizes them at the form boundary: a small zod **error map** (`apps/portal/lib/use-localized-resolver.ts`) keys off the structured zod **issue code/shape** (not the English text) and resolves it to the `errors.validation.*` RU catalog. The canonical RU error copy authored in `errors.*` is the source consumed by the error-display rule (#175). Decision-debt seam: if `@ds/schemas` later adopts a first-class i18n message strategy, the resolver collapses to a pass-through.
 
+### 8.2 Field-level client validation & input mask (EARS-22)
+
+Every portal user-input field declares the client-side validation rule and input mask relevant to its data type — email shape, E.164 phone with mask, fixed-length numeric OTP, password policy — and surfaces obviously-malformed input before submit with localized (RU) copy from the §8.1 catalog (`errors.validation.*`). This is a **UX affordance only**: it is intentionally redundant with the server check, never a substitute for it — the BFF/IdP stays the credential authority (§2) and the `@ds/schemas` request contracts stay loose (the login/reset shape guards remain permissive, §9 #147), so a client-rejected value carries no security weight and a field with no relevant rule declares "none" with a one-line reason rather than inventing one.
+
+Motivated by two identical live defects — #192 (`/login` identifier accepted invalid input, no mask) and #196 (`/reset` identifier, same) — the rule is **enforced**, not merely documented: #197 lands the semantic field primitives (email/phone/OTP/password inputs that carry their validation + mask) plus a custom ESLint gate that flags raw `<input>` on auth forms. The iteration-end checklist and Mode-(a) review focus pick up the per-field reject/accept browser check until that gate ships (and as defense-in-depth after).
+
 ## 9. Decision-debt for ADR-0001 (separate adr-revision follow-up)
 
 Surfaced per AGENTS.md §6; **not** changed inside this spec-authoring:

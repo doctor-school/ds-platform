@@ -152,8 +152,17 @@ on it) — and **configures + activates a generic HTTP SMS provider aimed at the
 `sms-sink` service** (`http://sms-sink:8090/`) so SMS-OTP login (EARS-7) and phone
 verification (EARS-13) codes are delivered to the dev SMS catch-all (Zitadel ships
 with no SMS provider either, so the `otpSms` challenge / `phone/resend` 200 but
-deliver nothing until this is set; the live SMS-OTP test #170 depends on it).
-Re-running converges — it never duplicates.
+deliver nothing until this is set; the live SMS-OTP test #170 depends on it). It
+finally **localizes the notification language to Russian** (#177): it sets the
+instance default language to `ru` **and** locks the allowed-languages restriction
+to `[ru]`, so every Zitadel-rendered email/SMS (registration, email-verify,
+password-reset, email/SMS OTP) renders from Zitadel's built-in Russian message
+texts. Both levers are needed — the instance default alone is only a last-resort
+fallback that loses to any request `Accept-Language`, so on its own the live
+notifications resolved to random languages; the `[ru]` restriction is what makes
+them deterministically Russian (the portal forms were already Russian via #181,
+but those IdP-rendered bodies are out of next-intl's reach). Re-running converges
+— it never duplicates.
 
 ```bash
 # Runs on a box with bash + curl + jq (the TrueNAS box has all three):
@@ -175,7 +184,11 @@ Override defaults via env / flags: `IDP_REDIRECT_URIS`, `IDP_POST_LOGOUT_URIS`,
 `SMS_DELIVERY_MODE` (default `sink`; see §3.bis), `IDP_SMTP_HOST` (default
 `mailpit:1025`), `IDP_SMTP_SENDER_ADDRESS`, `IDP_SMTP_SENDER_NAME`,
 `IDP_SMS_HTTP_ENDPOINT` (default `http://sms-sink:8090/` in `sink` mode,
-`http://sms-aero-adapter:8091/` in `real` mode), `--project-name`, `--app-name`.
+`http://sms-aero-adapter:8091/` in `real` mode), `IDP_NOTIFICATION_LANGUAGE`
+(default `ru`; the notification + login-UI locale), `IDP_RESTRICT_LANGUAGES`
+(default `1`; set `0` to leave the instance multi-locale and rely on the default
+language + per-user `preferredLanguage` instead of the `[ru]` lock),
+`--project-name`, `--app-name`.
 Defaults target the api BFF callback (`:3000/auth/callback`) and the portal
 (`:3100/auth/callback`).
 

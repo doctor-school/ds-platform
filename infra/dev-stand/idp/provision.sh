@@ -86,15 +86,35 @@ api() {
   printf '%s' "$body"
 }
 
-# Like api(), but treats Zitadel's "No changes" 400 as success — an idempotent
-# update that finds nothing to change is the desired converged state, not a fail.
+# Locale-independent "converged precondition" detector. Zitadel localizes its
+# error MESSAGES to the instance default language, so once step 8 flips that
+# default to `ru` the "No changes"/"already active" preconditions come back in
+# Russian ("Изменений не обнаружено", "Экземпляр не изменён", "уже активна") and
+# any English-literal grep silently misses them — re-aborting an otherwise
+# converged re-run under `set -euo pipefail`. The language-PROOF signals are the
+# gRPC status `"code": 9` (FAILED_PRECONDITION — what EVERY no-change/already-
+# active rejection is) and the stable error IDs in the `(CODE-xxxxx)` suffix,
+# which Zitadel NEVER translates. We match those first, then keep the EN/RU text
+# phrases as a readable fallback. Scoped to the idempotent converge helpers, where
+# a precondition rejection IS the desired converged state. Reads /tmp/.idperr, the
+# captured `API ... -> HTTP ...: {json}` line from api().
+_is_converged_precondition() {
+  grep -qE '"code"[[:space:]]*:[[:space:]]*9' /tmp/.idperr 2>/dev/null && return 0
+  grep -qiE "no changes|already active|изменений не обнаружено|не изменён|уже активн" \
+    /tmp/.idperr 2>/dev/null && return 0
+  return 1
+}
+
+# Like api(), but treats Zitadel's "No changes" precondition as success — an
+# idempotent update that finds nothing to change is the desired converged state,
+# not a fail (locale-independent via _is_converged_precondition).
 api_idempotent() {
   local out
   if out="$(api "$@" 2>/tmp/.idperr)"; then
     printf '%s' "$out"
     return 0
   fi
-  if grep -q "No changes" /tmp/.idperr 2>/dev/null; then
+  if _is_converged_precondition; then
     echo "(already converged — no changes)" >&2
     return 0
   fi
@@ -105,23 +125,21 @@ api_idempotent() {
 # Like api(), but for the SMTP/SMS provider `_activate` calls in the converge
 # branches (steps 6/7). A freshly converged provider must be (re)activated, but
 # on a SAME-MODE re-run the provider is ALREADY ACTIVE, and Zitadel rejects a
-# redundant activation with a precondition error whose wording is version-
-# dependent (an "already active"-class message, NOT the literal "No changes"
-# that api_idempotent swallows). One supervised same-mode re-run must converge
-# to a no-op, not abort under `set -euo pipefail`, so this helper treats BOTH
-# the "No changes" and the already-active precondition as success. Scoped to the
-# activate calls ONLY — the strict api_idempotent stays on the project/app/member
-# PUTs so genuine errors there are never masked.
+# redundant activation with a precondition error (gRPC code 9) whose wording is
+# both version- AND locale-dependent (an "already active"-class message, NOT the
+# literal "No changes"). One supervised same-mode re-run must converge to a no-op,
+# not abort under `set -euo pipefail`, so this helper treats the no-change AND the
+# already-active precondition as success via the shared locale-independent
+# _is_converged_precondition (code-9 + stable ids, EN/RU text fallback). Scoped to
+# the activate calls ONLY — the strict api_idempotent stays on the project/app/
+# member PUTs so genuine errors there are never masked.
 api_activate() {
   local out
   if out="$(api "$@" 2>/tmp/.idperr)"; then
     printf '%s' "$out"
     return 0
   fi
-  # Match case-insensitively on the converged-state phrases. Kept narrow: the
-  # "already active" precondition (and its terse "already" variants) plus the
-  # "No changes" string — anything else is a real failure and still aborts.
-  if grep -qiE "no changes|already active|already" /tmp/.idperr 2>/dev/null; then
+  if _is_converged_precondition; then
     echo "(provider already active — no changes)" >&2
     return 0
   fi
@@ -412,6 +430,77 @@ elif [[ -n "$SMS_SINK_ID" && "$SMS_SINK_ID" != "null" ]]; then
   echo "activated HTTP SMS provider ${SMS_SINK_ID} (dev-stand sms-sink) [boot default]" >&2
 else
   echo "WARN: no HTTP SMS provider id to activate; SMS-OTP (EARS-7) will not deliver." >&2
+fi
+
+# ── 8. ensure notification language → ru (default + allowed-language lock, #177) ─
+# Zitadel renders every notification (registration InitCode, email-verify,
+# password-reset, and the email/SMS OTP texts) from its message-text templates,
+# choosing the language by this precedence: the user's `preferredLanguage` →
+# the triggering request's `Accept-Language` → the INSTANCE DEFAULT. The portal
+# forms were already localized in #181, but these IdP-rendered bodies are out of
+# next-intl's reach and arrived in English/other languages live — this step fixes
+# that Zitadel-side, reproducibly.
+#
+# Zitadel ships COMPLETE built-in Russian translations for all of these message
+# types (verified live: init/verifyemail/passwordreset/verifyphone/verifyemailotp/
+# verifysmsotp all return good `ru` copy with the right {{.Code}}/{{.OTP}}
+# placeholders), so NO custom message-text overrides are needed — we only have to
+# make Zitadel SELECT Russian. (If the bundled copy ever regresses, converge
+# per-type custom texts via PUT /admin/v1/text/message/{type}/ru — init|
+# verifyemail|verifyphone|passwordreset|verifyemailotp|verifysmsotp.)
+#
+# TWO levers, because the instance default alone is NOT sufficient (proven live):
+#   (a) Default language → ru. The documented fallback. Necessary, but registrants
+#       created by the BFF carry no `preferredLanguage`, and the default is only a
+#       LAST resort — when a request carries any other resolvable language the
+#       default loses, and on this stand the pure-default path resolved to random
+#       languages (Polish/Turkish/Hungarian across identical requests), NOT ru.
+#   (b) Allowed-languages restriction → [ru]. The DETERMINISTIC lever. Zitadel
+#       renders notification (and login-UI) texts ONLY in allowed languages, so
+#       restricting the instance to `ru` collapses every non-ru negotiation onto
+#       Russian. Verified live: three pure-default-path registrations all rendered
+#       Russian once `allowedLanguages=[ru]`. This is the product reality for a
+#       Russian-only audience — and it keeps the fix entirely Zitadel-side (no BFF
+#       per-user `preferredLanguage` plumbing required). A restricted instance also
+#       means the default MUST be in the allowed set, which is why (a) precedes (b)
+#       (a default outside the allowed set is rejected — INST-class precondition).
+# Override the locale via IDP_NOTIFICATION_LANGUAGE; set IDP_RESTRICT_LANGUAGES=0
+# to skip lever (b) (e.g. a multi-locale instance) and rely on the default + the
+# BFF stamping `preferredLanguage` instead.
+#
+# Idempotency: re-setting the SAME default / restriction returns a precondition
+# 400 ("Instance not changed" INST-DS3rq) which — once the default IS ru — Zitadel
+# LOCALIZES to Russian, defeating any English-literal "No changes" grep. We
+# therefore read-before-write (the step-2/5 precedent): GET current state and PUT
+# only on a real delta. A second run finds ru already set/allowed and no-ops.
+NOTIF_LANG="${IDP_NOTIFICATION_LANGUAGE:-ru}"
+RESTRICT_LANGS="${IDP_RESTRICT_LANGUAGES:-1}"
+SUPPORTED_LANGS="$(api GET /admin/v1/languages | jq -r '.languages[]?' 2>/dev/null)"
+if ! grep -qx "$NOTIF_LANG" <<< "$SUPPORTED_LANGS"; then
+  echo "WARN: '${NOTIF_LANG}' is not a Zitadel-supported language; skipping notification-" >&2
+  echo "      language convergence. Notifications stay in the current language." >&2
+else
+  # (a) default language
+  CURRENT_DEFAULT_LANG="$(api GET /admin/v1/languages/default | jq -r '.language // empty')"
+  if [[ "$CURRENT_DEFAULT_LANG" == "$NOTIF_LANG" ]]; then
+    echo "instance default language already ${NOTIF_LANG}" >&2
+  else
+    api PUT "/admin/v1/languages/default/${NOTIF_LANG}" '{}' >/dev/null \
+      && echo "set instance default language ${CURRENT_DEFAULT_LANG:-<unset>} -> ${NOTIF_LANG}" >&2
+  fi
+  # (b) allowed-languages restriction (the deterministic lock)
+  if [[ "$RESTRICT_LANGS" == "1" ]]; then
+    CURRENT_ALLOWED="$(api GET /admin/v1/restrictions | jq -rc '.allowedLanguages // [] | sort')"
+    if [[ "$CURRENT_ALLOWED" == "$(jq -nc --arg l "$NOTIF_LANG" '[$l]')" ]]; then
+      echo "allowed languages already locked to [${NOTIF_LANG}]" >&2
+    else
+      api PUT /admin/v1/restrictions \
+        "$(jq -nc --arg l "$NOTIF_LANG" '{allowedLanguages:{list:[$l]}}')" >/dev/null \
+        && echo "locked allowed languages -> [${NOTIF_LANG}] (notifications deterministic)" >&2
+    fi
+  else
+    echo "IDP_RESTRICT_LANGUAGES=0 — leaving allowed languages unrestricted (default-only)" >&2
+  fi
 fi
 
 # ── output (machine-parseable; secret only when freshly created) ─────────────

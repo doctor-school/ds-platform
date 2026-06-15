@@ -121,6 +121,21 @@ export const ApiEnvSchema = z.looseObject({
   // `/reset`). Optional — defaults to the local portal in the adapter.
   MAILER_PORTAL_BASE_URL: z.url().optional(),
 
+  // Real SMTP relay creds for the BFF notice's REAL transport (#209) — REUSED
+  // from the IdP's real-SMTP class (provision.sh consumes the same vars for
+  // Zitadel's real provider). The MailerModule selects this transport per send
+  // when `email-delivery-real` is ON (else the MAILER_SMTP_* intercept / Mailpit),
+  // so ONE flag flip moves both Zitadel's channel and the BFF notice Mailpit ↔
+  // real. Optional (provision.sh-only today): unset ⇒ the real transport is absent
+  // and a flag-ON send fails SOFT to the intercept + warns (never throws). HOST
+  // carries `host:port`; if it has no port, IDP_SMTP_REAL_PORT is the fallback
+  // (mirrors provision.sh). `secure` is derived from port 465 in the adapter.
+  IDP_SMTP_REAL_HOST: z.string().optional(),
+  IDP_SMTP_REAL_PORT: z.coerce.number().int().positive().optional(),
+  IDP_SMTP_REAL_USER: z.string().optional(),
+  IDP_SMTP_REAL_PASSWORD: z.string().optional(),
+  IDP_SMTP_REAL_SENDER_ADDRESS: z.string().optional(),
+
   // Keyed HMAC pepper for ledger identifier masking (ADR-0001 §7, ADR-0003 §6).
   // The `audit_ledger` records an `identifier_hash`, never raw PD; a bare digest
   // over a low-entropy identifier space is a reproducible existence oracle (a

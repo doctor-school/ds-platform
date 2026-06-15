@@ -33,8 +33,9 @@ import {
 } from "@ds/design-system/card";
 import { Form, FormField } from "@ds/design-system/form";
 
-/** The reset code is a FIXED 6 digits (Zitadel default), like the registration
- * verify code — `<OtpField>` uses its slotted variant. */
+/** The reset code is a FIXED 6 characters (Zitadel default) — and ALPHANUMERIC
+ * (e.g. `PVDC3R`), not digits-only — like the registration verify code. `<OtpField>`
+ * uses its slotted variant, which accepts letters (it carries no digit-only filter). */
 const RESET_OTP_LENGTH = 6;
 
 /*
@@ -50,7 +51,6 @@ const RESET_OTP_LENGTH = 6;
  */
 
 export default function ResetPage() {
-  const router = useRouter();
   const t = useTranslations("reset");
   const te = useTranslations("errors");
   const [stage, setStage] = useState<"request" | "complete">("request");
@@ -70,18 +70,6 @@ export default function ResetPage() {
     resolver: useLocalizedResolver(ResetIdentifierFormSchema),
     defaultValues: { identifier: "" },
   });
-  // #200: resolve the complete step from the portal `ResetCompleteFormSchema` (field
-  // primitives), NOT `PasswordResetCompleteRequestSchema`. The request schema's
-  // `newPassword` is the message-carrying `NewPasswordSchema`, whose baked-in English
-  // outranks the localized error map in zod v4 and leaked onto the field; the portal
-  // schema's message-less `NewPasswordFieldSchema` renders the RU `passwordComplexity`
-  // copy instead. The submitted body still matches the loose `@ds/schemas` contract;
-  // the API enforces the real policy.
-  const completeForm = useForm<PasswordResetCompleteRequest>({
-    mode: "onTouched",
-    resolver: useLocalizedResolver(ResetCompleteFormSchema),
-    defaultValues: { identifier: "", code: "", newPassword: "" },
-  });
 
   async function onRequest(values: PasswordResetRequest) {
     setError(null);
@@ -91,26 +79,19 @@ export default function ResetPage() {
         ...(captchaToken ? { captchaToken } : {}),
       });
       // EARS-16: the ack is identical whether or not the identifier exists; we
-      // always advance to the code step. Carry the identifier into completion.
+      // always advance to the code step. Carry the identifier into completion — the
+      // complete step is a SEPARATE component (<ResetCompleteForm/>) that mounts only
+      // once `stage` flips, so its own useForm registers the `code` field on its first
+      // render. We deliberately do NOT hold the complete form here and seed it with
+      // reset()/setValue() after the request→complete toggle: because the `code`
+      // Controller mounted AFTER that form was created, RHF never bound it and every
+      // keystroke was dropped (the slotted field stayed "" — the #212/#211 bug that
+      // survived on /reset only). Owning the complete form in a freshly-mounted child
+      // is the same fix /login uses for its OTP verify step.
       setIdentifier(values.identifier);
-      completeForm.reset({
-        identifier: values.identifier,
-        code: "",
-        newPassword: "",
-      });
       setStage("complete");
     } catch (err) {
       setError(authErrorMessage(err, te, te("resetRequestFailed")));
-    }
-  }
-
-  async function onComplete(values: PasswordResetCompleteRequest) {
-    setError(null);
-    try {
-      await authClient.completePasswordReset(values);
-      router.push("/login");
-    } catch (err) {
-      setError(authErrorMessage(err, te, te("resetCompleteFailed")));
     }
   }
 
@@ -163,52 +144,7 @@ export default function ResetPage() {
               </form>
             </Form>
           ) : (
-            <Form {...completeForm}>
-              <form
-                onSubmit={completeForm.handleSubmit(onComplete)}
-                className="space-y-4"
-                noValidate
-              >
-                {/* Slotted 6-digit code (no auto-submit here — the complete step
-                    pairs the code with a new password, so the user submits both
-                    together; `onComplete` is intentionally omitted). */}
-                <FormField
-                  control={completeForm.control}
-                  name="code"
-                  render={({ field }) => (
-                    <OtpField
-                      field={field}
-                      length={RESET_OTP_LENGTH}
-                      variant="slotted"
-                      label={t("codeLabel")}
-                    />
-                  )}
-                />
-                <FormField
-                  control={completeForm.control}
-                  name="newPassword"
-                  render={({ field }) => (
-                    <PasswordField
-                      field={field}
-                      purpose="new"
-                      label={t("newPasswordLabel")}
-                    />
-                  )}
-                />
-                {error && (
-                  <p role="alert" className="text-sm text-destructive">
-                    {error}
-                  </p>
-                )}
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={completeForm.formState.isSubmitting}
-                >
-                  {t("setNewPassword")}
-                </Button>
-              </form>
-            </Form>
+            <ResetCompleteForm identifier={identifier} />
           )}
         </CardContent>
         <CardFooter className="text-sm">
@@ -218,5 +154,95 @@ export default function ResetPage() {
         </CardFooter>
       </Card>
     </main>
+  );
+}
+
+/**
+ * EARS-12 complete step. Its OWN `useForm` lives here so the `code` Controller is
+ * registered on this component's first render: the component mounts only once the
+ * request step has fired, so there is no late-mounted Controller and no post-hoc
+ * `reset()`/`setValue()` seeding of a parent-held form — both of which left the
+ * slotted `code` field detached and dropped every keystroke on /reset (#212/#211,
+ * the same class of failure /login's <OtpVerifyForm/> was restructured to avoid).
+ * `identifier` comes in as a prop (the BFF re-resolves it); the user types the code
+ * and the new password and submits both together.
+ */
+function ResetCompleteForm({ identifier }: { identifier: string }) {
+  const router = useRouter();
+  const t = useTranslations("reset");
+  const te = useTranslations("errors");
+  const [error, setError] = useState<string | null>(null);
+
+  // #200: resolve the complete step from the portal `ResetCompleteFormSchema` (field
+  // primitives), NOT `PasswordResetCompleteRequestSchema`. The request schema's
+  // `newPassword` is the message-carrying `NewPasswordSchema`, whose baked-in English
+  // outranks the localized error map in zod v4 and leaked onto the field; the portal
+  // schema's message-less `NewPasswordFieldSchema` renders the RU `passwordComplexity`
+  // copy instead. The submitted body still matches the loose `@ds/schemas` contract;
+  // the API enforces the real policy. Seeded with the resolved `identifier` at mount —
+  // no post-toggle reset()/setValue() on a parent form (the #212/#211 detachment).
+  const completeForm = useForm<PasswordResetCompleteRequest>({
+    mode: "onTouched",
+    resolver: useLocalizedResolver(ResetCompleteFormSchema),
+    defaultValues: { identifier, code: "", newPassword: "" },
+  });
+
+  async function onComplete(values: PasswordResetCompleteRequest) {
+    setError(null);
+    try {
+      await authClient.completePasswordReset({ ...values, identifier });
+      router.push("/login");
+    } catch (err) {
+      setError(authErrorMessage(err, te, te("resetCompleteFailed")));
+    }
+  }
+
+  return (
+    <Form {...completeForm}>
+      <form
+        onSubmit={completeForm.handleSubmit(onComplete)}
+        className="space-y-4"
+        noValidate
+      >
+        {/* Slotted 6-char alphanumeric code (no auto-submit here — the complete step
+            pairs the code with a new password, so the user submits both
+            together; `onComplete` is intentionally omitted). */}
+        <FormField
+          control={completeForm.control}
+          name="code"
+          render={({ field }) => (
+            <OtpField
+              field={field}
+              length={RESET_OTP_LENGTH}
+              variant="slotted"
+              label={t("codeLabel")}
+            />
+          )}
+        />
+        <FormField
+          control={completeForm.control}
+          name="newPassword"
+          render={({ field }) => (
+            <PasswordField
+              field={field}
+              purpose="new"
+              label={t("newPasswordLabel")}
+            />
+          )}
+        />
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={completeForm.formState.isSubmitting}
+        >
+          {t("setNewPassword")}
+        </Button>
+      </form>
+    </Form>
   );
 }

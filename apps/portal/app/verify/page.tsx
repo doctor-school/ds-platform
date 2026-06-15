@@ -29,8 +29,10 @@ import {
 } from "@ds/design-system/card";
 import { Form, FormField } from "@ds/design-system/form";
 
-/** The registration verification code is a FIXED 6 digits (Zitadel default),
- * shorter than the 8-digit login OTP — so `<OtpField>` uses its slotted variant. */
+/** The registration verification code is a FIXED 6 characters (Zitadel default) —
+ * and ALPHANUMERIC (the email code is not digits-only). `<OtpField>` uses its slotted
+ * variant, which accepts letters (no digit-only filter); #211 also moved the 8-char
+ * login OTP onto the same slotted look. */
 const VERIFY_OTP_LENGTH = 6;
 
 /*
@@ -62,7 +64,7 @@ const VERIFY_OTP_LENGTH = 6;
  * password is present (deep-link / reload / abandoned flow) we fall back to the
  * old behavior and route to `/login` for a manual sign-in.
  *
- * Auto-submit (#175): the registration code is a FIXED 6 digits, so the
+ * Auto-submit (#175): the registration code is a FIXED 6 characters, so the
  * design-system `InputOTP`'s native `onComplete` fires the submit the moment the
  * last digit lands — no manual click needed. The explicit button stays for
  * a11y/fallback, and an in-flight guard (`isSubmitting`) prevents a double-submit

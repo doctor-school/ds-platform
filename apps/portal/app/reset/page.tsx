@@ -33,8 +33,9 @@ import {
 } from "@ds/design-system/card";
 import { Form, FormField } from "@ds/design-system/form";
 
-/** The reset code is a FIXED 6 digits (Zitadel default), like the registration
- * verify code — `<OtpField>` uses its slotted variant. */
+/** The reset code is a FIXED 6 characters (Zitadel default) — and ALPHANUMERIC
+ * (e.g. `PVDC3R`), not digits-only — like the registration verify code. `<OtpField>`
+ * uses its slotted variant, which accepts letters (it carries no digit-only filter). */
 const RESET_OTP_LENGTH = 6;
 
 /*
@@ -169,7 +170,7 @@ export default function ResetPage() {
                 className="space-y-4"
                 noValidate
               >
-                {/* Slotted 6-digit code (no auto-submit here — the complete step
+                {/* Slotted 6-char alphanumeric code (no auto-submit here — the complete step
                     pairs the code with a new password, so the user submits both
                     together; `onComplete` is intentionally omitted). */}
                 <FormField

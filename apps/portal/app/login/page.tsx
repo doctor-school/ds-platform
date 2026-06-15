@@ -349,12 +349,11 @@ function OtpLogin() {
 
 /**
  * Zitadel's login email/SMS OTP codes are a FIXED 8 digits (verified live on the
- * dev-stand, #153 — see the `Input` note below). #175: that fixed length is what
- * lets the plain numeric input auto-submit the moment the final digit lands,
- * mirroring the `/verify` registration `InputOTP onComplete` semantics without a
- * slotted widget (rejected here because the code is longer/looser than the 6-char
- * registration code). The placeholder (`login.codePlaceholder` = `12345678`)
- * already advertises this length.
+ * dev-stand, #153). #175: that fixed length lets the field auto-submit the moment the
+ * final digit lands, via the slotted `InputOTP onComplete`. #211 unified the
+ * presentation: all three code surfaces (`/login`, `/verify`, `/reset`) now use the
+ * slotted variant — 8 slots fit the `max-w-md` login card. The login code is digits;
+ * the slotted widget accepts the digit subset fine (it carries no digit-only filter).
  */
 const LOGIN_OTP_LENGTH = 8;
 
@@ -411,11 +410,12 @@ function OtpVerifyForm({
   return (
     <Form {...verifyForm}>
       <form onSubmit={submit} className="space-y-4" noValidate>
-        {/* Plain (non-slotted) one-time-code box: the Zitadel login OTP is 8 digits
-            (verified live, #153) — longer than the 6-slot registration code on
-            /verify, so `<OtpField>` uses its `plain` variant here (a numeric Input
-            that takes the whole code in one shot, keeps `autocomplete="one-time-code"`
-            for OS autofill, and auto-submits at length — button kept for a11y). */}
+        {/* Slotted one-time-code box (#211): the Zitadel login OTP is 8 digits
+            (verified live, #153). `<OtpField>` uses its slotted variant — matching
+            /verify + /reset — with 8 fixed-width slots that fit the login card; it
+            keeps `autocomplete="one-time-code"` for OS autofill and auto-submits via
+            the native `onComplete` the moment the final digit lands (button kept for
+            a11y). */}
         <FormField
           control={verifyForm.control}
           name="code"
@@ -423,9 +423,8 @@ function OtpVerifyForm({
             <OtpField
               field={field}
               length={LOGIN_OTP_LENGTH}
-              variant="plain"
+              variant="slotted"
               label={t("enterCode")}
-              placeholder={t("codePlaceholder")}
               onComplete={onCodeComplete}
             />
           )}

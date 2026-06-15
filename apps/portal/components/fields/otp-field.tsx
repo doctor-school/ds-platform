@@ -25,15 +25,29 @@ import {
  * the registration / reset code is 6. Both are fixed, so both can auto-submit the
  * moment the last digit lands; only the number differs, hence a `length` prop.
  *
- * WHY two presentations (`variant`): preserving EXACT current behavior beats forcing
- * one widget. `/verify` and `/reset` use the slotted `InputOTP` (fixed-width slots,
- * native `onComplete`); `/login` uses a plain numeric `Input` (the 8-digit code is
- * longer/looser than a 6-slot widget wants — see #175). Rather than re-style either,
- * `<OtpField>` wraps whichever the surface already used:
+ * WHY two presentations (`variant`): the segmented slotted look is the default for
+ * every surface (#211 unified `/login` onto it too), but the plain numeric variant
+ * is retained because some surfaces / future codes may still want a single box:
  *   • `variant="slotted"` → the design-system `InputOTP` with `length` slots; its
- *     native `onComplete` drives auto-submit.
+ *     native `onComplete` drives auto-submit. Used by `/login`, `/verify`, `/reset`.
  *   • `variant="plain"`   → a plain numeric `<Input maxLength={length}>`; it strips
  *     non-digits and calls `onComplete` once `length` digits are present.
+ *
+ * Char set per surface: the registration (`/verify`) and reset (`/reset`) codes
+ * Zitadel emits are ALPHANUMERIC (e.g. `PVDC3R`), so the slotted widget must accept
+ * letters — it does, because we pass NO `pattern` to `InputOTP` (input-otp only
+ * restricts input when a `pattern` is given). The login OTP is digits, but the
+ * slotted widget happily accepts the digit subset, so no per-surface filter is
+ * needed. The plain variant's `otpDigits` strip is digit-specific and stays plain-only.
+ *
+ * #212 fix — the slotted variant must spread the FULL RHF `field` (name + ref +
+ * onBlur), not just `value`/`onChange`. input-otp's controlled hidden input needs a
+ * real `ref` (the design-system `InputOTP` forwards it straight to that input) for
+ * RHF to bind the field the same way the plain `<Input>` gets it via `{...field}`;
+ * wiring only `value`+`onChange` left the slotted field half-bound and it dropped
+ * every keystroke on `/reset` + `/verify`. `onChange` is set explicitly AFTER the
+ * spread because input-otp calls `onChange(value: string)` with a raw string (not a
+ * DOM event) — RHF's `field.onChange` ingests that string directly.
  *
  * Auto-submit + in-flight guard: the field calls `onComplete()` on completion; the
  * caller's `onComplete` is responsible for the `isSubmitting` guard (it already
@@ -42,8 +56,8 @@ import {
  */
 
 /** Digits only — strip the formatting an OS autofill / paste might carry so the
- * completion check sees the true code length. (Plain variant only; the slotted
- * widget is digit-constrained by its slots.) */
+ * completion check sees the true code length. PLAIN variant only (the login OTP is
+ * numeric); the slotted variant accepts alphanumeric codes verbatim. */
 function otpDigits(value: string): string {
   return value.replace(/\D/g, "");
 }
@@ -78,6 +92,7 @@ export function OtpField<T extends FieldValues>({
         <FormLabel>{label}</FormLabel>
         <FormControl>
           <InputOTP
+            {...field}
             maxLength={length}
             autoComplete="one-time-code"
             value={field.value ?? ""}

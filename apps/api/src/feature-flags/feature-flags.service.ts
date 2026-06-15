@@ -13,8 +13,8 @@ import type {
  */
 export interface UnleashLike {
   isEnabled(name: string, context?: unknown, fallbackValue?: boolean): boolean;
-  on(event: "changed", listener: () => void): void;
-  off?(event: "changed", listener: () => void): void;
+  on(event: "changed" | "synchronized", listener: () => void): void;
+  off?(event: "changed" | "synchronized", listener: () => void): void;
   destroy(): void;
 }
 
@@ -54,6 +54,16 @@ export class FeatureFlagsService implements FeatureFlags, OnModuleDestroy {
     if (!client) return () => undefined;
     client.on("changed", listener);
     return () => client.off?.("changed", listener);
+  }
+
+  onSynchronized(listener: () => void): () => void {
+    const client = this.client;
+    if (!client) return () => undefined;
+    // The SDK's `synchronized` event fires after its first successful poll of the
+    // Unleash server — the moment live flag state is known. The delivery reconcile
+    // uses this to converge a steady-ON flag at boot (#214 defect C).
+    client.on("synchronized", listener);
+    return () => client.off?.("synchronized", listener);
   }
 
   /**

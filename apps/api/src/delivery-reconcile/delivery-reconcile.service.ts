@@ -23,6 +23,27 @@ export interface DeliveryEnvDefaults {
 export type WarnFn = (message: string) => void;
 
 /**
+ * Initial-reconcile resilience knobs (#214 defect B). The boot reconcile is a
+ * network call to Zitadel that can fail transiently while the stand is still
+ * coming up, so it is retried with a bounded linear backoff. Overridable in unit
+ * tests to avoid real timers; the production default is a short, finite budget.
+ */
+export interface ReconcileRetryConfig {
+  /** Total attempts for the initial reconcile (1 = no retry). */
+  attempts: number;
+  /** Base delay (ms) between attempts; multiplied by the attempt index. */
+  baseDelayMs: number;
+  /** Sleep primitive — injectable so tests resolve immediately. */
+  sleep: (ms: number) => Promise<void>;
+}
+
+const DEFAULT_RETRY: ReconcileRetryConfig = {
+  attempts: 5,
+  baseDelayMs: 2000,
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+};
+
+/**
  * Reconciles the live `email-delivery-real` / `sms-delivery-real` Unleash flags
  * onto Zitadel's **active** notification provider (#185, design of record §3).
  *
@@ -38,46 +59,98 @@ export type WarnFn = (message: string) => void;
  * - **safe** — when the desired provider is not provisioned (e.g. real SMTP with
  *   no creds, so `provision.sh` skipped it) it leaves the channel untouched and
  *   warns; it NEVER activates the wrong provider as a fallback;
- * - **reactive** — {@link start} runs an initial reconcile and subscribes to the
- *   SDK `changed` event so an operator's UI toggle drives an `_activate` without
- *   a restart.
+ * - **reactive** — {@link start} subscribes to flag signals (the SDK `changed`
+ *   event for operator UI toggles AND the `synchronized` event for the SDK's first
+ *   poll) and runs a resilient initial reconcile. The subscriptions are wired even
+ *   if the initial reconcile fails, and a steady-ON flag converges on first sync
+ *   without a manual toggle (#214).
  *
  * It holds NO SMTP/SMS secrets — it only flips which pre-configured provider is
  * active (the creds live in Zitadel's provider config, set by `provision.sh`).
  */
 @Injectable()
 export class DeliveryReconcileService {
-  private unsubscribe: (() => void) | null = null;
+  private unsubscribeChange: (() => void) | null = null;
+  private unsubscribeSync: (() => void) | null = null;
 
   constructor(
     private readonly flags: FeatureFlags,
     private readonly admin: DeliveryAdmin,
     private readonly envDefaults: DeliveryEnvDefaults,
+    private readonly retry: ReconcileRetryConfig = DEFAULT_RETRY,
   ) {}
 
   /**
-   * Run an initial reconcile, then subscribe to flag changes. Called from the
-   * module's lifecycle hook on the dev-stand (when a live Zitadel admin client is
-   * available). The change handler is fire-and-forget — a failed reconcile logs
-   * and is retried on the next change; it never throws into the SDK emitter.
+   * Subscribe to flag signals, then run a resilient initial reconcile. Called
+   * from the module's lifecycle hook on the dev-stand (when a live Zitadel admin
+   * client is available).
+   *
+   * Subscriptions are wired FIRST and unconditionally (#214 defect B): a transient
+   * boot-time `fetch failed` in the initial reconcile must NOT leave the process
+   * deaf to flag changes for its whole lifetime. Two signals drive a re-reconcile:
+   *
+   * - `onChange` — an operator's UI toggle (the original reactive path); and
+   * - `onSynchronized` — the SDK's first successful poll. At boot the SDK has not
+   *   synced, so a flag read returns the env default; a flag that is steadily ON
+   *   never emits `changed`. Re-reconciling on first sync converges a steady-ON
+   *   flag without a manual toggle (#214 defect C).
+   *
+   * Both handlers and the initial reconcile are fire-and-forget — a failed
+   * reconcile logs and is retried on the next signal; `start()` never throws (so
+   * the module hook can await it without aborting boot).
    */
   async start(warn: WarnFn = defaultWarn): Promise<void> {
-    await this.reconcile(warn);
-    this.unsubscribe = this.flags.onChange(() => {
+    const safeReconcile = (reason: string): void => {
       void this.reconcile(warn).catch((err: unknown) => {
         warn(
-          `delivery reconcile failed on flag change: ${
+          `delivery reconcile failed on ${reason}: ${
             err instanceof Error ? err.message : "unknown"
           }`,
         );
       });
-    });
+    };
+    this.unsubscribeChange = this.flags.onChange(() =>
+      safeReconcile("flag change"),
+    );
+    this.unsubscribeSync = this.flags.onSynchronized(() =>
+      safeReconcile("SDK first sync"),
+    );
+    await this.initialReconcile(warn);
   }
 
-  /** Unsubscribe from flag changes (module shutdown). */
+  /**
+   * The boot reconcile with bounded backoff. A transient failure (stand still
+   * coming up) is retried; an exhausted budget logs and returns — the env-default
+   * provider stays active (fail-soft) and the next flag signal will reconcile.
+   * Never throws.
+   */
+  private async initialReconcile(warn: WarnFn): Promise<void> {
+    for (let attempt = 1; attempt <= this.retry.attempts; attempt++) {
+      try {
+        await this.reconcile(warn);
+        return;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "unknown";
+        if (attempt >= this.retry.attempts) {
+          warn(
+            `initial reconcile failed after ${attempt} attempt(s): ${message} — leaving the env-default provider active; a flag change or the SDK's first sync will reconcile`,
+          );
+          return;
+        }
+        warn(
+          `initial reconcile attempt ${attempt} failed: ${message} — retrying`,
+        );
+        await this.retry.sleep(this.retry.baseDelayMs * attempt);
+      }
+    }
+  }
+
+  /** Unsubscribe from flag signals (module shutdown). */
   stop(): void {
-    this.unsubscribe?.();
-    this.unsubscribe = null;
+    this.unsubscribeChange?.();
+    this.unsubscribeChange = null;
+    this.unsubscribeSync?.();
+    this.unsubscribeSync = null;
   }
 
   /**

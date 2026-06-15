@@ -10,26 +10,55 @@ import {
   type ZitadelProvider,
 } from "./delivery-reconcile.types.js";
 
-/** A FeatureFlags fake whose flag map is mutable so a toggle can be simulated. */
-function fakeFlags(initial: Partial<Record<FlagName, boolean>>): {
+/**
+ * A FeatureFlags fake whose flag map is mutable so a toggle can be simulated.
+ *
+ * - `set` mutates a flag value (the next read sees it).
+ * - `fire` invokes the `onChange` (`changed`) listeners — an operator UI toggle.
+ * - `sync` invokes the `onSynchronized` listeners AND, to mirror the real SDK,
+ *   reveals the live values: before sync, reads of any flag NOT pre-seeded as
+ *   "live yet" return the caller's env default (the unsynchronised contract);
+ *   after `sync()` the store values win. This models defect C's boot race where
+ *   `isEnabled` returns the env default until the SDK's first poll lands.
+ */
+function fakeFlags(
+  initial: Partial<Record<FlagName, boolean>>,
+  opts: { syncedAtStart?: boolean } = {},
+): {
   flags: FeatureFlags;
   set: (flag: FlagName, on: boolean) => void;
   fire: () => void;
+  sync: () => void;
 } {
   const store: Partial<Record<FlagName, boolean>> = { ...initial };
-  const listeners: Array<() => void> = [];
+  const changeListeners: Array<() => void> = [];
+  const syncListeners: Array<() => void> = [];
+  let synced = opts.syncedAtStart ?? true;
   return {
     set: (flag, on) => {
       store[flag] = on;
     },
-    fire: () => listeners.forEach((l) => l()),
+    fire: () => changeListeners.forEach((l) => l()),
+    sync: () => {
+      synced = true;
+      syncListeners.forEach((l) => l());
+    },
     flags: {
-      isEnabled: (flag, defaultValue) => store[flag] ?? defaultValue,
+      // Until the SDK has synchronised, the live value is unknown → env default.
+      isEnabled: (flag, defaultValue) =>
+        synced ? (store[flag] ?? defaultValue) : defaultValue,
       onChange: (l) => {
-        listeners.push(l);
+        changeListeners.push(l);
         return () => {
-          const i = listeners.indexOf(l);
-          if (i >= 0) listeners.splice(i, 1);
+          const i = changeListeners.indexOf(l);
+          if (i >= 0) changeListeners.splice(i, 1);
+        };
+      },
+      onSynchronized: (l) => {
+        syncListeners.push(l);
+        return () => {
+          const i = syncListeners.indexOf(l);
+          if (i >= 0) syncListeners.splice(i, 1);
         };
       },
     },
@@ -176,6 +205,111 @@ describe("DeliveryReconcileService (#185 flag → Zitadel _activate)", () => {
     // The change handler is async; flush microtasks.
     await new Promise((r) => setImmediate(r));
     expect(smsActivations).toEqual(["sms-aero"]);
+  });
+
+  it("defect B: subscribes to flag changes EVEN WHEN the initial reconcile fails (a later toggle still reconciles)", async () => {
+    // The stand is briefly unreachable at boot, so the FIRST reconcile rejects.
+    // A naive start() that awaits reconcile before subscribing would throw and
+    // never subscribe → the flag is dead for the whole process lifetime.
+    const { flags, set, fire } = fakeFlags({ "sms-delivery-real": false });
+    const sms = smsPair();
+    let firstSmsList = true;
+    const smsActivations: string[] = [];
+    const admin: DeliveryAdmin = {
+      listSmtpProviders: () => Promise.resolve(smtpPair()),
+      listSmsProviders: () => {
+        if (firstSmsList) {
+          firstSmsList = false;
+          return Promise.reject(new Error("fetch failed"));
+        }
+        return Promise.resolve(sms);
+      },
+      activateSmtp: () => Promise.resolve(),
+      activateSms: (id) => {
+        smsActivations.push(id);
+        for (const p of sms) p.active = p.id === id;
+        return Promise.resolve();
+      },
+    };
+    // attempts:1 → the initial reconcile fails permanently (no silent retry-save);
+    // the only thing that can recover the channel is a surviving subscription.
+    const svc = new DeliveryReconcileService(flags, admin, envDefaults, {
+      attempts: 1,
+      baseDelayMs: 0,
+      sleep: () => Promise.resolve(),
+    });
+    // start() must NOT throw even though the initial reconcile rejects, and it
+    // must leave the change subscription in place.
+    await expect(svc.start(vi.fn())).resolves.toBeUndefined();
+    // The dead-subscription bug would leave smsActivations empty forever.
+    expect(smsActivations).toEqual([]);
+    // Operator flips the flag ON later (connectivity has returned).
+    set("sms-delivery-real", true);
+    fire();
+    await new Promise((r) => setImmediate(r));
+    expect(smsActivations).toEqual(["sms-aero"]);
+  });
+
+  it("defect B (resilience): retries a transiently-failing initial reconcile with backoff and converges without any flag signal", async () => {
+    // The first reconcile blips (stand mid-power-cycle), the retry succeeds. The
+    // channel must converge to the env-default-on provider on its own — no toggle.
+    const { flags } = fakeFlags({});
+    const smtp = smtpPair();
+    let firstSmtpList = true;
+    const smtpActivations: string[] = [];
+    const admin: DeliveryAdmin = {
+      listSmtpProviders: () => {
+        if (firstSmtpList) {
+          firstSmtpList = false;
+          return Promise.reject(new Error("fetch failed"));
+        }
+        return Promise.resolve(smtp);
+      },
+      listSmsProviders: () => Promise.resolve(smsPair()),
+      activateSmtp: (id) => {
+        smtpActivations.push(id);
+        for (const p of smtp) p.active = p.id === id;
+        return Promise.resolve();
+      },
+      activateSms: () => Promise.resolve(),
+    };
+    const sleeps: number[] = [];
+    const svc = new DeliveryReconcileService(
+      flags,
+      admin,
+      { emailReal: true, smsReal: false }, // env default email=real
+      {
+        attempts: 3,
+        baseDelayMs: 10,
+        sleep: (ms) => {
+          sleeps.push(ms);
+          return Promise.resolve();
+        },
+      },
+    );
+    await svc.start(vi.fn());
+    expect(smtpActivations).toEqual(["smtp-real"]); // converged via the retry
+    expect(sleeps).toEqual([10]); // backed off once before the successful retry
+  });
+
+  it("defect C: converges a steady-ON flag once the SDK synchronises, WITHOUT any changed toggle", async () => {
+    // The flag is steadily ON in Unleash, but at boot the SDK has not synced yet,
+    // so the initial reconcile reads the env default (intercept) and leaves Mailpit
+    // active. No `changed` event ever fires (the flag value never changes). The
+    // reconcile must re-run on the SDK's first `synchronized` signal and converge.
+    const { flags, sync } = fakeFlags(
+      { "email-delivery-real": true },
+      { syncedAtStart: false },
+    );
+    const { admin, smtpActivations } = fakeAdmin(smtpPair(), smsPair());
+    const svc = new DeliveryReconcileService(flags, admin, envDefaults);
+    await svc.start(vi.fn());
+    // Pre-sync: env default email=intercept, mailpit already active → no activation.
+    expect(smtpActivations).toEqual([]);
+    // SDK finishes its first poll → `synchronized` fires (no `changed` toggle).
+    sync();
+    await new Promise((r) => setImmediate(r));
+    expect(smtpActivations).toEqual(["smtp-real"]);
   });
 
   it("unsubscribes on stop() so no further reconcile fires", async () => {

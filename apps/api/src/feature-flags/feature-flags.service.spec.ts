@@ -15,25 +15,31 @@ import { FLAG_BOT_PROTECTION } from "./feature-flags.types.js";
 function fakeUnleash(flags: Record<string, boolean>): {
   client: UnleashLike;
   fire: () => void;
+  fireSync: () => void;
   destroyed: () => boolean;
   set: (flag: string, on: boolean) => void;
 } {
-  const listeners: Array<() => void> = [];
+  const changeListeners: Array<() => void> = [];
+  const syncListeners: Array<() => void> = [];
+  const listenersFor = (event: "changed" | "synchronized") =>
+    event === "changed" ? changeListeners : syncListeners;
   let destroyed = false;
   const store = { ...flags };
   return {
     set: (flag, on) => {
       store[flag] = on;
     },
-    fire: () => listeners.forEach((l) => l()),
+    fire: () => changeListeners.forEach((l) => l()),
+    fireSync: () => syncListeners.forEach((l) => l()),
     destroyed: () => destroyed,
     client: {
       isEnabled: (name, _ctx, fallbackValue) =>
         name in store ? (store[name] as boolean) : (fallbackValue ?? false),
-      on: (_event, listener) => listeners.push(listener),
-      off: (_event, listener) => {
-        const i = listeners.indexOf(listener);
-        if (i >= 0) listeners.splice(i, 1);
+      on: (event, listener) => listenersFor(event).push(listener),
+      off: (event, listener) => {
+        const list = listenersFor(event);
+        const i = list.indexOf(listener);
+        if (i >= 0) list.splice(i, 1);
       },
       destroy: () => {
         destroyed = true;
@@ -101,6 +107,26 @@ describe("FeatureFlagsService (#185 live flag reads + fallback)", () => {
   it("onChange is a harmless no-op in env-only fallback mode (null client)", () => {
     const svc = new FeatureFlagsService(null);
     const unsub = svc.onChange(() => {
+      throw new Error("must not fire");
+    });
+    expect(() => unsub()).not.toThrow();
+  });
+
+  it("fires onSynchronized listeners on the SDK's first sync and supports unsubscribe (#214 defect C)", () => {
+    const { client, fireSync } = fakeUnleash({});
+    const svc = new FeatureFlagsService(client);
+    const cb = vi.fn();
+    const unsub = svc.onSynchronized(cb);
+    fireSync();
+    expect(cb).toHaveBeenCalledTimes(1);
+    unsub();
+    fireSync();
+    expect(cb).toHaveBeenCalledTimes(1); // no further calls after unsubscribe
+  });
+
+  it("onSynchronized is a harmless no-op in env-only fallback mode (null client)", () => {
+    const svc = new FeatureFlagsService(null);
+    const unsub = svc.onSynchronized(() => {
       throw new Error("must not fire");
     });
     expect(() => unsub()).not.toThrow();

@@ -397,7 +397,7 @@ function OtpVerifyForm({
   }
 
   // #175: auto-submit once the fixed-length login OTP is fully entered. `<OtpField
-  // variant="plain">` fires `onComplete` when `LOGIN_OTP_LENGTH` digits land; the
+  // variant="slotted">` (#211) fires `onComplete` when `LOGIN_OTP_LENGTH` digits land; the
   // in-flight guard (`isSubmitting`) here prevents a double network call if
   // completion races a manual click / the Enter key, and stops a re-fire if a later
   // keystroke/paste keeps the value at full length.

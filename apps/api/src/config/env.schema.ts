@@ -104,6 +104,23 @@ export const ApiEnvSchema = z.looseObject({
   EMAIL_DELIVERY_MODE: z.enum(["mailpit", "real"]).default("mailpit"),
   SMS_DELIVERY_MODE: z.enum(["sink", "real"]).default("sink"),
 
+  // BFF transactional-email channel (003 EARS-23, design §4) — the account-exists
+  // notice on duplicate registration, DISTINCT from Zitadel's identity-credential
+  // emails (verification / OTP / reset codes). Config-gated: with no
+  // MAILER_SMTP_HOST the SmtpMailer degrades to a logged no-op (infra-gated, like
+  // the IdP / Redis fakes), so the dev-stand / CI boot without an SMTP host. On
+  // the dev-stand these point at Mailpit (`truenas.local:1025`, no auth); in prod
+  // at a real SMTP relay (the same creds class as IDP_SMTP_REAL_*). The notice
+  // carries no secret, so this is a separate config block from the IdP's SMTP.
+  MAILER_SMTP_HOST: z.string().optional(),
+  MAILER_SMTP_PORT: z.coerce.number().int().positive().optional(),
+  MAILER_SMTP_USER: z.string().optional(),
+  MAILER_SMTP_PASSWORD: z.string().optional(),
+  MAILER_SMTP_FROM: z.string().optional(),
+  // Portal origin the notice's sign-in / reset links point at (`/login`,
+  // `/reset`). Optional — defaults to the local portal in the adapter.
+  MAILER_PORTAL_BASE_URL: z.url().optional(),
+
   // Keyed HMAC pepper for ledger identifier masking (ADR-0001 §7, ADR-0003 §6).
   // The `audit_ledger` records an `identifier_hash`, never raw PD; a bare digest
   // over a low-entropy identifier space is a reproducible existence oracle (a

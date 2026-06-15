@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { fetchOtpCode } from "./support/mailpit";
+import { fetchMessage, fetchOtpCode } from "./support/mailpit";
 import { fetchSmsOtpCode } from "./support/sms-sink";
 import {
   createUserWithPhone,
@@ -288,5 +288,69 @@ test.describe("portal auth journeys (real Zitadel)", () => {
 
     await expect(page.getByText(ruPasswordComplexity)).toBeVisible();
     await expect(page.getByText(/password must include/i)).toHaveCount(0);
+  });
+
+  // #207 EARS-23/24 — the duplicate-registration UX dead-end fix. Two halves:
+  //   EARS-24 (screen): a fresh register lands on the existence-agnostic
+  //     "check your email" /verify screen, which offers BOTH the code field AND
+  //     prominent Войти / Сбросить пароль actions (co-equal, never branching on
+  //     existence).
+  //   EARS-23 (backend): re-registering the SAME (already-registered) email
+  //     returns the IDENTICAL pending_verification AND privately sends an
+  //     account-exists notice email — a sign-in / reset prompt carrying NO code.
+  // Live-gated (manual): asserts against REAL Mailpit on the dev-stand. Requires
+  // MAILER_SMTP_* configured at the api so the notice actually sends.
+  test("EARS-23/24: duplicate register → existence-agnostic screen + account-exists notice (no code)", async ({
+    page,
+  }) => {
+    const email = newEmail();
+    const password = livePassword();
+
+    // ── Register #1 (new account) → land on the "check your email" screen ──
+    await page.goto("/register");
+    const firstAt = new Date().toISOString();
+    await page.locator('input[autocomplete="email"]').fill(email);
+    await page.locator('input[autocomplete="new-password"]').fill(password);
+    await page.getByTestId("register-submit").click();
+    await page.waitForURL(/\/verify/);
+
+    // EARS-24: the screen offers the code field AND the co-equal sign-in / reset
+    // actions — the existence-agnostic affordances, present for every visitor.
+    await expect(page.locator('input[autocomplete="one-time-code"]')).toBeVisible();
+    await expect(page.getByTestId("verify-go-to-login")).toBeVisible();
+    await expect(page.getByTestId("verify-go-to-reset")).toBeVisible();
+
+    // Complete verification so the email is now an ALREADY-REGISTERED account.
+    const verifyCode = await fetchOtpCode(email, firstAt, "Verify email");
+    expect(verifyCode).toBeTruthy();
+    await page.locator('input[autocomplete="one-time-code"]').fill(verifyCode!);
+    await page.waitForURL(/\/account/);
+    await page.getByTestId("logout").click();
+    await page.waitForURL(/\/login/);
+
+    // ── Register #2 (same, already-registered email) ──────────────────────
+    await page.goto("/register");
+    const dupAt = new Date().toISOString();
+    await page.locator('input[autocomplete="email"]').fill(email);
+    await page.locator('input[autocomplete="new-password"]').fill(password);
+    await page.getByTestId("register-submit").click();
+
+    // EARS-16: the response is identical — the form still routes to /verify and
+    // discloses nothing about existence (no dead-end; the same screen offers the
+    // sign-in affordance for the existing owner).
+    await page.waitForURL(/\/verify/);
+    await expect(page.getByTestId("verify-go-to-login")).toBeVisible();
+
+    // EARS-23: an account-exists notice lands privately in the inbox, and it
+    // carries NO verification/login code (it is a product notice, not a credential
+    // email — the existing owner is told to sign in / reset, never given a code).
+    const notice = await fetchMessage(email, dupAt, "уже есть аккаунт");
+    expect(notice, "account-exists notice should reach Mailpit").toBeTruthy();
+    const body = `${notice!.Text}\n${notice!.HTML}`;
+    expect(body).toMatch(/\/login/);
+    expect(body).toMatch(/\/reset/);
+    // No 6-8 digit / alphanumeric code anywhere in the notice.
+    expect(body).not.toMatch(/\bCode\s+[A-Z0-9]{4,12}\b/);
+    expect(body).not.toMatch(/\b[0-9]{6,8}\b/);
   });
 });

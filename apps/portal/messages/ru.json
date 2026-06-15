@@ -45,12 +45,16 @@
     "verifyAndSignIn": "Подтвердить и войти"
   },
   "verify": {
-    "title": "Подтвердите аккаунт",
-    "description": "Введите код, отправленный на адрес <strong>{identifier}</strong>.",
+    "title": "Проверьте почту",
+    "description": "Мы отправили письмо на адрес <strong>{identifier}</strong>. Если вы только что регистрируетесь — введите код из письма ниже. Если у вас уже есть аккаунт — войдите или сбросьте пароль.",
     "fallbackIdentifier": "ваш аккаунт",
-    "codeLabel": "Код подтверждения",
-    "submit": "Подтвердить",
-    "backToSignIn": "Вернуться ко входу"
+    "codeLabel": "Код из письма",
+    "submit": "Подтвердить код",
+    "newAccountHeading": "Новый аккаунт — введите код",
+    "existingAccountHeading": "Уже есть аккаунт?",
+    "existingAccountHint": "Войдите или восстановите доступ к существующему аккаунту.",
+    "goToSignIn": "Войти",
+    "goToReset": "Сбросить пароль"
   },
   "reset": {
     "title": "Сброс пароля",

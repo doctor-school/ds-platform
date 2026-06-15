@@ -35,6 +35,34 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then the response is indistinguishable in status, body, and timing from the never-registered case
     And no duplicate account is created
 
+  @EARS-23 @EARS-16 @happy
+  Scenario: Already-registered email receives an account-exists notice, not a verification code
+    # The legitimate owner must never be stranded waiting for a code that, by
+    # design, is never sent on this branch. The notice carries no code/token and
+    # creates nothing; the API response is identical to the never-registered case.
+    Given an email that is already registered
+    When a visitor submits the registration form with that email
+    Then an account-exists notice email (sign-in / reset prompt, no code or token) is sent to that address
+    And no verification code is sent and no account, consent, or audit_ledger row is written
+    And the API response is indistinguishable in status, body, and timing from the never-registered case
+
+  @EARS-23 @failure
+  Scenario: Repeated duplicate registrations do not flood the inbox
+    Given an email that is already registered
+    And an account-exists notice was just sent to that address
+    When a visitor submits the registration form with that email again within the throttle window
+    Then no second account-exists notice is sent
+    And the API response is still indistinguishable from the never-registered case
+
+  @EARS-24 @EARS-16 @happy
+  Scenario: The post-registration screen serves both new and existing visitors without revealing which
+    Given a visitor has submitted the registration form
+    When the portal shows the post-registration screen
+    Then the screen frames the step as "check your email"
+    And it offers entering the email code as a co-equal affordance
+    And it offers prominent Sign in and Reset password actions
+    And the screen never branches on whether the email was already registered
+
   @EARS-2 @EARS-16 @failure
   Scenario: Phone-only registration is not offered and never 500s
     # Zitadel cannot create a login-capable human without an email (GH #202);

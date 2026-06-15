@@ -24,7 +24,6 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@ds/design-system/card";
@@ -35,11 +34,22 @@ import { Form, FormField } from "@ds/design-system/form";
 const VERIFY_OTP_LENGTH = 6;
 
 /*
- * Verification surface (#131, EARS-3). Step 2 of register: the registrant lands
- * here from `/register` with their email in the query and submits the OTP code
- * Zitadel sent. Registration verification is email-only (#202 — registration is
- * email-primary). Validates with `VerifyRequestSchema`, submits same-origin to
- * `/v1/auth/verify`.
+ * Post-registration surface (#131, EARS-3; reframed #207, EARS-24). The BFF
+ * returns the IDENTICAL `pending_verification` for a brand-new and an
+ * already-registered email (EARS-16), so this screen CANNOT know which visitor
+ * it is showing — and must NEVER branch on account existence. It is therefore
+ * framed as a single, existence-agnostic "check your email" view with two
+ * co-equal affordances:
+ *   (a) enter the email code  — the new registrant's path (unchanged auto-submit
+ *       + post-verify auto-login, #175/#194);
+ *   (b) Войти / Сбросить пароль — prominent actions for the already-registered
+ *       owner, whose correct path is ALSO delivered privately by the EARS-23
+ *       account-exists notice email.
+ * The per-case routing happens in the inbox or by the user's own choice, never by
+ * the form disclosing existence. All copy is from the EARS-21 message catalog.
+ *
+ * Registration verification is email-only (#202 — registration is email-primary).
+ * Validates with `VerifyRequestSchema`, submits same-origin to `/v1/auth/verify`.
  *
  * Auto-login on success (#175): the verify API proves channel ownership (EARS-3)
  * but mints NO session. To carry the freshly-registered user straight in without
@@ -147,43 +157,73 @@ function VerifyCard() {
           })}
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={submit} className="space-y-4" noValidate>
-            <FormField
-              control={form.control}
-              name="code"
-              render={({ field }) => (
-                <OtpField
-                  field={field}
-                  length={VERIFY_OTP_LENGTH}
-                  variant="slotted"
-                  label={t("codeLabel")}
-                  onComplete={onComplete}
-                />
+      <CardContent className="space-y-6">
+        {/* (a) New-registrant path — enter the email code (unchanged auto-submit
+            + post-verify auto-login). A co-equal affordance, not the only one. */}
+        <section className="space-y-3" aria-label={t("newAccountHeading")}>
+          <h2 className="text-sm font-medium text-muted-foreground">
+            {t("newAccountHeading")}
+          </h2>
+          <Form {...form}>
+            <form onSubmit={submit} className="space-y-4" noValidate>
+              <FormField
+                control={form.control}
+                name="code"
+                render={({ field }) => (
+                  <OtpField
+                    field={field}
+                    length={VERIFY_OTP_LENGTH}
+                    variant="slotted"
+                    label={t("codeLabel")}
+                    onComplete={onComplete}
+                  />
+                )}
+              />
+              {error && (
+                <p role="alert" className="text-sm text-destructive">
+                  {error}
+                </p>
               )}
-            />
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={form.formState.isSubmitting}
-              data-testid="verify-submit"
-            >
-              {t("submit")}
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={form.formState.isSubmitting}
+                data-testid="verify-submit"
+              >
+                {t("submit")}
+              </Button>
+            </form>
+          </Form>
+        </section>
+
+        {/* (b) Already-registered owner's path — prominent, co-equal sign-in /
+            reset actions (NOT a footnote link). The screen never branches on
+            account existence; the owner's path is also reinforced out-of-band by
+            the EARS-23 notice email. */}
+        <section
+          className="space-y-3 border-t pt-6"
+          aria-label={t("existingAccountHeading")}
+        >
+          <h2 className="text-sm font-medium text-muted-foreground">
+            {t("existingAccountHeading")}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {t("existingAccountHint")}
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button asChild variant="secondary" className="flex-1">
+              <Link href="/login" data-testid="verify-go-to-login">
+                {t("goToSignIn")}
+              </Link>
             </Button>
-          </form>
-        </Form>
+            <Button asChild variant="outline" className="flex-1">
+              <Link href="/reset" data-testid="verify-go-to-reset">
+                {t("goToReset")}
+              </Link>
+            </Button>
+          </div>
+        </section>
       </CardContent>
-      <CardFooter className="text-sm">
-        <Link href="/login" className="underline">
-          {t("backToSignIn")}
-        </Link>
-      </CardFooter>
     </Card>
   );
 }

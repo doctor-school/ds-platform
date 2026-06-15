@@ -14,6 +14,12 @@ import {
 } from "./idp/idp.types.js";
 import type { RegisterRequest } from "@ds/schemas";
 import { InMemoryAuthAuditLog } from "./session/auth-audit.fake.js";
+import { FakeMailer } from "../mailer/mailer.fake.js";
+import {
+  InMemoryRegisterNoticeThrottle,
+  type RegisterNoticeThrottle,
+} from "../mailer/register-notice-throttle.js";
+import type { Mailer } from "../mailer/mailer.types.js";
 
 // AuthService.register error taxonomy (no DB). Registration is email-primary
 // (#202): the creation schema rejects baseline-violating passwords at the DTO
@@ -53,6 +59,8 @@ function buildService(idp: IdpClient): AuthService {
     explodingDb as never,
     undefined,
     { record: () => Promise.resolve() } as never,
+    new FakeMailer(),
+    new InMemoryRegisterNoticeThrottle("test-pepper"),
     {} as never,
     {} as never,
     {} as never,
@@ -148,6 +156,8 @@ describe("FakeIdpClient.createUser — no-email parity with real Zitadel (#202)"
       stubDb as never,
       undefined,
       audit,
+      new FakeMailer(),
+      new InMemoryRegisterNoticeThrottle("test-pepper"),
       {} as never,
       {} as never,
       {} as never,
@@ -168,5 +178,159 @@ describe("FakeIdpClient.createUser — no-email parity with real Zitadel (#202)"
         consent: [{ purpose: "tos", version: "2026-01" }],
       },
     ]);
+  });
+});
+
+// EARS-23 (#207): account-exists notice on a duplicate-registration. The
+// `alreadyExisted` branch is the EARS-16 hinge — it returns the IDENTICAL
+// `pending_verification` and creates nothing — so the legitimate owner's path is
+// delivered privately by email (a sign-in / reset notice) instead of leaving them
+// stranded on the /verify "enter your code" screen. The send is fire-and-forget,
+// per-address throttled, and never alters the response or throws.
+
+/** A stub DB whose insert/transaction chain succeeds (the new-account branch writes). */
+function makeStubDb() {
+  const insertChain = {
+    values: () => insertChain,
+    onConflictDoUpdate: () => insertChain,
+    returning: () => Promise.resolve([{ id: "stub-user-id" }]),
+    then: (resolve: (v: unknown) => void) => resolve(undefined),
+  };
+  return { transaction: (fn: (tx: unknown) => Promise<unknown>) =>
+    fn({ insert: () => insertChain }) };
+}
+
+/** Let the fire-and-forget notice chain settle (it runs off the response path). */
+function flushMicrotasks(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+function buildRegisterService(opts: {
+  idp: FakeIdpClient;
+  audit: InMemoryAuthAuditLog;
+  mailer: Mailer;
+  throttle: RegisterNoticeThrottle;
+}): AuthService {
+  return new AuthService(
+    opts.idp as unknown as IdpClient,
+    makeStubDb() as never,
+    undefined,
+    opts.audit,
+    opts.mailer,
+    opts.throttle,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+}
+
+describe("AuthService.register — account-exists notice (#207, EARS-23)", () => {
+  const reg: RegisterRequest = {
+    email: "owner@ds.test",
+    password: "Aa1!sufficiently-long",
+    consent,
+  };
+
+  it("EARS-23: when a register targets a NEW email, the system shall dispatch NO account-exists notice", async () => {
+    const mailer = new FakeMailer();
+    const service = buildRegisterService({
+      idp: new FakeIdpClient(),
+      audit: new InMemoryAuthAuditLog(),
+      mailer,
+      throttle: new InMemoryRegisterNoticeThrottle("test-pepper"),
+    });
+
+    const res = await service.register(reg);
+    await flushMicrotasks();
+
+    expect(res).toEqual({ status: "pending_verification" });
+    expect(mailer.accountExistsNotices).toEqual([]);
+  });
+
+  it("EARS-23: when a register targets an ALREADY-REGISTERED email, the system shall dispatch exactly one account-exists notice", async () => {
+    const idp = new FakeIdpClient();
+    const mailer = new FakeMailer();
+    const service = buildRegisterService({
+      idp,
+      audit: new InMemoryAuthAuditLog(),
+      mailer,
+      throttle: new InMemoryRegisterNoticeThrottle("test-pepper"),
+    });
+
+    // Pre-register so the second register hits the `alreadyExisted` branch.
+    await service.register(reg);
+    await flushMicrotasks();
+    expect(mailer.accountExistsNotices).toEqual([]); // none on the new branch
+
+    const res = await service.register(reg);
+    await flushMicrotasks();
+
+    expect(res).toEqual({ status: "pending_verification" });
+    expect(mailer.accountExistsNotices).toEqual(["owner@ds.test"]);
+  });
+
+  it("EARS-23: when a duplicate register repeats within the throttle window, the second notice shall be suppressed", async () => {
+    const idp = new FakeIdpClient();
+    const mailer = new FakeMailer();
+    const service = buildRegisterService({
+      idp,
+      audit: new InMemoryAuthAuditLog(),
+      mailer,
+      throttle: new InMemoryRegisterNoticeThrottle("test-pepper"),
+    });
+
+    await service.register(reg); // new account
+    await service.register(reg); // duplicate → notice #1
+    await service.register(reg); // duplicate → throttled
+    await flushMicrotasks();
+
+    expect(mailer.accountExistsNotices).toEqual(["owner@ds.test"]);
+  });
+
+  it("EARS-23: the already-existed branch shall write no account/consent/auth.register ledger row", async () => {
+    const idp = new FakeIdpClient();
+    const audit = new InMemoryAuthAuditLog();
+    const service = buildRegisterService({
+      idp,
+      audit,
+      mailer: new FakeMailer(),
+      throttle: new InMemoryRegisterNoticeThrottle("test-pepper"),
+    });
+
+    await service.register(reg); // new account → one Registered row
+    await service.register(reg); // duplicate → NO new row
+    await flushMicrotasks();
+
+    // Exactly the single new-account terminal row; the duplicate added nothing.
+    expect(audit.events).toEqual([
+      {
+        type: "Registered",
+        sub: expect.stringMatching(/^fake-sub-/),
+        channel: "email",
+        consent: [{ purpose: "tos", version: "2026-01" }],
+      },
+    ]);
+  });
+
+  it("EARS-23: when the notice send rejects, the duplicate-register response shall stay identical and not throw", async () => {
+    const idp = new FakeIdpClient();
+    // A mailer that always rejects — the fire-and-forget rejection must be
+    // swallowed, never surfacing on the response path (EARS-16 unchanged).
+    const exploding: Mailer = {
+      sendAccountExistsNotice: () =>
+        Promise.reject(new Error("smtp down")),
+    };
+    const service = buildRegisterService({
+      idp,
+      audit: new InMemoryAuthAuditLog(),
+      mailer: exploding,
+      throttle: new InMemoryRegisterNoticeThrottle("test-pepper"),
+    });
+
+    await service.register(reg); // new account
+    const res = await service.register(reg); // duplicate → notice rejects
+    await flushMicrotasks();
+
+    expect(res).toEqual({ status: "pending_verification" });
   });
 });

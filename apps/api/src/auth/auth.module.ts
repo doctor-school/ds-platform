@@ -3,6 +3,7 @@ import { APP_PIPE } from "@nestjs/core";
 import { ZodValidationPipe } from "nestjs-zod";
 import { loadEnv } from "../config/env.schema.js";
 import { IdpModule } from "./idp/idp.module.js";
+import { MailerModule } from "../mailer/mailer.module.js";
 import { SessionModule } from "./session/session.module.js";
 import { AuthController } from "./auth.controller.js";
 import { AuthService } from "./auth.service.js";
@@ -29,7 +30,7 @@ import {
  * auth services and the webhook-secret config value.
  */
 @Module({
-  imports: [IdpModule, SessionModule],
+  imports: [IdpModule, SessionModule, MailerModule],
   controllers: [AuthController],
   providers: [
     AuthService,

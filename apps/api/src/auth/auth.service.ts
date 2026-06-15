@@ -4,6 +4,7 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  Logger,
   ServiceUnavailableException,
   UnauthorizedException,
   UnprocessableEntityException,
@@ -35,6 +36,11 @@ import {
 import { AUTH_WEBHOOK_SECRET } from "./auth.tokens.js";
 import { UserMirrorService } from "./user-mirror.service.js";
 import { SmsBudgetService } from "./sms-budget/sms-budget.service.js";
+import { MAILER, type Mailer } from "../mailer/mailer.types.js";
+import {
+  REGISTER_NOTICE_THROTTLE,
+  type RegisterNoticeThrottle,
+} from "../mailer/register-notice-throttle.js";
 import { AUTH_AUDIT, type AuthAuditLog } from "./session/auth-audit.types.js";
 import {
   SessionService,
@@ -100,6 +106,8 @@ function isUniqueViolation(err: unknown): boolean {
  */
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   // Constructor ordering note: the `@Inject(...)` params come first and the
   // type-inferred `UserMirrorService` last. tsx/esbuild (used by the
   // endpoint-authz lint gate) mis-emits `design:paramtypes` when a type-inferred
@@ -111,6 +119,13 @@ export class AuthService {
     @Inject(AUTH_WEBHOOK_SECRET)
     private readonly webhookSecret: string | undefined,
     @Inject(AUTH_AUDIT) private readonly audit: AuthAuditLog,
+    // EARS-23 (#207): the BFF transactional-email channel + per-address throttle
+    // for the account-exists notice. Both are `@Inject`-token params, so they
+    // precede the type-inferred class deps below (the tsx/esbuild
+    // `design:paramtypes` ordering hazard above).
+    @Inject(MAILER) private readonly mailer: Mailer,
+    @Inject(REGISTER_NOTICE_THROTTLE)
+    private readonly noticeThrottle: RegisterNoticeThrottle,
     private readonly mirror: UserMirrorService,
     private readonly sessions: SessionService,
     private readonly smsBudget: SmsBudgetService,
@@ -433,9 +448,43 @@ export class AuthService {
           version: c.version,
         })),
       });
+    } else {
+      // EARS-23 (#207): the email is already registered. The form must NOT
+      // disclose this (that is precisely the oracle EARS-16 protects), so the
+      // legitimate owner's correct path is delivered PRIVATELY — an
+      // account-exists notice email (sign-in / reset prompt, no code/token/PD).
+      // The branch otherwise stays unchanged: no account, no consent row, no
+      // `auth.register` ledger entry (a duplicate registers nothing).
+      void this.dispatchAccountExistsNotice(req.email);
     }
 
     return { status: "pending_verification" };
+  }
+
+  /**
+   * EARS-23 (#207): dispatch the account-exists notice for an already-registered
+   * register, fire-and-forget. NOT awaited on the response path — so SMTP latency
+   * can never leak past the EARS-16 timing floor (a provider outage cannot stall
+   * or differentiate the response). Per-address throttled (an ephemeral,
+   * HMAC-keyed Redis marker, short TTL) so the form cannot flood a victim's
+   * inbox: only the first send within the window goes out. Every failure (throttle
+   * or send) is logged only and swallowed — it never throws and never alters the
+   * `pending_verification` response.
+   */
+  private async dispatchAccountExistsNotice(email: string): Promise<void> {
+    try {
+      const allowed = await this.noticeThrottle.tryAcquire(email);
+      if (!allowed) return;
+      await this.mailer.sendAccountExistsNotice(email);
+    } catch (err) {
+      // Logged only — the duplicate-register response is already returned and
+      // must stay identical to the never-registered case (EARS-16).
+      this.logger.warn(
+        `account-exists notice dispatch failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   /**

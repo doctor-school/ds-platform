@@ -15,8 +15,14 @@ const INVALID_EMAILS = ["", "   ", "no-at-sign", "missing@domain", "@ds.test"];
 const VALID_EMAIL = "owner@ds.test";
 
 function buildSmtp(): SmtpMailer {
-  // No host ⇒ the adapter is a logged no-op; the parity guard runs first.
-  return new SmtpMailer({ portalBaseUrl: "http://localhost:3001" });
+  // No host on either transport ⇒ the adapter is a logged no-op; the parity guard
+  // (assertSendableEmail) runs FIRST, before any transport decision (#209).
+  return new SmtpMailer({
+    intercept: {},
+    real: undefined,
+    isEnabled: () => false,
+    portalBaseUrl: "http://localhost:3001",
+  });
 }
 
 describe("EARS-23: FakeMailer ↔ SmtpMailer contract parity", () => {

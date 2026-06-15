@@ -1,8 +1,13 @@
 import { Logger, Module } from "@nestjs/common";
 import { Redis } from "ioredis";
-import { loadEnv } from "../config/env.schema.js";
+import { loadEnv, type ApiEnv } from "../config/env.schema.js";
+import { FEATURE_FLAGS } from "../feature-flags/feature-flags.tokens.js";
+import {
+  FLAG_EMAIL_DELIVERY_REAL,
+  type FeatureFlags,
+} from "../feature-flags/feature-flags.types.js";
 import { MAILER, type Mailer } from "./mailer.types.js";
-import { SmtpMailer } from "./smtp-mailer.js";
+import { SmtpMailer, type SmtpTransportConfig } from "./smtp-mailer.js";
 import {
   InMemoryRegisterNoticeThrottle,
   RedisRegisterNoticeThrottle,
@@ -34,6 +39,29 @@ function resolvePepper(): string {
 }
 
 /**
+ * Resolve the REAL transport config from `IDP_SMTP_REAL_*` (#209), reusing the
+ * IdP's real-SMTP creds class. `IDP_SMTP_REAL_HOST` carries `host:port`; a bare
+ * host falls back to `IDP_SMTP_REAL_PORT` (mirrors provision.sh). Returns
+ * `undefined` when the host is unset — a flag-ON send then fails soft to the
+ * Mailpit intercept + warns (never throws).
+ */
+function resolveRealTransport(env: ApiEnv): SmtpTransportConfig | undefined {
+  const raw = env.IDP_SMTP_REAL_HOST;
+  if (!raw) return undefined;
+  const [host, portFromHost] = raw.split(":", 2);
+  const port = portFromHost
+    ? Number.parseInt(portFromHost, 10)
+    : env.IDP_SMTP_REAL_PORT;
+  return {
+    host,
+    port: port && Number.isFinite(port) ? port : undefined,
+    user: env.IDP_SMTP_REAL_USER,
+    password: env.IDP_SMTP_REAL_PASSWORD,
+    from: env.IDP_SMTP_REAL_SENDER_ADDRESS,
+  };
+}
+
+/**
  * The BFF transactional-email channel (003 EARS-23, design §4) — distinct from
  * Zitadel's identity-credential emails. Provides:
  *
@@ -50,14 +78,29 @@ function resolvePepper(): string {
   providers: [
     {
       provide: MAILER,
-      useFactory: (): Mailer => {
+      // FEATURE_FLAGS is @Global (#185) ⇒ injectable here without re-importing
+      // (mirror BotProtectionModule). The factory passes a LIVE `email-delivery-real`
+      // read so a flag flip switches the notice transport with no restart (#209).
+      inject: [FEATURE_FLAGS],
+      useFactory: (flags: FeatureFlags): Mailer => {
         const env = loadEnv();
         return new SmtpMailer({
-          host: env.MAILER_SMTP_HOST,
-          port: env.MAILER_SMTP_PORT,
-          user: env.MAILER_SMTP_USER,
-          password: env.MAILER_SMTP_PASSWORD,
-          from: env.MAILER_SMTP_FROM,
+          intercept: {
+            host: env.MAILER_SMTP_HOST,
+            port: env.MAILER_SMTP_PORT,
+            user: env.MAILER_SMTP_USER,
+            password: env.MAILER_SMTP_PASSWORD,
+            from: env.MAILER_SMTP_FROM,
+          },
+          real: resolveRealTransport(env),
+          // Live read on every send: Unleash overrides when reachable; the
+          // EMAIL_DELIVERY_MODE env default ("real") is the boot default AND the
+          // Unleash-unreachable fallback (same contract as DeliveryReconcileService).
+          isEnabled: () =>
+            flags.isEnabled(
+              FLAG_EMAIL_DELIVERY_REAL,
+              env.EMAIL_DELIVERY_MODE === "real",
+            ),
           portalBaseUrl: env.MAILER_PORTAL_BASE_URL ?? DEFAULT_PORTAL_BASE_URL,
         });
       },

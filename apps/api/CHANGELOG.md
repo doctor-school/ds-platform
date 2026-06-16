@@ -1,5 +1,68 @@
 # @ds/api
 
+## 0.9.0
+
+### Minor Changes
+
+- [#210](https://github.com/doctor-school/ds-platform/pull/210) [`bd2e078`](https://github.com/doctor-school/ds-platform/commit/bd2e07842252e03d52b8912d7441f4cf7e68a446) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Flag-gate the BFF account-exists notice transport on `email-delivery-real` ([#209](https://github.com/doctor-school/ds-platform/issues/209), 003 EARS-23).
+
+  The EARS-23 account-exists notice ([#207](https://github.com/doctor-school/ds-platform/issues/207)/[#208](https://github.com/doctor-school/ds-platform/issues/208)) selected its SMTP transport purely
+  from `MAILER_SMTP_*` env, blind to the `email-delivery-real` Unleash flag — so
+  flipping the flag moved Zitadel's identity-credential channel to the real relay
+  while the BFF notice stayed on Mailpit (an inconsistent, per-channel toggle).
+
+  `SmtpMailer` now carries a **dual transport** — the **Mailpit intercept**
+  (`MAILER_SMTP_*`, the dev/test default) and the **real relay** (reusing the
+  `IDP_SMTP_REAL_*` creds) — and selects per send from the `email-delivery-real`
+  flag read **live** (env default `EMAIL_DELIVERY_MODE === "real"` as the
+  Unleash-unreachable fallback), mirroring `DeliveryReconcileService`. One operator
+  flag flip now moves **both** channels between Mailpit-intercept and the real relay
+  with no restart. Fail-soft: flag ON but `IDP_SMTP_REAL_*` unconfigured ⇒ warn and
+  use the intercept (never throws, never silently drops); the selected transport's
+  host unset ⇒ the existing logged no-op holds. FakeMailer ↔ SmtpMailer create-time
+  parity and the [#207](https://github.com/doctor-school/ds-platform/issues/207) invariants (fire-and-forget, per-address throttle, no
+  account/consent/`auth.register` write, EARS-16-identical response) are unchanged.
+
+  `env.schema.ts` gains the optional `IDP_SMTP_REAL_HOST` (carries `host:port`),
+  `IDP_SMTP_REAL_PORT`, `IDP_SMTP_REAL_USER`, `IDP_SMTP_REAL_PASSWORD`, and
+  `IDP_SMTP_REAL_SENDER_ADDRESS` (`secure` derived from port 465).
+
+- [#191](https://github.com/doctor-school/ds-platform/pull/191) [`c3c73a4`](https://github.com/doctor-school/ds-platform/commit/c3c73a4af9d61f7e3a1636436460e3a9b48323d0) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(api): [#185](https://github.com/doctor-school/ds-platform/issues/185) migrate runtime feature flags to Unleash + delivery reconcile
+
+  The api now reads three dev-stand runtime flags from Unleash (server SDK,
+  `unleash-client`) so an operator toggles them in the Unleash admin UI with no
+  `.env.local` edit + restart:
+
+  - `bot-protection` — read **live per request** by the captcha guard/provider. The
+    `SmartCaptchaProvider` master switch became an `isEnabled()` callback wired to
+    the live flag; `BOT_PROTECTION_ENABLED` is now the bootstrap default and the
+    **fail-closed** fallback (an Unleash outage never silently opens the gate).
+  - `email-delivery-real` / `sms-delivery-real` — drive a **reconcile**: the api
+    does not send OTP email/SMS (Zitadel does, via its active provider), so a flag
+    change cannot branch in code — it repoints Zitadel. A new `DeliveryReconcileService`
+    reacts to the SDK `changed` event (and reconciles on boot), finds the Zitadel
+    provider whose stable `description` matches the desired mode among the
+    pre-configured pair (`provision.sh` now ensures BOTH Mailpit + real SMTP and
+    both sms-sink + SMS-Aero providers), and calls the admin `…/_activate`. It holds
+    no SMTP/SMS secrets (only flips which provider is active), is idempotent
+    (already-active ⇒ no-op), and safe (a not-provisioned target ⇒ leave the active
+    provider, log a clear note, never activate the wrong one).
+
+  A new `FeatureFlagsService` wraps the SDK behind a `FEATURE_FLAGS` port: reads are
+  fail-soft (env default when Unleash is unreachable / the flag is unknown), with a
+  clean SDK shutdown on `OnModuleDestroy` (shutdown hooks enabled in `main.ts`). New
+  env: `UNLEASH_URL`, `UNLEASH_API_TOKEN`. The delivery flags' boot/Unleash-unreachable
+  fallback derives from the existing `EMAIL_DELIVERY_MODE` / `SMS_DELIVERY_MODE` knobs
+  (`mode === "real"`) — the SAME vars `provision.sh` uses to activate the boot provider,
+  so boot intent and the api fallback share one source of truth (no parallel boolean).
+  The SDK + reconcile bind only when their env is present (the shared-CI / fake-IdP
+  default runs env-only), so the api test topology is unchanged.
+
+### Patch Changes
+
+- Updated dependencies [[`1e45957`](https://github.com/doctor-school/ds-platform/commit/1e45957ac70d20c67b80b7f612d85d8421fafb67), [`a381363`](https://github.com/doctor-school/ds-platform/commit/a38136342b366df2dcbac73f674e8f806cd3b6e9)]:
+  - @ds/schemas@0.7.0
+
 ## 0.8.0
 
 ### Minor Changes

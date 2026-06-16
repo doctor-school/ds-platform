@@ -159,7 +159,8 @@ interceptor that no-op on unmarked handlers (the `@BotProtected` pattern), so ea
 gate touches no other call site:
 
 - **Rate limiting** (EARS-13) — `rate-limit/`: `@RateLimited` + a global guard
-  over `RateLimitService` (per-user 5/15 min, per-IP 20/15 min, per-ASN 100/h),
+  over `RateLimitService` (per-user 10/15 min, per-IP 20/15 min, per-ASN 100/h;
+  the per-user window is forgiven on a successful login or reset-complete),
   on register/login/otp/verify/reset; a refusal is a generic `429`.
 - **Timing equalization** (EARS-16) — `timing/` (see above).
 - **Login captcha-after-N-failures** (EARS-17) — `login-challenge/`:

@@ -57,13 +57,14 @@ export class DeliveryReconcileModule
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
-    // Fire-and-forget the initial reconcile + subscribe; a failure here must not
-    // abort boot (the env mode is the safe fallback). The service logs its own
-    // skip/error notes.
+    // `start()` subscribes to flag signals FIRST and runs a resilient, never-throw
+    // initial reconcile (#214), so a transient boot failure no longer leaves the
+    // process deaf to flag changes. The defensive catch stays as belt-and-braces:
+    // a failure here must never abort boot (the env mode is the safe fallback).
     if (!this.reconcile) return;
     await this.reconcile.start().catch((err: unknown) => {
       console.warn(
-        `[delivery-reconcile] initial reconcile failed: ${
+        `[delivery-reconcile] start failed: ${
           err instanceof Error ? err.message : "unknown"
         }`,
       );

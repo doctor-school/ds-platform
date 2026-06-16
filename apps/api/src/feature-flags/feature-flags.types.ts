@@ -36,6 +36,21 @@ export interface FeatureFlags {
    * the boot-time env mode stands, which is the documented fallback.
    */
   onChange(listener: () => void): () => void;
+
+  /**
+   * Register a listener fired once the SDK has completed its **first successful
+   * poll** of the Unleash server (the `synchronized` event). Distinct from
+   * {@link onChange}, which fires only on a *subsequent* toggle: a flag that is
+   * already steadily ON at boot never emits `changed`, so the delivery reconcile
+   * subscribes here to converge a steady-ON flag once real server state is known
+   * — without waiting for an operator to toggle it (#214 defect C). Before this
+   * fires, {@link isEnabled} returns the caller's env default (the unsynchronised
+   * fallback), so the boot-time reconcile may pick the wrong provider; this hook
+   * is the signal to re-reconcile. Returns an unsubscribe handle. A no-op when the
+   * adapter has no live SDK (env-only fallback mode) — there is no remote state to
+   * sync to, so the boot-time env mode stands (the documented fallback).
+   */
+  onSynchronized(listener: () => void): () => void;
 }
 
 /** The three dev-stand runtime flags this migration owns (#185, design §1/§5). */

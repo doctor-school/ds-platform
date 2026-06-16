@@ -441,13 +441,19 @@ fi
 # next-intl's reach and arrived in English/other languages live — this step fixes
 # that Zitadel-side, reproducibly.
 #
-# Zitadel ships COMPLETE built-in Russian translations for all of these message
-# types (verified live: init/verifyemail/passwordreset/verifyphone/verifyemailotp/
-# verifysmsotp all return good `ru` copy with the right {{.Code}}/{{.OTP}}
-# placeholders), so NO custom message-text overrides are needed — we only have to
-# make Zitadel SELECT Russian. (If the bundled copy ever regresses, converge
-# per-type custom texts via PUT /admin/v1/text/message/{type}/ru — init|
-# verifyemail|verifyphone|passwordreset|verifyemailotp|verifysmsotp.)
+# Zitadel ships built-in Russian translations for MOST of these message types
+# (verified live: init/verifyemail/passwordreset/verifyphone/verifyemailotp all
+# return good `ru` copy with the right {{.Code}}/{{.OTP}} placeholders), so those
+# need NO custom override — we only have to make Zitadel SELECT Russian.
+# `verifysmsotp` is the EXCEPTION (#226): its bundled default is inadequate —
+# it leaks OTP-jargon ("OTP"), the dev domain ({{.Domain}} -> truenas.local), the
+# raw Go-duration {{.Expiry}} (e.g. "5m0s"), and a WebOTP autofill line
+# (`@{{.Domain}} #{{.OTP}}`), and the idp even warns `VerifySMSOTP.Title not found
+# in language "ru"`. We therefore explicitly override `verifysmsotp` (ru + en) with
+# branded Doctor.School copy in step 8.bis below. (If any of the bundled copy ever
+# regresses, converge per-type custom texts via PUT
+# /admin/v1/text/message/{type}/ru — init|verifyemail|verifyphone|passwordreset|
+# verifyemailotp|verifysmsotp.)
 #
 # TWO levers, because the instance default alone is NOT sufficient (proven live):
 #   (a) Default language → ru. The documented fallback. Necessary, but registrants
@@ -521,6 +527,39 @@ else
     echo "IDP_RESTRICT_LANGUAGES=0 — leaving allowed languages unrestricted (default-only)" >&2
   fi
 fi
+
+# ── 8.bis. brand the SMS OTP message text (verifysmsotp ru+en) ───────────────
+# Branded SMS OTP copy (#226): the bundled verifysmsotp default leaks OTP-jargon,
+# the dev domain, the raw {{.Expiry}}, and a WebOTP autofill line. {{.OTP}} is the
+# Zitadel code variable for this type (verified live). Placed AFTER step 8 so the
+# language lock is already set. Idempotent: a same-text re-run returns a code-9
+# "No changes" precondition, which api_idempotent absorbs.
+#
+# ONLY `text` is customizable for verifysmsotp: per Zitadel source
+# `internal/notification/static/i18n/{ru,en}.yaml`, the i18n bundle defines just the
+# `Text` field for VerifySMSOTP in EVERY language — the other fields are email-only.
+# The message-text API persists ONLY `text` for this SMS type; a PUT of
+# title/subject/etc. is silently dropped (GET returns them null). Keep {{.OTP}} —
+# do NOT "fix" it to {{.Code}} (some docs cite {{.Code}}; it is wrong for this type).
+#
+# KNOWN BENIGN: each SMS OTP send logs 6 warnings
+#   `VerifySMSOTP.<field> not found in language "ru"`
+# for Title/PreHeader/Subject/Greeting/ButtonText/Footer (email-template label fields
+# that don't exist for the SMS type). They are NOT ru-specific (en warns identically),
+# NOT caused by this branding (the bundled default warns the same), and NOT removable
+# via the message-text API (the SMS type persists only `text`). Upstream Zitadel bug
+# https://github.com/zitadel/zitadel/issues/9636 — in v2.71.4 the missing translation
+# BLOCKED the SMS send (login broken); closed/Done by downgrading it to a non-blocking
+# warning. On our v4.15.0 the SMS sends fine; this is cosmetic log noise only.
+# Optional log-cleanup tracked in #230.
+RU_SMS_OTP_TEXT='Doctor.School: код для входа - {{.OTP}}, никому его не сообщайте'
+EN_SMS_OTP_TEXT='Doctor.School: your sign-in code is {{.OTP}}, do not share it with anyone'
+api_idempotent PUT /admin/v1/text/message/verifysmsotp/ru \
+  "$(jq -nc --arg t "$RU_SMS_OTP_TEXT" '{text:$t}')" >/dev/null \
+  && echo "ensured verifysmsotp/ru branded SMS OTP text" >&2
+api_idempotent PUT /admin/v1/text/message/verifysmsotp/en \
+  "$(jq -nc --arg t "$EN_SMS_OTP_TEXT" '{text:$t}')" >/dev/null \
+  && echo "ensured verifysmsotp/en branded SMS OTP text" >&2
 
 # ── output (machine-parseable; secret only when freshly created) ─────────────
 echo "IDP_PROJECT_ID=${PROJECT_ID}"

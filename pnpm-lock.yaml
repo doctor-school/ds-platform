@@ -300,6 +300,12 @@ importers:
 
   apps/promo: {}
 
+  infra/dev-stand/sms-aero-adapter:
+    devDependencies:
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@types/node@25.9.3)(jsdom@25.0.1)(vite@8.0.14(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
+
   packages/api-client: {}
 
   packages/db:

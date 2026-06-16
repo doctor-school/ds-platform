@@ -46,6 +46,7 @@
 // committed.
 
 import { createServer } from "node:http";
+import { pathToFileURL } from "node:url";
 
 const PORT = Number(process.env.SMS_AERO_ADAPTER_PORT ?? 8091);
 const SMSAERO_ENDPOINT = "https://gate.smsaero.ru/v2/sms/send";
@@ -74,20 +75,24 @@ const logEvent = (event, fields = {}) => {
   console.error(JSON.stringify({ event, ...fields }));
 };
 
-// Pull the recipient phone out of Zitadel's generic HTTP SMS webhook JSON.
-// Zitadel posts the recipient under `recipientPhoneNumber`; we also accept a few
-// defensive aliases seen across versions/configs, but we do NOT scan the whole
-// body for a number — a fuzzy match could send to the wrong number. If no known
-// field carries a non-empty string, we fail closed (return null) rather than
-// guess.
-const extractPhone = (msg) => {
+// Pull the recipient phone out of Zitadel's HTTP SMS webhook JSON. Zitadel v4.15
+// posts a NESTED shape: the recipient lives under `contextInfo.recipientPhoneNumber`
+// (#225). We check, in order: the nested contextInfo field; the legacy flat
+// aliases seen across versions/configs (back-compat); then the `args` block
+// (`verifiedPhone`, then `lastPhone`). We do NOT scan the whole body for a number
+// — a fuzzy match could send to the wrong number. If no known field carries a
+// non-empty string, we fail closed (return null) rather than guess.
+export const extractPhone = (msg) => {
   if (!msg || typeof msg !== "object") return null;
   const candidates = [
+    msg.contextInfo?.recipientPhoneNumber,
     msg.recipientPhoneNumber,
     msg.recipient,
     msg.phoneNumber,
     msg.phone,
     msg.to,
+    msg.args?.verifiedPhone,
+    msg.args?.lastPhone,
   ];
   for (const c of candidates) {
     if (typeof c === "string" && c.trim()) return c.trim();
@@ -95,12 +100,13 @@ const extractPhone = (msg) => {
   return null;
 };
 
-// Pull the rendered message text. Zitadel posts the body under `text`; accept a
-// couple of defensive aliases. An empty text is allowed to fall through to
-// SMS-Aero (it will reject), but a missing recipient is fatal above.
-const extractText = (msg) => {
+// Pull the rendered message text. Zitadel v4.15 posts it under
+// `templateData.text` (#225); we also accept the legacy flat aliases. An empty
+// text is allowed to fall through to SMS-Aero (it will reject), but a missing
+// recipient is fatal above.
+export const extractText = (msg) => {
   if (!msg || typeof msg !== "object") return "";
-  const candidates = [msg.text, msg.message, msg.body];
+  const candidates = [msg.templateData?.text, msg.text, msg.message, msg.body];
   for (const c of candidates) {
     if (typeof c === "string") return c;
   }
@@ -150,7 +156,10 @@ const sendViaSmsAero = async (phone, text) => {
   } catch (err) {
     // Network error / timeout — mirrors the PHP `$raw === false` branch. Log the
     // error name only, never the request body (it carries the OTP).
-    logEvent("smsaero.http_fail", { httpCode: 0, err: String(err?.name ?? err) });
+    logEvent("smsaero.http_fail", {
+      httpCode: 0,
+      err: String(err?.name ?? err),
+    });
     return false;
   } finally {
     clearTimeout(timer);
@@ -207,7 +216,10 @@ const server = createServer(async (req, res) => {
       // Fail closed: we will NOT scan/guess a number. 422 so Zitadel records the
       // delivery as failed rather than believing it sent.
       logEvent("smsaero.no_recipient");
-      return json(res, 422, { ok: false, error: "no recipient phone in webhook" });
+      return json(res, 422, {
+        ok: false,
+        error: "no recipient phone in webhook",
+      });
     }
 
     const text = extractText(parsed);
@@ -223,6 +235,12 @@ const server = createServer(async (req, res) => {
   return json(res, 404, { error: "not found" });
 });
 
-server.listen(PORT, () => {
-  console.log(`sms-aero-adapter listening on :${PORT}`);
-});
+// Only start the HTTP listener when run directly (`node server.mjs`), NOT when
+// imported by the test. The runtime image bind-mounts this file and runs it as
+// the entry point, so this guard preserves production behavior while keeping the
+// parse functions importable (vitest is a devDep, never present at runtime).
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  server.listen(PORT, () => {
+    console.log(`sms-aero-adapter listening on :${PORT}`);
+  });
+}

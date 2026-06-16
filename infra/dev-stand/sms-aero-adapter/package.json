@@ -1,0 +1,13 @@
+{
+  "name": "@ds/sms-aero-adapter",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Dev-stand SMS-Aero adapter (the real outbound SMS route). Plain ESM, runtime dependency-free; vitest is a devDep used only to test the webhook parse functions (#225).",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.8"
+  }
+}

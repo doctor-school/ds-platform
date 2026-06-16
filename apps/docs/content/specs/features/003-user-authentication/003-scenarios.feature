@@ -157,12 +157,23 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And a reset code is sent only if the identifier exists
 
   @EARS-12 @happy
-  Scenario: Completing a password reset revokes existing sessions
+  Scenario: Completing a password reset revokes existing sessions and auto-logs-in
     Given a user with a valid reset code
     When the user submits the code and a policy-conforming new password
     Then Zitadel sets the new password
-    And all existing sessions for that user are revoked
+    And all prior sessions for that user are revoked
     And a PasswordResetCompleted event is recorded
+    And a fresh authenticated session is established for the subject
+    And the __Host- session cookie is set with no token in the response body
+    And the portal routes to /account rather than /login
+
+  @EARS-13 @happy
+  Scenario: A successful login forgives the per-user rate-limit window
+    Given a user who has made several failed login attempts within the per-user window
+    When the user then submits the correct credentials within the window and succeeds
+    Then the per-user rate-limit window for that identifier is cleared
+    And a subsequent attempt for that identifier is not throttled
+    But the per-IP and per-ASN windows are not forgiven
 
   @EARS-15 @failure
   Scenario: Account soft-locks after repeated failures

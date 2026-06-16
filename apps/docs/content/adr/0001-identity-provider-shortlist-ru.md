@@ -86,7 +86,7 @@ email+password, email+magic-link, phone+SMS-OTP, biometric unlock (mobile, ло�
 
 ### 7. Security baseline (mandatory for v1)
 
-- Rate limiting: per-user (5 попыток / 15 мин), per-IP (20 / 15 мин), per-ASN (100 / hour).
+- Rate limiting: per-user (10 попыток / 15 мин, прощается при успешном login или password-reset-complete), per-IP (20 / 15 мин), per-ASN (100 / hour).
 - SMS toll-fraud защита: per-phone (3/hour) + per-IP (10/hour) + per-ASN (100/hour) + **global daily budget circuit-breaker** (≤2000 SMS/день).
 - Account lockout: 10 failed login / 30 мин → soft-lock + email notification.
 - Refresh token theft detection: re-use → invalidate цепочки (RFC 6819).

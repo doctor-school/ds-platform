@@ -15,7 +15,7 @@ export type Clock = () => number;
 /**
  * The challenge policy: after `threshold` failed logins from one origin within
  * `windowMs`, that origin must solve a bot-protection challenge on its next
- * login attempt. Set below the EARS-13 per-user hard limit (5/15 min) so the
+ * login attempt. Set below the EARS-13 per-user hard limit (10/15 min) so the
  * softer captcha gate engages *before* the request is throttled outright.
  */
 export interface LoginChallengeConfig {

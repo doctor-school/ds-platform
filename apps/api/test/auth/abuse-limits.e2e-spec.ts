@@ -102,6 +102,73 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth abuse limits (e2e)", () => {
     });
   });
 
+  // ── #222 (EARS-13): forgive-on-success ───────────────────────────────────────
+  // A successful login (and a successful password-reset-complete) clears the
+  // per-user window for that identifier, so a legitimate forgot-password → login
+  // recovery flow is never throttled mid-journey. Only the per-user window is
+  // forgiven — the per-IP / per-ASN windows are untouched.
+  describe("#222 EARS-13: a success forgives the per-user window", () => {
+    let app: NestFastifyApplication;
+    const email = "forgive@ds.test";
+    const password = "Aa1!ufficiently-long-pw";
+    beforeAll(async () => {
+      app = await bootApp((b) =>
+        b
+          // Per-user ceiling of 3 (per-IP wide open) so the boundary is quick.
+          // The `register` below consumes ONE per-user slot for `email` (the body
+          // field the guard keys on), so the in-test budget is the remaining two.
+          .overrideProvider(RATE_LIMIT_THRESHOLDS)
+          .useValue({
+            perUserPer15Min: 3,
+            perIpPer15Min: 1000,
+            perAsnPerHour: 1000,
+          }),
+      );
+      // Register the recovering user so the success path can actually log in.
+      // (This is the 1st per-user attempt for `email`.)
+      await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        headers: device,
+        payload: {
+          email,
+          password,
+          consent: [{ purpose: "tos", version: "2026-01" }],
+        },
+      });
+    });
+    afterAll(() => cleanup(app, [email]));
+
+    it("EARS-13: when a login succeeds, the system shall clear the per-user window so the next attempt is not throttled", async () => {
+      const wrong = () =>
+        app.inject({
+          method: "POST",
+          url: "/v1/auth/login",
+          headers: device,
+          payload: { identifier: email, password: "wrong-pw-here" },
+        });
+      // register already spent slot 1; spend slot 2 on a typo (generic 401).
+      expect((await wrong()).statusCode).toBe(401);
+      // The correct login is the 3rd (last in-budget) attempt — it SUCCEEDS and
+      // forgives the per-user window.
+      const ok = await app.inject({
+        method: "POST",
+        url: "/v1/auth/login",
+        headers: device,
+        payload: { identifier: email, password },
+      });
+      expect(ok.statusCode).toBe(200);
+      // Without forgive-on-success the window would now hold 3/3 and any further
+      // attempt would 429; because the success cleared it, three more attempts are
+      // admitted (a generic 401, NOT a throttle) before the ceiling is hit again.
+      expect((await wrong()).statusCode).toBe(401);
+      expect((await wrong()).statusCode).toBe(401);
+      expect((await wrong()).statusCode).toBe(401);
+      // The 4th post-success attempt finally re-hits the ceiling → 429.
+      expect((await wrong()).statusCode).toBe(429);
+    });
+  });
+
   // ── EARS-16: timing equalization ──────────────────────────────────────────
   describe("EARS-16: timing equalization", () => {
     let app: NestFastifyApplication;

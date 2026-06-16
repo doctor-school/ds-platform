@@ -848,7 +848,7 @@ export class ZitadelIdpClient implements IdpClient {
     identifier: string,
     code: string,
     newPassword: string,
-  ): Promise<{ sub: string } | null> {
+  ): Promise<IdpSession | null> {
     // Zitadel User v2: POST /v2/users/{userId}/password with the verificationCode
     // from the reset flow sets the new password. A non-2xx (bad/expired code) or
     // an unknown identifier both resolve to `null` — indistinguishable, generic
@@ -863,7 +863,39 @@ export class ZitadelIdpClient implements IdpClient {
         verificationCode: code,
       }),
     });
-    return res.ok ? { sub: userId } : null;
+    if (!res.ok) return null;
+    // #221: auto-login after reset — create a CHECKED session for the subject by
+    // running the same password check `passwordLogin` does, now with the
+    // just-set password. `POST /v2/sessions` with a `user` + `password` check
+    // returns `sessionId` + `sessionToken`; cache the token for the downstream
+    // OIDC exchange (mirroring passwordLogin) and hand back the checked
+    // {@link IdpSession}, so the BFF mints a fresh session via the shared
+    // establishment hop. A failure here falls through to a fresh login rather than
+    // a bare 500: we return null only if no session could be checked.
+    const sessionRes = await this.fetchImpl(this.url("/v2/sessions"), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({
+        checks: {
+          user: { loginName: identifier },
+          password: { password: newPassword },
+        },
+      }),
+    });
+    if (!sessionRes.ok) return null;
+    const data = (await sessionRes.json()) as {
+      sessionId?: string;
+      sessionToken?: string;
+      factors?: { user?: { id?: string } };
+    };
+    const zitadelSessionId = data.sessionId;
+    if (!zitadelSessionId) return null;
+    let sub = data.factors?.user?.id;
+    if (!sub) sub = await this.fetchSessionUserId(zitadelSessionId);
+    if (!sub) return null;
+    if (data.sessionToken)
+      this.rememberSessionToken(zitadelSessionId, data.sessionToken);
+    return { zitadelSessionId, sub };
   }
 
   // ── Passwordless login OTP (EARS-6/7) — design §3, §6; live-wired #153 ──

@@ -94,4 +94,23 @@ describe("/reset complete step (late-mounted slotted code field)", () => {
       }),
     );
   });
+
+  // #221 (EARS-12): a completed reset auto-logs-in (the BFF set the session
+  // cookie), so the page routes straight to /account — NOT back to /login.
+  it("EARS-12: when the reset completes, the page routes to /account (auto-login), not /login", async () => {
+    const user = userEvent.setup();
+    render(<ResetPage />);
+
+    await advanceToCompleteStage(user);
+
+    const codeInput = screen.getByRole("textbox");
+    await user.click(codeInput);
+    await user.keyboard(RESET_CODE);
+    await waitFor(() => expect(codeInput).toHaveValue(RESET_CODE));
+    await user.type(screen.getByLabelText("newPasswordLabel"), NEW_PASSWORD);
+    await user.click(screen.getByRole("button", { name: "setNewPassword" }));
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/account"));
+    expect(push).not.toHaveBeenCalledWith("/login");
+  });
 });

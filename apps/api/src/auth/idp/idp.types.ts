@@ -249,17 +249,21 @@ export interface IdpClient {
    */
   requestPasswordReset(identifier: string): Promise<void>;
   /**
-   * EARS-12: set a new password using a reset code. Resolves to the subject on
-   * success (so the BFF can revoke that user's sessions and emit the audit event)
-   * and to `null` on an invalid/expired code or unknown identifier — the two are
-   * indistinguishable so the caller answers with the same generic failure
-   * (EARS-16). The IdP is the only party that sets the password (design §2).
+   * EARS-12: set a new password using a reset code and, on success, return a
+   * **checked** Zitadel session — the same {@link IdpSession} shape `passwordLogin`
+   * yields — so the BFF can revoke that user's prior sessions, emit the audit
+   * event, AND mint a fresh authenticated session (auto-login, #221) by trading it
+   * for tokens via {@link exchangeSessionForTokens}, exactly as login does
+   * (design §6 convergence). Resolves to `null` on an invalid/expired code or
+   * unknown identifier — the two are indistinguishable so the caller answers with
+   * the same generic failure (EARS-16). The IdP is the only party that sets the
+   * password (design §2).
    */
   completePasswordReset(
     identifier: string,
     code: string,
     newPassword: string,
-  ): Promise<{ sub: string } | null>;
+  ): Promise<IdpSession | null>;
   /**
    * #157: authorize `sub` for the Zitadel **project role** `roleKey` (the v1
    * authenticated baseline is `doctor_guest`, {@link DOCTOR_GUEST_ROLE}). This is

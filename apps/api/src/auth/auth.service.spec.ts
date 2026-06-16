@@ -5,7 +5,7 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { AuthService } from "./auth.service.js";
-import { FakeIdpClient } from "./idp/idp.fake.js";
+import { FakeIdpClient, FAKE_VALID_CODE } from "./idp/idp.fake.js";
 import {
   IdpInvalidArgumentError,
   IdpPasswordPolicyError,
@@ -14,6 +14,9 @@ import {
 } from "./idp/idp.types.js";
 import type { RegisterRequest } from "@ds/schemas";
 import { InMemoryAuthAuditLog } from "./session/auth-audit.fake.js";
+import { InMemorySessionStore } from "./session/session-store.fake.js";
+import { SessionService } from "./session/session.service.js";
+import { parseCookies, SESSION_COOKIE_NAME } from "./session/session.cookie.js";
 import { FakeMailer } from "../mailer/mailer.fake.js";
 import {
   InMemoryRegisterNoticeThrottle,
@@ -332,5 +335,142 @@ describe("AuthService.register — account-exists notice (#207, EARS-23)", () =>
     await flushMicrotasks();
 
     expect(res).toEqual({ status: "pending_verification" });
+  });
+});
+
+// #221 (EARS-12): a completed password reset now AUTO-LOGS-IN the subject — it
+// keeps the global force-logout (every prior session revoked) + the
+// `PasswordResetCompleted` audit, then mints a FRESH authenticated session and
+// returns its `__Host-` cookie (mirroring the login session-creation path,
+// including its session-created `LoginSucceeded` audit row and the token-free
+// body, EARS-8). A bad/expired code or unknown identifier stays the same generic
+// failure (no existence oracle, EARS-16). Exercised at the service altitude over
+// the fake IdP + in-memory store + audit (no Postgres, no HTTP).
+describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () => {
+  const email = "reset-victim@ds.test";
+  const oldPassword = "Aa1!old-sufficiently-long";
+  const newPassword = "Aa1!new-sufficiently-long";
+  const fingerprint = "fp-reset-device";
+
+  /** A full AuthService wired to a real SessionService over fakes. */
+  async function buildResetService(): Promise<{
+    service: AuthService;
+    idp: FakeIdpClient;
+    store: InMemorySessionStore;
+    audit: InMemoryAuthAuditLog;
+    sub: string;
+  }> {
+    const idp = new FakeIdpClient();
+    const created = await idp.createUser({ email, password: oldPassword });
+    const store = new InMemorySessionStore();
+    const audit = new InMemoryAuthAuditLog();
+    const sessions = new SessionService(idp, store, audit);
+    const service = new AuthService(
+      idp,
+      explodingDb as never, // the reset path touches no DB
+      undefined,
+      audit,
+      new FakeMailer(),
+      new InMemoryRegisterNoticeThrottle("test-pepper"),
+      {} as never, // mirror — unused on the reset path
+      sessions,
+      {} as never, // smsBudget — unused on the reset path
+    );
+    return { service, idp, store, audit, sub: created.sub };
+  }
+
+  /** Establish a live session for the subject via the password-login path. */
+  async function establishExisting(
+    idp: FakeIdpClient,
+    sessions: SessionService,
+  ): Promise<string> {
+    const login = await idp.passwordLogin(email, oldPassword);
+    if (login.outcome !== "authenticated") throw new Error("login setup failed");
+    const { cookie } = await sessions.establish(
+      login.session.zitadelSessionId,
+      fingerprint,
+    );
+    return parseCookies(cookie)[SESSION_COOKIE_NAME] as string;
+  }
+
+  it("EARS-12: when a reset completes, the system shall mint a fresh session and return its __Host- cookie", async () => {
+    const { service, store } = await buildResetService();
+
+    await service.requestPasswordReset(email);
+    const result = await service.completePasswordReset(
+      email,
+      FAKE_VALID_CODE,
+      newPassword,
+      fingerprint,
+    );
+
+    // Token-free body (EARS-8) — the status is unchanged…
+    expect(result.body).toEqual({ status: "reset_completed" });
+    // …and a real __Host- session cookie is returned to set.
+    expect(result.cookie).toContain(`${SESSION_COOKIE_NAME}=`);
+    expect(result.cookie).toContain("__Host-");
+    // The cookie's sid resolves to a live, authenticated server-side session.
+    const sid = parseCookies(result.cookie)[SESSION_COOKIE_NAME] as string;
+    const record = await store.get(sid);
+    expect(record).toBeDefined();
+  });
+
+  it("EARS-12: the minted session emits a session-created LoginSucceeded row alongside PasswordResetCompleted", async () => {
+    const { service, audit, sub } = await buildResetService();
+
+    await service.requestPasswordReset(email);
+    await service.completePasswordReset(
+      email,
+      FAKE_VALID_CODE,
+      newPassword,
+      fingerprint,
+    );
+
+    // Force-logout audit is preserved…
+    expect(audit.events).toContainEqual({ type: "PasswordResetCompleted", sub });
+    // …and the new session records the same session-created row as login.
+    expect(audit.events).toContainEqual({
+      type: "LoginSucceeded",
+      sub,
+      method: "password",
+    });
+  });
+
+  it("EARS-12: prior sessions are still globally revoked before the fresh one is minted", async () => {
+    const { service, idp, store } = await buildResetService();
+    const sessions = new SessionService(idp, store, new InMemoryAuthAuditLog());
+    // Two live sessions for the subject (two devices).
+    const sidA = await establishExisting(idp, sessions);
+    const sidB = await establishExisting(idp, sessions);
+    expect(await store.get(sidA)).toBeDefined();
+    expect(await store.get(sidB)).toBeDefined();
+
+    await service.requestPasswordReset(email);
+    const result = await service.completePasswordReset(
+      email,
+      FAKE_VALID_CODE,
+      newPassword,
+      fingerprint,
+    );
+
+    // Both prior sessions are gone (global force-logout)…
+    expect(await store.get(sidA)).toBeUndefined();
+    expect(await store.get(sidB)).toBeUndefined();
+    // …while the freshly-minted post-reset session is live.
+    const freshSid = parseCookies(result.cookie)[SESSION_COOKIE_NAME] as string;
+    expect(await store.get(freshSid)).toBeDefined();
+  });
+
+  it("EARS-12: a bad/expired code stays a generic 400 (the throw precedes any session mint — no oracle)", async () => {
+    const { service } = await buildResetService();
+    await service.requestPasswordReset(email);
+
+    const err = await service
+      .completePasswordReset(email, "000000", newPassword, fingerprint)
+      .catch((e: unknown) => e);
+    // The generic 400 fires before any session-establishment, so no cookie and
+    // no session can leak on the failure path (EARS-16 unchanged).
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).getStatus()).toBe(400);
   });
 });

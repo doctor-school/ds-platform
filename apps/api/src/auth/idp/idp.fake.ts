@@ -360,7 +360,7 @@ export class FakeIdpClient implements IdpClient {
     identifier: string,
     code: string,
     newPassword: string,
-  ): Promise<{ sub: string } | null> {
+  ): Promise<IdpSession | null> {
     const record =
       this.byEmail.get(identifier.toLowerCase()) ??
       this.byPhone.get(identifier);
@@ -372,7 +372,11 @@ export class FakeIdpClient implements IdpClient {
     // updates its stored credential so a subsequent passwordLogin proves it.
     record.password = newPassword;
     this.resetCodes.delete(record.sub); // single-use code
-    return Promise.resolve({ sub: record.sub });
+    // #221: a completed reset auto-logs-in — hand back a CHECKED session (the same
+    // shape passwordLogin yields) so the BFF mints a fresh session via the shared
+    // establishment hop. The fake is no more permissive than the real adapter,
+    // which likewise mints a post-reset session only after the password is set.
+    return Promise.resolve(this.checkedSession(record.sub));
   }
 
   /** Test accessor: how many failed password checks the fake recorded for `identifier`. */

@@ -25,7 +25,7 @@ import type {
 } from "@ds/schemas";
 import { Authz, Public } from "../authz/index.js";
 import { BotProtected } from "../bot-protection/index.js";
-import { RateLimited } from "./rate-limit/index.js";
+import { RateLimited, RateLimitService } from "./rate-limit/index.js";
 import { TimingEqualized } from "./timing/index.js";
 import {
   LoginChallenged,
@@ -70,12 +70,16 @@ const GENERIC_LOGIN_FAILURE = "invalid credentials";
  */
 @Controller({ path: "auth", version: "1" })
 export class AuthController {
-  // Both deps are type-inferred (no `@Inject`), so the tsx/esbuild
+  // All deps are type-inferred (no `@Inject`), so the tsx/esbuild
   // `design:paramtypes` ordering hazard (a type-inferred param preceding an
   // `@Inject` one) does not apply — see the class doc above.
   constructor(
     private readonly auth: AuthService,
     private readonly loginChallenge: LoginChallengePolicy,
+    // #222: forgive-on-success — clear the EARS-13 per-user window when a login or
+    // a reset-complete succeeds (the guard consumed a unit before the outcome was
+    // known; a success means the user is legitimate, so do not strand them).
+    private readonly rateLimit: RateLimitService,
   ) {}
 
   /**
@@ -146,8 +150,12 @@ export class AuthController {
       throw new UnauthorizedException(GENERIC_LOGIN_FAILURE);
     }
 
-    // A successful login clears the origin's failure window (no lingering challenge).
+    // A successful login clears the origin's failure window (no lingering challenge)
+    // and forgives the EARS-13 per-user rate-limit window for this identifier
+    // (#222) — only the per-user window, keyed identically to how the guard keyed
+    // it; the per-IP / per-ASN windows are deliberately left intact.
     this.loginChallenge.reset(ip);
+    this.rateLimit.reset({ ip, identifier: dto.identifier });
     reply.header("set-cookie", result.cookie);
     return { status: "authenticated" };
   }
@@ -338,11 +346,17 @@ export class AuthController {
   }
 
   /**
-   * EARS-12: complete a password reset. Public — the reset code is the
-   * authenticator, not a session (the user has none yet). On success the IdP sets
-   * the new password and the BFF revokes every existing session of that subject
-   * (global force-logout) and records `PasswordResetCompleted`; a bad/expired code
-   * is the same generic 400 (EARS-16), thrown by the service.
+   * EARS-12: complete a password reset and auto-log-in (#221). Public — the reset
+   * code is the authenticator, not a session (the user has none yet). On success
+   * the IdP sets the new password; the BFF revokes every PRIOR session of that
+   * subject (global force-logout) and records `PasswordResetCompleted`, then mints
+   * a FRESH authenticated session and sets the `__Host-` cookie — the identical
+   * convergence point as login (design §6), returning a token-free body (EARS-8).
+   * The fingerprint is derived here (the controller is the only layer with the
+   * request), exactly as `login` does. A successful complete also forgives the
+   * EARS-13 per-user rate-limit window (#222), so a forgot-password → reset flow is
+   * not throttled. A bad/expired code is the same generic 400 (EARS-16), thrown by
+   * the service.
    */
   @Post("password/reset/complete")
   @Public()
@@ -354,14 +368,25 @@ export class AuthController {
     audit: "high-stakes",
     tests: ["EARS-12"],
   })
-  completePasswordReset(
+  async completePasswordReset(
     @Body() dto: PasswordResetCompleteRequestDto,
+    @Headers("user-agent") userAgent: string | undefined,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @Ip() ip: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<PasswordResetCompleteResponse> {
-    return this.auth.completePasswordReset(
+    const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
+    const { cookie, body } = await this.auth.completePasswordReset(
       dto.identifier,
       dto.code,
       dto.newPassword,
+      fingerprint,
     );
+    // Forgive the EARS-13 per-user window on success (#222), keyed identically to
+    // the guard; mint the fresh session by setting its __Host- cookie.
+    this.rateLimit.reset({ ip, identifier: dto.identifier });
+    reply.header("set-cookie", cookie);
+    return body;
   }
 
   @Post("zitadel/webhook")

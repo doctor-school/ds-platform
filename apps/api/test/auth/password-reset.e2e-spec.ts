@@ -150,11 +150,18 @@ describe.skipIf(!process.env.DATABASE_URL)("Password reset (e2e)", () => {
       payload: { identifier: email, code: FAKE_VALID_CODE, newPassword },
     });
     expect(complete.statusCode).toBe(200);
+    // Token-free body invariant (EARS-8): the status is unchanged…
     expect(complete.json()).toEqual({ status: "reset_completed" });
 
-    // Every existing session is revoked: neither prior cookie still authenticates.
+    // Every PRIOR session is revoked: neither earlier cookie still authenticates.
     expect(await authenticates(cookieA)).toBe(false);
     expect(await authenticates(cookieB)).toBe(false);
+
+    // #221 (EARS-12): the reset ALSO auto-logs-in — it sets a fresh __Host- session
+    // cookie that authenticates immediately (no detour through /login).
+    const minted = complete.cookies.find((c) => c.name === SESSION_COOKIE_NAME);
+    expect(minted).toBeDefined();
+    expect(await authenticates(minted!.value)).toBe(true);
 
     // The new password was set at the IdP: it logs in; the old one no longer does.
     const fresh = await login(email, newPassword);

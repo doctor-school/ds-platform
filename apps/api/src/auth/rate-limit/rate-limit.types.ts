@@ -20,9 +20,17 @@ export interface RateLimitThresholds {
   perAsnPerHour: number;
 }
 
-/** EARS-13 defaults (ADR-0001 §7): per-user 5/15 min, per-IP 20/15 min, per-ASN 100/h. */
+/**
+ * EARS-13 defaults (ADR-0001 §7): per-user 10/15 min, per-IP 20/15 min, per-ASN
+ * 100/h. The per-user ceiling was raised 5 → 10 (#222) so a legitimate
+ * forgot-password → login recovery flow (a reset request, a few login typos, then
+ * success) is not throttled mid-journey; a success additionally FORGIVES the
+ * per-user window ({@link RateLimitService.reset}), so the counter never strands a
+ * recovering user. The per-IP / per-ASN ceilings are unchanged (an attacker
+ * spraying many identifiers from one origin / network still hits those).
+ */
 export const DEFAULT_RATE_LIMIT_THRESHOLDS: RateLimitThresholds = {
-  perUserPer15Min: 5,
+  perUserPer15Min: 10,
   perIpPer15Min: 20,
   perAsnPerHour: 100,
 };

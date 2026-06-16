@@ -46,8 +46,10 @@ const RESET_OTP_LENGTH = 6;
  * `PasswordResetCompleteRequestSchema`, the latter carrying the #147 creation
  * complexity baseline) and submit same-origin to `/v1/auth/password/reset[...]`.
  * Reset is an abuse-prone unauthenticated surface, so the initiate step renders
- * the bot-protection field (EARS-17). On completion the BFF revokes every existing
- * session for the subject; we route to `/login` to sign in fresh.
+ * the bot-protection field (EARS-17). On completion the BFF revokes every PRIOR
+ * session for the subject AND mints a fresh authenticated session (auto-login,
+ * #221) — the response sets the `__Host-` session cookie — so we route straight
+ * to `/account` rather than back to `/login`.
  */
 
 export default function ResetPage() {
@@ -191,7 +193,9 @@ function ResetCompleteForm({ identifier }: { identifier: string }) {
     setError(null);
     try {
       await authClient.completePasswordReset({ ...values, identifier });
-      router.push("/login");
+      // #221: the reset response auto-logged us in (the BFF set the __Host- session
+      // cookie), so go straight to the authenticated area instead of /login.
+      router.push("/account");
     } catch (err) {
       setError(authErrorMessage(err, te, te("resetCompleteFailed")));
     }

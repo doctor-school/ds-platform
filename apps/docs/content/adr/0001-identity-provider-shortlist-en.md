@@ -86,7 +86,7 @@ Rationale for deferral: v1 user base ≤200 from the existing Doctor.School data
 
 ### 7. Security baseline (mandatory for v1)
 
-- Rate limiting: per-user (5 attempts / 15 min), per-IP (20 / 15 min), per-ASN (100 / hour).
+- Rate limiting: per-user (10 attempts / 15 min, forgiven on a successful login or password-reset-complete), per-IP (20 / 15 min), per-ASN (100 / hour).
 - SMS toll-fraud protection: per-phone (3/hour) + per-IP (10/hour) + per-ASN (100/hour) + **global daily budget circuit-breaker** (≤2000 SMS/day).
 - Account lockout: 10 failed logins / 30 min → soft-lock + email notification.
 - Refresh token theft detection: re-use → invalidate the chain (RFC 6819).

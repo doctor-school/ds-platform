@@ -297,26 +297,50 @@ export class AuthService {
   }
 
   /**
-   * EARS-12: complete a password reset. The IdP sets the new password against the
-   * reset code (design §2); on success every existing session of that subject is
-   * revoked (global force-logout) and `PasswordResetCompleted` is recorded — both
-   * owned by the session layer. An invalid/expired code or unknown identifier is
-   * the same generic failure (EARS-16); the specific reason lives only in the
-   * audit ledger (F6).
+   * EARS-12: complete a password reset and auto-log-in the subject (#221). The IdP
+   * sets the new password against the reset code and returns a checked session
+   * (design §2). On success the BFF (1) revokes every PRIOR session of that subject
+   * (global force-logout) and records `PasswordResetCompleted` — owned by the
+   * session layer — then (2) mints a FRESH authenticated session from the checked
+   * IdP session, exactly as the login path does (design §6 convergence: the same
+   * `sessions.establish` hop + the same session-created `LoginSucceeded` audit
+   * row). The response body stays token-free (EARS-8) — the new `__Host-` session
+   * cookie is returned for the controller to set. An invalid/expired code or
+   * unknown identifier is the same generic failure (EARS-16); the specific reason
+   * lives only in the audit ledger (F6). The `fingerprint` is computed by the
+   * controller from the request (the only request-coupled input) and bound into
+   * the new session here, mirroring `loginWithPassword`.
    */
   async completePasswordReset(
     identifier: string,
     code: string,
     newPassword: string,
-  ): Promise<PasswordResetCompleteResponse> {
-    const result = await this.idp.completePasswordReset(
+    fingerprint: string,
+  ): Promise<{ cookie: string; body: PasswordResetCompleteResponse }> {
+    const session = await this.idp.completePasswordReset(
       identifier,
       code,
       newPassword,
     );
-    if (!result) throw new BadRequestException(GENERIC_FAILURE);
-    await this.sessions.revokeAllForSub(result.sub);
-    return { status: "reset_completed" };
+    if (!session) throw new BadRequestException(GENERIC_FAILURE);
+    // Global force-logout of every PRIOR session (+ the PasswordResetCompleted
+    // audit) BEFORE minting the new one, so the credential change leaves no stale
+    // session behind and the fresh session is the only survivor.
+    await this.sessions.revokeAllForSub(session.sub);
+    // Mint the fresh session on the identical login convergence point (EARS-8).
+    const established = await this.sessions.establish(
+      session.zitadelSessionId,
+      fingerprint,
+    );
+    // Mirror login's session-created audit row (EARS-18): the reset just minted an
+    // authenticated session, so it records the same `LoginSucceeded` (method
+    // `password`) login does — in addition to the PasswordResetCompleted above.
+    await this.audit.record({
+      type: "LoginSucceeded",
+      sub: session.sub,
+      method: "password",
+    });
+    return { cookie: established.cookie, body: { status: "reset_completed" } };
   }
 
   /**

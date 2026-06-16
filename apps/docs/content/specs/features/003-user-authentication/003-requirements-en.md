@@ -138,11 +138,11 @@ The auth vertical is the platform's first real aggregate cluster (unlike the que
 **Password reset**
 
 - **EARS-11:** When a user requests a password reset for an identifier, the system shall trigger the Zitadel forgot-password code flow and respond enumeration-resistantly regardless of whether the identifier exists (ADR-0001 §7; backstops the Zitadel reset-flow enumeration advisory).
-- **EARS-12:** When a user submits a valid reset code and a policy-conforming new password, the system shall set the new password via Zitadel, revoke all of that user's existing sessions, and emit `PasswordResetCompleted`.
+- **EARS-12:** When a user submits a valid reset code and a policy-conforming new password, the system shall set the new password via Zitadel, revoke all of that user's existing sessions, emit `PasswordResetCompleted`, and establish a new authenticated session for the subject (auto-login — setting the `__Host-` session cookie, with no token in the response body per EARS-8).
 
 **Cross-cutting (ubiquitous / unwanted-behavior)**
 
-- **EARS-13:** The system shall rate-limit auth endpoints per ADR-0001 §7 — per-user (5 / 15 min), per-IP (20 / 15 min), per-ASN (100 / h) — returning a generic throttled response without revealing account existence.
+- **EARS-13:** The system shall rate-limit auth endpoints per ADR-0001 §7 — per-user (10 / 15 min), per-IP (20 / 15 min), per-ASN (100 / h) — returning a generic throttled response without revealing account existence; a successful login or password-reset-complete clears (forgives) the per-user window for that identifier (the per-IP / per-ASN windows are not forgiven).
 - **EARS-14:** While issuing SMS (verification or login OTP), the system shall enforce per-phone (3/h), per-IP (10/h), per-ASN (100/h) limits and a global daily SMS-budget circuit-breaker (≤ 2000/day), refusing further sends when any threshold is exceeded.
 - **EARS-15:** When a user reaches 10 failed password attempts within 30 min, the system shall soft-lock the account (native Zitadel lockout policy) and send a notification email; the account unlocks per policy.
 - **EARS-16:** The system shall return idempotent, enumeration-resistant responses on register / login / reset with a timing delta ≤ 50 ms between the existing-account and unknown-account paths (ADR-0001 §7).

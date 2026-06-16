@@ -97,6 +97,20 @@ export class RateLimitService {
     return true;
   }
 
+  /**
+   * #222 (EARS-13): forgive the **per-user** window for this attempt's identifier
+   * — clear the counter so a recovering user who just succeeded starts fresh. Only
+   * the per-user dimension is cleared (keyed identically to {@link tryConsume}'s
+   * lower-cased identifier); the per-IP and per-ASN windows are deliberately left
+   * intact, so a success cannot be used to refund an origin's / network's broader
+   * budget (an attacker spraying identifiers from one IP still hits the per-IP
+   * ceiling). An identifier-less context (no per-user key) is a no-op.
+   */
+  reset(ctx: RateLimitContext): void {
+    if (ctx.identifier === undefined) return;
+    this.byUser.delete(ctx.identifier.toLowerCase());
+  }
+
   /** Current count in the dimension's live window (0 if absent or rolled over). */
   private current(d: Dimension, t: number): number {
     const w = d.map.get(d.key);

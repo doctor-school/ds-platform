@@ -534,6 +534,24 @@ fi
 # Zitadel code variable for this type (verified live). Placed AFTER step 8 so the
 # language lock is already set. Idempotent: a same-text re-run returns a code-9
 # "No changes" precondition, which api_idempotent absorbs.
+#
+# ONLY `text` is customizable for verifysmsotp: per Zitadel source
+# `internal/notification/static/i18n/{ru,en}.yaml`, the i18n bundle defines just the
+# `Text` field for VerifySMSOTP in EVERY language — the other fields are email-only.
+# The message-text API persists ONLY `text` for this SMS type; a PUT of
+# title/subject/etc. is silently dropped (GET returns them null). Keep {{.OTP}} —
+# do NOT "fix" it to {{.Code}} (some docs cite {{.Code}}; it is wrong for this type).
+#
+# KNOWN BENIGN: each SMS OTP send logs 6 warnings
+#   `VerifySMSOTP.<field> not found in language "ru"`
+# for Title/PreHeader/Subject/Greeting/ButtonText/Footer (email-template label fields
+# that don't exist for the SMS type). They are NOT ru-specific (en warns identically),
+# NOT caused by this branding (the bundled default warns the same), and NOT removable
+# via the message-text API (the SMS type persists only `text`). Upstream Zitadel bug
+# https://github.com/zitadel/zitadel/issues/9636 — in v2.71.4 the missing translation
+# BLOCKED the SMS send (login broken); closed/Done by downgrading it to a non-blocking
+# warning. On our v4.15.0 the SMS sends fine; this is cosmetic log noise only.
+# Optional log-cleanup tracked in #230.
 RU_SMS_OTP_TEXT='Doctor.School: код для входа - {{.OTP}}, никому его не сообщайте'
 EN_SMS_OTP_TEXT='Doctor.School: your sign-in code is {{.OTP}}, do not share it with anyone'
 api_idempotent PUT /admin/v1/text/message/verifysmsotp/ru \

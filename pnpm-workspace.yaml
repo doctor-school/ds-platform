@@ -3,3 +3,4 @@ packages:
   - "packages/*"
   - "tools/reviewer-agent"
   - "tools/lint/eslint-rules"
+  - "infra/dev-stand/sms-aero-adapter"

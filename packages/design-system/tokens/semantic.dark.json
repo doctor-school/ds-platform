@@ -1,0 +1,23 @@
+{
+  "$description": "Dark-theme overrides — ONLY the semantic color layer is repointed at different primitives; primitives, radius, typography and motion are NOT duplicated. Emitted into the `.dark` block of tokens.css. Reproduces the current `.dark` palette 1:1.",
+  "color": {
+    "$type": "color",
+    "background": { "$value": "{color.neutral.950}" },
+    "foreground": { "$value": "{color.neutral.50}" },
+    "card": { "$value": "{color.neutral.800}" },
+    "card-foreground": { "$value": "{color.neutral.50}" },
+    "primary": { "$value": "{color.neutral.50}" },
+    "primary-foreground": { "$value": "{color.neutral.800}" },
+    "secondary": { "$value": "{color.neutral.700}" },
+    "secondary-foreground": { "$value": "{color.neutral.50}" },
+    "muted": { "$value": "{color.neutral.700}" },
+    "muted-foreground": { "$value": "{color.neutral.400}" },
+    "accent": { "$value": "{color.neutral.700}" },
+    "accent-foreground": { "$value": "{color.neutral.50}" },
+    "destructive": { "$value": "{color.red.400}" },
+    "destructive-foreground": { "$value": "{color.neutral.50}" },
+    "border": { "$value": "{color.neutral.alpha-10}" },
+    "input": { "$value": "{color.neutral.alpha-15}" },
+    "ring": { "$value": "{color.neutral.500}" }
+  }
+}

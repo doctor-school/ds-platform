@@ -1,0 +1,19 @@
+{
+  "button": {
+    "radius": { "$type": "dimension", "$value": "{radius.control}" }
+  },
+  "input": {
+    "radius": { "$type": "dimension", "$value": "{radius.control}" }
+  },
+  "card": {
+    "radius": { "$type": "dimension", "$value": "{radius.control}" }
+  },
+  "otp-slot": {
+    "radius": { "$type": "dimension", "$value": "{radius.control}" },
+    "size": { "$type": "dimension", "$value": "{space.10}" }
+  },
+
+  "game": {
+    "$description": "RESERVED namespace for future gamification (PRD §15: mascot, Lottie/Rive cards, Con/Pul/Au). Deliberately empty — no values in this foundation iteration; the game components are out of scope (#231 spec §2.1, §6). Tokens land here when those surfaces arrive without restructuring the taxonomy."
+  }
+}

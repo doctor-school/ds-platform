@@ -1,0 +1,69 @@
+{
+  "color": {
+    "$type": "color",
+    "background": { "$value": "{color.neutral.0}" },
+    "foreground": { "$value": "{color.neutral.950}" },
+    "card": { "$value": "{color.neutral.0}" },
+    "card-foreground": { "$value": "{color.neutral.950}" },
+    "primary": { "$value": "{color.neutral.800}" },
+    "primary-foreground": { "$value": "{color.neutral.50}" },
+    "secondary": { "$value": "{color.neutral.100}" },
+    "secondary-foreground": { "$value": "{color.neutral.800}" },
+    "muted": { "$value": "{color.neutral.100}" },
+    "muted-foreground": { "$value": "{color.neutral.500}" },
+    "accent": { "$value": "{color.neutral.100}" },
+    "accent-foreground": { "$value": "{color.neutral.800}" },
+    "destructive": { "$value": "{color.red.500}" },
+    "destructive-foreground": { "$value": "{color.neutral.50}" },
+    "border": { "$value": "{color.neutral.200}" },
+    "input": { "$value": "{color.neutral.200}" },
+    "ring": { "$value": "{color.neutral.400}" }
+  },
+
+  "radius": {
+    "$type": "dimension",
+    "control": { "$value": "{radius.base}" }
+  },
+
+  "text": {
+    "body": {
+      "font-size": { "$type": "dimension", "$value": "{font.size.base}" },
+      "line-height": {
+        "$type": "number",
+        "$value": "{font.line-height.normal}"
+      },
+      "font-weight": { "$type": "fontWeight", "$value": "{font.weight.normal}" }
+    },
+    "heading": {
+      "font-size": { "$type": "dimension", "$value": "{font.size.2xl}" },
+      "line-height": {
+        "$type": "number",
+        "$value": "{font.line-height.tight}"
+      },
+      "font-weight": {
+        "$type": "fontWeight",
+        "$value": "{font.weight.semibold}"
+      }
+    },
+    "label": {
+      "font-size": { "$type": "dimension", "$value": "{font.size.sm}" },
+      "line-height": {
+        "$type": "number",
+        "$value": "{font.line-height.normal}"
+      },
+      "font-weight": { "$type": "fontWeight", "$value": "{font.weight.medium}" }
+    }
+  },
+
+  "motion": {
+    "duration": {
+      "$type": "duration",
+      "fast": { "$value": "{duration.fast}" },
+      "base": { "$value": "{duration.base}" }
+    },
+    "easing": {
+      "$type": "cubicBezier",
+      "standard": { "$value": "{easing.standard}" }
+    }
+  }
+}

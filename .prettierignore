@@ -10,3 +10,9 @@ pnpm-lock.yaml
 **/dist/**
 **/.source/**
 **/coverage/**
+
+# Generated design tokens (#233). Style Dictionary owns this layout; the CI
+# `tokens-fresh` guard regenerates and `git diff --exit-code`s them, so Prettier
+# must NOT touch them or the committed file would diverge from a fresh build.
+packages/design-system/src/styles/tokens.css
+packages/design-system/src/styles/allowed-tokens.json

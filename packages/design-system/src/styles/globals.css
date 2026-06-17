@@ -18,7 +18,8 @@
  * (resolved through the workspace symlink) so their utility classes are emitted
  * even though the consuming app cannot see them in its own tree.
  */
-@source "../components";
+@source "../primitives";
+@source "../blocks";
 
 @keyframes caret-blink {
   0%,

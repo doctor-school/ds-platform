@@ -9,7 +9,7 @@ mode: inline
 
 **Kind:** procedural · **Mode:** inline (the lead agent executes this procedure itself).
 
-The design system exists so we **do not reinvent the wheel**. This skill makes adoption a _gated step_, not a good intention: every UI-shaped task passes the registry-research gate before any bespoke code is written. Canon: **ADR-0013** (design-token SoT, block adoption, the approved toolbox, the public-repo MIT constraint) and ADR-0004 §6 (frontend stack).
+The design system exists so we **do not reinvent the wheel**. This skill makes adoption a _gated step_, not a good intention: every UI-shaped task passes the registry-research gate before any bespoke code is written. Canon: **ADR-0013** (design-token SoT, block adoption, the approved toolbox, the proprietary-product licensing model) and ADR-0004 §6 (frontend stack).
 
 ## When this applies
 

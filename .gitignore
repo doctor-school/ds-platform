@@ -45,3 +45,8 @@ test-results/
 
 # Claude Code — share settings.json, keep local overrides private
 .claude/settings.local.json
+
+# Brand book raw presentation — ~142 MB binary; track via Git LFS if it must be
+# versioned. The durable artifact is the extracted brand->token map (see
+# apps/docs/content/specs/tech/2026-06-17-design-system-foundation-brand-token-map.md).
+apps/docs/brandbook/*.pdf

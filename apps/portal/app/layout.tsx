@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { Inter } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 
@@ -8,6 +9,19 @@ export const metadata: Metadata = {
   title: "Doctor.School",
   description: "Doctor.School user portal",
 };
+
+/**
+ * Inter is the brand UI base font (`font.family.base`, brand → token map §2). The
+ * design-system token `--font-sans` already declares an Inter-leading stack; here
+ * we self-host Inter via `next/font` and bind the loaded face to `--font-sans` on
+ * `<html>`, so the rendered UI is the actual Inter webfont (not a fallback) while
+ * the token stays the single source of truth for which family is the base.
+ */
+const inter = Inter({
+  subsets: ["latin", "cyrillic"],
+  display: "swap",
+  variable: "--font-inter",
+});
 
 /**
  * Root layout. Wires the single-locale (RU) i18n provider (#177): the locale and
@@ -26,7 +40,19 @@ export default async function RootLayout({
   const messages = await getMessages();
 
   return (
-    <html lang={locale} suppressHydrationWarning>
+    <html
+      lang={locale}
+      className={inter.variable}
+      style={
+        {
+          // Resolve the `--font-sans` token to the self-hosted Inter face first,
+          // keeping the token's emoji/system fallbacks after it.
+          "--font-sans":
+            "var(--font-inter), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'",
+        } as CSSProperties
+      }
+      suppressHydrationWarning
+    >
       <body className="min-h-screen bg-background text-foreground antialiased">
         <NextIntlClientProvider locale={locale} messages={messages}>
           {children}

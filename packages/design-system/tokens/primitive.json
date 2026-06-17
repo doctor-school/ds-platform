@@ -1,32 +1,98 @@
 {
   "color": {
     "$type": "color",
-    "white": { "$value": "oklch(1 0 0)" },
+    "$description": "Brand-pinned colors carry exact brand-book hexes (Doctor School brand → token map §1.1). System-derived values (neutral ramp, intermediate blue stops, introduced red) are noted inline. Reserved accent palettes (§1.2) have no semantic role.",
+    "white": { "$value": "#FFFFFF" },
     "black": { "$value": "oklch(0 0 0)" },
+
+    "blue": {
+      "$description": "Brand primary family. 700/500/300 are brand-pinned anchors (Pantone Dark Blue C / 2727 C / 284 C). 100/200/400/600/800 are system-derived around the anchors for tints/hover/pressed.",
+      "100": { "$value": "#D3E8FD" },
+      "200": { "$value": "#AED4FB" },
+      "300": { "$value": "#6BB1F7" },
+      "400": { "$value": "#4C9BF5" },
+      "500": { "$value": "#2D84F2" },
+      "600": { "$value": "#1F69C8" },
+      "700": { "$value": "#114D9E" },
+      "800": { "$value": "#0D3A77" }
+    },
+
+    "green": {
+      "$description": "Brand status green (success). 500 is brand-pinned; darker stop reserved via accent.green.",
+      "500": { "$value": "#009959" }
+    },
+
+    "orange": {
+      "$description": "Brand status orange/terracotta (warning). 500 is brand-pinned.",
+      "500": { "$value": "#DF5726" }
+    },
+
     "neutral": {
+      "$description": "System-derived blue-tinted gray ramp (cool hue ~250 around the brand primary), replacing the pure-gray #233 ramp. L values track Tailwind's gray scale; chroma is kept low so it reads as a cool neutral.",
       "0": { "$value": "oklch(1 0 0)" },
-      "50": { "$value": "oklch(0.985 0 0)" },
-      "100": { "$value": "oklch(0.97 0 0)" },
-      "200": { "$value": "oklch(0.922 0 0)" },
-      "400": { "$value": "oklch(0.708 0 0)" },
-      "500": { "$value": "oklch(0.556 0 0)" },
-      "700": { "$value": "oklch(0.269 0 0)" },
-      "800": { "$value": "oklch(0.205 0 0)" },
-      "950": { "$value": "oklch(0.145 0 0)" },
+      "50": { "$value": "oklch(0.985 0.002 250)" },
+      "100": { "$value": "oklch(0.968 0.004 250)" },
+      "200": { "$value": "oklch(0.922 0.006 250)" },
+      "300": { "$value": "oklch(0.87 0.008 250)" },
+      "400": { "$value": "oklch(0.704 0.01 250)" },
+      "500": { "$value": "oklch(0.556 0.012 250)" },
+      "600": { "$value": "oklch(0.45 0.014 250)" },
+      "700": { "$value": "oklch(0.372 0.016 250)" },
+      "800": { "$value": "oklch(0.27 0.018 250)" },
+      "900": { "$value": "oklch(0.21 0.02 250)" },
+      "950": { "$value": "oklch(0.16 0.02 250)" },
       "alpha-10": { "$value": "oklch(1 0 0 / 10%)" },
       "alpha-15": { "$value": "oklch(1 0 0 / 15%)" }
     },
+
     "red": {
-      "500": { "$value": "oklch(0.577 0.245 27.325)" },
-      "400": { "$value": "oklch(0.704 0.191 22.216)" }
+      "$description": "INTRODUCED functional error red — the Doctor School brand defines none. #C81E1E carries white text at 5.74:1 (WCAG AA pass for normal text) and reads against white. System-tunable.",
+      "500": { "$value": "#C81E1E" },
+      "400": { "$value": "#E15555" }
+    },
+
+    "accent": {
+      "$description": "RESERVED brand accent palettes (brand → token map §1.2). Tokenised as primitive reserves for future category/gamification surfaces; NO semantic role in this foundation. Out of scope for the auth slice.",
+      "purple": {
+        "300": { "$value": "#D3BADE" },
+        "500": { "$value": "#9257AE" },
+        "700": { "$value": "#73428A" }
+      },
+      "orange": {
+        "300": { "$value": "#F2BAA6" },
+        "500": { "$value": "#DF5726" },
+        "700": { "$value": "#B2431A" }
+      },
+      "gold": {
+        "300": { "$value": "#EFD8A9" },
+        "500": { "$value": "#E4BC6C" },
+        "700": { "$value": "#C5963A" }
+      },
+      "green": {
+        "300": { "$value": "#009959" },
+        "500": { "$value": "#00693D" },
+        "700": { "$value": "#00331E" }
+      },
+      "lime": {
+        "300": { "$value": "#BDD631" },
+        "500": { "$value": "#70C143" }
+      },
+      "lavender": {
+        "500": { "$value": "#B2A4D4" }
+      },
+      "sky": {
+        "500": { "$value": "#48A4DB" }
+      }
     }
   },
 
   "font": {
     "family": {
       "$type": "fontFamily",
-      "sans": {
+      "base": {
+        "$description": "Brand UI base font (brand → token map §2): Inter — all portal UI, body + headings. Inter is web-available + the shadcn default → no fallback risk. The portal loads Inter via next/font and binds it to --font-sans, so utilities resolve to Inter.",
         "$value": [
+          "Inter",
           "ui-sans-serif",
           "system-ui",
           "sans-serif",
@@ -35,6 +101,31 @@
           "Segoe UI Symbol",
           "Noto Color Emoji"
         ]
+      },
+      "sans": {
+        "$description": "Alias of font.family.base — the Tailwind `font-sans` utility / body default resolves to the brand base font (Inter).",
+        "$value": [
+          "Inter",
+          "ui-sans-serif",
+          "system-ui",
+          "sans-serif",
+          "Apple Color Emoji",
+          "Segoe UI Emoji",
+          "Segoe UI Symbol",
+          "Noto Color Emoji"
+        ]
+      },
+      "display": {
+        "$description": "RESERVED — Tactic Sans Extended (brand: special/marketing surfaces). Licensed brand face; NOT loaded by core UI. Token only.",
+        "$value": ["Tactic Sans Extended", "Inter", "sans-serif"]
+      },
+      "brand": {
+        "$description": "RESERVED — Century Gothic (brand: project logos/lockups). Licensed brand face; NOT loaded by core UI. Token only.",
+        "$value": ["Century Gothic", "Inter", "sans-serif"]
+      },
+      "social": {
+        "$description": "RESERVED — Montserrat (brand: social-media assets). NOT loaded by core UI. Token only.",
+        "$value": ["Montserrat", "Inter", "sans-serif"]
       },
       "mono": {
         "$value": [

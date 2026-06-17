@@ -52,6 +52,12 @@ Compose stack for Postgres / Redis / etc. → `infra/dev-stand/`. See the [local
 
 ---
 
+## Design-system / UI construction
+
+UI is built from `@ds/design-system` — styling **only** via tokens (arbitrary Tailwind values are lint-blocked), and **adoption before bespoke**: before writing any page/form/element from scratch, run the `build-ui-from-design-system` skill (`apps/docs/content/skills/`) — inventory the package, then search the approved registry whitelist (official shadcn · Origin UI · Intent·Jolly · Kibo), report the result, adopt + re-skin to tokens; bespoke only after the search comes up empty. Our code is proprietary (`UNLICENSED`) at any repo visibility; proprietary/paid registries are pattern-only while the repo is public. Canon: **ADR-0013** + AGENTS.md §6.
+
+---
+
 ## UI verification (mandatory)
 
 Any feature that can be checked in the UI MUST be verified in the **actual running UI** before it is called done: bring up the dev-stand (`infra/dev-stand/`, TrueNAS not 24/7), run api + portal locally, and drive the journey in a browser (Playwright MCP). `typecheck` + `build` + `lint` + Mode-a review are necessary but **not** sufficient — they never prove the rendered result, and live-gated E2E that does not run in CI is not a substitute. Keep the stand up by default during UI work — it is also what your own Playwright testing needs. A user-facing dev placeholder (e.g. a "set this env var" note shown to end users) is a banned stub, not an affordance — render the real thing or nothing.

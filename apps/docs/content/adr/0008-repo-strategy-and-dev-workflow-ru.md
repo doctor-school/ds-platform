@@ -43,7 +43,7 @@ AI-stack design spec §11 уже перечислил шаги AI-loop tooling (
 
 ### 2.1 Repo identity и владелец
 
-- **GitHub repository:** `doctor-school/ds-platform`, private до Pre-pilot launch.
+- **GitHub repository:** `doctor-school/ds-platform`. **Цель: private до Pre-pilot launch.** Сейчас **public** — фактически взятая митигация под два paywall'а GitHub Free: branch-protection API закрыт для private-репо (§2.6 reactivation triggers) и проект упёрся в квоту 2000 мин Actions для private (риск §2.11); публичный репо открывает оба бесплатно. **Вернуть в private** при появлении enabler'а — CI-diet под бесплатные 2000 мин private, либо upgrade до GitHub Team. Видимость **не** влияет на владение: код `UNLICENSED` (проприетарный, все права защищены) при любой видимости; открытое состояние — _source-available_, не open-source (ADR-0013 §5).
 - **GitHub organization:** `doctor-school` (GitHub Free plan: unlimited private repos + unlimited collaborators). Все repos DS Platform живут здесь — client-platform-level граница, симметричная Plane workspace `doctor-school`.
 - **Visibility decision Phase 1+:** оставить private vs source-available — отдельный ADR при достижении Pre-pilot или появлении community-сценария.
 

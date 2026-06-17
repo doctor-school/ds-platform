@@ -357,11 +357,14 @@ Tailwind + shadcn/ui — RSC-native (static CSS, никаких runtime CSS-in-J
 
 ### 6.3. AI-friendly customization для DS-brand
 
-Под gamification и medical-brand:
+> **Пересмотрено ADR-0013** (design-token SoT и theming + методология block-adoption). Исходное обещание — «DS-токены в `packages/design-system/tokens.json` → Tailwind theme config» — так и не материализовалось; механизм ниже его замещает.
 
-- DS-токены (цвета, типографика, spacing) в `packages/design-system/tokens.json` → Tailwind theme config
-- Mascot integration, Lottie/Rive для game-card animations (см. PRD §15 — геймификация)
-- Con/Pul/Au cards — кастомные shadcn-extended компоненты
+Под medical-brand и будущую геймификацию:
+
+- **Токены — единый источник истины** в формате DTCG (`packages/design-system/tokens/*.json`, три слоя primitive → semantic → component), компилируются **Style Dictionary** в Tailwind v4 `@theme` + `:root`/`.dark` CSS-переменные — **не** рукописный `tokens.json` и не `tailwind.config` theme-объект. Компоненты ссылаются только на semantic/component-токены; одно изменение semantic-слоя перекрашивает всё приложение. (ADR-0013 §1–2; tech-spec design-system-foundation §2.)
+- **Adoption блоков до bespoke:** UI собирается из готовых блоков/компонентов с фиксированного whitelist реестров (gate `build-ui-from-design-system`), переодетых в токены и owned в `src/blocks`/`src/primitives`. (ADR-0013 §4.)
+- Mascot integration, Lottie/Rive для game-card animations (см. PRD §15 — геймификация); namespace `game.*` зарезервирован.
+- Con/Pul/Au cards — кастомные shadcn-extended компоненты поверх token-оболочки.
 
 ---
 

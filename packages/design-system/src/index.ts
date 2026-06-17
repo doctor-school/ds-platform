@@ -1,7 +1,9 @@
 export { cn } from "./lib/utils";
-export { Button, buttonVariants, type ButtonProps } from "./components/button";
-export { Input } from "./components/input";
-export { Label } from "./components/label";
+
+// ── Primitives (owned shadcn components) ──────────────────────────────────────
+export { Button, buttonVariants, type ButtonProps } from "./primitives/button";
+export { Input } from "./primitives/input";
+export { Label } from "./primitives/label";
 export {
   Card,
   CardHeader,
@@ -9,7 +11,7 @@ export {
   CardTitle,
   CardDescription,
   CardContent,
-} from "./components/card";
+} from "./primitives/card";
 export {
   useFormField,
   Form,
@@ -19,16 +21,30 @@ export {
   FormDescription,
   FormMessage,
   FormField,
-} from "./components/form";
+} from "./primitives/form";
 export {
   InputOTP,
   InputOTPGroup,
   InputOTPSlot,
   InputOTPSeparator,
-} from "./components/input-otp";
+} from "./primitives/input-otp";
+export { Tabs, TabsList, TabsTrigger, TabsContent } from "./primitives/tabs";
+
+// ── Field primitives (#197) ───────────────────────────────────────────────────
 export {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "./components/tabs";
+  EmailField,
+  PhoneField,
+  OtpField,
+  PasswordField,
+  IdentifierField,
+  EmailFieldSchema,
+  PhoneFieldSchema,
+  IdentifierFieldSchema,
+  OtpCodeFieldSchema,
+  NewPasswordFieldSchema,
+  CurrentPasswordFieldSchema,
+  maskPhoneInput,
+} from "./primitives/fields";
+
+// ── Blocks (#235 / #227) ──────────────────────────────────────────────────────
+export { AuthCard, OtpFocusScreen, maskDestination } from "./blocks";

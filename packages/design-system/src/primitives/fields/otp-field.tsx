@@ -2,18 +2,9 @@
 
 import type { ControllerRenderProps, FieldValues } from "react-hook-form";
 
-import { Input } from "@ds/design-system/input";
-import {
-  FormControl,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@ds/design-system/form";
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSlot,
-} from "@ds/design-system/input-otp";
+import { Input } from "../input";
+import { FormControl, FormItem, FormLabel, FormMessage } from "../form";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "../input-otp";
 
 /**
  * `<OtpField>` (#197) — the semantic one-time-code primitive. Bakes in: fixed length

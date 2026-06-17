@@ -3,7 +3,7 @@ import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Form, FormField } from "@ds/design-system/form";
+import { Form, FormField } from "../form";
 
 import { OtpField } from "./otp-field";
 

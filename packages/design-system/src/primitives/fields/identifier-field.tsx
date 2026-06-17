@@ -1,15 +1,9 @@
 "use client";
 
-import { useTranslations } from "next-intl";
 import type { ControllerRenderProps, FieldValues } from "react-hook-form";
 
-import { Input } from "@ds/design-system/input";
-import {
-  FormControl,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@ds/design-system/form";
+import { Input } from "../input";
+import { FormControl, FormItem, FormLabel, FormMessage } from "../form";
 
 /**
  * `<IdentifierField>` (#197) — the email-OR-phone *union* box. This is the fifth
@@ -30,6 +24,8 @@ import {
  *
  * `autoComplete="username"` (not `email`/`tel`) because the box is a union — the
  * e2e selects the identifier by this attribute, so it is preserved exactly.
+ *
+ * i18n contract (#235): no copy lives here — the app supplies `label` / `placeholder`.
  */
 export function IdentifierField<T extends FieldValues>({
   field,
@@ -38,21 +34,20 @@ export function IdentifierField<T extends FieldValues>({
   testId,
 }: {
   field: ControllerRenderProps<T>;
-  /** Label; defaults to the shared `common.emailOrPhone` RU string. */
-  label?: string;
-  /** Placeholder; defaults to the shared `common.identifierPlaceholder`. */
+  /** Field label (app-supplied, localized). */
+  label: string;
+  /** Placeholder (app-supplied, localized). */
   placeholder?: string;
   /** Optional `data-testid` for the input (the e2e relies on stable test ids). */
   testId?: string;
 }) {
-  const tc = useTranslations("common");
   return (
     <FormItem>
-      <FormLabel>{label ?? tc("emailOrPhone")}</FormLabel>
+      <FormLabel>{label}</FormLabel>
       <FormControl>
         <Input
           autoComplete="username"
-          placeholder={placeholder ?? tc("identifierPlaceholder")}
+          placeholder={placeholder}
           data-testid={testId}
           {...field}
           value={field.value ?? ""}

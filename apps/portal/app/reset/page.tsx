@@ -13,7 +13,7 @@ import {
 } from "@ds/schemas";
 
 import { BotProtectionField } from "@/components/bot-protection";
-import { IdentifierField, OtpField, PasswordField } from "@/components/fields";
+import { IdentifierField, OtpField, PasswordField } from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import {
@@ -54,6 +54,7 @@ const RESET_OTP_LENGTH = 6;
 
 export default function ResetPage() {
   const t = useTranslations("reset");
+  const tc = useTranslations("common");
   const te = useTranslations("errors");
   const [stage, setStage] = useState<"request" | "complete">("request");
   const [identifier, setIdentifier] = useState("");
@@ -127,7 +128,13 @@ export default function ResetPage() {
                 <FormField
                   control={requestForm.control}
                   name="identifier"
-                  render={({ field }) => <IdentifierField field={field} />}
+                  render={({ field }) => (
+                    <IdentifierField
+                      field={field}
+                      label={tc("emailOrPhone")}
+                      placeholder={tc("identifierPlaceholder")}
+                    />
+                  )}
                 />
                 <BotProtectionField onToken={setCaptchaToken} />
                 {error && (
@@ -172,6 +179,7 @@ export default function ResetPage() {
 function ResetCompleteForm({ identifier }: { identifier: string }) {
   const router = useRouter();
   const t = useTranslations("reset");
+  const tc = useTranslations("common");
   const te = useTranslations("errors");
   const [error, setError] = useState<string | null>(null);
 
@@ -231,6 +239,7 @@ function ResetCompleteForm({ identifier }: { identifier: string }) {
               field={field}
               purpose="new"
               label={t("newPasswordLabel")}
+              policyHint={tc("passwordPolicy")}
             />
           )}
         />

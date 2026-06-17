@@ -10,27 +10,32 @@
     "./tokens.css": "./src/styles/tokens.css",
     "./allowed-tokens.json": "./src/styles/allowed-tokens.json",
     "./lib/utils": "./src/lib/utils.ts",
-    "./button": "./src/components/button.tsx",
-    "./input": "./src/components/input.tsx",
-    "./label": "./src/components/label.tsx",
-    "./card": "./src/components/card.tsx",
-    "./form": "./src/components/form.tsx",
-    "./input-otp": "./src/components/input-otp.tsx",
-    "./tabs": "./src/components/tabs.tsx"
+    "./button": "./src/primitives/button.tsx",
+    "./input": "./src/primitives/input.tsx",
+    "./label": "./src/primitives/label.tsx",
+    "./card": "./src/primitives/card.tsx",
+    "./form": "./src/primitives/form.tsx",
+    "./input-otp": "./src/primitives/input-otp.tsx",
+    "./tabs": "./src/primitives/tabs.tsx",
+    "./fields": "./src/primitives/fields/index.ts",
+    "./blocks": "./src/blocks/index.ts"
   },
   "scripts": {
     "build": "node ./style-dictionary.config.mjs",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "lint": "eslint ."
   },
   "dependencies": {
+    "@ds/schemas": "workspace:*",
     "@radix-ui/react-label": "^2.1.9",
     "@radix-ui/react-slot": "^1.2.5",
     "@radix-ui/react-tabs": "^1.1.14",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "input-otp": "^1.4.2",
-    "tailwind-merge": "^3.3.1"
+    "tailwind-merge": "^3.3.1",
+    "zod": "^4.4.3"
   },
   "peerDependencies": {
     "react": "^19.0.0",
@@ -39,13 +44,19 @@
     "tailwindcss": "^4.3.1"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.5.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.0.0",
+    "jsdom": "^25.0.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-hook-form": "^7.79.0",
     "style-dictionary": "^5.4.4",
     "tailwindcss": "^4.3.1",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
   }
 }

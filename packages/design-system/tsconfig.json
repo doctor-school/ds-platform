@@ -3,7 +3,11 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "noEmit": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // jsdom component tests use jest-dom matchers (`toBeInTheDocument`, …) and the
+    // Vitest globals (`describe`/`it`/`expect`); declare both so `tsc --noEmit` sees
+    // the matcher + global augmentations the same way the runtime setup wires them.
+    "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules", "dist"]

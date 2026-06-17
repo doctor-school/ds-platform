@@ -1,27 +1,23 @@
 "use client";
 
-import { useTranslations } from "next-intl";
 import type { ControllerRenderProps, FieldValues } from "react-hook-form";
 
-import { Input } from "@ds/design-system/input";
-import {
-  FormControl,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@ds/design-system/form";
+import { Input } from "../input";
+import { FormControl, FormItem, FormLabel, FormMessage } from "../form";
 
 /**
  * `<EmailField>` (#197) — the semantic email primitive. Bakes in the email-shape
  * validation (the resolver fragment `EmailFieldSchema`, composed by the form) plus
  * the correct HTML affordances (`type="email"` / `autoComplete="email"` /
- * `inputMode="email"`) and RU copy, so a call site never re-wires them — the gap
- * that produced #192/#196. The a11y wiring (label/aria-invalid/error) comes from the
- * design-system `<FormControl>` already; this primitive renders the whole
- * `<FormItem>` so the call site only passes the RHF `field` and an optional label.
+ * `inputMode="email"`), so a call site never re-wires them — the gap that produced
+ * #192/#196. The a11y wiring (label/aria-invalid/error) comes from the design-system
+ * `<FormControl>` already; this primitive renders the whole `<FormItem>` so the call
+ * site only passes the RHF `field`, a `label`, and a `placeholder`.
  *
- * The raw `<Input>` lives HERE (inside the sanctioned primitive), not on the auth
- * surface — which is exactly why the ESLint gate (which scopes to
+ * i18n contract (#235): this primitive lives in `@ds/design-system` and therefore
+ * carries NO copy of its own — the consuming app passes the localized `label` /
+ * `placeholder` strings. The raw `<Input>` lives HERE (inside the sanctioned
+ * primitive), not on the auth surface — which is why the ESLint gate (scoped to
  * `apps/portal/app/{login,register,…}`) does not flag it.
  */
 export function EmailField<T extends FieldValues>({
@@ -31,23 +27,22 @@ export function EmailField<T extends FieldValues>({
   testId,
 }: {
   field: ControllerRenderProps<T>;
-  /** Field label; defaults to the shared `common.email` RU string. */
-  label?: string;
-  /** Placeholder; defaults to the shared `common.emailPlaceholder`. */
+  /** Field label (app-supplied, localized). */
+  label: string;
+  /** Placeholder (app-supplied, localized). */
   placeholder?: string;
   /** Optional `data-testid` for the input (the e2e relies on stable test ids). */
   testId?: string;
 }) {
-  const tc = useTranslations("common");
   return (
     <FormItem>
-      <FormLabel>{label ?? tc("email")}</FormLabel>
+      <FormLabel>{label}</FormLabel>
       <FormControl>
         <Input
           type="email"
           autoComplete="email"
           inputMode="email"
-          placeholder={placeholder ?? tc("emailPlaceholder")}
+          placeholder={placeholder}
           data-testid={testId}
           {...field}
           // RHF may hold `undefined` for an optional identifier (the register email

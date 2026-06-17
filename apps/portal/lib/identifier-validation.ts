@@ -16,7 +16,8 @@ import {
   IdentifierFieldSchema,
   NewPasswordFieldSchema,
   OtpCodeFieldSchema,
-} from "@/components/fields/field-schemas";
+  maskPhoneInput,
+} from "@ds/design-system/fields";
 
 /**
  * Portal-side, per-channel identifier UX validation (#192), now composed from the
@@ -39,9 +40,9 @@ import {
  * (`lib/use-localized-resolver.ts`), so no English message text leaks.
  */
 
-// Re-export the phone mask from its primitive-co-located home so existing call
-// sites keep importing `maskPhoneInput` from here unchanged (#197 refactor).
-export { maskPhoneInput } from "@/components/fields/phone-mask";
+// Re-export the phone mask from the design-system package's fields entry so existing
+// call sites keep importing `maskPhoneInput` from here unchanged (#197 → #235 move).
+export { maskPhoneInput };
 
 /**
  * Password login (EARS-5) — a single identifier box that accepts EITHER a valid

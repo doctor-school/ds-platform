@@ -13,7 +13,7 @@ import {
   type VerifyRequest,
 } from "@ds/schemas";
 
-import { OtpField } from "@/components/fields";
+import { OtpField } from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import { takePendingRegistration } from "@/lib/pending-registration";

@@ -2,18 +2,9 @@
 
 import type { ControllerRenderProps, FieldValues } from "react-hook-form";
 
-import { Input } from "@ds/design-system/input";
-import {
-  FormControl,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@ds/design-system/form";
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSlot,
-} from "@ds/design-system/input-otp";
+import { Input } from "../input";
+import { FormControl, FormItem, FormLabel, FormMessage } from "../form";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "../input-otp";
 
 /**
  * `<OtpField>` (#197) — the semantic one-time-code primitive. Bakes in: fixed length
@@ -78,13 +69,13 @@ export function OtpField<T extends FieldValues>({
   /** `slotted` (verify/reset) or `plain` (login). */
   variant: "slotted" | "plain";
   /** Placeholder for the plain variant (e.g. login `12345678`). */
-  placeholder?: string;
+  placeholder?: string | undefined;
   /**
    * Fired once the fixed-length code is fully entered. The caller wires its
    * `isSubmitting`-guarded submit here (auto-submit, #175); optional so a surface
    * that wants manual-only submit can omit it.
    */
-  onComplete?: () => void;
+  onComplete?: (() => void) | undefined;
 }) {
   if (variant === "slotted") {
     return (
@@ -97,7 +88,7 @@ export function OtpField<T extends FieldValues>({
             autoComplete="one-time-code"
             value={field.value ?? ""}
             onChange={field.onChange}
-            onComplete={onComplete}
+            {...(onComplete ? { onComplete } : {})}
           >
             <InputOTPGroup>
               {Array.from({ length }, (_, i) => (

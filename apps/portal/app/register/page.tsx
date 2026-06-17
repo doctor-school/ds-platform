@@ -10,7 +10,7 @@ import { UserPlus } from "lucide-react";
 import { type RegisterRequest } from "@ds/schemas";
 
 import { BotProtectionField } from "@/components/bot-protection";
-import { EmailField, PasswordField } from "@/components/fields";
+import { EmailField, PasswordField } from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import { REQUIRED_CONSENT } from "@/lib/consent";
@@ -48,6 +48,7 @@ import { Form, FormField } from "@ds/design-system/form";
 export default function RegisterPage() {
   const router = useRouter();
   const t = useTranslations("register");
+  const tc = useTranslations("common");
   const te = useTranslations("errors");
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -124,14 +125,25 @@ export default function RegisterPage() {
               <FormField
                 control={form.control}
                 name="email"
-                render={({ field }) => <EmailField field={field} />}
+                render={({ field }) => (
+                  <EmailField
+                    field={field}
+                    label={tc("email")}
+                    placeholder={tc("emailPlaceholder")}
+                  />
+                )}
               />
 
               <FormField
                 control={form.control}
                 name="password"
                 render={({ field }) => (
-                  <PasswordField field={field} purpose="new" />
+                  <PasswordField
+                    field={field}
+                    purpose="new"
+                    label={tc("password")}
+                    policyHint={tc("passwordPolicy")}
+                  />
                 )}
               />
 

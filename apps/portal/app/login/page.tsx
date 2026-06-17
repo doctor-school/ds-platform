@@ -22,7 +22,7 @@ import {
   OtpField,
   PasswordField,
   PhoneField,
-} from "@/components/fields";
+} from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import {
@@ -116,6 +116,7 @@ export default function LoginPage() {
 function PasswordLogin() {
   const router = useRouter();
   const t = useTranslations("login");
+  const tc = useTranslations("common");
   const te = useTranslations("errors");
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -168,13 +169,23 @@ function PasswordLogin() {
         <FormField
           control={form.control}
           name="identifier"
-          render={({ field }) => <IdentifierField field={field} />}
+          render={({ field }) => (
+            <IdentifierField
+              field={field}
+              label={tc("emailOrPhone")}
+              placeholder={tc("identifierPlaceholder")}
+            />
+          )}
         />
         <FormField
           control={form.control}
           name="password"
           render={({ field }) => (
-            <PasswordField field={field} purpose="current" />
+            <PasswordField
+              field={field}
+              purpose="current"
+              label={tc("password")}
+            />
           )}
         />
         {/* Bot-protection mechanism (#84); the EARS-17 after-N-failures policy is

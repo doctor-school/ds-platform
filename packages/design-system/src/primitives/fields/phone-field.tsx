@@ -1,15 +1,9 @@
 "use client";
 
-import { useTranslations } from "next-intl";
 import type { ControllerRenderProps, FieldValues } from "react-hook-form";
 
-import { Input } from "@ds/design-system/input";
-import {
-  FormControl,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@ds/design-system/form";
+import { Input } from "../input";
+import { FormControl, FormItem, FormLabel, FormMessage } from "../form";
 
 import { maskPhoneInput } from "./phone-mask";
 
@@ -21,6 +15,8 @@ import { maskPhoneInput } from "./phone-mask";
  * way the OTP-SMS box originally did before #192. `type/autoComplete/inputMode` are
  * all `tel`. The mask is non-negotiable here: a phone field that does not mask is
  * precisely the defect this primitive exists to prevent.
+ *
+ * i18n contract (#235): no copy lives here — the app supplies `label` / `placeholder`.
  */
 export function PhoneField<T extends FieldValues>({
   field,
@@ -29,23 +25,22 @@ export function PhoneField<T extends FieldValues>({
   testId,
 }: {
   field: ControllerRenderProps<T>;
-  /** Field label; defaults to the shared `common.phone` RU string. */
-  label?: string;
-  /** Placeholder; defaults to the shared `common.phonePlaceholder` (`+79991234567`). */
+  /** Field label (app-supplied, localized). */
+  label: string;
+  /** Placeholder (app-supplied, localized, e.g. `+79991234567`). */
   placeholder?: string;
   /** Optional `data-testid` for the input (the e2e relies on stable test ids). */
   testId?: string;
 }) {
-  const tc = useTranslations("common");
   return (
     <FormItem>
-      <FormLabel>{label ?? tc("phone")}</FormLabel>
+      <FormLabel>{label}</FormLabel>
       <FormControl>
         <Input
           type="tel"
           autoComplete="tel"
           inputMode="tel"
-          placeholder={placeholder ?? tc("phonePlaceholder")}
+          placeholder={placeholder}
           data-testid={testId}
           {...field}
           value={field.value ?? ""}

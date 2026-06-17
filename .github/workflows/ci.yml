@@ -28,6 +28,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
   # ─── Core build/test/lint (parallel after setup) ─────────────────────
+  # `pnpm lint` runs, in order: `eslint .` (incl. the #197 auth-field gate and the
+  # #234 design-system guardrails — local/no-arbitrary-tailwind-value,
+  # local/no-token-redefinition, rhythmguard-tailwind/tailwind-class-use-scale),
+  # then `pnpm lint:oxlint` (#234 spec §4 level 1 — tailwindcss/no-hardcoded-colors
+  # via oxlint-tailwindcss), then `pnpm lint:stylelint` (#234 level 2 CSS side —
+  # rhythmguard/use-scale), then `turbo run lint` (per-package). All blocking;
+  # this job is in the `ci` meta-job needs-list, so any guardrail failure blocks merge.
   lint:
     needs: setup
     runs-on: ubuntu-latest

@@ -6,12 +6,17 @@
  * under the `local/` namespace; see each rule file for its rationale + escape hatch.
  */
 import noRawAuthFieldInput from "./no-raw-auth-field-input.mjs";
+import noArbitraryTailwindValue from "./no-arbitrary-tailwind-value.mjs";
+import noTokenRedefinition from "./no-token-redefinition.mjs";
 
 /** @type {import('eslint').ESLint.Plugin} */
 const plugin = {
   meta: { name: "@ds/eslint-rules-local" },
   rules: {
     "no-raw-auth-field-input": noRawAuthFieldInput,
+    // #234 design-system lint guardrails (spec §4 level 3).
+    "no-arbitrary-tailwind-value": noArbitraryTailwindValue,
+    "no-token-redefinition": noTokenRedefinition,
   },
 };
 

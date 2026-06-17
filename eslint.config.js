@@ -15,14 +15,35 @@
  * disabled: workspace stubs have no tsconfig.json yet. Enabled in G9+ once
  * apps/packages get real tsconfigs.
  */
+import { readFileSync } from "node:fs";
+
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import prettier from "eslint-config-prettier";
+import rhythmguard from "stylelint-plugin-rhythmguard/eslint";
 
-// Local repo-specific flat-config plugin (#197). Plain ESM, no build step — see
-// tools/lint/eslint-rules/index.mjs. Imported by relative path so this config is
-// self-contained regardless of workspace-package hoisting.
+// Local repo-specific flat-config plugin (#197 + #234). Plain ESM, no build step
+// — see tools/lint/eslint-rules/index.mjs. Imported by relative path so this
+// config is self-contained regardless of workspace-package hoisting.
 import localRules from "./tools/lint/eslint-rules/index.mjs";
+
+// #234 — the lint guardrails consume ONE generated source of truth: the
+// allowed-token enumeration emitted by the Style Dictionary token-build (#233).
+// The rhythmguard arbitrary-spacing gate needs the *effective* spacing scale in
+// px (the inert `--spacing-N` theme keys do not drive the numeric `p-4`/`gap-2`
+// utilities under Tailwind v4 — those derive from the single `--spacing`
+// multiplier — so the scale is derived from the `space.*` token VALUES and
+// emitted as `spacingScalePx`). Reading it here keeps styling + linting in lockstep.
+const allowedTokens = JSON.parse(
+  readFileSync(
+    new URL(
+      "./packages/design-system/src/styles/allowed-tokens.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+);
+const SPACING_SCALE_PX = allowedTokens.spacingScalePx;
 
 export default [
   {
@@ -100,6 +121,41 @@ export default [
     plugins: { local: localRules },
     rules: {
       "local/no-raw-auth-field-input": "error",
+    },
+  },
+  {
+    // #234 — design-system lint guardrails (spec §4), Layer-3 (project ESLint
+    // rules) + the rhythmguard scale gate, blocking on the `apps/**` surfaces.
+    // These ride the existing `eslint .` → `lint` CI job (no new job) and the
+    // lint-staged pre-commit hook (fast feedback). The single source of truth for
+    // the allowed scale is the generated allowed-tokens.json (loaded above).
+    //
+    //   • local/no-arbitrary-tailwind-value — broad backstop: forbids the
+    //     Tailwind arbitrary-VALUE escape hatch (`bg-[#fff]`, `p-[13px]`,
+    //     `rounded-[7px]`, `w-[323px]`) in className strings (arbitrary VARIANTS
+    //     like `data-[…]:` stay allowed). Covers every axis.
+    //   • rhythmguard-tailwind/tailwind-class-use-scale — tighter, autofixing
+    //     gate for arbitrary SPACING specifically: flags `p-[13px]`/`gap-[18px]`
+    //     off the effective scale and fixes to the nearest scale value. Color is
+    //     handled by oxlint's `tailwindcss/no-hardcoded-colors` (oxlint.json).
+    //   • local/no-token-redefinition — forbids forking a generated token value
+    //     via inline style / setProperty in app code (token values change only
+    //     in the @ds/design-system source).
+    files: ["apps/**/*.{ts,tsx,js,jsx,mjs,cjs}"],
+    languageOptions: {
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    plugins: {
+      local: localRules,
+      "rhythmguard-tailwind": rhythmguard,
+    },
+    rules: {
+      "local/no-arbitrary-tailwind-value": "error",
+      "local/no-token-redefinition": "error",
+      "rhythmguard-tailwind/tailwind-class-use-scale": [
+        "error",
+        { scale: SPACING_SCALE_PX },
+      ],
     },
   },
   prettier,

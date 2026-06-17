@@ -355,5 +355,22 @@
     "z-index.popover",
     "z-index.sticky",
     "z-index.toast"
+  ],
+  "spacingScalePx": [
+    0,
+    1,
+    2,
+    4,
+    6,
+    8,
+    10,
+    12,
+    16,
+    20,
+    24,
+    32,
+    40,
+    48,
+    64
   ]
 }

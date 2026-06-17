@@ -222,6 +222,32 @@ async function build() {
   mkdirSync(STYLES_DIR, { recursive: true });
   writeFileSync(join(STYLES_DIR, "tokens.css"), css, "utf8");
 
+  // --- effective spacing scale (px) — derived, for the rhythmguard gate ----
+  // DECISION-DEBT NOTE (#234, reconciling #233/#235): the `@theme inline` block
+  // emits NAMED spacing keys `--spacing-0…16`. Under Tailwind v4 those are INERT
+  // for the *numeric* spacing utilities (`p-4`, `gap-2`), which derive from the
+  // single `--spacing` multiplier, NOT from per-step keys. So the lint scale
+  // cannot be "the token names"; it must be the *effective px values* the
+  // `space.*` tokens resolve to. We compute them here from the resolved token
+  // VALUES (rem→px at 16px root) so the guardrail's allowed scale and the tokens
+  // share one generated source. (If/when the inert `--spacing-N` keys are
+  // dropped/renamed, this derivation is unaffected — it reads `space.*`.)
+  const REM_PX = 16;
+  const spacingScalePx = Array.from(
+    new Set(
+      lightLeaves
+        .filter((l) => l.path[0] === "space")
+        .map((l) => {
+          const raw = String(l.value).trim();
+          if (raw.endsWith("rem")) return parseFloat(raw) * REM_PX;
+          if (raw.endsWith("px")) return parseFloat(raw);
+          if (raw === "0") return 0;
+          return null;
+        })
+        .filter((n) => n !== null && Number.isFinite(n)),
+    ),
+  ).sort((a, b) => a - b);
+
   // --- allowed-tokens.json (consumed by lint guardrails, #234) -------------
   const allowed = {
     $generatedBy: "style-dictionary",
@@ -230,6 +256,10 @@ async function build() {
     cssVariables: rootVars.map((v) => v.name).sort(),
     themeKeys: themeEntries.map((e) => e.name).sort(),
     tokenPaths: lightLeaves.map((l) => l.path.join(".")).sort(),
+    // Effective spacing scale in px (derived from the `space.*` token VALUES, not
+    // the inert `--spacing-N` names) — the allowed scale for the rhythmguard
+    // arbitrary-spacing gate. See the decision-debt note above.
+    spacingScalePx,
   };
   writeFileSync(
     join(STYLES_DIR, "allowed-tokens.json"),
@@ -238,7 +268,7 @@ async function build() {
   );
 
   console.log(
-    `[tokens] wrote ${rootVars.length} :root vars, ${darkVars.length} .dark overrides, ${themeEntries.length} @theme keys, ${allowed.tokenPaths.length} allowed tokens.`,
+    `[tokens] wrote ${rootVars.length} :root vars, ${darkVars.length} .dark overrides, ${themeEntries.length} @theme keys, ${allowed.tokenPaths.length} allowed tokens, spacing scale [${spacingScalePx.join(", ")}]px.`,
   );
 }
 

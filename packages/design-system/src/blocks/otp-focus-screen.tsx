@@ -99,7 +99,7 @@ export function OtpFocusScreen<T extends FieldValues>({
   isSubmitting?: boolean;
 
   /** Fired when the fixed-length code completes (app wires the guarded auto-submit). */
-  onComplete?: () => void;
+  onComplete?: (() => void) | undefined;
   /** Manual submit handler (the `<form onSubmit>` the app owns). */
   onSubmit: React.FormEventHandler<HTMLFormElement>;
   /** Resend handler — the app re-requests the code and bumps `cooldownSeconds`. */

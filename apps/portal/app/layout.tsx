@@ -47,6 +47,12 @@ export default async function RootLayout({
         {
           // Resolve the `--font-sans` token to the self-hosted Inter face first,
           // keeping the token's emoji/system fallbacks after it.
+          // Narrow, intentional exception to no-token-redefinition (#234): this
+          // does NOT fork the token's *value* to a hardcoded one — it binds the
+          // `next/font` loaded Inter face (`--font-inter`) into the SAME family
+          // the token already names (brand→token map §2), so the rendered UI is
+          // the real webfont while the token stays the SoT for which family is base.
+          // eslint-disable-next-line local/no-token-redefinition -- bind self-hosted next/font Inter into the token's own family stack; not a value fork
           "--font-sans":
             "var(--font-inter), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'",
         } as CSSProperties

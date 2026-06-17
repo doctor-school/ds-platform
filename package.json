@@ -13,9 +13,11 @@
   "scripts": {
     "bootstrap": "tsx tools/agent-bootstrap.ts",
     "lint:endpoint-authz": "tsx --tsconfig apps/api/tsconfig.json tools/lint/endpoint-authz-lint.ts",
+    "lint:oxlint": "oxlint -c .oxlintrc.json --disable-unicorn-plugin --disable-oxc-plugin --disable-typescript-plugin -A all apps packages",
+    "lint:stylelint": "stylelint \"apps/**/*.css\" \"packages/**/*.css\"",
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "lint": "eslint . && turbo run lint",
+    "lint": "eslint . && pnpm lint:oxlint && pnpm lint:stylelint && turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "changeset": "changeset",
@@ -44,9 +46,13 @@
     "fast-glob": "^3.3.3",
     "gray-matter": "^4.0.3",
     "lint-staged": "^17.0.7",
+    "oxlint": "^1.70.0",
+    "oxlint-tailwindcss": "^1.3.3",
     "pg": "^8.13.0",
     "prettier": "^3.8.4",
     "simple-git-hooks": "^2.13.1",
+    "stylelint": "^17.13.0",
+    "stylelint-plugin-rhythmguard": "^2.0.1",
     "tsx": "^4.22.4",
     "turbo": "^2.9.18",
     "typescript": "^6.0.3",
@@ -59,7 +65,11 @@
     "*.{ts,tsx,js,jsx,mjs,cjs}": [
       "eslint --fix"
     ],
-    "*.{md,json,yaml,yml,css}": [
+    "*.css": [
+      "stylelint --fix",
+      "prettier --write"
+    ],
+    "*.{md,json,yaml,yml}": [
       "prettier --write"
     ]
   },

@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // #234 design-system lint guardrails (spec §4 level 1). oxlint-tailwindcss is
+  // the Tailwind-v4-native gate; we run ONE blocking rule here —
+  // no-hardcoded-colors — which forbids arbitrary color values (bg-[#ff5733],
+  // text-[rgb(...)], …) outside the token system. The plugin loads the design
+  // system from settings.tailwindcss.entryPoint, the design-system globals.css
+  // that imports the GENERATED tokens.css — so oxlint and styling share the one
+  // generated source of truth (#233). The other oxlint-tailwindcss rules are
+  // intentionally off: scale discipline is owned by rhythmguard (eslint.config.js)
+  // and the broad arbitrary-value backstop + token-redefinition gate are the
+  // local ESLint rules — one rule per axis, no overlapping noise. Run: pnpm lint:oxlint.
+  "jsPlugins": ["oxlint-tailwindcss"],
+  "settings": {
+    "tailwindcss": {
+      "entryPoint": "packages/design-system/src/styles/globals.css"
+    }
+  },
+  "rules": {
+    "tailwindcss/no-hardcoded-colors": "error"
+  },
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.next/**",
+    "**/.turbo/**",
+    "**/coverage/**",
+    "**/out/**",
+    "**/generated/**"
+  ]
+}

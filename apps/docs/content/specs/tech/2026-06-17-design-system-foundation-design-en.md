@@ -129,7 +129,7 @@ The first functional module is rebuilt "the right way" and becomes the reference
 ## 6. Brand integration (brand → token map)
 
 - The Doctor.School brand book (to be added to the repo by the user) maps into the **primitive + semantic** layers: palette → `color.*`; fonts → `font.family.*`; radii/shadows/spacing/motion → the corresponding scales; logo/mascot → asset tokens/components.
-- Deliverable: a **brand → token table** (a #231 artifact): each brand-book entity → a concrete token. Values await the brand book, but the **mapping structure and token names are designed now** (the brand book is secondary, per the product owner).
+- Deliverable: the **brand → token map** — authored in [`2026-06-17-design-system-foundation-brand-token-map.md`](./2026-06-17-design-system-foundation-brand-token-map.md). The Doctor School brand book is in the repo (`apps/docs/brandbook/`); the map pins the brand-defined values (primary blue `#2D84F2` + dark/light blues; Inter as the UI base font; brand green/orange for success/warning; reserved accent palettes and display fonts) and marks the brand-unspecified classes (neutral ramp, type scale, radius, spacing, shadow, motion) as `system`-derived. Decisions captured: destructive uses an **introduced** functional red (the brand has none); the additional accent palettes are **reserved** in the primitive layer (no semantic role) until category/gamification surfaces arrive.
 - Gamification (PRD §15) sits as a layer **on top of** the shadcn shell; the foundation reserves the `game.*` token namespace but the game components themselves are out of this iteration's scope.
 
 ---

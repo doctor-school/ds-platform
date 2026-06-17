@@ -7,6 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./globals.css": "./src/styles/globals.css",
+    "./tokens.css": "./src/styles/tokens.css",
+    "./allowed-tokens.json": "./src/styles/allowed-tokens.json",
     "./lib/utils": "./src/lib/utils.ts",
     "./button": "./src/components/button.tsx",
     "./input": "./src/components/input.tsx",
@@ -17,6 +19,7 @@
     "./tabs": "./src/components/tabs.tsx"
   },
   "scripts": {
+    "build": "node ./style-dictionary.config.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint ."
   },
@@ -41,6 +44,7 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-hook-form": "^7.79.0",
+    "style-dictionary": "^5.4.4",
     "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3"
   }

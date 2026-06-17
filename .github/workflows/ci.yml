@@ -138,6 +138,25 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @ds/docs build
 
+  # ─── Design-token freshness guard (#233) ─────────────────────────────
+  # The generated design tokens (packages/design-system/src/styles/tokens.css +
+  # allowed-tokens.json) are committed so apps build with no prebuild. This job
+  # regenerates them from the DTCG source and fails if the committed output is
+  # stale — keeping the source-of-truth (tokens/*.json) and the emitted CSS in
+  # lockstep. The token-build also validates that every reference resolves.
+  tokens-fresh:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @ds/design-system build
+      - name: Verify generated tokens are committed and up to date
+        run: git diff --exit-code -- packages/design-system/src/styles/tokens.css packages/design-system/src/styles/allowed-tokens.json
+
   # ─── Drift guards from ADR-0006 §7 ───────────────────────────────────
   api-drift:
     needs: setup
@@ -340,6 +359,7 @@ jobs:
         markdown-links,
         spec-link,
         endpoint-authz,
+        tokens-fresh,
       ]
     if: always()
     runs-on: ubuntu-latest

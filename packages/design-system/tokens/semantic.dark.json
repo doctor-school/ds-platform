@@ -1,23 +1,27 @@
 {
-  "$description": "Dark-theme overrides — ONLY the semantic color layer is repointed at different primitives; primitives, radius, typography and motion are NOT duplicated. Emitted into the `.dark` block of tokens.css. Reproduces the current `.dark` palette 1:1.",
+  "$description": "Dark-theme overrides — ONLY the semantic color layer is repointed at different primitives; primitives, radius, typography and motion are NOT duplicated. Emitted into the `.dark` block of tokens.css. DARK IS DEFERRED (brand → token map §1.3): the brand is light-first and a brand dark surface is future work. This keeps the #233 neutral dark functional (no regression) with the brand primary blue/red/status threaded through so a dark surface does not fall back to gray. Roles not listed here (primary-hover/pressed, success/warning) inherit their light brand values — acceptable for a deferred dark.",
   "color": {
     "$type": "color",
     "background": { "$value": "{color.neutral.950}" },
     "foreground": { "$value": "{color.neutral.50}" },
     "card": { "$value": "{color.neutral.800}" },
     "card-foreground": { "$value": "{color.neutral.50}" },
-    "primary": { "$value": "{color.neutral.50}" },
-    "primary-foreground": { "$value": "{color.neutral.800}" },
+    "primary": { "$value": "{color.blue.500}" },
+    "primary-foreground": { "$value": "{color.white}" },
     "secondary": { "$value": "{color.neutral.700}" },
     "secondary-foreground": { "$value": "{color.neutral.50}" },
     "muted": { "$value": "{color.neutral.700}" },
     "muted-foreground": { "$value": "{color.neutral.400}" },
     "accent": { "$value": "{color.neutral.700}" },
     "accent-foreground": { "$value": "{color.neutral.50}" },
+    "success": { "$value": "{color.green.500}" },
+    "success-foreground": { "$value": "{color.white}" },
+    "warning": { "$value": "{color.orange.500}" },
+    "warning-foreground": { "$value": "{color.white}" },
     "destructive": { "$value": "{color.red.400}" },
     "destructive-foreground": { "$value": "{color.neutral.50}" },
     "border": { "$value": "{color.neutral.alpha-10}" },
     "input": { "$value": "{color.neutral.alpha-15}" },
-    "ring": { "$value": "{color.neutral.500}" }
+    "ring": { "$value": "{color.blue.300}" }
   }
 }

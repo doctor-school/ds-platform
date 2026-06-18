@@ -58,6 +58,9 @@ export default [
       "**/*.tsbuildinfo",
       "pnpm-lock.yaml",
       ".changeset/**",
+      // Gitignored local scratch (e.g. the retro audit workspace, tools/retro
+      // out-dir default). Absent in CI; ignore so local `pnpm lint` matches.
+      ".audit-tmp/**",
       "apps/docs/.source/**",
       // Next.js generated triple-slash reference files
       "**/next-env.d.ts",

@@ -3,8 +3,9 @@
  * tools/lint/instruction-budget-lint.ts — anti-bloat budget for the always-on
  * agent context (epic #247, child #250).
  *
- * Why: the always-on context (AGENTS.md + CLAUDE.md, loaded in full every
- * session; MEMORY.md, of which only the first 200 lines / 25 KB load) suffers
+ * Why: the always-on context (AGENTS.md + CLAUDE.md + every path-less
+ * .claude/rules/*.md, loaded in full every session; MEMORY.md, of which only
+ * the first 200 lines / 25 KB load) suffers
  * "context rot" as it grows — the model's recall of any single rule degrades as
  * total tokens rise (Anthropic, "Effective context engineering for AI agents").
  * Anthropic's CLAUDE.md guidance is "target under 200 lines"; auto-memory loads
@@ -28,7 +29,7 @@
  * present and resolvable locally; in CI (no auto-memory dir) it is skipped with
  * a note, so the always-on repo files (AGENTS.md, CLAUDE.md) are the CI gate.
  */
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -67,7 +68,22 @@ const targets: Target[] = [
   ...(memPath ? [{ label: "MEMORY.md (auto-memory index)", path: memPath, optional: true } as Target] : []),
 ];
 
+// .claude/rules/*.md are always-on too — loaded at session start UNLESS a file
+// carries `paths:` frontmatter (which makes it lazy / file-scoped). Add each so
+// the per-file budget applies and a new always-on rule can't silently grow the
+// window unnoticed.
+const rulesDir = resolve(REPO_ROOT, ".claude", "rules");
+if (existsSync(rulesDir)) {
+  for (const f of readdirSync(rulesDir).filter((n) => n.endsWith(".md")).sort()) {
+    const p = resolve(rulesDir, f);
+    const lazy = /^---[\s\S]*?\bpaths\s*:/m.test(readFileSync(p, "utf8").slice(0, 800));
+    targets.push({ label: `.claude/rules/${f}${lazy ? " (lazy)" : " (always-on)"}`, path: p, optional: false });
+  }
+}
+
 let failed = false;
+let totalLines = 0;
+let totalBytes = 0;
 const lines: string[] = [];
 
 for (const t of targets) {
@@ -83,6 +99,10 @@ for (const t of targets) {
   const buf = readFileSync(t.path);
   const bytes = buf.length;
   const lineCount = buf.toString("utf8").split(/\r?\n/).length;
+  if (!t.label.includes("(lazy)")) {
+    totalLines += lineCount;
+    totalBytes += bytes;
+  }
 
   const overLines = lineCount > MAX_LINES;
   const overBytes = bytes > MAX_BYTES;
@@ -103,6 +123,11 @@ for (const t of targets) {
     lines.push(`${TAG} WARN        ${t.label}: ${lineCount} lines > soft target ${t.softLines} — consider trimming (not a failure).`);
   }
 }
+
+lines.push(
+  `${TAG} always-on total: ${totalLines} lines / ${(totalBytes / 1024).toFixed(1)} KB ` +
+    `(AGENTS.md + CLAUDE.md${memPath ? " + MEMORY.md" : ""} + path-less .claude/rules/*.md)`,
+);
 
 process.stdout.write(lines.join("\n") + "\n");
 if (failed) {

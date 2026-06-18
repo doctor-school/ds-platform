@@ -1,9 +1,9 @@
-<!-- Load-on-demand reference (epic #247 / #250). Relocated verbatim from AGENTS.md §9.
-     Pull when bringing up the dev stand, running migrations, or live-verifying UI. -->
+<!-- Auto-loaded reference (epic #247 / #250; no `paths:` frontmatter ⇒ always-on, in context every session).
+     Relocated verbatim from AGENTS.md §9. -->
 
 # Local Dev Stand (reference)
 
-Canon: AGENTS.md §9 one-liner. Pull this in for any dev-stand operation, migration, or live UI verification.
+Canon: AGENTS.md §9 one-liner; this is the detail, auto-loaded with it. Applies to any dev-stand operation, migration, or live UI verification.
 
 The local dev stand (Postgres, Redis, MinIO, `idp`, Centrifugo, Cerbos, Mailpit) runs as a Docker Compose stack. It is a **two-layer model** (setup-design §2.1): a portable contract in git (`infra/dev-stand/compose.core.yml`, `.env.example`, README) plus a per-developer recipe kept outside git (`.env.local`, `compose.override.yml`). The rules below are **portable** — they hold on every recipe. Recipe-specific endpoints, paths, and failure modes live in the developer's personal `~/.ds-platform/AGENT_NOTES.md`, never in repo files.
 

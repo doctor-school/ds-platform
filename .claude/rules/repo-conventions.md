@@ -1,9 +1,9 @@
-<!-- Load-on-demand reference (epic #247 / #250). Relocated from AGENTS.md §2 / §2.1.
-     Pulled when the task touches branches, commits, versioning, Issues, PRs, or merge. -->
+<!-- Auto-loaded reference (epic #247 / #250; no `paths:` frontmatter ⇒ always-on, in context every session).
+     Relocated from AGENTS.md §2 / §2.1 — the detail behind §2's one-liners. -->
 
 # Repository conventions (reference)
 
-Canon: AGENTS.md §2 (the always-on core carries the one-line rule; this file carries the detail). Pull this in when opening a branch/PR, cutting a changeset, or opening Issues from a spec.
+Canon: AGENTS.md §2 — the core carries the one-line rule; this file carries the detail and is auto-loaded with it. Consult it when opening a branch/PR, cutting a changeset, bumping a dependency, or opening Issues from a spec.
 
 ## Monorepo layout
 
@@ -30,6 +30,13 @@ Trunk-based; short-lived branches off `main`, squash-merge back. Naming `<prefix
 **PR template required** — set kind label (`feature` / `bug` / `chore` / `refactor` / `docs` / `tooling`), link Issue (`Closes #N`), mark author in the **body** (`author:claude` / `author:codex` / `author:human`). Note: `author:*` is a body marker, not a label that `gh pr create --label` accepts (memory `reference_pr_author_label_not_real`).
 
 **Branch protection.** Target-state contract (ADR-0008 §2.6) is enforced by convention + local hooks during Phase 0; server-side enforcement is deferred — GitHub Free + private repo blocks the branch-protection API. Verbatim payload at `branch-protection.json`. See ADR-0008 §2.6 for the full contract, the interim process-level substitutes, and the reactivation trigger.
+
+## Dependency bumps
+
+Two hard-won checks on any `dependencies` / `chore(deps)` / "upgrade X → Y" task (memory `feedback_dep_bump_verification`):
+
+1. **Verify the REAL pins first** — read the actual versions in `apps/*/package.json` / `packages/*/package.json` (+ `pnpm ls <pkg> -r` for transitives) **before** trusting the Issue title/body. "Coordinated upgrade" framings are often wrong — many suites release packages independently. If the framing diverges from reality, reword/close the Issue first; never stretch it to fit.
+2. **Verify the ABI, not just declared peers** — declared `peerDependencies` can lie. When the version choice hinges on a pinned peer, check the **actual imports in the installed tarball** (`grep -r "from .<peer>" node_modules/<pkg>/dist/`, or `npm pack <pkg>@<v>` + unpack + grep) rather than trusting `npm view <pkg> peerDependencies`. A CHANGELOG "moved/support X at <peer>" line in a _patch_ release signals an internal import may have shifted even though the peer-range didn't.
 
 ## ADRs & specs (where the artifacts live)
 

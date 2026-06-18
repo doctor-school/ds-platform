@@ -2,7 +2,7 @@
 
 # CLAUDE.md — Claude Code overlay for DS Platform
 
-All conventions in [`AGENTS.md`](./AGENTS.md) apply (imported above). This file adds only Claude-Code-specific tooling. **Detail is load-on-demand** in `.claude/rules/*.md` and the skill catalog — don't inline-grow this file (anti-bloat budget: ≤200 lines / ≤25 KB, checked by `pnpm lint:instruction-budget`).
+All conventions in [`AGENTS.md`](./AGENTS.md) apply (imported above). This file adds only Claude-Code-specific tooling. Detail lives in `.claude/rules/*.md` (**auto-loaded** alongside this file at session start) and the skill catalog (**read on demand**) — don't inline-grow this file (anti-bloat budget: ≤200 lines / ≤25 KB **per always-on file**, checked by `pnpm lint:instruction-budget`).
 
 <!-- maintainer note: this overlay is intentionally thin. New durable rules go in
      AGENTS.md (§6 for hard rules) or a .claude/rules/*.md reference, never here,
@@ -38,8 +38,14 @@ PowerShell here-strings (`@'…'@`) corrupt commit subjects in the Bash tool (�
 
 ---
 
-## Pointers (load on demand)
+## Reference files (auto-loaded) & on-demand pointers
+
+`.claude/rules/*.md` **auto-load** at session start alongside this file — you already have them in context, no need to re-read:
+
+- `.claude/rules/repo-conventions.md` — branches, commits, versioning, Issues, PRs, merge, dependency bumps.
+- `.claude/rules/dev-stand.md` — dev stand, migrations, live-verify plumbing.
+
+Pull these **on demand** when the task needs them:
 
 - **UI construction** — `@ds/design-system`, tokens-only, adopt-before-bespoke: AGENTS.md §6 + skill `build-ui-from-design-system` + ADR-0013.
-- **Dev stand / live-verify** — `.claude/rules/dev-stand.md`.
 - **Engineering-readiness defaults** (Coolify, Caddy, GlitchTip, Loki/Prometheus/Tempo, Vault, Unleash, Beget DNS) — [engineering-readiness spec](./apps/docs/content/specs/tech/2026-05-12-engineering-readiness-design-en.md).

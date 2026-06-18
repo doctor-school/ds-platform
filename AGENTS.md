@@ -2,18 +2,21 @@
 
 Universal AI-agent constitution for the DS Platform monorepo. Vendor-agnostic — readable by Claude Code, Codex, Cursor, or any future agent. Claude-Code-specific overlays live in `CLAUDE.md`.
 
-<!-- ALWAYS-ON CORE. Budget: ≤200 lines AND ≤25 KB (epic #247 / #250; grounded in
+<!-- ALWAYS-ON CORE. Per-file budget: ≤200 lines AND ≤25 KB (epic #247 / #250; grounded in
      Anthropic's CLAUDE.md "target under 200 lines" + the 200-line/25 KB auto-memory
      cutoff + the "smallest set of high-signal tokens" context-engineering guidance).
-     Detail is load-on-demand in .claude/rules/*.md — relocate, never inline-grow.
+     The always-on context = this file + CLAUDE.md + every .claude/rules/*.md — ALL auto-load
+     at session start (a rules file WITHOUT `paths:` frontmatter is always-on, not lazy).
+     Keep each file lean and relocate detail; a NEW always-on rules file adds to the window,
+     so give it `paths:` frontmatter if it is genuinely task-scoped. Never inline-grow.
      `/wrap` runs `pnpm lint:instruction-budget` each session; over budget ⇒ compact. -->
 
-This file is the slim core. **Detail loads on demand** — pull the matching reference only when the task needs it:
+This file is the slim core. The full always-on set auto-loads at session start: this file (via CLAUDE.md's `@AGENTS.md` import), CLAUDE.md, and every `.claude/rules/*.md`. Genuinely on-demand detail lives in skills and memory topic files:
 
-- Branches / commits / versioning / Issues / PRs / merge mechanics → `.claude/rules/repo-conventions.md`
-- Dev stand, migrations, live-verify plumbing → `.claude/rules/dev-stand.md`
-- Per-task procedure → the skill named in §3 (`apps/docs/content/skills/<name>/SKILL.md`)
-- Settled facts / past decisions → auto-memory (`MEMORY.md` index → topic file)
+- Branches / commits / versioning / Issues / PRs / merge mechanics → `.claude/rules/repo-conventions.md` _(auto-loaded)_
+- Dev stand, migrations, live-verify plumbing → `.claude/rules/dev-stand.md` _(auto-loaded)_
+- Per-task procedure → the skill named in §3 (`apps/docs/content/skills/<name>/SKILL.md`) _(read on demand)_
+- Settled facts / past decisions → auto-memory (`MEMORY.md` index → topic file) _(topic file read on demand)_
 
 ---
 
@@ -52,7 +55,7 @@ Every agent session, regardless of vendor, follows this three-step entry — **i
 | engineering-task  | Phase A bootstrap (DSP-160 sub-issue), CI hardening, scaffold | No skill — follow the task spec directly (see §3.8)           |
 | spec-authoring    | New feature-spec / new ADR / new design-spec                  | `superpowers:brainstorming` (sole allowed exception, §3.4)    |
 
-If the kind is ambiguous, stop and ask Tech Lead.
+Not in the table? **Dependency bump** → `engineering-task`; first run the two checks in `.claude/rules/repo-conventions.md` → _Dependency bumps_. **Opening Issues from an already-merged spec** → skill `open-ears-issues`. Anything still unmapped → default to `engineering-task` (§3.8), state the assumption, and proceed; stop and ask Tech Lead only if that genuinely doesn't fit.
 
 ### 3.2 Cite the entry point
 
@@ -139,18 +142,18 @@ In **Phase 0**, Tech Lead is the **single CODEOWNERS owner** (ADR-0008 §2.7) an
 
 ## 8. Where things live
 
-| Thing                              | Location                                                                                                   |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| ADRs / companion design specs      | `apps/docs/content/adr/NNNN-<slug>.md` / `…-design.md`                                                     |
-| Feature specs (triplet)            | `apps/docs/content/specs/features/NNN-<slug>/`                                                             |
-| Tech specs (brainstorm)            | `apps/docs/content/specs/tech/<topic>.md`                                                                  |
-| **Project skill catalog**          | **`apps/docs/content/skills/<name>/SKILL.md`**                                                             |
-| Glossary                           | `apps/docs/content/product/glossary/` (file-per-term, Keystatic-managed)                                   |
-| API contract SSOT / DB schema SSOT | `packages/schemas/` (Zod) / `packages/db/schema/` (Drizzle)                                                |
-| Generated SDK / glossary IDs       | `packages/api-client/`, `packages/glossary/ids.ts` (do not edit by hand)                                   |
-| Lint tools / bootstrap             | `tools/lint/*.ts` / `tools/agent-bootstrap.ts` (`pnpm bootstrap`)                                          |
-| Load-on-demand instruction detail  | `.claude/rules/*.md` (repo-conventions, dev-stand)                                                         |
-| Strategic / cross-team work-items  | Plane workspace `doctor-school` (projects DSP, DSC, DSM, DSO); code-level Issues → **GitHub** in this repo |
+| Thing                                      | Location                                                                                                   |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| ADRs / companion design specs              | `apps/docs/content/adr/NNNN-<slug>.md` / `…-design.md`                                                     |
+| Feature specs (triplet)                    | `apps/docs/content/specs/features/NNN-<slug>/`                                                             |
+| Tech specs (brainstorm)                    | `apps/docs/content/specs/tech/<topic>.md`                                                                  |
+| **Project skill catalog**                  | **`apps/docs/content/skills/<name>/SKILL.md`**                                                             |
+| Glossary                                   | `apps/docs/content/product/glossary/` (file-per-term, Keystatic-managed)                                   |
+| API contract SSOT / DB schema SSOT         | `packages/schemas/` (Zod) / `packages/db/schema/` (Drizzle)                                                |
+| Generated SDK / glossary IDs               | `packages/api-client/`, `packages/glossary/ids.ts` (do not edit by hand)                                   |
+| Lint tools / bootstrap                     | `tools/lint/*.ts` / `tools/agent-bootstrap.ts` (`pnpm bootstrap`)                                          |
+| Always-on instruction detail (auto-loaded) | `.claude/rules/*.md` (repo-conventions, dev-stand)                                                         |
+| Strategic / cross-team work-items          | Plane workspace `doctor-school` (projects DSP, DSC, DSM, DSO); code-level Issues → **GitHub** in this repo |
 
 **Tracker rule** (ADR-0006 §9): `gh` CLI first for code-level Issues; `pp-plane` only for cross-tracker references.
 

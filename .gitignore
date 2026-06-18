@@ -29,6 +29,9 @@ coverage/
 .DS_Store
 Thumbs.db
 
+# Retro-audit scratch (epic #247; tooling graduates to tools/retro/ under #248)
+.audit-tmp/
+
 # Logs
 *.log
 npm-debug.log*

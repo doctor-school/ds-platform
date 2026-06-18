@@ -1,63 +1,51 @@
+@AGENTS.md
+
 # CLAUDE.md — Claude Code overlay for DS Platform
 
-All conventions in [`AGENTS.md`](./AGENTS.md) apply. This file extends with Claude Code-specific tooling.
+All conventions in [`AGENTS.md`](./AGENTS.md) apply (imported above). This file adds only Claude-Code-specific tooling. Detail lives in `.claude/rules/*.md` (**auto-loaded** alongside this file at session start) and the skill catalog (**read on demand**) — don't inline-grow this file (anti-bloat budget: ≤200 lines / ≤25 KB **per always-on file**, checked by `pnpm lint:instruction-budget`).
+
+<!-- maintainer note: this overlay is intentionally thin. New durable rules go in
+     AGENTS.md (§6 for hard rules) or a .claude/rules/*.md reference, never here,
+     unless they are genuinely Claude-Code-only (hooks, MCP, superpowers). -->
 
 ---
 
 ## SessionStart hook
 
-The `.claude/settings.json` SessionStart hook runs `pnpm bootstrap` automatically. Output appears in `additionalContext` for every fresh session — git state, open Issues/PRs, active spec(s), and a recommended next step.
+`.claude/settings.json` runs `pnpm bootstrap` on SessionStart — git state, open Issues/PRs, active spec(s), recommended next step land in `additionalContext`. No need to manually run `git log` / `gh issue list` at session start. The `pnpm bootstrap` alias (`tsx tools/agent-bootstrap.ts`) avoids `tsx`-binary PATH issues across shells.
 
-No need to manually run `git log` or `gh issue list` at session start — bootstrap provides the live snapshot.
+## Auto-memory (load-on-demand by design)
 
-The `pnpm bootstrap` alias (defined in root `package.json` as `tsx tools/agent-bootstrap.ts`) avoids PATH-resolution issues with the `tsx` binary in different shell contexts.
-
----
+The repo auto-memory lives at `~/.claude/projects/<project>/memory/`. Only the first 200 lines / 25 KB of `MEMORY.md` load at session start; topic files load on demand when you read them. **`MEMORY.md` is an index, not a store** — keep it one bullet per topic, full detail in the topic file. When a memory becomes a hard convention, promote it into `AGENTS.md` / a skill / a `.claude/rules/*.md` and leave the memory bullet as a pointer (don't duplicate the full text in both).
 
 ## Tool priority
 
-1. **`gh` CLI** — primary for GitHub Issues, PRs, releases. JSON output (`gh ... --json ...`) is AI-friendly.
-2. **MCP `mcp__plugin_github_github__*`** — only for read-tasks that `gh` doesn't cover (rare).
-3. **`pp-plane` CLI** — for cross-tracker references only (e.g., linking a Plane DSO-XXX milestone from an ADR or commit message). **Not for code-level Issues.**
+1. **`gh` CLI** — primary for GitHub Issues, PRs, releases (JSON via `--json` is AI-friendly).
+2. **MCP `mcp__plugin_github_github__*`** — only for read-tasks `gh` doesn't cover (rare).
+3. **`plane-pp-cli`** (reads) + **Plane MCP `mcp__plane-pp-mcp__*`** (writes) — Plane work-items only. **Not for code-level Issues.** (Binary is `plane-pp-cli`, not `pp-plane`; PowerShell PATH only — memory `reference_pp_plane_cli_readonly`.)
+
+## Skill priorities (superpowers reminder)
+
+Canon: AGENTS.md §3 + §3.4. Project work uses the catalog `apps/docs/content/skills/<name>/SKILL.md` — identify kind → cite entry point → `Read` the SKILL.md. Because `superpowers:*` skills are auto-discoverable here: **only `superpowers:brainstorming` is allowed** (spec-authoring), and it must **not** chain into `writing-plans` (the SDD triplet is the plan). Every other `superpowers:*` skill (`executing-plans`, `subagent-driven-development`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `requesting-code-review`, `finishing-a-development-branch`, …) is disallowed as an orchestrator — its procedure is already absorbed by the project catalog (TDD inside `do-feature-iteration`, review dispatch inside `request-mode-a-review`).
+
+## PR-review subagent (Mode a)
+
+`feature-dev:code-reviewer` has no Bash/`gh`. For a Mode (a) review of a branch **not in the working tree**, dispatch `general-purpose` (Opus) so it can `gh pr diff` (memory `feedback_pr_review_subagent_needs_gh`).
+
+## Shell gotchas
+
+PowerShell here-strings (`@'…'@`) corrupt commit subjects in the Bash tool (→ `@`) — use `gh --body-file` / `-F` or a real bash heredoc (memory `feedback_no_powershell_heredoc_in_bash_tool`).
 
 ---
 
-## Plane vs GitHub Issues split (ADR-0006 §9)
+## Reference files (auto-loaded) & on-demand pointers
 
-Canon: **AGENTS.md §6 (Trackers) + §8**. Code-level tasks → GitHub Issues here (`gh issue ...`); strategic / cross-team milestones → Plane workspace `doctor-school`. **Do not invoke `pp-plane` for code tasks** — duplicate sources of truth break AI reasoning; `pp-plane` is for cross-tracker references only (e.g., linking a Plane DSO-XXX milestone from an ADR or commit message).
+`.claude/rules/*.md` **auto-load** at session start alongside this file — you already have them in context, no need to re-read:
 
----
+- `.claude/rules/repo-conventions.md` — branches, commits, versioning, Issues, PRs, merge, dependency bumps.
+- `.claude/rules/dev-stand.md` — dev stand, migrations, live-verify plumbing.
 
-## Skill priorities
+Pull these **on demand** when the task needs them:
 
-Canon: **AGENTS.md §3 (Work protocol) + §3.4 superpowers whitelist**. Project work uses the catalog `apps/docs/content/skills/<name>/SKILL.md` — identify task kind → cite entry point → `Read` the SKILL.md.
-
-**Claude-Code-specific reminder** (because these `superpowers:*` skills are auto-discoverable here): `superpowers:brainstorming` is the only one allowed, for spec-authoring only, and must **not** chain into `writing-plans` (the SDD triplet is the plan). Every other `superpowers:*` skill — `executing-plans`, `subagent-driven-development`, `dispatching-parallel-agents`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `requesting-code-review`, `receiving-code-review`, `finishing-a-development-branch`, `using-git-worktrees`, … — is disallowed as an orchestrator; their procedures are absorbed by the project catalog (TDD inside `do-feature-iteration`, review dispatch inside `request-mode-a-review`). Full rule: AGENTS.md §3.4.
-
----
-
-## Engineering-readiness reference
-
-Runtime / operational tooling defaults (Coolify, Caddy, GlitchTip, Loki + Prometheus + Tempo, Vault, Unleash, Beget DNS) live in the [engineering-readiness spec][es].
-
-[es]: ./apps/docs/content/specs/tech/2026-05-12-engineering-readiness-design-en.md
-
----
-
-## Local dev environment
-
-Compose stack for Postgres / Redis / etc. → `infra/dev-stand/`. See the [local-dev-environment setup-design spec][lds].
-
-[lds]: ./apps/docs/content/specs/tech/2026-05-18-local-dev-environment-setup-design-en.md
-
----
-
-## Design-system / UI construction
-
-UI is built from `@ds/design-system` — styling **only** via tokens (arbitrary Tailwind values are lint-blocked), and **adoption before bespoke**: before writing any page/form/element from scratch, run the `build-ui-from-design-system` skill (`apps/docs/content/skills/`) — inventory the package, then search the approved registry whitelist (official shadcn · Origin UI · Intent·Jolly · Kibo), report the result, adopt + re-skin to tokens; bespoke only after the search comes up empty. Our code is proprietary (`UNLICENSED`) at any repo visibility; proprietary/paid registries are pattern-only while the repo is public. Canon: **ADR-0013** + AGENTS.md §6.
-
----
-
-## UI verification (mandatory)
-
-Any feature that can be checked in the UI MUST be verified in the **actual running UI** before it is called done: bring up the dev-stand (`infra/dev-stand/`, TrueNAS not 24/7), run api + portal locally, and drive the journey in a browser (Playwright MCP). `typecheck` + `build` + `lint` + Mode-a review are necessary but **not** sufficient — they never prove the rendered result, and live-gated E2E that does not run in CI is not a substitute. Keep the stand up by default during UI work — it is also what your own Playwright testing needs. A user-facing dev placeholder (e.g. a "set this env var" note shown to end users) is a banned stub, not an affordance — render the real thing or nothing.
+- **UI construction** — `@ds/design-system`, tokens-only, adopt-before-bespoke: AGENTS.md §6 + skill `build-ui-from-design-system` + ADR-0013.
+- **Engineering-readiness defaults** (Coolify, Caddy, GlitchTip, Loki/Prometheus/Tempo, Vault, Unleash, Beget DNS) — [engineering-readiness spec](./apps/docs/content/specs/tech/2026-05-12-engineering-readiness-design-en.md).

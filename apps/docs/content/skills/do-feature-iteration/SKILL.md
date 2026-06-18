@@ -26,6 +26,12 @@ Execute the steps in order. Each `→` is a hard gate: the next step does not be
 3. **RED** — write one failing Vitest test per EARS-N. Naming: `it('EARS-N: when <trigger>, system shall <behavior>')`. Flat numbering per ADR-0006 §4; nest to `N.M` only when one handler carries multiple shall-clauses.
 4. **GREEN** — minimum code to pass the failing test.
 5. **REFACTOR** — clean up while staying green.
+   5a. **UI pre-flight gate (if this handler touches any rendered surface).** If the iteration touches a user-facing UI surface (`apps/portal/**`, `apps/promo/**`, `apps/admin/**`, `packages/design-system/**`), then before the checklist + review you MUST:
+   1. Run the **`build-ui-from-design-system` registry-research gate** ([../build-ui-from-design-system/SKILL.md](../build-ui-from-design-system/SKILL.md)) — adopt before bespoke, and record the adoption decision as a `registry-research:` line in the PR body (`adopted <block> from <registry>` or `bespoke — <why empty>`). Enforced by the `registry-research` CI gate (#251) + AGENTS.md §6.
+   2. **Live-verify** in the actual running UI — drive **every field kind on every surface** in a browser (Playwright) on the dev-stand per [`.claude/rules/dev-stand.md`](../../../../../.claude/rules/dev-stand.md) and AGENTS.md §6, watching rendered error language + timing. No user-facing dev placeholders (enforced by the `no-stub` CI gate, #251).
+
+   This makes the §6 UI Hard rules _fire from the executing procedure_, not just sit in the constitution. Skip only for a genuinely backend-only handler (`surface: backend-only`).
+
 6. **`run-iteration-end-checklist`** (dispatch) — verdict-gated. If `BLOCKED on #X`, fix item X and re-dispatch. Do **not** continue past a BLOCKED verdict.
 7. **`surface-decision-debt`** (inline) — required invocation; output may be `[]` but the invocation itself is required.
 8. `git push` + `gh pr create` with the PR template filled (label, `Closes #N`, `author:*`).
@@ -48,6 +54,7 @@ Execute the steps in order. Each `→` is a hard gate: the next step does not be
 
 ## Related skills
 
+- [../build-ui-from-design-system/SKILL.md](../build-ui-from-design-system/SKILL.md)
 - [../read-relevant-adrs/SKILL.md](../read-relevant-adrs/SKILL.md)
 - [../verify-base-ci-green/SKILL.md](../verify-base-ci-green/SKILL.md)
 - [../run-iteration-end-checklist/SKILL.md](../run-iteration-end-checklist/SKILL.md)

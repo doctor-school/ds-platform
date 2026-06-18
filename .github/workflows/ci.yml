@@ -298,6 +298,43 @@ jobs:
       - run: pnpm exec turbo run build --filter=@ds/api^...
       - run: pnpm lint:endpoint-authz
 
+  # ─── Enforcement gates for already-written rules (#251, epic #247) ────
+  # registry-research: a PR touching a user-facing UI surface must carry the
+  # `build-ui-from-design-system` adoption artifact in its body (ADR-0013 /
+  # AGENTS.md §6). no-stub: user-facing source must not ship a "set this env
+  # var" dev placeholder or an untracked TODO/FIXME stub (AGENTS.md §6). Both
+  # land as WARN per the ADR-0007 §2.6 new-guard posture — promote to BLOCK
+  # once stable. Excluded from the `ci` meta-job needs-list while WARN.
+  registry-research:
+    needs: setup
+    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:registry-research
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+
+  no-stub:
+    needs: setup
+    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:no-stub
+
   ears-tests:
     needs: setup
     continue-on-error: true # WARN v1

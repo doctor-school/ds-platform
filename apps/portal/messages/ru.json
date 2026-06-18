@@ -11,6 +11,19 @@
     "shortPhonePlaceholder": "+7…",
     "back": "Назад"
   },
+  "auth": {
+    "brandName": "Doctor.School",
+    "panelHeadline": "Профессиональное обучение и аккредитация для врачей",
+    "highlight1": "Курсы, НМО и аккредитация в одном кабинете",
+    "highlight2": "Доступ с компьютера и телефона",
+    "highlight3": "Защищённый вход и приватность данных",
+    "footnote": "© Doctor.School",
+    "enterCodeTitle": "Введите код",
+    "sentTo": "Код отправлен на {destination}",
+    "resend": "Отправить код снова",
+    "resendCountdown": "Повторно через {seconds} с",
+    "changeMethod": "Назад"
+  },
   "home": {
     "title": "Портал Doctor.School",
     "description": "Каркас приложения (ADR-0004 §3 / §7). Сценарии аутентификации (пароль / email-код / SMS-код) появляются в составе функции 003 — эта страница подтверждает, что приложение собирается на общей дизайн-системе.",
@@ -60,6 +73,7 @@
     "title": "Сброс пароля",
     "descriptionRequest": "Укажите электронную почту или телефон — мы отправим код для сброса.",
     "descriptionComplete": "Введите код, отправленный на {identifier}, и задайте новый пароль.",
+    "completeTitle": "Введите код и новый пароль",
     "codeLabel": "Код для сброса",
     "newPasswordLabel": "Новый пароль",
     "sendResetCode": "Отправить код для сброса",

@@ -46,5 +46,10 @@ export {
   maskPhoneInput,
 } from "./primitives/fields";
 
-// ── Blocks (#235 / #227) ──────────────────────────────────────────────────────
-export { AuthCard, OtpFocusScreen, maskDestination } from "./blocks";
+// ── Blocks (#235 / #227 / #237) ───────────────────────────────────────────────
+export {
+  AuthLayout,
+  AuthCard,
+  OtpFocusScreen,
+  maskDestination,
+} from "./blocks";

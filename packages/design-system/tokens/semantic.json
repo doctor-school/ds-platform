@@ -10,6 +10,8 @@
     "primary-foreground": { "$value": "{color.white}" },
     "primary-hover": { "$value": "{color.blue.700}" },
     "primary-pressed": { "$value": "{color.blue.700}" },
+    "brand": { "$value": "{color.blue.700}" },
+    "brand-foreground": { "$value": "{color.white}" },
     "secondary": { "$value": "{color.neutral.100}" },
     "secondary-foreground": { "$value": "{color.neutral.900}" },
     "muted": { "$value": "{color.neutral.100}" },

@@ -33,11 +33,13 @@ import { OtpField } from "../primitives/fields/otp-field";
  * The masked destination is computed by the app (reuse `maskDestination` from this
  * package) and passed pre-masked — the block never sees the raw destination.
  *
- * Resend cooldown: the block owns a live countdown. It (re)starts whenever the
- * `cooldownSeconds` prop *value* changes — the app bumps it (e.g. `setCooldown(c =>
- * ({ s: 30, n: c.n + 1 }))`) on a successful resend; while counting down the resend
- * control is disabled and shows `resendCountdownLabel(remaining)`, then re-enables
- * and shows `resendLabel`. Pass `cooldownSeconds={0}` to start enabled.
+ * Resend cooldown: the block owns the countdown end-to-end. `cooldownSeconds` is
+ * the cooldown DURATION — it seeds the countdown on mount (a code was just sent, so
+ * resend starts disabled) and the block RESTARTS that same duration itself each time
+ * resend is clicked, so repeated resends work without the app bumping any prop. While
+ * counting down the control is disabled and shows `resendCountdownLabel(remaining)`,
+ * then re-enables and shows `resendLabel`. Changing the `cooldownSeconds` value also
+ * re-seeds it. Pass `cooldownSeconds={0}` to start (and stay) enabled.
  */
 export function OtpFocusScreen<T extends FieldValues>({
   field,
@@ -58,6 +60,7 @@ export function OtpFocusScreen<T extends FieldValues>({
   onResend,
   onChangeMethod,
   error,
+  children,
   submitTestId,
   resendTestId,
   changeMethodTestId,
@@ -87,8 +90,11 @@ export function OtpFocusScreen<T extends FieldValues>({
   resendLabel: React.ReactNode;
   /** Resend control copy while counting down; receives the remaining seconds. */
   resendCountdownLabel: (secondsRemaining: number) => React.ReactNode;
-  /** Change-method / back control copy. */
-  changeMethodLabel: React.ReactNode;
+  /**
+   * Change-method / back control copy. OPTIONAL: surfaces that have no channel to
+   * switch back to (e.g. register-verify) omit it, and the control is not rendered.
+   */
+  changeMethodLabel?: React.ReactNode;
 
   /**
    * Resend cooldown in seconds. The countdown (re)starts whenever this VALUE
@@ -104,11 +110,22 @@ export function OtpFocusScreen<T extends FieldValues>({
   onSubmit: React.FormEventHandler<HTMLFormElement>;
   /** Resend handler — the app re-requests the code and bumps `cooldownSeconds`. */
   onResend: () => void;
-  /** Change-method / back handler — returns the surface to channel selection. */
-  onChangeMethod: () => void;
+  /**
+   * Change-method / back handler — returns the surface to channel selection.
+   * OPTIONAL: omitted (with `changeMethodLabel`) on surfaces with no method to
+   * change, e.g. register-verify.
+   */
+  onChangeMethod?: () => void;
 
   /** Optional error slot (already-mapped, localized message). */
   error?: React.ReactNode;
+  /**
+   * Optional extra fields rendered INSIDE the form, between the code box and the
+   * submit button — e.g. the new-password field on reset-complete, where the code
+   * is submitted together with a new password (so that surface omits `onComplete`,
+   * keeping the manual submit). Absent on the auto-submitting OTP surfaces.
+   */
+  children?: React.ReactNode;
 
   submitTestId?: string;
   resendTestId?: string;
@@ -149,6 +166,10 @@ export function OtpFocusScreen<T extends FieldValues>({
           onComplete={onComplete}
         />
 
+        {/* Optional extra fields (e.g. reset-complete's new-password) — submitted
+            together with the code. */}
+        {children}
+
         {error ? (
           <p role="alert" className="text-sm text-destructive">
             {error}
@@ -166,21 +187,33 @@ export function OtpFocusScreen<T extends FieldValues>({
       </form>
 
       <div className="flex items-center justify-between gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onChangeMethod}
-          data-testid={changeMethodTestId}
-        >
-          {changeMethodLabel}
-        </Button>
+        {/* Change-method / back — only when the surface supplies a handler (e.g.
+            login-OTP / reset return to the request step; register-verify omits it). */}
+        {onChangeMethod && changeMethodLabel ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onChangeMethod}
+            data-testid={changeMethodTestId}
+          >
+            {changeMethodLabel}
+          </Button>
+        ) : (
+          <span />
+        )}
         <Button
           type="button"
           variant="link"
           size="sm"
           disabled={resendDisabled}
-          onClick={onResend}
+          onClick={() => {
+            // Fire the app's re-request, then restart the local cooldown ourselves
+            // so repeated resends each re-disable for `cooldownSeconds` — the app
+            // owns the network call, the block owns the timer.
+            onResend();
+            if (cooldownSeconds > 0) setRemaining(cooldownSeconds);
+          }}
           data-testid={resendTestId}
         >
           {resendDisabled ? resendCountdownLabel(remaining) : resendLabel}

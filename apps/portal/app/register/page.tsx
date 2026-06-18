@@ -10,6 +10,7 @@ import { UserPlus } from "lucide-react";
 import { type RegisterRequest } from "@ds/schemas";
 
 import { BotProtectionField } from "@/components/bot-protection";
+import { AuthShell } from "@/components/auth-shell";
 import { EmailField, PasswordField } from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
@@ -22,18 +23,12 @@ import { registerFormSchema } from "@/lib/identifier-validation";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@ds/design-system/card";
 import { Form, FormField } from "@ds/design-system/form";
+import { AuthCard } from "@ds/design-system/blocks";
 
 /*
- * Registration surface (#131, EARS-1). Email-primary (#202): registration is
+ * Registration surface (#131, EARS-1; rebuilt on `@ds/design-system` for #237).
+ * Email-primary (#202): registration is
  * email + password only — Zitadel cannot create a login-capable human without an
  * email, so the dual-identifier email/phone toggle was removed (phone is a future
  * post-registration secondary identifier; it stays on /login, OTP-login, /reset).
@@ -106,72 +101,67 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-6 py-16">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <UserPlus className="text-primary" aria-hidden />
-            <CardTitle>{t("title")}</CardTitle>
-          </div>
-          <CardDescription>{t("description")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit(onSubmit)}
-              className="space-y-4"
-              noValidate
-            >
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <EmailField
-                    field={field}
-                    label={tc("email")}
-                    placeholder={tc("emailPlaceholder")}
-                  />
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <PasswordField
-                    field={field}
-                    purpose="new"
-                    label={tc("password")}
-                    policyHint={tc("passwordPolicy")}
-                  />
-                )}
-              />
-
-              <p className="text-xs text-muted-foreground">{t("consent")}</p>
-
-              <BotProtectionField onToken={setCaptchaToken} />
-              {error && (
-                <p role="alert" className="text-sm text-destructive">
-                  {error}
-                </p>
-              )}
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={form.formState.isSubmitting}
-                data-testid="register-submit"
-              >
-                {t("submit")}
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-        <CardFooter className="text-sm">
+    <AuthShell>
+      <AuthCard
+        title={t("title")}
+        description={t("description")}
+        icon={<UserPlus className="text-primary" aria-hidden />}
+        footer={
           <Link href="/login" className="underline">
             {t("haveAccount")}
           </Link>
-        </CardFooter>
-      </Card>
-    </main>
+        }
+      >
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="space-y-4"
+            noValidate
+          >
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <EmailField
+                  field={field}
+                  label={tc("email")}
+                  placeholder={tc("emailPlaceholder")}
+                />
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <PasswordField
+                  field={field}
+                  purpose="new"
+                  label={tc("password")}
+                  policyHint={tc("passwordPolicy")}
+                />
+              )}
+            />
+
+            <p className="text-xs text-muted-foreground">{t("consent")}</p>
+
+            <BotProtectionField onToken={setCaptchaToken} />
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={form.formState.isSubmitting}
+              data-testid="register-submit"
+            >
+              {t("submit")}
+            </Button>
+          </form>
+        </Form>
+      </AuthCard>
+    </AuthShell>
   );
 }

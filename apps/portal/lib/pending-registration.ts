@@ -97,6 +97,24 @@ export function takePendingRegistration(
   return registration;
 }
 
+/**
+ * Read the held credential for an identifier WITHOUT consuming it — used by the
+ * #237 register-verify resend, which must re-issue the verification email (re-POST
+ * `/register`) while leaving the held password in place for the eventual
+ * verify-success auto-login replay. Returns `null` when the slot is empty, expired,
+ * or held for a different identifier (same guards as {@link takePendingRegistration},
+ * minus the wipe). NEVER mutates the slot.
+ */
+export function peekPendingRegistration(
+  identifier: string,
+): PendingRegistration | null {
+  const held = pending;
+  if (!held || held.expiresAt <= Date.now()) return null;
+  if (held.identifier !== identifier) return null;
+  const { expiresAt: _expiresAt, ...registration } = held;
+  return registration;
+}
+
 /** Drop any held credential (abandonment / explicit reset). */
 export function clearPendingRegistration(): void {
   pending = null;

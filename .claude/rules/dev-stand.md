@@ -24,6 +24,7 @@ The stack is driven by `pnpm dev:*` (env-driven launcher `tools/dev/run.mjs`, DS
 - **LAN endpoints are trusted, not egress.** Dev-stand services are LAN endpoints — the LAN is classified as a trusted network (setup-design §8.3). Do NOT route stand traffic (e.g. `truenas.local`) through the egress PII scanner (ADR-0011); these are intra-zone calls.
 - **No source code on the remote Docker host.** Only Docker volumes live on a remote box. `apps/*` and `packages/*` stay on the developer's local NVMe (setup-design §2.2).
 - **The dev box is not 24/7.** TrueNAS is power-cycled — schedule any task uptime-relative (boot-triggered + age check), never fixed-time cron (memory `project_truenas_not_24_7`).
+- **Live-verify pre-flight is yours to run.** Before any live UI verification, confirm the stand is up with `pnpm dev:status` and bring it up (`pnpm dev:up`) if needed — the box is power-cycled, so a down stand is expected, not a blocker to hand back. **Never ask the user "is the dev box on?"** — check `dev:status` and follow the failure table (memory `feedback_check_dev_stand_yourself`).
 
 ## Baseline failure modes
 

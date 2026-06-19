@@ -13,6 +13,7 @@ import {
   type VerifyRequest,
 } from "@ds/schemas";
 
+import { AuthShell } from "@/components/auth-shell";
 import { OtpField } from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
@@ -20,13 +21,7 @@ import { takePendingRegistration } from "@/lib/pending-registration";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@ds/design-system/card";
+import { AuthCard, maskDestination } from "@ds/design-system/blocks";
 import { Form, FormField } from "@ds/design-system/form";
 
 /** The registration verification code is a FIXED 6 characters (Zitadel default) —
@@ -76,11 +71,11 @@ const VERIFY_OTP_LENGTH = 6;
 
 export default function VerifyPage() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-6 py-16">
+    <AuthShell>
       <Suspense fallback={null}>
         <VerifyCard />
       </Suspense>
-    </main>
+    </AuthShell>
   );
 }
 
@@ -143,23 +138,21 @@ function VerifyCard() {
     void submit();
   }, [form.formState.isSubmitting, submit]);
 
-  const identifierLabel = email ?? t("fallbackIdentifier");
+  // Privacy-masked destination (#227): the screen confirms WHERE the code went
+  // without re-printing the full address (`a•••@p•••.com`); reuses the same
+  // `maskDestination` helper the login-OTP focus-screen displays.
+  const identifierLabel = email ? maskDestination(email) : t("fallbackIdentifier");
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <MailCheck className="text-primary" aria-hidden />
-          <CardTitle>{t("title")}</CardTitle>
-        </div>
-        <CardDescription>
-          {t.rich("description", {
-            identifier: identifierLabel,
-            strong: (chunks) => <strong>{chunks}</strong>,
-          })}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <AuthCard
+      icon={<MailCheck className="text-primary" aria-hidden />}
+      title={t("title")}
+      description={t.rich("description", {
+        identifier: identifierLabel,
+        strong: (chunks) => <strong>{chunks}</strong>,
+      })}
+      contentClassName="space-y-6"
+    >
         {/* (a) New-registrant path — enter the email code (unchanged auto-submit
             + post-verify auto-login). A co-equal affordance, not the only one. */}
         <section className="space-y-3" aria-label={t("newAccountHeading")}>
@@ -225,7 +218,6 @@ function VerifyCard() {
             </Button>
           </div>
         </section>
-      </CardContent>
-    </Card>
+    </AuthCard>
   );
 }

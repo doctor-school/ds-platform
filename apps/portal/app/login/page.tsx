@@ -15,11 +15,11 @@ import {
   type OtpVerify,
 } from "@ds/schemas";
 
+import { AuthShell } from "@/components/auth-shell";
 import { BotProtectionField } from "@/components/bot-protection";
 import {
   EmailField,
   IdentifierField,
-  OtpField,
   PasswordField,
   PhoneField,
 } from "@ds/design-system/fields";
@@ -33,13 +33,10 @@ import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@ds/design-system/card";
+  AuthCard,
+  OtpFocusScreen,
+  maskDestination,
+} from "@ds/design-system/blocks";
 import { Form, FormField } from "@ds/design-system/form";
 import {
   Tabs,
@@ -49,66 +46,68 @@ import {
 } from "@ds/design-system/tabs";
 
 /*
- * Sign-in surface (#131). Wires the live BFF (003 F2 password / F3 OTP) into the
- * portal: forms validate with the `@ds/schemas` SSOT (NO re-declared zod), submit
- * same-origin to `/v1/auth/*` via {@link authClient}, and on success the BFF sets
- * the `__Host-ds_session` cookie and we route to the session-aware `/account`
- * landing. No token ever touches this client (EARS-8). Two journeys live here:
+ * Sign-in surface (#131, rebuilt on the design system in #237). Wires the live BFF
+ * (003 F2 password / F3 OTP) into the portal: forms validate with the `@ds/schemas`
+ * SSOT (NO re-declared zod), submit same-origin to `/v1/auth/*` via {@link
+ * authClient}, and on success the BFF sets the `__Host-ds_session` cookie and we
+ * route to the session-aware `/account` landing. No token ever touches this client
+ * (EARS-8). Two journeys live here:
  *   • Password login (EARS-5): single `identifier` box (email OR phone) — Zitadel
- *     resolves it — plus password. Matches {@link LoginRequestSchema}, which is
- *     why this is NOT an `email` field (the old scaffold was wrong).
+ *     resolves it — plus password.
  *   • Passwordless OTP login (EARS-6 email / EARS-7 SMS): request a code for an
- *     identifier+channel, then submit the 6-digit code. SMS has no dev-stand
- *     provider, but the UI is built for both channels.
+ *     identifier+channel, then the surface swaps to the focused OTP screen.
+ *
+ * #237 / #227: once a code is requested the OTP journey renders the design-system
+ * `<OtpFocusScreen>` block INSTEAD of the request chrome — masked destination +
+ * code box (auto-submit) + resend-with-cooldown + change-method/back, and BY
+ * CONSTRUCTION no channel switcher or secondary links, so the user cannot wander off
+ * the issued challenge (the #192/#196/#200/#211/#212/#227 papercut class). The whole
+ * surface is wrapped in the brand `<AuthShell>` (the approved split-screen look).
  */
 
 export default function LoginPage() {
   const t = useTranslations("login");
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-6 py-16">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="text-primary" aria-hidden />
-            <CardTitle>{t("title")}</CardTitle>
-          </div>
-          <CardDescription>{t("description")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {/* #179: pick a sign-in method first (segmented control) and render
-              ONLY that method's fields — Radix Tabs unmounts the inactive
-              `TabsContent`, so the password fields are absent from the DOM while
-              the OTP tab is active and vice-versa. Defaults to Password (no
-              "last-used" persistence — not persisting auth UI state matches the
-              security posture). Each method's component is unchanged; this is a
-              COMPOSITION-only change. */}
-          <Tabs defaultValue="password">
-            <TabsList aria-label={t("methodSwitcherLabel")}>
-              <TabsTrigger value="password" data-testid="login-method-password">
-                {t("methodPassword")}
-              </TabsTrigger>
-              <TabsTrigger value="otp" data-testid="login-method-otp">
-                {t("methodOtp")}
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="password">
-              <PasswordLogin />
-            </TabsContent>
-            <TabsContent value="otp">
-              <OtpLogin />
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-        <CardFooter className="flex-col items-start gap-1 text-sm">
-          <Link href="/register" className="underline">
-            {t("createAccount")}
-          </Link>
-          <Link href="/reset" className="underline">
-            {t("forgotPassword")}
-          </Link>
-        </CardFooter>
-      </Card>
-    </main>
+    <AuthShell>
+      <AuthCard
+        icon={<ShieldCheck className="text-primary" aria-hidden />}
+        title={t("title")}
+        description={t("description")}
+        footer={
+          <>
+            <Link href="/register" className="underline">
+              {t("createAccount")}
+            </Link>
+            <Link href="/reset" className="underline">
+              {t("forgotPassword")}
+            </Link>
+          </>
+        }
+      >
+        {/* #179: pick a sign-in method first (segmented control) and render
+            ONLY that method's fields — Radix Tabs unmounts the inactive
+            `TabsContent`, so the password fields are absent from the DOM while
+            the OTP tab is active and vice-versa. Defaults to Password (no
+            "last-used" persistence — not persisting auth UI state matches the
+            security posture). */}
+        <Tabs defaultValue="password">
+          <TabsList aria-label={t("methodSwitcherLabel")}>
+            <TabsTrigger value="password" data-testid="login-method-password">
+              {t("methodPassword")}
+            </TabsTrigger>
+            <TabsTrigger value="otp" data-testid="login-method-otp">
+              {t("methodOtp")}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="password">
+            <PasswordLogin />
+          </TabsContent>
+          <TabsContent value="otp">
+            <OtpLogin />
+          </TabsContent>
+        </Tabs>
+      </AuthCard>
+    </AuthShell>
   );
 }
 
@@ -210,7 +209,14 @@ function PasswordLogin() {
   );
 }
 
-/** EARS-6/7 passwordless OTP login: request a code, then submit it. */
+/**
+ * Resend cooldown (#227). The `<OtpFocusScreen>` block re-seeds its live countdown
+ * from `cooldownSeconds` on mount, so a successful resend re-keys the verify form to
+ * restart the timer (and clears the now-stale code) — see `resendNonce` below.
+ */
+const RESEND_COOLDOWN_SECONDS = 30;
+
+/** EARS-6/7 passwordless OTP login: request a code, then the focus-screen takes over. */
 function OtpLogin() {
   const t = useTranslations("login");
   const tc = useTranslations("common");
@@ -220,6 +226,11 @@ function OtpLogin() {
   const [identifier, setIdentifier] = useState("");
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // #227: a successful resend bumps this nonce, which re-keys <OtpVerifyForm> so its
+  // <OtpFocusScreen> remounts and re-seeds a fresh `RESEND_COOLDOWN_SECONDS`
+  // countdown (the block reads `cooldownSeconds` on mount). The remount also clears
+  // the code the user may have typed against the now-superseded code.
+  const [resendNonce, setResendNonce] = useState(0);
 
   // #192: the resolver tracks the ACTIVE channel — email channel requires a valid
   // email, SMS channel requires an E.164 phone. Rebuilt per channel so switching
@@ -236,25 +247,38 @@ function OtpLogin() {
     defaultValues: { identifier: "", channel: "email" },
   });
 
+  async function sendOtp(value: string) {
+    await authClient.requestOtp({
+      identifier: value,
+      channel,
+      ...(captchaToken ? { captchaToken } : {}),
+    });
+  }
+
   async function onRequest(values: OtpRequest) {
     setError(null);
     try {
-      await authClient.requestOtp({
-        ...values,
-        channel,
-        ...(captchaToken ? { captchaToken } : {}),
-      });
-      // Carry the identifier into the verify step (the BFF re-resolves it). The
-      // verify form is a SEPARATE component (<OtpVerifyForm/>) that mounts only
-      // once `sent` flips, so its own useForm registers the `code` field on its
-      // first render — no late-mounted/detached Controller. A prior attempt kept
-      // the verify form in this component and seeded it with reset()/setValue()
-      // after the request→verify toggle; because the `code` Controller mounted
-      // AFTER the form was created, RHF never bound it and every keystroke was
-      // dropped (the field stayed "" and login never fired). Owning the verify
-      // form in a freshly-mounted child is the idiomatic fix (#131/#153 live).
+      await sendOtp(values.identifier);
+      // Carry the identifier into the focus-screen (the BFF re-resolves it on
+      // verify). The verify step is a SEPARATE component (<OtpVerifyForm/>) that
+      // mounts only once `sent` flips, so its own useForm registers the `code`
+      // field on its first render — no late-mounted/detached Controller (#131/#153).
       setIdentifier(values.identifier);
+      setResendNonce(0);
       setSent(true);
+    } catch (err) {
+      setError(authErrorMessage(err, te, te("otpSendFailed")));
+    }
+  }
+
+  // #227 resend: re-request the SAME identifier+channel code. On success re-key the
+  // verify form (fresh cooldown + cleared code); on failure surface the error
+  // WITHOUT a remount so the focus-screen keeps the partially-typed code.
+  async function onResend() {
+    setError(null);
+    try {
+      await sendOtp(identifier);
+      setResendNonce((n) => n + 1);
     } catch (err) {
       setError(authErrorMessage(err, te, te("otpSendFailed")));
     }
@@ -262,96 +286,108 @@ function OtpLogin() {
 
   return (
     <div className="space-y-4" aria-label={t("otpFormLabel")}>
-      <div className="space-y-1">
-        <p className="text-sm font-medium">{t("otpHeading")}</p>
-        <p className="text-xs text-muted-foreground">{t("otpDescription")}</p>
-      </div>
-
-      {/* Channel selector — drives EARS-6 (email) vs EARS-7 (sms). */}
-      <div
-        className="flex gap-2"
-        role="radiogroup"
-        aria-label={t("otpChannelGroupLabel")}
-      >
-        {(["email", "sms"] as const).map((c) => (
-          <Button
-            key={c}
-            type="button"
-            variant={channel === c ? "default" : "outline"}
-            size="sm"
-            role="radio"
-            aria-checked={channel === c}
-            data-testid={`otp-channel-${c}`}
-            onClick={() => {
-              setChannel(c);
-              setSent(false);
-              // Clear the identifier on channel switch so a value typed for the
-              // previous channel (e.g. an email left in the box) does not linger
-              // into the other channel's stricter shape (#192).
-              requestForm.reset({ identifier: "", channel: c });
-            }}
-          >
-            {c === "email" ? t("otpChannelEmail") : t("otpChannelSms")}
-          </Button>
-        ))}
-      </div>
-
       {!sent ? (
-        <Form {...requestForm}>
-          <form
-            onSubmit={requestForm.handleSubmit(onRequest)}
-            className="space-y-4"
-            noValidate
+        <>
+          <div className="space-y-1">
+            <p className="text-sm font-medium">{t("otpHeading")}</p>
+            <p className="text-xs text-muted-foreground">
+              {t("otpDescription")}
+            </p>
+          </div>
+
+          {/* Channel selector — drives EARS-6 (email) vs EARS-7 (sms). Present only
+              on the request step; once a code is sent the focus-screen omits it by
+              construction (#227), and "Изменить способ" returns here. */}
+          <div
+            className="flex gap-2"
+            role="radiogroup"
+            aria-label={t("otpChannelGroupLabel")}
           >
-            {/* The OTP request box is channel-specific: the email channel is a pure
-                email, the sms channel a pure (masked) phone — so it uses the
-                channel-appropriate primitive, not the union box. Both keep the
-                `otp-identifier` test id the e2e queries (via the primitive `testId`
-                prop) and the masked-vs-unmasked behavior (#192 — sms masks via
-                `<PhoneField>`, email is unmasked via `<EmailField>`). */}
-            <FormField
-              control={requestForm.control}
-              name="identifier"
-              render={({ field }) =>
-                channel === "email" ? (
-                  <EmailField
-                    field={field}
-                    testId="otp-identifier"
-                    label={tc("email")}
-                    placeholder={tc("emailPlaceholder")}
-                  />
-                ) : (
-                  <PhoneField
-                    field={field}
-                    testId="otp-identifier"
-                    label={tc("phone")}
-                    placeholder={tc("shortPhonePlaceholder")}
-                  />
-                )
-              }
-            />
-            <BotProtectionField onToken={setCaptchaToken} />
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
-            <Button
-              type="submit"
-              variant="secondary"
-              className="w-full"
-              disabled={requestForm.formState.isSubmitting}
-              data-testid="otp-send"
+            {(["email", "sms"] as const).map((c) => (
+              <Button
+                key={c}
+                type="button"
+                variant={channel === c ? "default" : "outline"}
+                size="sm"
+                role="radio"
+                aria-checked={channel === c}
+                data-testid={`otp-channel-${c}`}
+                onClick={() => {
+                  setChannel(c);
+                  // Clear the identifier on channel switch so a value typed for the
+                  // previous channel (e.g. an email left in the box) does not linger
+                  // into the other channel's stricter shape (#192).
+                  requestForm.reset({ identifier: "", channel: c });
+                }}
+              >
+                {c === "email" ? t("otpChannelEmail") : t("otpChannelSms")}
+              </Button>
+            ))}
+          </div>
+
+          <Form {...requestForm}>
+            <form
+              onSubmit={requestForm.handleSubmit(onRequest)}
+              className="space-y-4"
+              noValidate
             >
-              {t("sendCode")}
-            </Button>
-          </form>
-        </Form>
+              {/* The OTP request box is channel-specific: the email channel is a pure
+                  email, the sms channel a pure (masked) phone — so it uses the
+                  channel-appropriate primitive, not the union box. Both keep the
+                  `otp-identifier` test id the e2e queries (via the primitive `testId`
+                  prop) and the masked-vs-unmasked behavior (#192). */}
+              <FormField
+                control={requestForm.control}
+                name="identifier"
+                render={({ field }) =>
+                  channel === "email" ? (
+                    <EmailField
+                      field={field}
+                      testId="otp-identifier"
+                      label={tc("email")}
+                      placeholder={tc("emailPlaceholder")}
+                    />
+                  ) : (
+                    <PhoneField
+                      field={field}
+                      testId="otp-identifier"
+                      label={tc("phone")}
+                      placeholder={tc("shortPhonePlaceholder")}
+                    />
+                  )
+                }
+              />
+              <BotProtectionField onToken={setCaptchaToken} />
+              {error && (
+                <p role="alert" className="text-sm text-destructive">
+                  {error}
+                </p>
+              )}
+              <Button
+                type="submit"
+                variant="secondary"
+                className="w-full"
+                disabled={requestForm.formState.isSubmitting}
+                data-testid="otp-send"
+              >
+                {t("sendCode")}
+              </Button>
+            </form>
+          </Form>
+        </>
       ) : (
         <OtpVerifyForm
+          key={resendNonce}
           identifier={identifier}
           channel={channel}
-          onBack={() => setSent(false)}
+          error={error}
+          cooldownSeconds={RESEND_COOLDOWN_SECONDS}
+          onResend={onResend}
+          onError={setError}
+          onBack={() => {
+            setSent(false);
+            setError(null);
+          }}
         />
       )}
     </div>
@@ -362,34 +398,44 @@ function OtpLogin() {
  * Zitadel's login email/SMS OTP codes are a FIXED 8 digits (verified live on the
  * dev-stand, #153). #175: that fixed length lets the field auto-submit the moment the
  * final digit lands, via the slotted `InputOTP onComplete`. #211 unified the
- * presentation: all three code surfaces (`/login`, `/verify`, `/reset`) now use the
- * slotted variant — 8 slots fit the `max-w-md` login card. The login code is digits;
- * the slotted widget accepts the digit subset fine (it carries no digit-only filter).
+ * presentation: all three code surfaces (`/login`, `/verify`, `/reset`) use the
+ * slotted variant — 8 slots fit the focus screen.
  */
 const LOGIN_OTP_LENGTH = 8;
 
 /**
- * EARS-6/7 verify step. Its OWN `useForm` lives here so the `code` field is
- * registered on this component's first render: the component mounts only once
- * the request step has fired, so there is no late-mounted Controller and no
- * post-hoc `reset()`/`setValue()` seeding (both of which left the field detached
- * and dropped every keystroke — #131/#153 live). `identifier`+`channel` come in
- * as props (the BFF re-resolves them); the user only types the code.
+ * EARS-6/7 verify step, rendered through the design-system `<OtpFocusScreen>` (#227).
+ * Its OWN `useForm` lives here so the `code` field is registered on this component's
+ * first render: it mounts only once a code has been requested, so there is no
+ * late-mounted Controller and no post-hoc seeding (both of which left the field
+ * detached and dropped every keystroke — #131/#153 live). `identifier`+`channel` come
+ * in as props (the BFF re-resolves them); the user only types the code.
+ *
+ * Error + resend are lifted to the parent <OtpLogin> (which owns the network call
+ * and the resend cooldown re-key): `error` is shown in the focus-screen's slot,
+ * `onResend` re-requests the code, `onError` reports a verify failure upward, and
+ * `onBack` ("Изменить способ") returns to channel selection.
  */
 function OtpVerifyForm({
   identifier,
   channel,
+  error,
+  cooldownSeconds,
+  onResend,
+  onError,
   onBack,
 }: {
   identifier: string;
   channel: OtpChannel;
+  error: string | null;
+  cooldownSeconds: number;
+  onResend: () => void;
+  onError: (message: string) => void;
   onBack: () => void;
 }) {
   const router = useRouter();
   const t = useTranslations("login");
-  const tc = useTranslations("common");
   const te = useTranslations("errors");
-  const [error, setError] = useState<string | null>(null);
 
   const verifyForm = useForm<OtpVerify>({
     mode: "onTouched", // #200: consistent on-blur validation across the auth forms.
@@ -398,20 +444,18 @@ function OtpVerifyForm({
   });
 
   async function onVerify(values: OtpVerify) {
-    setError(null);
     try {
       await authClient.loginWithOtp({ ...values, identifier, channel });
       router.push("/account");
     } catch (err) {
-      setError(authErrorMessage(err, te, te("otpVerifyFailed")));
+      onError(authErrorMessage(err, te, te("otpVerifyFailed")));
     }
   }
 
-  // #175: auto-submit once the fixed-length login OTP is fully entered. `<OtpField
-  // variant="slotted">` (#211) fires `onComplete` when `LOGIN_OTP_LENGTH` digits land; the
-  // in-flight guard (`isSubmitting`) here prevents a double network call if
-  // completion races a manual click / the Enter key, and stops a re-fire if a later
-  // keystroke/paste keeps the value at full length.
+  // #175: auto-submit once the fixed-length login OTP is fully entered. The in-flight
+  // guard (`isSubmitting`) prevents a double network call if completion races a manual
+  // click / the Enter key, and stops a re-fire if a later keystroke/paste keeps the
+  // value at full length.
   const submit = verifyForm.handleSubmit(onVerify);
   const onCodeComplete = useCallback(() => {
     if (verifyForm.formState.isSubmitting) return;
@@ -420,45 +464,36 @@ function OtpVerifyForm({
 
   return (
     <Form {...verifyForm}>
-      <form onSubmit={submit} className="space-y-4" noValidate>
-        {/* Slotted one-time-code box (#211): the Zitadel login OTP is 8 digits
-            (verified live, #153). `<OtpField>` uses its slotted variant — matching
-            /verify + /reset — with 8 fixed-width slots that fit the login card; it
-            keeps `autocomplete="one-time-code"` for OS autofill and auto-submits via
-            the native `onComplete` the moment the final digit lands (button kept for
-            a11y). */}
-        <FormField
-          control={verifyForm.control}
-          name="code"
-          render={({ field }) => (
-            <OtpField
-              field={field}
-              length={LOGIN_OTP_LENGTH}
-              variant="slotted"
-              label={t("enterCode")}
-              onComplete={onCodeComplete}
-            />
-          )}
-        />
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
+      <FormField
+        control={verifyForm.control}
+        name="code"
+        render={({ field }) => (
+          <OtpFocusScreen
+            field={field}
+            length={LOGIN_OTP_LENGTH}
+            variant="slotted"
+            title={t("otpVerifyTitle")}
+            sentToLabel={t("otpSentTo", {
+              destination: maskDestination(identifier),
+            })}
+            codeLabel={t("enterCode")}
+            submitLabel={t("verifyAndSignIn")}
+            resendLabel={t("resend")}
+            resendCountdownLabel={(seconds) => t("resendIn", { seconds })}
+            changeMethodLabel={t("changeMethod")}
+            cooldownSeconds={cooldownSeconds}
+            isSubmitting={verifyForm.formState.isSubmitting}
+            onComplete={onCodeComplete}
+            onSubmit={submit}
+            onResend={onResend}
+            onChangeMethod={onBack}
+            error={error}
+            submitTestId="otp-verify"
+            resendTestId="otp-resend"
+            changeMethodTestId="otp-change-method"
+          />
         )}
-        <div className="flex gap-2">
-          <Button
-            type="submit"
-            className="flex-1"
-            disabled={verifyForm.formState.isSubmitting}
-            data-testid="otp-verify"
-          >
-            {t("verifyAndSignIn")}
-          </Button>
-          <Button type="button" variant="ghost" onClick={onBack}>
-            {tc("back")}
-          </Button>
-        </div>
-      </form>
+      />
     </Form>
   );
 }

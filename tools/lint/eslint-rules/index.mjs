@@ -8,6 +8,8 @@
 import noRawAuthFieldInput from "./no-raw-auth-field-input.mjs";
 import noArbitraryTailwindValue from "./no-arbitrary-tailwind-value.mjs";
 import noTokenRedefinition from "./no-token-redefinition.mjs";
+import noHardcodedDisplayString from "./no-hardcoded-display-string.mjs";
+import authCatchUsesErrorMapper from "./auth-catch-uses-error-mapper.mjs";
 
 /** @type {import('eslint').ESLint.Plugin} */
 const plugin = {
@@ -17,6 +19,9 @@ const plugin = {
     // #234 design-system lint guardrails (spec §4 level 3).
     "no-arbitrary-tailwind-value": noArbitraryTailwindValue,
     "no-token-redefinition": noTokenRedefinition,
+    // #256 enforcement gates (epic #247): RU-i18n coverage + actionable errors.
+    "no-hardcoded-display-string": noHardcodedDisplayString,
+    "auth-catch-uses-error-mapper": authCatchUsesErrorMapper,
   },
 };
 

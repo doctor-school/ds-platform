@@ -25,6 +25,8 @@ Per AGENTS.md §4 + §6, the agent is **autonomous through merge**: it dispatche
 
 ### 1. Pick or create the Issue — with all fields complete (closes Theme B)
 
+**Deciding _which_ task to pick is the lead's own call — not an `AskUserQuestion`.** Before asking the user to choose, run the decision yourself: (1) sweep the backlog (open Issues / PRs / Dependabot / stale pins); (2) apply prerequisite-first + close-the-open-epic ordering; (3) classify the fork — a **sequencing / architecture / code-cleanliness** call you settle yourself by best-architecture (memory `feedback_spec_work_brainstorm_reuse_delegate`); only a genuine **product-scope** fork (or a true blocker) is eligible for `AskUserQuestion`. "Which of these ready tasks is more valuable" is usually yours to reason out, not the user's to adjudicate.
+
 If the work has no Issue, create one **before touching code** (AGENTS.md §6 — no untracked work). Whether picking or creating, enforce this **field-completeness checklist** before the Issue is "ready" — every box, not prose:
 
 - [ ] **Kind label** set — `feature` / `bug` / `chore` / `refactor` / `docs` / `tooling` (and `kind:ears-handler` / `kind:integration` for spec work). `author:*` goes in the **body**, not as a label.
@@ -37,6 +39,8 @@ For a spec-driven Issue **set**, do not hand-roll this — invoke **`open-ears-i
 When you start the Issue, move it: `node tools/gh/set-board-status.mjs <N> "In Progress"`.
 
 ### 2. Branch → implement (defer to the per-kind skill)
+
+**User-facing surface — design-approval gate first (AGENTS.md §6).** If the task renders a user-facing surface, the `build-ui-from-design-system` design-approval **Stage A** (product-owner picks the look) must be approved **before** this step — i.e. before moving the Issue to In Progress (step 1) and before this branch. Do not enter implementation of a user-facing design on your own taste.
 
 Branch off fresh `origin/main`: `<prefix>/<N>-<slug>` (§2 / repo-conventions). Then **identify the task kind (AGENTS.md §3.1) and run that skill** — do not re-derive the procedure here:
 

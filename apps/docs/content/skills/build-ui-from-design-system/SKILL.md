@@ -35,8 +35,17 @@ Any task that creates or reshapes an interface: a page, a form, a single field/c
 5. **Acceptance bar** (ADR-0013) for an adopted block: MIT/compatible license · correct RSC boundaries (`"use client"` only where required) · accessibility · no superfluous dependencies · maintenance freshness.
 6. **Adopt.** Install via the registry CLI as **owned code** → **re-skin to our tokens** (no hardcoded colors/spacing/radius — the lint guardrails block them) → place in `src/primitives/` or `src/blocks/`.
 7. **App glue stays in the app.** BFF calls, EARS-16 generic errors, i18n/localized copy, routing, validation wiring — never inside the block; the block is the presentation scaffold.
-8. **Live-verify.** Bring up the dev-stand + the app and drive the journey in a browser (Playwright) — mandatory per CLAUDE.md "UI verification". typecheck/build/lint/Mode-a review are necessary but not sufficient.
+8. **Live-verify.** First confirm the dev-stand is up **yourself** — `pnpm dev:status`; if it is down, bring it up (`pnpm dev:up`) and follow `.claude/rules/dev-stand.md` recovery on failure. The box is power-cycled (not 24/7), so a down stand is expected — **never ask the user "is the box on?"**, check it. Then drive the journey in a browser (Playwright) — mandatory per CLAUDE.md "UI verification". typecheck/build/lint/Mode-a review are necessary but not sufficient.
 9. **Bespoke is the last resort.** Build from scratch only after step 3 comes up empty, and **record the negative search result** (which registries, which candidates rejected and why) in the PR/spec so the decision is auditable.
+
+## Design-approval gate (user-facing surfaces)
+
+The _look_ of a user-facing surface is a product (taste) decision — approved by the product owner, not settled by the lead on best-architecture grounds (AGENTS.md §6). Two non-bypassable check-ins wrap the procedure above; for a `user-facing` task they gate the lifecycle (`run-task-lifecycle` step 2 — Stage A precedes board → In Progress + branch):
+
+- **Stage A — before adoption / any UI code (after step 3).** Present the registry-research shortlist as a concrete choice: 2–3 candidate blocks/screens (links + reference screenshots, or an ASCII wireframe of the layout via an `AskUserQuestion` preview), with the brand direction noted. The product owner picks by taste. Do **not** move the task to In Progress, create a branch, or write UI code before this pick.
+- **Stage B — before live-verify / merge (around step 8).** Build the picked option, apply our tokens + brand, then **render it and capture a screenshot** (Playwright over a throwaway preview route or the live stand) and show the product owner. Iterate until "ok". Only then run the live-verify journeys and proceed to review/merge. Storybook is deferred (spec §3.2), so the preview artifact is a Playwright screenshot, not a story.
+
+A user-facing surface entering implementation with no recorded product-owner design sign-off is the banned shortcut — design/UX is not the lead's call.
 
 ## Output
 
@@ -48,4 +57,6 @@ Any task that creates or reshapes an interface: a page, a form, a single field/c
 - **Hand-writing a scaffold without running step 3** (the #235 sin: a bespoke `AuthCard` while §3.1 said "adopt shadcn Blocks").
 - **Committing proprietary-registry code into the public repo** (license violation — those are pattern-only).
 - **Concluding the donor landscape from one link** — the gate names a fixed toolbox precisely so the search is complete, not anecdotal.
+- **Entering a user-facing surface's implementation (In Progress / branch / UI code) with no product-owner design sign-off** — the design-approval gate (Stage A) is skipped; design/UX is a product decision, not the lead's taste.
+- **Asking the user "is the dev box on?" instead of running `pnpm dev:status`** — the box is power-cycled; the live-verify pre-flight is the lead's to run (step 8).
 - Declaring "done" on build/lint/review without a browser live-verify.

@@ -124,6 +124,14 @@ export default [
     plugins: { local: localRules },
     rules: {
       "local/no-raw-auth-field-input": "error",
+      // #256 — enforcement gates for two recurring rules deferred by #251 (epic
+      // #247). Scoped to the auth surfaces (the defect class's home + what #237
+      // rebuilds): RU-i18n coverage (every display string flows through the
+      // next-intl catalog, sidestepping brittle language detection) and
+      // actionable errors (a catch that shows an error routes it through
+      // `authErrorMessage`, which bakes in the EARS-16-generic exception).
+      "local/no-hardcoded-display-string": "error",
+      "local/auth-catch-uses-error-mapper": "error",
     },
   },
   {

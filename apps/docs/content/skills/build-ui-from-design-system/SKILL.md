@@ -21,7 +21,7 @@ Any task that creates or reshapes an interface: a page, a form, a single field/c
 
 ## Procedure
 
-1. **Frame the unit.** Name the UI unit and enumerate its states — content states (default / filled / invalid / loading / empty / error / disabled) **and interaction states (hover / focus-visible / active / `cursor-pointer` on every clickable)** per the interaction-state contract (ADR-0013 §7 — base-reset + primitive contract + lint/runtime guards). You adopt against the _states_, not a happy-path screenshot.
+1. **Frame the unit.** Name the UI unit and enumerate its states — content states (default / filled / invalid / loading / empty / error / disabled) **and interaction states (hover / focus-visible / active / `cursor-pointer` on every clickable)** per the interaction-state contract (ADR-0013 §7 — base-reset + primitive contract + lint/runtime guards). You adopt against the _states_, not a happy-path screenshot. For a **design-system primitive**, the static guard `pnpm lint:interaction-states` (#269) machine-checks that a styled clickable carries `hover:` + a focus ring and that the layer-1 base-reset is intact — run it, but it does **not** replace the live hover/focus/cursor audit in step 8.
 2. **Inventory owned code first.** Check `@ds/design-system` — `tokens/`, `src/primitives/`, `src/blocks/`. If a fitting token/primitive/block already exists, use it. Do not re-create what the package already owns.
 3. **Registry-research gate (MANDATORY before any bespoke).** Search the approved committable toolbox for a block/component matching the unit, and **report what you searched and what you found**:
    1. Official **shadcn/ui** blocks + primitives (incl. `input-otp`) — use the **Radix** variant (matches our primitives).

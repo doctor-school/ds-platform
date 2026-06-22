@@ -42,4 +42,41 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
   }
+
+  /*
+   * Interaction-state base-reset (ADR-0013 §7 layer 1 / tech-spec §3.3, #272).
+   * Tailwind v4 Preflight dropped the v3 `button { cursor: pointer }` reset, so
+   * every interactive element silently degrades to the default arrow. Restore
+   * the correct cursor here, once, for every current/future/third-party element
+   * — the "by default" layer no component class needs to repeat. `:disabled`
+   * (specificity 0,1,0) and the later-declared `[aria-disabled="true"]` both
+   * outrank the element selectors below, so a disabled control wins not-allowed.
+   */
+  button,
+  [role="button"],
+  summary,
+  label[for],
+  select {
+    cursor: pointer;
+  }
+  :disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  /*
+   * Respect the user's reduced-motion preference platform-wide: neutralise
+   * transitions/animations (incl. the caret-blink keyframes above) instead of
+   * relying on each component to opt in. Standard a11y reset.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }

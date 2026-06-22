@@ -109,7 +109,7 @@ Interaction-state quality is guaranteed-by-default through a layered defence, no
 
 ### 3.4. Asset-format policy (ADR-0013 §8)
 
-Product assets are vector-first: logos/icons as **SVG** (`currentColor`-themeable, resolution-independent); raster as **WEBP** minimum; **PNG/JPG disallowed** for product assets. A coloured surface uses the clean white/mono brand variant directly — a CSS inversion filter or a `bg-card` chip is a workaround for a genuinely-missing variant only, confirmed by opening the brandbook first (the #237 white-chip was unnecessary — a clean white SVG existed).
+Product assets are vector-first: logos/icons as **SVG** (`currentColor`-themeable, resolution-independent); raster as **WEBP** minimum; **PNG/JPG disallowed** for product assets. A coloured surface uses the clean white/mono brand variant directly — a CSS inversion filter or a `bg-card` chip is a workaround for a genuinely-missing variant only, confirmed by opening the brandbook first (the #237 white-chip was unnecessary — a clean white logo asset existed; re-export it to SVG from the brand vector source if only a raster white variant is on hand).
 
 ---
 

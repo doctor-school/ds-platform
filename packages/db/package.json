@@ -28,12 +28,12 @@
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
-    "pg": "^8.13.0"
+    "pg": "^8.22.0"
   },
   "devDependencies": {
     "@types/pg": "^8.11.0",
     "drizzle-kit": "^0.31.10",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.9"
   }
 }

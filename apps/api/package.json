@@ -20,15 +20,15 @@
   "dependencies": {
     "@ds/db": "workspace:*",
     "@ds/schemas": "workspace:*",
-    "@nestjs/common": "^11.1.26",
-    "@nestjs/core": "^11.1.26",
-    "@nestjs/platform-fastify": "^11.1.26",
+    "@nestjs/common": "^11.1.27",
+    "@nestjs/core": "^11.1.27",
+    "@nestjs/platform-fastify": "^11.1.27",
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.0.0",
     "ioredis": "^5.11.1",
     "nestjs-zod": "^5.4.0",
-    "nodemailer": "^9.0.0",
-    "pg": "^8.13.0",
+    "nodemailer": "^9.0.1",
+    "pg": "^8.22.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0",
     "unleash-client": "^6.6.0",
@@ -36,7 +36,7 @@
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.23",
-    "@nestjs/testing": "^11.1.26",
+    "@nestjs/testing": "^11.1.27",
     "@types/node": "^25.9.3",
     "@types/nodemailer": "^8.0.1",
     "@types/pg": "^8.11.0",
@@ -45,6 +45,6 @@
     "esbuild": "^0.28.1",
     "supertest": "^7.0.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.9"
   }
 }

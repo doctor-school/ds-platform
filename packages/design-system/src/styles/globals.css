@@ -49,8 +49,11 @@
    * every interactive element silently degrades to the default arrow. Restore
    * the correct cursor here, once, for every current/future/third-party element
    * — the "by default" layer no component class needs to repeat. `:disabled`
-   * (specificity 0,1,0) and the later-declared `[aria-disabled="true"]` both
-   * outrank the element selectors below, so a disabled control wins not-allowed.
+   * and the later-declared `[aria-disabled="true"]` both outrank the element
+   * selectors below, so a disabled control gets not-allowed. Exception:
+   * `label[for]` does not participate in `:disabled` (HTML spec §4.10.18.5) — to
+   * show not-allowed on a label whose target is disabled, the consuming
+   * component sets `aria-disabled="true"` on the label itself.
    */
   button,
   [role="button"],

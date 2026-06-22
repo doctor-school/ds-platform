@@ -60,7 +60,7 @@ const TAG = "[interaction-states]";
 
 const GLOBALS_CSS = "packages/design-system/src/styles/globals.css";
 const INTERACTIVE_BASE = "packages/design-system/src/primitives/interactive-base.ts";
-const PRIMITIVE_GLOBS = ["packages/design-system/src/primitives/*.{ts,tsx}"];
+const PRIMITIVE_GLOBS = ["packages/design-system/src/primitives/**/*.{ts,tsx}"];
 const PRIMITIVE_IGNORE = [
   "**/*.test.{ts,tsx}",
   "**/*.spec.{ts,tsx}",
@@ -90,6 +90,19 @@ const HAS_OWN_STYLING_RE = /\bcva\s*\(|className=\{?\s*(?:cn\s*\(|["'`])/;
 const HOVER_RE = /\bhover:/;
 const FOCUS_VISIBLE_RE = /\bfocus-visible:/;
 const USES_INTERACTIVE_BASE_RE = /\binteractiveBase\b/;
+
+/**
+ * Strip JS/TS comments so a commented-out `// hover:` / `/* focus-visible: *\/`
+ * can't satisfy the affordance check (the same masking the layer-1 CSS check
+ * guards against). Block comments are removed wholesale; line comments only when
+ * the `//` follows start-of-line or whitespace, so a `://` inside a string
+ * literal (e.g. a URL) is left intact.
+ */
+function stripJsComments(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|\s)\/\/[^\n]*/g, "$1");
+}
 
 interface Violation {
   file: string;
@@ -178,8 +191,12 @@ function checkPrimitives(violations: Violation[]): number {
 
   let enforced = 0;
   for (const file of files) {
-    const src = read(file);
-    if (SUPPRESS_RE.test(src)) continue;
+    const raw = read(file);
+    if (SUPPRESS_RE.test(raw)) continue; // suppression marker lives in a comment
+
+    // Run the contract checks against the comment-stripped source so a
+    // commented-out class can't stand in for a real affordance.
+    const src = stripJsComments(raw);
 
     const isClickable = CLICKABLE_SIGNALS.some((re) => re.test(src));
     if (!isClickable) continue;

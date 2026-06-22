@@ -48,7 +48,10 @@ export function AuthShell({ children }: { children: ReactNode }) {
         <>
           {/* Decorative brand mark — the headline carries the accessible name, so the
               panel logo is presentational (empty alt). On a white token chip so the
-              colored logo keeps contrast against the blue panel. */}
+              colored logo keeps contrast against the blue panel. Pinned to the top of
+              the panel; the value-prop below grows to centre itself in the remaining
+              space (see the `flex-1` group), so there is no dead gap between the mark
+              and the headline. */}
           <div className="inline-flex w-fit rounded-xl bg-card p-4 shadow-sm">
             <Image
               src="/brand/logo.png"
@@ -59,11 +62,16 @@ export function AuthShell({ children }: { children: ReactNode }) {
               className="h-12 w-auto"
             />
           </div>
-          <div className="space-y-4">
-            <p className="text-3xl font-semibold leading-tight">
+          {/* Value prop — grows to fill the gap between the top mark and the bottom
+              footer and centres itself there, so the panel reads as a deliberate
+              three-zone split rather than an even distribution with a void up top. */}
+          <div className="flex flex-1 flex-col justify-center space-y-4">
+            <p className="max-w-lg text-4xl font-semibold leading-tight tracking-tight">
               {t("headline")}
             </p>
-            <p className="text-lg leading-snug opacity-90">{t("subcopy")}</p>
+            <p className="max-w-md text-lg leading-snug opacity-90">
+              {t("subcopy")}
+            </p>
           </div>
           <p className="text-sm opacity-80">{t("footer")}</p>
         </>

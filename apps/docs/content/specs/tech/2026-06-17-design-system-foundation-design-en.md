@@ -99,6 +99,18 @@ Reuse happens at the **block/section level** — whole auth screens, not just bu
 
 No Storybook in this iteration (ADR-0004 OQ-F9 trigger: ≥2 frontend developers / >20 components). Live verification is browser-on-stand per CLAUDE.md "UI verification (mandatory)". Recorded as a deliberate deferral, not a gap.
 
+### 3.3. Interaction-state & motion contract (ADR-0013 §7)
+
+Interaction-state quality is guaranteed-by-default through a layered defence, not per-screen diligence (the #237 retro: clickables shipped with no `cursor-pointer` because Tailwind v4 Preflight dropped the v3 `button { cursor: pointer }` reset). Mechanics:
+
+- **Base-reset** — `src/styles/globals.css` `@layer base` restores `cursor: pointer` for enabled interactive elements (`button`, `[role="button"]`, `summary`, `label[for]`, `select`) and `cursor: not-allowed` for `:disabled` / `[aria-disabled="true"]`, plus a `@media (prefers-reduced-motion: reduce)` guard that neutralises transitions/animations. One place; covers future and third-party elements.
+- **Primitive contract** — interactive primitives in `src/primitives/*` declare the full state set via a shared `interactiveBase` cva fragment (token-only): hover, `active:` press, `focus-visible` ring, `disabled`, and `loading` (`aria-busy` + spinner + `pointer-events-none`). Button and Tabs triggers are the first to comply.
+- Enforcement (lint + runtime) is §4; the process gate is the `build-ui-from-design-system` skill.
+
+### 3.4. Asset-format policy (ADR-0013 §8)
+
+Product assets are vector-first: logos/icons as **SVG** (`currentColor`-themeable, resolution-independent); raster as **WEBP** minimum; **PNG/JPG disallowed** for product assets. A coloured surface uses the clean white/mono brand variant directly — a CSS inversion filter or a `bg-card` chip is a workaround for a genuinely-missing variant only, confirmed by opening the brandbook first (the #237 white-chip was unnecessary — a clean white SVG existed).
+
 ---
 
 ## 4. Enforcement — lint guardrails
@@ -108,6 +120,10 @@ The system must warn the developer at edit time and block in CI when code bypass
 1. **`oxlint-tailwindcss`** (Tailwind-v4-native) — `no-hardcoded-colors`: forbids `bg-[#ff5733]` and arbitrary colors outside tokens.
 2. **stylelint + `rhythmguard`** — scale discipline: flags `p-[13px]`, `gap-[18px]`, arbitrary radius/typography/motion and autofixes to the nearest scale token.
 3. **Project ESLint rule** (in the spirit of the existing `no-class-validator` / `no-vercel-only-api`): forbid arbitrary Tailwind values in `apps/*` and forbid token redefinition outside `@ds/design-system`.
+4. **Interaction-state guard** (#269) — a project rule (in the existing `tools/lint/eslint-rules/` set) flags an interactive primitive whose variant classes lack `cursor-pointer` / hover / `focus-visible`. WARN in Phase 0 (ADR-0007 §2.6), promoted to BLOCK once stable.
+5. **Asset-format guard** (optional) — flags committed `*.png` / `*.jpg` under `apps/*/public` and the design system (ADR-0013 §8).
+
+**Runtime verification (CI).** Static rules confirm a class string is present but not that the rendered control behaves. A Playwright interaction smoke asserts computed `cursor:pointer` (enabled) / `not-allowed` (disabled), a hover style delta, and a visible focus ring on key controls; an **axe-core** scan over the auth surfaces machine-checks a11y (the AA-contrast usage rule from §6 / the #237 decision-debt: white on `primary`/`success`/`warning` only at large/bold, else `blue.700`). Storybook visual-regression stays deferred (§3.2); this is the runtime substitute.
 
 **Single source for checks too:** the allowed-token list is derived from the Style Dictionary output (§2.2), so styling and linting share one source of truth. **Gates:** rules run in CI (blocking) and pre-commit (fast feedback).
 

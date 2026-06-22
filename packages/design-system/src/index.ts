@@ -1,5 +1,8 @@
 export { cn } from "./lib/utils";
 
+// ── Interaction-state contract (ADR-0013 §7 layer 2, #273) ────────────────────
+export { interactiveBase } from "./primitives/interactive-base";
+
 // ── Primitives (owned shadcn components) ──────────────────────────────────────
 export { Button, buttonVariants, type ButtonProps } from "./primitives/button";
 export { Input } from "./primitives/input";

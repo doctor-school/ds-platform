@@ -105,7 +105,8 @@ Interaction-state quality is guaranteed-by-default through a layered defence, no
 
 - **Base-reset** — `src/styles/globals.css` `@layer base` restores `cursor: pointer` for enabled interactive elements (`button`, `[role="button"]`, `summary`, `label[for]`, `select`) and `cursor: not-allowed` for `:disabled` / `[aria-disabled="true"]`, plus a `@media (prefers-reduced-motion: reduce)` guard that neutralises transitions/animations. One place; covers future and third-party elements.
 - **Primitive contract** — interactive primitives in `src/primitives/*` declare the full state set via a shared `interactiveBase` cva fragment (token-only): hover, `active:` press, `focus-visible` ring, `disabled`, and `loading` (`aria-busy` + spinner + `pointer-events-none`). Button and Tabs triggers are the first to comply.
-- Enforcement (lint + runtime) is §4; the process gate is the `build-ui-from-design-system` skill.
+- **Static lint guard** — `tools/lint/interaction-states-lint.ts` (`pnpm lint:interaction-states`, CI job, #269) asserts the layer-1 base-reset is intact in `globals.css` (cursor resets + `prefers-reduced-motion`) and that every styled clickable primitive (`button` / `[role="button"]` / Radix `*.Trigger`) carries a `hover:` affordance and a `focus-visible:` ring (literal or via `interactiveBase`). Cursor is **not** re-checked per primitive — layer 1 owns it globally. WARN in Phase 0 (ADR-0007 §2.6).
+- Runtime enforcement (Playwright + axe) is §4; the process gate is the `build-ui-from-design-system` skill.
 
 ### 3.4. Asset-format policy (ADR-0013 §8)
 

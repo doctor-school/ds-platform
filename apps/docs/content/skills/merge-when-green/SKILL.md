@@ -17,13 +17,21 @@ mode: inline
 
 ## Procedure
 
-Run exactly one command:
+**Step 1 — confirm CI green BY HAND first (Phase-0 manual gate).** In Phase 0 the repo is GitHub Free + private, so there is **no server-side required-checks gate**: `--auto` does **not** hold the merge for CI — it merges the instant an approval exists, even while checks are still pending (this is what merged L1 #278 ahead of a pending CI). So the real gate is manual. Poll until **every** check is `pass`/`skipping` and **none** is `pending` or `fail`:
+
+```bash
+gh pr checks <N>   # repeat until no pending/fail remain
+```
+
+Do not proceed to step 2 while any check is pending or failed. (Memory `feedback_phase0_merge_gate_manual`.)
+
+**Step 2 — merge.** Once step 1 is green, run exactly one command:
 
 ```bash
 gh pr merge <N> --auto --squash --delete-branch
 ```
 
-`--auto` instructs GitHub to hold the merge until all required checks pass — functionally equivalent to a required `ci` status check on the single-developer happy path (per ADR-0008 §2.6; server-side branch protection is the target-state contract, deferred while the repo is on GitHub Free + private). `--squash` enforces linear history. `--delete-branch` cleans up the head branch.
+`--auto`/`--squash`/`--delete-branch` is the canonical merge command per ADR-0008 §2.6 (server-side branch protection is the target-state contract, deferred while on GitHub Free + private). `--auto` is harmless once step 1 is already green and keeps the command canonical; `--squash` enforces linear history; `--delete-branch` cleans up the head branch. **`--auto` is not a substitute for step 1** — it does not block on CI here.
 
 Per ADR-0007 §2.4 + §2.10: a positive Mode (a) or Mode (b) verdict + green CI is sufficient to merge. **Human-merge is not required.** Mode (c) reviews remain a single human decision.
 

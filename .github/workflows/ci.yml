@@ -363,6 +363,32 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/ears-test-lint.ts
 
+  # playwright-axe: the RUNTIME twin of the `interaction-states` STATIC lint
+  # (ADR-0013 §7 layer 4, #274). It builds the portal, boots it with `next start`
+  # (via the CI Playwright config's `webServer`), and drives the real rendered
+  # auth surfaces: an interaction smoke (computed cursor pointer/not-allowed,
+  # hover style delta, keyboard focus-visible ring) + an axe-core a11y/contrast
+  # scan of /login, /register, /reset. BACKEND-FREE — the auth pages render their
+  # forms client-side and the specs never submit, so no api / Zitadel / Mailpit /
+  # Postgres. WARN per ADR-0007 §2.6 new-guard posture (promote to BLOCK once
+  # stable); excluded from the `ci` meta-job needs-list while WARN, like the other
+  # WARN gates (registry-research / no-stub / interaction-states / ears-tests).
+  playwright-axe:
+    needs: setup
+    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # Build the portal (and its workspace deps) so `next start` serves a real
+      # production build — the same path the `build` job exercises, no special env.
+      - run: pnpm exec turbo run build --filter=@ds/portal
+      - run: pnpm --filter @ds/portal exec playwright install --with-deps chromium
+      - run: pnpm --filter @ds/portal test:e2e:ci
+
   tdd-signal:
     needs: setup
     continue-on-error: true # WARN v1

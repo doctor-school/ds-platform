@@ -63,6 +63,20 @@ describe("<AuthLayout>", () => {
     expect(aside.className).toContain("text-primary-foreground");
   });
 
+  it("places the brand panel left and the form right on lg (recorded #237 column-order)", () => {
+    // Deliberate-choice ledger: the column side is an explicit product-owner decision
+    // (brand LEFT, form RIGHT), not the inherited login-03 default. The form stays first
+    // in source order (a11y) and is flipped on lg+ via order utilities.
+    render(
+      <AuthLayout logo={<span>logo</span>} aside={<p>brand-aside</p>}>
+        <div data-testid="form-slot">form</div>
+      </AuthLayout>,
+    );
+    expect(screen.getByRole("complementary").className).toContain("lg:order-1");
+    const formColumn = screen.getByTestId("form-slot").closest("div.flex.flex-col");
+    expect(formColumn?.className).toContain("lg:order-2");
+  });
+
   it("omits the brand panel entirely when no aside is supplied (form-only fallback)", () => {
     render(
       <AuthLayout logo={<span>logo</span>}>

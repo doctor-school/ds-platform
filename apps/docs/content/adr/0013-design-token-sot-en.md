@@ -71,7 +71,7 @@ Quality is guaranteed by a **layered defence**, each layer making the next cheap
 4. **Runtime verification** — Playwright interaction smoke (computed `cursor:pointer`, hover style delta, focus ring) + axe-core a11y scan (contrast / focus) in CI; Storybook visual-regression stays deferred (tech-spec §3.2).
 5. **Process gate** — the `build-ui-from-design-system` skill mandates a `frontend-design` pass + an interaction-state audit in live-verify, so the human-in-the-loop check references the automation rather than replacing it.
 
-The a11y-contrast usage rule is part of this contract: white text on the brand-pinned `primary` / `success` / `warning` fills is allowed **only at large/bold** (≥3:1); normal-weight text on a colour fill uses the darker `blue.700` (`#114D9E`, 8.14:1). Layer 4's axe scan is the machine check for it. Mechanics: tech-spec.
+The a11y-contrast usage rule is part of this contract: white text on the brand-pinned `primary` / `success` / `warning` fills is allowed **only at large/bold** (≥3:1); normal-weight text on a colour fill uses the darker `blue.700` (`#114D9E` = Pantone Dark Blue C, a registered brand anchor; white 8.14:1). The filled primary `Button` realises this as the accessible action-fill triad `primary-action` (blue.700, resting) → `primary-hover` / `primary-pressed` (blue.800, 11.12:1), keeping `primary` = blue.500 as the brand anchor for link text, focus ring, icons and tints. Layer 4's axe scan is the machine check for it. Mechanics: tech-spec.
 
 ### 8. Asset-format policy
 

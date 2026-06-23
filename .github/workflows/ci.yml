@@ -335,6 +335,22 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:no-stub
 
+  # interaction-states: a @ds/design-system clickable primitive must carry its
+  # hover + focus-visible contract, and the globals.css layer-1 base-reset
+  # (cursor / prefers-reduced-motion) must stay intact (ADR-0013 §7 layer 3,
+  # #269). Static source scan — no PR/gh context needed. WARN per ADR-0007 §2.6.
+  interaction-states:
+    needs: setup
+    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:interaction-states
+
   ears-tests:
     needs: setup
     continue-on-error: true # WARN v1
@@ -346,6 +362,33 @@ jobs:
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/ears-test-lint.ts
+
+  # playwright-axe: the RUNTIME twin of the `interaction-states` STATIC lint
+  # (ADR-0013 §7 layer 4, #274). It builds the portal, boots it with `next start`
+  # (via the CI Playwright config's `webServer`), and drives the real rendered
+  # auth surfaces: an interaction smoke (computed cursor pointer/not-allowed,
+  # hover style delta, keyboard focus-visible ring) + an axe-core a11y/contrast
+  # scan of /login, /register, /reset. BACKEND-FREE — the auth pages render their
+  # forms client-side and the specs never submit, so no api / Zitadel / Mailpit /
+  # Postgres. BLOCKING per ADR-0007 §2.6 new-guard posture (promoted from WARN
+  # once stable, #285): the auth surfaces now pass on landing (AA-contrast fix —
+  # filled primary Button → blue.700, muted-foreground → neutral.600), so this
+  # gate is wired into the `ci` meta-job needs-list. The static twin
+  # (`interaction-states`, L3) stays WARN for now.
+  playwright-axe:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # Build the portal (and its workspace deps) so `next start` serves a real
+      # production build — the same path the `build` job exercises, no special env.
+      - run: pnpm exec turbo run build --filter=@ds/portal
+      - run: pnpm --filter @ds/portal exec playwright install --with-deps chromium
+      - run: pnpm --filter @ds/portal test:e2e:ci
 
   tdd-signal:
     needs: setup
@@ -404,6 +447,7 @@ jobs:
         spec-link,
         endpoint-authz,
         tokens-fresh,
+        playwright-axe,
       ]
     if: always()
     runs-on: ubuntu-latest

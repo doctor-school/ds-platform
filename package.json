@@ -15,6 +15,7 @@
     "board:status": "node tools/gh/set-board-status.mjs",
     "lint:endpoint-authz": "tsx --tsconfig apps/api/tsconfig.json tools/lint/endpoint-authz-lint.ts",
     "lint:instruction-budget": "tsx tools/lint/instruction-budget-lint.ts",
+    "lint:interaction-states": "tsx tools/lint/interaction-states-lint.ts",
     "lint:no-stub": "tsx tools/lint/no-stub-lint.ts",
     "lint:registry-research": "tsx tools/lint/registry-research-lint.ts",
     "lint:oxlint": "oxlint -c .oxlintrc.json --disable-unicorn-plugin --disable-oxc-plugin --disable-typescript-plugin -A all apps packages",
@@ -49,10 +50,10 @@
     "execa": "^9.6.1",
     "fast-glob": "^3.3.3",
     "gray-matter": "^4.0.3",
-    "lint-staged": "^17.0.7",
+    "lint-staged": "^17.0.8",
     "oxlint": "^1.70.0",
     "oxlint-tailwindcss": "^1.3.3",
-    "pg": "^8.13.0",
+    "pg": "^8.22.0",
     "prettier": "^3.8.4",
     "simple-git-hooks": "^2.13.1",
     "stylelint": "^17.13.0",
@@ -60,7 +61,7 @@
     "tsx": "^4.22.4",
     "turbo": "^2.9.18",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.61.0"
+    "typescript-eslint": "^8.61.1"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm lint-staged"

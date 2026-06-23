@@ -23,6 +23,8 @@ Feature 003 shipped a working auth UI, but the same class of UI papercuts kept r
 
 #231 laid the token + component foundation. But the first component-layer pass (#235) still **hand-wrote** screen scaffolds (`AuthCard`) instead of **adopting** ready shadcn blocks as the spec prescribed, and a stale `@source` shipped an unstyled UI past build/lint/review. The lesson: adoption and token-discipline must be **gated mechanisms**, not good intentions. This ADR records the decisions; #238 institutionalises them as a skill + instructions.
 
+The auth slice (#237) then surfaced a third recurring class the same way: **interaction-state defects** — clickables with no `cursor-pointer`, no hover/active feedback, no `prefers-reduced-motion` handling (Tailwind v4 Preflight dropped the v3 `button { cursor: pointer }` reset, so every shadcn primitive scaffolded under v3 assumptions silently degrades) — and **asset-format debt** (a heavy PNG wordmark, a white-chip workaround for a white logo that already existed). These are systemic, not per-screen; §7 and §8 make interaction-state quality and asset hygiene guaranteed-by-default and enforced, the same way §4/§6 made adoption and token discipline gated rather than optional.
+
 ---
 
 ## Decision
@@ -57,6 +59,26 @@ Our product code is **proprietary**: `package.json` `license: UNLICENSED`, all r
 
 Token discipline is enforced in CI (blocking) and pre-commit: `oxlint-tailwindcss` `no-hardcoded-colors`; stylelint `rhythmguard` scale discipline; a project ESLint rule forbidding arbitrary Tailwind values in `apps/*` and token redefinition outside `@ds/design-system`. The allowed-token list is derived from the Style Dictionary output, so styling and linting share one source. Mechanics: tech-spec §4.
 
+### 7. Interaction-state & motion quality contract
+
+Every interactive element carries its full state set as a **contract**, not as the diligence of a page author: **default / hover / active / focus-visible / disabled / loading**, and respects `prefers-reduced-motion`. A clickable with an arrow cursor, no hover feedback, or no visible keyboard-focus ring is a **defect**, not a pass.
+
+Quality is guaranteed by a **layered defence**, each layer making the next cheaper and catching what the prior misses:
+
+1. **Global base-reset** (`globals.css @layer base`) — restore `cursor: pointer` for enabled interactive elements / `not-allowed` for `:disabled`, and a `prefers-reduced-motion` guard. One place, covers every element including future and third-party components (the "by default" layer; it fixes the Tailwind-v4 Preflight regression at the root).
+2. **Primitive state contract** — each interactive primitive declares the full state set via a shared `interactiveBase` fragment (token-only): hover, `active:` press, focus-visible, disabled, loading (`aria-busy`).
+3. **Static lint guard** — a CI rule (`interaction-states`, #269) checks two things: the layer-1 base-reset stays intact in `globals.css` (the `cursor` resets + the `prefers-reduced-motion` guard), and every styled clickable primitive (`button` / `[role="button"]` / Radix `*.Trigger`) declares a `hover:` affordance and a `focus-visible:` ring (the latter directly or via the shared `interactiveBase` fragment). Cursor is owned globally by layer 1, so it is asserted there, not re-checked per primitive (WARN in Phase 0 per ADR-0007 §2.6, promoted to BLOCK once stable).
+4. **Runtime verification** — Playwright interaction smoke (computed `cursor:pointer`, hover style delta, focus ring) + axe-core a11y scan (contrast / focus) in CI; Storybook visual-regression stays deferred (tech-spec §3.2).
+5. **Process gate** — the `build-ui-from-design-system` skill mandates a `frontend-design` pass + an interaction-state audit in live-verify, so the human-in-the-loop check references the automation rather than replacing it.
+
+The a11y-contrast usage rule is part of this contract: white text on the brand-pinned `primary` / `success` / `warning` fills is allowed **only at large/bold** (≥3:1); normal-weight text on a colour fill uses the darker `blue.700` (`#114D9E` = Pantone Dark Blue C, a registered brand anchor; white 8.14:1). The filled primary `Button` realises this as the accessible action-fill triad `primary-action` (blue.700, resting) → `primary-hover` / `primary-pressed` (blue.800, 11.12:1), keeping `primary` = blue.500 as the brand anchor for link text, focus ring, icons and tints. Layer 4's axe scan is the machine check for it. Mechanics: tech-spec.
+
+### 8. Asset-format policy
+
+Product assets are **vector-first**: logos and icons ship as **SVG** (lightweight, resolution-independent, version-controllable, themeable via `currentColor`). Raster assets (photography, screenshots) ship as **WEBP** at minimum. **PNG / JPG are disallowed** for product assets — a PNG wordmark or a raster icon is an asset-hygiene defect, not an acceptable shortcut.
+
+A coloured surface uses the **clean white or mono brand variant directly**; a CSS colour-inversion filter or a `bg-card` token chip standing in for a missing variant is a workaround, not a treatment — confirm the variant's absence by opening the brandbook before reaching for a fallback, and if it is genuinely absent, request it rather than shipping the hack. Enforcement: an optional CI guard flagging committed `*.png` / `*.jpg` under `apps/*/public` and the design system (tech-spec).
+
 ---
 
 ## Rejected alternatives
@@ -73,4 +95,5 @@ Token discipline is enforced in CI (blocking) and pre-commit: `oxlint-tailwindcs
 - A semantic-token change re-themes the platform; the auth slice (#237) is the first reference build on the system.
 - Future UI work composes from the system by default — the `build-ui-from-design-system` gate makes "don't reinvent" auditable (an adoption decision is cited in every UI PR).
 - Our IP posture is explicit and visibility-independent; third-party adoption is license-checked at the gate.
+- Interaction-state quality and asset hygiene are guaranteed-by-default and enforced (§7–§8) rather than left to per-screen diligence; the #237 auth slice is re-applied on this hardened foundation as the proof (#270 epic).
 - ADR-0004 §6.3 is revised to point here. The repo-visibility question (currently public; ADR-0008 §2.1 target is private until Pre-pilot) is tracked under ADR-0008, not here.

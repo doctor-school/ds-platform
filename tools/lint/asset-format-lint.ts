@@ -41,9 +41,11 @@ const TAG = "[asset-format]";
 
 // Only the disallowed pair. WEBP (raster floor), SVG (vector), and .ico
 // (favicons) are intentionally absent — they pass.
+// Extensions are matched case-insensitively (`caseSensitiveMatch: false`
+// below), so `.PNG` / `.JPG` are caught without separate uppercase entries.
 const GLOBS = [
-  "apps/*/public/**/*.{png,jpg,jpeg,PNG,JPG,JPEG}",
-  "packages/design-system/**/*.{png,jpg,jpeg,PNG,JPG,JPEG}",
+  "apps/*/public/**/*.{png,jpg,jpeg}",
+  "packages/design-system/**/*.{png,jpg,jpeg}",
 ];
 const IGNORE = ["**/node_modules/**"];
 

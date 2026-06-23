@@ -10,9 +10,13 @@ import { cn } from "../lib/utils";
  * (design-approval Stage A).
  *
  *   ┌───────────────┬───────────────┐
- *   │   logo        │  brand panel  │   ← lg+ : two columns
- *   │   [AuthCard]  │ (primary-surf)│
+ *   │  brand panel  │   logo        │   ← lg+ : two columns
+ *   │ (primary-surf)│   [AuthCard]  │
  *   └───────────────┴───────────────┘
+ *   Column order is a recorded product-owner decision (#237): brand panel LEFT, form
+ *   RIGHT — not the inherited login-03 default (form-left). The form column stays
+ *   first in source order (a11y: the interactive surface precedes the decorative
+ *   panel) and is flipped visually on lg+ with `lg:order-2` / the panel `lg:order-1`.
  *   On < lg the brand panel is hidden and the form column fills the screen, with
  *   the logo kept above the card so mobile still carries the brand. On lg+ that
  *   form-column logo is hidden (`lg:hidden`) so the brand-panel mark is the single
@@ -52,8 +56,10 @@ export function AuthLayout({
 }) {
   return (
     <div className={cn("grid min-h-screen lg:grid-cols-2", className)}>
-      {/* Form column — centered, with the logo above the card. */}
-      <div className="flex flex-col items-center justify-center gap-8 px-6 py-12">
+      {/* Form column — centered, with the logo above the card. First in source order
+          for a11y; flipped to the RIGHT on lg+ (`lg:order-2`) so the brand panel sits
+          on the left per the recorded #237 column-order decision. */}
+      <div className="flex flex-col items-center justify-center gap-8 px-6 py-12 lg:order-2">
         {logo ? (
           <div className={cn("w-full max-w-md", aside ? "lg:hidden" : undefined)}>
             {logo}
@@ -63,9 +69,10 @@ export function AuthLayout({
       </div>
 
       {/* Brand panel — the branded surface (token fill). Hidden below `lg`, where
-          the form column fills the screen and the logo above carries the brand. */}
+          the form column fills the screen and the logo above carries the brand. On lg+
+          it takes the LEFT column (`lg:order-1`) per the recorded #237 decision. */}
       {aside ? (
-        <aside className="hidden flex-col justify-between gap-8 bg-primary-surface p-12 text-primary-foreground lg:flex">
+        <aside className="hidden flex-col justify-between gap-8 bg-primary-surface p-12 text-primary-foreground lg:order-1 lg:flex">
           {aside}
         </aside>
       ) : null}

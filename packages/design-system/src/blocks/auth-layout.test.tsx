@@ -57,8 +57,9 @@ describe("<AuthLayout>", () => {
     );
     const aside = screen.getByRole("complementary");
     expect(aside).toHaveTextContent("brand-aside");
-    // The panel is the branded surface — token-driven brand fill, not a hardcoded color.
-    expect(aside.className).toContain("bg-primary");
+    // The panel is the branded surface — AA-safe token fill (primary-surface = blue.700,
+    // white 8.14:1), not `primary` (blue.500, 3.69:1) and not a hardcoded color.
+    expect(aside.className).toContain("bg-primary-surface");
     expect(aside.className).toContain("text-primary-foreground");
   });
 

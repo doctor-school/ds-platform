@@ -11,7 +11,7 @@ import { cn } from "../lib/utils";
  *
  *   ┌───────────────┬───────────────┐
  *   │   logo        │  brand panel  │   ← lg+ : two columns
- *   │   [AuthCard]  │  (bg-primary) │
+ *   │   [AuthCard]  │ (primary-surf)│
  *   └───────────────┴───────────────┘
  *   On < lg the brand panel is hidden and the form column fills the screen, with
  *   the logo kept above the card so mobile still carries the brand. On lg+ that
@@ -25,10 +25,13 @@ import { cn } from "../lib/utils";
  * as `<AuthCard>` / `<OtpFocusScreen>`). RSC: no client hooks, so NO `"use client"`
  * — it is server-safe; the interactive form the app nests carries its own.
  *
- * The brand panel is filled with the semantic `primary` token (Doctor School brand
- * blue, #236) via `bg-primary` / `text-primary-foreground` — never a hardcoded
- * color (the lint guardrails block arbitrary values). Omit `aside` for a plain,
- * centered form-only screen (the panel is then not rendered at all).
+ * The brand panel is filled with the semantic `primary-surface` token (Doctor School
+ * brand blue.700 #114D9E — the AA-safe brand fill, white 8.14:1) via
+ * `bg-primary-surface` / `text-primary-foreground`, never a hardcoded color (the lint
+ * guardrails block arbitrary values). It carries normal-weight white copy (sub-copy /
+ * footer), so it must NOT use `primary` (blue.500, 3.69:1) which only clears AA for
+ * large/bold text (ADR-0013 §7). Omit `aside` for a plain, centered form-only screen
+ * (the panel is then not rendered at all).
  */
 export function AuthLayout({
   logo,
@@ -62,7 +65,7 @@ export function AuthLayout({
       {/* Brand panel — the branded surface (token fill). Hidden below `lg`, where
           the form column fills the screen and the logo above carries the brand. */}
       {aside ? (
-        <aside className="hidden flex-col justify-between gap-8 bg-primary p-12 text-primary-foreground lg:flex">
+        <aside className="hidden flex-col justify-between gap-8 bg-primary-surface p-12 text-primary-foreground lg:flex">
           {aside}
         </aside>
       ) : null}

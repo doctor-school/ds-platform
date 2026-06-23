@@ -1,0 +1,21 @@
+/*
+ * #269 REGRESSION FIXTURE (layer-1 CSS). The ONLY occurrence of the
+ * `button { cursor: pointer }` reset lives inside THIS comment — the real
+ * @layer base block below has had it deleted. A guard that does not strip CSS
+ * comments before its integrity check would match the commented token and
+ * false-PASS (the original #269 bug). The guard MUST still FAIL here.
+ *
+ * button, [role="button"] { cursor: pointer; }
+ */
+@layer base {
+  :disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

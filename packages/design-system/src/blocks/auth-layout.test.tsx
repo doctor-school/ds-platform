@@ -25,13 +25,28 @@ describe("<AuthLayout>", () => {
     expect(screen.getByTestId("form-slot")).toHaveTextContent("the form");
   });
 
-  it("renders the app-supplied logo (shown on every breakpoint, incl. mobile where the panel is hidden)", () => {
+  it("hides the form-column logo on lg when a brand panel is present (one logo per viewport)", () => {
+    // Desktop shows the brand-panel mark only; the form-top logo is `lg:hidden`, so the
+    // two never both render (the #275 / #237 duplicate-logo-on-desktop fix). On mobile the
+    // panel is hidden and this logo carries the brand.
     render(
       <AuthLayout logo={<span>brand-logo</span>} aside={<p>brand-aside</p>}>
         <div>form</div>
       </AuthLayout>,
     );
-    expect(screen.getByText("brand-logo")).toBeInTheDocument();
+    const logoWrapper = screen.getByText("brand-logo").parentElement;
+    expect(logoWrapper).toBeInTheDocument();
+    expect(logoWrapper?.className).toContain("lg:hidden");
+  });
+
+  it("keeps the form-column logo on every breakpoint when there is no brand panel (form-only fallback)", () => {
+    render(
+      <AuthLayout logo={<span>brand-logo</span>}>
+        <div>form</div>
+      </AuthLayout>,
+    );
+    const logoWrapper = screen.getByText("brand-logo").parentElement;
+    expect(logoWrapper?.className).not.toContain("lg:hidden");
   });
 
   it("renders the brand panel aside content in a complementary landmark", () => {

@@ -20,14 +20,16 @@ import { AuthLayout } from "@ds/design-system/blocks";
  * verify / reset) each wrap their `<AuthCard>` in this shell, so the reference look
  * is applied once and consistently.
  *
- * Logo asset: `public/brand/logo.png` (the colored wordmark, trimmed to its content
- * box) — copied from the Doctor School brand book (`apps/docs/brandbook/logo`, brand →
- * token map §6). Shown as-is on the white form column; on the blue brand panel it sits
- * on a white token chip (`bg-card`) so the colored mark keeps its contrast on blue
- * (the brand has no flat single-color logo export, and a CSS-inverted bitmap renders
- * the thin wordmark strokes hollow). Served `unoptimized` — it is a tiny static asset,
- * so the Next image re-encode adds nothing. Intrinsic sizes feed `next/image`; `h-*
- * w-auto` scales for display.
+ * Logo assets (SVG, ADR-0013 §8 asset-format policy — vector, not raster): the
+ * Doctor School wordmark re-exported clean from the brand vector source (no
+ * construction grid). `public/brand/logo.svg` is the colour lockup on the white form
+ * column; `public/brand/logo-white.svg` is the clean white variant placed *directly*
+ * on the blue brand panel — no `bg-card` chip and no CSS colour-inversion (a clean
+ * white vector exists, so the chip was an unnecessary workaround). Exactly one logo
+ * per viewport: the form-column logo is `lg:hidden` (the block hides it when a panel
+ * is present), so desktop shows only the panel mark and mobile only the form-top
+ * colour logo. Served `unoptimized` — a tiny static SVG needs no Next re-encode;
+ * intrinsic sizes feed `next/image` (viewBox 500×164), `h-* w-auto` scales display.
  */
 export function AuthShell({ children }: { children: ReactNode }) {
   const t = useTranslations("brand");
@@ -35,10 +37,10 @@ export function AuthShell({ children }: { children: ReactNode }) {
     <AuthLayout
       logo={
         <Image
-          src="/brand/logo.png"
+          src="/brand/logo.svg"
           alt={t("logoAlt")}
-          width={1511}
-          height={496}
+          width={500}
+          height={164}
           priority
           unoptimized
           className="h-10 w-auto"
@@ -47,21 +49,19 @@ export function AuthShell({ children }: { children: ReactNode }) {
       aside={
         <>
           {/* Decorative brand mark — the headline carries the accessible name, so the
-              panel logo is presentational (empty alt). On a white token chip so the
-              colored logo keeps contrast against the blue panel. Pinned to the top of
+              panel logo is presentational (empty alt). The clean white logo sits
+              directly on the blue panel (no chip, no inversion). Pinned to the top of
               the panel; the value-prop below grows to centre itself in the remaining
               space (see the `flex-1` group), so there is no dead gap between the mark
               and the headline. */}
-          <div className="inline-flex w-fit rounded-xl bg-card p-4 shadow-sm">
-            <Image
-              src="/brand/logo.png"
-              alt=""
-              width={1511}
-              height={496}
-              unoptimized
-              className="h-12 w-auto"
-            />
-          </div>
+          <Image
+            src="/brand/logo-white.svg"
+            alt=""
+            width={500}
+            height={164}
+            unoptimized
+            className="h-12 w-auto"
+          />
           {/* Value prop — grows to fill the gap between the top mark and the bottom
               footer and centres itself there, so the panel reads as a deliberate
               three-zone split rather than an even distribution with a void up top. */}

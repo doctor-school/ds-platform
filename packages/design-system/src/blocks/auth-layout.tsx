@@ -14,7 +14,10 @@ import { cn } from "../lib/utils";
  *   │   [AuthCard]  │  (bg-primary) │
  *   └───────────────┴───────────────┘
  *   On < lg the brand panel is hidden and the form column fills the screen, with
- *   the logo kept above the card so mobile still carries the brand.
+ *   the logo kept above the card so mobile still carries the brand. On lg+ that
+ *   form-column logo is hidden (`lg:hidden`) so the brand-panel mark is the single
+ *   logo per viewport — the two never both render (the #237/#275 duplicate-logo fix).
+ *   With no `aside` (form-only fallback) the logo stays on every breakpoint.
  *
  * Presentation scaffold ONLY: every visible string and asset is app-supplied — the
  * `logo` and the brand-panel `aside` (localized headline / sub-copy / art) are
@@ -33,8 +36,9 @@ export function AuthLayout({
   className,
   children,
 }: {
-  /** Brand lockup rendered above the form card — shown on every breakpoint so the
-   *  mobile layout (panel hidden) still carries the brand. */
+  /** Brand lockup rendered above the form card. On mobile (panel hidden) it carries
+   *  the brand; on lg+ it is hidden when a `aside` panel is present so there is exactly
+   *  one logo per viewport. With no `aside` it stays visible on every breakpoint. */
   logo?: React.ReactNode;
   /** Brand-panel content (app-supplied, localized headline / sub-copy / art).
    *  When omitted the panel is not rendered and the form fills the screen. */
@@ -47,7 +51,11 @@ export function AuthLayout({
     <div className={cn("grid min-h-screen lg:grid-cols-2", className)}>
       {/* Form column — centered, with the logo above the card. */}
       <div className="flex flex-col items-center justify-center gap-8 px-6 py-12">
-        {logo ? <div className="w-full max-w-md">{logo}</div> : null}
+        {logo ? (
+          <div className={cn("w-full max-w-md", aside ? "lg:hidden" : undefined)}>
+            {logo}
+          </div>
+        ) : null}
         <div className="w-full max-w-md">{children}</div>
       </div>
 

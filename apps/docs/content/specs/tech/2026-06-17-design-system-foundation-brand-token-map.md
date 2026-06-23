@@ -52,19 +52,20 @@ Brand book §2.2 additional palettes (pages 16–21). Decision (#231): tokenise 
 
 ### 1.3. Semantic layer (referenced by components)
 
-| Semantic token                                  | → references                                     | Notes                       |
-| ----------------------------------------------- | ------------------------------------------------ | --------------------------- |
-| `color.background`                              | `{color.white}`                                  | Light-first (medical white) |
-| `color.foreground`                              | `{color.neutral.900}`                            | Blue-tinted near-black      |
-| `color.primary`                                 | `{color.blue.500}` `#2D84F2`                     | Main action / brand         |
-| `color.primary-foreground`                      | `{color.white}`                                  |                             |
-| `color.primary-hover` / `color.primary-pressed` | `{color.blue.700}` `#114D9E`                     |                             |
-| `color.ring`                                    | `{color.blue.300}` `#6BB1F7`                     | Focus ring                  |
-| `color.muted` / `color.muted-foreground`        | `{color.neutral.100}` / `{color.neutral.500}`    |                             |
-| `color.border` / `color.input`                  | `{color.neutral.200}`                            |                             |
-| `color.success` / `-foreground`                 | `{color.green.500}` `#009959` / `{color.white}`  | Brand green                 |
-| `color.warning` / `-foreground`                 | `{color.orange.500}` `#DF5726` / `{color.white}` | Brand orange                |
-| `color.destructive` / `-foreground`             | `{color.red.500}` / `{color.white}`              | Introduced functional red   |
+| Semantic token                                  | → references                                     | Notes                                                                                  |
+| ----------------------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `color.background`                              | `{color.white}`                                  | Light-first (medical white)                                                            |
+| `color.foreground`                              | `{color.neutral.900}`                            | Blue-tinted near-black                                                                 |
+| `color.primary`                                 | `{color.blue.500}` `#2D84F2`                     | Brand anchor — link/ring/icons/tints (not a white-text fill)                           |
+| `color.primary-foreground`                      | `{color.white}`                                  |                                                                                        |
+| `color.primary-action`                          | `{color.blue.700}` `#114D9E`                     | Accessible filled-action fill (Pantone Dark Blue C); white text 8.14:1 per ADR-0013 §7 |
+| `color.primary-hover` / `color.primary-pressed` | `{color.blue.800}` `#0D3A77`                     | Hover/pressed of the action fill (visible delta, stays AA)                             |
+| `color.ring`                                    | `{color.blue.300}` `#6BB1F7`                     | Focus ring                                                                             |
+| `color.muted` / `color.muted-foreground`        | `{color.neutral.100}` / `{color.neutral.600}`    | muted-foreground AA on muted (6.77:1)                                                  |
+| `color.border` / `color.input`                  | `{color.neutral.200}`                            |                                                                                        |
+| `color.success` / `-foreground`                 | `{color.green.500}` `#009959` / `{color.white}`  | Brand green                                                                            |
+| `color.warning` / `-foreground`                 | `{color.orange.500}` `#DF5726` / `{color.white}` | Brand orange                                                                           |
+| `color.destructive` / `-foreground`             | `{color.red.500}` / `{color.white}`              | Introduced functional red                                                              |
 
 **Dark theme:** deferred — the brand is light-first; dark is a future semantic override (no primitive duplication), authored when a dark surface is needed.
 

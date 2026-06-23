@@ -64,6 +64,10 @@ export default [
       "apps/docs/.source/**",
       // Next.js generated triple-slash reference files
       "**/next-env.d.ts",
+      // #286 — lint-guard-test fixtures are deliberately-broken file trees fed to
+      // the guards under test (missing imports, commented-out tokens, raster
+      // assets). They are data, not source, and must not be linted.
+      "tools/lint/guard-tests/fixtures/**",
     ],
   },
   js.configs.recommended,

@@ -36,7 +36,12 @@ import { resolve, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import fg from "fast-glob";
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+// TEST SEAM: `LINT_FIXTURE_ROOT` lets the guard-tests harness point the scan at a
+// fixture tree (tools/lint/guard-tests). Inert in production — when unset the root
+// resolves to the repo root exactly as before, so runtime behaviour is unchanged.
+const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
+  ? resolve(process.env.LINT_FIXTURE_ROOT)
+  : resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TAG = "[asset-format]";
 
 // Only the disallowed pair. WEBP (raster floor), SVG (vector), and .ico

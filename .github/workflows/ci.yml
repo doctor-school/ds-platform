@@ -370,12 +370,13 @@ jobs:
   # hover style delta, keyboard focus-visible ring) + an axe-core a11y/contrast
   # scan of /login, /register, /reset. BACKEND-FREE — the auth pages render their
   # forms client-side and the specs never submit, so no api / Zitadel / Mailpit /
-  # Postgres. WARN per ADR-0007 §2.6 new-guard posture (promote to BLOCK once
-  # stable); excluded from the `ci` meta-job needs-list while WARN, like the other
-  # WARN gates (registry-research / no-stub / interaction-states / ears-tests).
+  # Postgres. BLOCKING per ADR-0007 §2.6 new-guard posture (promoted from WARN
+  # once stable, #285): the auth surfaces now pass on landing (AA-contrast fix —
+  # filled primary Button → blue.700, muted-foreground → neutral.600), so this
+  # gate is wired into the `ci` meta-job needs-list. The static twin
+  # (`interaction-states`, L3) stays WARN for now.
   playwright-axe:
     needs: setup
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -446,6 +447,7 @@ jobs:
         spec-link,
         endpoint-authz,
         tokens-fresh,
+        playwright-axe,
       ]
     if: always()
     runs-on: ubuntu-latest

@@ -1,7 +1,7 @@
 {
   "color": {
     "$type": "color",
-    "$description": "Semantic roles repointed onto the Doctor School brand (brand → token map §1.3). Light-first; the .dark overrides live in semantic.dark.json. Brand primary = blue.500 #2D84F2 stays the brand ANCHOR (link text, focus ring, icons, tints). White-on-fill AA (ADR-0013 §7): white on blue.500 is only 3.69:1, so a NORMAL-weight filled action does NOT paint blue.500 — it uses the accessible action-fill triad `primary-action` (blue.700, white 8.14:1, resting), `primary-hover` (blue.800, 11.12:1), `primary-pressed` (blue.800), which keeps a visible resting→hover interaction delta (#270 L1/L3) while clearing AA on every state. Status = brand green/orange + introduced red.",
+    "$description": "Semantic roles repointed onto the Doctor School brand (brand → token map §1.3). Light-first; the .dark overrides live in semantic.dark.json. Brand primary = blue.500 #2D84F2 stays the brand ANCHOR (link text, focus ring, icons, tints). White-on-fill AA (ADR-0013 §7): white on blue.500 is only 3.69:1, so a NORMAL-weight filled action does NOT paint blue.500 — it uses the accessible action-fill triad `primary-action` (blue.700, white 8.14:1, resting), `primary-hover` (blue.800, 11.12:1), `primary-pressed` (blue.800), which keeps a visible resting→hover interaction delta (#270 L1/L3) while clearing AA on every state. The same blue.700 AA rule governs any text-bearing brand FILL, not just actions: `primary-surface` (blue.700) is the brand fill for a coloured panel/surface that carries normal-weight white copy (e.g. the auth brand panel) — `primary` (blue.500) would only clear AA for large/bold text on it. Status = brand green/orange + introduced red.",
     "background": { "$value": "{color.white}" },
     "foreground": { "$value": "{color.neutral.900}" },
     "card": { "$value": "{color.white}" },
@@ -11,6 +11,7 @@
     "primary-action": { "$value": "{color.blue.700}" },
     "primary-hover": { "$value": "{color.blue.800}" },
     "primary-pressed": { "$value": "{color.blue.800}" },
+    "primary-surface": { "$value": "{color.blue.700}" },
     "secondary": { "$value": "{color.neutral.100}" },
     "secondary-foreground": { "$value": "{color.neutral.900}" },
     "muted": { "$value": "{color.neutral.100}" },

@@ -50,4 +50,4 @@ export {
 } from "./primitives/fields";
 
 // ── Blocks (#235 / #227) ──────────────────────────────────────────────────────
-export { AuthCard, OtpFocusScreen, maskDestination } from "./blocks";
+export { AuthLayout, AuthCard, OtpFocusScreen, maskDestination } from "./blocks";

@@ -9,6 +9,7 @@ import { UserPlus } from "lucide-react";
 
 import { type RegisterRequest } from "@ds/schemas";
 
+import { AuthShell } from "@/components/auth-shell";
 import { BotProtectionField } from "@/components/bot-protection";
 import { EmailField, PasswordField } from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
@@ -22,14 +23,7 @@ import { registerFormSchema } from "@/lib/identifier-validation";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@ds/design-system/card";
+import { AuthCard } from "@ds/design-system/blocks";
 import { Form, FormField } from "@ds/design-system/form";
 
 /*
@@ -106,72 +100,67 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-6 py-16">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <UserPlus className="text-primary" aria-hidden />
-            <CardTitle>{t("title")}</CardTitle>
-          </div>
-          <CardDescription>{t("description")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit(onSubmit)}
-              className="space-y-4"
-              noValidate
-            >
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <EmailField
-                    field={field}
-                    label={tc("email")}
-                    placeholder={tc("emailPlaceholder")}
-                  />
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <PasswordField
-                    field={field}
-                    purpose="new"
-                    label={tc("password")}
-                    policyHint={tc("passwordPolicy")}
-                  />
-                )}
-              />
-
-              <p className="text-xs text-muted-foreground">{t("consent")}</p>
-
-              <BotProtectionField onToken={setCaptchaToken} />
-              {error && (
-                <p role="alert" className="text-sm text-destructive">
-                  {error}
-                </p>
-              )}
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={form.formState.isSubmitting}
-                data-testid="register-submit"
-              >
-                {t("submit")}
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-        <CardFooter className="text-sm">
+    <AuthShell>
+      <AuthCard
+        icon={<UserPlus className="text-primary" aria-hidden />}
+        title={t("title")}
+        description={t("description")}
+        footer={
           <Link href="/login" className="underline">
             {t("haveAccount")}
           </Link>
-        </CardFooter>
-      </Card>
-    </main>
+        }
+      >
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="space-y-4"
+            noValidate
+          >
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <EmailField
+                  field={field}
+                  label={tc("email")}
+                  placeholder={tc("emailPlaceholder")}
+                />
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <PasswordField
+                  field={field}
+                  purpose="new"
+                  label={tc("password")}
+                  policyHint={tc("passwordPolicy")}
+                />
+              )}
+            />
+
+            <p className="text-xs text-muted-foreground">{t("consent")}</p>
+
+            <BotProtectionField onToken={setCaptchaToken} />
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={form.formState.isSubmitting}
+              data-testid="register-submit"
+            >
+              {t("submit")}
+            </Button>
+          </form>
+        </Form>
+      </AuthCard>
+    </AuthShell>
   );
 }

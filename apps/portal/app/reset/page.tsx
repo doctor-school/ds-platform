@@ -12,6 +12,7 @@ import {
   type PasswordResetCompleteRequest,
 } from "@ds/schemas";
 
+import { AuthShell } from "@/components/auth-shell";
 import { BotProtectionField } from "@/components/bot-protection";
 import { IdentifierField, OtpField, PasswordField } from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
@@ -23,14 +24,7 @@ import {
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@ds/design-system/card";
+import { AuthCard, maskDestination } from "@ds/design-system/blocks";
 import { Form, FormField } from "@ds/design-system/form";
 
 /** The reset code is a FIXED 6 characters (Zitadel default) — and ALPHANUMERIC
@@ -99,70 +93,70 @@ export default function ResetPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-6 py-16">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <KeyRound className="text-primary" aria-hidden />
-            <CardTitle>{t("title")}</CardTitle>
-          </div>
-          <CardDescription>
-            {stage === "request"
-              ? t("descriptionRequest")
-              : t("descriptionComplete", { identifier })}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {stage === "request" ? (
-            <Form {...requestForm}>
-              <form
-                onSubmit={requestForm.handleSubmit(onRequest)}
-                className="space-y-4"
-                noValidate
-              >
-                {/* #196 fix: the reset identifier is the same union box as
-                    login-password — `<IdentifierField>` bakes in the email-OR-phone
-                    validation, so a bare numeric is rejected before submit. UNMASKED
-                    (the default), matching the login-password box — only the OTP-sms
-                    channel masks. */}
-                <FormField
-                  control={requestForm.control}
-                  name="identifier"
-                  render={({ field }) => (
-                    <IdentifierField
-                      field={field}
-                      label={tc("emailOrPhone")}
-                      placeholder={tc("identifierPlaceholder")}
-                    />
-                  )}
-                />
-                <BotProtectionField onToken={setCaptchaToken} />
-                {error && (
-                  <p role="alert" className="text-sm text-destructive">
-                    {error}
-                  </p>
-                )}
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={requestForm.formState.isSubmitting}
-                  data-testid="reset-request-submit"
-                >
-                  {t("sendResetCode")}
-                </Button>
-              </form>
-            </Form>
-          ) : (
-            <ResetCompleteForm identifier={identifier} />
-          )}
-        </CardContent>
-        <CardFooter className="text-sm">
+    <AuthShell>
+      <AuthCard
+        icon={<KeyRound className="text-primary" aria-hidden />}
+        title={t("title")}
+        description={
+          stage === "request"
+            ? t("descriptionRequest")
+            : // #227: confirm WHERE the reset code went with a privacy-masked
+              // destination (the same `maskDestination` the login-OTP focus-screen
+              // shows), never the full identifier.
+              t("descriptionComplete", {
+                identifier: maskDestination(identifier),
+              })
+        }
+        footer={
           <Link href="/login" className="underline">
             {t("backToSignIn")}
           </Link>
-        </CardFooter>
-      </Card>
-    </main>
+        }
+      >
+        {stage === "request" ? (
+          <Form {...requestForm}>
+            <form
+              onSubmit={requestForm.handleSubmit(onRequest)}
+              className="space-y-4"
+              noValidate
+            >
+              {/* #196 fix: the reset identifier is the same union box as
+                  login-password — `<IdentifierField>` bakes in the email-OR-phone
+                  validation, so a bare numeric is rejected before submit. UNMASKED
+                  (the default), matching the login-password box — only the OTP-sms
+                  channel masks. */}
+              <FormField
+                control={requestForm.control}
+                name="identifier"
+                render={({ field }) => (
+                  <IdentifierField
+                    field={field}
+                    label={tc("emailOrPhone")}
+                    placeholder={tc("identifierPlaceholder")}
+                  />
+                )}
+              />
+              <BotProtectionField onToken={setCaptchaToken} />
+              {error && (
+                <p role="alert" className="text-sm text-destructive">
+                  {error}
+                </p>
+              )}
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={requestForm.formState.isSubmitting}
+                data-testid="reset-request-submit"
+              >
+                {t("sendResetCode")}
+              </Button>
+            </form>
+          </Form>
+        ) : (
+          <ResetCompleteForm identifier={identifier} />
+        )}
+      </AuthCard>
+    </AuthShell>
   );
 }
 

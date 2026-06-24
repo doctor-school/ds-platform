@@ -178,6 +178,35 @@ async function ghUnassignedIssues(args: string[]): Promise<GhIssue[]> {
   return all.filter((i) => !i.assignees || i.assignees.length === 0);
 }
 
+/**
+ * Raw count of ALL open issues — independent of the agent-ready/working/awaiting
+ * labels (#306). This is the un-maskable backlog signal: an empty triage bucket
+ * must never present as an empty board. Returns `null` on failure so the caller
+ * can print "(unknown)" rather than a misleading "0".
+ */
+async function ghOpenIssueCount(): Promise<number | null> {
+  try {
+    const { stdout } = await execa(
+      "gh",
+      [
+        "issue",
+        "list",
+        "--state",
+        "open",
+        "--limit",
+        "200",
+        "--json",
+        "number",
+      ],
+      { cwd: REPO_ROOT },
+    );
+    return (JSON.parse(stdout) as Array<{ number: number }>).length;
+  } catch (e) {
+    note("gh issue list --state open", e);
+    return null;
+  }
+}
+
 async function meLogin(): Promise<string> {
   try {
     const { stdout } = await execa("gh", ["api", "user", "--jq", ".login"], {
@@ -275,11 +304,17 @@ async function readSpecMeta(featureSlug: string): Promise<SpecMeta | null> {
   }
 }
 
-function recommend(
+// `openCount` is the raw `gh issue list --state open` total — deliberately
+// independent of the working/awaiting/ready triage buckets (#306). An empty
+// ready bucket (label-driven) must NEVER read as an empty backlog: when the
+// buckets are all empty but open issues exist, the recommendation is to triage
+// the board by readiness, not "clean slate / nothing to do".
+export function recommend(
   activeWorking: GhIssue[],
   awaitingReview: GhIssue[],
   prs: GhPRGroups,
   readyQueue: GhIssue[],
+  openCount: number,
 ): string {
   if (prs.others.length > 0) {
     return `${prs.others.length} non-author PR(s) open (Dependabot et al.) — triage before product work.`;
@@ -299,6 +334,12 @@ function recommend(
       .map((i) => `#${i.number}`)
       .join(", ")}.`;
   }
+  if (openCount > 0) {
+    // Buckets empty (none labelled agent-ready / agent-working / awaiting-review)
+    // but the board is NOT empty — the `ready` queue is a label-driven view, not
+    // ground truth (AGENTS.md §3.5). Direct the agent to triage, never "done".
+    return `${openCount} open issue(s) but none in ready/working/awaiting buckets — TRIAGE the open board by readiness (\`gh issue list --state open\`). The ready queue is label-driven, not ground truth; an empty bucket set is NOT an empty backlog.`;
+  }
   return `Clean slate. Open a new feature-spec via superpowers:brainstorming.`;
 }
 
@@ -308,7 +349,7 @@ function ts(): string {
 }
 
 async function main(): Promise<void> {
-  const [git, working, awaiting, ready, prs] = await Promise.all([
+  const [git, working, awaiting, ready, prs, openCount] = await Promise.all([
     gitState(),
     ghIssues(["--assignee", "@me", "--label", "agent-working"]),
     ghIssues(["--assignee", "@me", "--label", "awaiting-review"]),
@@ -316,6 +357,7 @@ async function main(): Promise<void> {
       rs.slice(0, 5),
     ),
     ghPRs(),
+    ghOpenIssueCount(),
   ]);
 
   const activeSpecs = await Promise.all(
@@ -351,8 +393,17 @@ async function main(): Promise<void> {
   out.push("");
 
   out.push("## Issues (working / awaiting / ready)");
+  // Raw open-issue total — independent of the triage buckets below (#306). An
+  // empty bucket set is NOT an empty backlog; this line is the un-maskable signal.
+  out.push(
+    `- Open issues: ${openCount ?? "(unknown)"} (\`gh issue list --state open\`)`,
+  );
   if (working.length === 0 && awaiting.length === 0 && ready.length === 0) {
-    out.push("(none)");
+    out.push(
+      openCount && openCount > 0
+        ? "(no triage buckets populated — see open-issue total above; TRIAGE the board by readiness)"
+        : "(none)",
+    );
   } else {
     for (const i of working) {
       out.push(
@@ -420,7 +471,7 @@ async function main(): Promise<void> {
   out.push("");
 
   out.push("## Recommendation");
-  out.push(recommend(working, awaiting, prs, ready));
+  out.push(recommend(working, awaiting, prs, ready, openCount ?? 0));
   out.push("");
 
   if (warnings.length > 0) {
@@ -434,8 +485,16 @@ async function main(): Promise<void> {
   process.stdout.write(out.join("\n"));
 }
 
-main().catch((e) => {
-  // Last-resort guard: must never crash the SessionStart hook.
-  process.stderr.write(`[agent-bootstrap] unexpected error: ${String(e)}\n`);
-  process.exit(0);
-});
+// Run only as the entry point (`tsx tools/agent-bootstrap.ts`). Guarding this
+// keeps the pure helpers (e.g. `recommend`) importable from a unit test without
+// firing the side-effecting `main()` / its `gh` + `git` subprocess calls.
+const INVOKED_PATH = process.argv[1] ? resolve(process.argv[1]) : "";
+const IS_ENTRY = INVOKED_PATH === fileURLToPath(import.meta.url);
+
+if (IS_ENTRY) {
+  main().catch((e) => {
+    // Last-resort guard: must never crash the SessionStart hook.
+    process.stderr.write(`[agent-bootstrap] unexpected error: ${String(e)}\n`);
+    process.exit(0);
+  });
+}

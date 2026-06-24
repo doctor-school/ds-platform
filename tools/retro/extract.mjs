@@ -83,8 +83,9 @@ const CORRECTION_RE = new RegExp(
     'почему', 'зачем', 'разве', 'не так', 'не нужно', 'не надо', 'надо было', 'должен был',
     'должно быть', 'стоп', 'отмен', 'верн[иё]', 'нельзя', 'это непра', 'неправильно', 'ошиб',
     'я же', 'я просил', 'я говорил', 'опять', 'снова', 'почему ты', 'а как правильно',
+    'применял', 'использовал', 'запускал', 'ты применил',
     'why ', 'instead', 'should have', 'you were supposed', 'wrong', 'no,', 'stop',
-    'revert', 'undo', "don't", 'do not', 'not what', 'i asked', 'i told you', 'again',
+    'revert', 'undo', "don't", 'do not', 'not what', 'i asked', 'i told you', 'again', 'did you',
   ].join('|'),
   'i',
 );

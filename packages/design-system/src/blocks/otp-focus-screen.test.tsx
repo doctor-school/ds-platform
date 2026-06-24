@@ -24,6 +24,7 @@ afterEach(cleanup);
 function Harness({
   length = 6,
   cooldownSeconds = 0,
+  resendNonce = 0,
   isSubmitting = false,
   onSubmit = (e: React.FormEvent) => e.preventDefault(),
   onResend = () => {},
@@ -32,6 +33,7 @@ function Harness({
 }: {
   length?: number;
   cooldownSeconds?: number;
+  resendNonce?: number;
   isSubmitting?: boolean;
   onSubmit?: React.FormEventHandler<HTMLFormElement>;
   onResend?: () => void;
@@ -57,6 +59,7 @@ function Harness({
             resendCountdownLabel={(s) => `Resend in ${s}s`}
             changeMethodLabel="Change method"
             cooldownSeconds={cooldownSeconds}
+            resendNonce={resendNonce}
             isSubmitting={isSubmitting}
             onComplete={onComplete}
             onSubmit={onSubmit}
@@ -106,6 +109,34 @@ describe("OtpFocusScreen", () => {
 
       expect(resend).not.toBeDisabled();
       expect(resend).toHaveTextContent("Resend");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("restarts the cooldown on a resendNonce bump without remounting (unchanged duration)", () => {
+    vi.useFakeTimers();
+    try {
+      // A resend re-issues the SAME 30s cooldown; the duration value does not
+      // change, so re-seeding cannot key off `cooldownSeconds` alone. The app
+      // bumps `resendNonce` instead — the block must restart the countdown
+      // without the consumer having to remount-by-key (#266; the #237 hack).
+      const { rerender } = render(
+        <Harness cooldownSeconds={30} resendNonce={0} />,
+      );
+      const resend = screen.getByTestId("otp-resend");
+      expect(resend).toHaveTextContent("Resend in 30s");
+
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(resend).toHaveTextContent("Resend in 25s");
+
+      // Same duration, bumped nonce → countdown restarts from 30, still the same
+      // mounted block (no `key` change).
+      rerender(<Harness cooldownSeconds={30} resendNonce={1} />);
+      expect(resend).toHaveTextContent("Resend in 30s");
+      expect(resend).toBeDisabled();
     } finally {
       vi.useRealTimers();
     }

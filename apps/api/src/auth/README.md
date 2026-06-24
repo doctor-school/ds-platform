@@ -173,10 +173,20 @@ gate touches no other call site:
   `auth.lockout.triggered`. The counter, lock, and notification email are native.
 - **Audit ledger** (EARS-18) — see the `AuthAuditLog` port above.
 
+## Reconciliation sweep schedule (built — #119)
+
+- **Periodic reconcile schedule** — `ReconcileScheduler` registers a config-driven
+  `@nestjs/schedule` interval that calls `ReconcileService.sweep()` (the EARS-19
+  eventual-consistency backstop). The period is `RECONCILE_SWEEP_INTERVAL_MS`
+  (default 15 min; `0` disables); the scheduler guards against overlapping ticks
+  and is fail-soft. A standalone-Nest CLI (`pnpm --filter @ds/api reconcile:sweep`)
+  is the ops manual trigger — not an HTTP endpoint, since v1 has no admin-auth
+  surface. Operating detail: `apps/docs/content/operations/auth-operations.md`.
+
 ## Seams (not built yet)
 
-- **Periodic reconcile schedule** — `ReconcileService.sweep()` is the unit a
-  `@nestjs/schedule` cron will call; wiring the trigger is deferred (design §11).
+- **Deeper reconciliation** — conflict resolution + soft-delete handling beyond
+  the simple upsert sweep is deferred (design §11).
 
 ## Constructor-ordering constraint
 

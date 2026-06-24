@@ -34,6 +34,7 @@ import {
   type IdpClient,
 } from "./idp/idp.types.js";
 import { AUTH_WEBHOOK_SECRET } from "./auth.tokens.js";
+import { webhookSecretMatches } from "./webhook-secret.js";
 import { UserMirrorService } from "./user-mirror.service.js";
 import { SmsBudgetService } from "./sms-budget/sms-budget.service.js";
 import { MAILER, type Mailer } from "../mailer/mailer.types.js";
@@ -546,13 +547,16 @@ export class AuthService {
    * EARS-19: upsert the mirror row from a Zitadel Action webhook payload after
    * authenticating the caller with the shared secret. Fails closed — an unset
    * secret rejects every call (the mirror-write surface is never open by
-   * default); a present secret must match exactly.
+   * default); a present secret must match exactly. The match is a **constant-time**
+   * compare (`webhookSecretMatches` → `crypto.timingSafeEqual`, #119 (b),
+   * design §11): a plain `!==` leaked timing proportional to the matching prefix,
+   * a side-channel that recovers the secret byte-by-byte.
    */
   async syncFromWebhook(
     providedSecret: string | undefined,
     payload: ZitadelWebhook,
   ): Promise<ZitadelWebhookResponse> {
-    if (!this.webhookSecret || providedSecret !== this.webhookSecret) {
+    if (!webhookSecretMatches(providedSecret, this.webhookSecret)) {
       throw new UnauthorizedException("invalid webhook secret");
     }
     await this.mirror.upsert(payload);

@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { fetchMessage, fetchOtpCode } from "./support/mailpit";
+import { NOTIFICATION_SUBJECTS } from "./support/notification-subjects";
 import { fetchSmsOtpCode } from "./support/sms-sink";
 import {
   createUserWithPhone,
@@ -113,7 +114,11 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     // advance on its own. On success the held password is replayed into the real
     // EARS-5 password login and the user lands DIRECTLY on /account (no manual
     // /login round-trip).
-    const verifyCode = await fetchOtpCode(email, sentAt, "Verify email");
+    const verifyCode = await fetchOtpCode(
+      email,
+      sentAt,
+      NOTIFICATION_SUBJECTS.verifyEmail,
+    );
     expect(verifyCode, "registration code should reach Mailpit").toBeTruthy();
     await page.locator('input[autocomplete="one-time-code"]').fill(verifyCode!);
     // No `getByTestId("verify-submit").click()` — auto-submit carries the flow.
@@ -145,7 +150,11 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await page.locator('input[autocomplete="new-password"]').fill(password);
     await page.getByTestId("register-submit").click();
     await page.waitForURL(/\/verify/);
-    const verifyCode = await fetchOtpCode(email, regAt, "Verify email");
+    const verifyCode = await fetchOtpCode(
+      email,
+      regAt,
+      NOTIFICATION_SUBJECTS.verifyEmail,
+    );
     expect(verifyCode).toBeTruthy();
     await page.locator('input[autocomplete="one-time-code"]').fill(verifyCode!);
     // Auto-submit + auto-login (#175) — no button click, lands on /account.
@@ -166,11 +175,16 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await page.getByTestId("otp-send").click();
 
     // ── Read the login OTP from Mailpit + submit (EARS-6 step 2 / EARS-8) ─
-    // Select by the `Verify OTP` subject, NOT timestamp: Zitadel sends the
-    // registration `Verify email` mail and this login `Verify OTP` mail < 1 s
-    // apart, so the registration code can fall inside the OTP window and be read
-    // instead (login then fails on the wrong code) — #131 live.
-    const otpCode = await fetchOtpCode(email, otpSentAt, "Verify OTP");
+    // Select by the email-OTP subject, NOT timestamp: Zitadel sends the
+    // registration verify-email mail and this login email-OTP mail < 1 s apart,
+    // so the registration code can fall inside the OTP window and be read instead
+    // (login then fails on the wrong code) — #131 live. Subjects are `ru`-locked
+    // (#177) and centralized in `NOTIFICATION_SUBJECTS` (#305).
+    const otpCode = await fetchOtpCode(
+      email,
+      otpSentAt,
+      NOTIFICATION_SUBJECTS.verifyEmailOtp,
+    );
     expect(otpCode, "login OTP should reach Mailpit").toBeTruthy();
     // #175: the login-OTP input AUTO-SUBMITS once the final (8th) digit lands —
     // we fill the code and do NOT click `otp-verify`; the flow must advance on
@@ -321,7 +335,11 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await expect(page.getByTestId("verify-go-to-reset")).toBeVisible();
 
     // Complete verification so the email is now an ALREADY-REGISTERED account.
-    const verifyCode = await fetchOtpCode(email, firstAt, "Verify email");
+    const verifyCode = await fetchOtpCode(
+      email,
+      firstAt,
+      NOTIFICATION_SUBJECTS.verifyEmail,
+    );
     expect(verifyCode).toBeTruthy();
     await page.locator('input[autocomplete="one-time-code"]').fill(verifyCode!);
     await page.waitForURL(/\/account/);

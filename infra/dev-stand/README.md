@@ -1,7 +1,8 @@
 # Local dev-stand
 
-Local development environment for DS Platform — Postgres, Redis, MinIO, `idp`,
-Centrifugo, Cerbos, Mailpit and friends, run as a Docker Compose stack.
+Local development environment for DS Platform — Postgres, Redis, MinIO, `idp`
+(Zitadel core) with its `idp-login` (Login V2 UI) + `idp-proxy` (Caddy single-origin
+front), Centrifugo, Cerbos, Mailpit and friends, run as a Docker Compose stack.
 
 The platform contract (compose files, `.env.example`, DX wrappers) is portable and
 lives in git. Each developer picks a **recipe** for _where_ Docker actually runs.
@@ -60,6 +61,37 @@ directory) — they hold per-machine secrets and must never be committed.
 > `IDP_SECRET_KEY`, …) in a password manager. They are not covered by ZFS
 > snapshots or host backups — on a wipe they are lost and must be rotated
 > (setup-design §10).
+
+---
+
+## Identity provider Console (Zitadel, operator-only)
+
+The Zitadel admin **Console** is browsable at
+`http://<HOST>:9080/ui/console` (e.g. `http://truenas.local:9080/ui/console`),
+logging in as `zitadel-admin@zitadel.<IDP_EXTERNAL_DOMAIN>` (e.g.
+`zitadel-admin@zitadel.truenas.local`) with `IDP_BOOTSTRAP_ADMIN_PASSWORD` from
+your `.env.local`. This is a **dev-operator convenience only** — the product auth
+path (the api BFF) stays headless and never routes through this UI. Full detail,
+including the single-origin architecture and the PAT-mount step, is in
+[`idp/bootstrap.md` §6](idp/bootstrap.md).
+
+Zitadel v4 splits the login UI out of the core binary, so three containers serve
+the one `${IDP_PORT:-9080}` origin:
+
+- **`idp`** (Zitadel core) — OIDC/JWT, Console, management/admin APIs. Now
+  **in-network only** (`idp:8080`); it no longer publishes a host port.
+- **`idp-login`** (`ghcr.io/zitadel/zitadel-login`, pinned to the core version) —
+  the Login V2 Next.js UI, served under `/ui/v2/login`. Authenticates to core with
+  the `ds-bootstrap` PAT (which already carries `IAM_LOGIN_CLIENT`), mounted
+  read-only from `IDP_LOGIN_PAT_FILE` — a path **outside** the synced stand dir so
+  `dev:up` never wipes it.
+- **`idp-proxy`** (Caddy, pinned) — publishes `${IDP_PORT:-9080}` and
+  single-origin-routes `/ui/v2/login/*` → `idp-login:3000`, everything else →
+  `idp:8080` over h2c. Because it fronts the same origin, the OIDC **issuer is
+  unchanged** (`http://<HOST>:9080`) and the headless BFF path is untouched.
+
+> The Login V2 `baseUri` (what makes the Console's interactive login render the
+> v2 UI) is set idempotently by `idp/provision.sh` step 4 — no console click-path.
 
 ---
 
@@ -314,6 +346,11 @@ with the compose stack in DSP-154; the rules are fixed here so DSP-154 implement
 
   Prefer **not publishing** internal-only ports at all and reaching services over the
   Docker network / SSH tunnel; publish only what the host apps genuinely need.
+
+  > **`9080` is now published by `idp-proxy` (Caddy), not `idp` directly** (#174):
+  > the host port is unchanged, but `idp` (`:8080`), `idp-login` (`:3000`) and
+  > Caddy's admin (`:2019`) are all in-network only. No new host ports are
+  > published.
 
 **Verification** — re-check for collisions before `compose up` (free ports print nothing):
 

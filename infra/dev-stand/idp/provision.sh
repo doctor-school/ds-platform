@@ -235,18 +235,31 @@ else
   echo "created OIDC app (appId $(echo "$CREATED" | jq -r '.appId'))" >&2
 fi
 
-# ── 4. ensure Login V2 instance feature ──────────────────────────────────────
+# ── 4. ensure Login V2 instance feature + baseUri (operator Console login, #174) ─
 # The headless BFF session->token exchange (EARS-8) links a checked session to a
 # pending OIDC auth request via POST /v2/oidc/auth_requests/{id}. That API only
 # resolves an auth request CREATED UNDER LOGIN V2 — with the feature off the
 # authorize hop files a v1 auth request the v2 API can't see (404 "Auth Request
 # does not exist", proven live #146). compose.core.yml turns it on at instance
 # init (ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED); this converges it on
-# any instance initialised before that default (idempotent). No baseUri is set:
-# the BFF never renders the v2 login UI, it only drives the auth_requests + token
-# endpoints served by the core binary.
-api_idempotent PUT /v2/features/instance '{"loginV2":{"required":true}}' >/dev/null \
-  && echo "loginV2 feature ensured (required)" >&2
+# any instance initialised before that default (idempotent).
+#
+# baseUri (#174): the v2 authorize hop redirects the BROWSER to this URL to render
+# the login UI. Setting it makes the admin Console (/ui/console) browsable — its
+# interactive login now lands on the `idp-login` container served under
+# /ui/v2/login at the SAME external origin (fronted by the idp-proxy Caddy). This
+# is a DEV-OPERATOR CONVENIENCE only: the api BFF stays HEADLESS (Variant-B) and
+# never renders this UI — its auth_requests + token endpoints are served by the
+# core binary regardless of baseUri. baseUri derives from the provisioner's
+# BASE_URL (the external origin) + the login app's base path, so it is the same
+# origin the issuer/discovery use — no new input. Override via IDP_LOGIN_BASE_URI.
+#
+# Idempotency: a same-value PUT returns Zitadel's code-9 "no changes" precondition,
+# which api_idempotent absorbs (locale-independent), so a re-run / dev:up converges.
+LOGIN_BASE_URI="${IDP_LOGIN_BASE_URI:-${BASE_URL}/ui/v2/login}"
+api_idempotent PUT /v2/features/instance \
+  "$(jq -nc --arg u "$LOGIN_BASE_URI" '{loginV2:{required:true, baseUri:$u}}')" >/dev/null \
+  && echo "loginV2 feature ensured (required, baseUri=${LOGIN_BASE_URI})" >&2
 
 # ── 5. grant IAM_LOGIN_CLIENT to the bootstrap machine user ───────────────────
 # Calling /v2/oidc/auth_requests/{id} needs the dedicated IAM_LOGIN_CLIENT role —

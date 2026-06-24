@@ -71,9 +71,15 @@ The Zitadel admin **Console** is browsable at
 logging in as `zitadel-admin@zitadel.<IDP_EXTERNAL_DOMAIN>` (e.g.
 `zitadel-admin@zitadel.truenas.local`) with `IDP_BOOTSTRAP_ADMIN_PASSWORD` from
 your `.env.local`. This is a **dev-operator convenience only** — the product auth
-path (the api BFF) stays headless and never routes through this UI. Full detail,
-including the single-origin architecture and the PAT-mount step, is in
-[`idp/bootstrap.md` §6](idp/bootstrap.md).
+path (the api BFF) stays headless and never routes through this UI.
+
+> **Browse via the `truenas.local` mDNS hostname, not the static-IP fallback** —
+> Caddy host-matches `${IDP_EXTERNAL_DOMAIN}` and Zitadel resolves the instance by
+> the same domain, so the Console only routes via the hostname (the same one the
+> issuer requires). If mDNS is down (see [`dev-stand.md`](../../.claude/rules/dev-stand.md)
+> failure table), fix mDNS / add a hosts entry rather than browsing by IP. Full detail,
+> including the single-origin architecture and the PAT-mount step, is in
+> [`idp/bootstrap.md` §6](idp/bootstrap.md).
 
 Zitadel v4 splits the login UI out of the core binary, so three containers serve
 the one `${IDP_PORT:-9080}` origin:

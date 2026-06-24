@@ -382,6 +382,14 @@ The Zitadel admin **Console** is browsable at `http://<HOST>:9080/ui/console`
 (`zitadel-admin@zitadel.truenas.local`) with `IDP_BOOTSTRAP_ADMIN_PASSWORD` from
 `.env.local`.
 
+> **Use the `truenas.local` hostname, not the static-IP fallback.** Caddy's site
+> address is host-matched to `${IDP_EXTERNAL_DOMAIN}` and Zitadel resolves the
+> instance by the same `ExternalDomain`, so the Console only routes via the
+> mDNS hostname (`truenas.local`) — the IP fallback used when mDNS fails (the
+> `.claude/rules/dev-stand.md` failure table) won't reach it. This is the **same
+> hostname the issuer already requires**; if mDNS is down, fix mDNS (or add a
+> hosts-file entry) rather than browsing by IP.
+
 > **Operator-only — NOT the product auth path.** This UI exists so an operator can
 > inspect/manage the instance in a browser. The api BFF stays **headless**
 > (Variant-B, §2): it never renders this UI and no `baseUri` is wired into the api

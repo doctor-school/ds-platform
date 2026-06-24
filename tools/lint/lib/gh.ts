@@ -36,7 +36,8 @@ export type GhResult<T> =
  * Run `gh <kind> view <number> --json <fields>` and parse its JSON, or serve a
  * canned fixture when `LINT_GH_FIXTURE_DIR` is set. `fields` is ignored under
  * the fixture seam (the file already holds the projected shape) but is passed
- * verbatim to the real CLI.
+ * verbatim to the real CLI. `cwd` likewise only matters on the real path (it
+ * sets where `gh` resolves the repo from); under the fixture seam it is unused.
  */
 export async function ghViewJson<T>(
   kind: "pr" | "issue",

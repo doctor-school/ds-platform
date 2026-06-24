@@ -1,207 +1,210 @@
 # MEMORY.md (fixture — OVER budget)
 
-- [topic 1](t1.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 2](t2.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 3](t3.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 4](t4.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 5](t5.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 6](t6.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 7](t7.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 8](t8.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 9](t9.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 10](t10.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 11](t11.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 12](t12.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 13](t13.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 14](t14.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 15](t15.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 16](t16.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 17](t17.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 18](t18.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 19](t19.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 20](t20.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 21](t21.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 22](t22.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 23](t23.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 24](t24.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 25](t25.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 26](t26.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 27](t27.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 28](t28.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 29](t29.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 30](t30.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 31](t31.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 32](t32.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 33](t33.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 34](t34.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 35](t35.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 36](t36.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 37](t37.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 38](t38.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 39](t39.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 40](t40.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 41](t41.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 42](t42.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 43](t43.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 44](t44.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 45](t45.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 46](t46.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 47](t47.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 48](t48.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 49](t49.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 50](t50.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 51](t51.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 52](t52.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 53](t53.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 54](t54.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 55](t55.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 56](t56.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 57](t57.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 58](t58.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 59](t59.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 60](t60.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 61](t61.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 62](t62.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 63](t63.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 64](t64.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 65](t65.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 66](t66.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 67](t67.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 68](t68.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 69](t69.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 70](t70.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 71](t71.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 72](t72.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 73](t73.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 74](t74.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 75](t75.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 76](t76.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 77](t77.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 78](t78.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 79](t79.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 80](t80.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 81](t81.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 82](t82.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 83](t83.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 84](t84.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 85](t85.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 86](t86.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 87](t87.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 88](t88.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 89](t89.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 90](t90.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 91](t91.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 92](t92.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 93](t93.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 94](t94.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 95](t95.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 96](t96.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 97](t97.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 98](t98.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 99](t99.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 100](t100.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 101](t101.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 102](t102.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 103](t103.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 104](t104.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 105](t105.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 106](t106.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 107](t107.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 108](t108.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 109](t109.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 110](t110.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 111](t111.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 112](t112.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 113](t113.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 114](t114.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 115](t115.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 116](t116.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 117](t117.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 118](t118.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 119](t119.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 120](t120.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 121](t121.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 122](t122.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 123](t123.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 124](t124.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 125](t125.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 126](t126.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 127](t127.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 128](t128.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 129](t129.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 130](t130.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 131](t131.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 132](t132.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 133](t133.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 134](t134.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 135](t135.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 136](t136.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 137](t137.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 138](t138.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 139](t139.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 140](t140.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 141](t141.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 142](t142.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 143](t143.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 144](t144.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 145](t145.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 146](t146.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 147](t147.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 148](t148.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 149](t149.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 150](t150.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 151](t151.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 152](t152.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 153](t153.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 154](t154.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 155](t155.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 156](t156.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 157](t157.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 158](t158.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 159](t159.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 160](t160.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 161](t161.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 162](t162.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 163](t163.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 164](t164.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 165](t165.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 166](t166.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 167](t167.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 168](t168.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 169](t169.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 170](t170.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 171](t171.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 172](t172.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 173](t173.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 174](t174.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 175](t175.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 176](t176.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 177](t177.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 178](t178.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 179](t179.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 180](t180.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 181](t181.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 182](t182.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 183](t183.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 184](t184.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 185](t185.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 186](t186.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 187](t187.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 188](t188.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 189](t189.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 190](t190.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 191](t191.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 192](t192.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 193](t193.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 194](t194.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 195](t195.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 196](t196.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 197](t197.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 198](t198.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 199](t199.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 200](t200.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 201](t201.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 202](t202.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 203](t203.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 204](t204.md) — index line padding past the 200-line MEMORY.md cutoff.
-- [topic 205](t205.md) — index line padding past the 200-line MEMORY.md cutoff.
+Plain-text padding past the 200-line cutoff. No markdown link syntax — fixture
+files are scanned by the repo-wide markdown-links (lychee) CI job.
+
+- topic 1: index line padding past the 200-line MEMORY.md cutoff.
+- topic 2: index line padding past the 200-line MEMORY.md cutoff.
+- topic 3: index line padding past the 200-line MEMORY.md cutoff.
+- topic 4: index line padding past the 200-line MEMORY.md cutoff.
+- topic 5: index line padding past the 200-line MEMORY.md cutoff.
+- topic 6: index line padding past the 200-line MEMORY.md cutoff.
+- topic 7: index line padding past the 200-line MEMORY.md cutoff.
+- topic 8: index line padding past the 200-line MEMORY.md cutoff.
+- topic 9: index line padding past the 200-line MEMORY.md cutoff.
+- topic 10: index line padding past the 200-line MEMORY.md cutoff.
+- topic 11: index line padding past the 200-line MEMORY.md cutoff.
+- topic 12: index line padding past the 200-line MEMORY.md cutoff.
+- topic 13: index line padding past the 200-line MEMORY.md cutoff.
+- topic 14: index line padding past the 200-line MEMORY.md cutoff.
+- topic 15: index line padding past the 200-line MEMORY.md cutoff.
+- topic 16: index line padding past the 200-line MEMORY.md cutoff.
+- topic 17: index line padding past the 200-line MEMORY.md cutoff.
+- topic 18: index line padding past the 200-line MEMORY.md cutoff.
+- topic 19: index line padding past the 200-line MEMORY.md cutoff.
+- topic 20: index line padding past the 200-line MEMORY.md cutoff.
+- topic 21: index line padding past the 200-line MEMORY.md cutoff.
+- topic 22: index line padding past the 200-line MEMORY.md cutoff.
+- topic 23: index line padding past the 200-line MEMORY.md cutoff.
+- topic 24: index line padding past the 200-line MEMORY.md cutoff.
+- topic 25: index line padding past the 200-line MEMORY.md cutoff.
+- topic 26: index line padding past the 200-line MEMORY.md cutoff.
+- topic 27: index line padding past the 200-line MEMORY.md cutoff.
+- topic 28: index line padding past the 200-line MEMORY.md cutoff.
+- topic 29: index line padding past the 200-line MEMORY.md cutoff.
+- topic 30: index line padding past the 200-line MEMORY.md cutoff.
+- topic 31: index line padding past the 200-line MEMORY.md cutoff.
+- topic 32: index line padding past the 200-line MEMORY.md cutoff.
+- topic 33: index line padding past the 200-line MEMORY.md cutoff.
+- topic 34: index line padding past the 200-line MEMORY.md cutoff.
+- topic 35: index line padding past the 200-line MEMORY.md cutoff.
+- topic 36: index line padding past the 200-line MEMORY.md cutoff.
+- topic 37: index line padding past the 200-line MEMORY.md cutoff.
+- topic 38: index line padding past the 200-line MEMORY.md cutoff.
+- topic 39: index line padding past the 200-line MEMORY.md cutoff.
+- topic 40: index line padding past the 200-line MEMORY.md cutoff.
+- topic 41: index line padding past the 200-line MEMORY.md cutoff.
+- topic 42: index line padding past the 200-line MEMORY.md cutoff.
+- topic 43: index line padding past the 200-line MEMORY.md cutoff.
+- topic 44: index line padding past the 200-line MEMORY.md cutoff.
+- topic 45: index line padding past the 200-line MEMORY.md cutoff.
+- topic 46: index line padding past the 200-line MEMORY.md cutoff.
+- topic 47: index line padding past the 200-line MEMORY.md cutoff.
+- topic 48: index line padding past the 200-line MEMORY.md cutoff.
+- topic 49: index line padding past the 200-line MEMORY.md cutoff.
+- topic 50: index line padding past the 200-line MEMORY.md cutoff.
+- topic 51: index line padding past the 200-line MEMORY.md cutoff.
+- topic 52: index line padding past the 200-line MEMORY.md cutoff.
+- topic 53: index line padding past the 200-line MEMORY.md cutoff.
+- topic 54: index line padding past the 200-line MEMORY.md cutoff.
+- topic 55: index line padding past the 200-line MEMORY.md cutoff.
+- topic 56: index line padding past the 200-line MEMORY.md cutoff.
+- topic 57: index line padding past the 200-line MEMORY.md cutoff.
+- topic 58: index line padding past the 200-line MEMORY.md cutoff.
+- topic 59: index line padding past the 200-line MEMORY.md cutoff.
+- topic 60: index line padding past the 200-line MEMORY.md cutoff.
+- topic 61: index line padding past the 200-line MEMORY.md cutoff.
+- topic 62: index line padding past the 200-line MEMORY.md cutoff.
+- topic 63: index line padding past the 200-line MEMORY.md cutoff.
+- topic 64: index line padding past the 200-line MEMORY.md cutoff.
+- topic 65: index line padding past the 200-line MEMORY.md cutoff.
+- topic 66: index line padding past the 200-line MEMORY.md cutoff.
+- topic 67: index line padding past the 200-line MEMORY.md cutoff.
+- topic 68: index line padding past the 200-line MEMORY.md cutoff.
+- topic 69: index line padding past the 200-line MEMORY.md cutoff.
+- topic 70: index line padding past the 200-line MEMORY.md cutoff.
+- topic 71: index line padding past the 200-line MEMORY.md cutoff.
+- topic 72: index line padding past the 200-line MEMORY.md cutoff.
+- topic 73: index line padding past the 200-line MEMORY.md cutoff.
+- topic 74: index line padding past the 200-line MEMORY.md cutoff.
+- topic 75: index line padding past the 200-line MEMORY.md cutoff.
+- topic 76: index line padding past the 200-line MEMORY.md cutoff.
+- topic 77: index line padding past the 200-line MEMORY.md cutoff.
+- topic 78: index line padding past the 200-line MEMORY.md cutoff.
+- topic 79: index line padding past the 200-line MEMORY.md cutoff.
+- topic 80: index line padding past the 200-line MEMORY.md cutoff.
+- topic 81: index line padding past the 200-line MEMORY.md cutoff.
+- topic 82: index line padding past the 200-line MEMORY.md cutoff.
+- topic 83: index line padding past the 200-line MEMORY.md cutoff.
+- topic 84: index line padding past the 200-line MEMORY.md cutoff.
+- topic 85: index line padding past the 200-line MEMORY.md cutoff.
+- topic 86: index line padding past the 200-line MEMORY.md cutoff.
+- topic 87: index line padding past the 200-line MEMORY.md cutoff.
+- topic 88: index line padding past the 200-line MEMORY.md cutoff.
+- topic 89: index line padding past the 200-line MEMORY.md cutoff.
+- topic 90: index line padding past the 200-line MEMORY.md cutoff.
+- topic 91: index line padding past the 200-line MEMORY.md cutoff.
+- topic 92: index line padding past the 200-line MEMORY.md cutoff.
+- topic 93: index line padding past the 200-line MEMORY.md cutoff.
+- topic 94: index line padding past the 200-line MEMORY.md cutoff.
+- topic 95: index line padding past the 200-line MEMORY.md cutoff.
+- topic 96: index line padding past the 200-line MEMORY.md cutoff.
+- topic 97: index line padding past the 200-line MEMORY.md cutoff.
+- topic 98: index line padding past the 200-line MEMORY.md cutoff.
+- topic 99: index line padding past the 200-line MEMORY.md cutoff.
+- topic 100: index line padding past the 200-line MEMORY.md cutoff.
+- topic 101: index line padding past the 200-line MEMORY.md cutoff.
+- topic 102: index line padding past the 200-line MEMORY.md cutoff.
+- topic 103: index line padding past the 200-line MEMORY.md cutoff.
+- topic 104: index line padding past the 200-line MEMORY.md cutoff.
+- topic 105: index line padding past the 200-line MEMORY.md cutoff.
+- topic 106: index line padding past the 200-line MEMORY.md cutoff.
+- topic 107: index line padding past the 200-line MEMORY.md cutoff.
+- topic 108: index line padding past the 200-line MEMORY.md cutoff.
+- topic 109: index line padding past the 200-line MEMORY.md cutoff.
+- topic 110: index line padding past the 200-line MEMORY.md cutoff.
+- topic 111: index line padding past the 200-line MEMORY.md cutoff.
+- topic 112: index line padding past the 200-line MEMORY.md cutoff.
+- topic 113: index line padding past the 200-line MEMORY.md cutoff.
+- topic 114: index line padding past the 200-line MEMORY.md cutoff.
+- topic 115: index line padding past the 200-line MEMORY.md cutoff.
+- topic 116: index line padding past the 200-line MEMORY.md cutoff.
+- topic 117: index line padding past the 200-line MEMORY.md cutoff.
+- topic 118: index line padding past the 200-line MEMORY.md cutoff.
+- topic 119: index line padding past the 200-line MEMORY.md cutoff.
+- topic 120: index line padding past the 200-line MEMORY.md cutoff.
+- topic 121: index line padding past the 200-line MEMORY.md cutoff.
+- topic 122: index line padding past the 200-line MEMORY.md cutoff.
+- topic 123: index line padding past the 200-line MEMORY.md cutoff.
+- topic 124: index line padding past the 200-line MEMORY.md cutoff.
+- topic 125: index line padding past the 200-line MEMORY.md cutoff.
+- topic 126: index line padding past the 200-line MEMORY.md cutoff.
+- topic 127: index line padding past the 200-line MEMORY.md cutoff.
+- topic 128: index line padding past the 200-line MEMORY.md cutoff.
+- topic 129: index line padding past the 200-line MEMORY.md cutoff.
+- topic 130: index line padding past the 200-line MEMORY.md cutoff.
+- topic 131: index line padding past the 200-line MEMORY.md cutoff.
+- topic 132: index line padding past the 200-line MEMORY.md cutoff.
+- topic 133: index line padding past the 200-line MEMORY.md cutoff.
+- topic 134: index line padding past the 200-line MEMORY.md cutoff.
+- topic 135: index line padding past the 200-line MEMORY.md cutoff.
+- topic 136: index line padding past the 200-line MEMORY.md cutoff.
+- topic 137: index line padding past the 200-line MEMORY.md cutoff.
+- topic 138: index line padding past the 200-line MEMORY.md cutoff.
+- topic 139: index line padding past the 200-line MEMORY.md cutoff.
+- topic 140: index line padding past the 200-line MEMORY.md cutoff.
+- topic 141: index line padding past the 200-line MEMORY.md cutoff.
+- topic 142: index line padding past the 200-line MEMORY.md cutoff.
+- topic 143: index line padding past the 200-line MEMORY.md cutoff.
+- topic 144: index line padding past the 200-line MEMORY.md cutoff.
+- topic 145: index line padding past the 200-line MEMORY.md cutoff.
+- topic 146: index line padding past the 200-line MEMORY.md cutoff.
+- topic 147: index line padding past the 200-line MEMORY.md cutoff.
+- topic 148: index line padding past the 200-line MEMORY.md cutoff.
+- topic 149: index line padding past the 200-line MEMORY.md cutoff.
+- topic 150: index line padding past the 200-line MEMORY.md cutoff.
+- topic 151: index line padding past the 200-line MEMORY.md cutoff.
+- topic 152: index line padding past the 200-line MEMORY.md cutoff.
+- topic 153: index line padding past the 200-line MEMORY.md cutoff.
+- topic 154: index line padding past the 200-line MEMORY.md cutoff.
+- topic 155: index line padding past the 200-line MEMORY.md cutoff.
+- topic 156: index line padding past the 200-line MEMORY.md cutoff.
+- topic 157: index line padding past the 200-line MEMORY.md cutoff.
+- topic 158: index line padding past the 200-line MEMORY.md cutoff.
+- topic 159: index line padding past the 200-line MEMORY.md cutoff.
+- topic 160: index line padding past the 200-line MEMORY.md cutoff.
+- topic 161: index line padding past the 200-line MEMORY.md cutoff.
+- topic 162: index line padding past the 200-line MEMORY.md cutoff.
+- topic 163: index line padding past the 200-line MEMORY.md cutoff.
+- topic 164: index line padding past the 200-line MEMORY.md cutoff.
+- topic 165: index line padding past the 200-line MEMORY.md cutoff.
+- topic 166: index line padding past the 200-line MEMORY.md cutoff.
+- topic 167: index line padding past the 200-line MEMORY.md cutoff.
+- topic 168: index line padding past the 200-line MEMORY.md cutoff.
+- topic 169: index line padding past the 200-line MEMORY.md cutoff.
+- topic 170: index line padding past the 200-line MEMORY.md cutoff.
+- topic 171: index line padding past the 200-line MEMORY.md cutoff.
+- topic 172: index line padding past the 200-line MEMORY.md cutoff.
+- topic 173: index line padding past the 200-line MEMORY.md cutoff.
+- topic 174: index line padding past the 200-line MEMORY.md cutoff.
+- topic 175: index line padding past the 200-line MEMORY.md cutoff.
+- topic 176: index line padding past the 200-line MEMORY.md cutoff.
+- topic 177: index line padding past the 200-line MEMORY.md cutoff.
+- topic 178: index line padding past the 200-line MEMORY.md cutoff.
+- topic 179: index line padding past the 200-line MEMORY.md cutoff.
+- topic 180: index line padding past the 200-line MEMORY.md cutoff.
+- topic 181: index line padding past the 200-line MEMORY.md cutoff.
+- topic 182: index line padding past the 200-line MEMORY.md cutoff.
+- topic 183: index line padding past the 200-line MEMORY.md cutoff.
+- topic 184: index line padding past the 200-line MEMORY.md cutoff.
+- topic 185: index line padding past the 200-line MEMORY.md cutoff.
+- topic 186: index line padding past the 200-line MEMORY.md cutoff.
+- topic 187: index line padding past the 200-line MEMORY.md cutoff.
+- topic 188: index line padding past the 200-line MEMORY.md cutoff.
+- topic 189: index line padding past the 200-line MEMORY.md cutoff.
+- topic 190: index line padding past the 200-line MEMORY.md cutoff.
+- topic 191: index line padding past the 200-line MEMORY.md cutoff.
+- topic 192: index line padding past the 200-line MEMORY.md cutoff.
+- topic 193: index line padding past the 200-line MEMORY.md cutoff.
+- topic 194: index line padding past the 200-line MEMORY.md cutoff.
+- topic 195: index line padding past the 200-line MEMORY.md cutoff.
+- topic 196: index line padding past the 200-line MEMORY.md cutoff.
+- topic 197: index line padding past the 200-line MEMORY.md cutoff.
+- topic 198: index line padding past the 200-line MEMORY.md cutoff.
+- topic 199: index line padding past the 200-line MEMORY.md cutoff.
+- topic 200: index line padding past the 200-line MEMORY.md cutoff.
+- topic 201: index line padding past the 200-line MEMORY.md cutoff.
+- topic 202: index line padding past the 200-line MEMORY.md cutoff.
+- topic 203: index line padding past the 200-line MEMORY.md cutoff.
+- topic 204: index line padding past the 200-line MEMORY.md cutoff.
+- topic 205: index line padding past the 200-line MEMORY.md cutoff.

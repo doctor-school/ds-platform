@@ -119,6 +119,7 @@ function main() {
   }
 
   const selfCatches = [];
+  const written = [];
   let totalBytes = 0;
 
   for (const id of interactiveIds) {
@@ -191,26 +192,27 @@ function main() {
     if (out.length === 0) continue;
     const header = `# session ${id}\nrange: ${firstTs} → ${lastTs}\nbranches: ${[...branches].join(', ')}\n\n`;
     const body = header + out.join('\n') + '\n';
+    const bytes = Buffer.byteLength(body);
     fs.writeFileSync(path.join(TDIR, `${id}.md`), body);
-    totalBytes += Buffer.byteLength(body);
+    written.push({ id, bytes });
+    totalBytes += bytes;
   }
 
   fs.writeFileSync(path.join(OUT, 'self-catches.json'), JSON.stringify(selfCatches, null, 2));
 
-  const files = fs
-    .readdirSync(TDIR)
-    .filter((f) => f.endsWith('.md'))
-    .map((f) => ({ id: f.replace('.md', ''), bytes: fs.statSync(path.join(TDIR, f)).size }));
-
+  // Report only the transcripts THIS run produced — never `readdirSync(TDIR)`,
+  // which also counts `.md` files left by earlier (batch) runs and so reported a
+  // stale, inflated total in single-session mode (the /wrap case: it processes one
+  // session but the dir still held the whole batch, e.g. `transcripts: 75`).
   process.stdout.write(
     JSON.stringify(
       {
         mode: args.session ? 'single' : 'batch',
-        transcripts: files.length,
+        transcripts: written.length,
         totalTranscriptBytes: totalBytes,
         totalTranscriptMB: +(totalBytes / 1048576).toFixed(2),
         selfCatches: selfCatches.length,
-        biggest: files
+        biggest: written
           .sort((a, b) => b.bytes - a.bytes)
           .slice(0, 5)
           .map((f) => `${f.id} ${(f.bytes / 1024) | 0}KB`),

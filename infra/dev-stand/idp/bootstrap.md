@@ -371,3 +371,104 @@ machine user the PAT belongs to.
 
 The OTP-login legs (`requestEmailOtp` / `loginWith*Otp`) remain fail-closed seams
 (tracked separately); they are not exercised by the token-exchange spec.
+
+---
+
+## 6. Browsable admin Console (Login V2 UI, operator-only) — #174
+
+The Zitadel admin **Console** is browsable at `http://<HOST>:9080/ui/console`
+(reference recipe: `http://truenas.local:9080/ui/console`), logging in as
+`zitadel-admin@zitadel.<IDP_EXTERNAL_DOMAIN>`
+(`zitadel-admin@zitadel.truenas.local`) with `IDP_BOOTSTRAP_ADMIN_PASSWORD` from
+`.env.local`.
+
+> **Use the `truenas.local` hostname, not the static-IP fallback.** Caddy's site
+> address is host-matched to `${IDP_EXTERNAL_DOMAIN}` and Zitadel resolves the
+> instance by the same `ExternalDomain`, so the Console only routes via the
+> mDNS hostname (`truenas.local`) — the IP fallback used when mDNS fails (the
+> `.claude/rules/dev-stand.md` failure table) won't reach it. This is the **same
+> hostname the issuer already requires**; if mDNS is down, fix mDNS (or add a
+> hosts-file entry) rather than browsing by IP.
+
+> **Operator-only — NOT the product auth path.** This UI exists so an operator can
+> inspect/manage the instance in a browser. The api BFF stays **headless**
+> (Variant-B, §2): it never renders this UI and no `baseUri` is wired into the api
+> auth path — the BFF drives the `auth_requests` + token endpoints on the core
+> binary directly. The `baseUri` set below only steers the **interactive**
+> (browser) authorize hop, which the Console uses and the BFF does not.
+
+### Why three containers now serve one origin
+
+Zitadel v4 split the v1 console-embedded login into a **separate Next.js
+`zitadel-login` container**; the core binary no longer renders a login screen, so
+the Console's interactive login `404`s (`/ui/v2/login/... → Not Found`) without
+it. Single-origin serving is the crux — the browser must reach BOTH the core
+(`/ui/console`, `/oauth`, `/v2`, `/.well-known`, gRPC) AND the Login V2 UI
+(`/ui/v2/login`) under the one origin Zitadel advertises as its issuer. Zitadel
+core does **not** proxy to the login container, so `compose.core.yml` adds two
+services and moves core off the published port (the canonical Zitadel
+self-hosting "disabled-TLS" pattern):
+
+- **`idp`** (core) — now **in-network only** (`idp:8080`, `expose`, no published
+  port).
+- **`idp-login`** (`ghcr.io/zitadel/zitadel-login`, **pinned to the core version**,
+  `IDP_LOGIN_IMAGE`) — the Login V2 UI under `/ui/v2/login`. Reaches core as
+  `ZITADEL_API_URL=http://idp:8080`, pins `CUSTOM_REQUEST_HEADERS=Host:<external-domain>`
+  so core resolves the instance, and authenticates with the **existing
+  `ds-bootstrap` PAT** (the same machine user the provisioner uses — it already
+  has `IAM_LOGIN_CLIENT`, the role the login client needs; §3 step 5).
+- **`idp-proxy`** (Caddy, **pinned**, `idp/Caddyfile`) — publishes
+  `${IDP_PORT:-9080}` and routes `/ui/v2/login/*` → `idp-login:3000`, everything
+  else → `idp:8080` over **h2c** (core runs `ZITADEL_TLS_ENABLED=false`). Because
+  it fronts the same origin, **the issuer is unchanged** (`http://<HOST>:9080`) and
+  the headless BFF path is untouched.
+
+### The PAT mount — placed once, outside the synced stand dir
+
+The login container needs the `ds-bootstrap` PAT as a file. `pnpm dev:up`
+**wipes and replaces** the entire remote stand dir (`DEV_REMOTE_DIR`) from a
+tarball of git-tracked files on every sync, so the PAT must live **outside** that
+dir (a committed PAT is forbidden). Place it once on the **Docker-daemon host**
+(the TrueNAS box on the reference recipe) at the path `IDP_LOGIN_PAT_FILE` points
+to (default `/var/lib/ds-platform/idp-login-client.pat`):
+
+```bash
+# reference recipe — write the bootstrap PAT to the daemon-host path once:
+PAT=$(tr -d '\r\n' < ~/.ds-platform/idp-bootstrap-pat.txt)
+printf '%s' "$PAT" | ssh truenas \
+  'sudo mkdir -p /var/lib/ds-platform && \
+   sudo tee /var/lib/ds-platform/idp-login-client.pat >/dev/null && \
+   sudo chmod 0644 /var/lib/ds-platform/idp-login-client.pat'
+```
+
+Then set `IDP_LOGIN_PAT_FILE` in `.env.local`. If the file is absent the
+`idp-login` container fails its healthcheck loudly (fail-closed) — it never
+silently serves a broken login. On a host-only recipe this is a local path; the
+default sits outside any synced dir, so it survives `dev:up`.
+
+### `baseUri` is set idempotently by `provision.sh` (no console click-path)
+
+`provision.sh` step 4 sets the Login V2 instance feature with the **`baseUri`**
+(`${IDP_BASE_URL}/ui/v2/login`) on top of `required:true`, read-before-write so a
+re-run / `dev:up` converges with no duplicates. This is a **runtime API call** on
+the running instance — it does **not** re-init and does **not** drop the `zitadel`
+DB. No `IDP_BOOTSTRAP` / re-init is needed to make the Console browsable.
+
+```bash
+# already part of the normal provision (§3); baseUri rides along:
+ssh truenas 'cd ~/ds-platform-dev-stand/idp && \
+  IDP_BASE_URL=http://truenas.local:9080 ./provision.sh --pat-file /tmp/idp-pat.txt'
+# verify it stuck:
+curl -s -H "Authorization: Bearer <PAT>" \
+  http://truenas.local:9080/v2/features/instance | jq '.loginV2'
+#   -> { "required": true, "baseUri": "http://truenas.local:9080/ui/v2/login", ... }
+```
+
+### Verify the Console (browser) and that the BFF path survives
+
+- **Console:** open `http://truenas.local:9080/ui/console` → it redirects to
+  `/ui/v2/login/...` (the v2 UI now renders), log in as
+  `zitadel-admin@zitadel.truenas.local` → it lands in the Console.
+- **BFF unaffected:** re-run the headless token-exchange spec (§4) — EARS-8/9 stay
+  GREEN, proving the issuer/origin and the `auth_requests` path are untouched by
+  the proxy.

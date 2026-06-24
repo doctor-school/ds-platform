@@ -290,8 +290,15 @@ services:
     # Inert unless IDP_BOOTSTRAP is set.
     tmpfs:
       - /pat:uid=1000,gid=1000,mode=0700
-    ports:
-      - "${IDP_PORT:-9080}:8080"
+    # No published host port: the browser/issuer origin (${IDP_PORT}, default 9080)
+    # is fronted by the `idp-proxy` Caddy service below, which single-origin-routes
+    # /ui/v2/login/* to the `idp-login` container and everything else here over h2c.
+    # Core is reachable in-network as `idp:8080` (Caddy, idp-login, and the api over
+    # LAN all hit the SAME external origin so OIDC discovery / the issuer are
+    # byte-identical — see idp-proxy). Publishing core directly would bypass the
+    # /ui/v2/login route and leave the Console login broken (#174).
+    expose:
+      - "8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -303,6 +310,113 @@ services:
       # start-from-init runs DB migrations inline on a fresh database, so the
       # first boot needs a longer grace than the upstream init-container split.
       start_period: 60s
+
+  # --- idp-login — Zitadel Login V2 UI (Next.js), dev-operator convenience (#174) ─
+  # The browsable login UI for the admin Console. Zitadel v4 split the v1
+  # console-embedded login out into THIS separate Next.js container; the core
+  # binary no longer renders any login screen, so /ui/console's interactive login
+  # 404s without it (`/ui/v2/login/... -> Not Found`). This is OPERATOR-ONLY: the
+  # api BFF stays HEADLESS (Variant-B, no baseUri wired into the api auth path) —
+  # see idp/bootstrap.md §6. The image tag is PINNED to the running core version
+  # (v4.15.0) so UI and core never skew.
+  #
+  # It reaches core over the bridge as `idp:8080` (ZITADEL_API_URL) and serves
+  # under the /ui/v2/login base path so the single external origin is one app. It
+  # authenticates to core with the EXISTING `ds-bootstrap` machine user PAT (which
+  # provision.sh already grants IAM_LOGIN_CLIENT — the role the login client needs)
+  # mounted read-only from a remote-host path OUTSIDE the synced stand dir
+  # (IDP_LOGIN_PAT_FILE), because `dev:up` wipes+replaces the stand dir on every
+  # sync and a committed PAT is forbidden. CUSTOM_REQUEST_HEADERS pins the Host so
+  # core resolves the request to this instance's external domain (the canonical
+  # self-hosting requirement). If the PAT file is absent the container fails its
+  # healthcheck loudly (fail-closed) rather than silently serving a broken login.
+  idp-login:
+    image: ${IDP_LOGIN_IMAGE:-ghcr.io/zitadel/zitadel-login:v4.15.0}
+    restart: unless-stopped
+    environment:
+      ZITADEL_API_URL: http://idp:8080
+      NEXT_PUBLIC_BASE_PATH: /ui/v2/login
+      ZITADEL_SERVICE_USER_TOKEN_FILE: /pat/login-client.pat
+      # Core must resolve the request host to its ExternalDomain or it 404s
+      # "Instance not found"; the login container talks to core by service name,
+      # so override the Host header to the external domain (issuer host).
+      CUSTOM_REQUEST_HEADERS: Host:${IDP_EXTERNAL_DOMAIN:-localhost}
+    expose:
+      - "3000"
+    volumes:
+      # Remote-host absolute path to the gitignored ds-bootstrap PAT, placed once
+      # by the operator OUTSIDE the synced stand dir so `dev:up` never wipes it
+      # (see idp/bootstrap.md §6). Read-only.
+      - ${IDP_LOGIN_PAT_FILE:-/var/lib/ds-platform/idp-login-client.pat}:/pat/login-client.pat:ro
+    depends_on:
+      idp:
+        condition: service_healthy
+    healthcheck:
+      # The login app serves a health route under its base path. Node 22 in the
+      # image has global fetch (mirrors the sms-sink/unleash pattern — no curl).
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/ui/v2/login/healthy').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # --- idp-proxy — single-origin reverse proxy for Zitadel core + Login V2 (#174) ─
+  # The crux of #174: the browser must reach BOTH the core (/ui/console, /oauth,
+  # /v2, /.well-known, gRPC) AND the Login V2 UI (/ui/v2/login) under ONE external
+  # origin (${IDP_PORT}, default 9080). Zitadel core does not proxy to the login
+  # container itself, so this Caddy service path-routes the single origin exactly
+  # per the canonical Zitadel self-hosting pattern (disabled-TLS Caddyfile):
+  #   /ui/v2/login/*  -> idp-login:3000
+  #   everything else -> h2c://idp:8080   (h2c = HTTP/2 cleartext; core runs
+  #                                         ZITADEL_TLS_ENABLED=false, so it speaks
+  #                                         h2c — the right upstream scheme).
+  # It takes over the published 9080 the core used to bind, so the issuer / OIDC
+  # discovery origin is UNCHANGED (http://${IDP_EXTERNAL_DOMAIN}:${IDP_PORT}); the
+  # BFF's headless path is untouched at the origin level (#174 DoD). Image pinned.
+  idp-proxy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    environment:
+      IDP_EXTERNAL_DOMAIN: ${IDP_EXTERNAL_DOMAIN:-localhost}
+      IDP_PORT: ${IDP_PORT:-9080}
+    command:
+      - caddy
+      - run
+      - --config
+      - /etc/caddy/Caddyfile
+      - --adapter
+      - caddyfile
+    volumes:
+      - ./idp/Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "${IDP_PORT:-9080}:9080"
+    depends_on:
+      idp:
+        condition: service_healthy
+      idp-login:
+        condition: service_healthy
+    healthcheck:
+      # Caddy's admin endpoint (localhost:2019) confirms the proxy is up; wget is
+      # present in caddy:*-alpine (busybox).
+      test:
+        [
+          "CMD",
+          "wget",
+          "-qO-",
+          "http://localhost:2019/config/",
+          "-O",
+          "/dev/null",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # --- Unleash — self-hosted runtime feature-flag service + admin UI (#184) ---
   # Pulled forward from "deferred" (engineering-readiness design picked Unleash

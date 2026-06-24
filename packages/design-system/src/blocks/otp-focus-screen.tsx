@@ -33,11 +33,14 @@ import { OtpField } from "../primitives/fields/otp-field";
  * The masked destination is computed by the app (reuse `maskDestination` from this
  * package) and passed pre-masked — the block never sees the raw destination.
  *
- * Resend cooldown: the block owns a live countdown. It (re)starts whenever the
- * `cooldownSeconds` prop *value* changes — the app bumps it (e.g. `setCooldown(c =>
- * ({ s: 30, n: c.n + 1 }))`) on a successful resend; while counting down the resend
- * control is disabled and shows `resendCountdownLabel(remaining)`, then re-enables
- * and shows `resendLabel`. Pass `cooldownSeconds={0}` to start enabled.
+ * Resend cooldown: the block owns a live countdown. It (re)starts whenever EITHER
+ * the `cooldownSeconds` prop *value* changes OR the `resendNonce` counter is bumped.
+ * A real resend re-issues the SAME duration (e.g. 30s) so the value does not change
+ * — the app bumps `resendNonce` on each successful resend and the countdown restarts
+ * regardless. This lets a consumer restart the cooldown WITHOUT remounting the block
+ * by `key` (the #237 → #266 anti-pattern). While counting down the resend control is
+ * disabled and shows `resendCountdownLabel(remaining)`, then re-enables and shows
+ * `resendLabel`. Pass `cooldownSeconds={0}` to start enabled.
  */
 export function OtpFocusScreen<T extends FieldValues>({
   field,
@@ -52,6 +55,7 @@ export function OtpFocusScreen<T extends FieldValues>({
   resendCountdownLabel,
   changeMethodLabel,
   cooldownSeconds = 0,
+  resendNonce = 0,
   isSubmitting = false,
   onComplete,
   onSubmit,
@@ -92,9 +96,16 @@ export function OtpFocusScreen<T extends FieldValues>({
 
   /**
    * Resend cooldown in seconds. The countdown (re)starts whenever this VALUE
-   * changes; the app bumps it on a successful resend. `0` = resend enabled now.
+   * changes (or `resendNonce` is bumped). `0` = resend enabled now.
    */
   cooldownSeconds?: number;
+  /**
+   * Monotonic resend counter. Bump it on each successful resend to restart the
+   * countdown even when `cooldownSeconds` is unchanged (a resend re-issues the
+   * same duration) — so a consumer never has to remount the block by `key` to
+   * reset the cooldown (#266). Defaults to `0`.
+   */
+  resendNonce?: number;
   /** App-owned in-flight flag — disables submit + guards the auto-submit race. */
   isSubmitting?: boolean;
 
@@ -115,11 +126,13 @@ export function OtpFocusScreen<T extends FieldValues>({
   changeMethodTestId?: string;
 }) {
   // Live resend countdown, owned by the block. Re-seed whenever the app changes the
-  // cooldown value (a successful resend); `0` leaves resend immediately enabled.
+  // cooldown value OR bumps `resendNonce` (a successful resend that re-issues the
+  // same duration) — so the countdown restarts without a remount; `0` leaves resend
+  // immediately enabled.
   const [remaining, setRemaining] = React.useState(cooldownSeconds);
   React.useEffect(() => {
     setRemaining(cooldownSeconds);
-  }, [cooldownSeconds]);
+  }, [cooldownSeconds, resendNonce]);
   React.useEffect(() => {
     if (remaining <= 0) return;
     const id = setInterval(() => {

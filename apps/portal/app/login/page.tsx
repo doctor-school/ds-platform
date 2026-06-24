@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -210,9 +210,9 @@ function PasswordLogin() {
 }
 
 /**
- * Resend cooldown (#227). The `<OtpFocusScreen>` block re-seeds its live countdown
- * from `cooldownSeconds` on mount, so a successful resend re-keys the verify form to
- * restart the timer (and clears the now-stale code) — see `resendNonce` below.
+ * Resend cooldown (#227). The `<OtpFocusScreen>` block restarts its live countdown
+ * whenever `resendNonce` is bumped, so a successful resend just increments the nonce
+ * (no remount) — see `resendNonce` below.
  */
 const RESEND_COOLDOWN_SECONDS = 30;
 
@@ -226,10 +226,10 @@ function OtpLogin() {
   const [identifier, setIdentifier] = useState("");
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // #227: a successful resend bumps this nonce, which re-keys <OtpVerifyForm> so its
-  // <OtpFocusScreen> remounts and re-seeds a fresh `RESEND_COOLDOWN_SECONDS`
-  // countdown (the block reads `cooldownSeconds` on mount). The remount also clears
-  // the code the user may have typed against the now-superseded code.
+  // #266: a successful resend bumps this nonce, passed to <OtpVerifyForm> →
+  // <OtpFocusScreen>, which restarts its `RESEND_COOLDOWN_SECONDS` countdown on the
+  // change WITHOUT a remount (the old #237 `key={resendNonce}` remount hack is gone).
+  // <OtpVerifyForm> also clears the now-superseded typed code on the same signal.
   const [resendNonce, setResendNonce] = useState(0);
 
   // #192: the resolver tracks the ACTIVE channel — email channel requires a valid
@@ -271,9 +271,9 @@ function OtpLogin() {
     }
   }
 
-  // #227 resend: re-request the SAME identifier+channel code. On success re-key the
-  // verify form (fresh cooldown + cleared code); on failure surface the error
-  // WITHOUT a remount so the focus-screen keeps the partially-typed code.
+  // #227/#266 resend: re-request the SAME identifier+channel code. On success bump the
+  // nonce (the focus-screen restarts its cooldown + the verify form clears the stale
+  // code, both without a remount); on failure surface the error and leave the screen.
   async function onResend() {
     setError(null);
     try {
@@ -377,11 +377,11 @@ function OtpLogin() {
         </>
       ) : (
         <OtpVerifyForm
-          key={resendNonce}
           identifier={identifier}
           channel={channel}
           error={error}
           cooldownSeconds={RESEND_COOLDOWN_SECONDS}
+          resendNonce={resendNonce}
           onResend={onResend}
           onError={setError}
           onBack={() => {
@@ -412,15 +412,18 @@ const LOGIN_OTP_LENGTH = 8;
  * in as props (the BFF re-resolves them); the user only types the code.
  *
  * Error + resend are lifted to the parent <OtpLogin> (which owns the network call
- * and the resend cooldown re-key): `error` is shown in the focus-screen's slot,
+ * and the resend cooldown signal): `error` is shown in the focus-screen's slot,
  * `onResend` re-requests the code, `onError` reports a verify failure upward, and
- * `onBack` ("Изменить способ") returns to channel selection.
+ * `onBack` ("Изменить способ") returns to channel selection. `resendNonce` is bumped
+ * by the parent on a successful resend — it restarts the focus-screen cooldown and
+ * clears the now-stale code here, both WITHOUT a remount (#266).
  */
 function OtpVerifyForm({
   identifier,
   channel,
   error,
   cooldownSeconds,
+  resendNonce,
   onResend,
   onError,
   onBack,
@@ -429,6 +432,7 @@ function OtpVerifyForm({
   channel: OtpChannel;
   error: string | null;
   cooldownSeconds: number;
+  resendNonce: number;
   onResend: () => void;
   onError: (message: string) => void;
   onBack: () => void;
@@ -442,6 +446,20 @@ function OtpVerifyForm({
     resolver: useLocalizedResolver(OtpVerifySchema),
     defaultValues: { identifier, code: "", channel },
   });
+
+  // #266: on a resend (nonce bump) clear the now-superseded typed code — the
+  // behaviour the old `key={resendNonce}` remount gave incidentally, now explicit so
+  // the block no longer has to be remounted to reset. Skips the initial mount (the
+  // field already defaults to ""); `resetField` is keyed only on the nonce.
+  const isInitialResend = useRef(true);
+  useEffect(() => {
+    if (isInitialResend.current) {
+      isInitialResend.current = false;
+      return;
+    }
+    verifyForm.resetField("code");
+    // Keyed only on the resend signal — `verifyForm` is a stable useForm handle.
+  }, [resendNonce]);
 
   async function onVerify(values: OtpVerify) {
     try {
@@ -482,6 +500,7 @@ function OtpVerifyForm({
             resendCountdownLabel={(seconds) => t("resendIn", { seconds })}
             changeMethodLabel={t("changeMethod")}
             cooldownSeconds={cooldownSeconds}
+            resendNonce={resendNonce}
             isSubmitting={verifyForm.formState.isSubmitting}
             onComplete={onCodeComplete}
             onSubmit={submit}

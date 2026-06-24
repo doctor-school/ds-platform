@@ -1,5 +1,17 @@
 # @ds/design-system
 
+## 0.3.0
+
+### Minor Changes
+
+- [#295](https://github.com/doctor-school/ds-platform/pull/295) [`8645614`](https://github.com/doctor-school/ds-platform/commit/8645614d9fe5dc194a65b619cb65ae58641309e4) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(266): `OtpFocusScreen` gains a `resendNonce` prop that restarts the resend
+  cooldown without a remount. The block previously re-seeded its countdown only
+  when `cooldownSeconds` changed, so a resend re-issuing the same duration could
+  not restart it — the portal login worked around this by remounting the verify
+  form via `key={resendNonce}`. Consumers now bump `resendNonce` instead; the
+  portal login drops the remount hack and clears the stale code explicitly on the
+  same signal.
+
 ## 0.2.0
 
 ### Minor Changes

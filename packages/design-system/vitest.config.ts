@@ -8,7 +8,9 @@ import react from "@vitejs/plugin-react";
 // regression (#212) test and the new OtpFocusScreen tests run here against a jsdom
 // DOM. Scoped to the co-located test files under src; the Style-Dictionary `build`
 // task emits no JS into dist, so a plain src include is unambiguous.
-// `@vitejs/plugin-react` provides the JSX transform.
+// `@vitejs/plugin-react` provides the JSX transform. The shared convention (tier,
+// jsdom polyfills, and the live-stand caveat) is documented at
+// apps/docs/content/architecture/component-testing.md (#215).
 export default defineConfig({
   plugins: [react()],
   resolve: {

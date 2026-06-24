@@ -10,6 +10,10 @@ import react from "@vitejs/plugin-react";
  * to `*.test.tsx` co-located with the components under test. `@/*` mirrors the
  * tsconfig path alias; `@ds/design-system/*` resolves through the workspace
  * package's own `exports`, so no alias is needed for it.
+ *
+ * Convention (the sanctioned component-test tier + the shared jsdom polyfills +
+ * the "jsdom guards the JS contract only, not rendering" caveat) is documented at
+ * apps/docs/content/architecture/component-testing.md (#215).
  */
 export default defineConfig({
   plugins: [react()],

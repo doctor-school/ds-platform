@@ -1,0 +1,5 @@
+{
+  "title": "Architecture notes",
+  "description": "Cross-cutting engineering conventions that are not ADR-weight decisions — testing tiers, build/tooling patterns, shared infra.",
+  "icon": "Boxes"
+}

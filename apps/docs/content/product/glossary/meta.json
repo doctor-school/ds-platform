@@ -1,0 +1,5 @@
+{
+  "title": "Glossary",
+  "description": "Canonical domain terms (file-per-term, Keystatic-managed per ADR-0006 §6). Each file's name is the term's snake_case canonical id.",
+  "icon": "BookA"
+}

@@ -13,6 +13,14 @@ Per OQ-1 closed default: this skill carries the reviewer prompt inline. The `too
 
 The body below is the **subagent prompt** — the reviewer prompt. The lead agent passes this file's content as the system prompt plus a task-specific user message giving the PR number and branch.
 
+## Scope — when Mode-a is required (lead-facing gate)
+
+Decide deterministically, by what the PR's diff touches — never "by feel":
+
+- **Mode-a REQUIRED** — any PR that changes **runtime / product code** (any shipping source under `apps/**` or `packages/**`: `app/`, `lib/`, `components/`, `src/`, … — excluding `*.test.*` / `*.spec.*`), **or** changes logic in a build/lint guard whose output gates other PRs (`tools/lint/**`, CI workflows). Dispatch the reviewer before merge; the `VERDICT:` line is the artifact.
+- **May merge on green CI + the author's recorded verification, WITHOUT a Mode-a dispatch** — only when the PR is _exclusively_ one of: pure documentation (`apps/docs/**`, `*.md`); a generated-artifact / config **regeneration** with no hand-written logic; or a **test-only / dev-tooling** change that alters no runtime path and no CI gate.
+- **Mixed PR → the stricter side wins:** if a PR mixes exempt files with even one runtime/product-code change, the runtime change pulls the whole PR under the requirement. When unsure, dispatch — a review is cheaper than a missed regression. (A test that exports a runtime symbol it covers makes that PR runtime-touching — review it.)
+
 ---
 
 ## Subagent prompt — DS Platform PR Reviewer

@@ -107,7 +107,12 @@ Run the lifecycle tail from [`run-task-lifecycle`](../run-task-lifecycle/SKILL.m
    not move the Projects v2 column.
 3. **Re-sweep branches/PRs** — `gh pr list` + `git ls-remote --heads origin`;
    bot branches (`changeset-release/main`, `dependabot/*`, `codeql/*`) can appear
-   post-merge.
+   post-merge. Also prune **local** dispatch-agent cruft: `git worktree prune`, then
+   delete merged orphan `worktree-agent-*` refs — confirm each is an ancestor of
+   `main` first (`git merge-base --is-ancestor <ref> main`) then `git branch -d`.
+   These accumulate across sessions when subagent-dispatch teardown (memory
+   `feedback_subagent_dispatch_teardown`) is missed; sweeping them here keeps the
+   repo from carrying a growing pile of dangling refs.
 4. **Check for stack / dependency updates** — look for open Dependabot PRs, an
    open `changeset-release/main` "Version Packages" PR, and stale pins. If
    something needs attention and has no tracking Issue, **file one with every

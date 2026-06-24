@@ -1,0 +1,6 @@
+{
+  "number": 200,
+  "title": "feat(042): add the login handler",
+  "body": "Closes #300\n\nImplements EARS-1 of the auth spec.\n",
+  "labels": [{ "name": "feature:042-foo" }]
+}

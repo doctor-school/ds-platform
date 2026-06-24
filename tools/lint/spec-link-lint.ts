@@ -24,12 +24,19 @@
  * Non-PR runs and non-feature PRs → exit 0 with skip note.
  * Failures: stderr, exit 1. Success: stdout summary, exit 0.
  */
-import { execa } from "execa";
 import { access } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+import { ghViewJson } from "./lib/gh";
+
+// TEST SEAM: `LINT_FIXTURE_ROOT` points the spec-folder existence checks at a
+// fixture tree (the `gh` calls have their own `LINT_GH_FIXTURE_DIR` seam in
+// lib/gh.ts). Inert in production — when unset the root resolves to the repo
+// root exactly as before, so runtime behaviour is unchanged.
+const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
+  ? resolve(process.env.LINT_FIXTURE_ROOT)
+  : resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TAG = "[spec-link]";
 
 // GitHub auto-close keywords (case-insensitive). See:
@@ -82,35 +89,31 @@ async function exists(path: string): Promise<boolean> {
 }
 
 async function ghPR(prNumber: string): Promise<GhPR | null> {
-  try {
-    const { stdout } = await execa(
-      "gh",
-      ["pr", "view", prNumber, "--json", "number,title,body,labels"],
-      { cwd: REPO_ROOT },
-    );
-    return JSON.parse(stdout) as GhPR;
-  } catch (e) {
-    process.stderr.write(
-      `${TAG} gh pr view ${prNumber} failed: ${(e as Error).message.split("\n")[0]}\n`,
-    );
+  const res = await ghViewJson<GhPR>(
+    "pr",
+    prNumber,
+    "number,title,body,labels",
+    REPO_ROOT,
+  );
+  if (!res.ok) {
+    process.stderr.write(`${TAG} gh pr view ${prNumber} failed: ${res.error}\n`);
     return null;
   }
+  return res.data;
 }
 
 async function ghIssue(num: number): Promise<GhIssue | null> {
-  try {
-    const { stdout } = await execa(
-      "gh",
-      ["issue", "view", String(num), "--json", "number,title,milestone,body"],
-      { cwd: REPO_ROOT },
-    );
-    return JSON.parse(stdout) as GhIssue;
-  } catch (e) {
-    process.stderr.write(
-      `${TAG} gh issue view ${num} failed: ${(e as Error).message.split("\n")[0]}\n`,
-    );
+  const res = await ghViewJson<GhIssue>(
+    "issue",
+    num,
+    "number,title,milestone,body",
+    REPO_ROOT,
+  );
+  if (!res.ok) {
+    process.stderr.write(`${TAG} gh issue view ${num} failed: ${res.error}\n`);
     return null;
   }
+  return res.data;
 }
 
 function extractClosedIssues(body: string): number[] {

@@ -34,7 +34,7 @@
  *
  * Run: `pnpm lint:registry-research` (PR_NUMBER from the Actions context).
  */
-import { execa } from "execa";
+import { ghViewJson } from "./lib/gh";
 
 const TAG = "[registry-research]";
 
@@ -47,8 +47,13 @@ const UI_PATH_RE =
 // Non-UI files inside those trees that should NOT trip the gate on their own
 // (config, docs, tests, generated tokens). If a PR ONLY touches these, the
 // registry-research artifact is not required.
+// NOTE on `\.config\.[mc]?[tj]s$`: build-config files are not UI source. The
+// pattern matches every real config extension — `.config.{ts,js,mts,mjs,cts,cjs}`
+// — not just the bare `.ts`/`.js` an earlier `[tjm]s$` covered (which silently
+// failed to exempt `.config.mjs` / `.config.cjs`, tripping the guard on a
+// build-config-only change such as `style-dictionary.config.mjs`).
 const UI_PATH_EXEMPT_RE =
-  /(\.md$|\.mdx$|\.json$|\.css$|\.test\.[tj]sx?$|\.spec\.[tj]sx?$|\/__tests__\/|\.config\.[tjm]s$|\/styles\/tokens\.css$|allowed-tokens\.json$)/;
+  /(\.md$|\.mdx$|\.json$|\.css$|\.test\.[tj]sx?$|\.spec\.[tj]sx?$|\/__tests__\/|\.config\.[mc]?[tj]s$|\/styles\/tokens\.css$|allowed-tokens\.json$)/;
 
 // The artifact: a `registry-research:` marker line, or a `## Registry research`
 // section heading followed by its body. Either form is accepted.
@@ -91,21 +96,12 @@ function resolvePrNumber(): string {
 }
 
 async function ghPR(prNumber: string): Promise<GhPR | null> {
-  try {
-    const { stdout } = await execa("gh", [
-      "pr",
-      "view",
-      prNumber,
-      "--json",
-      "number,body,files",
-    ]);
-    return JSON.parse(stdout) as GhPR;
-  } catch (e) {
-    process.stderr.write(
-      `${TAG} gh pr view ${prNumber} failed: ${(e as Error).message.split("\n")[0]}\n`,
-    );
+  const res = await ghViewJson<GhPR>("pr", prNumber, "number,body,files");
+  if (!res.ok) {
+    process.stderr.write(`${TAG} gh pr view ${prNumber} failed: ${res.error}\n`);
     return null;
   }
+  return res.data;
 }
 
 function extractArtifact(body: string): string | null {

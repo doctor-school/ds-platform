@@ -1,0 +1,5 @@
+{
+  "number": 100,
+  "body": "## Summary\n\nAdd the primary button primitive.\n\nregistry-research: adopted Button from shadcn (official registry), restyled with our tokens.\n",
+  "files": [{ "path": "packages/design-system/src/primitives/button.tsx" }]
+}

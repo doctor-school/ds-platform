@@ -1,0 +1,6 @@
+{
+  "number": 303,
+  "title": "EARS-1: handler whose folder lacks a requirements file",
+  "milestone": { "title": "Auth foundations v1" },
+  "body": "Milestone valid; the only failure is the absent requirements file.\n"
+}

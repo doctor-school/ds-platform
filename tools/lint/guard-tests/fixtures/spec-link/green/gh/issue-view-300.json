@@ -1,0 +1,6 @@
+{
+  "number": 300,
+  "title": "EARS-1: login handler",
+  "milestone": { "title": "Auth foundations v1" },
+  "body": "Spec: apps/docs/content/specs/features/042-foo\n"
+}

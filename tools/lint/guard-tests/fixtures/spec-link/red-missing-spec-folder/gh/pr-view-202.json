@@ -1,0 +1,6 @@
+{
+  "number": 202,
+  "title": "feat(099): handler against a non-existent spec",
+  "body": "Closes #302\n",
+  "labels": [{ "name": "feature:099-missing" }]
+}

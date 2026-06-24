@@ -123,7 +123,15 @@ function themeVar(path, roles) {
       if (rest[0] === "weight") return `--font-weight-${rest.slice(1).join("-")}`;
       return null;
     case "space":
-      return `--spacing-${rest.join("-")}`;
+      // The `space.*` primitives surface ONLY as `:root` `--space-N` vars and as
+      // the derived `spacingScalePx` (rhythmguard). They are deliberately NOT
+      // mapped onto a Tailwind `@theme` namespace: under Tailwind v4 the numeric
+      // spacing utilities (`p-4`, `gap-2`, `h-10`) derive from the single
+      // `--spacing` multiplier via `calc()`, so per-step `--spacing-N` `@theme`
+      // keys drive no utility — emitting them only advertised an inert mapping a
+      // reader would misread as "`p-4` → `--spacing-4`" (it does not). Dropped in
+      // #243. See the spacing-scale note in build() for the SoT derivation.
+      return null;
     case "shadow":
       return `--shadow-${rest.join("-")}`;
     case "breakpoint":
@@ -223,15 +231,14 @@ async function build() {
   writeFileSync(join(STYLES_DIR, "tokens.css"), css, "utf8");
 
   // --- effective spacing scale (px) — derived, for the rhythmguard gate ----
-  // DECISION-DEBT NOTE (#234, reconciling #233/#235): the `@theme inline` block
-  // emits NAMED spacing keys `--spacing-0…16`. Under Tailwind v4 those are INERT
-  // for the *numeric* spacing utilities (`p-4`, `gap-2`), which derive from the
-  // single `--spacing` multiplier, NOT from per-step keys. So the lint scale
-  // cannot be "the token names"; it must be the *effective px values* the
-  // `space.*` tokens resolve to. We compute them here from the resolved token
-  // VALUES (rem→px at 16px root) so the guardrail's allowed scale and the tokens
-  // share one generated source. (If/when the inert `--spacing-N` keys are
-  // dropped/renamed, this derivation is unaffected — it reads `space.*`.)
+  // The `space.*` tokens are the single source of truth for spacing: they emit
+  // as `:root` `--space-N` vars, and the rhythmguard's allowed scale is derived
+  // here from their resolved VALUES (rem→px at 16px root), so styling and linting
+  // share one generated source. We do NOT emit per-step `--spacing-N` `@theme`
+  // keys (dropped in #243): under Tailwind v4 the numeric spacing utilities
+  // (`p-4`, `gap-2`) derive from the single `--spacing` multiplier via `calc()`,
+  // so named per-step keys are inert for them — the lint scale therefore reads
+  // the effective px values, never the token names.
   const REM_PX = 16;
   const spacingScalePx = Array.from(
     new Set(

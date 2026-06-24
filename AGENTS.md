@@ -71,7 +71,7 @@ In the first user-facing reply, state: kind, active artifact (Issue #N / spec pa
 
 ### 3.5 Bootstrap
 
-Run `pnpm bootstrap` (alias `tsx tools/agent-bootstrap.ts`) for git/Issue/PR/spec state. Claude Code does this via SessionStart hook (`.claude/settings.json`) automatically.
+Run `pnpm bootstrap` (alias `tsx tools/agent-bootstrap.ts`) for git/Issue/PR/spec state. Claude Code does this via SessionStart hook (`.claude/settings.json`) automatically. Its `ready/working/awaiting` rollup is a **derived view, not ground truth** — read the actual open board (`gh issue list --state open` + Projects v2) and triage every item by readiness; never frame an open backlog as "nothing to do" from a `ready: none` rollup or a handoff "queue clear". **After a slice ships, drain the matured debt/ops backlog before the next product feature** (memory `feedback_clear_debt_before_features`).
 
 ### 3.6 Permission-mode disclosure
 

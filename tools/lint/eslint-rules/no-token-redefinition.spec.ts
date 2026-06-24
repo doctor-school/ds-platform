@@ -10,8 +10,10 @@ import rule from "./no-token-redefinition.mjs";
  * The rule forbids re-defining a design-token CSS variable in app code, deriving
  * the protected set from the generated `allowed-tokens.json` (the single source
  * of truth — #233/#234). The fixtures below use `--color-primary`, `--space-4`,
- * `--spacing-4`, and `--radius-md`, all present in that generated enumeration; a
- * non-token custom property (`--my-local`) and token *reads* must pass.
+ * `--text-base`, and `--radius-md` — a `:root` var (`--space-4`) and `@theme`
+ * namespace keys (`--text-base`, `--radius-md`), all present in that generated
+ * enumeration; a non-token custom property (`--my-local`) and token *reads* must
+ * pass.
  */
 const ruleTester = new RuleTester({
   languageOptions: {
@@ -48,9 +50,9 @@ describe("no-token-redefinition", () => {
           code: `const s = { "--space-4": "13px" };`,
           errors: [{ messageId: "tokenRedefinition" }],
         },
-        // The Tailwind `@theme` spacing key form.
+        // A Tailwind `@theme` namespace key form (font-size scale).
         {
-          code: `const s = { "--spacing-4": "13px" };`,
+          code: `const s = { "--text-base": "13px" };`,
           errors: [{ messageId: "tokenRedefinition" }],
         },
         // setProperty on a CSSStyleDeclaration.

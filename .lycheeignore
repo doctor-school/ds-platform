@@ -21,3 +21,8 @@
 # design spec). The page exists and is content-addressed; verified
 # manually. Same false-positive class as the nestjs-zod entry above.
 ^https://www\.npmjs\.com/package/@stoplight/spectral-owasp-ruleset($|/.*$)
+
+# Lint-guard test fixtures deliberately carry placeholder/broken markdown links
+# (e.g. a MEMORY.md fixture mimicking the auto-memory index). They are test data,
+# not docs — exclude the whole fixture tree from the link check. See #293.
+tools/lint/guard-tests/fixtures/

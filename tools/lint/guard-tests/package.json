@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Fixtures-based exit-code harness for the tools/lint/*.ts AI-discipline guards (#286). Each spec spawns the REAL guard via tsx with LINT_FIXTURE_ROOT pointed at a green/red fixture tree and asserts the guard's exit code (0 pass / 1 fail). Runs in CI via `turbo run test` (the `unit` job) — no new CI job.",
+  "description": "Fixtures-based exit-code harness for the tools/lint/*.ts AI-discipline guards (#286, extended #293). Each spec spawns the REAL guard via tsx and asserts its exit code (0 pass / 1 fail) through injectable seams — LINT_FIXTURE_ROOT (FS scan), LINT_GH_FIXTURE_DIR (canned gh JSON), LINT_MEMORY_FILE (auto-memory). Runs in CI via `turbo run test` (the `unit` job) — no new CI job. See README.md.",
   "scripts": {
     "test": "vitest run"
   },

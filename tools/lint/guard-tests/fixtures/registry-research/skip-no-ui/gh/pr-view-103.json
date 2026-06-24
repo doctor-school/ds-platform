@@ -1,0 +1,5 @@
+{
+  "number": 103,
+  "body": "chore: tweak a lint tool, no UI involved.\n",
+  "files": [{ "path": "tools/lint/foo.ts" }, { "path": "README.md" }]
+}

@@ -1,0 +1,6 @@
+{
+  "number": 203,
+  "title": "feat(043): handler whose spec folder lacks requirements",
+  "body": "Closes #303\n",
+  "labels": [{ "name": "feature:043-bar" }]
+}

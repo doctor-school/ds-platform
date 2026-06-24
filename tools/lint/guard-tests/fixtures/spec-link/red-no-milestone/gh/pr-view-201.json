@@ -1,0 +1,6 @@
+{
+  "number": 201,
+  "title": "feat(042): add the logout handler",
+  "body": "Closes #301\n",
+  "labels": [{ "name": "feature:042-foo" }]
+}

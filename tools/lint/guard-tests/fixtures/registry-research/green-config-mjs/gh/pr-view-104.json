@@ -1,0 +1,5 @@
+{
+  "number": 104,
+  "body": "chore: tune the Style Dictionary token build. Build-config only, no UI source, no registry-research artifact.\n",
+  "files": [{ "path": "packages/design-system/style-dictionary.config.mjs" }]
+}

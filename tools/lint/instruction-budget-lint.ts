@@ -33,7 +33,12 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+// TEST SEAM: `LINT_FIXTURE_ROOT` points the always-on repo-file budget checks
+// (AGENTS.md, CLAUDE.md, .claude/rules/*.md) at a fixture tree. Inert in
+// production — when unset the root resolves to the repo root exactly as before.
+const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
+  ? resolve(process.env.LINT_FIXTURE_ROOT)
+  : resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TAG = "[instruction-budget]";
 
 const MAX_LINES = 200;
@@ -52,6 +57,13 @@ interface Target {
 // working-dir path with separators replaced by '-'. We resolve it best-effort;
 // if it isn't found, the file is treated as skipped (CI has no auto-memory dir).
 function memoryPath(): string | null {
+  // TEST SEAM: `LINT_MEMORY_FILE` points the MEMORY.md budget check at a fixture
+  // file directly, bypassing the HOME + project-slug derivation (the slug is the
+  // absolute REPO_ROOT mangled, which is machine-specific and so cannot be
+  // pre-laid-out as a fixture). Inert in production — when unset the real
+  // auto-memory path is derived exactly as before.
+  const override = process.env.LINT_MEMORY_FILE;
+  if (override) return existsSync(override) ? resolve(override) : null;
   const home = process.env.HOME ?? process.env.USERPROFILE;
   if (!home) return null;
   // Project slug used by Claude Code, e.g. C--Users-sidor-repos-ds-platform

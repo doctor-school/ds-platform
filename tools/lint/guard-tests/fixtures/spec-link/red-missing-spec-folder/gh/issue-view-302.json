@@ -1,0 +1,6 @@
+{
+  "number": 302,
+  "title": "EARS-1: handler with no spec folder",
+  "milestone": { "title": "Auth foundations v1" },
+  "body": "Milestone is valid here so the only failure is the missing spec folder.\n"
+}

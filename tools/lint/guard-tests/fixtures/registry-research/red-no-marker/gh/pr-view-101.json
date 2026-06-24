@@ -1,0 +1,5 @@
+{
+  "number": 101,
+  "body": "## Summary\n\nHand-rolled a login form. No registry-research artifact in the body.\n",
+  "files": [{ "path": "apps/portal/src/app/login/page.tsx" }]
+}

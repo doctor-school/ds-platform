@@ -1,0 +1,6 @@
+{
+  "number": 204,
+  "title": "chore: a non-feature PR",
+  "body": "No feature:* label, so the spec-link rule does not apply.\n",
+  "labels": [{ "name": "chore" }]
+}

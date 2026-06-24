@@ -1,0 +1,5 @@
+{
+  "number": 102,
+  "body": "## Summary\n\nTouched a UI surface but left the artifact blank.\n\nregistry-research: tbd\n",
+  "files": [{ "path": "apps/portal/src/app/login/page.tsx" }]
+}

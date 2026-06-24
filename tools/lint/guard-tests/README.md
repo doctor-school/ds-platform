@@ -41,12 +41,25 @@ valid) so the asserted message maps to one branch.
 
 ## Coverage
 
-Covered (FS / gh / memory seams): `interaction-states`, `no-stub`,
+Covered here (FS / gh / memory seams): `interaction-states`, `no-stub`,
 `asset-format`, `registry-research`, `spec-link`, `instruction-budget`.
 
-**Not here:** `endpoint-authz` boots the real Nest `AppModule`, so its harness
-lives in `apps/api` (it needs `@nestjs/*` and runs in the `api-e2e` job) — tracked
-on #293. The `[stub]` guards (`tdd-signal`, `events`, `prior-decisions`,
-`module-readme`, glossary pair, `spec-status`) and the permanent-WARN
-`ears-test` have no fail branch to assert yet; each gets coverage when it grows
-real behaviour, on its own implementation Issue (#293 scope note).
+**`endpoint-authz` is covered in `apps/api`, not here.** It boots Nest (needs
+`@nestjs/*`, runs in the `api-e2e` job), so the Nest-boot strategy lives where
+the dependency does:
+
+- `apps/api/src/authz/authz.discovery.spec.ts` — `collectAuthzRows()` over a
+  fixture Nest module: green (well-classified routes, no violation), red-missing
+  (unclassified handler → violation), red-invalid (present-but-broken `@Authz`
+  on the validity path).
+- `apps/api/src/authz/authz.matrix.spec.ts` — the pure `validateRow()` /
+  `renderMatrix()` / `assembleEndpoint()` logic (every §6.2 / §3.1 branch).
+
+Together these assert the gate's scan + validity behaviour against a real boot;
+the thin `endpoint-authz-lint.ts` CLI shell (argv / drift / `--generate`) is I/O
+glue over that tested logic.
+
+**Stub guards:** `tdd-signal`, `events`, `prior-decisions`, `module-readme`, the
+glossary pair, and `spec-status` are `[stub]` (exit 0, no checks), and
+`ears-test` is permanent-WARN — no fail branch to assert yet. Each gets coverage
+when it grows real behaviour, on its own implementation Issue.

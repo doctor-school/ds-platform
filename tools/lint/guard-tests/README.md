@@ -44,6 +44,15 @@ valid) so the asserted message maps to one branch.
 Covered here (FS / gh / memory seams): `interaction-states`, `no-stub`,
 `asset-format`, `registry-research`, `spec-link`, `instruction-budget`.
 
+**Also here (direct import, not a lint guard):**
+`agent-bootstrap-recommend.spec.ts` unit-covers the pure `recommend()` of
+[`tools/agent-bootstrap.ts`](../../agent-bootstrap.ts) (#306) — its only
+side-effect-free seam (the script guards `main()` behind an entry-point check so
+the import fires no `gh`/`git` subprocess). It rides this package's `vitest run`
+because `tools/` has no test workspace of its own; the assertion that an empty
+ready/working/awaiting bucket set with open issues yields a _triage_ nudge (never
+"clean slate") is the deterministic backstop the #306 retro asked for.
+
 **`endpoint-authz` is covered in `apps/api`, not here.** It boots Nest (needs
 `@nestjs/*`, runs in the `api-e2e` job), so the Nest-boot strategy lives where
 the dependency does:

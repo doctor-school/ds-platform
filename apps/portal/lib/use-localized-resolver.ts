@@ -17,12 +17,16 @@ import type { z } from "zod";
  * issues (`code` + shape, NOT the English message text) into the `errors.validation.*`
  * RU catalog. `<FormMessage>` then renders the localized string with no English left.
  *
- * Decision-debt (documented seam, follow-up not in #177): localization keys off the
- * zod issue *code/shape*, not the English message, so it is robust to copy edits in
- * `@ds/schemas` — but a brand-new validation rule there needs a matching key added
- * here. If `@ds/schemas` later adopts a first-class i18n message strategy (zod v4
- * global locale / message keys), this resolver collapses to a thin pass-through. The
- * canonical RU error copy authored here is what #175 (error-display rule) consumes.
+ * Decision-debt #188 (seam kept, hardened against drift — option (c)): localization
+ * keys off the zod issue *code/shape*, not the English message, so it is robust to
+ * copy edits in `@ds/schemas`. The seam stays (localizing `@ds/schemas` itself would
+ * be wrong — `apps/api` consumes it too, and a zod v4 schema-level message would
+ * outrank this map and re-leak English, see #200). The residual risk — a brand-new
+ * `@ds/schemas`/field rule degrading silently to the generic `fallback` — is now
+ * caught by `use-localized-resolver.test.ts`, which drives every portal-consumed
+ * schema's real validation rules through `translateIssue` and asserts none resolves
+ * to `fallback`. Adding a rule that this map doesn't handle fails that guard.
+ * The canonical RU error copy authored here is what #175 (error-display rule) consumes.
  */
 export function useLocalizedResolver<TFieldValues extends FieldValues, Out>(
   schema: z.ZodType<Out, TFieldValues>,
@@ -39,7 +43,7 @@ export function useLocalizedResolver<TFieldValues extends FieldValues, Out>(
 }
 
 /** A zod v4 issue, narrowed to the fields we branch on. */
-interface ZodIssueLike {
+export interface ZodIssueLike {
   code: string;
   minimum?: number | bigint;
   maximum?: number | bigint;
@@ -49,14 +53,15 @@ interface ZodIssueLike {
   message?: string;
 }
 
-type Translator = (key: string) => string;
+export type Translator = (key: string) => string;
 
 /**
  * Map a structured zod issue to a RU catalog string. Keys off the issue's `code`
  * and shape (length bound, format, refine identity), never the English text, so
- * copy edits upstream don't silently fall back to English.
+ * copy edits upstream don't silently fall back to English. Exported for the
+ * drift-guard test (#188); production code reaches it via the resolver above.
  */
-function translateIssue(issue: ZodIssueLike, t: Translator): string {
+export function translateIssue(issue: ZodIssueLike, t: Translator): string {
   const field = issue.path?.[issue.path.length - 1];
 
   switch (issue.code) {

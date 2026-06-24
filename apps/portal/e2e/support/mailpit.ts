@@ -33,14 +33,15 @@ function extractCode(msg: { Text?: string; HTML?: string }): string | null {
  *
  * `subject` disambiguates the TWO Zitadel mails a single address receives in the
  * email-OTP journey, which Zitadel sends < 1 s apart so the time cutoff alone
- * cannot separate them (proven live, #131): registration sends a `Verify email`
+ * cannot separate them (proven live, #131): registration sends a verify-email
  * mail (a 6-char alphanumeric code, e.g. `L3VMNK`) and the login-OTP request
- * sends a `Verify OTP` mail (an 8-digit code, e.g. `47787462`). Because the
+ * sends an email-OTP mail (an 8-digit code, e.g. `47787462`). Because the
  * registration mail can land INSIDE the OTP window, the OTP-login step must
- * select by subject (`Verify OTP`), not by timestamp — otherwise it reads the
- * stale registration code and login fails with a wrong-code. The default (no
- * `subject`) preserves the timestamp-only behaviour the registration-verify
- * callers rely on.
+ * select by subject, not by timestamp — otherwise it reads the stale
+ * registration code and login fails with a wrong-code. Subjects are `ru`-locked
+ * since #177 and live in `notification-subjects` (`NOTIFICATION_SUBJECTS`) — the
+ * caller passes the right one (#305). The default (no `subject`) preserves the
+ * timestamp-only behaviour the single-mail callers rely on.
  */
 export async function fetchOtpCode(
   email: string,

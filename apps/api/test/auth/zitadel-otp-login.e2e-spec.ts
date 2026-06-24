@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ZitadelIdpClient } from "../../src/auth/idp/zitadel.idp.js";
+import { NOTIFICATION_SUBJECTS } from "../support/notification-subjects.js";
 
 /**
  * EARS-6/7 real-adapter integration spec (design §3, §6, §11 — passwordless
@@ -79,12 +80,15 @@ function extractCode(msg: { Text?: string; HTML?: string }): string | null {
  * mail so we only read the login-OTP code.
  *
  * `subject` disambiguates the TWO mails a single address receives here — the
- * registration `Verify email` (a 6-char alphanumeric, e.g. `JS5CIC`) and the
- * login `Verify OTP` (an 8-digit code) — exactly as the portal `support/mailpit`
- * helper does (#131). The `afterIso` cutoff ALONE is not enough: `afterIso` is
+ * registration verify-email (a 6-char alphanumeric, e.g. `JS5CIC`) and the
+ * login email-OTP (an 8-digit code) — exactly as the portal `support/mailpit`
+ * helper does (#131). The subjects are `ru`-locked since #177 and centralized in
+ * `support/notification-subjects` (`NOTIFICATION_SUBJECTS`), the single SoT-traced
+ * home — a hardcoded English literal would match nothing live (#305). The
+ * `afterIso` cutoff ALONE is not enough: `afterIso` is
  * the test host's `new Date()` while Mailpit's `Created` is the dev-stand's
  * server clock, and any host↔stand skew (the TrueNAS box is not 24/7, so NTP
- * drifts) can pull the stale `Verify email` mail into the `Created >= after`
+ * drifts) can pull the stale verify-email mail into the `Created >= after`
  * window — the login step then reads the registration code and never verifies
  * (proven live, #170 triage). Selecting by subject makes the read deterministic
  * regardless of clock skew. The default (no `subject`) preserves timestamp-only
@@ -265,7 +269,11 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     await sleep(3000);
     const verifySentAt = new Date().toISOString();
     await client.requestEmailVerification(created.sub);
-    const verifyCode = await fetchOtpCode(email, verifySentAt, "Verify email");
+    const verifyCode = await fetchOtpCode(
+      email,
+      verifySentAt,
+      NOTIFICATION_SUBJECTS.verifyEmail,
+    );
     if (verifyCode) {
       await client.verifyEmail(created.sub, verifyCode);
     }
@@ -279,7 +287,11 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
       const sentAt = new Date().toISOString();
       await expect(client.requestEmailOtp(email)).resolves.toBeUndefined();
 
-      const code = await fetchOtpCode(email, sentAt, "Verify OTP");
+      const code = await fetchOtpCode(
+        email,
+        sentAt,
+        NOTIFICATION_SUBJECTS.verifyEmailOtp,
+      );
       expect(
         code,
         "login OTP code should be delivered to Mailpit",

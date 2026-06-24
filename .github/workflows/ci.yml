@@ -17,7 +17,7 @@ jobs:
   setup:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: pnpm/action-setup@v6
@@ -39,7 +39,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -50,7 +50,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -65,7 +65,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -95,7 +95,7 @@ jobs:
     env:
       DATABASE_URL: postgres://ds:ds@localhost:5432/ds_test
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -106,7 +106,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -124,7 +124,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -138,7 +138,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -155,7 +155,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -170,7 +170,7 @@ jobs:
     if: false # Enabled by G8: apps/api (NestJS) + openapi.snapshot.json land then
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - run: echo "api-drift placeholder"
 
   db-drift:
@@ -178,14 +178,14 @@ jobs:
     if: false # Enabled by G6: packages/db Drizzle schema lands then
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - run: echo "db-drift placeholder"
 
   events-drift:
     needs: setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -197,14 +197,14 @@ jobs:
     if: false # Enabled by G6: pnpm generate:all + generators (drizzle/openapi-typescript/etc.) land then
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - run: echo "generated-artifacts placeholder"
 
   markdown-links:
     needs: setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Link check
@@ -218,7 +218,7 @@ jobs:
     continue-on-error: true # WARN v1
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -230,7 +230,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -244,7 +244,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -265,7 +265,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -287,7 +287,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -313,7 +313,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -328,7 +328,7 @@ jobs:
     continue-on-error: true # WARN v1 (promote to BLOCK once stable)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -344,7 +344,7 @@ jobs:
     continue-on-error: true # WARN v1 (promote to BLOCK once stable)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -360,7 +360,7 @@ jobs:
     continue-on-error: true # WARN v1 (promote to BLOCK once stable)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -372,7 +372,7 @@ jobs:
     continue-on-error: true # WARN v1
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -395,7 +395,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -411,7 +411,7 @@ jobs:
     continue-on-error: true # WARN v1
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -423,7 +423,7 @@ jobs:
     continue-on-error: true # WARN v1
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
@@ -435,7 +435,7 @@ jobs:
     continue-on-error: true # WARN v1
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }

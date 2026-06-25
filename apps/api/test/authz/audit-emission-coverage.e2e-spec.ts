@@ -109,6 +109,14 @@ const HIGH_STAKES_AUDIT_COVERAGE: Record<string, Coverage> = {
     coveredBy:
       "audit-ledger.e2e: EARS-18 email verification appends one auth.account.verified row",
   },
+  "POST /v1/auth/verify/resend": {
+    // #319 (EARS-25): a resend re-issues the otp_email code ONLY for an existing,
+    // unverified registrant → one auth.otp.sent row; the no-op paths (unknown /
+    // already-verified) emit nothing, so the ledger is not an existence oracle.
+    emits: ["OtpSent"],
+    coveredBy:
+      "verify.e2e (EARS-25): an existing+unverified resend appends exactly one auth.otp.sent row; no-op paths append none",
+  },
 };
 
 describe.skipIf(!process.env.DATABASE_URL)(

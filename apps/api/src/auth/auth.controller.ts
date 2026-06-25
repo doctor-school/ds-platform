@@ -20,6 +20,7 @@ import type {
   RefreshResponse,
   RegisterResponse,
   SessionClaims,
+  VerifyResendResponse,
   VerifyResponse,
   ZitadelWebhookResponse,
 } from "@ds/schemas";
@@ -40,6 +41,7 @@ import {
   PasswordResetRequestDto,
   RegisterRequestDto,
   VerifyRequestDto,
+  VerifyResendRequestDto,
   ZitadelWebhookDto,
 } from "./auth.dto.js";
 import { WEBHOOK_SECRET_HEADER } from "./auth.tokens.js";
@@ -318,6 +320,36 @@ export class AuthController {
   })
   verify(@Body() dto: VerifyRequestDto): Promise<VerifyResponse> {
     return this.auth.verify(dto);
+  }
+
+  /**
+   * EARS-25: resend the registration email verification code (#319). Public
+   * (unauthenticated entry point — the existence-agnostic `/verify` screen,
+   * EARS-24, calls it without the held password). The decorators mirror the other
+   * abuse-prone unauthenticated message-spending surfaces (`password/reset`):
+   * `@RateLimited` (EARS-13), `@TimingEqualized` (EARS-16's ≤50 ms budget), and
+   * `@BotProtected("verify-resend")` (EARS-17; the guard no-ops until a provider
+   * is configured). The body is the same `resend_requested` acknowledgement
+   * whether or not the identifier exists or is already verified — a code is
+   * re-issued only for an existing, unverified registrant, but the response,
+   * status, and timing disclose nothing (enumeration-resistant, EARS-16).
+   */
+  @Post("verify/resend")
+  @Public()
+  @RateLimited()
+  @TimingEqualized()
+  @BotProtected("verify-resend")
+  @HttpCode(200)
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "high-stakes",
+    tests: ["EARS-25", "EARS-16"],
+  })
+  resendVerification(
+    @Body() dto: VerifyResendRequestDto,
+  ): Promise<VerifyResendResponse> {
+    return this.auth.resendEmailVerification(dto.identifier);
   }
 
   /**

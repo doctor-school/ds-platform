@@ -19,6 +19,7 @@ import type {
   RegisterRequest,
   RegisterResponse,
   VerifyRequest,
+  VerifyResendResponse,
   VerifyResponse,
   ZitadelWebhook,
   ZitadelWebhookResponse,
@@ -541,6 +542,38 @@ export class AuthService {
     });
 
     return { status: "verified" };
+  }
+
+  /**
+   * EARS-25: resend the registration email verification code, enumeration-safely.
+   * The existence-agnostic `/verify` screen (EARS-24) needs a way to re-send the
+   * code without the held password (re-`register` is the EARS-23 path and needs
+   * it). Delegates to the IdP port's enumeration-safe
+   * {@link IdpClient.resendEmailVerification} — keyed by the identifier, resolving
+   * → `sub` internally and re-issuing the `otp_email` code ONLY for an existing,
+   * UNVERIFIED registrant (an unknown identifier or an already-verified one is a
+   * silent no-op). The port never throws or branches on existence, so the response
+   * (`resend_requested`), status, and timing are identical on every path
+   * (EARS-16; the ≤50 ms budget is the F6 `@TimingEqualized` concern). It creates
+   * no `users`/consent row and appends the `otp.sent` ledger row (EARS-18) ONLY
+   * when a code was actually issued (the port returns `true`) — the no-op paths
+   * write nothing, so the ledger is not itself an existence oracle.
+   */
+  async resendEmailVerification(
+    identifier: string,
+  ): Promise<VerifyResendResponse> {
+    const issued = await this.idp.resendEmailVerification(identifier);
+    // EARS-18: `auth.otp.sent` (identifier masked, channel email) — written ONLY
+    // when a real code was re-issued. An unknown / already-verified identifier
+    // issued nothing, so no row exists for it: the ledger discloses no existence.
+    if (issued) {
+      await this.audit.record({
+        type: "OtpSent",
+        identifier,
+        channel: "email",
+      });
+    }
+    return { status: "resend_requested" };
   }
 
   /**

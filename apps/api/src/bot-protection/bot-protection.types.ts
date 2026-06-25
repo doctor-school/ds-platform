@@ -23,7 +23,12 @@ export type BotProtectionAction =
   // EARS-17 (F6 #90): the passwordless OTP-request surface. It is a pre-session
   // message-spending endpoint (resolves the #129 decision-debt: SMS has the
   // EARS-14 budget, but email-OTP had no abuse gate) — gated like register/reset.
-  | "otp-request";
+  | "otp-request"
+  // EARS-17 / EARS-25 (#319): the registration verification-code resend surface.
+  // Another pre-session message-spending endpoint (it re-issues the `otp_email`
+  // code for an unverified registrant) — an abuse-prone unauthenticated path
+  // gated like register / reset / otp-request.
+  | "verify-resend";
 
 /**
  * Outcome of a verification. `ok` is the only value a call site branches on;

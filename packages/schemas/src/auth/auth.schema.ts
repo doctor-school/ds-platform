@@ -162,6 +162,35 @@ export const VerifyResponseSchema = z.strictObject({
 export type VerifyResponse = z.infer<typeof VerifyResponseSchema>;
 
 /**
+ * Resend the registration email verification code (EARS-25). The existence-
+ * agnostic `/verify` screen (EARS-24) needs a way to re-send the code without the
+ * held password (re-`register` is the EARS-23 path and needs that password). A
+ * single `identifier` box (the email — registration is email-primary, EARS-2) is
+ * the loose contract, like {@link PasswordResetRequestSchema}: Zitadel stays the
+ * credential authority and resolves the identifier (design §2), so the BFF does
+ * not branch on its shape. `captchaToken` is the bot-protection widget token read
+ * by the guard (EARS-17; resend is an abuse-prone unauthenticated surface);
+ * optional here because the guard no-ops when the provider is disabled (the
+ * dev-stand default).
+ */
+export const VerifyResendRequestSchema = z.object({
+  identifier: z.string().min(1),
+  captchaToken: z.string().optional(),
+});
+export type VerifyResendRequest = z.infer<typeof VerifyResendRequestSchema>;
+
+/**
+ * Resend response (EARS-25). Deliberately identical whether or not the identifier
+ * exists or is already verified — a code is re-issued only for an existing,
+ * unverified registrant, but the response discloses nothing (enumeration-
+ * resistant, EARS-16). Always `resend_requested`.
+ */
+export const VerifyResendResponseSchema = z.strictObject({
+  status: z.literal("resend_requested"),
+});
+export type VerifyResendResponse = z.infer<typeof VerifyResendResponseSchema>;
+
+/**
  * Login request (EARS-5). A single `identifier` box (email or phone) + password
  * — the user types one credential and Zitadel resolves it (the IdP owns the
  * credential, design §2), so the BFF does not branch on the identifier shape the

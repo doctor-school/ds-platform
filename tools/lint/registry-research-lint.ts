@@ -52,8 +52,13 @@ const UI_PATH_RE =
 // — not just the bare `.ts`/`.js` an earlier `[tjm]s$` covered (which silently
 // failed to exempt `.config.mjs` / `.config.cjs`, tripping the guard on a
 // build-config-only change such as `style-dictionary.config.mjs`).
+// NOTE on `(^|\/)e2e\/`: the Playwright E2E tree (`apps/<app>/e2e/**`, including
+// its `support/` helpers like `e2e/support/mailpit.ts`) is test code, not UI
+// source — the same as `*.spec.ts` / `__tests__/`. The path-segment anchor
+// matches an `e2e/` directory anywhere in the relative path, but NOT a file or
+// dir merely *named* like `*e2e*` inside `src/` (#309).
 const UI_PATH_EXEMPT_RE =
-  /(\.md$|\.mdx$|\.json$|\.css$|\.test\.[tj]sx?$|\.spec\.[tj]sx?$|\/__tests__\/|\.config\.[mc]?[tj]s$|\/styles\/tokens\.css$|allowed-tokens\.json$)/;
+  /(\.md$|\.mdx$|\.json$|\.css$|\.test\.[tj]sx?$|\.spec\.[tj]sx?$|\/__tests__\/|(^|\/)e2e\/|\.config\.[mc]?[tj]s$|\/styles\/tokens\.css$|allowed-tokens\.json$)/;
 
 // The artifact: a `registry-research:` marker line, or a `## Registry research`
 // section heading followed by its body. Either form is accepted.

@@ -3,13 +3,7 @@
 import type { ControllerRenderProps, FieldValues } from "react-hook-form";
 
 import { Input } from "../input";
-import {
-  FormControl,
-  FormDescription,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "../form";
+import { FormControl, FormItem, FormLabel, FormMessage } from "../form";
 
 /**
  * `<PasswordField>` (#197) — the semantic password primitive. `type="password"` is
@@ -68,10 +62,14 @@ export function PasswordField<T extends FieldValues>({
           value={field.value ?? ""}
         />
       </FormControl>
-      {withPolicy && policyHint ? (
-        <FormDescription>{policyHint}</FormDescription>
-      ) : null}
-      <FormMessage />
+      {/* Single no-reflow slot (ADR-0013 §7): the policy hint is the FormMessage's
+          helper `children` (muted by default), swapped IN PLACE by the destructive
+          validation error — one element, one reserved line, one id. Rendering a
+          separate <FormDescription> here would duplicate `formDescriptionId` and
+          stack an extra blank reserved line (defects #1/#7). `purpose="current"`
+          (login, no policy) passes no children → the slot reserves the line silently
+          and shows only the error. */}
+      <FormMessage>{withPolicy && policyHint ? policyHint : undefined}</FormMessage>
     </FormItem>
   );
 }

@@ -25,6 +25,7 @@ import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 import { useResendCooldown } from "@/lib/use-resend-cooldown";
 
 import { Button } from "@ds/design-system/button";
+import { Link as DsLink } from "@ds/design-system/link";
 import {
   AuthCard,
   maskDestination,
@@ -122,16 +123,16 @@ export default function ResetPage() {
               })
         }
         footer={
-          <Link href="/login" className="underline">
-            {t("backToSignIn")}
-          </Link>
+          <DsLink asChild>
+            <Link href="/login">{t("backToSignIn")}</Link>
+          </DsLink>
         }
       >
         {stage === "request" ? (
           <Form {...requestForm}>
             <form
               onSubmit={requestForm.handleSubmit(onRequest)}
-              className="space-y-4"
+              className="space-y-5"
               noValidate
             >
               {/* #196 fix: the reset identifier is the same union box as
@@ -275,7 +276,7 @@ function ResetCompleteForm({
     <Form {...completeForm}>
       <form
         onSubmit={completeForm.handleSubmit(onComplete)}
-        className="space-y-4"
+        className="space-y-5"
         noValidate
       >
         {/* Slotted 6-char alphanumeric code (no auto-submit here — the complete step

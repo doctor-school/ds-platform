@@ -32,6 +32,7 @@ import {
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
+import { Link as DsLink } from "@ds/design-system/link";
 import {
   AuthCard,
   OtpFocusScreen,
@@ -75,12 +76,12 @@ export default function LoginPage() {
         description={t("description")}
         footer={
           <>
-            <Link href="/register" className="underline">
-              {t("createAccount")}
-            </Link>
-            <Link href="/reset" className="underline">
-              {t("forgotPassword")}
-            </Link>
+            <DsLink asChild>
+              <Link href="/register">{t("createAccount")}</Link>
+            </DsLink>
+            <DsLink asChild>
+              <Link href="/reset">{t("forgotPassword")}</Link>
+            </DsLink>
           </>
         }
       >
@@ -156,7 +157,7 @@ function PasswordLogin() {
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className="space-y-4"
+        className="space-y-5"
         noValidate
         aria-label={t("passwordFormLabel")}
         data-testid="password-login-form"
@@ -328,7 +329,7 @@ function OtpLogin() {
           <Form {...requestForm}>
             <form
               onSubmit={requestForm.handleSubmit(onRequest)}
-              className="space-y-4"
+              className="space-y-5"
               noValidate
             >
               {/* The OTP request box is channel-specific: the email channel is a pure

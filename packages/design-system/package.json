@@ -11,6 +11,7 @@
     "./allowed-tokens.json": "./src/styles/allowed-tokens.json",
     "./lib/utils": "./src/lib/utils.ts",
     "./button": "./src/primitives/button.tsx",
+    "./link": "./src/primitives/link.tsx",
     "./input": "./src/primitives/input.tsx",
     "./label": "./src/primitives/label.tsx",
     "./card": "./src/primitives/card.tsx",

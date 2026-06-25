@@ -213,7 +213,7 @@ function VerifyCard() {
             {t("newAccountHeading")}
           </h2>
           <Form {...form}>
-            <form onSubmit={submit} className="space-y-4" noValidate>
+            <form onSubmit={submit} className="space-y-5" noValidate>
               <FormField
                 control={form.control}
                 name="code"

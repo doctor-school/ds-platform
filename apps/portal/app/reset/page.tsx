@@ -207,6 +207,13 @@ function ResetCompleteForm({
   const tc = useTranslations("common");
   const te = useTranslations("errors");
   const [error, setError] = useState<string | null>(null);
+  // The resend re-hits `POST /v1/auth/password/reset`, which is
+  // `@BotProtected("password-reset")` (EARS-17) — so the resend needs its own
+  // captcha token (the request step's token lives in the parent and is not
+  // carried here). Renders nothing when no provider is configured (dev default).
+  const [resendCaptchaToken, setResendCaptchaToken] = useState<string | null>(
+    null,
+  );
 
   // #200: resolve the complete step from the portal `ResetCompleteFormSchema` (field
   // primitives), NOT `PasswordResetCompleteRequestSchema`. The request schema's
@@ -228,7 +235,10 @@ function ResetCompleteForm({
   // restarts the shared cooldown timer + clears the now-stale typed code.
   const { resendNonce, onResend } = useResendCooldown({
     resend: async () => {
-      await authClient.requestPasswordReset({ identifier });
+      await authClient.requestPasswordReset({
+        identifier,
+        ...(resendCaptchaToken ? { captchaToken: resendCaptchaToken } : {}),
+      });
     },
     onError: (err) =>
       setError(authErrorMessage(err, te, te("resetResendFailed"))),
@@ -308,6 +318,9 @@ function ResetCompleteForm({
           {t("setNewPassword")}
         </Button>
       </form>
+      {/* EARS-17 bot-protection for the resend (renders nothing when no provider is
+          configured — the dev default). */}
+      <BotProtectionField onToken={setResendCaptchaToken} />
       {/* #267: focus-polish footer — «начать заново» (change the identifier, back to
           the request step) on the left, resend-with-cooldown (real
           `requestPasswordReset`) on the right. Mirrors the focus-screen's

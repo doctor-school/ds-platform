@@ -14,6 +14,7 @@ import {
 } from "@ds/schemas";
 
 import { AuthShell } from "@/components/auth-shell";
+import { BotProtectionField } from "@/components/bot-protection";
 import { OtpField } from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
@@ -98,6 +99,11 @@ function VerifyCard() {
   const params = useSearchParams();
   const email = params.get("email") ?? undefined;
   const [error, setError] = useState<string | null>(null);
+  // Resend is an abuse-prone unauthenticated surface (EARS-17), so the EARS-25
+  // endpoint is `@BotProtected("verify-resend")`. The widget token rides as
+  // `captchaToken`; when no provider is configured (the dev default)
+  // `<BotProtectionField>` renders nothing and the guard short-circuits to ok.
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   const form = useForm<VerifyRequest>({
     resolver: useLocalizedResolver(VerifyRequestSchema),
@@ -113,7 +119,10 @@ function VerifyCard() {
   // existence-agnostic, so resend never reveals whether the account exists.
   const { resendNonce, onResend } = useResendCooldown({
     resend: async () => {
-      await authClient.resendVerification({ identifier: email ?? "" });
+      await authClient.resendVerification({
+        identifier: email ?? "",
+        ...(captchaToken ? { captchaToken } : {}),
+      });
     },
     onError: (err) =>
       setError(authErrorMessage(err, te, te("verifyResendFailed"))),
@@ -240,19 +249,24 @@ function VerifyCard() {
               empty request. The countdown reuses the SAME timer the focus-screen
               block runs. */}
           {email ? (
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                variant="link"
-                size="sm"
-                disabled={resendDisabled}
-                onClick={() => void onResend()}
-                data-testid="verify-resend"
-              >
-                {resendDisabled
-                  ? t("resendIn", { seconds: remaining })
-                  : t("resend")}
-              </Button>
+            <div className="space-y-2">
+              {/* EARS-17 bot-protection for the resend (renders nothing when no
+                  provider is configured — the dev default). */}
+              <BotProtectionField onToken={setCaptchaToken} />
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  disabled={resendDisabled}
+                  onClick={() => void onResend()}
+                  data-testid="verify-resend"
+                >
+                  {resendDisabled
+                    ? t("resendIn", { seconds: remaining })
+                    : t("resend")}
+                </Button>
+              </div>
             </div>
           ) : null}
         </section>

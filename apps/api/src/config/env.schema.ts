@@ -61,6 +61,23 @@ export const ApiEnvSchema = z.looseObject({
   // surface is never opened by default.
   IDP_WEBHOOK_SECRET: z.string().optional(),
 
+  // Reconciliation sweep period (EARS-19, design §11 "Reconciliation depth",
+  // #119). The Zitadel Action webhook is the primary, authoritative sync
+  // trigger; this periodic sweep is the eventual-consistency BACKSTOP that
+  // closes a webhook-miss divergence by upserting the mirror + re-asserting the
+  // `doctor_guest` grant for every Zitadel user. `idp.listUsers()` is a full
+  // enumeration, so the default is deliberately conservative (15 min) — a
+  // miss-recovery backstop, not a real-time mirror. Set to `0` to DISABLE the
+  // periodic sweep (e.g. when an external scheduler or only the manual trigger
+  // drives it); the unit a scheduler/manual-trigger calls is the same
+  // `ReconcileService.sweep()`. The interval is read from config here, never a
+  // hardcoded constant in the scheduler.
+  RECONCILE_SWEEP_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(900_000),
+
   // Server-side BFF session store (design §3, ADR-0001 §6: refresh stored
   // server-side in Redis). Bound to the Redis adapter when set; with no
   // REDIS_URL (the shared CI / dev-stand-without-redis default) the in-memory

@@ -1,0 +1,5 @@
+{
+  "title": "Operations",
+  "description": "Runbooks for operating the platform's live surfaces — auth/IdP sync, secret rotation, scheduled jobs, and their failure modes. Roles, not names.",
+  "icon": "Wrench"
+}

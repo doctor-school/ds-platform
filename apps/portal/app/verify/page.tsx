@@ -261,6 +261,9 @@ function VerifyCard() {
                   disabled={resendDisabled}
                   onClick={() => void onResend()}
                   data-testid="verify-resend"
+                  // `tabular-nums` — fixed-width digits so the countdown label does
+                  // not jitter as the seconds tick down (#227/#267 owner finding).
+                  className="tabular-nums"
                 >
                   {resendDisabled
                     ? t("resendIn", { seconds: remaining })

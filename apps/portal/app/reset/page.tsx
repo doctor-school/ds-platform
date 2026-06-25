@@ -318,36 +318,43 @@ function ResetCompleteForm({
           {t("setNewPassword")}
         </Button>
       </form>
-      {/* EARS-17 bot-protection for the resend (renders nothing when no provider is
-          configured — the dev default). */}
-      <BotProtectionField onToken={setResendCaptchaToken} />
-      {/* #267: focus-polish footer — «начать заново» (change the identifier, back to
-          the request step) on the left, resend-with-cooldown (real
-          `requestPasswordReset`) on the right. Mirrors the focus-screen's
-          change-method/resend pairing, kept inline because the reset step submits the
-          code together with a new password. */}
-      <div className="flex items-center justify-between gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onRestart}
-          data-testid="reset-restart"
-        >
-          {t("startOver")}
-        </Button>
-        <Button
-          type="button"
-          variant="link"
-          size="sm"
-          disabled={resendDisabled}
-          onClick={() => void onResend()}
-          data-testid="reset-resend"
-        >
-          {resendDisabled
-            ? t("resendIn", { seconds: remaining })
-            : t("resend")}
-        </Button>
+      {/* #267: focus-polish footer — separated from the password field with a top
+          border + spacing so «Начать заново» is no longer jammed against the input
+          (owner finding). «Начать заново» (change the identifier, back to the
+          request step) on the left, resend-with-cooldown (real
+          `requestPasswordReset`) on the right; mirrors the focus-screen's
+          change-method/resend pairing, kept inline because the reset step submits
+          the code together with a new password. */}
+      <div className="mt-6 space-y-3 border-t pt-4">
+        {/* EARS-17 bot-protection for the resend (renders nothing when no provider
+            is configured — the dev default). */}
+        <BotProtectionField onToken={setResendCaptchaToken} />
+        <div className="flex items-center justify-between gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onRestart}
+            data-testid="reset-restart"
+          >
+            {t("startOver")}
+          </Button>
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            disabled={resendDisabled}
+            onClick={() => void onResend()}
+            data-testid="reset-resend"
+            // `tabular-nums` — fixed-width digits so the countdown does not jitter
+            // (#227/#267 owner finding).
+            className="tabular-nums"
+          >
+            {resendDisabled
+              ? t("resendIn", { seconds: remaining })
+              : t("resend")}
+          </Button>
+        </div>
       </div>
     </Form>
   );

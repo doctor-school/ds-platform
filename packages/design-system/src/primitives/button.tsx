@@ -19,8 +19,13 @@ const buttonVariants = cva(
           "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 active:bg-destructive/80",
         outline:
           "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground active:bg-accent/80",
+        // A bordered tonal secondary (#227/#267 owner finding): the borderless
+        // light fill read as "disabled" against the card. A resting border gives
+        // it the same clickable weight as `outline`, the tonal fill keeps it
+        // distinct, and the brand-ring hover + darker active make the interaction
+        // unmistakable. Token-only (`border-input` / `secondary` / `ring`).
         secondary:
-          "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80 active:bg-secondary/70",
+          "border border-input bg-secondary text-secondary-foreground shadow-sm hover:border-ring hover:bg-secondary/70 active:bg-secondary/60",
         ghost:
           "hover:bg-accent hover:text-accent-foreground active:bg-accent/80",
         link: "text-primary underline-offset-4 hover:underline active:text-primary/80",

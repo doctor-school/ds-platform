@@ -185,6 +185,11 @@ export function OtpFocusScreen<T extends FieldValues>({
           disabled={resendDisabled}
           onClick={onResend}
           data-testid={resendTestId}
+          // `tabular-nums` so the countdown digits are fixed-width — the label no
+          // longer jitters as the remaining-seconds digit changes (#227/#267 owner
+          // finding). `text-right` keeps it anchored at the row edge while the text
+          // length varies between the countdown and the resend label.
+          className="text-right tabular-nums"
         >
           {resendDisabled ? resendCountdownLabel(remaining) : resendLabel}
         </Button>

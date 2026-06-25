@@ -75,7 +75,15 @@ const FormItem = React.forwardRef<HTMLDivElement, React.ComponentProps<"div">>(
     const id = React.useId();
     return (
       <FormItemContext.Provider value={{ id }}>
-        <div ref={ref} className={cn("space-y-2", className)} {...props} />
+        {/* `gap-2.5` (10px), not the old `space-y-2` (8px): the control's
+            `focus-visible:ring-2 ring-offset-2` extends ~4px above the input, so an
+            8px label→control gap left the ring visually touching the label. 10px
+            clears it with air to spare (#227/#267 owner finding). */}
+        <div
+          ref={ref}
+          className={cn("flex flex-col gap-2.5", className)}
+          {...props}
+        />
       </FormItemContext.Provider>
     );
   },
@@ -141,15 +149,20 @@ const FormMessage = React.forwardRef<
   const { error, formMessageId } = useFormField();
   const body = error ? String(error?.message ?? "") : children;
 
-  if (!body) {
-    return null;
-  }
-
+  // Always render the slot — reserve one line of height so the field group does
+  // not grow/jump when a validation message shows or hides (#227/#267 owner
+  // finding: forms reflowed on error). `min-h-5` (20px) ≈ one `text-sm`
+  // line-height; empty + `aria-hidden` keeps the placeholder out of the a11y tree
+  // and screen-reader output until there is a real message.
   return (
     <p
       ref={ref}
       id={formMessageId}
-      className={cn("text-sm font-medium text-destructive", className)}
+      className={cn(
+        "min-h-5 text-sm font-medium text-destructive",
+        className,
+      )}
+      aria-hidden={body ? undefined : true}
       {...props}
     >
       {body}

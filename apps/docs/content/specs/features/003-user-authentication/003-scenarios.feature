@@ -63,6 +63,18 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And it offers prominent Sign in and Reset password actions
     And the screen never branches on whether the email was already registered
 
+  @EARS-25 @EARS-16 @happy
+  Scenario: Resending the registration verification code is enumeration-resistant
+    # The /verify screen lets a visitor re-request the email code without revealing
+    # whether the identifier exists or is already verified. A code is re-issued only
+    # for an existing, unverified registrant; the response stays identical otherwise.
+    Given a visitor on the existence-agnostic /verify screen requests the verification code be re-sent
+    When the request reaches the BFF for any identifier
+    Then the response is indistinguishable in status, body, and timing from the unknown or already-verified case
+    And a Zitadel otp_email code is re-issued only if the identifier is an existing, unverified registrant
+    And an otp.sent audit_ledger row is appended only when a code is actually issued
+    And the resend is subject to the EARS-13 rate limits and writes no users or consent row
+
   @EARS-2 @EARS-16 @failure
   Scenario: Phone-only registration is not offered and never 500s
     # Zitadel cannot create a login-capable human without an email (GH #202);

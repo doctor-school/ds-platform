@@ -52,14 +52,15 @@ the consuming app's CSS even though they live outside the app tree.
 
 ## Component set (003 auth forms)
 
-| Export                     | Purpose                                                                                           |
-| -------------------------- | ------------------------------------------------------------------------------------------------- |
-| `Button` (`./button`)      | `cva` variants — primary / outline / ghost / destructive / link                                   |
-| `Input` (`./input`)        | Text/email/password field                                                                         |
-| `Label` (`./label`)        | Radix label primitive                                                                             |
-| `Card` (`./card`)          | `Card` + `Header`/`Title`/`Description`/`Content`/`Footer` — the auth-form shell                  |
-| `Form` (`./form`)          | RHF binding — `Form`/`FormField`/`FormItem`/`FormLabel`/`FormControl`/`FormMessage` (ADR-0004 §9) |
-| `InputOTP` (`./input-otp`) | One-time-code field for email-OTP / SMS-OTP (EARS-6/7)                                            |
+| Export                     | Purpose                                                                                                                                                  |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Button` (`./button`)      | `cva` variants — primary / outline / ghost / destructive / link                                                                                          |
+| `Link` (`./link`)          | Nav/footer link — `interactiveBase` ring + `link` state row; `standalone` (no resting underline) / `inline` variants, `asChild` wraps `next/link` (#324) |
+| `Input` (`./input`)        | Text/email/password field                                                                                                                                |
+| `Label` (`./label`)        | Radix label primitive                                                                                                                                    |
+| `Card` (`./card`)          | `Card` + `Header`/`Title`/`Description`/`Content`/`Footer` — the auth-form shell                                                                         |
+| `Form` (`./form`)          | RHF binding — `Form`/`FormField`/`FormItem`/`FormLabel`/`FormControl`/`FormMessage` (ADR-0004 §9)                                                        |
+| `InputOTP` (`./input-otp`) | One-time-code field for email-OTP / SMS-OTP (EARS-6/7)                                                                                                   |
 
 Forms follow the ADR-0004 §9 pattern: **RHF + `@hookform/resolvers/zod` + shadcn
 `<Form>`**, with the Zod schema imported from the SSOT (`@ds/schemas`, once the
@@ -99,15 +100,15 @@ citations in ADR-0013 §7 → _Form layout & validation contract_). **Token-only
 no arbitrary `[...]` values** — every class below resolves to an existing scale
 token (the §5 / `#269` arbitrary-value guard must stay green).
 
-| Concern | Value | Notes |
-| --- | --- | --- |
-| Label ↔ control gap | `space-y-1.5` (6 px) | `FormItem` inner gap — label belongs to its control as one unit |
-| Field-group spacing | `space-y-5` (20 px) | set on the `<form>` / fields wrapper, **not** the `FormItem` |
-| Field height | `h-9` | `Input` / single-line controls (matches `Button` default) |
-| Message slot | `min-h-5` one-line slot | `text-sm` `leading-5` = one 20 px line; **always present on a validating field** |
-| Helper (resting) | `text-sm text-muted-foreground` | shown by default inside the slot |
-| Error (swap-in) | `text-sm font-medium text-destructive` | replaces the helper **in place** — same slot, no height change |
-| No helper + no validation | render **no slot** | field stacks on the `space-y-5` rhythm; never a blank reserved line |
+| Concern                   | Value                                  | Notes                                                                                                                                                                                                                                                      |
+| ------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Label ↔ control gap       | `flex flex-col gap-2.5` (10 px)        | `FormItem` inner gap — label belongs to its control as one unit; `2.5` not `1.5` so the control's `interactiveBase` `focus-visible:ring-2 ring-offset-2` (~4 px above the input) does not touch the label on focus (ring-clearance, #227/#267 live-proven) |
+| Field-group spacing       | `space-y-2` (8 px, additive)           | set on the `<form>` / fields wrapper, **not** the `FormItem`; **small** — the reserved message slot already adds ~20 px of separation, so a big gap on top over-spaces (round-1 `space-y-5` = ~50 px, live-proven too airy #227/#267). Net ~38 px/field    |
+| Field height              | `h-9`                                  | `Input` / single-line controls (matches `Button` default)                                                                                                                                                                                                  |
+| Message slot              | `min-h-5` one-line slot                | `text-sm` `leading-5` = one 20 px line; **always present on a validating field**                                                                                                                                                                           |
+| Helper (resting)          | `text-sm text-muted-foreground`        | shown by default inside the slot                                                                                                                                                                                                                           |
+| Error (swap-in)           | `text-sm font-medium text-destructive` | replaces the helper **in place** — same slot, no height change                                                                                                                                                                                             |
+| No helper + no validation | render **no slot**                     | field stacks on the `space-y-2` rhythm; never a blank reserved line                                                                                                                                                                                        |
 
 **The no-reflow slot.** `FormMessage` must **not** `return null` when empty (that
 is the reflow source). Instead the field renders one persistent slot wrapper at
@@ -119,32 +120,32 @@ plain field is not pushed apart by an always-blank line (defect #1) — the slot
 present **only where a field can show a message** (defect #7).
 
 ```
-FormItem            → space-y-1.5            (label ↔ control, tight)
+FormItem            → flex flex-col gap-2.5  (label ↔ control, tight + ring-clearing)
   FormLabel
   FormControl        → Input h-9
   message slot       → min-h-5               (helper by default; error swaps in place)
-<form> / fields      → space-y-5             (between fields, loose)
+<form> / fields      → space-y-2             (small additive; slot carries most separation)
 ```
 
 ### Clickable state matrix (the values for `#324`)
 
-| Kind | Resting | Hover | Active | Disabled |
-| --- | --- | --- | --- | --- |
-| `Button` default | `bg-primary-action text-primary-foreground shadow` | `hover:bg-primary-hover` | `active:bg-primary-pressed` | `disabled:opacity-50 disabled:pointer-events-none` + L1 `not-allowed` |
-| `Button` secondary | `bg-secondary text-secondary-foreground` **`border border-input`** `shadow-sm` | `hover:bg-secondary/80` | `active:bg-secondary/70` | same |
-| `Button` outline | `border border-input bg-background shadow-sm` | `hover:bg-accent hover:text-accent-foreground` | `active:bg-accent/80` | same |
-| `Button` ghost | — | `hover:bg-accent hover:text-accent-foreground` | `active:bg-accent/80` | same |
-| `Link` / `link` | `text-primary` (no underline) | `hover:underline underline-offset-4` | `active:text-primary/80` | `disabled:opacity-50` + L1 `not-allowed` |
-| `TabsTrigger` | inactive `text-foreground/60` **`border border-transparent`** `px-3 py-1` | `data-[state=inactive]:hover:bg-background/50 data-[state=inactive]:hover:text-foreground` | — | `disabled:opacity-50` |
-| `TabsTrigger` active | `data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow` | — | — | — |
+| Kind                 | Resting                                                                                            | Hover                                                                                      | Active                          | Disabled                                                              |
+| -------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------- | --------------------------------------------------------------------- |
+| `Button` default     | `bg-primary-action text-primary-foreground shadow`                                                 | `hover:bg-primary-hover`                                                                   | `active:bg-primary-pressed`     | `disabled:opacity-50 disabled:pointer-events-none` + L1 `not-allowed` |
+| `Button` secondary   | `bg-secondary text-secondary-foreground` **`border border-input`** `shadow-sm`                     | `hover:border-ring hover:bg-secondary/70`                                                  | `active:bg-secondary/60`        | same                                                                  |
+| `Button` outline     | `border border-input bg-background shadow-sm`                                                      | `hover:bg-accent hover:text-accent-foreground`                                             | `active:bg-accent/80`           | same                                                                  |
+| `Button` ghost       | —                                                                                                  | `hover:bg-accent hover:text-accent-foreground`                                             | `active:bg-accent/80`           | same                                                                  |
+| `Link` / `link`      | `text-primary-action` (blue.700, AA on white; no underline)                                        | `hover:underline underline-offset-4`                                                       | `active:text-primary-action/80` | `disabled:opacity-50` + L1 `not-allowed`                              |
+| `TabsTrigger`        | inactive `text-foreground/60` **`border border-transparent`** `px-3 py-1`                          | `data-[state=inactive]:hover:bg-background/50 data-[state=inactive]:hover:text-foreground` | —                               | `disabled:opacity-50`                                                 |
+| `TabsTrigger` active | `data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow` | —                                                                                          | —                               | —                                                                     |
 
 - **Disabled vs secondary (#2):** secondary is told apart from disabled by a
   **`border border-input` + pointer cursor + live hover**, never by fill depth.
   Disabled is the **combination** `opacity-50` + L1 `cursor: not-allowed` +
-  `pointer-events-none` — dimmed *and* inert *and* not-allowed cursor.
+  `pointer-events-none` — dimmed _and_ inert _and_ not-allowed cursor.
 - **Link (#3):** the new `Link` primitive composes `interactiveBase` (focus ring)
-  + `text-primary hover:underline underline-offset-4 active:text-primary/80`; no
-  resting underline on standalone nav links, resting underline on in-body links.
+  - `text-primary-action hover:underline underline-offset-4 active:text-primary-action/80`; no
+    resting underline on standalone nav links, resting underline on in-body links.
 - **Tab inset (#4):** every `TabsTrigger` carries `border border-transparent` so
   the active background+shadow does not shift neighbours, with `px-3 py-1` inside
   the list so an inactive hover reads as an inset chip, not a flush block.

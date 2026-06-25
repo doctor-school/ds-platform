@@ -5,6 +5,7 @@ export { interactiveBase } from "./primitives/interactive-base";
 
 // ── Primitives (owned shadcn components) ──────────────────────────────────────
 export { Button, buttonVariants, type ButtonProps } from "./primitives/button";
+export { Link, linkVariants, type LinkProps } from "./primitives/link";
 export { Input } from "./primitives/input";
 export { Label } from "./primitives/label";
 export {

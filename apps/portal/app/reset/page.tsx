@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -22,15 +22,30 @@ import {
   ResetIdentifierFormSchema,
 } from "@/lib/identifier-validation";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
+import { useResendCooldown } from "@/lib/use-resend-cooldown";
 
 import { Button } from "@ds/design-system/button";
-import { AuthCard, maskDestination } from "@ds/design-system/blocks";
+import { Link as DsLink } from "@ds/design-system/link";
+import {
+  AuthCard,
+  maskDestination,
+  useResendCountdown,
+} from "@ds/design-system/blocks";
 import { Form, FormField } from "@ds/design-system/form";
 
 /** The reset code is a FIXED 6 characters (Zitadel default) — and ALPHANUMERIC
  * (e.g. `PVDC3R`), not digits-only — like the registration verify code. `<OtpField>`
  * uses its slotted variant, which accepts letters (it carries no digit-only filter). */
 const RESET_OTP_LENGTH = 6;
+
+/**
+ * Resend cooldown (#267) for the reset complete step. Bumping the nonce restarts the
+ * shared `useResendCountdown` timer (the same one `<OtpFocusScreen>` runs on /login
+ * & /verify) without a remount. The reset code-step submits the code TOGETHER with a
+ * new password (a shape `<OtpFocusScreen>` doesn't carry), so it reuses the timer +
+ * resend orchestration inline rather than adopting the whole block.
+ */
+const RESET_RESEND_COOLDOWN_SECONDS = 30;
 
 /*
  * Password-reset surface (#131, EARS-11 initiate / EARS-12 complete). Two steps on
@@ -108,16 +123,16 @@ export default function ResetPage() {
               })
         }
         footer={
-          <Link href="/login" className="underline">
-            {t("backToSignIn")}
-          </Link>
+          <DsLink asChild>
+            <Link href="/login">{t("backToSignIn")}</Link>
+          </DsLink>
         }
       >
         {stage === "request" ? (
           <Form {...requestForm}>
             <form
               onSubmit={requestForm.handleSubmit(onRequest)}
-              className="space-y-4"
+              className="space-y-2"
               noValidate
             >
               {/* #196 fix: the reset identifier is the same union box as
@@ -153,7 +168,18 @@ export default function ResetPage() {
             </form>
           </Form>
         ) : (
-          <ResetCompleteForm identifier={identifier} />
+          <ResetCompleteForm
+            identifier={identifier}
+            onRestart={() => {
+              // «Начать заново»: return to the request stage so the user can change
+              // the identifier (e.g. mistyped email/phone) and request a fresh code.
+              setError(null);
+              setCaptchaToken(null);
+              setIdentifier("");
+              requestForm.reset({ identifier: "" });
+              setStage("request");
+            }}
+          />
         )}
       </AuthCard>
     </AuthShell>
@@ -170,12 +196,33 @@ export default function ResetPage() {
  * `identifier` comes in as a prop (the BFF re-resolves it); the user types the code
  * and the new password and submits both together.
  */
-function ResetCompleteForm({ identifier }: { identifier: string }) {
+function ResetCompleteForm({
+  identifier,
+  onRestart,
+}: {
+  identifier: string;
+  onRestart: () => void;
+}) {
   const router = useRouter();
   const t = useTranslations("reset");
   const tc = useTranslations("common");
   const te = useTranslations("errors");
   const [error, setError] = useState<string | null>(null);
+  // #326: neutral, enumeration-safe resend acknowledgement. The on-screen response is
+  // generic and IDENTICAL whether or not an account exists for the identifier — the
+  // "account exists" fact is disclosed out-of-band by email, never on-screen (OWASP
+  // Authentication Cheat Sheet + WSTG "Testing for Account Enumeration"; Clerk
+  // user-enumeration-protection). UI-only: a resend re-hits the existing reset
+  // endpoint and sends no additional notice email. Fixes the "dead button" — the
+  // resend re-armed the cooldown but acknowledged nothing on success.
+  const [notice, setNotice] = useState<string | null>(null);
+  // The resend re-hits `POST /v1/auth/password/reset`, which is
+  // `@BotProtected("password-reset")` (EARS-17) — so the resend needs its own
+  // captcha token (the request step's token lives in the parent and is not
+  // carried here). Renders nothing when no provider is configured (dev default).
+  const [resendCaptchaToken, setResendCaptchaToken] = useState<string | null>(
+    null,
+  );
 
   // #200: resolve the complete step from the portal `ResetCompleteFormSchema` (field
   // primitives), NOT `PasswordResetCompleteRequestSchema`. The request schema's
@@ -190,6 +237,46 @@ function ResetCompleteForm({ identifier }: { identifier: string }) {
     resolver: useLocalizedResolver(ResetCompleteFormSchema),
     defaultValues: { identifier, code: "", newPassword: "" },
   });
+
+  // #267 resend: re-request a reset code for the SAME held identifier via the
+  // EXISTING `requestPasswordReset` (no new backend). EARS-16: the ack is identical
+  // whether the identifier exists, so resend leaks nothing. Bumping the nonce
+  // restarts the shared cooldown timer + clears the now-stale typed code.
+  const { resendNonce, onResend } = useResendCooldown({
+    resend: async () => {
+      await authClient.requestPasswordReset({
+        identifier,
+        ...(resendCaptchaToken ? { captchaToken: resendCaptchaToken } : {}),
+      });
+    },
+    onError: (err) =>
+      setError(authErrorMessage(err, te, te("resetResendFailed"))),
+    // Clear BOTH channels before a fresh attempt so neither a prior error nor a stale
+    // confirmation lingers across the next resend (#326).
+    onBeforeResend: () => {
+      setError(null);
+      setNotice(null);
+    },
+    // #326: neutral confirmation, conditionally phrased so it discloses nothing about
+    // account existence (identical for every visitor). The masked destination reuses
+    // the same `maskDestination` helper the card description shows.
+    onSuccess: () =>
+      setNotice(t("resendAcknowledged", { identifier: maskDestination(identifier) })),
+  });
+  const remaining = useResendCountdown(RESET_RESEND_COOLDOWN_SECONDS, resendNonce);
+  const resendDisabled = remaining > 0;
+
+  // On a successful resend clear the superseded code (the new password is kept — the
+  // user only needs the fresh code). Skips the initial mount.
+  const isInitialResend = useRef(true);
+  useEffect(() => {
+    if (isInitialResend.current) {
+      isInitialResend.current = false;
+      return;
+    }
+    completeForm.resetField("code");
+
+  }, [resendNonce]);
 
   async function onComplete(values: PasswordResetCompleteRequest) {
     setError(null);
@@ -207,7 +294,7 @@ function ResetCompleteForm({ identifier }: { identifier: string }) {
     <Form {...completeForm}>
       <form
         onSubmit={completeForm.handleSubmit(onComplete)}
-        className="space-y-4"
+        className="space-y-2"
         noValidate
       >
         {/* Slotted 6-char alphanumeric code (no auto-submit here — the complete step
@@ -250,6 +337,57 @@ function ResetCompleteForm({ identifier }: { identifier: string }) {
           {t("setNewPassword")}
         </Button>
       </form>
+      {/* #267: focus-polish footer — separated from the password field with a top
+          border + spacing so «Начать заново» is no longer jammed against the input
+          (owner finding). «Начать заново» (change the identifier, back to the
+          request step) on the left, resend-with-cooldown (real
+          `requestPasswordReset`) on the right; mirrors the focus-screen's
+          change-method/resend pairing, kept inline because the reset step submits
+          the code together with a new password. */}
+      <div className="mt-6 space-y-3 border-t pt-4">
+        {/* EARS-17 bot-protection for the resend (renders nothing when no provider
+            is configured — the dev default). */}
+        <BotProtectionField onToken={setResendCaptchaToken} />
+        <div className="flex items-center justify-between gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onRestart}
+            data-testid="reset-restart"
+          >
+            {t("startOver")}
+          </Button>
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            disabled={resendDisabled}
+            onClick={() => void onResend()}
+            data-testid="reset-resend"
+            // `tabular-nums` — fixed-width digits so the countdown does not jitter
+            // (#227/#267 owner finding).
+            className="tabular-nums"
+          >
+            {resendDisabled
+              ? t("resendIn", { seconds: remaining })
+              : t("resend")}
+          </Button>
+        </div>
+        {/* #326: neutral, enumeration-safe confirmation — NOT destructive (a success
+            ack, not an error). Identical copy in every case; the account-exists fact
+            is disclosed out-of-band by email, never here. */}
+        {notice && (
+          <p
+            role="status"
+            aria-live="polite"
+            className="text-sm text-muted-foreground"
+            data-testid="reset-resend-notice"
+          >
+            {notice}
+          </p>
+        )}
+      </div>
     </Form>
   );
 }

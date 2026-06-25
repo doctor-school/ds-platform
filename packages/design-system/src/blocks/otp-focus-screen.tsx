@@ -5,6 +5,7 @@ import type { ControllerRenderProps, FieldValues } from "react-hook-form";
 
 import { Button } from "../primitives/button";
 import { OtpField } from "../primitives/fields/otp-field";
+import { useResendCountdown } from "./use-resend-countdown";
 
 /**
  * `<OtpFocusScreen>` (#227, absorbed into #235) — a reusable, focused OTP-entry
@@ -125,22 +126,11 @@ export function OtpFocusScreen<T extends FieldValues>({
   resendTestId?: string;
   changeMethodTestId?: string;
 }) {
-  // Live resend countdown, owned by the block. Re-seed whenever the app changes the
-  // cooldown value OR bumps `resendNonce` (a successful resend that re-issues the
-  // same duration) — so the countdown restarts without a remount; `0` leaves resend
-  // immediately enabled.
-  const [remaining, setRemaining] = React.useState(cooldownSeconds);
-  React.useEffect(() => {
-    setRemaining(cooldownSeconds);
-  }, [cooldownSeconds, resendNonce]);
-  React.useEffect(() => {
-    if (remaining <= 0) return;
-    const id = setInterval(() => {
-      setRemaining((r) => (r <= 1 ? 0 : r - 1));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [remaining]);
-
+  // Live resend countdown, owned by the shared `useResendCountdown` hook so the
+  // `/reset` inline resend (which can't adopt this whole block) runs the identical
+  // timer. (Re)starts whenever the app changes `cooldownSeconds` OR bumps
+  // `resendNonce` — restart without a remount; `0` leaves resend enabled now.
+  const remaining = useResendCountdown(cooldownSeconds, resendNonce);
   const resendDisabled = remaining > 0;
 
   return (
@@ -195,6 +185,11 @@ export function OtpFocusScreen<T extends FieldValues>({
           disabled={resendDisabled}
           onClick={onResend}
           data-testid={resendTestId}
+          // `tabular-nums` so the countdown digits are fixed-width — the label no
+          // longer jitters as the remaining-seconds digit changes (#227/#267 owner
+          // finding). `text-right` keeps it anchored at the row edge while the text
+          // length varies between the countdown and the resend label.
+          className="text-right tabular-nums"
         >
           {resendDisabled ? resendCountdownLabel(remaining) : resendLabel}
         </Button>

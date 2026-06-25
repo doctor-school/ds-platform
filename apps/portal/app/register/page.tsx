@@ -23,6 +23,7 @@ import { registerFormSchema } from "@/lib/identifier-validation";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
+import { Link as DsLink } from "@ds/design-system/link";
 import { AuthCard } from "@ds/design-system/blocks";
 import { Form, FormField } from "@ds/design-system/form";
 
@@ -106,15 +107,15 @@ export default function RegisterPage() {
         title={t("title")}
         description={t("description")}
         footer={
-          <Link href="/login" className="underline">
-            {t("haveAccount")}
-          </Link>
+          <DsLink asChild>
+            <Link href="/login">{t("haveAccount")}</Link>
+          </DsLink>
         }
       >
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(onSubmit)}
-            className="space-y-4"
+            className="space-y-2"
             noValidate
           >
             <FormField

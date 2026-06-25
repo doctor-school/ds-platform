@@ -2,9 +2,31 @@ import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Button } from "./button";
+import { Button, buttonVariants } from "./button";
 
 afterEach(cleanup);
+
+/**
+ * The `secondary` variant must read as an enabled, clickable secondary action,
+ * not a disabled chip (#227/#267 owner finding). The borderless light fill looked
+ * disabled; the fix gives it a resting border (like `outline`) plus a clear
+ * hover/active. This pins the regression: `secondary` carries a border and the
+ * hover/active feedback, so it can never silently revert to the borderless look.
+ */
+describe("Button secondary variant reads as enabled", () => {
+  it("carries a resting border + hover/active feedback (not a borderless chip)", () => {
+    const cls = buttonVariants({ variant: "secondary" });
+    expect(cls).toMatch(/\bborder\b/);
+    expect(cls).toMatch(/border-input/);
+    expect(cls).toMatch(/hover:/);
+    expect(cls).toMatch(/active:/);
+  });
+
+  it("matches the bordered weight of the outline variant (both bordered)", () => {
+    expect(buttonVariants({ variant: "outline" })).toMatch(/\bborder\b/);
+    expect(buttonVariants({ variant: "secondary" })).toMatch(/\bborder\b/);
+  });
+});
 
 /**
  * Contract harness for the Button `loading` state (ADR-0013 §7 layer 2, #273).

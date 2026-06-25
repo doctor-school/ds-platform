@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -14,14 +14,20 @@ import {
 } from "@ds/schemas";
 
 import { AuthShell } from "@/components/auth-shell";
+import { BotProtectionField } from "@/components/bot-protection";
 import { OtpField } from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import { takePendingRegistration } from "@/lib/pending-registration";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
+import { useResendCooldown } from "@/lib/use-resend-cooldown";
 
 import { Button } from "@ds/design-system/button";
-import { AuthCard, maskDestination } from "@ds/design-system/blocks";
+import {
+  AuthCard,
+  maskDestination,
+  useResendCountdown,
+} from "@ds/design-system/blocks";
 import { Form, FormField } from "@ds/design-system/form";
 
 /** The registration verification code is a FIXED 6 characters (Zitadel default) —
@@ -29,6 +35,13 @@ import { Form, FormField } from "@ds/design-system/form";
  * variant, which accepts letters (no digit-only filter); #211 also moved the 8-char
  * login OTP onto the same slotted look. */
 const VERIFY_OTP_LENGTH = 6;
+
+/**
+ * Resend cooldown (#227/#267). Bumping the nonce restarts the live countdown (the
+ * same `useResendCountdown` timer the `<OtpFocusScreen>` block uses) without a
+ * remount, and clears the now-stale typed code — matching the proven `/login` pattern.
+ */
+const VERIFY_RESEND_COOLDOWN_SECONDS = 30;
 
 /*
  * Post-registration surface (#131, EARS-3; reframed #207, EARS-24). The BFF
@@ -86,6 +99,20 @@ function VerifyCard() {
   const params = useSearchParams();
   const email = params.get("email") ?? undefined;
   const [error, setError] = useState<string | null>(null);
+  // #326: neutral, enumeration-safe resend acknowledgement. The on-screen response
+  // to a resend is generic and IDENTICAL in every case (registered / unregistered /
+  // already-verified) — the "account exists" fact is disclosed out-of-band by email,
+  // never on-screen (OWASP Authentication Cheat Sheet + WSTG "Testing for Account
+  // Enumeration"; Clerk user-enumeration-protection). It is purely UI: a resend sends
+  // no additional notice email (the register-time EARS-23 notice already covered the
+  // owner; re-notifying per resend is noise + abuse-amplification). This also fixes
+  // the "dead button" — the resend re-armed the cooldown but acknowledged nothing.
+  const [notice, setNotice] = useState<string | null>(null);
+  // Resend is an abuse-prone unauthenticated surface (EARS-17), so the EARS-25
+  // endpoint is `@BotProtected("verify-resend")`. The widget token rides as
+  // `captchaToken`; when no provider is configured (the dev default)
+  // `<BotProtectionField>` renders nothing and the guard short-circuits to ok.
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   const form = useForm<VerifyRequest>({
     resolver: useLocalizedResolver(VerifyRequestSchema),
@@ -93,6 +120,55 @@ function VerifyCard() {
     // is not user-editable here — they only type the code.
     defaultValues: { email, code: "" },
   });
+
+  // Privacy-masked destination (#227): the screen confirms WHERE the code went
+  // without re-printing the full address (`a•••@p•••.com`); reuses the same
+  // `maskDestination` helper the login-OTP focus-screen displays. Computed here so
+  // both the card description and the #326 resend confirmation can interpolate it.
+  const identifierLabel = email ? maskDestination(email) : t("fallbackIdentifier");
+
+  // #267 resend: re-issue the registration code via the dedicated EARS-25 endpoint
+  // (`/v1/auth/verify/resend`, #319) — NOT a re-`register` (no held password here).
+  // The identifier is the seeded email; if it is absent (deep-link without `?email=`)
+  // resend has nothing to target, so the control is hidden. EARS-16: the ack is
+  // existence-agnostic, so resend never reveals whether the account exists.
+  const { resendNonce, onResend } = useResendCooldown({
+    resend: async () => {
+      await authClient.resendVerification({
+        identifier: email ?? "",
+        ...(captchaToken ? { captchaToken } : {}),
+      });
+    },
+    onError: (err) =>
+      setError(authErrorMessage(err, te, te("verifyResendFailed"))),
+    // Clear BOTH channels before a fresh attempt: a prior error or a stale
+    // confirmation must not linger across the next resend (#326).
+    onBeforeResend: () => {
+      setError(null);
+      setNotice(null);
+    },
+    // #326: neutral confirmation, conditionally phrased so it asserts nothing about
+    // account existence (identical for every visitor — see the `notice` comment above).
+    onSuccess: () => setNotice(t("resendAcknowledged", { identifier: identifierLabel })),
+  });
+  // The block's countdown lives inside <OtpFocusScreen>; the /verify code section
+  // keeps its existing dual-affordance layout (NOT the single-focus block, per
+  // EARS-24), so it runs the SAME shared timer inline for its own resend control.
+  const remaining = useResendCountdown(VERIFY_RESEND_COOLDOWN_SECONDS, resendNonce);
+  const resendDisabled = remaining > 0;
+
+  // On a successful resend (nonce bump) clear the now-superseded typed code, so the
+  // user re-enters the fresh code — same explicit reset /login's verify step uses.
+  const isInitialResend = useRef(true);
+  useEffect(() => {
+    if (isInitialResend.current) {
+      isInitialResend.current = false;
+      return;
+    }
+    form.resetField("code");
+    // Keyed only on the resend signal — `form` is a stable useForm handle.
+
+  }, [resendNonce]);
 
   async function onSubmit(values: VerifyRequest) {
     setError(null);
@@ -138,11 +214,6 @@ function VerifyCard() {
     void submit();
   }, [form.formState.isSubmitting, submit]);
 
-  // Privacy-masked destination (#227): the screen confirms WHERE the code went
-  // without re-printing the full address (`a•••@p•••.com`); reuses the same
-  // `maskDestination` helper the login-OTP focus-screen displays.
-  const identifierLabel = email ? maskDestination(email) : t("fallbackIdentifier");
-
   return (
     <AuthCard
       icon={<MailCheck className="text-primary" aria-hidden />}
@@ -160,7 +231,7 @@ function VerifyCard() {
             {t("newAccountHeading")}
           </h2>
           <Form {...form}>
-            <form onSubmit={submit} className="space-y-4" noValidate>
+            <form onSubmit={submit} className="space-y-2" noValidate>
               <FormField
                 control={form.control}
                 name="code"
@@ -189,6 +260,49 @@ function VerifyCard() {
               </Button>
             </form>
           </Form>
+          {/* #267 resend-with-cooldown, wired to the real EARS-25 endpoint. Only
+              meaningful when an email destination is known (it is seeded from the
+              `?email=` the register step passes); on a bare deep-link there is
+              nothing to resend to, so the control is hidden rather than firing an
+              empty request. The countdown reuses the SAME timer the focus-screen
+              block runs. */}
+          {email ? (
+            <div className="space-y-2">
+              {/* EARS-17 bot-protection for the resend (renders nothing when no
+                  provider is configured — the dev default). */}
+              <BotProtectionField onToken={setCaptchaToken} />
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  disabled={resendDisabled}
+                  onClick={() => void onResend()}
+                  data-testid="verify-resend"
+                  // `tabular-nums` — fixed-width digits so the countdown label does
+                  // not jitter as the seconds tick down (#227/#267 owner finding).
+                  className="tabular-nums"
+                >
+                  {resendDisabled
+                    ? t("resendIn", { seconds: remaining })
+                    : t("resend")}
+                </Button>
+              </div>
+              {/* #326: neutral, enumeration-safe confirmation — NOT destructive (it is
+                  a success ack, not an error). Identical copy in every case; the
+                  account-exists fact is disclosed out-of-band by email, never here. */}
+              {notice && (
+                <p
+                  role="status"
+                  aria-live="polite"
+                  className="text-sm text-muted-foreground"
+                  data-testid="verify-resend-notice"
+                >
+                  {notice}
+                </p>
+              )}
+            </div>
+          ) : null}
         </section>
 
         {/* (b) Already-registered owner's path — prominent, co-equal sign-in /

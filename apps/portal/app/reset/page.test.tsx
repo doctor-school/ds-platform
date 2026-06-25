@@ -1,4 +1,11 @@
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  cleanup,
+  act,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -62,6 +69,114 @@ async function advanceToCompleteStage(user: ReturnType<typeof userEvent.setup>) 
   // The complete step's <ResetCompleteForm/> mounts only now (late-mount path).
   await screen.findByRole("textbox");
 }
+
+describe("/reset complete step — resend with cooldown (#267)", () => {
+  it("resend is disabled during the cooldown, then re-enables and re-calls the REAL requestPasswordReset", async () => {
+    // Fake timers from the start so the complete step's cooldown interval is fake
+    // from creation (a `useFakeTimers()` installed AFTER mount can't advance an
+    // already-scheduled real interval). All interaction here is `fireEvent`
+    // (synchronous) — userEvent's internal delays hang under fake timers.
+    vi.useFakeTimers();
+    try {
+      render(<ResetPage />);
+
+      // Request step → complete step, via synchronous events.
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: IDENTIFIER },
+      });
+      fireEvent.click(screen.getByTestId("reset-request-submit"));
+      await act(async () => {
+        await Promise.resolve();
+      });
+      // One call so far — the initial request that flipped to the complete stage.
+      expect(requestPasswordReset).toHaveBeenCalledTimes(1);
+
+      // The resend control starts in cooldown (countdown running), so it is disabled
+      // and a click does NOT fire a second request.
+      const resend = screen.getByTestId("reset-resend");
+      expect(resend).toBeDisabled();
+
+      // Drain the 30s cooldown synchronously; the control re-enables.
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+      expect(resend).not.toBeDisabled();
+
+      // A resend re-issues the code via the EXISTING requestPasswordReset endpoint
+      // (no new backend) for the SAME held identifier.
+      fireEvent.click(resend);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(requestPasswordReset).toHaveBeenCalledTimes(2);
+      expect(requestPasswordReset).toHaveBeenLastCalledWith(
+        expect.objectContaining({ identifier: IDENTIFIER }),
+      );
+      // And the cooldown restarts (disabled again) on the successful resend.
+      expect(resend).toBeDisabled();
+      // #326: a neutral, enumeration-safe confirmation appears on success —
+      // role="status" (aria-live polite), NOT a destructive error. Fixes the "dead
+      // button" that re-armed the cooldown but acknowledged nothing. UI-only.
+      const notice = screen.getByTestId("reset-resend-notice");
+      expect(notice).toBeInTheDocument();
+      expect(notice).toHaveAttribute("role", "status");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("#326: the resend confirmation is the SAME regardless of the identifier (no existence branch)", async () => {
+    // The on-screen response is generic and identical whether or not an account
+    // exists for the identifier — disclosure is out-of-band by email, never here.
+    async function noticeTextFor(idValue: string): Promise<string> {
+      vi.useFakeTimers();
+      try {
+        render(<ResetPage />);
+        fireEvent.change(screen.getByRole("textbox"), {
+          target: { value: idValue },
+        });
+        fireEvent.click(screen.getByTestId("reset-request-submit"));
+        await act(async () => {
+          await Promise.resolve();
+        });
+        const resend = screen.getByTestId("reset-resend");
+        act(() => {
+          vi.advanceTimersByTime(30_000);
+        });
+        fireEvent.click(resend);
+        await act(async () => {
+          await Promise.resolve();
+        });
+        const text = screen.getByTestId("reset-resend-notice").textContent ?? "";
+        cleanup();
+        return text;
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+
+    const first = await noticeTextFor("registered@example.com");
+    const second = await noticeTextFor("never-seen@example.com");
+    expect(first).toBe(second);
+    expect(first).not.toBe("");
+  });
+
+  it("«начать заново» returns to the request step (change identifier)", async () => {
+    const user = userEvent.setup();
+    render(<ResetPage />);
+    await advanceToCompleteStage(user);
+
+    // Complete step shows the new-password field; restart returns to the request
+    // step where it is absent and the identifier box is editable again.
+    expect(screen.getByLabelText("newPasswordLabel")).toBeInTheDocument();
+    await user.click(screen.getByTestId("reset-restart"));
+
+    await waitFor(() =>
+      expect(screen.queryByLabelText("newPasswordLabel")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("reset-request-submit")).toBeInTheDocument();
+  });
+});
 
 describe("/reset complete step (late-mounted slotted code field)", () => {
   it("ingests the code typed AFTER the request->complete toggle and submits it", async () => {

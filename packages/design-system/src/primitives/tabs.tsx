@@ -39,7 +39,12 @@ const TabsTrigger = React.forwardRef<
     className={cn(
       interactiveBase,
       // transition-all (not just colors) so the active shadow animates too.
-      "inline-flex flex-1 items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all disabled:pointer-events-none data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow data-[state=inactive]:hover:bg-background/50 data-[state=inactive]:hover:text-foreground",
+      // #4 tab inset (ADR-0013 §7): every trigger carries a persistent
+      // `border border-transparent` so the active state's `bg-background` +
+      // `shadow` never shifts its inactive neighbour — the inactive hover reads
+      // as an inset chip inside the `px-3 py-1` padding, not a flush block.
+      // Inactive resting is the muted `text-foreground/60` → `hover:text-foreground`.
+      "inline-flex flex-1 items-center justify-center whitespace-nowrap rounded-md border border-transparent px-3 py-1 text-sm font-medium transition-all disabled:pointer-events-none data-[state=inactive]:text-foreground/60 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow data-[state=inactive]:hover:bg-background/50 data-[state=inactive]:hover:text-foreground",
       className,
     )}
     {...props}

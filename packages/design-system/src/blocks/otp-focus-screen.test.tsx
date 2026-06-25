@@ -142,6 +142,13 @@ describe("OtpFocusScreen", () => {
     }
   });
 
+  it("renders the countdown with tabular-nums so the digits do not jitter (#267)", () => {
+    render(<Harness cooldownSeconds={9} />);
+    const resend = screen.getByTestId("otp-resend");
+    // Fixed-width digits keep the label from shifting as the seconds tick down.
+    expect(resend).toHaveClass("tabular-nums");
+  });
+
   it("fires onResend when the (enabled) resend control is clicked", async () => {
     const onResend = vi.fn();
     const user = userEvent.setup();

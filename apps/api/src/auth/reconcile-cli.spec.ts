@@ -32,7 +32,7 @@ function fakeContext(service: ReconcileService): {
 }
 
 describe("runReconcileSweep — #119 manual reconcile trigger", () => {
-  it("resolves ReconcileService from the context and returns its sweep result", async () => {
+  it("EARS-19: resolves ReconcileService from the context and returns its sweep result", async () => {
     const service = {
       sweep: vi.fn(() => Promise.resolve({ reconciled: 7 })),
     } as unknown as ReconcileService;
@@ -44,7 +44,7 @@ describe("runReconcileSweep — #119 manual reconcile trigger", () => {
     expect(result).toEqual({ reconciled: 7 });
   });
 
-  it("closes the application context even when the sweep throws", async () => {
+  it("EARS-19: closes the application context even when the sweep throws", async () => {
     const service = {
       sweep: vi.fn(() => Promise.reject(new Error("listUsers down"))),
     } as unknown as ReconcileService;
@@ -56,7 +56,7 @@ describe("runReconcileSweep — #119 manual reconcile trigger", () => {
     expect(ctx.closed()).toBe(true);
   });
 
-  it("closes the application context on success", async () => {
+  it("EARS-19: closes the application context on success", async () => {
     const service = {
       sweep: vi.fn(() => Promise.resolve({ reconciled: 0 })),
     } as unknown as ReconcileService;

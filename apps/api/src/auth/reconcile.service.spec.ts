@@ -55,7 +55,7 @@ function fakeMirror(): { mirror: UserMirrorService; upserted: string[] } {
 }
 
 describe("ReconcileService.sweep — #119 EARS-19 backstop", () => {
-  it("upserts + grants a human user (has email) and reports it reconciled", async () => {
+  it("EARS-19: upserts + grants a human user (has email) and reports it reconciled", async () => {
     const { idp, granted } = fakeIdp([
       { sub: "human-1", email: "doc@ds.test", emailVerified: true },
     ]);
@@ -69,7 +69,7 @@ describe("ReconcileService.sweep — #119 EARS-19 backstop", () => {
     expect(result.reconciled).toBe(1);
   });
 
-  it("upserts a phone-only human user", async () => {
+  it("EARS-19: upserts a phone-only human user", async () => {
     const { idp } = fakeIdp([{ sub: "human-2", phone: "+79991234567" }]);
     const { mirror, upserted } = fakeMirror();
     const svc = new ReconcileService(idp, mirror);
@@ -80,7 +80,7 @@ describe("ReconcileService.sweep — #119 EARS-19 backstop", () => {
     expect(result.reconciled).toBe(1);
   });
 
-  it("skips a machine/service account with neither email nor phone (no upsert, no grant, not counted)", async () => {
+  it("EARS-19: skips a machine/service account with neither email nor phone (no upsert, no grant, not counted)", async () => {
     const { idp, granted } = fakeIdp([
       { sub: "machine-svc" }, // no email, no phone — the BFF's own service user
       { sub: "human-3", email: "doc3@ds.test" },
@@ -97,7 +97,7 @@ describe("ReconcileService.sweep — #119 EARS-19 backstop", () => {
     expect(result.reconciled).toBe(1);
   });
 
-  it("an empty Zitadel returns reconciled 0", async () => {
+  it("EARS-19: an empty Zitadel returns reconciled 0", async () => {
     const { idp } = fakeIdp([]);
     const { mirror } = fakeMirror();
     const svc = new ReconcileService(idp, mirror);

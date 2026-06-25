@@ -65,7 +65,7 @@ function fakeSweep(): {
 }
 
 describe("ReconcileScheduler — #119 periodic sweep wiring", () => {
-  it("registers an interval whose period is the configured value (config-driven, not hardcoded)", () => {
+  it("EARS-19: registers an interval whose period is the configured value (config-driven, not hardcoded)", () => {
     const { service } = fakeSweep();
     const registry = fakeRegistry();
     const intervalMs = 123_456;
@@ -87,7 +87,7 @@ describe("ReconcileScheduler — #119 periodic sweep wiring", () => {
     other.onModuleDestroy();
   });
 
-  it("a non-positive interval disables the schedule (no interval registered)", () => {
+  it("EARS-19: a non-positive interval disables the schedule (no interval registered)", () => {
     const { service } = fakeSweep();
     const registry = fakeRegistry();
     const scheduler = new ReconcileScheduler(service, 0, registry);
@@ -100,7 +100,7 @@ describe("ReconcileScheduler — #119 periodic sweep wiring", () => {
     scheduler.onModuleDestroy();
   });
 
-  it("the tick calls sweep()", async () => {
+  it("EARS-19: the tick calls sweep()", async () => {
     const { service, calls, resolveNext } = fakeSweep();
     const registry = fakeRegistry();
     const scheduler = new ReconcileScheduler(service, 60_000, registry);
@@ -113,7 +113,7 @@ describe("ReconcileScheduler — #119 periodic sweep wiring", () => {
     expect(calls()).toBe(1);
   });
 
-  it("does not overlap: a tick while a sweep is still running is skipped", async () => {
+  it("EARS-19: does not overlap: a tick while a sweep is still running is skipped", async () => {
     const { service, calls, resolveNext } = fakeSweep();
     const registry = fakeRegistry();
     const scheduler = new ReconcileScheduler(service, 60_000, registry);
@@ -134,7 +134,7 @@ describe("ReconcileScheduler — #119 periodic sweep wiring", () => {
     expect(calls()).toBe(2);
   });
 
-  it("a thrown sweep is swallowed (a backstop must not crash the scheduler) and the next tick still runs", async () => {
+  it("EARS-19: a thrown sweep is swallowed (a backstop must not crash the scheduler) and the next tick still runs", async () => {
     let calls = 0;
     const service = {
       sweep: vi.fn(() => {

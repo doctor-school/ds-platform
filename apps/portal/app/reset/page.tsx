@@ -208,6 +208,14 @@ function ResetCompleteForm({
   const tc = useTranslations("common");
   const te = useTranslations("errors");
   const [error, setError] = useState<string | null>(null);
+  // #326: neutral, enumeration-safe resend acknowledgement. The on-screen response is
+  // generic and IDENTICAL whether or not an account exists for the identifier — the
+  // "account exists" fact is disclosed out-of-band by email, never on-screen (OWASP
+  // Authentication Cheat Sheet + WSTG "Testing for Account Enumeration"; Clerk
+  // user-enumeration-protection). UI-only: a resend re-hits the existing reset
+  // endpoint and sends no additional notice email. Fixes the "dead button" — the
+  // resend re-armed the cooldown but acknowledged nothing on success.
+  const [notice, setNotice] = useState<string | null>(null);
   // The resend re-hits `POST /v1/auth/password/reset`, which is
   // `@BotProtected("password-reset")` (EARS-17) — so the resend needs its own
   // captcha token (the request step's token lives in the parent and is not
@@ -243,7 +251,17 @@ function ResetCompleteForm({
     },
     onError: (err) =>
       setError(authErrorMessage(err, te, te("resetResendFailed"))),
-    onBeforeResend: () => setError(null),
+    // Clear BOTH channels before a fresh attempt so neither a prior error nor a stale
+    // confirmation lingers across the next resend (#326).
+    onBeforeResend: () => {
+      setError(null);
+      setNotice(null);
+    },
+    // #326: neutral confirmation, conditionally phrased so it discloses nothing about
+    // account existence (identical for every visitor). The masked destination reuses
+    // the same `maskDestination` helper the card description shows.
+    onSuccess: () =>
+      setNotice(t("resendAcknowledged", { identifier: maskDestination(identifier) })),
   });
   const remaining = useResendCountdown(RESET_RESEND_COOLDOWN_SECONDS, resendNonce);
   const resendDisabled = remaining > 0;
@@ -356,6 +374,19 @@ function ResetCompleteForm({
               : t("resend")}
           </Button>
         </div>
+        {/* #326: neutral, enumeration-safe confirmation — NOT destructive (a success
+            ack, not an error). Identical copy in every case; the account-exists fact
+            is disclosed out-of-band by email, never here. */}
+        {notice && (
+          <p
+            role="status"
+            aria-live="polite"
+            className="text-sm text-muted-foreground"
+            data-testid="reset-resend-notice"
+          >
+            {notice}
+          </p>
+        )}
       </div>
     </Form>
   );

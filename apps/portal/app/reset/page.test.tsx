@@ -114,9 +114,51 @@ describe("/reset complete step — resend with cooldown (#267)", () => {
       );
       // And the cooldown restarts (disabled again) on the successful resend.
       expect(resend).toBeDisabled();
+      // #326: a neutral, enumeration-safe confirmation appears on success —
+      // role="status" (aria-live polite), NOT a destructive error. Fixes the "dead
+      // button" that re-armed the cooldown but acknowledged nothing. UI-only.
+      const notice = screen.getByTestId("reset-resend-notice");
+      expect(notice).toBeInTheDocument();
+      expect(notice).toHaveAttribute("role", "status");
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("#326: the resend confirmation is the SAME regardless of the identifier (no existence branch)", async () => {
+    // The on-screen response is generic and identical whether or not an account
+    // exists for the identifier — disclosure is out-of-band by email, never here.
+    async function noticeTextFor(idValue: string): Promise<string> {
+      vi.useFakeTimers();
+      try {
+        render(<ResetPage />);
+        fireEvent.change(screen.getByRole("textbox"), {
+          target: { value: idValue },
+        });
+        fireEvent.click(screen.getByTestId("reset-request-submit"));
+        await act(async () => {
+          await Promise.resolve();
+        });
+        const resend = screen.getByTestId("reset-resend");
+        act(() => {
+          vi.advanceTimersByTime(30_000);
+        });
+        fireEvent.click(resend);
+        await act(async () => {
+          await Promise.resolve();
+        });
+        const text = screen.getByTestId("reset-resend-notice").textContent ?? "";
+        cleanup();
+        return text;
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+
+    const first = await noticeTextFor("registered@example.com");
+    const second = await noticeTextFor("never-seen@example.com");
+    expect(first).toBe(second);
+    expect(first).not.toBe("");
   });
 
   it("«начать заново» returns to the request step (change identifier)", async () => {

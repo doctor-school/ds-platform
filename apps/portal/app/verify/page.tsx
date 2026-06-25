@@ -99,6 +99,15 @@ function VerifyCard() {
   const params = useSearchParams();
   const email = params.get("email") ?? undefined;
   const [error, setError] = useState<string | null>(null);
+  // #326: neutral, enumeration-safe resend acknowledgement. The on-screen response
+  // to a resend is generic and IDENTICAL in every case (registered / unregistered /
+  // already-verified) — the "account exists" fact is disclosed out-of-band by email,
+  // never on-screen (OWASP Authentication Cheat Sheet + WSTG "Testing for Account
+  // Enumeration"; Clerk user-enumeration-protection). It is purely UI: a resend sends
+  // no additional notice email (the register-time EARS-23 notice already covered the
+  // owner; re-notifying per resend is noise + abuse-amplification). This also fixes
+  // the "dead button" — the resend re-armed the cooldown but acknowledged nothing.
+  const [notice, setNotice] = useState<string | null>(null);
   // Resend is an abuse-prone unauthenticated surface (EARS-17), so the EARS-25
   // endpoint is `@BotProtected("verify-resend")`. The widget token rides as
   // `captchaToken`; when no provider is configured (the dev default)
@@ -111,6 +120,12 @@ function VerifyCard() {
     // is not user-editable here — they only type the code.
     defaultValues: { email, code: "" },
   });
+
+  // Privacy-masked destination (#227): the screen confirms WHERE the code went
+  // without re-printing the full address (`a•••@p•••.com`); reuses the same
+  // `maskDestination` helper the login-OTP focus-screen displays. Computed here so
+  // both the card description and the #326 resend confirmation can interpolate it.
+  const identifierLabel = email ? maskDestination(email) : t("fallbackIdentifier");
 
   // #267 resend: re-issue the registration code via the dedicated EARS-25 endpoint
   // (`/v1/auth/verify/resend`, #319) — NOT a re-`register` (no held password here).
@@ -126,7 +141,15 @@ function VerifyCard() {
     },
     onError: (err) =>
       setError(authErrorMessage(err, te, te("verifyResendFailed"))),
-    onBeforeResend: () => setError(null),
+    // Clear BOTH channels before a fresh attempt: a prior error or a stale
+    // confirmation must not linger across the next resend (#326).
+    onBeforeResend: () => {
+      setError(null);
+      setNotice(null);
+    },
+    // #326: neutral confirmation, conditionally phrased so it asserts nothing about
+    // account existence (identical for every visitor — see the `notice` comment above).
+    onSuccess: () => setNotice(t("resendAcknowledged", { identifier: identifierLabel })),
   });
   // The block's countdown lives inside <OtpFocusScreen>; the /verify code section
   // keeps its existing dual-affordance layout (NOT the single-focus block, per
@@ -190,11 +213,6 @@ function VerifyCard() {
     if (form.formState.isSubmitting) return;
     void submit();
   }, [form.formState.isSubmitting, submit]);
-
-  // Privacy-masked destination (#227): the screen confirms WHERE the code went
-  // without re-printing the full address (`a•••@p•••.com`); reuses the same
-  // `maskDestination` helper the login-OTP focus-screen displays.
-  const identifierLabel = email ? maskDestination(email) : t("fallbackIdentifier");
 
   return (
     <AuthCard
@@ -270,6 +288,19 @@ function VerifyCard() {
                     : t("resend")}
                 </Button>
               </div>
+              {/* #326: neutral, enumeration-safe confirmation — NOT destructive (it is
+                  a success ack, not an error). Identical copy in every case; the
+                  account-exists fact is disclosed out-of-band by email, never here. */}
+              {notice && (
+                <p
+                  role="status"
+                  aria-live="polite"
+                  className="text-sm text-muted-foreground"
+                  data-testid="verify-resend-notice"
+                >
+                  {notice}
+                </p>
+              )}
             </div>
           ) : null}
         </section>

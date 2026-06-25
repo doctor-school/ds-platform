@@ -112,9 +112,47 @@ describe("/verify dual-affordance + resend (#227/#267)", () => {
       expect(verify).not.toHaveBeenCalled();
       // Cooldown restarts on the successful resend (nonce bump re-disables it).
       expect(resend).toBeDisabled();
+      // #326: a neutral, enumeration-safe confirmation now appears on success —
+      // role="status" (aria-live polite), NOT a destructive error. This is the
+      // fix for the "dead button" (the resend re-armed the cooldown but acknowledged
+      // nothing). It is purely UI: no extra backend call beyond the resend itself.
+      const notice = screen.getByTestId("verify-resend-notice");
+      expect(notice).toBeInTheDocument();
+      expect(notice).toHaveAttribute("role", "status");
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("#326: the resend confirmation is the SAME regardless of the email (no existence branch)", async () => {
+    // The on-screen response to a resend is generic and identical in every case —
+    // the account-exists fact is disclosed out-of-band by email, never here. Drive
+    // two different emails and assert the same neutral notice copy both times.
+    async function noticeTextFor(emailValue: string): Promise<string> {
+      searchParams = new URLSearchParams({ email: emailValue });
+      vi.useFakeTimers();
+      try {
+        render(<VerifyPage />);
+        const resend = screen.getByTestId("verify-resend");
+        act(() => {
+          vi.advanceTimersByTime(30_000);
+        });
+        fireEvent.click(resend);
+        await act(async () => {
+          await Promise.resolve();
+        });
+        const text = screen.getByTestId("verify-resend-notice").textContent ?? "";
+        cleanup();
+        return text;
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+
+    const first = await noticeTextFor("registered@example.com");
+    const second = await noticeTextFor("never-seen@example.com");
+    expect(first).toBe(second);
+    expect(first).not.toBe("");
   });
 
   it("hides resend when there is no email destination to target (bare deep-link)", () => {

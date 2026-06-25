@@ -63,6 +63,7 @@
     "submit": "Подтвердить код",
     "resend": "Отправить код ещё раз",
     "resendIn": "Отправить повторно можно через {seconds} с",
+    "resendAcknowledged": "Если регистрация ещё не подтверждена, мы повторно отправили код на {identifier}.",
     "newAccountHeading": "Новый аккаунт — введите код",
     "existingAccountHeading": "Уже есть аккаунт?",
     "existingAccountHint": "Войдите или восстановите доступ к существующему аккаунту.",
@@ -79,6 +80,7 @@
     "setNewPassword": "Задать новый пароль",
     "resend": "Отправить код ещё раз",
     "resendIn": "Отправить повторно можно через {seconds} с",
+    "resendAcknowledged": "Если для {identifier} есть аккаунт, мы повторно отправили код.",
     "startOver": "Начать заново",
     "backToSignIn": "Вернуться ко входу"
   },

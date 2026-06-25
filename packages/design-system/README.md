@@ -103,12 +103,12 @@ token (the §5 / `#269` arbitrary-value guard must stay green).
 | Concern                   | Value                                  | Notes                                                                                                                                                                                                                                                      |
 | ------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Label ↔ control gap       | `flex flex-col gap-2.5` (10 px)        | `FormItem` inner gap — label belongs to its control as one unit; `2.5` not `1.5` so the control's `interactiveBase` `focus-visible:ring-2 ring-offset-2` (~4 px above the input) does not touch the label on focus (ring-clearance, #227/#267 live-proven) |
-| Field-group spacing       | `space-y-5` (20 px)                    | set on the `<form>` / fields wrapper, **not** the `FormItem`                                                                                                                                                                                               |
+| Field-group spacing       | `space-y-2` (8 px, additive)           | set on the `<form>` / fields wrapper, **not** the `FormItem`; **small** — the reserved message slot already adds ~20 px of separation, so a big gap on top over-spaces (round-1 `space-y-5` = ~50 px, live-proven too airy #227/#267). Net ~38 px/field    |
 | Field height              | `h-9`                                  | `Input` / single-line controls (matches `Button` default)                                                                                                                                                                                                  |
 | Message slot              | `min-h-5` one-line slot                | `text-sm` `leading-5` = one 20 px line; **always present on a validating field**                                                                                                                                                                           |
 | Helper (resting)          | `text-sm text-muted-foreground`        | shown by default inside the slot                                                                                                                                                                                                                           |
 | Error (swap-in)           | `text-sm font-medium text-destructive` | replaces the helper **in place** — same slot, no height change                                                                                                                                                                                             |
-| No helper + no validation | render **no slot**                     | field stacks on the `space-y-5` rhythm; never a blank reserved line                                                                                                                                                                                        |
+| No helper + no validation | render **no slot**                     | field stacks on the `space-y-2` rhythm; never a blank reserved line                                                                                                                                                                                        |
 
 **The no-reflow slot.** `FormMessage` must **not** `return null` when empty (that
 is the reflow source). Instead the field renders one persistent slot wrapper at
@@ -124,7 +124,7 @@ FormItem            → flex flex-col gap-2.5  (label ↔ control, tight + ring-
   FormLabel
   FormControl        → Input h-9
   message slot       → min-h-5               (helper by default; error swaps in place)
-<form> / fields      → space-y-5             (between fields, loose)
+<form> / fields      → space-y-2             (small additive; slot carries most separation)
 ```
 
 ### Clickable state matrix (the values for `#324`)

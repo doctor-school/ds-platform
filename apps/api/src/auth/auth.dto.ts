@@ -7,6 +7,7 @@ import {
   PasswordResetRequestSchema,
   RegisterRequestSchema,
   VerifyRequestSchema,
+  VerifyResendRequestSchema,
   ZitadelWebhookSchema,
 } from "@ds/schemas";
 
@@ -19,6 +20,9 @@ export class LoginRequestDto extends createZodDto(LoginRequestSchema) {}
 export class OtpRequestDto extends createZodDto(OtpRequestSchema) {}
 export class OtpVerifyDto extends createZodDto(OtpVerifySchema) {}
 export class VerifyRequestDto extends createZodDto(VerifyRequestSchema) {}
+export class VerifyResendRequestDto extends createZodDto(
+  VerifyResendRequestSchema,
+) {}
 export class ZitadelWebhookDto extends createZodDto(ZitadelWebhookSchema) {}
 export class PasswordResetRequestDto extends createZodDto(
   PasswordResetRequestSchema,

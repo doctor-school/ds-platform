@@ -829,6 +829,76 @@ export class ZitadelIdpClient implements IdpClient {
     return data.result?.[0]?.userId ?? null;
   }
 
+  /**
+   * Resolve an identifier (email or phone) to a Zitadel user's `{ userId,
+   * emailVerified }`, or `null` if no user matches. Like {@link resolveUserId} but
+   * also surfaces the email-verified flag the User v2 search carries
+   * (`human.email.isVerified`, the same field {@link listUsers} reads), needed by
+   * {@link resendEmailVerification} to skip an already-verified registrant.
+   * Fails closed — any non-2xx or empty result is `null` — so the resend stays
+   * enumeration-safe (an unknown identifier looks like a hiccup).
+   */
+  private async resolveUserVerification(
+    identifier: string,
+  ): Promise<{ userId: string; emailVerified: boolean } | null> {
+    const query = identifier.startsWith("+")
+      ? { phoneQuery: { number: identifier } }
+      : { emailQuery: { emailAddress: identifier } };
+    const res = await this.fetchImpl(this.url("/v2/users"), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ queries: [query] }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      result?: Array<{
+        userId?: string;
+        human?: { email?: { isVerified?: boolean } };
+      }>;
+    };
+    const hit = data.result?.[0];
+    if (!hit?.userId) return null;
+    return {
+      userId: hit.userId,
+      emailVerified: hit.human?.email?.isVerified ?? false,
+    };
+  }
+
+  async resendEmailVerification(identifier: string): Promise<boolean> {
+    // EARS-25: re-issue the registration email code, enumeration-safely. Mirror
+    // `requestPasswordReset`'s discipline — resolve the identifier internally and
+    // NEVER throw or branch on existence so the caller's ack/timing is not an
+    // oracle (EARS-16). A code is re-sent ONLY for an existing, UNVERIFIED
+    // registrant; an unknown identifier, an already-verified one, or any provider
+    // hiccup is a silent no-op. The boolean is a server-side ledger decision
+    // (whether an `otp.sent` row is owed), never reflected into the response.
+    try {
+      const user = await this.resolveUserVerification(identifier);
+      // Unknown identifier, or already verified → no send, no ledger row. An
+      // already-verified registrant has no pending verification to re-issue, and
+      // re-sending would be an existence/state oracle, so it is a no-op.
+      if (!user || user.emailVerified) return false;
+      // Reuse the same native send the EARS-1/3 cascade uses — the verification-
+      // code resend hop (`POST /v2/users/{id}/email/resend`, #148). A failed send
+      // means no code was delivered, so no ledger row is owed: report `false`
+      // rather than throw (the caller's response stays identical either way).
+      const res = await this.fetchImpl(
+        this.url(`/v2/users/${user.userId}/email/resend`),
+        {
+          method: "POST",
+          headers: this.headers(),
+          body: JSON.stringify({ sendCode: {} }),
+        },
+      );
+      return res.ok;
+    } catch {
+      // A thrown fetch (network hiccup) is indistinguishable from success to the
+      // caller — swallow it, exactly like `requestPasswordReset`'s `.catch`, and
+      // report no send so no ledger row is written.
+      return false;
+    }
+  }
+
   async requestPasswordReset(identifier: string): Promise<void> {
     // Zitadel User v2: POST /v2/users/{userId}/password_reset triggers the
     // forgot-password code (Zitadel sends it via the configured notifier). Every

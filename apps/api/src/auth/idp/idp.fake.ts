@@ -121,6 +121,21 @@ export class FakeIdpClient implements IdpClient {
     return Promise.resolve();
   }
 
+  resendEmailVerification(identifier: string): Promise<boolean> {
+    // EARS-25 fake/real parity (no more permissive than the real adapter): a
+    // code is re-issued ONLY for an existing, UNVERIFIED registrant. The real
+    // Zitadel adapter resolves the identifier and skips an already-verified one
+    // (its User v2 search carries `human.email.isVerified`); the fake mirrors that
+    // exact unverified-vs-verified distinction off its own `emailVerified` flag,
+    // so a regression that re-sends to a verified (or unknown) identifier fails in
+    // unit tests, not only live. Every path resolves (never throws) so the caller
+    // stays enumeration-safe (EARS-16); the boolean drives only the server-side
+    // `otp.sent` ledger decision, never the response.
+    const record = this.findByIdentifier(identifier);
+    if (!record || record.emailVerified) return Promise.resolve(false);
+    return Promise.resolve(true);
+  }
+
   requestPhoneVerification(_sub: string): Promise<void> {
     // #202: registration is email-only, so the BFF never calls this at register.
     // The method stays on the port for the future post-registration

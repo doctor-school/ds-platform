@@ -474,3 +474,103 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
     expect((err as BadRequestException).getStatus()).toBe(400);
   });
 });
+
+// EARS-25 (#319): resend the registration email verification code,
+// enumeration-safely. A code is re-issued ONLY for an existing, UNVERIFIED
+// registrant; an unknown identifier or an already-verified one is a silent no-op.
+// The response (`resend_requested`), status, and timing are identical on every
+// path (EARS-16) — and the `otp.sent` ledger row (EARS-18) is appended ONLY when
+// a code was actually issued, so the ledger is not an existence oracle. Exercised
+// at the service altitude over the fake IdP + in-memory audit (no DB, no HTTP).
+describe("AuthService.resendEmailVerification — enumeration-safe (#319, EARS-25)", () => {
+  const password = "Aa1!sufficiently-long-pw";
+
+  /** A service wired with only the deps the resend path uses (idp + audit). */
+  function buildResendService(idp: FakeIdpClient, audit: InMemoryAuthAuditLog) {
+    return new AuthService(
+      idp as unknown as IdpClient,
+      explodingDb as never, // the resend path touches no DB
+      undefined,
+      audit,
+      new FakeMailer(),
+      new InMemoryRegisterNoticeThrottle("test-pepper"),
+      {} as never, // mirror — unused on the resend path
+      {} as never, // sessions — unused on the resend path
+      {} as never, // smsBudget — unused on the resend path
+    );
+  }
+
+  it("EARS-25: when an existing, unverified registrant requests a resend, the system shall re-issue the code and append exactly one otp.sent row", async () => {
+    const idp = new FakeIdpClient();
+    const audit = new InMemoryAuthAuditLog();
+    const email = "unverified@ds.test";
+    await idp.createUser({ email, password }); // unverified (no verifyEmail)
+    const service = buildResendService(idp, audit);
+
+    const res = await service.resendEmailVerification(email);
+
+    expect(res).toEqual({ status: "resend_requested" });
+    expect(audit.events).toEqual([
+      { type: "OtpSent", identifier: email, channel: "email" },
+    ]);
+  });
+
+  it("EARS-25/16: an unknown identifier yields the identical ack with NO code and NO ledger row", async () => {
+    const idp = new FakeIdpClient();
+    const audit = new InMemoryAuthAuditLog();
+    const service = buildResendService(idp, audit);
+
+    const res = await service.resendEmailVerification("nobody@ds.test");
+
+    // Identical body to the real-send path (no existence oracle, EARS-16)…
+    expect(res).toEqual({ status: "resend_requested" });
+    // …but no code was issued, so the ledger stays empty (not an oracle).
+    expect(audit.events).toEqual([]);
+  });
+
+  it("EARS-25/16: an ALREADY-VERIFIED registrant yields the identical ack with NO code and NO ledger row", async () => {
+    const idp = new FakeIdpClient();
+    const audit = new InMemoryAuthAuditLog();
+    const email = "verified@ds.test";
+    const created = await idp.createUser({ email, password });
+    // Flip the registrant to verified (mirrors a completed EARS-3 verify).
+    await idp.verifyEmail(created.sub, FAKE_VALID_CODE);
+    const service = buildResendService(idp, audit);
+
+    const res = await service.resendEmailVerification(email);
+
+    expect(res).toEqual({ status: "resend_requested" });
+    // A verified registrant has no pending verification — no send, no row.
+    expect(audit.events).toEqual([]);
+  });
+});
+
+// EARS-25 (#319): the FakeIdpClient.resendEmailVerification must be NO MORE
+// PERMISSIVE than the real Zitadel adapter — it re-issues a code (resolves `true`)
+// ONLY for an existing, UNVERIFIED registrant, exactly the unverified-vs-verified
+// distinction the real adapter draws off `human.email.isVerified`. A fake that
+// returned `true` for an unknown or already-verified identifier would hide a
+// broken vertical (memory: fake-no-more-permissive).
+describe("FakeIdpClient.resendEmailVerification — parity with real adapter (#319, EARS-25)", () => {
+  const password = "Aa1!sufficiently-long-pw";
+
+  it("resolves true for an existing, unverified registrant", async () => {
+    const idp = new FakeIdpClient();
+    await idp.createUser({ email: "u@ds.test", password });
+    await expect(idp.resendEmailVerification("u@ds.test")).resolves.toBe(true);
+  });
+
+  it("resolves false (no send) for an unknown identifier", async () => {
+    const idp = new FakeIdpClient();
+    await expect(idp.resendEmailVerification("nobody@ds.test")).resolves.toBe(
+      false,
+    );
+  });
+
+  it("resolves false (no send) for an already-verified registrant", async () => {
+    const idp = new FakeIdpClient();
+    const created = await idp.createUser({ email: "v@ds.test", password });
+    await idp.verifyEmail(created.sub, FAKE_VALID_CODE);
+    await expect(idp.resendEmailVerification("v@ds.test")).resolves.toBe(false);
+  });
+});

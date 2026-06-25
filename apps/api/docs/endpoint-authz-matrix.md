@@ -14,4 +14,5 @@
 | POST /v1/auth/refresh                 | authenticated | doctor_guest   | fast-path  | —            | false   | low-stakes  | EARS-9                   |
 | POST /v1/auth/register                | public        | —              | none       | —            | false   | high-stakes | EARS-1, EARS-20, EARS-16 |
 | POST /v1/auth/verify                  | public        | —              | none       | —            | false   | high-stakes | EARS-3, EARS-4           |
+| POST /v1/auth/verify/resend           | public        | —              | none       | —            | false   | high-stakes | EARS-25, EARS-16         |
 | POST /v1/auth/zitadel/webhook         | public        | —              | none       | —            | false   | low-stakes  | EARS-19                  |

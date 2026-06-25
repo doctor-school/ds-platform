@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -19,9 +19,14 @@ import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import { takePendingRegistration } from "@/lib/pending-registration";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
+import { useResendCooldown } from "@/lib/use-resend-cooldown";
 
 import { Button } from "@ds/design-system/button";
-import { AuthCard, maskDestination } from "@ds/design-system/blocks";
+import {
+  AuthCard,
+  maskDestination,
+  useResendCountdown,
+} from "@ds/design-system/blocks";
 import { Form, FormField } from "@ds/design-system/form";
 
 /** The registration verification code is a FIXED 6 characters (Zitadel default) —
@@ -29,6 +34,13 @@ import { Form, FormField } from "@ds/design-system/form";
  * variant, which accepts letters (no digit-only filter); #211 also moved the 8-char
  * login OTP onto the same slotted look. */
 const VERIFY_OTP_LENGTH = 6;
+
+/**
+ * Resend cooldown (#227/#267). Bumping the nonce restarts the live countdown (the
+ * same `useResendCountdown` timer the `<OtpFocusScreen>` block uses) without a
+ * remount, and clears the now-stale typed code — matching the proven `/login` pattern.
+ */
+const VERIFY_RESEND_COOLDOWN_SECONDS = 30;
 
 /*
  * Post-registration surface (#131, EARS-3; reframed #207, EARS-24). The BFF
@@ -93,6 +105,38 @@ function VerifyCard() {
     // is not user-editable here — they only type the code.
     defaultValues: { email, code: "" },
   });
+
+  // #267 resend: re-issue the registration code via the dedicated EARS-25 endpoint
+  // (`/v1/auth/verify/resend`, #319) — NOT a re-`register` (no held password here).
+  // The identifier is the seeded email; if it is absent (deep-link without `?email=`)
+  // resend has nothing to target, so the control is hidden. EARS-16: the ack is
+  // existence-agnostic, so resend never reveals whether the account exists.
+  const { resendNonce, onResend } = useResendCooldown({
+    resend: async () => {
+      await authClient.resendVerification({ identifier: email ?? "" });
+    },
+    onError: (err) =>
+      setError(authErrorMessage(err, te, te("verifyResendFailed"))),
+    onBeforeResend: () => setError(null),
+  });
+  // The block's countdown lives inside <OtpFocusScreen>; the /verify code section
+  // keeps its existing dual-affordance layout (NOT the single-focus block, per
+  // EARS-24), so it runs the SAME shared timer inline for its own resend control.
+  const remaining = useResendCountdown(VERIFY_RESEND_COOLDOWN_SECONDS, resendNonce);
+  const resendDisabled = remaining > 0;
+
+  // On a successful resend (nonce bump) clear the now-superseded typed code, so the
+  // user re-enters the fresh code — same explicit reset /login's verify step uses.
+  const isInitialResend = useRef(true);
+  useEffect(() => {
+    if (isInitialResend.current) {
+      isInitialResend.current = false;
+      return;
+    }
+    form.resetField("code");
+    // Keyed only on the resend signal — `form` is a stable useForm handle.
+
+  }, [resendNonce]);
 
   async function onSubmit(values: VerifyRequest) {
     setError(null);
@@ -189,6 +233,28 @@ function VerifyCard() {
               </Button>
             </form>
           </Form>
+          {/* #267 resend-with-cooldown, wired to the real EARS-25 endpoint. Only
+              meaningful when an email destination is known (it is seeded from the
+              `?email=` the register step passes); on a bare deep-link there is
+              nothing to resend to, so the control is hidden rather than firing an
+              empty request. The countdown reuses the SAME timer the focus-screen
+              block runs. */}
+          {email ? (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                disabled={resendDisabled}
+                onClick={() => void onResend()}
+                data-testid="verify-resend"
+              >
+                {resendDisabled
+                  ? t("resendIn", { seconds: remaining })
+                  : t("resend")}
+              </Button>
+            </div>
+          ) : null}
         </section>
 
         {/* (b) Already-registered owner's path — prominent, co-equal sign-in /

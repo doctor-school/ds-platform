@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -22,15 +22,29 @@ import {
   ResetIdentifierFormSchema,
 } from "@/lib/identifier-validation";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
+import { useResendCooldown } from "@/lib/use-resend-cooldown";
 
 import { Button } from "@ds/design-system/button";
-import { AuthCard, maskDestination } from "@ds/design-system/blocks";
+import {
+  AuthCard,
+  maskDestination,
+  useResendCountdown,
+} from "@ds/design-system/blocks";
 import { Form, FormField } from "@ds/design-system/form";
 
 /** The reset code is a FIXED 6 characters (Zitadel default) — and ALPHANUMERIC
  * (e.g. `PVDC3R`), not digits-only — like the registration verify code. `<OtpField>`
  * uses its slotted variant, which accepts letters (it carries no digit-only filter). */
 const RESET_OTP_LENGTH = 6;
+
+/**
+ * Resend cooldown (#267) for the reset complete step. Bumping the nonce restarts the
+ * shared `useResendCountdown` timer (the same one `<OtpFocusScreen>` runs on /login
+ * & /verify) without a remount. The reset code-step submits the code TOGETHER with a
+ * new password (a shape `<OtpFocusScreen>` doesn't carry), so it reuses the timer +
+ * resend orchestration inline rather than adopting the whole block.
+ */
+const RESET_RESEND_COOLDOWN_SECONDS = 30;
 
 /*
  * Password-reset surface (#131, EARS-11 initiate / EARS-12 complete). Two steps on
@@ -153,7 +167,18 @@ export default function ResetPage() {
             </form>
           </Form>
         ) : (
-          <ResetCompleteForm identifier={identifier} />
+          <ResetCompleteForm
+            identifier={identifier}
+            onRestart={() => {
+              // «Начать заново»: return to the request stage so the user can change
+              // the identifier (e.g. mistyped email/phone) and request a fresh code.
+              setError(null);
+              setCaptchaToken(null);
+              setIdentifier("");
+              requestForm.reset({ identifier: "" });
+              setStage("request");
+            }}
+          />
         )}
       </AuthCard>
     </AuthShell>
@@ -170,7 +195,13 @@ export default function ResetPage() {
  * `identifier` comes in as a prop (the BFF re-resolves it); the user types the code
  * and the new password and submits both together.
  */
-function ResetCompleteForm({ identifier }: { identifier: string }) {
+function ResetCompleteForm({
+  identifier,
+  onRestart,
+}: {
+  identifier: string;
+  onRestart: () => void;
+}) {
   const router = useRouter();
   const t = useTranslations("reset");
   const tc = useTranslations("common");
@@ -190,6 +221,33 @@ function ResetCompleteForm({ identifier }: { identifier: string }) {
     resolver: useLocalizedResolver(ResetCompleteFormSchema),
     defaultValues: { identifier, code: "", newPassword: "" },
   });
+
+  // #267 resend: re-request a reset code for the SAME held identifier via the
+  // EXISTING `requestPasswordReset` (no new backend). EARS-16: the ack is identical
+  // whether the identifier exists, so resend leaks nothing. Bumping the nonce
+  // restarts the shared cooldown timer + clears the now-stale typed code.
+  const { resendNonce, onResend } = useResendCooldown({
+    resend: async () => {
+      await authClient.requestPasswordReset({ identifier });
+    },
+    onError: (err) =>
+      setError(authErrorMessage(err, te, te("resetResendFailed"))),
+    onBeforeResend: () => setError(null),
+  });
+  const remaining = useResendCountdown(RESET_RESEND_COOLDOWN_SECONDS, resendNonce);
+  const resendDisabled = remaining > 0;
+
+  // On a successful resend clear the superseded code (the new password is kept — the
+  // user only needs the fresh code). Skips the initial mount.
+  const isInitialResend = useRef(true);
+  useEffect(() => {
+    if (isInitialResend.current) {
+      isInitialResend.current = false;
+      return;
+    }
+    completeForm.resetField("code");
+
+  }, [resendNonce]);
 
   async function onComplete(values: PasswordResetCompleteRequest) {
     setError(null);
@@ -250,6 +308,34 @@ function ResetCompleteForm({ identifier }: { identifier: string }) {
           {t("setNewPassword")}
         </Button>
       </form>
+      {/* #267: focus-polish footer — «начать заново» (change the identifier, back to
+          the request step) on the left, resend-with-cooldown (real
+          `requestPasswordReset`) on the right. Mirrors the focus-screen's
+          change-method/resend pairing, kept inline because the reset step submits the
+          code together with a new password. */}
+      <div className="flex items-center justify-between gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onRestart}
+          data-testid="reset-restart"
+        >
+          {t("startOver")}
+        </Button>
+        <Button
+          type="button"
+          variant="link"
+          size="sm"
+          disabled={resendDisabled}
+          onClick={() => void onResend()}
+          data-testid="reset-resend"
+        >
+          {resendDisabled
+            ? t("resendIn", { seconds: remaining })
+            : t("resend")}
+        </Button>
+      </div>
     </Form>
   );
 }

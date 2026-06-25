@@ -16,6 +16,8 @@ import type {
   RegisterResponse,
   SessionClaims,
   VerifyRequest,
+  VerifyResendRequest,
+  VerifyResendResponse,
   VerifyResponse,
 } from "@ds/schemas";
 
@@ -85,6 +87,16 @@ export const authClient = {
 
   verify: (body: VerifyRequest) =>
     post<VerifyRequest, VerifyResponse>("verify", body),
+
+  /**
+   * Re-send the registration verification code (EARS-25, #319/#321). The
+   * existence-agnostic `/verify` screen has no held password, so it cannot
+   * re-`register` (the EARS-23 path); this dedicated endpoint re-issues the email
+   * code with the identical enumeration-safe ack regardless of account state
+   * (EARS-16).
+   */
+  resendVerification: (body: VerifyResendRequest) =>
+    post<VerifyResendRequest, VerifyResendResponse>("verify/resend", body),
 
   login: (body: LoginRequest) =>
     post<LoginRequest, LoginResponse>("login", body),

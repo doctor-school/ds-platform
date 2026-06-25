@@ -1,0 +1,30 @@
+/*
+ * Minimal green fixture mirroring the real design-system base-reset. The
+ * commented prose below deliberately mentions cursor rules so the guard's
+ * comment-stripping is exercised on a PASSING tree too — the real rules live
+ * outside the comment.
+ *
+ * note: button { cursor: pointer } and cursor: not-allowed are described here in
+ * prose only; the actual @layer base block carries them.
+ */
+@layer base {
+  button,
+  [role="button"],
+  a[href] {
+    cursor: pointer;
+  }
+
+  :disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

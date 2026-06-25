@@ -90,6 +90,65 @@ token-only `hover:` state — the lint and the `build-ui-from-design-system`
 live-verify audit both check for it. To opt a genuine exception out, mark it with
 `/* interaction-states-ok: <reason> */`.
 
+## Form layout standard (ADR-0013 §7)
+
+Form vertical rhythm and validation messaging are a **contract**, not per-screen
+care — constant height, no reflow on error, no over-spacing. These are the
+concrete token-only classes `#324` implements against (rationale + research
+citations in ADR-0013 §7 → _Form layout & validation contract_). **Token-only:
+no arbitrary `[...]` values** — every class below resolves to an existing scale
+token (the §5 / `#269` arbitrary-value guard must stay green).
+
+| Concern | Value | Notes |
+| --- | --- | --- |
+| Label ↔ control gap | `space-y-1.5` (6 px) | `FormItem` inner gap — label belongs to its control as one unit |
+| Field-group spacing | `space-y-5` (20 px) | set on the `<form>` / fields wrapper, **not** the `FormItem` |
+| Field height | `h-9` | `Input` / single-line controls (matches `Button` default) |
+| Message slot | `min-h-5` one-line slot | `text-sm` `leading-5` = one 20 px line; **always present on a validating field** |
+| Helper (resting) | `text-sm text-muted-foreground` | shown by default inside the slot |
+| Error (swap-in) | `text-sm font-medium text-destructive` | replaces the helper **in place** — same slot, no height change |
+| No helper + no validation | render **no slot** | field stacks on the `space-y-5` rhythm; never a blank reserved line |
+
+**The no-reflow slot.** `FormMessage` must **not** `return null` when empty (that
+is the reflow source). Instead the field renders one persistent slot wrapper at
+`min-h-5` that shows `FormDescription` (helper) by default and shows
+`FormMessage` (error) when `error` is set — the two never coexist, the wrapper
+height is constant, so the form does not grow when an error appears. A field that
+declares neither a helper nor a validating schema renders no slot at all, so a
+plain field is not pushed apart by an always-blank line (defect #1) — the slot is
+present **only where a field can show a message** (defect #7).
+
+```
+FormItem            → space-y-1.5            (label ↔ control, tight)
+  FormLabel
+  FormControl        → Input h-9
+  message slot       → min-h-5               (helper by default; error swaps in place)
+<form> / fields      → space-y-5             (between fields, loose)
+```
+
+### Clickable state matrix (the values for `#324`)
+
+| Kind | Resting | Hover | Active | Disabled |
+| --- | --- | --- | --- | --- |
+| `Button` default | `bg-primary-action text-primary-foreground shadow` | `hover:bg-primary-hover` | `active:bg-primary-pressed` | `disabled:opacity-50 disabled:pointer-events-none` + L1 `not-allowed` |
+| `Button` secondary | `bg-secondary text-secondary-foreground` **`border border-input`** `shadow-sm` | `hover:bg-secondary/80` | `active:bg-secondary/70` | same |
+| `Button` outline | `border border-input bg-background shadow-sm` | `hover:bg-accent hover:text-accent-foreground` | `active:bg-accent/80` | same |
+| `Button` ghost | — | `hover:bg-accent hover:text-accent-foreground` | `active:bg-accent/80` | same |
+| `Link` / `link` | `text-primary` (no underline) | `hover:underline underline-offset-4` | `active:text-primary/80` | `disabled:opacity-50` + L1 `not-allowed` |
+| `TabsTrigger` | inactive `text-foreground/60` **`border border-transparent`** `px-3 py-1` | `data-[state=inactive]:hover:bg-background/50 data-[state=inactive]:hover:text-foreground` | — | `disabled:opacity-50` |
+| `TabsTrigger` active | `data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow` | — | — | — |
+
+- **Disabled vs secondary (#2):** secondary is told apart from disabled by a
+  **`border border-input` + pointer cursor + live hover**, never by fill depth.
+  Disabled is the **combination** `opacity-50` + L1 `cursor: not-allowed` +
+  `pointer-events-none` — dimmed *and* inert *and* not-allowed cursor.
+- **Link (#3):** the new `Link` primitive composes `interactiveBase` (focus ring)
+  + `text-primary hover:underline underline-offset-4 active:text-primary/80`; no
+  resting underline on standalone nav links, resting underline on in-body links.
+- **Tab inset (#4):** every `TabsTrigger` carries `border border-transparent` so
+  the active background+shadow does not shift neighbours, with `px-3 py-1` inside
+  the list so an inactive hover reads as an inset chip, not a flush block.
+
 ## Adding a component later
 
 This package follows the shadcn **owned-code** convention: components are copied

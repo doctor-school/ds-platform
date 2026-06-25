@@ -45,4 +45,30 @@ describe("interaction-states-lint", () => {
     // Either branch (hover or focus) firing proves the commented tokens did not count.
     expect(stderr).toMatch(/no `hover:\*` affordance|no visible keyboard focus/);
   });
+
+  // ── scope (c): app-level "no raw styled text link" (#325) ──────────────────
+  // The coverage gap that let the portal footer ship `<Link className="underline">`
+  // with no hover state through green CI (2026-06-25 live review, finding #3).
+
+  it("#325 app-green: DS-`Link`-composed (`asChild`) + bare unstyled <a> links → exit 0", () => {
+    const { code } = runGuard(GUARD, dir("app-green"));
+    expect(code).toBe(0);
+  });
+
+  it("#325 app-red: a raw styled `<a className=…>` text link in app source → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("app-red-raw-anchor"));
+    expect(code).toBe(1);
+    expect(stderr).toContain("raw `<a className=…>` text link");
+  });
+
+  it("#325 app-red: a raw `next/link` `<Link className=…>` text link (defect #3 shape) → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("app-red-raw-nextlink"));
+    expect(code).toBe(1);
+    expect(stderr).toContain("raw `next/link` `<Link className=…>` text link");
+  });
+
+  it("#325 app-suppressed: a reasoned `interaction-states-ok` marker skips the raw link → exit 0", () => {
+    const { code } = runGuard(GUARD, dir("app-suppressed"));
+    expect(code).toBe(0);
+  });
 });

@@ -12,9 +12,11 @@ import { interactiveBase } from "./interactive-base";
  * or disabled treatment (defect #3).
  *
  * Composes the shared `interactiveBase` (the `focus-visible` ring identical to the
- * hover affordance — WAI consistency) with the `link` states: `text-primary` brand
- * colour, `hover:underline` (`underline-offset-4`), `active:text-primary/80`, and
- * the `disabled:opacity-50` dim. Cursor + `prefers-reduced-motion` come from the L1
+ * hover affordance — WAI consistency) with the `link` states: `text-primary-action`
+ * (blue.700 `#114D9E`, the brand-anchored accessible link colour — 8.14:1 on white,
+ * WCAG AA for normal-weight text, where `primary`/blue.500 is only ~3.3:1 and fails
+ * the axe scan), `hover:underline` (`underline-offset-4`), `active:text-primary-action/80`,
+ * and the `disabled:opacity-50` dim. Cursor + `prefers-reduced-motion` come from the L1
  * `globals.css` base-reset; an `aria-disabled` link also gets `pointer-events-none`
  * so it is inert like a disabled control. Token-only throughout (no arbitrary
  * Tailwind values — the §5 / #269 guard must stay green).
@@ -33,7 +35,7 @@ import { interactiveBase } from "./interactive-base";
 const linkVariants = cva(
   cn(
     interactiveBase,
-    "rounded-sm text-primary underline-offset-4 hover:underline active:text-primary/80 aria-disabled:pointer-events-none aria-disabled:opacity-50",
+    "rounded-sm text-primary-action underline-offset-4 hover:underline active:text-primary-action/80 aria-disabled:pointer-events-none aria-disabled:opacity-50",
   ),
   {
     variants: {

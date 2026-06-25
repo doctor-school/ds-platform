@@ -16,11 +16,14 @@ afterEach(cleanup);
 describe("Link variant classes", () => {
   it("standalone (default): brand colour, hover-underline + focus ring, no resting underline", () => {
     const cls = linkVariants();
-    expect(cls).toMatch(/text-primary/);
+    // Accessible brand link colour: primary-action (blue.700, 8.14:1 on white) —
+    // NOT primary/blue.500 (~3.3:1, fails the axe scan).
+    expect(cls).toMatch(/text-primary-action/);
+    expect(cls).not.toMatch(/(?:^|\s)text-primary(?:\s|$)/);
     expect(cls).toMatch(/hover:underline/);
     expect(cls).toMatch(/underline-offset-4/);
     expect(cls).toMatch(/focus-visible:ring-2/);
-    expect(cls).toMatch(/active:text-primary\/80/);
+    expect(cls).toMatch(/active:text-primary-action\/80/);
     // disabled dim via aria-disabled (anchors have no native :disabled).
     expect(cls).toMatch(/aria-disabled:opacity-50/);
     // No RESTING underline class on the standalone variant.
@@ -38,7 +41,7 @@ describe("Link rendering + routing", () => {
     render(<Link href="/login">Sign in</Link>);
     const link = screen.getByRole("link", { name: "Sign in" });
     expect(link).toHaveAttribute("href", "/login");
-    expect(link).toHaveClass("text-primary", "hover:underline");
+    expect(link).toHaveClass("text-primary-action", "hover:underline");
     expect(link).toHaveClass("focus-visible:ring-2");
   });
 
@@ -56,7 +59,7 @@ describe("Link rendering + routing", () => {
     expect(link.tagName).toBe("A");
     expect(link).toHaveAttribute("href", "/register");
     // Interaction states come from the primitive, applied onto the wrapped anchor.
-    expect(link).toHaveClass("text-primary", "hover:underline");
+    expect(link).toHaveClass("text-primary-action", "hover:underline");
     expect(screen.getAllByRole("link")).toHaveLength(1);
   });
 
@@ -67,6 +70,6 @@ describe("Link rendering + routing", () => {
       </Link>,
     );
     const link = screen.getByRole("link", { name: "X" });
-    expect(link).toHaveClass("w-full", "text-primary");
+    expect(link).toHaveClass("w-full", "text-primary-action");
   });
 });

@@ -75,6 +75,15 @@ describe("registry-research-lint", () => {
     expect(code).toBe(0);
   });
 
+  it("regression (#309): an `apps/*/e2e/**` support-file-only change is exempt → exit 0", () => {
+    const { code } = runGuard(
+      GUARD,
+      caseDir("registry-research", "green-e2e-support"),
+      { env: prEnv("105", "green-e2e-support") },
+    );
+    expect(code).toBe(0);
+  });
+
   it("skip: not a pull_request event → exit 0", () => {
     const { code, stdout } = runGuard(
       GUARD,

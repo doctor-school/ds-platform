@@ -1,0 +1,8 @@
+{
+  "number": 105,
+  "body": "test(portal): add a Mailpit polling helper for the auth e2e suite. Playwright E2E support only, no UI source, no registry-research artifact.\n",
+  "files": [
+    { "path": "apps/portal/e2e/support/mailpit.ts" },
+    { "path": "apps/portal/e2e/support/notification-subjects.ts" }
+  ]
+}

@@ -216,13 +216,23 @@ function main() {
         continue;
       }
       const t = textOf(content);
-      if (!t || isNoise(t)) continue;
-      const handoff = isHandoff(t);
+      const img =
+        Array.isArray(content) && content.some((c) => c && c.type === 'image');
+      const realText = t && !isNoise(t) ? t : '';
+      // Keep an image-only user turn: in a UI/design session the correction
+      // channel IS the annotated screenshot (empty text), which the text-only
+      // CORRECTION_RE can never see — dropping it undercounts corrections (the
+      // #333 retro saw 1 of ~7). Flag it as a correction candidate.
+      if (!realText && !img) continue;
+      const imageOnly = !realText && img;
+      const text = realText || '[image-only turn — likely an annotated-screenshot correction]';
+      const handoff = isHandoff(text);
       meta.humanMsgs.push({
         ts: e.timestamp || null,
-        text: t,
+        text,
         handoff,
-        correction: !handoff && CORRECTION_RE.test(t),
+        imageOnly,
+        correction: !handoff && (CORRECTION_RE.test(text) || imageOnly),
       });
     }
 

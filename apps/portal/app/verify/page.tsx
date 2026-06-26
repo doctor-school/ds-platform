@@ -246,7 +246,7 @@ function VerifyCard() {
                 )}
               />
               {error && (
-                <p role="alert" className="text-sm text-destructive">
+                <p role="alert" className="text-xs text-destructive">
                   {error}
                 </p>
               )}

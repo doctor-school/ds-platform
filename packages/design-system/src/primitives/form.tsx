@@ -142,6 +142,17 @@ const FormDescription = React.forwardRef<
 FormDescription.displayName = "FormDescription";
 
 /**
+ * Single source of the form message style (ADR-0013 §7). The error tone and the
+ * helper tone live **here, once** — `FormMessage` (field-level) and `FormError`
+ * (form-level submit/auth error) both compose these, so the error look is defined
+ * in one place, never re-typed as a raw `text-xs text-destructive` `<p>` on each
+ * page (the #333 Stage-B finding). Token-only.
+ */
+const FORM_MESSAGE_TEXT = "text-xs";
+const FORM_ERROR_TONE = "text-destructive";
+const FORM_HELPER_TONE = "text-muted-foreground";
+
+/**
  * Inline validation message (ADR-0013 §7 → "Form layout & validation contract",
  * #333 redo of the slice-B standard — owner-picked **1A inline**).
  *
@@ -193,8 +204,8 @@ const FormMessage = React.forwardRef<
       // the description id when showing the helper.
       id={hasError ? formMessageId : formDescriptionId}
       className={cn(
-        "text-xs",
-        hasError ? "text-destructive" : "text-muted-foreground",
+        FORM_MESSAGE_TEXT,
+        hasError ? FORM_ERROR_TONE : FORM_HELPER_TONE,
         className,
       )}
       role={hasError ? "alert" : undefined}
@@ -206,6 +217,35 @@ const FormMessage = React.forwardRef<
 });
 FormMessage.displayName = "FormMessage";
 
+/**
+ * Form-level error (ADR-0013 §7). The **single** primitive for a submit/auth
+ * error that is not tied to one field — e.g. the EARS-16 generic login/register
+ * outcome, a 429/5xx/network message. It owns the error style from the shared
+ * source (same `text-xs text-destructive` as a `FormMessage` error) so the look
+ * is defined in **one place**; pages render `<FormError>{error}</FormError>`
+ * instead of hand-typing a raw `<p role="alert" className="…">` each time (the
+ * #333 Stage-B finding — the error style must live in the design system, not be
+ * duplicated per screen). Renders nothing when there is no message.
+ */
+const FormError = React.forwardRef<
+  HTMLParagraphElement,
+  React.ComponentProps<"p">
+>(({ className, children, ...props }, ref) => {
+  const hasBody = children != null && children !== false && children !== "";
+  if (!hasBody) return null;
+  return (
+    <p
+      ref={ref}
+      role="alert"
+      className={cn(FORM_MESSAGE_TEXT, FORM_ERROR_TONE, className)}
+      {...props}
+    >
+      {children}
+    </p>
+  );
+});
+FormError.displayName = "FormError";
+
 export {
   useFormField,
   Form,
@@ -214,5 +254,6 @@ export {
   FormControl,
   FormDescription,
   FormMessage,
+  FormError,
   FormField,
 };

@@ -4,6 +4,7 @@ import * as React from "react";
 import type { ControllerRenderProps, FieldValues } from "react-hook-form";
 
 import { Button } from "../primitives/button";
+import { FormError } from "../primitives/form";
 import { OtpField } from "../primitives/fields/otp-field";
 import { useResendCountdown } from "./use-resend-countdown";
 
@@ -152,11 +153,7 @@ export function OtpFocusScreen<T extends FieldValues>({
           onComplete={onComplete}
         />
 
-        {error ? (
-          <p role="alert" className="text-xs text-destructive">
-            {error}
-          </p>
-        ) : null}
+        <FormError>{error}</FormError>
 
         <Button
           type="submit"

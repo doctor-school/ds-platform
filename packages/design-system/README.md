@@ -59,7 +59,7 @@ the consuming app's CSS even though they live outside the app tree.
 | `Input` (`./input`)        | Text/email/password field                                                                                                                                |
 | `Label` (`./label`)        | Radix label primitive                                                                                                                                    |
 | `Card` (`./card`)          | `Card` + `Header`/`Title`/`Description`/`Content`/`Footer` — the auth-form shell                                                                         |
-| `Form` (`./form`)          | RHF binding — `Form`/`FormField`/`FormItem`/`FormLabel`/`FormControl`/`FormMessage` (ADR-0004 §9)                                                        |
+| `Form` (`./form`)          | RHF binding — `Form`/`FormField`/`FormItem`/`FormLabel`/`FormControl`/`FormMessage` + `FormError` (form-level submit error) (ADR-0004 §9)                |
 | `InputOTP` (`./input-otp`) | One-time-code field for email-OTP / SMS-OTP (EARS-6/7)                                                                                                   |
 
 Forms follow the ADR-0004 §9 pattern: **RHF + `@hookform/resolvers/zod` + shadcn
@@ -120,6 +120,14 @@ failure — the two never coexist. The accepted cost is a small one-line downwar
 shift when an error appears; validation is **on blur** (`mode: onTouched`) so it
 never fires mid-typing. Long forms (**>3 fields**) use a `<FormErrorSummary>`
 panel **below the submit button** instead (deferred until the first such form).
+
+**One error-style source.** The error look (`text-xs text-destructive`,
+`role="alert"`) lives in **one place** — `FormMessage` (field-level) and
+`FormError` (form-level submit/auth error, e.g. the EARS-16 generic outcome) both
+compose the shared tone constants in `form.tsx`. A page renders
+`<FormError>{error}</FormError>`, **never** a hand-typed raw `<p role="alert"
+className="…">` — duplicating the error style per screen is the #333 Stage-B
+finding the design system exists to prevent.
 
 ```
 FormItem            → flex flex-col gap-2.5  (label ↔ control, tight + ring-clearing)

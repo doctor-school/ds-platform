@@ -31,7 +31,7 @@ import {
   maskDestination,
   useResendCountdown,
 } from "@ds/design-system/blocks";
-import { Form, FormField } from "@ds/design-system/form";
+import { Form, FormField, FormError } from "@ds/design-system/form";
 
 /** The reset code is a FIXED 6 characters (Zitadel default) — and ALPHANUMERIC
  * (e.g. `PVDC3R`), not digits-only — like the registration verify code. `<OtpField>`
@@ -152,11 +152,7 @@ export default function ResetPage() {
                 )}
               />
               <BotProtectionField onToken={setCaptchaToken} />
-              {error && (
-                <p role="alert" className="text-xs text-destructive">
-                  {error}
-                </p>
-              )}
+              <FormError>{error}</FormError>
               <Button
                 type="submit"
                 className="w-full"
@@ -324,11 +320,7 @@ function ResetCompleteForm({
             />
           )}
         />
-        {error && (
-          <p role="alert" className="text-xs text-destructive">
-            {error}
-          </p>
-        )}
+        <FormError>{error}</FormError>
         <Button
           type="submit"
           className="w-full"

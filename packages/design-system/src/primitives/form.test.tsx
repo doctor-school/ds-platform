@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   Form,
   FormControl,
+  FormError,
   FormField,
   FormItem,
   FormLabel,
@@ -110,6 +111,23 @@ describe("FormItem label↔control gap (focus ring clearance, unchanged)", () =>
     render(<Harness />);
     const item = screen.getByTestId("item");
     expect(item).toHaveClass("flex", "flex-col", "gap-2.5");
+  });
+});
+
+describe("FormError — single form-level error primitive (one error style source)", () => {
+  it("renders nothing when there is no message", () => {
+    render(<FormError data-testid="ferr">{null}</FormError>);
+    expect(screen.queryByTestId("ferr")).not.toBeInTheDocument();
+  });
+
+  it("renders the submit/auth error in the SAME style as a field error (text-xs destructive, alert)", () => {
+    render(<FormError data-testid="ferr">Не удалось войти.</FormError>);
+    const err = screen.getByTestId("ferr");
+    expect(err).toHaveTextContent("Не удалось войти.");
+    // Same shared style as FormMessage's error branch — the look lives in one place.
+    expect(err).toHaveClass("text-xs", "text-destructive");
+    expect(err).not.toHaveClass("font-medium");
+    expect(err).toHaveAttribute("role", "alert");
   });
 });
 

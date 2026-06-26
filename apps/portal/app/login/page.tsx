@@ -38,7 +38,7 @@ import {
   OtpFocusScreen,
   maskDestination,
 } from "@ds/design-system/blocks";
-import { Form, FormField } from "@ds/design-system/form";
+import { Form, FormField, FormError } from "@ds/design-system/form";
 import {
   Tabs,
   TabsContent,
@@ -192,11 +192,7 @@ function PasswordLogin() {
             F6/#90, so here it renders unconditionally (harmless — the guard no-ops
             without a configured provider). Its token rides as `captchaToken`. */}
         <BotProtectionField onToken={setCaptchaToken} />
-        {error && (
-          <p role="alert" className="text-xs text-destructive">
-            {error}
-          </p>
-        )}
+        <FormError>{error}</FormError>
         <Button
           type="submit"
           className="w-full"
@@ -359,11 +355,7 @@ function OtpLogin() {
                 }
               />
               <BotProtectionField onToken={setCaptchaToken} />
-              {error && (
-                <p role="alert" className="text-xs text-destructive">
-                  {error}
-                </p>
-              )}
+              <FormError>{error}</FormError>
               <Button
                 type="submit"
                 variant="secondary"

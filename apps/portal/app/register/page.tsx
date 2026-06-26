@@ -25,7 +25,7 @@ import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 import { Button } from "@ds/design-system/button";
 import { Link as DsLink } from "@ds/design-system/link";
 import { AuthCard } from "@ds/design-system/blocks";
-import { Form, FormField } from "@ds/design-system/form";
+import { Form, FormField, FormError } from "@ds/design-system/form";
 
 /*
  * Registration surface (#131, EARS-1). Email-primary (#202): registration is
@@ -146,11 +146,7 @@ export default function RegisterPage() {
             <p className="text-xs text-muted-foreground">{t("consent")}</p>
 
             <BotProtectionField onToken={setCaptchaToken} />
-            {error && (
-              <p role="alert" className="text-xs text-destructive">
-                {error}
-              </p>
-            )}
+            <FormError>{error}</FormError>
             <Button
               type="submit"
               className="w-full"

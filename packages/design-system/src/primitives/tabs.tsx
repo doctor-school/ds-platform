@@ -22,7 +22,11 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-9 w-full items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
+      // K-2 (#333): `gap-2` opens a visible track between segments so an inactive
+      // segment's hover fill never butts flush against the active segment — the
+      // slice-B defect was hover-gluing (two segments reading as one block on
+      // hover), which a transparent border alone did not fix.
+      "inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-muted p-1 text-muted-foreground",
       className,
     )}
     {...props}

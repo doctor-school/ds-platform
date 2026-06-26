@@ -157,7 +157,7 @@ function PasswordLogin() {
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className="space-y-2"
+        className="space-y-4"
         noValidate
         aria-label={t("passwordFormLabel")}
         data-testid="password-login-form"
@@ -329,7 +329,7 @@ function OtpLogin() {
           <Form {...requestForm}>
             <form
               onSubmit={requestForm.handleSubmit(onRequest)}
-              className="space-y-2"
+              className="space-y-4"
               noValidate
             >
               {/* The OTP request box is channel-specific: the email channel is a pure

@@ -97,15 +97,11 @@ const FormLabel = React.forwardRef<
   React.ElementRef<typeof Label>,
   React.ComponentPropsWithoutRef<typeof Label>
 >(({ className, ...props }, ref) => {
-  const { error, formItemId } = useFormField();
-  return (
-    <Label
-      ref={ref}
-      className={cn(error && "text-destructive", className)}
-      htmlFor={formItemId}
-      {...props}
-    />
-  );
+  // K-3 (#333): the label stays NEUTRAL on error. Invalidity is carried by the
+  // input border + the error message (NN/g: mark the field, not the text); a red
+  // label stacked on a red message + red helper is the "red mush" the owner flagged.
+  const { formItemId } = useFormField();
+  return <Label ref={ref} className={className} htmlFor={formItemId} {...props} />;
 });
 FormLabel.displayName = "FormLabel";
 
@@ -146,29 +142,34 @@ const FormDescription = React.forwardRef<
 FormDescription.displayName = "FormDescription";
 
 /**
- * No-reflow validation slot (ADR-0013 §7 → "Form layout & validation contract").
+ * Inline validation message (ADR-0013 §7 → "Form layout & validation contract",
+ * #333 redo of the slice-B standard — owner-picked **1A inline**).
  *
- * One persistent one-line slot (`min-h-5` = a single `text-sm`/`leading-5` 20px
- * line) that holds the field's **helper** (`FormDescription` styling) by default
- * and **swaps the error in place** (`FormMessage` styling) on validation failure.
- * The wrapper height is constant across the resting → helper → error states, so
- * the form NEVER reflows when an error appears or clears (defect #7), and because
- * the helper and the error share the one slot it is not an extra always-blank gap
- * line over every field (defect #1).
+ * The message renders **on demand** directly under its control: it shows the
+ * field's **helper** (muted) by default and **swaps the error in place**
+ * (destructive) on validation failure. A field with **neither** a helper nor an
+ * error renders **nothing at all** — no reserved blank line. This is the fix for
+ * the slice-B over-spacing (K-1): the old `min-h-5` always-reserved line stacked
+ * a permanent gap under every field. The cost of inline is a small, accepted
+ * downward shift (~one 12px line) when an error appears — the Polaris / Primer /
+ * shadcn / Radix default, validated on blur (`mode: onTouched`) so it never fires
+ * mid-typing.
+ *
+ * The text is **small (`text-xs`) and NOT bold** (the slice-B bold/`text-sm`
+ * error read "heavy"); the field's invalidity is carried by the input border +
+ * this message, not a red label (K-3). It hugs its control via the `FormItem`
+ * `gap-2.5`, and the form's `space-y-4` keeps it clearly closer to its own field
+ * than to the next one (proximity / Gestalt — the message must not read as
+ * attached to the following field's label).
  *
  * Composition:
- *  - pass `children` (the localized helper) for a field with helper text — it
- *    renders as the muted description and is replaced in place by the destructive
- *    error when the field is invalid;
- *  - pass NO children for a validating field with no helper — the slot reserves
- *    the line silently (empty + `aria-hidden`) and shows only the error;
- *  - a field that can NEITHER validate NOR show a helper simply omits
- *    `<FormMessage/>` and stacks on the field-group rhythm — no reserved line.
- *
- * `aria-describedby` (set on `FormControl`) already points the control at both the
- * description id and the message id, so the helper↔error swap is announced. When
- * the error is showing the slot carries `role="alert"` so it is announced as an
- * error, and it drops `aria-hidden` only when it has real content.
+ *  - pass `children` (the localized helper) for a field with helper text — muted
+ *    by default, replaced in place by the destructive error when invalid;
+ *  - pass NO children for a validating field with no helper — nothing renders
+ *    until an error, then the error appears inline;
+ *  - the element owns the helper id when resting and the message id (+ `role`
+ *    `alert`) when erroring, so `aria-describedby` (set on `FormControl`) resolves
+ *    whichever content is showing and the error is announced.
  */
 const FormMessage = React.forwardRef<
   HTMLParagraphElement,
@@ -177,26 +178,26 @@ const FormMessage = React.forwardRef<
   const { error, formDescriptionId, formMessageId } = useFormField();
   const errorText = error ? String(error?.message ?? "") : "";
   const hasError = errorText.length > 0;
-  // Helper (children) shows by default; the error swaps into the SAME slot in
-  // place when present — the two never coexist, so the reserved height is constant.
+  // Helper (children) shows by default; the error swaps into its place when
+  // present — the two never coexist.
   const body = hasError ? errorText : children;
   const hasBody = hasError || (children != null && children !== false);
+
+  // Inline (1A): a resting field with no message reserves no space at all.
+  if (!hasBody) return null;
 
   return (
     <p
       ref={ref}
-      // The slot owns BOTH ids so `aria-describedby` resolves whichever content is
-      // showing (the helper id when resting, the message id when erroring).
+      // Owns the message id when erroring (so `aria-describedby` resolves it) and
+      // the description id when showing the helper.
       id={hasError ? formMessageId : formDescriptionId}
       className={cn(
-        "min-h-5 text-sm",
-        hasError ? "font-medium text-destructive" : "text-muted-foreground",
+        "text-xs",
+        hasError ? "text-destructive" : "text-muted-foreground",
         className,
       )}
-      // Announce the error as an alert; an empty reserved line stays out of the
-      // a11y tree until it carries real content.
       role={hasError ? "alert" : undefined}
-      aria-hidden={hasBody ? undefined : true}
       {...props}
     >
       {body}

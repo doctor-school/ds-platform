@@ -132,7 +132,7 @@ export default function ResetPage() {
           <Form {...requestForm}>
             <form
               onSubmit={requestForm.handleSubmit(onRequest)}
-              className="space-y-2"
+              className="space-y-4"
               noValidate
             >
               {/* #196 fix: the reset identifier is the same union box as
@@ -294,7 +294,7 @@ function ResetCompleteForm({
     <Form {...completeForm}>
       <form
         onSubmit={completeForm.handleSubmit(onComplete)}
-        className="space-y-2"
+        className="space-y-4"
         noValidate
       >
         {/* Slotted 6-char alphanumeric code (no auto-submit here — the complete step

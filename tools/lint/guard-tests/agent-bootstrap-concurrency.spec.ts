@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   encodeProjectSlug,
+  isRepoSessionDir,
   isSharedMainTree,
   liveParallelSessions,
 } from "../../agent-bootstrap";
@@ -111,6 +112,23 @@ describe("agent-bootstrap isSharedMainTree()", () => {
         cwd,
       ),
     ).toBe(true);
+  });
+});
+
+describe("agent-bootstrap isRepoSessionDir()", () => {
+  const main = "C--Users-sidor-repos-ds-platform";
+
+  it("matches the primary tree's slug exactly", () => {
+    expect(isRepoSessionDir(main, main)).toBe(true);
+  });
+
+  it("matches a linked-worktree sibling via the worktree separator", () => {
+    expect(isRepoSessionDir(`${main}--claude-worktrees-359`, main)).toBe(true);
+  });
+
+  it("rejects a sibling repo whose slug merely starts the same way", () => {
+    expect(isRepoSessionDir(`${main}-2`, main)).toBe(false);
+    expect(isRepoSessionDir(`${main}-staging`, main)).toBe(false);
   });
 });
 

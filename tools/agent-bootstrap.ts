@@ -402,11 +402,25 @@ export function isSharedMainTree(
  * Encode an absolute path the way Claude Code names its project log directory
  * under `~/.claude/projects/` — every non-alphanumeric run is a single dash...
  * (`C:\Users\…\ds-platform` → `C--Users-…-ds-platform`). Used to locate the
- * repo's session logs (the primary tree's slug is the prefix of every linked
- * worktree's slug, so a prefix match captures both).
+ * repo's session logs — the primary tree's slug, plus each linked worktree's
+ * `…--claude-worktrees-<name>` sibling (see `isRepoSessionDir`).
  */
 export function encodeProjectSlug(absPath: string): string {
   return absPath.replace(/[^a-zA-Z0-9]/g, "-");
+}
+
+/**
+ * Is `dirName` a session-log dir for THIS repo? The primary tree is `mainSlug`
+ * exactly; a linked worktree is `mainSlug` + a `--claude-worktrees-<name>`
+ * suffix. A bare `startsWith(mainSlug)` would also match a SIBLING repo whose
+ * slug merely starts the same way (`…-ds-platform` vs `…-ds-platform-2`), so the
+ * suffix must be the worktree separator, never an arbitrary continuation.
+ */
+export function isRepoSessionDir(dirName: string, mainSlug: string): boolean {
+  return (
+    dirName === mainSlug ||
+    dirName.startsWith(`${mainSlug}--claude-worktrees-`)
+  );
 }
 
 interface Concurrency {
@@ -458,7 +472,7 @@ async function concurrency(): Promise<Concurrency> {
     const nowMs = Date.now();
 
     const dirs = (await readdir(projectsDir, { withFileTypes: true }))
-      .filter((d) => d.isDirectory() && d.name.startsWith(mainSlug))
+      .filter((d) => d.isDirectory() && isRepoSessionDir(d.name, mainSlug))
       .map((d) => d.name);
 
     const logs: SessionLog[] = [];

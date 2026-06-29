@@ -3,7 +3,6 @@
 import { useEffect, type ReactNode } from "react";
 import { useForm, type Control, type FieldValues } from "react-hook-form";
 
-import { interactiveBase } from "@ds/design-system";
 import { Button } from "@ds/design-system/button";
 import { Link } from "@ds/design-system/link";
 import { Input } from "@ds/design-system/input";
@@ -59,14 +58,21 @@ import {
 const POINTER_STATES = new Set(["hover", "focus", "active"]);
 
 /**
- * Statically-forced focus ring, DERIVED from the exported `interactiveBase`
- * contract (the single source of every primitive's focus styling) by dropping
- * its `focus-visible:` prefixes so the ring paints unconditionally. Applied to
- * the `focus` state cell so the ring is visible on a static read (and screenshot)
- * without tabbing — no re-implementation, and it cannot drift from the real
- * focus styling because it is computed from the same exported string.
+ * Statically-forced focus ring — applied to the `focus` state cell so the ring
+ * is visible on a static read (and screenshot) without tabbing, instead of a
+ * pointer-only state. It MIRRORS the exported `interactiveBase` focus contract
+ * (`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
+ * focus-visible:ring-offset-2`, see `@ds/design-system` → `interactive-base.ts`)
+ * with the `focus-visible:` prefixes dropped so it paints unconditionally.
+ *
+ * Written as a LITERAL (not `interactiveBase.replace(...)`): Tailwind's content
+ * scanner only emits utilities it sees as literal strings, so a runtime-computed
+ * class string would silently fail to generate. `ring-ring` resolves to the
+ * `--color-ring` token, so the ring stays token-driven and matches the real
+ * focus ring; keep this in sync if the `interactiveBase` ring ever changes.
  */
-const FORCED_FOCUS = interactiveBase.replace(/focus-visible:/g, "");
+const FORCED_FOCUS =
+  "outline-none ring-2 ring-ring ring-offset-2 ring-offset-background";
 
 type StateSpec = { name: string; note?: string };
 

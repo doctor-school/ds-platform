@@ -78,7 +78,7 @@ Then run transcripts.mjs over the same <out-dir> to build per-session transcript
 
 // ── heuristics ──────────────────────────────────────────────────────────────
 // Does a human message look like a correction / "why did you…" / pushback?
-const CORRECTION_RE = new RegExp(
+export const CORRECTION_RE = new RegExp(
   [
     'почему', 'зачем', 'разве', 'не так', 'не нужно', 'не надо', 'надо было', 'должен был',
     'должно быть', 'стоп', 'отмен', 'верн[иё]', 'нельзя', 'это непра', 'неправильно', 'ошиб',
@@ -98,6 +98,69 @@ function isHandoff(t) {
     s.startsWith('# Agent bootstrap') ||
     /^#{1,3}\s*Current task/m.test(s.slice(0, 400))
   );
+}
+
+// ── AskUserQuestion answers ───────────────────────────────────────────────
+// A decision/collision session often resolves through an `AskUserQuestion`, and
+// the decisive correction lands as the user's free-text answer or as a note
+// attached to a selection (#360). Those answers arrive as a `tool_result` user
+// entry — the typed-message path skips them, so the #345 retro reported
+// `corrections: 0` for a session whose defining moment was a clear correction.
+//
+// The user-authored strings live in `toolUseResult.answers` (values) and
+// `toolUseResult.annotations[q].notes`; the keys are the *questions* (assistant
+// text) and must never be scanned. Older logs may carry only the rendered
+// `tool_result.content` envelope — parse the `="…"` answer values from it as a
+// fallback (it does NOT carry the notes channel).
+const AUQ_ENVELOPE_PREFIX = 'Your questions have been answered:';
+
+function toolResultString(e) {
+  const content = e && e.message && e.message.content;
+  if (!Array.isArray(content)) return '';
+  const tr = content.find((c) => c && c.type === 'tool_result');
+  return tr && typeof tr.content === 'string' ? tr.content : '';
+}
+
+// Is this user entry an AskUserQuestion answer envelope?
+export function isAuqAnswer(e) {
+  const tur = e && e.toolUseResult;
+  if (tur && tur.answers && typeof tur.answers === 'object') return true;
+  return toolResultString(e).startsWith(AUQ_ENVELOPE_PREFIX);
+}
+
+// The user-authored strings inside an AskUserQuestion answer entry: every answer
+// value plus every annotation note. Never the question text. De-duplicated,
+// order-preserving.
+export function auqUserStrings(e) {
+  const tur = e && e.toolUseResult;
+  const out = [];
+  const push = (v) => {
+    if (typeof v === 'string') {
+      const s = v.trim();
+      if (s && !out.includes(s)) out.push(s);
+    }
+  };
+
+  if (tur && tur.answers && typeof tur.answers === 'object') {
+    for (const v of Object.values(tur.answers)) push(v);
+  }
+  if (tur && tur.annotations && typeof tur.annotations === 'object') {
+    for (const a of Object.values(tur.annotations)) {
+      if (a && typeof a === 'object') push(a.notes);
+    }
+  }
+
+  // Fallback: parse the rendered envelope when no structured payload is present.
+  if (out.length === 0) {
+    const s = toolResultString(e);
+    if (s.startsWith(AUQ_ENVELOPE_PREFIX)) {
+      // Capture each `="…"` answer value (the RHS), never the "…" question (LHS).
+      const re = /="((?:[^"\\]|\\.)*)"/g;
+      let m;
+      while ((m = re.exec(s))) push(m[1].replace(/\\"/g, '"'));
+    }
+  }
+  return out;
 }
 
 function textOf(content) {
@@ -208,8 +271,24 @@ function main() {
       if (e.type !== 'user' || !e.message || e.message.role !== 'user') continue;
       if (e.isMeta) continue;
       if (e.isCompactSummary) continue;
-      // skip tool_result-only user entries
       const content = e.message.content;
+      // AskUserQuestion answers are real user input wrapped in a tool_result
+      // envelope — pull the user-authored strings (answer values + notes) and
+      // flag corrections among them, attributed to the answer timestamp (#360).
+      if (isAuqAnswer(e)) {
+        for (const ans of auqUserStrings(e)) {
+          meta.humanMsgs.push({
+            ts: e.timestamp || null,
+            text: ans,
+            handoff: false,
+            imageOnly: false,
+            source: 'askuserquestion',
+            correction: CORRECTION_RE.test(ans),
+          });
+        }
+        continue;
+      }
+      // skip the remaining tool_result-only user entries
       if (Array.isArray(content) && content.every((c) => c && c.type === 'tool_result')) continue;
       if (e.promptSource === 'sdk') {
         meta.sdkPrompts++;
@@ -232,6 +311,7 @@ function main() {
         text,
         handoff,
         imageOnly,
+        source: 'typed',
         correction: !handoff && (CORRECTION_RE.test(text) || imageOnly),
       });
     }
@@ -317,4 +397,10 @@ function main() {
   process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
 }
 
-main();
+// Run only as the entry point (`node tools/retro/extract.mjs`). Guarding this
+// keeps the pure helpers (CORRECTION_RE, isAuqAnswer, auqUserStrings) importable
+// from a unit test without firing the side-effecting `main()` (#360).
+const INVOKED_PATH = process.argv[1] ? path.resolve(process.argv[1]) : '';
+if (INVOKED_PATH === fileURLToPath(import.meta.url)) {
+  main();
+}

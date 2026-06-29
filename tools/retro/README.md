@@ -18,8 +18,16 @@ README covers only how to run the tools.
 | `transcripts.mjs` | `transcripts/<id>.md`, `self-catches.json`                             |
 
 `extract.mjs` isolates interactive sessions (excludes `promptSource: sdk`
-runs), pulls the real human-typed messages, and flags correction / pushback
-messages. `transcripts.mjs` reads the `index.json` it wrote and builds a
+runs), pulls the real human input, and flags correction / pushback messages.
+Human input is read from **two** channels: typed user turns, and
+**`AskUserQuestion` answers** — the user's free-text "Other" answers and the
+notes they attach to a selection (`source: "askuserquestion"` on the digest
+message). Those answers live in a `tool_result` envelope the typed-message path
+skips, yet a decision/collision session's decisive correction often lands
+exactly there, so scanning only typed turns under-counts corrections (the #345
+miss: `corrections: 0` for a session whose defining moment was an AUQ answer).
+The question text is the assistant's and is never scanned. `transcripts.mjs`
+reads the `index.json` it wrote and builds a
 compact per-session transcript (user text + assistant text + tool-call trace,
 dropping bulky `tool_result` payloads) plus an assistant self-correction list.
 

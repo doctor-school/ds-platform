@@ -59,6 +59,15 @@ because `tools/` has no test workspace of its own; the assertion that an empty
 ready/working/awaiting bucket set with open issues yields a _triage_ nudge (never
 "clean slate") is the deterministic backstop the #306 retro asked for.
 
+`agent-bootstrap-concurrency.spec.ts` + `task-worktree.spec.ts` unit-cover the
+parallel-session detector (#359): the pure `liveParallelSessions()` (mtime
+window, self-exclusion, shared-main-tree breakdown), `isSharedMainTree()`, and
+`encodeProjectSlug()` of [`tools/agent-bootstrap.ts`](../../agent-bootstrap.ts),
+plus the slug/prefix/path derivation of
+[`tools/dev/task-worktree.mjs`](../../dev/task-worktree.mjs) (`pnpm
+task:worktree`). Same entry-point-guard discipline — the import fires no
+`git`/`gh` subprocess.
+
 **`endpoint-authz` is covered in `apps/api`, not here.** It boots Nest (needs
 `@nestjs/*`, runs in the `api-e2e` job), so the Nest-boot strategy lives where
 the dependency does:

@@ -10,16 +10,25 @@ import { Link } from "@ds/design-system/link";
 
 /**
  * Showcase landing — the table of contents for the living catalogue
- * (design-system-showcase spec §3). Sections with a live route link to it;
- * sections still owned by an open WBS Issue (Blocks, #348) are enumerated but
- * NOT linked — no placeholder route standing in for a tracked deliverable
- * (AGENTS.md §6).
+ * (design-system-showcase spec §3). Each section links to its live route; a
+ * section still owned by an open WBS Issue is enumerated but left unlinked (no
+ * placeholder route standing in for a tracked deliverable, AGENTS.md §6) until
+ * its route lands. All three spec sections (Tokens / Primitives / Blocks) are now
+ * live.
  *
  * Everything here is composed from the real `@ds/design-system` exports — the
  * showcase adds nothing of its own (spec §2.4); the chrome itself demonstrates
  * the package it catalogues.
  */
-const SECTIONS = [
+type Section = {
+  title: string;
+  description: string;
+  issue: string;
+  /** Live route — absent while the section is still owned by an open WBS Issue. */
+  href?: string;
+};
+
+const SECTIONS: readonly Section[] = [
   {
     title: "Tokens",
     description:
@@ -39,9 +48,9 @@ const SECTIONS = [
     description:
       "Each exported block (auth-card, auth-layout, otp-focus-screen) rendered with representative content in its key states, branded.",
     issue: "#348",
-    href: undefined,
+    href: "/blocks",
   },
-] as const;
+];
 
 function SectionCard({
   section,

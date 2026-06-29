@@ -3,11 +3,7 @@
 import { type ReactNode } from "react";
 import { useForm, type FieldValues } from "react-hook-form";
 
-import { Button } from "@ds/design-system/button";
-import { Link } from "@ds/design-system/link";
-import { Input } from "@ds/design-system/input";
 import { Form, FormField } from "@ds/design-system/form";
-import { EmailField, PasswordField } from "@ds/design-system/fields";
 import {
   AuthCard,
   AuthLayout,
@@ -18,20 +14,21 @@ import {
 /**
  * Blocks section (design-system-showcase spec §3.3). Each exported
  * `@ds/design-system` block — `AuthCard`, `AuthLayout`, `OtpFocusScreen` — is
- * rendered as the REAL composed block in its key states, branded. The showcase
- * re-implements nothing (spec §2.4): the blocks compose their own real primitives,
- * and this view supplies only the representative, i18n-free sample content the app
- * layer would otherwise own (copy / logo / form glue), exactly as the product apps
- * pass it in (the blocks carry no copy of their own).
+ * catalogued the SAME unit-as-subject way as Tokens (§3.1) and Primitives (§3.2):
+ * the subject is the block's **composition contract** — its slots / props and the
+ * **state matrix a consumer must handle** — NOT a re-staged finished product screen
+ * (the inversion caught post-merge on #348 → this rework #386).
  *
- * Branding is the blocks' own token wiring: `AuthLayout`'s brand panel paints from
- * the semantic `primary-surface` token, the `AuthCard` chrome from the card tokens —
- * never an app-local colour. The sample logo is a token-styled text wordmark (the
- * showcase owns no brand asset and must not reach into a product app's `public/`).
+ * So every slot is filled with a labelled, app-supplied placeholder that EXPOSES the
+ * slot (a dashed region named for the prop it stands in for), never marketing copy or
+ * a brand wordmark dressing the block as the login/verify surface it composes into.
+ * The blocks themselves still render through their REAL composed primitives (Card,
+ * OtpField, Button…) branded by their own tokens — the `AuthLayout` brand panel paints
+ * from the semantic `primary-surface` token — and the showcase re-implements nothing
+ * (spec §2.4); the placeholders are catalogue chrome standing in for the app layer.
  */
 
-/** Section frame: a titled block with an export-name caption — mirrors the
- *  primitives view so the two read identically. */
+/** Section frame — mirrors the primitives view so all three sections read identically. */
 function BlockSection({
   title,
   exportsLine,
@@ -56,101 +53,99 @@ function BlockSection({
   );
 }
 
-/** A labelled state cell — the state name above its rendered block sample. */
-function StateCase({ label, children }: { label: string; children: ReactNode }) {
+/** A labelled sub-row inside a section (the slot-anatomy row, a state-matrix row).
+ *  Mirrors the primitives view's `SubRow`. */
+function SubRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
-      <span className="font-mono text-xs text-muted-foreground">{label}</span>
+      <span className="text-sm font-medium text-foreground">{label}</span>
       {children}
     </div>
   );
 }
 
 /**
- * Sample brand lockup — a token-styled text wordmark standing in for the app's
- * supplied logo. The showcase deliberately owns no brand asset (it is a viewer of
- * the design system, not the brand); the wordmark uses only tokens, so it carries
- * the brand colour without a raster/SVG dependency on a product app.
+ * Inline slot marker — a dashed mono chip naming a slot, used where the slot sits
+ * inline inside the block (the `AuthCard` `icon` / `title` / `description`, the
+ * `AuthLayout` `logo`). It stands in for the app-supplied node and names it, instead
+ * of pretending to be product copy. `onPanel` recolours it for the branded panel.
  */
-function SampleLogo({ onPanel = false }: { onPanel?: boolean }) {
+function SlotTag({ name, onPanel = false }: { name: string; onPanel?: boolean }) {
   return (
     <span
-      className={`text-lg font-semibold tracking-tight ${
-        onPanel ? "text-primary-foreground" : "text-primary"
+      className={`inline-flex rounded border border-dashed px-1.5 py-0.5 font-mono text-xs ${
+        onPanel
+          ? "border-primary-foreground/50 text-primary-foreground"
+          : "border-border text-muted-foreground"
       }`}
     >
-      Doctor School
+      {name}
     </span>
   );
 }
 
-/** A representative lucide-style shield-check glyph for the AuthCard header icon,
- *  inlined so the showcase adds no icon-library dependency. Token-coloured. */
-function ShieldGlyph() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="size-5 text-primary"
-      aria-hidden
-    >
-      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
-      <path d="m9 12 2 2 4-4" />
-    </svg>
-  );
-}
-
-/** Representative AuthCard footer — secondary links, exactly the app's footer shape. */
-function SampleFooter() {
-  return (
-    <>
-      <Link asChild>
-        <a href="#register">Create an account</a>
-      </Link>
-      <Link asChild>
-        <a href="#reset">Forgot your password?</a>
-      </Link>
-    </>
-  );
-}
-
 /**
- * Representative sign-in form body — composes the real `EmailField` / `PasswordField`
- * primitives in their own RHF context, so the `AuthCard` content slot renders exactly
- * what an auth surface nests. `preventDefault` keeps the showcase a pure viewer (no
- * BFF). Not a re-implementation: these are the package's own field primitives.
+ * Block-level slot region — a labelled dashed box exposing a slot the app fills (the
+ * `AuthCard` `children`, the `AuthLayout` `aside`). The mono label names the slot; the
+ * optional note describes what the consumer passes. `onPanel` recolours it for the
+ * `primary-surface` brand panel.
  */
-function SampleSignInForm() {
-  const form = useForm<FieldValues>({
-    defaultValues: { email: "", password: "" },
-    mode: "onTouched",
-  });
+function Slot({
+  name,
+  note,
+  onPanel = false,
+}: {
+  name: string;
+  note?: string;
+  onPanel?: boolean;
+}) {
   return (
-    <Form {...form}>
-      <form className="space-y-4" onSubmit={(e) => e.preventDefault()} noValidate>
-        <FormField
-          name="email"
-          control={form.control}
-          render={({ field }) => (
-            <EmailField field={field} label="Email" placeholder="you@example.com" />
-          )}
-        />
-        <FormField
-          name="password"
-          control={form.control}
-          render={({ field }) => (
-            <PasswordField field={field} purpose="current" label="Password" />
-          )}
-        />
-        <Button type="submit" className="w-full">
-          Sign in
-        </Button>
-      </form>
-    </Form>
+    <div
+      className={`flex flex-col gap-1 rounded-md border border-dashed p-3 ${
+        onPanel ? "border-primary-foreground/50" : "border-border"
+      }`}
+    >
+      <span
+        className={`font-mono text-xs ${
+          onPanel ? "text-primary-foreground" : "text-muted-foreground"
+        }`}
+      >
+        {name}
+      </span>
+      {note ? (
+        <span
+          className={`text-xs ${
+            onPanel ? "text-primary-foreground/80" : "text-muted-foreground/70"
+          }`}
+        >
+          {note}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** A labelled state-matrix cell — the state name (+ the prop that drives it) above
+ *  its rendered sample. */
+function StateCase({
+  label,
+  note,
+  children,
+}: {
+  label: string;
+  note?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-0.5">
+        <span className="font-mono text-xs text-muted-foreground">{label}</span>
+        {note ? (
+          <span className="text-xs text-muted-foreground/70">{note}</span>
+        ) : null}
+      </div>
+      {children}
+    </div>
   );
 }
 
@@ -158,119 +153,127 @@ function AuthCardSection() {
   return (
     <BlockSection
       title="AuthCard"
-      exportsLine="AuthCard — the owned auth screen-scaffold (icon · title · description · content · footer)"
+      exportsLine="AuthCard — slots: icon? · title · description? · children · footer? (token-only Card scaffold)"
     >
       <p className="text-sm text-muted-foreground">
-        Presentation scaffold for the four auth surfaces (login / register / reset /
-        verify). All copy, the icon and the footer links are app-supplied — shown here
-        with representative content composing the real field primitives.
+        The owned presentation scaffold the four auth surfaces (login / register /
+        reset / verify) compose into. It renders the real{" "}
+        <code className="font-mono text-xs">Card</code> primitives; every slot below
+        is app-supplied — the block carries no copy, form, or icon of its own.
       </p>
-      <div className="grid grid-cols-1 gap-x-10 gap-y-6 lg:grid-cols-2">
-        <StateCase label="full (icon + description + footer)">
-          <AuthCard
-            icon={<ShieldGlyph />}
-            title="Sign in"
-            description="Use your email and password, or request a one-time code."
-            footer={<SampleFooter />}
-            className="max-w-md"
+
+      <SubRow label="Slot anatomy — every slot exposed">
+        <AuthCard
+          className="max-w-md"
+          icon={<SlotTag name="icon" />}
+          title={<SlotTag name="title" />}
+          description={<SlotTag name="description" />}
+          footer={<SlotTag name="footer" />}
+        >
+          <Slot
+            name="children"
+            note="app-owned form / body — composes any primitives"
+          />
+        </AuthCard>
+      </SubRow>
+
+      <SubRow label="State matrix — optional-slot presence">
+        <div className="grid grid-cols-1 gap-x-10 gap-y-6 lg:grid-cols-2">
+          <StateCase label="all slots" note="icon + description + footer present">
+            <AuthCard
+              className="max-w-md"
+              icon={<SlotTag name="icon" />}
+              title={<SlotTag name="title" />}
+              description={<SlotTag name="description" />}
+              footer={<SlotTag name="footer" />}
+            >
+              <Slot name="children" />
+            </AuthCard>
+          </StateCase>
+          <StateCase
+            label="required only"
+            note="title + children; icon / description / footer omitted"
           >
-            <SampleSignInForm />
-          </AuthCard>
-        </StateCase>
-        <StateCase label="minimal (title + content only)">
-          <AuthCard title="Reset your password" className="max-w-md">
-            <p className="text-sm text-foreground">
-              Enter the email associated with your account and we will send a reset
-              code.
-            </p>
-            <div className="mt-4">
-              <Input className="w-full" placeholder="you@example.com" />
-            </div>
-          </AuthCard>
-        </StateCase>
-      </div>
+            <AuthCard className="max-w-md" title={<SlotTag name="title" />}>
+              <Slot name="children" />
+            </AuthCard>
+          </StateCase>
+        </div>
+      </SubRow>
     </BlockSection>
   );
 }
 
-/**
- * Representative brand-panel content for `AuthLayout`'s `aside` — the localized
- * headline / sub-copy / footer the app supplies, here as i18n-free sample copy on the
- * block's own `primary-surface` token fill (the panel owns the branding).
- */
-function SampleAside() {
+/** A compact `AuthCard` with its slots exposed, nested into the `AuthLayout` demos as
+ *  the `children` the layout wraps (the layout's real contract is "wraps an AuthCard"). */
+function NestedAuthCard() {
   return (
-    <>
-      <SampleLogo onPanel />
-      <div className="flex flex-1 flex-col justify-center space-y-4">
-        <p className="max-w-lg text-4xl font-semibold leading-tight tracking-tight">
-          Medical education that moves with you.
-        </p>
-        <p className="max-w-md text-lg leading-snug opacity-90">
-          Accredited courses from leading sponsors, built for practising doctors.
-        </p>
-      </div>
-      <p className="text-sm opacity-80">© Doctor School</p>
-    </>
+    <AuthCard
+      icon={<SlotTag name="icon" />}
+      title={<SlotTag name="title" />}
+      description={<SlotTag name="description" />}
+      footer={<SlotTag name="footer" />}
+    >
+      <Slot name="children" note="app-owned form" />
+    </AuthCard>
   );
 }
 
-/**
- * `AuthLayout` is a full-screen split (`min-h-screen`, two columns on `lg+`). Each
- * sample is rendered inside a bordered preview frame; the block's own `min-h-screen`
- * is neutralised to `min-h-0` via the passed `className` (tailwind-merge keeps the
- * last `min-h-*`), so the block sizes to its content at a catalogue scale instead of
- * forcing a full viewport height. The two-column split appears at a desktop (`lg+`)
- * viewport — narrower viewports collapse to the form-only column exactly as the real
- * surface does. `min-h-0` is token-safe (no arbitrary value, §5 lint).
- */
 function AuthLayoutSection() {
   return (
     <BlockSection
       title="AuthLayout"
-      exportsLine="AuthLayout — split-screen auth chrome (brand panel + centered form column)"
+      exportsLine="AuthLayout — slots: logo? · aside? (brand panel) · children (AuthCard); aside present ⇒ split, absent ⇒ form-only"
     >
       <p className="text-sm text-muted-foreground">
-        Wraps an <code className="font-mono text-xs">AuthCard</code>. With an{" "}
-        <code className="font-mono text-xs">aside</code> it is the branded
-        split-screen (brand panel left, form right on lg+); without one it is a
-        centered form-only screen. Logo and panel copy are app-supplied.
+        The split-screen chrome wrapping an{" "}
+        <code className="font-mono text-xs">AuthCard</code>. The brand panel paints
+        from the semantic{" "}
+        <code className="font-mono text-xs">primary-surface</code> token (the block's
+        own branding); the <code className="font-mono text-xs">logo</code> and the
+        panel <code className="font-mono text-xs">aside</code> are app-supplied. The
+        two-column split appears at{" "}
+        <code className="font-mono text-xs">lg+</code>; the block's{" "}
+        <code className="font-mono text-xs">min-h-screen</code> is neutralised to{" "}
+        <code className="font-mono text-xs">min-h-0</code> here so it sizes to content
+        at catalogue scale.
       </p>
 
-      <StateCase label="branded split (logo + aside + AuthCard)">
-        <div className="overflow-hidden rounded-xl border border-border">
-          <AuthLayout
-            className="min-h-0"
-            logo={<SampleLogo />}
-            aside={<SampleAside />}
+      <SubRow label="State matrix — aside present vs omitted">
+        <div className="flex flex-col gap-6">
+          <StateCase
+            label="aside present"
+            note="branded split — brand panel (lg+) + form column"
           >
-            <AuthCard
-              icon={<ShieldGlyph />}
-              title="Sign in"
-              description="Use your email and password, or request a one-time code."
-              footer={<SampleFooter />}
-            >
-              <SampleSignInForm />
-            </AuthCard>
-          </AuthLayout>
-        </div>
-      </StateCase>
+            <div className="overflow-hidden rounded-xl border border-border">
+              <AuthLayout
+                className="min-h-0"
+                logo={<SlotTag name="logo" />}
+                aside={
+                  <Slot
+                    name="aside"
+                    note="app-supplied brand-panel headline / sub-copy / art"
+                    onPanel
+                  />
+                }
+              >
+                <NestedAuthCard />
+              </AuthLayout>
+            </div>
+          </StateCase>
 
-      <StateCase label="form-only (no aside — logo on every breakpoint)">
-        <div className="overflow-hidden rounded-xl border border-border">
-          <AuthLayout className="min-h-0" logo={<SampleLogo />}>
-            <AuthCard title="Reset your password">
-              <p className="text-sm text-foreground">
-                Enter the email associated with your account and we will send a reset
-                code.
-              </p>
-              <div className="mt-4">
-                <Input className="w-full" placeholder="you@example.com" />
-              </div>
-            </AuthCard>
-          </AuthLayout>
+          <StateCase
+            label="aside omitted"
+            note="form-only — logo on every breakpoint, panel not rendered"
+          >
+            <div className="overflow-hidden rounded-xl border border-border">
+              <AuthLayout className="min-h-0" logo={<SlotTag name="logo" />}>
+                <NestedAuthCard />
+              </AuthLayout>
+            </div>
+          </StateCase>
         </div>
-      </StateCase>
+      </SubRow>
     </BlockSection>
   );
 }
@@ -278,9 +281,11 @@ function AuthLayoutSection() {
 /**
  * `OtpFocusScreen` demo wrapper. The block takes an RHF `field` (the app owns the
  * form), so each sample mounts its own `<Form>` + `<FormField>` to supply a real
- * `code` field — the same wiring the login surface uses. Handlers are no-op
- * `preventDefault` / no-op callbacks (pure viewer). `cooldownSeconds` /
- * `isSubmitting` / `error` drive the state shown.
+ * `code` field. Every visible string is passed by PROP NAME (`submitLabel`,
+ * `resendLabel`, …) so the sample exposes the copy contract instead of reading as a
+ * finished verify screen; the masked destination demonstrates the real
+ * `maskDestination` export. Handlers are no-op `preventDefault` (pure viewer).
+ * `cooldownSeconds` / `isSubmitting` / `error` drive the state shown.
  */
 function OtpFocusDemo({
   cooldownSeconds = 0,
@@ -305,13 +310,13 @@ function OtpFocusDemo({
             field={field}
             length={8}
             variant="slotted"
-            title="Enter your code"
-            sentToLabel={`Code sent to ${maskDestination("doctor@example.com")}`}
-            codeLabel="Verification code"
-            submitLabel="Verify and sign in"
-            resendLabel="Resend code"
-            resendCountdownLabel={(seconds) => `Resend in ${seconds}s`}
-            changeMethodLabel="Change method"
+            title="title"
+            sentToLabel={`sentToLabel · ${maskDestination("doctor@example.com")}`}
+            codeLabel="codeLabel"
+            submitLabel="submitLabel"
+            resendLabel="resendLabel"
+            resendCountdownLabel={(seconds) => `resendCountdownLabel(${seconds})`}
+            changeMethodLabel="changeMethodLabel"
             cooldownSeconds={cooldownSeconds}
             isSubmitting={isSubmitting}
             error={error}
@@ -325,40 +330,56 @@ function OtpFocusDemo({
   );
 }
 
+/** Catalogue frame for an `OtpFocusScreen` sample — the surface composes it inside a
+ *  card region, so each state renders in a bordered box at catalogue scale. */
+function OtpFrame({ children }: { children: ReactNode }) {
+  return (
+    <div className="max-w-sm rounded-xl border border-border p-6">{children}</div>
+  );
+}
+
 function OtpFocusScreenSection() {
   return (
     <BlockSection
       title="OtpFocusScreen"
-      exportsLine="OtpFocusScreen — focused OTP-entry block (masked destination · code · submit · resend cooldown · change-method)"
+      exportsLine="OtpFocusScreen — props: field · length · sentToLabel · *Label copy · cooldownSeconds · resendNonce · isSubmitting · error"
     >
       <p className="text-sm text-muted-foreground">
-        Replaces the request chrome once a code is issued: masked destination, code box
-        (auto-submits on completion), resend-with-cooldown and change-method — and by
-        construction nothing else, so the user cannot wander off the challenge. Shown in
-        a card frame as the surface composes it.
+        The focused OTP-entry block a surface swaps in once a code is issued: by
+        construction it renders ONLY masked destination + code input + submit +
+        resend(cooldown) + change-method, so the user cannot wander off the challenge.
+        Every visible string is an app-supplied prop (labelled here by prop name); the
+        masked destination is computed by the app via{" "}
+        <code className="font-mono text-xs">maskDestination</code>. The subject is the{" "}
+        <strong className="font-medium text-foreground">
+          state matrix a consumer must drive
+        </strong>
+        .
       </p>
-      <div className="grid grid-cols-1 gap-x-10 gap-y-6 lg:grid-cols-2">
-        <StateCase label="resend ready (cooldown 0)">
-          <div className="max-w-sm rounded-xl border border-border p-6">
-            <OtpFocusDemo cooldownSeconds={0} />
-          </div>
-        </StateCase>
-        <StateCase label="resend counting down">
-          <div className="max-w-sm rounded-xl border border-border p-6">
-            <OtpFocusDemo cooldownSeconds={30} />
-          </div>
-        </StateCase>
-        <StateCase label="error (mapped message in slot)">
-          <div className="max-w-sm rounded-xl border border-border p-6">
-            <OtpFocusDemo cooldownSeconds={30} error="That code is incorrect." />
-          </div>
-        </StateCase>
-        <StateCase label="submitting (submit disabled)">
-          <div className="max-w-sm rounded-xl border border-border p-6">
-            <OtpFocusDemo cooldownSeconds={30} isSubmitting />
-          </div>
-        </StateCase>
-      </div>
+      <SubRow label="State matrix — resend cooldown · error · submitting">
+        <div className="grid grid-cols-1 gap-x-10 gap-y-6 lg:grid-cols-2">
+          <StateCase label="resend ready" note="cooldownSeconds = 0">
+            <OtpFrame>
+              <OtpFocusDemo cooldownSeconds={0} />
+            </OtpFrame>
+          </StateCase>
+          <StateCase label="resend counting down" note="cooldownSeconds = 30">
+            <OtpFrame>
+              <OtpFocusDemo cooldownSeconds={30} />
+            </OtpFrame>
+          </StateCase>
+          <StateCase label="error" note="error slot populated">
+            <OtpFrame>
+              <OtpFocusDemo cooldownSeconds={30} error="error slot (mapped message)" />
+            </OtpFrame>
+          </StateCase>
+          <StateCase label="submitting" note="isSubmitting — submit disabled">
+            <OtpFrame>
+              <OtpFocusDemo cooldownSeconds={30} isSubmitting />
+            </OtpFrame>
+          </StateCase>
+        </div>
+      </SubRow>
     </BlockSection>
   );
 }

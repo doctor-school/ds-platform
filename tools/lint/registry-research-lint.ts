@@ -57,8 +57,15 @@ const UI_PATH_RE =
 // source — the same as `*.spec.ts` / `__tests__/`. The path-segment anchor
 // matches an `e2e/` directory anywhere in the relative path, but NOT a file or
 // dir merely *named* like `*e2e*` inside `src/` (#309).
+// NOTE on `\.setup\.[mc]?[tj]sx?$`: Vitest/Jest setup files (`vitest.setup.ts`,
+// `*.setup.tsx`, …) are test-harness code in the same kind as `*.config.*` and
+// `*.test.*` — they wire up the test environment and ship no rendered UI. The
+// pattern covers every real setup extension (`.setup.{ts,tsx,js,jsx,mts,mjs,
+// cts,cjs}`). Before this, a test-only PR whose only non-`.test.tsx` file was
+// `packages/design-system/vitest.setup.ts` tripped the guard as if it were a
+// user-facing surface (#378, surfaced by #377).
 const UI_PATH_EXEMPT_RE =
-  /(\.md$|\.mdx$|\.json$|\.css$|\.test\.[tj]sx?$|\.spec\.[tj]sx?$|\/__tests__\/|(^|\/)e2e\/|\.config\.[mc]?[tj]s$|\/styles\/tokens\.css$|allowed-tokens\.json$)/;
+  /(\.md$|\.mdx$|\.json$|\.css$|\.test\.[tj]sx?$|\.spec\.[tj]sx?$|\/__tests__\/|(^|\/)e2e\/|\.config\.[mc]?[tj]s$|\.setup\.[mc]?[tj]sx?$|\/styles\/tokens\.css$|allowed-tokens\.json$)/;
 
 // The artifact: a `registry-research:` marker line, or a `## Registry research`
 // section heading followed by its body. Either form is accepted.

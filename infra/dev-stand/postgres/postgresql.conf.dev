@@ -4,6 +4,21 @@
 # Values target a ~4-8 GB working set on a developer box — NOT production.
 # Production tuning is owned by the prod-deploy infra, a separate concern.
 
+# --- Extensions / background workers ---
+# pg_partman background worker (ADR-0003 §3 — partition auto-creation runs INSIDE
+# Postgres via the BGW, not an external cron). The partman BINARY ships in the
+# data-layer image (Dockerfile), shared by dev AND prod; the GUCs below are
+# PER-ENV — prod sets the equivalent values (its own dbname/role/interval) in the
+# prod data-layer conf. `pg_partman_bgw.dbname` must be the app database (ds_dev
+# here) and `.role` the owner of the `partman` schema (ds). The worker calls
+# partman.run_maintenance on its interval, extending the monthly audit_ledger
+# chain ~premake months ahead. Loading the library requires a restart.
+shared_preload_libraries = 'pg_partman_bgw'
+pg_partman_bgw.dbname = 'ds_dev'
+pg_partman_bgw.role = 'ds'
+# 3600s = hourly — ample for a monthly interval on a power-cycled dev box.
+pg_partman_bgw.interval = 3600
+
 # --- Connections ---
 listen_addresses = '*'
 max_connections = 100

@@ -68,14 +68,22 @@ directory) — they hold per-machine secrets and must never be committed.
 
 The `postgres` service runs a **repo-built** image (`postgres/Dockerfile`), not a
 plain upstream tag: it extends `pgvector/pgvector:pg17` with **`pg_partman`** so
-the native monthly RANGE partitions on `audit_ledger` (#367) can be auto-created
-and retained (ADR-0003 §2.6 / §2.7; the #136 retention follow-up). `vector` and
-`pg_partman` coexist — `init.sql` enables both on a fresh cluster (`vector` in
-`public`, `pg_partman` in a dedicated `partman` schema).
+the native monthly RANGE partitions on `audit_ledger` (#367) are auto-created
+(ADR-0003 §3 / §6; #136). `vector` and `pg_partman` coexist — `init.sql` enables
+both on a fresh cluster (`vector` in `public`, `pg_partman` in a dedicated
+`partman` schema). Auto-creation runs **inside Postgres via the pg_partman
+background worker**: `postgres/postgresql.conf.dev` sets
+`shared_preload_libraries = 'pg_partman_bgw'` plus the `pg_partman_bgw.*` GUCs
+(dbname `ds_dev`, role `ds`, hourly interval), so no external cron is needed. The
+GUCs are per-env — prod sets the equivalent values in its own conf; the **image**
+is the shared binary SSOT. (The 5y retention `DROP PARTITION` is the #383
+follow-up — the drop-mask is disabled on v1, so no retention is configured.)
 
 The **same Dockerfile is the prod data-layer image source** — the deploy pipeline
 builds + pushes it to the registry so pgvector + pg_partman are present in every
-environment (engineering-readiness data-layer plan).
+environment (engineering-readiness data-layer plan). **CI builds the same image**
+too: the `api-e2e` job builds `postgres/Dockerfile` and runs it (the bare
+pgvector tag has no pg_partman), so migration `0004` can install the extension.
 
 `docker compose up` builds the image on first use when the tag is absent. After a
 Dockerfile change, rebuild explicitly:

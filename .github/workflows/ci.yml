@@ -73,25 +73,20 @@ jobs:
       - run: pnpm exec turbo run test --filter='!@ds/api'
 
   # apps/api e2e (readiness EARS-1, health EARS-1) + unit specs against a real
-  # Postgres 17 + pgvector. The Vitest globalSetup runs `drizzle:migrate:ci`
-  # (drizzle-kit migrate, no dev-stand snapshot) before the suite (#66).
+  # Postgres 17 + pgvector + pg_partman. The Vitest globalSetup runs
+  # `drizzle:migrate:ci` (drizzle-kit migrate, no dev-stand snapshot) before the
+  # suite (#66); migration 0004 installs the pg_partman extension, so the DB must
+  # carry the partman BINARY.
+  #
+  # GitHub Actions `services:` can only pull a pre-built image, and the bare
+  # pgvector/pgvector:pg17 image has no pg_partman — so instead of a `services:`
+  # block we BUILD the data-layer image from infra/dev-stand/postgres/Dockerfile
+  # (the SSOT image: pgvector + pg_partman, #369) and run it as a step. The
+  # migration self-creates the partman schema + extension, so no init.sql mount
+  # is needed. Same creds/port/DB name the suite expects on DATABASE_URL.
   api-e2e:
     needs: setup
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: pgvector/pgvector:pg17
-        env:
-          POSTGRES_USER: ds
-          POSTGRES_PASSWORD: ds
-          POSTGRES_DB: ds_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U ds -d ds_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     env:
       DATABASE_URL: postgres://ds:ds@localhost:5432/ds_test
     steps:
@@ -100,6 +95,25 @@ jobs:
       - uses: actions/setup-node@v6
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      - name: Build the data-layer Postgres image (pgvector + pg_partman)
+        run: docker build -t ds-platform/postgres:pg17-partman infra/dev-stand/postgres
+      - name: Start Postgres
+        run: |
+          docker run -d --name ds-postgres \
+            -e POSTGRES_USER=ds \
+            -e POSTGRES_PASSWORD=ds \
+            -e POSTGRES_DB=ds_test \
+            -p 5432:5432 \
+            ds-platform/postgres:pg17-partman
+      - name: Wait for Postgres to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec ds-postgres pg_isready -U ds -d ds_test; then
+              echo "Postgres is ready"; exit 0
+            fi
+            echo "waiting for Postgres ($i/30)..."; sleep 2
+          done
+          echo "Postgres did not become ready in time"; docker logs ds-postgres; exit 1
       - run: pnpm exec turbo run test --filter=@ds/api
 
   build:

@@ -101,7 +101,7 @@ Each exported primitive — button, card, input, input-otp, link, label, tabs, f
 
 ### 3.3. Blocks
 
-Each exported block — `auth-card`, `auth-layout`, `otp-focus-screen` — rendered with representative content in its key states. Blocks render with their real composed primitives, branded.
+Each exported block — `auth-card`, `auth-layout`, `otp-focus-screen` — rendered as a **reusable unit**, the same unit-as-subject framing as §3.1/§3.2: the **subject is the block's composition contract** — its slots / props and the **state matrix a consumer must handle** — not a re-staged finished product screen. Slot content is illustrative and **exposes the slot** (a labelled, app-supplied region), rather than dressing the block as the branded product surface it composes into: re-rendering a screen that already exists in the product documents the _fact of development_, not the system's reuse surface (the inversion caught post-merge on #348 → rework #386). Blocks render via their real composed primitives, branded by their own tokens.
 
 ---
 
@@ -137,6 +137,8 @@ Pixel/visual-regression (Chromatic / Storybook test-runner / Lost-Pixel-class) s
 ## 6. WBS → child Issues (under epic #340)
 
 Each becomes a sub-issue of #340 with native blocked-by/blocking links (repo-conventions). Ordering reflects dependencies.
+
+**Every section is authored unit-as-subject.** Tokens (§3.1) and Primitives (§3.2) are the binding pattern, not just the leaf line: a section's subject is the reusable design-system **unit + its contract** (token → value/alias; primitive → variant × size × state; block → slot/prop + state matrix), **never a re-staged product screen**. A new leaf section (Blocks, and any future Layouts / Icons / …) inherits this parent contract — it is **never** authored against its terse §3.x line read in isolation, and a reviewer names the section's subject to confirm it is the system unit, not a consumer artifact (§5.2). A purpose miss here is invisible to every mechanical gate and cost a post-merge rework (#348 → #386).
 
 1. **Scaffold `apps/showcase`** — minimal Next 15 App-Router app, `@ds/showcase`, depends on `@ds/design-system`; `globals.css` = the single `@import "@ds/design-system/globals.css"` (byte-identical to portal, §2.2); `pnpm dev:*` serves it on the stand. **DoD also includes the §6.2 doc-alignment** (rewrite foundation §3.2 inline + add the ADR-0013 §7 pointer) so it is not dropped at Issue-creation time. _(blocks 2–7)_
 2. **Tokens section** — render all token classes from the generated manifest. _(blocked-by 1)_

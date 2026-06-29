@@ -46,6 +46,7 @@
     "dev:status": "node tools/dev/run.mjs status",
     "dev:config": "node tools/dev/run.mjs config",
     "dev:smoke": "node tools/dev/smoke.mjs",
+    "task:worktree": "node tools/dev/task-worktree.mjs",
     "worktree:teardown": "node tools/dev/worktree-teardown.mjs"
   },
   "devDependencies": {

@@ -343,22 +343,196 @@ export function recommend(
   return `Clean slate. Open a new feature-spec via superpowers:brainstorming.`;
 }
 
+// ── concurrency detector (#359) ─────────────────────────────────────────────
+// The user runs PARALLEL Claude sessions in one repo. A session editing the
+// SHARED main tree while another is live sweeps uncommitted edits into the wrong
+// PR (happened on #345/#355 — now AGENTS.md §6). These pure seams let the
+// detector be unit-tested without firing `main()`'s subprocesses.
+
+/** One Claude session log: its session id, mtime, and which tree it runs in. */
+export interface SessionLog {
+  id: string;
+  mtimeMs: number;
+  inSharedMainTree: boolean;
+}
+
+export interface LiveSessionOpts {
+  nowMs: number;
+  windowMs: number;
+  /** Current session id to exclude; "" excludes nothing (over-count is safe). */
+  selfId: string;
+}
+
+/**
+ * Count live parallel sessions: logs touched within `windowMs` of `nowMs`,
+ * excluding the current session. A future mtime (clock skew) is "live", never
+ * negative. Returns the total plus the shared-main-tree subset (the ones that
+ * can actually collide with a main-tree edit).
+ */
+export function liveParallelSessions(
+  logs: SessionLog[],
+  opts: LiveSessionOpts,
+): { total: number; inMainTree: number } {
+  const live = logs.filter(
+    (l) => l.id !== opts.selfId && opts.nowMs - l.mtimeMs <= opts.windowMs,
+  );
+  return {
+    total: live.length,
+    inMainTree: live.filter((l) => l.inSharedMainTree).length,
+  };
+}
+
+/**
+ * True when the CWD is the PRIMARY working tree, not a linked worktree. In the
+ * primary tree `git rev-parse --git-dir` and `--git-common-dir` resolve to the
+ * same `.git`; in a linked worktree the git-dir is `.git/worktrees/<name>`.
+ * Both inputs are resolved against `cwd` so a relative `.git` compares equal.
+ */
+export function isSharedMainTree(
+  gitDir: string,
+  gitCommonDir: string,
+  cwd: string,
+): boolean {
+  const norm = (p: string) =>
+    resolve(cwd, p).replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  return norm(gitDir) === norm(gitCommonDir);
+}
+
+/**
+ * Encode an absolute path the way Claude Code names its project log directory
+ * under `~/.claude/projects/` — every non-alphanumeric run is a single dash...
+ * (`C:\Users\…\ds-platform` → `C--Users-…-ds-platform`). Used to locate the
+ * repo's session logs — the primary tree's slug, plus each linked worktree's
+ * `…--claude-worktrees-<name>` sibling (see `isRepoSessionDir`).
+ */
+export function encodeProjectSlug(absPath: string): string {
+  return absPath.replace(/[^a-zA-Z0-9]/g, "-");
+}
+
+/**
+ * Is `dirName` a session-log dir for THIS repo? The primary tree is `mainSlug`
+ * exactly; a linked worktree is `mainSlug` + a `--claude-worktrees-<name>`
+ * suffix. A bare `startsWith(mainSlug)` would also match a SIBLING repo whose
+ * slug merely starts the same way (`…-ds-platform` vs `…-ds-platform-2`), so the
+ * suffix must be the worktree separator, never an arbitrary continuation.
+ */
+export function isRepoSessionDir(dirName: string, mainSlug: string): boolean {
+  return (
+    dirName === mainSlug ||
+    dirName.startsWith(`${mainSlug}--claude-worktrees-`)
+  );
+}
+
+interface Concurrency {
+  inSharedMainTree: boolean;
+  liveSessions: number;
+  liveInMainTree: number;
+  worktrees: string[];
+}
+
+const SESSION_WINDOW_MS = 10 * 60 * 1000; // 10 min — validated on the #345 session.
+
+async function concurrency(): Promise<Concurrency> {
+  let inSharedMainTree = true;
+  let mainRoot = REPO_ROOT;
+  try {
+    const [gd, gcd] = await Promise.all([
+      execa("git", ["rev-parse", "--git-dir"], { cwd: REPO_ROOT }),
+      execa("git", ["rev-parse", "--git-common-dir"], { cwd: REPO_ROOT }),
+    ]);
+    inSharedMainTree = isSharedMainTree(
+      gd.stdout.trim(),
+      gcd.stdout.trim(),
+      REPO_ROOT,
+    );
+    // The primary tree's root = parent of the common `.git` dir.
+    mainRoot = dirname(resolve(REPO_ROOT, gcd.stdout.trim()));
+  } catch (e) {
+    note("git rev-parse (concurrency)", e);
+  }
+
+  let worktrees: string[] = [];
+  try {
+    const { stdout } = await execa("git", ["worktree", "list"], {
+      cwd: REPO_ROOT,
+    });
+    worktrees = stdout.split("\n").filter(Boolean);
+  } catch (e) {
+    note("git worktree list", e);
+  }
+
+  let liveSessions = 0;
+  let liveInMainTree = 0;
+  try {
+    const { readdir, stat } = await import("node:fs/promises");
+    const { homedir } = await import("node:os");
+    const projectsDir = resolve(homedir(), ".claude", "projects");
+    const mainSlug = encodeProjectSlug(mainRoot);
+    const selfId = process.env["CLAUDE_CODE_SESSION_ID"] ?? "";
+    const nowMs = Date.now();
+
+    const dirs = (await readdir(projectsDir, { withFileTypes: true }))
+      .filter((d) => d.isDirectory() && isRepoSessionDir(d.name, mainSlug))
+      .map((d) => d.name);
+
+    const logs: SessionLog[] = [];
+    for (const dir of dirs) {
+      // The bare main slug = the primary tree; a `…-claude-worktrees-…` suffix
+      // = a linked worktree session.
+      const inMain = dir === mainSlug;
+      const full = resolve(projectsDir, dir);
+      let entries: string[] = [];
+      try {
+        entries = (await readdir(full)).filter((f) => f.endsWith(".jsonl"));
+      } catch {
+        continue;
+      }
+      for (const f of entries) {
+        try {
+          const s = await stat(resolve(full, f));
+          logs.push({
+            id: f.replace(/\.jsonl$/, ""),
+            mtimeMs: s.mtimeMs,
+            inSharedMainTree: inMain,
+          });
+        } catch {
+          // Log vanished mid-scan — ignore.
+        }
+      }
+    }
+
+    const counts = liveParallelSessions(logs, {
+      nowMs,
+      windowMs: SESSION_WINDOW_MS,
+      selfId,
+    });
+    liveSessions = counts.total;
+    liveInMainTree = counts.inMainTree;
+  } catch (e) {
+    note("session-log scan", e);
+  }
+
+  return { inSharedMainTree, liveSessions, liveInMainTree, worktrees };
+}
+
 function ts(): string {
   // YYYY-MM-DD HH:mm UTC — stable, sortable.
   return new Date().toISOString().slice(0, 16).replace("T", " ");
 }
 
 async function main(): Promise<void> {
-  const [git, working, awaiting, ready, prs, openCount] = await Promise.all([
-    gitState(),
-    ghIssues(["--assignee", "@me", "--label", "agent-working"]),
-    ghIssues(["--assignee", "@me", "--label", "awaiting-review"]),
-    ghUnassignedIssues(["--label", "agent-ready", "--limit", "20"]).then((rs) =>
-      rs.slice(0, 5),
-    ),
-    ghPRs(),
-    ghOpenIssueCount(),
-  ]);
+  const [git, working, awaiting, ready, prs, openCount, conc] =
+    await Promise.all([
+      gitState(),
+      ghIssues(["--assignee", "@me", "--label", "agent-working"]),
+      ghIssues(["--assignee", "@me", "--label", "awaiting-review"]),
+      ghUnassignedIssues(["--label", "agent-ready", "--limit", "20"]).then(
+        (rs) => rs.slice(0, 5),
+      ),
+      ghPRs(),
+      ghOpenIssueCount(),
+      concurrency(),
+    ]);
 
   const activeSpecs = await Promise.all(
     working.map(async (i) => {
@@ -389,6 +563,29 @@ async function main(): Promise<void> {
     for (const c of git.recent) out.push(`  - ${c}`);
   } else {
     out.push("- Recent commits: (none)");
+  }
+  out.push("");
+
+  out.push("## Concurrency");
+  out.push(
+    `- Working tree: ${conc.inSharedMainTree ? "SHARED main tree" : "isolated worktree"}`,
+  );
+  out.push(
+    `- Live parallel sessions (excl. self): ${conc.liveSessions}${
+      conc.liveSessions > 0
+        ? ` (${conc.liveInMainTree} in the shared main tree)`
+        : ""
+    }`,
+  );
+  if (conc.worktrees.length > 1) {
+    out.push(`- Worktrees (${conc.worktrees.length}):`);
+    for (const w of conc.worktrees) out.push(`  - ${w}`);
+  }
+  if (conc.inSharedMainTree && conc.liveSessions > 0) {
+    out.push("");
+    out.push(
+      `> ⚠ **${conc.liveSessions} other live session(s) and you are in the SHARED main tree.** A parallel session can switch the branch out from under you and sweep your uncommitted edits into the wrong PR (AGENTS.md §6). Before editing, isolate: \`pnpm task:worktree <N>\` → \`EnterWorktree path:.claude/worktrees/<N>\`.`,
+    );
   }
   out.push("");
 

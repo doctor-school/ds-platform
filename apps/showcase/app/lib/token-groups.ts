@@ -55,6 +55,20 @@ export interface TokenGroup {
   description: string;
   kind: TokenSpecimenKind;
   tokens: TokenEntry[];
+  /** Also read+show the `.dark` value (semantic colours diverge by theme). */
+  showDark?: boolean;
+}
+
+/**
+ * Palette primitive vs semantic role. A colour is a **palette primitive** if it
+ * is `white`/`black` or a `<scale>-<step>` ramp entry (`blue-500`,
+ * `neutral-100`, `neutral-alpha-10`, …). Everything else under `--color-` is a
+ * **semantic role** (`background`, `card`, `primary`, `accent-foreground`, …)
+ * that references a primitive — which is why semantic tokens resolve to the same
+ * light-mode value as a palette swatch, yet diverge by theme.
+ */
+function isPaletteColor(label: string): boolean {
+  return /^(white|black)$/.test(label) || /^(blue|neutral|green|orange|red)-/.test(label);
 }
 
 /** Ordered classifiers — each `:root` var falls into the FIRST one it matches. */
@@ -66,12 +80,25 @@ const CLASSIFIERS: {
   match: (name: string) => boolean;
   /** Strip the group prefix for the per-token label. */
   label: (name: string) => string;
+  showDark?: boolean;
 }[] = [
   {
-    id: "color",
-    title: "Color",
-    description: "Brand, semantic role and neutral-scale colours.",
+    id: "color-palette",
+    title: "Color · palette (primitives)",
+    description:
+      "The raw colour ramps — the single source the semantic roles below reference.",
     kind: "color",
+    match: (n) =>
+      n.startsWith("--color-") && isPaletteColor(n.slice("--color-".length)),
+    label: (n) => n.slice("--color-".length),
+  },
+  {
+    id: "color-semantic",
+    title: "Color · semantic roles",
+    description:
+      "Role tokens that reference a palette primitive. They share a palette value in light mode (so a swatch can look like a duplicate) but carry distinct meaning and DIVERGE by theme — the dark value is shown alongside.",
+    kind: "color",
+    showDark: true,
     match: (n) => n.startsWith("--color-"),
     label: (n) => n.slice("--color-".length),
   },
@@ -219,6 +246,7 @@ export function buildTokenGroups(): TokenGroup[] {
     description: c.description,
     kind: c.kind,
     tokens: [] as TokenEntry[],
+    ...(c.showDark ? { showDark: true } : {}),
   }));
   const uncategorized: TokenEntry[] = [];
 

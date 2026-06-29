@@ -3,6 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useForm, type Control, type FieldValues } from "react-hook-form";
 
+import { interactiveBase } from "@ds/design-system";
 import { Button } from "@ds/design-system/button";
 import { Link } from "@ds/design-system/link";
 import { Input } from "@ds/design-system/input";
@@ -56,6 +57,16 @@ import {
  */
 
 const POINTER_STATES = new Set(["hover", "focus", "active"]);
+
+/**
+ * Statically-forced focus ring, DERIVED from the exported `interactiveBase`
+ * contract (the single source of every primitive's focus styling) by dropping
+ * its `focus-visible:` prefixes so the ring paints unconditionally. Applied to
+ * the `focus` state cell so the ring is visible on a static read (and screenshot)
+ * without tabbing — no re-implementation, and it cannot drift from the real
+ * focus styling because it is computed from the same exported string.
+ */
+const FORCED_FOCUS = interactiveBase.replace(/focus-visible:/g, "");
 
 type StateSpec = { name: string; note?: string };
 
@@ -127,9 +138,9 @@ function SubRow({ label, children }: { label: string; children: ReactNode }) {
 
 const INTERACTIVE_STATES: StateSpec[] = [
   { name: "default" },
-  { name: "hover", note: "forced via CDP (#351) / hover the live sample" },
-  { name: "focus", note: "forced via CDP (#351) / tab to the live sample" },
-  { name: "active", note: "forced via CDP (#351) / press the live sample" },
+  { name: "hover", note: "hover the cell / forced via CDP (#351)" },
+  { name: "focus", note: "ring forced (mirrors interactiveBase)" },
+  { name: "active", note: "press the cell / forced via CDP (#351)" },
   { name: "disabled" },
 ];
 
@@ -158,7 +169,11 @@ function ButtonSection() {
           <StateColumns
             states={INTERACTIVE_STATES}
             render={(state) => (
-              <Button variant={variant} disabled={state === "disabled"}>
+              <Button
+                variant={variant}
+                disabled={state === "disabled"}
+                className={state === "focus" ? FORCED_FOCUS : undefined}
+              >
                 {variant === "link" ? "Link button" : "Button"}
               </Button>
             )}
@@ -191,9 +206,9 @@ function ButtonSection() {
 const LINK_VARIANTS = ["standalone", "inline"] as const;
 const LINK_STATES: StateSpec[] = [
   { name: "default" },
-  { name: "hover", note: "forced via CDP (#351)" },
-  { name: "focus", note: "forced via CDP (#351)" },
-  { name: "active", note: "forced via CDP (#351)" },
+  { name: "hover", note: "hover / CDP #351" },
+  { name: "focus", note: "ring forced" },
+  { name: "active", note: "press / CDP #351" },
   { name: "disabled", note: 'aria-disabled="true"' },
 ];
 
@@ -214,6 +229,7 @@ function LinkSection() {
                   href="#"
                   variant={variant}
                   aria-disabled={state === "disabled" || undefined}
+                  className={state === "focus" ? FORCED_FOCUS : undefined}
                 >
                   {variant} link
                 </Link>
@@ -257,7 +273,7 @@ function StateColumnsInline({
 
 const INPUT_STATES: StateSpec[] = [
   { name: "default" },
-  { name: "focus", note: "forced via CDP (#351)" },
+  { name: "focus", note: "ring forced (mirrors interactiveBase)" },
   { name: "disabled" },
   { name: "error", note: 'aria-invalid="true"' },
 ];
@@ -269,7 +285,7 @@ function InputSection() {
         states={INPUT_STATES}
         render={(state) => (
           <Input
-            className="w-48"
+            className={state === "focus" ? `w-48 ${FORCED_FOCUS}` : "w-48"}
             placeholder="you@example.com"
             defaultValue={state === "error" ? "not-an-email" : ""}
             disabled={state === "disabled"}

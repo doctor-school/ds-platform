@@ -11,7 +11,7 @@ export default function PrimitivesPage() {
   return (
     <SectionShell
       title="Primitives"
-      intro="Every exported primitive, rendered as the real component across its variants, sizes and states. Static states (default / disabled / error) render from real props; pointer states (hover / focus / active) are tagged for the forced-pseudo-state capture and exercisable on each live sample."
+      intro="Every exported primitive, rendered as the real component across its variants, sizes and states. Static states (default / disabled / error / focus) render directly — the focus ring is forced from the exported interactiveBase contract; hover / active are exercisable on each cell and forced via CDP (#351) for the screenshot capture."
     >
       <PrimitivesView />
     </SectionShell>

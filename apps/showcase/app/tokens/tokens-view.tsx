@@ -16,6 +16,7 @@ import type { TokenEntry, TokenGroup } from "../lib/token-groups";
  */
 export function TokensView({ groups }: { groups: TokenGroup[] }) {
   const [values, setValues] = useState<Record<string, string>>({});
+  const [darkValues, setDarkValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const cs = getComputedStyle(document.documentElement);
@@ -27,6 +28,27 @@ export function TokensView({ groups }: { groups: TokenGroup[] }) {
       }
     }
     setValues(next);
+
+    // Semantic colours diverge by theme — read their `.dark` values from an
+    // offscreen probe carrying the `.dark` class (the same cascade the app uses),
+    // so the catalogue can show light + dark side by side. Still read from the
+    // compiled CSS, never hardcoded.
+    const darkNames = groups
+      .filter((g) => g.showDark)
+      .flatMap((g) => g.tokens.map((t) => t.name));
+    if (darkNames.length > 0) {
+      const probe = document.createElement("div");
+      probe.className = "dark";
+      probe.style.position = "absolute";
+      probe.style.visibility = "hidden";
+      probe.style.pointerEvents = "none";
+      document.body.appendChild(probe);
+      const dcs = getComputedStyle(probe);
+      const dark: Record<string, string> = {};
+      for (const name of darkNames) dark[name] = dcs.getPropertyValue(name).trim();
+      document.body.removeChild(probe);
+      setDarkValues(dark);
+    }
   }, [groups]);
 
   return (
@@ -43,25 +65,34 @@ export function TokensView({ groups }: { groups: TokenGroup[] }) {
             <TextRoleGrid tokens={group.tokens} values={values} />
           ) : (
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {group.tokens.map((token) => (
-                <li
-                  key={token.name}
-                  className="flex items-center gap-4 rounded-lg border border-border bg-card p-3"
-                >
-                  <Specimen kind={group.kind} token={token} />
-                  <div className="flex min-w-0 flex-col">
-                    <span className="truncate text-sm font-medium text-foreground">
-                      {token.label}
-                    </span>
-                    <code className="truncate font-mono text-xs text-muted-foreground">
-                      {token.name}
-                    </code>
-                    <code className="truncate font-mono text-xs text-muted-foreground">
-                      {values[token.name] || "…"}
-                    </code>
-                  </div>
-                </li>
-              ))}
+              {group.tokens.map((token) =>
+                group.showDark ? (
+                  <SemanticColorRow
+                    key={token.name}
+                    token={token}
+                    light={values[token.name]}
+                    dark={darkValues[token.name]}
+                  />
+                ) : (
+                  <li
+                    key={token.name}
+                    className="flex items-center gap-4 rounded-lg border border-border bg-card p-3"
+                  >
+                    <Specimen kind={group.kind} token={token} />
+                    <div className="flex min-w-0 flex-col">
+                      <span className="truncate text-sm font-medium text-foreground">
+                        {token.label}
+                      </span>
+                      <code className="truncate font-mono text-xs text-muted-foreground">
+                        {token.name}
+                      </code>
+                      <code className="truncate font-mono text-xs text-muted-foreground">
+                        {values[token.name] || "…"}
+                      </code>
+                    </div>
+                  </li>
+                ),
+              )}
             </ul>
           )}
         </section>
@@ -231,6 +262,58 @@ function Specimen({ kind, token }: { kind: string; token: TokenEntry }) {
     default:
       return <SpecimenFrame className="border border-border bg-muted" />;
   }
+}
+
+/**
+ * A semantic colour row — a split swatch (light | dark) plus both resolved
+ * values. The dark half is the SAME `var(<token>)` rendered inside a `.dark`
+ * context, so it resolves through the real theme cascade (no literal colour).
+ * This makes the primitive→semantic layering legible: a role that looks like a
+ * duplicate of a palette swatch in light mode reveals its distinct purpose when
+ * the dark value diverges.
+ */
+function SemanticColorRow({
+  token,
+  light,
+  dark,
+}: {
+  token: TokenEntry;
+  light?: string;
+  dark?: string;
+}) {
+  const diverges = !!light && !!dark && light !== dark;
+  return (
+    <li className="flex items-center gap-4 rounded-lg border border-border bg-card p-3">
+      <div className="flex shrink-0 overflow-hidden rounded-md border border-border">
+        <div className="h-12 w-6" style={{ background: `var(${token.name})` }} />
+        <div className="dark">
+          <div
+            className="h-12 w-6"
+            style={{ background: `var(${token.name})` }}
+          />
+        </div>
+      </div>
+      <div className="flex min-w-0 flex-col">
+        <span className="truncate text-sm font-medium text-foreground">
+          {token.label}
+          {diverges ? (
+            <span className="ml-2 font-normal text-muted-foreground">
+              · diverges in dark
+            </span>
+          ) : null}
+        </span>
+        <code className="truncate font-mono text-xs text-muted-foreground">
+          {token.name}
+        </code>
+        <code className="truncate font-mono text-xs text-muted-foreground">
+          light {light || "…"}
+        </code>
+        <code className="truncate font-mono text-xs text-muted-foreground">
+          dark {dark || "…"}
+        </code>
+      </div>
+    </li>
+  );
 }
 
 /**

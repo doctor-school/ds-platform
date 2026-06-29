@@ -2,31 +2,106 @@
   "color": {
     "$type": "color",
     "$description": "Semantic roles repointed onto the Doctor School brand (brand → token map §1.3). Light-first; the .dark overrides live in semantic.dark.json. Brand primary = blue.500 #2D84F2 stays the brand ANCHOR (link text, focus ring, icons, tints). White-on-fill AA (ADR-0013 §7): white on blue.500 is only 3.69:1, so a NORMAL-weight filled action does NOT paint blue.500 — it uses the accessible action-fill triad `primary-action` (blue.700, white 8.14:1, resting), `primary-hover` (blue.800, 11.12:1), `primary-pressed` (blue.800), which keeps a visible resting→hover interaction delta (#270 L1/L3) while clearing AA on every state. The same blue.700 AA rule governs any text-bearing brand FILL, not just actions: `primary-surface` (blue.700) is the brand fill for a coloured panel/surface that carries normal-weight white copy (e.g. the auth brand panel) — `primary` (blue.500) would only clear AA for large/bold text on it. Status = brand green/orange + introduced red.",
-    "background": { "$value": "{color.white}" },
-    "foreground": { "$value": "{color.neutral.900}" },
-    "card": { "$value": "{color.white}" },
-    "card-foreground": { "$value": "{color.neutral.900}" },
-    "primary": { "$value": "{color.blue.500}" },
-    "primary-foreground": { "$value": "{color.white}" },
-    "primary-action": { "$value": "{color.blue.700}" },
-    "primary-hover": { "$value": "{color.blue.800}" },
-    "primary-pressed": { "$value": "{color.blue.800}" },
-    "primary-surface": { "$value": "{color.blue.700}" },
-    "secondary": { "$value": "{color.neutral.100}" },
-    "secondary-foreground": { "$value": "{color.neutral.900}" },
-    "muted": { "$value": "{color.neutral.100}" },
-    "muted-foreground": { "$value": "{color.neutral.600}" },
-    "accent": { "$value": "{color.neutral.100}" },
-    "accent-foreground": { "$value": "{color.neutral.900}" },
-    "success": { "$value": "{color.green.500}" },
-    "success-foreground": { "$value": "{color.white}" },
-    "warning": { "$value": "{color.orange.500}" },
-    "warning-foreground": { "$value": "{color.white}" },
-    "destructive": { "$value": "{color.red.500}" },
-    "destructive-foreground": { "$value": "{color.white}" },
-    "border": { "$value": "{color.neutral.200}" },
-    "input": { "$value": "{color.neutral.200}" },
-    "ring": { "$value": "{color.blue.300}" }
+    "background": {
+      "$value": "{color.white}",
+      "$description": "The default page/app surface. Pair with `foreground` for text."
+    },
+    "foreground": {
+      "$value": "{color.neutral.900}",
+      "$description": "Default text and icon colour, used on `background`."
+    },
+    "card": {
+      "$value": "{color.white}",
+      "$description": "A raised surface (card, popover, panel) sitting on `background`. Pair with `card-foreground`."
+    },
+    "card-foreground": {
+      "$value": "{color.neutral.900}",
+      "$description": "Text and icon colour on a `card` surface."
+    },
+    "primary": {
+      "$value": "{color.blue.500}",
+      "$description": "Brand anchor (blue.500) for link text, focus accents, icons and tints. NOT a normal-weight filled action — that fails AA; use `primary-action`."
+    },
+    "primary-foreground": {
+      "$value": "{color.white}",
+      "$description": "Text and icon colour ON a primary/action fill (white on the brand button)."
+    },
+    "primary-action": {
+      "$value": "{color.blue.700}",
+      "$description": "Resting fill for a normal-weight filled primary button (blue.700, AA on white). Pairs with `primary-foreground`."
+    },
+    "primary-hover": {
+      "$value": "{color.blue.800}",
+      "$description": "Hover fill for a primary action (darker than the resting `primary-action`)."
+    },
+    "primary-pressed": {
+      "$value": "{color.blue.800}",
+      "$description": "Pressed/active fill for a primary action."
+    },
+    "primary-surface": {
+      "$value": "{color.blue.700}",
+      "$description": "Brand-coloured panel/surface that carries normal-weight white copy (e.g. the auth brand panel)."
+    },
+    "secondary": {
+      "$value": "{color.neutral.100}",
+      "$description": "Low-emphasis tonal fill (secondary buttons, subtle chips). Pair with `secondary-foreground`."
+    },
+    "secondary-foreground": {
+      "$value": "{color.neutral.900}",
+      "$description": "Text and icon colour on a `secondary` fill."
+    },
+    "muted": {
+      "$value": "{color.neutral.100}",
+      "$description": "A muted background for subtle fills, hovered rows or disabled tracks."
+    },
+    "muted-foreground": {
+      "$value": "{color.neutral.600}",
+      "$description": "De-emphasised text — helper text, placeholders, captions, metadata."
+    },
+    "accent": {
+      "$value": "{color.neutral.100}",
+      "$description": "Hover/selected background for interactive list items and ghost buttons. Pair with `accent-foreground`."
+    },
+    "accent-foreground": {
+      "$value": "{color.neutral.900}",
+      "$description": "Text and icon colour on an `accent` surface."
+    },
+    "success": {
+      "$value": "{color.green.500}",
+      "$description": "Positive-status fill, border or icon. Pair with `success-foreground`."
+    },
+    "success-foreground": {
+      "$value": "{color.white}",
+      "$description": "Text and icon colour on a `success` fill."
+    },
+    "warning": {
+      "$value": "{color.orange.500}",
+      "$description": "Caution-status fill, border or icon. Pair with `warning-foreground`."
+    },
+    "warning-foreground": {
+      "$value": "{color.white}",
+      "$description": "Text and icon colour on a `warning` fill."
+    },
+    "destructive": {
+      "$value": "{color.red.500}",
+      "$description": "Error/danger fill, border or icon — destructive actions and invalid state. Pair with `destructive-foreground`."
+    },
+    "destructive-foreground": {
+      "$value": "{color.white}",
+      "$description": "Text and icon colour on a `destructive` fill."
+    },
+    "border": {
+      "$value": "{color.neutral.200}",
+      "$description": "Default border and divider colour on surfaces."
+    },
+    "input": {
+      "$value": "{color.neutral.200}",
+      "$description": "Border colour of form inputs and controls."
+    },
+    "ring": {
+      "$value": "{color.blue.300}",
+      "$description": "The keyboard-focus ring colour (the `focus-visible` ring on every interactive primitive)."
+    }
   },
 
   "radius": {

@@ -47,6 +47,10 @@ export interface TokenEntry {
    * other group leaves this undefined and reads the live computed value.
    */
   staticValue?: string;
+  /** The primitive this token aliases (`--color-card` → `--color-white`), if any. */
+  reference?: string;
+  /** Usage note from the token source `$description`, if any. */
+  description?: string;
 }
 
 export interface TokenGroup {
@@ -239,6 +243,8 @@ export function buildTokenGroups(): TokenGroup[] {
   const cssVariables: string[] = manifest.cssVariables ?? [];
   const breakpoints: { name: string; value: string }[] =
     manifest.breakpoints ?? [];
+  const references: Record<string, string> = manifest.references ?? {};
+  const descriptions: Record<string, string> = manifest.descriptions ?? {};
 
   const groups: TokenGroup[] = CLASSIFIERS.map((c) => ({
     id: c.id,
@@ -257,7 +263,12 @@ export function buildTokenGroups(): TokenGroup[] {
       continue;
     }
     const group = groups[idx]!;
-    group.tokens.push({ name, label: CLASSIFIERS[idx]!.label(name) });
+    group.tokens.push({
+      name,
+      label: CLASSIFIERS[idx]!.label(name),
+      ...(references[name] ? { reference: references[name] } : {}),
+      ...(descriptions[name] ? { description: descriptions[name] } : {}),
+    });
   }
 
   // Breakpoints — values from the manifest (see file header).

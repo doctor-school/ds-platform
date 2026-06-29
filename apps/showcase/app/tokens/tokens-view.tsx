@@ -79,10 +79,20 @@ export function TokensView({ groups }: { groups: TokenGroup[] }) {
                     className="flex items-center gap-4 rounded-lg border border-border bg-card p-3"
                   >
                     <Specimen kind={group.kind} token={token} />
-                    <div className="flex min-w-0 flex-col">
+                    <div className="flex min-w-0 flex-col gap-0.5">
                       <span className="truncate text-sm font-medium text-foreground">
                         {token.label}
                       </span>
+                      {token.reference ? (
+                        <code className="truncate font-mono text-xs text-muted-foreground">
+                          → aliases {token.reference}
+                        </code>
+                      ) : null}
+                      {token.description ? (
+                        <p className="text-xs leading-snug text-muted-foreground">
+                          {token.description}
+                        </p>
+                      ) : null}
                       <code className="truncate font-mono text-xs text-muted-foreground">
                         {token.name}
                       </code>
@@ -293,7 +303,7 @@ function SemanticColorRow({
           />
         </div>
       </div>
-      <div className="flex min-w-0 flex-col">
+      <div className="flex min-w-0 flex-col gap-0.5">
         <span className="truncate text-sm font-medium text-foreground">
           {token.label}
           {diverges ? (
@@ -302,14 +312,18 @@ function SemanticColorRow({
             </span>
           ) : null}
         </span>
+        {token.reference ? (
+          <code className="truncate font-mono text-xs text-muted-foreground">
+            → aliases {token.reference}
+          </code>
+        ) : null}
+        {token.description ? (
+          <p className="text-xs leading-snug text-muted-foreground">
+            {token.description}
+          </p>
+        ) : null}
         <code className="truncate font-mono text-xs text-muted-foreground">
-          {token.name}
-        </code>
-        <code className="truncate font-mono text-xs text-muted-foreground">
-          light {light || "…"}
-        </code>
-        <code className="truncate font-mono text-xs text-muted-foreground">
-          dark {dark || "…"}
+          {token.name} · light {light || "…"} · dark {dark || "…"}
         </code>
       </div>
     </li>

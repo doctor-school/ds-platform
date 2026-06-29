@@ -55,7 +55,7 @@ The cost is a one-time minimal Next-app scaffold + a build target. This is far l
 
 ### 2.2. Styling pipeline — mirror portal, no new pipeline
 
-`apps/showcase/app/globals.css` mirrors `apps/portal/app/globals.css`: it imports the same compiled token CSS (`@ds/design-system` `tokens.css`/`globals.css`) and uses the same Tailwind v4 `@theme`/`@source` wiring. The showcase renders **the real `@ds/design-system` components** through **the same render pipeline as features** — a green in the showcase is a green for the components features will compose. No bespoke re-implementation of any primitive is permitted in the showcase (that would defeat its purpose).
+`apps/showcase/app/globals.css` mirrors `apps/portal/app/globals.css` **exactly**: a single `@import "@ds/design-system/globals.css"` and nothing else. Portal owns no styling of its own — the `@theme` block, the `@source "../primitives"`/`"../blocks"` scans, and the `:root`/`.dark` token variables all live **inside the package**, pulled in by that one import (ADR-0004 §6.3). The showcase re-uses the same single import, so it inherits the identical Tailwind v4 wiring without re-declaring any of it. It renders **the real `@ds/design-system` components** through **the same render pipeline as features** — a green in the showcase is a green for the components features will compose. No bespoke re-implementation of any primitive, and no app-local `@theme`/token override, is permitted in the showcase (that would defeat its purpose).
 
 ### 2.3. Serving — live URL on the dev stand
 
@@ -80,6 +80,8 @@ Drift is **structurally impossible**, not merely discouraged:
 - The **retargeted Playwright + axe** (§5.2) exercise behaviour across the whole catalogue.
 
 The isolation chosen in §2.1 isolates only the **hosting Next shell** (so an internal tool does not pollute the product app and docs stays decoupled). It does **not** isolate the design system, which is single and shared. The dependency binding is identical whether the showcase is a dedicated app or a route inside a consumer — the bond is the shared package, not the hosting location.
+
+**The one residual drift vector — and its mitigation.** The catalogue _content_ cannot drift (shared package + re-implementation ban + coverage guard). The single surface the coverage guard and the retargeted Playwright+axe do **not** cover is the showcase shell's own `globals.css` import wiring — in principle it could fall behind a future change to how apps consume the package. This is exactly why §2.2 mandates the **single `@import "@ds/design-system/globals.css"`, byte-identical to portal, with no app-local `@theme`/token wiring**: there is no app-side styling configuration to drift, only one shared import line that either resolves or fails the build. So drift of catalogue content is structurally impossible; drift of the shell's wiring is reduced to a single import line held identical to the other consumers by convention.
 
 **How a coding agent works against it (the full cycle, with deliverables A/C).** All UI is adopted from `@ds/design-system` (AGENTS.md §6, adopt-before-bespoke). For an element class **not yet covered**: the `research-ui-element` subagent (A) renders 2–3 researched options into the showcase candidate seam (§4) → the owner picks on the live URL (Stage A) → the choice is encoded as a standard in the design constitution (generalised ADR-0013 §7, A) → it is implemented into `@ds/design-system` as a token-only primitive/block → it appears in the showcase → the owner approves the catalogue (Stage B). For an element class **already covered**: the agent reuses the package export and consults the showcase (the rendered look) + the constitution (the rule) — no re-research. Features always compose from the package; the debloated `build-ui-from-design-system` (C) is the thin procedure that points the agent at the showcase + constitution; the coverage guard plus the anti-bloat budget extended to skills keep the surface and the skill from re-bloating.
 
@@ -136,7 +138,7 @@ Pixel/visual-regression (Chromatic / Storybook test-runner / Lost-Pixel-class) s
 
 Each becomes a sub-issue of #340 with native blocked-by/blocking links (repo-conventions). Ordering reflects dependencies.
 
-1. **Scaffold `apps/showcase`** — minimal Next 15 App-Router app, `@ds/showcase`, depends on `@ds/design-system`; `globals.css` mirrors portal's token wiring; `pnpm dev:*` serves it on the stand. _(blocks 2–7)_
+1. **Scaffold `apps/showcase`** — minimal Next 15 App-Router app, `@ds/showcase`, depends on `@ds/design-system`; `globals.css` = the single `@import "@ds/design-system/globals.css"` (byte-identical to portal, §2.2); `pnpm dev:*` serves it on the stand. **DoD also includes the §6.2 doc-alignment** (rewrite foundation §3.2 inline + add the ADR-0013 §7 pointer) so it is not dropped at Issue-creation time. _(blocks 2–7)_
 2. **Tokens section** — render all token classes from the generated manifest. _(blocked-by 1)_
 3. **Primitives section** — every primitive × every state/variant/size, with the states column. _(blocked-by 1)_
 4. **Blocks section** — auth-card, auth-layout, otp-focus-screen in key states. _(blocked-by 1, 3)_

@@ -120,6 +120,23 @@ describe("OtpField variant=slotted", () => {
     expect(typeof boundRef?.setCustomValidity).toBe("function");
   });
 
+  it("does not schedule input-otp's window-polling PWM timer (#366, jsdom teardown flake)", () => {
+    // input-otp's password-manager-badge heuristic schedules a 1s `setInterval`
+    // whose body reads `window.innerWidth`. In jsdom that interval can fire in the
+    // gap between a test finishing and the environment tearing down — throwing an
+    // unhandled `ReferenceError: window is not defined` that red-lights the whole
+    // `unit` job (#366). With `pushPasswordManagerStrategy="none"` forced for every
+    // `OTPInput` under test (vitest.setup.ts), the PWM effects early-return and
+    // schedule no such timer. This guards the root cause directly (deterministic),
+    // not the nondeterministic symptom.
+    const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
+    const { unmount } = render(<SlottedHarness length={6} />);
+    const pwmIntervals = setIntervalSpy.mock.calls.filter(([, ms]) => ms === 1000);
+    unmount();
+    setIntervalSpy.mockRestore();
+    expect(pwmIntervals).toHaveLength(0);
+  });
+
   it("fires onComplete once the full-length (8) login code lands", async () => {
     const user = userEvent.setup();
     const onComplete = vi.fn();

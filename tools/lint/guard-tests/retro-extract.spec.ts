@@ -14,6 +14,9 @@ import {
   CORRECTION_RE,
   isAuqAnswer,
 } from "../../retro/extract.mjs";
+// SELF_CATCH is the assistant-side self-correction lexicon; #362 made it
+// exportable behind the same entry-point guard so it is unit testable.
+import { SELF_CATCH } from "../../retro/transcripts.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const EXTRACT = resolve(HERE, "..", "..", "retro", "extract.mjs");
@@ -90,6 +93,87 @@ describe("retro extract — AUQ answer detection (pure)", () => {
   it("CORRECTION_RE flags an AUQ free-text correction, not a benign preset", () => {
     expect(CORRECTION_RE.test("почему ты не создал своё рабочее дерево?")).toBe(true);
     expect(CORRECTION_RE.test("Вариант A")).toBe(false);
+  });
+});
+
+// ── CORRECTION_RE lexicon recall (#362) ─────────────────────────────────────
+// A genuine correction that uses none of the ORIGINAL tokens was missed even on
+// the right channel — the canonical live-corpus example surfaced in the #360
+// review («…не нужен MFA, давай тогда его вообще сейчас исключим из скоупа»).
+// The lexicon now also covers `не нужен/на`, `исключ`, `вместо`, `на самом деле`,
+// `всё-таки`, `ещё раз`, `не должно` — chosen because each catches real pushback
+// in the corpus with no benign false positives. The soft-directive «давай …»
+// framing is deliberately NOT a token (it is mostly a benign next-step directive,
+// «давай дальше / делай /wrap»); the corrective companion words carry the signal.
+describe("retro extract — CORRECTION_RE lexicon recall (#362)", () => {
+  it("flags real-shape corrections that use none of the original tokens", () => {
+    // the canonical live-corpus miss («не нужен» + «исключ»)
+    expect(
+      CORRECTION_RE.test(
+        "по нашей же спеке для doctor_guest не нужен MFA, давай тогда его вообще сейчас исключим из скоупа",
+      ),
+    ).toBe(true);
+    // replacement instruction («вместо») — no original token present
+    expect(
+      CORRECTION_RE.test("не заводи новый сервис, переиспользуй существующий вместо нового"),
+    ).toBe(true);
+    // pushback marker «всё-таки» riding a soft directive
+    expect(
+      CORRECTION_RE.test("Давай всё-таки превью в HTML формате делать, это логичнее"),
+    ).toBe(true);
+    // redo / re-explain marker «ещё раз»
+    expect(CORRECTION_RE.test("Нет, давай ещё раз — что значит этот шаг?")).toBe(true);
+    // «на самом деле» — the classic "actually…" reframe
+    expect(CORRECTION_RE.test("на самом деле это совсем не то, что я просил")).toBe(true);
+    // bug-complaint «не должно» (the throttle report; «должно быть» alone missed it)
+    expect(CORRECTION_RE.test("троттл слишком агрессивный, так быть не должно")).toBe(true);
+  });
+
+  it("precision guard: benign soft-directives and presets stay unflagged", () => {
+    // bare «давай …» next-step directives must NOT start matching
+    expect(CORRECTION_RE.test("ок, давай дальше по плану")).toBe(false);
+    expect(CORRECTION_RE.test("Давай сначала follow-up, потом 003")).toBe(false);
+    expect(CORRECTION_RE.test("Давай прогоним /wrap")).toBe(false);
+    expect(CORRECTION_RE.test("Давай разберёмся с 313")).toBe(false);
+    // preset selections / neutral acks
+    expect(CORRECTION_RE.test("Вариант A")).toBe(false);
+    expect(CORRECTION_RE.test("ок, дальше")).toBe(false);
+    // «лучше» was deliberately LEFT OUT — as praise it is benign, so it must
+    // not flag (the one real «лучше» correction is already caught by «не нужен»)
+    expect(CORRECTION_RE.test("так стало гораздо лучше, спасибо")).toBe(false);
+  });
+
+  it("precision guard: «исключ» is stem-anchored — benign exception/exclusively talk stays unflagged", () => {
+    // the corrective verb forms still flag
+    expect(CORRECTION_RE.test("давай исключим это из скоупа")).toBe(true);
+    expect(CORRECTION_RE.test("надо исключить шаг")).toBe(true);
+    expect(CORRECTION_RE.test("исключаем фичу из релиза")).toBe(true);
+    // but routine technical talk must NOT (the #362-review precision boundary)
+    expect(CORRECTION_RE.test("это исключение бросается в обработчике")).toBe(false);
+    expect(CORRECTION_RE.test("работает исключительно на проде")).toBe(false);
+  });
+});
+
+// ── SELF_CATCH lexicon recall (#362) ────────────────────────────────────────
+// The assistant-side self-correction lexicon missed clean RU markers the corpus
+// surfaced («я зря …», «я перепутал …»). The additions are high-precision: the
+// noisy candidates («исправл», «пропустил», «нарушил») were rejected because they
+// flood on neutral status lines and quoted-rule narration.
+describe("retro transcripts — SELF_CATCH lexicon recall (#362)", () => {
+  it("flags clean RU self-correction markers the corpus showed missed", () => {
+    expect(SELF_CATCH.test("я зря впихнул «покой» и «ошибку» в две узкие колонки")).toBe(true);
+    expect(SELF_CATCH.test("да, теперь вижу — я зря запустил опрос с нуля")).toBe(true);
+    expect(SELF_CATCH.test("я перепутал отправителя и получателя")).toBe(true);
+    expect(SELF_CATCH.test("я неправильно понял требование")).toBe(true);
+  });
+
+  it("still flags the original markers and stays quiet on neutral status lines", () => {
+    expect(SELF_CATCH.test("на самом деле порядок @Inject важен")).toBe(true);
+    expect(SELF_CATCH.test("я ошибся в импорте")).toBe(true);
+    // a neutral status line must NOT read as a self-catch (the reason «исправл»
+    // / «пропустил» were deliberately left out of the lexicon)
+    expect(SELF_CATCH.test("CI зелёный, исправил тип в api-client, мержу")).toBe(false);
+    expect(SELF_CATCH.test("локальный cleanup gh пропустил из-за worktree")).toBe(false);
   });
 });
 

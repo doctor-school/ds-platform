@@ -18,6 +18,8 @@
     "lint:endpoint-authz": "tsx --tsconfig apps/api/tsconfig.json tools/lint/endpoint-authz-lint.ts",
     "lint:form-error": "tsx tools/lint/form-error-lint.ts",
     "lint:instruction-budget": "tsx tools/lint/instruction-budget-lint.ts",
+    "lint:ears-naming": "tsx tools/lint/ears-naming-lint.ts",
+    "lint:ears-test": "tsx tools/lint/ears-test-lint.ts",
     "lint:form-rhythm": "tsx tools/lint/form-rhythm-lint.ts",
     "lint:interaction-states": "tsx tools/lint/interaction-states-lint.ts",
     "lint:no-stub": "tsx tools/lint/no-stub-lint.ts",

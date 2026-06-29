@@ -59,7 +59,7 @@ the consuming app's CSS even though they live outside the app tree.
 | `Input` (`./input`)        | Text/email/password field                                                                                                                                |
 | `Label` (`./label`)        | Radix label primitive                                                                                                                                    |
 | `Card` (`./card`)          | `Card` + `Header`/`Title`/`Description`/`Content`/`Footer` — the auth-form shell                                                                         |
-| `Form` (`./form`)          | RHF binding — `Form`/`FormField`/`FormItem`/`FormLabel`/`FormControl`/`FormMessage` (ADR-0004 §9)                                                        |
+| `Form` (`./form`)          | RHF binding — `Form`/`FormField`/`FormItem`/`FormLabel`/`FormControl`/`FormMessage` + `FormError` (form-level submit error) (ADR-0004 §9)                |
 | `InputOTP` (`./input-otp`) | One-time-code field for email-OTP / SMS-OTP (EARS-6/7)                                                                                                   |
 
 Forms follow the ADR-0004 §9 pattern: **RHF + `@hookform/resolvers/zod` + shadcn
@@ -94,37 +94,47 @@ live-verify audit both check for it. To opt a genuine exception out, mark it wit
 ## Form layout standard (ADR-0013 §7)
 
 Form vertical rhythm and validation messaging are a **contract**, not per-screen
-care — constant height, no reflow on error, no over-spacing. These are the
-concrete token-only classes `#324` implements against (rationale + research
-citations in ADR-0013 §7 → _Form layout & validation contract_). **Token-only:
-no arbitrary `[...]` values** — every class below resolves to an existing scale
-token (the §5 / `#269` arbitrary-value guard must stay green).
+care — tight resting rhythm, no over-spacing, and an error that reads as part of
+**its** field. These are the concrete token-only classes `#333` implements against
+(rationale + research citations in ADR-0013 §7 → _Form layout & validation
+contract_). **Token-only: no arbitrary `[...]` values** — every class below
+resolves to an existing scale token (the §5 / `#269` arbitrary-value guard must
+stay green).
 
-| Concern                   | Value                                  | Notes                                                                                                                                                                                                                                                      |
-| ------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Label ↔ control gap       | `flex flex-col gap-2.5` (10 px)        | `FormItem` inner gap — label belongs to its control as one unit; `2.5` not `1.5` so the control's `interactiveBase` `focus-visible:ring-2 ring-offset-2` (~4 px above the input) does not touch the label on focus (ring-clearance, #227/#267 live-proven) |
-| Field-group spacing       | `space-y-2` (8 px, additive)           | set on the `<form>` / fields wrapper, **not** the `FormItem`; **small** — the reserved message slot already adds ~20 px of separation, so a big gap on top over-spaces (round-1 `space-y-5` = ~50 px, live-proven too airy #227/#267). Net ~38 px/field    |
-| Field height              | `h-9`                                  | `Input` / single-line controls (matches `Button` default)                                                                                                                                                                                                  |
-| Message slot              | `min-h-5` one-line slot                | `text-sm` `leading-5` = one 20 px line; **always present on a validating field**                                                                                                                                                                           |
-| Helper (resting)          | `text-sm text-muted-foreground`        | shown by default inside the slot                                                                                                                                                                                                                           |
-| Error (swap-in)           | `text-sm font-medium text-destructive` | replaces the helper **in place** — same slot, no height change                                                                                                                                                                                             |
-| No helper + no validation | render **no slot**                     | field stacks on the `space-y-2` rhythm; never a blank reserved line                                                                                                                                                                                        |
+| Concern              | Value                                                                         | Notes                                                                                                                                                                                                                     |
+| -------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Label ↔ control gap  | `flex flex-col gap-2.5` (10 px)                                               | `FormItem` inner gap; `2.5` not `1.5` so the control's `interactiveBase` `focus-visible:ring-2 ring-offset-2` (~4 px above the input) does not touch the label on focus (ring-clearance, #227/#267 live-proven)           |
+| Field-group spacing  | `space-y-4` (16 px)                                                           | set on the `<form>` / fields wrapper, **not** the `FormItem`; **larger** than the 10 px in-field gap so an on-demand message stays closer to its own field than to the next field's label (proximity, #333 owner finding) |
+| Field height         | `h-9`                                                                         | `Input` / single-line controls (matches `Button` default)                                                                                                                                                                 |
+| Message (inline)     | `text-xs` (12 px), rendered on demand                                         | **no reserved height** — renders only when there is a helper or an error; small and **not bold** (#333 owner finding)                                                                                                     |
+| Helper (resting)     | `text-xs text-muted-foreground`                                               | shown by default; **omit `FormMessage` children** for a field with no helper → nothing renders at rest                                                                                                                    |
+| Error (swap-in)      | `text-xs text-destructive` (`role=alert`)                                     | replaces the helper **in place**; the field's invalidity is also carried by the input border (below)                                                                                                                      |
+| Input invalid        | `aria-invalid:border-destructive aria-invalid:focus-visible:ring-destructive` | error marks the **field** (border + ring), label stays **neutral** — no "red mush" (#333 K-3)                                                                                                                             |
+| No helper + no error | render **nothing**                                                            | field stacks on the `space-y-4` rhythm; **never** a blank reserved line (the slice-B over-spacing, #333 K-1)                                                                                                              |
 
-**The no-reflow slot.** `FormMessage` must **not** `return null` when empty (that
-is the reflow source). Instead the field renders one persistent slot wrapper at
-`min-h-5` that shows `FormDescription` (helper) by default and shows
-`FormMessage` (error) when `error` is set — the two never coexist, the wrapper
-height is constant, so the form does not grow when an error appears. A field that
-declares neither a helper nor a validating schema renders no slot at all, so a
-plain field is not pushed apart by an always-blank line (defect #1) — the slot is
-present **only where a field can show a message** (defect #7).
+**Inline message (1A).** `FormMessage` returns `null` when it has neither a
+helper (`children`) nor an error — a resting field reserves **no** blank line (the
+slice-B `min-h-5` over-spacing, K-1). When present it shows the helper (muted) by
+default and **swaps the error into its place** (`role="alert"`, destructive) on
+failure — the two never coexist. The accepted cost is a small one-line downward
+shift when an error appears; validation is **on blur** (`mode: onTouched`) so it
+never fires mid-typing. Long forms (**>3 fields**) use a `<FormErrorSummary>`
+panel **below the submit button** instead (deferred until the first such form).
+
+**One error-style source.** The error look (`text-xs text-destructive`,
+`role="alert"`) lives in **one place** — `FormMessage` (field-level) and
+`FormError` (form-level submit/auth error, e.g. the EARS-16 generic outcome) both
+compose the shared tone constants in `form.tsx`. A page renders
+`<FormError>{error}</FormError>`, **never** a hand-typed raw `<p role="alert"
+className="…">` — duplicating the error style per screen is the #333 Stage-B
+finding the design system exists to prevent.
 
 ```
 FormItem            → flex flex-col gap-2.5  (label ↔ control, tight + ring-clearing)
-  FormLabel
-  FormControl        → Input h-9
-  message slot       → min-h-5               (helper by default; error swaps in place)
-<form> / fields      → space-y-2             (small additive; slot carries most separation)
+  FormLabel                                  (neutral on error — no text-destructive)
+  FormControl        → Input h-9             (aria-invalid → destructive border + ring)
+  FormMessage        → text-xs, on demand    (helper muted; error swaps in place; null when empty)
+<form> / fields      → space-y-4             (16 px — message hugs its field, not the next)
 ```
 
 ### Clickable state matrix (the values for `#324`)
@@ -136,7 +146,7 @@ FormItem            → flex flex-col gap-2.5  (label ↔ control, tight + ring-
 | `Button` outline     | `border border-input bg-background shadow-sm`                                                      | `hover:bg-accent hover:text-accent-foreground`                                             | `active:bg-accent/80`           | same                                                                  |
 | `Button` ghost       | —                                                                                                  | `hover:bg-accent hover:text-accent-foreground`                                             | `active:bg-accent/80`           | same                                                                  |
 | `Link` / `link`      | `text-primary-action` (blue.700, AA on white; no underline)                                        | `hover:underline underline-offset-4`                                                       | `active:text-primary-action/80` | `disabled:opacity-50` + L1 `not-allowed`                              |
-| `TabsTrigger`        | inactive `text-foreground/60` **`border border-transparent`** `px-3 py-1`                          | `data-[state=inactive]:hover:bg-background/50 data-[state=inactive]:hover:text-foreground` | —                               | `disabled:opacity-50`                                                 |
+| `TabsTrigger`        | inactive `text-foreground/60` `px-3 py-1`; `TabsList` **`gap-2` track**                            | `data-[state=inactive]:hover:bg-background/50 data-[state=inactive]:hover:text-foreground` | —                               | `disabled:opacity-50`                                                 |
 | `TabsTrigger` active | `data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow` | —                                                                                          | —                               | —                                                                     |
 
 - **Disabled vs secondary (#2):** secondary is told apart from disabled by a
@@ -146,9 +156,10 @@ FormItem            → flex flex-col gap-2.5  (label ↔ control, tight + ring-
 - **Link (#3):** the new `Link` primitive composes `interactiveBase` (focus ring)
   - `text-primary-action hover:underline underline-offset-4 active:text-primary-action/80`; no
     resting underline on standalone nav links, resting underline on in-body links.
-- **Tab inset (#4):** every `TabsTrigger` carries `border border-transparent` so
-  the active background+shadow does not shift neighbours, with `px-3 py-1` inside
-  the list so an inactive hover reads as an inset chip, not a flush block.
+- **Segment separation (#4, redone in #333):** `TabsList` carries a `gap-2` track
+  between segments so an inactive segment's `hover:bg-background/50` never butts
+  flush against the active segment (the slice-B hover-gluing defect, K-2). The
+  transparent-border-only inset was not enough — the gap is the fix.
 
 ## Adding a component later
 

@@ -31,7 +31,7 @@ import {
   maskDestination,
   useResendCountdown,
 } from "@ds/design-system/blocks";
-import { Form, FormField } from "@ds/design-system/form";
+import { Form, FormField, FormError } from "@ds/design-system/form";
 
 /** The reset code is a FIXED 6 characters (Zitadel default) — and ALPHANUMERIC
  * (e.g. `PVDC3R`), not digits-only — like the registration verify code. `<OtpField>`
@@ -132,7 +132,7 @@ export default function ResetPage() {
           <Form {...requestForm}>
             <form
               onSubmit={requestForm.handleSubmit(onRequest)}
-              className="space-y-2"
+              className="space-y-4"
               noValidate
             >
               {/* #196 fix: the reset identifier is the same union box as
@@ -152,11 +152,7 @@ export default function ResetPage() {
                 )}
               />
               <BotProtectionField onToken={setCaptchaToken} />
-              {error && (
-                <p role="alert" className="text-sm text-destructive">
-                  {error}
-                </p>
-              )}
+              <FormError>{error}</FormError>
               <Button
                 type="submit"
                 className="w-full"
@@ -294,7 +290,7 @@ function ResetCompleteForm({
     <Form {...completeForm}>
       <form
         onSubmit={completeForm.handleSubmit(onComplete)}
-        className="space-y-2"
+        className="space-y-4"
         noValidate
       >
         {/* Slotted 6-char alphanumeric code (no auto-submit here — the complete step
@@ -324,11 +320,7 @@ function ResetCompleteForm({
             />
           )}
         />
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
+        <FormError>{error}</FormError>
         <Button
           type="submit"
           className="w-full"

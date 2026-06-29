@@ -62,13 +62,11 @@ export function PasswordField<T extends FieldValues>({
           value={field.value ?? ""}
         />
       </FormControl>
-      {/* Single no-reflow slot (ADR-0013 §7): the policy hint is the FormMessage's
+      {/* Inline message (ADR-0013 §7, #333): the policy hint is the FormMessage's
           helper `children` (muted by default), swapped IN PLACE by the destructive
-          validation error — one element, one reserved line, one id. Rendering a
-          separate <FormDescription> here would duplicate `formDescriptionId` and
-          stack an extra blank reserved line (defects #1/#7). `purpose="current"`
-          (login, no policy) passes no children → the slot reserves the line silently
-          and shows only the error. */}
+          error — one element, one id. Rendering a separate <FormDescription> would
+          duplicate `formDescriptionId`. `purpose="current"` (login, no policy)
+          passes no children → nothing renders until an error (no reserved line). */}
       <FormMessage>{withPolicy && policyHint ? policyHint : undefined}</FormMessage>
     </FormItem>
   );

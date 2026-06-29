@@ -28,7 +28,7 @@ import {
   maskDestination,
   useResendCountdown,
 } from "@ds/design-system/blocks";
-import { Form, FormField } from "@ds/design-system/form";
+import { Form, FormField, FormError } from "@ds/design-system/form";
 
 /** The registration verification code is a FIXED 6 characters (Zitadel default) —
  * and ALPHANUMERIC (the email code is not digits-only). `<OtpField>` uses its slotted
@@ -231,7 +231,7 @@ function VerifyCard() {
             {t("newAccountHeading")}
           </h2>
           <Form {...form}>
-            <form onSubmit={submit} className="space-y-2" noValidate>
+            <form onSubmit={submit} className="space-y-4" noValidate>
               <FormField
                 control={form.control}
                 name="code"
@@ -245,11 +245,7 @@ function VerifyCard() {
                   />
                 )}
               />
-              {error && (
-                <p role="alert" className="text-sm text-destructive">
-                  {error}
-                </p>
-              )}
+              <FormError>{error}</FormError>
               <Button
                 type="submit"
                 className="w-full"

@@ -10,20 +10,14 @@ import { PasswordField } from "./password-field";
 afterEach(cleanup);
 
 /**
- * Regression harness (#324 Mode-a review): drives `<PasswordField>` exactly as the
- * register / reset surfaces (`purpose="new"` + `policyHint`) and login
- * (`purpose="current"`) do, and pins the SINGLE no-reflow slot the form contract
- * (ADR-0013 §7) requires.
+ * Regression harness: drives `<PasswordField>` exactly as the register / reset
+ * surfaces (`purpose="new"` + `policyHint`) and login (`purpose="current"`) do,
+ * and pins the **inline** message contract (ADR-0013 §7, #333 redo).
  *
- * The defect this guards: the field used to render a separate `<FormDescription>`
- * PLUS an empty `<FormMessage>`, producing TWO elements sharing `formDescriptionId`
- * (invalid duplicate id, ambiguous `aria-describedby`) and an extra always-blank
- * reserved line (defect #1). The earlier `form.test.tsx` only exercised the
- * helper-as-`FormMessage`-children path, so it stayed green while the real field
- * shipped the regression. These tests render the AS-SHIPPED composition.
- *
- * jsdom has no layout engine, so the no-GROWTH proof is the lead's live-verify;
- * these pin the DOM / id / swap contract the duplicate-id regression broke.
+ * The field renders ONE message element via `FormMessage` children: the policy
+ * hint (muted) by default, swapped in place by the destructive error. A field
+ * with no helper (`purpose="current"`) renders **nothing** until an error — the
+ * slice-B always-reserved `min-h-5` line (the K-1 over-spacing defect) is gone.
  */
 function PwHarness({
   purpose,
@@ -63,23 +57,23 @@ function PwHarness({
 
 const POLICY = "Не менее 8 символов: заглавная, строчная, цифра, спецсимвол.";
 
-describe("PasswordField composition (single no-reflow slot)", () => {
-  it("renders the policy hint as the ONE message slot — no duplicate description element", () => {
+describe("PasswordField composition (inline message)", () => {
+  it("renders the policy hint as the ONE message element — no duplicate description element", () => {
     const { container } = render(
       <PwHarness purpose="new" policyHint={POLICY} />,
     );
-    // Before the fix there were TWO elements owning the description id (the
-    // separate FormDescription AND the empty FormMessage). Now: exactly one.
+    // Exactly one element owns the description id (no separate FormDescription +
+    // empty FormMessage pair), and it is small + muted.
     const descs = container.querySelectorAll('[id$="-form-item-description"]');
     expect(descs).toHaveLength(1);
     const desc = descs[0]!;
     expect(desc).toHaveTextContent(POLICY);
-    expect(desc).toHaveClass("text-muted-foreground");
-    // And exactly one message paragraph under the field — no extra blank line.
+    expect(desc).toHaveClass("text-xs", "text-muted-foreground");
+    // Exactly one message paragraph under the field — no extra blank line.
     expect(container.querySelectorAll("p")).toHaveLength(1);
   });
 
-  it("swaps the error into the same slot in place (message id, destructive, alert)", () => {
+  it("swaps the error into the hint's place (message id, small destructive, alert, NOT bold)", () => {
     const { container } = render(
       <PwHarness
         purpose="new"
@@ -88,38 +82,33 @@ describe("PasswordField composition (single no-reflow slot)", () => {
       />,
     );
     const paras = container.querySelectorAll("p");
-    // Still ONE element — the error replaced the helper in place, not a new line.
+    // Still ONE element — the error replaced the helper, not a new line.
     expect(paras).toHaveLength(1);
     const slot = paras[0]!;
     expect(slot).toHaveTextContent("Не менее 8 символов.");
     expect(slot.textContent ?? "").not.toContain(POLICY);
-    expect(slot).toHaveClass("font-medium", "text-destructive");
+    expect(slot).toHaveClass("text-xs", "text-destructive");
+    expect(slot).not.toHaveClass("font-medium");
     expect(slot).toHaveAttribute("role", "alert");
     expect(slot.id).toMatch(/-form-item-message$/);
-    // While erroring the slot owns the message id, not the description id — so no
-    // duplicate id and no orphaned helper element.
+    // While erroring the element owns the message id, not the description id.
     expect(
       container.querySelectorAll('[id$="-form-item-description"]'),
     ).toHaveLength(0);
   });
 
-  it("purpose=current (login) reserves one empty silent slot and shows the error", () => {
+  it("purpose=current (login) renders NO message line at rest, then shows the error inline", () => {
     const { container, rerender } = render(<PwHarness purpose="current" />);
-    // No helper: a single reserved min-h-5 line, hidden from a11y until filled.
-    let paras = container.querySelectorAll("p");
-    expect(paras).toHaveLength(1);
-    const resting = paras[0]!;
-    expect(resting).toHaveClass("min-h-5");
-    expect(resting).toHaveAttribute("aria-hidden", "true");
-    expect(resting).toBeEmptyDOMElement();
+    // K-1: no helper → no reserved line at all (the old min-h-5 slot is gone).
+    expect(container.querySelectorAll("p")).toHaveLength(0);
     expect(screen.getByTestId("pw")).toHaveAttribute(
       "autocomplete",
       "current-password",
     );
 
-    // The same single slot carries the error on failure (no second line).
+    // The error appears inline on failure.
     rerender(<PwHarness purpose="current" error="Не менее 8 символов." />);
-    paras = container.querySelectorAll("p");
+    const paras = container.querySelectorAll("p");
     expect(paras).toHaveLength(1);
     const errored = paras[0]!;
     expect(errored).toHaveTextContent("Не менее 8 символов.");

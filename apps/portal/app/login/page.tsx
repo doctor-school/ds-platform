@@ -38,7 +38,7 @@ import {
   OtpFocusScreen,
   maskDestination,
 } from "@ds/design-system/blocks";
-import { Form, FormField } from "@ds/design-system/form";
+import { Form, FormField, FormError } from "@ds/design-system/form";
 import {
   Tabs,
   TabsContent,
@@ -157,7 +157,7 @@ function PasswordLogin() {
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className="space-y-2"
+        className="space-y-4"
         noValidate
         aria-label={t("passwordFormLabel")}
         data-testid="password-login-form"
@@ -192,11 +192,7 @@ function PasswordLogin() {
             F6/#90, so here it renders unconditionally (harmless — the guard no-ops
             without a configured provider). Its token rides as `captchaToken`. */}
         <BotProtectionField onToken={setCaptchaToken} />
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
+        <FormError>{error}</FormError>
         <Button
           type="submit"
           className="w-full"
@@ -329,7 +325,7 @@ function OtpLogin() {
           <Form {...requestForm}>
             <form
               onSubmit={requestForm.handleSubmit(onRequest)}
-              className="space-y-2"
+              className="space-y-4"
               noValidate
             >
               {/* The OTP request box is channel-specific: the email channel is a pure
@@ -359,11 +355,7 @@ function OtpLogin() {
                 }
               />
               <BotProtectionField onToken={setCaptchaToken} />
-              {error && (
-                <p role="alert" className="text-sm text-destructive">
-                  {error}
-                </p>
-              )}
+              <FormError>{error}</FormError>
               <Button
                 type="submit"
                 variant="secondary"

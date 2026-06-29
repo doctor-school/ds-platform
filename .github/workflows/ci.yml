@@ -385,6 +385,26 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:form-error
 
+  # form-rhythm: the settled form vertical-rhythm + error-state contract (ADR-0013
+  # §7 "Form layout & validation contract", #333 redo / #334). Flags the three
+  # valid-token defects the #333 owner review caught and every prior gate missed:
+  # a `min-h-*` reserved blank line on a message (K-1 over-spacing), a duplicate
+  # `formDescriptionId` (a `<FormDescription>` beside a `<FormMessage>` — the
+  # PasswordField bug), and a `text-destructive` label in the error state (K-3 "red
+  # mush"). Static source scan over the DS form primitives + app surfaces — no
+  # PR/gh context. WARN per ADR-0007 §2.6.
+  form-rhythm:
+    needs: setup
+    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:form-rhythm
+
   ears-tests:
     needs: setup
     continue-on-error: true # WARN v1

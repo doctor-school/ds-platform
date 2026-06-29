@@ -137,6 +137,15 @@ FormItem            → flex flex-col gap-2.5  (label ↔ control, tight + ring-
 <form> / fields      → space-y-4             (16 px — message hugs its field, not the next)
 ```
 
+**Enforcement.** Two static guards keep this contract from silently regressing
+(both WARN in Phase 0, fixture-tested in `@ds/lint-guard-tests`): `form-error`
+(#339) flags a hand-typed `role="alert"` + `text-destructive` error block that
+bypasses `FormError` / `FormMessage`; `form-rhythm` (#334) flags the three #333
+defects — a `min-h-*` reserved blank line on a message (K-1), a duplicate
+`formDescriptionId` (a `<FormDescription>` beside a `<FormMessage>`), and a
+`text-destructive` label in the error state (K-3). Each takes a
+`/* form-error-ok: */` / `/* form-rhythm-ok: */` reasoned opt-out.
+
 ### Clickable state matrix (the values for `#324`)
 
 | Kind                 | Resting                                                                                            | Hover                                                                                      | Active                          | Disabled                                                              |

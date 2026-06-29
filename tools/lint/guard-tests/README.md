@@ -14,12 +14,12 @@ A guard can only be driven deterministically if its inputs are injectable. The
 guards expose four seams, each inert in production (the env var is unset, so the
 guard resolves real paths / spawns real `gh` exactly as before):
 
-| Seam env var          | Replaces                                   | Used by                                                                                           |
-| --------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| `LINT_FIXTURE_ROOT`   | the repo root the guard scans (FS)         | interaction-states, form-error, form-rhythm, no-stub, asset-format, spec-link, instruction-budget |
-| `LINT_GH_FIXTURE_DIR` | `gh pr/issue view` (canned JSON)           | registry-research, spec-link                                                                      |
-| `LINT_MEMORY_FILE`    | the derived `~/.claude/.../MEMORY.md` path | instruction-budget                                                                                |
-| _(args)_              | CLI flags (`runGuard(..., { extraArgs })`) | —                                                                                                 |
+| Seam env var          | Replaces                                   | Used by                                                                                                                   |
+| --------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `LINT_FIXTURE_ROOT`   | the repo root the guard scans (FS)         | interaction-states, form-error, form-rhythm, ears-naming, ears-test, no-stub, asset-format, spec-link, instruction-budget |
+| `LINT_GH_FIXTURE_DIR` | `gh pr/issue view` (canned JSON)           | registry-research, spec-link                                                                                              |
+| `LINT_MEMORY_FILE`    | the derived `~/.claude/.../MEMORY.md` path | instruction-budget                                                                                                        |
+| _(args)_              | CLI flags (`runGuard(..., { extraArgs })`) | —                                                                                                                         |
 
 `LINT_FIXTURE_ROOT` is set to the case dir automatically by `runGuard`; the rest
 are passed per case via `runGuard(guard, caseDir, { env })`.
@@ -42,8 +42,13 @@ valid) so the asserted message maps to one branch.
 ## Coverage
 
 Covered here (FS / gh / memory seams): `interaction-states`, `form-error`,
-`form-rhythm`, `no-stub`, `asset-format`, `registry-research`, `spec-link`,
-`instruction-budget`.
+`form-rhythm`, `ears-naming`, `ears-test`, `no-stub`, `asset-format`,
+`registry-research`, `spec-link`, `instruction-budget`.
+
+The EARS pair is the bidirectional EARS↔test contract (#316): `ears-test`
+(coverage + orphan; a pure WARN nudge, so its cases assert the stdout warning
+text rather than an exit code) and `ears-naming` (format hygiene; exit-code
+cases for a malformed `EARS-…` prefix).
 
 **Also here (direct import, not a lint guard):**
 `agent-bootstrap-recommend.spec.ts` unit-covers the pure `recommend()` of
@@ -70,6 +75,7 @@ the thin `endpoint-authz-lint.ts` CLI shell (argv / drift / `--generate`) is I/O
 glue over that tested logic.
 
 **Stub guards:** `tdd-signal`, `events`, `prior-decisions`, `module-readme`, the
-glossary pair, and `spec-status` are `[stub]` (exit 0, no checks), and
-`ears-test` is permanent-WARN — no fail branch to assert yet. Each gets coverage
-when it grows real behaviour, on its own implementation Issue.
+glossary pair, and `spec-status` are `[stub]` (exit 0, no checks) — no fail branch
+to assert yet. Each gets coverage when it grows real behaviour, on its own
+implementation Issue. (`ears-test` grew its coverage + orphan behaviour in #316
+and is now covered above via stdout assertions.)

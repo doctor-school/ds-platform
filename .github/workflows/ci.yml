@@ -417,6 +417,24 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/ears-test-lint.ts
 
+  # ears-naming: the FORMAT-hygiene direction of the EARS↔test contract (#316,
+  # ADR-0006 §4). `ears-tests` (above) owns coverage+orphan; this flags a MALFORMED
+  # EARS prefix on a test title (ears-3:, EARS3:, EARS-3 without a colon), accepting
+  # every real shape (flat / nested / compound EARS-N/M / (#issue)). It does NOT
+  # demand every test be EARS-named — a legit non-EARS unit / #issue test is left
+  # alone. Static title scan. WARN per ADR-0007 §2.6.
+  ears-naming:
+    needs: setup
+    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:ears-naming
+
   # playwright-axe: the RUNTIME twin of the `interaction-states` STATIC lint
   # (ADR-0013 §7 layer 4, #274). It builds the portal, boots it with `next start`
   # (via the CI Playwright config's `webServer`), and drives the real rendered

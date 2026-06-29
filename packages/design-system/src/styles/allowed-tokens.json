@@ -363,5 +363,27 @@
     40,
     48,
     64
+  ],
+  "breakpoints": [
+    {
+      "name": "--breakpoint-2xl",
+      "value": "96rem"
+    },
+    {
+      "name": "--breakpoint-lg",
+      "value": "64rem"
+    },
+    {
+      "name": "--breakpoint-md",
+      "value": "48rem"
+    },
+    {
+      "name": "--breakpoint-sm",
+      "value": "40rem"
+    },
+    {
+      "name": "--breakpoint-xl",
+      "value": "80rem"
+    }
   ]
 }

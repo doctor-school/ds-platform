@@ -255,6 +255,18 @@ async function build() {
     ),
   ).sort((a, b) => a - b);
 
+  // --- breakpoints (name -> literal value) ---------------------------------
+  // Breakpoints are emitted ONLY as literal `@theme inline` values (above), never
+  // as `:root` `--breakpoint-*` runtime vars — a `var()` is invalid inside the
+  // `@media (width >= …)` query they drive. So `getComputedStyle` cannot read
+  // them; the showcase tokens page (#346) reads their VALUES from here instead,
+  // the same generated-SoT pattern as `spacingScalePx`. Keyed by the `@theme` var
+  // name so it lines up with `themeKeys`.
+  const breakpoints = lightLeaves
+    .filter((l) => l.path[0] === "breakpoint")
+    .map((l) => ({ name: themeVar(l.path, roles), value: cssValue(l) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   // --- allowed-tokens.json (consumed by lint guardrails, #234) -------------
   const allowed = {
     $generatedBy: "style-dictionary",
@@ -267,6 +279,9 @@ async function build() {
     // the inert `--spacing-N` names) — the allowed scale for the rhythmguard
     // arbitrary-spacing gate. See the decision-debt note above.
     spacingScalePx,
+    // Breakpoint values (`@theme inline` literals, not `:root` vars — see above),
+    // so the showcase can render them from the generated manifest, not hardcode.
+    breakpoints,
   };
   writeFileSync(
     join(STYLES_DIR, "allowed-tokens.json"),

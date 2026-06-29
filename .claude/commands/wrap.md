@@ -60,7 +60,12 @@ detail OUT of the always-on core (long detail → `.claude/rules/*.md` with `pat
 frontmatter, or a skill; settled facts → a `memory/<topic>.md` + a one-line
 `MEMORY.md` index entry). Then run `pnpm lint:instruction-budget`; if any
 always-on file is OVER BUDGET, compact further and re-run until **PASS**. The
-session is not wrapped with a red budget.
+session is not wrapped with a red budget. **Land the wrap's own edits via a
+`tooling/`/`docs/` branch + PR — never leave them uncommitted in the shared main
+tree** (a parallel session's `git add` sweeps a dangling instruction edit into
+the wrong PR; auto-memory files under `~/.claude/.../memory/` save in place). The
+wrap is not done while `git status` shows uncommitted repo-tracked instruction
+files.
 
 ## 4. Repo/task hygiene (run-task-lifecycle §7 tail)
 

@@ -96,6 +96,17 @@ On approval:
    byte size and the target delta up front, then do a single budget-sized rewrite
    — not iterative trim-then-`wc -c` loops (each em-dash/Cyrillic char is multi-byte,
    so byte convergence by eye is slow and wasteful).
+4. **Land the wrap's own edits — never leave them dangling.** The
+   instruction/memory edits this wrap just applied are themselves changes that
+   must be **committed**, not left uncommitted in the shared main tree where a
+   parallel session's `git add` can sweep them into the wrong PR — the exact
+   orphaned `.claude/rules/dev-stand.md` edit a prior `/wrap` left for the next
+   session to rescue (`feedback_worktree_per_session_when_parallel`). Land them
+   like any other change: a `tooling/`/`docs/` worktree + branch + PR
+   (`merge-when-green`); auto-memory files under `~/.claude/projects/<slug>/memory/`
+   are outside the repo and are saved in place, not committed. Before declaring
+   the wrap done, `git status` MUST be clean of repo-tracked instruction files
+   (`AGENTS.md`, `CLAUDE.md`, `.claude/**`, `apps/docs/content/skills/**`).
 
 ### 4. Repo/task hygiene (via run-task-lifecycle patterns)
 

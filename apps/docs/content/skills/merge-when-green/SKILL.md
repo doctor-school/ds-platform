@@ -17,13 +17,13 @@ mode: inline
 
 ## Procedure
 
-**Step 1 — confirm CI green BY HAND first (Phase-0 manual gate).** In Phase 0 the repo is GitHub Free + private, so there is **no server-side required-checks gate**: `--auto` does **not** hold the merge for CI — it merges the instant an approval exists, even while checks are still pending (this is what merged L1 #278 ahead of a pending CI). So the real gate is manual. Poll until **every** check is `pass`/`skipping` and **none** is `pending` or `fail`:
+**Step 1 — confirm CI green BY HAND first (Phase-0 manual gate).** In Phase 0 the repo is GitHub Free + private, so there is **no server-side required-checks gate**: `--auto` does **not** hold the merge for CI — it merges the instant an approval exists, even while checks are still pending (this is what merged L1 #278 ahead of a pending CI). So the real gate is manual. Run the deterministic wait helper, which blocks until **every** check is `pass`/`skipping` and exits non-zero if any is `fail`/`cancel` or still `pending` at timeout:
 
 ```bash
-gh pr checks <N>   # repeat until no pending/fail remain
+pnpm ci:wait <N>   # node tools/gh/wait-ci-green.mjs <N> [--timeout <sec>] [--interval <sec>]
 ```
 
-Do not proceed to step 2 while any check is pending or failed. (Memory `feedback_phase0_merge_gate_manual`.)
+Exit `0` = all green → proceed to step 2. Exit `1` = a check failed/cancelled → do **not** merge; investigate. Exit `2` = timed out still pending → re-run or inspect the stuck job. This replaces the fragile hand-tuned `for … sleep …` poll loop (#317). Do not proceed to step 2 unless `ci:wait` exited `0`. (Memory `feedback_phase0_merge_gate_manual`.)
 
 **Step 2 — merge.** Once step 1 is green, run exactly one command:
 

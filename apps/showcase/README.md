@@ -24,6 +24,11 @@ its own. Drift of catalogue content is structurally impossible; the coverage gua
 - **Tokens** (#346) — every token class as specimens from the generated manifest.
 - **Primitives** (#347) — every primitive × state/variant/size, with a states column.
 - **Blocks** (#348) — `auth-card`, `auth-layout`, `otp-focus-screen` in key states.
+- **Candidates / Stage-A** (#349) — the candidate/adopted seam (spec §4): 2–3
+  researched candidate variants of an element class rendered beside the adopted
+  entry, role-labelled, for the owner's Stage-A pick. Schema-stable surface
+  (`app/_components/candidate-adopted.tsx`) — the `research-ui-element` subagent
+  (deliverable A, #340) renders its options through it with no surface change.
 
 ## Run locally
 

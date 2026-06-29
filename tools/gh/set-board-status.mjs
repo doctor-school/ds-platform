@@ -26,6 +26,12 @@
  */
 import { spawnSync } from "node:child_process";
 
+// The DS Platform board is already >100 items, paged below at `--limit 1000`.
+// That JSON payload overflows spawnSync's default 1 MB stdout buffer → ENOBUFS,
+// which would crash the manual board-status fallback silently (#315). 64 MB is
+// comfortably above any realistic board-list payload.
+const GH_MAX_BUFFER = 64 * 1024 * 1024;
+
 const OWNER = "doctor-school";
 const PROJECT_NUMBER = "1";
 const PROJECT_TITLE = "DS Platform";
@@ -52,7 +58,10 @@ function die(msg) {
 
 /** Run `gh <args>`; return parsed JSON (or raw string when not JSON). Throws on non-zero. */
 function gh(args, { json = true } = {}) {
-  const res = spawnSync("gh", args, { encoding: "utf8" });
+  const res = spawnSync("gh", args, {
+    encoding: "utf8",
+    maxBuffer: GH_MAX_BUFFER,
+  });
   if (res.error)
     die(
       `failed to spawn gh: ${res.error.message} (is the gh CLI installed + on PATH?)`,

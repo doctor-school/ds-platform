@@ -42,6 +42,8 @@ Per ADR-0007 §2.4 + §2.10: a positive Mode (a) or Mode (b) verdict + green CI 
 3. Clean the **local** squash-merged branch (it is not an ancestor of `main`, so `-d` refuses): `git fetch origin --prune` then `git branch -D <branch>`.
 4. Tear the worktree down: `pnpm worktree:teardown .claude/worktrees/<N> --branch <branch>` (long-path-safe, #335) — or `node tools/dev/worktree-teardown.mjs <path>`.
 
+**Before the first edit in a worktree (the trap #359 itself prevents):** `EnterWorktree` (or `git worktree add`) moves the cwd but does NOT redirect **absolute** paths — an absolute MAIN-tree path (`C:/Users/.../ds-platform/...`) in Write/Edit silently lands in the **shared main tree**, not the worktree, and any green observed there is a green against a non-isolated checkout (not a real green, `feedback_no_workarounds_build_clean`). Address files by **worktree-relative** or **`.claude/worktrees/<N>/…`** paths; sanity-check one path resolves under the worktree before editing; run tests/build **from** the worktree. If edits already leaked to main: copy them into the worktree, then `git restore` the tracked files + delete the new untracked ones in main — only after confirming `git status`/`git diff` shows the diff is exclusively yours. (memory `feedback_worktree_absolute_paths_escape_isolation`)
+
 ## Output
 
 - PR merged into `main` (or queued for `--auto` merge once CI clears).

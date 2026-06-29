@@ -92,7 +92,10 @@ On approval:
 3. **Enforce the budget** — run `pnpm lint:instruction-budget`. If any always-on
    file is **OVER BUDGET**, compact further (relocate detail per step 2) and
    re-run until it reports **PASS**. The session is not "wrapped" with a red
-   budget.
+   budget. **Size the compaction in one pass, not a grind:** compute the current
+   byte size and the target delta up front, then do a single budget-sized rewrite
+   — not iterative trim-then-`wc -c` loops (each em-dash/Cyrillic char is multi-byte,
+   so byte convergence by eye is slow and wasteful).
 
 ### 4. Repo/task hygiene (via run-task-lifecycle patterns)
 

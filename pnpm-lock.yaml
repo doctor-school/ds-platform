@@ -323,6 +323,9 @@ importers:
       '@ds/design-system':
         specifier: workspace:*
         version: link:../../packages/design-system
+      '@ds/schemas':
+        specifier: workspace:*
+        version: link:../../packages/schemas
       next:
         specifier: 16.2.9
         version: 16.2.9(@playwright/test@1.61.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -332,6 +335,9 @@ importers:
       react-dom:
         specifier: 19.2.7
         version: 19.2.7(react@19.2.7)
+      react-hook-form:
+        specifier: ^7.80.0
+        version: 7.80.0(react@19.2.7)
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4.3.1

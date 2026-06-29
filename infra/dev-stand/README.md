@@ -64,6 +64,37 @@ directory) — they hold per-machine secrets and must never be committed.
 
 ---
 
+## Data layer (Postgres image)
+
+The `postgres` service runs a **repo-built** image (`postgres/Dockerfile`), not a
+plain upstream tag: it extends `pgvector/pgvector:pg17` with **`pg_partman`** so
+the native monthly RANGE partitions on `audit_ledger` (#367) can be auto-created
+and retained (ADR-0003 §2.6 / §2.7; the #136 retention follow-up). `vector` and
+`pg_partman` coexist — `init.sql` enables both on a fresh cluster (`vector` in
+`public`, `pg_partman` in a dedicated `partman` schema).
+
+The **same Dockerfile is the prod data-layer image source** — the deploy pipeline
+builds + pushes it to the registry so pgvector + pg_partman are present in every
+environment (engineering-readiness data-layer plan).
+
+`docker compose up` builds the image on first use when the tag is absent. After a
+Dockerfile change, rebuild explicitly:
+
+```powershell
+ssh truenas "cd <stand-dir> && sudo docker compose -f compose.core.yml build postgres"
+```
+
+> **Existing volume?** `postgres/init.sql` enables `pg_partman` only on a **fresh**
+> cluster. On a dev-stand whose Postgres volume already exists, enable it once after
+> rolling out the new image (the package is now baked in, so this just creates the
+> extension):
+>
+> ```powershell
+> ssh truenas "sudo docker exec ds-platform-dev-postgres-1 psql -U ds -d ds_dev -c 'CREATE SCHEMA IF NOT EXISTS partman AUTHORIZATION ds; CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;'"
+> ```
+
+---
+
 ## Identity provider Console (Zitadel, operator-only)
 
 The Zitadel admin **Console** is browsable at

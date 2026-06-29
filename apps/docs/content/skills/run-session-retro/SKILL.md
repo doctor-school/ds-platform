@@ -96,6 +96,21 @@ discards false positives. Treat a flagged message as a **candidate**, then read
 the surrounding transcript to confirm a genuine deviation before emitting a
 finding.
 
+- **UI/design sessions correct via screenshots, not words.** The correction
+  channel for visual work is the **annotated screenshot** — an `image-only` user
+  turn with no text the `CORRECTION_RE` can ever match. `extract.mjs` now keeps
+  these (flagged `imageOnly`, counted as a correction candidate), but they carry
+  no quotable text, so reconstruct the arc from the **assistant's
+  acknowledgements** ("Вы правы / принято / поправил / ноготь — это …") rather
+  than from `corrections.json` text alone. A UI session showing `corrections: 1`
+  with many `imageOnly` turns ran far more correction round-trips than the count.
+- **A handed-in `--session <id>` may be the wrong log.** An SDK-launched
+  review/security subagent writes its own `*.jsonl` (`promptSource: sdk`,
+  `kind: sdk`); it is **not** the interactive work session. If the given id
+  resolves to an `sdk`/near-empty log, find the real session (newest large
+  interactive `*.jsonl`, e.g. the one whose branch matches the work) and analyze
+  that instead — note the correction in the corpus header.
+
 ### 4. Read each candidate in context, emit findings
 
 For every confirmed deviation, read the `transcripts/<id>.md` around the

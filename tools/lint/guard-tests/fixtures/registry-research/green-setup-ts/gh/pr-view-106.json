@@ -1,0 +1,8 @@
+{
+  "number": 106,
+  "body": "fix(366): stop input-otp's PWM timers leaking 'window is not defined' in jsdom. Test-harness only (Vitest setup + a unit test), no UI source, no registry-research artifact.\n",
+  "files": [
+    { "path": "packages/design-system/vitest.setup.ts" },
+    { "path": "packages/design-system/src/components/input-otp.test.tsx" }
+  ]
+}

@@ -84,6 +84,15 @@ describe("registry-research-lint", () => {
     expect(code).toBe(0);
   });
 
+  it("regression (#378): a `*.setup.ts`-only change (vitest.setup.ts) is exempt → exit 0", () => {
+    const { code } = runGuard(
+      GUARD,
+      caseDir("registry-research", "green-setup-ts"),
+      { env: prEnv("106", "green-setup-ts") },
+    );
+    expect(code).toBe(0);
+  });
+
   it("skip: not a pull_request event → exit 0", () => {
     const { code, stdout } = runGuard(
       GUARD,

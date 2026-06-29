@@ -13,8 +13,8 @@ import { Link } from "@ds/design-system/link";
  * (design-system-showcase spec §3). Each section links to its live route; a
  * section still owned by an open WBS Issue is enumerated but left unlinked (no
  * placeholder route standing in for a tracked deliverable, AGENTS.md §6) until
- * its route lands. All three spec sections (Tokens / Primitives / Blocks) are now
- * live.
+ * its route lands. The catalogue sections (Tokens / Primitives / Blocks) and the
+ * Stage-A candidate/adopted seam are now live.
  *
  * Everything here is composed from the real `@ds/design-system` exports — the
  * showcase adds nothing of its own (spec §2.4); the chrome itself demonstrates
@@ -49,6 +49,13 @@ const SECTIONS: readonly Section[] = [
       "Each exported block (auth-card, auth-layout, otp-focus-screen) rendered with representative content in its key states, branded.",
     issue: "#348",
     href: "/blocks",
+  },
+  {
+    title: "Candidates (Stage-A)",
+    description:
+      "The candidate/adopted seam — 2–3 researched candidate variants of an element class rendered beside the adopted entry, role-labelled, for the owner's Stage-A pick on the live URL.",
+    issue: "#349",
+    href: "/candidates",
   },
 ];
 

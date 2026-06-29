@@ -1,0 +1,11 @@
+/*
+ * Showcase global stylesheet. Identical wiring to apps/portal/app/globals.css:
+ * one import of the shared design-system tokens, which in turn import Tailwind
+ * and declare the `:root` / `.dark` theme variables (ADR-0004 §6.3). The
+ * showcase owns NO styling of its own — no `@theme`, no `@source`, no token
+ * override (design-system-showcase spec §2.2). There is no app-side styling
+ * configuration to drift from the product apps: only this one shared import line,
+ * which either resolves or fails the build. The single source of truth lives in
+ * @ds/design-system.
+ */
+@import "@ds/design-system/globals.css";

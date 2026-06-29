@@ -95,9 +95,9 @@ Reuse happens at the **block/section level** — whole auth screens, not just bu
 3. **Acceptance bar** (not all registries are production-grade): MIT/compatible license; correct RSC boundaries (`"use client"` only where required); accessibility; no superfluous dependencies; maintenance freshness.
 4. App-specific glue is never inside the block: the block is the screen scaffold; the BFF endpoints, EARS-16 generic errors, #197 field primitives, auto-submit, masked-destination + resend/cooldown (#227) are wired in the app/composition layer.
 
-### 3.2. Storybook — deferred (conscious)
+### 3.2. Living showcase — a lightweight route-app; Storybook deferred
 
-No Storybook in this iteration (ADR-0004 OQ-F9 trigger: ≥2 frontend developers / >20 components). Live verification is browser-on-stand per CLAUDE.md "UI verification (mandatory)". Recorded as a deliberate deferral, not a gap.
+The design system has a living showcase, implemented as a lightweight, route-rendered Next app (`apps/showcase`, `@ds/showcase`) that renders every token, primitive and block from the real `@ds/design-system` package as a live URL on the dev stand — the rendered SSOT surface and the Stage-A/Stage-B design-approval surface ([design-system-showcase design](./2026-06-29-design-system-showcase-design-en.md)). **Storybook and visual-regression remain deferred** until ADR-0004 OQ-F9 honestly triggers (≥2 frontend developers / >20 components); at that point the dedicated `apps/showcase` is where they are introduced. A route-rendered showcase is the conventional shape at this scale (it is also more aligned with a non-technical approver than Storybook's isolated environment). Live verification is browser-on-stand per CLAUDE.md "UI verification (mandatory)", with the showcase itself as the live-verify surface for the design system. Recorded as a deliberate, re-triggerable deferral, not a gap.
 
 ### 3.3. Interaction-state & motion contract (ADR-0013 §7)
 

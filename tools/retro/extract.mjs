@@ -91,7 +91,11 @@ export const CORRECTION_RE = new RegExp(
     // positives. The soft-directive «давай …» is deliberately NOT here — on its
     // own it is a benign next-step directive («давай дальше»); the corrective
     // companions («всё-таки», «ещё раз») carry the signal instead.
-    'исключ', 'вместо', 'на самом деле', 'всё-таки', 'все-таки', 'ещё раз', 'еще раз',
+    // «исключ» is stem-anchored to the corrective verb forms so it never flags
+    // the benign «исключение» (exception) / «исключительно» (exclusively) that
+    // appear in routine technical talk (#362 review SUGGESTION).
+    'исключ(?:им|ить|ил[аи]?|аем|ают)', 'вместо', 'на самом деле', 'всё-таки',
+    'все-таки', 'ещё раз', 'еще раз',
     'why ', 'instead', 'should have', 'you were supposed', 'wrong', 'no,', 'stop',
     'revert', 'undo', "don't", 'do not', 'not what', 'i asked', 'i told you', 'again', 'did you',
   ].join('|'),

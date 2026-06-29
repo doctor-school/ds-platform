@@ -142,6 +142,16 @@ describe("retro extract — CORRECTION_RE lexicon recall (#362)", () => {
     // not flag (the one real «лучше» correction is already caught by «не нужен»)
     expect(CORRECTION_RE.test("так стало гораздо лучше, спасибо")).toBe(false);
   });
+
+  it("precision guard: «исключ» is stem-anchored — benign exception/exclusively talk stays unflagged", () => {
+    // the corrective verb forms still flag
+    expect(CORRECTION_RE.test("давай исключим это из скоупа")).toBe(true);
+    expect(CORRECTION_RE.test("надо исключить шаг")).toBe(true);
+    expect(CORRECTION_RE.test("исключаем фичу из релиза")).toBe(true);
+    // but routine technical talk must NOT (the #362-review precision boundary)
+    expect(CORRECTION_RE.test("это исключение бросается в обработчике")).toBe(false);
+    expect(CORRECTION_RE.test("работает исключительно на проде")).toBe(false);
+  });
 });
 
 // ── SELF_CATCH lexicon recall (#362) ────────────────────────────────────────

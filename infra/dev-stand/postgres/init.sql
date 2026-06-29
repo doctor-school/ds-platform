@@ -9,6 +9,18 @@
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
+-- pg_partman (ADR-0003 §2.6 / §2.7, ADR-0009 retention matrix) — declarative
+-- monthly RANGE partition auto-creation + retention for `audit_ledger` (#367
+-- native partitioning; #136 retention follow-up consumes this). Lives in a
+-- dedicated `partman` schema per upstream convention; the maintenance functions
+-- (`partman.create_parent`, `partman.run_maintenance`) are wired by #136. The
+-- `postgresql-17-partman` package ships in the data-layer image (Dockerfile).
+-- On an EXISTING volume this script does not re-run, so the operator creates the
+-- extension once by hand (README → Data layer); the IF NOT EXISTS guards make
+-- that safe.
+CREATE SCHEMA IF NOT EXISTS partman AUTHORIZATION ds;
+CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;
+
 -- Unleash (#184) keeps its tables in a dedicated `unleash` schema inside this
 -- shared database (no separate database; see compose.core.yml → unleash). Create
 -- it up-front on a fresh cluster so the very first Unleash boot migrates cleanly

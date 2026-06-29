@@ -26,9 +26,16 @@
 name: ds-platform-dev
 
 services:
-  # --- Postgres 17 + pgvector — primary datastore (ADR-0003) ---
+  # --- Postgres 17 + pgvector + pg_partman — primary datastore (ADR-0003) ---
+  # Built from postgres/Dockerfile (pgvector base + pg_partman, #369) — the same
+  # image source serves prod. `docker compose up` builds it on first use when the
+  # tagged image is absent; rebuild after a Dockerfile change with
+  # `docker compose -f compose.core.yml build postgres` (README → Data layer).
   postgres:
-    image: pgvector/pgvector:pg17
+    image: ds-platform/postgres:pg17-partman
+    build:
+      context: ./postgres
+      dockerfile: Dockerfile
     restart: unless-stopped
     environment:
       POSTGRES_USER: ds

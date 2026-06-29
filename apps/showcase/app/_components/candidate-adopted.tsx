@@ -135,8 +135,12 @@ function OptionCard({
   const adopted = role === "adopted";
   return (
     <Card
+      // Each option is a labelled group (role pill + sample + provenance); the
+      // adopted entry is the anchor the candidates are judged against. `role`
+      // makes the `aria-label` meaningful to assistive tech (a bare label on a
+      // generic container is ignored).
+      role="group"
       className={cn("flex flex-col gap-4", adopted && "border-ring")}
-      // The adopted entry is the anchor the candidates are judged against.
       aria-label={`${adopted ? "Adopted" : `Candidate ${ordinal ?? ""}`.trim()}: ${option.label}`}
     >
       <CardHeader>

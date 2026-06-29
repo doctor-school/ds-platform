@@ -74,6 +74,40 @@ function cssName(path) {
   return path.join("-");
 }
 
+/**
+ * Read the RAW DTCG source (before Style Dictionary resolves references) to
+ * capture, per emitted token: (a) its REFERENCE — the `{group.token}` alias it
+ * points at, as a CSS-var name — and (b) its `$description` usage note. Both
+ * keyed by CSS-var name so they line up with `cssVariables`. The showcase reads
+ * these to make the primitive→semantic layering and the "use this for…" guidance
+ * legible on the page (#370), so a role like `card` shows it aliases `white` and
+ * what it is for — no second source of truth, no hardcoding in the viewer.
+ */
+function readRawMeta(files) {
+  const references = {};
+  const descriptions = {};
+  const visit = (node, path) => {
+    if (node == null || typeof node !== "object") return;
+    if (Object.prototype.hasOwnProperty.call(node, "$value")) {
+      const name = `--${cssName(path)}`;
+      if (typeof node.$value === "string") {
+        const m = node.$value.match(/^\{([^}]+)\}$/);
+        if (m) references[name] = `--${m[1].split(".").join("-")}`;
+      }
+      if (typeof node.$description === "string") {
+        descriptions[name] = node.$description;
+      }
+      return;
+    }
+    for (const [key, child] of Object.entries(node)) {
+      if (key.startsWith("$")) continue;
+      visit(child, [...path, key]);
+    }
+  };
+  for (const file of files) visit(JSON.parse(readFileSync(file, "utf8")), []);
+  return { references, descriptions };
+}
+
 /** Format a resolved DTCG value into a CSS-usable string. */
 function cssValue(token) {
   const { value, type } = token;
@@ -267,6 +301,16 @@ async function build() {
     .map((l) => ({ name: themeVar(l.path, roles), value: cssValue(l) }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  // --- token references + usage descriptions (raw source) ------------------
+  // Read from the unresolved DTCG source so a semantic role keeps its `{primitive}`
+  // reference and its `$description` (Style Dictionary resolves both away). The
+  // showcase (#370) renders these so the layering + "use for" guidance is legible.
+  const { references, descriptions } = readRawMeta([
+    join(TOKENS_DIR, "primitive.json"),
+    join(TOKENS_DIR, "semantic.json"),
+    join(TOKENS_DIR, "component.json"),
+  ]);
+
   // --- allowed-tokens.json (consumed by lint guardrails, #234) -------------
   const allowed = {
     $generatedBy: "style-dictionary",
@@ -282,6 +326,10 @@ async function build() {
     // Breakpoint values (`@theme inline` literals, not `:root` vars — see above),
     // so the showcase can render them from the generated manifest, not hardcode.
     breakpoints,
+    // Per-token reference (alias → primitive) and usage `$description`, read from
+    // the raw source so the showcase can explain "which token, and what for" (#370).
+    references,
+    descriptions,
   };
   writeFileSync(
     join(STYLES_DIR, "allowed-tokens.json"),

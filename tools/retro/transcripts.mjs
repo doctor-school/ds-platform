@@ -63,7 +63,10 @@ Run extract.mjs first (it writes index.json into <out-dir>). Same options:
 Outputs (in <out-dir>): transcripts/<id>.md, self-catches.json.`;
 
 // Assistant self-correction ("I was wrong / let me fix that / I should have…").
-const SELF_CATCH = new RegExp(
+// Exported (with the entry-point guard at the bottom) so the lexicon is unit
+// testable without firing main() — the same idiom #360 introduced for
+// extract.mjs's CORRECTION_RE.
+export const SELF_CATCH = new RegExp(
   [
     'actually,', 'wait,', 'on second thought', 'let me reconsider', 'i was wrong',
     'i made a mistake', 'my mistake', "i shouldn't have", 'i should have',
@@ -72,6 +75,11 @@ const SELF_CATCH = new RegExp(
     'i should not have', 'i overstepped', 'let me fix that', 'i misread',
     'oops', 'to correct myself', 'i assumed', 'i deviated', 'i broke the rule',
     'на самом деле', 'я ошибся', 'моя ошибка', 'поправл', 'был неправ', 'забыл',
+    // #362 — recall lexicon: clean RU self-correction markers the corpus showed
+    // missed («я зря впихнул/запустил…», «я перепутал…»). Verified high-precision:
+    // unlike «исправл»/«пропустил»/«нарушил» (which flood on neutral status lines
+    // and quoted-rule narration) these read only as the agent owning a slip.
+    'я зря', 'перепутал', 'неправильно понял', 'не так понял',
   ].join('|'),
   'i',
 );
@@ -223,4 +231,10 @@ function main() {
   );
 }
 
-main();
+// Run only as the entry point (`node tools/retro/transcripts.mjs`). Guarding the
+// call keeps the SELF_CATCH lexicon importable from a unit test without firing
+// the side-effecting main() — the same idiom extract.mjs uses (#360, #362).
+const INVOKED_PATH = process.argv[1] ? path.resolve(process.argv[1]) : '';
+if (INVOKED_PATH === fileURLToPath(import.meta.url)) {
+  main();
+}

@@ -80,10 +80,18 @@ Then run transcripts.mjs over the same <out-dir> to build per-session transcript
 // Does a human message look like a correction / "why did you…" / pushback?
 export const CORRECTION_RE = new RegExp(
   [
-    'почему', 'зачем', 'разве', 'не так', 'не нужно', 'не надо', 'надо было', 'должен был',
-    'должно быть', 'стоп', 'отмен', 'верн[иё]', 'нельзя', 'это непра', 'неправильно', 'ошиб',
-    'я же', 'я просил', 'я говорил', 'опять', 'снова', 'почему ты', 'а как правильно',
-    'применял', 'использовал', 'запускал', 'ты применил',
+    'почему', 'зачем', 'разве', 'не так', 'не нужно', 'не нужен', 'не нужна', 'не надо',
+    'надо было', 'должен был', 'должно быть', 'не должно', 'стоп', 'отмен', 'верн[иё]',
+    'нельзя', 'это непра', 'неправильно', 'ошиб', 'я же', 'я просил', 'я говорил',
+    'опять', 'снова', 'почему ты', 'а как правильно', 'применял', 'использовал',
+    'запускал', 'ты применил',
+    // #362 — recall lexicon: real corrections that used none of the tokens above
+    // (canonical live-corpus miss «…не нужен MFA … исключим из скоупа»). Each was
+    // verified against the corpus to add genuine pushback with no benign false
+    // positives. The soft-directive «давай …» is deliberately NOT here — on its
+    // own it is a benign next-step directive («давай дальше»); the corrective
+    // companions («всё-таки», «ещё раз») carry the signal instead.
+    'исключ', 'вместо', 'на самом деле', 'всё-таки', 'все-таки', 'ещё раз', 'еще раз',
     'why ', 'instead', 'should have', 'you were supposed', 'wrong', 'no,', 'stop',
     'revert', 'undo', "don't", 'do not', 'not what', 'i asked', 'i told you', 'again', 'did you',
   ].join('|'),

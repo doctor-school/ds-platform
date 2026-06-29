@@ -74,4 +74,9 @@ SKILL.md) and a regression fixture — its records validate against that schema.
 - The scripts are dependency-free Node ESM (`.mjs`); no build step.
 - They are read-only over the logs and idempotent over `<out-dir>`.
 - The correction heuristic is bilingual (RU + EN); see `CORRECTION_RE` in
-  `extract.mjs` and `SELF_CATCH` in `transcripts.mjs`.
+  `extract.mjs` and `SELF_CATCH` in `transcripts.mjs`. Both lexicons are tuned
+  for precision over recall — add a token only when it catches real pushback in
+  the live corpus with no benign false positives (the #362 audit rejected bare
+  «давай …», «лучше», «слишком», «исправл» on exactly those grounds). Both regexes
+  are exported behind an entry-point guard and unit-covered in
+  `tools/lint/guard-tests/retro-extract.spec.ts`.

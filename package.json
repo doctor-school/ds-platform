@@ -15,6 +15,7 @@
     "board:status": "node tools/gh/set-board-status.mjs",
     "lint:asset-format": "tsx tools/lint/asset-format-lint.ts",
     "lint:endpoint-authz": "tsx --tsconfig apps/api/tsconfig.json tools/lint/endpoint-authz-lint.ts",
+    "lint:form-error": "tsx tools/lint/form-error-lint.ts",
     "lint:instruction-budget": "tsx tools/lint/instruction-budget-lint.ts",
     "lint:interaction-states": "tsx tools/lint/interaction-states-lint.ts",
     "lint:no-stub": "tsx tools/lint/no-stub-lint.ts",

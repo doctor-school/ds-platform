@@ -14,12 +14,12 @@ A guard can only be driven deterministically if its inputs are injectable. The
 guards expose four seams, each inert in production (the env var is unset, so the
 guard resolves real paths / spawns real `gh` exactly as before):
 
-| Seam env var          | Replaces                                   | Used by                                                                  |
-| --------------------- | ------------------------------------------ | ------------------------------------------------------------------------ |
-| `LINT_FIXTURE_ROOT`   | the repo root the guard scans (FS)         | interaction-states, no-stub, asset-format, spec-link, instruction-budget |
-| `LINT_GH_FIXTURE_DIR` | `gh pr/issue view` (canned JSON)           | registry-research, spec-link                                             |
-| `LINT_MEMORY_FILE`    | the derived `~/.claude/.../MEMORY.md` path | instruction-budget                                                       |
-| _(args)_              | CLI flags (`runGuard(..., { extraArgs })`) | —                                                                        |
+| Seam env var          | Replaces                                   | Used by                                                                              |
+| --------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `LINT_FIXTURE_ROOT`   | the repo root the guard scans (FS)         | interaction-states, form-error, no-stub, asset-format, spec-link, instruction-budget |
+| `LINT_GH_FIXTURE_DIR` | `gh pr/issue view` (canned JSON)           | registry-research, spec-link                                                         |
+| `LINT_MEMORY_FILE`    | the derived `~/.claude/.../MEMORY.md` path | instruction-budget                                                                   |
+| _(args)_              | CLI flags (`runGuard(..., { extraArgs })`) | —                                                                                    |
 
 `LINT_FIXTURE_ROOT` is set to the case dir automatically by `runGuard`; the rest
 are passed per case via `runGuard(guard, caseDir, { env })`.
@@ -41,8 +41,8 @@ valid) so the asserted message maps to one branch.
 
 ## Coverage
 
-Covered here (FS / gh / memory seams): `interaction-states`, `no-stub`,
-`asset-format`, `registry-research`, `spec-link`, `instruction-budget`.
+Covered here (FS / gh / memory seams): `interaction-states`, `form-error`,
+`no-stub`, `asset-format`, `registry-research`, `spec-link`, `instruction-budget`.
 
 **Also here (direct import, not a lint guard):**
 `agent-bootstrap-recommend.spec.ts` unit-covers the pure `recommend()` of

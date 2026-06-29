@@ -367,6 +367,24 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:interaction-states
 
+  # form-error: a form-level error/message in app UI source must route through the
+  # @ds/design-system `FormError` / `FormMessage` primitive, not be hand-typed as a
+  # raw `<p role="alert" className="text-destructive">` per page (ADR-0013 §7,
+  # #333 redo / #339). `text-destructive` is a valid token, so no color / arbitrary
+  # -value guard catches the duplication — only this one does. Static source scan —
+  # no PR/gh context needed. WARN per ADR-0007 §2.6.
+  form-error:
+    needs: setup
+    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:form-error
+
   ears-tests:
     needs: setup
     continue-on-error: true # WARN v1

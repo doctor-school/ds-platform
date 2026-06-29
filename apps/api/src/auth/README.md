@@ -63,7 +63,12 @@ keyed by the cookie's `sid`. No token is ever in a response body (EARS-8).
   `auth.<class>.<event>` wire id in one place (`auth-audit.ledger.ts:toLedgerRow`,
   ADR-0001 §7.3), and bound `AUTH_AUDIT` to the durable `DrizzleAuthAuditLog`
   writer (append-only `audit_ledger`, PD masked to `identifier_hash`). The
-  in-memory `auth-audit.fake.ts` stays the unit-spec double.
+  `audit_ledger` table is natively `RANGE (created_at)` monthly-partitioned
+  (#136, ADR-0003 §2.7) — the partition key is carried in the composite PK
+  `(id, created_at)` and the composite `event_id` unique `(event_id, created_at)`,
+  so `event_id` dedup is scoped within a monthly partition; the writer inserts
+  through the partitioned parent and is otherwise unchanged. The in-memory
+  `auth-audit.fake.ts` stays the unit-spec double.
 - **`SessionAuthHook`** — a Fastify `onRequest` hook that populates the request
   subject the global `AuthzGuard` reads (the seam in `authz/authz.guard.ts`). It
   is a hook, not a Nest middleware, because Fastify middleware sees the _raw_

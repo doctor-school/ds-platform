@@ -13,6 +13,7 @@
   "scripts": {
     "bootstrap": "tsx tools/agent-bootstrap.ts",
     "board:status": "node tools/gh/set-board-status.mjs",
+    "ci:wait": "node tools/gh/wait-ci-green.mjs",
     "lint:asset-format": "tsx tools/lint/asset-format-lint.ts",
     "lint:endpoint-authz": "tsx --tsconfig apps/api/tsconfig.json tools/lint/endpoint-authz-lint.ts",
     "lint:form-error": "tsx tools/lint/form-error-lint.ts",

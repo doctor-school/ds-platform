@@ -4,17 +4,19 @@ import { BlocksView } from "./blocks-view";
 /**
  * Blocks section (design-system-showcase spec §3.3). Each exported block —
  * `AuthCard`, `AuthLayout`, `OtpFocusScreen` — catalogued unit-as-subject like Tokens
- * and Primitives: the subject is the block's composition contract (its slots / props
- * and the state matrix a consumer must handle), NOT a re-staged product screen (the
- * #348 inversion, reworked in #386). Each slot is filled by a labelled placeholder
- * that exposes it; the blocks still render their own real primitives, branded by their
- * own tokens, and the showcase re-implements nothing (spec §2.4).
+ * and Primitives. After two corrected circles (#348 re-staged the branded product
+ * screen — a mirror; #390 filled slots with raw prop names — a wireframe), the
+ * researched DS-doc middle ground + the owner's Stage-A pick (#386, Layout = Stacked)
+ * present each block, vertically, as: a realistic-but-neutral live render + a
+ * slots/props table (the real contract) + a state matrix (the states a consumer must
+ * handle). The blocks render their own real composed primitives, branded by their own
+ * tokens; the showcase is a viewer and re-implements nothing (spec §2.4).
  */
 export default function BlocksPage() {
   return (
     <SectionShell
       title="Blocks"
-      intro="Each exported design-system block as a reusable unit: its slot / prop contract and the state matrix a consumer must handle — not a finished login or verify screen. Every slot is filled with a labelled, app-supplied placeholder that exposes it; the blocks render their own real composed primitives, branded by their own tokens."
+      intro="Each exported design-system block as a reusable unit: a realistic-but-neutral render of the real composed block, its slots / props contract, and the state matrix a consumer must handle — not a finished product screen and not a raw-prop-name wireframe. The blocks render their own real composed primitives, branded by their own tokens."
     >
       <BlocksView />
     </SectionShell>

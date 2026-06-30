@@ -31,7 +31,9 @@ import { useResendCountdown } from "./use-resend-countdown";
  * Behavior (preserved from `verify/page.tsx`): the code field auto-submits the
  * moment the fixed-length code lands, via `<OtpField onComplete>`. The app owns the
  * RHF form and the `isSubmitting` guard, so it passes a guarded `onComplete` and the
- * current `isSubmitting` (to disable the submit button + skip a racing auto-submit).
+ * current `isSubmitting`, which drives the submit's shared `Button.loading` pending
+ * affordance (spinner + `aria-busy` + disabled-while-loading, ADR-0013 §7 / #337) and
+ * skips a racing auto-submit.
  * The masked destination is computed by the app (reuse `maskDestination` from this
  * package) and passed pre-masked — the block never sees the raw destination.
  *
@@ -108,7 +110,10 @@ export function OtpFocusScreen<T extends FieldValues>({
    * reset the cooldown (#266). Defaults to `0`.
    */
   resendNonce?: number;
-  /** App-owned in-flight flag — disables submit + guards the auto-submit race. */
+  /**
+   * App-owned in-flight flag — drives the submit's `Button.loading` pending affordance
+   * (spinner + `aria-busy` + disabled-while-loading) and guards the auto-submit race.
+   */
   isSubmitting?: boolean;
 
   /** Fired when the fixed-length code completes (app wires the guarded auto-submit). */
@@ -158,7 +163,7 @@ export function OtpFocusScreen<T extends FieldValues>({
         <Button
           type="submit"
           className="w-full"
-          disabled={isSubmitting}
+          loading={isSubmitting}
           data-testid={submitTestId}
         >
           {submitLabel}

@@ -196,7 +196,7 @@ function PasswordLogin() {
         <Button
           type="submit"
           className="w-full"
-          disabled={form.formState.isSubmitting}
+          loading={form.formState.isSubmitting}
           data-testid="password-login-submit"
         >
           {t("submit")}
@@ -360,7 +360,7 @@ function OtpLogin() {
                 type="submit"
                 variant="secondary"
                 className="w-full"
-                disabled={requestForm.formState.isSubmitting}
+                loading={requestForm.formState.isSubmitting}
                 data-testid="otp-send"
               >
                 {t("sendCode")}

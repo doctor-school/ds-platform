@@ -156,7 +156,7 @@ export default function ResetPage() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={requestForm.formState.isSubmitting}
+                loading={requestForm.formState.isSubmitting}
                 data-testid="reset-request-submit"
               >
                 {t("sendResetCode")}
@@ -324,7 +324,7 @@ function ResetCompleteForm({
         <Button
           type="submit"
           className="w-full"
-          disabled={completeForm.formState.isSubmitting}
+          loading={completeForm.formState.isSubmitting}
         >
           {t("setNewPassword")}
         </Button>

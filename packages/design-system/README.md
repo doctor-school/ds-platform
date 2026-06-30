@@ -91,6 +91,27 @@ token-only `hover:` state — the lint and the `build-ui-from-design-system`
 live-verify audit both check for it. To opt a genuine exception out, mark it with
 `/* interaction-states-ok: <reason> */`.
 
+### Async-submit pending (`loading`, ADR-0013 §7 / #337)
+
+Any submit whose handler **awaits a network call** drives `Button`'s `loading`
+prop from the form's in-flight flag — **not** a bare `disabled`:
+
+```tsx
+// ✅ pending feedback: spinner + aria-busy + disabled-while-loading (one prop)
+<Button type="submit" loading={form.formState.isSubmitting}>Войти</Button>
+
+// ❌ static disabled — the surface "appears to hang", no progress signal (#337)
+<Button type="submit" disabled={form.formState.isSubmitting}>Войти</Button>
+```
+
+`loading` renders the determinate spinner, sets `aria-busy`, **and** disables the
+control while busy (so it is also the double-submit guard); the spin is neutralised
+under `prefers-reduced-motion` by the layer-1 reset while `aria-busy` still
+announces. `disabled` stays for **non-submit** controls gated by cooldown/validity
+(resend, change-method). The `submit-pending` lint (`pnpm lint:submit-pending`, CI
+job, WARN) flags a `type="submit"` disabled by an in-flight flag with no `loading`;
+opt a genuine exception out with `/* submit-pending-ok: <reason> */`.
+
 ## Form layout standard (ADR-0013 §7)
 
 Form vertical rhythm and validation messaging are a **contract**, not per-screen

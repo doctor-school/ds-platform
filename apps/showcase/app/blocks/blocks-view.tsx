@@ -310,7 +310,7 @@ function NeutralAside() {
       </div>
       <div className="flex flex-col gap-2">
         <p className="text-2xl font-semibold tracking-tight">Welcome back</p>
-        <p className="text-sm text-primary-foreground/80">
+        <p className="text-sm opacity-80">
           Sign in to pick up where you left off.
         </p>
       </div>

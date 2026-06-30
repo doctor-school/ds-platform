@@ -399,6 +399,25 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:interaction-states
 
+  # aa-contrast: the cheap STATIC pre-filter for the AA-contrast usage rule (ADR-0013
+  # §7), left of the runtime playwright-axe tier (#351). Flags the two deterministic
+  # token-level anti-patterns — an opacity-dimmed `text-*-foreground/NN` and a
+  # text-bearing raw `bg-primary` fill — that no colour / arbitrary-value guard catches
+  # (both are valid tokens). The #351 retarget caught 4 such defects only at runtime;
+  # this gate catches the static subset early (#402). Static source scan — no PR/gh
+  # context needed. WARN per ADR-0007 §2.6.
+  aa-contrast:
+    needs: setup
+    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:aa-contrast
+
   # form-error: a form-level error/message in app UI source must route through the
   # @ds/design-system `FormError` / `FormMessage` primitive, not be hand-typed as a
   # raw `<p role="alert" className="text-destructive">` per page (ADR-0013 §7,

@@ -11,8 +11,7 @@
     "lint": "next lint || true",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test",
-    "test:e2e:ci": "playwright test --config=playwright.ci.config.ts"
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@ds/design-system": "workspace:*",
@@ -27,7 +26,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.12.1",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4.3.1",
     "@testing-library/jest-dom": "^6.6.3",

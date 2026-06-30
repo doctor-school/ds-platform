@@ -97,7 +97,10 @@ function StateColumns({
             {render(s.name)}
           </div>
           {s.note ? (
-            <span className="max-w-48 text-xs text-muted-foreground/70">
+            // muted-foreground at full strength (the AA-safe quiet tier, #270);
+            // an opacity modifier (`/70`) dims it below the WCAG-AA threshold and
+            // is caught by the retargeted axe scan (#351).
+            <span className="max-w-48 text-xs text-muted-foreground">
               {s.note}
             </span>
           ) : null}
@@ -292,6 +295,10 @@ function InputSection() {
         render={(state) => (
           <Input
             className={state === "focus" ? `w-48 ${FORCED_FOCUS}` : "w-48"}
+            // A bare specimen has no visible <Label>; give it an accessible name
+            // so it is not an unlabelled form control (caught by the retargeted
+            // axe `label` rule, #351). Real surfaces label via FormField/Label.
+            aria-label={`Input sample (${state})`}
             placeholder="you@example.com"
             defaultValue={state === "error" ? "not-an-email" : ""}
             disabled={state === "disabled"}
@@ -400,7 +407,16 @@ function OtpSection() {
           <span className="font-mono text-xs text-muted-foreground">
             filled (6, grouped + separator)
           </span>
-          <InputOTP maxLength={6} value="123456" readOnly onChange={() => {}}>
+          {/* Bare specimens carry an accessible name (no visible <Label>) so the
+              underlying OTP input is not flagged unlabelled by the axe `label`
+              rule (#351); real surfaces label via OtpField/FormField. */}
+          <InputOTP
+            maxLength={6}
+            value="123456"
+            readOnly
+            onChange={() => {}}
+            aria-label="One-time code sample (filled, read-only)"
+          >
             <InputOTPGroup>
               <InputOTPSlot index={0} />
               <InputOTPSlot index={1} />
@@ -418,7 +434,12 @@ function OtpSection() {
           <span className="font-mono text-xs text-muted-foreground">
             empty (4)
           </span>
-          <InputOTP maxLength={4} value="" onChange={() => {}}>
+          <InputOTP
+            maxLength={4}
+            value=""
+            onChange={() => {}}
+            aria-label="One-time code sample (empty)"
+          >
             <InputOTPGroup>
               <InputOTPSlot index={0} />
               <InputOTPSlot index={1} />
@@ -429,7 +450,13 @@ function OtpSection() {
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="font-mono text-xs text-muted-foreground">disabled</span>
-          <InputOTP maxLength={4} value="12" disabled onChange={() => {}}>
+          <InputOTP
+            maxLength={4}
+            value="12"
+            disabled
+            onChange={() => {}}
+            aria-label="One-time code sample (disabled)"
+          >
             <InputOTPGroup>
               <InputOTPSlot index={0} />
               <InputOTPSlot index={1} />

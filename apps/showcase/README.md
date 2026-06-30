@@ -33,12 +33,37 @@ its own. Drift of catalogue content is structurally impossible; the coverage gua
 ## Run locally
 
 ```sh
-pnpm --filter @ds/showcase dev      # http://localhost:3002
+pnpm --filter @ds/showcase dev      # dev server,    http://localhost:3002
+pnpm --filter @ds/showcase build && pnpm --filter @ds/showcase start
+                                    # production build + serve, http://localhost:3002
 ```
 
 The dev stand (`pnpm dev:*`) backs the platform's services; the showcase itself is
 a pure static viewer with no backend, so `next dev` is all it needs. Endpoints/ports
-that do matter elsewhere are read from `.env.local`, never hardcoded.
+that do matter elsewhere are read from `.env.local`, never hardcoded. This live URL
+is the Stage-A / Stage-B design-approval surface — bring it up before a live-verify
+(`pnpm dev:status` first, the box is power-cycled).
+
+## Runtime checks (interaction + a11y)
+
+The §7 interaction + a11y runtime checks (ADR-0013 §7 layer 4) are **retargeted onto
+the showcase** (spec §5.2, [#351](https://github.com/doctor-school/ds-platform/issues/351)).
+Because the catalogue renders every primitive/block in every state in one place, this
+is a strict superset of the prior auth-only checks (which it replaces):
+
+- `e2e/interaction-states.e2e.spec.ts` — drives real primitives: `cursor: pointer`
+  enabled / `not-allowed` disabled, a measurable hover delta, a keyboard
+  `:focus-visible` ring.
+- `e2e/a11y-axe.e2e.spec.ts` — an axe-core WCAG 2 A/AA scan of every route.
+
+Both are **backend-free** and run in CI (the `playwright-axe` BLOCK gate) against a
+hermetic `next start` build:
+
+```sh
+pnpm --filter @ds/showcase build
+pnpm --filter @ds/showcase exec playwright install --with-deps chromium
+pnpm --filter @ds/showcase test:e2e:ci
+```
 
 ## Scope
 

@@ -47,8 +47,9 @@ const TabsTrigger = React.forwardRef<
       // `border border-transparent` so the active state's `bg-background` +
       // `shadow` never shifts its inactive neighbour — the inactive hover reads
       // as an inset chip inside the `px-3 py-1` padding, not a flush block.
-      // Inactive resting is the muted `text-foreground/60` → `hover:text-foreground`.
-      "inline-flex flex-1 items-center justify-center whitespace-nowrap rounded-md border border-transparent px-3 py-1 text-sm font-medium transition-all disabled:pointer-events-none data-[state=inactive]:text-foreground/60 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow data-[state=inactive]:hover:bg-background/50 data-[state=inactive]:hover:text-foreground",
+      // Inactive resting is the AA-safe quiet tier `text-muted-foreground` (full
+      // strength, #270 — not an opacity-dimmed foreground) → `hover:text-foreground`.
+      "inline-flex flex-1 items-center justify-center whitespace-nowrap rounded-md border border-transparent px-3 py-1 text-sm font-medium transition-all disabled:pointer-events-none data-[state=inactive]:text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow data-[state=inactive]:hover:bg-background/50 data-[state=inactive]:hover:text-foreground",
       className,
     )}
     {...props}

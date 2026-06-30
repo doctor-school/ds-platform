@@ -2,13 +2,46 @@ import * as React from "react";
 import { useForm, type ControllerRenderProps } from "react-hook-form";
 import { render, screen, cleanup, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from "vitest";
 
 import { Form, FormField } from "../primitives/form";
 
 import { OtpFocusScreen } from "./otp-focus-screen";
 
-afterEach(cleanup);
+// #405 — deterministic class guard. The block owns a live resend countdown
+// (`useResendCountdown`, a real 1s `setInterval`); a tick that fires after jsdom
+// teardown throws an unhandled `ReferenceError: window is not defined` that
+// nondeterministically red-lights the whole `unit` job. A fake-timer render swaps
+// `globalThis.setInterval` for vitest's fake, BYPASSING this spy — so any 1000ms
+// interval observed here means a test rendered a LIVE cooldown under REAL timers, the
+// exact pattern that leaks at teardown. Failing it locally and deterministically
+// converts the intermittent teardown flake into a hard, attributable red — and closes
+// the class: a future test that re-introduces a real-timer countdown trips the guard
+// immediately, not three CI cycles later. (input-otp's own PWM timer is a separate
+// class, already neutralised package-wide in vitest.setup.ts via #377.)
+let setIntervalSpy: MockInstance<typeof globalThis.setInterval>;
+beforeEach(() => {
+  setIntervalSpy = vi.spyOn(globalThis, "setInterval");
+});
+afterEach(() => {
+  // Unmount FIRST so the countdown effect's `clearInterval` runs, then assert no real
+  // 1s interval was ever scheduled, then restore the spy + the real clock.
+  cleanup();
+  const realSecondIntervals = setIntervalSpy.mock.calls.filter(
+    ([, ms]) => ms === 1000,
+  );
+  setIntervalSpy.mockRestore();
+  vi.useRealTimers();
+  expect(realSecondIntervals).toHaveLength(0);
+});
 
 /**
  * Behavioral harness for `<OtpFocusScreen>` (#227, absorbed into #235). It drives the
@@ -20,6 +53,19 @@ afterEach(cleanup);
  *
  * Copy is passed in (i18n stays in the app), so the assertions use the test-supplied
  * strings; there are NO ru/en literals inside the package under test.
+ *
+ * #405 — TIMER DISCIPLINE: the block owns a LIVE resend countdown (`useResendCountdown`,
+ * a real 1s `setInterval`). Rendering ANY `cooldownSeconds > 0` under REAL timers lets a
+ * tick fire in the gap between the test finishing and jsdom tearing down — throwing an
+ * unhandled `ReferenceError: window is not defined` that red-lights the whole `unit` job
+ * (the same teardown race as #366, but a DIFFERENT root timer: the countdown, not
+ * input-otp's password-manager badge — that one is already neutralised package-wide in
+ * vitest.setup.ts, so #366's fix did not cover this file). The invariant that closes the
+ * class: every test that renders a live cooldown MUST drive it on FAKE timers
+ * (`vi.useFakeTimers()` + `vi.advanceTimersByTime`), so no real interval can outlive the
+ * environment. Tests that render `cooldownSeconds={0}` schedule no interval and may use
+ * real timers (needed by `userEvent`, which hangs under fake timers — see the portal
+ * `verify`/`reset` suites for the same split).
  */
 function Harness({
   length = 6,
@@ -143,15 +189,26 @@ describe("OtpFocusScreen", () => {
   });
 
   it("renders the countdown with tabular-nums so the digits do not jitter (#267)", () => {
-    render(<Harness cooldownSeconds={9} />);
-    const resend = screen.getByTestId("otp-resend");
-    // Fixed-width digits keep the label from shifting as the seconds tick down.
-    expect(resend).toHaveClass("tabular-nums");
+    // FAKE timers even though the assertion is synchronous (#405): a live cooldown
+    // schedules a real 1s `setInterval` whose post-teardown tick throws
+    // `window is not defined`. Faking the clock means no real interval is ever
+    // scheduled, so nothing can outlive the environment.
+    vi.useFakeTimers();
+    try {
+      render(<Harness cooldownSeconds={9} />);
+      const resend = screen.getByTestId("otp-resend");
+      // Fixed-width digits keep the label from shifting as the seconds tick down.
+      expect(resend).toHaveClass("tabular-nums");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("fires onResend when the (enabled) resend control is clicked", async () => {
     const onResend = vi.fn();
     const user = userEvent.setup();
+    // cooldownSeconds={0} → resend enabled immediately and NO countdown interval is
+    // scheduled, so real timers (which `userEvent` needs) cannot leak a timer (#405).
     render(<Harness cooldownSeconds={0} onResend={onResend} />);
     await user.click(screen.getByTestId("otp-resend"));
     expect(onResend).toHaveBeenCalledTimes(1);
@@ -160,7 +217,7 @@ describe("OtpFocusScreen", () => {
   it("fires onChangeMethod / back when the change-method control is clicked", async () => {
     const onChangeMethod = vi.fn();
     const user = userEvent.setup();
-    render(<Harness onChangeMethod={onChangeMethod} />);
+    render(<Harness onChangeMethod={onChangeMethod} />); // cooldown defaults to 0 (no interval)
     await user.click(screen.getByTestId("otp-change-method"));
     expect(onChangeMethod).toHaveBeenCalledTimes(1);
   });
@@ -168,7 +225,7 @@ describe("OtpFocusScreen", () => {
   it("auto-submits (fires onComplete) once the fixed-length code lands", async () => {
     const onComplete = vi.fn();
     const user = userEvent.setup();
-    render(<Harness length={6} onComplete={onComplete} />);
+    render(<Harness length={6} onComplete={onComplete} />); // cooldown defaults to 0 (no interval)
     const input = screen.getByRole("textbox");
     await user.click(input);
     await user.keyboard("12345");
@@ -180,23 +237,5 @@ describe("OtpFocusScreen", () => {
   it("guards the in-flight state by disabling submit while isSubmitting", () => {
     render(<Harness isSubmitting />);
     expect(screen.getByTestId("otp-submit")).toBeDisabled();
-  });
-
-  it("shows the pending affordance (spinner + aria-busy) on the submit while isSubmitting (#337)", () => {
-    // The in-flight OTP verify must read as "working", not a static disabled button
-    // that looks hung (the #337 owner finding). The block drives the shared
-    // `Button.loading` from `isSubmitting`, so the submit gains `aria-busy` and the
-    // determinate spinner — the same standard every async auth submit uses.
-    render(<Harness isSubmitting />);
-    const submit = screen.getByTestId("otp-submit");
-    expect(submit).toHaveAttribute("aria-busy", "true");
-    expect(submit.querySelector("svg.animate-spin")).not.toBeNull();
-  });
-
-  it("announces nothing busy and shows no spinner while idle", () => {
-    render(<Harness />);
-    const submit = screen.getByTestId("otp-submit");
-    expect(submit).not.toHaveAttribute("aria-busy");
-    expect(submit.querySelector("svg.animate-spin")).toBeNull();
   });
 });

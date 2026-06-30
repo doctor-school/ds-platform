@@ -141,7 +141,10 @@ function StateCase({
       <div className="flex flex-col gap-0.5">
         <span className="font-mono text-xs text-muted-foreground">{label}</span>
         {note ? (
-          <span className="text-xs text-muted-foreground/70">{note}</span>
+          // muted-foreground at full strength (the AA-safe quiet tier, #270); an
+          // opacity modifier (`/70`) dims it below WCAG-AA and is caught by the
+          // retargeted axe scan (#351).
+          <span className="text-xs text-muted-foreground">{note}</span>
         ) : null}
       </div>
       {children}

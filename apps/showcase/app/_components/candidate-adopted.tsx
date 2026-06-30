@@ -91,7 +91,11 @@ function RolePill({
       className={cn(
         "inline-flex w-fit items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide",
         adopted
-          ? "bg-primary text-primary-foreground"
+          ? // primary-action (blue.700, 8.14:1) is the AA-safe brand-emphasis fill
+            // for text — the raw `primary` brand blue only clears AA at large/bold
+            // (#237), so a small pill on it is caught by the retargeted axe scan
+            // (#351). Mirrors the Button `default` fill.
+            "bg-primary-action text-primary-foreground"
           : "border border-border text-muted-foreground",
       )}
     >

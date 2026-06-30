@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start -p 3002",
     "lint": "next lint || true",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:e2e:ci": "playwright test --config=playwright.ci.config.ts"
   },
   "dependencies": {
     "@ds/design-system": "workspace:*",
@@ -20,6 +21,8 @@
     "react-hook-form": "^7.80.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4.3.1",
     "@types/node": "^26.0.1",
     "@types/react": "^19.2.17",

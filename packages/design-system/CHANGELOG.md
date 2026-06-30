@@ -1,5 +1,19 @@
 # @ds/design-system
 
+## 0.5.0
+
+### Minor Changes
+
+- [#398](https://github.com/doctor-school/ds-platform/pull/398) [`25a22ca`](https://github.com/doctor-school/ds-platform/commit/25a22ca0b71961ce599cf8b891595d59736c87a6) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Submit/pending progress visualization across the auth surfaces ([#337](https://github.com/doctor-school/ds-platform/issues/337)). Every async
+  submit now drives the shared `Button.loading` affordance from its in-flight flag
+  (`loading={isSubmitting}`) instead of a static `disabled={isSubmitting}` — a
+  determinate spinner + `aria-busy` + disabled-while-loading, so the surface reads as
+  "working" instead of appearing to hang (the [#333](https://github.com/doctor-school/ds-platform/issues/333) Stage-B owner finding). Covers
+  login (password + OTP request), register, reset (request + complete), verify, and the
+  shared `<OtpFocusScreen>` block. `prefers-reduced-motion` and the double-submit guard
+  are already satisfied by `Button.loading`. The standard is documented in ADR-0013 §7
+  and enforced by a new `submit-pending` lint guard (WARN).
+
 ## 0.4.0
 
 ### Minor Changes

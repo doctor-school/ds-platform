@@ -25,6 +25,7 @@
     "lint:no-stub": "tsx tools/lint/no-stub-lint.ts",
     "lint:registry-research": "tsx tools/lint/registry-research-lint.ts",
     "lint:showcase-coverage": "tsx tools/lint/showcase-coverage-lint.ts",
+    "lint:submit-pending": "tsx tools/lint/submit-pending-lint.ts",
     "lint:oxlint": "oxlint -c .oxlintrc.json --disable-unicorn-plugin --disable-oxc-plugin --disable-typescript-plugin -A all apps packages",
     "lint:stylelint": "stylelint \"apps/**/*.css\" \"packages/**/*.css\"",
     "build": "turbo run build",

@@ -181,4 +181,22 @@ describe("OtpFocusScreen", () => {
     render(<Harness isSubmitting />);
     expect(screen.getByTestId("otp-submit")).toBeDisabled();
   });
+
+  it("shows the pending affordance (spinner + aria-busy) on the submit while isSubmitting (#337)", () => {
+    // The in-flight OTP verify must read as "working", not a static disabled button
+    // that looks hung (the #337 owner finding). The block drives the shared
+    // `Button.loading` from `isSubmitting`, so the submit gains `aria-busy` and the
+    // determinate spinner — the same standard every async auth submit uses.
+    render(<Harness isSubmitting />);
+    const submit = screen.getByTestId("otp-submit");
+    expect(submit).toHaveAttribute("aria-busy", "true");
+    expect(submit.querySelector("svg.animate-spin")).not.toBeNull();
+  });
+
+  it("announces nothing busy and shows no spinner while idle", () => {
+    render(<Harness />);
+    const submit = screen.getByTestId("otp-submit");
+    expect(submit).not.toHaveAttribute("aria-busy");
+    expect(submit.querySelector("svg.animate-spin")).toBeNull();
+  });
 });

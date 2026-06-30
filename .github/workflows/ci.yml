@@ -437,6 +437,26 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:form-rhythm
 
+  # submit-pending: the async-submit pending standard (ADR-0013 §7 layer 2, #337).
+  # Flags a `type="submit"` control disabled by an in-flight flag
+  # (`disabled={isSubmitting}`) with no `loading` prop — a static disabled button that
+  # gives no progress signal and reads as hung (the #333 Stage-B owner finding). The
+  # design system already ships the fix (`Button.loading` = spinner + `aria-busy` +
+  # disabled-while-loading); this guard catches the adoption gap, a valid-token combo
+  # every prior gate passes. Static source scan over the DS blocks/primitives + app
+  # surfaces — no PR/gh context. WARN per ADR-0007 §2.6.
+  submit-pending:
+    needs: setup
+    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:submit-pending
+
   ears-tests:
     needs: setup
     continue-on-error: true # WARN v1

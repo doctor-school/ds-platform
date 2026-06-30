@@ -249,7 +249,7 @@ function VerifyCard() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={form.formState.isSubmitting}
+                loading={form.formState.isSubmitting}
                 data-testid="verify-submit"
               >
                 {t("submit")}

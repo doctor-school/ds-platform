@@ -229,3 +229,55 @@ describe("/reset complete step (late-mounted slotted code field)", () => {
     expect(push).not.toHaveBeenCalledWith("/login");
   });
 });
+
+/**
+ * #337 (submit/pending progress visualization): both /reset submits — the request
+ * step and the complete step — must show the shared `Button.loading` affordance
+ * (spinner + `aria-busy`) while their network call is in flight, instead of a static
+ * disabled button that reads as hung (the #333 Stage-B owner finding). Each call is
+ * held pending (a never-resolving promise) so the affordance can be asserted.
+ */
+describe("/reset submit pending affordances (#337)", () => {
+  it("shows spinner + aria-busy on the request submit while requestPasswordReset is in flight", async () => {
+    const user = userEvent.setup();
+    requestPasswordReset.mockImplementationOnce(() => new Promise(() => {}));
+    render(<ResetPage />);
+
+    await user.type(screen.getByRole("textbox"), IDENTIFIER);
+    const submit = screen.getByTestId("reset-request-submit");
+    expect(submit).not.toHaveAttribute("aria-busy");
+
+    await user.click(submit);
+
+    await waitFor(() => {
+      expect(requestPasswordReset).toHaveBeenCalledTimes(1);
+      expect(submit).toHaveAttribute("aria-busy", "true");
+    });
+    expect(submit.querySelector("svg.animate-spin")).not.toBeNull();
+  });
+
+  it("shows spinner + aria-busy on the complete submit while completePasswordReset is in flight", async () => {
+    const user = userEvent.setup();
+    render(<ResetPage />);
+
+    await advanceToCompleteStage(user);
+
+    const codeInput = screen.getByRole("textbox");
+    await user.click(codeInput);
+    await user.keyboard(RESET_CODE);
+    await waitFor(() => expect(codeInput).toHaveValue(RESET_CODE));
+    await user.type(screen.getByLabelText("newPasswordLabel"), NEW_PASSWORD);
+
+    completePasswordReset.mockImplementationOnce(() => new Promise(() => {}));
+    const submit = screen.getByRole("button", { name: "setNewPassword" });
+    expect(submit).not.toHaveAttribute("aria-busy");
+
+    await user.click(submit);
+
+    await waitFor(() => {
+      expect(completePasswordReset).toHaveBeenCalledTimes(1);
+      expect(submit).toHaveAttribute("aria-busy", "true");
+    });
+    expect(submit.querySelector("svg.animate-spin")).not.toBeNull();
+  });
+});

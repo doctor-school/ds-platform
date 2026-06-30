@@ -179,4 +179,27 @@ describe("/verify dual-affordance + resend (#227/#267)", () => {
       expect.objectContaining({ email: EMAIL, code: VERIFY_CODE }),
     );
   });
+
+  it("#337: shows spinner + aria-busy on the verify submit while the verify call is in flight", async () => {
+    // The submit must read as "working", not a static disabled button that looks hung
+    // (the #333 Stage-B owner finding). The page drives `Button.loading` from
+    // `isSubmitting`, so the submit gains `aria-busy` + the spinner. Hold the verify
+    // call pending so the in-flight state is observable.
+    const user = userEvent.setup();
+    verify.mockImplementationOnce(() => new Promise(() => {}));
+    render(<VerifyPage />);
+
+    const submit = screen.getByTestId("verify-submit");
+    expect(submit).not.toHaveAttribute("aria-busy");
+
+    const codeInput = screen.getByRole("textbox");
+    await user.click(codeInput);
+    await user.keyboard(VERIFY_CODE);
+
+    await waitFor(() => {
+      expect(verify).toHaveBeenCalledTimes(1);
+      expect(submit).toHaveAttribute("aria-busy", "true");
+    });
+    expect(submit.querySelector("svg.animate-spin")).not.toBeNull();
+  });
 });

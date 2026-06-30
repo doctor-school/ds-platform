@@ -150,7 +150,7 @@ export default function RegisterPage() {
             <Button
               type="submit"
               className="w-full"
-              disabled={form.formState.isSubmitting}
+              loading={form.formState.isSubmitting}
               data-testid="register-submit"
             >
               {t("submit")}

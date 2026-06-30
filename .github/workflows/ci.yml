@@ -367,6 +367,25 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:showcase-coverage
 
+  # showcase-snippet: the showcase (apps/showcase) is the rendered VIEWER of
+  # @ds/design-system — it re-implements nothing (design-system-showcase spec §2.4).
+  # A hand-typed usage snippet (a STRING/template-literal constant depicting a block
+  # import or PascalCase JSX) is a second, hand-maintained copy of code the package
+  # owns and DRIFTS; mature systems auto-extract displayed code from the real source
+  # so it cannot. This guard flags such literals (#396). Static source scan — no
+  # PR/gh context needed. WARN per ADR-0007 §2.6.
+  showcase-snippet:
+    needs: setup
+    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:showcase-snippet
+
   # asset-format: product assets are vector-first (ADR-0013 §8, #275) — logos /
   # icons ship as SVG, raster as WEBP minimum; committed *.png / *.jpg / *.jpeg
   # under apps/*/public or @ds/design-system is an asset-hygiene defect. Static

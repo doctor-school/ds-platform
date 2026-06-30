@@ -77,6 +77,7 @@ Drift is **structurally impossible**, not merely discouraged:
 
 - The showcase imports the **same exports** of `@ds/design-system` over `workspace:*` that `apps/portal` does — same version, same compiled tokens. §2.2 forbids the showcase from re-implementing any primitive. So `showcase ≡ what the product apps render`, **by construction** — there is nothing separate to diverge.
 - The **coverage guard** (§5.1) machine-asserts every package export has a showcase entry → the viewer cannot silently lag the system.
+- The **`showcase-snippet` guard** (#396, ADR-0013 §7) machine-asserts the showcase carries no hand-typed usage snippet — a string/template-literal constant depicting a `@ds/design-system` import or a PascalCase JSX tag is a second, hand-maintained copy of code the package owns that drifts; a wanted snippet must be auto-extracted from the real example file, never typed. This closes the subtler re-implementation vector the coverage guard does not see (a catalogued export whose displayed code is hand-copied).
 - The **retargeted Playwright + axe** (§5.2) exercise behaviour across the whole catalogue.
 
 The isolation chosen in §2.1 isolates only the **hosting Next shell** (so an internal tool does not pollute the product app and docs stays decoupled). It does **not** isolate the design system, which is single and shared. The dependency binding is identical whether the showcase is a dedicated app or a route inside a consumer — the bond is the shared package, not the hosting location.

@@ -51,7 +51,8 @@
     "dev:config": "node tools/dev/run.mjs config",
     "dev:smoke": "node tools/dev/smoke.mjs",
     "task:worktree": "node tools/dev/task-worktree.mjs",
-    "worktree:teardown": "node tools/dev/worktree-teardown.mjs"
+    "worktree:teardown": "node tools/dev/worktree-teardown.mjs",
+    "pr:preflight": "node tools/lint/pr-preflight.mjs"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.7.0",

@@ -1,0 +1,10 @@
+{
+  "name": "@ds/design-system",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./lib/utils": "./src/lib/utils.ts",
+    "./button": "./src/primitives/button.tsx",
+    "./input-otp": "./src/primitives/input-otp.tsx"
+  }
+}

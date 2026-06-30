@@ -349,6 +349,24 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:no-stub
 
+  # showcase-coverage: the design-system living showcase (apps/showcase) is the
+  # rendered viewer of @ds/design-system — it must stay *living*. This guard
+  # asserts every package COMPONENT export has a catalogued entry in the showcase
+  # registry (apps/showcase/app/lib/registry.ts), so a new primitive/block cannot
+  # ship without appearing in the catalogue (design-system-showcase spec §5.1,
+  # #350). Static source scan — no PR/gh context needed. WARN per ADR-0007 §2.6.
+  showcase-coverage:
+    needs: setup
+    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:showcase-coverage
+
   # asset-format: product assets are vector-first (ADR-0013 §8, #275) — logos /
   # icons ship as SVG, raster as WEBP minimum; committed *.png / *.jpg / *.jpeg
   # under apps/*/public or @ds/design-system is an asset-hygiene defect. Static

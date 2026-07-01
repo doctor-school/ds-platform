@@ -114,6 +114,19 @@ export interface IdpSession {
   /** Opaque Zitadel session id, bound to the BFF session record (design §3). */
   zitadelSessionId: string;
   sub: string;
+  /**
+   * The **checked-session bearer token** Zitadel returned alongside the
+   * `zitadelSessionId` (#143). It is the proof-of-check the OIDC authorize→token
+   * dance presents when linking the session to the auth request
+   * ({@link IdpClient.exchangeSessionForTokens}). Server-side only (it never
+   * crosses an HTTP boundary — no `@ds/schemas` shape carries it) and **single-use
+   * for the OIDC exchange**: `establish` consumes it synchronously in the same
+   * request as the login, so it is threaded through this handle rather than cached
+   * in adapter state or persisted in the session record. Before #143 the real
+   * adapter kept it in a hidden per-adapter `Map` keyed by `zitadelSessionId`;
+   * folding it into this explicit port field removes that hidden singleton state.
+   */
+  sessionToken: string;
 }
 
 /**
@@ -248,9 +261,14 @@ export interface IdpClient {
   passwordLogin(identifier: string, password: string): Promise<PasswordLoginResult>;
   /**
    * EARS-8: complete the OIDC exchange against a checked session, yielding the
-   * access JWT, the rotating opaque refresh token, and the principal claims.
+   * access JWT, the rotating opaque refresh token, and the principal claims. Takes
+   * the whole checked {@link IdpSession} handle (#143) — both the opaque
+   * `zitadelSessionId` and the single-use `sessionToken` proof-of-check — so the
+   * proof-of-check is threaded explicitly through the port rather than looked up
+   * from hidden per-adapter state. The `sessionToken` is consumed here; an
+   * empty/missing one fails closed (mints nothing, ADR-0001 §7).
    */
-  exchangeSessionForTokens(zitadelSessionId: string): Promise<IdpTokens>;
+  exchangeSessionForTokens(session: IdpSession): Promise<IdpTokens>;
   /**
    * EARS-9: rotate a single-use refresh token. On success the old token is
    * consumed and fresh access + refresh tokens are returned; a replay of an

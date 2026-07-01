@@ -174,36 +174,29 @@ export class ZitadelIdpClient implements IdpClient {
   private readonly fetchImpl: FetchLike;
 
   /**
-   * Checked-session tokens captured at login, keyed by `zitadelSessionId`. The
-   * OIDC authorize→token dance needs the session **token** (proof the session
-   * passed its check), but the BFF port only carries the opaque `sessionId`
-   * between {@link passwordLogin}/`loginWith*Otp` and
-   * {@link exchangeSessionForTokens}. Zitadel's `POST /v2/sessions` returns both;
-   * we cache the token here and consume it (single-use, deleted on exchange)
-   * within the same request lifecycle on this singleton adapter. Memory-bounded
-   * by the single-use delete — an unconsumed entry only lingers if a login is
-   * never traded for tokens (a programming error in the BFF).
-   */
-  private readonly sessionTokens = new Map<string, string>();
-
-  /**
-   * Live OTP-login challenges captured between the two port calls, keyed by the
-   * lowercased `identifier`. The {@link IdpClient} port passes ONLY `identifier`
-   * to both `requestEmailOtp`/`requestSmsOtp` (which arms the challenge) and the
-   * matching `loginWith*Otp` (which verifies the code) — no Zitadel session
-   * handle crosses the port — so this adapter must carry the server-side session
-   * (`sessionId` + the still-unchecked `sessionToken`) between the two calls
-   * itself. We stash it here on the request hop and consume it (single-use,
-   * deleted on the verify hop) on the same singleton adapter within the request
-   * lifecycle, exactly mirroring the {@link sessionTokens} pattern.
+   * Live OTP-login challenges captured between the two SEPARATE HTTP requests the
+   * OTP-login flow spans, keyed by the lowercased `identifier`. The
+   * {@link IdpClient} port passes ONLY `identifier` to both
+   * `requestEmailOtp`/`requestSmsOtp` (request #1 — arms the challenge, returns
+   * `void` for enumeration-safety) and the matching `loginWith*Otp` (request #2 —
+   * verifies the code) — no Zitadel session handle crosses the port between them —
+   * so this adapter must carry the server-side session (`sessionId` + the
+   * still-unchecked `sessionToken`) between the two calls itself. We stash it here
+   * on the request hop and consume it (single-use, deleted on the verify hop) on
+   * the same singleton adapter.
    *
-   * NB: this is the **second** hidden cross-request state on this singleton
-   * adapter — the exact concern #143 (IdpSession port widening: thread an
-   * explicit end-to-end session handle through the port instead of caching it in
-   * the adapter) tracks. #153 directs mirroring the existing `sessionTokens`
-   * pattern here because #143 has not landed; doing so ADDS one more entry to the
-   * #143 debt openly rather than deepening the hidden state silently. When #143
-   * lands, both Maps fold into the explicit port handle.
+   * NB: #143 folded the former `sessionTokens` map into the explicit
+   * {@link IdpSession.sessionToken} handle (the checked-session token now rides
+   * the port handle from `passwordLogin`/`loginWith*Otp` straight into
+   * {@link exchangeSessionForTokens}, no adapter cache). This challenge map is
+   * DIFFERENT and deliberately stays: unlike `sessionTokens` — which was a
+   * within-one-request hand-off between two methods called back-to-back — this is
+   * a genuine cross-REQUEST bridge (`request*Otp` → `loginWith*Otp` are two
+   * distinct HTTP requests), and `request*Otp` returns `void` for
+   * enumeration-safety (EARS-6/7/16), so there is no handle to thread through the
+   * port without leaking an existence oracle. Folding it out is tracked separately
+   * as **#410** (a shared BFF challenge store for scale-out) — until then it
+   * remains here, honestly, as the one remaining cross-request adapter state.
    */
   private readonly otpChallenges = new Map<
     string,
@@ -269,16 +262,6 @@ export class ZitadelIdpClient implements IdpClient {
       });
     }
     return this.orgIdPromise;
-  }
-
-  /**
-   * Record the checked-session token Zitadel returned alongside a `sessionId`,
-   * so the OIDC exchange can present it. Called by the login paths; exposed for
-   * the unit spec (which drives the exchange in isolation, without a live
-   * `/v2/sessions` round-trip).
-   */
-  rememberSessionToken(zitadelSessionId: string, sessionToken: string): void {
-    this.sessionTokens.set(zitadelSessionId, sessionToken);
   }
 
   private headers(): Record<string, string> {
@@ -565,10 +548,18 @@ export class ZitadelIdpClient implements IdpClient {
     let sub = data.factors?.user?.id;
     if (!sub) sub = await this.fetchSessionUserId(zitadelSessionId);
     if (!sub) return { outcome: "rejected" };
-    // Cache the session token for the OIDC exchange (see `sessionTokens`).
-    if (data.sessionToken)
-      this.rememberSessionToken(zitadelSessionId, data.sessionToken);
-    return { outcome: "authenticated", session: { zitadelSessionId, sub } };
+    // Thread the checked-session token through the port handle (#143): it rides
+    // the returned {@link IdpSession} straight into the downstream OIDC exchange,
+    // instead of a hidden per-adapter cache. A missing token yields an empty
+    // string here, which `exchangeSessionForTokens` then fails closed on.
+    return {
+      outcome: "authenticated",
+      session: {
+        zitadelSessionId,
+        sub,
+        sessionToken: data.sessionToken ?? "",
+      },
+    };
   }
 
   /**
@@ -648,110 +639,109 @@ export class ZitadelIdpClient implements IdpClient {
    *
    * Fails closed (throws, mints nothing) on any missing config, missing session
    * token, or non-2xx — never an open gate (ADR-0001 §7).
+   *
+   * #143: the checked-session token now arrives on the {@link IdpSession} handle
+   * (`session.sessionToken`) rather than a hidden per-adapter cache — the token is
+   * threaded explicitly end-to-end and consumed here, single-use, in the same
+   * request as the login.
    */
-  async exchangeSessionForTokens(zitadelSessionId: string): Promise<IdpTokens> {
+  async exchangeSessionForTokens(session: IdpSession): Promise<IdpTokens> {
     const { clientId, redirectUri } = this.requireOidcApp();
-    const sessionToken = this.sessionTokens.get(zitadelSessionId);
+    const { zitadelSessionId, sessionToken } = session;
     if (!sessionToken) {
+      // Fail closed exactly as before: an empty/absent proof-of-check token
+      // cannot link the OIDC auth request, so we mint nothing (ADR-0001 §7).
       throw new Error(
-        "no checked-session token captured for this session; cannot complete the OIDC exchange",
+        "no checked-session token on the session handle; cannot complete the OIDC exchange",
       );
     }
 
-    // Consume the captured session token — single-use, on EVERY exit path
-    // (success or a throw in any of steps 1–3). Leaving it in the Map on an
-    // early throw would leak sensitive Zitadel session material indefinitely on
-    // this global singleton adapter, so the delete lives in a `finally`.
-    try {
-      // 1. Start the OIDC auth request; read (do not follow) the redirect.
-      const scopes = (this.config.scopes ?? DEFAULT_OIDC_SCOPES).join(" ");
-      const authorizeQuery = new URLSearchParams({
-        client_id: clientId,
-        redirect_uri: redirectUri,
-        response_type: "code",
-        scope: scopes,
-        prompt: "none",
-      });
-      const authorizeRes = await this.fetchImpl(
-        this.url(`/oauth/v2/authorize?${authorizeQuery.toString()}`),
-        { method: "GET", headers: this.headers(), redirect: "manual" },
-      );
-      const location = this.readLocation(authorizeRes);
-      // Live wire-shape delta (#145, vs Zitadel v4.15): the authorize 302
-      // redirects to the login-UI page carrying `authRequestID` (capital `ID`,
-      // e.g. `/ui/login/login?authRequestID=<id>`), not the lowercase
-      // `authRequest` the merged #122 code parsed. Read both (the canonical live
-      // `authRequestID` first, `authRequest` kept for back-compat / the fake).
-      const locationParams = location
-        ? new URLSearchParams(location.split("?")[1] ?? "")
-        : null;
-      const authRequestId =
-        locationParams?.get("authRequestID") ??
-        locationParams?.get("authRequest") ??
-        null;
-      if (!authRequestId) {
-        throw new Error("zitadel authorize did not yield an authRequest id");
-      }
+    // 1. Start the OIDC auth request; read (do not follow) the redirect.
+    const scopes = (this.config.scopes ?? DEFAULT_OIDC_SCOPES).join(" ");
+    const authorizeQuery = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: scopes,
+      prompt: "none",
+    });
+    const authorizeRes = await this.fetchImpl(
+      this.url(`/oauth/v2/authorize?${authorizeQuery.toString()}`),
+      { method: "GET", headers: this.headers(), redirect: "manual" },
+    );
+    const location = this.readLocation(authorizeRes);
+    // Live wire-shape delta (#145, vs Zitadel v4.15): the authorize 302
+    // redirects to the login-UI page carrying `authRequestID` (capital `ID`,
+    // e.g. `/ui/login/login?authRequestID=<id>`), not the lowercase
+    // `authRequest` the merged #122 code parsed. Read both (the canonical live
+    // `authRequestID` first, `authRequest` kept for back-compat / the fake).
+    const locationParams = location
+      ? new URLSearchParams(location.split("?")[1] ?? "")
+      : null;
+    const authRequestId =
+      locationParams?.get("authRequestID") ??
+      locationParams?.get("authRequest") ??
+      null;
+    if (!authRequestId) {
+      throw new Error("zitadel authorize did not yield an authRequest id");
+    }
 
-      // 2. Link the checked session → callbackUrl with the code.
-      const linkRes = await this.fetchImpl(
-        this.url(`/v2/oidc/auth_requests/${authRequestId}`),
-        {
-          method: "POST",
-          headers: this.headers(),
-          body: JSON.stringify({
-            session: { sessionId: zitadelSessionId, sessionToken },
-          }),
-        },
-      );
-      if (!linkRes.ok) {
-        throw new Error(
-          `zitadel auth_request link failed: HTTP ${linkRes.status}`,
-        );
-      }
-      const linkData = (await linkRes.json()) as { callbackUrl?: string };
-      const code = linkData.callbackUrl
-        ? new URLSearchParams(linkData.callbackUrl.split("?")[1] ?? "").get(
-            "code",
-          )
-        : null;
-      if (!code) {
-        throw new Error("zitadel auth_request callback carried no code");
-      }
-
-      // 3. Exchange the code for tokens.
-      const tokenBody = new URLSearchParams({
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: redirectUri,
-        ...this.tokenAuthParams(),
-      });
-      const tokenRes = await this.fetchImpl(this.url("/oauth/v2/token"), {
+    // 2. Link the checked session → callbackUrl with the code.
+    const linkRes = await this.fetchImpl(
+      this.url(`/v2/oidc/auth_requests/${authRequestId}`),
+      {
         method: "POST",
-        headers: {
-          authorization: `Bearer ${this.config.serviceToken}`,
-          "content-type": "application/x-www-form-urlencoded",
-        },
-        body: tokenBody.toString(),
-      });
-      if (!tokenRes.ok) {
-        throw new Error(
-          `zitadel token endpoint failed: HTTP ${tokenRes.status}`,
-        );
-      }
-      const data = (await tokenRes.json()) as OidcTokenResponse;
-      if (!data.access_token || !data.refresh_token) {
-        throw new Error("zitadel token response missing access/refresh token");
-      }
-      return {
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token,
-        expiresInSeconds: data.expires_in ?? 0,
-        claims: parseIdpClaims(data.id_token ?? ""),
-      };
-    } finally {
-      this.sessionTokens.delete(zitadelSessionId);
+        headers: this.headers(),
+        body: JSON.stringify({
+          session: { sessionId: zitadelSessionId, sessionToken },
+        }),
+      },
+    );
+    if (!linkRes.ok) {
+      throw new Error(
+        `zitadel auth_request link failed: HTTP ${linkRes.status}`,
+      );
     }
+    const linkData = (await linkRes.json()) as { callbackUrl?: string };
+    const code = linkData.callbackUrl
+      ? new URLSearchParams(linkData.callbackUrl.split("?")[1] ?? "").get(
+          "code",
+        )
+      : null;
+    if (!code) {
+      throw new Error("zitadel auth_request callback carried no code");
+    }
+
+    // 3. Exchange the code for tokens.
+    const tokenBody = new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: redirectUri,
+      ...this.tokenAuthParams(),
+    });
+    const tokenRes = await this.fetchImpl(this.url("/oauth/v2/token"), {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${this.config.serviceToken}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: tokenBody.toString(),
+    });
+    if (!tokenRes.ok) {
+      throw new Error(
+        `zitadel token endpoint failed: HTTP ${tokenRes.status}`,
+      );
+    }
+    const data = (await tokenRes.json()) as OidcTokenResponse;
+    if (!data.access_token || !data.refresh_token) {
+      throw new Error("zitadel token response missing access/refresh token");
+    }
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresInSeconds: data.expires_in ?? 0,
+      claims: parseIdpClaims(data.id_token ?? ""),
+    };
   }
 
   /**
@@ -937,11 +927,11 @@ export class ZitadelIdpClient implements IdpClient {
     // #221: auto-login after reset — create a CHECKED session for the subject by
     // running the same password check `passwordLogin` does, now with the
     // just-set password. `POST /v2/sessions` with a `user` + `password` check
-    // returns `sessionId` + `sessionToken`; cache the token for the downstream
-    // OIDC exchange (mirroring passwordLogin) and hand back the checked
-    // {@link IdpSession}, so the BFF mints a fresh session via the shared
-    // establishment hop. A failure here falls through to a fresh login rather than
-    // a bare 500: we return null only if no session could be checked.
+    // returns `sessionId` + `sessionToken`; #143 threads that token through the
+    // returned {@link IdpSession} handle (no adapter cache) so the BFF mints a
+    // fresh session via the shared establishment hop. A failure here falls through
+    // to a fresh login rather than a bare 500: we return null only if no session
+    // could be checked.
     const sessionRes = await this.fetchImpl(this.url("/v2/sessions"), {
       method: "POST",
       headers: this.headers(),
@@ -963,9 +953,7 @@ export class ZitadelIdpClient implements IdpClient {
     let sub = data.factors?.user?.id;
     if (!sub) sub = await this.fetchSessionUserId(zitadelSessionId);
     if (!sub) return null;
-    if (data.sessionToken)
-      this.rememberSessionToken(zitadelSessionId, data.sessionToken);
-    return { zitadelSessionId, sub };
+    return { zitadelSessionId, sub, sessionToken: data.sessionToken ?? "" };
   }
 
   // ── Passwordless login OTP (EARS-6/7) — design §3, §6; live-wired #153 ──
@@ -974,7 +962,9 @@ export class ZitadelIdpClient implements IdpClient {
   // then update the same session with the submitted code, then exchange the
   // checked session for tokens (the shared `exchangeSessionForTokens` hop). The
   // challenge is bound to a server-side session carried between the request and
-  // verify calls via the `otpChallenges` cache (mirroring `sessionTokens`).
+  // verify calls (two distinct HTTP requests) via the `otpChallenges` cache — the
+  // one remaining cross-request adapter state after #143 folded `sessionTokens`
+  // into the port handle; its own fold-out is tracked as #410.
   //
   // Wire-shape risk note (same class as #122 → corrected by #145/#148 live): the
   // exact Session-v2 field names/paths below are PINNED DETERMINISTICALLY BY THE
@@ -1101,16 +1091,16 @@ export class ZitadelIdpClient implements IdpClient {
     if (!res.ok) return null;
     this.otpChallenges.delete(key);
     const data = (await res.json()) as { sessionToken?: string };
-    // Feed the OIDC exchange: cache the CHECKED-session token under the sessionId
-    // so the downstream `exchangeSessionForTokens(sessionId)` finds it (mirrors
-    // how `passwordLogin` captures `sessionToken`). Prefer the fresh token from
-    // the verify response; fall back to the challenge token if the live response
-    // omits it (awaiting-live-confirmation — the update may not re-issue a token).
-    this.rememberSessionToken(
-      challenge.sessionId,
-      data.sessionToken ?? challenge.sessionToken,
-    );
-    return { zitadelSessionId: challenge.sessionId, sub: challenge.sub };
+    // Thread the CHECKED-session token through the returned {@link IdpSession}
+    // handle (#143) so the downstream `exchangeSessionForTokens(session)` reads it
+    // off the handle — no adapter cache. Prefer the fresh token the verify hop
+    // re-issues; fall back to the challenge token if the live response omits it
+    // (awaiting-live-confirmation — the update may not re-issue a token).
+    return {
+      zitadelSessionId: challenge.sessionId,
+      sub: challenge.sub,
+      sessionToken: data.sessionToken ?? challenge.sessionToken,
+    };
   }
 
   async requestEmailOtp(identifier: string): Promise<void> {

@@ -40,7 +40,7 @@ When you start the Issue, move it: `node tools/gh/set-board-status.mjs <N> "In P
 
 ### 2. Branch → implement (defer to the per-kind skill)
 
-**User-facing surface — design-approval gate first (AGENTS.md §6).** If the task renders a user-facing surface, the `build-ui-from-design-system` design-approval **Stage A** (product-owner picks the look) must be approved **before** this step — i.e. before moving the Issue to In Progress (step 1) and before this branch. Do not enter implementation of a user-facing design on your own taste.
+**User-facing surface — the design-system-first cycle gates this step (AGENTS.md §6).** If the task renders a user-facing surface, run the `build-ui-from-design-system` cycle **before** this step — before moving the Issue to In Progress (step 1) and before this branch. For an element class **not yet covered** in the [design constitution](../../design/constitution.md), the cycle dispatches [`research-ui-element`](../research-ui-element/SKILL.md) first — its rendered options are the **Stage A** artifact the product owner picks from; a **covered** class is reused from the package + constitution, not re-researched. Do not enter implementation of a user-facing design on your own taste. Full cycle + Stage A/B gates: `build-ui-from-design-system`.
 
 Branch off fresh `origin/main`: `<prefix>/<N>-<slug>` (§2 / repo-conventions). Then **identify the task kind (AGENTS.md §3.1) and run that skill** — do not re-derive the procedure here:
 

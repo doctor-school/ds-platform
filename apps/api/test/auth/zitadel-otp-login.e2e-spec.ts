@@ -306,7 +306,7 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
       expect(session.sub).toBe(created.sub);
 
       // EARS-8 convergence: trade the checked session for real tokens.
-      tokens = await client.exchangeSessionForTokens(session.zitadelSessionId);
+      tokens = await client.exchangeSessionForTokens(session);
     }
     expect(tokens, "exchange should mint tokens after OTP login").toBeTruthy();
     expect(tokens!.accessToken).toBeTruthy();
@@ -374,7 +374,7 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
       expect(session.sub).toBe(created.sub);
 
       // EARS-8 convergence: trade the checked session for real tokens.
-      tokens = await client.exchangeSessionForTokens(session.zitadelSessionId);
+      tokens = await client.exchangeSessionForTokens(session);
     }
     expect(
       tokens,

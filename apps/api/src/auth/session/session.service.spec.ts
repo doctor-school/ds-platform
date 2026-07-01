@@ -34,10 +34,7 @@ describe("SessionService — refresh rotation + logout", () => {
     const audit = new InMemoryAuthAuditLog();
     const svc = new SessionService(idp, store, audit);
 
-    const { cookie, claims } = await svc.establish(
-      login.session.zitadelSessionId,
-      FP,
-    );
+    const { cookie, claims } = await svc.establish(login.session, FP);
     const sid = parseCookies(cookie)[SESSION_COOKIE_NAME] as string;
     return { svc, store, audit, sid, sub: claims.sub };
   }
@@ -110,7 +107,7 @@ describe("SessionService — refresh rotation + logout", () => {
     async function establishFor(email: string): Promise<string> {
       const s = await idp.passwordLogin(email, "pw-12345678");
       if (s.outcome !== "authenticated") throw new Error("login setup failed");
-      const { cookie } = await svc.establish(s.session.zitadelSessionId, FP);
+      const { cookie } = await svc.establish(s.session, FP);
       return parseCookies(cookie)[SESSION_COOKIE_NAME] as string;
     }
 

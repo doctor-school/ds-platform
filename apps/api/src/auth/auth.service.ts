@@ -176,7 +176,7 @@ export class AuthService {
     }
 
     const established = await this.sessions.establish(
-      result.session.zitadelSessionId,
+      result.session,
       fingerprint,
     );
     await this.audit.record({
@@ -254,10 +254,7 @@ export class AuthService {
       });
       return null;
     }
-    const established = await this.sessions.establish(
-      session.zitadelSessionId,
-      fingerprint,
-    );
+    const established = await this.sessions.establish(session, fingerprint);
     await this.audit.record({
       type: "LoginSucceeded",
       sub: session.sub,
@@ -330,10 +327,7 @@ export class AuthService {
     // session behind and the fresh session is the only survivor.
     await this.sessions.revokeAllForSub(session.sub);
     // Mint the fresh session on the identical login convergence point (EARS-8).
-    const established = await this.sessions.establish(
-      session.zitadelSessionId,
-      fingerprint,
-    );
+    const established = await this.sessions.establish(session, fingerprint);
     // Mirror login's session-created audit row (EARS-18): the reset just minted an
     // authenticated session, so it records the same `LoginSucceeded` (method
     // `password`) login does — in addition to the PasswordResetCompleted above.

@@ -59,9 +59,7 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OIDC token exchange (integration)", () => {
     expect(login.outcome).toBe("authenticated");
     if (login.outcome !== "authenticated") return;
 
-    const tokens = await client.exchangeSessionForTokens(
-      login.session.zitadelSessionId,
-    );
+    const tokens = await client.exchangeSessionForTokens(login.session);
     expect(tokens.accessToken).toBeTruthy();
     expect(tokens.refreshToken).toBeTruthy();
     expect(tokens.expiresInSeconds).toBeGreaterThan(0);
@@ -94,9 +92,7 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OIDC token exchange (integration)", () => {
       expect(login.outcome).toBe("authenticated");
       if (login.outcome !== "authenticated") return;
 
-      const tokens = await client.exchangeSessionForTokens(
-        login.session.zitadelSessionId,
-      );
+      const tokens = await client.exchangeSessionForTokens(login.session);
       // The grant is the reason the claim carries the role.
       expect(tokens.claims.roles).toContain("doctor_guest");
     },
@@ -107,9 +103,7 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OIDC token exchange (integration)", () => {
     if (login.outcome !== "authenticated") {
       throw new Error("precondition: password login must succeed");
     }
-    const tokens = await client.exchangeSessionForTokens(
-      login.session.zitadelSessionId,
-    );
+    const tokens = await client.exchangeSessionForTokens(login.session);
     const rotated = await client.refreshTokens(tokens.refreshToken);
     expect(rotated.reuseDetected).toBe(false);
     if (rotated.reuseDetected) return;

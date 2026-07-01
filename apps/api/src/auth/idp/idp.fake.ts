@@ -48,8 +48,18 @@ export class FakeIdpClient implements IdpClient {
   private readonly byEmail = new Map<string, FakeRecord>();
   private readonly byPhone = new Map<string, FakeRecord>();
   private readonly bySub = new Map<string, FakeRecord>();
-  /** Checked sessions awaiting their OIDC exchange: zitadelSessionId → sub. */
-  private readonly sessions = new Map<string, string>();
+  /**
+   * Checked sessions awaiting their OIDC exchange: `zitadelSessionId` → the sub
+   * plus the `sessionToken` minted for that session. The fake plays the IdP's own
+   * session store, so it records the token it minted and the exchange VALIDATES
+   * the token presented on the {@link IdpSession} handle against it (#143) — the
+   * fake is no more permissive than the real adapter, which fails closed on a
+   * missing/wrong proof-of-check token.
+   */
+  private readonly sessions = new Map<
+    string,
+    { sub: string; sessionToken: string }
+  >();
   /** Live (rotatable) refresh tokens → sub. Models the IdP-side refresh chain. */
   private readonly liveRefresh = new Map<string, string>();
   /** Refresh tokens already rotated once — replaying one is RFC-6819 reuse (EARS-9). */
@@ -197,25 +207,33 @@ export class FakeIdpClient implements IdpClient {
       return Promise.resolve({ outcome: "rejected" });
     }
 
-    const zitadelSessionId = `fake-session-${++this.seq}`;
-    this.sessions.set(zitadelSessionId, record.sub);
     return Promise.resolve({
       outcome: "authenticated",
-      session: { zitadelSessionId, sub: record.sub },
+      session: this.checkedSession(record.sub),
     });
   }
 
-  exchangeSessionForTokens(zitadelSessionId: string): Promise<IdpTokens> {
-    const sub = this.sessions.get(zitadelSessionId);
-    if (!sub) {
+  exchangeSessionForTokens(session: IdpSession): Promise<IdpTokens> {
+    const minted = this.sessions.get(session.zitadelSessionId);
+    if (!minted) {
       // Exchanging an unknown/consumed session is a programming error in the
       // BFF, not a user-facing path — fail loud rather than mint a token.
       return Promise.reject(new Error("unknown zitadel session"));
     }
+    // #143 fake/real parity (no more permissive than the real adapter): the real
+    // ZitadelIdpClient links the OIDC auth request with the proof-of-check
+    // `sessionToken` and fails closed on a missing/wrong one. Validate the token
+    // presented on the port handle against the one this fake minted for the
+    // session — a tampered or omitted token must fail, not mint, so a regression
+    // that drops the end-to-end token thread is caught in unit tests.
+    if (!session.sessionToken || session.sessionToken !== minted.sessionToken) {
+      return Promise.reject(new Error("checked-session token mismatch"));
+    }
+    const sub = minted.sub;
     const refreshToken = `fake-refresh-${++this.seq}`;
     this.liveRefresh.set(refreshToken, sub);
     return Promise.resolve({
-      accessToken: `fake-access-${zitadelSessionId}`,
+      accessToken: `fake-access-${session.zitadelSessionId}`,
       refreshToken,
       expiresInSeconds: 900,
       // #157: roles reflect ONLY what was actually granted via grantProjectRole
@@ -279,11 +297,18 @@ export class FakeIdpClient implements IdpClient {
     );
   }
 
-  /** Mint a checked session for a sub that just passed an OTP login check (EARS-6/7). */
+  /**
+   * Mint a checked session for a sub that just passed a login check (password
+   * EARS-5, or OTP EARS-6/7). Records the minted `sessionToken` server-side so the
+   * downstream {@link exchangeSessionForTokens} can validate the token presented
+   * on the port handle against it (#143 — the fake plays the IdP's session store),
+   * and threads the same token onto the returned {@link IdpSession} handle.
+   */
   private checkedSession(sub: string): IdpSession {
     const zitadelSessionId = `fake-session-${++this.seq}`;
-    this.sessions.set(zitadelSessionId, sub);
-    return { zitadelSessionId, sub };
+    const sessionToken = `fake-session-token-${this.seq}`;
+    this.sessions.set(zitadelSessionId, { sub, sessionToken });
+    return { zitadelSessionId, sub, sessionToken };
   }
 
   requestEmailOtp(identifier: string): Promise<void> {

@@ -386,10 +386,7 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
   ): Promise<string> {
     const login = await idp.passwordLogin(email, oldPassword);
     if (login.outcome !== "authenticated") throw new Error("login setup failed");
-    const { cookie } = await sessions.establish(
-      login.session.zitadelSessionId,
-      fingerprint,
-    );
+    const { cookie } = await sessions.establish(login.session, fingerprint);
     return parseCookies(cookie)[SESSION_COOKIE_NAME] as string;
   }
 

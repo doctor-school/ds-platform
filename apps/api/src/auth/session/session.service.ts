@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import type { SessionClaims } from "@ds/schemas";
-import { IDP_CLIENT, type IdpClient } from "../idp/idp.types.js";
+import {
+  IDP_CLIENT,
+  type IdpClient,
+  type IdpSession,
+} from "../idp/idp.types.js";
 import { AUTH_AUDIT, type AuthAuditLog } from "./auth-audit.types.js";
 import {
   clearSessionCookie,
@@ -50,16 +54,25 @@ export class SessionService {
    * tokens + fingerprint server-side under a fresh `sid`, and return the
    * `__Host-` cookie to set plus the principal claims to surface. No token is
    * returned to the caller's body — it goes only into the server-side record.
+   *
+   * Takes the whole checked {@link IdpSession} handle (#143). The exchange needs
+   * the session's single-use `sessionToken` (proof-of-check) — it now arrives on
+   * the handle rather than a hidden per-adapter cache — and this method is the
+   * ONLY caller of `exchangeSessionForTokens`, always invoked synchronously in the
+   * same request as the login. The token is consumed here in the exchange and is
+   * deliberately NOT persisted onto the {@link SessionRecord}: only the opaque
+   * `zitadelSessionId` is stored (the durable binding), because a spent
+   * single-use secret in the record would be dead, sensitive data.
    */
   async establish(
-    zitadelSessionId: string,
+    session: IdpSession,
     fingerprint: string,
   ): Promise<{ cookie: string; claims: SessionClaims }> {
-    const tokens = await this.idp.exchangeSessionForTokens(zitadelSessionId);
+    const tokens = await this.idp.exchangeSessionForTokens(session);
     const sid = randomUUID();
     const record: SessionRecord = {
       sid,
-      zitadelSessionId,
+      zitadelSessionId: session.zitadelSessionId,
       sub: tokens.claims.sub,
       roles: tokens.claims.roles,
       mfa: tokens.claims.mfa,

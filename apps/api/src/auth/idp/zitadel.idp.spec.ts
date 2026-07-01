@@ -119,8 +119,11 @@ describe("ZitadelIdpClient OIDC session→token exchange", () => {
     });
     const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
 
-    client.rememberSessionToken("sess-1", "session-token-1");
-    const tokens = await client.exchangeSessionForTokens("sess-1");
+    const tokens = await client.exchangeSessionForTokens({
+      zitadelSessionId: "sess-1",
+      sub: "zid-user-1",
+      sessionToken: "session-token-1",
+    });
 
     expect(tokens.accessToken).toBe("ACCESS");
     expect(tokens.refreshToken).toBe("REFRESH");
@@ -160,8 +163,11 @@ describe("ZitadelIdpClient OIDC session→token exchange", () => {
       },
     });
     const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
-    client.rememberSessionToken("sess-2", "session-token-2");
-    const tokens = await client.exchangeSessionForTokens("sess-2");
+    const tokens = await client.exchangeSessionForTokens({
+      zitadelSessionId: "sess-2",
+      sub: "zid-user-2",
+      sessionToken: "session-token-2",
+    });
     expect(tokens.claims.mfa).toBe(false);
     expect(tokens.claims.roles).toEqual(["doctor_guest"]);
   });
@@ -188,8 +194,11 @@ describe("ZitadelIdpClient OIDC session→token exchange", () => {
       },
     });
     const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
-    client.rememberSessionToken("sess-3", "t3");
-    const tokens = await client.exchangeSessionForTokens("sess-3");
+    const tokens = await client.exchangeSessionForTokens({
+      zitadelSessionId: "sess-3",
+      sub: "zid-user-3",
+      sessionToken: "t3",
+    });
     expect(tokens.claims.roles.sort()).toEqual(["doctor_guest", "expert"]);
     expect(tokens.claims.mfa).toBe(false);
   });
@@ -212,8 +221,11 @@ describe("ZitadelIdpClient OIDC session→token exchange", () => {
       },
     });
     const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
-    client.rememberSessionToken("sess-5", "t5");
-    const tokens = await client.exchangeSessionForTokens("sess-5");
+    const tokens = await client.exchangeSessionForTokens({
+      zitadelSessionId: "sess-5",
+      sub: "zid-user-5",
+      sessionToken: "t5",
+    });
     expect(tokens.claims.mfa).toBe(false);
   });
 
@@ -235,8 +247,11 @@ describe("ZitadelIdpClient OIDC session→token exchange", () => {
       },
     });
     const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
-    client.rememberSessionToken("sess-6", "t6");
-    const tokens = await client.exchangeSessionForTokens("sess-6");
+    const tokens = await client.exchangeSessionForTokens({
+      zitadelSessionId: "sess-6",
+      sub: "zid-user-6",
+      sessionToken: "t6",
+    });
     expect(tokens.claims.mfa).toBe(false);
   });
 
@@ -245,16 +260,28 @@ describe("ZitadelIdpClient OIDC session→token exchange", () => {
       token: { ok: false, status: 400, body: { error: "invalid_grant" } },
     });
     const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
-    client.rememberSessionToken("sess-4", "t4");
-    await expect(client.exchangeSessionForTokens("sess-4")).rejects.toThrow();
+    await expect(
+      client.exchangeSessionForTokens({
+        zitadelSessionId: "sess-4",
+        sub: "zid-user-4",
+        sessionToken: "t4",
+      }),
+    ).rejects.toThrow();
   });
 
-  it("EARS-8: rejects when the checked session token was never captured", async () => {
+  it("EARS-8: fails closed when the session handle carries no checked-session token (#143)", async () => {
+    // #143: the proof-of-check token now rides the IdpSession handle; a
+    // missing/empty one must fail closed (mint nothing) exactly as the old
+    // uncaptured-token path did — never an open gate (ADR-0001 §7).
     const { fetchImpl } = scriptedFetch({});
     const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
     await expect(
-      client.exchangeSessionForTokens("unknown-session"),
-    ).rejects.toThrow();
+      client.exchangeSessionForTokens({
+        zitadelSessionId: "unknown-session",
+        sub: "zid-user-x",
+        sessionToken: "",
+      }),
+    ).rejects.toThrow(/checked-session token/i);
   });
 
   it("EARS-8: fails closed when the OIDC application config is absent (no clientId)", async () => {
@@ -264,10 +291,13 @@ describe("ZitadelIdpClient OIDC session→token exchange", () => {
       serviceToken: "svc",
       fetchImpl,
     });
-    client.rememberSessionToken("s", "t");
-    await expect(client.exchangeSessionForTokens("s")).rejects.toThrow(
-      /OIDC application/i,
-    );
+    await expect(
+      client.exchangeSessionForTokens({
+        zitadelSessionId: "s",
+        sub: "zid-user-s",
+        sessionToken: "t",
+      }),
+    ).rejects.toThrow(/OIDC application/i);
   });
 
   it("EARS-9: refresh-token rotation hits the token endpoint with the refresh grant and parses claims", async () => {
@@ -766,7 +796,7 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
     await expect(client.requestEmailOtp("doc@ds.test")).resolves.toBeUndefined();
   });
 
-  it("EARS-6: loginWithEmailOtp verifies the code, feeds rememberSessionToken, then exchange yields tokens", async () => {
+  it("EARS-6: loginWithEmailOtp verifies the code, threads the checked-session token on the handle, then exchange yields tokens", async () => {
     const { fetchImpl, calls } = otpFetch({
       userId: "otp-user-1",
       verifiedToken: "checked-token-1",
@@ -785,7 +815,12 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
 
     await client.requestEmailOtp("doc@ds.test");
     const session = await client.loginWithEmailOtp("Doc@ds.test", "123456");
-    expect(session).toEqual({ zitadelSessionId: "otp-sess-1", sub: "otp-user-1" });
+    // #143: the checked session carries the fresh verify token on the handle.
+    expect(session).toEqual({
+      zitadelSessionId: "otp-sess-1",
+      sub: "otp-user-1",
+      sessionToken: "checked-token-1",
+    });
 
     // The verify hop hit /v2/sessions/{id} with the unchecked token + the otpEmail
     // code. #153 live delta: the session update is a PATCH (a POST 405s live).
@@ -797,10 +832,10 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
       checks: { otpEmail: { code: "123456" } },
     });
 
-    // End-to-end linchpin: the checked-session token was remembered, so the
-    // downstream OIDC exchange (which consumes sessionTokens.get(sessionId))
-    // completes and mints real tokens.
-    const tokens = await client.exchangeSessionForTokens(session!.zitadelSessionId);
+    // End-to-end linchpin (#143): the checked-session token rides the returned
+    // handle, so the downstream OIDC exchange (which reads session.sessionToken)
+    // completes and mints real tokens — no adapter-side cache.
+    const tokens = await client.exchangeSessionForTokens(session!);
     expect(tokens.accessToken).toBe("ACCESS");
     expect(tokens.refreshToken).toBe("REFRESH");
     expect(tokens.claims.sub).toBe("otp-user-1");
@@ -832,7 +867,7 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
       checks: { otpSms: { code: "654321" } },
     });
     await expect(
-      client.exchangeSessionForTokens(session!.zitadelSessionId),
+      client.exchangeSessionForTokens(session!),
     ).resolves.toMatchObject({ accessToken: "A" });
   });
 
@@ -890,16 +925,15 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
     expect(session).toEqual({
       zitadelSessionId: "otp-sess-1",
       sub: "otp-user-1",
+      sessionToken: "checked-token-retry",
     });
     // Both verify hops hit the same cached session id.
     const verifyHops = calls.filter((c) =>
       /\/v2\/sessions\/otp-sess-1$/.test(c.url),
     );
     expect(verifyHops).toHaveLength(2);
-    // The retried checked-session token feeds the downstream OIDC exchange.
-    const tokens = await client.exchangeSessionForTokens(
-      session!.zitadelSessionId,
-    );
+    // The retried checked-session token (on the handle) feeds the OIDC exchange.
+    const tokens = await client.exchangeSessionForTokens(session!);
     expect(tokens.accessToken).toBe("ACCESS");
   });
 
@@ -911,6 +945,7 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
     expect(await client.loginWithEmailOtp("doc@ds.test", "123456")).toEqual({
       zitadelSessionId: "otp-sess-1",
       sub: "otp-user-1",
+      sessionToken: "checked-token",
     });
     // The challenge was consumed on success → a second attempt finds nothing.
     expect(await client.loginWithEmailOtp("doc@ds.test", "123456")).toBeNull();

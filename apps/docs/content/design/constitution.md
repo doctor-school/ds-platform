@@ -13,12 +13,12 @@ It closes the epic-#340 root cause that _research was ephemeral and "performed-n
 
 This store holds the **research** — the _why_, the citations, the option history. It does **not** re-host the decision record or the concrete classes; each lives in exactly one place and this store links to it:
 
-| Surface                               | Holds                                                                                                                  | Where                                                                        |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| **Design Constitution** (this doc)    | Per-class **research**: best-practice principle, citations, rendered-option history, token/primitive mapping           | here                                                                         |
-| **ADR-0013 §7**                       | The **decision**: the layered-defence model, the interaction-state contract principle, the enforcement/guard catalogue | [`adr/0013`](../adr/0013-design-token-sot-en)                                |
-| **`@ds/design-system` README**        | The **concrete values**: the exact token-only Tailwind classes each primitive implements                               | `packages/design-system/README.md`                                           |
-| **Living showcase** (`apps/showcase`) | The **rendered** contract: every primitive/block in every state on a live URL                                          | [showcase design](../specs/tech/2026-06-29-design-system-showcase-design-en) |
+| Surface                               | Holds                                                                                                                  | Where                                                                           |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **Design Constitution** (this doc)    | Per-class **research**: best-practice principle, citations, rendered-option history, token/primitive mapping           | here                                                                            |
+| **ADR-0013 §7**                       | The **decision**: the layered-defence model, the interaction-state contract principle, the enforcement/guard catalogue | [`adr/0013`](../adr/0013-design-token-sot-en.md)                                |
+| **`@ds/design-system` README**        | The **concrete values**: the exact token-only Tailwind classes each primitive implements                               | `packages/design-system/README.md`                                              |
+| **Living showcase** (`apps/showcase`) | The **rendered** contract: every primitive/block in every state on a live URL                                          | [showcase design](../specs/tech/2026-06-29-design-system-showcase-design-en.md) |
 
 A per-class value appears in **one** of these, never copied across two. If you find yourself pasting a Tailwind class into this doc, stop — link to the README table instead.
 
@@ -89,7 +89,7 @@ focus-visible / disabled / loading / invalid / empty …>
 
 **Rendered contract.** Showcase → Primitives → Button (every variant × state).
 
-**Decision & enforcement.** [ADR-0013 §7](../adr/0013-design-token-sot-en) layers 1–4; guards `interaction-states` (#269), `aa-contrast` (#402).
+**Decision & enforcement.** [ADR-0013 §7](../adr/0013-design-token-sot-en.md) layers 1–4; guards `interaction-states` (#269), `aa-contrast` (#402).
 
 ## Field / text input
 
@@ -109,7 +109,7 @@ focus-visible / disabled / loading / invalid / empty …>
 
 **Rendered contract.** Showcase → Primitives → Input / Field.
 
-**Decision & enforcement.** [ADR-0013 §7](../adr/0013-design-token-sot-en); guards `form-rhythm` (#334), `interaction-states`.
+**Decision & enforcement.** [ADR-0013 §7](../adr/0013-design-token-sot-en.md); guards `form-rhythm` (#334), `interaction-states`.
 
 ## Error & validation display
 
@@ -129,7 +129,7 @@ focus-visible / disabled / loading / invalid / empty …>
 
 **Rendered contract.** Showcase → Primitives → Field (invalid state).
 
-**Decision & enforcement.** [ADR-0013 §7](../adr/0013-design-token-sot-en); guards `form-error` (#339), `form-rhythm` (#334).
+**Decision & enforcement.** [ADR-0013 §7](../adr/0013-design-token-sot-en.md); guards `form-error` (#339), `form-rhythm` (#334).
 
 ## Tabs / segmented control
 
@@ -149,7 +149,7 @@ focus-visible / disabled / loading / invalid / empty …>
 
 **Rendered contract.** Showcase → Primitives → Tabs.
 
-**Decision & enforcement.** [ADR-0013 §7](../adr/0013-design-token-sot-en); guard `interaction-states`.
+**Decision & enforcement.** [ADR-0013 §7](../adr/0013-design-token-sot-en.md); guard `interaction-states`.
 
 ## Link / navigation
 
@@ -167,7 +167,7 @@ focus-visible / disabled / loading / invalid / empty …>
 
 **Rendered contract.** Showcase → Primitives → Link.
 
-**Decision & enforcement.** [ADR-0013 §7](../adr/0013-design-token-sot-en); guards `interaction-states`, `aa-contrast`.
+**Decision & enforcement.** [ADR-0013 §7](../adr/0013-design-token-sot-en.md); guards `interaction-states`, `aa-contrast`.
 
 ## Motion / transition
 
@@ -185,4 +185,4 @@ focus-visible / disabled / loading / invalid / empty …>
 
 **Rendered contract.** Showcase → Primitives → Button (loading state).
 
-**Decision & enforcement.** [ADR-0013 §7](../adr/0013-design-token-sot-en); guard `submit-pending` (#337).
+**Decision & enforcement.** [ADR-0013 §7](../adr/0013-design-token-sot-en.md); guard `submit-pending` (#337).

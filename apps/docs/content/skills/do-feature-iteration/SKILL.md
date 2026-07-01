@@ -30,6 +30,8 @@ Execute the steps in order. Each `→` is a hard gate: the next step does not be
    1. Run the **`build-ui-from-design-system` registry-research gate** ([../build-ui-from-design-system/SKILL.md](../build-ui-from-design-system/SKILL.md)) — adopt before bespoke, and record the adoption decision as a `registry-research:` line in the PR body (`adopted <block> from <registry>` or `bespoke — <why empty>`). Enforced by the `registry-research` CI gate (#251) + AGENTS.md §6.
    2. **Live-verify** in the actual running UI — drive **every field kind on every surface** in a browser (Playwright) on the dev-stand per [`.claude/rules/dev-stand.md`](../../../../../.claude/rules/dev-stand.md) and AGENTS.md §6, watching rendered error language + timing. No user-facing dev placeholders (enforced by the `no-stub` CI gate, #251).
 
+   If this feature came through `do-product-discovery`, build the **approved mockup** referenced in `NNN-product.md` — the *screen-composition* Stage A is pre-satisfied there (ADR-0014 §5); any element class not yet in the constitution still runs its own element-class Stage A. This gate is then composition + adoption + live-verify, not a fresh layout decision.
+
    This makes the §6 UI Hard rules _fire from the executing procedure_, not just sit in the constitution. Skip only for a genuinely backend-only handler (`surface: backend-only`).
 
 6. **`run-iteration-end-checklist`** (dispatch) — verdict-gated. If `BLOCKED on #X`, fix item X and re-dispatch. Do **not** continue past a BLOCKED verdict.

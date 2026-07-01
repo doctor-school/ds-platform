@@ -53,9 +53,10 @@ Every agent session, regardless of vendor, follows this three-step entry — **i
 | adr-revision      | Edit to an existing ADR (inline rewrite by default)           | `apps/docs/content/skills/do-adr-revision/SKILL.md`           |
 | decision-debt     | Closing a silent-decision artifact surfaced earlier           | `apps/docs/content/skills/do-decision-debt-followup/SKILL.md` |
 | engineering-task  | Phase A bootstrap (DSP-160 sub-issue), CI hardening, scaffold | No skill — follow the task spec directly (see §3.8)           |
+| product-discovery | New product epic / user-facing feature with no PRD yet        | `apps/docs/content/skills/do-product-discovery/SKILL.md`      |
 | spec-authoring    | New feature-spec / new ADR / new design-spec                  | `superpowers:brainstorming` (sole allowed exception, §3.4)    |
 
-Not in the table? **Dependency bump** → `engineering-task`; first run the two checks in `.claude/rules/repo-conventions.md` → _Dependency bumps_. **Opening Issues from an already-merged spec** → skill `open-ears-issues`. Anything still unmapped → default to `engineering-task` (§3.8), state the assumption, and proceed; stop and ask Tech Lead only if that genuinely doesn't fit.
+Not in the table? **Dependency bump** → `engineering-task`; first run the two checks in `.claude/rules/repo-conventions.md` → _Dependency bumps_. **Opening Issues from an already-merged spec** → skill `open-ears-issues`. A **user-facing product epic/feature with no PRD** enters at `product-discovery`, which hands off to `spec-authoring` then `feature-iteration` (ADR-0014). Anything still unmapped → default to `engineering-task` (§3.8), state the assumption, and proceed; stop and ask Tech Lead only if that genuinely doesn't fit.
 
 ### 3.2 Cite the entry point
 

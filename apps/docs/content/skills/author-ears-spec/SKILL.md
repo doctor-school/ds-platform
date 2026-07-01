@@ -20,7 +20,7 @@ You are authoring a 3-file SDD triplet for a new feature in the DS Platform mono
 ### Input
 
 - Initiative reference: `NNN-<slug>` (the feature number is the next free number under `apps/docs/content/specs/features/`).
-- Source PRD section, roadmap line, or initiative description.
+- **The feature PRD `NNN-product.md`** (ADR-0014 — the "PRD section"): user stories with `US-N` ids + product acceptance criteria. A legacy roadmap-line / initiative description is still accepted for a spec with no PRD (e.g. backend-only infra).
 - ADRs relevant to the feature's domain.
 
 ### Procedure
@@ -30,6 +30,7 @@ You are authoring a 3-file SDD triplet for a new feature in the DS Platform mono
    - Frontmatter: `tracker:` (GitHub Milestone URL placeholder if the milestone isn't created yet), `status: Draft`, **`surface:`** (required — see below).
    - Sections: Outcomes / Scope / Constraints / Prior decisions (cite ADRs) / Event Model (Commands / Events / Read models / Policies) / **EARS requirements** / Invariants / Verification.
    - **EARS numbering: flat (`EARS-1`, `EARS-2`, …) per ADR-0006 §4** (closing G11 finding F-5). Use nested `N.M` **only** when a single handler genuinely carries multiple shall-clauses (rare).
+   - **Traceability `realizes:`** — when the spec derives from a `NNN-product.md`, each EARS clause carries a `realizes: US-N` backlink to the PRD story it formalizes (ADR-0014 §2), giving the trace `US-N → EARS-N → test`. Omit for a legacy spec with no PRD.
    - **Frontmatter `surface:` (required): `backend-only` | `user-facing`.** Declares whether the feature ships a user-facing deliverable (a screen in portal / admin / promo / mobile). The classification is **explicit and review-checked** — a silent backend-only default is exactly the **F-22** failure (003 shipped auth login as backend-only EARS-handlers, leaving the portal forms unowned and no flow completable in a browser). There is no third `mixed` value — a feature with both backend and UI work is `user-facing` (any UI deliverable makes it so) and fires the four user-facing rules below. UI is **not** required of every spec — a genuine backend-only spec (internal API, webhook, pipeline, reconcile sweep) declares `backend-only` and the user-facing rules are N/A.
      - **The explicit classification is the primary control** — `surface:` is set by the author and confirmed at spec-review against the feature's actual outcomes/scope, not inferred. The author and reviewer ask "does this feature put a screen in front of a user?" and answer it deliberately.
      - **Anti-hide guard** (heuristic backstop, not the primary control). If any EARS _trigger_ references a UI surface (form, page, button, link — e.g. "when a visitor submits the registration form…"), `surface: backend-only` is **invalid → return error**. A UI in the trigger means a user-facing deliverable exists; it cannot be classified away. This is necessary but **not sufficient**: an author could phrase every EARS purely server-side and omit the UI from the trigger text, evading the scan — so spec-review must still confirm the `surface:` value matches the Outcomes/Scope, never rely on the trigger scan alone.

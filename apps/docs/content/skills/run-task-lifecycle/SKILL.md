@@ -40,10 +40,11 @@ When you start the Issue, move it: `node tools/gh/set-board-status.mjs <N> "In P
 
 ### 2. Branch → implement (defer to the per-kind skill)
 
-**User-facing surface — the design-system-first cycle gates this step (AGENTS.md §6).** If the task renders a user-facing surface, run the `build-ui-from-design-system` cycle **before** this step — before moving the Issue to In Progress (step 1) and before this branch. For an element class **not yet covered** in the [design constitution](../../design/constitution.md), the cycle dispatches [`research-ui-element`](../research-ui-element/SKILL.md) first — its rendered options are the **Stage A** artifact the product owner picks from; a **covered** class is reused from the package + constitution, not re-researched. Do not enter implementation of a user-facing design on your own taste. Full cycle + Stage A/B gates: `build-ui-from-design-system`.
+**User-facing surface — the design-system-first cycle gates this step (AGENTS.md §6).** If the task renders a user-facing surface, run the `build-ui-from-design-system` cycle **before** this step — before moving the Issue to In Progress (step 1) and before this branch. For an element class **not yet covered** in the [design constitution](../../design/constitution.md), the cycle dispatches [`research-ui-element`](../research-ui-element/SKILL.md) first — its rendered options are the **Stage A** artifact the product owner picks from; a **covered** class is reused from the package + constitution, not re-researched. Do not enter implementation of a user-facing design on your own taste. Full cycle + Stage A/B gates: `build-ui-from-design-system`. For a surface that came through `product-discovery`, its screen LAYOUT was already owner-approved on the `author-design-mockup` mockup (ADR-0014) — build that; the element-class cycle here handles any uncovered class.
 
 Branch off fresh `origin/main`: `<prefix>/<N>-<slug>` (§2 / repo-conventions). Then **identify the task kind (AGENTS.md §3.1) and run that skill** — do not re-derive the procedure here:
 
+- **product-discovery** → **`do-product-discovery`** (discovery track: legacy-mine → brief + PRD → Claude Design mockup → handoff to `spec-authoring`; ADR-0014).
 - **feature-iteration** → **`do-feature-iteration`** (RED→GREEN→REFACTOR, its own end-checklist + review + merge gates).
 - **hotfix-pr** → **`do-hotfix-pr`**.
 - **adr-revision** → **`do-adr-revision`**; **decision-debt** → **`do-decision-debt-followup`**.

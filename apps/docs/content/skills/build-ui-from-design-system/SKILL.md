@@ -48,6 +48,8 @@ It also includes a **UI-quality-fix round** (spacing / state / hover / reflow de
 
 The _look_ is a product (taste) decision — the product owner's, not the lead's best-architecture call (AGENTS.md §6). Two non-bypassable check-ins wrap the procedure; for a `user-facing` task they gate the lifecycle (`run-task-lifecycle` step 2 — Stage A precedes board→In-Progress + branch). Detail + failure lessons: memory `feedback_ui_design_product_approval`.
 
+**Screen composition is settled upstream (ADR-0014).** When a feature came through `do-product-discovery`, its surface LAYOUT was already picked by the owner on the Claude Design mockup (`author-design-mockup`) — build that arrangement. This gate's Stage A below remains the **element-class** pick (a class not yet in the constitution); a feature with no prior discovery mockup composes its layout here directly.
+
 **Stage A — before any UI code (after step 4).**
 
 - **Brand SoT first.** Read `packages/design-system/tokens/primitive.json` (Pantone annotations name the registered brand anchors, e.g. `blue.700 #114D9E` = Pantone Dark Blue C) + the brandbook **before** generating options — it avoids wasted rounds.

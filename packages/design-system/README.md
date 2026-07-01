@@ -117,8 +117,9 @@ opt a genuine exception out with `/* submit-pending-ok: <reason> */`.
 Form vertical rhythm and validation messaging are a **contract**, not per-screen
 care — tight resting rhythm, no over-spacing, and an error that reads as part of
 **its** field. These are the concrete token-only classes `#333` implements against
-(rationale + research citations in ADR-0013 §7 → _Form layout & validation
-contract_). **Token-only: no arbitrary `[...]` values** — every class below
+(the decision is ADR-0013 §7; the rationale + research citations live in the
+design constitution → _Field_ + _Error & validation display_). **Token-only: no
+arbitrary `[...]` values** — every class below
 resolves to an existing scale token (the §5 / `#269` arbitrary-value guard must
 stay green).
 

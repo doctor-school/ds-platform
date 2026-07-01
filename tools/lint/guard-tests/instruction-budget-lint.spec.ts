@@ -14,7 +14,9 @@ import { caseDir, runGuard } from "./run-guard";
  * derivation, which is machine-specific and cannot be pre-laid-out as a fixture.
  *
  * Covers the green path, the repo-file over-budget branch (an AGENTS.md past 200
- * lines), and the auto-memory over-budget branch (a MEMORY.md past 200 lines).
+ * lines), the auto-memory over-budget branch (a MEMORY.md past 200 lines), and
+ * the read-on-demand skills group (#416): a within-budget skill reports `ok`, an
+ * over-budget skill WARNs without failing the run (Phase-0 WARN posture).
  */
 const GUARD = "instruction-budget-lint.ts";
 const memoryFile = (name: string) =>
@@ -50,5 +52,21 @@ describe("instruction-budget-lint", () => {
     expect(code).toBe(1);
     expect(stderr).toContain("MEMORY.md");
     expect(stderr).toContain("> 200");
+  });
+
+  it("skills: an over-budget SKILL.md WARNs but does NOT fail the run (Phase-0 #416)", () => {
+    const { code, stdout, stderr } = runGuard(
+      GUARD,
+      caseDir("instruction-budget", "skills"),
+    );
+    // Skills are read-on-demand → over-budget is a WARN, so the run still passes.
+    expect(code).toBe(0);
+    expect(stdout).toContain("PASS");
+    // The within-budget skill is scanned and reported ok…
+    expect(stdout).toContain("skill: tiny-skill");
+    // …and the over-budget skill is surfaced as a WARN, not a failure.
+    expect(stdout).toContain("WARN");
+    expect(stderr).toContain("bloated-skill");
+    expect(stderr).toContain("WARN");
   });
 });

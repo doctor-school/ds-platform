@@ -22,6 +22,14 @@
  *   - bytes:  <= 25 KB  (MEMORY.md load cutoff; applied to all three for headroom)
  *   CLAUDE.md additionally carries a softer high-signal WARN target of 120 lines.
  *
+ * Skills (`apps/docs/content/skills/<name>/SKILL.md`, #416) are read-on-demand, not
+ * always-on — they never enter the session-start window, so the concern is
+ * per-file scannability, not context rot. We reuse the SAME 200-line / 25 KB
+ * ceiling (no new magic number; every skill already fits with headroom — the
+ * largest is ~13 KB) but at WARN level in Phase 0: an over-budget skill prints a
+ * warning and is listed, without failing the run. Skills do NOT contribute to
+ * the always-on total.
+ *
  * Run: `pnpm lint:instruction-budget` (also the `/wrap` budget step).
  * Failures: stderr + exit 1. Success: stdout summary + exit 0.
  *
@@ -50,6 +58,8 @@ interface Target {
   path: string;
   optional: boolean; // outside git (auto-memory) — skip when absent
   softLines?: number;
+  warnOnly?: boolean; // over-budget WARNs instead of failing (Phase-0 skills, #416)
+  offTotal?: boolean; // not part of the always-on total (read-on-demand skills)
 }
 
 // MEMORY.md path: derive from this repo's auto-memory dir convention
@@ -93,6 +103,23 @@ if (existsSync(rulesDir)) {
   }
 }
 
+// Skills (apps/docs/content/skills/*/SKILL.md, #416) are read-on-demand — cap
+// them so a skill can't silently re-bloat, but at WARN level in Phase 0 and OFF
+// the always-on total (they never load at session start). Same 200 L / 25 KB
+// ceiling as the always-on files; the concern is per-file scannability.
+const skillsDir = resolve(REPO_ROOT, "apps", "docs", "content", "skills");
+if (existsSync(skillsDir)) {
+  for (const d of readdirSync(skillsDir, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .sort()) {
+    const p = resolve(skillsDir, d, "SKILL.md");
+    if (existsSync(p)) {
+      targets.push({ label: `skill: ${d} (on-demand)`, path: p, optional: false, warnOnly: true, offTotal: true });
+    }
+  }
+}
+
 let failed = false;
 let totalLines = 0;
 let totalBytes = 0;
@@ -111,25 +138,30 @@ for (const t of targets) {
   const buf = readFileSync(t.path);
   const bytes = buf.length;
   const lineCount = buf.toString("utf8").split(/\r?\n/).length;
-  if (!t.label.includes("(lazy)")) {
+  if (!t.label.includes("(lazy)") && !t.offTotal) {
     totalLines += lineCount;
     totalBytes += bytes;
   }
 
   const overLines = lineCount > MAX_LINES;
   const overBytes = bytes > MAX_BYTES;
-  const status = overLines || overBytes ? "OVER BUDGET" : "ok";
+  const over = overLines || overBytes;
+  const status = over ? (t.warnOnly ? "WARN" : "OVER BUDGET") : "ok";
   lines.push(
     `${TAG} ${status.padEnd(11)} ${t.label}: ${lineCount} lines / ${(bytes / 1024).toFixed(1)} KB ` +
       `(limit ${MAX_LINES} lines / ${(MAX_BYTES / 1024).toFixed(0)} KB)`,
   );
+  // Phase-0 skills (#416): over-budget is a WARN, not a failure — surface it on
+  // stderr for visibility but don't fail the run.
+  const flag = (msg: string) => {
+    process.stderr.write(`${TAG} ${t.warnOnly ? "WARN " : ""}${msg}\n`);
+    if (!t.warnOnly) failed = true;
+  };
   if (overLines) {
-    process.stderr.write(`${TAG} ${t.label}: ${lineCount} lines > ${MAX_LINES}. Relocate detail to .claude/rules/*.md or a skill/topic file.\n`);
-    failed = true;
+    flag(`${t.label}: ${lineCount} lines > ${MAX_LINES}. Relocate detail to .claude/rules/*.md or a skill/topic file.`);
   }
   if (overBytes) {
-    process.stderr.write(`${TAG} ${t.label}: ${(bytes / 1024).toFixed(1)} KB > ${(MAX_BYTES / 1024).toFixed(0)} KB. Relocate detail to .claude/rules/*.md or a skill/topic file.\n`);
-    failed = true;
+    flag(`${t.label}: ${(bytes / 1024).toFixed(1)} KB > ${(MAX_BYTES / 1024).toFixed(0)} KB. Relocate detail to .claude/rules/*.md or a skill/topic file.`);
   }
   if (!overLines && t.softLines && lineCount > t.softLines) {
     lines.push(`${TAG} WARN        ${t.label}: ${lineCount} lines > soft target ${t.softLines} — consider trimming (not a failure).`);

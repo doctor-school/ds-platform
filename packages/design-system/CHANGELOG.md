@@ -1,5 +1,11 @@
 # @ds/design-system
 
+## 0.5.1
+
+### Patch Changes
+
+- [#404](https://github.com/doctor-school/ds-platform/pull/404) [`18de7ef`](https://github.com/doctor-school/ds-platform/commit/18de7ef2a24bbbe5b69d73ca6a1837e864d53437) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Fix the inactive `Tabs` trigger to use the AA-safe quiet tier `text-muted-foreground` (full strength) instead of an opacity-dimmed `text-foreground/60`. An opacity modifier on a foreground token drops it below the WCAG-AA contrast threshold ([#270](https://github.com/doctor-school/ds-platform/issues/270)); the muted-foreground token is the designated quiet-but-readable tier. Hover still resolves to full `text-foreground`. Surfaced by the new static `aa-contrast` guard ([#402](https://github.com/doctor-school/ds-platform/issues/402)) and confirmed AA-clean by the showcase axe scan ([#351](https://github.com/doctor-school/ds-platform/issues/351)).
+
 ## 0.5.0
 
 ### Minor Changes

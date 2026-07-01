@@ -153,8 +153,7 @@ const FORM_ERROR_TONE = "text-destructive";
 const FORM_HELPER_TONE = "text-muted-foreground";
 
 /**
- * Inline validation message (ADR-0013 §7 → "Per-class contracts"; research +
- * citations in the design constitution → _Field_ + _Error & validation display_;
+ * Inline validation message (ADR-0013 §7 → "Form layout & validation contract",
  * #333 redo of the slice-B standard — owner-picked **1A inline**).
  *
  * The message renders **on demand** directly under its control: it shows the

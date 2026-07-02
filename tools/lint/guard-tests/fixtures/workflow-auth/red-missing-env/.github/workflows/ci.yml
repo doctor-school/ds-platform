@@ -1,0 +1,15 @@
+name: CI
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  # gh-gated, job-level `permissions` present, but the invoking STEP is MISSING
+  # its `GH_TOKEN` / `PR_NUMBER` env → finding (the token wiring half of the
+  # Issue-#10 pattern).
+  spec-link:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - run: pnpm exec tsx tools/lint/spec-link-lint.ts

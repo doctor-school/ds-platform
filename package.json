@@ -35,6 +35,7 @@
     "lint:spec-status": "tsx tools/lint/spec-status-lint.ts",
     "lint:submit-pending": "tsx tools/lint/submit-pending-lint.ts",
     "lint:tdd-signal": "tsx tools/lint/tdd-signal-lint.ts",
+    "lint:workflow-auth": "tsx tools/lint/workflow-auth-lint.ts",
     "lint:oxlint": "oxlint -c .oxlintrc.json --disable-unicorn-plugin --disable-oxc-plugin --disable-typescript-plugin -A all apps packages",
     "lint:stylelint": "stylelint \"apps/**/*.css\" \"packages/**/*.css\"",
     "build": "turbo run build",
@@ -84,7 +85,8 @@
     "tsx": "^4.22.4",
     "turbo": "^2.10.0",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.62.0"
+    "typescript-eslint": "^8.62.0",
+    "yaml": "^2.9.0"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm lint-staged"

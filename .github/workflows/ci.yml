@@ -690,6 +690,30 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
 
+  # ─── Workflow-auth meta-guard (Issue-#10 pattern enforcement, #462) ───
+  # workflow-auth: enforces the "Issue-#10 auth pattern" on ci.yml ITSELF — every
+  # job that runs `gh` or a PR-event-gated guard (a `tools/lint/lib/gh.ts`
+  # consumer) MUST carry `permissions: { contents: read, pull-requests: read }` on
+  # the job + `GH_TOKEN`/`PR_NUMBER` on the invoking step (the `spec-link`
+  # precedent, Issue #10 root cause 1). PR #455 shipped three PR-gated guard jobs
+  # WITHOUT the block → all three vacuous-red on every PR; this guard makes that
+  # gap deterministic + local. The gh-consumer set is DERIVED (scan tools/lint for
+  # the `./lib/gh` import), never a stale literal. Static parse of ci.yml — no
+  # PR/gh context needed, and the job is NOT itself gh-gated so it (correctly)
+  # needs no auth block. WARN v1 per ADR-0007 §2.6 — promotion clock starts at
+  # merge 2026-07-02. Excluded from the `ci` needs-list while WARN.
+  workflow-auth:
+    needs: setup
+    continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsx tools/lint/workflow-auth-lint.ts
+
   # ─── Meta-job: single status check for branch protection ─────────────
   # Phase 0 baseline: every hard-red job that actually runs today sits in this
   # needs-list (#440) — a job is either here (BLOCK), `continue-on-error` (WARN),

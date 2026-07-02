@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   GUARDS,
+  STATIC_GUARDS,
+  hasStaticFlag,
   parsePrNumber,
   summarize,
 } from "../pr-preflight.mjs";
@@ -27,6 +29,38 @@ describe("pr-preflight GUARDS roster", () => {
     for (const g of GUARDS) {
       expect(g.file).toMatch(/^[a-z-]+-lint\.ts$/);
     }
+  });
+});
+
+describe("pr-preflight STATIC_GUARDS roster (#462)", () => {
+  it("maps each static guard to a tools/lint/*.ts entrypoint", () => {
+    expect(STATIC_GUARDS.length).toBeGreaterThan(0);
+    for (const g of STATIC_GUARDS) {
+      expect(g.file).toMatch(/-lint\.ts$/);
+    }
+  });
+
+  it("excludes the four PR-gated guards and the Nest-booting endpoint-authz", () => {
+    const staticFiles = new Set(STATIC_GUARDS.map((g) => g.file));
+    // the PR-event-gated family runs in the base sweep, never the static one.
+    for (const g of GUARDS) expect(staticFiles.has(g.file)).toBe(false);
+    // tdd-signal is also PR-event-gated; endpoint-authz boots a Nest context.
+    expect(staticFiles.has("tdd-signal-lint.ts")).toBe(false);
+    expect(staticFiles.has("endpoint-authz-lint.ts")).toBe(false);
+  });
+
+  it("has no duplicate entrypoints", () => {
+    const files = STATIC_GUARDS.map((g) => g.file);
+    expect(new Set(files).size).toBe(files.length);
+  });
+});
+
+describe("pr-preflight hasStaticFlag()", () => {
+  it("detects the --static flag anywhere in argv", () => {
+    expect(hasStaticFlag(["--static"])).toBe(true);
+    expect(hasStaticFlag(["406", "--static"])).toBe(true);
+    expect(hasStaticFlag(["406"])).toBe(false);
+    expect(hasStaticFlag([])).toBe(false);
   });
 });
 

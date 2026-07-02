@@ -18,6 +18,12 @@ import { test, expect, type Page } from "@playwright/test";
  * contract is unchanged (`@ds/schemas` stays loose) — this is purely the portal-UX
  * guard. Selectors are locale-agnostic (`data-testid` / `autocomplete` / ARIA), so
  * the Russian copy (#177) does not break them.
+ *
+ * Traceability (ADR-0006 §4 — a `user-facing` requirement is verified by Playwright
+ * E2E): these ungated client-side checks ARE the requirement-level coverage for
+ * EARS-22 (each field applies its data-type validation rule + input mask before
+ * submit) and EARS-21 (malformed input surfaces localized RU copy from the typed
+ * message catalog, never baked English) — the titles below carry those ids.
  */
 
 const BASE = process.env.E2E_PORTAL_URL ?? "http://localhost:3001";
@@ -51,7 +57,7 @@ async function expectValidOrAbsent(
   await expect(input).not.toHaveAttribute("aria-invalid", "true");
 }
 
-test.describe("#192 portal identifier validation (client-side, ungated)", () => {
+test.describe("EARS-22 #192 portal identifier validation + mask (client-side, ungated)", () => {
   test.use({ baseURL: BASE });
 
   test.beforeEach(async ({ page }) => {
@@ -164,7 +170,7 @@ test.describe("#192 portal identifier validation (client-side, ungated)", () => 
  * `/reset` is not a phone-only channel) now applies. Same ungated, backend-free
  * tier: the resolver rejects a bare-numeric identifier before any network call.
  */
-test.describe("#196 portal /reset identifier validation (client-side, ungated)", () => {
+test.describe("EARS-22 #196 portal /reset identifier validation (client-side, ungated)", () => {
   test.use({ baseURL: BASE });
 
   test.beforeEach(async ({ page }) => {
@@ -215,10 +221,10 @@ test.describe("#196 portal /reset identifier validation (client-side, ungated)",
  * but the RU-copy assertion is intentionally exact — proving the localized string
  * (not the English) is what renders is the whole point of defect 1.
  */
-test.describe("#200 creation-password RU copy + on-blur validation (client-side, ungated)", () => {
+test.describe("EARS-22 #200 creation-password RU copy + on-blur validation (client-side, ungated)", () => {
   test.use({ baseURL: BASE });
 
-  test("register: a weak new password renders the RU complexity copy, never English", async ({
+  test("EARS-21/22: a weak new password renders the RU complexity copy from the message catalog, never the baked English", async ({
     page,
   }) => {
     await page.goto("/register");

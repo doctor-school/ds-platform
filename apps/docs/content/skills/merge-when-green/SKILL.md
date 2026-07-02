@@ -25,13 +25,15 @@ pnpm ci:wait <N>   # node tools/gh/wait-ci-green.mjs <N> [--timeout <sec>] [--in
 
 Exit `0` = all green → proceed to step 1a. Exit `1` = a check failed/cancelled → do **not** merge; investigate. Exit `2` = timed out still pending → re-run or inspect the stuck job. This replaces the fragile hand-tuned `for … sleep …` poll loop (#317). Do not proceed unless `ci:wait` exited `0`. (Memory `feedback_phase0_merge_gate_manual`.)
 
-**Step 1a — base-freshness check (parallel sessions).** Green CI on this PR only proves the branch is green **against the base it last built on** — and Phase 0 has **no server-side up-to-date gate** (branch protection is deferred on GitHub Free + private, repo-conventions → _Branch protection_). So if a **parallel session merged into `main`** after this branch's checks ran, that green is stale: it was observed against an old `main`. Confirm the branch is not behind before merging:
+**Step 1a — base-freshness check (parallel sessions).** Green CI on this PR only proves the branch is green **against the base it last built on** — and Phase 0 has **no server-side up-to-date gate** (branch protection is deferred on GitHub Free + private, repo-conventions → _Branch protection_). So if a **parallel session merged into `main`** after this branch's checks ran, that green is stale: it was observed against an old `main`. Check base ancestry directly (do **not** use `gh pr view --json mergeStateStatus` for this — GitHub reports `BEHIND` only when server-side "require branches to be up to date" protection is active, which this repo defers, so a stale branch here reads `CLEAN`/`UNSTABLE` and the signal never fires; verified live on #430/#431):
 
 ```bash
-gh pr view <N> --json mergeStateStatus -q .mergeStateStatus
+git fetch origin -q
+git merge-base --is-ancestor "$(git rev-parse origin/main)" \
+  "$(gh pr view <N> --json headRefOid -q .headRefOid)" && echo fresh || echo STALE
 ```
 
-If the value is **`BEHIND`**, the green CI ran against a stale `main` — rebase, re-push, and re-verify **before** merging:
+`fresh` (origin/main is an ancestor of the PR head) → proceed to Step 2. `STALE` → the green CI ran against an old `main`; rebase, re-push, and re-verify **before** merging:
 
 ```bash
 git fetch origin && git rebase origin/main
@@ -39,9 +41,9 @@ git push --force-with-lease
 pnpm ci:wait <N>   # must exit 0 again on the rebased head
 ```
 
-Only once the rebased head is green (and `mergeStateStatus` is no longer `BEHIND`) proceed to Step 2. **Precedent:** two parallel branches cut off a pre-merge base each added the same dependency; the second to merge carried a `pnpm-lock.yaml` generated against the old tree, and the `setup` job went red on `main` post-merge (#218, memory `feedback_rebase_parallel_branches_for_lockfile`). The BEHIND-check catches exactly this class before it lands. (Any state other than `BEHIND`/`BLOCKED` — e.g. `CLEAN` — needs no rebase; a `BLOCKED` here in Phase 0 is the absent required-check gate, not a real block, so fall back to the Step 1 hand-check.)
+Only once the rebased head is green (and the ancestry check says `fresh`) proceed to Step 2. **Precedent:** two parallel branches cut off a pre-merge base each added the same dependency; the second to merge carried a `pnpm-lock.yaml` generated against the old tree, and the `setup` job went red on `main` post-merge (#218, memory `feedback_rebase_parallel_branches_for_lockfile`). The ancestry check catches exactly this class before it lands.
 
-**Step 2 — merge.** Once step 1 is green and step 1a confirms the branch is not `BEHIND`, run exactly one command:
+**Step 2 — merge.** Once step 1 is green and step 1a says `fresh`, run exactly one command:
 
 ```bash
 gh pr merge <N> --auto --squash --delete-branch

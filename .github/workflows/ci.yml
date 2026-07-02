@@ -610,6 +610,7 @@ jobs:
   ci:
     needs:
       [
+        setup,
         lint,
         types,
         unit,
@@ -629,9 +630,12 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
+      # A required job must SUCCEED — `skipped`/`cancelled` fail too, else a red
+      # `setup` skips every downstream job and the aggregate would go green on a
+      # run where nothing built or tested (#449 Mode (a) review).
       - name: Aggregate
         run: |
-          if [ "${{ contains(needs.*.result, 'failure') }}" = "true" ]; then
-            echo "Required job failed"; exit 1
+          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'skipped') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+            echo "Required job failed, was skipped, or was cancelled"; exit 1
           fi
           echo "All required jobs green"

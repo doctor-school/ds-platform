@@ -99,14 +99,17 @@ if (typeof document !== "undefined" && !document.elementFromPoint) {
 
 These stubs make the tests run; they are no-ops, not behaviour — the tests assert
 value flow, never pixel geometry. (`packages/design-system/` and `apps/portal/`
-share this polyfill pair but their setups have since diverged around it: the
-design-system copy adds the #377 password-manager shim, the portal copy adds the
-#434 orphan-timer guard below. Folding the common core into a shared Vitest
-preset / config package is a reasonable future consolidation — deliberately
-deferred until a third consumer makes the abstraction worth it; #441 tracks
-bringing the orphan-timer guard to the design-system side.)
+share this polyfill pair, and both now carry the orphan-timer guard below —
+adopted by the portal in #434 and by the design-system in #441 as a deliberate
+sibling copy (`packages/design-system/orphan-timers.setup.ts`), since the repo has
+no shared Vitest-preset package and one helper does not justify inventing a
+heavyweight one. The design-system setup additionally keeps its #377
+password-manager shim. Folding the common core into a shared Vitest preset /
+config package remains a reasonable future consolidation — deferred until a third
+consumer makes the abstraction worth it; the two guard copies are cross-noted in
+their headers so a future upstream `input-otp` fix updates both.)
 
-## The #434 orphan-timer guard (portal setup — this one IS behaviour)
+## The #434/#441 orphan-timer guard (portal + design-system setups — this one IS behaviour)
 
 `input-otp@1.4.2` schedules a 0/10/50 ms `setTimeout` triple on every value/focus
 change and returns **no cleanup** from the scheduling effect. A timer scheduled by
@@ -116,9 +119,10 @@ red-lights the whole `unit` CI job with an intermittent
 `ReferenceError: window is not defined` (#405's class, a different root timer —
 upstream has no newer release to bump to).
 
-The portal `vitest.setup.ts` defends deterministically
-(`apps/portal/orphan-timers.setup.ts`, contract-tested by
-`orphan-timers.test.tsx`): it wraps the environment's `setTimeout`/`clearTimeout`
+Both the portal and the design-system `vitest.setup.ts` defend deterministically
+(`apps/portal/orphan-timers.setup.ts` and `packages/design-system/orphan-timers.setup.ts`,
+each contract-tested by a co-located `orphan-timers.test.tsx`): they wrap the
+environment's `setTimeout`/`clearTimeout`
 to track every pending handle with its scheduling stack, and a setup-level global
 `afterEach` — running **after** the file's own hooks (afterEach is LIFO) —
 unmounts (`cleanup()`) and defuses every orphan:

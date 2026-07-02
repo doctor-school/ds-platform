@@ -1,9 +1,15 @@
 /**
- * #434 — orphan-`setTimeout` tracking for the portal's jsdom suites.
+ * #441 — orphan-`setTimeout` tracking for `@ds/design-system`'s jsdom suites.
  *
- * SIBLING: `@ds/design-system` adopted this guard verbatim in #441
- * (`packages/design-system/orphan-timers.setup.ts`). The two copies are siblings —
- * a future upstream `input-otp` fix (or a rework of this guard) must update BOTH.
+ * ORIGIN: adopted verbatim (behaviour-identical) from the portal's #434 guard,
+ * `apps/portal/orphan-timers.setup.ts` (PR #442, commit f21f429). The same latent
+ * exposure lives here — `otp-field.test.tsx` and the auth-block suites drive
+ * `input-otp` under real timers — so the environment defends itself the same way.
+ * The two copies are siblings: a future upstream `input-otp` fix (or a rework of
+ * this guard) must update BOTH. There is no shared test-util package in the repo
+ * (per-location `vitest.setup.ts` is the standing convention) and one helper does
+ * not justify inventing a heavyweight one — so this is a deliberate per-package
+ * copy, not a fork of intent.
  *
  * Why: `input-otp@1.4.2` schedules a 0/10/50ms `setTimeout` triple on every
  * value/focus change (its minified `syncTimeouts` helper) and returns NO cleanup
@@ -11,9 +17,12 @@
  * outlive the file's JSDOM environment; the late callback then reaches React's
  * `dispatchSetState` → `resolveUpdatePriority`, which touches the torn-down
  * `window` and red-lights the whole `unit` job with an intermittent
- * `ReferenceError: window is not defined` (same class as #405, different timer).
- * Upstream offers no newer release (1.4.2 is latest), so the environment defends
- * itself deterministically instead of racing the teardown.
+ * `ReferenceError: window is not defined` (same class as #366/#405/#408, a
+ * different timer than those interval guards cover). The design-system's #377 PWM
+ * mock and #408 interval guard defuse `setInterval` leaks only; the 0/10/50ms
+ * `setTimeout` triple is covered by neither. Upstream offers no newer release
+ * (1.4.2 is latest), so the environment defends itself deterministically instead
+ * of racing the teardown.
  *
  * How: `installOrphanTimerTracking()` (called once from vitest.setup.ts, BEFORE
  * any test can snapshot the globals) wraps the environment's `setTimeout` /

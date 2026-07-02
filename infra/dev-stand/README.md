@@ -219,18 +219,21 @@ The stack is driven by `pnpm dev:*` scripts — a cross-platform Node launcher
 (`tools/dev/run.mjs`) that reads your `.env.local`, picks the transport, and runs
 `docker compose` against the dev-stand (setup-design §9).
 
-| Command                      | Does                                                                |
-| ---------------------------- | ------------------------------------------------------------------- |
-| `pnpm dev:up`                | Start the stack (detached).                                         |
-| `pnpm dev:down`              | Stop the stack; named volumes preserved.                            |
-| `pnpm dev:status`            | List dev-stand containers (`docker compose ps`).                    |
-| `pnpm dev:logs [service]`    | Follow logs — all services, or one (`pnpm dev:logs postgres`).      |
-| `pnpm dev:restart [service]` | Restart all services, or one.                                       |
-| `pnpm dev:psql`              | Open a `psql` shell on `ds_dev` (`docker compose exec postgres …`). |
-| `pnpm dev:snapshot <desc>`   | Pre-migration snapshot — recipe-specific.                           |
-| `pnpm dev:rollback <name>`   | Roll the database back to a snapshot — recipe-specific.             |
-| `pnpm dev:reset-db`          | Drop + recreate the database volume, then start.                    |
-| `pnpm dev:config`            | Validate compose + `${SECRET}` interpolation, without an `up`.      |
+| Command                      | Does                                                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev:up`                | Start the stack (detached).                                                                                         |
+| `pnpm dev:down`              | Stop the stack; named volumes preserved.                                                                            |
+| `pnpm dev:status`            | List dev-stand containers (`docker compose ps`).                                                                    |
+| `pnpm dev:logs [service]`    | Follow logs — all services, or one (`pnpm dev:logs postgres`).                                                      |
+| `pnpm dev:restart [service]` | Restart all services, or one.                                                                                       |
+| `pnpm dev:psql [db]`         | Open a `psql` shell — the shared `ds_dev` by default, or a branch database.                                         |
+| `pnpm dev:snapshot <desc>`   | Pre-migration snapshot — recipe-specific, **dataset-global**.                                                       |
+| `pnpm dev:rollback <name>`   | Roll the database back to a snapshot — recipe-specific, **dataset-global** (see the parallel-session caveat below). |
+| `pnpm dev:reset-db`          | Drop + recreate the database volume, then start.                                                                    |
+| `pnpm dev:config`            | Validate compose + `${SECRET}` interpolation, without an `up`.                                                      |
+| `pnpm dev:ports`             | Print the first free `(api, portal)` port pair — `3000/3001`, then `3100/3101`, … Never kills a listener (#428).    |
+| `pnpm dev:db:branch <N>`     | Create + migrate the per-branch database `ds_dev_<n>`; prints the `DATABASE_URL` to export (#428).                  |
+| `pnpm dev:db:drop <N>`       | Drop the `ds_dev_<n>` branch database. The shared `ds_dev` is structurally undroppable here.                        |
 
 **Transport.** The launcher reads `DEV_SSH_HOST` / `DEV_DOCKER_SUDO` /
 `DEV_REMOTE_DIR` from `.env.local` (see `.env.example`). With `DEV_SSH_HOST` set
@@ -262,6 +265,26 @@ host-only recipe both commands warn and no-op.
 **Not yet wired.** `dev:reset-db` recreates the volume and starts the stack, but
 the schema-migrate + seed steps are added once `apps/api` exists (setup-design
 §11 OQ-4).
+
+**Parallel sessions (#428).** Two sessions on one box isolate at two seams:
+
+1. **Ports** — `3000/3001` is the single-session default; a parallel session
+   runs `pnpm dev:ports` and boots api/portal on the printed free pair
+   (`API_PORT`/`PORTAL_PORT` env). Never kill a listener you did not start.
+2. **Database** — each branch worktree gets its own database inside the shared
+   Postgres container: `pnpm dev:db:branch <issue-N>` creates `ds_dev_<n>` and
+   migrates it (through the sanctioned wrapper, so the dataset-global snapshot
+   still fires first); export the printed `DATABASE_URL` when booting that
+   session's api — the override lives in the session env, never in
+   `~/.ds-platform/.env.local`. A broken branch DB is rolled back by
+   `dev:db:drop` + re-`db:branch` (schema is minutes-cheap; branch data is test
+   data). Zitadel / Redis / MinIO stay shared.
+
+Because ZFS snapshots cover the whole `pgdata` dataset, **`dev:rollback`
+rewinds every branch database at once — while parallel sessions are live it is
+coordination-gated**: announce on the board / task comments and get an ack
+before rolling back, exactly like any other stand-wide destructive op.
+`dev:reset-db` stays global and stays forbidden to subagents.
 
 ---
 

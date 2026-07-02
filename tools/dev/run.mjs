@@ -43,6 +43,8 @@ const COMMANDS = [
   "reset-db",
   "status",
   "config",
+  "db-branch",
+  "db-drop",
 ];
 
 function fail(msg) {
@@ -59,12 +61,15 @@ function usage() {
       "  down               stop the dev-stand (volumes preserved)",
       "  logs [service]     follow logs (all services, or one)",
       "  restart [service]  restart all services, or one",
-      "  psql               open a psql shell on the dev database",
-      "  snapshot <desc>    take a pre-migration snapshot (recipe-specific)",
-      "  rollback <name>    roll the database back to a snapshot (recipe-specific)",
+      "  psql [db]          open a psql shell (default: the shared ds_dev)",
+      "  snapshot <desc>    take a pre-migration snapshot (recipe-specific, dataset-GLOBAL)",
+      "  rollback <name>    roll the database back to a snapshot (recipe-specific, dataset-GLOBAL —",
+      "                     coordination-gated while parallel sessions are live, #428)",
       "  reset-db           drop + recreate the database volume, then start",
       "  status             list dev-stand containers",
       "  config             validate compose + secret interpolation (no up)",
+      "  db-branch <N|slug> create ds_dev_<n> + migrate it; prints the DATABASE_URL to export (#428)",
+      "  db-drop <N|slug>   drop the ds_dev_<n> branch database (refuses the shared ds_dev)",
     ].join("\n"),
   );
   process.exit(2);
@@ -238,7 +243,10 @@ function compose(sub, { tty = false } = {}) {
   const { sshHost, remoteDir, useSudo, hasOverride, overrideFile, serviceEnv } =
     cfg();
   if (sshHost) {
-    const remote = `cd ${remoteDir} && ${useSudo ? "sudo " : ""}docker compose ${composeFileFlags()} ${sub.join(" ")}`;
+    // Quote every arg for the remote POSIX shell — multi-word args (a psql -c
+    // SQL statement, a snapshot description) must arrive as ONE argv element,
+    // not be word-split by ssh's implicit shell (#428).
+    const remote = `cd ${remoteDir} && ${useSudo ? "sudo " : ""}docker compose ${composeFileFlags()} ${sub.map(shq).join(" ")}`;
     return run("ssh", tty ? ["-t", sshHost, remote] : [sshHost, remote]);
   }
   const flags = hasOverride
@@ -273,7 +281,125 @@ function runRecipeScript(name, scriptArgs) {
   return r.status ?? 1;
 }
 
+// --- per-branch DB seams (#428, unit-tested in tools/lint/guard-tests) ------
+
+/**
+ * Derive the branch database name from an issue number or slug: lowercase,
+ * dashes folded to underscores, must reduce to [a-z0-9_]+ — anything else is
+ * refused (the value is interpolated into SQL identifiers).
+ */
+export function branchDbName(input) {
+  const folded = String(input ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, "_");
+  if (!/^[a-z0-9_]+$/.test(folded)) {
+    throw new Error(
+      `db-branch: "${input}" does not reduce to [a-z0-9_]+ — use the issue number or a plain slug`,
+    );
+  }
+  // A full ds_dev_<x> name passes through (natural when copy-pasting the
+  // db-branch output back into db-drop); the bare shared name "ds_dev" is NOT
+  // in that shape and would derive ds_dev_ds_dev — structurally undroppable.
+  return /^ds_dev_[a-z0-9_]+$/.test(folded) ? folded : `ds_dev_${folded}`;
+}
+
+/** Swap ONLY the database path of the recipe's DATABASE_URL. */
+export function branchDatabaseUrl(baseUrl, dbName) {
+  const url = new URL(baseUrl); // throws on garbage — intended
+  url.pathname = `/${dbName}`;
+  return url.toString();
+}
+
+/**
+ * Drop-safety gate: only the ds_dev_* branch namespace is droppable; the
+ * shared ds_dev itself (and anything else — postgres, zitadel, …) is refused.
+ */
+export function assertDroppableDbName(name) {
+  if (!/^ds_dev_[a-z0-9_]+$/.test(name)) {
+    throw new Error(
+      `db-drop: "${name}" is outside the droppable ds_dev_<branch> namespace — refusing`,
+    );
+  }
+}
+
 // --- commands --------------------------------------------------------------
+
+// Run one SQL statement against a database in the stand's postgres container,
+// non-interactively (`exec -T` keeps the tty out of the way on both
+// transports). ON_ERROR_STOP makes psql's exit code the verdict. Identifiers
+// interpolated into `sql` must come from branchDbName's [a-z0-9_]+ contract.
+function psqlExec(db, sql) {
+  return compose([
+    "exec",
+    "-T",
+    "postgres",
+    "psql",
+    "-U",
+    "ds",
+    "-d",
+    db,
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-c",
+    sql,
+  ]);
+}
+
+function cmdDbBranch(input) {
+  if (!input) fail("usage: pnpm dev:db:branch <issue-N|slug>");
+  const db = branchDbName(input);
+  const baseUrl = (cfg().serviceEnv.DATABASE_URL || "").trim();
+  if (!baseUrl)
+    fail(
+      "db-branch: DATABASE_URL is not set in your .env.local — the branch URL is derived from it.",
+    );
+  const url = branchDatabaseUrl(baseUrl, db);
+
+  // Idempotent create. CREATE DATABASE supports neither transactions nor
+  // IF NOT EXISTS, so let the duplicate error signal reuse: `psql` prints
+  // `ERROR: database "…" already exists` and exits 1 — any OTHER error would
+  // also fail the immediately-following migrate, which is the real gate.
+  const create = psqlExec("postgres", `CREATE DATABASE ${db} OWNER ds`);
+  if (create !== 0) {
+    console.warn(
+      `db-branch: CREATE DATABASE ${db} exited non-zero — "already exists" above means reuse (fine); ` +
+        "anything else will fail the migrate below.",
+    );
+  }
+
+  // Migrate through the sanctioned wrapper (chains the dataset-global
+  // dev:snapshot first — harmless for a fresh branch DB, and keeps the
+  // snapshot-before-migrate rule intact) with the branch DATABASE_URL.
+  console.log(`db-branch: migrating ${db} …`);
+  const mig = run("pnpm", ["--filter", "@ds/api", "run", "drizzle:migrate"], {
+    cwd: REPO_ROOT,
+    env: { ...process.env, DATABASE_URL: url },
+    // Windows resolves pnpm via its .cmd shim — spawnSync needs a shell for it.
+    shell: process.platform === "win32",
+  });
+  if (mig !== 0) fail(`db-branch: migration failed against ${db}`);
+
+  console.log("");
+  console.log("db-branch: ready. Boot this session's api with:");
+  console.log(`DATABASE_URL=${url}`);
+  return 0;
+}
+
+function cmdDbDrop(input) {
+  if (!input) fail("usage: pnpm dev:db:drop <issue-N|slug>");
+  const db = branchDbName(input);
+  assertDroppableDbName(db);
+  const term = psqlExec(
+    "postgres",
+    `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${db}' AND pid <> pg_backend_pid()`,
+  );
+  if (term !== 0) fail(`db-drop: could not terminate connections to ${db}`);
+  const drop = psqlExec("postgres", `DROP DATABASE IF EXISTS ${db}`);
+  if (drop !== 0) fail(`db-drop: DROP DATABASE ${db} failed`);
+  console.log(`db-drop: ${db} dropped.`);
+  return 0;
+}
 
 function cmdSnapshot(desc) {
   if (!desc) fail("usage: pnpm dev:snapshot <description>");
@@ -375,9 +501,10 @@ function dispatch(cmd, rest) {
     case "restart":
       return compose(["restart", ...rest]);
     case "psql":
-      return compose(["exec", "postgres", "psql", "-U", "ds", "-d", "ds_dev"], {
-        tty: true,
-      });
+      return compose(
+        ["exec", "postgres", "psql", "-U", "ds", "-d", rest[0] || "ds_dev"],
+        { tty: true },
+      );
     case "snapshot":
       return cmdSnapshot(rest[0]);
     case "rollback":
@@ -386,11 +513,22 @@ function dispatch(cmd, rest) {
       return cmdResetDb();
     case "config":
       return cmdConfig();
+    case "db-branch":
+      return cmdDbBranch(rest[0]);
+    case "db-drop":
+      return cmdDbDrop(rest[0]);
     default:
       return usage();
   }
 }
 
-const [cmd, ...rest] = process.argv.slice(2);
-if (!cmd || !COMMANDS.includes(cmd)) usage();
-process.exit(dispatch(cmd, rest));
+// Run only as the entry point — the #428 pure seams (branchDbName,
+// branchDatabaseUrl, assertDroppableDbName) are importable from the guard-test
+// harness without firing the CLI (mirrors task-worktree.mjs / pr-preflight.mjs).
+const INVOKED = process.argv[1] ? resolve(process.argv[1]) : "";
+const SELF = resolve(fileURLToPath(import.meta.url));
+if (INVOKED === SELF) {
+  const [cmd, ...rest] = process.argv.slice(2);
+  if (!cmd || !COMMANDS.includes(cmd)) usage();
+  process.exit(dispatch(cmd, rest));
+}

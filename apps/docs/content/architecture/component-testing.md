@@ -99,9 +99,38 @@ if (typeof document !== "undefined" && !document.elementFromPoint) {
 
 These stubs make the tests run; they are no-ops, not behaviour — the tests assert
 value flow, never pixel geometry. (`packages/design-system/` and `apps/portal/`
-currently carry an identical copy of this setup. Folding it into a shared Vitest
-preset / config package is a reasonable future consolidation — it is deliberately
-left as a copy until a third consumer makes the abstraction worth it.)
+share this polyfill pair but their setups have since diverged around it: the
+design-system copy adds the #377 password-manager shim, the portal copy adds the
+#434 orphan-timer guard below. Folding the common core into a shared Vitest
+preset / config package is a reasonable future consolidation — deliberately
+deferred until a third consumer makes the abstraction worth it; #441 tracks
+bringing the orphan-timer guard to the design-system side.)
+
+## The #434 orphan-timer guard (portal setup — this one IS behaviour)
+
+`input-otp@1.4.2` schedules a 0/10/50 ms `setTimeout` triple on every value/focus
+change and returns **no cleanup** from the scheduling effect. A timer scheduled by
+a suite's final keystrokes therefore outlives the file's jsdom environment; the
+late callback reaches React's state dispatch, touches the torn-down `window`, and
+red-lights the whole `unit` CI job with an intermittent
+`ReferenceError: window is not defined` (#405's class, a different root timer —
+upstream has no newer release to bump to).
+
+The portal `vitest.setup.ts` defends deterministically
+(`apps/portal/orphan-timers.setup.ts`, contract-tested by
+`orphan-timers.test.tsx`): it wraps the environment's `setTimeout`/`clearTimeout`
+to track every pending handle with its scheduling stack, and a setup-level global
+`afterEach` — running **after** the file's own hooks (afterEach is LIFO) —
+unmounts (`cleanup()`) and defuses every orphan:
+
+- an orphan whose scheduling stack contains an `input-otp` frame is the
+  **documented upstream defect** — cleared silently (post-unmount the sync tick
+  is dead code);
+- **any other** leaked `setTimeout` fails the test on the spot, with the
+  scheduling site in the message. That is a real defect in the component or test
+  you just wrote: clear the timer in the owning effect's cleanup, or drive the
+  test on fake timers (`vi.useFakeTimers()` — the mock swaps the wrapper out, so
+  controlled timers are never tracked; `vi.useRealTimers()` restores it).
 
 ## The hard caveat — jsdom does not replace the live stand
 

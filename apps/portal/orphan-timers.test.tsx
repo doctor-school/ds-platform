@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Form, FormField } from "@ds/design-system/form";
 import { OtpField } from "@ds/design-system/fields";
 
-import { flushOrphanTimers } from "./orphan-timers";
+import { flushOrphanTimers } from "./orphan-timers.setup";
 
 /**
  * #434 — orphan-timer guard (the vitest.setup.ts tracking installed for every

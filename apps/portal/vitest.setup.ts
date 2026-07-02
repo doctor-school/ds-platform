@@ -2,7 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
 
-import { installOrphanTimerTracking, flushOrphanTimers } from "./orphan-timers";
+import { installOrphanTimerTracking, flushOrphanTimers } from "./orphan-timers.setup";
 
 // #434: input-otp@1.4.2 schedules an uncleaned 0/10/50ms setTimeout triple on
 // every value/focus change; a timer scheduled by a suite's last keystrokes fires
@@ -13,7 +13,8 @@ import { installOrphanTimerTracking, flushOrphanTimers } from "./orphan-timers";
 // defuse the orphans. The known upstream defect (input-otp frames) is cleared
 // silently; any OTHER leaked timer is OUR defect and fails the test right here,
 // attributably, instead of as an intermittent CI teardown flake. Rationale +
-// contract tests: ./orphan-timers.ts / ./orphan-timers.test.tsx.
+// contract tests: ./orphan-timers.setup.ts / ./orphan-timers.test.tsx. Doc:
+// apps/docs/content/architecture/component-testing.md → "The #434 orphan-timer guard".
 installOrphanTimerTracking();
 
 afterEach(() => {

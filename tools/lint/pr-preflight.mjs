@@ -1,39 +1,40 @@
 #!/usr/bin/env node
-// DS Platform — one-shot local pre-flight of the PR-event-gated lint guards.
+// DS Platform — one-shot local pre-flight of the CI lint guards, so a defect fails
+// at the developer's keyboard instead of as a CI red + rerun.
 //
-// Why: `registry-research`, `spec-link`, `prior-decisions`, and
-// `spec-status-fresh` are hard-gated to `GITHUB_EVENT_NAME=pull_request` + a PR
-// number (e.g. registry-research-lint.ts:143), so they CANNOT run pre-push — a
-// missing PR-body marker (the `registry-research:` line a UI-touching PR needs,
-// a `Closes #N` link, a milestone) surfaces only as a CI red + rerun AFTER push,
-// an avoidable round-trip (#402 lost a cycle to exactly this). The interim fix
-// was a convention rule: run each guard by hand with the right env incantation.
-// This is the deterministic version — one command runs all four against a live
-// PR so the marker is fixed in the same beat, right after `gh pr create` and
-// BEFORE dispatching the Mode (a) review.
+// Two guard families, selected by the CLI:
+//
+//   1. The PR-EVENT-GATED family (`GUARDS`) — `registry-research`, `spec-link`,
+//      `prior-decisions`, `spec-status-fresh`. These are hard-gated to
+//      `GITHUB_EVENT_NAME=pull_request` + a PR number (e.g.
+//      registry-research-lint.ts:143), so they CANNOT run pre-push — a missing
+//      PR-body marker (the `registry-research:` line a UI-touching PR needs, a
+//      `Closes #N` link, a milestone) surfaces only as a CI red + rerun AFTER push
+//      (#402 lost a cycle to exactly this). Run right after `gh pr create`, BEFORE
+//      dispatching the Mode (a) review, against the LIVE PR (each guard's
+//      `gh pr view <N>` reads the real PR via the developer's authenticated gh CLI).
+//
+//   2. The STATIC tree-scan family (`STATIC_GUARDS`, opt-in via `--static`) — the
+//      cheap `tools/lint/*.ts` guards that need NO PR context, NO playwright/e2e,
+//      and NO Nest boot. PR #452 opened with the sibling `ears-naming` static guard
+//      red (non-canonical EARS headings the same PR added) — a CI-red rework loop a
+//      local static run would have caught pre-push. A `tools/lint`-touching branch
+//      runs `pnpm pr:preflight --static` before `gh pr create` (Issue #462;
+//      memory `feedback_orchestration_brief_full_lint_before_pr`). Excluded from
+//      this family: the four PR-gated guards above (they run in the base sweep),
+//      `endpoint-authz` (boots a Nest context), and `tdd-signal` (also PR-gated).
+//
+// ── CLI contract ──────────────────────────────────────────────────────────────
+//   pnpm pr:preflight <N>            # PR-gated family only, against live PR #N
+//   pnpm pr:preflight --static       # static family only (standalone, pre-push)
+//   pnpm pr:preflight --static <N>   # BOTH: PR-gated (vs #N) + static family
+//   pnpm pr:preflight                # usage error (need a PR number or --static)
 //
 // Canon: AGENTS.md §4 / `.claude/rules/repo-conventions.md` → "PR-event-gated
 // guards run only after push — pre-flight them locally"; ADR-0007 §2.6 (guard
-// table). Issue #406.
+// table). Issues #406, #462.
 //
-// Usage:
-//   node tools/lint/pr-preflight.mjs <N>
-//   pnpm pr:preflight <N>                 # alias
-//
-// What it does, in order:
-//   1. parse the PR number from argv (refuse early on a missing/non-numeric arg),
-//   2. for each of the four guards, spawn it with `GITHUB_EVENT_NAME=pull_request
-//      PR_NUMBER=<N>` layered over the env (so its `gh pr view <N>` reads the LIVE
-//      PR body/files via the developer's authenticated gh CLI),
-//   3. print a per-guard PASS/FAIL summary,
-//   4. exit non-zero if ANY guard failed.
-//
-// Note: all four are REAL WARN v1 guards (#438 implemented `prior-decisions` and
-// `spec-status-fresh`, the last two former exit-0 stubs) — each fails on its
-// finding, so pre-flight catches a missing PR-body marker / spec link / Prior-
-// decisions section / Draft spec status before push, not as a CI red + rerun.
-//
-// Exit codes: 0 = all guards passed; 1 = at least one guard failed; 2 = usage
+// Exit codes: 0 = all selected guards passed; 1 = at least one failed; 2 = usage
 // error.
 
 import { spawnSync } from "node:child_process";
@@ -54,6 +55,34 @@ export const GUARDS = [
 ];
 
 /**
+ * The cheap STATIC tree-scan guards — every `tools/lint/*.ts` guard that needs no
+ * PR context, no playwright/e2e, and no Nest boot — in CI-job order. Run by
+ * `--static` for a full local sweep before `gh pr create`. `name` = CI job name,
+ * `file` = tools/lint entrypoint. Deliberately EXCLUDES: the four PR-gated guards
+ * in `GUARDS` + `tdd-signal` (PR-event-gated, need `gh pr view`) and
+ * `endpoint-authz` (boots a Nest application context).
+ */
+export const STATIC_GUARDS = [
+  { name: "events-drift", file: "events-lint.ts" },
+  { name: "module-readme", file: "module-readme-lint.ts" },
+  { name: "glossary-mdx", file: "glossary-mdx-lint.ts" },
+  { name: "glossary-roundtrip", file: "glossary-roundtrip-lint.ts" },
+  { name: "instruction-budget", file: "instruction-budget-lint.ts" },
+  { name: "no-stub", file: "no-stub-lint.ts" },
+  { name: "showcase-coverage", file: "showcase-coverage-lint.ts" },
+  { name: "showcase-snippet", file: "showcase-snippet-lint.ts" },
+  { name: "asset-format", file: "asset-format-lint.ts" },
+  { name: "interaction-states", file: "interaction-states-lint.ts" },
+  { name: "aa-contrast", file: "aa-contrast-lint.ts" },
+  { name: "form-error", file: "form-error-lint.ts" },
+  { name: "form-rhythm", file: "form-rhythm-lint.ts" },
+  { name: "submit-pending", file: "submit-pending-lint.ts" },
+  { name: "ears-tests", file: "ears-test-lint.ts" },
+  { name: "ears-naming", file: "ears-naming-lint.ts" },
+  { name: "workflow-auth", file: "workflow-auth-lint.ts" },
+];
+
+/**
  * Read the PR number from raw argv (`process.argv.slice(2)`): the first
  * positional (non-`--flag`) arg, if it is all digits. Returns the string number
  * or null when missing / non-numeric.
@@ -63,6 +92,11 @@ export function parsePrNumber(argv) {
   const n = positional[0];
   if (!n || !/^\d+$/.test(n)) return null;
   return n;
+}
+
+/** True when the `--static` flag is present (opt-in to the static guard family). */
+export function hasStaticFlag(argv) {
+  return argv.includes("--static");
 }
 
 /**
@@ -96,22 +130,20 @@ function repoRoot() {
 }
 
 /**
- * Run one guard against the live PR, inheriting stdio so its own findings stream
- * through. Invoked via `pnpm exec tsx` (matching the guard-test harness) so the
- * same resolution path runs on the Windows dev box and the ubuntu CI runner.
+ * Spawn one guard, inheriting stdio so its own findings stream through. Invoked
+ * via `pnpm exec tsx` (matching the guard-test harness) so the same resolution
+ * path runs on the Windows dev box and the ubuntu CI runner. `extraEnv` layers the
+ * `pull_request` Actions context for the PR-gated family; the static family passes
+ * `{}` (no PR context needed).
  */
-function runGuard(guard, prNumber, root) {
+function runGuard(guard, root, extraEnv) {
   out(`── ${guard.name} ──`);
   const res = spawnSync(
     "pnpm",
     ["exec", "tsx", resolve(root, "tools", "lint", guard.file)],
     {
       cwd: root,
-      env: {
-        ...process.env,
-        GITHUB_EVENT_NAME: "pull_request",
-        PR_NUMBER: prNumber,
-      },
+      env: { ...process.env, ...extraEnv },
       stdio: "inherit",
       encoding: "utf8",
       shell: process.platform === "win32",
@@ -121,15 +153,34 @@ function runGuard(guard, prNumber, root) {
 }
 
 function main() {
-  const prNumber = parsePrNumber(process.argv.slice(2));
-  if (!prNumber) {
-    die("Usage: pnpm pr:preflight <N>   (N = the live PR number)");
+  const argv = process.argv.slice(2);
+  const prNumber = parsePrNumber(argv);
+  const runStatic = hasStaticFlag(argv);
+
+  if (!prNumber && !runStatic) {
+    die(
+      "Usage:\n" +
+        "  pnpm pr:preflight <N>           PR-event-gated guards vs live PR #N\n" +
+        "  pnpm pr:preflight --static      static tree-scan guards (pre-push)\n" +
+        "  pnpm pr:preflight --static <N>  both families in one sweep",
+    );
   }
 
   const root = repoRoot();
-  out(`pre-flighting PR #${prNumber} against ${GUARDS.length} PR-event-gated guard(s)…`);
+  const results = [];
 
-  const results = GUARDS.map((g) => runGuard(g, prNumber, root));
+  if (prNumber) {
+    out(
+      `pre-flighting PR #${prNumber} against ${GUARDS.length} PR-event-gated guard(s)…`,
+    );
+    const prEnv = { GITHUB_EVENT_NAME: "pull_request", PR_NUMBER: prNumber };
+    for (const g of GUARDS) results.push(runGuard(g, root, prEnv));
+  }
+
+  if (runStatic) {
+    out(`running ${STATIC_GUARDS.length} static tree-scan guard(s)…`);
+    for (const g of STATIC_GUARDS) results.push(runGuard(g, root, {}));
+  }
 
   const { ok, lines } = summarize(results);
   out("summary:");
@@ -137,12 +188,15 @@ function main() {
 
   if (!ok) {
     die(
-      "one or more guards failed — fix the PR body/links above, then re-run `pnpm pr:preflight " +
-        `${prNumber}\` before dispatching the Mode (a) review.`,
+      `one or more guards failed — fix the finding(s) above, then re-run \`pnpm pr:preflight${
+        runStatic ? " --static" : ""
+      }${prNumber ? ` ${prNumber}` : ""}\` before ${
+        prNumber ? "dispatching the Mode (a) review" : "`gh pr create`"
+      }.`,
       1,
     );
   }
-  out(`all ${GUARDS.length} guards passed — clear to dispatch Mode (a).`);
+  out(`all ${results.length} guard(s) passed — clear to proceed.`);
   process.exit(0);
 }
 

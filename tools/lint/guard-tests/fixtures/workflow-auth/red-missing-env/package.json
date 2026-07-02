@@ -1,0 +1,8 @@
+{
+  "name": "workflow-auth-fixture",
+  "private": true,
+  "scripts": {
+    "lint:registry-research": "tsx tools/lint/registry-research-lint.ts",
+    "lint:module-readme": "tsx tools/lint/module-readme-lint.ts"
+  }
+}

@@ -103,8 +103,8 @@ Together these assert the gate's scan + validity behaviour against a real boot;
 the thin `endpoint-authz-lint.ts` CLI shell (argv / drift / `--generate`) is I/O
 glue over that tested logic.
 
-**Stub guards:** `events` and the glossary pair are still `[stub]` (exit 0, no
-checks) — no fail branch to assert yet. Each gets coverage when it grows real
-behaviour, on its own implementation Issue. (`ears-test` grew its coverage +
-orphan behaviour in #316; `tdd-signal` / `spec-status` / `prior-decisions` /
-`module-readme` grew theirs in #438 — all now covered above.)
+**No stub guards remain.** `events-drift` and the glossary pair (`glossary-mdx`,
+`glossary-roundtrip`) grew real behaviour in #448 (they were exit-0 stubs) and are
+covered above; `ears-test` grew its coverage + orphan behaviour in #316; and
+`tdd-signal` / `spec-status` / `prior-decisions` / `module-readme` grew theirs in
+#438. Every guard that runs now asserts at least one exit-code branch here.

@@ -17,7 +17,7 @@ import { installOrphanTimerTracking, flushOrphanTimers } from "./orphan-timers.s
 // test right here, attributably, instead of as an intermittent CI teardown flake.
 // Adopted from the portal's #434 guard (PR #442) — rationale + contract tests:
 // ./orphan-timers.setup.ts / ./src/orphan-timers.test.tsx. Doc:
-// apps/docs/content/architecture/component-testing.md → "The #434 orphan-timer guard".
+// apps/docs/content/architecture/component-testing.md → "The #434/#441 orphan-timer guard".
 installOrphanTimerTracking();
 
 afterEach(() => {

@@ -55,4 +55,4 @@ A `user-facing` feature during `do-product-discovery`, before EARS. **Skip** for
 
 - [../build-ui-from-design-system/SKILL.md](../build-ui-from-design-system/SKILL.md) · [../research-ui-element/SKILL.md](../research-ui-element/SKILL.md) — the element-class cycle this composes on top of and delegates to.
 - [../do-product-discovery/SKILL.md](../do-product-discovery/SKILL.md) — the orchestrator that runs this.
-- [../report-task-outcome/SKILL.md](../report-task-outcome/SKILL.md) — the visual-delivery recipe for the Stage-A artifact.
+- [../report-task-outcome/SKILL.md](../report-task-outcome/SKILL.md) — the end-of-task report shape; the Stage-A artifact itself is the owner's recorded pick in claude.ai/design, not a delivered screenshot.

@@ -27,7 +27,7 @@ At the end of any task you report to the user (a merged PR, a completed engineer
 6. **▸ Технически (collapsed appendix, at the END):** files, tokens, changeset, CI — full detail on request only. The report reads as a product report, not a diff.
 7. **Дальше / отложено:** next queue item, deferred items + why.
 
-## Visual-delivery recipe (reused by build-ui Stage-A / Stage-B)
+## Visual-delivery recipe (reused by build-ui Stage-B supplements + mid-task decision visuals)
 
 A confirmation or report visual the user **cannot see** is worthless — images you `Read` render only in your own CLI, not to the user. To produce and DELIVER one:
 
@@ -52,5 +52,5 @@ A confirmation or report visual the user **cannot see** is worthless — images 
 
 ## Related
 
-- [build-ui-from-design-system](../build-ui-from-design-system/SKILL.md) — Stage-A / Stage-B reuse this visual-delivery recipe.
+- [build-ui-from-design-system](../build-ui-from-design-system/SKILL.md) — Stage-B supplement screenshots (the live URL stays the primary deliverable) reuse this visual-delivery recipe; the Stage-A look pick lives in claude.ai/design, not here.
 - memory `feedback_final_report_format` — the machine-specific artifact path + render recipe + pointer back here.

@@ -501,9 +501,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:submit-pending
 
+  # ears-tests: the COVERAGE + ORPHAN direction of the EARS↔test contract (#316,
+  # ADR-0006 §4). Every requirement id has a test title that cites it (folding a
+  # flat `EARS-N` spec ↔ nested `EARS-N.M` tests component-wise), and no test title
+  # cites a requirement no spec declares. As of #437 the guard FOLDS nested ids +
+  # EXITS NON-ZERO on findings (the promotion prerequisite), with a tracked-Issue
+  # deferral allowlist for the genuine gaps. Promotion clock (ADR-0007 §2.6, 4 clean
+  # weeks) starts at merge — 2026-07-02. Kept WARN (`continue-on-error`) until the
+  # sweep flips it; do not remove `continue-on-error` here — promotion is a later
+  # sweep decision, not this change.
   ears-tests:
     needs: setup
-    continue-on-error: true # WARN v1
+    continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

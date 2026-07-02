@@ -24,7 +24,7 @@
  * `*.module.ts`) at the same single glob depth §7 uses (`src/modules/*` = one
  * level below `src/`, so here `src/<module>/` = one level below `src/`). This is
  * the narrowest reading that faithfully realises the contract's INTENT. (The
- * stale §7 path is decision-debt flagged in the #438 report, not fixed here.)
+ * stale §7 path is decision-debt tracked in #457 (adr-revision), not fixed here.)
  *
  * ── Edge cases ────────────────────────────────────────────────────────────────
  * - **App-root composition module excluded.** `app.module.ts` sitting *directly*
@@ -46,7 +46,7 @@
  * `delivery-reconcile`, `feature-flags`, `health`, `mailer`, `readiness`).
  * Authoring six real export-documenting READMEs is not a mechanical in-scope fix,
  * so they are grandfathered in `MODULE_README_ALLOW` below — each entry references
- * the tracked backfill Issue (see #438 report). This mirrors the `BUILTIN_DEFERRALS`
+ * the tracked backfill Issue #456. This mirrors the `BUILTIN_DEFERRALS`
  * precedent in ears-test-lint.ts: an allowlist entry is tracked debt, not a silent
  * bypass. The `LINT_MODULE_README_ALLOW` env seam replaces the map for tests.
  *
@@ -67,16 +67,17 @@ const TAG = "[module-readme]";
  * Grandfathered module dirs (repo-root-relative POSIX paths) that predate the
  * guard and lack an ADR-0006 §7 README. Value = the reason + tracking Issue.
  * Keep SHORT; prune each entry when its module grows a real README. Every entry
- * MUST reference an OPEN backfill Issue (module-README backfill, filed off #438).
+ * MUST reference an OPEN backfill Issue (#456 — the module-README backfill
+ * tracker, filed off #438).
  */
 type Allow = { issue: number; reason: string };
 const MODULE_README_ALLOW: Record<string, Allow> = {
-  "apps/api/src/database": { issue: 438, reason: "infra module, README backfill pending" },
-  "apps/api/src/delivery-reconcile": { issue: 438, reason: "README backfill pending" },
-  "apps/api/src/feature-flags": { issue: 438, reason: "README backfill pending" },
-  "apps/api/src/health": { issue: 438, reason: "README backfill pending" },
-  "apps/api/src/mailer": { issue: 438, reason: "README backfill pending" },
-  "apps/api/src/readiness": { issue: 438, reason: "README backfill pending" },
+  "apps/api/src/database": { issue: 456, reason: "infra module, README backfill pending" },
+  "apps/api/src/delivery-reconcile": { issue: 456, reason: "README backfill pending" },
+  "apps/api/src/feature-flags": { issue: 456, reason: "README backfill pending" },
+  "apps/api/src/health": { issue: 456, reason: "README backfill pending" },
+  "apps/api/src/mailer": { issue: 456, reason: "README backfill pending" },
+  "apps/api/src/readiness": { issue: 456, reason: "README backfill pending" },
 };
 
 function loadAllow(): Record<string, Allow> {

@@ -40,38 +40,52 @@ infra/deploy/
    token; project-scoped tokens do not exist). Confirm/create the `ds-platform`
    Timeweb project and set `project_id`. Generate deploy SSH keypairs and set the
    `*_ssh_pubkey_path` + real pubkeys in `cloud-init/*.yaml`. Set `admin_ssh_cidr`.
-2. **Provision:** from `terraform/`: `set -a; . ../.env; set +a` then
-   `terraform init && terraform validate && terraform plan`. The provider attribute
-   shapes are already resolved & `validate`-green against `timeweb-cloud` v1.7.1
-   (twc_vpc uses a region `location`; firewalls bind via `link {id,type="server"}`;
-   servers join the VPC via a `local_network {id,ip,mode}` block — DSO-100
-   2026-07-02). `plan`/`apply` still validate **values** live (preset prices/sizes,
-   the `vpc_location="ru-2"` region, zone availability) — review the plan before
-   `apply`.
-3. **DNS (manual, at Beget — the zone is NOT at Timeweb):** point A-records
+2. **Value-preflight (BEFORE `plan`/`apply`).** Attribute-shape `validate`-green
+   does NOT cover value-level availability — enumerate these from the **live
+   provider API** (not a repo mapping), else you learn them via failed applies:
+   - **VPC region:** `twc_vpc.location` is only offered in `ru-1 / ru-3 / de-1 /
+nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ)
+     ⇒ `ru-1` (SPb) or `ru-3` (Moscow). Cheapest RF VPC-capable 4/8/80 = `id2581`
+     (ru-1, 1485₽); `id4803` (ru-3, 1800₽).
+   - **Availability-zone code:** SPb = `spb-3` (NOT `spb-1`), Moscow = `msk-1`,
+     Novosibirsk = `nsk-1`. A fixed RF preset also works with the AZ **omitted**
+     (bbm's ru-1 host sets none). Query `GET /api/v1/presets/servers`.
+   - **Free capacity:** a valid region/zone can still return `no_free_node` (409)
+     at apply — check the account panel / retry / pick an available region before
+     committing. (2026-07-02: ru-1/2581 hit `no_free_node`; MSK-1 was available.)
+3. **Provision:** from `terraform/`: `set -a; . ../.env; set +a` then
+   `terraform init && terraform validate && terraform plan`. Provider attribute
+   shapes are resolved & `validate`-green against `timeweb-cloud` v1.7.1 (twc_vpc
+   uses a region `location`; firewalls bind via `link {id,type="server"}`; servers
+   join the VPC via a `local_network {id,ip,mode}` block — DSO-100 2026-07-02).
+   Review the plan (region/preset/cost) before `apply`.
+4. **DNS (manual, at Beget — the zone is NOT at Timeweb):** point A-records
    `api.` / `app.` / `id.doctor.school` at the `api_prod_public_ip` output. Root
    `doctor.school` A-record is untouched. Email records (MX/SPF/DKIM/DMARC) are
    already live (memory `reference_doctor_school_email_dns`).
-4. **Secrets (out-of-band):** provision `/etc/ds-platform/{api,zitadel,data}.env`
+5. **Secrets (out-of-band):** provision `/etc/ds-platform/{api,zitadel,data}.env`
    onto each VPS (root:root, `0600`) — app/runtime secrets are never committed and
    never produced by Terraform (spec §5.4). **Exception (DD-6):** the pgbackrest S3
    keys ARE Terraform-generated (they live in `tfstate`); copy them into `data.env`
    with `terraform output -raw pgbackrest_s3_access_key` and
    `terraform output -raw pgbackrest_s3_secret_key` (+ `pgbackrest_bucket_full_name`
    / `pgbackrest_s3_hostname` for the repo target).
-5. **Bring up services:** `docker compose -f compose/data-prod/compose.yml up -d`
+6. **Bring up services:** `docker compose -f compose/data-prod/compose.yml up -d`
    first (DB/Redis/backup), then `compose/api-prod/compose.yml` (after resolving the
    image build+publish TODOs). Set `EMAIL_DELIVERY_MODE=real` + `SMS_DELIVERY_MODE=real`
    and run the Zitadel provider reconcile so delivery points at mail.ru + SMS-Aero.
-6. **Verify (definition of done):** drive the auth vertical in the live UI
+7. **Verify (definition of done):** drive the auth vertical in the live UI
    (`app.doctor.school`) — real email + SMS OTP + `/me/*` + valid TLS + a pgbackrest
    basebackup/WAL in S3 with a restore dry-run (spec §10).
 
 ## Key gotchas
 
-- **152-ФЗ zone-pinning:** `availability_zone` is MANDATORY on every `twc_server`
-  and the VPC — without it the provider silently places servers in `ams-1` (outside
-  RF). Both VPSes + VPC are pinned to `nsk-1` (single-AZ, single VPC).
+- **152-ФЗ region/zone:** keep both VPSes + the VPC in the same **RF** region. A
+  **fixed RF preset** (e.g. `id2581` ru-1) lands in RF even with `availability_zone`
+  **omitted** — bbm's ru-1 host sets none (the `ams-1` default risk is for
+  location-agnostic ordering, not a pinned RF preset). If you DO pin an AZ, use a
+  valid code (`spb-3` for ru-1, `msk-1` for ru-3 — NOT `spb-1`). See the
+  value-preflight in Apply order §2.
 - **Public IP is a separate paid resource** (+180₽/mo) — only `api-prod` gets one;
   `data-prod` stays private (no `twc_server_ip`).
 - **Self-hosted PG, not Managed PG** — Managed PG has no pgvector + no superuser
@@ -88,5 +102,7 @@ infra/deploy/
   provisioning (dropped afterward), or bake the image/pre-pull offline. Confirm on
   the first `apply`; if cloud-init hangs, attach a floating IP, re-run, detach.
 - **VPC region vs server AZ:** `twc_vpc.location` takes a **region** code
-  (`vpc_location="ru-2"`), while each `twc_server.availability_zone` takes an **AZ**
-  (`nsk-1`, which is inside ru-2). They must stay co-located (single-AZ, ADR-0012).
+  (`ru-1`/`ru-3`, NOT `ru-2` — no VPC there), while `twc_server.availability_zone`
+  takes an **AZ** (`spb-3`/`msk-1`). Keep them co-located (single-AZ, ADR-0012). The
+  committed spec §1/§4 + `variables.tf` defaults still say ru-2/nsk-1 — full DD-8
+  region reconcile is a tracked follow-up (see `project_infra_deploy_prepilot_recon`).

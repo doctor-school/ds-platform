@@ -53,7 +53,7 @@ gh pr merge <N> --auto --squash --delete-branch
 
 Per ADR-0007 §2.4 + §2.10: a positive Mode (a) or Mode (b) verdict + green CI is sufficient to merge. **Human-merge is not required.** Mode (c) reviews remain a single human decision.
 
-**Step 2a — merging from a git worktree (AGENTS.md §6 worktree-per-session).** When the PR branch lives in a `.claude/worktrees/<N>` worktree, `gh pr merge … --delete-branch` **errors on its local cleanup** — `fatal: 'main' is already used by worktree at <primary>` — because it tries to check `main` out locally while the primary tree holds it. **The remote squash-merge still succeeds**; only the local branch deletion fails. So:
+**Step 2a — merging from a git worktree (AGENTS.md §6 worktree-per-session).** **Prefer to run `gh pr merge` from the MAIN tree, not from inside the worktree** — `ExitWorktree action:keep` first (or `cd` to the primary tree), then merge. `--delete-branch` fails its local cleanup when run inside the worktree, and merging from `main` sidesteps the error and the follow-up re-verify entirely. If you _do_ merge from inside the worktree: `gh pr merge … --delete-branch` **errors on its local cleanup** — `fatal: 'main' is already used by worktree at <primary>` — because it tries to check `main` out locally while the primary tree holds it. **The remote squash-merge still succeeds**; only the local branch deletion fails. Either way:
 
 1. Confirm the merge landed: `gh pr view <N> --json state,mergedAt` → `state:MERGED`, `mergedAt` set.
 2. The **remote** branch is already deleted by `--delete-branch`; verify `git ls-remote --heads origin <branch>` is empty.
@@ -61,7 +61,14 @@ Per ADR-0007 §2.4 + §2.10: a positive Mode (a) or Mode (b) verdict + green CI 
 4. Tear the worktree down: `pnpm worktree:teardown .claude/worktrees/<N> --branch <branch>` (long-path-safe, #335) — or `node tools/dev/worktree-teardown.mjs <path>`.
 5. **Keep the live URL alive (if the owner reviews it on the stand).** Tearing the worktree down kills any dev server you booted from it, so a `localhost` URL you handed for review goes dead. If the work exposes a live-verify surface the owner opens, **(re)boot it from the `main` tree** after teardown (`git merge --ff-only origin/main` first, then the app's `dev` script) and leave it up — never hand a dead `localhost`, and don't kill→reboot per merge (boot from `main` once the branch has landed). The stand stays up until the owner's review concludes (`feedback_live_url_not_screenshots`).
 
-**Committing from a fresh worktree.** A just-created worktree has no `node_modules`, so the `lint-staged` pre-commit hook fails (`'lint-staged' is not recognized`). For a **docs/config-only** branch, `git commit --no-verify` is the expected path — log the reason in the PR body (the repo-conventions escape hatch); CI re-runs lint/format. Run `pnpm install` only when the task touches code that needs the hook.
+**Committing from a fresh worktree (docs/IaC-only).** A just-created worktree has no `node_modules`, so the `lint-staged` pre-commit hook fails (`'lint-staged' is not recognized`). For a **docs/config/IaC-only** branch, `git commit --no-verify` is the expected path — log the reason in the PR body (the repo-conventions escape hatch). This is a sanctioned escape hatch, **not** a banned workaround. But `--no-verify` also skips Prettier, and Prettier **gates** md/json/yaml/css on CI (`reference_prettier_not_ts_gate`) — so **pre-format the changed files with the MAIN tree's prettier binary** before committing, else the PR lands with a red `format` check + rerun:
+
+```bash
+node <main-tree>/node_modules/prettier/bin/prettier.cjs --write \
+  .claude/worktrees/<N>/path/to/changed.md  # …md/json/yaml/css only; .env/.ts are not prettier-gated
+```
+
+Run `pnpm install` in the worktree only when the task touches code that needs the hook (compile/typecheck/tests).
 
 **Before the first edit in a worktree (the trap #359 itself prevents):** `EnterWorktree` (or `git worktree add`) moves the cwd but does NOT redirect **absolute** paths — an absolute MAIN-tree path (`C:/Users/.../ds-platform/...`) in Write/Edit silently lands in the **shared main tree**, not the worktree, and any green observed there is a green against a non-isolated checkout (not a real green, `feedback_no_workarounds_build_clean`). Address files by **worktree-relative** or **`.claude/worktrees/<N>/…`** paths; sanity-check one path resolves under the worktree before editing; run tests/build **from** the worktree. If edits already leaked to main: copy them into the worktree, then `git restore` the tracked files + delete the new untracked ones in main — only after confirming `git status`/`git diff` shows the diff is exclusively yours. (memory `feedback_worktree_absolute_paths_escape_isolation`)
 

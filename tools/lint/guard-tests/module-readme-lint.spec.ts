@@ -32,11 +32,27 @@ describe("module-readme-lint", () => {
     const { code, stdout } = runGuard(GUARD, dir("red-missing-readme"), {
       env: {
         LINT_MODULE_README_ALLOW: JSON.stringify({
-          "apps/api/src/foo": { issue: 438, reason: "fixture grandfather" },
+          "apps/api/src/foo": { issue: 456, reason: "fixture grandfather" },
         }),
       },
     });
     expect(code).toBe(0);
     expect(stdout).toContain("allowlisted");
+  });
+
+  it("red: a stale allowlist entry (module HAS a README) → exit 1", () => {
+    // Reuses the green fixture (foo has a README) with an allowlist entry for
+    // it via the env seam — the entry is now stale and must be a finding
+    // (mirrors ears-test-lint's stale-deferral rule, #452).
+    const { code, stderr } = runGuard(GUARD, dir("green"), {
+      env: {
+        LINT_MODULE_README_ALLOW: JSON.stringify({
+          "apps/api/src/foo": { issue: 456, reason: "backfilled, entry lingering" },
+        }),
+      },
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("stale allowlist entry");
+    expect(stderr).toContain("apps/api/src/foo");
   });
 });

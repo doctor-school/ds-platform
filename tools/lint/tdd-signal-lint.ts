@@ -44,6 +44,11 @@
  * - **Branch-stack history invisible.** A test added in an earlier, already-merged
  *   PR of the same stack counts (it's in the tree); a test only in an unmerged
  *   sibling branch does not.
+ * - **`packages/*` excluded in v1 (deliberate scope).** The scan covers
+ *   `apps/<app>/src/` only: the design's §5.2 row targets "modified src" of the
+ *   EARS-handler surface (app feature modules under the TDD hard rule), and
+ *   `packages/*` mixes shipped libraries with config/tooling packages whose test
+ *   topology differs — widen at the WARN→BLOCK promotion review, not silently.
  * These are the "false positives possible" the design acknowledges — the guard is
  * a WARN nudge, not a merge-blocker, and stays conservative to keep noise low.
  *

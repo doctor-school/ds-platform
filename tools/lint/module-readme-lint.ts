@@ -49,6 +49,9 @@
  * the tracked backfill Issue #456. This mirrors the `BUILTIN_DEFERRALS`
  * precedent in ears-test-lint.ts: an allowlist entry is tracked debt, not a silent
  * bypass. The `LINT_MODULE_README_ALLOW` env seam replaces the map for tests.
+ * A STALE entry — the module grew its README but the entry lingers — is itself
+ * a finding (exit 1), mirroring ears-test-lint's stale-deferral rule (#452):
+ * the allowlist must shrink as the debt drains, never fossilise.
  *
  * Seam: `LINT_FIXTURE_ROOT` (guard-tests harness). Inert in production.
  * Run: `pnpm lint:module-readme`. Findings: stderr + exit 1. Clean: exit 0.
@@ -142,10 +145,19 @@ async function main(): Promise<void> {
   );
 
   const findings: string[] = [];
+  const stale: string[] = [];
   let allowed = 0;
   for (const dir of [...moduleDirs].sort()) {
-    if (await exists(resolve(REPO_ROOT, dir, "README.md"))) continue;
-    if (dir in allow) {
+    const hasReadme = await exists(resolve(REPO_ROOT, dir, "README.md"));
+    const isAllowed = dir in allow;
+    if (hasReadme && isAllowed) {
+      // README backfilled but the entry lingers — stale entries are findings
+      // (mirrors ears-test-lint's stale-deferral rule, #452).
+      stale.push(dir);
+      continue;
+    }
+    if (hasReadme) continue;
+    if (isAllowed) {
       allowed++;
       info(`allowlisted (README backfill #${allow[dir].issue}): ${dir} — ${allow[dir].reason}`);
       continue;
@@ -153,7 +165,7 @@ async function main(): Promise<void> {
     findings.push(dir);
   }
 
-  if (findings.length === 0) {
+  if (findings.length === 0 && stale.length === 0) {
     info(
       `PASS — every module dir has a README (${allowed} grandfathered gap(s) tracked in the allowlist).`,
     );
@@ -163,12 +175,17 @@ async function main(): Promise<void> {
   for (const dir of findings) {
     process.stderr.write(`${TAG} missing README  ${dir}/README.md\n`);
   }
+  for (const dir of stale) {
+    process.stderr.write(
+      `${TAG} stale allowlist entry  ${dir} — the README exists; remove the entry from MODULE_README_ALLOW (was tracked by #${allow[dir].issue})\n`,
+    );
+  }
   process.stderr.write(
-    `${TAG} FAIL — ${findings.length} NestJS module dir(s) without a README. ` +
-      `Per ADR-0006 §7 every module documents itself: add \`${findings[0]}/README.md\` ` +
+    `${TAG} FAIL — ${findings.length} module dir(s) without a README, ${stale.length} stale allowlist entrie(s). ` +
+      `Per ADR-0006 §7 every module documents itself: add \`<module>/README.md\` ` +
       `describing the module's purpose + exported symbols. If a gap is genuine ` +
       `pre-existing debt, add it to MODULE_README_ALLOW in tools/lint/module-readme-lint.ts ` +
-      `with a tracking Issue.\n`,
+      `with a tracking Issue; when a README lands, remove its allowlist entry in the same PR.\n`,
   );
   process.exit(1);
 }

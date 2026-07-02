@@ -26,7 +26,9 @@
  * After both exclusions, a residual `[[id]]` in live prose is a real glossary
  * directive and must resolve. This disambiguation is HEURISTIC (a new memory
  * prefix or a novel prose cross-ref could slip the net), which is exactly why the
- * job is burned in as WARN rather than a hard BLOCK — see the posture note.
+ * job is burned in as WARN rather than a hard BLOCK — see the posture note. The
+ * §6.4 directive-marker collision itself is tracked decision-debt: #459 (the
+ * ADR-0006 §6 reconcile) settles a distinct glossary-directive marker.
  *
  * ── Posture (recorded on the ci.yml job header) ───────────────────────────────
  * BURN-IN: `continue-on-error: true` (WARN), and REMOVED from the `ci` needs-list
@@ -39,8 +41,10 @@
  *   (c) no real glossary `[[term-id]]` directive is in use yet, so as a BLOCK gate
  *       it would gate nothing real while carrying that FP risk.
  * Re-entry criterion (promote to BLOCK + back into the needs-list): when the
- * glossary generation pipeline (ADR-0006 §6.2) + real `[[term-id]]` usage land AND
- * the Pilot phase opens, earliest sweep 2026-07-02 per ADR-0007 §2.6 + ADR-0006 §7.0.
+ * glossary generation pipeline (ADR-0006 §6.2, tracked by #460) + real
+ * `[[term-id]]` usage land, the §6.4 directive-marker collision is settled by the
+ * ADR-0006 §6 reconcile (#459), AND the Pilot phase opens — earliest sweep
+ * 2026-07-02 per ADR-0007 §2.6 + ADR-0006 §7.0.
  *
  * Seam: `LINT_FIXTURE_ROOT` (guard-tests harness) — inert in production.
  * Run: `pnpm lint:glossary-mdx`. Findings: stderr + exit 1. Clean: stdout + exit 0.

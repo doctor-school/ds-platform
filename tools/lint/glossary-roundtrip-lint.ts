@@ -15,18 +15,19 @@
  *   - source id absent from ids.ts → `pnpm generate:glossary` not run → FAIL.
  *   - generated id with no source term → orphan/stale generated id → FAIL.
  * This is parse-and-compare (a pure read/diff, no side effects) rather than
- * regenerate-and-diff, because the ADR-0006 §6.2 generator does NOT exist yet —
- * there is nothing to execute. When the generator lands, it becomes the
- * lockstep source and the committed `ids.ts` is what this guard diffs against
- * (the `tokens-fresh` "generated artifact is committed + up to date" pattern).
+ * regenerate-and-diff, because the ADR-0006 §6.2 generator does NOT exist yet
+ * (pipeline tracked by #460) — there is nothing to execute. When the #460
+ * generator lands, it becomes the lockstep source and the committed `ids.ts` is
+ * what this guard diffs against (the `tokens-fresh` "generated artifact is
+ * committed + up to date" pattern).
  *
  * ── Empty-state = REAL evaluated emptiness (NOT a hardcoded exit 0) ────────────
  * `packages/glossary` is an empty package today (just package.json): there is no
  * `src/ids.ts`, no generator script, no `generate:glossary`. So the guard SCANS,
  * finds NO generated artifact, and reports "generated artifact not present —
  * nothing to roundtrip" (exit 0). This is evaluated emptiness, not a stub: the
- * moment `packages/glossary/(src/)?ids.ts` lands, the guard bites on any drift
- * between it and the glossary source.
+ * moment the #460 pipeline lands `packages/glossary/(src/)?ids.ts`, the guard
+ * bites on any drift between it and the glossary source.
  *
  * ── Posture (recorded on the ci.yml job header) ───────────────────────────────
  * KEPT hard-red (BLOCK, in the `ci` needs-list). It is a deterministic pure
@@ -38,10 +39,11 @@
  * So the deterministic + clean criterion wins over the Pilot phasing here.
  * (Contrast glossary-mdx, burned in for genuine `[[…]]` namespace ambiguity.)
  *
- * ── Doc-reality mismatch (reported on #448, not fixed here) ────────────────────
+ * ── Doc-reality mismatch (tracked, not fixed here) ─────────────────────────────
  * ADR-0006 §6 body / AGENTS.md §8 cite the artifact as `packages/glossary/ids.ts`;
- * design §6.2 as `packages/glossary/src/ids.ts`. The whole §6.2 pipeline is
- * unbuilt. The guard accepts either path so it works whichever the pipeline picks.
+ * design §6.2 as `packages/glossary/src/ids.ts` — path inconsistency tracked by
+ * #459 (ADR-0006 §6 reconcile); the unbuilt §6.2 pipeline itself is #460. The
+ * guard accepts either path so it works whichever the pipeline picks.
  *
  * Seam: `LINT_FIXTURE_ROOT` (guard-tests harness) — inert in production.
  * Run: `pnpm lint:glossary-roundtrip`. Findings: stderr + exit 1. Clean/empty: exit 0.

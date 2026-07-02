@@ -10,12 +10,13 @@
  * `title:`/`description:`/`lang:` frontmatter and state the canonical id in the
  * BODY as ``**Canonical id:** `snake_id` ``. So this reader keys on the body
  * marker (the authoritative, machine-checkable id) — NOT the §6.1 frontmatter,
- * which does not exist. The §6.1 mismatch is decision-debt reported on #448, not
- * papered over here: the guards check the reality the repo actually stores.
+ * which does not exist. The §6.1 mismatch is tracked decision-debt (#459, the
+ * ADR-0006 §6 reconcile), not papered over here: the guards check the reality
+ * the repo actually stores.
  *
  * The generated artifact (`packages/glossary/(src/)?ids.ts` → `GLOSSARY_IDS`) and
- * the whole ADR-0006 §6.2 generator pipeline do NOT exist yet — that is why the
- * roundtrip guard is honestly empty until the generated side lands.
+ * the whole ADR-0006 §6.2 generator pipeline do NOT exist yet (tracked by #460) —
+ * that is why the roundtrip guard is honestly empty until the generated side lands.
  */
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";

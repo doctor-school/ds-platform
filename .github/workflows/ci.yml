@@ -268,9 +268,10 @@ jobs:
   # false-positive class the deterministic events-drift/roundtrip checks lack;
   # (c) no real glossary `[[term-id]]` directive is in use yet, so as BLOCK it
   # would gate nothing real while carrying that FP risk. RE-ENTRY (→ BLOCK + back
-  # into the needs-list): when the ADR-0006 §6.2 glossary generation pipeline +
-  # real `[[term-id]]` usage land AND the Pilot phase opens — earliest sweep
-  # 2026-07-02 per ADR-0007 §2.6 + ADR-0006 §7.0.
+  # into the needs-list): when the ADR-0006 §6.2 glossary generation pipeline
+  # (#460) + real `[[term-id]]` usage land, the §6.4 directive-marker collision
+  # is settled by the ADR-0006 §6 reconcile (#459), AND the Pilot phase opens —
+  # earliest sweep 2026-07-02 per ADR-0007 §2.6 + ADR-0006 §7.0.
   glossary-mdx:
     needs: setup
     continue-on-error: true # WARN (burn-in) — Pilot-phased + `[[…]]` namespace FP risk; re-entry criterion in the header
@@ -289,8 +290,9 @@ jobs:
   # glossary-roundtrip — ADR-0006 §6 roundtrip (glossary source ids ↔ generated
   # `packages/glossary/(src/)?ids.ts`). REAL guard as of #448 (was a 5-line exit-0
   # stub). Parse-and-compare (not regenerate — the §6.2 generator does not exist
-  # yet); empty-state is evaluated emptiness: no generated ids.ts today → exits 0
-  # "nothing to roundtrip", bites the moment the artifact lands. POSTURE: KEPT
+  # yet; pipeline tracked by #460); empty-state is evaluated emptiness: no
+  # generated ids.ts today → exits 0 "nothing to roundtrip", bites the moment
+  # the #460 pipeline lands the committed artifact. POSTURE: KEPT
   # hard-red (BLOCK, in the `ci` needs-list). It is a deterministic symmetric
   # id-set diff with no false-positive class; ADR-0006 §7.0 Pilot-phases it, but
   # that phasing targets FP/overhead noise a set-diff on a currently-ABSENT

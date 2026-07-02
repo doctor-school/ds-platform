@@ -57,7 +57,7 @@ async function expectValidOrAbsent(
   await expect(input).not.toHaveAttribute("aria-invalid", "true");
 }
 
-test.describe("EARS-22 #192 portal identifier validation + mask (client-side, ungated)", () => {
+test.describe("EARS-22: portal identifier validation + mask (client-side, ungated) (#192)", () => {
   test.use({ baseURL: BASE });
 
   test.beforeEach(async ({ page }) => {
@@ -170,7 +170,7 @@ test.describe("EARS-22 #192 portal identifier validation + mask (client-side, un
  * `/reset` is not a phone-only channel) now applies. Same ungated, backend-free
  * tier: the resolver rejects a bare-numeric identifier before any network call.
  */
-test.describe("EARS-22 #196 portal /reset identifier validation (client-side, ungated)", () => {
+test.describe("EARS-22: portal /reset identifier validation (client-side, ungated) (#196)", () => {
   test.use({ baseURL: BASE });
 
   test.beforeEach(async ({ page }) => {
@@ -221,7 +221,7 @@ test.describe("EARS-22 #196 portal /reset identifier validation (client-side, un
  * but the RU-copy assertion is intentionally exact — proving the localized string
  * (not the English) is what renders is the whole point of defect 1.
  */
-test.describe("EARS-22 #200 creation-password RU copy + on-blur validation (client-side, ungated)", () => {
+test.describe("EARS-22: creation-password RU copy + on-blur validation (client-side, ungated) (#200)", () => {
   test.use({ baseURL: BASE });
 
   test("EARS-21/22: a weak new password renders the RU complexity copy from the message catalog, never the baked English", async ({

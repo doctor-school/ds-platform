@@ -862,7 +862,7 @@ This section is **a design for the future, not a Phase 0 implementation**. Each 
 
 **LiteLLM admin UI protection:** LiteLLM admin has no native OIDC; protect via nginx forward-auth proxy with Zitadel (ADR-0001 OIDC tenant, closed per §8 / DSP-209). This is non-trivial and is documented as a separate design block in the trigger-ADR.
 
-**Capacity Phase 0+1:** instance A — one VM (Hetzner EU, ~~€20/mo); instance B — one VM on existing Timeweb (~~₽1,000/mo). HA pair via keepalived — Phase Pilot+.
+**Capacity Phase 0+1:** instance A — one VM (Hetzner EU, ≈€20/mo); instance B — one VM on existing Timeweb (≈₽1,000/mo). HA pair via keepalived — Phase Pilot+.
 
 **Pre-v2 prerequisite — dual-LLM pattern evaluation:** Content Pipeline v2 (`12-ai-content-pipeline.md` §3) processes content from expert briefs. If a brief can contain user-submitted material (e.g., copy-paste from chat, files from co-authors), a prompt-injection vector is active from day 1. Before launching v2 in production — a formal assessment: does user-controlled content enter the pipeline? If yes — the OWASP dual-LLM pattern (privileged LLM with tools, separated from the quarantined LLM that reads untrusted content) must be in the trigger-ADR design, not deferred further.
 

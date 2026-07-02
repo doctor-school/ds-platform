@@ -861,7 +861,7 @@ Single config flag в `.github/agents-config.json`:
 
 **LiteLLM admin UI protection:** LiteLLM admin не имеет native OIDC; protect через nginx forward-auth proxy с Zitadel (ADR-0001 OIDC tenant, закрыто по §8 / DSP-209). Это не trivial и оформляется отдельным дизайн-блоком в trigger-ADR.
 
-**Capacity Phase 0+1:** instance A — одна VM (Hetzner EU, ~~€20/мес); instance B — одна VM в существующем Timeweb (~~₽1000/мес). HA-пара через keepalived — Phase Pilot+.
+**Capacity Phase 0+1:** instance A — одна VM (Hetzner EU, ≈€20/мес); instance B — одна VM в существующем Timeweb (≈₽1000/мес). HA-пара через keepalived — Phase Pilot+.
 
 **Pre-v2 prerequisite — dual-LLM pattern evaluation:** Content Pipeline v2 (`12-ai-content-pipeline.md` §3) processes content из brief'ов от экспертов. Если brief может содержать user-submitted material (e.g., копипаст из чата, файлы от соавторов), prompt-injection vector активен с дня 1. Перед запуском v2 в production — формальная оценка: входит ли user-controlled content в pipeline? Если да — OWASP dual-LLM pattern (privileged LLM с tools отделена от quarantined LLM читающей untrusted content) должен быть в дизайне trigger-ADR, не deferred дальше.
 

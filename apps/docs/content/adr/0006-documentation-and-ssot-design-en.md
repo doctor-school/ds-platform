@@ -89,13 +89,13 @@ This document is the implementation detail for ADR-0006. The ADR records "what a
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | API contract            | `packages/schemas/**/*.ts` (Zod)                                                                                                                                                              | `openapi.snapshot.json`, `packages/api-client/` (typed SDK)                                             | `pnpm generate:openapi` (NestJS boot → export); `pnpm generate:sdk` (`openapi-typescript`)           | Spectral lint + snapshot diff                 |
 | DB schema               | `packages/db/schema/**/*.ts` (Drizzle)                                                                                                                                                        | `apps/api/drizzle/*.sql` (migrations per ADR-0008 §2.3), `packages/db/erd.svg`                          | `pnpm db:generate` (drizzle-kit; `out: ../../apps/api/drizzle`); `pnpm db:erd` (introspect → render) | `drizzle-kit check`                           |
-| Domain IDs              | `apps/docs/content/product/glossary/*.md` (per-term YAML frontmatter)                                                                                                                         | `packages/glossary/ids.ts` (TS const)                                                                   | `pnpm generate:glossary`                                                                             | ESLint custom rule + roundtrip check          |
+| Domain IDs              | `apps/docs/content/product/glossary/*.md` (per-term markdown; canonical id in body marker)                                                                                                    | `packages/glossary/src/ids.ts` (TS const)                                                               | `pnpm generate:glossary`                                                                             | ESLint custom rule + roundtrip check          |
 | Domain labels (ru/en)   | same glossary frontmatter                                                                                                                                                                     | `packages/i18n/messages/{ru,en}/glossary.json`; Payload Glossary Collection rows                        | `pnpm generate:glossary`; `pnpm sync:glossary-payload` (on staging+prod)                             | Payload Lexical AST glossary-ref check        |
 | Business content        | Payload collections (`apps/cms` DB)                                                                                                                                                           | Build-time fetch / runtime API                                                                          | Payload native                                                                                       | Lexical glossary-ref check                    |
 | Architectural decisions | `docs/adr/NNNN-*.md` Git, immutable                                                                                                                                                           | Rendered Fumadocs                                                                                       | (none — content as-is)                                                                               | Manual review on PR                           |
 | Tech specs              | `docs/content/specs/tech/YYYY-MM-DD-*.md`                                                                                                                                                     | Rendered Fumadocs                                                                                       | (none — content as-is)                                                                               | Manual review                                 |
 | Feature specs           | `apps/docs/content/specs/features/NNN-<slug>/` (3 files: `NNN-requirements.md`, `NNN-design.md`, `NNN-scenarios.feature` — per ADR-0006 §4 + §9; tasks tracked in GitHub Issues, not in file) | Vitest tests (EARS hints), Playwright tests (Gherkin via `playwright-bdd`), NestJS scaffolding (manual) | `pnpm generate:tests:playwright` (gherkin → playwright)                                              | Tests pass; EARS-ID ↔ Vitest describe linkage |
-| Module README           | `apps/*/src/modules/*/README.md`                                                                                                                                                              | Rendered Fumadocs                                                                                       | (none)                                                                                               | `module-readme-lint.ts`                       |
+| Module README           | `apps/*/src/<module>/README.md` (module dir = direct child of `apps/<app>/src/` holding a `*.module.ts`)                                                                                      | Rendered Fumadocs                                                                                       | (none)                                                                                               | `module-readme-lint.ts`                       |
 | Prose narrative         | `apps/docs/content/product/{vision,prd/*,business-rules,user-journeys}.md`                                                                                                                    | Rendered Fumadocs                                                                                       | (none)                                                                                               | Markdown link check; glossary-mdx-lint        |
 | Operations              | `apps/docs/content/operations/*.md`, `runbooks/*.md`                                                                                                                                          | Rendered Fumadocs                                                                                       | (none)                                                                                               | Markdown link check                           |
 | AI constitution         | `AGENTS.md` (root), `CLAUDE.md` (root)                                                                                                                                                        | (none — read directly by AI)                                                                            | (none)                                                                                               | Manual review                                 |
@@ -183,7 +183,7 @@ ds-platform/                          # repo root
 │   │   ├── migrations/                 # generated SQL
 │   │   └── erd.svg                     # generated
 │   ├── glossary/
-│   │   ├── ids.ts                      # GENERATED — never edit
+│   │   ├── src/ids.ts                  # GENERATED — never edit
 │   │   ├── loader.ts                   # YAML loader for scripts
 │   │   └── eslint-plugin/              # custom @ds/glossary-canonical-ids rule
 │   ├── i18n/
@@ -372,33 +372,32 @@ export default config({
 
 ### 6.1 File format
 
-Each term is a separate markdown file `apps/docs/content/product/glossary/<id>.md`:
+Each term is a separate markdown file under `apps/docs/content/product/glossary/` (slug = the term's kebab file name, e.g. `doctor-guest.md`). The file is a **Keystatic entry**: `title` / `description` / `lang` frontmatter, then a body that opens with the term heading and a metadata line stating the **canonical id** and its bounded context, followed by the definition prose, related terms, and sources.
+
+The **canonical id lives in the body**, not in frontmatter — it is carried by a `**Canonical id:** \`snake_id\`` marker. That marker is the authoritative, machine-checkable key: the glossary guards (`glossary-mdx-lint`, `glossary-roundtrip-lint`, via `tools/lint/lib/glossary.ts`) read the id from it, and the `**Bounded context:** <ctx>` marker on the same line records the DDD context.
 
 ```markdown
 ---
-id: doctor
-label_ru: Врач
-label_en: Doctor
-aliases:
-  - доктор
-  - медработник
-  - physician
-bounded_context: identity
-related:
-  - nmo_credit
-  - accreditation
-  - course_completion
-immutable_id: true
+title: "doctor_guest"
+description: "The v1 self-service backend role and mirror identity granted to a net-new visitor who self-registers on the doctor portal."
+lang: en
 ---
 
-A registered Doctor.School user with a medical education
-who has been verified through [NMO (Continuing Medical Education)](nmo_credit).
+# doctor_guest
 
-Has the role `doctor` in Cerbos policy (ADR-0003 §3), access to courses,
-certificates, avatar, and Con/Pul/Au points.
+**Bounded context:** identity · **Canonical id:** `doctor_guest`
 
-**Not to be confused with:** `admin` (content moderator), `expert` (lecturer/content author).
+`doctor_guest` is the coarse v1 role a net-new visitor receives when they
+self-register on the doctor portal. It is the identity produced by the first
+authentication feature (003): a self-service web registrant who has obtained a
+backend identity but has not yet been verified and upgraded to a full `doctor`.
+
+**Related terms:** domain user mirror, consent gate, enumeration resistance.
+
+**Sources:** ADR-0001 §1, §4; feature 003 requirements + design.
 ```
+
+**Note on the §5 Keystatic config and §6.2 generator sketches.** Those sketches predate the adopted Keystatic shape above — they illustrate a `label_ru` / `bounded_context` / `related` frontmatter schema and a generator that parses it. The on-disk format of record is the one in this §6.1 (frontmatter + `**Canonical id:**` body marker). The generation pipeline (§6.2) does not exist yet — it is tracked by #460, which is where the generator's field-mapping is reconciled to read the real format (the body-marker id + the frontmatter it keeps).
 
 ### 6.2 Generator script
 
@@ -569,9 +568,11 @@ export const rule: Rule.RuleModule = {
 
 Note: the rule statically imports `GLOSSARY_IDS` — this works because `packages/glossary/src/ids.ts` is committed to Git (see §6.2). ESLint runs AFTER `pnpm install` without needing to regenerate; freshness is guaranteed by the CI step "Generated artifacts up-to-date."
 
-### 6.4 MDX glossary-lint — opt-in `[[term-id]]` directive approach
+### 6.4 MDX glossary-lint — prefixed `[[g:term-id]]` glossary directive
 
-Decision: instead of bold-detection heuristics (which produce false positives on casual prose), an **opt-in marker** `[[term-id]]` is used. The linter checks only these directives — all other bold/italic remain untouched.
+Decision: a glossary reference in prose is written with a **`g:`-namespaced marker** — `[[g:term-id]]` (or `[[g:term-id|display label]]`). The `g:` prefix keeps glossary directives from colliding with the **bare `[[…]]`** already used pervasively for the memory / decision cross-reference convention (`[[feedback_…]]`, `[[reference_…]]`, `[[project_…]]`), which §7.0 validates as its own separate `[[refs]]` check. So bare `[[…]]` stays with the refs convention; `[[g:…]]` is a glossary lookup. A directive resolves iff the id after `g:` is a glossary canonical id (the §6.1 body marker); anything else is left untouched — no bold / heuristic detection.
+
+**Guard status (heuristic → exact).** The committed `tools/lint/glossary-mdx-lint.ts` currently approximates this at **WARN** (burn-in): it matches bare `[[…]]`, excludes the `reference_` / `feedback_` / `project_` memory namespaces, and masks fenced + inline code. Promoting the guard to require the exact `g:` grammar (and to BLOCK) is tracked at its ADR-0007 §2.6 promotion window — this ADR settles the syntax (#459); the guard itself is not changed by this revision.
 
 `tools/lint/glossary-mdx-lint.ts`:
 
@@ -585,8 +586,8 @@ import { GLOSSARY_IDS } from "@ds/glossary/ids";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../..");
 
-// Matches [[term_id]] or [[term_id|display label]] — wiki-link style
-const DIRECTIVE_RE = /\[\[([a-z][a-z0-9_]*)(?:\|[^\]]+)?\]\]/g;
+// Target grammar: [[g:term_id]] or [[g:term_id|display label]] — g:-namespaced
+const DIRECTIVE_RE = /\[\[g:([a-z][a-z0-9_]*)(?:\|[^\]]+)?\]\]/g;
 
 async function main() {
   const validIds = new Set(Object.keys(GLOSSARY_IDS));
@@ -633,11 +634,11 @@ main().catch((e) => {
 
 **Usage in prose:**
 
-- `the platform authenticates [[doctor]] via [[nmo_credit]]` — canonical references; Fumadocs renders as an inline tooltip with definition + cross-link.
-- `the platform authenticates [[doctor|the doctor]] via...` — alias display label.
-- New term: `... [[new_role]]` + same-line comment with the `new-term: new_role` marker — explicit opt-out. A glossary entry for `new_role` must appear in the same PR (CI will catch it in the roundtrip check).
+- `the platform authenticates [[g:doctor_guest]] via [[g:consent_gate]]` — canonical references; Fumadocs renders as an inline tooltip with definition + cross-link.
+- `the platform authenticates [[g:doctor_guest|the guest]] via...` — alias display label.
+- New term: `... [[g:new_role]]` + a same-line `new-term: new_role` marker — explicit opt-out. A glossary entry for `new_role` must appear in the same PR (CI will catch it in the roundtrip check).
 
-**Extension in v2 (if needed)** — add a heuristic for bold-detected canonical labels (Spec-Driven term detection) — but v1 = directives only, zero false-positives.
+**Extension in v2 (if needed)** — add a heuristic for bold-detected canonical labels (Spec-Driven term detection) — but v1 = `[[g:…]]` directives only, zero false-positives.
 
 ### 6.5 Payload Glossary Collection sync
 
@@ -648,9 +649,7 @@ import payload from "payload";
 import { GLOSSARY_TERMS } from "@ds/glossary/ids";
 
 async function main() {
-  await payload.init({
-    /* config */
-  });
+  await payload.init({/* config */});
 
   for (const term of GLOSSARY_TERMS) {
     const existing = await payload.find({
@@ -730,9 +729,7 @@ export const MarketingPages: CollectionConfig = {
       },
     ],
   },
-  fields: [
-    /* ... */
-  ],
+  fields: [/* ... */],
 };
 ```
 
@@ -768,7 +765,7 @@ Not every drift check is equally urgent. Phased rollout per the Pre-pilot / Pilo
 | Phase                                        | CI checks (incremental list)                                                                                                                                                                                                                                                                                                   |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Pre-pilot (mandatory)**                    | OpenAPI drift (NestJS schemas ↔ generated client), DB migrations drift (drizzle-kit check), spec link integrity (no broken `[[refs]]`), glossary canonical IDs (ESLint `@ds/glossary-canonical-ids`), retention-matrix lint (ADR-0009 §10), PII scanner (engineering-readiness §3.bis), audit-egress-channels (ADR-0011 §2.4). |
-| **Pilot** (added when there are pilot users) | Roundtrip validation Payload ↔ glossary, MDX glossary-lint `[[term-id]]` opt-in, generated ERD freshness, module README freshness checks.                                                                                                                                                                                      |
+| **Pilot** (added when there are pilot users) | Roundtrip validation Payload ↔ glossary, MDX glossary-lint `[[g:term-id]]` opt-in, generated ERD freshness, module README freshness checks.                                                                                                                                                                                    |
 | **Scale** (added at scale phase)             | Editorial UI integration (Payload), advanced roundtrip checks, machine-validatable spec fragments (JSON Schema / OpenAPI in-spec), automated spec re-validation against code changes.                                                                                                                                          |
 
 **Rationale:** the pre-pilot review correctly flagged "Fumadocs + Keystatic + glossary YAML + roundtrip validation + many CI gates may slow early delivery and produce false positives". Phasing prevents that overhead early while keeping full defense at scale.
@@ -1110,7 +1107,7 @@ Decomposition of the spec into atomic tasks happens in GitHub Issues (one EARS-h
      --body "Spec: apps/docs/content/specs/features/001-doctor-onboarding/001-requirements.md#ears-3
 
    ## Implementation
-   - Handler: `apps/api/src/modules/auth/oidc-callback.handler.ts`
+   - Handler: `apps/api/src/auth/oidc-callback.handler.ts`
    - Test: `oidc-callback.handler.test.ts` (must reference EARS-3 in describe)
    "
    ```
@@ -1167,10 +1164,10 @@ Decomposition of the spec into atomic tasks happens in GitHub Issues (one EARS-h
 - /apps/docs/content/product/glossary/ — domain terms (canonical)
 - /apps/docs/content/architecture/ — overview + C4
 - /apps/docs/content/operations/ — runbooks
-- /apps/_/src/modules/_/README.md — module README per ADR-0006
+- /apps/*/src/<module>/README.md — module README per ADR-0006
 - /packages/schemas/ — Zod schemas (API SSOT)
 - /packages/db/schema/ — Drizzle schemas (DB SSOT)
-- /packages/glossary/ids.ts — GENERATED, never edit
+- /packages/glossary/src/ids.ts — GENERATED, never edit
 
 ## Before any task
 
@@ -1179,7 +1176,7 @@ Decomposition of the spec into atomic tasks happens in GitHub Issues (one EARS-h
 3. Read related ADRs listed in spec's "Prior decisions" section.
 4. Check `packages/schemas/<module>/*.ts` for current Zod contract.
 5. Check `packages/db/schema/<module>.ts` for current DB schema.
-6. Check `apps/<app>/src/modules/<name>/README.md`.
+6. Check `apps/<app>/src/<name>/README.md`.
 
 ## During implementation
 

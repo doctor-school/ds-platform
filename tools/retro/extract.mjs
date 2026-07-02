@@ -96,6 +96,13 @@ export const CORRECTION_RE = new RegExp(
     // appear in routine technical talk (#362 review SUGGESTION).
     'исключ(?:им|ить|ил[аи]?|аем|ают)', 'вместо', 'на самом деле', 'всё-таки',
     'все-таки', 'ещё раз', 'еще раз',
+    // 2026-07-02 DSO-100 wrap retro — three real corrections the regex scored 0:
+    // «Не понял, в чём вопрос» (confusion pushback), «Как это не установлен…»
+    // (questioning a false claim), «убери всё лишнее» (undo-what-you-added).
+    // «лишн» is the corrective stem (лишнее/лишний = superfluous), «убери» the
+    // remove-directive; «как это не» is anchored to the negated-claim form so it
+    // does not flag the benign «как это работает/сделать».
+    'не понял', 'не понимаю', 'как это не', 'убери', 'лишн',
     'why ', 'instead', 'should have', 'you were supposed', 'wrong', 'no,', 'stop',
     'revert', 'undo', "don't", 'do not', 'not what', 'i asked', 'i told you', 'again', 'did you',
   ].join('|'),

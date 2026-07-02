@@ -436,6 +436,8 @@ Before `git push` the agent goes through each item. If even one is false — do 
 
 > **Interim semantics note:** rows marked `BLOCK` assume a server-side required status check on `main`. While ADR-0008 §2.6 branch protection is deferred (GitHub Free + private repo blocks the branch-protection API — ADR-0008 §2.6), `BLOCK` is read operationally as **"CI job exits red and the Tech Lead treats it as a merge-blocker by convention"** — same outcome on the single-developer happy path, no server-side guarantee.
 
+The table above is the founding set; the authoritative live guard list + per-guard severity is `.github/workflows/ci.yml`. Severity lifecycle — new-guard WARN posture, the WARN→BLOCK promotion criterion, demotion, and the sweep cadence — lives in the narrative ADR-0007 §2.6.
+
 ### 5.3 Custom lint scripts
 
 **`tools/lint/ears-test-lint.ts`** — sketch example:

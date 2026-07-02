@@ -105,7 +105,17 @@ Sketch и edge cases — design spec §4.
 | **Spec status freshness** | merged PR с label `feature:*`, но spec status='Draft'                                                                                                                                                                               | WARN v1                 |
 | **Prior decisions cited** | новый spec без ADR-link в "Prior decisions" если категория ≠ docs-only                                                                                                                                                              | WARN v1                 |
 
-Реализация в `tools/lint/spec-link-lint.ts`, `tools/lint/ears-test-lint.ts`. Эти guard'ы — CI-сигналы, видимые прямо человеку-ревьюверу в PR UI: WARN-guard'ы — non-blocking checks, BLOCK-guard'ы — блокируют merge. Их роль — «подсказать человеку-ревьюверу»; они вход для human review, а не для автоматического ревьювера.
+Реализация в `tools/lint/*.ts` (один скрипт на guard). Эти guard'ы — CI-сигналы, видимые прямо человеку-ревьюверу в PR UI: WARN-guard'ы — non-blocking checks, BLOCK-guard'ы — блокируют merge. Их роль — «подсказать человеку-ревьюверу»; они вход для human review, а не для автоматического ревьювера. Таблица выше — стартовый набор; инвентарь guard'ов растёт от фичи к фиче, и **авторитетный список + текущая severity каждого guard'а — `.github/workflows/ci.yml`** (WARN = `continue-on-error: true`, исключён из needs-list meta-job'а `ci`; BLOCK = в needs-list).
+
+**Posture нового guard'а.** Новый guard приземляется как WARN v1 — кроме случаев, когда задокументированный security-мандат требует hard failure с первого дня (класс `endpoint-authz`, per ADR-0001 design §2.5).
+
+**WARN→BLOCK promotion.** WARN-guard промоутится, когда выполнено всё перечисленное:
+
+1. **Реальный сигнал** — его скрипт выходит с ненулевым кодом на findings. Exit-0 заглушка или скрипт, печатающий warnings при всегда-нулевом exit-коде, не промоутируем: сначала сделать его падающим, потом запускать отсчёт.
+2. **Возраст** — ≥ 4 последовательных недели с введения guard'а или последнего содержательного изменения его правила.
+3. **Чистое окно** — ноль подтверждённых false positives в этом окне и ноль живых findings на `main` (включая findings, которые WARN-скрипт печатает, всё ещё выходя с 0). PR-red, закрытый исправлением PR/кода, — **true** positive: он считается «за» promotion, а не «против». Для PR-event-gated guard'ов (класс `registry-research`) окно оценивается по PR-ранам — «зелёность» на `push`-ранах вакуумна.
+
+Механика promotion: убрать `continue-on-error`, добавить job в needs-list meta-job'а `ci`, обновить header-комментарий job'а. **Demotion:** один подтверждённый false positive у BLOCK-guard'а демоутит его обратно в WARN тем же тактом, с Issue на починку guard'а. **Каденция:** весь WARN-набор переоценивается на каждом чекпойнте «drain the matured debt backlog» (AGENTS.md §3.5); каждый sweep фиксирует датированный per-guard вердикт (promoted / left WARN + причина) в несущем его Issue или PR.
 
 > **Interim semantics note (per ADR-0008 §2.6 deferred branch protection):** пока ADR-0008 §2.6 branch protection отложен до апгрейда плана org'а или перевода репо в public, `BLOCK` читается операционально как **«CI job выходит red, и Tech Lead трактует это как merge-blocker по convention'у»** — тот же outcome на single-developer happy path, без server-side гарантии.
 

@@ -595,6 +595,8 @@ jobs:
   # Phase 0 baseline: only required-needs jobs that actually run today.
   # docs-build, api-drift, db-drift, generated-artifacts join needs-list as their
   # owning groups (G6/G8/G9) land. WARN-only jobs are intentionally excluded.
+  # WARN→BLOCK promotion criterion + sweep cadence: ADR-0007 §2.6 (settled in
+  # #427; first sweep 2026-07-02 — per-guard verdicts recorded on the Issue).
   # Job name must stay `ci` — branch protection on `main` (per ADR-0008
   # §2.6 item 4) requires exactly one status check context named `ci`.
   # Renaming this job breaks merge gating.

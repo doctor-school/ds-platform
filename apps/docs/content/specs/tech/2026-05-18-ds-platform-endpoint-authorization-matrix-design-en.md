@@ -223,7 +223,7 @@ A route is a **violation** (CI fail) when any of the following holds:
 
 The completeness gate (Layer 2) is **BLOCK**. The Spectral/OWASP defense-in-depth pass (Layer 4) is **WARN**.
 
-This is a deliberate exception to ADR-0007 §2.6's general Phase-0 posture ("`spec-link` is BLOCK; others are WARN in Phase 0"). The exception is justified because both authoritative sources for _this specific_ gate mandate hard failure — ADR-0001 §2.5 ("missing metadata → CI fail") and engineering-readiness §3 ("fails on missing metadata") — and the matrix is a named **pre-pilot security BLOCKER**. It is therefore classified BLOCK alongside `spec-link`, not WARN with the stylistic guards.
+This is a deliberate exception to ADR-0007 §2.6's general Phase-0 posture (a new guard lands as WARN v1). The exception is justified because both authoritative sources for _this specific_ gate mandate hard failure — ADR-0001 §2.5 ("missing metadata → CI fail") and engineering-readiness §3 ("fails on missing metadata") — and the matrix is a named **pre-pilot security BLOCKER**. It is therefore classified BLOCK alongside `spec-link`, not WARN with the stylistic guards.
 
 The BLOCK classification does **not** impede Phase-0 bootstrap: the gate is _vacuously green when there are no routes to classify_. It fails only once a route exists without complete metadata. So the "WARN because the codebase is still empty" rationale does not apply — there is nothing to fail until there is something to protect.
 

@@ -102,7 +102,7 @@ Per ADR-0007 §2.10. **Mode (a)** — same-session subagent dispatch via `reques
 
 ## 5. Lint guards
 
-CI lint guards (ADR-0007 §2.6) surface as PR Checks for the reviewer and author-agent. Authoritative list + per-guard severity: `.github/workflows/ci.yml`; WARN→BLOCK promotion criterion + sweep cadence: **ADR-0007 §2.6**. `spec-link` / `endpoint-authz` / `playwright-axe` are BLOCK; the rest WARN in Phase 0.
+CI lint guards (ADR-0007 §2.6) surface as PR Checks for the reviewer and author-agent. Authoritative list + per-guard severity: `.github/workflows/ci.yml`; WARN→BLOCK promotion criterion + sweep cadence: **ADR-0007 §2.6**. `spec-link` / `endpoint-authz` / `playwright-axe` are BLOCK; the rest of the §2.6 guard family is WARN in Phase 0 (baseline drift/glossary jobs are separate hard-red checks).
 
 ---
 

@@ -107,7 +107,7 @@ Sketch и edge cases — design spec §4.
 
 Реализация в `tools/lint/*.ts` (один скрипт на guard). Эти guard'ы — CI-сигналы, видимые прямо человеку-ревьюверу в PR UI: WARN-guard'ы — non-blocking checks, BLOCK-guard'ы — блокируют merge. Их роль — «подсказать человеку-ревьюверу»; они вход для human review, а не для автоматического ревьювера. Таблица выше — стартовый набор; инвентарь guard'ов растёт от фичи к фиче, и **авторитетный список + текущая severity каждого guard'а — `.github/workflows/ci.yml`** (WARN = `continue-on-error: true`, исключён из needs-list meta-job'а `ci`; BLOCK = в needs-list).
 
-**Posture нового guard'а.** Новый guard приземляется как WARN v1 — кроме случаев, когда задокументированный security-мандат требует hard failure с первого дня (класс `endpoint-authz`, per ADR-0001 §2.5).
+**Posture нового guard'а.** Новый guard приземляется как WARN v1 — кроме случаев, когда задокументированный security-мандат требует hard failure с первого дня (класс `endpoint-authz`, per ADR-0001 design §2.5).
 
 **WARN→BLOCK promotion.** WARN-guard промоутится, когда выполнено всё перечисленное:
 

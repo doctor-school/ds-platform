@@ -107,7 +107,7 @@ Sketch and edge cases — design spec §4.
 
 Implementation in `tools/lint/*.ts` (one script per guard). These guards are CI signals visible directly to the human reviewer in the PR UI: WARN-only guards appear as non-blocking checks; BLOCK guards prevent merge. Their role is "nudge the human reviewer" — they are inputs to human review, not inputs to an automated reviewer. The table above is the founding set; the guard inventory grows feature-by-feature, and the **authoritative list + current severity of every guard is `.github/workflows/ci.yml`** (WARN = `continue-on-error: true`, excluded from the `ci` meta-job needs-list; BLOCK = in the needs-list).
 
-**New-guard posture.** A new guard lands as WARN v1, unless a documented security mandate requires hard failure from day one (the `endpoint-authz` class, per ADR-0001 §2.5).
+**New-guard posture.** A new guard lands as WARN v1, unless a documented security mandate requires hard failure from day one (the `endpoint-authz` class, per ADR-0001 design §2.5).
 
 **WARN→BLOCK promotion.** A WARN guard is promoted when all of the following hold:
 

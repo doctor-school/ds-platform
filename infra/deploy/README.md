@@ -49,7 +49,12 @@ infra/deploy/
    `doctor.school` A-record is untouched. Email records (MX/SPF/DKIM/DMARC) are
    already live (memory `reference_doctor_school_email_dns`).
 4. **Secrets (out-of-band):** provision `/etc/ds-platform/{api,zitadel,data}.env`
-   onto each VPS (root:root, `0600`) — never committed, never in tfstate (spec §5.4).
+   onto each VPS (root:root, `0600`) — app/runtime secrets are never committed and
+   never produced by Terraform (spec §5.4). **Exception (DD-6):** the pgbackrest S3
+   keys ARE Terraform-generated (they live in `tfstate`); copy them into `data.env`
+   with `terraform output -raw pgbackrest_s3_access_key` and
+   `terraform output -raw pgbackrest_s3_secret_key` (+ `pgbackrest_bucket_full_name`
+   / `pgbackrest_s3_hostname` for the repo target).
 5. **Bring up services:** `docker compose -f compose/data-prod/compose.yml up -d`
    first (DB/Redis/backup), then `compose/api-prod/compose.yml` (after resolving the
    image build+publish TODOs). Set `EMAIL_DELIVERY_MODE=real` + `SMS_DELIVERY_MODE=real`

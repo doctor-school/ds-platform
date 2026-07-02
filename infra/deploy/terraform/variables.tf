@@ -55,3 +55,21 @@ variable "vpc_cidr" {
   type        = string
   default     = "192.168.0.0/24"
 }
+
+variable "vpc_location" {
+  description = "REGION code for the twc_vpc (distinct from the per-server availability_zone). A VPC is single-location and takes a region code, not an AZ: ru-2 = Novosibirsk, which contains AZ nsk-1 (var.availability_zone). Keep in the same region as the servers' AZ (single-AZ, ADR-0012). Region↔AZ mapping: ru-1 SPb, ru-2 Novosibirsk (nsk-1), ru-3 Moscow. Validated on apply."
+  type        = string
+  default     = "ru-2"
+}
+
+variable "api_prod_private_ip" {
+  description = "Static VPC address for api-prod inside var.vpc_cidr. api-prod's DB/Redis clients dial data-prod's private IP; this one is mostly for symmetry/debugging."
+  type        = string
+  default     = "192.168.0.20"
+}
+
+variable "data_prod_private_ip" {
+  description = "Static VPC address for data-prod inside var.vpc_cidr. This is the host in api-prod's DATABASE_URL / REDIS_URL (spec §5.4). Static so the on-box api.env is deterministic."
+  type        = string
+  default     = "192.168.0.10"
+}

@@ -97,13 +97,13 @@ interface Deferral {
  *   FUTURE post-registration secondary-identifier path" — a negative/scoping
  *   requirement. Its positive counterpart (email-only verify) is exercised by the
  *   EARS-2/EARS-3 e2e; its own testable path (the future secondary-phone verify)
- *   is unbuilt and would need live Zitadel. Tracked in the 003 auth post-v1
- *   backlog (#220). Prune this entry once the secondary-phone verify path lands
- *   with its own `EARS-4` test.
+ *   is unbuilt and would need live Zitadel. Tracked in #454 (sub-issue of the 003
+ *   auth post-v1 backlog #220). Prune this entry once the secondary-phone verify
+ *   path lands with its own `EARS-4` test.
  */
 const BUILTIN_DEFERRALS: Record<string, Deferral> = {
   'EARS-4': {
-    issue: 220,
+    issue: 454,
     reason:
       'registration verify is email-only; the future secondary-phone verify path is unbuilt (needs live Zitadel)',
   },

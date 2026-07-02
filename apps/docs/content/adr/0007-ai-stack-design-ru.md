@@ -47,7 +47,7 @@ lang: ru
 
 ### 2.2 Каноническая процедура — skill-каталог в `apps/docs/content/skills/<name>/SKILL.md`
 
-Источником истины для процедуры AI-итерации служит **проектный skill-каталог** в `apps/docs/content/skills/<name>/SKILL.md` (AGENTS.md §3.3 — «the path is the contract»). Оркестрационные skill'ы (`do-feature-iteration`, `do-hotfix-pr`, `do-adr-revision`, `do-decision-debt-followup`) собирают процедурные (`read-relevant-adrs`, `verify-base-ci-green`, `author-ears-spec`, `open-ears-issues`, `run-iteration-end-checklist`, `request-mode-a-review`, `respond-to-review`, `write-iteration-summary`, `surface-decision-debt`, `merge-when-green`). Discipline-gate'ы оформлены как «Cannot proceed without» на каждом orchestration skill — агент не может молча их пропустить, прочитав narrative. Inline-резюме ниже зеркалит каталог; каталог — авторитетный.
+Источником истины для процедуры AI-итерации служит **проектный skill-каталог** в `apps/docs/content/skills/<name>/SKILL.md` (AGENTS.md §3.3 — «the path is the contract»). Оркестрационные skill'ы (`do-feature-iteration`, `do-hotfix-pr`, `do-adr-revision`, `do-decision-debt-followup`, `author-feature-spec`) собирают процедурные (`read-relevant-adrs`, `verify-base-ci-green`, `author-ears-spec`, `open-ears-issues`, `run-iteration-end-checklist`, `request-mode-a-review`, `respond-to-review`, `write-iteration-summary`, `surface-decision-debt`, `merge-when-green`). Discipline-gate'ы оформлены как «Cannot proceed without» на каждом orchestration skill — агент не может молча их пропустить, прочитав narrative. Inline-резюме ниже зеркалит каталог; каталог — авторитетный.
 
 orchestrated iteration cycle (`do-feature-iteration` оркеструет эти шаги):
 

@@ -269,8 +269,10 @@ the schema-migrate + seed steps are added once `apps/api` exists (setup-design
 **Parallel sessions (#428).** Two sessions on one box isolate at two seams:
 
 1. **Ports** — `3000/3001` is the single-session default; a parallel session
-   runs `pnpm dev:ports` and boots api/portal on the printed free pair
-   (`API_PORT`/`PORTAL_PORT` env). Never kill a listener you did not start.
+   runs `pnpm dev:ports` and boots api/portal on the printed free pair — both
+   apps consume `PORT` (the printed boot lines carry the exact commands;
+   `API_PORT`/`PORTAL_PORT` are handoff labels). Never kill a listener you did
+   not start.
 2. **Database** — each branch worktree gets its own database inside the shared
    Postgres container: `pnpm dev:db:branch <issue-N>` creates `ds_dev_<n>` and
    migrates it (through the sanctioned wrapper, so the dataset-global snapshot

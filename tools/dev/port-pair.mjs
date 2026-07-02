@@ -46,13 +46,17 @@ export async function firstFreePair(pairs, probe) {
   return null;
 }
 
-/** Ready-to-paste output for the session log / live-URL handoff. */
+/**
+ * Session-log labels + the REAL wiring: both apps consume `PORT` (api via
+ * apps/api/src/main.ts, portal via next dev/start), so the boot lines below are
+ * what actually binds the pair — API_PORT/PORTAL_PORT are handoff labels only.
+ */
 export function formatPair([api, portal]) {
   return [
     `API_PORT=${api}`,
     `PORTAL_PORT=${portal}`,
-    `# api:    http://localhost:${api}`,
-    `# portal: http://localhost:${portal}`,
+    `# boot api:    PORT=${api} pnpm --filter @ds/api start   → http://localhost:${api}`,
+    `# boot portal: PORT=${portal} pnpm --filter @ds/portal start → http://localhost:${portal}`,
   ];
 }
 

@@ -1,0 +1,51 @@
+# Outputs consumed by the DNS runbook (Beget A-records), SSH aliases, and the
+# on-box .env provisioning (spec §5.3, §5.4, §6.3).
+
+output "api_prod_public_ip" {
+  description = "api-prod public IPv4 — set Beget A-records api./app./id.doctor.school to this (spec §5.3)."
+  value       = twc_server_ip.api_prod_ipv4.ip
+}
+
+output "api_prod_server_id" {
+  description = "api-prod server id — for the recovery runbook + power-control API."
+  value       = twc_server.api_prod.id
+}
+
+output "data_prod_server_id" {
+  description = "data-prod server id (private, no public IP)."
+  value       = twc_server.data_prod.id
+}
+
+# Private IPs of both hosts inside twc_vpc.ds — DATABASE_URL/REDIS_URL on api-prod
+# point at data-prod's private IP.
+# TODO(DSO-100): confirm the attribute exposing the VPC-side IP (e.g.
+# twc_server.<x>.local_networks[*].ip or a network block) on `terraform validate`.
+output "data_prod_private_ip" {
+  description = "data-prod private (VPC) IPv4 — value of the DB/Redis host in api-prod's api.env."
+  value       = "TODO: twc_server.data_prod private IP attribute (see network.tf notice)"
+}
+
+output "pgbackrest_bucket" {
+  description = "Requested pgbackrest bucket name."
+  value       = twc_s3_bucket.pgbackrest.name
+}
+
+output "pgbackrest_bucket_full_name" {
+  description = "Real (account-prefixed) bucket name — the S3 path-style repo target for pgbackrest."
+  value       = twc_s3_bucket.pgbackrest.full_name
+}
+
+output "pgbackrest_s3_hostname" {
+  description = "S3 endpoint host of the pgbackrest bucket."
+  value       = twc_s3_bucket.pgbackrest.hostname
+}
+
+output "pgbackrest_s3_access_key" {
+  value     = twc_s3_bucket.pgbackrest.access_key
+  sensitive = true
+}
+
+output "pgbackrest_s3_secret_key" {
+  value     = twc_s3_bucket.pgbackrest.secret_key
+  sensitive = true
+}

@@ -1,0 +1,29 @@
+# ⚠ SKELETON (DSO-100) — Caddy vhosts for the 003 slice (spec §5.2).
+# Automatic Let's Encrypt (HTTP-01 over :80), auto-renew, no manual certs.
+# TODO(DSO-100): set the ACME contact email; confirm upstream container ports.
+
+{
+	# email your-ops@doctor.school   # TODO(DSO-100): ACME contact for expiry notices
+}
+
+# Portal (Next.js) — user-facing auth screens.
+app.doctor.school {
+	reverse_proxy portal:3000
+}
+
+# NestJS BFF/API.
+api.doctor.school {
+	reverse_proxy api:3000 # TODO(DSO-100): confirm the api's listen port
+}
+
+# Zitadel OIDC issuer — single-origin split: Login V2 UI vs core (dev-stand idp-proxy pattern).
+id.doctor.school {
+	# Login V2 UI paths → the login container.
+	handle /ui/v2/login/* {
+		reverse_proxy zitadel-login:3000 # TODO(DSO-100): confirm login container port
+	}
+	# Everything else → Zitadel core (gRPC-web/HTTP2).
+	handle {
+		reverse_proxy zitadel:8080 # TODO(DSO-100): confirm core port + h2c if needed
+	}
+}

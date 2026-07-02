@@ -1,0 +1,15 @@
+# Terraform local state, providers, CLI binary, tfvars — NEVER commit.
+.bin/
+.terraform/
+.terraform.tfstate.lock.info
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc

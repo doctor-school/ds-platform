@@ -1,0 +1,50 @@
+# ⚠ SKELETON (DSO-100) — data-prod persistence plane (spec §2.2, §3, §6.3).
+# PRIVATE host: bind published ports to the VPC interface ONLY, never 0.0.0.0.
+# Postgres MUST be a pgvector-enabled 17 build (ADR-0003) — the decisive reason
+# for self-hosted PG over Managed PG (spec §3).
+#
+# Secrets via /etc/ds-platform/data.env (POSTGRES_PASSWORD, pgbackrest S3 creds +
+# repo cipher passphrase) — never committed (spec §5.4).
+
+name: ds-data-prod
+
+services:
+  postgres:
+    # TODO(DSO-100): pin a pgvector-enabled postgres:17 image (mirror the dev-stand
+    # infra/dev-stand/postgres/Dockerfile build, or pgvector/pgvector:pg17).
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    env_file: [/etc/ds-platform/data.env]
+    environment:
+      POSTGRES_DB: ds_prod
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # init.sql creates the `zitadel` DB alongside `ds_prod` (dev-stand parity).
+      - ./init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro # TODO(DSO-100): port infra/dev-stand/postgres/init.sql
+    ports:
+      - "${VPC_IP:?bind to the private IP}:5432:5432" # VPC-only; NEVER 0.0.0.0
+    # TODO(DSO-100): postgresql.conf with archive_mode=on + archive_command → pgbackrest (WAL, RPO ≤15m)
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"] # AOF (ADR-0003 §8)
+    volumes:
+      - redisdata:/data
+    ports:
+      - "${VPC_IP:?bind to the private IP}:6379:6379" # VPC-only
+
+  pgbackrest:
+    # TODO(DSO-100): custom pgbackrest image; repo1 = Timeweb S3 (spec §6.3).
+    # cron: daily full 02:30 MSK + incr /6h; retention repo1-retention-full=7;
+    # repo cipher AES-256-CBC (passphrase from data.env); continuous WAL archive.
+    image: pgbackrest:custom # TODO(DSO-100): build/publish
+    restart: unless-stopped
+    env_file: [/etc/ds-platform/data.env]
+    volumes:
+      - pgdata:/var/lib/postgresql/data:ro
+    depends_on: [postgres]
+
+volumes:
+  pgdata:
+  redisdata:

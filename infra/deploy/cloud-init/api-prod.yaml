@@ -1,0 +1,44 @@
+#cloud-config
+# Base hardening for api-prod on first boot (spec §5). Non-root deploy user,
+# firewall, Docker + compose plugin, timezone. App containers are brought up
+# separately from infra/deploy/compose/api-prod/ (NOT here) once secrets are
+# provisioned out-of-band into /etc/ds-platform/*.env (spec §5.4).
+# TODO(DSO-100): replace the deploy pubkey placeholder before apply.
+
+timezone: Europe/Moscow
+
+package_update: true
+package_upgrade: true
+packages:
+  - ufw
+  - fail2ban
+  - unattended-upgrades
+  - ca-certificates
+  - curl
+
+users:
+  - name: deploy
+    groups: [sudo, docker]
+    shell: /bin/bash
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    ssh_authorized_keys:
+      - "ssh-ed25519 AAAA... deploy@ds-api-prod   # TODO(DSO-100): real deploy pubkey"
+
+write_files:
+  # Directory for out-of-band secrets — filled by the provisioning runbook, never baked here.
+  - path: /etc/ds-platform/.keep
+    content: ""
+    permissions: "0700"
+
+runcmd:
+  # Docker CE + compose plugin (official convenience script).
+  - curl -fsSL https://get.docker.com | sh
+  # Host-level firewall (defence-in-depth alongside twc_firewall): SSH + web only.
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow 22/tcp
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+  - ufw --force enable
+  - systemctl enable --now fail2ban
+  - install -d -m 0700 -o root -g root /etc/ds-platform

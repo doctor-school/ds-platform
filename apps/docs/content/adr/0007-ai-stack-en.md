@@ -105,7 +105,17 @@ Sketch and edge cases — design spec §4.
 | **Spec status freshness** | merged PR with label `feature:*`, but spec status='Draft'                                                                                                                                                                      | WARN v1               |
 | **Prior decisions cited** | new spec without an ADR-link in "Prior decisions" if category ≠ docs-only                                                                                                                                                      | WARN v1               |
 
-Implementation in `tools/lint/spec-link-lint.ts`, `tools/lint/ears-test-lint.ts`. These guards are CI signals visible directly to the human reviewer in the PR UI: WARN-only guards appear as non-blocking checks; BLOCK guards prevent merge. Their role is "nudge the human reviewer" — they are inputs to human review, not inputs to an automated reviewer.
+Implementation in `tools/lint/*.ts` (one script per guard). These guards are CI signals visible directly to the human reviewer in the PR UI: WARN-only guards appear as non-blocking checks; BLOCK guards prevent merge. Their role is "nudge the human reviewer" — they are inputs to human review, not inputs to an automated reviewer. The table above is the founding set; the guard inventory grows feature-by-feature, and the **authoritative list + current severity of every guard is `.github/workflows/ci.yml`** (WARN = `continue-on-error: true`, excluded from the `ci` meta-job needs-list; BLOCK = in the needs-list).
+
+**New-guard posture.** A new guard lands as WARN v1, unless a documented security mandate requires hard failure from day one (the `endpoint-authz` class, per ADR-0001 §2.5).
+
+**WARN→BLOCK promotion.** A WARN guard is promoted when all of the following hold:
+
+1. **Real signal** — its script exits non-zero on findings. An exit-0 stub, or a script that prints warnings but always exits 0, is not promotable: make it fail first, then start the clock.
+2. **Age** — ≥ 4 consecutive weeks since the guard's introduction or the last substantive change to its rule.
+3. **Clean window** — zero confirmed false positives in that window, and zero live findings on `main` (including findings a WARN script prints while still exiting 0). A PR red that was resolved by fixing the PR/code is a **true** positive — it counts for promotion, not against. For PR-event-gated guards (the `registry-research` class) the window is evaluated over PR runs — greenness on `push` runs is vacuous.
+
+Promotion mechanics: remove `continue-on-error`, add the job to the `ci` meta-job needs-list, update the job's header comment. **Demotion:** one confirmed false positive on a BLOCK guard demotes it back to WARN in the same beat, with an Issue tracking the guard fix. **Cadence:** the whole WARN set is re-evaluated at every "drain the matured debt backlog" checkpoint (AGENTS.md §3.5); each sweep records a dated per-guard verdict (promoted / left WARN + reason) in the Issue or PR that carries it.
 
 > **Interim semantics note (per ADR-0008 §2.6 deferred branch protection):** while ADR-0008 §2.6 branch protection is deferred until org plan upgrade or the repo is made public, `BLOCK` is read operationally as **"CI job exits red and the Tech Lead treats it as a merge-blocker by convention"** — same outcome on the single-developer happy path, no server-side guarantee.
 

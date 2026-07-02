@@ -418,24 +418,9 @@ main().catch((e) => {
 
 ## 5. Iteration-end checklist + AI-specific drift guards
 
-### 5.1 12-item checklist (AGENTS.md hard rules)
+### 5.1 14-item checklist (AGENTS.md hard rules)
 
-Перед `git push` агент проходит каждый пункт. Если хоть один false — не push, либо чинит, либо escalate.
-
-| #   | Check                                                                                                                                  | Команда / условие                                                   |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| 1   | All tests green                                                                                                                        | `pnpm test:unit && pnpm test:e2e`                                   |
-| 2   | Generated artifacts up-to-date                                                                                                         | `pnpm generate:all && git diff --exit-code`                         |
-| 3   | TypeScript compiles                                                                                                                    | `pnpm typecheck`                                                    |
-| 4   | Lint clean                                                                                                                             | `pnpm lint` (incl. `@ds/glossary-canonical-ids`, events-lint)       |
-| 5   | Module README updated если exports changed                                                                                             | `pnpm lint:module-readme`                                           |
-| 6   | Spec `status` frontmatter обновлён (Draft → In dev → Shipped)                                                                          | manual edit в `NNN-requirements.md`                                 |
-| 7   | Glossary terms добавлены если в коде/spec появилась новая доменная лексика                                                             | `pnpm lint:glossary-mdx`                                            |
-| 8   | ADR создан если было архитектурное решение                                                                                             | judgment; интерактивный reviewer (AGENTS.md §4) ловит miss'ы        |
-| 9   | Linked Issue получил summary comment (file paths, decisions, что осталось)                                                             | `gh issue comment <N> --body-file <summary>`                        |
-| 10  | `apps/docs/content/architecture/` обновлён если появился новый app/package или изменилась структура                                    | manual edit (closes F-3)                                            |
-| 11  | `apps/docs/content/operations/` runbook добавлен если появился новый операционный concern                                              | manual edit (closes F-3)                                            |
-| 12  | Vertical-slice DoD (conditional, F-22) — последний handler спеки `surface: user-facing`: путь проходится end-to-end либо tracked Issue | browser/E2E green; N/A для `backend-only` / не-финального handler'а |
+Перед `git push` агент проходит каждый пункт. Если хоть один false — не push, либо чинит, либо escalate. **Авторитетный, всегда-актуальный список пунктов — сам skill** — `apps/docs/content/skills/run-iteration-end-checklist/SKILL.md` — а не таблица, дублированная здесь (каталог авторитетен; §2.2). На момент написания 14 пунктов: (1) tests green, (2) generated artifacts up-to-date, (3) TypeScript compiles, (4) lint clean, (5) module README updated если exports changed, (6) spec `status` frontmatter advanced, (7) glossary terms added если выросла доменная лексика, (8) ADR created если было архитектурное решение, (9) `architecture/` обновлён для структурных изменений, (10) `operations/` runbook добавлен для новых операционных concern'ов, (11) linked Issue получил summary comment, (12) vertical-slice DoD (conditional, F-22), (13) field validation + input mask (conditional), (14) registry-research marker (conditional). Точная команда / условие и правило N/A каждого пункта — в skill.
 
 ### 5.2 CI gates — AI-specific extensions (поверх ADR-0006 §7)
 
@@ -876,7 +861,7 @@ Single config flag в `.github/agents-config.json`:
 
 **LiteLLM admin UI protection:** LiteLLM admin не имеет native OIDC; protect через nginx forward-auth proxy с Zitadel (ADR-0001 OIDC tenant, закрыто по §8 / DSP-209). Это не trivial и оформляется отдельным дизайн-блоком в trigger-ADR.
 
-**Capacity Phase 0+1:** instance A — одна VM (Hetzner EU, ~€20/мес); instance B — одна VM в существующем Timeweb (~₽1000/мес). HA-пара через keepalived — Phase Pilot+.
+**Capacity Phase 0+1:** instance A — одна VM (Hetzner EU, ~~€20/мес); instance B — одна VM в существующем Timeweb (~~₽1000/мес). HA-пара через keepalived — Phase Pilot+.
 
 **Pre-v2 prerequisite — dual-LLM pattern evaluation:** Content Pipeline v2 (`12-ai-content-pipeline.md` §3) processes content из brief'ов от экспертов. Если brief может содержать user-submitted material (e.g., копипаст из чата, файлы от соавторов), prompt-injection vector активен с дня 1. Перед запуском v2 в production — формальная оценка: входит ли user-controlled content в pipeline? Если да — OWASP dual-LLM pattern (privileged LLM с tools отделена от quarantined LLM читающей untrusted content) должен быть в дизайне trigger-ADR, не deferred дальше.
 
@@ -984,12 +969,12 @@ Per ADR-0006 §9 conventions (title format `[NNN] EARS-N: ...`, label `kind:ears
 
 - If no parent Issue exists for the spec: create one with `--body-file` (a `--body` flag must be provided in non-interactive contexts; `gh issue create` without it opens an editor and hangs in CI/Codex):
   gh issue create --title "Feature NNN: <name>" \
-   --milestone "<product theme>" --label "feature:NNN-<slug>" \
-   --body-file .github/issue_templates/feature.md
+  --milestone "<product theme>" --label "feature:NNN-<slug>" \
+  --body-file .github/issue_templates/feature.md
   Then for each EARS-handler from `NNN-requirements.md`:
   gh issue create --title "[NNN] EARS-N: <description>" \
-   --milestone "<product theme>" --label "feature:NNN-<slug>,kind:ears-handler,agent-ready" \
-   --body "Spec: apps/docs/content/specs/features/NNN-<slug>/. Parent: #<parent-issue>."
+  --milestone "<product theme>" --label "feature:NNN-<slug>,kind:ears-handler,agent-ready" \
+  --body "Spec: apps/docs/content/specs/features/NNN-<slug>/. Parent: #<parent-issue>."
 - Use superpowers:writing-plans skill only if the task is multi-step within a single Issue.
 
 ### Step 3 — RED (TDD: failing tests first)
@@ -1096,19 +1081,19 @@ Phase 0 (Tech Lead + AI, sequential — после того как DSO-31 соз
 
 **Pre-requisite для шага 13:** Tech Lead должен иметь admin permissions на репо (branch protection rule в шаге 13 требует admin token; cannot be automated). Если репо принадлежит организации — нужны org-admin права или явное delegation на репо-admin role.
 
-| Step | Action                                                                                                                                                                    | Output                                            | Blocking                  |
+| Step | Action | Output | Blocking |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------- | ----------------------------------------------------------------- |
-| 1    | Создать `tools/agent-bootstrap.ts`                                                                                                                                        | bootstrap работает локально                       | DSO-31 (репо exists)      |
-| 2    | Добавить `pnpm bootstrap` alias в root `package.json`                                                                                                                     | команда runnable                                  | step 1                    | **Done в G1, см. commit `ae3826f` в `doctor-school/ds-platform`** |
-| 3    | Добавить `.claude/settings.json` с SessionStart hook                                                                                                                      | Claude Code auto-loads bootstrap                  | step 2                    |
-| 4    | Создать `packages/llm-utils/buildContext.ts`                                                                                                                              | reusable helper для LLM-clients                   | DSO-31                    |
-| 7    | Добавить `.github/agents-config.json` kill switch                                                                                                                         | kill switch active                                | —                         |
-| 8    | Создать `tools/lint/spec-link-lint.ts` + `ears-test-lint.ts`                                                                                                              | AI-specific guards available                      | —                         |
-| 9    | Добавить шаги в `.github/workflows/ci.yml` для guards (WARN/BLOCK per §5.2)                                                                                               | CI выполняет guards                               | step 8                    |
-| 11   | Обновить `AGENTS.md` (root) с секцией AI-loop discipline                                                                                                                  | агенты следуют orchestrated iteration cycle       | DSO-31 baseline AGENTS.md |
-| 12   | Обновить `CLAUDE.md` (root) с SessionStart hook reference + skill priorities                                                                                              | Claude Code aligned                               | step 11                   |
-| 13   | **[Manual GitHub UI / `gh api`]** Добавить branch protection rule: ≥1 human approval required, no direct push to main. Отложено по ADR-0008 §2.6 (GitHub Free + private). | merge gated server-side когда protection доступен | step 9                    |
-| 14   | Smoke test: first feature spec через цикл (superpowers:brainstorming → spec → Issues → PR → review → merge)                                                               | proof of concept                                  | steps 1-13                |
+| 1 | Создать `tools/agent-bootstrap.ts` | bootstrap работает локально | DSO-31 (репо exists) |
+| 2 | Добавить `pnpm bootstrap` alias в root `package.json` | команда runnable | step 1 | **Done в G1, см. commit `ae3826f` в `doctor-school/ds-platform`** |
+| 3 | Добавить `.claude/settings.json` с SessionStart hook | Claude Code auto-loads bootstrap | step 2 |
+| 4 | Создать `packages/llm-utils/buildContext.ts` | reusable helper для LLM-clients | DSO-31 |
+| 7 | Добавить `.github/agents-config.json` kill switch | kill switch active | — |
+| 8 | Создать `tools/lint/spec-link-lint.ts` + `ears-test-lint.ts` | AI-specific guards available | — |
+| 9 | Добавить шаги в `.github/workflows/ci.yml` для guards (WARN/BLOCK per §5.2) | CI выполняет guards | step 8 |
+| 11 | Обновить `AGENTS.md` (root) с секцией AI-loop discipline | агенты следуют orchestrated iteration cycle | DSO-31 baseline AGENTS.md |
+| 12 | Обновить `CLAUDE.md` (root) с SessionStart hook reference + skill priorities | Claude Code aligned | step 11 |
+| 13 | **[Manual GitHub UI / `gh api`]** Добавить branch protection rule: ≥1 human approval required, no direct push to main. Отложено по ADR-0008 §2.6 (GitHub Free + private). | merge gated server-side когда protection доступен | step 9 |
+| 14 | Smoke test: first feature spec через цикл (superpowers:brainstorming → spec → Issues → PR → review → merge) | proof of concept | steps 1-13 |
 
 Нумерация шагов сохраняет исходную последовательность; отменённые шаги (5, 6, 10) намеренно пропущены.
 

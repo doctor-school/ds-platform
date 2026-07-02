@@ -1,0 +1,18 @@
+{
+  "consent_gate": {
+    "title": "consent gate",
+    "description": "The registration-time rule that no personal-data row is created before the registrant's per-purpose, versioned consent is recorded."
+  },
+  "doctor_guest": {
+    "title": "doctor_guest",
+    "description": "The v1 self-service backend role and mirror identity granted to a net-new visitor who self-registers on the doctor portal."
+  },
+  "enumeration_resistance": {
+    "title": "enumeration resistance",
+    "description": "Returning identical responses for existing vs unknown identifiers on auth surfaces, so an attacker cannot probe which accounts exist."
+  },
+  "user_mirror": {
+    "title": "domain user mirror",
+    "description": "The backend users row that projects a Zitadel identity into the domain — the UserMirror produced and reconciled by the auth feature."
+  }
+}

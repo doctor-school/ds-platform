@@ -42,16 +42,17 @@
  *   deliberately NOT in v1. v1 asserts a `README.md` exists, nothing more.
  *
  * ── Allowlist (pre-existing gaps) ─────────────────────────────────────────────
- * Six api modules predate this guard and lack a README (`database`,
- * `delivery-reconcile`, `feature-flags`, `health`, `mailer`, `readiness`).
- * Authoring six real export-documenting READMEs is not a mechanical in-scope fix,
- * so they are grandfathered in `MODULE_README_ALLOW` below — each entry references
- * the tracked backfill Issue #456. This mirrors the `BUILTIN_DEFERRALS`
- * precedent in ears-test-lint.ts: an allowlist entry is tracked debt, not a silent
- * bypass. The `LINT_MODULE_README_ALLOW` env seam replaces the map for tests.
- * A STALE entry — the module grew its README but the entry lingers — is itself
- * a finding (exit 1), mirroring ears-test-lint's stale-deferral rule (#452):
- * the allowlist must shrink as the debt drains, never fossilise.
+ * `MODULE_README_ALLOW` grandfathers module dirs that predate the guard and lack
+ * an ADR-0006 §7 README, each entry referencing an OPEN backfill Issue. This
+ * mirrors the `BUILTIN_DEFERRALS` precedent in ears-test-lint.ts: an allowlist
+ * entry is tracked debt, not a silent bypass. It is now **empty** — the six api
+ * modules originally grandfathered off #438 (`database`, `delivery-reconcile`,
+ * `feature-flags`, `health`, `mailer`, `readiness`) got their READMEs in the #456
+ * backfill, so the debt is fully drained. The `LINT_MODULE_README_ALLOW` env seam
+ * replaces the map for tests. A STALE entry — the module grew its README but the
+ * entry lingers — is itself a finding (exit 1), mirroring ears-test-lint's
+ * stale-deferral rule (#452): the allowlist must shrink as the debt drains, never
+ * fossilise.
  *
  * Seam: `LINT_FIXTURE_ROOT` (guard-tests harness). Inert in production.
  * Run: `pnpm lint:module-readme`. Findings: stderr + exit 1. Clean: exit 0.
@@ -74,14 +75,7 @@ const TAG = "[module-readme]";
  * tracker, filed off #438).
  */
 type Allow = { issue: number; reason: string };
-const MODULE_README_ALLOW: Record<string, Allow> = {
-  "apps/api/src/database": { issue: 456, reason: "infra module, README backfill pending" },
-  "apps/api/src/delivery-reconcile": { issue: 456, reason: "README backfill pending" },
-  "apps/api/src/feature-flags": { issue: 456, reason: "README backfill pending" },
-  "apps/api/src/health": { issue: 456, reason: "README backfill pending" },
-  "apps/api/src/mailer": { issue: 456, reason: "README backfill pending" },
-  "apps/api/src/readiness": { issue: 456, reason: "README backfill pending" },
-};
+const MODULE_README_ALLOW: Record<string, Allow> = {};
 
 function loadAllow(): Record<string, Allow> {
   const raw = process.env.LINT_MODULE_README_ALLOW;
@@ -159,7 +153,9 @@ async function main(): Promise<void> {
     if (hasReadme) continue;
     if (isAllowed) {
       allowed++;
-      info(`allowlisted (README backfill #${allow[dir].issue}): ${dir} — ${allow[dir].reason}`);
+      info(
+        `allowlisted (README backfill #${allow[dir].issue}): ${dir} — ${allow[dir].reason}`,
+      );
       continue;
     }
     findings.push(dir);

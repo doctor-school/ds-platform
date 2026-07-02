@@ -54,7 +54,7 @@ Every agent session, regardless of vendor, follows this three-step entry — **i
 | decision-debt     | Closing a silent-decision artifact surfaced earlier           | `apps/docs/content/skills/do-decision-debt-followup/SKILL.md` |
 | engineering-task  | Phase A bootstrap (DSP-160 sub-issue), CI hardening, scaffold | No skill — follow the task spec directly (see §3.8)           |
 | product-discovery | New product epic / user-facing feature with no PRD yet        | `apps/docs/content/skills/do-product-discovery/SKILL.md`      |
-| spec-authoring    | New feature-spec / new ADR / new design-spec                  | `superpowers:brainstorming` (sole allowed exception, §3.4)    |
+| spec-authoring    | New feature-spec / new ADR / new design-spec                  | `apps/docs/content/skills/author-feature-spec/SKILL.md`       |
 
 Not in the table? **Dependency bump** → `engineering-task`; first run the two checks in `.claude/rules/repo-conventions.md` → _Dependency bumps_. **Opening Issues from an already-merged spec** → skill `open-ears-issues`. A **user-facing product epic/feature with no PRD** enters at `product-discovery`, which hands off to `spec-authoring` then `feature-iteration` (ADR-0014). Anything still unmapped → default to `engineering-task` (§3.8), state the assumption, and proceed; stop and ask Tech Lead only if that genuinely doesn't fit.
 
@@ -68,7 +68,7 @@ In the first user-facing reply, state: kind, active artifact (Issue #N / spec pa
 
 ### 3.4 Superpowers whitelist (single exception)
 
-`superpowers:brainstorming` is the only `superpowers:*` skill allowed for project work, and only for spec-authoring. After brainstorming concludes, **do not chain into `superpowers:writing-plans`** — the `NNN-requirements.md` / `NNN-design.md` triplet is the plan (ADR-0007 §2.4 via `do-feature-iteration`). All other `superpowers:*` skills, and any chain initiated internally by a superpowers skill, are explicitly disallowed for project work. They may be referenced as implementation patterns inside project SKILL.md content, but not as the orchestrator.
+`superpowers:brainstorming` is the only `superpowers:*` skill allowed for project work, and only **as the step-2 implementation vehicle of `author-feature-spec`** (and its `do-product-discovery` upstream) — never as the orchestrator itself. The orchestrator is the catalog skill (`apps/docs/content/skills/author-feature-spec/SKILL.md`); brainstorming is one step inside it (§3.3 — the path is the contract). After brainstorming concludes, **do not chain into `superpowers:writing-plans`** — the `NNN-requirements.md` / `NNN-design.md` triplet is the plan (ADR-0007 §2.4). All other `superpowers:*` skills, and any chain initiated internally by a superpowers skill, are explicitly disallowed for project work. They may be referenced as implementation patterns inside project SKILL.md content, but not as the orchestrator.
 
 ### 3.5 Bootstrap
 
@@ -108,7 +108,7 @@ CI lint guards (ADR-0007 §2.6) surface as PR Checks for the reviewer and author
 
 ## 6. Hard rules
 
-- **SDD.** No production code without a feature spec at `apps/docs/content/specs/features/NNN-<slug>/`. If absent, invoke `superpowers:brainstorming` (§3.4) to author one.
+- **SDD.** No production code without a feature spec at `apps/docs/content/specs/features/NNN-<slug>/`. If absent, run `author-feature-spec` (§3.1) to author one.
 - **Vertical slices over horizontal layers (F-22).** Every feature-spec declares `surface: backend-only | user-facing` in `NNN-requirements.md` frontmatter; a genuine backend-only spec is verified by Vitest e2e alone, but a `user-facing` feature owns its UI deliverable in the **same** WBS as its backend. Backend-first is allowed only as an explicit, tracked out-of-scope deferral named in the spec — never a silent default. A UI surface in any EARS _trigger_ forbids `surface: backend-only`. Enforced by `author-ears-spec`, `open-ears-issues` step 3a, `run-iteration-end-checklist` item 12.
 - **No untracked seam / scaffold (F-22).** A scaffold, stub, fake, or fail-closed seam standing in for a real deliverable is decision-debt: it MUST be a tracked open Issue with an explicit "done against the real dependency" criterion — a code comment is not an obligation the tracker can see. A `user-facing` theme's DoD is "a vertical slice is completable end-to-end", not "all backend handlers merged". Detail: `open-ears-issues` step 3a.
 - **No workarounds, no patches, no temporary hacks — build it right the first time.** A workaround, monkey-patch, local source edit "just to make it run", manual one-off step, hardcoded value standing in for missing config, or any "temporary" measure is **forbidden** — in code _and_ process. If a prerequisite is not ready, **STOP and fix the prerequisite properly first**, as its own tracked Issue wired as a blocking dependency (`blocked_by`). Corollaries: (a) **never rush a UI/integration layer ahead of the backend it depends on** — if the live path isn't ready, the slice isn't ready; (b) **verification only counts against clean, committed code** — a green observed against a patched/hacked/locally-mutated state is not a real green; (c) the urge to "just get it working now" is the signal to re-sequence, not to patch. Detail: memory `feedback_no_workarounds_build_clean`.

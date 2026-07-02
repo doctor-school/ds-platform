@@ -47,7 +47,7 @@ lang: ru
 
 ### 2.2 Каноническая процедура — skill-каталог в `apps/docs/content/skills/<name>/SKILL.md`
 
-Источником истины для процедуры AI-итерации служит **проектный skill-каталог** в `apps/docs/content/skills/<name>/SKILL.md` (AGENTS.md §3.3 — «the path is the contract»). Оркестрационные skill'ы (`do-feature-iteration`, `do-hotfix-pr`, `do-adr-revision`, `do-decision-debt-followup`) собирают процедурные (`read-relevant-adrs`, `verify-base-ci-green`, `author-ears-spec`, `open-ears-issues`, `run-iteration-end-checklist`, `request-mode-a-review`, `respond-to-review`, `write-iteration-summary`, `surface-decision-debt`, `merge-when-green`). Discipline-gate'ы оформлены как «Cannot proceed without» на каждом orchestration skill — агент не может молча их пропустить, прочитав narrative. Inline-резюме ниже зеркалит каталог; каталог — авторитетный.
+Источником истины для процедуры AI-итерации служит **проектный skill-каталог** в `apps/docs/content/skills/<name>/SKILL.md` (AGENTS.md §3.3 — «the path is the contract»). Оркестрационные skill'ы (`do-feature-iteration`, `do-hotfix-pr`, `do-adr-revision`, `do-decision-debt-followup`, `author-feature-spec`) собирают процедурные (`read-relevant-adrs`, `verify-base-ci-green`, `author-ears-spec`, `open-ears-issues`, `run-iteration-end-checklist`, `request-mode-a-review`, `respond-to-review`, `write-iteration-summary`, `surface-decision-debt`, `merge-when-green`). Discipline-gate'ы оформлены как «Cannot proceed without» на каждом orchestration skill — агент не может молча их пропустить, прочитав narrative. Inline-резюме ниже зеркалит каталог; каталог — авторитетный.
 
 orchestrated iteration cycle (`do-feature-iteration` оркеструет эти шаги):
 
@@ -861,7 +861,7 @@ Single config flag в `.github/agents-config.json`:
 
 **LiteLLM admin UI protection:** LiteLLM admin не имеет native OIDC; protect через nginx forward-auth proxy с Zitadel (ADR-0001 OIDC tenant, закрыто по §8 / DSP-209). Это не trivial и оформляется отдельным дизайн-блоком в trigger-ADR.
 
-**Capacity Phase 0+1:** instance A — одна VM (Hetzner EU, ~~€20/мес); instance B — одна VM в существующем Timeweb (~~₽1000/мес). HA-пара через keepalived — Phase Pilot+.
+**Capacity Phase 0+1:** instance A — одна VM (Hetzner EU, ≈€20/мес); instance B — одна VM в существующем Timeweb (≈₽1000/мес). HA-пара через keepalived — Phase Pilot+.
 
 **Pre-v2 prerequisite — dual-LLM pattern evaluation:** Content Pipeline v2 (`12-ai-content-pipeline.md` §3) processes content из brief'ов от экспертов. Если brief может содержать user-submitted material (e.g., копипаст из чата, файлы от соавторов), prompt-injection vector активен с дня 1. Перед запуском v2 в production — формальная оценка: входит ли user-controlled content в pipeline? Если да — OWASP dual-LLM pattern (privileged LLM с tools отделена от quarantined LLM читающей untrusted content) должен быть в дизайне trigger-ADR, не deferred дальше.
 

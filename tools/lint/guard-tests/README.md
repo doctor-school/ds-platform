@@ -14,12 +14,12 @@ A guard can only be driven deterministically if its inputs are injectable. The
 guards expose four seams, each inert in production (the env var is unset, so the
 guard resolves real paths / spawns real `gh` exactly as before):
 
-| Seam env var          | Replaces                                   | Used by                                                                                                                   |
-| --------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| `LINT_FIXTURE_ROOT`   | the repo root the guard scans (FS)         | interaction-states, form-error, form-rhythm, ears-naming, ears-test, no-stub, asset-format, spec-link, instruction-budget |
-| `LINT_GH_FIXTURE_DIR` | `gh pr/issue view` (canned JSON)           | registry-research, spec-link                                                                                              |
-| `LINT_MEMORY_FILE`    | the derived `~/.claude/.../MEMORY.md` path | instruction-budget                                                                                                        |
-| _(args)_              | CLI flags (`runGuard(..., { extraArgs })`) | —                                                                                                                         |
+| Seam env var          | Replaces                                   | Used by                                                                                                                                                                   |
+| --------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LINT_FIXTURE_ROOT`   | the repo root the guard scans (FS)         | interaction-states, form-error, form-rhythm, ears-naming, ears-test, no-stub, asset-format, spec-link, instruction-budget, events-drift, glossary-mdx, glossary-roundtrip |
+| `LINT_GH_FIXTURE_DIR` | `gh pr/issue view` (canned JSON)           | registry-research, spec-link                                                                                                                                              |
+| `LINT_MEMORY_FILE`    | the derived `~/.claude/.../MEMORY.md` path | instruction-budget                                                                                                                                                        |
+| _(args)_              | CLI flags (`runGuard(..., { extraArgs })`) | —                                                                                                                                                                         |
 
 `LINT_FIXTURE_ROOT` is set to the case dir automatically by `runGuard`; the rest
 are passed per case via `runGuard(guard, caseDir, { env })`.
@@ -44,9 +44,21 @@ valid) so the asserted message maps to one branch.
 Covered here (FS / gh / memory seams): `interaction-states`, `form-error`,
 `form-rhythm`, `ears-naming`, `ears-test`, `no-stub`, `asset-format`,
 `registry-research`, `spec-link`, `instruction-budget`, `module-readme`,
-`tdd-signal`, `spec-status`, `prior-decisions`.
+`tdd-signal`, `spec-status`, `prior-decisions`, `events-drift`, `glossary-mdx`,
+`glossary-roundtrip`.
 
-The last four grew real behaviour in #438 (they were exit-0 stubs). `module-readme`
+The last three grew real behaviour in #448 (they were exit-0 stubs, baseline
+hard-red in the `ci` needs-list per #440). All three are FS-scan
+(`LINT_FIXTURE_ROOT`): `events-drift` diffs `@OutboxEmit` call-sites against
+`specs/**/events.md`; `glossary-roundtrip` diffs the glossary source id set
+against the generated `packages/glossary/(src/)?ids.ts`; `glossary-mdx` resolves
+`[[term-id]]` directives against the glossary source. Each ships a green case,
+an empty/evaluated-emptiness case (events-drift, glossary-roundtrip) or scoping
+cases (glossary-mdx cross-ref + code-span masking), the new-term opt-out
+(glossary-mdx), and one red-per-branch. The glossary pair shares
+[`lib/glossary.ts`](../lib/glossary.ts) (the canonical-id source reader).
+
+The four #438 guards grew real behaviour then (they were exit-0 stubs). `module-readme`
 is an FS-scan (`LINT_FIXTURE_ROOT`) with a `LINT_MODULE_README_ALLOW` env seam for
 the grandfather-allowlist branch; `tdd-signal` / `spec-status` / `prior-decisions`
 are PR-event-gated — their changed-file / label / status inputs come from the
@@ -91,8 +103,8 @@ Together these assert the gate's scan + validity behaviour against a real boot;
 the thin `endpoint-authz-lint.ts` CLI shell (argv / drift / `--generate`) is I/O
 glue over that tested logic.
 
-**Stub guards:** `events` and the glossary pair are still `[stub]` (exit 0, no
-checks) — no fail branch to assert yet. Each gets coverage when it grows real
-behaviour, on its own implementation Issue. (`ears-test` grew its coverage +
-orphan behaviour in #316; `tdd-signal` / `spec-status` / `prior-decisions` /
-`module-readme` grew theirs in #438 — all now covered above.)
+**No stub guards remain.** `events-drift` and the glossary pair (`glossary-mdx`,
+`glossary-roundtrip`) grew real behaviour in #448 (they were exit-0 stubs) and are
+covered above; `ears-test` grew its coverage + orphan behaviour in #316; and
+`tdd-signal` / `spec-status` / `prior-decisions` / `module-readme` grew theirs in
+#438. Every guard that runs now asserts at least one exit-code branch here.

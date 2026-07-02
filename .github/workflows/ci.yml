@@ -195,10 +195,15 @@ jobs:
       - uses: actions/checkout@v7
       - run: echo "db-drift placeholder"
 
-  # events-drift / glossary-mdx / glossary-roundtrip are ADR-0006 §6/§7 BASELINE
-  # hard-red checks (AGENTS.md §5) — wired into the `ci` meta-job needs-list
-  # (#440). The scripts behind them are still exit-0 stubs; real implementation
-  # tracked by #448 (posture decision at landing time recorded here).
+  # events-drift — ADR-0006 §7 "Events drift" row (@OutboxEmit call-sites ↔ spec
+  # events.md). REAL guard as of #448 (was a 5-line exit-0 stub). Empty-state is
+  # evaluated emptiness, not hardcoded: it scans, finds no emitters and no
+  # events.md manifests today, and exits 0 "nothing to check" (endpoint-authz
+  # vacuously-green semantics) — it bites the moment the first emitter/manifest
+  # lands. POSTURE: KEPT hard-red (BLOCK, in the `ci` needs-list). It is a
+  # deterministic literal set comparison with no false-positive class, clean on
+  # main, and ADR-0006 §7.0 does NOT phase it into the Pilot tier (unlike the two
+  # glossary checks) — so no burn-in is warranted.
   events-drift:
     needs: setup
     runs-on: ubuntu-latest
@@ -249,11 +254,27 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/module-readme-lint.ts
 
-  # ─── Glossary 4-layer validation from ADR-0006 §6 ────────────────────
-  # Baseline hard-red, in the `ci` needs-list (#440); scripts are still exit-0
-  # stubs — real implementation tracked by #448 (see events-drift note above).
+  # ─── Glossary validation from ADR-0006 §6 ────────────────────────────
+  # glossary-mdx — ADR-0006 §6.4 MDX glossary-lint (a `[[term-id]]` directive in
+  # docs prose must resolve to a glossary term). REAL guard as of #448 (was a
+  # 5-line exit-0 stub). POSTURE: BURN-IN — `continue-on-error: true` (WARN) and
+  # REMOVED from the `ci` needs-list (BLOCK = in needs-list, WARN =
+  # continue-on-error, never both). Rationale: (a) ADR-0006 §7.0 phases
+  # glossary-mdx into the Pilot tier (#449 posture note) — not pre-pilot-mandatory;
+  # (b) the `[[…]]` syntax is OVERLOADED — glossary terms vs. memory/decision
+  # cross-refs (`[[reference_*]]`/`[[feedback_*]]`/`[[project_*]]`, the separate
+  # §7.0 `[[refs]]` check) vs. code-fenced syntax examples — so the guard's
+  # namespace-exclusion + code-masking disambiguation is HEURISTIC, a real
+  # false-positive class the deterministic events-drift/roundtrip checks lack;
+  # (c) no real glossary `[[term-id]]` directive is in use yet, so as BLOCK it
+  # would gate nothing real while carrying that FP risk. RE-ENTRY (→ BLOCK + back
+  # into the needs-list): when the ADR-0006 §6.2 glossary generation pipeline
+  # (#460) + real `[[term-id]]` usage land, the §6.4 directive-marker collision
+  # is settled by the ADR-0006 §6 reconcile (#459), AND the Pilot phase opens —
+  # earliest sweep 2026-07-02 per ADR-0007 §2.6 + ADR-0006 §7.0.
   glossary-mdx:
     needs: setup
+    continue-on-error: true # WARN (burn-in) — Pilot-phased + `[[…]]` namespace FP risk; re-entry criterion in the header
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -266,6 +287,18 @@ jobs:
   # glossary-ids: covered by ESLint rule `glossary-canonical-ids` inside `lint` job.
   # Re-enable as separate job in G5 when packages/eslint-config rule lands.
 
+  # glossary-roundtrip — ADR-0006 §6 roundtrip (glossary source ids ↔ generated
+  # `packages/glossary/(src/)?ids.ts`). REAL guard as of #448 (was a 5-line exit-0
+  # stub). Parse-and-compare (not regenerate — the §6.2 generator does not exist
+  # yet; pipeline tracked by #460); empty-state is evaluated emptiness: no
+  # generated ids.ts today → exits 0 "nothing to roundtrip", bites the moment
+  # the #460 pipeline lands the committed artifact. POSTURE: KEPT
+  # hard-red (BLOCK, in the `ci` needs-list). It is a deterministic symmetric
+  # id-set diff with no false-positive class; ADR-0006 §7.0 Pilot-phases it, but
+  # that phasing targets FP/overhead noise a set-diff on a currently-ABSENT
+  # artifact cannot create — it can only fire on a genuine source↔generated drift
+  # worth blocking the instant the pipeline lands. (Contrast glossary-mdx above,
+  # burned in for genuine `[[…]]` namespace ambiguity.)
   glossary-roundtrip:
     needs: setup
     runs-on: ubuntu-latest
@@ -680,7 +713,6 @@ jobs:
         docs-build,
         markdown-links,
         events-drift,
-        glossary-mdx,
         glossary-roundtrip,
         spec-link,
         endpoint-authz,

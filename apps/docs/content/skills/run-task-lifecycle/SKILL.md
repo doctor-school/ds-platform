@@ -79,7 +79,7 @@ With APPROVE + green CI, invoke **`merge-when-green`**: the single command `gh p
 
 Run all four, in order, as part of the **same** merge step — not a separate human ask ("тогда почему ты закрыл задачу?" / "CI прошёл, но задача висит"):
 
-1. **Confirm the Issue closed** — `Closes #N` auto-closes it; verify with `gh issue view <N> --json state`. If it did not close (the keyword was missing), close it explicitly.
+1. **Confirm the Issue closed** — `Closes #N` auto-closes it; verify with `gh issue view <N> --json state`. If it did not close (the keyword was missing), close it explicitly. The iteration summary / result comment on the Issue must carry the `surface-decision-debt` verdict (`[]` or the list) — a merge without it is incomplete, and on a multi-task batch this is per-task, not per-session.
 2. **Set board Status = Done** — `node tools/gh/set-board-status.mjs <N> "Done"`. `Closes #N` does **not** move the Projects v2 column (no closed→Done workflow is wired); this is the deterministic helper for the rule in memory `feedback_project_status_done_on_merge`. This step is part of merge, not optional.
 3. **Re-sweep branches/PRs** — `gh pr list` + `git ls-remote --heads origin`; bot branches (`changeset-release/main`, `dependabot/*`, `codeql/*`) can appear post-merge (repo-conventions → _Post-merge inventory re-sweep_).
 4. **Groom next** — pick the next unblocked board item (resume → rework → fresh → unblock ordering, board-design §5), or report the queue is empty. A merged task that leaves the next one un-surfaced is an incomplete lifecycle.

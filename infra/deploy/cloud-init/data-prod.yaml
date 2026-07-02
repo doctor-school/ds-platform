@@ -1,0 +1,41 @@
+#cloud-config
+# Base hardening for data-prod on first boot (spec §5). PRIVATE host: NO public
+# web ports opened here — Postgres/Redis are reachable only inside the VPC, and
+# the twc_firewall already restricts to the VPC CIDR. Host ufw allows SSH only.
+# App containers come up separately from infra/deploy/compose/data-prod/.
+# TODO(DSO-100): replace the deploy pubkey placeholder before apply.
+
+timezone: Europe/Moscow
+
+package_update: true
+package_upgrade: true
+packages:
+  - ufw
+  - fail2ban
+  - unattended-upgrades
+  - ca-certificates
+  - curl
+
+users:
+  - name: deploy
+    groups: [sudo, docker]
+    shell: /bin/bash
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    ssh_authorized_keys:
+      - "ssh-ed25519 AAAA... deploy@ds-data-prod   # TODO(DSO-100): real deploy pubkey"
+
+write_files:
+  - path: /etc/ds-platform/.keep
+    content: ""
+    permissions: "0700"
+
+runcmd:
+  - curl -fsSL https://get.docker.com | sh
+  # SSH only on the host firewall; 5432/6379 are exposed to the VPC by twc_firewall,
+  # never to the public internet (data-prod has no public IP anyway).
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow 22/tcp
+  - ufw --force enable
+  - systemctl enable --now fail2ban
+  - install -d -m 0700 -o root -g root /etc/ds-platform

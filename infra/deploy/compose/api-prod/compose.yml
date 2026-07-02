@@ -1,0 +1,56 @@
+# ⚠ SKELETON (DSO-100) — api-prod public plane. Service topology + wiring for the
+# 003 auth slice (spec §2.1). NOT apply-ready: image tags, the image build+publish
+# pipeline, and secret provisioning are tracked TODOs, not silent stubs.
+#
+# Secrets: provisioned OUT-OF-BAND into /etc/ds-platform/*.env (root:root 0600),
+# referenced via env_file — NEVER committed, NEVER in Terraform state (spec §5.4).
+#
+# Runs ONLY what 003 exercises: caddy + api + portal + zitadel + zitadel-login.
+# NOT here (spec §2.3): nginx (Caddy instead), BullMQ workers (no queues in 003),
+# centrifugo (deferred), cerbos (unimplemented SEAM / DSO-27).
+
+name: ds-api-prod
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # ACME certs — persist across restarts
+      - caddy_config:/config
+    depends_on: [api, portal, zitadel, zitadel-login]
+
+  api:
+    image: ds-api:${DS_API_TAG:?set in api.env} # TODO(DSO-100): build+publish pipeline → registry
+    restart: unless-stopped
+    env_file: [/etc/ds-platform/api.env] # DATABASE_URL/REDIS_URL point at data-prod PRIVATE IP
+    command: ["node", "dist/main.js"]
+    # no published ports — Caddy reaches it over the compose network (api:PORT)
+
+  portal:
+    image: ds-portal:${DS_PORTAL_TAG:?set in api.env} # TODO(DSO-100): Next.js standalone build+publish
+    restart: unless-stopped
+    env_file: [/etc/ds-platform/api.env]
+
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:v4.15.0 # pinned in lockstep with zitadel-login
+    restart: unless-stopped
+    env_file: [/etc/ds-platform/zitadel.env] # masterkey (32 chars), its DATABASE_URL, real SMTP/SMS
+    command: >-
+      start --masterkeyFromEnv
+    # TODO(DSO-100): externalDomain=id.doctor.school, TLS terminated at Caddy (externalSecure=true,
+    # tls.enabled=false behind proxy) — port config to match the dev-stand idp bootstrap.
+
+  zitadel-login:
+    image: ghcr.io/zitadel/zitadel-login:v4.15.0 # Login V2 UI — bump in lockstep with core
+    restart: unless-stopped
+    env_file: [/etc/ds-platform/zitadel.env]
+    depends_on: [zitadel]
+
+volumes:
+  caddy_data:
+  caddy_config:

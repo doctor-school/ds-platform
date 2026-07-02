@@ -28,6 +28,8 @@ The repo auto-memory lives at `~/.claude/projects/<project>/memory/`. Only the f
 
 Canon: AGENTS.md §3 + §3.4. Project work uses the catalog `apps/docs/content/skills/<name>/SKILL.md` — identify kind → cite entry point → `Read` the SKILL.md. Because `superpowers:*` skills are auto-discoverable here: **only `superpowers:brainstorming` is allowed**, and only as the step-2 vehicle inside `author-feature-spec` (the spec-authoring orchestrator), never as the orchestrator itself; it must **not** chain into `writing-plans` (the SDD triplet is the plan). Every other `superpowers:*` skill (`executing-plans`, `subagent-driven-development`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `requesting-code-review`, `finishing-a-development-branch`, …) is disallowed as an orchestrator — its procedure is already absorbed by the project catalog (TDD inside `do-feature-iteration`, review dispatch inside `request-mode-a-review`).
 
+**Orchestrate-directive routing.** A session/handoff directive containing «оркеструй» / "orchestrate" engages `orchestrating-coding-agents`: implementation is dispatched to subagents (not only reviews/checklists), the lead supervises; fall back to inline execution only after the owner explicitly confirms it.
+
 ## PR-review subagent (Mode a)
 
 `feature-dev:code-reviewer` has no Bash/`gh`. For a Mode (a) review of a branch **not in the working tree**, dispatch `general-purpose` (Opus) so it can `gh pr diff` (memory `feedback_pr_review_subagent_needs_gh`).

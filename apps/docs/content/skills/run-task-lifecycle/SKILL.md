@@ -27,6 +27,13 @@ Per AGENTS.md §4 + §6, the agent is **autonomous through merge**: it dispatche
 
 **Deciding _which_ task to pick is the lead's own call — not an `AskUserQuestion`.** Before asking the user to choose, run the decision yourself: (1) sweep the backlog (open Issues / PRs / Dependabot / stale pins); (2) apply prerequisite-first + close-the-open-epic ordering; (3) classify the fork — a **sequencing / architecture / code-cleanliness** call you settle yourself by best-architecture (memory `feedback_spec_work_brainstorm_reuse_delegate`); only a genuine **product-scope** fork (or a true blocker) is eligible for `AskUserQuestion`. "Which of these ready tasks is more valuable" is usually yours to reason out, not the user's to adjudicate.
 
+**Issue-claim protocol (parallel sessions).** Sessions run concurrently in this repo (AGENTS.md §6 — worktree-per-session), so the board is a **shared resource**: two sessions can race for the same ready item. The board Status **is** the claim, and first-claim wins:
+
+- **`In Progress` means owned.** An item already at Status `In Progress` belongs to **another live session** — do **not** pick it. The one exception is a stop-state comment on it saying the work stopped/was handed back (the fixed four-field shape, repo-conventions → _Issue conventions_); never assume it's free without **reading that latest comment** first.
+- **Setting Status = `In Progress` is the claim marker — do it first.** Moving the item to `In Progress` (`node tools/gh/set-board-status.mjs <N> "In Progress"`) is the **first** action of taking a task, **before** the branch and before any other step — it is how you stake the claim other sessions read.
+- **Re-check Status immediately before branching.** Between deciding and creating the branch another session may have claimed the item. Re-read its Status right before `git … branch`; if it flipped to `In Progress` under you (someone claimed it in the gap), **yield and pick the next item** — first claim wins, no tug-of-war.
+- **Grooming collides too.** When you groom the "next task" in parallel with other sessions, the same rule resolves it: claim by flipping Status, and if two sessions eye the same top item, the one that set `In Progress` first owns it; the other moves to the next unblocked item.
+
 If the work has no Issue, create one **before touching code** (AGENTS.md §6 — no untracked work). Whether picking or creating, enforce this **field-completeness checklist** before the Issue is "ready" — every box, not prose:
 
 - [ ] **Kind label** set — `feature` / `bug` / `chore` / `refactor` / `docs` / `tooling` (and `kind:ears-handler` / `kind:integration` for spec work). `author:*` goes in the **body**, not as a label.

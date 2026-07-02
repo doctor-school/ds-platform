@@ -1,0 +1,5 @@
+{
+  "number": 600,
+  "labels": [{ "name": "feature:042-foo" }],
+  "files": [{ "path": "apps/api/src/foo/foo.controller.ts" }]
+}

@@ -28,8 +28,10 @@
 //   3. print a per-guard PASS/FAIL summary,
 //   4. exit non-zero if ANY guard failed.
 //
-// Note: `prior-decisions` and `spec-status` are STUBS today (exit 0); they are
-// invoked anyway so the pre-flight stays complete as those guards land (G5).
+// Note: all four are REAL WARN v1 guards (#438 implemented `prior-decisions` and
+// `spec-status-fresh`, the last two former exit-0 stubs) — each fails on its
+// finding, so pre-flight catches a missing PR-body marker / spec link / Prior-
+// decisions section / Draft spec status before push, not as a CI red + rerun.
 //
 // Exit codes: 0 = all guards passed; 1 = at least one guard failed; 2 = usage
 // error.

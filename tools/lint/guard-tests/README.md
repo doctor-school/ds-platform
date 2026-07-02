@@ -43,7 +43,15 @@ valid) so the asserted message maps to one branch.
 
 Covered here (FS / gh / memory seams): `interaction-states`, `form-error`,
 `form-rhythm`, `ears-naming`, `ears-test`, `no-stub`, `asset-format`,
-`registry-research`, `spec-link`, `instruction-budget`.
+`registry-research`, `spec-link`, `instruction-budget`, `module-readme`,
+`tdd-signal`, `spec-status`, `prior-decisions`.
+
+The last four grew real behaviour in #438 (they were exit-0 stubs). `module-readme`
+is an FS-scan (`LINT_FIXTURE_ROOT`) with a `LINT_MODULE_README_ALLOW` env seam for
+the grandfather-allowlist branch; `tdd-signal` / `spec-status` / `prior-decisions`
+are PR-event-gated — their changed-file / label / status inputs come from the
+`LINT_GH_FIXTURE_DIR` `gh pr view` seam, and their spec/tree reads from
+`LINT_FIXTURE_ROOT`. Each ships green + one red-per-branch + skip cases.
 
 The EARS pair is the bidirectional EARS↔test contract (#316): `ears-test`
 (coverage + orphan; a pure WARN nudge, so its cases assert the stdout warning
@@ -83,8 +91,8 @@ Together these assert the gate's scan + validity behaviour against a real boot;
 the thin `endpoint-authz-lint.ts` CLI shell (argv / drift / `--generate`) is I/O
 glue over that tested logic.
 
-**Stub guards:** `tdd-signal`, `events`, `prior-decisions`, `module-readme`, the
-glossary pair, and `spec-status` are `[stub]` (exit 0, no checks) — no fail branch
-to assert yet. Each gets coverage when it grows real behaviour, on its own
-implementation Issue. (`ears-test` grew its coverage + orphan behaviour in #316
-and is now covered above via stdout assertions.)
+**Stub guards:** `events` and the glossary pair are still `[stub]` (exit 0, no
+checks) — no fail branch to assert yet. Each gets coverage when it grows real
+behaviour, on its own implementation Issue. (`ears-test` grew its coverage +
+orphan behaviour in #316; `tdd-signal` / `spec-status` / `prior-decisions` /
+`module-readme` grew theirs in #438 — all now covered above.)

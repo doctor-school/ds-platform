@@ -1,0 +1,7 @@
+{
+  "number": 500,
+  "files": [
+    { "path": "apps/api/src/foo/foo.service.ts" },
+    { "path": "apps/api/src/foo/foo.service.test.ts" }
+  ]
+}

@@ -1,0 +1,3 @@
+# Foo module
+
+Exports `FooModule`.

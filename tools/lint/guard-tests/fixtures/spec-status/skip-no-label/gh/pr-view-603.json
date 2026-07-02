@@ -1,0 +1,5 @@
+{
+  "number": 603,
+  "labels": [{ "name": "tooling" }],
+  "files": [{ "path": "tools/lint/foo.ts" }]
+}

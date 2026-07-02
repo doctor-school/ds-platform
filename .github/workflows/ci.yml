@@ -231,9 +231,15 @@ jobs:
           args: --no-progress --include-fragments .
           fail: true
 
+  # module-readme: every top-level NestJS module dir under apps/*/src (a dir with a
+  # *.module.ts) carries a README (ADR-0006 §7). Was an exit-0 stub; implemented as
+  # a REAL WARN v1 in #438 — EXITS NON-ZERO on findings, with a tracked-Issue
+  # grandfather allowlist for the 6 pre-existing gaps. Promotion clock (ADR-0007
+  # §2.6, 4 clean weeks) starts at merge — 2026-07-02. Kept WARN
+  # (`continue-on-error`) until the sweep flips it; do not remove it here.
   module-readme:
     needs: setup
-    continue-on-error: true # WARN v1
+    continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -570,9 +576,16 @@ jobs:
       - run: pnpm --filter @ds/showcase exec playwright install --with-deps chromium
       - run: pnpm --filter @ds/showcase test:e2e:ci
 
+  # tdd-signal: a PR that changes production source under apps/*/src with no test
+  # in the diff AND no pre-existing test in the changed module (design §5.2,
+  # heuristic). Was an exit-0 stub; implemented as a REAL WARN v1 in #438 — reads
+  # the changed-file set from `gh pr view` (PR-event-gated; shallow CI checkout has
+  # no base to diff) and EXITS NON-ZERO on findings. Promotion clock (ADR-0007
+  # §2.6, 4 clean weeks) starts at merge — 2026-07-02. Kept WARN
+  # (`continue-on-error`) until the sweep flips it; do not remove it here.
   tdd-signal:
     needs: setup
-    continue-on-error: true # WARN v1
+    continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -582,9 +595,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/tdd-signal-lint.ts
 
+  # spec-status-fresh: a feature:NNN-<slug> PR whose bound spec is still
+  # `status: Draft` (design §5.2, `In dev` minimum). Was an exit-0 stub;
+  # implemented as a REAL WARN v1 in #438 — PR-event-gated (exits 0 outside a PR;
+  # also run by `pnpm pr:preflight`), exempts the authoring PR that edits the
+  # requirements file, EXITS NON-ZERO on a Draft-below-floor finding. Promotion
+  # clock (ADR-0007 §2.6, 4 clean weeks) starts at merge — 2026-07-02. Kept WARN
+  # (`continue-on-error`) until the sweep flips it; do not remove it here.
   spec-status-fresh:
     needs: setup
-    continue-on-error: true # WARN v1
+    continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -594,9 +614,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/spec-status-lint.ts
 
+  # prior-decisions: a PR that adds/edits a feature-spec requirements file must
+  # cite ≥1 ADR in a `## Prior decisions` section (design §5.2). Was an exit-0
+  # stub; implemented as a REAL WARN v1 in #438 — PR-event-gated (exits 0 outside a
+  # PR; also run by `pnpm pr:preflight`), diff-scoped to touched requirements
+  # files, EXITS NON-ZERO on findings. Promotion clock (ADR-0007 §2.6, 4 clean
+  # weeks) starts at merge — 2026-07-02. Kept WARN (`continue-on-error`) until the
+  # sweep flips it; do not remove it here.
   prior-decisions:
     needs: setup
-    continue-on-error: true # WARN v1
+    continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

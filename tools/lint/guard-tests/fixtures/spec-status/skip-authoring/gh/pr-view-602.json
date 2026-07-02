@@ -1,0 +1,7 @@
+{
+  "number": 602,
+  "labels": [{ "name": "feature:042-foo" }],
+  "files": [
+    { "path": "apps/docs/content/specs/features/042-foo/042-requirements.md" }
+  ]
+}

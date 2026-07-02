@@ -90,7 +90,7 @@ lang: ru
 | API contract            | `packages/schemas/**/*.ts` (Zod)                                                                                                                                                            | `openapi.snapshot.json`, `packages/api-client/` (typed SDK)                                             | `pnpm generate:openapi` (NestJS boot → export); `pnpm generate:sdk` (`openapi-typescript`)           | Spectral lint + snapshot diff                 |
 | DB schema               | `packages/db/schema/**/*.ts` (Drizzle)                                                                                                                                                      | `apps/api/drizzle/*.sql` (миграции per ADR-0008 §2.3), `packages/db/erd.svg`                            | `pnpm db:generate` (drizzle-kit; `out: ../../apps/api/drizzle`); `pnpm db:erd` (introspect → render) | `drizzle-kit check`                           |
 | Domain IDs              | `apps/docs/content/product/glossary/*.md` (per-term markdown; canonical id in body marker)                                                                                                  | `packages/glossary/src/ids.ts` (TS const)                                                               | `pnpm generate:glossary`                                                                             | ESLint custom rule + roundtrip check          |
-| Domain labels (ru/en)   | same glossary frontmatter                                                                                                                                                                   | `packages/i18n/messages/{ru,en}/glossary.json`; Payload Glossary Collection rows                        | `pnpm generate:glossary`; `pnpm sync:glossary-payload` (on staging+prod)                             | Payload Lexical AST glossary-ref check        |
+| Domain labels (ru/en)   | same glossary frontmatter                                                                                                                                                                   | `packages/glossary/messages/<lang>/glossary.json`; Payload Glossary Collection rows                     | `pnpm generate:glossary`; `pnpm sync:glossary-payload` (on staging+prod)                             | Payload Lexical AST glossary-ref check        |
 | Business content        | Payload collections (`apps/cms` DB)                                                                                                                                                         | Build-time fetch / runtime API                                                                          | Payload native                                                                                       | Lexical glossary-ref check                    |
 | Architectural decisions | `docs/adr/NNNN-*.md` Git, immutable                                                                                                                                                         | Rendered Fumadocs                                                                                       | (none — content as-is)                                                                               | Manual review on PR                           |
 | Tech specs              | `docs/content/specs/tech/YYYY-MM-DD-*.md`                                                                                                                                                   | Rendered Fumadocs                                                                                       | (none — content as-is)                                                                               | Manual review                                 |
@@ -486,8 +486,14 @@ export const GLOSSARY_TERMS: ReadonlyArray<GlossaryTerm> = ${JSON.stringify(
   await writeFile(idsOut, idsTs);
 
   // generate i18n bundles
-  const ruOut = resolve(REPO_ROOT, "packages/i18n/messages/ru/glossary.json");
-  const enOut = resolve(REPO_ROOT, "packages/i18n/messages/en/glossary.json");
+  const ruOut = resolve(
+    REPO_ROOT,
+    "packages/glossary/messages/ru/glossary.json",
+  );
+  const enOut = resolve(
+    REPO_ROOT,
+    "packages/glossary/messages/en/glossary.json",
+  );
   await mkdir(dirname(ruOut), { recursive: true });
   await mkdir(dirname(enOut), { recursive: true });
   await writeFile(
@@ -817,7 +823,7 @@ jobs:
             packages/glossary/src/ids.ts \
             packages/api-client/openapi.snapshot.json \
             packages/api-client/src/*.generated.ts \
-            packages/i18n/messages/*/glossary.json \
+            packages/glossary/messages/*/glossary.json \
             || (echo "::error::Generated artifacts out of date. Run 'pnpm generate:all' and commit."; exit 1)
 
       - name: TypeScript compile

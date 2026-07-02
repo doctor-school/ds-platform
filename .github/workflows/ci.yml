@@ -195,6 +195,10 @@ jobs:
       - uses: actions/checkout@v7
       - run: echo "db-drift placeholder"
 
+  # events-drift / glossary-mdx / glossary-roundtrip are ADR-0006 §6/§7 BASELINE
+  # hard-red checks (AGENTS.md §5) — wired into the `ci` meta-job needs-list
+  # (#440). The scripts behind them are still exit-0 stubs; real implementation
+  # tracked by #448 (posture decision at landing time recorded here).
   events-drift:
     needs: setup
     runs-on: ubuntu-latest
@@ -240,6 +244,8 @@ jobs:
       - run: pnpm exec tsx tools/lint/module-readme-lint.ts
 
   # ─── Glossary 4-layer validation from ADR-0006 §6 ────────────────────
+  # Baseline hard-red, in the `ci` needs-list (#440); scripts are still exit-0
+  # stubs — real implementation tracked by #448 (see events-drift note above).
   glossary-mdx:
     needs: setup
     runs-on: ubuntu-latest
@@ -592,9 +598,10 @@ jobs:
       - run: pnpm exec tsx tools/lint/prior-decisions-lint.ts
 
   # ─── Meta-job: single status check for branch protection ─────────────
-  # Phase 0 baseline: only required-needs jobs that actually run today.
-  # docs-build, api-drift, db-drift, generated-artifacts join needs-list as their
-  # owning groups (G6/G8/G9) land. WARN-only jobs are intentionally excluded.
+  # Phase 0 baseline: every hard-red job that actually runs today sits in this
+  # needs-list (#440) — a job is either here (BLOCK), `continue-on-error` (WARN),
+  # or `if: false` (placeholder until its owning group G6/G8/G9 lands: api-drift,
+  # db-drift, generated-artifacts). WARN-only jobs are intentionally excluded.
   # WARN→BLOCK promotion criterion + sweep cadence: ADR-0007 §2.6 (settled in
   # #427; first sweep 2026-07-02 — per-guard verdicts recorded on the Issue).
   # Job name must stay `ci` — branch protection on `main` (per ADR-0008
@@ -603,6 +610,7 @@ jobs:
   ci:
     needs:
       [
+        setup,
         lint,
         types,
         unit,
@@ -611,6 +619,9 @@ jobs:
         api-build-smoke,
         docs-build,
         markdown-links,
+        events-drift,
+        glossary-mdx,
+        glossary-roundtrip,
         spec-link,
         endpoint-authz,
         tokens-fresh,
@@ -619,9 +630,12 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
+      # A required job must SUCCEED — `skipped`/`cancelled` fail too, else a red
+      # `setup` skips every downstream job and the aggregate would go green on a
+      # run where nothing built or tested (#449 Mode (a) review).
       - name: Aggregate
         run: |
-          if [ "${{ contains(needs.*.result, 'failure') }}" = "true" ]; then
-            echo "Required job failed"; exit 1
+          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'skipped') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+            echo "Required job failed, was skipped, or was cancelled"; exit 1
           fi
           echo "All required jobs green"

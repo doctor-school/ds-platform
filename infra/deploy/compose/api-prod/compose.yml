@@ -2,8 +2,10 @@
 # 003 auth slice (spec §2.1). NOT apply-ready: image tags, the image build+publish
 # pipeline, and secret provisioning are tracked TODOs, not silent stubs.
 #
-# Secrets: provisioned OUT-OF-BAND into /etc/ds-platform/*.env (root:root 0600),
-# referenced via env_file — NEVER committed, NEVER in Terraform state (spec §5.4).
+# Secrets: app/runtime secrets provisioned OUT-OF-BAND into /etc/ds-platform/*.env
+# (root:root 0600), referenced via env_file — NEVER committed, never produced by
+# Terraform (spec §5.4). NB: the pgbackrest S3 keys ARE Terraform-generated and
+# land in tfstate (spec §5.4 DD-6) — that is the one exception.
 #
 # Runs ONLY what 003 exercises: caddy + api + portal + zitadel + zitadel-login.
 # NOT here (spec §2.3): nginx (Caddy instead), BullMQ workers (no queues in 003),

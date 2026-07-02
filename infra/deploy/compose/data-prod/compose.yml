@@ -4,7 +4,9 @@
 # for self-hosted PG over Managed PG (spec §3).
 #
 # Secrets via /etc/ds-platform/data.env (POSTGRES_PASSWORD, pgbackrest S3 creds +
-# repo cipher passphrase) — never committed (spec §5.4).
+# repo cipher passphrase) — never committed (spec §5.4). The S3 keys originate in
+# tfstate (Terraform-generated) — copy them here via `terraform output -raw`
+# (spec §5.4 DD-6 + infra/deploy/README.md apply step 4).
 
 name: ds-data-prod
 

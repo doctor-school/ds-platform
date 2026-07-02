@@ -5,8 +5,13 @@
 # retention is pgbackrest-side (repo1-retention-full=7), not bucket lifecycle.
 
 resource "twc_s3_bucket" "pgbackrest" {
-  name       = "ds-prod-pgbackrest"
-  type       = "private"
-  preset_id  = 2669 # TODO(DSO-100): confirm a HOT pay-as-you-go preset (~50 GB). Cold penalizes churny WAL retrieval.
+  name = "ds-prod-pgbackrest"
+  type = "private"
+  # 2669 = S3 Hot v2, auto-upgradable (bbm precedent: bbm-zoom-rotation-buffer,
+  # ~79₽/mo at 10 GB base). HOT is the right class — pgbackrest WAL retrieval is
+  # churny and cold storage penalizes early-delete + per-retrieval; auto-upgrade
+  # grows past the base as basebackups accumulate toward the ~50 GB in spec §4.
+  # Preset price/size validated on apply.
+  preset_id  = 2669
   project_id = var.project_id
 }

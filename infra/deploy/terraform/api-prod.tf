@@ -1,6 +1,8 @@
 # api-prod — public plane (spec §2.1). Runs Caddy (TLS) + api + portal + Zitadel.
 # One public IPv4. Base hardening on first boot via cloud-init.
-# TODO(DSO-100): confirm VPC-attach + firewall-bind attribute names on `validate`.
+# VPC-attach + firewall-bind shapes verified against provider schema v1.7.1
+# (see network.tf): server joins the VPC via a `local_network` block; the
+# firewall binds from its side via `link` (twc_firewall.api_prod in network.tf).
 
 resource "twc_ssh_key" "api_prod" {
   name       = "ds-api-prod"
@@ -22,8 +24,14 @@ resource "twc_server" "api_prod" {
   # Base VPS hardening on first boot (non-root deploy user, ufw, docker+compose).
   cloud_init = file("${path.module}/../cloud-init/api-prod.yaml")
 
-  # TODO(DSO-100): attach to twc_vpc.ds (confirm arg: vpc_id / network block).
-  # TODO(DSO-100): bind twc_firewall.api_prod (confirm arg name).
+  # Join the private VPC with a static address. mode=no_nat: api-prod reaches the
+  # internet (ACME, image pulls) through its own public IPv4 (twc_server_ip below);
+  # the private NIC carries only VPC-local traffic to data-prod (PG/Redis).
+  local_network {
+    id   = twc_vpc.ds.id
+    ip   = var.api_prod_private_ip
+    mode = "no_nat"
+  }
 
   comment = "ds-platform api-prod (Caddy+api+portal+Zitadel). project ds-platform. nsk-1. DSO-100."
 }

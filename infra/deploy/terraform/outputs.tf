@@ -17,12 +17,16 @@ output "data_prod_server_id" {
 }
 
 # Private IPs of both hosts inside twc_vpc.ds — DATABASE_URL/REDIS_URL on api-prod
-# point at data-prod's private IP.
-# TODO(DSO-100): confirm the attribute exposing the VPC-side IP (e.g.
-# twc_server.<x>.local_networks[*].ip or a network block) on `terraform validate`.
+# point at data-prod's private IP. Sourced from the server's `local_network` block
+# (verified attribute, provider v1.7.1); static per var.*_private_ip.
 output "data_prod_private_ip" {
-  description = "data-prod private (VPC) IPv4 — value of the DB/Redis host in api-prod's api.env."
-  value       = "TODO: twc_server.data_prod private IP attribute (see network.tf notice)"
+  description = "data-prod private (VPC) IPv4 — value of the DB/Redis host in api-prod's api.env (spec §5.4)."
+  value       = twc_server.data_prod.local_network[0].ip
+}
+
+output "api_prod_private_ip" {
+  description = "api-prod private (VPC) IPv4 — for VPC-side debugging / bastion routing."
+  value       = twc_server.api_prod.local_network[0].ip
 }
 
 output "pgbackrest_bucket" {

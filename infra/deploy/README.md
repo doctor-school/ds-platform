@@ -11,11 +11,12 @@ an **always-on** Timeweb production environment with live SMS + Email.
 - **Is:** two Timeweb VPSes (`api-prod` public + `data-prod` private) joined by a
   private network (per ADR-0012), plus a pgbackrest S3 backup repo. Own Terraform
   harness, own state, own `TWC_TOKEN`, **project-scope `ds-platform`** (tenancy SSOT).
-- **Is a skeleton:** the `terraform/` harness provisions the hosts/network/S3, but
-  `compose/**`, `cloud-init/*`, and several attribute shapes carry explicit
-  `TODO(DSO-100)` markers (image build+publish pipeline, secret provisioning
-  runbook, pgbackrest repo config, VPC-attach/firewall-bind attribute names). These
-  are tracked follow-ups, **not** apply-and-forget.
+- **Is a skeleton:** the `terraform/` harness provisions the hosts/network/S3
+  (all provider attribute shapes verified against `timeweb-cloud/timeweb-cloud`
+  v1.7.1 — `terraform validate` passes), but `compose/**` and `cloud-init/*` carry
+  explicit `TODO(DSO-100)` markers (image build+publish pipeline, secret
+  provisioning runbook, pgbackrest repo config). These are tracked follow-ups,
+  **not** apply-and-forget.
 - **Is NOT:** the full pre-pilot. Cerbos, BullMQ workers, Centrifugo, Unleash,
   admin/cms/promo/mobile, WAF, HA, LB, CDN, preview-vps, Beget S3 offsite are all
   **out of slice** — deploying only what 003 actually runs (spec §2.3, §8).
@@ -40,10 +41,13 @@ infra/deploy/
    Timeweb project and set `project_id`. Generate deploy SSH keypairs and set the
    `*_ssh_pubkey_path` + real pubkeys in `cloud-init/*.yaml`. Set `admin_ssh_cidr`.
 2. **Provision:** from `terraform/`: `set -a; . ../.env; set +a` then
-   `terraform init && terraform validate && terraform plan`.
-   **Resolve every `TODO(DSO-100)` `validate` notice first** (twc_vpc / twc_firewall
-   attribute names + VPC-attach/firewall-bind args are unverified against the
-   provider schema — the bbm template does not use these resources yet). Then `apply`.
+   `terraform init && terraform validate && terraform plan`. The provider attribute
+   shapes are already resolved & `validate`-green against `timeweb-cloud` v1.7.1
+   (twc_vpc uses a region `location`; firewalls bind via `link {id,type="server"}`;
+   servers join the VPC via a `local_network {id,ip,mode}` block — DSO-100
+   2026-07-02). `plan`/`apply` still validate **values** live (preset prices/sizes,
+   the `vpc_location="ru-2"` region, zone availability) — review the plan before
+   `apply`.
 3. **DNS (manual, at Beget — the zone is NOT at Timeweb):** point A-records
    `api.` / `app.` / `id.doctor.school` at the `api_prod_public_ip` output. Root
    `doctor.school` A-record is untouched. Email records (MX/SPF/DKIM/DMARC) are
@@ -76,3 +80,13 @@ infra/deploy/
   when local disk >70% or on-box backup retention is needed (spec §4).
 - **Terraform state has secrets** (S3 keys via outputs) — `*.tfstate` is gitignored;
   keep it out of any shared location. Vault migration is a tracked follow-up.
+- **first-boot egress (data-prod):** data-prod has no public IP; its VPC interface
+  is `mode="snat"` so runtime egress (pgbackrest→S3, image pulls) is NAT'd out.
+  But cloud-init runs at **first boot**, possibly before SNAT is fully up — if the
+  data-prod cloud-init needs the internet (apt, docker install) it may stall. The
+  provider docs' remedy is a temporary `floating_ip_id` on the server during
+  provisioning (dropped afterward), or bake the image/pre-pull offline. Confirm on
+  the first `apply`; if cloud-init hangs, attach a floating IP, re-run, detach.
+- **VPC region vs server AZ:** `twc_vpc.location` takes a **region** code
+  (`vpc_location="ru-2"`), while each `twc_server.availability_zone` takes an **AZ**
+  (`nsk-1`, which is inside ru-2). They must stay co-located (single-AZ, ADR-0012).

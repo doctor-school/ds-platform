@@ -1,25 +1,35 @@
 # Private network + firewall (spec §5.1).
 #
-# ⚠ SKELETON — the exact twc_vpc / twc_firewall / twc_firewall_rule attribute
-# names + how a server attaches to a VPC and how a firewall binds to a server
-# MUST be validated against the installed provider schema on `terraform init` +
-# `terraform validate` (the bbm harness does not yet use these resources).
-# TODO(DSO-100): confirm attribute shapes, then remove this notice.
+# Attribute shapes verified against timeweb-cloud/timeweb-cloud provider schema
+# v1.7.1 (`terraform providers schema -json`, DSO-100 2026-07-02) + the provider
+# docs. Confirmed: twc_vpc takes {name, subnet_v4, location}; twc_firewall has NO
+# project_id and binds to servers via `link {id,type}` blocks (NOT a server-side
+# arg); twc_firewall_rule takes {firewall_id, direction="ingress", protocol, port,
+# cidr}; a server joins the VPC via a `local_network {id,ip,mode}` block (see
+# api-prod.tf / data-prod.tf).
 
-# Private network — data-prod is reachable ONLY here (no public IP). Single
-# location (VPC is single-zone) → both VPSes pinned to var.availability_zone.
+# Private network — data-prod is reachable ONLY here (no public IP). A twc_vpc is
+# single-location: its `location` is the REGION code (e.g. "ru-2"), distinct from
+# the per-server `availability_zone` ("nsk-1"). nsk-1 ⊂ ru-2 (Novosibirsk), so the
+# VPC region and both servers' AZ are co-located (single-AZ, ADR-0012).
 resource "twc_vpc" "ds" {
-  name          = "ds-prod-vpc"
-  subnet_v4     = var.vpc_cidr
-  location      = var.availability_zone # TODO: confirm attribute name (location vs availability_zone)
-  description   = "ds-platform prod private net (api-prod ⟷ data-prod). DSO-100."
+  name        = "ds-prod-vpc"
+  subnet_v4   = var.vpc_cidr
+  location    = var.vpc_location
+  description = "ds-platform prod private net (api-prod ⟷ data-prod). DSO-100."
 }
 
 # api-prod firewall: public web (80/443) + SSH from the admin CIDR only.
+# Binds to the api-prod server via `link` (twc_firewall has no project_id — the
+# firewall inherits the project from the linked server).
 resource "twc_firewall" "api_prod" {
   name        = "ds-api-prod-fw"
   description = "api-prod: web open, SSH admin-only. DSO-100."
-  project_id  = var.project_id
+
+  link {
+    id   = twc_server.api_prod.id
+    type = "server"
+  }
 }
 
 resource "twc_firewall_rule" "api_http" {
@@ -47,11 +57,15 @@ resource "twc_firewall_rule" "api_ssh" {
 }
 
 # data-prod firewall: NO public web. Postgres/Redis only inside the VPC; SSH
-# admin-only (or via api-prod as a bastion).
+# admin-only (or via api-prod as a bastion). Binds to the data-prod server.
 resource "twc_firewall" "data_prod" {
   name        = "ds-data-prod-fw"
   description = "data-prod: VPC-only PG/Redis, SSH admin-only, no public web. DSO-100."
-  project_id  = var.project_id
+
+  link {
+    id   = twc_server.data_prod.id
+    type = "server"
+  }
 }
 
 resource "twc_firewall_rule" "data_pg" {

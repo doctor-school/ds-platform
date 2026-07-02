@@ -153,7 +153,7 @@ In **Phase 0**, Tech Lead is the **single CODEOWNERS owner** (ADR-0008 §2.7) an
 | **Project skill catalog**                  | **`apps/docs/content/skills/<name>/SKILL.md`**                                                             |
 | Glossary                                   | `apps/docs/content/product/glossary/` (file-per-term, Keystatic-managed)                                   |
 | API contract SSOT / DB schema SSOT         | `packages/schemas/` (Zod) / `packages/db/schema/` (Drizzle)                                                |
-| Generated SDK / glossary IDs               | `packages/api-client/`, `packages/glossary/ids.ts` (do not edit by hand)                                   |
+| Generated SDK / glossary IDs               | `packages/api-client/`, `packages/glossary/src/ids.ts` (do not edit by hand)                               |
 | Lint tools / bootstrap                     | `tools/lint/*.ts` / `tools/agent-bootstrap.ts` (`pnpm bootstrap`)                                          |
 | Always-on instruction detail (auto-loaded) | `.claude/rules/*.md` (repo-conventions, dev-stand)                                                         |
 | Strategic / cross-team work-items          | Plane workspace `doctor-school` (projects DSP, DSC, DSM, DSO); code-level Issues → **GitHub** in this repo |

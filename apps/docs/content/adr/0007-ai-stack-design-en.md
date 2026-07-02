@@ -169,7 +169,7 @@ Any agent at the start of a session (sync or async) runs the script and receives
 3. Active spec(s)
    - For each agent-working Issue: reads its feature:NNN-<slug> label → spec folder path
    - Reads NNN-requirements.md frontmatter: status, Prior decisions (list of ADRs)
-   - Extracts glossary terms from spec body via [[term-id]] directives
+   - Extracts glossary terms from spec body via [[g:term-id]] directives
 
 4. Context files to load (paths only)
    - AGENTS.md, CLAUDE.md (root)

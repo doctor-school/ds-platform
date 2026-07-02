@@ -49,22 +49,22 @@ Principle [[feedback_docs_as_ssot]] (STRICT): doc-first cycle, AI session starts
 
 Principle 7 of the reference doc applied literally: each type of truth has exactly one home. Full table:
 
-| Type of truth                                | Master                                                                                | Mechanism propagation                                                                                     |
-| -------------------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| API contract                                 | Zod schemas in `packages/schemas/`                                                    | nestjs-zod → OpenAPI 3.1 → openapi-typescript → `@ds/api-client` SDK (ADR-0002 §3-5)                      |
-| DB schema                                    | Drizzle TS schemas in `packages/db/schema/`                                           | drizzle-kit generate → SQL migrations + introspect → ERD .svg (ADR-0003 §4)                               |
-| Domain IDs (immutable)                       | `apps/docs/content/product/glossary/*.md` (Keystatic-managed)                         | `pnpm generate:glossary` → `packages/glossary/ids.ts` TS const → ESLint enforce import                    |
-| Domain labels (mutable RU/EN)                | same glossary                                                                         | i18n bundles + sync to Payload Glossary Collection                                                        |
-| Business content (legal/team/marketing)      | Payload v3 collections                                                                | Build-time fetch / runtime API (ADR-0004 §7)                                                              |
-| Architectural decisions                      | `docs/adr/NNNN-*.md` immutable Git                                                    | Rendered in Fumadocs portal                                                                               |
-| Tech specs (architectural brainstorm output) | `docs/content/specs/tech/YYYY-MM-DD-*.md`                                             | DSO-25..29 pattern, Keystatic-editable                                                                    |
-| Feature specs (SDD)                          | `docs/content/specs/features/NNN-name/` (req+design+scenarios — 3 files, no tasks.md) | EARS → unit tests; Gherkin → Playwright E2E; per-EARS GitHub Issues with label `feature:NNN-name`         |
-| Implementation tasks (code-level)            | **GitHub Issues** in DS Platform repo (one Issue per EARS handler / bug / refactor)   | PR-linked, auto-close on merge; AI reads `gh issue view`; cross-link `tracker:` field in spec frontmatter |
-| Strategic/PM tasks (non-code)                | **Plane** workspace `doctor-school` (DSP/DSC/DSM/DSO projects)                        | Strategic level, cross-team (product+legal+HR+marketing), Product Lead-native; cross-link via URL labels  |
-| Module README                                | `apps/*/src/modules/*/README.md`                                                      | Rendered Fumadocs + lint checks exports ↔ README                                                          |
-| Prose narrative (Vision, OKRs, PRD)          | `apps/docs/content/product/*.md`                                                      | Keystatic UI for Product Lead + Fumadocs render                                                           |
-| Operations (runbooks, monitoring)            | `apps/docs/content/operations/`                                                       | Fumadocs render                                                                                           |
-| AI constitution                              | `AGENTS.md` (root) + `CLAUDE.md` (Claude-Code overrides)                              | Read by AI first at session start                                                                         |
+| Type of truth                                | Master                                                                                                   | Mechanism propagation                                                                                     |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| API contract                                 | Zod schemas in `packages/schemas/`                                                                       | nestjs-zod → OpenAPI 3.1 → openapi-typescript → `@ds/api-client` SDK (ADR-0002 §3-5)                      |
+| DB schema                                    | Drizzle TS schemas in `packages/db/schema/`                                                              | drizzle-kit generate → SQL migrations + introspect → ERD .svg (ADR-0003 §4)                               |
+| Domain IDs (immutable)                       | `apps/docs/content/product/glossary/*.md` (Keystatic-managed)                                            | `pnpm generate:glossary` → `packages/glossary/src/ids.ts` TS const → ESLint enforce import                |
+| Domain labels (mutable RU/EN)                | same glossary                                                                                            | i18n bundles + sync to Payload Glossary Collection                                                        |
+| Business content (legal/team/marketing)      | Payload v3 collections                                                                                   | Build-time fetch / runtime API (ADR-0004 §7)                                                              |
+| Architectural decisions                      | `docs/adr/NNNN-*.md` immutable Git                                                                       | Rendered in Fumadocs portal                                                                               |
+| Tech specs (architectural brainstorm output) | `docs/content/specs/tech/YYYY-MM-DD-*.md`                                                                | DSO-25..29 pattern, Keystatic-editable                                                                    |
+| Feature specs (SDD)                          | `docs/content/specs/features/NNN-name/` (req+design+scenarios — 3 files, no tasks.md)                    | EARS → unit tests; Gherkin → Playwright E2E; per-EARS GitHub Issues with label `feature:NNN-name`         |
+| Implementation tasks (code-level)            | **GitHub Issues** in DS Platform repo (one Issue per EARS handler / bug / refactor)                      | PR-linked, auto-close on merge; AI reads `gh issue view`; cross-link `tracker:` field in spec frontmatter |
+| Strategic/PM tasks (non-code)                | **Plane** workspace `doctor-school` (DSP/DSC/DSM/DSO projects)                                           | Strategic level, cross-team (product+legal+HR+marketing), Product Lead-native; cross-link via URL labels  |
+| Module README                                | `apps/*/src/<module>/README.md` (module dir = direct child of `apps/<app>/src/` holding a `*.module.ts`) | Rendered Fumadocs + lint checks README presence (exports ↔ README in v2)                                  |
+| Prose narrative (Vision, OKRs, PRD)          | `apps/docs/content/product/*.md`                                                                         | Keystatic UI for Product Lead + Fumadocs render                                                           |
+| Operations (runbooks, monitoring)            | `apps/docs/content/operations/`                                                                          | Fumadocs render                                                                                           |
+| AI constitution                              | `AGENTS.md` (root) + `CLAUDE.md` (Claude-Code overrides)                                                 | Read by AI first at session start                                                                         |
 
 "Copying a value between Masters is forbidden" — this is the best indicator of potential drift. If a value appears in two places, the second must be an auto-generated artifact, not a manual copy.
 
@@ -154,40 +154,42 @@ Outputs of Spec-Driven Development:
 
 `.cursor/rules/` — added when/if Cursor joins the team.
 
-### 6. Glossary Mechanism: glossary.yaml + 4-layer validation + roundtrip check
+### 6. Glossary Mechanism: file-per-term glossary + 4-layer validation + roundtrip check
 
 Described in detail in design spec §6 with code sketches. Summary:
 
-- Master = `apps/docs/content/product/glossary/*.md` (Keystatic file-per-term collection, frontmatter YAML + markdown body for definition).
-- Generated artifact = `packages/glossary/ids.ts` (TS const enum) + sync to Payload Glossary Collection.
+- Master = `apps/docs/content/product/glossary/*.md` — a Keystatic file-per-term collection. Each file carries Keystatic frontmatter (`title` / `description` / `lang`) and states its **canonical id in the body** as a `**Canonical id:** \`snake_id\``marker (alongside`**Bounded context:** <ctx>`), followed by the markdown definition. The canonical id is the machine-checkable key (parsed by the glossary guards); it is not a frontmatter field.
+- Generated artifact = `packages/glossary/src/ids.ts` (TS const enum) + sync to Payload Glossary Collection.
 - 4 client-facing validation layers + 1 CI roundtrip check:
 
 1.  **Keystatic UI** — typed fields, relationship references, save-blocking validators.
-2.  **MDX glossary-lint** — custom AST parser scans `[[term-id]]` directives and bold tokens in `apps/docs/content/**/*.{md,mdx}`; unknown term without a `<!-- new-term -->` marker → fail.
+2.  **MDX glossary-lint** — custom AST parser scans `[[g:term-id]]` glossary directives in `apps/docs/content/**/*.{md,mdx}`; an unresolved id without a same-line `new-term: <id>` opt-out → fail.
 3.  **ESLint `@ds/glossary-canonical-ids`** — TS literals matching a GlossaryId must be imported from `@ds/glossary/ids`, not be an inline string.
 4.  **Payload Lexical glossary-ref check** — every `<GlossaryRef id="...">` in a Payload Lexical AST export exists in the glossary.
 
-- **Roundtrip CI check** — glossary.yaml ↔ generated TS ids ↔ Payload Glossary table consistent (runs post-sync).
+- **Roundtrip CI check** — glossary source ↔ generated TS ids ↔ Payload Glossary table consistent (runs post-sync).
 
 ### 7. Drift Detection Stack
 
 Full v1 list (all block merge except those marked warn-only):
 
-| Check                                                                      | Tool                                                    | What it verifies                                                                                       |
-| -------------------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| TS compile                                                                 | `tsc --noEmit`                                          | Basic type safety                                                                                      |
-| ESLint                                                                     | `eslint` flat config                                    | Custom rules incl. `glossary-canonical-ids`, `no-class-validator`, `no-vercel-only-api` (ADR-0004 §13) |
-| Prettier                                                                   | `prettier --check`                                      | Code style                                                                                             |
-| Unit tests                                                                 | Vitest                                                  | Per-handler coverage                                                                                   |
-| E2E                                                                        | Playwright + `playwright-bdd`                           | Gherkin scenarios pass                                                                                 |
-| **API drift**                                                              | Spectral + `openapi.snapshot.json` diff                 | NestJS-generated OpenAPI vs committed snapshot                                                         |
-| **DB schema drift**                                                        | `drizzle-kit check`                                     | TS schema ↔ migrations consistent                                                                      |
-| **Events drift**                                                           | Custom AST (`tools/lint/events-lint.ts`)                | `@OutboxEmit` calls ↔ spec's `events.md`                                                               |
-| **Glossary lint (3 CI checks; layer 1 = Keystatic UI runtime, not in CI)** | custom MDX-lint + ESLint custom rule + Payload AST scan | See §6 above                                                                                           |
-| **Generated artifacts**                                                    | `pnpm generate:all --check`                             | openapi-typescript SDK + glossary IDs + ERD up-to-date                                                 |
-| **Markdown links**                                                         | `lychee`                                                | No broken links cross-docs                                                                             |
-| **Module README**                                                          | `tools/lint/module-readme-lint.ts`                      | Every `src/modules/*/` has a README; export symbols mentioned (warn-only v1, block in v2)              |
-| **Docs build**                                                             | `apps/docs` next build                                  | Fumadocs builds without errors                                                                         |
+| Check                                                                      | Tool                                                    | What it verifies                                                                                                                                  |
+| -------------------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TS compile                                                                 | `tsc --noEmit`                                          | Basic type safety                                                                                                                                 |
+| ESLint                                                                     | `eslint` flat config                                    | Custom rules incl. `glossary-canonical-ids`, `no-class-validator`, `no-vercel-only-api` (ADR-0004 §13)                                            |
+| Prettier                                                                   | `prettier --check`                                      | Code style                                                                                                                                        |
+| Unit tests                                                                 | Vitest                                                  | Per-handler coverage                                                                                                                              |
+| E2E                                                                        | Playwright + `playwright-bdd`                           | Gherkin scenarios pass                                                                                                                            |
+| **API drift**                                                              | Spectral + `openapi.snapshot.json` diff                 | NestJS-generated OpenAPI vs committed snapshot                                                                                                    |
+| **DB schema drift**                                                        | `drizzle-kit check`                                     | TS schema ↔ migrations consistent                                                                                                                 |
+| **Events drift**                                                           | Custom AST (`tools/lint/events-lint.ts`)                | `@OutboxEmit` calls ↔ spec's `events.md`                                                                                                          |
+| **Glossary lint (3 CI checks; layer 1 = Keystatic UI runtime, not in CI)** | custom MDX-lint + ESLint custom rule + Payload AST scan | See §6 above                                                                                                                                      |
+| **Generated artifacts**                                                    | `pnpm generate:all --check`                             | openapi-typescript SDK + glossary IDs + ERD up-to-date                                                                                            |
+| **Markdown links**                                                         | `lychee`                                                | No broken links cross-docs                                                                                                                        |
+| **Module README**                                                          | `tools/lint/module-readme-lint.ts`                      | Every top-level NestJS module dir (direct child of `apps/<app>/src/` holding a `*.module.ts`) has a README (warn-only v1; exports ↔ README in v2) |
+| **Docs build**                                                             | `apps/docs` next build                                  | Fumadocs builds without errors                                                                                                                    |
+
+**Module-README location.** A _module_ is a top-level NestJS module directory — a direct child of `apps/<app>/src/` that contains at least one `*.module.ts` file (e.g. `apps/api/src/auth/`); its README lives at that directory's root (`apps/<app>/src/<module>/README.md`). NestJS modules nest directly under `src/` — there is no intermediate `modules/` wrapper directory. The app-root composition module (`apps/<app>/src/app.module.ts`, no subdirectory) is out of scope, and a nested sub-module rides its parent module's README. `module-readme-lint.ts` asserts README presence only in v1 (warn-only); the exports ↔ README cross-check is the v2 tightening.
 
 **Not v1 (deferred):**
 
@@ -267,7 +269,7 @@ ds-platform/
 │   ├── api-client/                # generated SDK
 │   ├── db/                        # Drizzle schema (DB SSOT)
 │   ├── glossary/
-│   │   ├── ids.ts                 # GENERATED — never edit
+│   │   ├── src/ids.ts             # GENERATED — never edit
 │   │   └── loader.ts              # YAML reader for scripts
 │   ├── hooks/, design-system/, observability/, utils/, eslint-config/
 │   └── ...
@@ -364,7 +366,7 @@ ds-platform/
 - ADR-0002 — Zod schemas + nestjs-zod + openapi-typescript → SDK
 - ADR-0003 — Drizzle schemas + drizzle-kit
 - ADR-0004 — Payload v3 Glossary Collection, Next.js 15 + Tailwind + shadcn for all apps
-- ADR-0005 — Module README pattern reused in `apps/mobile/src/modules/`
+- ADR-0005 — Module README pattern reused in `apps/mobile/src/<module>/`
 
 **Delegated to other tasks:**
 

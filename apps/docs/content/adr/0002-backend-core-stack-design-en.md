@@ -675,7 +675,7 @@ Documentation is the single source of truth for development, not a by-product. T
 | Specs (design)     | `docs/superpowers/specs/YYYY-MM-DD-*.md` | Brainstorm → human/AI   | BEFORE code           |
 | ADR                | `docs/adr/NNNN-*.md`                     | After brainstorm        | BEFORE code           |
 | API docs (OpenAPI) | `/v1/openapi.json` + Scalar UI           | **Auto from Zod**       | Every build           |
-| Module READMEs     | `src/modules/<name>/README.md`           | Developer/AI with code  | In PR (manual review) |
+| Module READMEs     | `src/<module>/README.md`                 | Developer/AI with code  | In PR (manual review) |
 | Runbooks           | `docs/runbooks/<scenario>.md`            | Developer               | On new scenario       |
 | Knowledge base     | Fumadocs portal (`apps/docs`)            | Repo is SSOT (ADR-0006) | Merge to main         |
 
@@ -768,12 +768,12 @@ Documentation is the single source of truth for development, not a by-product. T
 
 **v1 (4 core, PR blockers):**
 
-| Gate                   | What it checks                                                                                                                        |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| openapi-snapshot       | Breaking changes require version bump                                                                                                 |
-| module-readme-required | PR touches `src/modules/X/*.controller.ts`/`*.service.ts` → README in diff (or override label) — **manual review, not machine check** |
-| adr-link-check         | Markdown links in specs/ADR are valid                                                                                                 |
-| spec-frontmatter       | Valid frontmatter (date, status, related-issues)                                                                                      |
+| Gate                   | What it checks                                                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| openapi-snapshot       | Breaking changes require version bump                                                                                                |
+| module-readme-required | PR touches `src/<module>/*.controller.ts`/`*.service.ts` → README in diff (or override label) — **manual review, not machine check** |
+| adr-link-check         | Markdown links in specs/ADR are valid                                                                                                |
+| spec-frontmatter       | Valid frontmatter (date, status, related-issues)                                                                                     |
 
 **v2 (when team grows to 3+):**
 

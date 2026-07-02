@@ -220,7 +220,7 @@ Trigger to split: first engineer hired. At that point CODEOWNERS is split per `a
 | `markdown-links`        | `lychee` cross-doc link check                                                   | ADR-0006 §7   | BLOCK              |
 | `module-readme`         | `tools/lint/module-readme-lint.ts`                                              | ADR-0006 §7   | WARN v1 → BLOCK v2 |
 | `docs-build`            | `apps/docs` `next build` (Fumadocs compiles clean)                              | ADR-0006 §7   | BLOCK              |
-| `glossary-mdx`          | `tools/lint/glossary-mdx-lint.ts` (`[[term-id]]` references)                    | ADR-0006 §6   | BLOCK              |
+| `glossary-mdx`          | `tools/lint/glossary-mdx-lint.ts` (`[[g:term-id]]` references)                  | ADR-0006 §6   | BLOCK              |
 | `glossary-ids`          | ESLint `glossary-canonical-ids` rule (from `packages/eslint-config/`)           | ADR-0006 §6   | BLOCK              |
 | `glossary-roundtrip`    | YAML ↔ Payload Glossary Collection sync drift                                   | ADR-0006 §6   | BLOCK              |
 | `spec-link`             | `tools/lint/spec-link-lint.ts` (PR feature:\* requires Closes #N + spec folder) | ADR-0007 §2.6 | BLOCK              |

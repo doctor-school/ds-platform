@@ -168,7 +168,7 @@ Hard rule, enforce'ится через AGENTS.md + TDD-signal CI guard (§5.2 WA
 3. Active spec(s)
    - Для каждого agent-working Issue: читает лейбл feature:NNN-<slug> → spec folder path
    - Читает NNN-requirements.md frontmatter: status, Prior decisions (list of ADRs)
-   - Извлекает glossary terms из spec body через [[term-id]] directives
+   - Извлекает glossary terms из spec body через [[g:term-id]] directives
 
 4. Context files to load (paths only)
    - AGENTS.md, CLAUDE.md (root)

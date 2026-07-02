@@ -27,6 +27,14 @@ The stack is driven by `pnpm dev:*` (env-driven launcher `tools/dev/run.mjs`, DS
 - **The dev box is not 24/7.** TrueNAS is power-cycled — schedule any task uptime-relative (boot-triggered + age check), never fixed-time cron (memory `project_truenas_not_24_7`).
 - **Live-verify pre-flight is yours to run.** Before any live UI verification, confirm the stand is up with `pnpm dev:status` and bring it up (`pnpm dev:up`) if needed — the box is power-cycled, so a down stand is expected, not a blocker to hand back. **Never ask the user "is the dev box on?"** — check `dev:status` and follow the failure table (memory `feedback_check_dev_stand_yourself`).
 
+## Parallel sessions — dev-server ports
+
+The `api :3000` / `portal :3001` pair (memory `reference_local_api_portal_live_run_recipe`) is the **single-session default only**. Sessions run concurrently here (AGENTS.md §6), so app ports are a shared resource:
+
+- **Probe, don't reuse.** A parallel session takes the **next free pair** — 3100/3101, then 3200/3201, … — instead of binding the default. Check what is listening first, then pick the first free pair.
+- **Never kill a listener you did not start.** A foreign `localhost` server is very likely another session's **Stage-B live-review URL**, which MUST stay up until the product owner's verdict (AGENTS.md §6). Killing it tears down that review — forbidden. (This overrides the "KILL stale listeners first" step in the single-session recipe, which applies only to **your own** stale listeners on **your own** pair.)
+- **Record the pair.** Write the chosen `api`/`portal` pair into the **Stage-B handoff** and the Issue's **stop-state comment**, so the owner opens the right URL and the next session knows which pairs are taken.
+
 ## Baseline failure modes
 
 | Symptom                          | Check                                                                                                                                                                                                                  |

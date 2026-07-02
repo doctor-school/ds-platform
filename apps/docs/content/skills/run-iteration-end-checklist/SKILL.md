@@ -25,7 +25,7 @@ You are a verification subagent. Your sole job is to verify the 14-item iteratio
 
 ### Procedure
 
-For each of the 13 items below, return one of: **PASS** / **FAIL** (with one-line reason) / **N/A** (with one-line reason).
+For each of the 14 items below, return one of: **PASS** / **FAIL** (with one-line reason) / **N/A** (with one-line reason).
 
 1. `pnpm test` — green (unit + e2e where applicable).
 2. `pnpm generate:all && git diff --exit-code` — no drift in generated artifacts.

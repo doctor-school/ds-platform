@@ -419,24 +419,9 @@ main().catch((e) => {
 
 ## 5. Iteration-end checklist + AI-specific drift guards
 
-### 5.1 12-item checklist (AGENTS.md hard rules)
+### 5.1 14-item checklist (AGENTS.md hard rules)
 
-Before `git push` the agent goes through each item. If even one is false — do not push; either fix or escalate.
-
-| #   | Check                                                                                                                                   | Command / condition                                           |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| 1   | All tests green                                                                                                                         | `pnpm test:unit && pnpm test:e2e`                             |
-| 2   | Generated artifacts up-to-date                                                                                                          | `pnpm generate:all && git diff --exit-code`                   |
-| 3   | TypeScript compiles                                                                                                                     | `pnpm typecheck`                                              |
-| 4   | Lint clean                                                                                                                              | `pnpm lint` (incl. `@ds/glossary-canonical-ids`, events-lint) |
-| 5   | Module README updated if exports changed                                                                                                | `pnpm lint:module-readme`                                     |
-| 6   | Spec `status` frontmatter updated (Draft → In dev → Shipped)                                                                            | manual edit in `NNN-requirements.md`                          |
-| 7   | Glossary terms added if new domain vocabulary appeared in code/spec                                                                     | `pnpm lint:glossary-mdx`                                      |
-| 8   | ADR created if an architectural decision was made                                                                                       | judgment; interactive reviewer (AGENTS.md §4) catches misses  |
-| 9   | Linked Issue received a summary comment (file paths, decisions, what remains)                                                           | `gh issue comment <N> --body-file <summary>`                  |
-| 10  | `apps/docs/content/architecture/` updated if a new app/package materialised or structure changed                                        | manual edit (closes F-3)                                      |
-| 11  | `apps/docs/content/operations/` runbook added if a new operational concern was introduced                                               | manual edit (closes F-3)                                      |
-| 12  | Vertical-slice DoD (conditional, F-22) — last handler of a `surface: user-facing` spec: journey completable end-to-end or tracked Issue | browser/E2E green; N/A for `backend-only` / non-final handler |
+Before `git push` the agent goes through each item. If even one is false — do not push; either fix or escalate. The **authoritative, always-current item list is the skill** — `apps/docs/content/skills/run-iteration-end-checklist/SKILL.md` — not a table duplicated here (the catalog is authoritative; §2.2). At time of writing the 14 items are: (1) tests green, (2) generated artifacts up-to-date, (3) TypeScript compiles, (4) lint clean, (5) module README updated if exports changed, (6) spec `status` frontmatter advanced, (7) glossary terms added if domain vocabulary grew, (8) ADR created if an architectural decision was made, (9) `architecture/` updated for structural changes, (10) `operations/` runbook added for new operational concerns, (11) linked Issue received a summary comment, (12) vertical-slice DoD (conditional, F-22), (13) field validation + input mask (conditional), (14) registry-research marker (conditional). See the skill for each item's exact command / condition and N/A rule.
 
 ### 5.2 CI gates — AI-specific extensions (on top of ADR-0006 §7)
 
@@ -877,7 +862,7 @@ This section is **a design for the future, not a Phase 0 implementation**. Each 
 
 **LiteLLM admin UI protection:** LiteLLM admin has no native OIDC; protect via nginx forward-auth proxy with Zitadel (ADR-0001 OIDC tenant, closed per §8 / DSP-209). This is non-trivial and is documented as a separate design block in the trigger-ADR.
 
-**Capacity Phase 0+1:** instance A — one VM (Hetzner EU, ~€20/mo); instance B — one VM on existing Timeweb (~₽1,000/mo). HA pair via keepalived — Phase Pilot+.
+**Capacity Phase 0+1:** instance A — one VM (Hetzner EU, ~~€20/mo); instance B — one VM on existing Timeweb (~~₽1,000/mo). HA pair via keepalived — Phase Pilot+.
 
 **Pre-v2 prerequisite — dual-LLM pattern evaluation:** Content Pipeline v2 (`12-ai-content-pipeline.md` §3) processes content from expert briefs. If a brief can contain user-submitted material (e.g., copy-paste from chat, files from co-authors), a prompt-injection vector is active from day 1. Before launching v2 in production — a formal assessment: does user-controlled content enter the pipeline? If yes — the OWASP dual-LLM pattern (privileged LLM with tools, separated from the quarantined LLM that reads untrusted content) must be in the trigger-ADR design, not deferred further.
 
@@ -985,12 +970,12 @@ Per ADR-0006 §9 conventions (title format `[NNN] EARS-N: ...`, label `kind:ears
 
 - If no parent Issue exists for the spec: create one with `--body-file` (a `--body` flag must be provided in non-interactive contexts; `gh issue create` without it opens an editor and hangs in CI/Codex):
   gh issue create --title "Feature NNN: <name>" \
-   --milestone "<product theme>" --label "feature:NNN-<slug>" \
-   --body-file .github/issue_templates/feature.md
+  --milestone "<product theme>" --label "feature:NNN-<slug>" \
+  --body-file .github/issue_templates/feature.md
   Then for each EARS-handler from `NNN-requirements.md`:
   gh issue create --title "[NNN] EARS-N: <description>" \
-   --milestone "<product theme>" --label "feature:NNN-<slug>,kind:ears-handler,agent-ready" \
-   --body "Spec: apps/docs/content/specs/features/NNN-<slug>/. Parent: #<parent-issue>."
+  --milestone "<product theme>" --label "feature:NNN-<slug>,kind:ears-handler,agent-ready" \
+  --body "Spec: apps/docs/content/specs/features/NNN-<slug>/. Parent: #<parent-issue>."
 - Use superpowers:writing-plans skill only if the task is multi-step within a single Issue.
 
 ### Step 3 — RED (TDD: failing tests first)
@@ -1097,19 +1082,19 @@ Phase 0 (Tech Lead + AI, sequential — after DSO-31 creates the `ds-platform` r
 
 **Pre-requisite for step 13:** Tech Lead must have admin permissions on the repo (branch protection rule in step 13 requires admin token; cannot be automated). If the repo belongs to an organization — org-admin rights or explicit delegation to repo-admin role are needed.
 
-| Step | Action                                                                                                                                                                                    | Output                                               | Blocking                  |
+| Step | Action | Output | Blocking |
 | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------- | ------------------------------------------------------------------- |
-| 1    | Create `tools/agent-bootstrap.ts`                                                                                                                                                         | bootstrap works locally                              | DSO-31 (repo exists)      |
-| 2    | Add `pnpm bootstrap` alias to root `package.json`                                                                                                                                         | command is runnable                                  | step 1                    | **Done in G1, see commit `ae3826f` in `doctor-school/ds-platform`** |
-| 3    | Add `.claude/settings.json` with SessionStart hook                                                                                                                                        | Claude Code auto-loads bootstrap                     | step 2                    |
-| 4    | Create `packages/llm-utils/buildContext.ts`                                                                                                                                               | reusable helper for LLM clients                      | DSO-31                    |
-| 7    | Add `.github/agents-config.json` kill switch                                                                                                                                              | kill switch active                                   | —                         |
-| 8    | Create `tools/lint/spec-link-lint.ts` + `ears-test-lint.ts`                                                                                                                               | AI-specific guards available                         | —                         |
-| 9    | Add steps to `.github/workflows/ci.yml` for guards (WARN/BLOCK per §5.2)                                                                                                                  | CI executes guards                                   | step 8                    |
-| 11   | Update `AGENTS.md` (root) with AI-loop discipline section                                                                                                                                 | agents follow orchestrated iteration cycle           | DSO-31 baseline AGENTS.md |
-| 12   | Update `CLAUDE.md` (root) with SessionStart hook reference + skill priorities                                                                                                             | Claude Code aligned                                  | step 11                   |
-| 13   | **[Manual GitHub UI / `gh api`]** Add branch protection rule: ≥1 human approval required, no direct push to main. Deferred per ADR-0008 §2.6 (GitHub Free + private repo blocks the API). | merge gated server-side once protection is reachable | step 9                    |
-| 14   | Smoke test: first feature spec through the cycle (superpowers:brainstorming → spec → Issues → PR → review → merge)                                                                        | proof of concept                                     | steps 1–13                |
+| 1 | Create `tools/agent-bootstrap.ts` | bootstrap works locally | DSO-31 (repo exists) |
+| 2 | Add `pnpm bootstrap` alias to root `package.json` | command is runnable | step 1 | **Done in G1, see commit `ae3826f` in `doctor-school/ds-platform`** |
+| 3 | Add `.claude/settings.json` with SessionStart hook | Claude Code auto-loads bootstrap | step 2 |
+| 4 | Create `packages/llm-utils/buildContext.ts` | reusable helper for LLM clients | DSO-31 |
+| 7 | Add `.github/agents-config.json` kill switch | kill switch active | — |
+| 8 | Create `tools/lint/spec-link-lint.ts` + `ears-test-lint.ts` | AI-specific guards available | — |
+| 9 | Add steps to `.github/workflows/ci.yml` for guards (WARN/BLOCK per §5.2) | CI executes guards | step 8 |
+| 11 | Update `AGENTS.md` (root) with AI-loop discipline section | agents follow orchestrated iteration cycle | DSO-31 baseline AGENTS.md |
+| 12 | Update `CLAUDE.md` (root) with SessionStart hook reference + skill priorities | Claude Code aligned | step 11 |
+| 13 | **[Manual GitHub UI / `gh api`]** Add branch protection rule: ≥1 human approval required, no direct push to main. Deferred per ADR-0008 §2.6 (GitHub Free + private repo blocks the API). | merge gated server-side once protection is reachable | step 9 |
+| 14 | Smoke test: first feature spec through the cycle (superpowers:brainstorming → spec → Issues → PR → review → merge) | proof of concept | steps 1–13 |
 
 Step numbering preserves the original sequence; cancelled steps (5, 6, 10) are intentionally omitted.
 

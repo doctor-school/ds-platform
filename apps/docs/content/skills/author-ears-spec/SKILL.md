@@ -20,6 +20,7 @@ You are authoring a 3-file SDD triplet for a new feature in the DS Platform mono
 ### Input
 
 - Initiative reference: `NNN-<slug>` (the feature number is the next free number under `apps/docs/content/specs/features/`).
+  - **Reserve `NNN` before authoring (parallel-session race).** The next-free number read against `apps/docs/content/specs/features/` alone is not authoritative — a parallel spec-authoring session may have already claimed it on a branch that isn't merged yet. Before writing any file, confirm the chosen `NNN` is **not** already claimed by an open `feat/spec-NNN-*` branch/PR (`git ls-remote --heads origin 'refs/heads/feat/spec-*'`, `gh pr list --search 'spec-'`) or an existing parent Issue, then **reserve** the number by opening the parent Issue (or recording the reservation on the initiative Issue) **before** authoring begins. Two parallel sessions must never pick the same `NNN`.
 - **The feature PRD `NNN-product.md`** (ADR-0014 — the "PRD section"): user stories with `US-N` ids + product acceptance criteria. A legacy roadmap-line / initiative description is still accepted for a spec with no PRD (e.g. backend-only infra).
 - ADRs relevant to the feature's domain.
 
@@ -27,6 +28,7 @@ You are authoring a 3-file SDD triplet for a new feature in the DS Platform mono
 
 1. **Read sources** — PRD section + listed ADRs + any prior feature-spec in the same domain (for tone and structure precedent).
 2. **Write `NNN-requirements.md`** (filename prefixed with the spec number per ADR-0006 §4):
+   - **Bilingual split — PRODUCT specs only.** A **product** feature spec (one derived from a `NNN-product.md` PRD / with a user-facing surface) ships its requirements as a mirrored pair **`NNN-requirements-en.md` + `NNN-requirements-ru.md`** — both product-owner-facing, so both languages. `NNN-design.md` and `NNN-scenarios.feature` stay **EN-only** even for a product spec (engineer-facing artifacts). A **tech / backend-only infra** spec is **EN-only throughout** — a single `NNN-requirements.md`, no `-ru` mirror. Worked precedent: spec 003 (`003-requirements-en.md` / `003-requirements-ru.md`, with `003-design.md` + `003-scenarios.feature` EN-only). The `-en`/`-ru` requirements must stay semantically equivalent; the `spec-link` guard accepts either `NNN-requirements.md` or `NNN-requirements-en.md`.
    - Frontmatter: `tracker:` (GitHub Milestone URL placeholder if the milestone isn't created yet), `status: Draft`, **`surface:`** (required — see below).
    - Sections: Outcomes / Scope / Constraints / Prior decisions (cite ADRs) / Event Model (Commands / Events / Read models / Policies) / **EARS requirements** / Invariants / Verification.
    - **EARS numbering: flat (`EARS-1`, `EARS-2`, …) per ADR-0006 §4** (closing G11 finding F-5). Use nested `N.M` **only** when a single handler genuinely carries multiple shall-clauses (rare).
@@ -51,6 +53,8 @@ You are authoring a 3-file SDD triplet for a new feature in the DS Platform mono
 
 - EARS numbering inconsistent with the flat convention — return an error and let the lead agent decide whether to fix or accept (nested `N.M` is allowed but must be justified).
 - Triplet missing a file — return error.
+- A **product** spec whose requirements shipped monolingual (a lone `NNN-requirements.md` / `NNN-requirements-en.md` with no `NNN-requirements-ru.md` mirror) — return error (product requirements are product-owner-facing → EN+RU mandatory). Conversely, a `-ru` mirror added to a tech / backend-only spec is also wrong — return error.
+- `NNN` collides with an already-claimed number (open `feat/spec-NNN-*` branch/PR or existing parent Issue) and was not reserved before authoring — return error; the lead agent re-picks the next genuinely free number.
 - `surface:` frontmatter missing or not one of `backend-only` / `user-facing` — return error (F-22).
 - `surface: backend-only` while an EARS trigger references a UI surface (anti-hide guard) — return error (F-22).
 - `surface: user-facing` with a UI-triggered EARS that has no owning requirement and no named out-of-scope deferral — return error (F-22).

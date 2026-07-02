@@ -587,6 +587,13 @@ jobs:
     needs: setup
     continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
     runs-on: ubuntu-latest
+    # The guard calls `gh pr view <N>` — same wiring as spec-link: the default
+    # GITHUB_TOKEN under restrictive workflow permissions lacks
+    # `pull-requests: read`, which makes `gh pr view` exit non-zero before the
+    # guard's skip short-circuit (Issue #10 root cause 1).
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -594,6 +601,9 @@ jobs:
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/tdd-signal-lint.ts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
 
   # spec-status-fresh: a feature:NNN-<slug> PR whose bound spec is still
   # `status: Draft` (design §5.2, `In dev` minimum). Was an exit-0 stub;
@@ -606,6 +616,10 @@ jobs:
     needs: setup
     continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
     runs-on: ubuntu-latest
+    # `gh pr view` wiring — see the tdd-signal note (Issue #10 root cause 1).
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -613,6 +627,9 @@ jobs:
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/spec-status-lint.ts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
 
   # prior-decisions: a PR that adds/edits a feature-spec requirements file must
   # cite ≥1 ADR in a `## Prior decisions` section (design §5.2). Was an exit-0
@@ -625,6 +642,10 @@ jobs:
     needs: setup
     continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
     runs-on: ubuntu-latest
+    # `gh pr view` wiring — see the tdd-signal note (Issue #10 root cause 1).
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -632,6 +653,9 @@ jobs:
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/prior-decisions-lint.ts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
 
   # ─── Meta-job: single status check for branch protection ─────────────
   # Phase 0 baseline: every hard-red job that actually runs today sits in this

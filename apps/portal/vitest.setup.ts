@@ -14,7 +14,7 @@ import { installOrphanTimerTracking, flushOrphanTimers } from "./orphan-timers.s
 // silently; any OTHER leaked timer is OUR defect and fails the test right here,
 // attributably, instead of as an intermittent CI teardown flake. Rationale +
 // contract tests: ./orphan-timers.setup.ts / ./orphan-timers.test.tsx. Doc:
-// apps/docs/content/architecture/component-testing.md → "The #434 orphan-timer guard".
+// apps/docs/content/architecture/component-testing.md → "The #434/#441 orphan-timer guard".
 installOrphanTimerTracking();
 
 afterEach(() => {

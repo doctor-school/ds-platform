@@ -10,7 +10,8 @@
         "!.next/cache/**",
         "src/styles/tokens.css",
         "src/styles/allowed-tokens.json"
-      ]
+      ],
+      "env": ["API_PROXY_TARGET"]
     },
     "dev": {
       "cache": false,

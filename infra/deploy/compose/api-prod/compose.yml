@@ -83,10 +83,22 @@ services:
         # OFF for the 003 slice (bot protection disabled). Set a real Yandex
         # SmartCaptcha site key here to bake the live widget (build-time inlined).
         NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY: ""
+        # BUILD-time on purpose (DSO-100): Next evaluates `rewrites()` at `next
+        # build` and freezes the destination into .next/routes-manifest.json — a
+        # runtime-only API_PROXY_TARGET is ignored and the baked localhost fallback
+        # ECONNREFUSEDs the same-origin /v1/* proxy. Must match the api service's
+        # compose DNS name. The runtime env copy (via env_file) stays — harmless.
+        API_PROXY_TARGET: http://api:3000
     image: ds-portal:local
     restart: unless-stopped
     env_file: [/etc/ds-platform/api.env] # API_PROXY_TARGET=http://api:3000 (same-origin BFF proxy)
     # Dockerfile bakes PORT=3001 + HOSTNAME=0.0.0.0 (Next standalone).
+    environment:
+      # Pin explicitly: the shared api.env env_file must never leak an api PORT
+      # value into the portal (DSO-100 on-box find — a PORT=3000 line in api.env
+      # overrode the image's ENV PORT=3001, the portal bound 3000, and Caddy's
+      # portal:3001 upstream broke). compose `environment:` outranks env_file.
+      PORT: "3001"
     depends_on:
       api:
         condition: service_started

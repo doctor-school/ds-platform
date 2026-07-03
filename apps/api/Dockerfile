@@ -16,11 +16,10 @@
 #           this fuller stage, never from the runtime image.
 #   runtime slim non-root image that runs `node dist/main.js`.
 #
-# ⚠ DSO-100: authored from the monorepo build contract; NOT yet build-verified on
-# the box (no local Docker on the authoring host). First on-box `docker compose
-# build` is the verification gate before this is called done. `pnpm deploy` (pnpm
-# 10) assembles /out from the workspace graph — verify it resolves the workspace
-# deps on the first build; if pnpm 10 needs `--legacy`, add it here.
+# DSO-100: build-verified ON-BOX (api-prod, 2026-07-03) — image builds, boots, and
+# passes /v1/health + /v1/ready (postgres+pgvector ok) against the prod data plane.
+# `pnpm deploy` REQUIRES `--legacy` on pnpm 10 (ERR_PNPM_DEPLOY_NONINJECTED_WORKSPACE
+# otherwise — this workspace does not set inject-workspace-packages).
 FROM node:22-slim AS base
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 RUN corepack enable
@@ -36,7 +35,7 @@ FROM deps AS build
 # Build @ds/api and everything it depends on, in dependency order (turbo ^build).
 RUN pnpm turbo run build --filter=@ds/api
 # Assemble a self-contained, prod-only deployment of @ds/api into /out.
-RUN pnpm --filter=@ds/api deploy --prod /out
+RUN pnpm --filter=@ds/api deploy --prod --legacy /out
 
 # One-shot migration runner (deploy-time; NOT a long-running service). Reuses the
 # full install (drizzle-kit is a devDependency, absent from the runtime image) and

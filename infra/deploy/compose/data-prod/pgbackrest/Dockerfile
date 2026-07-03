@@ -8,8 +8,13 @@
 # archive_command). Built on-box, no registry.
 FROM postgres:17-bookworm
 
+
+# ca-certificates is REQUIRED: the postgres:17-bookworm base ships no TLS trust
+# store, so pgbackrest's OpenSSL cannot verify the (publicly-valid GlobalSign)
+# cert on the Timeweb S3 endpoint — stanza-create/check/backup all fail with
+# error 19 "self-signed certificate in certificate chain" (DSO-100 on-box find).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends pgbackrest cron \
+    && apt-get install -y --no-install-recommends pgbackrest cron ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /var/log/pgbackrest /var/spool/pgbackrest \
     && chown -R postgres:postgres /var/log/pgbackrest /var/spool/pgbackrest

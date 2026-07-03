@@ -91,20 +91,29 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    `api.` / `app.` / `id.doctor.school` at the `api_prod_public_ip` output. Root
    `doctor.school` A-record is untouched. Email records (MX/SPF/DKIM/DMARC) are
    already live (memory `reference_doctor_school_email_dns`).
-5. **Deploy-key `git clone` (both boxes — images build on-box, no registry).**
-   Generate a read-only deploy key, add its public half to this private GitHub repo
-   (Settings → Deploy keys, read-only), and clone the repo onto each VPS (short path
-   → Windows long-path irrelevant on Linux, but keep it shallow to save disk):
+5. **Get the committed `main` source onto both boxes (images build on-box, no registry).**
 
-   ```bash
-   ssh-keygen -t ed25519 -f ~/.ssh/ds-deploy -N '' -C 'ds-platform deploy-ro'
-   # → add ~/.ssh/ds-deploy.pub as a READ-ONLY deploy key on the GitHub repo
-   # on EACH VPS (api-prod and data-prod), as the deploy user:
-   GIT_SSH_COMMAND='ssh -i ~/.ssh/ds-deploy -o IdentitiesOnly=yes' \
-     git clone --depth 1 git@github.com:<org>/ds-platform.git ~/ds-platform
-   ```
+   > **DSO-100 on-box finding:** deploy keys are **disabled org-wide** for
+   > `doctor-school` (GitHub Free org policy; no REST API to toggle, and enabling it
+   > changes security posture for every repo in the org). So the deploy-key clone
+   > below does **not** work as written. Instead, ship the committed `origin/main`
+   > tree over the already-trusted SSH channel — no credential ever lands on a prod
+   > box, and the build is identical (`.git`/`.github` are `.dockerignore`d, the
+   > builds run no git command, so an archive == a shallow clone for build purposes):
+   >
+   > ```bash
+   > # from the workstation (repo root), for EACH box (api-prod and data-prod):
+   > git archive --format=tar.gz --prefix=ds-platform/ origin/main \
+   >   | ssh <box> 'rm -rf ~/ds-platform && tar xzf - -C ~'
+   > ```
+   >
+   > Original (blocked) deploy-key path, kept for when org deploy keys are enabled:
+   > `ssh-keygen -t ed25519 -f ~/.ssh/ds-deploy -N ''` → `gh repo deploy-key add
+~/.ssh/ds-deploy.pub --title ds-<box> --repo doctor-school/ds-platform` →
+   > `GIT_SSH_COMMAND='ssh -i ~/.ssh/ds-deploy -o IdentitiesOnly=yes' git clone
+--depth 1 git@github.com:doctor-school/ds-platform.git ~/ds-platform`.
 
-   Both boxes need the clone: api-prod builds api/portal + runs migrations from it;
+   Both boxes need the tree: api-prod builds api/portal + runs migrations from it;
    data-prod builds the Postgres + pgbackrest images from `infra/deploy/compose/data-prod/`
    (and the api-prod compose bind-mounts `infra/dev-stand/sms-aero-adapter/server.mjs`).
 
@@ -137,35 +146,92 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    address (`var.data_prod_private_ip`, default `192.168.0.10`) — the published
    ports bind to it, never `0.0.0.0`:
 
+   > **DSO-100 on-box findings (both apply to every `docker compose` call below and
+   > in steps 8–9):**
+   >
+   > - The `env_file`s are `root:root 0600`; the docker-compose **CLI reads them as
+   >   the invoking user**, so the `deploy` user gets `permission denied`. Run every
+   >   compose command as **`sudo docker compose …`** (the daemon already runs as
+   >   root). `sudo` strips inline env vars, so pass `VPC_IP` via a **`.env` beside
+   >   `compose.yml`**, not `VPC_IP=… sudo docker compose`.
+
    ```bash
    cd ~/ds-platform/infra/deploy/compose/data-prod
-   VPC_IP=192.168.0.10 docker compose up -d --build     # builds pgvector+partman+pgbackrest, redis, pgbackrest sidecar
-   docker compose logs -f postgres                       # wait for "database system is ready"
+   echo "VPC_IP=192.168.0.10" > .env                     # interpolation var (NOT a secret); sudo strips inline vars
+   sudo docker compose up -d --build                     # builds pgvector+partman+pgbackrest, redis, pgbackrest sidecar
+   sudo docker compose logs -f postgres                  # wait for "database system is ready"
    # pgbackrest sidecar auto-runs `stanza-create` + `check` on start; confirm:
-   docker compose logs pgbackrest                        # expect the stanza check to pass
+   sudo docker compose logs pgbackrest                   # expect the stanza check to pass
    ```
+
+   > **DSO-100 code defect (BLOCKS backups + WAL archiving):** neither
+   > `compose/data-prod/postgres/Dockerfile` nor `compose/data-prod/pgbackrest/Dockerfile`
+   > installs **`ca-certificates`**, so the containers have no TLS trust store and
+   > pgbackrest's `stanza-create`/`check` **and** Postgres's `archive_command` both
+   > fail against `s3.twcstorage.ru` with OpenSSL error 19 (`self-signed certificate
+in certificate chain`) — even though the cert is a valid public GlobalSign cert
+   > (the host `curl`s it fine). **Fixed:** both Dockerfiles now install
+   > `ca-certificates`. On a box first deployed from the pre-fix images, rebuild
+   > (`sudo docker compose up -d --build`) and confirm the pgbackrest stanza check
+   > passes and `pg_stat_archiver` failures stop — until then the DB runs but is
+   > **unbacked**.
 
 8. **Migrate `ds_prod`, then bring up api-prod.** Migrations run from the one-shot
    `migrate` service (carries drizzle-kit; the runtime image does not), against the
    data-prod DB via `api.env`'s `DATABASE_URL`:
 
+   > **DSO-100 on-box findings (all three fixed in the committed files):**
+   >
+   > - **`apps/api/Dockerfile` needs `--legacy`:** pnpm v10's `deploy` refuses a
+   >   non-injected workspace (`ERR_PNPM_DEPLOY_NONINJECTED_WORKSPACE`); the deploy
+   >   line is now `pnpm --filter=@ds/api deploy --prod --legacy /out`.
+   > - **Portal `/v1/*` proxy is baked at BUILD time:** `apps/portal/next.config.ts`
+   >   resolves the rewrite destination from `API_PROXY_TARGET` inside `rewrites()`,
+   >   which Next evaluates at `next build` and freezes into
+   >   `.next/routes-manifest.json` — built without the env, the
+   >   `?? "http://localhost:3000"` fallback got frozen in and the portal proxied
+   >   `/v1/*` to `127.0.0.1:3000` (ECONNREFUSED) despite a correct runtime env.
+   >   Fixed: the portal Dockerfile takes `ARG API_PROXY_TARGET` before the build and
+   >   the compose portal service passes `build.args: API_PROXY_TARGET:
+http://api:3000`. A portal image built before this fix must be REBUILT.
+   > - **`PORT` must not live in the shared `api.env`:** the portal shares `api.env`
+   >   as its `env_file`, so a `PORT=3000` line (meant for the api) overrode the
+   >   portal Dockerfile's `ENV PORT=3001` → portal bound 3000 → Caddy's
+   >   `portal:3001` upstream failed. Fixed: the template carries no `PORT` line (the
+   >   api defaults to 3000 in code) and the compose portal service pins `PORT: "3001"`
+   >   via `environment:` (which outranks env_file). If a deployed `api.env` still
+   >   carries `PORT=3000`, delete that line.
+
    ```bash
    cd ~/ds-platform/infra/deploy/compose/api-prod
-   docker compose --profile migrate run --rm migrate     # applies apps/api/drizzle/0000..0004
-   docker compose up -d --build                           # caddy + api + portal + zitadel + zitadel-login + sms-aero-adapter
-   docker compose logs -f zitadel                         # first boot: start-from-init runs Zitadel's own DB migration
+   sudo docker compose --profile migrate run --rm migrate # applies apps/api/drizzle/0000..0004
+   sudo docker compose build                              # api + portal (~10-20 min on 4 vCPU); zitadel/login/sms pulled
+   # NOTE: do NOT `up -d` the whole stack yet — Zitadel must first-boot ALONE with the
+   # FIRSTINSTANCE block set, so the ds-bootstrap PAT exists before zitadel-login
+   # (whose PAT bind-mount is fail-closed) and caddy start. See step 9.
    ```
 
 9. **Zitadel bootstrap + OIDC provision (spec §6.1; mirrors `infra/dev-stand/idp/bootstrap.md`).**
-   - **First boot only** — uncomment the `ZITADEL_FIRSTINSTANCE_*` block in
-     `zitadel.env`, `docker compose up -d zitadel`, then capture the ds-bootstrap PAT
-     from the `/pat` tmpfs and **re-comment** the block:
+   - **First boot only** — the `ZITADEL_FIRSTINSTANCE_*` block MUST be **uncommented
+     before Zitadel's very first boot** (start-from-init writes the PAT only while the
+     `zitadel` DB is empty; a later uncomment on an already-initialised instance never
+     re-fires). So bring **zitadel up alone first**, capture the PAT, **re-comment**
+     the block, then `up -d` the rest (DSO-100 ordering fix — the old flow uncommented
+     only after a full `up`, missing the PAT window):
 
      ```bash
-     PID=$(docker inspect ds-api-prod-zitadel-1 --format '{{.State.Pid}}')
-     sudo cat /proc/$PID/root/pat/pat.txt | sudo tee /etc/ds-platform/idp-bootstrap-pat.txt
-     # put IDP_SERVICE_TOKEN=<that PAT> in api.env; place the same PAT for zitadel-login:
+     # zitadel.env FIRSTINSTANCE_* uncommented at provisioning time (step 6):
+     sudo docker compose up -d zitadel                      # first-init on the empty `zitadel` DB
+     # wait until healthy:
+     until [ "$(sudo docker inspect ds-api-prod-zitadel-1 --format '{{.State.Health.Status}}')" = healthy ]; do sleep 5; done
+     PID=$(sudo docker inspect ds-api-prod-zitadel-1 --format '{{.State.Pid}}')
+     sudo cat /proc/$PID/root/pat/pat.txt | sudo tee /etc/ds-platform/idp-bootstrap-pat.txt >/dev/null
+     sudo chmod 600 /etc/ds-platform/idp-bootstrap-pat.txt
      sudo install -m 600 /etc/ds-platform/idp-bootstrap-pat.txt /etc/ds-platform/idp-login-client.pat
+     sudo sed -i -E 's/^(ZITADEL_FIRSTINSTANCE_)/#\1/' /etc/ds-platform/zitadel.env   # re-comment so a restart never re-inits
+     sudo docker compose up -d                              # now the rest: api + portal + sms-adapter + zitadel-login + caddy
+     # put IDP_SERVICE_TOKEN=<that PAT> in api.env AFTER DNS + provision.sh (below);
+     # pre-DNS, leave it unset so the api boots on its in-memory fake for local smoke.
      ```
 
    - **Provision the OIDC app + activate the real providers** (idempotent; SMTP creds

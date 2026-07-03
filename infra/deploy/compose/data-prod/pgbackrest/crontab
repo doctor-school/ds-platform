@@ -1,0 +1,7 @@
+# DS Platform data-prod — pgbackrest schedule (root crontab; TZ=Europe/Moscow set on
+# the container, so these are MSK). Each job drops to the `postgres` user via gosu
+# inside backup.sh. Full daily 02:30 (inside the 02:00–06:00 MSK maintenance window,
+# ADR-0012 §5); incremental every 6h at 00/06/12/18 (no overlap with the full).
+# Output → the container log (docker compose logs pgbackrest) + /var/log/pgbackrest.
+30 2 * * * /usr/local/bin/backup.sh full >> /var/log/pgbackrest/cron.log 2>&1
+0 0,6,12,18 * * * /usr/local/bin/backup.sh incr >> /var/log/pgbackrest/cron.log 2>&1

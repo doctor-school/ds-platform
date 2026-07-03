@@ -12,8 +12,13 @@ output "api_prod_server_id" {
 }
 
 output "data_prod_server_id" {
-  description = "data-prod server id (private, no public IP)."
+  description = "data-prod server id (no public IP; inbound-private via default-deny fw, egress via router NAT)."
   value       = twc_server.data_prod.id
+}
+
+output "data_prod_egress_ip" {
+  description = "Floating IPv4 the router NATs data-prod's egress from. NOT an inbound/DNS target — data-prod accepts no public inbound."
+  value       = twc_floating_ip.data_egress.ip
 }
 
 # Private IPs of both hosts inside twc_vpc.ds — DATABASE_URL/REDIS_URL on api-prod

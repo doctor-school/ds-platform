@@ -3,7 +3,6 @@
 # firewall, Docker + compose plugin, timezone. App containers are brought up
 # separately from infra/deploy/compose/api-prod/ (NOT here) once secrets are
 # provisioned out-of-band into /etc/ds-platform/*.env (spec §5.4).
-# TODO(DSO-100): replace the deploy pubkey placeholder before apply.
 
 timezone: Europe/Moscow
 
@@ -22,7 +21,7 @@ users:
     shell: /bin/bash
     sudo: ["ALL=(ALL) NOPASSWD:ALL"]
     ssh_authorized_keys:
-      - "ssh-ed25519 AAAA... deploy@ds-api-prod   # TODO(DSO-100): real deploy pubkey"
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMhbEUW92rTm3l3HgO0ipwRSg1UnTRJrWYqit5Z2ViBV deploy@ds-api-prod"
 
 write_files:
   # Directory for out-of-band secrets — filled by the provisioning runbook, never baked here.

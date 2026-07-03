@@ -1,0 +1,27 @@
+# Lean the ON-BOX docker build context (DSO-100). Build context is the repo root
+# (see infra/deploy/compose/*/compose.yml); the image builds need source + the
+# pnpm lockfile only. Everything reproducible, heavy, or secret is excluded so the
+# context tar stays small and no secret/tfstate is ever shipped into a layer.
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/*.tsbuildinfo
+**/coverage
+**/test-results
+**/playwright-report
+.git
+.github
+.claude
+docs
+**/*.md
+
+# Never ship deploy state / secrets into a build layer.
+infra/deploy/.env
+infra/deploy/terraform/.terraform
+infra/deploy/terraform/*.tfstate*
+infra/deploy/terraform/*.tfvars
+**/.env
+**/.env.local
+**/.env.*.local
+!**/.env.example

@@ -1,5 +1,10 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
+
+const configDir = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * next-intl plugin (#177). Points at the single-locale request config
@@ -27,6 +32,14 @@ const config: NextConfig = {
   reactStrictMode: true,
   // Self-host as a Node container, no Vercel runtime (ADR-0004 §2.3 / §18).
   output: "standalone",
+  // Pin the file-tracing root to the monorepo root (two levels up from apps/portal).
+  // Next infers the root from the nearest lockfile; in a pnpm workspace that is the
+  // repo root, but pinning it makes the standalone layout DETERMINISTIC — the server
+  // entry lands at apps/portal/server.js with the traced node_modules nested under
+  // the app, exactly the path the on-box Docker image COPYs (apps/portal/Dockerfile,
+  // DSO-100). Without this Next may warn about an inferred workspace root and, on a
+  // machine with a stray lockfile, root the trace elsewhere and break the COPY.
+  outputFileTracingRoot: path.join(configDir, "../../"),
   // Consume @ds/design-system as source (.tsx) — owned-code shadcn model,
   // no separate build step for the internal package (ADR-0004 §6).
   transpilePackages: ["@ds/design-system"],

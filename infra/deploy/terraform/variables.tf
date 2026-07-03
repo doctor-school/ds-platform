@@ -9,9 +9,9 @@ variable "project_id" {
 }
 
 variable "availability_zone" {
-  description = "RF zone for BOTH VPSes and the VPC (single-AZ, ADR-0012). MANDATORY (152-ФЗ): without it the provider defaults to ams-1 (outside RF) even on an RF preset. nsk-1 = ru-2 Novosibirsk."
+  description = "RF zone for the VPSes, router floating IP, and VPC (single-AZ, ADR-0012). MANDATORY (152-ФЗ) AND must match the preset's node pool: a preset is pinned to its zone, so a wrong zone → 'location_zone not valid' (DSO-100). msk-1 = ru-3 Moscow (chosen: ru-1/ru-3 have live 4/8/80 capacity, Novosibirsk excluded)."
   type        = string
-  default     = "nsk-1"
+  default     = "msk-1"
 }
 
 variable "ubuntu_2404_os_id" {
@@ -21,15 +21,21 @@ variable "ubuntu_2404_os_id" {
 }
 
 variable "api_prod_preset_id" {
-  description = "VPS preset for api-prod. 3019 = ru-2 nsk 4 vCPU / 8 GB / 80 GB nvme, cheapest 4/8/80 (~1210₽/mo, +180₽ IPv4). Price validated on apply."
+  description = "VPS preset for api-prod. 4803 = ru-3 msk 4 vCPU / 8 GB / 80 GB nvme (1800₽/mo, +180₽ IPv4). Node pool msk-kvmnvm, zone msk-1. Price/zone validated on apply."
   type        = number
-  default     = 3019
+  default     = 4803
 }
 
 variable "data_prod_preset_id" {
-  description = "VPS preset for data-prod. 3019 = ru-2 nsk 4/8/80 (~1210₽/mo, no public IP → no +180₽). Upgrade trigger: local disk >70% or on-box backup retention needed → bump to a larger-disk preset (spec §4)."
+  description = "VPS preset for data-prod. 4803 = ru-3 msk 4/8/80 (1800₽/mo, no public IP → egress via twc_router NAT). Upgrade trigger: local disk >70% or on-box backup retention needed → bump to a larger-disk preset (spec §4)."
   type        = number
-  default     = 3019
+  default     = 4803
+}
+
+variable "router_preset_id" {
+  description = "NAT router preset for the private data plane. 2009 = ru-3 msk 1 vCPU / 1 GB, cheapest (450₽/mo) — sufficient to SNAT egress for the 2-server plane. GET /api/v1/presets/routers."
+  type        = number
+  default     = 2009
 }
 
 variable "api_prod_ssh_pubkey_path" {
@@ -57,9 +63,15 @@ variable "vpc_cidr" {
 }
 
 variable "vpc_location" {
-  description = "REGION code for the twc_vpc (distinct from the per-server availability_zone). A VPC is single-location and takes a region code, not an AZ: ru-2 = Novosibirsk, which contains AZ nsk-1 (var.availability_zone). Keep in the same region as the servers' AZ (single-AZ, ADR-0012). Region↔AZ mapping: ru-1 SPb, ru-2 Novosibirsk (nsk-1), ru-3 Moscow. Validated on apply."
+  description = "REGION code for the twc_vpc (distinct from the per-server availability_zone). A VPC is single-location and takes a region code, not an AZ: ru-3 = Moscow, which contains AZ msk-1 (var.availability_zone). Keep in the same region as the servers' AZ (single-AZ, ADR-0012). The VPC cannot relocate in-place — changing region forces replacement (DSO-100). Region↔AZ mapping: ru-1 SPb (spb-3), ru-2 Novosibirsk (nsk-1), ru-3 Moscow (msk-1). Validated on apply."
   type        = string
-  default     = "ru-2"
+  default     = "ru-3"
+}
+
+variable "vpc_router_gateway_ip" {
+  description = "Gateway address twc_router.ds holds inside the VPC — data-prod's default-route target (rendered into its cloud-init). Timeweb-ASSIGNED at router creation, not chosen by us: verify via GET /api/v1/routers → networks[].gateway after any router recreate and update this value if it moved (observed: 192.168.0.4, DSO-100 2026-07-03). Not exported by the provider (twc_router has no gateway attribute), hence a pinned variable."
+  type        = string
+  default     = "192.168.0.4"
 }
 
 variable "api_prod_private_ip" {

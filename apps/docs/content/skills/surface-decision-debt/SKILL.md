@@ -24,7 +24,7 @@ mode: inline
    - **Open a follow-up Issue** with label `decision-debt` and a clear title (`gh issue create --label decision-debt --title "..." --body "..."`).
    - **Open an ADR-revision task** via `do-adr-revision` (if the deviation should retroactively become the convention).
    - **Log it in the iteration summary** with rationale (if the deviation is genuinely one-off and not worth tracking further).
-3. **Return the list.** Either a list of opened follow-ups (with Issue numbers / amendment links) or an explicit empty list `[]`. The list goes into `write-iteration-summary`.
+3. **Return the list.** Either a list of opened follow-ups (with Issue numbers / amendment links) or an explicit empty list `[]`. The two are mutually exclusive: **if the reflection names ANY deviation — even one judged benign or handled in-band — it MUST appear as a list item (option 2c at minimum); `[]` plus a prose "decision note" is invalid output**, because `[]` asserts nothing was decided silently while the note contradicts it. The list goes into `write-iteration-summary` (or the stop-state / result comment for non-iteration kinds).
 
 ## Output
 
@@ -35,3 +35,4 @@ mode: inline
 
 - **Skipping the skill entirely** — the F-19 / F-21 pattern. The agent moves from REFACTOR straight to push/PR/merge without ever reflecting on what was decided silently. That is the structural reason silent decisions accumulate into debt.
 - Producing a list and forgetting to record it in `write-iteration-summary` — surfacing without persistence has the same end-state as not surfacing.
+- **Reporting `[]` while narrating a deviation in prose next to it** — the #471 stop-state pattern (an unratified artifact type noted as a "decision note" beside an empty list). The named deviation belongs in the list; the empty list is only for a genuinely deviation-free iteration.

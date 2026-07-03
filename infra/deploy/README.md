@@ -1,7 +1,8 @@
 # `infra/deploy/` — DS Platform pre-pilot deploy slice (DSO-100)
 
-IaC **skeleton** for deploying the built auth vertical (feature 003, epic #80) onto
-an **always-on** Timeweb production environment with live SMS + Email.
+Applied Terraform topology + **apply-ready** on-box deploy payload for deploying the
+built auth vertical (feature 003, epic #80) onto an **always-on** Timeweb production
+environment with live SMS + Email.
 
 > **Design (SSOT):** [`apps/docs/content/specs/tech/2026-07-02-ds-platform-prepilot-deploy-slice-design-en.md`](../../apps/docs/content/specs/tech/2026-07-02-ds-platform-prepilot-deploy-slice-design-en.md).
 > Read it first — this README is the operational runbook, the spec is the decisions.
@@ -57,6 +58,9 @@ infra/deploy/
 | redis            | 6379 (VPC)    | — (AOF)                                                                                          |
 
 Health: `/v1/health` (api), `/v1/ready` (api — probes Postgres + pgvector).
+
+Note: redis runs AOF with **no `maxmemory` / eviction policy set yet** — fine at
+0 users (pre-pilot); tune per ADR-0003 §6 as a tracked follow-up, not an on-box edit.
 
 ## Apply order
 
@@ -215,15 +219,23 @@ first `apply` (report, don't assume green):
   when local disk >70% or on-box backup retention is needed (spec §4).
 - **Terraform state has secrets** (S3 keys via outputs) — `*.tfstate` is gitignored;
   keep it out of any shared location. Vault migration is a tracked follow-up.
-- **first-boot egress (data-prod):** data-prod has no public IP; its VPC interface
-  is `mode="snat"` so runtime egress (pgbackrest→S3, image pulls) is NAT'd out.
-  But cloud-init runs at **first boot**, possibly before SNAT is fully up — if the
-  data-prod cloud-init needs the internet (apt, docker install) it may stall. The
-  provider docs' remedy is a temporary `floating_ip_id` on the server during
-  provisioning (dropped afterward), or bake the image/pre-pull offline. Confirm on
-  the first `apply`; if cloud-init hangs, attach a floating IP, re-run, detach.
+- **first-boot egress (data-prod):** data-prod has no public IP and its VPC port is
+  `mode="no_nat"` (local-only) — there is **no per-server SNAT** on a Timeweb local
+  network, and `mode="snat"` must never be requested (it 500s cosmetically, orphans
+  the resource, and contaminates the VPC's port modes — spec §5.1). All egress comes
+  from the **`twc_router` network NAT** (gateway `var.vpc_router_gateway_ip`, NAT
+  source = the router's floating IP). Because the host has zero egress until its
+  default route exists, `cloud-init/data-prod.yaml` is **route-first**: a netplan
+  drop-in (`write_files`) + `netplan apply` as the first `runcmd`, with packages
+  installed from `runcmd` (NOT the cloud-init `packages` module, which runs earlier
+  and would hang against unreachable mirrors). Do **not** attach a temporary
+  floating IP to data-prod as an egress workaround — that puts a public IP on the
+  IP-less data plane; if first-boot egress fails, verify the router gateway var
+  (DD-8 in the spec) and the netplan drop-in instead.
 - **VPC region vs server AZ:** `twc_vpc.location` takes a **region** code
   (`ru-1`/`ru-3`, NOT `ru-2` — no VPC there), while `twc_server.availability_zone`
-  takes an **AZ** (`spb-3`/`msk-1`). Keep them co-located (single-AZ, ADR-0012). The
-  committed spec §1/§4 + `variables.tf` defaults still say ru-2/nsk-1 — full DD-8
-  region reconcile is a tracked follow-up (see `project_infra_deploy_prepilot_recon`).
+  takes an **AZ** (`spb-3`/`msk-1`). Keep them co-located (single-AZ, ADR-0012).
+  The `variables.tf` defaults are `msk-1` (AZ) / `ru-3` (VPC region) — as-built.
+  Caution that stays true: a **preset is pinned to its zone**, so a preset↔zone
+  mismatch fails apply with a misleading `location_zone not valid` / `no_free_node`
+  (no availability API to pre-check) — validate on `apply` (Apply order §2).

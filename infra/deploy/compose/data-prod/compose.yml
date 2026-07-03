@@ -1,31 +1,53 @@
-# ⚠ SKELETON (DSO-100) — data-prod persistence plane (spec §2.2, §3, §6.3).
-# PRIVATE host: bind published ports to the VPC interface ONLY, never 0.0.0.0.
-# Postgres MUST be a pgvector-enabled 17 build (ADR-0003) — the decisive reason
-# for self-hosted PG over Managed PG (spec §3).
+# data-prod — persistence plane for the 003 slice (spec §2.2, §3, §6.3). Apply-ready
+# (DSO-100). PRIVATE host: published ports bind to the VPC interface ONLY, never
+# 0.0.0.0 — set VPC_IP to data-prod's private address (var.data_prod_private_ip,
+# default 192.168.0.10) before `up` (README apply step / a `.env` beside this file):
+#     VPC_IP=192.168.0.10 docker compose -f compose.yml up -d
 #
-# Secrets via /etc/ds-platform/data.env (POSTGRES_PASSWORD, pgbackrest S3 creds +
-# repo cipher passphrase) — never committed (spec §5.4). The S3 keys originate in
-# tfstate (Terraform-generated) — copy them here via `terraform output -raw`
-# (spec §5.4 DD-6 + infra/deploy/README.md apply step 4).
+# Postgres is a pgvector + pg_partman + pgbackrest build (postgres/Dockerfile) — the
+# pgvector requirement (ADR-0003) is the decisive reason for self-hosted PG over
+# Managed PG (spec §3); pg_partman backs the audit_ledger partitioning migration
+# (apps/api/drizzle/0004); pgbackrest is embedded so archive_command can push WAL.
+#
+# Secrets via /etc/ds-platform/data.env: POSTGRES_PASSWORD, pgbackrest S3 creds
+# (PGBACKREST_REPO1_S3_KEY / _KEY_SECRET — Terraform-generated, copied via
+# `terraform output -raw`, spec §5.4 DD-6), bucket/endpoint/region, and the repo
+# cipher passphrase (PGBACKREST_REPO1_CIPHER_PASS). Never committed.
 
 name: ds-data-prod
 
 services:
   postgres:
-    # TODO(DSO-100): pin a pgvector-enabled postgres:17 image (mirror the dev-stand
-    # infra/dev-stand/postgres/Dockerfile build, or pgvector/pgvector:pg17).
-    image: postgres:17-bookworm
+    build:
+      # pgvector/pgvector:pg17 + postgresql-17-partman (parity with the dev-stand
+      # data-layer image, infra/dev-stand/postgres/Dockerfile) + pgbackrest (for
+      # archive_command). Built on-box, no registry.
+      context: ./postgres
+      dockerfile: Dockerfile
+    image: ds-postgres:pg17-partman-pgbackrest
     restart: unless-stopped
-    env_file: [/etc/ds-platform/data.env]
+    env_file: [/etc/ds-platform/data.env] # POSTGRES_PASSWORD + PGBACKREST_* (archive_command egress)
     environment:
+      POSTGRES_USER: ds
       POSTGRES_DB: ds_prod
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # init.sql creates the `zitadel` DB alongside `ds_prod` (dev-stand parity).
-      - ./init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro # TODO(DSO-100): port infra/dev-stand/postgres/init.sql
+      # vector + partman on a FRESH cluster (Zitadel creates its own `zitadel` DB via
+      # the admin creds on first boot — no init here, dev-stand parity).
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      - pgsocket:/var/run/postgresql # shared with the pgbackrest sidecar (socket)
+      - pgbackrest_log:/var/log/pgbackrest
     ports:
-      - "${VPC_IP:?bind to the private IP}:5432:5432" # VPC-only; NEVER 0.0.0.0
-    # TODO(DSO-100): postgresql.conf with archive_mode=on + archive_command → pgbackrest (WAL, RPO ≤15m)
+      - "${VPC_IP:?set VPC_IP to data-prod private IP}:5432:5432" # VPC-only; NEVER 0.0.0.0
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ds -d ds_prod"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   redis:
     image: redis:7-alpine
@@ -34,19 +56,37 @@ services:
     volumes:
       - redisdata:/data
     ports:
-      - "${VPC_IP:?bind to the private IP}:6379:6379" # VPC-only
+      - "${VPC_IP:?set VPC_IP to data-prod private IP}:6379:6379" # VPC-only
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   pgbackrest:
-    # TODO(DSO-100): custom pgbackrest image; repo1 = Timeweb S3 (spec §6.3).
-    # cron: daily full 02:30 MSK + incr /6h; retention repo1-retention-full=7;
-    # repo cipher AES-256-CBC (passphrase from data.env); continuous WAL archive.
-    image: pgbackrest:custom # TODO(DSO-100): build/publish
+    # Small on-box build: postgres:17-bookworm (uid-999 parity + libpq/gosu) +
+    # pgbackrest + cron. Daily full 02:30 MSK + incr /6h; retention-full=7; repo
+    # cipher AES-256-CBC; continuous WAL archive (postgres archive_command). Entry
+    # runs stanza-create (idempotent) then cron in the foreground (spec §6.3).
+    build:
+      context: ./pgbackrest
+      dockerfile: Dockerfile
+    image: ds-pgbackrest:local
     restart: unless-stopped
-    env_file: [/etc/ds-platform/data.env]
+    env_file: [/etc/ds-platform/data.env] # PGBACKREST_* (S3 creds/bucket/endpoint/region + cipher pass)
+    environment:
+      TZ: Europe/Moscow # so the 02:30 full fires at 02:30 MSK (maintenance window)
     volumes:
-      - pgdata:/var/lib/postgresql/data:ro
-    depends_on: [postgres]
+      - pgdata:/var/lib/postgresql/data:ro # read PGDATA files during backup
+      - pgsocket:/var/run/postgresql # connect to postgres via the shared socket
+      - ./pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      - pgbackrest_log:/var/log/pgbackrest
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   pgdata:
   redisdata:
+  pgsocket:
+  pgbackrest_log:

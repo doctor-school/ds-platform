@@ -1,20 +1,19 @@
 #cloud-config
 # Base hardening for data-prod on first boot (spec §5). PRIVATE host: NO public
-# web ports opened here — Postgres/Redis are reachable only inside the VPC, and
+# IPv4 — all egress goes through the VPC NAT router (twc_router.ds), reached via
+# the default route below. Postgres/Redis are reachable only inside the VPC, and
 # the twc_firewall already restricts to the VPC CIDR. Host ufw allows SSH only.
 # App containers come up separately from infra/deploy/compose/data-prod/.
-# TODO(DSO-100): replace the deploy pubkey placeholder before apply.
+#
+# Rendered by terraform templatefile() (data-prod.tf): ${router_gateway_ip} is the
+# Timeweb-assigned gateway of twc_router.ds inside the VPC (var.vpc_router_gateway_ip).
+#
+# NOTE: unlike api-prod.yaml, packages install from `runcmd`, NOT the cloud-init
+# `packages` module — this host has zero egress until the default route below is
+# applied, and the package module runs BEFORE runcmd, so it would hang against
+# unreachable mirrors. runcmd gives the explicit order: route first, then apt.
 
 timezone: Europe/Moscow
-
-package_update: true
-package_upgrade: true
-packages:
-  - ufw
-  - fail2ban
-  - unattended-upgrades
-  - ca-certificates
-  - curl
 
 users:
   - name: deploy
@@ -22,17 +21,41 @@ users:
     shell: /bin/bash
     sudo: ["ALL=(ALL) NOPASSWD:ALL"]
     ssh_authorized_keys:
-      - "ssh-ed25519 AAAA... deploy@ds-data-prod   # TODO(DSO-100): real deploy pubkey"
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBWaxOrFAq4TUzvsFD+pkiTes/bwVY/u/DbNEtv11PiJ deploy@ds-data-prod"
 
 write_files:
+  # Default IPv4 route via the VPC NAT router — the ONLY egress path for this
+  # IP-less host. IPv4 public resolvers ride the same path (Timeweb's provisioned
+  # resolvers are IPv6-only and unreachable from the private plane).
+  - path: /etc/netplan/60-vpc-default-route.yaml
+    permissions: "0600"
+    content: |
+      network:
+        version: 2
+        ethernets:
+          eth1:
+            routes:
+              - to: default
+                via: ${router_gateway_ip}
+            nameservers:
+              addresses: [1.1.1.1, 8.8.8.8]
+  # Directory for out-of-band secrets — filled by the provisioning runbook, never baked here.
   - path: /etc/ds-platform/.keep
     content: ""
     permissions: "0700"
 
 runcmd:
+  # 1. Egress first: apply the NAT-router default route + IPv4 DNS.
+  - netplan apply
+  # 2. Base packages (same set as api-prod, installed here because egress only
+  #    exists after step 1 — see NOTE above).
+  - apt-get update
+  - DEBIAN_FRONTEND=noninteractive apt-get -y upgrade
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y ufw fail2ban unattended-upgrades ca-certificates curl
+  # 3. Docker CE + compose plugin (official convenience script).
   - curl -fsSL https://get.docker.com | sh
-  # SSH only on the host firewall; 5432/6379 are exposed to the VPC by twc_firewall,
-  # never to the public internet (data-prod has no public IP anyway).
+  # 4. SSH only on the host firewall; 5432/6379 are exposed to the VPC by
+  #    twc_firewall, never to the public internet (data-prod has no public IP).
   - ufw default deny incoming
   - ufw default allow outgoing
   - ufw allow 22/tcp

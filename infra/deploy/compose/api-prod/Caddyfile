@@ -1,29 +1,35 @@
-# ⚠ SKELETON (DSO-100) — Caddy vhosts for the 003 slice (spec §5.2).
-# Automatic Let's Encrypt (HTTP-01 over :80), auto-renew, no manual certs.
-# TODO(DSO-100): set the ACME contact email; confirm upstream container ports.
+# Caddy vhosts for the 003 slice (spec §5.2). Automatic Let's Encrypt (HTTP-01 over
+# :80), auto-renew, no manual certs. Upstream ports verified against the built code
+# (DSO-100): api = 3000 (apps/api/src/main.ts PORT default), portal = 3001
+# (apps/portal/Dockerfile ENV PORT=3001), zitadel core = 8080 (h2c), zitadel-login
+# = 3000. Certs persist in the caddy_data volume (compose.yml).
 
 {
-	# email your-ops@doctor.school   # TODO(DSO-100): ACME contact for expiry notices
+	# ACME contact for expiry notices (spec §5.2).
+	email a@preencipium.com
 }
 
-# Portal (Next.js) — user-facing auth screens.
+# Portal (Next.js standalone) — user-facing auth screens.
 app.doctor.school {
-	reverse_proxy portal:3000
+	reverse_proxy portal:3001
 }
 
-# NestJS BFF/API.
+# NestJS BFF/API. The portal proxies /v1/* to the api internally (same-origin
+# __Host- cookie), but the api is also directly reachable at api.doctor.school.
 api.doctor.school {
-	reverse_proxy api:3000 # TODO(DSO-100): confirm the api's listen port
+	reverse_proxy api:3000
 }
 
-# Zitadel OIDC issuer — single-origin split: Login V2 UI vs core (dev-stand idp-proxy pattern).
+# Zitadel OIDC issuer — single-origin split: Login V2 UI vs core (dev-stand
+# idp-proxy pattern, infra/dev-stand/idp/Caddyfile). Core runs TLS_ENABLED=false and
+# speaks HTTP/2 cleartext, so the core upstream is h2c://.
 id.doctor.school {
 	# Login V2 UI paths → the login container.
 	handle /ui/v2/login/* {
-		reverse_proxy zitadel-login:3000 # TODO(DSO-100): confirm login container port
+		reverse_proxy zitadel-login:3000
 	}
-	# Everything else → Zitadel core (gRPC-web/HTTP2).
+	# Everything else → Zitadel core (Console, OIDC /oauth /.well-known /v2, gRPC-web).
 	handle {
-		reverse_proxy zitadel:8080 # TODO(DSO-100): confirm core port + h2c if needed
+		reverse_proxy h2c://zitadel:8080
 	}
 }

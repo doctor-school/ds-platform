@@ -11,12 +11,16 @@ an **always-on** Timeweb production environment with live SMS + Email.
 - **Is:** two Timeweb VPSes (`api-prod` public + `data-prod` private) joined by a
   private network (per ADR-0012), plus a pgbackrest S3 backup repo. Own Terraform
   harness, own state, own `TWC_TOKEN`, **project-scope `ds-platform`** (tenancy SSOT).
-- **Is a skeleton:** the `terraform/` harness provisions the hosts/network/S3
-  (all provider attribute shapes verified against `timeweb-cloud/timeweb-cloud`
-  v1.7.1 — `terraform validate` passes), but `compose/**` and `cloud-init/*` carry
-  explicit `TODO(DSO-100)` markers (image build+publish pipeline, secret
-  provisioning runbook, pgbackrest repo config). These are tracked follow-ups,
-  **not** apply-and-forget.
+- **Is apply-ready (`compose/**`):** both `compose.yml` files, the Caddyfile, the
+  Dockerfiles, the data-layer Postgres image, and the pgbackrest sidecar are
+  resolved against the built 003 code — no `TODO(DSO-100)` stubs remain. Images
+  build **on-box** (no registry; the box gets source via a read-only deploy-key
+  `git clone`). What remains is **build-verify-on-box** (the workstation has no
+  Docker) — see [Verify-on-box](#verify-on-box).
+- **Is still preliminary elsewhere:** the `terraform/` harness provisions the
+  hosts/network/S3 (attribute shapes verified against `timeweb-cloud/timeweb-cloud`
+  v1.7.1 — `terraform validate` passes) but the region/zone reconcile is a
+  fast-follow (DD-8, see `terraform.tfvars`); `cloud-init/*` is base hardening.
 - **Is NOT:** the full pre-pilot. Cerbos, BullMQ workers, Centrifugo, Unleash,
   admin/cms/promo/mobile, WAF, HA, LB, CDN, preview-vps, Beget S3 offsite are all
   **out of slice** — deploying only what 003 actually runs (spec §2.3, §8).
@@ -29,10 +33,30 @@ infra/deploy/
   terraform/          twc harness: providers, variables, network (vpc+firewall),
                       api-prod, data-prod, s3 (pgbackrest repo), outputs
   cloud-init/         first-boot base hardening (non-root deploy user, ufw, docker)
+  api.env.example     /etc/ds-platform/api.env template (api + portal + sms-adapter + migrate)
+  zitadel.env.example /etc/ds-platform/zitadel.env template (masterkey, DB, FIRSTINSTANCE)
+  data.env.example    /etc/ds-platform/data.env template (POSTGRES_PASSWORD, pgbackrest S3)
   compose/
-    api-prod/         caddy + api + portal + zitadel + zitadel-login (skeleton) + Caddyfile
-    data-prod/        postgres(pgvector) + redis + pgbackrest (skeleton)
+    api-prod/         Caddyfile + compose: caddy + api + portal + zitadel +
+                      zitadel-login + sms-aero-adapter + a one-shot `migrate` service
+    data-prod/        compose: postgres + redis + pgbackrest, plus
+                      postgres/  (Dockerfile pgvector+partman+pgbackrest, postgresql.conf, init.sql)
+                      pgbackrest/(Dockerfile, pgbackrest.conf, crontab, entrypoint.sh, backup.sh)
 ```
+
+## Runtime contract (discovered from the built 003 code)
+
+| Service          | Port          | Key env (from `env_file`)                                                                        |
+| ---------------- | ------------- | ------------------------------------------------------------------------------------------------ |
+| api (NestJS)     | 3000 (`PORT`) | `DATABASE_URL` `REDIS_URL` `IDP_*` `AUDIT_IDENTIFIER_PEPPER` `*_DELIVERY_MODE` `IDP_SMTP_REAL_*` |
+| portal (Next.js) | 3001          | `API_PROXY_TARGET=http://api:3000` (build-arg `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY`, off)          |
+| zitadel core     | 8080 (h2c)    | `ZITADEL_MASTERKEY` `ZITADEL_DATABASE_POSTGRES_*` `ZITADEL_EXTERNAL*`                            |
+| zitadel-login    | 3000          | `ZITADEL_API_URL` + the ds-bootstrap PAT file mount                                              |
+| sms-aero-adapter | 8091          | `SMSAERO_EMAIL` `SMSAERO_API_KEY` `SMSAERO_SIGN` (from api.env)                                  |
+| postgres         | 5432 (VPC)    | `POSTGRES_PASSWORD` `PGBACKREST_*`                                                               |
+| redis            | 6379 (VPC)    | — (AOF)                                                                                          |
+
+Health: `/v1/health` (api), `/v1/ready` (api — probes Postgres + pgvector).
 
 ## Apply order
 
@@ -63,20 +87,117 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    `api.` / `app.` / `id.doctor.school` at the `api_prod_public_ip` output. Root
    `doctor.school` A-record is untouched. Email records (MX/SPF/DKIM/DMARC) are
    already live (memory `reference_doctor_school_email_dns`).
-5. **Secrets (out-of-band):** provision `/etc/ds-platform/{api,zitadel,data}.env`
-   onto each VPS (root:root, `0600`) — app/runtime secrets are never committed and
-   never produced by Terraform (spec §5.4). **Exception (DD-6):** the pgbackrest S3
-   keys ARE Terraform-generated (they live in `tfstate`); copy them into `data.env`
-   with `terraform output -raw pgbackrest_s3_access_key` and
-   `terraform output -raw pgbackrest_s3_secret_key` (+ `pgbackrest_bucket_full_name`
-   / `pgbackrest_s3_hostname` for the repo target).
-6. **Bring up services:** `docker compose -f compose/data-prod/compose.yml up -d`
-   first (DB/Redis/backup), then `compose/api-prod/compose.yml` (after resolving the
-   image build+publish TODOs). Set `EMAIL_DELIVERY_MODE=real` + `SMS_DELIVERY_MODE=real`
-   and run the Zitadel provider reconcile so delivery points at mail.ru + SMS-Aero.
-7. **Verify (definition of done):** drive the auth vertical in the live UI
-   (`app.doctor.school`) — real email + SMS OTP + `/me/*` + valid TLS + a pgbackrest
-   basebackup/WAL in S3 with a restore dry-run (spec §10).
+5. **Deploy-key `git clone` (both boxes — images build on-box, no registry).**
+   Generate a read-only deploy key, add its public half to this private GitHub repo
+   (Settings → Deploy keys, read-only), and clone the repo onto each VPS (short path
+   → Windows long-path irrelevant on Linux, but keep it shallow to save disk):
+
+   ```bash
+   ssh-keygen -t ed25519 -f ~/.ssh/ds-deploy -N '' -C 'ds-platform deploy-ro'
+   # → add ~/.ssh/ds-deploy.pub as a READ-ONLY deploy key on the GitHub repo
+   # on EACH VPS (api-prod and data-prod), as the deploy user:
+   GIT_SSH_COMMAND='ssh -i ~/.ssh/ds-deploy -o IdentitiesOnly=yes' \
+     git clone --depth 1 git@github.com:<org>/ds-platform.git ~/ds-platform
+   ```
+
+   Both boxes need the clone: api-prod builds api/portal + runs migrations from it;
+   data-prod builds the Postgres + pgbackrest images from `infra/deploy/compose/data-prod/`
+   (and the api-prod compose bind-mounts `infra/dev-stand/sms-aero-adapter/server.mjs`).
+
+6. **Secrets (out-of-band).** Provision `/etc/ds-platform/{api,zitadel}.env` on
+   api-prod and `/etc/ds-platform/data.env` on data-prod, root:root `0600`, from the
+   templates (`infra/deploy/*.env.example`). App/runtime secrets are never committed
+   and never produced by Terraform (spec §5.4). The **same `ds` DB password** goes in
+   all three (`DATABASE_URL` / `ZITADEL_DATABASE_*_PASSWORD` / `POSTGRES_PASSWORD`).
+
+   ```bash
+   sudo install -d -m 700 /etc/ds-platform
+   sudo install -m 600 ~/ds-platform/infra/deploy/api.env.example  /etc/ds-platform/api.env     # api-prod
+   sudo install -m 600 ~/ds-platform/infra/deploy/zitadel.env.example /etc/ds-platform/zitadel.env  # api-prod
+   sudo install -m 600 ~/ds-platform/infra/deploy/data.env.example /etc/ds-platform/data.env    # data-prod
+   # …then edit each to fill REAL values (openssl rand -hex 32 for pepper / cipher pass;
+   #    exactly 32 chars for ZITADEL_MASTERKEY: openssl rand -hex 16).
+   ```
+
+   **DD-6 — pgbackrest S3 keys from Terraform** (the one secret class in `tfstate`).
+   On the workstation, in `infra/deploy/terraform/`:
+
+   ```bash
+   terraform output -raw pgbackrest_bucket_full_name   # → PGBACKREST_REPO1_S3_BUCKET
+   terraform output -raw pgbackrest_s3_hostname        # → PGBACKREST_REPO1_S3_ENDPOINT
+   terraform output -raw pgbackrest_s3_access_key      # → PGBACKREST_REPO1_S3_KEY
+   terraform output -raw pgbackrest_s3_secret_key      # → PGBACKREST_REPO1_S3_KEY_SECRET
+   ```
+
+7. **Bring up data-prod FIRST** (DB/Redis/backup). `VPC_IP` = data-prod's private
+   address (`var.data_prod_private_ip`, default `192.168.0.10`) — the published
+   ports bind to it, never `0.0.0.0`:
+
+   ```bash
+   cd ~/ds-platform/infra/deploy/compose/data-prod
+   VPC_IP=192.168.0.10 docker compose up -d --build     # builds pgvector+partman+pgbackrest, redis, pgbackrest sidecar
+   docker compose logs -f postgres                       # wait for "database system is ready"
+   # pgbackrest sidecar auto-runs `stanza-create` + `check` on start; confirm:
+   docker compose logs pgbackrest                        # expect the stanza check to pass
+   ```
+
+8. **Migrate `ds_prod`, then bring up api-prod.** Migrations run from the one-shot
+   `migrate` service (carries drizzle-kit; the runtime image does not), against the
+   data-prod DB via `api.env`'s `DATABASE_URL`:
+
+   ```bash
+   cd ~/ds-platform/infra/deploy/compose/api-prod
+   docker compose --profile migrate run --rm migrate     # applies apps/api/drizzle/0000..0004
+   docker compose up -d --build                           # caddy + api + portal + zitadel + zitadel-login + sms-aero-adapter
+   docker compose logs -f zitadel                         # first boot: start-from-init runs Zitadel's own DB migration
+   ```
+
+9. **Zitadel bootstrap + OIDC provision (spec §6.1; mirrors `infra/dev-stand/idp/bootstrap.md`).**
+   - **First boot only** — uncomment the `ZITADEL_FIRSTINSTANCE_*` block in
+     `zitadel.env`, `docker compose up -d zitadel`, then capture the ds-bootstrap PAT
+     from the `/pat` tmpfs and **re-comment** the block:
+
+     ```bash
+     PID=$(docker inspect ds-api-prod-zitadel-1 --format '{{.State.Pid}}')
+     sudo cat /proc/$PID/root/pat/pat.txt | sudo tee /etc/ds-platform/idp-bootstrap-pat.txt
+     # put IDP_SERVICE_TOKEN=<that PAT> in api.env; place the same PAT for zitadel-login:
+     sudo install -m 600 /etc/ds-platform/idp-bootstrap-pat.txt /etc/ds-platform/idp-login-client.pat
+     ```
+
+   - **Provision the OIDC app + activate the real providers** (idempotent; SMTP creds
+     come from `api.env`, so source it). This grants `IAM_LOGIN_CLIENT`, registers the
+     prod redirect URI, and activates mail.ru + SMS-Aero as the boot providers:
+
+     ```bash
+     set -a; . /etc/ds-platform/api.env; set +a
+     cd ~/ds-platform/infra/dev-stand/idp
+     IDP_BASE_URL=https://id.doctor.school \
+       IDP_REDIRECT_URIS=https://api.doctor.school/auth/callback \
+       IDP_POST_LOGOUT_URIS=https://app.doctor.school \
+       EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real \
+       ./provision.sh --pat-file /etc/ds-platform/idp-bootstrap-pat.txt
+     # copy the emitted IDP_CLIENT_ID / IDP_CLIENT_SECRET / IDP_PROJECT_ID into api.env,
+     # then: docker compose up -d api   (restart to pick up the OIDC creds)
+     ```
+
+10. **Verify (definition of done, spec §10).** Drive the auth vertical in the live
+    UI (`https://app.doctor.school`, Playwright): register → **real** verification
+    email (mail.ru); email-OTP login; **one supervised paid** SMS-OTP login
+    (SMS-Aero); `/me/*` behind a session; valid TLS on all three hostnames; a
+    pgbackrest basebackup + WAL in S3 with a restore dry-run (RTO ≤ 2 h).
+
+## Verify-on-box
+
+The workstation has no Docker, so the following are **build/run-verify-only** on the
+first `apply` (report, don't assume green):
+
+- `apps/api/Dockerfile` — `pnpm deploy --prod /out` resolving the workspace graph
+  (add `--legacy` if pnpm 10 requires it); `node dist/main.js` boot.
+- `apps/portal/Dockerfile` — the Next standalone COPY paths (the pinned
+  `outputFileTracingRoot` should land the entry at `apps/portal/server.js`).
+- `compose/data-prod/pgbackrest` — `stanza-create` + `check` succeeding against S3,
+  the socket-based backup connection (local `trust`), and a real full/incr + restore.
+- Caddy ACME issuance for all three hostnames (needs the Beget A-records live first).
 
 ## Key gotchas
 

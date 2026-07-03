@@ -1,0 +1,6 @@
+# These run in a Linux container — force LF so a Windows checkout can't ship CRLF
+# into the image (a CRLF shebang breaks `#!/usr/bin/env bash`).
+*.sh text eol=lf
+entrypoint.sh text eol=lf
+backup.sh text eol=lf
+crontab text eol=lf

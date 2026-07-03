@@ -1,19 +1,27 @@
-# ⚠ SKELETON (DSO-100) — api-prod public plane. Service topology + wiring for the
-# 003 auth slice (spec §2.1). NOT apply-ready: image tags, the image build+publish
-# pipeline, and secret provisioning are tracked TODOs, not silent stubs.
+# api-prod — public plane for the 003 auth slice (spec §2.1). Apply-ready (DSO-100).
+#
+# On-box image builds, NO registry (bbm-portal precedent): api + portal build from
+# `build:` with the REPO ROOT as context (the box has a shallow git clone via a
+# read-only deploy key — README apply steps). Zitadel + zitadel-login pull upstream
+# pinned images. Runs ONLY what 003 exercises (spec §2.3): caddy + api + portal +
+# zitadel + zitadel-login + sms-aero-adapter. NOT here: nginx (Caddy instead),
+# BullMQ workers (no queues in 003), centrifugo (deferred), cerbos (SEAM / DSO-27).
+#
+# sms-aero-adapter IS required for the DoD's live SMS (spec §6.2 / §10.3): Zitadel's
+# generic HTTP SMS provider POSTs each OTP to it and it forwards to SMS-Aero. The
+# spec §2.1 table omits it (it lists only the 5 headline services) — filled here so
+# `SMS_DELIVERY_MODE=real` actually delivers; flagged to the orchestrator to
+# reconcile the §2.1 inventory line.
 #
 # Secrets: app/runtime secrets provisioned OUT-OF-BAND into /etc/ds-platform/*.env
 # (root:root 0600), referenced via env_file — NEVER committed, never produced by
-# Terraform (spec §5.4). NB: the pgbackrest S3 keys ARE Terraform-generated and
-# land in tfstate (spec §5.4 DD-6) — that is the one exception.
-#
-# Runs ONLY what 003 exercises: caddy + api + portal + zitadel + zitadel-login.
-# NOT here (spec §2.3): nginx (Caddy instead), BullMQ workers (no queues in 003),
-# centrifugo (deferred), cerbos (unimplemented SEAM / DSO-27).
+# Terraform (spec §5.4). DB/Redis hosts point at the data-prod PRIVATE VPC IP
+# (spec §5.1); TLS is terminated at Caddy for all three public hostnames (§5.2).
 
 name: ds-api-prod
 
 services:
+  # --- Caddy — TLS terminator + reverse proxy for the 3 public hostnames (§5.2) ---
   caddy:
     image: caddy:2
     restart: unless-stopped
@@ -22,36 +30,198 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data # ACME certs — persist across restarts
+      - caddy_data:/data # ACME certs — persist across restarts (do NOT wipe)
       - caddy_config:/config
-    depends_on: [api, portal, zitadel, zitadel-login]
+    depends_on:
+      api:
+        condition: service_started
+      portal:
+        condition: service_started
+      zitadel:
+        condition: service_healthy
+      # service_started (not _healthy): on the FIRST boot the login container is
+      # unhealthy until its ds-bootstrap PAT is provisioned (README step 9). Don't
+      # let that wedge Caddy — only /ui/v2/login 502s until then; TLS + api + portal
+      # + Zitadel core still serve.
+      zitadel-login:
+        condition: service_started
 
+  # --- api — NestJS BFF/API (auth, sessions, /me/*, mailer, SMS-budget) ---
   api:
-    image: ds-api:${DS_API_TAG:?set in api.env} # TODO(DSO-100): build+publish pipeline → registry
+    build:
+      context: ../../../.. # repo root (on-box git clone) — see .dockerignore
+      dockerfile: apps/api/Dockerfile
+    image: ds-api:local # tag the on-box build; no registry push
     restart: unless-stopped
-    env_file: [/etc/ds-platform/api.env] # DATABASE_URL/REDIS_URL point at data-prod PRIVATE IP
-    command: ["node", "dist/main.js"]
-    # no published ports — Caddy reaches it over the compose network (api:PORT)
+    env_file: [/etc/ds-platform/api.env] # DATABASE_URL/REDIS_URL → data-prod PRIVATE IP
+    # PORT (default 3000) comes from api.env; binds 0.0.0.0 (apps/api/src/main.ts).
+    depends_on:
+      zitadel:
+        condition: service_healthy
+    healthcheck:
+      # /v1/health is @Public (apps/api/src/health/health.controller.ts). node:22
+      # has global fetch — no curl in the slim image. PORT is read from the env.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:'+(process.env.PORT||3000)+'/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # no published ports — Caddy reaches it over the compose network (api:3000)
 
+  # --- portal — Next.js standalone, user-facing auth screens (app.doctor.school) ---
   portal:
-    image: ds-portal:${DS_PORTAL_TAG:?set in api.env} # TODO(DSO-100): Next.js standalone build+publish
+    build:
+      context: ../../../..
+      dockerfile: apps/portal/Dockerfile
+      args:
+        # OFF for the 003 slice (bot protection disabled). Set a real Yandex
+        # SmartCaptcha site key here to bake the live widget (build-time inlined).
+        NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY: ""
+    image: ds-portal:local
     restart: unless-stopped
-    env_file: [/etc/ds-platform/api.env]
+    env_file: [/etc/ds-platform/api.env] # API_PROXY_TARGET=http://api:3000 (same-origin BFF proxy)
+    # Dockerfile bakes PORT=3001 + HOSTNAME=0.0.0.0 (Next standalone).
+    depends_on:
+      api:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3001/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
+  # --- zitadel — OIDC issuer core (id.doctor.school). TLS at Caddy (§5.2) ----------
+  # Mirrors the dev-stand `idp` service (infra/dev-stand/compose.core.yml) with PROD
+  # externalisation: EXTERNALSECURE=true + EXTERNALPORT=443 (public https via Caddy),
+  # TLS_ENABLED=false (Caddy terminates; core speaks h2c upstream). Its DB is the
+  # `zitadel` database on data-prod — Zitadel creates it itself on first boot using
+  # the ADMIN creds. First-boot bootstrap (ds-bootstrap machine user + PAT) is gated
+  # by the ZITADEL_FIRSTINSTANCE_* vars in zitadel.env (README init step); leave them
+  # unset for normal boots. The masterkey (ZITADEL_MASTERKEY) MUST be exactly 32 chars.
   zitadel:
     image: ghcr.io/zitadel/zitadel:v4.15.0 # pinned in lockstep with zitadel-login
     restart: unless-stopped
-    env_file: [/etc/ds-platform/zitadel.env] # masterkey (32 chars), its DATABASE_URL, real SMTP/SMS
-    command: >-
-      start --masterkeyFromEnv
-    # TODO(DSO-100): externalDomain=id.doctor.school, TLS terminated at Caddy (externalSecure=true,
-    # tls.enabled=false behind proxy) — port config to match the dev-stand idp bootstrap.
+    command: ["start-from-init", "--masterkeyFromEnv"]
+    env_file: [/etc/ds-platform/zitadel.env] # ZITADEL_MASTERKEY, DB host/pw, FIRSTINSTANCE*, real SMTP
+    environment:
+      ZITADEL_EXTERNALSECURE: "true"
+      ZITADEL_TLS_ENABLED: "false"
+      ZITADEL_EXTERNALDOMAIN: id.doctor.school
+      ZITADEL_EXTERNALPORT: "443"
+      # REQUIRED for the headless BFF session→token exchange (EARS-8) — the
+      # /v2/oidc/auth_requests/{id} link only resolves an auth request created under
+      # Login V2 (dev-stand parity; do NOT disable — proven live #146).
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "true"
+      # DB → data-prod. HOST + passwords come from zitadel.env (deploy-specific /
+      # secret). Database name + non-secret shape here.
+      ZITADEL_DATABASE_POSTGRES_PORT: "5432"
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: ds
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable # intra-VPC (§5.1); DB-TLS is a later hardening
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ds
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+    tmpfs:
+      # Writable, uid/gid-1000-owned tmpfs for the FIRSTINSTANCE PatPath file on a
+      # bootstrap init (distroless runs as uid 1000; a default mount is root-owned).
+      # Inert unless ZITADEL_FIRSTINSTANCE_PATPATH is set in zitadel.env.
+      - /pat:uid=1000,gid=1000,mode=0700
+    expose:
+      - "8080" # in-network only; Caddy fronts the public origin
+    healthcheck:
+      test: ["CMD", "/app/zitadel", "ready"]
+      interval: 10s
+      timeout: 30s
+      retries: 12
+      start_period: 60s # start-from-init runs DB migrations inline on first boot
 
+  # --- zitadel-login — Login V2 UI (Next.js), pinned to core (dev-stand parity) -----
   zitadel-login:
-    image: ghcr.io/zitadel/zitadel-login:v4.15.0 # Login V2 UI — bump in lockstep with core
+    image: ghcr.io/zitadel/zitadel-login:v4.15.0
     restart: unless-stopped
-    env_file: [/etc/ds-platform/zitadel.env]
-    depends_on: [zitadel]
+    environment:
+      ZITADEL_API_URL: http://zitadel:8080
+      NEXT_PUBLIC_BASE_PATH: /ui/v2/login
+      ZITADEL_SERVICE_USER_TOKEN_FILE: /pat/login-client.pat
+      # Core resolves the request host to its ExternalDomain or 404s "Instance not
+      # found"; the login container talks to core by service name, so pin the Host.
+      CUSTOM_REQUEST_HEADERS: Host:id.doctor.school
+    volumes:
+      # The ds-bootstrap PAT (IAM_LOGIN_CLIENT), provisioned out-of-band root:root
+      # 0600 (README init step); read-only. Absent ⇒ this container fails its
+      # healthcheck loudly (fail-closed) rather than serving a broken login.
+      - /etc/ds-platform/idp-login-client.pat:/pat/login-client.pat:ro
+    depends_on:
+      zitadel:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/ui/v2/login/healthy').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # --- sms-aero-adapter — REAL outbound SMS route (spec §6.2; opt-in, COSTS MONEY) --
+  # The production SMS bridge: Zitadel's HTTP SMS provider POSTs each OTP here and it
+  # forwards to SMS-Aero (Gate API v2). Runs the SAME dependency-free script the
+  # dev-stand uses (infra/dev-stand/sms-aero-adapter/server.mjs, bind-mounted onto a
+  # stock node image — no bespoke build). Harmless when unused: Zitadel only POSTs
+  # here once provision.sh activates the real provider (SMS_DELIVERY_MODE=real). The
+  # SMSAERO_* creds live in api.env (spec §5.4) and are read ONLY from env.
+  sms-aero-adapter:
+    image: node:22-alpine
+    restart: unless-stopped
+    command: ["node", "/srv/server.mjs"]
+    env_file: [/etc/ds-platform/api.env] # SMSAERO_EMAIL / SMSAERO_API_KEY / SMSAERO_SIGN
+    environment:
+      SMS_AERO_ADAPTER_PORT: "8091"
+    volumes:
+      - ../../../../infra/dev-stand/sms-aero-adapter/server.mjs:/srv/server.mjs:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:8091/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- migrate — one-shot Drizzle migration runner (deploy-time, NOT a service) -----
+  # `docker compose --profile migrate run --rm migrate` applies apps/api/drizzle/*
+  # against ds_prod BEFORE bringing `api` up (README apply step). Builds the `migrate`
+  # target (carries drizzle-kit, absent from the runtime image). profiles: keeps it
+  # out of `up`.
+  migrate:
+    build:
+      context: ../../../..
+      dockerfile: apps/api/Dockerfile
+      target: migrate
+    image: ds-api-migrate:local
+    profiles: ["migrate"]
+    restart: "no"
+    env_file: [/etc/ds-platform/api.env] # DATABASE_URL → data-prod PRIVATE IP / ds_prod
+    command: ["pnpm", "run", "drizzle:migrate:ci"]
 
 volumes:
   caddy_data:

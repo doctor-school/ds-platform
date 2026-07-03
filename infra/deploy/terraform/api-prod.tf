@@ -24,16 +24,20 @@ resource "twc_server" "api_prod" {
   # Base VPS hardening on first boot (non-root deploy user, ufw, docker+compose).
   cloud_init = file("${path.module}/../cloud-init/api-prod.yaml")
 
-  # Join the private VPC with a static address. mode=no_nat: api-prod reaches the
-  # internet (ACME, image pulls) through its own public IPv4 (twc_server_ip below);
-  # the private NIC carries only VPC-local traffic to data-prod (PG/Redis).
+  # Join the private VPC with a static address. mode=no_nat: "only local network
+  # traffic allowed" on this port. api-prod's own public IPv4 (twc_server_ip below)
+  # handles ALL public in/out (ACME, image pulls, inbound web + SSH); the VPC port
+  # stays local-only. Because the port is no_nat, the network router (twc_router.ds,
+  # which NATs data-prod's egress) does NOT rewrite this port's mode — api-prod's
+  # public path is unaffected by the router. The private NIC carries only VPC-local
+  # traffic to data-prod (PG/Redis).
   local_network {
     id   = twc_vpc.ds.id
     ip   = var.api_prod_private_ip
     mode = "no_nat"
   }
 
-  comment = "ds-platform api-prod (Caddy+api+portal+Zitadel). project ds-platform. nsk-1. DSO-100."
+  comment = "ds-platform api-prod (Caddy+api+portal+Zitadel). project ds-platform. msk-1. DSO-100."
 }
 
 # Public IPv4 — separate paid resource (+180₽/mo); the preset does NOT include it.

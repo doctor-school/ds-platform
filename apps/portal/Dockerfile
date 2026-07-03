@@ -39,6 +39,10 @@ ENV NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY=$NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY
 # /v1/* to the baked `?? "http://localhost:3000"` fallback → ECONNREFUSED, despite a
 # correct runtime API_PROXY_TARGET in its env). The default keeps local single-app
 # builds working; the prod compose passes build.args API_PROXY_TARGET=http://api:3000.
+# NOTE the ARG/ENV alone is NOT enough: the build runs through turbo, whose strict
+# env mode strips undeclared vars from the task process — API_PROXY_TARGET must ALSO
+# be on the `build` task's `env` allowlist in turbo.json (DSO-100 second on-box find:
+# with the ARG but no allowlist, the manifest still baked the localhost fallback).
 ARG API_PROXY_TARGET=http://localhost:3000
 ENV API_PROXY_TARGET=$API_PROXY_TARGET
 COPY . .

@@ -16,6 +16,11 @@ FROM pgvector/pgvector:pg17
 # patch versions out of the index, so an exact `=` pin breaks the build the moment
 # a new patch ships (dev-stand Dockerfile precedent). Tested classes: pg_partman
 # 5.4.x, pgbackrest 2.5x (bookworm).
+# ca-certificates is REQUIRED alongside pgbackrest: the pgvector/pg17 (bookworm)
+# base ships no TLS trust store, so archive_command's pgbackrest cannot verify the
+# (publicly-valid GlobalSign) cert on the Timeweb S3 endpoint — WAL archiving fails
+# with error 19 "self-signed certificate in certificate chain" (DSO-100 on-box find:
+# pg_stat_archiver showed 0 archived / 51 failed with no CA bundle present).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends postgresql-17-partman pgbackrest \
+    && apt-get install -y --no-install-recommends postgresql-17-partman pgbackrest ca-certificates \
     && rm -rf /var/lib/apt/lists/*

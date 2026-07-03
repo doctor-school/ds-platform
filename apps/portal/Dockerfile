@@ -14,10 +14,10 @@
 # The BFF is reached same-origin via next.config rewrites → API_PROXY_TARGET
 # (set to the internal compose URL http://api:3000 in api.env). No CORS.
 #
-# ⚠ DSO-100: authored from the Next standalone contract; NOT yet build-verified on
-# the box. First on-box `docker compose build` verifies the standalone path (if
-# Next roots tracing differently, add `outputFileTracingRoot` to next.config and
-# adjust the COPY paths). Verification gate before this is called done.
+# DSO-100: build-verified ON-BOX (api-prod, 2026-07-03) — the standalone COPY paths
+# resolve as pinned (entry at apps/portal/server.js) and the portal serves on 3001.
+# NOTE: API_PROXY_TARGET must arrive as a BUILD ARG (below) — Next freezes
+# `rewrites()` destinations into .next/routes-manifest.json at build time.
 FROM node:22-slim AS base
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 RUN corepack enable
@@ -33,6 +33,14 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # api.env (SMARTCAPTCHA_SERVER_KEY), never here.
 ARG NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY=
 ENV NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY=$NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY
+# API_PROXY_TARGET must be present at BUILD time: Next evaluates `rewrites()` during
+# `next build` and freezes the destination into .next/routes-manifest.json — runtime
+# env cannot change it (DSO-100 on-box find: built without it, the portal proxied
+# /v1/* to the baked `?? "http://localhost:3000"` fallback → ECONNREFUSED, despite a
+# correct runtime API_PROXY_TARGET in its env). The default keeps local single-app
+# builds working; the prod compose passes build.args API_PROXY_TARGET=http://api:3000.
+ARG API_PROXY_TARGET=http://localhost:3000
+ENV API_PROXY_TARGET=$API_PROXY_TARGET
 COPY . .
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm install --frozen-lockfile
 RUN pnpm turbo run build --filter=@ds/portal

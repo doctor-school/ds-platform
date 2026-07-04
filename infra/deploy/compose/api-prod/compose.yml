@@ -51,10 +51,17 @@ services:
     build:
       context: ../../../.. # repo root (on-box git clone) — see .dockerignore
       dockerfile: apps/api/Dockerfile
-    image: ds-api:local # tag the on-box build; no registry push
+    # SHA-tagged by `pnpm deploy:prod` (DSO-127): DEPLOY_SHA is set in the `.env`
+    # beside this file so build + up + rollback all reference `ds-api:<sha>`.
+    # Falls back to `:local` for the manual README path (no DEPLOY_SHA set).
+    image: ds-api:${DEPLOY_SHA:-local}
     restart: unless-stopped
     env_file: [/etc/ds-platform/api.env] # DATABASE_URL/REDIS_URL → data-prod PRIVATE IP
     # PORT (default 3000) comes from api.env; binds 0.0.0.0 (apps/api/src/main.ts).
+    environment:
+      # The deployed commit SHA — surfaced at GET /v1/health (DSO-127) so an
+      # operator can confirm the live build over HTTP. Empty on the manual path.
+      DEPLOY_SHA: ${DEPLOY_SHA:-}
     depends_on:
       zitadel:
         condition: service_healthy
@@ -89,7 +96,9 @@ services:
         # ECONNREFUSEDs the same-origin /v1/* proxy. Must match the api service's
         # compose DNS name. The runtime env copy (via env_file) stays — harmless.
         API_PROXY_TARGET: http://api:3000
-    image: ds-portal:local
+    # SHA-tagged in lockstep with the api (DSO-127) for retention + app-only
+    # rollback; `:local` fallback for the manual README path.
+    image: ds-portal:${DEPLOY_SHA:-local}
     restart: unless-stopped
     env_file: [/etc/ds-platform/api.env] # API_PROXY_TARGET=http://api:3000 (same-origin BFF proxy)
     # Dockerfile bakes PORT=3001 + HOSTNAME=0.0.0.0 (Next standalone).

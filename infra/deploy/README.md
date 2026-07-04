@@ -62,7 +62,51 @@ Health: `/v1/health` (api), `/v1/ready` (api — probes Postgres + pgvector).
 Note: redis runs AOF with **no `maxmemory` / eviction policy set yet** — fine at
 0 users (pre-pilot); tune per ADR-0003 §6 as a tracked follow-up, not an on-box edit.
 
+## Deploy — one command (`pnpm deploy:prod`)
+
+The **steady-state redeploy** is a single idempotent command (DSO-126) that
+formalises the manual steps 5–8 + 10 below — nothing hand-run on the box:
+
+```bash
+pnpm deploy:prod                 # deploy origin/main (the default)
+pnpm deploy:prod --rollback <sha>   # app-only rollback to a prior SHA tag (see Rollback)
+pnpm deploy:prod --skip-ci-check    # escape hatch (logs a loud warning)
+```
+
+Pipeline (`tools/deploy/prod.mjs`), fail-closed and stops at the first red step:
+
+1. **Pre-flight** — refuses a **dirty working tree**, a HEAD **≠ `origin/main`**,
+   or a **red CI** for that SHA (latest check-run per name via `gh api
+…/commits/<sha>/check-runs`). The deployed commit is `origin/main`'s SHA.
+2. **Ship** — `git archive <sha>` streamed over SSH to **both** boxes
+   (`rm -rf ~/ds-platform && tar x`); no registry, no deploy key (README step 5).
+3. **data-prod** — `docker compose up -d --build` (idempotent).
+4. **Checkpoint (DSO-129)** — a pgbackrest **pre-migrate `incr` backup** (the
+   same `backup.sh` cron runs) **before** any migration, so a restore point
+   exists at the pre-migrate state. See [Prod migration rule](#prod-migration-rule--expandcontract).
+5. **api-prod** — `migrate` (idempotent drizzle-kit) → `build` → `up -d`. Images
+   are SHA-tagged **`ds-api:<sha>` / `ds-portal:<sha>`** (DSO-127) — the compose
+   `image:` reads `DEPLOY_SHA` from a `.env` the script writes beside `compose.yml`.
+6. **Retention (DSO-127)** — keeps the **last 3** SHA-tagged images per repo,
+   prunes older (never `:local`, never the running one).
+7. **Smoke (DSO-128)** — `tools/deploy/smoke-prod.mjs --expect-sha <sha>`; a red
+   smoke fails the deploy loud and prints the rollback pointer.
+
+The **deployed SHA is queryable over HTTP** (DSO-127): the api reports it at
+`GET /v1/health` → `{"version":"<sha>", …}` (from the `DEPLOY_SHA` env; unset in
+local dev). `curl -s https://api.doctor.school/v1/health | jq .version`.
+
+The script is the **steady-state** path only. **First-time provisioning**
+(Terraform §§1–3, DNS §4, out-of-band secrets §6, and the **Zitadel first-boot
+bootstrap** §9) stays the manual runbook below — those are one-time, not
+per-deploy. Run them once; from then on `pnpm deploy:prod` is the whole deploy.
+
 ## Apply order
+
+> **Steps 5–8 + 10 are what `pnpm deploy:prod` automates** on every redeploy —
+> they are documented here as the manual fallback + the record of what the
+> script does on the box. Steps 1–4, 6 (secrets), and 9 (Zitadel first-boot) are
+> **first-time provisioning**, run once by hand.
 
 1. **Prereqs:** `cp .env.example .env` and set `TWC_TOKEN` (an account-level Timeweb
    token; project-scoped tokens do not exist). Confirm/create the `ds-platform`
@@ -268,6 +312,54 @@ first `apply` (report, don't assume green):
 - `compose/data-prod/pgbackrest` — `stanza-create` + `check` succeeding against S3,
   the socket-based backup connection (local `trust`), and a real full/incr + restore.
 - Caddy ACME issuance for all three hostnames (needs the Beget A-records live first).
+
+## Rollback
+
+Two independent failure classes, two independent reverts (DSO-127) — never
+conflate them:
+
+- **Bad APP build** (api/portal code regression, healthy DB) → **app-only
+  rollback**, one command, no rebuild:
+
+  ```bash
+  pnpm deploy:prod --rollback <previous-sha>
+  ```
+
+  It `up -d`s the already-present `ds-api:<sha>` / `ds-portal:<sha>` images (kept
+  by retention — the **last 3** SHAs), rewrites the `DEPLOY_SHA` `.env`, and
+  re-smokes. It does **not** rebuild, migrate, or touch the DB. If the target SHA
+  was already pruned, roll **forward** instead (check out that commit's `main`,
+  `pnpm deploy:prod`). Manual equivalent on the box:
+  `cd ~/ds-platform/infra/deploy/compose/api-prod && printf 'DEPLOY_SHA=<sha>\n' > .env && sudo docker compose up -d`.
+
+- **Bad MIGRATION** (schema/data corruption) → **pgbackrest restore** to the
+  pre-migrate checkpoint (DSO-129 took one right before `migrate`; restore is
+  ~23s, RTO ≤ 2h target). On data-prod, with postgres stopped:
+
+  ```bash
+  cd ~/ds-platform/infra/deploy/compose/data-prod
+  sudo docker compose stop postgres
+  sudo docker compose run --rm pgbackrest gosu postgres \
+    pgbackrest --stanza=ds --delta --type=default restore   # or --type=time --target='<pre-migrate ts>'
+  sudo docker compose up -d postgres
+  ```
+
+  A PITR `--type=time` target rewinds to just before the bad migration using the
+  continuously-archived WAL. Confirm with `pgbackrest --stanza=ds info`.
+
+## Prod migration rule — expand/contract
+
+**All prod DB migrations MUST be backward-compatible (expand/contract).** A
+migration may only **add** (nullable columns, new tables, new indexes
+`CONCURRENTLY`), never **destructively rename/drop** in the same release as the
+code that stops using the old shape. The reason is the rollback contract above:
+an **app-only rollback** (`--rollback <sha>`) swaps the app image **without**
+touching the DB, so the previous app build must still run against the
+already-migrated schema. Sequence a removal across **two** deploys — expand
+(add + dual-write/read) ships and beds in, then contract (drop the old) ships
+only once no rolled-back app version can need it. This keeps app rollback a
+one-command, no-DB-rollback operation and reserves the pgbackrest restore for
+genuine data corruption, not routine reverts.
 
 ## Key gotchas
 

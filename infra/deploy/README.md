@@ -468,6 +468,16 @@ reaches the UI via an SSH tunnel.
   `api` project carries an email alert rule (fires on new issues). Live-verified: test
   event → alert notification `sent=True`; delivery to the owner's mailbox awaits owner
   confirmation. Grafana infra-alert email is a **separate** channel (bbm mon, below).
+- **Gotcha — no team ⇒ alert emails silently not sent (DSO-132).** GlitchTip resolves
+  alert recipients through user → org → **team** → project → alert, and sets
+  `is_sent=True` unconditionally (processed ≠ sent) — an org/project with no team
+  produces zero recipients and zero emails, with nothing in the logs. After onboarding,
+  always: create a team, add the user to it, attach the project. Verify the resolution:
+
+  ```bash
+  sudo docker compose exec -T web ./manage.py shell -c "from django.apps import apps; from django.contrib.auth import get_user_model; n = apps.get_model('alerts','Notification').objects.order_by('-id').first(); print(list(get_user_model().objects.alert_notification_recipients(n).values_list('email', flat=True)))"
+  # non-empty list of emails = recipients resolve; [] = alerts go nowhere
+  ```
 
 ## Мониторинг (внешний, через bbm mon-prod-tw, tenant=ds)
 

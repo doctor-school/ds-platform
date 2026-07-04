@@ -80,10 +80,17 @@ async function probeApiHealth() {
   if (json.status !== "ok") throw new Error(`status=${json.status}`);
   const shown = json.version ? ` · version=${json.version}` : " · version=(unset)";
   if (EXPECT_SHA) {
-    if (json.version !== EXPECT_SHA) {
+    // Hard-fail ONLY on a definite mismatch (the WRONG build is live — a real
+    // deploy failure). A version that is entirely ABSENT means a build that
+    // predates DSO-127's `version` field (e.g. a deploy of pre-feature main) —
+    // not an unhealthy prod, so warn loudly but don't fail the smoke.
+    if (json.version && json.version !== EXPECT_SHA) {
       throw new Error(
-        `deployed version ${json.version ?? "(unset)"} !== expected ${EXPECT_SHA}`,
+        `WRONG build live: version ${json.version} !== expected ${EXPECT_SHA}`,
       );
+    }
+    if (!json.version) {
+      return `200 · status=ok · ⚠ no version field (pre-DSO-127 build; expected once on main)`;
     }
     return `200 · status=ok · version matches ${EXPECT_SHA}`;
   }

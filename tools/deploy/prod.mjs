@@ -322,8 +322,11 @@ sudo docker compose up -d
     API_PROD,
     `prune_repo() {
   repo="$1"; keep="$2"
+  # \`|| true\` on grep: under pipefail a grep that filters out EVERY line (e.g.
+  # only \`:local\` tags exist yet — no SHA tags) exits 1, which would abort the
+  # whole deploy. "nothing to prune" is success, not failure.
   sudo docker images "$repo" --format '{{.CreatedAt}}\\t{{.Tag}}' \\
-    | grep -vP '\\tlocal$' \\
+    | { grep -vP '\\tlocal$' || true; } \\
     | sort -r \\
     | awk -v k="$keep" -F'\\t' 'NR>k{print $2}' \\
     | while IFS= read -r tag; do

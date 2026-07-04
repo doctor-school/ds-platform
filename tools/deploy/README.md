@@ -47,8 +47,9 @@ image tag with **no** rebuild / migrate / DB change.
 
 Probes the three public origins end to end over real TLS: `api.doctor.school`
 `/v1/health` (+ optional `--expect-sha` assertion) & `/v1/ready`,
-`app.doctor.school/`, `id.doctor.school/ui/v2/login`, and cert validity/expiry on
-all three hosts. Exit non-zero on any failure. Hostnames default to the prod
+`app.doctor.school/`, `id.doctor.school/ui/v2/login/loginname` (the login entry —
+the bare `/ui/v2/login` 404s per Caddy's sub-path routing), and cert
+validity/expiry on all three hosts. Exit non-zero on any failure. Hostnames default to the prod
 vhosts and are env-overridable (`PROD_API_HOST` / `PROD_PORTAL_HOST` /
 `PROD_ID_HOST`) for a staging clone.
 

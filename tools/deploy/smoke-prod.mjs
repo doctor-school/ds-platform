@@ -120,9 +120,14 @@ async function probePortal() {
 }
 
 async function probeLogin() {
-  const res = await httpsGet(`https://${ID_HOST}/ui/v2/login`);
-  if (res.status >= 400) throw new Error(`/ui/v2/login → ${res.status}`);
-  return `${res.status} (Zitadel Login V2)`;
+  // Probe the actual login ENTRY screen, not the bare base path: the api-prod
+  // Caddyfile routes `/ui/v2/login/*` (sub-paths) to the login container, so a
+  // bare `/ui/v2/login` (no sub-path) falls through to Zitadel core and 404s —
+  // `/ui/v2/login/loginname` is the real first screen (username entry) and 200s.
+  const res = await httpsGet(`https://${ID_HOST}/ui/v2/login/loginname`);
+  if (res.status >= 400)
+    throw new Error(`/ui/v2/login/loginname → ${res.status}`);
+  return `${res.status} (Zitadel Login V2 — loginname screen)`;
 }
 
 function probeTls(host) {

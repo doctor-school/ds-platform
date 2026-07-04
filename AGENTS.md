@@ -87,7 +87,7 @@ If the active task is a Plane work-item (DSP-XXX / DSO-XXX), the first action af
 `engineering-task` is the only kind with no orchestration skill — but the §6 discipline gates still apply, run directly by the lead:
 
 - **`surface-decision-debt`** (inline) — mandatory before the result comment. Output `[]` or a list.
-- **`request-mode-a-review`** (dispatch) — mandatory before merge for any PR touching runtime/product code or a CI-gating guard; pure docs / test-only / generated-regen PRs may merge on green CI — **except an infra/IaC spec or skeleton making a security-posture claim (secret handling, backup creds, TLS, network exposure): dispatch Mode (a) even with no runtime code** (deterministic scope rule in the skill, §4).
+- **`request-mode-a-review`** (dispatch) — mandatory before merge for any PR touching runtime/product code or a CI-gating guard; pure docs / test-only / generated-regen PRs may merge on green CI — **except the skill's §Scope carve-outs (spec artifacts incl. product-layer brief/PRDs; merge/CI-procedure docs; infra/IaC security-posture claims): dispatch Mode (a) even with no runtime code** (deterministic scope rule in the skill, §4).
 - **`run-iteration-end-checklist`** is **not** dispatched (CI runs test/typecheck/lint/drift); its remaining items (module README, architecture/operations docs, glossary terms) are an inline self-check before opening the PR.
 
 ---

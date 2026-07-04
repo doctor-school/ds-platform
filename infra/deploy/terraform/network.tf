@@ -135,3 +135,16 @@ resource "twc_firewall_rule" "data_ssh" {
   port        = 22
   cidr        = var.vpc_cidr
 }
+
+# GlitchTip ingest/UI (DSO-125). The self-hosted GlitchTip web container on data-prod
+# binds 192.168.0.10:8000 (VPC-only, never 0.0.0.0). api-prod (192.168.0.20) POSTs
+# error events to it over the VPC, and the owner reaches the UI via an SSH tunnel —
+# both paths originate inside var.vpc_cidr, so this rule (like data_pg / data_redis)
+# opens 8000 to the VPC CIDR ONLY. No public exposure.
+resource "twc_firewall_rule" "glitchtip_ingest" {
+  firewall_id = twc_firewall.data_prod.id
+  direction   = "ingress"
+  protocol    = "tcp"
+  port        = 8000
+  cidr        = var.vpc_cidr
+}

@@ -397,3 +397,63 @@ genuine data corruption, not routine reverts.
   Caution that stays true: a **preset is pinned to its zone**, so a preset↔zone
   mismatch fails apply with a misleading `location_zone not valid` / `no_free_node`
   (no availability API to pre-check) — validate on `apply` (Apply order §2).
+
+## GlitchTip error monitoring (DSO-125)
+
+Self-hosted [GlitchTip](https://glitchtip.com) (Sentry-compatible) for api error
+monitoring. Sentry SaaS is rejected by 152-ФЗ (ADR-0004 §15 / ADR-0005 §10), so the
+collector runs in-RF on **data-prod** — the persistence box has the headroom (only
+the Postgres stack runs there) and GlitchTip's storage colocates with Postgres. The
+UI is **not** internet-published; api-prod ships events over the VPC and the owner
+reaches the UI via an SSH tunnel.
+
+- **Stack:** `compose/data-prod/glitchtip/compose.yml` (name `ds-glitchtip`) — a
+  GlitchTip v6 `all_in_one` `web` container (web + worker + beat + auto-migrate) plus
+  a **dedicated** `valkey` broker. Separate from the core data plane (`../compose.yml`)
+  so it never destabilises postgres / redis / pgbackrest.
+- **Database:** a NEW `glitchtip` database + least-priv role in the EXISTING Postgres
+  17 — created by hand (NEVER touch the `ds` role or `ds_prod`):
+
+  ```bash
+  # on data-prod, via the running postgres container (no volume edits):
+  GTPW=$(openssl rand -hex 24)   # keep this — it goes in glitchtip.env's DATABASE_URL
+  sudo docker exec -i ds-data-prod-postgres-1 psql -U ds -d ds_prod <<SQL
+  CREATE ROLE glitchtip LOGIN PASSWORD '$GTPW';
+  CREATE DATABASE glitchtip OWNER glitchtip;
+  SQL
+  ```
+
+  pgbackrest backs the whole cluster, so the new database is captured automatically —
+  no pgbackrest config change.
+
+- **Secrets:** `/etc/ds-platform/glitchtip.env` (root:root 0600) from
+  `infra/deploy/glitchtip.env.example` — `SECRET_KEY` (`openssl rand -hex 32`),
+  `DATABASE_URL` (the glitchtip role's password + `192.168.0.10:5432/glitchtip`),
+  `GLITCHTIP_DOMAIN`.
+- **Firewall:** `twc_firewall_rule.glitchtip_ingest` (network.tf) opens tcp `8000`
+  from `var.vpc_cidr` ONLY — the web port binds `192.168.0.10:8000` (VPC, never
+  `0.0.0.0`). Single-rule terraform add; `plan` shows exactly one resource to create.
+- **Bring up:**
+
+  ```bash
+  cd ~/ds-platform/infra/deploy/compose/data-prod/glitchtip
+  echo "VPC_IP=192.168.0.10" > .env            # interpolation var (NOT a secret)
+  sudo docker compose up -d                     # web auto-runs migrations on first boot
+  sudo docker compose logs -f web               # wait for the web server to bind :8000
+  ```
+
+- **Create the project + DSN:** open the UI over an SSH tunnel and register the first
+  user, then create org `ds-platform` + project `api` (platform: Node.js) and copy the
+  DSN. Rewrite the DSN host to the VPC endpoint (`192.168.0.10:8000`) and put it in
+  `api.env` as `SENTRY_DSN` (README §api.env), then recreate the api
+  (`cd ~/ds-platform/infra/deploy/compose/api-prod && sudo docker compose up -d api`).
+
+  ```bash
+  # from the workstation — tunnel to the private UI through the api-prod bastion:
+  ssh -L 8000:192.168.0.10:8000 ds-data-prod    # then open http://localhost:8000
+  ```
+
+- **api integration:** `apps/api` initialises `@sentry/node` only when `SENTRY_DSN`
+  is set (a no-op on the dev-stand / CI) and a global exception filter reports 5xx /
+  unexpected errors; PII is stripped from every event (ADR-0011). See
+  `apps/api/src/observability/`.

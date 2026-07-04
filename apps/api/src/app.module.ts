@@ -10,9 +10,13 @@ import { RateLimitModule } from "./auth/rate-limit/rate-limit.module.js";
 import { TimingEqualizationModule } from "./auth/timing/timing-equalization.module.js";
 import { LoginChallengeModule } from "./auth/login-challenge/login-challenge.module.js";
 import { AuthModule } from "./auth/auth.module.js";
+import { ObservabilityModule } from "./observability/observability.module.js";
 
 @Module({
   imports: [
+    // Global Sentry/GlitchTip exception filter (DSO-125) — first so it wraps
+    // every downstream module's errors; inert when SENTRY_DSN is unset.
+    ObservabilityModule,
     // RateLimit first so a throttled request (EARS-13) sheds before the heavier
     // bot-protection / authz guards run.
     RateLimitModule,

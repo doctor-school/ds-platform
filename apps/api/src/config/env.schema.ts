@@ -153,6 +153,17 @@ export const ApiEnvSchema = z.looseObject({
   IDP_SMTP_REAL_PASSWORD: z.string().optional(),
   IDP_SMTP_REAL_SENDER_ADDRESS: z.string().optional(),
 
+  // Error monitoring (self-hosted GlitchTip — DSO-125). Sentry SaaS is rejected
+  // by 152-ФЗ (ADR-0004 §15 / ADR-0005 §10), so events go to an RF-zone GlitchTip
+  // reached over the private VPC (`SENTRY_DSN` host = data-prod's VPC IP). The SDK
+  // is initialised ONLY when SENTRY_DSN is set (prod `/etc/ds-platform/api.env`);
+  // unset on the dev-stand / CI ⇒ a no-op (like the IdP / Redis fakes), so nothing
+  // is reported off-box. Optional environment tag + tracing sample rate (default 0
+  // — this is error monitoring only, no performance tracing).
+  SENTRY_DSN: z.string().optional(),
+  SENTRY_ENVIRONMENT: z.string().default("production"),
+  SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0),
+
   // Keyed HMAC pepper for ledger identifier masking (ADR-0001 §7, ADR-0003 §6).
   // The `audit_ledger` records an `identifier_hash`, never raw PD; a bare digest
   // over a low-entropy identifier space is a reproducible existence oracle (a

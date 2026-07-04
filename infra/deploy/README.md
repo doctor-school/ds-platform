@@ -462,3 +462,22 @@ reaches the UI via an SSH tunnel.
   is set (a no-op on the dev-stand / CI) and a global exception filter reports 5xx /
   unexpected errors; PII is stripped from every event (ADR-0011). See
   `apps/api/src/observability/`.
+
+## Мониторинг (внешний, через bbm mon-prod-tw, tenant=ds)
+
+As-built (OBS-трек, живьём верифицировано):
+
+- **Стек:** mon.bbm.academy (Grafana/Prometheus/Loki), фолдер «Doctor.School»,
+  дашборд uid `ds-host-overview`.
+- **Push-агенты:** Alloy на api-prod и data-prod (node-метрики + journald + docker →
+  mon; `instance=api-prod`/`data-prod`, `tenant=ds`). Конфиг: `/etc/alloy/config.alloy`;
+  креды push — `~/alloy.env` (chmod 600). Read-only docker-socket-proxy на
+  `127.0.0.1:2375`.
+- **Egress data-prod** к mon идёт через router-NAT, source-IP `72.56.14.72`
+  (в `mon-push-allow.conf` на mon).
+- **Алерты** `tenant=ds` → канал «DS Мониторинг» (Mattermost; Telegram временно
+  недоступен — bbm-side egress-блокер): `S3BackupStale-ds` (pgbackrest
+  `ds-prod-pgbackrest` >26ч), `ServiceDown`/`CertExpirySoon` (3 эндпоинта),
+  `HostTelemetryStale-api-prod`/`-data-prod`, `DiskFillHigh` (>85/92%).
+- **Blackbox-эндпоинты:** `api.doctor.school/v1/health`, `app.doctor.school/`,
+  `id.doctor.school/`.

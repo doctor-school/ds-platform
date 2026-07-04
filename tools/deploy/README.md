@@ -33,11 +33,20 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    `backup.sh` cron runs) **before** `migrate`, so a restore anchor exists at the
    pre-migrate state. Pairs with the **expand/contract** prod migration rule
    (README) so an app rollback never needs a DB rollback.
-5. **api-prod** — `migrate` → `build` → `up -d`; images SHA-tagged
-   **`ds-api:<sha>` / `ds-portal:<sha>`** (DSO-127) via a `DEPLOY_SHA` `.env` the
-   script writes beside `compose.yml`.
-6. **Retention (DSO-127)** — keeps the last **3** SHA-tagged images per repo.
-7. **Smoke (DSO-128)** — `smoke-prod.mjs --expect-sha <sha>`.
+5. **api-prod** — `migrate --build` (the migrate image is rebuilt from the
+   freshly shipped tree — a reused stale image would apply old migrations) →
+   `build` → `up -d`; images SHA-tagged **`ds-api:<sha>` / `ds-portal:<sha>`**
+   (DSO-127) via a `DEPLOY_SHA` `.env` the script writes beside `compose.yml`.
+6. **Truthful-success verify** — the script polls `docker inspect` on-box until
+   the RUNNING api + portal containers carry exactly `ds-*:<sha>` **and** report
+   healthy (≤ 4 min); otherwise the deploy is FAILED, never "OK". (Added after
+   the DSO-127 rework: a stdin-swallowed `bash -s` script silently skipped
+   `build`/`up -d` while the deploy still printed success — all remote scripts
+   now drain stdin fully before executing.)
+7. **Retention (DSO-127)** — keeps the last **3** SHA-tagged images per repo.
+8. **Smoke (DSO-128)** — `smoke-prod.mjs --expect-sha <sha>`; the health probe
+   requires `version` to be **present and equal** to the deployed SHA (an absent
+   version is a FAIL — it means the expected build is not what's live).
 
 The **deployed SHA is queryable over HTTP**: `GET /v1/health` → `{"version":…}`
 (from the api's `DEPLOY_SHA` env). `--rollback` `up -d`s an already-present prior

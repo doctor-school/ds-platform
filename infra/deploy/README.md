@@ -462,6 +462,12 @@ reaches the UI via an SSH tunnel.
   is set (a no-op on the dev-stand / CI) and a global exception filter reports 5xx /
   unexpected errors; PII is stripped from every event (ADR-0011). See
   `apps/api/src/observability/`.
+- **Alert email (DSO-132, live):** `EMAIL_URL` in `glitchtip.env` is wired to the
+  mail.ru relay (`smtp+ssl://…@smtp.mail.ru:465`, `DEFAULT_FROM_EMAIL=noreply@doctor.school`
+  — same relay as Zitadel/BFF; see `glitchtip.env.example` for the scheme gotcha) and the
+  `api` project carries an email alert rule (fires on new issues). Live-verified: test
+  event → alert notification `sent=True`; delivery to the owner's mailbox awaits owner
+  confirmation. Grafana infra-alert email is a **separate** channel (bbm mon, below).
 
 ## Мониторинг (внешний, через bbm mon-prod-tw, tenant=ds)
 

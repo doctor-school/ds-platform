@@ -1,5 +1,16 @@
 # @ds/api
 
+## 0.13.0
+
+### Minor Changes
+
+- [#482](https://github.com/doctor-school/ds-platform/pull/482) [`b3c3587`](https://github.com/doctor-school/ds-platform/commit/b3c35873923a50a295421c34846032bb11696a31) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add GlitchTip (self-hosted Sentry-compatible) error monitoring to the api. `@sentry/node` is initialised only when `SENTRY_DSN` is set (prod only; a no-op on the dev-stand / CI), and a global exception filter reports 5xx / unexpected errors while leaving client-facing responses unchanged. PII is stripped from every event (request, user, and server context removed; breadcrumbs disabled) per ADR-0011. Self-hosted GlitchTip is the 152-ФЗ-compliant, RF-zone replacement for Sentry SaaS (ADR-0004 §15 / ADR-0005 §10) — DSO-125.
+
+### Patch Changes
+
+- Updated dependencies [[`88514b6`](https://github.com/doctor-school/ds-platform/commit/88514b60c93d47805dcc71539e84f89f8b2edda8)]:
+  - @ds/schemas@0.9.0
+
 ## 0.12.0
 
 ### Minor Changes

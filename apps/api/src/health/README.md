@@ -22,7 +22,10 @@ traffic". The response shape is owned by the `@ds/schemas` SSOT
 - **`HealthController`** (`health.controller.ts`) — `GET /v1/health`, marked
   `@Public()` and classified `@Authz({ access: 'public', check: 'none', audit:
 'none' })` so the endpoint-authz gate passes (an unclassified route is denied).
-  Returns `{ status: 'ok', uptime: process.uptime(), timestamp }` — no I/O.
+  Returns `{ status: 'ok', uptime: process.uptime(), timestamp }` — no I/O. When
+  `DEPLOY_SHA` is set (baked into the prod container by `pnpm deploy:prod`,
+  DSO-127) it also returns `version: '<sha>'`, so an operator can confirm the
+  live build over plain HTTP; the field is omitted in local dev / tests.
 - **`HealthResponseDto`** (`health.dto.ts`) — the `createZodDto`-derived DTO over
   `HealthResponseSchema` from `@ds/schemas`, so the OpenAPI document and the
   runtime validation share the one schema source

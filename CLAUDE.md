@@ -30,6 +30,10 @@ Canon: AGENTS.md §3 + §3.4. Project work uses the catalog `apps/docs/content/s
 
 **Orchestrate-directive routing.** A session/handoff directive containing «оркеструй» / "orchestrate" engages `orchestrating-coding-agents`: implementation is dispatched to subagents (not only reviews/checklists), the lead supervises; fall back to inline execution only after the owner explicitly confirms it.
 
+## Blocked-on-owner handback
+
+Работа заблокирована ТОЛЬКО действием владельца → последняя видимая строка хода: `⏸ ЖДУ ВАС: <одно действие>; после него продолжу автономно`; поллер/wakeup — после неё, не вместо (memory `feedback_explicit_handback_when_owner_blocked`).
+
 ## PR-review subagent (Mode a)
 
 `feature-dev:code-reviewer` has no Bash/`gh`. For a Mode (a) review of a branch **not in the working tree**, dispatch `general-purpose` (Opus) so it can `gh pr diff` (memory `feedback_pr_review_subagent_needs_gh`).

@@ -1,6 +1,6 @@
 ---
-title: "Feature 005 — Event registration & «my events» (PRD)"
-description: "Product requirements for webinar registration on top of shipped auth (feature 003): logged-in one-tap registration, guest-through-auth flow, «my events» visibility, and registration state on the event page. Wave 1 of the Webinars epic; source of the 005 EARS triplet (ADR-0014)."
+title: "Feature 005 — Event registration & «мои события» (PRD)"
+description: "Product requirements for webinar registration on top of shipped auth (feature 003): logged-in one-tap registration, guest-through-auth flow, «мои события» visibility, and registration state on the event page. Wave 1 of the Webinars epic; source of the 005 EARS triplet (ADR-0014)."
 slug: webinars-005-event-registration-product
 epic: ../../product/webinars/brief.md
 status: Draft

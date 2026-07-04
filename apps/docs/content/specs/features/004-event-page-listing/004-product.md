@@ -45,7 +45,7 @@ The public face of a webinar: an event page that any visitor can read **without 
 
 ## Product acceptance criteria
 
-- The event page for a `published` event is fully readable with **zero authentication** — no soft wall, no gated sections in the pre-live state.
+- The event page for a `published` event is fully readable with **zero authentication** — no soft wall, no gated sections in the pre-live state — and that public readability persists through `live` and `ended` (the page itself stays open; only the room behind the join path is server-side gated, feature 006).
 - The page presents: title, school/series, date + time explicitly marked **МСК**, description, speakers, a program **PDF** link, target specialties, and partners.
 - «Участвовать» is the single primary CTA and leads into registration (guest passes through auth 003 without losing the event context — handoff owned by feature 005).
 - The listing shows **published upcoming** webinars ordered by nearest air date; each card carries enough to choose (date/time MSK, title, school/series, specialties, speakers).
@@ -63,6 +63,7 @@ The public face of a webinar: an event page that any visitor can read **without 
 ## Open questions
 
 - Listing composition beyond the minimal card set (e.g. a "current live" banner as on the legacy home) — owner taste call at Stage A mockups.
+- Archived-event direct link: US-5 promises a stable, publicly readable link, while archived events are off public surfaces — what does a distributed link show once the event is `archived` (an "event is archived" notice, a redirect to the listing, or a 404)? Owner decision needed before the 004 EARS triplet fixes this behavior.
 
 ## Approved mockup
 

@@ -45,12 +45,12 @@ lang: en
 
 Approved variant **A «thin vertical»** — four wave-1 features, all `surface: user-facing`, each with a co-located PRD:
 
-| #   | Feature                                                                        | One-liner                                                                                                                                                 |
-| --- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 004 | [`event-page-listing`](../../features/004-event-page-listing/004-product.md)   | Public event page (pre-live: hero, date/time, speakers, program PDF, specialties, partners; CTA register) + minimal upcoming-broadcasts listing.          |
-| 005 | [`event-registration`](../../features/005-event-registration/005-product.md)   | Registration on top of auth 003 (logged-in one-tap; guest → auth → completes registration), «my events» visibility, registration state on the event page. |
-| 006 | [`webinar-room`](../../features/006-webinar-room/006-product.md)               | The authenticated room: embed player (explicit provider enum), live chat (Centrifugo), heartbeat presence capture that drives the sponsor report.         |
-| 007 | [`event-admin-minimal`](../../features/007-event-admin-minimal/007-product.md) | Admin/Refine: create/edit event, stream link config, open/close the live room, event state transitions.                                                   |
+| #   | Feature                                                                        | One-liner                                                                                                                                                   |
+| --- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 004 | [`event-page-listing`](../../features/004-event-page-listing/004-product.md)   | Public event page (pre-live: hero, date/time, speakers, program PDF, specialties, partners; CTA register) + minimal upcoming-broadcasts listing.            |
+| 005 | [`event-registration`](../../features/005-event-registration/005-product.md)   | Registration on top of auth 003 (logged-in one-tap; guest → auth → completes registration), «мои события» visibility, registration state on the event page. |
+| 006 | [`webinar-room`](../../features/006-webinar-room/006-product.md)               | The authenticated room: embed player (explicit provider enum), live chat (Centrifugo), heartbeat presence capture that drives the sponsor report.           |
+| 007 | [`event-admin-minimal`](../../features/007-event-admin-minimal/007-product.md) | Admin/Refine: create/edit event, stream link config, open/close the live room, event state transitions.                                                     |
 
 **Wave 2** (future features of this epic — no PRD folders yet):
 

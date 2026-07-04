@@ -58,3 +58,6 @@ apps/docs/brandbook/
 
 # Stray live-verify screenshots dropped at repo root (durable home: Pictures/<task>/)
 /*.png
+
+# wrap-init local audit state (machine-specific /wrap-init re-run state, not repo content — #484)
+.claude/commands/.wrap-init.json

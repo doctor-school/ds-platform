@@ -32,7 +32,7 @@ Canon: AGENTS.md §3 + §3.4. Project work uses the catalog `apps/docs/content/s
 
 ## Blocked-on-owner handback
 
-Работа заблокирована ТОЛЬКО действием владельца → последняя видимая строка хода: `⏸ ЖДУ ВАС: <одно действие>; после него продолжу автономно`; поллер/wakeup — после неё, не вместо (memory `feedback_explicit_handback_when_owner_blocked`).
+Работа заблокирована ТОЛЬКО действием владельца → последняя видимая строка хода: `⏸ ЖДУ ВАС: <одно действие>; после него продолжу автономно`; поллер/wakeup — после неё, не вместо. Каждый вынесенный владельцу вопрос — самодостаточная plain-language строка (что / почему / что изменит ответ), без жаргонных отсылок к отчёту (memory `feedback_explicit_handback_when_owner_blocked`).
 
 ## PR-review subagent (Mode a)
 

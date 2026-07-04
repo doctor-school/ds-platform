@@ -1,0 +1,79 @@
+# data-prod — GlitchTip error-monitoring plane (DSO-125). Self-hosted, RF-zone
+# (152-ФЗ: Sentry SaaS is rejected — ADR-0004 §15 / ADR-0005 §10). Deployed on
+# data-prod (the persistence box) because it has the headroom (only the Postgres
+# stack runs there) and GlitchTip's storage is then colocated with Postgres — no
+# cross-box hop for its DB.
+#
+# SEPARATE stack from the core data plane (../compose.yml) so it never destabilises
+# postgres / redis / pgbackrest: this file is `up`/`down`-ed independently and owns
+# only NEW resources. GlitchTip's own broker is a DEDICATED valkey container (clean
+# isolation from the prod `redis` — GlitchTip never touches it). GlitchTip's DB is a
+# NEW `glitchtip` database + role in the EXISTING Postgres 17 (created by hand via
+# `psql CREATE DATABASE/ROLE` — README §GlitchTip), reached over the VPC interface
+# (192.168.0.10:5432), the same endpoint the api uses. pgbackrest backs the whole
+# cluster, so the new database is captured automatically (no pgbackrest change).
+#
+# PRIVATE host: the web port binds to the VPC interface ONLY (never 0.0.0.0) — set
+# VPC_IP to data-prod's private address (var.data_prod_private_ip, default
+# 192.168.0.10) via a `.env` beside this file, as with ../compose.yml. The UI is NOT
+# published to the internet; the owner reaches it over an SSH tunnel (README).
+# api-prod ships events to http://192.168.0.10:8000 over the VPC (firewall rule
+# `glitchtip_ingest`, network.tf).
+#
+# Secrets via /etc/ds-platform/glitchtip.env (root:root 0600): SECRET_KEY (openssl
+# rand -hex 32), DATABASE_URL (with the glitchtip role's password), GLITCHTIP_DOMAIN.
+# Never committed. GlitchTip v6 `all_in_one` runs migrations + web + worker + beat in
+# one container (migrations run automatically on start — SKIP_INIT default False).
+
+name: ds-glitchtip
+
+services:
+  valkey:
+    # Dedicated broker/cache — isolated from the prod `redis`. Small AOF-less
+    # instance: GlitchTip's queue is transient (events are persisted in Postgres).
+    image: valkey/valkey:9
+    restart: unless-stopped
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    # Pin the major (v6) per GlitchTip's upgrade guidance; migrations run on start.
+    image: glitchtip/glitchtip:6
+    restart: unless-stopped
+    env_file: [/etc/ds-platform/glitchtip.env] # SECRET_KEY, DATABASE_URL, GLITCHTIP_DOMAIN, EMAIL_URL
+    environment:
+      SERVER_ROLE: all_in_one # web + worker + beat + auto-migrate in one container
+      VALKEY_URL: redis://valkey:6379
+      # Restrict Django's Host header allowlist (default is the wildcard) — the two
+      # legitimate origins are the VPC ingest IP (api-prod POSTs here) and the
+      # localhost the owner's SSH tunnel maps to. Non-secret, so it lives here.
+      ALLOWED_HOSTS: "localhost,127.0.0.1,192.168.0.10"
+    depends_on:
+      valkey:
+        condition: service_healthy
+    ports:
+      # VPC-only ingest + UI. api-prod POSTs events here; owner tunnels to it.
+      - "${VPC_IP:?set VPC_IP to data-prod private IP}:8000:8000"
+    volumes:
+      - uploads:/code/uploads
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/_health/')",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s # first boot runs migrations before the port opens
+
+volumes:
+  valkey-data:
+  uploads:

@@ -6,8 +6,12 @@ import {
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { AppModule } from './app.module.js';
+import { initSentry } from './observability/instrument.js';
 
 async function bootstrap(): Promise<void> {
+  // Error monitoring (GlitchTip, DSO-125) — initialised BEFORE the app so the
+  // SDK's global handlers register first. No-op when SENTRY_DSN is unset.
+  initSentry();
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(),

@@ -176,9 +176,23 @@ function assertGreenCi(sha) {
 
 // Run a bash script on a box, fed over stdin (no shell-quoting hell). Streams
 // the box's stdout/stderr live. Rejects on non-zero exit.
+//
+// The remote command DRAINS the whole script into a variable first
+// (`script=$(cat)`) and only then executes it. Never use a bare `bash -s`
+// here: bash -s reads the script from stdin INCREMENTALLY, so any command
+// that itself reads stdin — `docker compose run` attaches the container's
+// stdin by default — silently EATS the rest of the script and bash exits 0
+// at EOF. That exact failure skipped the `build` + `up -d` lines after the
+// migrate step and made every deploy a silent no-op (DSO-127 rework: prod
+// kept running :local while the script reported "DEPLOY OK").
+// --norc: with stdin on the ssh channel, bash's remote-shell heuristic would
+// source /etc/bash.bashrc (PS1 unbound under -u → stderr noise); inhibit it.
+const REMOTE_BASH =
+  'script=$(cat); exec bash --norc -euo pipefail -c "$script"';
+
 function sshScript(host, script, { label } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn("ssh", [host, "bash", "-euo", "pipefail", "-s"], {
+    const child = spawn("ssh", [host, REMOTE_BASH], {
       stdio: ["pipe", "inherit", "inherit"],
     });
     child.on("error", reject);
@@ -193,9 +207,10 @@ function sshScript(host, script, { label } = {}) {
 }
 
 // Capture a box's stdout (small commands: image inspect, pgbackrest info).
+// Same stdin-drain contract as sshScript (see REMOTE_BASH).
 function sshCapture(host, script) {
   return new Promise((resolve, reject) => {
-    const child = spawn("ssh", [host, "bash", "-euo", "pipefail", "-s"], {
+    const child = spawn("ssh", [host, REMOTE_BASH], {
       stdio: ["pipe", "pipe", "inherit"],
     });
     let out = "";
@@ -209,6 +224,43 @@ function sshCapture(host, script) {
     child.stdin.write(script);
     child.stdin.end();
   });
+}
+
+// Truthful-success gate (DSO-127 rework): after `up -d`, prove the RUNNING
+// api + portal containers actually carry the deployed SHA-tagged images and
+// reach healthy — a "DEPLOY OK" line must never outrun the box's reality
+// again. Polls on-box (one ssh channel) up to ~4 min to cover the containers'
+// healthcheck start_period + retries after a real image swap.
+async function verifyRunningSha(sha) {
+  const out = await sshCapture(
+    API_PROD,
+    `deadline=$(( $(date +%s) + 240 ))
+while true; do
+  api_img=$(sudo docker inspect ds-api-prod-api-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent)
+  portal_img=$(sudo docker inspect ds-api-prod-portal-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent)
+  api_h=$(sudo docker inspect ds-api-prod-api-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo absent)
+  portal_h=$(sudo docker inspect ds-api-prod-portal-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo absent)
+  state="api=$api_img($api_h) portal=$portal_img($portal_h)"
+  if [ "$api_img" = "ds-api:${sha}" ] && [ "$portal_img" = "ds-portal:${sha}" ] \\
+     && [ "$api_h" = healthy ] && [ "$portal_h" = healthy ]; then
+    echo "OK $state"; break
+  fi
+  if [ "$(date +%s)" -ge "$deadline" ]; then
+    echo "TIMEOUT $state"; break
+  fi
+  sleep 5
+done`,
+  );
+  console.log(`      ${out}`);
+  if (!out.startsWith("OK ")) {
+    die(
+      `running containers do NOT carry the deployed SHA (or never got healthy):\n` +
+        `  ${out}\n` +
+        `  The success line would be a lie — treating this deploy as FAILED.`,
+      { rollbackHint: true },
+    );
+  }
+  ok(`api + portal RUN ds-*:${sha.slice(0, 12)} and are healthy`);
 }
 
 // Ship the committed tree to a box: git archive <sha> | ssh box 'rm -rf && tar x'.
@@ -306,7 +358,11 @@ sudo docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info
     `cd ${API_COMPOSE}
 printf 'DEPLOY_SHA=%s\\n' '${sha}' > .env
 echo '── migrate (drizzle-kit; idempotent) ──'
-sudo docker compose --profile migrate run --rm migrate
+# --build: rebuild the migrate image from the freshly shipped tree, else the
+#   run reuses a stale ds-api-migrate:local and applies OLD migrations.
+# </dev/null: compose run attaches the container's stdin by default — never
+#   let it read this shell's stdin (see REMOTE_BASH; defense in depth).
+sudo docker compose --profile migrate run --build --rm migrate </dev/null
 echo '── build ds-api:${sha.slice(0, 12)}… + ds-portal ──'
 sudo docker compose build
 echo '── up -d ──'
@@ -315,6 +371,9 @@ sudo docker compose up -d
     { label: "api-prod deploy" },
   );
   ok("migrate + build + up -d", t);
+
+  step("Verify the RUNNING containers carry the deployed SHA");
+  await verifyRunningSha(sha);
 
   step(`DSO-127: image retention (keep last ${IMAGE_RETENTION} SHA tags/repo)`);
   t = Date.now();
@@ -375,9 +434,17 @@ function runSmoke(sha) {
 
 // --- rollback (app-only; DSO-127) -----------------------------------------
 
-async function rollback(sha) {
-  if (!/^[0-9a-f]{7,40}$/.test(sha)) {
-    die(`--rollback needs a git SHA (7–40 hex chars), got: ${sha}`);
+async function rollback(shaArg) {
+  if (!/^[0-9a-f]{7,40}$/.test(shaArg)) {
+    die(`--rollback needs a git SHA (7–40 hex chars), got: ${shaArg}`);
+  }
+  // Images are tagged with the FULL commit SHA — expand a short prefix via
+  // local git so `--rollback 88514b6` matches `ds-api:88514b60c93d…`.
+  let sha;
+  try {
+    sha = localCap("git", ["rev-parse", "--verify", `${shaArg}^{commit}`]);
+  } catch {
+    die(`cannot resolve ${shaArg} to a commit in the local repo`);
   }
   step(`App-only rollback → ds-api:${sha.slice(0, 12)} / ds-portal:${sha.slice(0, 12)}`);
 
@@ -405,7 +472,9 @@ sudo docker compose up -d
 `,
     { label: "rollback up" },
   );
-  ok("app tier swapped to previous image");
+
+  step("Verify the RUNNING containers carry the rollback SHA");
+  await verifyRunningSha(sha);
 
   step("DSO-128: prod smoke (--expect-sha)");
   await runSmoke(sha);

@@ -430,9 +430,14 @@ reaches the UI via an SSH tunnel.
   `infra/deploy/glitchtip.env.example` — `SECRET_KEY` (`openssl rand -hex 32`),
   `DATABASE_URL` (the glitchtip role's password + `192.168.0.10:5432/glitchtip`),
   `GLITCHTIP_DOMAIN`.
-- **Firewall:** `twc_firewall_rule.glitchtip_ingest` (network.tf) opens tcp `8000`
-  from `var.vpc_cidr` ONLY — the web port binds `192.168.0.10:8000` (VPC, never
-  `0.0.0.0`). Single-rule terraform add; `plan` shows exactly one resource to create.
+- **Firewall:** the web port binds `192.168.0.10:8000` (VPC, never `0.0.0.0`).
+  `twc_firewall_rule.glitchtip_ingest` (network.tf) declares tcp `8000` from
+  `var.vpc_cidr` for consistency with the `data_pg` / `data_redis` rules, but the
+  Timeweb cloud firewall does **not** filter data-prod's private VPC interface (no
+  public NIC), so api-prod already reaches `:8000` over the VPC without it (verified
+  `curl → HTTP 200`, DSO-125). The rule was therefore **not** applied to live state
+  on deploy — it materialises on the next planned `terraform apply` (one additive
+  resource). No public exposure either way.
 - **Bring up:**
 
   ```bash

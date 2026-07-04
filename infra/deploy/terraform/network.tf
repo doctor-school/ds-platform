@@ -141,6 +141,14 @@ resource "twc_firewall_rule" "data_ssh" {
 # error events to it over the VPC, and the owner reaches the UI via an SSH tunnel —
 # both paths originate inside var.vpc_cidr, so this rule (like data_pg / data_redis)
 # opens 8000 to the VPC CIDR ONLY. No public exposure.
+#
+# EMPIRICAL NOTE (DSO-125 2026-07-04): the Timeweb cloud firewall does NOT filter the
+# private VPC interface (data-prod has no public NIC), so 192.168.0.10:8000 is already
+# reachable from api-prod over the VPC WITHOUT this rule — verified `curl → HTTP 200`.
+# This resource is therefore declarative/defense-in-depth, matching the data_pg /
+# data_redis pattern; it was NOT applied to live state on deploy (connectivity already
+# worked and live-infra terraform is touched only when strictly necessary). It
+# materialises on the next planned `terraform apply` — a single additive rule.
 resource "twc_firewall_rule" "glitchtip_ingest" {
   firewall_id = twc_firewall.data_prod.id
   direction   = "ingress"

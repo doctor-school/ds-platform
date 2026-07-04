@@ -49,6 +49,10 @@ services:
     environment:
       SERVER_ROLE: all_in_one # web + worker + beat + auto-migrate in one container
       VALKEY_URL: redis://valkey:6379
+      # Restrict Django's Host header allowlist (default is the wildcard) — the two
+      # legitimate origins are the VPC ingest IP (api-prod POSTs here) and the
+      # localhost the owner's SSH tunnel maps to. Non-secret, so it lives here.
+      ALLOWED_HOSTS: "localhost,127.0.0.1,192.168.0.10"
     depends_on:
       valkey:
         condition: service_healthy

@@ -1,5 +1,14 @@
 # @ds/schemas
 
+## 0.9.0
+
+### Minor Changes
+
+- [#481](https://github.com/doctor-school/ds-platform/pull/481) [`88514b6`](https://github.com/doctor-school/ds-platform/commit/88514b60c93d47805dcc71539e84f89f8b2edda8) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add an optional `version` field to `HealthResponseSchema` — the deployed commit
+  SHA the api reports at `GET /v1/health` (sourced from the `DEPLOY_SHA` env baked
+  into the container by `pnpm deploy:prod`, DSO-127). Additive and optional: unset
+  in local dev / tests where no deploy stamped a SHA.
+
 ## 0.8.0
 
 ### Minor Changes

@@ -164,7 +164,7 @@ Described in detail in design spec §6 with code sketches. Summary:
 
 1.  **Keystatic UI** — typed fields, relationship references, save-blocking validators.
 2.  **MDX glossary-lint** — custom AST parser scans `[[g:term-id]]` glossary directives in `apps/docs/content/**/*.{md,mdx}`; an unresolved id without a same-line `new-term: <id>` opt-out → fail.
-3.  **ESLint `@ds/glossary-canonical-ids`** — TS literals matching a GlossaryId must be imported from `@ds/glossary/ids`, not be an inline string.
+3.  **ESLint `local/glossary-canonical-ids`** — TS literals matching a GlossaryId must be imported from `@ds/glossary/ids`, not be an inline string.
 4.  **Payload Lexical glossary-ref check** — every `<GlossaryRef id="...">` in a Payload Lexical AST export exists in the glossary.
 
 - **Roundtrip CI check** — glossary source ↔ generated TS ids ↔ Payload Glossary table consistent (runs post-sync).
@@ -176,7 +176,7 @@ Full v1 list (all block merge except those marked warn-only):
 | Check                                                                      | Tool                                                    | What it verifies                                                                                                                                  |
 | -------------------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | TS compile                                                                 | `tsc --noEmit`                                          | Basic type safety                                                                                                                                 |
-| ESLint                                                                     | `eslint` flat config                                    | Custom rules incl. `glossary-canonical-ids`, `no-class-validator`, `no-vercel-only-api` (ADR-0004 §13)                                            |
+| ESLint                                                                     | `eslint` flat config                                    | Custom rules incl. `local/glossary-canonical-ids`, `no-class-validator`, `no-vercel-only-api` (ADR-0004 §13)                                      |
 | Prettier                                                                   | `prettier --check`                                      | Code style                                                                                                                                        |
 | Unit tests                                                                 | Vitest                                                  | Per-handler coverage                                                                                                                              |
 | E2E                                                                        | Playwright + `playwright-bdd`                           | Gherkin scenarios pass                                                                                                                            |
@@ -302,7 +302,7 @@ ds-platform/
 - **Fumadocs young (~1.5 years)** — smaller plugin ecosystem than Docusaurus, OpenAPI integration requires manually embedding a Scalar/Redoc React component. Mitigation: content-portable.
 - **Product Lead learning Keystatic** — block editor is simpler than an IDE, but still a new environment; first month + tutorial.
 - **Glossary 4-layer validation** requires writing ~3 custom lint scripts in `tools/lint/` (~300 lines of TS). Not trivial, but a straightforward pattern.
-- **Custom ESLint rule `glossary-canonical-ids`** — one more thing to maintain. Mitigation: standalone package, tested separately.
+- **Custom ESLint rule `local/glossary-canonical-ids`** — one more thing to maintain. Mitigation: standalone package, tested separately.
 - **EARS + Event Modeling + Gherkin discipline** requires training; the first feature spec is written more slowly. Mitigation: payoff on codegen tests from the second feature onward.
 - **Sync glossary.yaml → Payload Glossary Collection** — one more CI script, idempotency required.
 - **Mermaid-only — render is limited** for complex C4. Trigger to revisit is recorded.

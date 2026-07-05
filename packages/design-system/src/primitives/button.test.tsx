@@ -14,17 +14,75 @@ afterEach(cleanup);
  * hover/active feedback, so it can never silently revert to the borderless look.
  */
 describe("Button secondary variant reads as enabled", () => {
-  it("carries a resting border + hover/active feedback (not a borderless chip)", () => {
+  it("carries a resting 2px border + hover/active feedback (not a borderless chip)", () => {
     const cls = buttonVariants({ variant: "secondary" });
-    expect(cls).toMatch(/\bborder\b/);
-    expect(cls).toMatch(/border-input/);
+    expect(cls).toMatch(/border-2/);
+    expect(cls).toMatch(/border-border/);
     expect(cls).toMatch(/hover:/);
     expect(cls).toMatch(/active:/);
   });
 
-  it("matches the bordered weight of the outline variant (both bordered)", () => {
-    expect(buttonVariants({ variant: "outline" })).toMatch(/\bborder\b/);
-    expect(buttonVariants({ variant: "secondary" })).toMatch(/\bborder\b/);
+  it("matches the bordered weight of the outline variant (both hard 2px bordered)", () => {
+    expect(buttonVariants({ variant: "outline" })).toMatch(/border-2/);
+    expect(buttonVariants({ variant: "secondary" })).toMatch(/border-2/);
+  });
+});
+
+/**
+ * Neo-brutalist re-skin contract (#512, source `design-source/design-system.dc.html`).
+ * The look is CSS proven live on the dev stand; this pins the token-class contract
+ * jsdom can assert — square radius-0, a hard 2px border, and the PER-VARIANT offset
+ * shadow colour (the brief's fidelity trap): a filled action casts in the INK
+ * `shadow-btn`, a bordered surface casts in the SOFT `shadow-ghost`. They differ.
+ */
+describe("Button neo-brutalist offset-shadow contract (#512)", () => {
+  it("primary (default) casts the INK offset shadow and fills the accessible action colour", () => {
+    const cls = buttonVariants({ variant: "default" });
+    expect(cls).toMatch(/\bshadow-btn\b/);
+    expect(cls).toMatch(/hover:shadow-btn-hover/);
+    expect(cls).toMatch(/focus-visible:shadow-btn-focus/);
+    expect(cls).toMatch(/bg-primary-action/);
+    expect(cls).toMatch(/font-extrabold/);
+    // Not the generic blue `md` shadow (wrong colour for a filled action).
+    expect(cls).not.toMatch(/\bshadow-md\b/);
+  });
+
+  it("destructive also casts the INK offset shadow", () => {
+    const cls = buttonVariants({ variant: "destructive" });
+    expect(cls).toMatch(/\bshadow-btn\b/);
+    expect(cls).toMatch(/bg-destructive/);
+  });
+
+  it("outline + secondary (bordered surfaces) cast the SOFT offset shadow, not the ink one", () => {
+    for (const variant of ["outline", "secondary"] as const) {
+      const cls = buttonVariants({ variant });
+      expect(cls).toMatch(/\bshadow-ghost\b/);
+      expect(cls).toMatch(/focus-visible:shadow-ghost-focus/);
+      expect(cls).not.toMatch(/\bshadow-btn\b/);
+    }
+  });
+
+  it("presses translate INTO the cast and collapse the shadow (hover 2px → press flat)", () => {
+    const cls = buttonVariants({ variant: "default" });
+    expect(cls).toMatch(/hover:translate-x-0\.5/);
+    expect(cls).toMatch(/active:translate-x-1\b/);
+    expect(cls).toMatch(/active:shadow-none/);
+    // Disabled removes the lift entirely (opacity .4, no shadow) — source §06.
+    expect(cls).toMatch(/disabled:opacity-40/);
+    expect(cls).toMatch(/disabled:shadow-none/);
+  });
+
+  it("every variant is square (radius 0 — no rounded-* utility in the class set)", () => {
+    for (const variant of [
+      "default",
+      "destructive",
+      "outline",
+      "secondary",
+      "ghost",
+      "link",
+    ] as const) {
+      expect(buttonVariants({ variant })).not.toMatch(/\brounded-/);
+    }
   });
 });
 

@@ -66,14 +66,15 @@ describe("FormMessage inline (no reserved line, no reflow over-spacing)", () => 
     expect(screen.queryByTestId("message")).not.toBeInTheDocument();
   });
 
-  it("shows the error inline, small and NOT bold, announced as an alert", () => {
+  it("shows the error inline as the source's ⚠ + weight-700 danger, announced as an alert", () => {
     render(<Harness error="Required" />);
     const msg = screen.getByTestId("message");
     expect(msg).toHaveTextContent("Required");
-    expect(msg).toHaveClass("text-xs", "text-destructive");
-    // K-3 / owner: the error text is not bold ("выглядит тяжело").
-    expect(msg).not.toHaveClass("font-medium");
-    // No reserved-height slot anymore (inline grows on demand).
+    // Neo-brutalist error (#512, source §07): 12px weight-700 danger with the
+    // leading ⚠ glyph — supersedes the prior slice-B "not bold" tone.
+    expect(msg).toHaveClass("text-xs", "font-bold", "text-destructive");
+    expect(msg.textContent ?? "").toContain("⚠");
+    // No reserved-height slot (inline grows on demand).
     expect(msg).not.toHaveClass("min-h-5");
     expect(msg).toHaveAttribute("role", "alert");
   });
@@ -131,13 +132,15 @@ describe("FormError — single form-level error primitive (one error style sourc
   });
 });
 
-describe("Input invalid state (K-3 — red border carries the error)", () => {
-  it("carries an aria-invalid destructive border + ring (not a neutral border)", () => {
+describe("Input invalid state (K-3 — red border + danger tint carry the error)", () => {
+  it("carries an aria-invalid destructive border + pale danger-tint fill (not a neutral border)", () => {
     render(<Input aria-invalid data-testid="inp" />);
     const inp = screen.getByTestId("inp");
+    // Neo-brutalist error (#512, source §07): destructive 2px border + the pale
+    // `destructive-tint` (dangerTint) fill, set by aria-invalid on the control.
     expect(inp).toHaveClass(
       "aria-invalid:border-destructive",
-      "aria-invalid:focus-visible:ring-destructive",
+      "aria-invalid:bg-destructive-tint",
     );
   });
 });

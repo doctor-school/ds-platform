@@ -12,7 +12,8 @@ const Label = React.forwardRef<
   <LabelPrimitive.Root
     ref={ref}
     className={cn(
-      "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
+      // Neo-brutalist field label (#512, source §07): 12px extrabold-ish 700 ink.
+      "text-xs font-bold leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
       className,
     )}
     {...props}

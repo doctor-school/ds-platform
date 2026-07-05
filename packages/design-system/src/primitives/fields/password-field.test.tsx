@@ -73,7 +73,7 @@ describe("PasswordField composition (inline message)", () => {
     expect(container.querySelectorAll("p")).toHaveLength(1);
   });
 
-  it("swaps the error into the hint's place (message id, small destructive, alert, NOT bold)", () => {
+  it("swaps the error into the hint's place (message id, small weight-700 danger + ⚠, alert)", () => {
     const { container } = render(
       <PwHarness
         purpose="new"
@@ -87,8 +87,8 @@ describe("PasswordField composition (inline message)", () => {
     const slot = paras[0]!;
     expect(slot).toHaveTextContent("Не менее 8 символов.");
     expect(slot.textContent ?? "").not.toContain(POLICY);
-    expect(slot).toHaveClass("text-xs", "text-destructive");
-    expect(slot).not.toHaveClass("font-medium");
+    expect(slot).toHaveClass("text-xs", "font-bold", "text-destructive");
+    expect(slot.textContent ?? "").toContain("⚠");
     expect(slot).toHaveAttribute("role", "alert");
     expect(slot.id).toMatch(/-form-item-message$/);
     // While erroring the element owns the message id, not the description id.

@@ -149,8 +149,24 @@ FormDescription.displayName = "FormDescription";
  * page (the #333 Stage-B finding). Token-only.
  */
 const FORM_MESSAGE_TEXT = "text-xs";
-const FORM_ERROR_TONE = "text-destructive";
+// Neo-brutalist error tone (#512, source §07 "Формы и валидация"): the inline
+// error is 12px **weight 700** danger with a leading `⚠` glyph — the source's
+// `⚠ <msg>` treatment. This supersedes the prior slice-B "not bold" tone (#333):
+// the owner-authored visual-language canvas (`design-source/design-system.dc.html`,
+// the fidelity SoT) renders the error at 700, so the re-skin follows it. The
+// helper tone stays quiet and normal-weight so the two never read alike.
+const FORM_ERROR_TONE = "font-bold text-destructive";
 const FORM_HELPER_TONE = "text-muted-foreground";
+
+/** The `⚠` glyph that leads a neo-brutalist inline/summary error (source §07),
+ * decorative — the message text carries the meaning, so it is `aria-hidden`. */
+function ErrorGlyph() {
+  return (
+    <span aria-hidden className="flex-none">
+      ⚠
+    </span>
+  );
+}
 
 /**
  * Inline validation message (ADR-0013 §7 → "Form layout & validation contract",
@@ -189,9 +205,6 @@ const FormMessage = React.forwardRef<
   const { error, formDescriptionId, formMessageId } = useFormField();
   const errorText = error ? String(error?.message ?? "") : "";
   const hasError = errorText.length > 0;
-  // Helper (children) shows by default; the error swaps into its place when
-  // present — the two never coexist.
-  const body = hasError ? errorText : children;
   const hasBody = hasError || (children != null && children !== false);
 
   // Inline (1A): a resting field with no message reserves no space at all.
@@ -206,12 +219,23 @@ const FormMessage = React.forwardRef<
       className={cn(
         FORM_MESSAGE_TEXT,
         hasError ? FORM_ERROR_TONE : FORM_HELPER_TONE,
+        // The error leads with the `⚠` glyph, so it lays out as an inline flex row.
+        hasError && "flex items-center gap-1.5",
         className,
       )}
       role={hasError ? "alert" : undefined}
       {...props}
     >
-      {body}
+      {/* Helper (children) shows by default; the error swaps into its place with
+          the leading `⚠` — the two never coexist. */}
+      {hasError ? (
+        <>
+          <ErrorGlyph />
+          {errorText}
+        </>
+      ) : (
+        children
+      )}
     </p>
   );
 });
@@ -237,9 +261,15 @@ const FormError = React.forwardRef<
     <p
       ref={ref}
       role="alert"
-      className={cn(FORM_MESSAGE_TEXT, FORM_ERROR_TONE, className)}
+      className={cn(
+        FORM_MESSAGE_TEXT,
+        FORM_ERROR_TONE,
+        "flex items-center gap-1.5",
+        className,
+      )}
       {...props}
     >
+      <ErrorGlyph />
       {children}
     </p>
   );

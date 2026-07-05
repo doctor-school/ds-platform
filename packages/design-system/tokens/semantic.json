@@ -118,6 +118,10 @@
       "$value": "{color.white}",
       "$description": "Text and icon colour on a `destructive` fill."
     },
+    "destructive-tint": {
+      "$value": "#fdecec",
+      "$description": "Pale-red field/error surface (danger tint) behind an invalid input — the source's `dangerTint`. Carries normal `foreground` ink; the destructive border + `⚠` message carry the error. Theme-aware: pale-red light → deep-maroon dark."
+    },
     "border": {
       "$value": "{color.neutral.900}",
       "$description": "Structural border — the hard near-black outline (neutral.900) of the neo-brutalist frame (2px). Not the subtle divider; that is `hairline`."

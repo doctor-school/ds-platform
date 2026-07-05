@@ -153,6 +153,11 @@ describe("backlog-triage parseProseBlockers()", () => {
     expect(parseProseBlockers(body)).toEqual([]);
   });
 
+  it("a '## Blocked by' section whose only bullet is '- None currently.' → zero blockers (takeable)", () => {
+    const body = "## Blocked by\n\n- None currently.\n\n## Notes\n\n- n/a\n";
+    expect(parseProseBlockers(body)).toEqual([]);
+  });
+
   it("a section bullet that DOES cite an issue is an issue blocker, not a subsystem", () => {
     const body = "## Blocked by\n\n- Needs #512 to land first.\n";
     const b = parseProseBlockers(body);

@@ -125,6 +125,13 @@ export function parseProseBlockers(body: string): ProseBlocker[] {
   const isBlockedByHeading = (l: string) =>
     /^\s{0,3}#{1,6}\s+blocked\s+by\b/i.test(l);
   const isBullet = (l: string) => /^\s*[-*]\s+/.test(l);
+  // A placeholder bullet/clause that explicitly declares NO blocker, e.g.
+  // `- None currently.` / `Nothing yet.` — its content (after any list marker
+  // and emphasis) begins with "none"/"nothing". Must be skipped in BOTH the
+  // section-bullet loop and the inline branch, else it parses to a bogus
+  // `{subsystem: "None"}` and falsely reports the Issue blocked.
+  const isNoBlockerText = (t: string) =>
+    /^\s*(?:[-*]\s+)?(?:\*\*)?\s*(nothing|none)\b/i.test(t);
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
@@ -134,7 +141,7 @@ export function parseProseBlockers(body: string): ProseBlocker[] {
       for (let j = i + 1; j < lines.length; j++) {
         const l = lines[j]!;
         if (isHeading(l)) break; // next section ends the block
-        if (isBullet(l)) items.push(l);
+        if (isBullet(l) && !isNoBlockerText(l)) items.push(l);
       }
       continue;
     }
@@ -147,7 +154,7 @@ export function parseProseBlockers(body: string): ProseBlocker[] {
     const m = line.match(/^\s*(?:[-*]\s+)?(?:\*\*)?blocked\s+by\b[:\s*]*(.*)$/i);
     if (m) {
       const rest = m[1] ?? "";
-      if (/^\s*(nothing|none)\b/i.test(rest)) continue; // explicit no-blocker
+      if (isNoBlockerText(rest)) continue; // explicit no-blocker
       // Clause runs to the first sentence terminator followed by space/EOL.
       const clause = rest.split(/(?<=[.])\s|(?<=[.])$/u)[0] ?? rest;
       if (clause.trim()) items.push(clause);

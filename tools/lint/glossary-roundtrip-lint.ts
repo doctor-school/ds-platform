@@ -14,36 +14,37 @@
  * ADR/AGENTS-cited `packages/glossary/ids.ts`). Any asymmetry is drift:
  *   - source id absent from ids.ts → `pnpm generate:glossary` not run → FAIL.
  *   - generated id with no source term → orphan/stale generated id → FAIL.
- * This is parse-and-compare (a pure read/diff, no side effects) rather than
- * regenerate-and-diff, because the ADR-0006 §6.2 generator does NOT exist yet
- * (pipeline tracked by #460) — there is nothing to execute. When the #460
- * generator lands, it becomes the lockstep source and the committed `ids.ts` is
- * what this guard diffs against (the `tokens-fresh` "generated artifact is
- * committed + up to date" pattern).
+ * This is a pure parse-and-compare (a read/diff, no side effects): it does NOT
+ * re-run the generator. The ADR-0006 §6.2 generator landed with #460 —
+ * `packages/glossary/scripts/generate.ts`, run via `pnpm generate:glossary`,
+ * emits the committed `packages/glossary/src/ids.ts` (`GLOSSARY_IDS`, 4 ids
+ * today). This guard diffs that committed artifact against the glossary source —
+ * the `tokens-fresh` "generated artifact is committed + up to date" pattern — so
+ * a stale `ids.ts` (generator not re-run) surfaces as drift, exit 1.
  *
- * ── Empty-state = REAL evaluated emptiness (NOT a hardcoded exit 0) ────────────
- * `packages/glossary` is an empty package today (just package.json): there is no
- * `src/ids.ts`, no generator script, no `generate:glossary`. So the guard SCANS,
- * finds NO generated artifact, and reports "generated artifact not present —
- * nothing to roundtrip" (exit 0). This is evaluated emptiness, not a stub: the
- * moment the #460 pipeline lands `packages/glossary/(src/)?ids.ts`, the guard
- * bites on any drift between it and the glossary source.
+ * ── Empty-state branch = DEFENSIVE handling (NOT the live state) ───────────────
+ * On a real checkout the committed artifact is present (`packages/glossary/src/ids.ts`)
+ * and the guard runs the real source↔generated diff. The branch below that reports
+ * "generated artifact not present — nothing to roundtrip" (exit 0) when the SCAN
+ * finds no artifact is retained as DEFENSIVE handling for a not-yet-generated tree;
+ * it is exercised only by the fixture test (`LINT_FIXTURE_ROOT` no-artifact case),
+ * not production reality. Kept because it is a real evaluated code path, not a stub.
  *
  * ── Posture (recorded on the ci.yml job header) ───────────────────────────────
  * KEPT hard-red (BLOCK, in the `ci` needs-list). It is a deterministic pure
- * set comparison with no false-positive class, and clean (empty) on `main`.
+ * set comparison with no false-positive class, and clean (in lockstep) on `main`.
  * ADR-0006 §7.0 phases roundtrip into the Pilot tier — that phasing addressed
- * FALSE-POSITIVE / overhead noise, which a symmetric id-set diff on a
- * currently-ABSENT artifact cannot produce; it can only fire on a genuine
- * source↔generated drift, which is worth blocking the instant the pipeline lands.
+ * FALSE-POSITIVE / overhead noise, which a symmetric id-set diff cannot produce;
+ * it can only fire on a genuine source↔generated drift, which is worth blocking.
  * So the deterministic + clean criterion wins over the Pilot phasing here.
  * (Contrast glossary-mdx, burned in for genuine `[[…]]` namespace ambiguity.)
  *
- * ── Doc-reality mismatch (tracked, not fixed here) ─────────────────────────────
- * ADR-0006 §6 body / AGENTS.md §8 cite the artifact as `packages/glossary/ids.ts`;
- * design §6.2 as `packages/glossary/src/ids.ts` — path inconsistency tracked by
- * #459 (ADR-0006 §6 reconcile); the unbuilt §6.2 pipeline itself is #460. The
- * guard accepts either path so it works whichever the pipeline picks.
+ * ── Artifact path (design vs ADR/AGENTS) ──────────────────────────────────────
+ * The artifact of record is `packages/glossary/src/ids.ts` — what the §6.2
+ * generator emits and AGENTS.md §8 cites. The ADR-0006 §6 body reconcile (#459)
+ * settled the format-and-path split; the guard still accepts both `src/ids.ts`
+ * and the bare `packages/glossary/ids.ts` path defensively, so it works
+ * whichever path the pipeline emits.
  *
  * Seam: `LINT_FIXTURE_ROOT` (guard-tests harness) — inert in production.
  * Run: `pnpm lint:glossary-roundtrip`. Findings: stderr + exit 1. Clean/empty: exit 0.
@@ -97,11 +98,13 @@ async function main(): Promise<void> {
     }
   }
 
-  // Real evaluated emptiness: no generated artifact → nothing to roundtrip.
+  // Defensive empty-state branch (not the live state — the committed artifact
+  // exists on a real checkout): no generated artifact found → nothing to roundtrip.
   if (!idsRel) {
     info(
       `generated glossary id artifact not present (looked for ${IDS_CANDIDATES.join(", ")}) — ` +
-        "nothing to roundtrip. Bites when the ADR-0006 §6.2 generator + committed ids.ts land.",
+        "nothing to roundtrip. Defensive path for a not-yet-generated tree; normally the " +
+        "committed src/ids.ts is present and gets the real source↔generated diff.",
     );
     process.exit(0);
   }

@@ -397,7 +397,7 @@ backend identity but has not yet been verified and upgraded to a full `doctor`.
 **Sources:** ADR-0001 §1, §4; feature 003 requirements + design.
 ```
 
-**Про sketches §5 (Keystatic config) и §6.2 (generator).** Эти sketches предшествуют принятому Keystatic-формату выше — они иллюстрируют frontmatter-схему `label_ru` / `bounded_context` / `related` и generator, который её парсит. Формат на диске, имеющий силу, — тот, что в этом §6.1 (frontmatter + маркер `**Canonical id:**` в теле). Пайплайн генерации (§6.2) ещё не существует — он отслеживается в #460, где field-mapping генератора и приводится в соответствие реальному формату (id из body-маркера + сохраняемый frontmatter).
+**Про sketches §5 (Keystatic config) и §6.2 (generator).** Эти sketches предшествуют принятому Keystatic-формату выше — они иллюстрируют frontmatter-схему `label_ru` / `bounded_context` / `related` и generator, который её парсит. Формат на диске, имеющий силу, — тот, что в этом §6.1 (frontmatter + маркер `**Canonical id:**` в теле). Пайплайн генерации (§6.2) реализован в #460: `packages/glossary/scripts/generate.ts` (запускается через `pnpm generate:glossary`) читает реальный формат — id из body-маркера `**Canonical id:**` плюс сохраняемый frontmatter — и генерирует закоммиченный `packages/glossary/src/ids.ts` (`GLOSSARY_IDS`).
 
 ### 6.2 Generator script
 

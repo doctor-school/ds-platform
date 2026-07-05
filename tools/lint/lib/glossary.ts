@@ -21,9 +21,10 @@
  * ADR-0006 §6 reconcile), not papered over here: the guards check the reality
  * the repo actually stores.
  *
- * The generated artifact (`packages/glossary/(src/)?ids.ts` → `GLOSSARY_IDS`) and
- * the whole ADR-0006 §6.2 generator pipeline do NOT exist yet (tracked by #460) —
- * that is why the roundtrip guard is honestly empty until the generated side lands.
+ * The generated artifact (`packages/glossary/src/ids.ts` → `GLOSSARY_IDS`) and the
+ * ADR-0006 §6.2 generator pipeline (`scripts/generate.ts`, run via
+ * `pnpm generate:glossary`) landed with #460 — so the roundtrip guard diffs this
+ * reader's source ids against the committed generated ids for real.
  */
 import {
   readGlossarySourceSync,

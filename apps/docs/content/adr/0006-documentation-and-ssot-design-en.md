@@ -397,7 +397,7 @@ backend identity but has not yet been verified and upgraded to a full `doctor`.
 **Sources:** ADR-0001 §1, §4; feature 003 requirements + design.
 ```
 
-**Note on the §5 Keystatic config and §6.2 generator sketches.** Those sketches predate the adopted Keystatic shape above — they illustrate a `label_ru` / `bounded_context` / `related` frontmatter schema and a generator that parses it. The on-disk format of record is the one in this §6.1 (frontmatter + `**Canonical id:**` body marker). The generation pipeline (§6.2) does not exist yet — it is tracked by #460, which is where the generator's field-mapping is reconciled to read the real format (the body-marker id + the frontmatter it keeps).
+**Note on the §5 Keystatic config and §6.2 generator sketches.** Those sketches predate the adopted Keystatic shape above — they illustrate a `label_ru` / `bounded_context` / `related` frontmatter schema and a generator that parses it. The on-disk format of record is the one in this §6.1 (frontmatter + `**Canonical id:**` body marker). The generation pipeline (§6.2) landed with #460: `packages/glossary/scripts/generate.ts` (run via `pnpm generate:glossary`) reads the real format — the `**Canonical id:**` body-marker id plus the frontmatter it keeps — and emits the committed `packages/glossary/src/ids.ts` (`GLOSSARY_IDS`).
 
 ### 6.2 Generator script
 

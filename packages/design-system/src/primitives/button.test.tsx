@@ -27,9 +27,11 @@ describe("Button neo-brutalist offset-shadow contract", () => {
     expect(cls).toMatch(/hover:shadow-base/);
     expect(cls).toMatch(/active:translate-x-1/);
     expect(cls).toMatch(/active:shadow-none/);
-    // disabled: no shadow + the .4 dim, and a visible keyboard focus (interactiveBase).
+    // disabled: no shadow + the shared token dim (opacity-50), and a visible
+    // keyboard focus (both from interactiveBase). The issue's `.4` has no token;
+    // see the PR decision-debt note.
     expect(cls).toMatch(/disabled:shadow-none/);
-    expect(cls).toMatch(/disabled:opacity-40/);
+    expect(cls).toMatch(/disabled:opacity-50/);
     expect(cls).toMatch(/focus-visible:/);
   });
 

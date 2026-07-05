@@ -13,13 +13,15 @@ import { interactiveBase } from "./interactive-base";
  * shrinks it to 2px (`shadow-base`), pressed nudges +4px and drops the shadow to
  * 0. Focus adds the shared `interactiveBase` ring on top of the offset shadow
  * (they compose as separate box-shadow layers); disabled loses the shadow and
- * dims to .4. `link` opts out of the frame — it is a bare text link. Token-only
- * (`border-input` / `shadow-md` / `shadow-base` / the spacing scale for translate).
+ * dims via the shared `interactiveBase` dim (the `opacity-50` token — see the PR
+ * decision-debt note re: the issue's `.4`, which has no token). `link` opts out of
+ * the frame — it is a bare text link. Token-only (`border-input` / `shadow-md` /
+ * `shadow-base` / the spacing scale for the translate).
  */
 const buttonVariants = cva(
   cn(
     interactiveBase,
-    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-none border-2 border-input text-sm font-bold transition-all disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-none border-2 border-input text-sm font-bold transition-all disabled:pointer-events-none disabled:shadow-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   ),
   {
     variants: {

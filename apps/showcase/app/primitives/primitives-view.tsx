@@ -3,7 +3,10 @@
 import { useEffect, type ReactNode } from "react";
 import { useForm, type Control, type FieldValues } from "react-hook-form";
 
+import NextLink from "next/link";
+
 import { Button } from "@ds/design-system/button";
+import { Container } from "@ds/design-system/container";
 import { Link } from "@ds/design-system/link";
 import { Input } from "@ds/design-system/input";
 import { Label } from "@ds/design-system/label";
@@ -726,6 +729,45 @@ function FormPrimitivesSection() {
   );
 }
 
+/**
+ * Container — the page-shell LAYOUT primitive (#514, canvas §09). Unlike the
+ * stateful primitives above it has no state matrix; the subject is its
+ * width/gutter contract. The two variants render as their real selves (both cap
+ * below this page's own max-width, so a tinted fill shows the shell + gutter);
+ * the full responsive rhythm at BOTH breakpoints lives on the dedicated route.
+ */
+function ContainerSection() {
+  return (
+    <PrimitiveSection
+      title="Container"
+      exportsLine="Container · content 1104 / calendar 1240 · gutter 16 (mobile) → clamp 16–48 (desktop) · margin-auto"
+    >
+      <SubRow label="content — the 1104px reading column">
+        <Container className="border border-border bg-section py-5">
+          <p className="text-sm text-muted-foreground">
+            centred · max-w 1104 · fixed 16px gutter below 901, fluid 16→48 above
+          </p>
+        </Container>
+      </SubRow>
+      <SubRow label="calendar — the 1240px schedule width">
+        <Container
+          variant="calendar"
+          className="border border-border bg-section py-5"
+        >
+          <p className="text-sm text-muted-foreground">
+            centred · max-w 1240 · same responsive gutter
+          </p>
+        </Container>
+      </SubRow>
+      <Link asChild variant="standalone" className="text-sm">
+        <NextLink href="/layout-rhythm">
+          See the full rhythm composition at both breakpoints →
+        </NextLink>
+      </Link>
+    </PrimitiveSection>
+  );
+}
+
 export function PrimitivesView() {
   return (
     <div className="flex flex-col gap-2">
@@ -738,6 +780,7 @@ export function PrimitivesView() {
       <OtpSection />
       <FormPrimitivesSection />
       <FieldsSection />
+      <ContainerSection />
     </div>
   );
 }

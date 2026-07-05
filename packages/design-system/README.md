@@ -192,6 +192,52 @@ defects — a `min-h-*` reserved blank line on a message (K-1), a duplicate
   flush against the active segment (the slice-B hover-gluing defect, K-2). The
   transparent-border-only inset was not enough — the gap is the fix.
 
+## Layout & spatial rhythm (#514, canvas §09)
+
+Surfaces compose space **by role, not by eye**. The container/breakpoint contract
+and the semantic spacing roles are token-only; a live example composition renders
+the rhythm at both breakpoints in the showcase (`/layout-rhythm`).
+
+**Container primitive** — `Container` (`./container`) is the page shell:
+`margin-inline: auto`, a role-based max-width, and the responsive page gutter.
+
+```tsx
+import { Container } from "@ds/design-system/container";
+
+<Container asChild variant="content">
+  <main>…</main>
+</Container>;
+// variant="calendar" for the wider schedule/calendar surface
+```
+
+| Concern          | Mobile (`≤ 900`)                          | Desktop (`≥ 901`)                                                    |
+| ---------------- | ----------------------------------------- | -------------------------------------------------------------------- |
+| Gutter           | fixed **16px** (`--layout-gutter-mobile`) | fluid **16→48px** (`--layout-gutter` clamp)                          |
+| Container width  | edge-to-edge (fills)                      | `content` **1104** / `calendar` **1240**                             |
+| Breakpoint token | —                                         | `--breakpoint-desktop` (56.3125rem = 901px) → the `desktop:` variant |
+
+The `901px` layout threshold is the `breakpoint.desktop` token; use the generated
+`desktop:` Tailwind variant to switch a rule at that boundary (e.g. the stack role
+below).
+
+**Semantic spacing roles** — each is a `--space-<role>` token aliasing a step of
+the 4px scale; consume via `var(--space-<role>)` or the equivalent scale utility.
+
+| Role        | Token(s)                    | px            | Use for                          |
+| ----------- | --------------------------- | ------------- | -------------------------------- |
+| `inset-*`   | `--space-inset-sm/md/lg/xl` | 16/20/24/30   | padding **inside** a surface     |
+| `stack`     | `--space-stack`             | 28 → 0 mobile | gap between stacked list cards   |
+| `section-*` | `--space-section-sm/lg`     | 44/48         | block-to-block page rhythm       |
+| `control-*` | `--space-control-sm/md/lg`  | 8/10/12       | between chips / buttons / fields |
+| `inline-*`  | `--space-inline-sm/md`      | 6/8           | icon ↔ text                      |
+| `band`      | `--space-band`              | 0             | day-band bleed (edge-to-edge)    |
+
+The `stack` role is the one responsive role: **0 on mobile, 28 on desktop** — apply
+it across the `desktop:` boundary, e.g. `class="flex flex-col gap-0 desktop:gap-7"`
+(28 = `gap-7`). **Baseline** (canvas §09): interactive controls keep a **≥44×44**
+hit target (`min-h-11`), the keyboard focus ring is **3px** (`shadow-focus`), and
+text pairs stay AA (`foreground` / `muted-foreground`).
+
 ## Adding a component later
 
 This package follows the shadcn **owned-code** convention: components are copied

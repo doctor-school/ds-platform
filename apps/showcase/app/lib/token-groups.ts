@@ -232,6 +232,15 @@ const CLASSIFIERS: {
     match: (n) => n.endsWith("size"),
     label: (n) => n.replace(/^--/, "").replace(/-?size$/, ""),
   },
+  {
+    id: "layout",
+    title: "Layout — container & gutter",
+    description:
+      "The page-shell contract (#514, canvas §09): the content/calendar container max-widths and the fluid/mobile page gutters. Paired with the `desktop` breakpoint below.",
+    kind: "value",
+    match: (n) => n.startsWith("--layout-"),
+    label: (n) => n.slice("--layout-".length),
+  },
 ];
 
 /**

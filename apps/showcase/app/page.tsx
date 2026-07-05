@@ -57,6 +57,13 @@ const SECTIONS: readonly Section[] = [
     issue: "#349",
     href: "/candidates",
   },
+  {
+    title: "Layout & spatial rhythm",
+    description:
+      "The container / breakpoint contract and the semantic spacing roles (inset · stack · section · control · inline · day-band) composed into one surface — resize across 901px to watch the rhythm flip regime at both breakpoints.",
+    issue: "#514",
+    href: "/layout-rhythm",
+  },
 ];
 
 function SectionCard({

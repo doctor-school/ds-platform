@@ -33,6 +33,11 @@ export {
   InputOTPSeparator,
 } from "./primitives/input-otp";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./primitives/tabs";
+export {
+  Container,
+  containerVariants,
+  type ContainerProps,
+} from "./primitives/container";
 
 // ── Field primitives (#197) ───────────────────────────────────────────────────
 export {

@@ -211,8 +211,10 @@
     "5": { "$value": "1.25rem" },
     "6": { "$value": "1.5rem" },
     "7": { "$value": "1.75rem" },
+    "7-5": { "$value": "1.875rem" },
     "8": { "$value": "2rem" },
     "10": { "$value": "2.5rem" },
+    "11": { "$value": "2.75rem" },
     "12": { "$value": "3rem" },
     "16": { "$value": "4rem" }
   },
@@ -277,10 +279,21 @@
 
   "breakpoint": {
     "$type": "dimension",
+    "$description": "Responsive width thresholds. sm–2xl are the Tailwind rem ladder (utility variants). `desktop` (56.3125rem = 901px) is the LAYOUT threshold of the container/rhythm system (#514, canvas §09): below it the mobile rules apply (edge-to-edge, fixed 16px gutter, stack collapses to 0); at/above it the container + shadows + fluid gutter engage. The `desktop:` Tailwind variant is generated from this token.",
     "sm": { "$value": "40rem" },
     "md": { "$value": "48rem" },
     "lg": { "$value": "64rem" },
     "xl": { "$value": "80rem" },
-    "2xl": { "$value": "96rem" }
+    "2xl": { "$value": "96rem" },
+    "desktop": { "$value": "56.3125rem" }
+  },
+
+  "layout": {
+    "$type": "dimension",
+    "$description": "Page-shell dimensions for the container/rhythm system (#514, canvas §09). `container-content` (1104px) is the reading-column max-width; `container-calendar` (1240px) the wider calendar/schedule max-width. `gutter-min`/`gutter-max` (16→48px) are the endpoints of the fluid desktop page gutter; the composed `layout.gutter` clamp and the fixed mobile gutter live in the semantic layer.",
+    "container-content": { "$value": "1104px" },
+    "container-calendar": { "$value": "1240px" },
+    "gutter-min": { "$value": "1rem" },
+    "gutter-max": { "$value": "3rem" }
   }
 }

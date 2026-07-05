@@ -203,5 +203,75 @@
       "$type": "cubicBezier",
       "standard": { "$value": "{easing.standard}" }
     }
+  },
+
+  "space": {
+    "$type": "dimension",
+    "$description": "Semantic spacing ROLES over the 4px scale (#514, canvas §09) — surfaces compose space by role, not by eye. Each role aliases a `space.*` primitive step; the responsive collapse (stack 0 on mobile, edge-to-edge gutter) is applied at the composition/`desktop:` boundary, these tokens carry the desktop reference value. Roles: `inset-*` = padding INSIDE a surface (16/20/24/30); `stack` = gap between stacked list cards (28 desktop, 0 mobile); `section-*` = block-to-block rhythm (44/48); `control-*` = gap between chips/buttons/fields (8/10/12); `inline-*` = icon↔text gap (6/8); `band` = day-band bleed (0).",
+    "inset-sm": {
+      "$value": "{space.4}",
+      "$description": "Compact inset — padding inside a dense card, chip or control (16px)."
+    },
+    "inset-md": {
+      "$value": "{space.5}",
+      "$description": "Default inset — the standard padding inside a card or panel (20px)."
+    },
+    "inset-lg": {
+      "$value": "{space.6}",
+      "$description": "Roomy inset — padding inside a spacious panel or dialog (24px)."
+    },
+    "inset-xl": {
+      "$value": "{space.7-5}",
+      "$description": "Hero inset — padding inside a feature/hero surface (30px)."
+    },
+    "stack": {
+      "$value": "{space.7}",
+      "$description": "Stack gap — vertical space between stacked list cards. 28px on desktop; collapses to 0 on mobile (edge-to-edge list), applied via the `desktop:` boundary."
+    },
+    "section-sm": {
+      "$value": "{space.11}",
+      "$description": "Section rhythm (min) — vertical space between page blocks/sections (44px)."
+    },
+    "section-lg": {
+      "$value": "{space.12}",
+      "$description": "Section rhythm (max) — the larger block-to-block gap for a more open page (48px)."
+    },
+    "control-sm": {
+      "$value": "{space.2}",
+      "$description": "Tight control gap — space between adjacent chips/buttons/fields (8px)."
+    },
+    "control-md": {
+      "$value": "{space.2-5}",
+      "$description": "Default control gap — the standard gap in a control row (10px)."
+    },
+    "control-lg": {
+      "$value": "{space.3}",
+      "$description": "Roomy control gap — a more separated control row (12px)."
+    },
+    "inline-sm": {
+      "$value": "{space.1-5}",
+      "$description": "Tight inline gap — icon↔text spacing in a dense label (6px)."
+    },
+    "inline-md": {
+      "$value": "{space.2}",
+      "$description": "Default inline gap — icon↔text spacing in a button/chip (8px)."
+    },
+    "band": {
+      "$value": "{space.0}",
+      "$description": "Day-band bleed — zero inset; a band that runs full-bleed to the container edge (0)."
+    }
+  },
+
+  "layout": {
+    "$type": "dimension",
+    "$description": "Composed page-shell values for the container/rhythm system (#514, canvas §09). `gutter` is the fluid desktop page gutter (clamps 16→48px); `gutter-mobile` is the fixed 16px mobile gutter (edge-to-edge shell). Container max-widths are the `layout.container-*` primitives, consumed directly.",
+    "gutter": {
+      "$value": "clamp({layout.gutter-min}, 5vw, {layout.gutter-max})",
+      "$description": "Desktop page gutter — fluid, clamping between 16px and 48px as the viewport grows. Paired with a container max-width + `margin-inline:auto`."
+    },
+    "gutter-mobile": {
+      "$value": "{layout.gutter-min}",
+      "$description": "Mobile page gutter — a fixed 16px inset on the edge-to-edge shell (below the `desktop` breakpoint)."
+    }
   }
 }

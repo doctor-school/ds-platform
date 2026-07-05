@@ -18,6 +18,7 @@
     "./form": "./src/primitives/form.tsx",
     "./input-otp": "./src/primitives/input-otp.tsx",
     "./tabs": "./src/primitives/tabs.tsx",
+    "./container": "./src/primitives/container.tsx",
     "./fields": "./src/primitives/fields/index.ts",
     "./blocks": "./src/blocks/index.ts"
   },

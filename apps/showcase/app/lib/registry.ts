@@ -57,6 +57,7 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "link", section: "primitives" },
   { id: "tabs", section: "primitives" },
   { id: "form", section: "primitives" },
+  { id: "container", section: "primitives" },
 
   // ── Field primitives (spec §3.2, the `fields/*` set) — `./fields` components.
   { id: "EmailField", section: "primitives" },

@@ -284,8 +284,38 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/glossary-mdx-lint.ts
 
-  # glossary-ids: covered by ESLint rule `glossary-canonical-ids` inside `lint` job.
-  # Re-enable as separate job in G5 when packages/eslint-config rule lands.
+  # glossary-ids — ADR-0006 §6.3 glossary canonical-id SSOT enforcement. The
+  # ESLint rule `local/glossary-canonical-ids` (#468) forbids a bare string
+  # literal equal to a glossary canonical id in glossary-CONSUMER code
+  # (`apps/cms/**`, `apps/docs/**`), steering it to the typed `GLOSSARY_IDS.<id>`
+  # so a rename breaks the build. It is also wired at `warn` in the main
+  # `eslint.config.js` (editor/dev feedback, rides the `lint` job non-blockingly);
+  # THIS job is the promotable pass/fail check surface — a dedicated
+  # `eslint.glossary-ids.config.mjs` running ONLY that rule at `error`.
+  #
+  # The id-vs-domain-enum collision (`doctor_guest` — a glossary id AND the live
+  # RBAC role wire-value, SSOT apps/api authz.types.ts ROLES / idp.types.ts
+  # DOCTOR_GUEST_ROLE) is handled two ways: the surface scope keeps the rule off
+  # apps/api/**·packages/db|schemas/** entirely, and `domainEnumIds:["doctor_guest"]`
+  # makes the rule abstain on that id. Clean on main (no glossary-consumer code
+  # hardcodes an id yet); it bites the moment one does.
+  #
+  # POSTURE: BURN-IN — `continue-on-error: true` (WARN v1, ADR-0007 §2.6), REMOVED
+  # from the `ci` needs-list (BLOCK = in needs-list, WARN = continue-on-error —
+  # never both). RE-ENTRY (→ BLOCK + into the needs-list): when a real
+  # glossary-consumer surface (Payload GlossaryRef / docs component) lands and the
+  # ADR-0007 §2.6 sweep opens — flip `continue-on-error` to false, no rule change.
+  glossary-ids:
+    needs: setup
+    continue-on-error: true # WARN (burn-in) — promotable check surface; re-entry criterion in the header
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:glossary-ids
 
   # glossary-roundtrip — ADR-0006 §6 roundtrip (glossary source ids ↔ generated
   # `packages/glossary/(src/)?ids.ts`). REAL guard as of #448 (was a 5-line exit-0

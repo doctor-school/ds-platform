@@ -173,5 +173,31 @@ export default [
       ],
     },
   },
+  {
+    // #468 — glossary canonical-id SSOT enforcement (ADR-0006 §6.3). Forbids a
+    // bare string literal equal to a glossary canonical id, steering it to the
+    // typed `GLOSSARY_IDS.<id>` (import from `@ds/glossary/ids`) so a rename
+    // breaks the build. SCOPED to the glossary-CONSUMER surface only (cms +
+    // docs), which keeps it entirely off `apps/api/**` / `packages/db|schemas/**`
+    // — the home of the ~35 `doctor_guest` RBAC-wire-value sites. WIDEN
+    // ADDITIVELY: add a glob here when a new glossary-consumer surface lands.
+    // `domainEnumIds: ["doctor_guest"]` exempts the one id that also is a live
+    // domain wire-value (the RBAC role, SSOT `apps/api/src/authz/authz.types.ts`
+    // ROLES / `idp.types.ts` DOCTOR_GUEST_ROLE) — the rule abstains on it.
+    //
+    // Severity `warn` here (WARN v1, ADR-0007 §2.6): editor/dev in-line feedback
+    // that rides the `eslint .` → `lint` job WITHOUT blocking (eslint exits 0 on
+    // warnings). The PROMOTABLE pass/fail check surface for the WARN→BLOCK sweep
+    // is the dedicated `glossary-ids` CI job (`pnpm lint:glossary-ids`, its own
+    // `eslint.glossary-ids.config.mjs` at `error`).
+    files: ["apps/cms/**/*.{ts,tsx,js,jsx,mjs,cjs}", "apps/docs/**/*.{ts,tsx,js,jsx,mjs,cjs}"],
+    languageOptions: {
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    plugins: { local: localRules },
+    rules: {
+      "local/glossary-canonical-ids": ["warn", { domainEnumIds: ["doctor_guest"] }],
+    },
+  },
   prettier,
 ];

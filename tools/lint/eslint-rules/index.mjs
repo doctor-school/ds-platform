@@ -10,6 +10,7 @@ import noArbitraryTailwindValue from "./no-arbitrary-tailwind-value.mjs";
 import noTokenRedefinition from "./no-token-redefinition.mjs";
 import noHardcodedDisplayString from "./no-hardcoded-display-string.mjs";
 import authCatchUsesErrorMapper from "./auth-catch-uses-error-mapper.mjs";
+import glossaryCanonicalIds from "./glossary-canonical-ids.mjs";
 
 /** @type {import('eslint').ESLint.Plugin} */
 const plugin = {
@@ -22,6 +23,8 @@ const plugin = {
     // #256 enforcement gates (epic #247): RU-i18n coverage + actionable errors.
     "no-hardcoded-display-string": noHardcodedDisplayString,
     "auth-catch-uses-error-mapper": authCatchUsesErrorMapper,
+    // #468 — glossary canonical-id SSOT enforcement (ADR-0006 §6.3).
+    "glossary-canonical-ids": glossaryCanonicalIds,
   },
 };
 

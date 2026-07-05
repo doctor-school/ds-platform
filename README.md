@@ -32,6 +32,7 @@ Runtime/operational tooling (Coolify preview, Caddy, GlitchTip, Loki, Vault, Unl
 ```bash
 pnpm install
 pnpm bootstrap            # AI-agent live state snapshot
+pnpm backlog:triage       # per-Issue readiness from the blocked_by graph (not labels)
 pnpm dev                  # all apps in parallel
 pnpm --filter @ds/api dev   # single app
 ```

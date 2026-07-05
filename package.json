@@ -12,6 +12,7 @@
   },
   "scripts": {
     "bootstrap": "tsx tools/agent-bootstrap.ts",
+    "backlog:triage": "tsx tools/backlog-triage.ts",
     "board:status": "node tools/gh/set-board-status.mjs",
     "ci:wait": "node tools/gh/wait-ci-green.mjs",
     "lint:asset-format": "tsx tools/lint/asset-format-lint.ts",

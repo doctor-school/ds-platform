@@ -731,11 +731,11 @@ CI fail → marketing page references a non-existent term → block deploy.
 
 Not every drift check is equally urgent. Phased rollout per the Pre-pilot / Pilot / Scale phases from engineering-readiness §"Phase definitions":
 
-| Phase                                        | CI checks (incremental list)                                                                                                                                                                                                                                                                                                   |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Pre-pilot (mandatory)**                    | OpenAPI drift (NestJS schemas ↔ generated client), DB migrations drift (drizzle-kit check), spec link integrity (no broken `[[refs]]`), glossary canonical IDs (ESLint `@ds/glossary-canonical-ids`), retention-matrix lint (ADR-0009 §10), PII scanner (engineering-readiness §3.bis), audit-egress-channels (ADR-0011 §2.4). |
-| **Pilot** (added when there are pilot users) | Roundtrip validation Payload ↔ glossary, MDX glossary-lint `[[g:term-id]]` opt-in, generated ERD freshness, module README freshness checks.                                                                                                                                                                                    |
-| **Scale** (added at scale phase)             | Editorial UI integration (Payload), advanced roundtrip checks, machine-validatable spec fragments (JSON Schema / OpenAPI in-spec), automated spec re-validation against code changes.                                                                                                                                          |
+| Phase                                        | CI checks (incremental list)                                                                                                                                                                                                                                                                                                     |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Pre-pilot (mandatory)**                    | OpenAPI drift (NestJS schemas ↔ generated client), DB migrations drift (drizzle-kit check), spec link integrity (no broken `[[refs]]`), glossary canonical IDs (ESLint `local/glossary-canonical-ids`), retention-matrix lint (ADR-0009 §10), PII scanner (engineering-readiness §3.bis), audit-egress-channels (ADR-0011 §2.4). |
+| **Pilot** (added when there are pilot users) | Roundtrip validation Payload ↔ glossary, MDX glossary-lint `[[g:term-id]]` opt-in, generated ERD freshness, module README freshness checks.                                                                                                                                                                                      |
+| **Scale** (added at scale phase)             | Editorial UI integration (Payload), advanced roundtrip checks, machine-validatable spec fragments (JSON Schema / OpenAPI in-spec), automated spec re-validation against code changes.                                                                                                                                            |
 
 **Rationale:** the pre-pilot review correctly flagged "Fumadocs + Keystatic + glossary YAML + roundtrip validation + many CI gates may slow early delivery and produce false positives". Phasing prevents that overhead early while keeping full defense at scale.
 
@@ -792,7 +792,7 @@ jobs:
       - name: TypeScript compile
         run: pnpm typecheck
 
-      - name: ESLint (incl. @ds/glossary-canonical-ids)
+      - name: ESLint (local/glossary-canonical-ids rides here at warn)
         run: pnpm lint
 
       - name: Prettier
@@ -812,6 +812,13 @@ jobs:
 
       - name: Events drift
         run: pnpm lint:events
+
+      - name: Glossary IDs lint (dedicated job, WARN — §6.3)
+        # In the real ci.yml this is a standalone `glossary-ids` job with
+        # `continue-on-error: true` (the promotable check surface); the ESLint step
+        # above only rides `local/glossary-canonical-ids` at warn (non-blocking).
+        continue-on-error: true
+        run: pnpm lint:glossary-ids
 
       - name: Glossary MDX lint (opt-in directive)
         run: pnpm lint:glossary-mdx

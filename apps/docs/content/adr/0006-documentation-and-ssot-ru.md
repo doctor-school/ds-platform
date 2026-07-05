@@ -164,7 +164,7 @@ Outputs Spec-Driven Development:
 
 1.  **Keystatic UI** — typed fields, relationship references, save-blocking validators.
 2.  **MDX glossary-lint** — кастомный AST-парсер сканирует glossary-директивы `[[g:term-id]]` в `apps/docs/content/**/*.{md,mdx}`; неразрешённый id без same-line opt-out `new-term: <id>` → fail.
-3.  **ESLint `@ds/glossary-canonical-ids`** — TS-литералы, совпадающие с GlossaryId, должны импортироваться из `@ds/glossary/ids`, не быть инлайн-string'ом.
+3.  **ESLint `local/glossary-canonical-ids`** — TS-литералы, совпадающие с GlossaryId, должны импортироваться из `@ds/glossary/ids`, не быть инлайн-string'ом.
 4.  **Payload Lexical glossary-ref check** — каждый `<GlossaryRef id="...">` в Payload Lexical AST экспорта существует в glossary.
 
 - **Roundtrip CI check** — glossary source ↔ generated TS ids ↔ Payload Glossary table consistent (запускается post-sync).
@@ -176,7 +176,7 @@ Outputs Spec-Driven Development:
 | Check                                                                    | Tool                                                    | Что проверяет                                                                                                                                          |
 | ------------------------------------------------------------------------ | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | TS compile                                                               | `tsc --noEmit`                                          | Базовая типобезопасность                                                                                                                               |
-| ESLint                                                                   | `eslint` flat config                                    | Custom rules incl. `glossary-canonical-ids`, `no-class-validator`, `no-vercel-only-api` (ADR-0004 §13)                                                 |
+| ESLint                                                                   | `eslint` flat config                                    | Custom rules incl. `local/glossary-canonical-ids`, `no-class-validator`, `no-vercel-only-api` (ADR-0004 §13)                                           |
 | Prettier                                                                 | `prettier --check`                                      | Code style                                                                                                                                             |
 | Unit tests                                                               | Vitest                                                  | Per-handler coverage                                                                                                                                   |
 | E2E                                                                      | Playwright + `playwright-bdd`                           | Gherkin scenarios pass                                                                                                                                 |
@@ -302,7 +302,7 @@ ds-platform/
 - **Fumadocs young (~1.5 года)** — plugin-ecosystem меньше Docusaurus, OpenAPI integration требует ручной embed Scalar/Redoc React-компонента. Mitigation: контент-portable.
 - **Product Lead учится работе в Keystatic** — block editor проще IDE, но всё равно новая среда; первый месяц + туториал.
 - **Glossary 4-layer validation** требует написать ~3 custom lint-скрипта в `tools/lint/` (~300 строк TS). Не trivial, но прямой pattern.
-- **Custom ESLint rule `glossary-canonical-ids`** — еще одно maintain. Mitigation: standalone package, тестируется отдельно.
+- **Custom ESLint rule `local/glossary-canonical-ids`** — еще одно maintain. Mitigation: standalone package, тестируется отдельно.
 - **EARS + Event Modeling + Gherkin дисциплина** требует обучения; первая feature-spec пишется медленнее. Mitigation: payoff на codegen tests со второго feature.
 - **Sync glossary.yaml → Payload Glossary Collection** — ещё один script в CI, идемпотентность нужна.
 - **Mermaid единственный — рендер ограничен** для сложных C4. Trigger to revisit зафиксирован.

@@ -11,8 +11,8 @@
  * synchronous (so it cannot `await`). Hence this file mirrors `readGlossaryIds`'s
  * APPROACH exactly — same source (`apps/docs/content/product/glossary/*.md`), same
  * `**Canonical id:**` body marker — but synchronously in plain ESM. The
- * two-line glob+regex duplication with `lib/glossary.ts` is tracked decision-debt
- * to reconcile into one shared module when the ADR-0006 §6.2 generator (#460) lands.
+ * two-line glob+regex duplication with `lib/glossary.ts` is a tracked follow-up —
+ * reconcile the async + sync readers into one shared module.
  *
  * Keying on the BODY marker (not §6.1 frontmatter, which the repo never adopted)
  * matches `lib/glossary.ts` — see its header for the source-of-truth reality.
@@ -32,8 +32,14 @@ const CANONICAL_ID_RE = /\*\*Canonical id:\*\*\s*`([a-z][a-z0-9_]*)`/;
  * `repoRoot`. A file with no `**Canonical id:**` marker contributes nothing (its
  * id cannot be established) — same rule as the async reader.
  *
+ * Floor assertion: the glossary source files are committed, so a genuinely empty
+ * id set means the source moved / emptied / lost all markers — which would make
+ * the `glossary-canonical-ids` rule silently no-op (a guard whose value vanishes
+ * with no signal). That is a real breakage, so THROW rather than return `∅`.
+ *
  * @param {string} repoRoot absolute repo root (or a fixture root in tests).
- * @returns {Set<string>} the canonical id set.
+ * @returns {Set<string>} the non-empty canonical id set.
+ * @throws {Error} if zero canonical ids are parsed.
  */
 export function readGlossaryIdsSync(repoRoot) {
   const files = fg.sync(GLOSSARY_SRC_GLOB, {
@@ -45,6 +51,15 @@ export function readGlossaryIdsSync(repoRoot) {
     const raw = readFileSync(resolve(repoRoot, rel), "utf8");
     const m = raw.match(CANONICAL_ID_RE);
     if (m) ids.add(m[1]);
+  }
+  if (ids.size === 0) {
+    throw new Error(
+      `[glossary-ids] no glossary canonical ids parsed from ` +
+        `${GLOSSARY_SRC_GLOB} under ${repoRoot} (scanned ${files.length} file(s)). ` +
+        `The committed glossary source is missing or lost its \`**Canonical id:**\` ` +
+        `markers — the glossary-canonical-ids rule would silently enforce nothing. ` +
+        `Restore the glossary source or fix the marker format.`,
+    );
   }
   return ids;
 }

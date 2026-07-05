@@ -26,7 +26,12 @@ const TabsList = React.forwardRef<
       // holding flush segments (no gap, no inner padding) — the segments share the
       // track's frame and are divided by a 2px rule, so the whole control reads as
       // a single ink-framed block, not floating chips.
-      "inline-flex h-9 w-full items-center justify-center overflow-hidden rounded-none border-2 border-border bg-background text-muted-foreground",
+      //
+      // NOT `overflow-hidden`: the square (radius-0) track needs no corner clip, and
+      // a clip would cut a keyboard-focused trigger's `focus-visible` ring (which
+      // `focus-visible:z-10` cannot escape). The segments already sit inside the
+      // border box, so the flush look holds without clipping.
+      "inline-flex h-9 w-full items-center justify-center rounded-none border-2 border-border bg-background text-muted-foreground",
       className,
     )}
     {...props}

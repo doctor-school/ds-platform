@@ -23,6 +23,9 @@ describe("Tabs segment-control contract", () => {
     );
     const list = screen.getByTestId("list");
     expect(list).toHaveClass("rounded-none", "border-2", "border-border");
+    // Must NOT clip: `overflow-hidden` would cut a focused trigger's focus-visible
+    // ring (which z-10 cannot escape). The square track needs no corner clip.
+    expect(list).not.toHaveClass("overflow-hidden");
   });
 
   it("active trigger fills with the primary action colour; inactive is quiet + hoverable", () => {

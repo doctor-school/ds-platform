@@ -72,8 +72,13 @@ describe("FormMessage inline (no reserved line, no reflow over-spacing)", () => 
     expect(msg).toHaveTextContent("Required");
     // Neo-brutalist error row (#512): 12/700 danger (`text-xs font-bold text-destructive`).
     expect(msg).toHaveClass("text-xs", "font-bold", "text-destructive");
-    // The ⚠ marker leads the row (decorative — aria-hidden so SR reads just the message).
+    // The ⚠ marker leads the row and is DECORATIVE: it lives in an aria-hidden
+    // element so a screen reader announces just the message (the row already
+    // carries role="alert"), never the emoji name.
     expect(msg.textContent).toContain("⚠");
+    const marker = msg.querySelector('[aria-hidden="true"]');
+    expect(marker).not.toBeNull();
+    expect(marker?.textContent).toContain("⚠");
     // No reserved-height slot anymore (inline grows on demand).
     expect(msg).not.toHaveClass("min-h-5");
     expect(msg).toHaveAttribute("role", "alert");
@@ -131,6 +136,8 @@ describe("FormError — single form-level error primitive (one error style sourc
     // Same shared style as FormMessage's error branch — the look lives in one place.
     expect(err).toHaveClass("text-xs", "font-bold", "text-destructive");
     expect(err.textContent).toContain("⚠");
+    // The ⚠ marker is decorative (aria-hidden) — SR reads just the error text.
+    expect(err.querySelector('[aria-hidden="true"]')?.textContent).toContain("⚠");
     expect(err).toHaveAttribute("role", "alert");
   });
 });

@@ -15,7 +15,7 @@
 // Pipeline (deploy):
 //   pre-flight  clean tree · HEAD==origin/main · green CI for the SHA (gh)
 //   ship        git archive <sha> → api-prod + data-prod over ssh (no registry)
-//   data-prod   up -d --build (idempotent)
+//   data-prod   up -d --build (idempotent; attestations off → no-op ≠ recreate, #486)
 //   checkpoint  pgbackrest pre-migrate incr backup  (DSO-129 — BEFORE migrate)
 //   api-prod    migrate → build (ds-api:<sha>, ds-portal:<sha>) → up -d
 //   retention   keep the last 3 SHA-tagged images per repo  (DSO-127)
@@ -39,6 +39,24 @@ const DATA_PROD = process.env.DS_DATA_PROD_SSH || "ds-data-prod";
 const REMOTE_TREE = "~/ds-platform";
 const VPC_IP = process.env.DS_DATA_PROD_VPC_IP || "192.168.0.10";
 const IMAGE_RETENTION = 3;
+
+// Reproducible on-box builds (#486). By default `docker compose build` attaches a
+// BuildKit *provenance* attestation whose metadata varies per build, so the image
+// CONFIG digest (= the image ID) changes on every rebuild even when the Dockerfile
+// and context are byte-identical and every layer is cache-hit. `up -d` compares the
+// running container's image ID against the tag and RECREATES on any difference — so
+// a no-op redeploy needlessly recreated the data-prod `postgres` container (a ~24s
+// persistence blip) and would churn the SHA-tagged api/portal images on a same-SHA
+// re-run too. Disabling default attestations makes the image ID a pure function of
+// the build inputs: unchanged inputs → identical ID → `up -d` is a true no-op; a
+// real Dockerfile/context change → new ID → recreate (both verified live on
+// data-prod). We never consume the attestation (on-box build, no registry push, no
+// signature verifier), so dropping it costs nothing.
+//   Placement matters: this is `sudo VAR=val cmd` (var AFTER sudo — sudo's own
+//   env-setting syntax, which it honors), NOT `VAR=val sudo cmd` (var before sudo,
+//   which sudo's env_reset strips — the exact trap the VPC_IP `.env` sidesteps,
+//   README §7). Verified stable across repeated builds on the box.
+const NO_ATTEST = "BUILDX_NO_DEFAULT_ATTESTATIONS=1";
 
 const API_COMPOSE = `${REMOTE_TREE}/infra/deploy/compose/api-prod`;
 const DATA_COMPOSE = `${REMOTE_TREE}/infra/deploy/compose/data-prod`;
@@ -318,7 +336,7 @@ async function deploy() {
     DATA_PROD,
     `cd ${DATA_COMPOSE}
 printf 'VPC_IP=%s\\n' '${VPC_IP}' > .env
-sudo docker compose up -d --build
+sudo ${NO_ATTEST} docker compose up -d --build
 `,
     { label: "data-prod up" },
   );
@@ -362,9 +380,10 @@ echo '── migrate (drizzle-kit; idempotent) ──'
 #   run reuses a stale ds-api-migrate:local and applies OLD migrations.
 # </dev/null: compose run attaches the container's stdin by default — never
 #   let it read this shell's stdin (see REMOTE_BASH; defense in depth).
-sudo docker compose --profile migrate run --build --rm migrate </dev/null
+# ${NO_ATTEST}: reproducible image IDs so a same-SHA re-run is a true no-op (#486).
+sudo ${NO_ATTEST} docker compose --profile migrate run --build --rm migrate </dev/null
 echo '── build ds-api:${sha.slice(0, 12)}… + ds-portal ──'
-sudo docker compose build
+sudo ${NO_ATTEST} docker compose build
 echo '── up -d ──'
 sudo docker compose up -d
 `,

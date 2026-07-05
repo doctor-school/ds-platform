@@ -26,6 +26,14 @@ Every UI-shaped task runs this loop; the gates below enforce each arrow:
 
 Features always compose from `@ds/design-system`; bespoke is the last resort, recorded.
 
+## Canvas source → vendor it, build from it (never from prose)
+
+When the design originates in a **Claude Design canvas** (`.dc.html`) — a full re-skin, an auth/webinar screen set, any owner-authored visual language — the canvas is the fidelity SoT, and its **exact values** (px, border widths, colors L+D, states, placeholders) live only in the `.dc.html` inline styles:
+
+- **Import first, before dispatching or building.** Vendor the `.dc.html` into `design-source/` via `DesignSync get_file` (the canvas project id is in memory) — it is a **repo file**, not a link (a link does not survive the next session; the source must). A canvas whose bytes are not in the repo is **not-ready**, not "prose in the issue".
+- **Build from the file.** The issue-body text is a lossy transcription — a coverage checklist, not the spec. Where prose and the `.dc.html` disagree, **the source wins**. Hand implementers the **file path** and state "the source overrides any prose in this brief"; do **not** re-narrate the source's values back as prose (that reintroduces the transcription loss).
+- **Diff render vs source before Stage-B.** The lead compares the rendered surface against `design-source/<file>.dc.html` **element-by-element** — values, geometry, and presentation — before the owner handback. Token-safety / tokens-only / internal-consistency is **not** fidelity; every gate can be green while the render diverges from the canvas (the #512–514 re-skin miss). Memory `feedback_import_design_source_before_building`.
+
 ## When this applies
 
 Any task that creates or reshapes an interface — a page, form, control, layout, overlay, or an empty/error/loading state. **Classify by the touched SURFACE, not the GitHub label**: a `tooling` / `engineering-task` framing never exempts a user-facing look, and this **includes a catalogue / showcase / doc surface** that renders the design system itself (`apps/showcase/**`) — its look is a product decision too (memory `feedback_classify_by_surface_not_label`; the #348→#386 reopen).

@@ -80,6 +80,13 @@ export const SELF_CATCH = new RegExp(
     // unlike «исправл»/«пропустил»/«нарушил» (which flood on neutral status lines
     // and quoted-rule narration) these read only as the agent owning a slip.
     'я зря', 'перепутал', 'неправильно понял', 'не так понял',
+    // #486 — the worktree-escape self-catch class the extractor missed
+    // (`selfCatches=0` on a session with a textbook self-catch). High-precision
+    // multi-word markers only: an agent owning that it hit a known trap or that
+    // its edits escaped the worktree into main. Kept phrase-length to avoid the
+    // flood risk a bare «ловушка»/«escaped» would carry on neutral narration.
+    'ловушка из памяти', 'ровно ловушк', 'escaped isolation',
+    'escap\\w+ the worktree', 'leaked to (the )?main',
   ].join('|'),
   'i',
 );

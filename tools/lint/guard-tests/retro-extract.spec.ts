@@ -154,6 +154,44 @@ describe("retro extract — CORRECTION_RE lexicon recall (#362)", () => {
   });
 });
 
+// ── CORRECTION_RE — RU delivery-refutation + false-premise recall (#492) ─────
+// The single-session /wrap retro of session a5676594 (2026-07-04) scored 0
+// corrections on a session with two explicit owner corrections: a false-premise
+// challenge («С чего ты взял, что есть?») and a delivery-failure report refuting
+// a claimed DoD («в it@bbm.academy пусто»). Single-session mode survived because
+// the retro agent reads the full transcript; in MULTI-session batch mode these
+// RU corrections drop silently out of the corpus. The lexicon now covers the
+// false-premise idiom, the negated-delivery family (не дошл / не пришл /
+// не получил), and the empty-inbox predicate «пуст(о|ой|ая|ые|ых)» — the last
+// left+right anchored so it never fires mid-word on упустили / запустил /
+// допустим (the four real corpus noise cases the bare пуст-stem caught).
+describe("retro extract — CORRECTION_RE RU delivery-refutation recall (#492)", () => {
+  it("flags the false-premise challenge and the empty-inbox delivery report", () => {
+    // the two live-corpus misses from session a5676594
+    expect(CORRECTION_RE.test("С чего ты взял, что есть? Поставь it@bbm.academy пока")).toBe(true);
+    expect(CORRECTION_RE.test("На a@ получил три письма, в it@bbm.academy пусто")).toBe(true);
+    // adjacent real delivery-failure report already in the corpus
+    expect(CORRECTION_RE.test("[Image #1] Malpit пустой [Image #2]")).toBe(true);
+    // didn't-receive report (the corpus «Код отправил, но SMS не получил»)
+    expect(CORRECTION_RE.test("Код отправил, но SMS не получил")).toBe(true);
+    // forward-looking negated-delivery idioms (multi-session email verification)
+    expect(CORRECTION_RE.test("письмо так и не дошло")).toBe(true);
+    expect(CORRECTION_RE.test("код на телефон так и не пришёл")).toBe(true);
+  });
+
+  it("precision guard: «пуст» is Cyrillic-anchored — mid-word matches stay unflagged", () => {
+    // the four real corpus noise cases the bare пуст-stem would have caught
+    expect(CORRECTION_RE.test("Мы ничего не упустили?")).toBe(false);
+    expect(CORRECTION_RE.test("Сервер выключился. Сейчас запустил его")).toBe(false);
+    expect(CORRECTION_RE.test("допустим origin для одного, intent для другого")).toBe(false);
+    // narrow suffix group: instrumental/genitive data-structure talk stays quiet
+    expect(CORRECTION_RE.test("оставь поле пустым")).toBe(false);
+    expect(CORRECTION_RE.test("пустого объекта тут нет")).toBe(false);
+    // a benign receipt ack must not flag via «не получил» (no «не» before it)
+    expect(CORRECTION_RE.test("Да, получил")).toBe(false);
+  });
+});
+
 // ── SELF_CATCH lexicon recall (#362) ────────────────────────────────────────
 // The assistant-side self-correction lexicon missed clean RU markers the corpus
 // surfaced («я зря …», «я перепутал …»). The additions are high-precision: the

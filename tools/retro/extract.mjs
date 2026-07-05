@@ -103,6 +103,21 @@ export const CORRECTION_RE = new RegExp(
     // remove-directive; «как это не» is anchored to the negated-claim form so it
     // does not flag the benign «как это работает/сделать».
     'не понял', 'не понимаю', 'как это не', 'убери', 'лишн',
+    // 2026-07-04 a5676594 wrap retro — two owner corrections the regex scored 0,
+    // and the reason MULTI-session mode drops them (#492): a false-premise
+    // challenge («С чего ты взял, что есть?») and a delivery-failure report
+    // refuting a claimed DoD («в it@bbm.academy пусто»). Added: the false-premise
+    // idiom, the negated-delivery family (не дошл/не пришл/не получил — didn't
+    // arrive / didn't receive), and the empty-inbox predicate. «пуст» is
+    // Cyrillic-anchored both sides — `\b` is ASCII-only under JS regex without
+    // the `u` flag, so a bare stem flooded on упустили/запустил/допустим (the four
+    // real corpus noise cases); the lookbehind kills those, and the narrow suffix
+    // group (о|ой|ая|ые|ых, dropping ым/ого) also drops «пустым массивом» /
+    // «пустого объекта» data-structure talk. Residual: nominative «пустой массив»
+    // still matches (lexically identical to «Malpit пустой») — accepted, 0
+    // occurrences in the 668-msg human corpus and CORRECTION_RE is a recall net.
+    'с чего ты взял', 'не дош(?:л|ёл)', 'не приш(?:л|ёл)', 'не получил',
+    '(?<![а-яё])пуст(?:о|ой|ая|ые|ых)(?![а-яё])',
     'why ', 'instead', 'should have', 'you were supposed', 'wrong', 'no,', 'stop',
     'revert', 'undo', "don't", 'do not', 'not what', 'i asked', 'i told you', 'again', 'did you',
   ].join('|'),

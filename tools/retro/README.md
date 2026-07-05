@@ -77,6 +77,15 @@ SKILL.md) and a regression fixture — its records validate against that schema.
   `extract.mjs` and `SELF_CATCH` in `transcripts.mjs`. Both lexicons are tuned
   for precision over recall — add a token only when it catches real pushback in
   the live corpus with no benign false positives (the #362 audit rejected bare
-  «давай …», «лучше», «слишком», «исправл» on exactly those grounds). Both regexes
-  are exported behind an entry-point guard and unit-covered in
+  «давай …», «лучше», «слишком», «исправл» on exactly those grounds). A stem that
+  would otherwise flood mid-word is Cyrillic-anchored with a lookbehind, not `\b`
+  (ASCII-only under JS regex without the `u` flag): `исключ…` (#362) and
+  `(?<![а-яё])пуст…` (#492, the empty-inbox delivery-failure predicate) both do
+  this. Where a corrective form is lexically identical to benign technical talk
+  («пустой массив» vs «ящик пустой») and the benign form is absent from the live
+  corpus, the residual collision is an accepted recall-over-precision tradeoff —
+  `CORRECTION_RE` is a recall net a retro agent reviews, and its false negative
+  (an owner delivery-refutation silently dropped from the multi-session corpus)
+  costs more than a rare false positive. Both regexes are exported behind an
+  entry-point guard and unit-covered in
   `tools/lint/guard-tests/retro-extract.spec.ts`.

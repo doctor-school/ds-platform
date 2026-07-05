@@ -23,8 +23,14 @@
  *   node tools/gh/create-issue.mjs --no-todo  --title "<t>" --body-file <f>   # add to board, leave Status unset
  *   pnpm issue:create --title "<t>" --body-file <f> --label tooling           # alias
  *
- * Control flags (consumed here, NOT forwarded to gh):
+ * Control flags (consumed here, NOT forwarded to gh) — put them BEFORE the gh
+ * passthrough; a passthrough VALUE equal to a control flag would be consumed too:
  *   --no-todo   add the Issue to the board but do not set Status=Todo.
+ *
+ * Repo is hard-pinned to the board's repo (the Projects v2 board is repo-specific):
+ * a `--repo`/`-R` in the passthrough is REJECTED rather than silently honored, so
+ * the created Issue can never land in a foreign repo while item-add still targets
+ * the doctor-school board.
  *
  * Safety: every `gh` call uses an explicit argv array (no shell string) — no
  * command injection. Project/field/option ids below are cross-checked against
@@ -101,6 +107,19 @@ export function partitionArgs(argv) {
 }
 
 /**
+ * Detect a `--repo` / `-R` override in the gh passthrough. This helper is
+ * hard-pinned to the board's repo, so an override is rejected (not silently
+ * honored) — gh would otherwise let a passthrough `--repo` win over our pin.
+ * @param {string[]} args
+ * @returns {boolean}
+ */
+export function hasRepoOverride(args) {
+  return (args ?? []).some(
+    (a) => a === "--repo" || a.startsWith("--repo=") || a === "-R" || a.startsWith("-R"),
+  );
+}
+
+/**
  * Extract the created Issue's URL from `gh issue create` stdout — gh prints the
  * canonical `https://github.com/<owner>/<repo>/issues/<N>` URL on its own line.
  * @param {string} stdout
@@ -141,9 +160,10 @@ export function buildNodeQuery(itemId) {
  * Validate the GraphQL node read-back against the Issue we just created.
  * @param {any} apiJson  parsed `gh api graphql` response
  * @param {number} expectedNumber
+ * @param {{ expectTodo?: boolean }} [opts]  when expectTodo, Status must read back "Todo"
  * @returns {{ ok: boolean, reason?: string, status?: string|null, number?: number }}
  */
-export function parseNodeReadback(apiJson, expectedNumber) {
+export function parseNodeReadback(apiJson, expectedNumber, { expectTodo = false } = {}) {
   const node = apiJson?.data?.node;
   if (!node) return { ok: false, reason: "node not found on the board (GraphQL returned null)" };
   const number = node.content?.number;
@@ -155,6 +175,13 @@ export function parseNodeReadback(apiJson, expectedNumber) {
       reason: `board item resolves to Issue #${number}, expected #${expectedNumber}`,
     };
   const status = node.fieldValueByName?.name ?? null;
+  if (expectTodo && status !== "Todo")
+    return {
+      ok: false,
+      reason: `board Status reads "${status ?? "(unset)"}", expected "Todo"`,
+      status,
+      number,
+    };
   return { ok: true, status, number };
 }
 
@@ -174,10 +201,21 @@ function main() {
 
   const { setTodo, passthrough } = partitionArgs(argv);
 
-  // 1. Create the Issue — thin passthrough. Pin --repo so the returned URL is
-  //    guaranteed to belong to the board's repo regardless of cwd.
+  // The board is repo-specific, so the repo pin must win. gh honors the LAST
+  // --repo, so a passthrough override would silently defeat a leading pin —
+  // reject it outright rather than land the Issue in a foreign repo.
+  if (hasRepoOverride(passthrough))
+    die(
+      `--repo/-R is not allowed: this helper is hard-pinned to ${REPO} because the ` +
+        `Projects v2 board is repo-specific. Remove it from the arguments.`,
+    );
+
+  // 1. Create the Issue — thin passthrough. Pin --repo AFTER the passthrough so
+  //    the returned URL is guaranteed to belong to the board's repo (gh honors
+  //    the last --repo; the reject above already blocks a passthrough override,
+  //    this is belt-and-suspenders).
   process.stdout.write(`[create-issue] creating Issue…\n`);
-  const createOut = gh(["issue", "create", "--repo", REPO, ...passthrough], {
+  const createOut = gh(["issue", "create", ...passthrough, "--repo", REPO], {
     json: false,
   });
   const url = extractIssueUrl(createOut);
@@ -202,7 +240,12 @@ function main() {
     "json",
   ]);
   const itemId = added?.id;
-  if (!itemId) die(`gh project item-add returned no item id (payload: ${JSON.stringify(added)})`);
+  if (!itemId)
+    die(
+      `gh project item-add returned no item id (payload: ${JSON.stringify(added)}); ` +
+        `Issue #${issueNumber} exists but is NOT on the board — reconcile with: ` +
+        `gh project item-add ${PROJECT_NUMBER} --owner ${OWNER} --url ${url}`,
+    );
   process.stdout.write(`[create-issue] added to board — item ${itemId}\n`);
 
   // 3. Optionally set Status=Todo.
@@ -232,9 +275,12 @@ function main() {
     "-f",
     `query=${buildNodeQuery(itemId)}`,
   ]);
-  const check = parseNodeReadback(readback, issueNumber);
+  const check = parseNodeReadback(readback, issueNumber, { expectTodo: setTodo });
   if (!check.ok)
-    die(`board confirmation failed: ${check.reason} (item ${itemId})`);
+    die(
+      `board confirmation failed: ${check.reason} (item ${itemId}); ` +
+        `reconcile with: pnpm board:status ${issueNumber} Todo`,
+    );
 
   process.stdout.write(
     `[create-issue] OK — confirmed on board.\n` +

@@ -118,6 +118,14 @@ export const CORRECTION_RE = new RegExp(
     // occurrences in the 668-msg human corpus and CORRECTION_RE is a recall net.
     'с чего ты взял', 'не дош(?:л|ёл)', 'не приш(?:л|ёл)', 'не получил',
     '(?<![а-яё])пуст(?:о|ой|ая|ые|ых)(?![а-яё])',
+    // 2026-07-05 548dd102 wrap retro — the DEFINING owner correction scored 0:
+    // «Не Cancelled, а done как фактически сделанные…», the direct «не X, а Y»
+    // contrastive substitution (replace X with Y) that used none of the tokens
+    // above. The left side is a SINGLE token ([^\s,]+ forbids space + comma) so
+    // the benign additive «не только X, а также Y» (two tokens before «, а»)
+    // stays unflagged; the trailing «\sа\s» keeps «а» a standalone contrastive
+    // conjunction, not a mid-word match.
+    'не [^\\s,]+,\\s+а\\s',
     'why ', 'instead', 'should have', 'you were supposed', 'wrong', 'no,', 'stop',
     'revert', 'undo', "don't", 'do not', 'not what', 'i asked', 'i told you', 'again', 'did you',
   ].join('|'),

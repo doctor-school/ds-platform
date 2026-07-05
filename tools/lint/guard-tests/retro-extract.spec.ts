@@ -192,6 +192,29 @@ describe("retro extract — CORRECTION_RE RU delivery-refutation recall (#492)",
   });
 });
 
+// ── CORRECTION_RE — RU «не X, а Y» contrastive-substitution recall (#508) ────
+// The single-session /wrap retro of session 548dd102 (2026-07-05) scored 0 on the
+// DEFINING owner correction — «Не Cancelled, а done как фактически сделанные…» —
+// the direct «не X, а Y» contrastive substitution (replace X with Y), which used
+// none of the prior tokens. Added «не WORD, а » anchored to a SINGLE token between
+// «не» and «, а » (the token class forbids space + comma), so the benign additive
+// «не только X, а также Y» (two tokens before the comma) stays unflagged.
+describe("retro extract — CORRECTION_RE «не X, а Y» contrastive recall (#508)", () => {
+  it("flags the contrastive-substitution correction", () => {
+    // the live-corpus miss from session 548dd102
+    expect(CORRECTION_RE.test("Не Cancelled, а done как фактически сделанные")).toBe(true);
+    expect(CORRECTION_RE.test("не так, а вот так надо было")).toBe(true);
+    expect(CORRECTION_RE.test("закрывай не сейчас, а после ревью")).toBe(true);
+  });
+
+  it("precision guard: the benign additive «не только X, а также Y» stays unflagged", () => {
+    // single-token constraint before «, а» keeps the additive «не только …» out
+    expect(CORRECTION_RE.test("поддержим не только email, а также телефон")).toBe(false);
+    // a multi-word left side is out of scope and must not match the additive shape
+    expect(CORRECTION_RE.test("не A и B, а также C")).toBe(false);
+  });
+});
+
 // ── SELF_CATCH lexicon recall (#362) ────────────────────────────────────────
 // The assistant-side self-correction lexicon missed clean RU markers the corpus
 // surfaced («я зря …», «я перепутал …»). The additions are high-precision: the

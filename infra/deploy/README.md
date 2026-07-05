@@ -80,7 +80,13 @@ Pipeline (`tools/deploy/prod.mjs`), fail-closed and stops at the first red step:
 …/commits/<sha>/check-runs`). The deployed commit is `origin/main`'s SHA.
 2. **Ship** — `git archive <sha>` streamed over SSH to **both** boxes
    (`rm -rf ~/ds-platform && tar x`); no registry, no deploy key (README step 5).
-3. **data-prod** — `docker compose up -d --build` (idempotent).
+3. **data-prod** — `docker compose up -d --build` (idempotent). Builds run with
+   **`BUILDX_NO_DEFAULT_ATTESTATIONS=1`** so an unchanged build yields a
+   byte-identical image ID: a no-op redeploy is a **true no-op** and does NOT
+   recreate the `postgres` container (#486 — without it, BuildKit's default
+   provenance attestation churns the image digest every build → `up -d` recreates
+   → a ~24s persistence blip). A real Dockerfile/context change still rebuilds and
+   recreates. The same flag guards the api-prod `build`/`migrate` (step 5).
 4. **Checkpoint (DSO-129)** — a pgbackrest **pre-migrate `incr` backup** (the
    same `backup.sh` cron runs) **before** any migration, so a restore point
    exists at the pre-migrate state. See [Prod migration rule](#prod-migration-rule--expandcontract).
@@ -202,7 +208,10 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    ```bash
    cd ~/ds-platform/infra/deploy/compose/data-prod
    echo "VPC_IP=192.168.0.10" > .env                     # interpolation var (NOT a secret); sudo strips inline vars
-   sudo docker compose up -d --build                     # builds pgvector+partman+pgbackrest, redis, pgbackrest sidecar
+   # BUILDX_NO_DEFAULT_ATTESTATIONS=1 → reproducible image ID, so a re-run doesn't
+   # recreate postgres (#486). `sudo VAR=val cmd` (var AFTER sudo) is honored; the
+   # `.env` route above is only for compose *interpolation* vars, not the build env.
+   sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose up -d --build   # pgvector+partman+pgbackrest, redis, pgbackrest sidecar
    sudo docker compose logs -f postgres                  # wait for "database system is ready"
    # pgbackrest sidecar auto-runs `stanza-create` + `check` on start; confirm:
    sudo docker compose logs pgbackrest                   # expect the stanza check to pass
@@ -216,7 +225,7 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
 in certificate chain`) — even though the cert is a valid public GlobalSign cert
    > (the host `curl`s it fine). **Fixed:** both Dockerfiles now install
    > `ca-certificates`. On a box first deployed from the pre-fix images, rebuild
-   > (`sudo docker compose up -d --build`) and confirm the pgbackrest stanza check
+   > (`sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose up -d --build`) and confirm the pgbackrest stanza check
    > passes and `pg_stat_archiver` failures stop — until then the DB runs but is
    > **unbacked**.
 

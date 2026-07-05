@@ -31,7 +31,10 @@ const InputOTPGroup = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div">
 >(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("flex items-center", className)} {...props} />
+  // `gap-2` between cells so each slot carries its own 2px frame cleanly (no
+  // doubled seams) and a filled cell's ink border reads distinct from its
+  // muted-bordered empty neighbours.
+  <div ref={ref} className={cn("flex items-center gap-2", className)} {...props} />
 ));
 InputOTPGroup.displayName = "InputOTPGroup";
 
@@ -49,8 +52,14 @@ const InputOTPSlot = React.forwardRef<
     <div
       ref={ref}
       className={cn(
-        "relative flex h-9 w-9 items-center justify-center border-y border-r border-input text-sm shadow-sm transition-all first:rounded-l-md first:border-l last:rounded-r-md",
-        isActive && "z-10 ring-2 ring-ring",
+        // Neo-brutalist OTP cell (#512): a square 2px-bordered slot with tabular,
+        // uppercase glyphs (a code renders as a fixed monospaced-width grid). A
+        // FILLED cell takes the ink `border-input`; an empty one stays muted, so a
+        // partially-typed code reads its progress by border weight. `h-10 w-10`
+        // matches the `--otp-slot-size` token (2.5rem).
+        "relative flex h-10 w-10 items-center justify-center rounded-none border-2 text-sm font-bold uppercase tabular-nums transition-all",
+        char ? "border-input" : "border-muted-2",
+        isActive && "z-10 border-input ring-2 ring-ring",
         className,
       )}
       {...props}

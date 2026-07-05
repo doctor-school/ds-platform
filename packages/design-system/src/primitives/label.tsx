@@ -12,7 +12,10 @@ const Label = React.forwardRef<
   <LabelPrimitive.Root
     ref={ref}
     className={cn(
-      "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
+      // Neo-brutalist label (#512): the compact 12/700 caption the language sets
+      // over every control (`text-xs` = 12px, `font-bold` = 700). Still dims with
+      // its paired (`peer`) disabled input.
+      "text-xs font-bold leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
       className,
     )}
     {...props}

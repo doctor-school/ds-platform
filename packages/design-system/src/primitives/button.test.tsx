@@ -7,24 +7,60 @@ import { Button, buttonVariants } from "./button";
 afterEach(cleanup);
 
 /**
- * The `secondary` variant must read as an enabled, clickable secondary action,
- * not a disabled chip (#227/#267 owner finding). The borderless light fill looked
- * disabled; the fix gives it a resting border (like `outline`) plus a clear
- * hover/active. This pins the regression: `secondary` carries a border and the
- * hover/active feedback, so it can never silently revert to the borderless look.
+ * Neo-brutalist language contract (#512, canvas 8cc2f39a). Every button is a hard
+ * bordered slab with a token-driven offset shadow (`shadow-md` = `4px 4px 0`), a
+ * square corner (`rounded-none` — `--button-radius` is 0), and bold text; it
+ * "presses into the page" on interaction — hover nudges it toward the shadow by
+ * 2px and shrinks the shadow, pressed nudges 4px and drops the shadow to 0;
+ * disabled loses the shadow and dims. These pin the visual contract so a
+ * regression to the pre-511 soft look can't merge silently.
  */
-describe("Button secondary variant reads as enabled", () => {
-  it("carries a resting border + hover/active feedback (not a borderless chip)", () => {
-    const cls = buttonVariants({ variant: "secondary" });
-    expect(cls).toMatch(/\bborder\b/);
-    expect(cls).toMatch(/border-input/);
-    expect(cls).toMatch(/hover:/);
-    expect(cls).toMatch(/active:/);
+describe("Button neo-brutalist offset-shadow contract", () => {
+  it("default (primary): square, offset shadow, bold, press-motion + focus/disabled", () => {
+    const cls = buttonVariants({ variant: "default" });
+    expect(cls).toMatch(/rounded-none/);
+    expect(cls).toMatch(/border-2/);
+    expect(cls).toMatch(/font-bold/);
+    // resting offset shadow (4px) → hover shrinks to 2px → pressed drops to 0.
+    expect(cls).toMatch(/shadow-md/);
+    expect(cls).toMatch(/hover:translate-x-0\.5/);
+    expect(cls).toMatch(/hover:shadow-base/);
+    expect(cls).toMatch(/active:translate-x-1/);
+    expect(cls).toMatch(/active:shadow-none/);
+    // disabled: no shadow + the .4 dim, and a visible keyboard focus (interactiveBase).
+    expect(cls).toMatch(/disabled:shadow-none/);
+    expect(cls).toMatch(/disabled:opacity-40/);
+    expect(cls).toMatch(/focus-visible:/);
   });
 
-  it("matches the bordered weight of the outline variant (both bordered)", () => {
-    expect(buttonVariants({ variant: "outline" })).toMatch(/\bborder\b/);
-    expect(buttonVariants({ variant: "secondary" })).toMatch(/\bborder\b/);
+  it("ghost carries the same offset-shadow treatment (issue: primary / ghost)", () => {
+    const cls = buttonVariants({ variant: "ghost" });
+    expect(cls).toMatch(/shadow-md/);
+    expect(cls).toMatch(/active:shadow-none/);
+    expect(cls).toMatch(/hover:/);
+  });
+
+  /**
+   * `secondary` stays an enabled, clickable action (the #227/#267 owner finding):
+   * in the neo-brutalist language every button is bordered, so the old
+   * "borderless chip reads as disabled" defect cannot recur — assert the hard
+   * border + press feedback.
+   */
+  it("secondary + outline are hard-bordered slabs with press feedback", () => {
+    for (const variant of ["secondary", "outline"] as const) {
+      const cls = buttonVariants({ variant });
+      expect(cls).toMatch(/border-2/);
+      expect(cls).toMatch(/shadow-md/);
+      expect(cls).toMatch(/hover:/);
+      expect(cls).toMatch(/active:/);
+    }
+  });
+
+  it("link variant is a bare text link — no border frame, no offset shadow", () => {
+    const cls = buttonVariants({ variant: "link" });
+    expect(cls).toMatch(/border-transparent/);
+    expect(cls).toMatch(/shadow-none/);
+    expect(cls).toMatch(/text-primary-action/);
   });
 });
 

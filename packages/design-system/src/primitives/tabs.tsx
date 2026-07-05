@@ -22,11 +22,11 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      // K-2 (#333): `gap-2` opens a visible track between segments so an inactive
-      // segment's hover fill never butts flush against the active segment — the
-      // slice-B defect was hover-gluing (two segments reading as one block on
-      // hover), which a transparent border alone did not fix.
-      "inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-muted p-1 text-muted-foreground",
+      // Neo-brutalist segment control (#512): one hard 2px-bordered, square track
+      // holding flush segments (no gap, no inner padding) — the segments share the
+      // track's frame and are divided by a 2px rule, so the whole control reads as
+      // a single ink-framed block, not floating chips.
+      "inline-flex h-9 w-full items-center justify-center overflow-hidden rounded-none border-2 border-border bg-background text-muted-foreground",
       className,
     )}
     {...props}
@@ -42,14 +42,13 @@ const TabsTrigger = React.forwardRef<
     ref={ref}
     className={cn(
       interactiveBase,
-      // transition-all (not just colors) so the active shadow animates too.
-      // #4 tab inset (ADR-0013 §7): every trigger carries a persistent
-      // `border border-transparent` so the active state's `bg-background` +
-      // `shadow` never shifts its inactive neighbour — the inactive hover reads
-      // as an inset chip inside the `px-3 py-1` padding, not a flush block.
-      // Inactive resting is the AA-safe quiet tier `text-muted-foreground` (full
-      // strength, #270 — not an opacity-dimmed foreground) → `hover:text-foreground`.
-      "inline-flex flex-1 items-center justify-center whitespace-nowrap rounded-md border border-transparent px-3 py-1 text-sm font-medium transition-all disabled:pointer-events-none data-[state=inactive]:text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow data-[state=inactive]:hover:bg-background/50 data-[state=inactive]:hover:text-foreground",
+      // Each segment is a flush, square, bold cell divided from its neighbour by a
+      // 2px right rule (`last:border-r-0` drops the trailing one). The ACTIVE
+      // segment fills solid with the primary action colour (white on blue.700, AA);
+      // inactive resting is the AA-safe quiet tier `text-muted-foreground` (full
+      // strength, #270) with an `accent` hover fill. `focus-visible:z-10` lifts the
+      // focused segment's ring above its neighbours' borders.
+      "inline-flex flex-1 items-center justify-center whitespace-nowrap rounded-none border-r-2 border-border px-3 py-1 text-sm font-bold transition-colors last:border-r-0 focus-visible:z-10 disabled:pointer-events-none data-[state=inactive]:text-muted-foreground data-[state=active]:bg-primary-action data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-accent data-[state=inactive]:hover:text-foreground",
       className,
     )}
     {...props}

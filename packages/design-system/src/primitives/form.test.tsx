@@ -66,23 +66,27 @@ describe("FormMessage inline (no reserved line, no reflow over-spacing)", () => 
     expect(screen.queryByTestId("message")).not.toBeInTheDocument();
   });
 
-  it("shows the error inline, small and NOT bold, announced as an alert", () => {
+  it("shows the error inline — 12/700 danger with a ⚠ marker, announced as an alert", () => {
     render(<Harness error="Required" />);
     const msg = screen.getByTestId("message");
     expect(msg).toHaveTextContent("Required");
-    expect(msg).toHaveClass("text-xs", "text-destructive");
-    // K-3 / owner: the error text is not bold ("выглядит тяжело").
-    expect(msg).not.toHaveClass("font-medium");
+    // Neo-brutalist error row (#512): 12/700 danger (`text-xs font-bold text-destructive`).
+    expect(msg).toHaveClass("text-xs", "font-bold", "text-destructive");
+    // The ⚠ marker leads the row (decorative — aria-hidden so SR reads just the message).
+    expect(msg.textContent).toContain("⚠");
     // No reserved-height slot anymore (inline grows on demand).
     expect(msg).not.toHaveClass("min-h-5");
     expect(msg).toHaveAttribute("role", "alert");
   });
 
-  it("shows the helper by default (muted, small, visible, no alert)", () => {
+  it("shows the helper by default (muted, small, NOT bold, no ⚠, no alert)", () => {
     render(<Harness helper="We never share this." />);
     const msg = screen.getByTestId("message");
     expect(msg).toHaveTextContent("We never share this.");
+    // The helper stays quiet: muted, not bold, no danger marker (only the error is loud).
     expect(msg).toHaveClass("text-xs", "text-muted-foreground");
+    expect(msg).not.toHaveClass("font-bold");
+    expect(msg.textContent).not.toContain("⚠");
     expect(msg).not.toHaveAttribute("aria-hidden");
     expect(msg).not.toHaveAttribute("role", "alert");
   });
@@ -92,7 +96,7 @@ describe("FormMessage inline (no reserved line, no reflow over-spacing)", () => 
     const msg = screen.getByTestId("message");
     expect(msg).toHaveTextContent("Required");
     expect(msg.textContent).not.toContain("We never share this.");
-    expect(msg).toHaveClass("text-xs", "text-destructive");
+    expect(msg).toHaveClass("text-xs", "font-bold", "text-destructive");
     expect(msg).toHaveAttribute("role", "alert");
   });
 });
@@ -120,23 +124,25 @@ describe("FormError — single form-level error primitive (one error style sourc
     expect(screen.queryByTestId("ferr")).not.toBeInTheDocument();
   });
 
-  it("renders the submit/auth error in the SAME style as a field error (text-xs destructive, alert)", () => {
+  it("renders the submit/auth error in the SAME style as a field error (12/700 danger + ⚠, alert)", () => {
     render(<FormError data-testid="ferr">Не удалось войти.</FormError>);
     const err = screen.getByTestId("ferr");
     expect(err).toHaveTextContent("Не удалось войти.");
     // Same shared style as FormMessage's error branch — the look lives in one place.
-    expect(err).toHaveClass("text-xs", "text-destructive");
-    expect(err).not.toHaveClass("font-medium");
+    expect(err).toHaveClass("text-xs", "font-bold", "text-destructive");
+    expect(err.textContent).toContain("⚠");
     expect(err).toHaveAttribute("role", "alert");
   });
 });
 
 describe("Input invalid state (K-3 — red border carries the error)", () => {
-  it("carries an aria-invalid destructive border + ring (not a neutral border)", () => {
+  it("carries an aria-invalid destructive border + tint + ring (not a neutral border)", () => {
     render(<Input aria-invalid data-testid="inp" />);
     const inp = screen.getByTestId("inp");
     expect(inp).toHaveClass(
       "aria-invalid:border-destructive",
+      // neo-brutalist error (#512): a faint danger tint fills the field, too.
+      "aria-invalid:bg-destructive/10",
       "aria-invalid:focus-visible:ring-destructive",
     );
   });

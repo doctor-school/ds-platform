@@ -149,8 +149,19 @@ FormDescription.displayName = "FormDescription";
  * page (the #333 Stage-B finding). Token-only.
  */
 const FORM_MESSAGE_TEXT = "text-xs";
-const FORM_ERROR_TONE = "text-destructive";
+// Neo-brutalist error row (#512): 12/700 danger — the loud, bold error the
+// language uses, led by a ⚠ marker. The helper stays quiet (muted, not bold).
+const FORM_ERROR_TONE = "font-bold text-destructive";
 const FORM_HELPER_TONE = "text-muted-foreground";
+
+/**
+ * Decorative danger marker for an error row (`⚠ `). `aria-hidden` so a screen
+ * reader announces just the message text (the row already carries `role="alert"`),
+ * not the emoji name.
+ */
+function ErrorMarker() {
+  return <span aria-hidden="true">⚠ </span>;
+}
 
 /**
  * Inline validation message (ADR-0013 §7 → "Form layout & validation contract",
@@ -211,6 +222,7 @@ const FormMessage = React.forwardRef<
       role={hasError ? "alert" : undefined}
       {...props}
     >
+      {hasError ? <ErrorMarker /> : null}
       {body}
     </p>
   );
@@ -240,6 +252,7 @@ const FormError = React.forwardRef<
       className={cn(FORM_MESSAGE_TEXT, FORM_ERROR_TONE, className)}
       {...props}
     >
+      <ErrorMarker />
       {children}
     </p>
   );

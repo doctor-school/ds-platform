@@ -7,7 +7,10 @@ const Card = React.forwardRef<HTMLDivElement, React.ComponentProps<"div">>(
     <div
       ref={ref}
       className={cn(
-        "rounded-xl border border-border bg-card text-card-foreground shadow",
+        // Neo-brutalist card (#512): a hard 2px-bordered, square panel casting the
+        // token offset shadow (`shadow-md` = `4px 4px 0`), replacing the pre-511
+        // soft `rounded-xl` + blurred shadow.
+        "rounded-none border-2 border-border bg-card text-card-foreground shadow-md",
         className,
       )}
       {...props}

@@ -282,9 +282,11 @@ function StateColumnsInline({
 
 const INPUT_STATES: StateSpec[] = [
   { name: "default" },
-  { name: "focus", note: "ring forced (mirrors interactiveBase)" },
+  { name: "focus", note: "blue.300 border + ring forced (mirrors interactiveBase)" },
+  { name: "filled", note: "carries a value" },
+  { name: "success", note: 'data-success (valid) → green border' },
   { name: "disabled" },
-  { name: "error", note: 'aria-invalid="true"' },
+  { name: "error", note: 'aria-invalid="true" → danger border + tint' },
 ];
 
 function InputSection() {
@@ -300,9 +302,16 @@ function InputSection() {
             // axe `label` rule, #351). Real surfaces label via FormField/Label.
             aria-label={`Input sample (${state})`}
             placeholder="you@example.com"
-            defaultValue={state === "error" ? "not-an-email" : ""}
+            defaultValue={
+              state === "error"
+                ? "not-an-email"
+                : state === "filled" || state === "success"
+                  ? "dr.doctorova@example.com"
+                  : ""
+            }
             disabled={state === "disabled"}
             aria-invalid={state === "error" || undefined}
+            data-success={state === "success" || undefined}
           />
         )}
       />

@@ -16,3 +16,6 @@ pnpm-lock.yaml
 # must NOT touch them or the committed file would diverge from a fresh build.
 packages/design-system/src/styles/tokens.css
 packages/design-system/src/styles/allowed-tokens.json
+
+# Imported Claude Design canvas — keep bytes verbatim
+design-source/

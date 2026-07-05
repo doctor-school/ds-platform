@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}</style></helmet>
+
+<div style="min-height:100vh;background:{{ page }}">
+  <!-- Хедер -->
+  <header style="background:{{ headerBg }};padding:16px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
+    <div style="display:flex;align-items:center;gap:16px;min-width:0">
+      <img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block;flex:none">
+      <span style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#D3E8FD">Визуальный язык</span>
+    </div>
+    <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px;flex:none">{{ themeIcon }}</button>
+  </header>
+
+  <!-- Титул -->
+  <div style="background:{{ headerBg }};padding:clamp(32px,5vw,48px) clamp(16px,4vw,48px) clamp(40px,6vw,64px)">
+    <div style="max-width:1080px;margin:0 auto">
+      <h1 style="margin:0;font-size:clamp(30px,5vw,50px);line-height:1.02;font-weight:800;letter-spacing:-.035em;color:#fff">Doctor.School · система</h1>
+      <p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:#D3E8FD;max-width:640px">Токены извлечены из готовых экранов и сведены к единой шкале. Значения — как есть, без визуальной переработки. Два режима: светлый и тёмный (переключатель ☀/☾ в шапке).</p>
+    </div>
+  </div>
+
+  <main style="max-width:1080px;margin:0 auto;padding:clamp(36px,5vw,56px) clamp(16px,4vw,48px) 96px;display:flex;flex-direction:column;gap:clamp(44px,6vw,68px)">
+
+    <!-- ЦВЕТ -->
+    <section>
+      <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:28px">
+        <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">01 · Цвет</span>
+        <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:32px">
+        <sc-for list="{{ colorGroups }}" as="g" hint-placeholder-count="6">
+          <div>
+            <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:14px">{{ g.title }}</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:14px">
+              <sc-for list="{{ g.items }}" as="c" hint-placeholder-count="4">
+                <div>
+                  <div style="{{ c.box }}"></div>
+                  <div style="font-size:13px;font-weight:800;color:{{ ink }};margin-top:10px;font-variant-numeric:tabular-nums">{{ c.name }}</div>
+                  <div style="font-size:11px;font-weight:600;line-height:1.7;color:{{ inkFaint }};margin-top:3px;font-variant-numeric:tabular-nums">{{ c.vals }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- ТИПОГРАФИКА -->
+    <section>
+      <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:28px">
+        <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">02 · Типографика</span>
+        <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:{{ inkMuted }};margin-bottom:24px">Гарнитура — <b style="color:{{ ink }}">Inter</b>. Начертания 400 / 500 / 600 / 700 / 800. Шкала кегля кратна логике 10–12–13–14–15–16–20–22–28–40–56.</div>
+      <div style="display:flex;flex-direction:column">
+        <sc-for list="{{ typeRows }}" as="t" hint-placeholder-count="11">
+          <div style="display:flex;align-items:baseline;gap:24px;padding:16px 0;border-top:1px solid {{ hairline }};flex-wrap:wrap">
+            <div style="{{ t.sampleStyle }}">{{ t.sample }}</div>
+            <div style="margin-left:auto;text-align:right;flex:none">
+              <div style="font-size:13px;font-weight:800;color:{{ ink }};font-variant-numeric:tabular-nums">{{ t.name }}</div>
+              <div style="font-size:11px;font-weight:600;color:{{ inkFaint }};margin-top:2px;font-variant-numeric:tabular-nums">{{ t.meta }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- ШКАЛА ОТСТУПОВ -->
+    <section>
+      <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:28px">
+        <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">03 · Отступы</span>
+        <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:{{ inkMuted }};margin-bottom:24px">База — 4px. Полушаги 2 / 6 / 10 / 14 / 18 / 22 допустимы для тонкой подгонки.</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <sc-for list="{{ spaceScale }}" as="s" hint-placeholder-count="12">
+          <div style="display:flex;align-items:center;gap:16px">
+            <span style="font-size:12px;font-weight:800;color:{{ ink }};width:44px;flex:none;font-variant-numeric:tabular-nums">{{ s.px }}</span>
+            <div style="{{ s.bar }}"></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- РАМКИ · РАДИУС · ТЕНИ -->
+    <section>
+      <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:28px">
+        <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">04 · Рамки · радиус · тени</span>
+        <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px">
+        <div style="border:2px solid {{ border }};padding:22px;background:{{ surface }}">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:12px">Рамки</div>
+          <div style="height:0;border-top:2px solid {{ border }};margin-bottom:6px"></div>
+          <div style="font-size:12px;font-weight:700;color:{{ ink }}">2px solid — структурная</div>
+          <div style="height:0;border-top:1px solid {{ hairline }};margin:16px 0 6px"></div>
+          <div style="font-size:12px;font-weight:700;color:{{ ink }}">1px hairline — разделитель</div>
+        </div>
+        <div style="border:2px solid {{ border }};padding:22px;background:{{ surface }}">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:12px">Радиус</div>
+          <div style="display:flex;align-items:center;gap:14px"><span style="width:44px;height:44px;background:{{ btnBg }};flex:none"></span><div><div style="font-size:16px;font-weight:800;color:{{ ink }}">0px</div><div style="font-size:11.5px;font-weight:600;color:{{ inkFaint }}">Острые углы — намеренно, весь язык</div></div></div>
+        </div>
+        <div style="border:2px solid {{ border }};padding:22px;background:{{ surface }}">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:16px">Тени · офсетные, blur 0</div>
+          <div style="display:flex;gap:22px;flex-wrap:wrap">
+            <sc-for list="{{ shadowScale }}" as="sh" hint-placeholder-count="3">
+              <div style="text-align:center"><div style="{{ sh.box }}"></div><div style="font-size:11px;font-weight:800;color:{{ ink }};margin-top:12px;font-variant-numeric:tabular-nums">{{ sh.name }}</div></div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- КОМПОНЕНТЫ -->
+    <section>
+      <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:28px">
+        <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">05 · Компоненты</span>
+        <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px">
+
+        <!-- Кнопки -->
+        <div style="border:2px solid {{ border }};background:{{ surface }};padding:24px">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:18px">Кнопки</div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap">
+            <button style="font:inherit;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:13px 22px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Primary ↗</button>
+            <button style="font:inherit;font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:13px 20px;cursor:pointer;box-shadow:4px 4px 0 {{ shadowSm }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ shadowSm }}">Ghost</button>
+          </div>
+        </div>
+
+        <!-- Чипы -->
+        <div style="border:2px solid {{ border }};background:{{ surface }};padding:24px">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:18px">Чипы фильтра</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <span style="font-size:13px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:6px 13px;border:2px solid {{ btnBg }}">Выбран</span>
+            <span style="font-size:13px;font-weight:700;color:{{ tintFg }};background:transparent;padding:6px 13px;border:2px solid {{ chipBorder }}">Обычный</span>
+            <span style="font-size:13px;font-weight:700;color:{{ tintFg }};background:transparent;padding:6px 13px;border:2px solid {{ chipBorder }}">Ещё</span>
+          </div>
+        </div>
+
+        <!-- Сегмент-контрол -->
+        <div style="border:2px solid {{ border }};background:{{ surface }};padding:24px">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:18px">Сегмент-контрол</div>
+          <div style="display:inline-grid;grid-template-columns:auto auto;border:2px solid {{ border }}">
+            <span style="padding:12px 18px;font-size:13px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }}">Неделя</span>
+            <span style="padding:12px 18px;font-size:13px;font-weight:700;color:{{ tintFg }};background:{{ surface }};border-left:2px solid {{ border }}">Месяц</span>
+          </div>
+        </div>
+
+        <!-- Бейджи -->
+        <div style="border:2px solid {{ border }};background:{{ surface }};padding:24px">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:18px">Бейдж «в эфире»</div>
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <span style="display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:#C81E1E;padding:6px 12px"><span style="width:7px;height:7px;border-radius:50%;background:#fff;animation:livePulse 1.6s ease-in-out infinite"></span>В эфире</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ tintFg }};background:{{ tint }};padding:6px 10px">Спикер</span>
+          </div>
+        </div>
+
+        <!-- Поле ввода -->
+        <div style="border:2px solid {{ border }};background:{{ surface }};padding:24px">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:18px">Поле ввода</div>
+          <input placeholder="Написать в чат…" style="width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;padding:12px 14px;border:2px solid {{ hairline }};outline:none;background:{{ surface }};color:{{ ink }}" style-focus="border-color:#6BB1F7">
+        </div>
+
+        <!-- Аватар -->
+        <div style="border:2px solid {{ border }};background:{{ surface }};padding:24px">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:18px">Аватар · инициалы</div>
+          <div style="display:flex;gap:12px">
+            <span style="width:40px;height:40px;background:{{ btnBg }};color:{{ btnFg }};display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:800">АС</span>
+            <span style="width:40px;height:40px;background:{{ tint }};color:{{ tintFg }};display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:800">МВ</span>
+          </div>
+        </div>
+
+        <!-- Плашка дня -->
+        <div style="border:2px solid {{ border }};background:{{ surface }};padding:0;overflow:hidden">
+          <div style="padding:20px 24px 6px"><div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }}">Плашка дня</div></div>
+          <div style="margin-top:8px;padding:13px 24px;background:{{ sectionGray }}"><span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }}">Сегодня — 16 июля</span></div>
+        </div>
+
+        <!-- Карточка эфира (мини) -->
+        <div style="grid-column:1/-1;border:2px solid {{ border }};background:{{ surface }};box-shadow:6px 6px 0 {{ shadow }};display:grid;grid-template-columns:150px 1fr">
+          <div style="background:{{ tint }};border-right:2px solid {{ border }};padding:22px 20px;display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:34px;font-weight:800;line-height:1;letter-spacing:-.04em;color:{{ tintFg }};font-variant-numeric:tabular-nums">19:00</div>
+            <div style="font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ tintFg }}">Эфир № 042</div>
+          </div>
+          <div style="padding:22px 24px">
+            <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:10px">Карточка эфира</div>
+            <div style="font-size:18px;font-weight:700;line-height:1.3;letter-spacing:-.02em;color:{{ ink }}">Плашка времени · заголовок · чипы · спикеры · CTA</div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+    <!-- СОСТОЯНИЯ -->
+    <section>
+      <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:28px">
+        <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">06 · Состояния</span>
+        <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:{{ inkMuted }};margin-bottom:24px">Каждый интерактивный элемент проходит один и тот же набор состояний: <b style="color:{{ ink }}">rest · hover · focus · pressed · disabled</b> (+ selected / error там, где применимо). Фокус — кольцо <span style="font-variant-numeric:tabular-nums">0&nbsp;0&nbsp;0&nbsp;3px</span> {{ focusHex }}.</div>
+
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <!-- Primary -->
+        <div style="border:2px solid {{ border }};background:{{ surface }};padding:24px">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:20px">Кнопка · Primary</div>
+          <div style="display:flex;flex-wrap:wrap;gap:28px">
+            <div style="display:flex;flex-direction:column;align-items:flex-start;gap:10px"><button style="font:inherit;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:12px 20px;box-shadow:4px 4px 0 {{ border }}">Участвовать</button><span style="{{ cap }}">Rest</span></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-start;gap:10px"><button style="font:inherit;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ hoverBg }};border:2px solid {{ hoverBg }};padding:12px 20px;transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Участвовать</button><span style="{{ cap }}">Hover</span></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-start;gap:10px"><button style="font:inherit;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:12px 20px;box-shadow:4px 4px 0 {{ border }},0 0 0 3px {{ focusRing }}">Участвовать</button><span style="{{ cap }}">Focus</span></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-start;gap:10px"><button style="font:inherit;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:12px 20px;transform:translate(4px,4px);box-shadow:0 0 0 {{ border }}">Участвовать</button><span style="{{ cap }}">Pressed</span></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-start;gap:10px"><button disabled style="font:inherit;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:12px 20px;opacity:.4;box-shadow:none;cursor:not-allowed">Участвовать</button><span style="{{ cap }}">Disabled</span></div>
+          </div>
+        </div>
+
+        <!-- Ghost -->
+        <div style="border:2px solid {{ border }};background:{{ surface }};padding:24px">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:20px">Кнопка · Ghost</div>
+          <div style="display:flex;flex-wrap:wrap;gap:28px">
+            <div style="display:flex;flex-direction:column;align-items:flex-start;gap:10px"><button style="font:inherit;font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:12px 20px;box-shadow:4px 4px 0 {{ shadowSm }}">В календарь</button><span style="{{ cap }}">Rest</span></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-start;gap:10px"><button style="font:inherit;font-size:14px;font-weight:700;color:{{ ink }};background:{{ tint }};border:2px solid {{ accent }};padding:12px 20px;transform:translate(2px,2px);box-shadow:2px 2px 0 {{ shadowSm }}">В календарь</button><span style="{{ cap }}">Hover</span></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-start;gap:10px"><button style="font:inherit;font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:12px 20px;box-shadow:4px 4px 0 {{ shadowSm }},0 0 0 3px {{ focusRing }}">В календарь</button><span style="{{ cap }}">Focus</span></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-start;gap:10px"><button style="font:inherit;font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:12px 20px;transform:translate(4px,4px);box-shadow:0 0 0 {{ shadowSm }}">В календарь</button><span style="{{ cap }}">Pressed</span></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-start;gap:10px"><button disabled style="font:inherit;font-size:14px;font-weight:700;color:{{ inkDisabled }};background:{{ surface }};border:2px solid {{ hairline }};padding:12px 20px;box-shadow:none;cursor:not-allowed">В календарь</button><span style="{{ cap }}">Disabled</span></div>
+          </div>
+        </div>
+
+        <!-- Chip -->
+        <div style="border:2px solid {{ border }};background:{{ surface }};padding:24px">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:20px">Чип фильтра</div>
+          <div style="display:flex;flex-wrap:wrap;gap:28px">
+            <div style="display:flex;flex-direction:column;align-items:flex-start;gap:10px"><span style="font-size:13px;font-weight:700;color:{{ tintFg }};background:transparent;padding:6px 13px;border:2px solid {{ chipBorder }}">Кардиология</span><span style="{{ cap }}">Rest</span></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-start;gap:10px"><span style="font-size:13px;font-weight:700;color:{{ tintFg }};background:{{ tint }};padding:6px 13px;border:2px solid {{ tintFg }}">Кардиология</span><span style="{{ cap }}">Hover</span></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-start;gap:10px"><span style="font-size:13px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:6px 13px;border:2px solid {{ btnBg }}">Кардиология</span><span style="{{ cap }}">Selected</span></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-start;gap:10px"><span style="font-size:13px;font-weight:700;color:{{ inkDisabled }};background:transparent;padding:6px 13px;border:2px solid {{ hairline }};cursor:not-allowed">Кардиология</span><span style="{{ cap }}">Disabled</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ФОРМЫ И ВАЛИДАЦИЯ -->
+    <section>
+      <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:28px">
+        <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">07 · Формы и валидация</span>
+        <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+      </div>
+
+      <!-- Поля: состояния -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:22px">
+        <!-- Default -->
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;color:{{ ink }};margin-bottom:7px">Email</label>
+          <div style="font-size:14px;padding:12px 14px;border:2px solid {{ hairline }};background:{{ surface }};color:{{ inkFaint }}">doctor@clinic.ru</div>
+          <div style="{{ cap }};margin-top:8px">Default</div>
+        </div>
+        <!-- Focus -->
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;color:{{ ink }};margin-bottom:7px">Email</label>
+          <div style="font-size:14px;padding:12px 14px;border:2px solid #6BB1F7;background:{{ surface }};color:{{ ink }};box-shadow:0 0 0 3px {{ focusRing }}">doctor@clinic<span style="border-left:2px solid {{ ink }};margin-left:1px">&nbsp;</span></div>
+          <div style="{{ cap }};margin-top:8px">Focus</div>
+        </div>
+        <!-- Filled -->
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;color:{{ ink }};margin-bottom:7px">Email</label>
+          <div style="font-size:14px;padding:12px 14px;border:2px solid {{ border }};background:{{ surface }};color:{{ ink }}">anna@nmic.ru</div>
+          <div style="{{ cap }};margin-top:8px">Filled</div>
+        </div>
+        <!-- Error -->
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;color:{{ ink }};margin-bottom:7px">Email <span style="color:{{ danger }}">*</span></label>
+          <div style="font-size:14px;padding:12px 14px;border:2px solid {{ danger }};background:{{ dangerTint }};color:{{ ink }}">anna@clinic</div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:{{ danger }};margin-top:8px"><span>⚠</span>Неверный формат e-mail</div>
+        </div>
+        <!-- Success -->
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;color:{{ ink }};margin-bottom:7px">Email</label>
+          <div style="font-size:14px;padding:12px 14px;border:2px solid {{ success }};background:{{ successTint }};color:{{ ink }}">anna@nmic.ru</div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:{{ success }};margin-top:8px"><span>✓</span>Адрес подтверждён</div>
+        </div>
+        <!-- Disabled -->
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;color:{{ inkDisabled }};margin-bottom:7px">Email</label>
+          <div style="font-size:14px;padding:12px 14px;border:2px solid {{ hairline }};background:{{ disabledBg }};color:{{ inkDisabled }};cursor:not-allowed">doctor@clinic.ru</div>
+          <div style="{{ cap }};margin-top:8px">Disabled</div>
+        </div>
+      </div>
+
+      <!-- Сводка ошибок -->
+      <div style="margin-top:26px;border:2px solid {{ danger }};background:{{ dangerTint }};padding:16px 18px;display:flex;gap:12px;align-items:flex-start">
+        <span style="font-size:16px;line-height:1.2;color:{{ danger }};flex:none">⚠</span>
+        <div><div style="font-size:14px;font-weight:800;color:{{ ink }};margin-bottom:4px">Не удалось отправить форму</div><div style="font-size:13px;line-height:1.5;color:{{ inkMuted }}">Проверьте e-mail и выберите специальность — 2 поля заполнены с ошибкой.</div></div>
+      </div>
+
+      <!-- Чекбокс / радио / тумблер -->
+      <div style="margin-top:28px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:22px">
+        <div style="border:2px solid {{ border }};background:{{ surface }};padding:22px">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:18px">Чекбокс</div>
+          <div style="display:flex;gap:22px">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:9px"><span style="width:22px;height:22px;border:2px solid {{ border }};background:{{ surface }};display:block"></span><span style="{{ cap }}">Off</span></div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:9px"><span style="width:22px;height:22px;border:2px solid {{ btnBg }};background:{{ btnBg }};color:{{ btnFg }};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800">✓</span><span style="{{ cap }}">On</span></div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:9px"><span style="width:22px;height:22px;border:2px solid {{ hairline }};background:{{ disabledBg }};display:block"></span><span style="{{ cap }}">Disabled</span></div>
+          </div>
+        </div>
+        <div style="border:2px solid {{ border }};background:{{ surface }};padding:22px">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:18px">Радио</div>
+          <div style="display:flex;gap:22px">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:9px"><span style="width:22px;height:22px;border:2px solid {{ border }};background:{{ surface }};border-radius:50%;display:block"></span><span style="{{ cap }}">Off</span></div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:9px"><span style="width:22px;height:22px;border:2px solid {{ btnBg }};background:{{ surface }};border-radius:50%;display:flex;align-items:center;justify-content:center"><span style="width:10px;height:10px;border-radius:50%;background:{{ btnBg }}"></span></span><span style="{{ cap }}">On</span></div>
+          </div>
+        </div>
+        <div style="border:2px solid {{ border }};background:{{ surface }};padding:22px">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:18px">Тумблер</div>
+          <div style="display:flex;gap:22px">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:9px"><span style="width:46px;height:26px;background:{{ hairline }};border:2px solid {{ border }};display:flex;align-items:center;padding:0 2px;box-sizing:border-box"><span style="width:16px;height:16px;background:{{ surface }};border:2px solid {{ border }};box-sizing:border-box"></span></span><span style="{{ cap }}">Off</span></div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:9px"><span style="width:46px;height:26px;background:{{ btnBg }};border:2px solid {{ btnBg }};display:flex;align-items:center;justify-content:flex-end;padding:0 2px;box-sizing:border-box"><span style="width:16px;height:16px;background:{{ btnFg }};box-sizing:border-box"></span></span><span style="{{ cap }}">On</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ОБРАТНАЯ СВЯЗЬ -->
+    <section>
+      <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:28px">
+        <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">08 · Обратная связь</span>
+        <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="border:2px solid {{ accent }};background:{{ tint }};padding:14px 16px;display:flex;gap:12px;align-items:flex-start"><span style="font-size:15px;color:{{ accent }};flex:none">ⓘ</span><div style="font-size:13.5px;line-height:1.5;color:{{ ink }}"><b>Инфо.</b> Эфир начнётся через 15 минут — мы пришлём напоминание.</div></div>
+        <div style="border:2px solid {{ success }};background:{{ successTint }};padding:14px 16px;display:flex;gap:12px;align-items:flex-start"><span style="font-size:15px;color:{{ success }};flex:none">✓</span><div style="font-size:13.5px;line-height:1.5;color:{{ ink }}"><b>Успех.</b> Вы записаны на эфир — добавили в календарь.</div></div>
+        <div style="border:2px solid {{ warn }};background:{{ warnTint }};padding:14px 16px;display:flex;gap:12px;align-items:flex-start"><span style="font-size:15px;color:{{ warn }};flex:none">⚠</span><div style="font-size:13.5px;line-height:1.5;color:{{ ink }}"><b>Внимание.</b> Запись эфира будет доступна только 30 дней.</div></div>
+        <div style="border:2px solid {{ danger }};background:{{ dangerTint }};padding:14px 16px;display:flex;gap:12px;align-items:flex-start"><span style="font-size:15px;color:{{ danger }};flex:none">✕</span><div style="font-size:13.5px;line-height:1.5;color:{{ ink }}"><b>Ошибка.</b> Не удалось подключиться к эфиру — обновите страницу.</div></div>
+      </div>
+
+      <!-- Скелетон -->
+      <div style="margin-top:26px;border:2px solid {{ border }};background:{{ surface }};padding:22px">
+        <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:18px">Скелетон загрузки</div>
+        <div style="display:flex;gap:16px;align-items:center">
+          <div style="width:56px;height:56px;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite;flex:none"></div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:10px">
+            <div style="height:12px;width:60%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+            <div style="height:12px;width:85%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+            <div style="height:12px;width:40%;background:{{ hairline }};animation:livePulse 1.4s ease-in-out infinite"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- РАСКЛАДКА И РИТМ -->
+    <section>
+      <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:28px">
+        <span style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">09 · Раскладка и ритм</span>
+        <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:{{ inkMuted }};margin-bottom:24px">Пространство задаётся <b style="color:{{ ink }}">семантическими ролями</b> поверх шкалы (§03), а не на глаз. Три роли: <b style="color:{{ ink }}">inset</b> (padding внутри), <b style="color:{{ ink }}">stack</b> (между соседями), <b style="color:{{ ink }}">section</b> (ритм блоков).</div>
+
+      <!-- Контейнер и брейкпоинты -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;margin-bottom:26px">
+        <div style="border:2px solid {{ border }};background:{{ surface }};padding:22px">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:14px">Контейнер</div>
+          <div style="font-size:13px;line-height:1.9;color:{{ ink }};font-variant-numeric:tabular-nums">max-width <b>1104</b> — контент<br>max-width <b>1240</b> — календарь<br>gutters <b>clamp(16 → 48)</b><br>центрирование <b>margin:0 auto</b></div>
+        </div>
+        <div style="border:2px solid {{ border }};background:{{ surface }};padding:22px">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:14px">Брейкпоинты</div>
+          <div style="font-size:13px;line-height:1.9;color:{{ ink }};font-variant-numeric:tabular-nums">моб. <b>≤ 900</b> — edge-to-edge, 16px гаттер<br>десктоп <b>≥ 901</b> — контейнер, тени<br>gutter моб. фикс. <b>16</b> (для bleed)</div>
+        </div>
+        <div style="border:2px solid {{ border }};background:{{ surface }};padding:22px">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:14px">Hit-target</div>
+          <div style="font-size:13px;line-height:1.9;color:{{ ink }};font-variant-numeric:tabular-nums">мин. <b>44 × 44</b> для касания<br>кольцо фокуса <b>3px</b><br>контраст текста <b>AA</b></div>
+        </div>
+      </div>
+
+      <!-- Правила пространства -->
+      <div style="border:2px solid {{ border }};background:{{ surface }}">
+        <div style="display:grid;grid-template-columns:130px 1fr 1fr;padding:12px 18px;border-bottom:2px solid {{ border }};background:{{ sectionGray }}">
+          <span style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ ink }}">Роль</span>
+          <span style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ ink }}">Значения</span>
+          <span style="font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ ink }}">Где</span>
+        </div>
+        <sc-for list="{{ spaceRules }}" as="r" hint-placeholder-count="6">
+          <div style="display:grid;grid-template-columns:130px 1fr 1fr;padding:13px 18px;border-bottom:1px solid {{ hairline }};align-items:baseline">
+            <span style="font-size:13px;font-weight:800;color:{{ accent }}">{{ r.role }}</span>
+            <span style="font-size:13px;font-weight:700;color:{{ ink }};font-variant-numeric:tabular-nums">{{ r.val }}</span>
+            <span style="font-size:12.5px;font-weight:600;color:{{ inkMuted }}">{{ r.use }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+  </main>
+
+  <footer style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);max-width:1080px;margin:0 auto;box-sizing:content-box;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+    {{ footLogoEl }}
+    <div style="font-size:12.5px;font-weight:600;color:{{ inkFaint }}">Извлечено из финальных экранов · 2026</div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })() };
+
+  renderVals() {
+    const d = this.state.dark;
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const inkMuted = d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)';
+    const inkFaint = d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const page = d ? 'oklch(.16 .02 250)' : '#fff';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const hairline = d ? 'rgba(255,255,255,.16)' : 'oklch(.922 .006 250)';
+    const sectionGray = d ? 'oklch(.185 .02 250)' : 'oklch(.955 .004 250)';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const tint = d ? '#0D3A77' : '#D3E8FD';
+    const tintFg = d ? '#AED4FB' : '#114D9E';
+    const chipBorder = d ? 'rgba(107,177,247,.45)' : '#AED4FB';
+    const shadow = d ? '#6BB1F7' : '#114D9E';
+    const shadowSm = d ? '#1F69C8' : '#AED4FB';
+
+    // ---- Цветовые токены ----
+    const mk = (name, light, dark) => {
+      const cur = d ? (dark || light) : light;
+      return { name, vals: 'L ' + light + '  ·  D ' + (dark || light),
+        box: 'width:100%;height:52px;border:2px solid ' + border + ';background:' + cur };
+    };
+    const colorGroups = [
+      { title: 'Бренд', items: [
+        mk('blue/900', '#0D3A77'), mk('blue/800 · deep', '#114D9E'), mk('blue/500 · primary', '#2D84F2'),
+        mk('blue/300', '#6BB1F7'), mk('blue/200', '#AED4FB'), mk('blue/100 · tint', '#D3E8FD') ] },
+      { title: 'Текст', items: [
+        mk('ink', 'oklch(.21 .02 250)', '#ffffff'), mk('ink/muted', 'oklch(.45 .014 250)', 'rgba(255,255,255,.62)'),
+        mk('ink/faint', 'oklch(.556 .012 250)', 'rgba(255,255,255,.5)'), mk('muted', 'oklch(.704 .01 250)', 'rgba(255,255,255,.4)') ] },
+      { title: 'Поверхности и линии', items: [
+        mk('page', '#ffffff', 'oklch(.16 .02 250)'), mk('surface', '#ffffff', 'oklch(.21 .02 250)'),
+        mk('section', 'oklch(.955 .004 250)', 'oklch(.185 .02 250)'), mk('border', 'oklch(.21 .02 250)', '#ffffff'),
+        mk('hairline', 'oklch(.922 .006 250)', 'rgba(255,255,255,.16)') ] },
+      { title: 'Семантика', items: [
+        mk('live / danger', '#C81E1E'), mk('success', '#009959', '#4ADE80'), mk('header-bg', '#2D84F2', '#114D9E') ] },
+      { title: 'Кнопки и заливки', items: [
+        mk('btn-bg', '#114D9E', '#6BB1F7'), mk('btn-fg', '#ffffff', '#0D3A77'), mk('tint-fg', '#114D9E', '#AED4FB') ] },
+      { title: 'Тени · офсетные', items: [
+        mk('shadow', '#114D9E', '#6BB1F7'), mk('shadow-sm', '#AED4FB', '#1F69C8') ] }
+    ];
+
+    // ---- Типографика ----
+    const T = (px, w, name, meta, ls, upper) => ({
+      name, meta,
+      sample: upper ? 'Врачи учат врачей' : 'Врачи учат врачей',
+      sampleStyle: 'font-size:' + px + 'px;font-weight:' + w + ';color:' + ink + ';line-height:1.1;' +
+        (ls ? 'letter-spacing:' + ls + ';' : '') + (upper ? 'text-transform:uppercase;' : '') + 'min-width:0'
+    });
+    const typeRows = [
+      T(56, 800, 'Display', '800 · -.035em · clamp 34→56', '-.035em'),
+      T(40, 800, 'Numeric / time', '800 · -.04em · табличные цифры', '-.04em'),
+      T(28, 800, 'H1', '800 · -.025em', '-.025em'),
+      T(22, 800, 'H2', '800 · -.02em', '-.02em'),
+      T(20, 800, 'H3', '800 · -.02em', '-.02em'),
+      T(16, 700, 'Title', '700 · -.01em', '-.01em'),
+      T(15, 600, 'Body', '600', ''),
+      T(14, 600, 'Body-sm', '600', ''),
+      T(13, 700, 'Label / chip', '700', ''),
+      T(12, 700, 'Caption', '700', ''),
+      T(10, 800, 'Micro-label', '800 · +.12em · UPPERCASE', '.12em', true)
+    ];
+
+    // ---- Отступы ----
+    const spaceScale = [2, 4, 6, 8, 10, 12, 16, 20, 24, 28, 32, 40, 48, 64].map(px => ({
+      px, bar: 'height:14px;width:' + px + 'px;background:' + btnBg
+    }));
+
+    // ---- Тени ----
+    const shadowScale = [['offset/sm', '3px 3px 0'], ['offset/md', '4px 4px 0'], ['offset/lg', '6px 6px 0']].map(([name, v]) => ({
+      name, box: 'width:44px;height:44px;background:' + surface + ';border:2px solid ' + border + ';box-shadow:' + v + ' ' + shadow
+    }));
+
+    const spaceRules = [
+      { role: 'inset', val: '16 · 20 · 24 · 30', use: 'Padding внутри карточек, панелей, кнопок' },
+      { role: 'stack', val: '0 моб · 28 десктоп', use: 'Между карточками в списке' },
+      { role: 'section', val: '44 · 48', use: 'Ритм между смысловыми блоками' },
+      { role: 'controls', val: '8 · 10 · 12', use: 'Между чипами, кнопками, полями' },
+      { role: 'inline', val: '6 · 8', use: 'Иконка ↔ текст, лейбл ↔ значение' },
+      { role: 'day-band', val: '0 (bleed)', use: 'Плашка дня примыкает к карточкам' }
+    ];
+    const bd = ['#2D84F2', '#009959', '#B5791A', '#C81E1E', '#6BB1F7', '#114D9E', '#0D3A77', '#2D84F2'];
+    const backlog = [
+      ['Экспорт токенов', 'JSON + CSS-переменные (Style Dictionary) для передачи в код'],
+      ['Motion', 'Длительности 150/250 мс и easing cubic-bezier(.4,0,.2,1)'],
+      ['Иконки', 'Единый набор:штрих 2px, сетка 24, острые формы'],
+      ['Elevation', 'Уровни офсет-теней как именованные токены'],
+      ['Плотность', 'Режимы compact / comfortable'],
+      ['Доступность', 'Контраст AA, focus-ring, hit-target ≥44 — гайд'],
+      ['Контент и тон', 'Правила микрокопирайта и голоса продукта'],
+      ['Версионирование', 'Changelog, deprecation, do / don’t']
+    ].map((x, i) => ({ title: x[0], note: x[1], dot: 'width:10px;height:10px;background:' + bd[i % bd.length] + ';flex:none' }));
+
+    return {
+      spaceRules, backlog,
+      toggleTheme: () => this.setState(s => { const dark = !s.dark; try { localStorage.setItem('ds-theme', dark ? 'dark' : 'light'); } catch (e) {} return { dark }; }),
+      themeIcon: d ? '☀' : '☾',
+      page, ink, inkMuted, inkFaint, surface, border, hairline, sectionGray, accent,
+      btnBg, btnFg, tint, tintFg, chipBorder, shadow, shadowSm,
+      headerBg: d ? '#114D9E' : '#2D84F2',
+      danger: '#C81E1E',
+      dangerTint: d ? '#3a1414' : '#fdecec',
+      success: d ? '#4ADE80' : '#009959',
+      successTint: d ? '#0e2a1c' : '#e6f6ee',
+      warn: d ? '#F5B740' : '#B5791A',
+      warnTint: d ? '#332612' : '#fdf4e3',
+      focusRing: 'rgba(107,177,247,.5)',
+      hoverBg: d ? '#8AC7FB' : '#0D3A77',
+      focusHex: 'rgba(107,177,247,.5)',
+      cap: 'font-size:11px;font-weight:700;color:' + inkFaint + ';text-transform:uppercase;letter-spacing:.06em',
+      disabledBg: d ? 'oklch(.26 .02 250)' : 'oklch(.968 .003 250)',
+      inkDisabled: d ? 'rgba(255,255,255,.34)' : 'oklch(.75 .01 250)',
+      footLogoEl: React.createElement('img', { src: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo-color.svg', alt: 'Doctor.School', style: { height: '22px', display: 'block' } }),
+      colorGroups, typeRows, spaceScale, shadowScale
+    };
+  }
+}
+</script>
+</body>
+</html>

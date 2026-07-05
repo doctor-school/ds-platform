@@ -22,8 +22,9 @@ afterEach(cleanup);
  *  - a resting field with neither helper nor error renders **no** message element
  *    at all (no reserved blank line — the slice-B over-spacing defect K-1);
  *  - the message shows the helper by default and SWAPS the error in place;
- *  - the error text is small (`text-xs`) and **not bold**, and the field's
- *    invalidity is carried by the input border, NOT a red label (K-3 "red mush");
+ *  - the error is the neo-brutalist tone (#512, source §07): small (`text-xs`),
+ *    **weight 700** danger with a leading `⚠` glyph — the field's invalidity is
+ *    carried by the input border + this message, NOT a red label (K-3 "red mush");
  *  - the FormLabel stays neutral even on error.
  */
 function Harness({
@@ -121,13 +122,14 @@ describe("FormError — single form-level error primitive (one error style sourc
     expect(screen.queryByTestId("ferr")).not.toBeInTheDocument();
   });
 
-  it("renders the submit/auth error in the SAME style as a field error (text-xs destructive, alert)", () => {
+  it("renders the submit/auth error in the SAME neo-brutalist style as a field error (text-xs weight-700 danger + ⚠, alert)", () => {
     render(<FormError data-testid="ferr">Не удалось войти.</FormError>);
     const err = screen.getByTestId("ferr");
     expect(err).toHaveTextContent("Не удалось войти.");
-    // Same shared style as FormMessage's error branch — the look lives in one place.
-    expect(err).toHaveClass("text-xs", "text-destructive");
-    expect(err).not.toHaveClass("font-medium");
+    // Same shared style as FormMessage's error branch — the look lives in one place
+    // (#512, source §07): weight-700 danger with the leading ⚠ glyph.
+    expect(err).toHaveClass("text-xs", "font-bold", "text-destructive");
+    expect(err.textContent ?? "").toContain("⚠");
     expect(err).toHaveAttribute("role", "alert");
   });
 });

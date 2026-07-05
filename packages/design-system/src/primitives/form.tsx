@@ -182,12 +182,16 @@ function ErrorGlyph() {
  * shadcn / Radix default, validated on blur (`mode: onTouched`) so it never fires
  * mid-typing.
  *
- * The text is **small (`text-xs`) and NOT bold** (the slice-B bold/`text-sm`
- * error read "heavy"); the field's invalidity is carried by the input border +
- * this message, not a red label (K-3). It hugs its control via the `FormItem`
- * `gap-2.5`, and the form's `space-y-4` keeps it clearly closer to its own field
- * than to the next one (proximity / Gestalt — the message must not read as
- * attached to the following field's label).
+ * The **error** renders as the neo-brutalist tone (#512, source §07 / the
+ * `FORM_ERROR_TONE` note above): small (`text-xs`), **weight 700** danger with a
+ * leading `⚠` glyph — the owner-authored visual-language canvas renders the field
+ * error at 700, so the re-skin follows it (superseding the prior slice-B "not
+ * bold" tone). The **helper** stays quiet and normal-weight so the two never read
+ * alike. The field's invalidity is carried by the input border + this message,
+ * not a red label (K-3). It hugs its control via the `FormItem` `gap-2.5`, and the
+ * form's `space-y-4` keeps it clearly closer to its own field than to the next one
+ * (proximity / Gestalt — the message must not read as attached to the following
+ * field's label).
  *
  * Composition:
  *  - pass `children` (the localized helper) for a field with helper text — muted

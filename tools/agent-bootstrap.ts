@@ -337,8 +337,9 @@ export function recommend(
   if (openCount > 0) {
     // Buckets empty (none labelled agent-ready / agent-working / awaiting-review)
     // but the board is NOT empty — the `ready` queue is a label-driven view, not
-    // ground truth (AGENTS.md §3.5). Direct the agent to triage, never "done".
-    return `${openCount} open issue(s) but none in ready/working/awaiting buckets — TRIAGE the open board by readiness (\`gh issue list --state open\`). The ready queue is label-driven, not ground truth; an empty bucket set is NOT an empty backlog.`;
+    // ground truth (AGENTS.md §3.5). Direct the agent to TRIAGE by resolving the
+    // dependency graph (`pnpm backlog:triage`, #497), never "done".
+    return `${openCount} open issue(s) but none in ready/working/awaiting buckets — run \`pnpm backlog:triage\` to TRIAGE the open board by readiness resolved from the native blocked_by graph (NOT labels). The ready queue is label-driven, not ground truth; an empty bucket set is NOT an empty backlog.`;
   }
   return `Clean slate. Open a new feature-spec via superpowers:brainstorming.`;
 }
@@ -594,6 +595,12 @@ async function main(): Promise<void> {
   // empty bucket set is NOT an empty backlog; this line is the un-maskable signal.
   out.push(
     `- Open issues: ${openCount ?? "(unknown)"} (\`gh issue list --state open\`)`,
+  );
+  // Readiness is COMPUTED from the dependency graph, never a label (#497,
+  // AGENTS.md §3.5). The bucket lines below are the label-driven view; the
+  // authoritative blocked-vs-takeable split comes from `pnpm backlog:triage`.
+  out.push(
+    "- Readiness (blocked vs takeable) resolved from the native blocked_by graph, NOT labels: `pnpm backlog:triage`",
   );
   if (working.length === 0 && awaiting.length === 0 && ready.length === 0) {
     out.push(

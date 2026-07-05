@@ -67,6 +67,25 @@ Forms follow the ADR-0004 §9 pattern: **RHF + `@hookform/resolvers/zod` + shadc
 auth schemas land in F1/F2). The resolver + schema live in the consuming app, not
 here.
 
+## Language primitives (#513, neo-brutalist #511)
+
+The component classes the neo-brutalist language introduces — hard 2px borders, 0
+radius, token-only, catalogued in the showcase in both themes. Radix-backed
+controls (Checkbox / Radio / Switch / Avatar / FilterChip) inherit their ARIA +
+keyboard contract from Radix; the DS layer is the token skin only.
+
+| Export                                      | Purpose                                                                                                                     |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `FilterChip` (`./filter-chip`)              | Toggleable facet chip (Radix Toggle → `aria-pressed`) — rest / hover / selected (btn-bg) / disabled                         |
+| `Badge` (`./badge`)                         | `live` (destructive, UPPERCASE, pulsing dot) / `label` / `speaker` (tint)                                                   |
+| `Avatar` (`./avatar`)                       | Initials chip (Radix) — `solid` (btn-bg) / `tint`; `Avatar`/`AvatarImage`/`AvatarFallback`                                  |
+| `Checkbox` (`./checkbox`)                   | Binary opt-in (Radix `role=checkbox`) — off / on (btn-bg + ✓) / disabled; register-consent dep                              |
+| `RadioGroup` / `RadioGroupItem` (`./radio`) | Single-choice group (Radix) — off / on                                                                                      |
+| `Switch` (`./switch`)                       | Instant on/off (Radix `role=switch`) — off / on                                                                             |
+| `Alert` (`./alert`)                         | Callout — info / success / warn / danger (2px border + tint surface + status icon); `Alert`/`AlertTitle`/`AlertDescription` |
+| `Skeleton` (`./skeleton`)                   | `livePulse` shimmer placeholder block                                                                                       |
+| `DayBand` (`./day-band`)                    | Full-bleed section label plate (schedule day header)                                                                        |
+
 ## Interaction-state contract (ADR-0013 §7)
 
 Interaction quality (cursor, hover, active, focus-visible, disabled, loading,

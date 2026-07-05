@@ -38,6 +38,15 @@ import {
   PasswordField,
   PhoneField,
 } from "@ds/design-system/fields";
+import { FilterChip } from "@ds/design-system/filter-chip";
+import { Badge } from "@ds/design-system/badge";
+import { Avatar, AvatarFallback } from "@ds/design-system/avatar";
+import { Checkbox } from "@ds/design-system/checkbox";
+import { RadioGroup, RadioGroupItem } from "@ds/design-system/radio";
+import { Switch } from "@ds/design-system/switch";
+import { Alert, AlertTitle, AlertDescription } from "@ds/design-system/alert";
+import { Skeleton } from "@ds/design-system/skeleton";
+import { DayBand } from "@ds/design-system/day-band";
 
 /**
  * Primitives section (design-system-showcase spec §3.2). Every exported
@@ -726,6 +735,248 @@ function FormPrimitivesSection() {
   );
 }
 
+/**
+ * Renders the SAME specimen block twice — once in light, once inside a `.dark`
+ * container that flips to the dark token set — so every language primitive is
+ * catalogued in both themes on one page (issue #513 acceptance: "render in both
+ * themes"). Mirrors the tokens-view light|dark split (`_components`), reusing the
+ * `.dark` cascade the product apps use.
+ */
+function ThemePair({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {(["light", "dark"] as const).map((theme) => (
+        <div
+          key={theme}
+          className={
+            theme === "dark"
+              ? "dark flex flex-col gap-4 border border-hairline bg-background p-4 text-foreground"
+              : "flex flex-col gap-4 border border-hairline bg-background p-4 text-foreground"
+          }
+        >
+          <span className="font-mono text-xs text-muted-foreground">{theme}</span>
+          {children}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** A labelled specimen cell (state / variant name above the rendered unit). */
+function Cell({ name, children }: { name: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col items-start gap-1.5">
+      <span className="font-mono text-xs text-muted-foreground">{name}</span>
+      {children}
+    </div>
+  );
+}
+
+function FilterChipSection() {
+  return (
+    <PrimitiveSection
+      title="Filter chip"
+      exportsLine="FilterChip — rest / hover / selected / disabled (Radix Toggle → aria-pressed)"
+    >
+      <ThemePair>
+        <div className="flex flex-wrap items-start gap-4">
+          <Cell name="rest">
+            <FilterChip>Cardiology</FilterChip>
+          </Cell>
+          <Cell name="hover (forced #351)">
+            <div data-showcase-force="hover">
+              <FilterChip>Cardiology</FilterChip>
+            </div>
+          </Cell>
+          <Cell name="selected">
+            <FilterChip pressed>Cardiology</FilterChip>
+          </Cell>
+          <Cell name="disabled">
+            <FilterChip disabled>Cardiology</FilterChip>
+          </Cell>
+        </div>
+      </ThemePair>
+    </PrimitiveSection>
+  );
+}
+
+function BadgeSection() {
+  return (
+    <PrimitiveSection
+      title="Badge"
+      exportsLine="Badge · badgeVariants — live (pulsing dot, UPPERCASE) / label / speaker (tint)"
+    >
+      <ThemePair>
+        <div className="flex flex-wrap items-center gap-4">
+          <Cell name='variant="live"'>
+            <Badge variant="live">Live</Badge>
+          </Cell>
+          <Cell name='variant="label"'>
+            <Badge variant="label">Immunology</Badge>
+          </Cell>
+          <Cell name='variant="speaker"'>
+            <Badge variant="speaker">Speaker</Badge>
+          </Cell>
+        </div>
+      </ThemePair>
+    </PrimitiveSection>
+  );
+}
+
+function AvatarSection() {
+  return (
+    <PrimitiveSection
+      title="Avatar"
+      exportsLine="Avatar · AvatarImage · AvatarFallback · avatarVariants — solid (btn-bg) / tint, initials"
+    >
+      <ThemePair>
+        <div className="flex flex-wrap items-center gap-4">
+          <Cell name='variant="solid"'>
+            <Avatar role="img" aria-label="Dr. Anna Ivanova">
+              <AvatarFallback>AI</AvatarFallback>
+            </Avatar>
+          </Cell>
+          <Cell name='variant="tint"'>
+            <Avatar role="img" aria-label="Dr. Petr Orlov" variant="tint">
+              <AvatarFallback>PO</AvatarFallback>
+            </Avatar>
+          </Cell>
+        </div>
+      </ThemePair>
+    </PrimitiveSection>
+  );
+}
+
+function CheckboxSection() {
+  return (
+    <PrimitiveSection
+      title="Checkbox"
+      exportsLine="Checkbox — off / on (btn-bg + ✓) / disabled (Radix → role=checkbox)"
+    >
+      <ThemePair>
+        <div className="flex flex-wrap items-start gap-6">
+          <Cell name="off">
+            <Checkbox aria-label="Consent (off)" />
+          </Cell>
+          <Cell name="on">
+            <Checkbox aria-label="Consent (on)" defaultChecked />
+          </Cell>
+          <Cell name="disabled">
+            <Checkbox aria-label="Consent (disabled)" disabled />
+          </Cell>
+          <Cell name="disabled + on">
+            <Checkbox aria-label="Consent (disabled, on)" disabled defaultChecked />
+          </Cell>
+        </div>
+      </ThemePair>
+    </PrimitiveSection>
+  );
+}
+
+function RadioSection() {
+  return (
+    <PrimitiveSection
+      title="Radio"
+      exportsLine="RadioGroup · RadioGroupItem — off / on (Radix → radiogroup + roving focus)"
+    >
+      <ThemePair>
+        <RadioGroup aria-label="Session track" defaultValue="a" className="flex gap-6">
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <RadioGroupItem value="a" /> Clinical
+          </label>
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <RadioGroupItem value="b" /> Research
+          </label>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <RadioGroupItem value="c" disabled /> Archived
+          </label>
+        </RadioGroup>
+      </ThemePair>
+    </PrimitiveSection>
+  );
+}
+
+function SwitchSection() {
+  return (
+    <PrimitiveSection
+      title="Switch"
+      exportsLine="Switch — off / on (Radix → role=switch)"
+    >
+      <ThemePair>
+        <div className="flex flex-wrap items-start gap-6">
+          <Cell name="off">
+            <Switch aria-label="Reminders (off)" />
+          </Cell>
+          <Cell name="on">
+            <Switch aria-label="Reminders (on)" defaultChecked />
+          </Cell>
+          <Cell name="disabled">
+            <Switch aria-label="Reminders (disabled)" disabled />
+          </Cell>
+        </div>
+      </ThemePair>
+    </PrimitiveSection>
+  );
+}
+
+const ALERT_VARIANTS = ["info", "success", "warn", "danger"] as const;
+
+function AlertSection() {
+  return (
+    <PrimitiveSection
+      title="Alert / callout"
+      exportsLine="Alert · AlertTitle · AlertDescription · alertVariants — info / success / warn / danger"
+    >
+      <ThemePair>
+        <div className="flex flex-col gap-3">
+          {ALERT_VARIANTS.map((variant) => (
+            <Alert key={variant} variant={variant}>
+              <AlertTitle>
+                {variant[0].toUpperCase() + variant.slice(1)}
+              </AlertTitle>
+              <AlertDescription>
+                The webinar recording is now available in your library.
+              </AlertDescription>
+            </Alert>
+          ))}
+        </div>
+      </ThemePair>
+    </PrimitiveSection>
+  );
+}
+
+function SkeletonSection() {
+  return (
+    <PrimitiveSection
+      title="Skeleton"
+      exportsLine="Skeleton — livePulse shimmer placeholder blocks"
+    >
+      <ThemePair>
+        <div className="flex items-center gap-4">
+          <Skeleton className="size-10" />
+          <div className="flex flex-1 flex-col gap-2">
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-4 w-1/3" />
+          </div>
+        </div>
+      </ThemePair>
+    </PrimitiveSection>
+  );
+}
+
+function DayBandSection() {
+  return (
+    <PrimitiveSection
+      title="Day band"
+      exportsLine="DayBand — full-bleed section label plate"
+    >
+      <ThemePair>
+        <DayBand>Day 1 · 17 July</DayBand>
+      </ThemePair>
+    </PrimitiveSection>
+  );
+}
+
 export function PrimitivesView() {
   return (
     <div className="flex flex-col gap-2">
@@ -738,6 +989,15 @@ export function PrimitivesView() {
       <OtpSection />
       <FormPrimitivesSection />
       <FieldsSection />
+      <FilterChipSection />
+      <BadgeSection />
+      <AvatarSection />
+      <CheckboxSection />
+      <RadioSection />
+      <SwitchSection />
+      <AlertSection />
+      <SkeletonSection />
+      <DayBandSection />
     </div>
   );
 }

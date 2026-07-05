@@ -18,20 +18,28 @@
     },
 
     "green": {
-      "$description": "Brand status green (success). 500 is brand-pinned; darker stop reserved via accent.green.",
-      "500": { "$value": "#009959" }
+      "$description": "Functional success green. 500 (#009959) is the brand-pinned light fill; 400 (#4ADE80) is the brighter dark-theme fill (dark ink 9.24:1).",
+      "500": { "$value": "#009959" },
+      "400": { "$value": "#4ADE80" }
     },
 
     "orange": {
-      "$description": "Brand status orange/terracotta (warning). 500 is brand-pinned.",
+      "$description": "Brand terracotta/orange accent (brand-pinned). Reserved brand colour (also mirrored in accent.orange); carries NO semantic warning role — warnings use the functional `amber` family.",
       "500": { "$value": "#DF5726" }
     },
 
+    "amber": {
+      "$description": "INTRODUCED functional warning amber — the brand terracotta reads as an accent, not a caution signal, so warnings use a dedicated amber. 500 (#B5791A) carries dark ink at 5.14:1 (WCAG AA) on light; 400 (#F5B740) is the brighter dark-theme fill (dark ink 8.99:1).",
+      "500": { "$value": "#B5791A" },
+      "400": { "$value": "#F5B740" }
+    },
+
     "neutral": {
-      "$description": "System-derived blue-tinted gray ramp (cool hue ~250 around the brand primary), replacing the pure-gray #233 ramp. L values track Tailwind's gray scale; chroma is kept low so it reads as a cool neutral.",
+      "$description": "System-derived blue-tinted gray ramp (cool hue ~250 around the brand primary). L values track Tailwind's gray scale; chroma is kept low so it reads as a cool neutral. 900/.21, 600/.45, 500/.556, 400/.704 are the four text tiers (ink / muted / faint / muted-2). 150 and 925 are the subtle section surfaces (light / dark). alpha-* are white overlays for dark-theme dividers and quiet text.",
       "0": { "$value": "oklch(1 0 0)" },
       "50": { "$value": "oklch(0.985 0.002 250)" },
       "100": { "$value": "oklch(0.968 0.004 250)" },
+      "150": { "$value": "oklch(0.955 0.004 250)" },
       "200": { "$value": "oklch(0.922 0.006 250)" },
       "300": { "$value": "oklch(0.87 0.008 250)" },
       "400": { "$value": "oklch(0.704 0.01 250)" },
@@ -40,13 +48,17 @@
       "700": { "$value": "oklch(0.372 0.016 250)" },
       "800": { "$value": "oklch(0.27 0.018 250)" },
       "900": { "$value": "oklch(0.21 0.02 250)" },
+      "925": { "$value": "oklch(0.185 0.02 250)" },
       "950": { "$value": "oklch(0.16 0.02 250)" },
       "alpha-10": { "$value": "oklch(1 0 0 / 10%)" },
-      "alpha-15": { "$value": "oklch(1 0 0 / 15%)" }
+      "alpha-15": { "$value": "oklch(1 0 0 / 15%)" },
+      "alpha-16": { "$value": "oklch(1 0 0 / 16%)" },
+      "alpha-50": { "$value": "oklch(1 0 0 / 50%)" },
+      "alpha-62": { "$value": "oklch(1 0 0 / 62%)" }
     },
 
     "red": {
-      "$description": "INTRODUCED functional error red — the Doctor School brand defines none. #C81E1E carries white text at 5.74:1 (WCAG AA pass for normal text) and reads against white. System-tunable.",
+      "$description": "INTRODUCED functional danger/live red — the Doctor School brand defines none. #C81E1E carries white text at 5.74:1 (WCAG AA pass for normal text) and reads against white. System-tunable.",
       "500": { "$value": "#C81E1E" },
       "400": { "$value": "#E15555" }
     },
@@ -142,21 +154,26 @@
     },
     "size": {
       "$type": "dimension",
+      "$description": "Neo-brutalist kegel (px→rem at 16px base): 2xs 10 · xs 12 · caption 13 · sm 14 · body-compact 15 · base 16 · lg 20 (title) · xl 22 (h3) · 2xl 28 (h2) · 3xl 40 (h1) · 4xl 56 (display).",
+      "2xs": { "$value": "0.625rem" },
       "xs": { "$value": "0.75rem" },
+      "caption": { "$value": "0.8125rem" },
       "sm": { "$value": "0.875rem" },
+      "body-compact": { "$value": "0.9375rem" },
       "base": { "$value": "1rem" },
-      "lg": { "$value": "1.125rem" },
-      "xl": { "$value": "1.25rem" },
-      "2xl": { "$value": "1.5rem" },
-      "3xl": { "$value": "1.875rem" },
-      "4xl": { "$value": "2.25rem" }
+      "lg": { "$value": "1.25rem" },
+      "xl": { "$value": "1.375rem" },
+      "2xl": { "$value": "1.75rem" },
+      "3xl": { "$value": "2.5rem" },
+      "4xl": { "$value": "3.5rem" }
     },
     "weight": {
       "$type": "fontWeight",
       "normal": { "$value": 400 },
       "medium": { "$value": 500 },
       "semibold": { "$value": 600 },
-      "bold": { "$value": 700 }
+      "bold": { "$value": 700 },
+      "extrabold": { "$value": 800 }
     },
     "line-height": {
       "$type": "number",
@@ -168,9 +185,15 @@
     },
     "letter-spacing": {
       "$type": "dimension",
+      "$description": "Neo-brutalist tracking by role: numeric −.04 (tabular figures) · display −.035 · tight −.025 (h1) · heading −.02 (h2/h3) · title −.01 · normal 0 · wide .025 · micro .12 (uppercase micro-label).",
+      "numeric": { "$value": "-0.04em" },
+      "display": { "$value": "-0.035em" },
       "tight": { "$value": "-0.025em" },
+      "heading": { "$value": "-0.02em" },
+      "title": { "$value": "-0.01em" },
       "normal": { "$value": "0em" },
-      "wide": { "$value": "0.025em" }
+      "wide": { "$value": "0.025em" },
+      "micro": { "$value": "0.12em" }
     }
   },
 
@@ -187,6 +210,7 @@
     "4": { "$value": "1rem" },
     "5": { "$value": "1.25rem" },
     "6": { "$value": "1.5rem" },
+    "7": { "$value": "1.75rem" },
     "8": { "$value": "2rem" },
     "10": { "$value": "2.5rem" },
     "12": { "$value": "3rem" },
@@ -195,7 +219,8 @@
 
   "radius": {
     "$type": "dimension",
-    "base": { "$value": "0.625rem" }
+    "$description": "Neo-brutalism has NO rounded corners — the structural radius is 0. Every semantic/component radius collapses onto this.",
+    "base": { "$value": "0rem" }
   },
 
   "border-width": {
@@ -208,16 +233,12 @@
 
   "shadow": {
     "$type": "shadow",
-    "sm": { "$value": "0 1px 2px 0 oklch(0 0 0 / 0.05)" },
-    "base": {
-      "$value": "0 1px 3px 0 oklch(0 0 0 / 0.1), 0 1px 2px -1px oklch(0 0 0 / 0.1)"
-    },
-    "md": {
-      "$value": "0 4px 6px -1px oklch(0 0 0 / 0.1), 0 2px 4px -2px oklch(0 0 0 / 0.1)"
-    },
-    "lg": {
-      "$value": "0 10px 15px -3px oklch(0 0 0 / 0.1), 0 4px 6px -4px oklch(0 0 0 / 0.1)"
-    }
+    "$description": "Neo-brutalist signature: HARD offset shadows (blur 0), never soft blur. Offsets sm 3px / md 4px / lg 6px, base a 2px micro-cast. The cast colour is theme-aware via the `elevation` / `elevation-soft` semantic roles (blue.700→blue.300 / blue.200→blue.600), referenced as CSS vars so the primitive flips per theme without being duplicated. `focus` is the keyboard-focus ring (blue.300 @ 50%).",
+    "sm": { "$value": "3px 3px 0 var(--color-elevation-soft)" },
+    "base": { "$value": "2px 2px 0 var(--color-elevation-soft)" },
+    "md": { "$value": "4px 4px 0 var(--color-elevation)" },
+    "lg": { "$value": "6px 6px 0 var(--color-elevation)" },
+    "focus": { "$value": "0 0 0 3px rgba(107, 177, 247, 0.5)" }
   },
 
   "duration": {

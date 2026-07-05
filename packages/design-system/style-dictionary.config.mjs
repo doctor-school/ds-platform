@@ -230,12 +230,16 @@ async function build() {
         : `var(--${cssName(l.path)})`;
     themeEntries.push({ name: tv, ref });
   }
-  // Radius scale: derive Tailwind's rounded-sm|md|lg|xl from semantic radius.control.
+  // Radius scale: the neo-brutalist visual language is a FLAT, radius-0 system, so the
+  // Tailwind rounded-sm|md|lg|xl ladder collapses onto `--radius-control` — every rung
+  // resolves to the one control radius (0), and an adopted shadcn block's `rounded-md` /
+  // `rounded-lg` / `rounded-xl` renders square, not with a leaked corner. A future rounded
+  // theme would reintroduce proportional per-rung deltas here.
   themeEntries.push(
-    { name: "--radius-sm", ref: "calc(var(--radius-control) - 4px)" },
-    { name: "--radius-md", ref: "calc(var(--radius-control) - 2px)" },
+    { name: "--radius-sm", ref: "var(--radius-control)" },
+    { name: "--radius-md", ref: "var(--radius-control)" },
     { name: "--radius-lg", ref: "var(--radius-control)" },
-    { name: "--radius-xl", ref: "calc(var(--radius-control) + 4px)" },
+    { name: "--radius-xl", ref: "var(--radius-control)" },
   );
   // The caret-blink animation utility lives with the tokens it animates.
   themeEntries.push({

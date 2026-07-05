@@ -22,6 +22,17 @@
 # manually. Same false-positive class as the nestjs-zod entry above.
 ^https://www\.npmjs\.com/package/@stoplight/spectral-owasp-ruleset($|/.*$)
 
+# Imported Claude Design source (design-source/): reference material, not a
+# runnable app. (1) The provenance links in its README point at the login-gated
+# Claude Design canvas, which unauthenticated lychee cannot reach. (2) The
+# imported design-system.dc.html references the canvas-side runtime + logo assets
+# (support.js, assets/ds-logo-*.svg) that we intentionally do NOT vendor (see the
+# folder README). Both are verified manually / re-pullable via DesignSync — same
+# false-positive class as the private Projects v2 boards above.
+^https://claude\.ai/design/.*$
+design-source/assets/
+design-source/support\.js
+
 # Lint-guard test fixtures deliberately carry placeholder/broken markdown links
 # (e.g. a MEMORY.md fixture mimicking the auto-memory index). They are test data,
 # not docs — exclude the whole fixture tree from the link check. See #293.

@@ -15,6 +15,7 @@
     "backlog:triage": "tsx tools/backlog-triage.ts",
     "board:status": "node tools/gh/set-board-status.mjs",
     "ci:wait": "node tools/gh/wait-ci-green.mjs",
+    "issue:create": "node tools/gh/create-issue.mjs",
     "lint:asset-format": "tsx tools/lint/asset-format-lint.ts",
     "lint:endpoint-authz": "tsx --tsconfig apps/api/tsconfig.json tools/lint/endpoint-authz-lint.ts",
     "lint:events": "tsx tools/lint/events-lint.ts",

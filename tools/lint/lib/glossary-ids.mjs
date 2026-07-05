@@ -1,31 +1,20 @@
 /**
- * tools/lint/lib/glossary-ids.mjs — SYNCHRONOUS, plain-ESM reader for the
- * glossary canonical-id set, for the `glossary-canonical-ids` ESLint rule (#468).
+ * tools/lint/lib/glossary-ids.mjs — the id-SET projection of the shared glossary
+ * source reader, consumed by the `glossary-canonical-ids` ESLint rule (#468).
  *
- * ── Why a plain-ESM sync twin of lib/glossary.ts ──────────────────────────────
- * The two ADR-0006 §6 glossary GUARDS (glossary-mdx-lint, glossary-roundtrip-lint)
- * are `tsx`-run scripts and consume the async `readGlossaryIds` in `lib/glossary.ts`.
- * The `glossary-canonical-ids` ESLint rule is different on two axes: it rides the
- * plain-node `eslint .` path (NO tsx, NO build — so it cannot import a `.ts` module
- * nor the built `@ds/glossary/ids` dist), and an ESLint rule's `create()` is
- * synchronous (so it cannot `await`). Hence this file mirrors `readGlossaryIds`'s
- * APPROACH exactly — same source (`apps/docs/content/product/glossary/*.md`), same
- * `**Canonical id:**` body marker — but synchronously in plain ESM. The
- * two-line glob+regex duplication with `lib/glossary.ts` is a tracked follow-up —
- * reconcile the async + sync readers into one shared module.
- *
- * Keying on the BODY marker (not §6.1 frontmatter, which the repo never adopted)
- * matches `lib/glossary.ts` — see its header for the source-of-truth reality.
+ * Both glossary readers now delegate to ONE primitive (`glossary-source.mjs`,
+ * #500): the glob + ``**Canonical id:**`` parse live there, once. This file adds
+ * only (a) the projection to the id `Set` and (b) the FLOOR ASSERTION the ESLint
+ * rule depends on. See `glossary-source.mjs` for why the primitive is plain-ESM
+ * and synchronous (the plain-node `eslint .` path can do neither tsx nor async).
  */
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import fg from "fast-glob";
+import {
+  readGlossarySourceSync,
+  GLOSSARY_SRC_GLOB,
+} from "./glossary-source.mjs";
 
-/** The glossary source dir, repo-root-relative POSIX (matches lib/glossary.ts). */
-export const GLOSSARY_SRC_GLOB = "apps/docs/content/product/glossary/*.md";
-
-/** ``**Canonical id:** `snake_id` `` — authoritative id marker (matches lib/glossary.ts). */
-const CANONICAL_ID_RE = /\*\*Canonical id:\*\*\s*`([a-z][a-z0-9_]*)`/;
+/** Re-export so the ESLint rule / tests can reference the source glob. */
+export { GLOSSARY_SRC_GLOB };
 
 /**
  * Read the set of glossary canonical ids from the source `.md` files under
@@ -42,20 +31,12 @@ const CANONICAL_ID_RE = /\*\*Canonical id:\*\*\s*`([a-z][a-z0-9_]*)`/;
  * @throws {Error} if zero canonical ids are parsed.
  */
 export function readGlossaryIdsSync(repoRoot) {
-  const files = fg.sync(GLOSSARY_SRC_GLOB, {
-    cwd: repoRoot,
-    ignore: ["**/node_modules/**"],
-  });
-  const ids = new Set();
-  for (const rel of files.sort()) {
-    const raw = readFileSync(resolve(repoRoot, rel), "utf8");
-    const m = raw.match(CANONICAL_ID_RE);
-    if (m) ids.add(m[1]);
-  }
+  const { terms, skipped } = readGlossarySourceSync(repoRoot);
+  const ids = new Set(terms.map((t) => t.id));
   if (ids.size === 0) {
     throw new Error(
       `[glossary-ids] no glossary canonical ids parsed from ` +
-        `${GLOSSARY_SRC_GLOB} under ${repoRoot} (scanned ${files.length} file(s)). ` +
+        `${GLOSSARY_SRC_GLOB} under ${repoRoot} (scanned ${skipped.length} file(s)). ` +
         `The committed glossary source is missing or lost its \`**Canonical id:**\` ` +
         `markers — the glossary-canonical-ids rule would silently enforce nothing. ` +
         `Restore the glossary source or fix the marker format.`,

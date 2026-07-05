@@ -39,7 +39,7 @@ If the work has no Issue, create one **before touching code** (AGENTS.md §6 —
 - [ ] **Kind label** set — `feature` / `bug` / `chore` / `refactor` / `docs` / `tooling` (and `kind:ears-handler` / `kind:integration` for spec work). `author:*` goes in the **body**, not as a label.
 - [ ] **Milestone** assigned — the long-lived product-theme milestone (e.g. `Auth foundations v1`, `Agent workflow & methodology`), not a per-spec name. An Issue with no milestone is incomplete ("почему все эти задачи не в майлстоуне?").
 - [ ] **Native dependency links** wired — sub-issue under its parent **and** `blocked_by` / `blocks` edges via the REST API, **not** prose in the body. The board ordering procedure reads only the native graph.
-- [ ] **Board Status** set — `node tools/gh/set-board-status.mjs <N> "Todo"` (or `In Progress` once you start). A fresh Issue not on the board / with no Status is invisible to the "By milestone" view.
+- [ ] **On the board with a Status** — when you **create** the Issue mid-session, file it via `pnpm issue:create --title … --body-file … --label …` (thin `gh issue create` wrapper that adds it to the board + sets Status=Todo + confirms via GraphQL), because the "Item added → Todo" auto-add is unreliable in-session (memory `reference_gh_issue_board_autoadd_delay`). For an Issue already on the board, move it with `node tools/gh/set-board-status.mjs <N> "In Progress"` once you start. A fresh Issue not on the board / with no Status is invisible to the "By milestone" view.
 
 For a spec-driven Issue **set**, do not hand-roll this — invoke **`open-ears-issues`** (it does the label set, parent + per-EARS children, the `surface: user-facing` integration Issues, and the native-graph wiring in one recipe). The field detail lives in `.claude/rules/repo-conventions.md` → _Issue conventions_; do not restate it here.
 
@@ -105,4 +105,7 @@ Run all four, in order, as part of the **same** merge step — not a separate hu
 - [../merge-when-green/SKILL.md](../merge-when-green/SKILL.md) — the single merge command (step 6).
 - [../run-iteration-end-checklist/SKILL.md](../run-iteration-end-checklist/SKILL.md) · [../surface-decision-debt/SKILL.md](../surface-decision-debt/SKILL.md) — pre-merge discipline gates.
 
-Helper: `tools/gh/set-board-status.mjs` (alias `pnpm board:status <N> <status>`) — deterministic Projects v2 Status setter used in steps 1 and 7.
+Helpers:
+
+- `tools/gh/create-issue.mjs` (alias `pnpm issue:create --title "<t>" --body-file <f> [--label <l> …]`) — thin wrapper over `gh issue create` that **also** adds the new Issue to the Projects v2 board and sets Status=Todo, confirming via a GraphQL `node(id)` read. Use it for **any mid-session Issue creation**: the board's "Item added → Todo" auto-add is unreliable within a session (memory `reference_gh_issue_board_autoadd_delay`), so a bare `gh issue create` can silently miss the board.
+- `tools/gh/set-board-status.mjs` (alias `pnpm board:status <N> <status>`) — deterministic Projects v2 Status setter used in steps 1 and 7.

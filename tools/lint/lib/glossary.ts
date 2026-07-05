@@ -17,13 +17,14 @@
  * `title:`/`description:`/`lang:` frontmatter and state the canonical id in the
  * BODY as ``**Canonical id:** `snake_id` ``. So the shared reader keys on the body
  * marker (the authoritative, machine-checkable id) — NOT the §6.1 frontmatter,
- * which does not exist. The §6.1 mismatch is tracked decision-debt (#459, the
- * ADR-0006 §6 reconcile), not papered over here: the guards check the reality
- * the repo actually stores.
+ * which the repo never adopted. The ADR-0006 §6.1 format was reconciled to this
+ * body-marker reality in #459 (the ADR-0006 §6 reconcile): the body marker is the
+ * format of record, and the guards check the reality the repo actually stores.
  *
- * The generated artifact (`packages/glossary/(src/)?ids.ts` → `GLOSSARY_IDS`) and
- * the whole ADR-0006 §6.2 generator pipeline do NOT exist yet (tracked by #460) —
- * that is why the roundtrip guard is honestly empty until the generated side lands.
+ * The generated artifact (`packages/glossary/src/ids.ts` → `GLOSSARY_IDS`) and the
+ * ADR-0006 §6.2 generator pipeline (`scripts/generate.ts`, run via
+ * `pnpm generate:glossary`) landed with #460 — so the roundtrip guard diffs this
+ * reader's source ids against the committed generated ids for real.
  */
 import {
   readGlossarySourceSync,

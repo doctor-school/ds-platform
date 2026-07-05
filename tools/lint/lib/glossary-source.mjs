@@ -18,8 +18,9 @@
  * `title:`/`description:`/`lang:` frontmatter and state the canonical id in the
  * BODY as ``**Canonical id:** `snake_id` ``. So this reader keys on the body
  * marker (the authoritative, machine-checkable id) — NOT the §6.1 frontmatter,
- * which does not exist. The §6.1 mismatch is tracked decision-debt (#459), not
- * papered over here. Full context in `lib/glossary.ts`'s header.
+ * which the repo never adopted. The ADR-0006 §6.1 format was reconciled to this
+ * body-marker reality in #459 — the body marker is the format of record. Full
+ * context in `lib/glossary.ts`'s header.
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";

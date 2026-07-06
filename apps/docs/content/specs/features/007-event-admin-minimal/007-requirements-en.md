@@ -9,7 +9,7 @@ parent_issue: https://github.com/doctor-school/ds-platform/issues/471
 issues: [587, 588, 589, 590, 591, 592, 593, 594, 595]
 prior_decisions:
   - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace; §3/§4 canvas is source when one exists — here there is **no** admin canvas, a recorded Stage-A gap, so wave 1 uses stock Refine UI and carries no canvas-fidelity EARS)
-  - ADR-0001 — Identity / Auth / RBAC (§2 endpoint-authz matrix — the admin commands + admin reads are `access: authenticated`, `required_roles: platform_admin`, `auth_check: fast-path`; admin mutations are the high-stakes tier §2.5/§8, and the Refine admin app is 2FA-gated per ADR-0004; wave 1 is one trusted admin group)
+  - "ADR-0001 — Identity / Auth / RBAC (§2 endpoint-authz matrix — the admin commands + admin reads are `access: authenticated`, `required_roles: platform_admin`, `auth_check: fast-path`; admin mutations are the high-stakes tier §2.5/§8, and the Refine admin app is 2FA-gated per ADR-0004; wave 1 is one trusted admin group)"
   - ADR-0002 — Backend Core Stack (§3 nestjs-zod + URI versioning `/v1/...` + Vitest; `packages/schemas/` SSOT for the event-aggregate, stream-config, and lifecycle DTOs)
   - ADR-0003 — Data Layer (the event aggregate + `stream_config` in Postgres + Drizzle; the program PDF in Timeweb Object Storage — MinIO on the dev stand; §6 audit_ledger for the lifecycle transitions)
   - ADR-0004 — Frontend Stack (§3 admin app = Refine + 2FA on `admin.doctor.school`; custom data/auth/access providers on the NestJS API; the admin surface is CSR)

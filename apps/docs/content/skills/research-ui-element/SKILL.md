@@ -62,6 +62,8 @@ Return a single markdown block that is a **drop-in constitution section** in the
 
 Deliver the option screenshots to the lead (absolute paths per memory `reference_playwright_screenshot_absolute_path`). The lead presents them to the product owner (Stage A), records the pick into the `Rendered options + owner pick` line, and appends the section to the constitution.
 
+**Return contract — final message to the lead (context economy, #534).** Write the section block to a file (the path the lead names in the brief, or the session scratchpad) instead of pasting it into the reply. Your final message = that file path + the screenshot paths + a ≤10-line summary of the options and the recommended pick. The lead reads the file once at append time; a full section pasted into the reply sits in the lead's context for the rest of the session.
+
 ### Failure modes
 
 - **Re-researching a covered class** — the section already exists; you were mis-dispatched. Say so and stop; reuse is the rule.

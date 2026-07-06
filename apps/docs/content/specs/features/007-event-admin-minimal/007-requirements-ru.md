@@ -6,6 +6,7 @@ status: Draft
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
 parent_issue: https://github.com/doctor-school/ds-platform/issues/471
+issues: [587, 588, 589, 590, 591, 592, 593, 594, 595]
 prior_decisions:
   - ADR-0014 — Жизненный цикл продуктового дизайна (§2 трасса PRD → EARS `realizes:`; §3/§4 канвас — источник, когда он есть — здесь админ-канваса **нет**, зафиксированный Stage-A gap, поэтому волна 1 использует штатный UI Refine и не несёт канвас-точных EARS)
   - ADR-0001 — Identity / Auth / RBAC (§2 матрица endpoint-authz — админ-команды + админ-reads это `access: authenticated`, `required_roles: platform_admin`, `auth_check: fast-path`; админ-мутации — высокоставочный tier §2.5/§8, а админ-приложение Refine закрыто 2FA по ADR-0004; волна 1 — одна доверенная админ-группа)

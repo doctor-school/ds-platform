@@ -6,6 +6,7 @@ status: Draft
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
 parent_issue: https://github.com/doctor-school/ds-platform/issues/471
+issues: [587, 588, 589, 590, 591, 592, 593, 594, 595]
 prior_decisions:
   - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace; §3/§4 canvas is source when one exists — here there is **no** admin canvas, a recorded Stage-A gap, so wave 1 uses stock Refine UI and carries no canvas-fidelity EARS)
   - ADR-0001 — Identity / Auth / RBAC (§2 endpoint-authz matrix — the admin commands + admin reads are `access: authenticated`, `required_roles: platform_admin`, `auth_check: fast-path`; admin mutations are the high-stakes tier §2.5/§8, and the Refine admin app is 2FA-gated per ADR-0004; wave 1 is one trusted admin group)

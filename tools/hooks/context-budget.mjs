@@ -52,7 +52,7 @@ try {
         systemMessage: `⚠ Контекст сессии ≈ ${k}K токенов (порог ${THRESHOLD / 1000}K) — каждый следующий ход дорожает кэш-ридами. Пора /wrap.`,
         hookSpecificOutput: {
           hookEventName: "UserPromptSubmit",
-          additionalContext: `<context-budget-guard>Session context is ~${k}K tokens — over the ${THRESHOLD / 1000}K wrap threshold (owner policy: wrap instead of multiplying cache reads). Do NOT start new tasks or dispatch new subagents. Finish only the immediately in-flight step (an unmerged approved PR, an unanswered owner question), then propose /wrap in your reply. If nothing is in flight, propose /wrap now.</context-budget-guard>`,
+          additionalContext: `<context-budget-guard>Session context is ~${k}K tokens — over the ${THRESHOLD / 1000}K wrap threshold (owner policy: wrap instead of multiplying cache reads). Do NOT start new units of work. The bounded closeout of a PR already opened this session IS in-flight — finish it per AGENTS.md §6 PR-lifecycle (Mode-a review dispatch → CI confirm → merge → board Done → teardown), including the review-subagent dispatch. Otherwise finish only the immediately in-flight step (an unanswered owner question), then propose /wrap in your reply. If nothing is in flight, propose /wrap now.</context-budget-guard>`,
         },
       }),
     );

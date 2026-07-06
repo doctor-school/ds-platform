@@ -20,7 +20,7 @@ At the end of any task you report to the user (a merged PR, a completed engineer
 1. **✅ #N — title · status** (merged / closed / blocked).
 2. **Для пользователя (plain language):** the product / user-visible impact in 1–3 sentences, no jargon — what a person would actually notice.
 3. **🖼 Проверить глазами — MANDATORY, always exactly one of:**
-   - `ДА → <path / URL>` with a rendered **before/after** (for ANY task that changed visible UI — always, don't wait to be asked), **delivered to a user-visible location** (see recipe), or
+   - `ДА → <path / URL>` with a rendered **before/after** (for ANY task that changed visible UI — always, don't wait to be asked), **delivered to a user-visible location** (see recipe). For UI/DS-visual work the value is a **LIVE URL** you boot yourself from fresh `main` BEFORE reporting (showcase `/blocks` for DS units, the portal page for screens); a screenshots folder / before-after images are a supplement to the URL, never its substitute (memory `feedback_live_url_not_screenshots`), or
    - `НЕТ — backend/infra/agent-internal; проверяемо так: <test / behaviour / command>`. For a **hook-driven / agent-internal** deliverable (runs automatically in SessionStart, a guard, etc.) phrase the verify line as the **automatic trigger** — "работает само при старте сессии, тебе делать ничего не нужно" — never "запусти X" (the user reads a bare command as a new per-session chore).
 4. **Откуда всплыло / где в очереди:** one line of task-chain context (which epic/issue, why now) — on the report AND on any mid-thread decision request.
 5. **Трекер:** PR #, Issue #, board Status, what was unblocked/closed.

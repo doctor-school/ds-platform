@@ -1,5 +1,12 @@
 # @ds/portal
 
+## 0.8.1
+
+### Patch Changes
+
+- Updated dependencies [[`73dcd7f`](https://github.com/doctor-school/ds-platform/commit/73dcd7f1c9b16d7b008f9e5015fe34531eac66fa)]:
+  - @ds/design-system@0.7.0
+
 ## 0.8.0
 
 ### Minor Changes

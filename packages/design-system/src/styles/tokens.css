@@ -86,6 +86,7 @@
   --font-family-social: Montserrat, Inter, sans-serif;
   --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   --font-size-2xs: 0.625rem;
+  --font-size-eyebrow: 0.6875rem;
   --font-size-xs: 0.75rem;
   --font-size-caption: 0.8125rem;
   --font-size-sm: 0.875rem;
@@ -93,6 +94,7 @@
   --font-size-base: 1rem;
   --font-size-lg: 1.25rem;
   --font-size-xl: 1.375rem;
+  --font-size-title-lg: 1.5rem;
   --font-size-2xl: 1.75rem;
   --font-size-3xl: 2.5rem;
   --font-size-4xl: 3.5rem;
@@ -196,6 +198,7 @@
   --card-radius: 0rem;
   --otp-slot-radius: 0rem;
   --otp-slot-size: 2.5rem;
+  --webinar-card-time-plate: 12.25rem;
 }
 
 .dark {
@@ -293,6 +296,7 @@
   --font-social: var(--font-family-social);
   --font-mono: var(--font-family-mono);
   --text-2xs: var(--font-size-2xs);
+  --text-eyebrow: var(--font-size-eyebrow);
   --text-xs: var(--font-size-xs);
   --text-caption: var(--font-size-caption);
   --text-sm: var(--font-size-sm);
@@ -300,6 +304,7 @@
   --text-base: var(--font-size-base);
   --text-lg: var(--font-size-lg);
   --text-xl: var(--font-size-xl);
+  --text-title-lg: var(--font-size-title-lg);
   --text-2xl: var(--font-size-2xl);
   --text-3xl: var(--font-size-3xl);
   --text-4xl: var(--font-size-4xl);
@@ -342,4 +347,6 @@
   --animate-live-pulse: live-pulse 1.6s ease-in-out infinite;
   --animate-skeleton-pulse: live-pulse 1.4s ease-in-out infinite;
   --tracking-micro: var(--font-letter-spacing-micro);
+  --tracking-numeric: var(--font-letter-spacing-numeric);
+  --spacing-time-plate: var(--webinar-card-time-plate);
 }

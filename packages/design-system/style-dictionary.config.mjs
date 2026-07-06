@@ -290,6 +290,22 @@ async function build() {
     name: "--tracking-micro",
     ref: "var(--font-letter-spacing-micro)",
   });
+  // Numeric/time tracking as a token-backed `tracking-numeric` utility (#514).
+  // The big tabular time on the webinar-card plate (56px desktop / 40px mobile,
+  // source webinar-card.dc.html) tracks at −.04em — the `numeric` letter-spacing
+  // token — which no default Tailwind rung carries (`tracking-tight` is −.025em).
+  themeEntries.push({
+    name: "--tracking-numeric",
+    ref: "var(--font-letter-spacing-numeric)",
+  });
+  // The webinar-card time-plate width as a SIZING utility (`w-time-plate`, #514).
+  // A named `--spacing-*` key drives the sizing utilities (`w-*` / `basis-*`) the
+  // same way the §09 role keys drive gap/padding; the value lives in the component
+  // token (component.json `webinar-card.time-plate`, 196px — source grid column).
+  themeEntries.push({
+    name: "--spacing-time-plate",
+    ref: "var(--webinar-card-time-plate)",
+  });
 
   // --- assemble tokens.css -------------------------------------------------
   const css = [

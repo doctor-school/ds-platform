@@ -154,8 +154,12 @@
     },
     "size": {
       "$type": "dimension",
-      "$description": "Neo-brutalist kegel (px→rem at 16px base): 2xs 10 · xs 12 · caption 13 · sm 14 · body-compact 15 · base 16 · lg 20 (title) · xl 22 (h3) · 2xl 28 (h2) · 3xl 40 (h1) · 4xl 56 (display).",
+      "$description": "Neo-brutalist kegel (px→rem at 16px base): 2xs 10 · eyebrow 11 · xs 12 · caption 13 · sm 14 · body-compact 15 · base 16 · lg 20 (title) · xl 22 (h3) · title-lg 24 (listing-card title) · 2xl 28 (h2) · 3xl 40 (h1) · 4xl 56 (display).",
       "2xs": { "$value": "0.625rem" },
+      "eyebrow": {
+        "$value": "0.6875rem",
+        "$description": "11px — the uppercase plate/section eyebrow of the canvas card surfaces (webinar-card «Эфир № N» plate label; §05 section eyebrows). Sits between 2xs (10) and xs (12); source webinar-card.dc.html."
+      },
       "xs": { "$value": "0.75rem" },
       "caption": { "$value": "0.8125rem" },
       "sm": { "$value": "0.875rem" },
@@ -163,6 +167,10 @@
       "base": { "$value": "1rem" },
       "lg": { "$value": "1.25rem" },
       "xl": { "$value": "1.375rem" },
+      "title-lg": {
+        "$value": "1.5rem",
+        "$description": "24px — the desktop listing/webinar-card title (source webinar-card.dc.html: 24px/700/1.3/-.02em; mobile drops to lg 20px). Between xl (h3, 22) and 2xl (h2, 28)."
+      },
       "2xl": { "$value": "1.75rem" },
       "3xl": { "$value": "2.5rem" },
       "4xl": { "$value": "3.5rem" }

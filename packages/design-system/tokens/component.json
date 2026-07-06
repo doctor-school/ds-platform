@@ -13,6 +13,14 @@
     "size": { "$type": "dimension", "$value": "{space.10}" }
   },
 
+  "webinar-card": {
+    "time-plate": {
+      "$type": "dimension",
+      "$value": "12.25rem",
+      "$description": "196px — the fixed width of the desktop webinar-card time plate (source webinar-card.dc.html: grid-template-columns 196px 1fr). Wide enough for the 56px tabular time and a ONE-line «Эфир № N» label. Surfaced as the `w-time-plate` sizing utility (--spacing-time-plate @theme key); ≤900px the plate is a full-width horizontal band instead."
+    }
+  },
+
   "game": {
     "$description": "RESERVED namespace for future gamification (PRD §15: mascot, Lottie/Rive cards, Con/Pul/Au). Deliberately empty — no values in this foundation iteration; the game components are out of scope (#231 spec §2.1, §6). Tokens land here when those surfaces arrive without restructuring the taxonomy."
   }

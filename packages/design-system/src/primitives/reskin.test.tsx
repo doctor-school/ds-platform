@@ -93,25 +93,37 @@ describe("Tabs — hard-bordered segment control (#512)", () => {
   });
 });
 
-describe("InputOTP slot — 40px square, 2px border, filled ⇒ ink (#512)", () => {
-  it("renders empty slots with a 2px hairline border and square 40px cells", () => {
+describe("InputOTP slot — 40px square that may shrink to fit, 2px border, filled ⇒ ink (#512/#544)", () => {
+  it("renders empty slots as 40px-preferred squares that may shrink (min-w-0); group content-sized + shrinkable", () => {
     render(
       <InputOTP maxLength={4} value="" onChange={() => {}} aria-label="code">
-        <InputOTPGroup>
+        <InputOTPGroup data-testid="group">
           <InputOTPSlot index={0} data-testid="slot0" />
           <InputOTPSlot index={1} />
         </InputOTPGroup>
       </InputOTP>,
     );
+    // #544: the group stays CONTENT-sized (no `w-full` — multi-group compositions with
+    // a separator keep their wide-layout geometry) but carries `min-w-0` so it may
+    // shrink inside a narrow container; each slot keeps the preferred `w-10` square
+    // (`aspect-square`, the approved #512 deviation from the canvas 42×52 wrap) plus
+    // `min-w-0` so an 8-slot login row compresses to fit at 390px instead of
+    // overflowing.
+    const group = screen.getByTestId("group");
+    expect(group).toHaveClass("min-w-0");
+    expect(group.className.split(/\s+/)).not.toContain("w-full");
     const slot = screen.getByTestId("slot0");
     expect(slot).toHaveClass(
-      "h-10",
+      "aspect-square",
       "w-10",
+      "min-w-0",
       "border-y-2",
       "border-r-2",
       "border-hairline",
       "tabular-nums",
     );
+    // Fixed height is gone — `aspect-square` keeps the cell square as it shrinks.
+    expect(slot.className.split(/\s+/)).not.toContain("h-10");
     expect(slot.className).not.toMatch(/\brounded-/);
   });
 

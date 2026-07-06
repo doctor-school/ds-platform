@@ -71,4 +71,10 @@ Registration for a webinar, built on the already-shipped auth foundation (featur
 
 ## Approved mockup
 
-_To be filled at Stage A by `author-design-mockup` (product-owner choice recorded before implementation)._
+Vendored canvas source (byte-verbatim from the Claude Design project «Doctor.School визуальный язык» — build to these files, see [`design-source/README.md`](../../../../../../design-source/README.md)):
+
+- [`design-source/my-events.dc.html`](../../../../../../design-source/my-events.dc.html) — the «мои события» surface (US-4): tabs Предстоящие / Записи / Сертификаты, specialty filter, day-grouped registered events rendered as `ВебинарКарточка` (variants live/registered/past).
+- [`design-source/webinar-page.dc.html`](../../../../../../design-source/webinar-page.dc.html) — the registration state on the event page (US-1, US-3): the status card's `upcoming / live` states carry the register CTA and the registered/join signposting copy.
+- [`design-source/webinar-card.dc.html`](../../../../../../design-source/webinar-card.dc.html) — the `registered` card variant («вы записаны» time plate + join CTA when live).
+
+**Status:** composition authored by the product owner on the Claude Design canvas (project «Doctor.School визуальный язык»); Stage-A re-confirmation at the next owner checkpoint.

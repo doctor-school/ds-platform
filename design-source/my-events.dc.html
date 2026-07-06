@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}</style></helmet>
+
+<div style="min-height:100vh;background:{{ pageBg }}">
+  <header data-screen-label="Мои события" style="background:{{ headerBg }};padding:16px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
+    <a href="Эфиры.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
+        <details style="position:relative">
+          <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 {{ headerShadow }}">≡</summary>
+          <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:200px;z-index:20">
+            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Эфиры</a>
+            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Школы</a>
+            <a href="Мои события.dc.html" style="padding:12px 16px;font-size:15px;font-weight:800;color:{{ headerBg }};text-decoration:none">Мои события</a>
+          </nav>
+        </details>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+      <nav style="display:flex;align-items:center;gap:28px;font-size:14px;font-weight:700">
+        <a href="Эфиры.dc.html" style="color:#D3E8FD;text-decoration:none">Эфиры</a>
+        <a href="Эфиры.dc.html" style="color:#D3E8FD;text-decoration:none">Школы</a>
+        <a href="Мои события.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px">Мои события</a>
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
+        <span style="width:40px;height:40px;background:#fff;color:#114D9E;display:inline-flex;align-items:center;justify-content:center;font-size:13.5px;font-weight:800;box-shadow:3px 3px 0 {{ headerShadow }};cursor:pointer">ВК</span>
+      </nav>
+    </sc-if>
+  </header>
+
+  <div style="background:{{ headerBg }};padding:{{ posterPad }}">
+    <div style="max-width:1104px;margin:0 auto;display:flex;align-items:flex-end;justify-content:space-between;gap:32px;flex-wrap:wrap">
+      <div>
+        <h1 style="margin:0;font-size:clamp(34px,6vw,56px);line-height:1;font-weight:800;letter-spacing:-.035em;color:#fff">Мои события</h1>
+        <div style="font-size:15px;font-weight:600;color:#D3E8FD;margin-top:16px">Виктор, у вас 3 события на этой неделе · одно уже в эфире</div>
+      </div>
+      <div style="font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#D3E8FD;line-height:2;padding-bottom:6px">Часовой пояс<br><span style="color:#fff">Москва · UTC+3</span></div>
+    </div>
+  </div>
+
+  <main style="max-width:1104px;margin:{{ mainMargin }};padding:{{ mainPad }};position:relative;z-index:1">
+    <!-- Табы -->
+    <div style="{{ tabsWrap }}">
+      <button onClick="{{ tabUpcoming }}" style="{{ tabBtnU }}"><span>Предстоящие</span><span style="{{ countU }}">3</span></button>
+      <button onClick="{{ tabRecordings }}" style="{{ tabBtnR }}"><span>Записи</span><span style="{{ countR }}">12</span></button>
+      <button onClick="{{ tabCerts }}" style="{{ tabBtnC }}"><span>Сертификаты</span><span style="{{ countC }}">4</span></button>
+    </div>
+
+    <!-- ПРЕДСТОЯЩИЕ -->
+    <sc-if value="{{ showUpcoming }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <!-- Фильтр по направлениям -->
+        <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+        <div style="position:relative;z-index:6;margin-top:6px">
+          <button onClick="{{ toggleFilter }}" style="font:inherit;width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;cursor:pointer;text-align:left;background:{{ surface }};border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadow }}">
+            <span style="min-width:0"><span style="display:block;font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:3px">Направление</span><span style="display:block;font-size:16px;font-weight:800;color:{{ ink }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ specLabel }}</span></span>
+            <span style="font-size:12px;color:{{ ink }};flex:none">{{ filterCaret }}</span>
+          </button>
+          <sc-if value="{{ filterOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="background:{{ surface }};border:2px solid {{ border }};border-top:0;box-shadow:4px 4px 0 {{ shadow }};overflow:hidden">
+            <sc-for list="{{ specRows }}" as="sp" hint-placeholder-count="5"><button onClick="{{ sp.onClick }}" style="{{ sp.style }}"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ sp.name }}</span><span style="{{ sp.checkStyle }}">✓</span></button></sc-for>
+          </div>
+          </sc-if>
+        </div>
+        </sc-if>
+        <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }};margin-right:4px">Направление</span>
+          <sc-for list="{{ quickChips }}" as="qc" hint-placeholder-count="5"><button onClick="{{ qc.onClick }}" style="{{ qc.style }}">{{ qc.name }}</button></sc-for>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ isFilteredUp }}" hint-placeholder-val="{{ false }}">
+        <div style="{{ filterBadgeWrap }}">
+          <span style="font-size:12.5px;font-weight:700;color:{{ inkFaint }}">Фильтр:</span>
+          <button onClick="{{ resetSpec }}" style="font:inherit;display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:0;padding:7px 14px;cursor:pointer">{{ spec }} <span style="font-size:14px">✕</span></button>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ upHasResults }}" hint-placeholder-val="{{ true }}">
+        <sc-for list="{{ filteredUp }}" as="day" hint-placeholder-count="3">
+          <div style="{{ dayHeaderStyle }}">
+            <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">{{ day.label }}</span>
+            <span style="{{ dayRuleStyle }}"></span>
+          </div>
+          <sc-for list="{{ day.events }}" as="ev" hint-placeholder-count="1">
+            <div style="{{ cardBleed }}"><dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="{{ ev.variant }}" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" cta="{{ ev.cta }}" cta-href="{{ ev.ctaHref }}" href="{{ ev.href }}" school="{{ ev.school }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" hint-size="100%,220px"></dc-import></div>
+          </sc-for>
+        </sc-for>
+        </sc-if>
+        <sc-if value="{{ upNoResults }}" hint-placeholder-val="{{ false }}">
+        <div style="{{ upEmptyWrap }}">
+          <div style="font-size:16px;font-weight:800;color:{{ ink }};margin-bottom:8px">Нет записей по направлению «{{ spec }}»</div>
+          <button onClick="{{ resetSpec }}" style="font:inherit;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:12px 24px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}">Показать все</button>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ notFilteredUp }}" hint-placeholder-val="{{ true }}">
+        <div style="border:2px dashed {{ dashBorder }};padding:32px;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-top:32px">
+          <div style="font-size:14.5px;line-height:1.6;color:{{ inkMuted }}">На выходных пока пусто. На следующей неделе — <b style="color:{{ ink }}">6 эфиров по вашим специальностям</b>.</div>
+          <a href="Эфиры.dc.html" style="font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:13px 24px;white-space:nowrap;box-shadow:3px 3px 0 {{ border }};text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:1px 1px 0 {{ border }}">Смотреть расписание ↗</a>
+        </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <!-- ЗАПИСИ -->
+    <sc-if value="{{ showRecordings }}" hint-placeholder-val="{{ false }}">
+      <div>
+        <div style="{{ dayHeaderStyle }}">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Доступно 30 дней после эфира</span>
+          <span style="{{ dayRuleStyle }}"></span>
+        </div>
+        <div style="{{ cardWrap }}">
+          <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="past" num="Эфир № 038" time="88 мин" timeSub="12 июля · запись" href="Комната эфира.dc.html" school="Школа неврологии" title="Мигрень: современная CGRP-терапия и разбор случаев" chips="{{ cr1 }}" speakers="{{ sr1 }}" hint-size="100%,200px"></dc-import>
+          <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="past" num="Эфир № 035" time="76 мин" timeSub="9 июля · запись" href="Комната эфира.dc.html" school="Школа пульмонологии" title="ХОБЛ: тройная терапия и ведение обострений" chips="{{ cr2 }}" speakers="{{ sr2 }}" hint-size="100%,200px"></dc-import>
+          <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="past" num="Эфир № 031" time="94 мин" timeSub="4 июля · запись" href="Комната эфира.dc.html" school="Школа гастроэнтерологии" title="ГЭРБ: тактика 2026 и рефрактерные формы" chips="{{ cr3 }}" speakers="{{ sr3 }}" hint-size="100%,200px"></dc-import>
+        </div>
+        <div style="margin-top:32px;font-size:13px;font-weight:700;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;cursor:pointer">Показать все 12 записей</div>
+      </div>
+    </sc-if>
+
+    <!-- СЕРТИФИКАТЫ -->
+    <sc-if value="{{ showCerts }}" hint-placeholder-val="{{ false }}">
+      <div>
+        <div style="{{ dayHeaderStyle }}">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Сертификаты участника · 4</span>
+          <span style="{{ dayRuleStyle }}"></span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:24px">
+          <sc-for list="{{ certs }}" as="ct" hint-placeholder-count="4">
+            <div style="border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadowSm }};background:{{ surface }};padding:24px;display:flex;flex-direction:column;gap:14px">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <span style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }}">{{ ct.num }}</span>
+                <span style="font-size:26px">🎓</span>
+              </div>
+              <div style="font-size:16px;font-weight:700;line-height:1.3;color:{{ ink }};letter-spacing:-.01em">{{ ct.title }}</div>
+              <div style="font-size:12.5px;font-weight:600;color:{{ inkMuted }}">{{ ct.meta }}</div>
+              <a href="Мои события.dc.html" style="margin-top:auto;font-size:13px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:11px 18px;text-align:center;text-decoration:none;box-shadow:3px 3px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:1px 1px 0 {{ border }}">Скачать PDF ↓</a>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+  </main>
+
+  <footer style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:0 auto;box-sizing:content-box;gap:16px;flex-wrap:wrap">
+    {{ footLogoEl }}
+    <div style="font-size:12.5px;font-weight:600;color:{{ inkFaint }}">Врачи учат врачей · 2026</div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
+    isMobile: false, tab: 'upcoming', spec: 'Все', filterOpen: false
+  };
+  componentDidMount() {
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.upd = () => this.setState({ isMobile: this.mq.matches });
+    this.upd();
+    this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
+  }
+  renderVals() {
+    const d = this.state.dark, m = this.state.isMobile, tab = this.state.tab;
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const shadow = d ? '#6BB1F7' : '#114D9E';
+    const shadowSm = d ? '#1F69C8' : '#AED4FB';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const hairline = d ? 'rgba(255,255,255,.16)' : 'oklch(.922 .006 250)';
+    const spacer = d ? 'oklch(.16 .02 250)' : 'oklch(.93 .006 250)';
+    const tabActive = (on) => ({ w: on ? 800 : 700, fg: on ? btnFg : (d ? '#AED4FB' : '#114D9E'), bg: on ? btnBg : surface });
+    const U = tabActive(tab === 'upcoming'), R = tabActive(tab === 'recordings'), C = tabActive(tab === 'certs');
+    const tabsWrap = m
+      ? 'background:' + surface + ';display:grid;grid-template-columns:1fr 1fr 1fr;border:0;box-shadow:none;margin:0 -16px'
+      : 'border:2px solid ' + border + ';box-shadow:6px 6px 0 ' + shadow + ';background:' + surface + ';display:flex;width:fit-content;max-width:100%;overflow-x:auto';
+    const tabBtn = (on, first) => 'font:inherit;cursor:pointer;border:0;' + (first ? '' : 'border-left:' + (m ? '1px solid ' + hairline : '2px solid ' + border) + ';') + 'background:' + (on ? btnBg : surface) + ';color:' + (on ? btnFg : (d ? '#AED4FB' : '#114D9E')) + ';font-weight:' + (on ? 800 : 700) + ';' + (m ? 'display:flex;flex-direction:column;align-items:center;gap:3px;padding:12px 6px;font-size:12.5px;text-align:center' : 'display:flex;align-items:center;gap:8px;padding:15px 26px;font-size:14px');
+    const countStyle = (on) => m ? ('font-size:11px;font-weight:800;color:' + (on ? btnFg : accent)) : ('font-size:14px;font-weight:800;opacity:.8');
+
+    // ===== Фильтр по направлениям (вкладка «Предстоящие») =====
+    const spec = this.state.spec, filterOpen = this.state.filterOpen;
+    const chipInk = d ? '#AED4FB' : '#114D9E';
+    const chipBorder = d ? 'rgba(107,177,247,.45)' : '#AED4FB';
+    const upcomingDays = [
+      { label:'Сегодня — 16 июля, среда', events:[ { variant:'live', num:'Эфир № 042', time:'19:00', timeSub:'идёт 24 мин · вы записаны', cta:'Войти в эфир ↗', ctaHref:'Комната эфира.dc.html', href:'Вебинар.dc.html', school:'Школа травматологии и ортопедии', title:'Пластика ахиллова сухожилия: разбор клинических случаев', chips:['Травматология','Ортопедия','Спортивная медицина'], speakers:[{name:'Анна Соколова',org:'НМИЦ им. Пирогова'},{name:'Михаил Верещагин',org:'Сеченовский унив.'}] } ] },
+      { label:'Завтра — 17 июля, четверг', events:[ { variant:'registered', num:'Эфир № 044', time:'18:00', timeSub:'17 июля · напомним за час', href:'Вебинар.dc.html', school:'Школа кардиологии', title:'ХСН с сохранной фракцией выброса: амбулаторное ведение', chips:['Кардиология','Терапия'], speakers:[{name:'Пётр Малахов',org:'НМИЦ кардиологии'},{name:'Ирина Северова',org:'РНИМУ им. Пирогова'}] } ] },
+      { label:'18 июля, пятница', events:[ { variant:'registered', num:'Эфир № 046', time:'18:00', timeSub:'18 июля · напомним за час', href:'Вебинар.dc.html', school:'Школа эндокринологии', title:'Сахарный диабет 2 типа: старт инсулинотерапии', chips:['Эндокринология'], speakers:[{name:'Марат Гареев',org:'НМИЦ эндокринологии'}] } ] }
+    ];
+    const uniqSpecs = [];
+    upcomingDays.forEach(g => g.events.forEach(e => e.chips.forEach(c => { if (uniqSpecs.indexOf(c) === -1) uniqSpecs.push(c); })));
+    const specList = ['Все'].concat(uniqSpecs);
+    const matchSpec = (e) => spec === 'Все' || e.chips.indexOf(spec) !== -1;
+    const filteredUp = upcomingDays.map(g => ({ label: g.label, events: g.events.filter(matchSpec) })).filter(g => g.events.length > 0);
+    const upHasResults = filteredUp.length > 0;
+    const selectSpec = (name) => () => this.setState({ spec: name, filterOpen: false });
+    const rowStyle = (active) => 'font:inherit;display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:13px 16px;font-size:15px;text-align:left;border:0;border-bottom:1px solid ' + hairline + ';cursor:pointer;font-weight:' + (active ? 800 : 600) + ';color:' + (active ? btnFg : ink) + ';background:' + (active ? btnBg : surface);
+    const specRows = specList.map(name => ({ name, onClick: selectSpec(name), style: rowStyle(spec === name), checkStyle: 'font-size:14px;flex:none;color:' + btnFg + ';' + (spec === name ? '' : 'display:none') }));
+    const chipStyle = (active) => 'font:inherit;font-size:13px;font-weight:' + (active ? 800 : 700) + ';cursor:pointer;padding:6px 13px;color:' + (active ? btnFg : chipInk) + ';background:' + (active ? btnBg : 'transparent') + ';border:2px solid ' + (active ? btnBg : chipBorder);
+    const quickChips = specList.map(name => ({ name, onClick: selectSpec(name), style: chipStyle(spec === name) }));
+
+    return {
+      dark: d, isMobile: m, isDesktop: !m,
+      spec, filterOpen, isFilteredUp: spec !== 'Все', notFilteredUp: spec === 'Все',
+      upHasResults, upNoResults: !upHasResults, filteredUp,
+      specLabel: spec === 'Все' ? 'Все направления' : spec,
+      filterCaret: filterOpen ? '▲' : '▼',
+      specRows, quickChips,
+      toggleFilter: () => this.setState(s => ({ filterOpen: !s.filterOpen })),
+      resetSpec: () => this.setState({ spec: 'Все', filterOpen: false }),
+      filterBadgeWrap: m ? 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:16px 0 2px' : 'display:flex;align-items:center;gap:12px;margin:24px 0 0',
+      upEmptyWrap: 'text-align:center;padding:' + (m ? '36px 16px' : '48px 24px') + ';border:2px dashed ' + (d ? 'rgba(255,255,255,.3)' : 'oklch(.8 .01 250)') + ';margin-top:' + (m ? '18px' : '28px'),
+      toggleTheme: () => this.setState(s => { const dark=!s.dark; try{localStorage.setItem('ds-theme',dark?'dark':'light');}catch(e){} return {dark}; }),
+      themeIcon: d ? '☀' : '☾',
+      tabUpcoming: () => this.setState({ tab: 'upcoming' }),
+      tabRecordings: () => this.setState({ tab: 'recordings' }),
+      tabCerts: () => this.setState({ tab: 'certs' }),
+      showUpcoming: tab === 'upcoming', showRecordings: tab === 'recordings', showCerts: tab === 'certs',
+      tabsWrap,
+      tabBtnU: tabBtn(tab === 'upcoming', true), tabBtnR: tabBtn(tab === 'recordings', false), tabBtnC: tabBtn(tab === 'certs', false),
+      countU: countStyle(tab === 'upcoming'), countR: countStyle(tab === 'recordings'), countC: countStyle(tab === 'certs'),
+      pageBg: d ? 'oklch(.16 .02 250)' : '#fff',
+      headerBg: d ? '#114D9E' : '#2D84F2',
+      headerShadow: d ? 'oklch(.16 .02 250)' : '#114D9E',
+      surface, ink, border, shadow, shadowSm, accent, btnBg, btnFg,
+      secMargin: m ? '30px 0 18px' : '48px 0 24px',
+      mainPad: m ? '0 16px 64px' : '0 clamp(16px,4vw,48px) 96px',
+      posterPad: m ? 'clamp(28px,6vw,52px) 16px 24px' : 'clamp(36px,6vw,52px) clamp(16px,4vw,48px) 108px',
+      mainMargin: m ? '0 auto 0' : '-60px auto 0',
+      dayHeaderStyle: m
+        ? 'margin:0 -16px;padding:14px 16px 12px;background:' + (d ? 'oklch(.185 .02 250)' : 'oklch(.955 .004 250)') + ';display:flex;align-items:center'
+        : 'display:flex;align-items:baseline;gap:18px;margin:48px 0 24px',
+      dayRuleStyle: m ? 'display:none' : 'flex:1;border-top:2px solid ' + ink,
+      cardBleed: m ? 'margin:0 -16px' : '',
+      cardWrap: m ? 'display:flex;flex-direction:column;gap:0;margin:0 -16px' : 'display:flex;flex-direction:column;gap:28px',
+      cardWrapSingle: m ? 'margin:0 -16px 24px' : 'margin-bottom:48px',
+      inkMuted: d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)',
+      inkFaint: d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)',
+      dashBorder: d ? 'rgba(255,255,255,.35)' : 'oklch(.704 .01 250)',
+      footLogoEl: React.createElement('img', { src: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo-color.svg', alt: 'Doctor.School', style: { height: '22px', display: 'block' } }),
+      c1:['Травматология','Ортопедия','Спортивная медицина'], c3:['Кардиология','Терапия'], c5:['Эндокринология'],
+      s1:[{name:'Анна Соколова',org:'НМИЦ им. Пирогова'},{name:'Михаил Верещагин',org:'Сеченовский унив.'}],
+      s3:[{name:'Пётр Малахов',org:'НМИЦ кардиологии'},{name:'Ирина Северова',org:'РНИМУ им. Пирогова'}],
+      s5:[{name:'Марат Гареев',org:'НМИЦ эндокринологии'}],
+      cr1:['Неврология'], cr2:['Пульмонология','Терапия'], cr3:['Гастроэнтерология'],
+      sr1:[{name:'Сергей Донцов',org:'НМИЦ неврологии'}], sr2:[{name:'Алла Жукова',org:'НИИ пульмонологии'}],
+      sr3:[{name:'Дарья Литвинова',org:'клиника «Рассвет»'}],
+      certs:[
+        {num:'Серт. № 2026-0442', title:'Пластика ахиллова сухожилия', meta:'12 июля 2026 · 90 мин · 1,5 ЗЕТ НМО'},
+        {num:'Серт. № 2026-0417', title:'Мигрень: CGRP-терапия', meta:'8 июля 2026 · 88 мин · 1,5 ЗЕТ НМО'},
+        {num:'Серт. № 2026-0388', title:'ХОБЛ: тройная терапия', meta:'2 июля 2026 · 76 мин · 1 ЗЕТ НМО'},
+        {num:'Серт. № 2026-0351', title:'ГЭРБ: тактика 2026', meta:'28 июня 2026 · 94 мин · 1,5 ЗЕТ НМО'}
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

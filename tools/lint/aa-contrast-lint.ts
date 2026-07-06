@@ -19,7 +19,7 @@
  * the retargeted axe scan's job (#351). This guard is the static twin; axe is the
  * runtime backstop for everything DOM-derived.
  *
- * What it flags — TWO deterministic token-level anti-patterns:
+ * What it flags — THREE deterministic token-level anti-patterns:
  *
  *  (1) **Opacity-dimmed foreground text** — a `text-<token>-foreground/<NN>` utility
  *      (e.g. `text-muted-foreground/70`, `text-primary-foreground/80`,
@@ -38,6 +38,15 @@
  *      specimen) is fine — only flagged when a `text-*` utility is present on the SAME
  *      opening tag (the "text is rendered on the fill" signal). Element-scoped via the
  *      enclosing-tag helper, mirroring `submit-pending` / `form-error`.
+ *
+ *  (3) **Theme-mispaired panel foreground** — `bg-primary-surface` on an element that
+ *      ALSO carries `text-primary-foreground`. The two look paired but are NOT:
+ *      `primary-foreground` pairs with the ACTION fill and repoints to dark ink in
+ *      `.dark` (where `primary-action` lifts to a light-blue fill), while
+ *      `primary-surface` stays blue.700 in both themes — the combination renders
+ *      dark-on-dark (~1.2:1) in dark theme (the #517 review blocker). The paired token
+ *      is `text-primary-surface-foreground` (white in BOTH themes, 8.14:1).
+ *      Element-scoped like (2).
  *
  * Out of scope by construction (the static/runtime boundary): blue.500-as-text
  * (`text-primary`) and large/bold-vs-normal weight exemptions are contrast judgements
@@ -117,6 +126,16 @@ const RAW_PRIMARY_FILL_RE = /\bbg-primary\b(?!-)/g;
 // not flagged.
 const TEXT_UTILITY_RE = /\btext-[a-z]/;
 
+// ── (3) Theme-mispaired panel foreground ─────────────────────────────────────
+// `bg-primary-surface` NOT followed by `-`, so a hypothetical longer variant never
+// matches the fill check.
+const SURFACE_FILL_RE = /\bbg-primary-surface\b(?!-)/g;
+// The ACTION-pair foreground on the same opening tag. The CORRECT paired utility is
+// `text-primary-surface-foreground`, which does not contain the substring
+// `text-primary-foreground` (the `surface-` segment breaks it), so a word-bounded
+// literal cannot false-positive on the fixed pairing.
+const ACTION_FOREGROUND_ON_TAG_RE = /\btext-primary-foreground\b/;
+
 /**
  * Strip JS/TS comments so a commented-out example (a migration note documenting the very
  * anti-pattern, e.g. tabs.tsx's "Inactive resting is the muted `text-foreground/60`")
@@ -185,6 +204,32 @@ function checkRawPrimaryFill(src: string, file: string, violations: Violation[])
   }
 }
 
+/** (3) `bg-primary-surface` on a tag that also carries the ACTION-pair foreground. */
+function checkMispairedSurfaceForeground(
+  src: string,
+  file: string,
+  violations: Violation[],
+): void {
+  const seen = new Set<number>();
+  for (const m of src.matchAll(SURFACE_FILL_RE)) {
+    const tag = enclosingTag(src, m.index ?? 0);
+    if (!tag) continue;
+    if (!ACTION_FOREGROUND_ON_TAG_RE.test(tag)) continue;
+    const start = src.lastIndexOf("<", m.index ?? 0);
+    if (seen.has(start)) continue;
+    seen.add(start);
+    violations.push({
+      file,
+      message:
+        "theme-mispaired `bg-primary-surface` + `text-primary-foreground` — " +
+        "`primary-foreground` pairs with the ACTION fill and repoints to dark ink in " +
+        "`.dark`, while `primary-surface` stays blue.700 in both themes, so the copy " +
+        "renders dark-on-dark (~1.2:1) in dark theme (#517). Use the paired " +
+        "`text-primary-surface-foreground` (white in BOTH themes, 8.14:1).",
+    });
+  }
+}
+
 function scan(violations: Violation[]): number {
   const files = fg.sync(SCAN_GLOBS, {
     cwd: REPO_ROOT,
@@ -201,6 +246,7 @@ function scan(violations: Violation[]): number {
 
     checkDimmedForeground(src, file, violations);
     checkRawPrimaryFill(src, file, violations);
+    checkMispairedSurfaceForeground(src, file, violations);
   }
   return scanned;
 }
@@ -224,7 +270,9 @@ function main(): void {
     process.exit(1);
   }
 
-  info(`OK — ${scanned} UI file(s) carry no opacity-dimmed foreground or text-bearing bg-primary.`);
+  info(
+    `OK — ${scanned} UI file(s) carry no opacity-dimmed foreground, text-bearing bg-primary, or mispaired primary-surface foreground.`,
+  );
   process.exit(0);
 }
 

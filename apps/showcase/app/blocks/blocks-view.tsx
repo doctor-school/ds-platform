@@ -176,7 +176,7 @@ function LockGlyph({ className }: { className?: string }) {
 /* ------------------------------------------------------------------ */
 
 const AUTH_CARD_PROPS: PropRow[] = [
-  { name: "icon", type: "ReactNode", required: false, description: "Leading icon beside the title." },
+  { name: "icon", type: "ReactNode", required: false, description: "Glyph rendered in a tint badge tile above the title." },
   { name: "title", type: "ReactNode", required: true, description: "Card title." },
   { name: "description", type: "ReactNode", required: false, description: "Sub-copy under the title." },
   { name: "children", type: "ReactNode", required: true, description: "App-owned form / body — composes any primitives." },
@@ -192,7 +192,7 @@ function NeutralAuthCard({ className }: { className?: string }) {
   return (
     <AuthCard
       className={className}
-      icon={<LockGlyph />}
+      icon={<LockGlyph className="text-tint-foreground" />}
       title="Sign in"
       description="Enter your details to continue."
       footer={
@@ -296,24 +296,35 @@ function AuthCardSection() {
 
 const AUTH_LAYOUT_PROPS: PropRow[] = [
   { name: "logo", type: "ReactNode", required: false, description: "Brand lockup above the form card. On lg+ it is hidden when an aside is present (the panel carries the mark); with no aside it shows on every breakpoint." },
-  { name: "aside", type: "ReactNode", required: false, description: "Brand-panel content (headline / sub-copy / art). Present ⇒ two-column split on lg+; omitted ⇒ centered form-only screen (panel not rendered)." },
+  { name: "aside", type: "ReactNode", required: false, description: "Brand-panel content (eyebrow / headline / sub-copy centered, footer pinned low). Present ⇒ two-column split at layout; omitted ⇒ centered form-only screen (panel not rendered)." },
   { name: "children", type: "ReactNode", required: true, description: "The auth form for this surface (an AuthCard)." },
 ];
 
-/** Neutral brand-panel content for the `aside` slot — representative, not product marketing. */
+/**
+ * Neutral brand-panel content for the `aside` slot — representative, not product
+ * marketing. Mirrors the canvas panel composition (#517, `auth.dc.html`): an eyebrow
+ * (caps micro-label) + large headline + subcopy vertically CENTERED in the panel,
+ * and a separate footer line pinned to the bottom. No logo lives in the demo panel
+ * (the layout's `logo` slot above the card carries the mark) — #518 composes the
+ * portal aside to this shape. Copy inherits the block's own
+ * `text-primary-surface-foreground`; the quiet tiers use element opacity (never a
+ * foreground-token opacity, the aa-contrast rule).
+ */
 function NeutralAside() {
   return (
     <div className="flex h-full flex-col justify-between gap-8">
-      <div className="flex items-center gap-2 font-semibold">
-        <LockGlyph className="size-5 text-primary-foreground" />
-        <span>Acme</span>
-      </div>
-      <div className="flex flex-col gap-2">
-        <p className="text-2xl font-semibold tracking-tight">Welcome back</p>
-        <p className="text-sm opacity-80">
+      <div className="flex flex-1 flex-col justify-center gap-5">
+        <p className="text-eyebrow font-extrabold uppercase tracking-micro opacity-80">
+          Peer to peer
+        </p>
+        <p className="max-w-lg text-3xl font-extrabold leading-tight tracking-tight">
+          Welcome back
+        </p>
+        <p className="max-w-md text-lg leading-snug opacity-90">
           Sign in to pick up where you left off.
         </p>
       </div>
+      <p className="text-sm font-semibold opacity-80">Free · no red tape · © Acme</p>
     </div>
   );
 }
@@ -336,7 +347,7 @@ function NestedAuthCard() {
   });
   return (
     <AuthCard
-      icon={<LockGlyph />}
+      icon={<LockGlyph className="text-tint-foreground" />}
       title="Sign in"
       description="Enter your details to continue."
       footer={
@@ -382,7 +393,8 @@ function AuthLayoutSection() {
         semantic <code className="font-mono text-xs">primary-surface</code> token (the block&apos;s
         own branding); the <code className="font-mono text-xs">logo</code> and the panel{" "}
         <code className="font-mono text-xs">aside</code> are app-supplied. The two-column split
-        appears at <code className="font-mono text-xs">lg+</code>; the block&apos;s{" "}
+        engages at the semantic <code className="font-mono text-xs">layout</code> breakpoint
+        (≥901px, §09 — the token match for the canvas ≤900px fold); the block&apos;s{" "}
         <code className="font-mono text-xs">min-h-screen</code> is neutralised to{" "}
         <code className="font-mono text-xs">min-h-0</code> here so it sizes to content at catalogue
         scale.

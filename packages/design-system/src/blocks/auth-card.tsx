@@ -11,12 +11,16 @@ import {
 } from "../primitives/card";
 
 /**
- * `<AuthCard>` (#235) — the owned screen-scaffold the auth surfaces (login /
- * register / reset / verify) compose into. It is the re-skinned, token-only
- * distillation of the shadcn "auth card" chrome (a centered card with an
- * icon+title header, a description, a content slot, and an optional footer of
- * secondary links) — kept minimal-owned rather than importing a heavy block, per
- * the §3.1 acceptance bar.
+ * `<AuthCard>` (#235, re-skinned to the neo-brutalist language in #517) — the owned
+ * screen-scaffold the auth surfaces (login / register / reset / verify) compose into.
+ * It renders the neo-brutalist `Card` primitive (square, 2px structural border, 6px
+ * offset `elevation` cast) and, per the canvas `auth-card` unit, promotes the `icon`
+ * into a square TINT-filled badge tile stacked ABOVE a heavy, up-scaled title with the
+ * description below — no longer a small glyph inline beside the title.
+ *
+ * The badge tile paints from the AA-safe `tint` / `tint-foreground` token pairing (blue
+ * tint surface + ink-blue glyph), never a hardcoded colour; an app-supplied icon that
+ * carries its own `text-*` class keeps that colour (the tile only provides the default).
  *
  * It is a presentation scaffold ONLY: the form, BFF calls, EARS-16 error mapping,
  * routing and i18n are app glue and stay in the app/composition layer. All copy
@@ -51,10 +55,18 @@ export function AuthCard({
   return (
     <Card className={className} {...rest}>
       <CardHeader>
-        <div className="flex items-center gap-2">
-          {icon}
-          <CardTitle>{title}</CardTitle>
-        </div>
+        {icon ? (
+          // Neo-brutalist badge tile (#517, canvas `auth-card`): a square tint surface
+          // holding the app-supplied glyph, above the title. `text-tint-foreground` is
+          // the default glyph colour (AA-safe on `tint`); an icon with its own `text-*`
+          // class overrides it. `[&_svg]:size-6` normalises the glyph to the canvas 26px.
+          <span className="mb-3 inline-flex size-12 items-center justify-center bg-tint text-tint-foreground [&_svg]:size-6">
+            {icon}
+          </span>
+        ) : null}
+        <CardTitle className="text-2xl font-extrabold tracking-tight">
+          {title}
+        </CardTitle>
         {description ? <CardDescription>{description}</CardDescription> : null}
       </CardHeader>
       <CardContent className={cn(contentClassName)}>{children}</CardContent>

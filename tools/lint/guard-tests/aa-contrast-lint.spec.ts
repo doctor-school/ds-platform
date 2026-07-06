@@ -36,6 +36,16 @@ describe("aa-contrast-lint", () => {
     expect(stderr).toContain("bg-primary-action");
   });
 
+  it("red (3): `bg-primary-surface` mispaired with `text-primary-foreground` → exit 1", () => {
+    // The action-pair foreground repoints to dark ink in `.dark` while the surface
+    // stays blue.700 — dark-on-dark (~1.2:1), the #517 review blocker. The paired
+    // `text-primary-surface-foreground` (asserted clean in the `green` case) is the fix.
+    const { code, stderr } = runGuard(GUARD, dir("red-surface-mispaired"));
+    expect(code).toBe(1);
+    expect(stderr).toContain("theme-mispaired `bg-primary-surface`");
+    expect(stderr).toContain("text-primary-surface-foreground");
+  });
+
   it("pass: a text-LESS `bg-primary` swatch (incl. an opacity tint) → exit 0", () => {
     const { code } = runGuard(GUARD, dir("swatch-textless-green"));
     expect(code).toBe(0);

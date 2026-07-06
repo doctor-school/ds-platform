@@ -44,7 +44,11 @@
     },
     "primary-surface": {
       "$value": "{color.blue.700}",
-      "$description": "Brand-coloured panel/surface that carries normal-weight white copy (e.g. the auth brand panel)."
+      "$description": "Brand-coloured panel/surface that carries normal-weight white copy (e.g. the auth brand panel). Pair with `primary-surface-foreground` — NOT `primary-foreground`, which repoints to dark ink in `.dark` (where `primary-action` lifts to a light-blue fill) and would render near-invisible on this panel."
+    },
+    "primary-surface-foreground": {
+      "$value": "{color.white}",
+      "$description": "Text and icon colour ON a `primary-surface` fill. White in BOTH themes (the surface stays blue.700 in dark, white 8.14:1) — deliberately NOT overridden in semantic.dark.json, unlike `primary-foreground` which pairs with the theme-flipping action fill."
     },
     "secondary": {
       "$value": "{color.neutral.100}",

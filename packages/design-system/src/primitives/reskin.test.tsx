@@ -93,8 +93,8 @@ describe("Tabs — hard-bordered segment control (#512)", () => {
   });
 });
 
-describe("InputOTP slot — square, capped at 40px, 2px border, filled ⇒ ink (#512/#544)", () => {
-  it("renders empty slots as square cells that fill-to-fit but cap at 40px, with a 2px hairline border", () => {
+describe("InputOTP slot — 40px square that may shrink to fit, 2px border, filled ⇒ ink (#512/#544)", () => {
+  it("renders empty slots as 40px-preferred squares that may shrink (min-w-0); group content-sized + shrinkable", () => {
     render(
       <InputOTP maxLength={4} value="" onChange={() => {}} aria-label="code">
         <InputOTPGroup data-testid="group">
@@ -103,25 +103,27 @@ describe("InputOTP slot — square, capped at 40px, 2px border, filled ⇒ ink (
         </InputOTPGroup>
       </InputOTP>,
     );
-    // #544: the row is full-width and each slot is a flex-1 square capped at the canvas
-    // 40px (`max-w-10`) — so an 8-slot login row shrinks to fit a narrow card instead of
-    // overflowing, while a wide card keeps the 40px cell. Fixed `h-10 w-10` is gone.
-    expect(screen.getByTestId("group")).toHaveClass("w-full");
+    // #544: the group stays CONTENT-sized (no `w-full` — multi-group compositions with
+    // a separator keep their wide-layout geometry) but carries `min-w-0` so it may
+    // shrink inside a narrow container; each slot keeps the preferred `w-10` square
+    // (`aspect-square`, the approved #512 deviation from the canvas 42×52 wrap) plus
+    // `min-w-0` so an 8-slot login row compresses to fit at 390px instead of
+    // overflowing.
+    const group = screen.getByTestId("group");
+    expect(group).toHaveClass("min-w-0");
+    expect(group.className.split(/\s+/)).not.toContain("w-full");
     const slot = screen.getByTestId("slot0");
     expect(slot).toHaveClass(
       "aspect-square",
-      "flex-1",
-      "max-w-10",
+      "w-10",
       "min-w-0",
       "border-y-2",
       "border-r-2",
       "border-hairline",
       "tabular-nums",
     );
-    // Fixed 40px sizing (`h-10`/`w-10`) is replaced by the fluid capped square.
-    const tokens = slot.className.split(/\s+/);
-    expect(tokens).not.toContain("h-10");
-    expect(tokens).not.toContain("w-10");
+    // Fixed height is gone — `aspect-square` keeps the cell square as it shrinks.
+    expect(slot.className.split(/\s+/)).not.toContain("h-10");
     expect(slot.className).not.toMatch(/\brounded-/);
   });
 

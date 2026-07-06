@@ -31,12 +31,13 @@ const InputOTPGroup = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div">
 >(({ className, ...props }, ref) => (
-  // `w-full` so the slots (each `flex-1`) distribute the AVAILABLE width and the row
-  // can never exceed its container — the #544 fix. On a wide card the slots cap at the
-  // canvas 40px (`max-w-10`) and pack at the start (leftover space, same left-aligned
-  // look as before); on a narrow card (login = 8 slots at 390px) they shrink to fit
-  // instead of overflowing the card body.
-  <div ref={ref} className={cn("flex w-full items-center", className)} {...props} />
+  // `min-w-0` (#544): as a flex item of the `InputOTP` container the group's default
+  // `min-width:auto` refused to shrink below its slots' content, so a long row (login
+  // = 8 slots) overflowed a narrow card. With `min-w-0` the group may shrink to the
+  // available width and its slots (also `min-w-0`) compress equally. The group stays
+  // CONTENT-sized otherwise (no `w-full`), so multi-group compositions with a
+  // separator («123 – 456», showcase) keep their geometry on wide layouts.
+  <div ref={ref} className={cn("flex min-w-0 items-center", className)} {...props} />
 ));
 InputOTPGroup.displayName = "InputOTPGroup";
 
@@ -54,17 +55,20 @@ const InputOTPSlot = React.forwardRef<
     <div
       ref={ref}
       className={cn(
-        // Neo-brutalist OTP slot (#512, source §07): a square cell capped at the
-        // canvas 40px (`--otp-slot-size` = 2.5rem = `max-w-10`) with a hard 2px border,
-        // tabular uppercase digits. `flex-1 aspect-square min-w-0` (#544) lets the cell
-        // fill an equal share of the `w-full` group and stay square while SHRINKING below
-        // 40px when the row would otherwise overflow a narrow card (login = 8 slots at
-        // 390px); on a wide card it caps at 40px, so the 6-slot verify/reset rows are
-        // unchanged. Shared edges via `border-y-2 border-r-2` + `first:border-l-2` so
-        // neighbours don't double. Empty = `hairline`; FILLED switches to the ink
-        // `border` (source "filled ⇒ border ink"); the ACTIVE slot takes the brand
-        // `ring` border + the flush 3px `shadow-focus`. Token-only → light + `.dark`.
-        "relative flex aspect-square min-w-0 max-w-10 flex-1 items-center justify-center border-y-2 border-r-2 first:border-l-2 text-sm font-bold uppercase tabular-nums text-foreground transition-all",
+        // Neo-brutalist OTP slot: a 40px square cell (`w-10`, the approved #512
+        // deviation from the canvas 42×52 wrapped inputs — auth.dc.html renders
+        // 42×52px slots with a 7px gap + flex-wrap; #512 shipped a contiguous
+        // shared-border 40px row instead) with a hard 2px border, tabular uppercase
+        // digits. `aspect-square min-w-0` (#544) lets the cell SHRINK below its
+        // preferred 40px — staying square — only when the row would otherwise
+        // overflow a narrow card (login = 8 slots at 390px); on wide layouts every
+        // slot keeps its 40px preferred width, so 6-slot verify/reset rows and
+        // multi-group compositions are unchanged. Shared edges via `border-y-2
+        // border-r-2` + `first:border-l-2` so neighbours don't double. Empty =
+        // `hairline`; FILLED switches to the ink `border` (source "filled ⇒ border
+        // ink"); the ACTIVE slot takes the brand `ring` border + the flush 3px
+        // `shadow-focus`. Token-only → light + `.dark`.
+        "relative flex aspect-square w-10 min-w-0 items-center justify-center border-y-2 border-r-2 first:border-l-2 text-sm font-bold uppercase tabular-nums text-foreground transition-all",
         char ? "border-border" : "border-hairline",
         isActive && "z-10 border-ring shadow-focus",
         className,

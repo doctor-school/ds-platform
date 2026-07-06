@@ -2,8 +2,10 @@
 "@ds/design-system": patch
 ---
 
-Fix the OTP slot row overflowing a narrow card body (#544). The `InputOTPGroup` is now
-`w-full` and each `InputOTPSlot` is a `flex-1 aspect-square` cell capped at the canvas
-40px (`max-w-10`): the 8-slot login row shrinks to fit at 390px instead of overflowing
-the page body by ~30px, while wider cards and the 6-slot verify/reset rows keep the
-unchanged 40px square cell. Both themes; neo-brutalist shared-border look preserved.
+Fix the OTP slot row overflowing a narrow card body (#544). `InputOTPGroup` and each
+`InputOTPSlot` now carry `min-w-0`, and the slot is an `aspect-square` cell with a
+preferred `w-10` width (the approved #512 deviation from the canvas 42×52 wrapped
+inputs): the 8-slot login row shrinks to fit at 390px instead of overflowing the page
+body by ~30px, while wide layouts — including 6-slot verify/reset rows and multi-group
+compositions with a separator — keep the unchanged 40px square cell and their existing
+geometry. Both themes; neo-brutalist contiguous shared-border look preserved.

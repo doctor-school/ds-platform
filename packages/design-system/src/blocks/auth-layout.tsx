@@ -64,8 +64,14 @@ export function AuthLayout({
     <div className={cn("grid min-h-screen layout:grid-cols-2", className)}>
       {/* Form column — centered, with the logo above the card. First in source order
           for a11y; flipped to the RIGHT at `layout:` (`layout:order-2`) so the brand
-          panel sits on the left per the recorded #237 column-order decision. */}
-      <div className="flex flex-col items-center justify-center gap-8 px-6 py-12 layout:order-2">
+          panel sits on the left per the recorded #237 column-order decision.
+          `min-w-0` (#544): as a grid item the column's default `min-width:auto` let
+          over-wide card content (the 8-slot OTP row) inflate the single-column track
+          past the viewport instead of constraining it — with `min-w-0` the column
+          holds the viewport width and shrinkable content (the OTP slots) compresses
+          to fit. At `layout:` the tracks are already `minmax(0,1fr)`, so the split
+          is unaffected. */}
+      <div className="flex min-w-0 flex-col items-center justify-center gap-8 px-6 py-12 layout:order-2">
         {logo ? (
           <div className={cn("w-full max-w-md", aside ? "layout:hidden" : undefined)}>
             {logo}

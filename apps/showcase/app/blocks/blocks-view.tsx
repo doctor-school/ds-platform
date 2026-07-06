@@ -306,25 +306,27 @@ const AUTH_LAYOUT_PROPS: PropRow[] = [
  * (caps micro-label) + large headline + subcopy vertically CENTERED in the panel,
  * and a separate footer line pinned to the bottom. No logo lives in the demo panel
  * (the layout's `logo` slot above the card carries the mark) — #518 composes the
- * portal aside to this shape. Copy inherits the block's own
- * `text-primary-surface-foreground`; the quiet tiers use element opacity (never a
- * foreground-token opacity, the aa-contrast rule).
+ * portal aside to this shape. The headline inherits the block's own white
+ * `text-primary-surface-foreground`; the quiet tiers (eyebrow / subcopy / footer)
+ * use the `text-primary-surface-muted` token — one visible weight below the white
+ * headline, AA on the blue.700 panel in both themes (#537, replacing the prior
+ * element `opacity-*` dim: a real token reads as a deliberate tier, not translucency).
  */
 function NeutralAside() {
   return (
     <div className="flex h-full flex-col justify-between gap-8">
       <div className="flex flex-1 flex-col justify-center gap-5">
-        <p className="text-eyebrow font-extrabold uppercase tracking-micro opacity-80">
+        <p className="text-eyebrow font-extrabold uppercase tracking-micro text-primary-surface-muted">
           Peer to peer
         </p>
         <p className="max-w-lg text-3xl font-extrabold leading-tight tracking-tight">
           Welcome back
         </p>
-        <p className="max-w-md text-lg leading-snug opacity-90">
+        <p className="max-w-md text-lg leading-snug text-primary-surface-muted">
           Sign in to pick up where you left off.
         </p>
       </div>
-      <p className="text-sm font-semibold opacity-80">Free · no red tape · © Acme</p>
+      <p className="text-sm font-semibold text-primary-surface-muted">Free · no red tape · © Acme</p>
     </div>
   );
 }

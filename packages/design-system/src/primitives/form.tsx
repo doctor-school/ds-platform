@@ -145,8 +145,8 @@ FormDescription.displayName = "FormDescription";
  * Single source of the form message style (ADR-0013 §7). The error tone and the
  * helper tone live **here, once** — `FormMessage` (field-level) and `FormError`
  * (form-level submit/auth error) both compose these, so the error look is defined
- * in one place, never re-typed as a raw `text-xs text-destructive` `<p>` on each
- * page (the #333 Stage-B finding). Token-only.
+ * in one place, never re-typed as a raw `text-xs text-destructive-text` `<p>` on
+ * each page (the #333 Stage-B finding). Token-only.
  */
 const FORM_MESSAGE_TEXT = "text-xs";
 // Neo-brutalist error tone (#512, source §07 "Формы и валидация"): the inline
@@ -155,7 +155,12 @@ const FORM_MESSAGE_TEXT = "text-xs";
 // the owner-authored visual-language canvas (`design-source/design-system.dc.html`,
 // the fidelity SoT) renders the error at 700, so the re-skin follows it. The
 // helper tone stays quiet and normal-weight so the two never read alike.
-const FORM_ERROR_TONE = "font-bold text-destructive";
+// The danger colour is `destructive-text`, NOT the `destructive` FILL (#537): a
+// filled button needs a dark red for white-text AA (red.500 #C81E1E), but the SAME
+// red as MESSAGE TEXT on the near-black dark card is only 3.09:1 — so the error
+// text rides its own role (light #C81E1E / dark red.400 #E15555, 4.75:1 on the
+// dark card), which keeps the message legible in both themes.
+const FORM_ERROR_TONE = "font-bold text-destructive-text";
 const FORM_HELPER_TONE = "text-muted-foreground";
 
 /** The `⚠` glyph that leads a neo-brutalist inline/summary error (source §07),
@@ -249,7 +254,7 @@ FormMessage.displayName = "FormMessage";
  * Form-level error (ADR-0013 §7). The **single** primitive for a submit/auth
  * error that is not tied to one field — e.g. the EARS-16 generic login/register
  * outcome, a 429/5xx/network message. It owns the error style from the shared
- * source (same `text-xs text-destructive` as a `FormMessage` error) so the look
+ * source (same `text-xs text-destructive-text` as a `FormMessage` error) so the look
  * is defined in **one place**; pages render `<FormError>{error}</FormError>`
  * instead of hand-typing a raw `<p role="alert" className="…">` each time (the
  * #333 Stage-B finding — the error style must live in the design system, not be

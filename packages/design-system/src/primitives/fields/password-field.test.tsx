@@ -87,7 +87,7 @@ describe("PasswordField composition (inline message)", () => {
     const slot = paras[0]!;
     expect(slot).toHaveTextContent("Не менее 8 символов.");
     expect(slot.textContent ?? "").not.toContain(POLICY);
-    expect(slot).toHaveClass("text-xs", "font-bold", "text-destructive");
+    expect(slot).toHaveClass("text-xs", "font-bold", "text-destructive-text");
     expect(slot.textContent ?? "").toContain("⚠");
     expect(slot).toHaveAttribute("role", "alert");
     expect(slot.id).toMatch(/-form-item-message$/);

@@ -73,7 +73,7 @@ describe("FormMessage inline (no reserved line, no reflow over-spacing)", () => 
     expect(msg).toHaveTextContent("Required");
     // Neo-brutalist error (#512, source §07): 12px weight-700 danger with the
     // leading ⚠ glyph — supersedes the prior slice-B "not bold" tone.
-    expect(msg).toHaveClass("text-xs", "font-bold", "text-destructive");
+    expect(msg).toHaveClass("text-xs", "font-bold", "text-destructive-text");
     expect(msg.textContent ?? "").toContain("⚠");
     // No reserved-height slot (inline grows on demand).
     expect(msg).not.toHaveClass("min-h-5");
@@ -94,7 +94,7 @@ describe("FormMessage inline (no reserved line, no reflow over-spacing)", () => 
     const msg = screen.getByTestId("message");
     expect(msg).toHaveTextContent("Required");
     expect(msg.textContent).not.toContain("We never share this.");
-    expect(msg).toHaveClass("text-xs", "text-destructive");
+    expect(msg).toHaveClass("text-xs", "text-destructive-text");
     expect(msg).toHaveAttribute("role", "alert");
   });
 });
@@ -104,7 +104,7 @@ describe("FormLabel stays neutral on error (K-3 — no red label)", () => {
     render(<Harness error="Required" />);
     const label = screen.getByTestId("label");
     // The error is carried by the input border + message, not a red label.
-    expect(label).not.toHaveClass("text-destructive");
+    expect(label).not.toHaveClass("text-destructive-text");
   });
 });
 
@@ -128,7 +128,7 @@ describe("FormError — single form-level error primitive (one error style sourc
     expect(err).toHaveTextContent("Не удалось войти.");
     // Same shared style as FormMessage's error branch — the look lives in one place
     // (#512, source §07): weight-700 danger with the leading ⚠ glyph.
-    expect(err).toHaveClass("text-xs", "font-bold", "text-destructive");
+    expect(err).toHaveClass("text-xs", "font-bold", "text-destructive-text");
     expect(err.textContent ?? "").toContain("⚠");
     expect(err).toHaveAttribute("role", "alert");
   });

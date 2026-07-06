@@ -17,9 +17,11 @@ import { cn } from "../lib/utils";
  *   • danger   `live` (#C81E1E, INVARIANT) on `destructive-tint`        → role=alert
  *
  * FIDELITY NOTE: danger paints `live`, NOT `destructive`. The source keeps the
- * danger red at #C81E1E in BOTH themes (its `danger` constant), whereas the
- * `destructive` token lifts to red.400 in dark for AA-on-card-fill — a different
- * value. The alert's danger border/icon follow the source, so `live` is correct.
+ * danger red at #C81E1E in BOTH themes (its `danger` constant) — which the `live`
+ * role carries invariant. The `destructive` FILL is also #C81E1E in both themes
+ * (since #537), but it is the interactive-fill role (button / invalid input), a
+ * distinct semantic from this non-text alert border/icon, so `live` is the correct
+ * token here.
  */
 const alertVariants = cva(
   "flex items-start gap-3 border-2 px-4 py-3.5",

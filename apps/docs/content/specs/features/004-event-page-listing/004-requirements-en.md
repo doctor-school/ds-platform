@@ -6,6 +6,7 @@ status: Draft
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
 parent_issue: https://github.com/doctor-school/ds-platform/issues/471
+issues: [549, 550, 551, 552, 553, 554, 555, 556, 557, 558, 559]
 prior_decisions:
   - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace; §3/§4 canvas is source, repo holds the built artifact)
   - ADR-0002 — Backend Core Stack (§3 nestjs-zod + URI versioning `/v1/...` + Vitest; `packages/schemas/` SSOT)

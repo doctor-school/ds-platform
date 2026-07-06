@@ -27,6 +27,10 @@ At the end of any task you report to the user (a merged PR, a completed engineer
 6. **▸ Технически (collapsed appendix, at the END):** files, tokens, changeset, CI — full detail on request only. The report reads as a product report, not a diff.
 7. **Дальше / отложено:** next queue item, deferred items + why.
 
+## Owner-question shape (mandatory gate)
+
+Any question you put to the owner — in the report **and** in the `⏸ ЖДУ ВАС: <одно действие>` handback line — renders as a self-contained block, four beats: **что случилось / почему спрашиваю / что изменит ответ / где посмотреть** (a live URL, or a concrete page — never "look at the diff"). **Banned:** jargon (token names, internal process terms) and any «см. Issue/отчёт» redirect that makes the owner go read something to parse the question — an Issue number is allowed only as a parenthetical aside. Before releasing the report, self-check **each** question against this form: an owner who has read nothing else must be able to answer it. Precedent: the 2026-07-06 checkpoint asked 4 questions in internal shorthand; the owner could not parse 3 of them, and the re-ask cost a full round-trip.
+
 ## Visual-delivery recipe (reused by build-ui Stage-B supplements + mid-task decision visuals)
 
 A confirmation or report visual the user **cannot see** is worthless — images you `Read` render only in your own CLI, not to the user. To produce and DELIVER one:
@@ -48,6 +52,7 @@ A confirmation or report visual the user **cannot see** is worthless — images 
 - **Engineering-jargon-first report** with no product framing and no explicit visual-to-check line.
 - **Omitting the before/after** for a visible-UI change, or showing only the "after".
 - **Opening a decision request mid-thread with no "why this surfaced" context.**
+- **An owner question in internal shorthand** — jargon, a token name, or a «см. Issue/отчёт» redirect instead of the self-contained что-случилось / почему / что-изменит / где-посмотреть block.
 - **Leaving preview PNGs in the repo root** (the MCP saves there) — `mv` them out, keep `git status` clean.
 
 ## Related

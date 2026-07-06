@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1}50%{opacity:.4}}</style></helmet>
+
+<div style="min-height:100vh;background:{{ page }};display:flex;flex-direction:column">
+  <!-- Превью-панель (переключатель экранов) -->
+  <div style="background:{{ page }};border-bottom:2px solid {{ border }};padding:12px clamp(16px,4vw,40px);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+    <span style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ inkFaint }}">Doctor.School · авторизация</span>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="display:flex;border:2px solid {{ border }};overflow:hidden">
+        <sc-for list="{{ screenTabs }}" as="st" hint-placeholder-count="4"><button onClick="{{ st.onClick }}" style="{{ st.style }}">{{ st.name }}</button></sc-for>
+      </div>
+      <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:{{ ink }};border:2px solid {{ border }};cursor:pointer;font-size:15px;flex:none">{{ themeIcon }}</button>
+    </div>
+  </div>
+
+  <!-- Сплит-экран -->
+  <div style="flex:1;display:grid;grid-template-columns:{{ shellCols }};min-height:0">
+    <!-- Колонка формы -->
+    <div style="order:2;display:flex;flex-direction:column;padding:clamp(24px,4vw,48px) clamp(16px,4vw,40px);background:{{ page }};min-width:0">
+      <img src="{{ logoSrc }}" alt="Doctor.School" style="height:30px;align-self:flex-start;display:block">
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:32px 0">
+        <div style="width:100%;max-width:440px;background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(24px,4vw,36px)">
+
+          <!-- бейдж-иконка + заголовок -->
+          <span style="width:52px;height:52px;background:{{ tint }};color:{{ accent }};display:inline-flex;align-items:center;justify-content:center;margin-bottom:20px">{{ screenIcon }}</span>
+          <h1 style="margin:0;font-size:26px;font-weight:800;letter-spacing:-.025em;color:{{ ink }};line-height:1.15">{{ title }}</h1>
+          <p style="margin:10px 0 24px;font-size:14px;line-height:1.55;color:{{ inkMuted }}">{{ description }}</p>
+
+          <!-- ============ ВХОД ============ -->
+          <sc-if value="{{ isLogin }}" hint-placeholder-val="{{ true }}">
+            <div style="display:grid;grid-template-columns:1fr 1fr;border:2px solid {{ border }};margin-bottom:22px">
+              <button onClick="{{ tabPw }}" style="{{ tabPwStyle }}">Пароль</button>
+              <button onClick="{{ tabOtp }}" style="{{ tabOtpStyle }}">По коду</button>
+            </div>
+
+            <sc-if value="{{ loginPw }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;flex-direction:column;gap:18px">
+                <div>
+                  <label style="{{ fLoginId.labelStyle }}">{{ fLoginId.label }}</label>
+                  <input type="text" value="{{ fLoginId.value }}" onChange="{{ fLoginId.onChange }}" onBlur="{{ fLoginId.onBlur }}" placeholder="{{ fLoginId.placeholder }}" style="{{ fLoginId.inputStyle }}">
+                  <div style="{{ fLoginId.errStyle }}">⚠ {{ fLoginId.error }}</div>
+                </div>
+                <div>
+                  <label style="{{ fLoginPw.labelStyle }}">{{ fLoginPw.label }}</label>
+                  <div style="position:relative">
+                    <input type="{{ pwType }}" value="{{ fLoginPw.value }}" onChange="{{ fLoginPw.onChange }}" onBlur="{{ fLoginPw.onBlur }}" placeholder="••••••••" style="{{ fLoginPw.inputStyle }};padding-right:52px">
+                    <button onClick="{{ togglePw }}" type="button" style="position:absolute;top:0;right:0;height:100%;width:48px;background:transparent;border:0;cursor:pointer;font-size:12px;font-weight:800;color:{{ accent }}">{{ pwToggle }}</button>
+                  </div>
+                  <div style="{{ fLoginPw.errStyle }}">⚠ {{ fLoginPw.error }}</div>
+                </div>
+                <button style="font:inherit;width:100%;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Войти</button>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ loginOtp }}" hint-placeholder-val="{{ false }}">
+              <sc-if value="{{ otpNotSent }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;flex-direction:column;gap:18px">
+                  <div>
+                    <div style="font-size:14px;font-weight:700;color:{{ ink }};margin-bottom:4px">Вход по одноразовому коду</div>
+                    <div style="font-size:12.5px;line-height:1.5;color:{{ inkFaint }}">Пришлём код на почту или телефон — пароль не нужен.</div>
+                  </div>
+                  <div style="display:flex;gap:8px">
+                    <button onClick="{{ chEmail }}" style="{{ chEmailStyle }}">Эл. почта</button>
+                    <button onClick="{{ chSms }}" style="{{ chSmsStyle }}">SMS</button>
+                  </div>
+                  <div>
+                    <label style="{{ fOtpId.labelStyle }}">{{ fOtpId.label }}</label>
+                    <input type="text" value="{{ fOtpId.value }}" onChange="{{ fOtpId.onChange }}" onBlur="{{ fOtpId.onBlur }}" placeholder="{{ fOtpId.placeholder }}" style="{{ fOtpId.inputStyle }}">
+                    <div style="{{ fOtpId.errStyle }}">⚠ {{ fOtpId.error }}</div>
+                  </div>
+                  <button onClick="{{ sendOtp }}" style="font:inherit;width:100%;font-size:15px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:14px;cursor:pointer;box-shadow:4px 4px 0 {{ shadowSm }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ shadowSm }}">Отправить код</button>
+                </div>
+              </sc-if>
+              <sc-if value="{{ otpSent }}" hint-placeholder-val="{{ false }}">
+                {{ otpFocusEl }}
+              </sc-if>
+            </sc-if>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:24px;padding-top:20px;border-top:2px solid {{ hairline }}">
+              <button onClick="{{ goRegister }}" style="font:inherit;font-size:13px;font-weight:700;color:{{ accent }};background:transparent;border:0;cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Создать аккаунт</button>
+              <button onClick="{{ goReset }}" style="font:inherit;font-size:13px;font-weight:700;color:{{ accent }};background:transparent;border:0;cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Забыли пароль?</button>
+            </div>
+          </sc-if>
+
+          <!-- ============ РЕГИСТРАЦИЯ ============ -->
+          <sc-if value="{{ isRegister }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:18px">
+              <div>
+                <label style="{{ fRegEmail.labelStyle }}">{{ fRegEmail.label }}</label>
+                <input type="email" value="{{ fRegEmail.value }}" onChange="{{ fRegEmail.onChange }}" onBlur="{{ fRegEmail.onBlur }}" placeholder="{{ fRegEmail.placeholder }}" style="{{ fRegEmail.inputStyle }}">
+                <div style="{{ fRegEmail.errStyle }}">⚠ {{ fRegEmail.error }}</div>
+              </div>
+              <div>
+                <label style="{{ fRegPw.labelStyle }}">{{ fRegPw.label }}</label>
+                <input type="{{ pwType }}" value="{{ fRegPw.value }}" onChange="{{ fRegPw.onChange }}" onBlur="{{ fRegPw.onBlur }}" placeholder="••••••••" style="{{ fRegPw.inputStyle }}">
+                <div style="{{ fRegPwHint }}">Минимум 8 символов, буквы и цифры.</div>
+                <div style="{{ fRegPw.errStyle }}">⚠ {{ fRegPw.error }}</div>
+              </div>
+              <p style="margin:0;font-size:12px;line-height:1.55;color:{{ inkFaint }}">Продолжая, вы соглашаетесь с условиями использования и политикой конфиденциальности.</p>
+              <button style="font:inherit;width:100%;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Создать аккаунт</button>
+            </div>
+            <div style="margin-top:24px;padding-top:20px;border-top:2px solid {{ hairline }}">
+              <button onClick="{{ goLogin }}" style="font:inherit;font-size:13px;font-weight:700;color:{{ accent }};background:transparent;border:0;cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Уже есть аккаунт? Войти</button>
+            </div>
+          </sc-if>
+
+          <!-- ============ ПОДТВЕРЖДЕНИЕ (VERIFY) ============ -->
+          <sc-if value="{{ isVerify }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:24px">
+              <div style="display:flex;flex-direction:column;gap:14px">
+                <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Новый аккаунт — введите код</div>
+                <div>
+                  <label style="display:block;font-size:12px;font-weight:700;color:{{ ink }};margin-bottom:10px">Код из письма</label>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <sc-for list="{{ verifySlots }}" as="s" hint-placeholder-count="6"><input id="{{ s.id }}" maxlength="1" value="{{ s.value }}" onChange="{{ s.onChange }}" onKeyDown="{{ s.onKeyDown }}" style="{{ s.style }}"></sc-for>
+                  </div>
+                </div>
+                <sc-if value="{{ verified }}" hint-placeholder-val="{{ false }}">
+                  <div style="border:2px solid {{ success }};background:{{ successTint }};padding:12px 14px;display:flex;gap:10px;align-items:center;font-size:13px;font-weight:700;color:{{ ink }}"><span style="color:{{ success }}">✓</span>Код принят — входим…</div>
+                </sc-if>
+                <button style="font:inherit;width:100%;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Подтвердить</button>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <div style="display:flex;justify-content:flex-end">
+                    <button onClick="{{ resend }}" style="{{ resendStyle }}">{{ resendLabel }}</button>
+                  </div>
+                  <sc-if value="{{ notice }}" hint-placeholder-val="{{ false }}">
+                    <p style="margin:0;font-size:12.5px;line-height:1.5;color:{{ inkMuted }}">Если аккаунт с этим адресом существует, мы повторно отправили код на {{ maskedDest }}.</p>
+                  </sc-if>
+                </div>
+              </div>
+              <div style="border-top:2px solid {{ hairline }};padding-top:22px;display:flex;flex-direction:column;gap:14px">
+                <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Уже регистрировались?</div>
+                <p style="margin:0;font-size:13px;line-height:1.5;color:{{ inkMuted }}">Войдите в существующий аккаунт или сбросьте пароль.</p>
+                <div style="display:flex;gap:12px;flex-wrap:wrap">
+                  <button onClick="{{ goLogin }}" style="font:inherit;flex:1;min-width:140px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:12px;cursor:pointer;box-shadow:3px 3px 0 {{ border }}">Войти</button>
+                  <button onClick="{{ goReset }}" style="font:inherit;flex:1;min-width:140px;font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:12px;cursor:pointer;box-shadow:3px 3px 0 {{ shadowSm }}">Сбросить пароль</button>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- ============ СБРОС ПАРОЛЯ (RESET) ============ -->
+          <sc-if value="{{ isReset }}" hint-placeholder-val="{{ false }}">
+            <sc-if value="{{ resetRequest }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;flex-direction:column;gap:18px">
+                <div>
+                  <label style="{{ fResetId.labelStyle }}">{{ fResetId.label }}</label>
+                  <input type="text" value="{{ fResetId.value }}" onChange="{{ fResetId.onChange }}" onBlur="{{ fResetId.onBlur }}" placeholder="{{ fResetId.placeholder }}" style="{{ fResetId.inputStyle }}">
+                  <div style="{{ fResetId.errStyle }}">⚠ {{ fResetId.error }}</div>
+                </div>
+                <button onClick="{{ resetSend }}" style="font:inherit;width:100%;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Отправить код сброса</button>
+              </div>
+            </sc-if>
+            <sc-if value="{{ resetComplete }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:18px">
+                <div>
+                  <label style="display:block;font-size:12px;font-weight:700;color:{{ ink }};margin-bottom:10px">Код из сообщения</label>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <sc-for list="{{ resetSlots }}" as="s" hint-placeholder-count="6"><input id="{{ s.id }}" maxlength="1" value="{{ s.value }}" onChange="{{ s.onChange }}" onKeyDown="{{ s.onKeyDown }}" style="{{ s.style }}"></sc-for>
+                  </div>
+                </div>
+                <div>
+                  <label style="{{ fResetPw.labelStyle }}">{{ fResetPw.label }}</label>
+                  <input type="{{ pwType }}" value="{{ fResetPw.value }}" onChange="{{ fResetPw.onChange }}" onBlur="{{ fResetPw.onBlur }}" placeholder="••••••••" style="{{ fResetPw.inputStyle }}">
+                  <div style="{{ fResetPwHint }}">Минимум 8 символов, буквы и цифры.</div>
+                  <div style="{{ fResetPw.errStyle }}">⚠ {{ fResetPw.error }}</div>
+                </div>
+                <button style="font:inherit;width:100%;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Задать новый пароль</button>
+                <div style="border-top:2px solid {{ hairline }};padding-top:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+                  <button onClick="{{ resetRestart }}" style="font:inherit;font-size:13px;font-weight:700;color:{{ inkMuted }};background:transparent;border:0;cursor:pointer">Начать заново</button>
+                  <button onClick="{{ resend }}" style="{{ resendStyle }}">{{ resendLabel }}</button>
+                </div>
+                <sc-if value="{{ notice }}" hint-placeholder-val="{{ false }}">
+                  <p style="margin:0;font-size:12.5px;line-height:1.5;color:{{ inkMuted }}">Если аккаунт существует, мы повторно отправили код на {{ maskedDest }}.</p>
+                </sc-if>
+              </div>
+            </sc-if>
+            <div style="margin-top:24px;padding-top:20px;border-top:2px solid {{ hairline }}">
+              <button onClick="{{ goLogin }}" style="font:inherit;font-size:13px;font-weight:700;color:{{ accent }};background:transparent;border:0;cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">← Вернуться ко входу</button>
+            </div>
+          </sc-if>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Брендовая панель -->
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+    <div style="order:1;background:{{ headerBg }};padding:clamp(40px,4vw,64px);display:flex;flex-direction:column;color:#fff">
+      <img src="assets/ds-logo-white.svg" alt="" style="height:40px;align-self:flex-start;display:block">
+      <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:20px">
+        <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#D3E8FD">Врачи учат врачей</div>
+        <h2 style="margin:0;font-size:clamp(30px,3.4vw,46px);line-height:1.05;font-weight:800;letter-spacing:-.035em;color:#fff;max-width:16ch">{{ panelHeadline }}</h2>
+        <p style="margin:0;font-size:17px;line-height:1.55;color:#D3E8FD;max-width:34ch">Бесплатные эфиры, записи и сертификаты НМО — от практикующих врачей 38 школ.</p>
+      </div>
+      <div style="font-size:13px;font-weight:600;color:rgba(255,255,255,.8)">Бесплатно · без бюрократии · © Doctor.School 2026</div>
+    </div>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
+    isMobile: false,
+    screen: 'login',
+    loginTab: 'password',
+    otpChannel: 'email',
+    otpSent: false,
+    resetStage: 'request',
+    values: {}, touched: {},
+    otp: Array(8).fill(''),
+    cooldown: 0, notice: false, verified: false, showPw: false
+  };
+  componentDidMount() {
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.upd = () => this.setState({ isMobile: this.mq.matches });
+    this.upd();
+    this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
+    this.timer = setInterval(() => this.setState(s => (s.cooldown > 0 ? { cooldown: s.cooldown - 1 } : null)), 1000);
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+
+  resetSub(extra) {
+    return Object.assign({ loginTab: 'password', otpChannel: 'email', otpSent: false, resetStage: 'request', otp: Array(8).fill(''), cooldown: 0, notice: false, verified: false, values: {}, touched: {} }, extra || {});
+  }
+  go(screen) { this.setState(this.resetSub({ screen })); }
+  startCd() { this.setState({ cooldown: 30 }); }
+
+  renderVals() {
+    const s = this.state, d = s.dark, m = s.isMobile, R = React.createElement;
+    const page = d ? 'oklch(.16 .02 250)' : '#fff';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const inkMuted = d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)';
+    const inkFaint = d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const hairline = d ? 'rgba(255,255,255,.16)' : 'oklch(.922 .006 250)';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const tint = d ? '#0D3A77' : '#D3E8FD';
+    const tintFg = d ? '#AED4FB' : '#114D9E';
+    const shadow = d ? '#6BB1F7' : '#114D9E';
+    const shadowSm = d ? '#1F69C8' : '#AED4FB';
+    const headerBg = d ? '#114D9E' : '#2D84F2';
+    const danger = '#C81E1E';
+    const dangerTint = d ? '#3a1414' : '#fdecec';
+    const success = d ? '#4ADE80' : '#009959';
+    const successTint = d ? '#0e2a1c' : '#e6f6ee';
+
+    // валидаторы
+    const emailOk = v => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v);
+    const phoneOk = v => /^\+?\d{10,15}$/.test((v || '').replace(/[\s()\-]/g, ''));
+    const vEmail = v => emailOk(v) ? '' : 'Неверный формат e-mail';
+    const vPhone = v => phoneOk(v) ? '' : 'Телефон в формате +7 900 000-00-00';
+    const vIdent = v => (emailOk(v) || phoneOk(v)) ? '' : 'Введите e-mail или телефон';
+    const vNewPw = v => (v.length >= 8 && /[a-zа-я]/i.test(v) && /\d/.test(v)) ? '' : 'Минимум 8 символов, буквы и цифры';
+
+    const mkField = (name, label, placeholder, validate, required) => {
+      const val = s.values[name] || '';
+      const touched = !!s.touched[name];
+      let err = '';
+      if (touched) { if (!val && required) err = required; else if (val && validate) err = validate(val) || ''; }
+      return {
+        label, placeholder, value: val, error: err,
+        onChange: (e) => { const v = e.target.value; this.setState(st => ({ values: Object.assign({}, st.values, { [name]: v }) })); },
+        onBlur: () => this.setState(st => ({ touched: Object.assign({}, st.touched, { [name]: true }) })),
+        labelStyle: 'display:block;font-size:12px;font-weight:700;color:' + ink + ';margin-bottom:7px',
+        inputStyle: 'width:100%;box-sizing:border-box;font:inherit;font-size:14px;padding:12px 14px;border:2px solid ' + (err ? danger : hairline) + ';background:' + (err ? dangerTint : surface) + ';color:' + ink + ';outline:none',
+        errStyle: err ? 'display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:' + danger + ';margin-top:7px' : 'display:none'
+      };
+    };
+
+    // OTP слоты
+    const otpInput = (i, len, e) => {
+      const ch = (e.target.value || '').replace(/\s/g, '').slice(-1);
+      const otp = s.otp.slice(); otp[i] = ch;
+      const done = ch && i === len - 1 && otp.slice(0, len).every(c => c);
+      this.setState({ otp, verified: done ? true : s.verified });
+      if (ch && i < len - 1) { const n = document.getElementById('otp-' + (i + 1)); if (n) n.focus(); }
+    };
+    const otpKey = (i, e) => { if (e.key === 'Backspace' && !s.otp[i] && i > 0) { const p = document.getElementById('otp-' + (i - 1)); if (p) p.focus(); } };
+    const makeSlots = (len) => Array.from({ length: len }, (_, i) => {
+      const filled = !!s.otp[i];
+      return {
+        id: 'otp-' + i, value: s.otp[i] || '',
+        onChange: (e) => otpInput(i, len, e), onKeyDown: (e) => otpKey(i, e),
+        style: 'width:42px;height:52px;box-sizing:border-box;text-align:center;font:inherit;font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;text-transform:uppercase;border:2px solid ' + (filled ? border : hairline) + ';background:' + surface + ';color:' + ink + ';outline:none'
+      };
+    });
+
+    // resend / cooldown
+    const resendLabel = s.cooldown > 0 ? ('Отправить снова · ' + s.cooldown + ' с') : 'Отправить снова';
+    const resendStyle = 'font:inherit;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;background:transparent;border:0;cursor:' + (s.cooldown > 0 ? 'default' : 'pointer') + ';color:' + (s.cooldown > 0 ? inkFaint : accent) + ';text-decoration:' + (s.cooldown > 0 ? 'none' : 'underline') + ';text-decoration-thickness:2px;text-underline-offset:4px';
+
+    // маскированный адрес
+    const dest = s.values['otpId'] || s.values['resetId'] || 'anna@nmic.ru';
+    const maskedDest = dest.includes('@') ? dest.replace(/^(.).*(@.).*(\..*)$/, '$1•••$2•••$3') : dest.replace(/\d(?=\d{2})/g, '•');
+
+    // иконки
+    const svg = (paths) => R('svg', { width: 26, height: 26, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, paths.map((p, i) => R('path', { key: i, d: p })));
+    const icons = {
+      login: svg(['M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z', 'M9 12l2 2 4-4']),
+      register: svg(['M9 21c0-3.3 2.7-6 6-6', 'M6 8a3 3 0 1 0 6 0 3 3 0 0 0-6 0', 'M18 8v6', 'M15 11h6']),
+      verify: svg(['M3 6h18v12H3z', 'M3 7l9 6 9-6', 'M8 20l3 3 6-6']),
+      reset: svg(['M8 13a4 4 0 1 0-4-4', 'M8 9l12 12', 'M17 18l2-2', 'M19 16l2-2'])
+    };
+    const iconKey = s.screen;
+    const titles = {
+      login: ['Вход', 'Войдите в личный кабинет врача'],
+      register: ['Создание аккаунта', 'Бесплатно, за две минуты — нужны только e-mail и пароль'],
+      verify: ['Проверьте почту', 'Мы отправили код на ' + maskedDest + '. Введите его, чтобы завершить регистрацию.'],
+      reset: s.resetStage === 'request'
+        ? ['Сброс пароля', 'Укажите e-mail или телефон — пришлём код для сброса.']
+        : ['Новый пароль', 'Код отправлен на ' + maskedDest + '. Введите его и задайте новый пароль.']
+    };
+    const panelHeadlines = { login: 'С возвращением в эфир', register: 'Присоединяйтесь к сообществу врачей', verify: 'Ещё один шаг', reset: 'Вернём доступ за минуту' };
+
+    // login otp focus-screen элемент (после отправки)
+    const otpFocusEl = R('div', { style: { display: 'flex', flexDirection: 'column', gap: '18px' } },
+      R('div', null,
+        R('div', { style: { fontSize: '14px', fontWeight: 700, color: ink } }, 'Введите код'),
+        R('div', { style: { fontSize: '12.5px', color: inkFaint, marginTop: '4px' } }, 'Код отправлен на ' + maskedDest)),
+      R('div', { style: { display: 'flex', gap: '7px', flexWrap: 'wrap' } },
+        makeSlots(8).map(sl => R('input', { key: sl.id, id: sl.id, maxLength: 1, value: sl.value, onChange: sl.onChange, onKeyDown: sl.onKeyDown, style: cssToObj(sl.style) }))),
+      s.verified ? R('div', { style: { border: '2px solid ' + success, background: successTint, padding: '12px 14px', display: 'flex', gap: '10px', alignItems: 'center', fontSize: '13px', fontWeight: 700, color: ink } }, R('span', { style: { color: success } }, '✓'), 'Код принят — входим…') : null,
+      R('button', { style: { font: 'inherit', width: '100%', fontSize: '15px', fontWeight: 800, color: btnFg, background: btnBg, border: '2px solid ' + btnBg, padding: '14px', cursor: 'pointer', boxShadow: '4px 4px 0 ' + border } }, 'Подтвердить и войти'),
+      R('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' } },
+        R('button', { onClick: () => this.setState({ otpSent: false, otp: Array(8).fill(''), verified: false, cooldown: 0 }), style: { font: 'inherit', fontSize: '13px', fontWeight: 700, color: inkMuted, background: 'transparent', border: 0, cursor: 'pointer' } }, '← Изменить способ'),
+        R('button', { onClick: () => { this.startCd(); }, disabled: s.cooldown > 0, style: cssToObj(resendStyle) }, resendLabel)));
+
+    const segTab = (on) => 'font:inherit;padding:11px 6px;text-align:center;font-size:13.5px;font-weight:' + (on ? 800 : 700) + ';border:0;cursor:pointer;color:' + (on ? btnFg : tintFg) + ';background:' + (on ? btnBg : surface);
+    const chBtn = (on) => 'font:inherit;flex:1;font-size:13px;font-weight:' + (on ? 800 : 700) + ';cursor:pointer;padding:10px;color:' + (on ? btnFg : tintFg) + ';background:' + (on ? btnBg : 'transparent') + ';border:2px solid ' + (on ? btnBg : hairline);
+    const scrTab = (name, key) => ({ name, onClick: () => this.go(key), style: 'font:inherit;font-size:12px;font-weight:' + (s.screen === key ? 800 : 700) + ';padding:9px 14px;border:0;cursor:pointer;color:' + (s.screen === key ? btnFg : ink) + ';background:' + (s.screen === key ? btnBg : surface) + (key !== 'login' ? ';border-left:2px solid ' + border : '') });
+
+    return {
+      toggleTheme: () => this.setState(st => { const dark = !st.dark; try { localStorage.setItem('ds-theme', dark ? 'dark' : 'light'); } catch (e) {} return { dark }; }),
+      themeIcon: d ? '☀' : '☾',
+      isDesktop: !m, page, surface, ink, inkMuted, inkFaint, border, hairline, accent, btnBg, btnFg, tint, tintFg, shadow, shadowSm, headerBg, danger, dangerTint, success, successTint,
+      shellCols: m ? '1fr' : '.95fr 1.05fr',
+      logoSrc: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo-color.svg',
+      screenTabs: [scrTab('Вход', 'login'), scrTab('Регистрация', 'register'), scrTab('Код', 'verify'), scrTab('Сброс', 'reset')],
+      screenIcon: icons[iconKey], title: titles[s.screen][0], description: titles[s.screen][1],
+      panelHeadline: panelHeadlines[s.screen],
+      isLogin: s.screen === 'login', isRegister: s.screen === 'register', isVerify: s.screen === 'verify', isReset: s.screen === 'reset',
+      // login
+      loginPw: s.loginTab === 'password', loginOtp: s.loginTab === 'otp',
+      tabPw: () => this.setState({ loginTab: 'password' }), tabOtp: () => this.setState({ loginTab: 'otp' }),
+      tabPwStyle: segTab(s.loginTab === 'password'), tabOtpStyle: segTab(s.loginTab === 'otp') + ';border-left:2px solid ' + border,
+      otpNotSent: !s.otpSent, otpSent: s.otpSent,
+      chEmail: () => this.setState({ otpChannel: 'email' }), chSms: () => this.setState({ otpChannel: 'sms' }),
+      chEmailStyle: chBtn(s.otpChannel === 'email'), chSmsStyle: chBtn(s.otpChannel === 'sms'),
+      sendOtp: () => { this.setState({ touched: Object.assign({}, s.touched, { otpId: true }) }); const v = s.values['otpId'] || ''; const ok = s.otpChannel === 'email' ? emailOk(v) : phoneOk(v); if (ok) { this.setState({ otpSent: true, otp: Array(8).fill(''), verified: false }); this.startCd(); } },
+      otpFocusEl,
+      fLoginId: mkField('loginId', 'Email или телефон', 'doctor@clinic.ru', vIdent, 'Введите e-mail или телефон'),
+      fLoginPw: mkField('loginPw', 'Пароль', '', null, 'Введите пароль'),
+      fOtpId: s.otpChannel === 'email'
+        ? mkField('otpId', 'Электронная почта', 'doctor@clinic.ru', vEmail, 'Введите e-mail')
+        : mkField('otpId', 'Телефон', '+7 900 000-00-00', vPhone, 'Введите телефон'),
+      pwType: s.showPw ? 'text' : 'password', pwToggle: s.showPw ? 'Скрыть' : 'Показать', togglePw: () => this.setState({ showPw: !s.showPw }),
+      // register
+      fRegEmail: mkField('regEmail', 'Электронная почта', 'doctor@clinic.ru', vEmail, 'Введите e-mail'),
+      fRegPw: mkField('regPw', 'Пароль', '', vNewPw, 'Придумайте пароль'),
+      fRegPwHint: (s.touched['regPw'] && s.values['regPw'] && vNewPw(s.values['regPw'])) ? 'display:none' : 'font-size:12px;font-weight:600;color:' + inkFaint + ';margin-top:7px',
+      // verify
+      verifySlots: makeSlots(6), verified: s.verified, notice: s.notice, maskedDest,
+      resendLabel, resendStyle,
+      resend: () => { if (s.cooldown > 0) return; this.setState({ notice: true, otp: Array(8).fill(''), verified: false }); this.startCd(); },
+      // reset
+      resetRequest: s.resetStage === 'request', resetComplete: s.resetStage === 'complete',
+      fResetId: mkField('resetId', 'Email или телефон', 'doctor@clinic.ru', vIdent, 'Введите e-mail или телефон'),
+      fResetPw: mkField('resetPw', 'Новый пароль', '', vNewPw, 'Придумайте пароль'),
+      fResetPwHint: (s.touched['resetPw'] && s.values['resetPw'] && vNewPw(s.values['resetPw'])) ? 'display:none' : 'font-size:12px;font-weight:600;color:' + inkFaint + ';margin-top:7px',
+      resetSlots: makeSlots(6),
+      resetSend: () => { this.setState({ touched: Object.assign({}, s.touched, { resetId: true }) }); const v = s.values['resetId'] || ''; if (emailOk(v) || phoneOk(v)) { this.setState({ resetStage: 'complete', otp: Array(8).fill(''), notice: false }); this.startCd(); } },
+      resetRestart: () => this.setState({ resetStage: 'request', otp: Array(8).fill(''), notice: false, cooldown: 0 }),
+      // nav
+      goLogin: () => this.go('login'), goRegister: () => this.go('register'), goReset: () => this.go('reset')
+    };
+  }
+}
+function cssToObj(str) { const o = {}; (str || '').split(';').forEach(r => { const i = r.indexOf(':'); if (i > 0) { const k = r.slice(0, i).trim().replace(/-([a-z])/g, (_, c) => c.toUpperCase()); o[k] = r.slice(i + 1).trim(); } }); return o; }
+</script>
+</body>
+</html>

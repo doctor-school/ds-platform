@@ -9,12 +9,14 @@ This folder holds the **actual design source** for the Doctor.School neo-brutali
 | File | What it is |
 | --- | --- |
 | `design-system.dc.html` | The 9-section visual language: **01** color · **02** type · **03** spacing · **04** borders/radius/shadows · **05** components · **06** states · **07** forms & validation · **08** feedback · **09** layout & rhythm. Exact token values are in the `renderVals()` block at the bottom (light `d=false` / dark `d=true`). |
+| `webinar-card.dc.html` | The webinar card (canvas `ВебинарКарточка.dc.html`): desktop grid `196px 1fr` + 2px border + `6px 6px 0` blue shadow, time 56px, body pad 30/32; **mobile ≤900 — flat**: `border:0`, `box-shadow:none`, full-bleed, time 40px, body pad 16, CTA shadows off; variants live/scheduled/registered/past (live sticker rotate 3deg desktop / inline plate mobile). |
+| `webinars-listing.dc.html` | The webinar listing screen (canvas `Эфиры.dc.html`): the §09 rhythm applied for real — desktop day header = label + 2px ink rule (margin 48/24), card list `gap:28px`; **mobile** day header = full-bleed `section`-bg band (`margin:0 -16px`), card list `gap:0; margin:0 -16px` (cards bleed, separation via the tint time plate — no borders at all). |
 
 ## Which issues build against this
 
 - **DS foundation** — `#510` (parent) → `#512` core primitives · `#513` new primitives · `#514` layout & rhythm · `#515` showcase/a11y capstone → **`design-system.dc.html`** (all sections; component geometry in §05–§08, layout in §09).
 - **Auth re-skin** — `#516`–`#520` → `Авторизация.dc.html` *(loaded here at the start of the auth phase).*
-- **Webinars** — `#471` → `Эфиры.dc.html`, `Вебинар.dc.html`, `ВебинарКарточка.dc.html`, `Комната эфира.dc.html`, `Мои события.dc.html`, `Направления.dc.html`, `Эфиры месяц.dc.html` *(loaded here at the start of the webinars phase).*
+- **Webinars** — `#471` → `Эфиры.dc.html` (**vendored: `webinars-listing.dc.html`**), `ВебинарКарточка.dc.html` (**vendored: `webinar-card.dc.html`** — pulled early for the #514 rhythm demo fidelity), `Вебинар.dc.html`, `Комната эфира.dc.html`, `Мои события.dc.html`, `Направления.dc.html`, `Эфиры месяц.dc.html` *(remaining files load at the start of the webinars phase).*
 
 ## Provenance & how to refresh
 

@@ -6,7 +6,7 @@ status: Draft
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
 parent_issue: https://github.com/doctor-school/ds-platform/issues/471
-issues: []
+issues: [576, 577, 578, 579, 580, 581, 582, 583, 584]
 prior_decisions:
   - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace; §3/§4 canvas is source, repo holds the built artifact)
   - ADR-0001 — Identity / Auth / RBAC (§2 endpoint-authz matrix — the room-config read, chat, and heartbeat endpoints are `authenticated` `doctor_guest` with a `policy` auth_check: the registration-and-live gate is a policy eval beyond a role fast-path)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useForm, type Control, type FieldValues } from "react-hook-form";
 
 import { Button } from "@ds/design-system/button";
@@ -22,6 +22,15 @@ import {
   InputOTPSlot,
 } from "@ds/design-system/input-otp";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ds/design-system/tabs";
+import { FilterChip } from "@ds/design-system/filter-chip";
+import { Badge } from "@ds/design-system/badge";
+import { Avatar } from "@ds/design-system/avatar";
+import { Checkbox } from "@ds/design-system/checkbox";
+import { Radio } from "@ds/design-system/radio";
+import { Switch } from "@ds/design-system/switch";
+import { Alert } from "@ds/design-system/alert";
+import { Skeleton } from "@ds/design-system/skeleton";
+import { DayBand } from "@ds/design-system/day-band";
 import {
   Form,
   FormControl,
@@ -724,6 +733,270 @@ function FormPrimitivesSection() {
   );
 }
 
+/**
+ * The new-language primitives (#513, source §05–§08) each carry theme-flipping
+ * SEMANTIC tokens, so a single-theme render proves only half the contract. Every
+ * §513 section renders its states TWICE — a light panel and a `.dark` panel side by
+ * side — so both themes are visible on one page (the `.dark` class flips the token
+ * CSS vars for its subtree exactly as the product apps do). The `render(theme)`
+ * signature also lets grouped controls (radios) carry a per-panel `name`, so the
+ * light and dark radio groups stay independent.
+ */
+function ThemePair({
+  render,
+}: {
+  render: (theme: "light" | "dark") => ReactNode;
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      {(["light", "dark"] as const).map((theme) => (
+        <div
+          key={theme}
+          className={
+            "flex flex-col items-start gap-4 border-2 border-border bg-background p-6" +
+            (theme === "dark" ? " dark" : "")
+          }
+        >
+          <span className="font-mono text-xs text-muted-foreground">{theme}</span>
+          {render(theme)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** A labelled specimen cell (state / variant name above the real component). */
+function Cell({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col items-start gap-1.5">
+      <span className="font-mono text-xs text-muted-foreground">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+/** Interactive filter chip — a human can toggle it (aria-pressed flips). */
+function FilterChipLive() {
+  const [on, setOn] = useState(false);
+  return (
+    <FilterChip selected={on} onClick={() => setOn((v) => !v)}>
+      Кардиология
+    </FilterChip>
+  );
+}
+
+function FilterChipSection() {
+  return (
+    <PrimitiveSection
+      title="Filter chip"
+      exportsLine="FilterChip · filterChipVariants — state (aria-pressed toggle)"
+    >
+      <SubRow label="Live sample (click to toggle selection)">
+        <FilterChipLive />
+      </SubRow>
+      <SubRow label="States (source §06) — light + dark">
+        <ThemePair
+          render={() => (
+            <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
+              <Cell label="rest">
+                <FilterChip>Кардиология</FilterChip>
+              </Cell>
+              <Cell label="hover">
+                <div data-showcase-force="hover">
+                  <FilterChip>Кардиология</FilterChip>
+                </div>
+              </Cell>
+              <Cell label="selected">
+                <FilterChip selected>Кардиология</FilterChip>
+              </Cell>
+              <Cell label="focus">
+                <FilterChip className={FORCED_FOCUS}>Кардиология</FilterChip>
+              </Cell>
+              <Cell label="disabled">
+                <FilterChip disabled>Кардиология</FilterChip>
+              </Cell>
+            </div>
+          )}
+        />
+      </SubRow>
+    </PrimitiveSection>
+  );
+}
+
+function BadgeSection() {
+  return (
+    <PrimitiveSection title="Badge" exportsLine="Badge · badgeVariants — variant">
+      <ThemePair
+        render={() => (
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge variant="live">В эфире</Badge>
+            <Badge variant="label">Метка</Badge>
+            <Badge variant="speaker">Спикер</Badge>
+          </div>
+        )}
+      />
+    </PrimitiveSection>
+  );
+}
+
+function AvatarSection() {
+  return (
+    <PrimitiveSection title="Avatar" exportsLine="Avatar · avatarVariants — variant">
+      <ThemePair
+        render={() => (
+          <div className="flex flex-wrap items-center gap-3">
+            <Cell label="default">
+              <Avatar>АС</Avatar>
+            </Cell>
+            <Cell label="tint">
+              <Avatar variant="tint">МВ</Avatar>
+            </Cell>
+          </div>
+        )}
+      />
+    </PrimitiveSection>
+  );
+}
+
+function CheckboxSection() {
+  return (
+    <PrimitiveSection title="Checkbox" exportsLine="Checkbox — state (real native checkbox)">
+      <SubRow label="Live sample (click / tab + space)">
+        <Checkbox defaultChecked>Присылать напоминания об эфирах</Checkbox>
+      </SubRow>
+      <SubRow label="States (source §07) — light + dark">
+        <ThemePair
+          render={() => (
+            <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
+              <Cell label="off">
+                <Checkbox aria-label="off" />
+              </Cell>
+              <Cell label="on">
+                <Checkbox defaultChecked aria-label="on" />
+              </Cell>
+              <Cell label="disabled">
+                <Checkbox disabled aria-label="disabled" />
+              </Cell>
+              <Cell label="disabled on">
+                <Checkbox disabled defaultChecked aria-label="disabled on" />
+              </Cell>
+            </div>
+          )}
+        />
+      </SubRow>
+    </PrimitiveSection>
+  );
+}
+
+function RadioSection() {
+  return (
+    <PrimitiveSection title="Radio" exportsLine="Radio — state (real native radio group)">
+      <SubRow label="States (source §07) — light + dark">
+        <ThemePair
+          render={(theme) => (
+            <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
+              <Cell label="off">
+                <Radio name={`dir-${theme}`} value="off" aria-label="off" />
+              </Cell>
+              <Cell label="on">
+                <Radio name={`dir-${theme}`} value="on" defaultChecked aria-label="on" />
+              </Cell>
+              <Cell label="disabled">
+                <Radio name={`dir-dis-${theme}`} value="d" disabled aria-label="disabled" />
+              </Cell>
+            </div>
+          )}
+        />
+      </SubRow>
+    </PrimitiveSection>
+  );
+}
+
+function SwitchSection() {
+  return (
+    <PrimitiveSection title="Switch" exportsLine="Switch — state (role=switch)">
+      <SubRow label="Live sample (click / tab + space)">
+        <Switch defaultChecked>Уведомления в Telegram</Switch>
+      </SubRow>
+      <SubRow label="States (source §07) — light + dark">
+        <ThemePair
+          render={() => (
+            <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
+              <Cell label="off">
+                <Switch aria-label="off" />
+              </Cell>
+              <Cell label="on">
+                <Switch defaultChecked aria-label="on" />
+              </Cell>
+              <Cell label="disabled">
+                <Switch disabled aria-label="disabled" />
+              </Cell>
+            </div>
+          )}
+        />
+      </SubRow>
+    </PrimitiveSection>
+  );
+}
+
+function AlertSection() {
+  return (
+    <PrimitiveSection title="Alert" exportsLine="Alert · alertVariants — variant">
+      <ThemePair
+        render={() => (
+          <div className="flex w-full flex-col gap-3">
+            <Alert variant="info">
+              <b>Инфо.</b> Эфир начнётся через 15 минут — мы пришлём напоминание.
+            </Alert>
+            <Alert variant="success">
+              <b>Успех.</b> Вы записаны на эфир — добавили в календарь.
+            </Alert>
+            <Alert variant="warn">
+              <b>Внимание.</b> Запись эфира будет доступна только 30 дней.
+            </Alert>
+            <Alert variant="danger">
+              <b>Ошибка.</b> Не удалось подключиться к эфиру — обновите страницу.
+            </Alert>
+          </div>
+        )}
+      />
+    </PrimitiveSection>
+  );
+}
+
+function SkeletonSection() {
+  return (
+    <PrimitiveSection title="Skeleton" exportsLine="Skeleton — composable loading placeholder">
+      <ThemePair
+        render={() => (
+          <div className="flex w-full items-center gap-4">
+            <Skeleton className="size-14" />
+            <div className="flex flex-1 flex-col gap-2.5">
+              <Skeleton className="h-3 w-3/5" />
+              <Skeleton className="h-3 w-5/6" />
+              <Skeleton className="h-3 w-2/5" />
+            </div>
+          </div>
+        )}
+      />
+    </PrimitiveSection>
+  );
+}
+
+function DayBandSection() {
+  return (
+    <PrimitiveSection title="Day-band" exportsLine="DayBand — full-bleed section plate">
+      <ThemePair
+        render={() => (
+          <div className="w-full">
+            <DayBand>Сегодня — 16 июля</DayBand>
+          </div>
+        )}
+      />
+    </PrimitiveSection>
+  );
+}
+
 export function PrimitivesView() {
   return (
     <div className="flex flex-col gap-2">
@@ -736,6 +1009,15 @@ export function PrimitivesView() {
       <OtpSection />
       <FormPrimitivesSection />
       <FieldsSection />
+      <FilterChipSection />
+      <BadgeSection />
+      <AvatarSection />
+      <CheckboxSection />
+      <RadioSection />
+      <SwitchSection />
+      <AlertSection />
+      <SkeletonSection />
+      <DayBandSection />
     </div>
   );
 }

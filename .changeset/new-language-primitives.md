@@ -1,0 +1,5 @@
+---
+"@ds/design-system": minor
+---
+
+Add the nine new-language primitives to `@ds/design-system` (source `design-source/design-system.dc.html` §05–§08): **FilterChip** (interactive `aria-pressed` toggle), **Badge** (`live` pulsing indicator + `label`/`speaker` tint tags), **Avatar** (square initials, two fills), **Checkbox** / **Radio** / **Switch** (real native controls — keyboard + focus native — behind styled 22×22 / round / 46×26 visuals with the flush 3px focus ring), **Alert** (info/success/warn/danger callouts with `role=status|alert`), **Skeleton** (composable pulsing loader), and **DayBand** (full-bleed section plate). Adds the supporting semantic tokens (`info`, `live`/`live-foreground`, `success-tint`, `warning-tint`, `chip-border`), a `tracking-micro` utility, and the `live-pulse` animation (`animate-live-pulse` / `animate-skeleton-pulse`). Token-only, square, both themes; the danger/live red is the source's invariant `#C81E1E` in both themes (not the theme-flipping `destructive`).

@@ -33,6 +33,25 @@
   }
 }
 
+/*
+ * `live-pulse` — the feedback pulse (#513, source `livePulse`). Drives the live
+ * badge's leading dot (`animate-live-pulse`, 1.6s) and the loading skeleton's
+ * shimmer (`animate-skeleton-pulse`, 1.4s); both `--animate-*` utilities are
+ * generated into tokens.css from the token-build and reference this one keyframe.
+ * Neutralised under `prefers-reduced-motion` by the base-reset below.
+ */
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.72);
+  }
+}
+
 @layer base {
   * {
     border-color: var(--color-border);

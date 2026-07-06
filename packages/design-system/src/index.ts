@@ -34,6 +34,21 @@ export {
 } from "./primitives/input-otp";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./primitives/tabs";
 
+// ── New-language primitives (#513, source §05–§08) ────────────────────────────
+export {
+  FilterChip,
+  filterChipVariants,
+  type FilterChipProps,
+} from "./primitives/filter-chip";
+export { Badge, badgeVariants, type BadgeProps } from "./primitives/badge";
+export { Avatar, avatarVariants, type AvatarProps } from "./primitives/avatar";
+export { Checkbox, type CheckboxProps } from "./primitives/checkbox";
+export { Radio, type RadioProps } from "./primitives/radio";
+export { Switch, type SwitchProps } from "./primitives/switch";
+export { Alert, alertVariants, type AlertProps } from "./primitives/alert";
+export { Skeleton } from "./primitives/skeleton";
+export { DayBand } from "./primitives/day-band";
+
 // ── Field primitives (#197) ───────────────────────────────────────────────────
 export {
   EmailField,

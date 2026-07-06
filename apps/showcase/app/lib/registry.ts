@@ -58,6 +58,17 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "tabs", section: "primitives" },
   { id: "form", section: "primitives" },
 
+  // ── New-language primitives (spec §3.2, #513) — single-file primitive subpaths.
+  { id: "filter-chip", section: "primitives" },
+  { id: "badge", section: "primitives" },
+  { id: "avatar", section: "primitives" },
+  { id: "checkbox", section: "primitives" },
+  { id: "radio", section: "primitives" },
+  { id: "switch", section: "primitives" },
+  { id: "alert", section: "primitives" },
+  { id: "skeleton", section: "primitives" },
+  { id: "day-band", section: "primitives" },
+
   // ── Field primitives (spec §3.2, the `fields/*` set) — `./fields` components.
   { id: "EmailField", section: "primitives" },
   { id: "PhoneField", section: "primitives" },

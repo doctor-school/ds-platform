@@ -86,6 +86,14 @@
       "$value": "{color.blue.700}",
       "$description": "Text and icon colour on a `tint` surface (blue.700 on blue.100, 6.49:1 AA)."
     },
+    "info": {
+      "$value": "{color.blue.500}",
+      "$description": "Informational accent — the border + leading icon of an info callout/alert, painted on the pale `tint` surface. The source's `accent` role: brand blue.500 light → blue.300 dark (the theme-aware brand accent, distinct from `primary` which stays blue.500 in dark)."
+    },
+    "chip-border": {
+      "$value": "{color.blue.200}",
+      "$description": "Resting border of an unselected filter chip — the pale brand-blue outline (blue.200 light → blue.300 @ 45% dark) that reads as a quiet, tappable outline before selection. Source `chipBorder`."
+    },
     "header": {
       "$value": "{color.blue.500}",
       "$description": "Brand chrome band (top nav / app header) — the brand-forward blue.500. Pair with `header-foreground`; header text is large/bold brand or logo (white on blue.500 is 3.69:1, the large/bold ≥3:1 carve-out, not normal-weight body — see AA note in ADR-0013 §7)."
@@ -102,6 +110,10 @@
       "$value": "{color.white}",
       "$description": "Text and icon colour on a `success` fill."
     },
+    "success-tint": {
+      "$value": "#e6f6ee",
+      "$description": "Pale-green success surface behind a success callout/alert — the source's success tint. Carries normal `foreground` ink; the `success` border + ✓ icon carry the semantic. Theme-aware: pale-green light → deep-green dark."
+    },
     "warning": {
       "$value": "{color.amber.500}",
       "$description": "Caution-status fill, border or icon (functional amber). Pair with `warning-foreground` — white FAILS AA on amber, so the foreground is dark ink."
@@ -109,6 +121,10 @@
     "warning-foreground": {
       "$value": "{color.neutral.950}",
       "$description": "Dark ink on a `warning` amber fill (neutral.950, 5.14:1 on amber.500 / 8.99:1 on amber.400 dark)."
+    },
+    "warning-tint": {
+      "$value": "#fdf4e3",
+      "$description": "Pale-amber caution surface behind a warning callout/alert — the source's warn tint. Carries normal `foreground` ink; the `warning` border + ⚠ icon carry the semantic. Theme-aware: pale-amber light → deep-amber dark."
     },
     "destructive": {
       "$value": "{color.red.500}",
@@ -121,6 +137,14 @@
     "destructive-tint": {
       "$value": "#fdecec",
       "$description": "Pale-red field/error surface (danger tint) behind an invalid input — the source's `dangerTint`. Carries normal `foreground` ink; the destructive border + `⚠` message carry the error. Theme-aware: pale-red light → deep-maroon dark."
+    },
+    "live": {
+      "$value": "{color.red.500}",
+      "$description": "Flat live/danger red (#C81E1E) — the fill of a `live` badge (\"в эфире\") and the border + leading icon of a danger callout/alert. The source's `danger`/`live` constant: INVARIANT across themes (same #C81E1E on the light page and the dark maroon tint), so it does NOT track the theme-flipping `destructive` token (whose dark variant lifts to red.400 for AA on the dark card fill). Pair with `live-foreground`."
+    },
+    "live-foreground": {
+      "$value": "{color.white}",
+      "$description": "Text, icon and pulse-dot colour on a `live` fill — white in both themes (white on #C81E1E = 5.74:1 AA)."
     },
     "border": {
       "$value": "{color.neutral.900}",

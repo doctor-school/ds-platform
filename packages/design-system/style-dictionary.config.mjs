@@ -246,6 +246,27 @@ async function build() {
     name: "--animate-caret-blink",
     ref: "caret-blink 1.25s ease-out infinite",
   });
+  // The `livePulse` feedback animation (badge live-dot + loading skeleton, #513),
+  // exposed as two named `animate-*` utilities differing only in duration — the
+  // source runs the live badge dot at 1.6s and the skeleton shimmer at 1.4s. Both
+  // reference the ONE `live-pulse` keyframe defined in globals.css (alongside
+  // caret-blink); the `prefers-reduced-motion` base-reset neutralises them.
+  themeEntries.push(
+    { name: "--animate-live-pulse", ref: "live-pulse 1.6s ease-in-out infinite" },
+    {
+      name: "--animate-skeleton-pulse",
+      ref: "live-pulse 1.4s ease-in-out infinite",
+    },
+  );
+  // Uppercase micro-label tracking as a token-backed `tracking-micro` utility
+  // (#513). The foundation normalises every scattered uppercase eyebrow / badge /
+  // day-band tracking (source 0.08–0.16em) onto the single micro-label token
+  // (+0.12em, `--font-letter-spacing-micro`), so the badges and the day-band plate
+  // resolve their tracking to one token rather than Tailwind's default ladder.
+  themeEntries.push({
+    name: "--tracking-micro",
+    ref: "var(--font-letter-spacing-micro)",
+  });
 
   // --- assemble tokens.css -------------------------------------------------
   const css = [

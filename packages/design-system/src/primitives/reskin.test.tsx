@@ -93,25 +93,35 @@ describe("Tabs — hard-bordered segment control (#512)", () => {
   });
 });
 
-describe("InputOTP slot — 40px square, 2px border, filled ⇒ ink (#512)", () => {
-  it("renders empty slots with a 2px hairline border and square 40px cells", () => {
+describe("InputOTP slot — square, capped at 40px, 2px border, filled ⇒ ink (#512/#544)", () => {
+  it("renders empty slots as square cells that fill-to-fit but cap at 40px, with a 2px hairline border", () => {
     render(
       <InputOTP maxLength={4} value="" onChange={() => {}} aria-label="code">
-        <InputOTPGroup>
+        <InputOTPGroup data-testid="group">
           <InputOTPSlot index={0} data-testid="slot0" />
           <InputOTPSlot index={1} />
         </InputOTPGroup>
       </InputOTP>,
     );
+    // #544: the row is full-width and each slot is a flex-1 square capped at the canvas
+    // 40px (`max-w-10`) — so an 8-slot login row shrinks to fit a narrow card instead of
+    // overflowing, while a wide card keeps the 40px cell. Fixed `h-10 w-10` is gone.
+    expect(screen.getByTestId("group")).toHaveClass("w-full");
     const slot = screen.getByTestId("slot0");
     expect(slot).toHaveClass(
-      "h-10",
-      "w-10",
+      "aspect-square",
+      "flex-1",
+      "max-w-10",
+      "min-w-0",
       "border-y-2",
       "border-r-2",
       "border-hairline",
       "tabular-nums",
     );
+    // Fixed 40px sizing (`h-10`/`w-10`) is replaced by the fluid capped square.
+    const tokens = slot.className.split(/\s+/);
+    expect(tokens).not.toContain("h-10");
+    expect(tokens).not.toContain("w-10");
     expect(slot.className).not.toMatch(/\brounded-/);
   });
 

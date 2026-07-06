@@ -31,7 +31,12 @@ const InputOTPGroup = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div">
 >(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("flex items-center", className)} {...props} />
+  // `w-full` so the slots (each `flex-1`) distribute the AVAILABLE width and the row
+  // can never exceed its container — the #544 fix. On a wide card the slots cap at the
+  // canvas 40px (`max-w-10`) and pack at the start (leftover space, same left-aligned
+  // look as before); on a narrow card (login = 8 slots at 390px) they shrink to fit
+  // instead of overflowing the card body.
+  <div ref={ref} className={cn("flex w-full items-center", className)} {...props} />
 ));
 InputOTPGroup.displayName = "InputOTPGroup";
 
@@ -49,13 +54,17 @@ const InputOTPSlot = React.forwardRef<
     <div
       ref={ref}
       className={cn(
-        // Neo-brutalist OTP slot (#512, source §07): a 40px square cell
-        // (`--otp-slot-size` = 2.5rem = h-10/w-10) with a hard 2px border, tabular
-        // uppercase digits. Shared edges via `border-y-2 border-r-2` + `first:border-l-2`
-        // so neighbours don't double. Empty = `hairline`; FILLED switches to the ink
+        // Neo-brutalist OTP slot (#512, source §07): a square cell capped at the
+        // canvas 40px (`--otp-slot-size` = 2.5rem = `max-w-10`) with a hard 2px border,
+        // tabular uppercase digits. `flex-1 aspect-square min-w-0` (#544) lets the cell
+        // fill an equal share of the `w-full` group and stay square while SHRINKING below
+        // 40px when the row would otherwise overflow a narrow card (login = 8 slots at
+        // 390px); on a wide card it caps at 40px, so the 6-slot verify/reset rows are
+        // unchanged. Shared edges via `border-y-2 border-r-2` + `first:border-l-2` so
+        // neighbours don't double. Empty = `hairline`; FILLED switches to the ink
         // `border` (source "filled ⇒ border ink"); the ACTIVE slot takes the brand
         // `ring` border + the flush 3px `shadow-focus`. Token-only → light + `.dark`.
-        "relative flex h-10 w-10 items-center justify-center border-y-2 border-r-2 first:border-l-2 text-sm font-bold uppercase tabular-nums text-foreground transition-all",
+        "relative flex aspect-square min-w-0 max-w-10 flex-1 items-center justify-center border-y-2 border-r-2 first:border-l-2 text-sm font-bold uppercase tabular-nums text-foreground transition-all",
         char ? "border-border" : "border-hairline",
         isActive && "z-10 border-ring shadow-focus",
         className,

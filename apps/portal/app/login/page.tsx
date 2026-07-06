@@ -306,6 +306,8 @@ function OtpLogin() {
                 type="button"
                 variant={channel === c ? "default" : "outline"}
                 size="sm"
+                // Canvas `chBtn`: the two channels split the row into equal halves.
+                className="flex-1"
                 role="radio"
                 aria-checked={channel === c}
                 data-testid={`otp-channel-${c}`}

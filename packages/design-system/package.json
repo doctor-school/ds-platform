@@ -27,6 +27,7 @@
     "./alert": "./src/primitives/alert.tsx",
     "./skeleton": "./src/primitives/skeleton.tsx",
     "./day-band": "./src/primitives/day-band.tsx",
+    "./container": "./src/primitives/container.tsx",
     "./fields": "./src/primitives/fields/index.ts",
     "./blocks": "./src/blocks/index.ts"
   },

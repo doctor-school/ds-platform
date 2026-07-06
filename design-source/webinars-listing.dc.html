@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}.scrollx::-webkit-scrollbar{height:6px}.scrollx::-webkit-scrollbar-thumb{background:rgba(0,0,0,.2)}</style></helmet>
+
+<div style="min-height:100vh;background:{{ pageBg }}">
+  <!-- Хедер -->
+  <header data-screen-label="Листинг эфиров" style="background:{{ headerBg }};padding:16px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
+    <a href="Эфиры.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
+        <details style="position:relative">
+          <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 {{ headerShadow }}">≡</summary>
+          <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:200px;z-index:20">
+            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:800;color:{{ headerBg }};text-decoration:none">Эфиры</a>
+            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Школы</a>
+            <a href="Мои события.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Мои события</a>
+            <a href="Мои события.dc.html" style="margin-top:6px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Войти</a>
+          </nav>
+        </details>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+      <nav style="display:flex;align-items:center;gap:28px;font-size:14px;font-weight:700">
+        <a href="Эфиры.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px">Эфиры</a>
+        <a href="Эфиры.dc.html" style="color:#D3E8FD;text-decoration:none">Школы</a>
+        <a href="Мои события.dc.html" style="color:#D3E8FD;text-decoration:none">Мои события</a>
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
+        <button style="font:inherit;font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;border:0;padding:11px 22px;cursor:pointer;box-shadow:3px 3px 0 {{ headerShadow }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">Войти</button>
+      </nav>
+    </sc-if>
+  </header>
+
+  <!-- Плакатное поле -->
+  <div style="background:{{ headerBg }};padding:clamp(36px,6vw,52px) clamp(16px,4vw,48px) 120px;position:relative">
+    <div style="max-width:1104px;margin:0 auto;display:flex;align-items:flex-end;justify-content:space-between;gap:32px;flex-wrap:wrap">
+      <div>
+        <h1 style="margin:0;font-size:clamp(34px,6vw,56px);line-height:1;font-weight:800;letter-spacing:-.035em;color:#fff">Расписание эфиров</h1>
+        <div style="font-size:15px;font-weight:600;color:#D3E8FD;margin-top:16px">Неделя 29 · 142 эфира · 38 школ · время — МСК</div>
+      </div>
+      <div style="font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#D3E8FD;line-height:2;padding-bottom:6px">Врачи учат врачей<br><span style="color:#fff">Бесплатно · без бюрократии</span></div>
+    </div>
+  </div>
+
+  <main style="max-width:1104px;margin:-72px auto 0;padding:{{ mainPad }};position:relative;z-index:1">
+
+    <!-- Фильтры · МОБИЛЬНЫЙ -->
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+    <div style="position:relative;z-index:6">
+      <button onClick="{{ toggleFilter }}" style="font:inherit;width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;cursor:pointer;text-align:left;background:{{ surface }};border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadow }}">
+        <span style="min-width:0">
+          <span style="display:block;font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:3px">Специальность</span>
+          <span style="display:block;font-size:16px;font-weight:800;color:{{ ink }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ specLabel }}</span>
+        </span>
+        <span style="font-size:12px;color:{{ ink }};flex:none">{{ filterCaret }}</span>
+      </button>
+      <sc-if value="{{ filterOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="background:{{ surface }};border:2px solid {{ border }};border-top:0;box-shadow:4px 4px 0 {{ shadow }};max-height:320px;overflow-y:auto;overflow-x:hidden">
+        <sc-for list="{{ specRows }}" as="sp" hint-placeholder-count="10">
+          <button onClick="{{ sp.onClick }}" style="{{ sp.style }}"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ sp.name }}</span><span style="{{ sp.checkStyle }}">✓</span></button>
+        </sc-for>
+      </div>
+      </sc-if>
+    </div>
+    </sc-if>
+
+    <!-- Фильтры · ДЕСКТОП -->
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+    <div style="position:relative;z-index:6">
+      <div style="background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:20px 22px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <sc-for list="{{ quickChips }}" as="qc" hint-placeholder-count="5">
+            <button onClick="{{ qc.onClick }}" style="{{ qc.style }}">{{ qc.name }}</button>
+          </sc-for>
+        </div>
+        <button onClick="{{ toggleFilter }}" style="font:inherit;font-size:12px;font-weight:700;color:{{ accent }};background:transparent;border:0;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;cursor:pointer;white-space:nowrap">{{ moreLabel }}</button>
+      </div>
+      <sc-if value="{{ filterOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;top:calc(100% + 10px);left:0;right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:22px;z-index:12">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <span style="font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ ink }}">Все специальности · 29</span>
+          <button onClick="{{ toggleFilter }}" style="font:inherit;font-size:18px;line-height:1;color:{{ ink }};background:transparent;border:0;cursor:pointer">✕</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:8px">
+          <sc-for list="{{ panelChips }}" as="pc" hint-placeholder-count="12">
+            <button onClick="{{ pc.onClick }}" style="{{ pc.style }}">{{ pc.name }}</button>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+    </div>
+    </sc-if>
+
+    <!-- Навигация по датам · МОБИЛЬНАЯ -->
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+    <div style="margin-top:24px;position:relative;z-index:2">
+      <div style="display:flex;align-items:stretch;gap:10px">
+        <details style="position:relative;flex:1;min-width:0">
+          <summary style="list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;box-sizing:border-box;width:100%;cursor:pointer;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};height:46px;padding:0 16px;box-shadow:none;white-space:nowrap">Июль 2026 <span style="font-size:11px">▼</span></summary>
+          <div style="position:absolute;top:calc(100% + 12px);left:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:20px;width:min(340px,84vw);z-index:10">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+              <span style="font-size:15px;font-weight:800;color:{{ ink }};cursor:pointer;padding:2px 8px">‹</span>
+              <span style="font-size:14px;font-weight:800;letter-spacing:.08em;color:{{ ink }}">2026</span>
+              <span style="font-size:15px;font-weight:800;color:{{ ink }};cursor:pointer;padding:2px 8px">›</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+              <sc-for list="{{ months }}" as="mo" hint-placeholder-count="12"><span style="{{ mo.style }}"><span style="display:block;font-size:13px;font-weight:800">{{ mo.name }}</span><span style="display:block;font-size:10.5px;font-weight:600;margin-top:2px">{{ mo.note }}</span></span></sc-for>
+            </div>
+          </div>
+        </details>
+        <div style="display:flex;flex:none;height:46px;box-sizing:border-box;border:2px solid {{ border }};background:{{ surface }};box-shadow:none">
+          <span style="display:inline-flex;align-items:center;padding:0 15px;font-size:13px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }}">Неделя</span>
+          <a href="Эфиры месяц.dc.html" style="display:inline-flex;align-items:center;padding:0 15px;font-size:13px;font-weight:700;color:{{ chipInk }};background:{{ surface }};text-decoration:none;border-left:2px solid {{ border }}">Месяц</a>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:16px 2px 8px">
+        <span style="font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ inkFaint }}">{{ weekRange }}</span>
+        <div style="display:flex;gap:14px">
+          <span onClick="{{ prevWeek }}" style="font-size:16px;font-weight:800;color:{{ ink }};cursor:pointer;line-height:1">‹</span>
+          <span onClick="{{ nextWeek }}" style="font-size:16px;font-weight:800;color:{{ ink }};cursor:pointer;line-height:1">›</span>
+        </div>
+      </div>
+
+      <div style="display:flex;border:2px solid {{ border }};background:{{ surface }};box-shadow:none;overflow:hidden">
+        <sc-for list="{{ days }}" as="day" hint-placeholder-count="7"><button onClick="{{ day.onClick }}" style="{{ day.mStyle }}"><span style="{{ day.mDow }}">{{ day.dowShort }}</span><span style="{{ day.mDate }}">{{ day.date }}</span><span style="{{ day.dotStyle }}"></span></button></sc-for>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- Навигация по датам · ДЕСКТОП/ПЛАНШЕТ -->
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+    <div style="margin-top:28px;position:relative;z-index:2;display:flex;align-items:stretch;gap:12px;flex-wrap:wrap">
+      <details style="position:relative">
+        <summary style="list-style:none;display:inline-flex;align-items:center;gap:12px;height:100%;box-sizing:border-box;cursor:pointer;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:14px 20px;box-shadow:3px 3px 0 {{ border }};white-space:nowrap">Июль 2026 <span style="font-size:11px">▼</span></summary>
+        <div style="position:absolute;top:calc(100% + 12px);left:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:22px;width:min(340px,86vw);z-index:10">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <span style="font-size:15px;font-weight:800;color:{{ ink }};cursor:pointer;padding:2px 8px">‹</span>
+            <span style="font-size:14px;font-weight:800;letter-spacing:.08em;color:{{ ink }}">2026</span>
+            <span style="font-size:15px;font-weight:800;color:{{ ink }};cursor:pointer;padding:2px 8px">›</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+            <sc-for list="{{ months }}" as="mo" hint-placeholder-count="12"><span style="{{ mo.style }}"><span style="display:block;font-size:13px;font-weight:800">{{ mo.name }}</span><span style="display:block;font-size:10.5px;font-weight:600;margin-top:2px">{{ mo.note }}</span></span></sc-for>
+          </div>
+          <div style="border-top:2px solid {{ hairline }};margin-top:16px;padding-top:14px;display:flex;justify-content:space-between">
+            <span style="font-size:12.5px;font-weight:700;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;cursor:pointer">Весь 2026</span>
+            <a href="Эфиры месяц.dc.html" style="font-size:12.5px;font-weight:700;color:{{ accent }};text-decoration:underline;text-underline-offset:4px">Открыть месяц</a>
+          </div>
+        </div>
+      </details>
+
+      <div style="display:flex;gap:12px;flex:1;min-width:0">
+      <button onClick="{{ prevWeek }}" style="font:inherit;font-size:16px;font-weight:800;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:0 16px;cursor:pointer;box-shadow:3px 3px 0 {{ shadowSm }};flex:none">‹</button>
+
+      <div class="scrollx" style="flex:1;min-width:0;overflow-x:auto;display:flex;border:2px solid {{ border }};background:{{ surface }};box-shadow:3px 3px 0 {{ shadowSm }}">
+        <sc-for list="{{ days }}" as="day" hint-placeholder-count="7"><span onClick="{{ day.onClick }}" style="{{ day.style }}"><span style="display:block;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em">{{ day.dow }}</span><span style="display:block;font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:2px;font-variant-numeric:tabular-nums">{{ day.date }}</span><span style="display:block;font-size:10px;font-weight:600;margin-top:1px">{{ day.note }}</span></span></sc-for>
+      </div>
+
+      <button onClick="{{ nextWeek }}" style="font:inherit;font-size:16px;font-weight:800;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:0 16px;cursor:pointer;box-shadow:3px 3px 0 {{ shadowSm }};flex:none">›</button>
+      </div>
+
+      <div style="display:inline-grid;grid-template-columns:auto auto;border:2px solid {{ border }};background:{{ surface }};box-shadow:3px 3px 0 {{ shadowSm }}">
+        <span style="display:inline-flex;align-items:center;justify-content:center;padding:14px 18px;font-size:13px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }}">Неделя</span>
+        <a href="Эфиры месяц.dc.html" style="display:inline-flex;align-items:center;justify-content:center;padding:14px 18px;font-size:13px;font-weight:700;color:{{ chipInk }};background:{{ surface }};text-decoration:none;border-left:2px solid {{ border }}">Месяц</a>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- Индикатор фильтра -->
+    <sc-if value="{{ isFiltered }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ filterBadgeWrap }}">
+      <span style="font-size:12.5px;font-weight:700;color:{{ inkFaint }}">Фильтр по специальности:</span>
+      <button onClick="{{ resetSpec }}" style="font:inherit;display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:0;padding:7px 14px;cursor:pointer">{{ spec }} <span style="font-size:14px">✕</span></button>
+    </div>
+    </sc-if>
+
+    <!-- Список эфиров (фильтруемый) -->
+    <sc-if value="{{ hasResults }}" hint-placeholder-val="{{ true }}">
+    <sc-for list="{{ filtered }}" as="day" hint-placeholder-count="3">
+      <div style="{{ dayHeaderStyle }}">
+        <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">{{ day.label }}</span>
+        <span style="{{ dayRuleStyle }}"></span>
+      </div>
+      <div style="{{ cardWrap }}">
+        <sc-for list="{{ day.events }}" as="ev" hint-placeholder-count="2">
+          <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="{{ ev.variant }}" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" cta="{{ ev.cta }}" cta-href="{{ ev.ctaHref }}" href="{{ ev.href }}" school="{{ ev.school }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" hint-size="100%,220px"></dc-import>
+        </sc-for>
+      </div>
+    </sc-for>
+
+    <div style="{{ nextWeekWrap }}">
+      <button onClick="{{ weekBtnAction }}" style="font:inherit;font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:14px 32px;cursor:pointer;box-shadow:4px 4px 0 {{ shadowSm }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ shadowSm }}">{{ weekBtnLabel }}</button>
+    </div>
+    </sc-if>
+
+    <!-- Пустое состояние -->
+    <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ emptyWrap }}">
+      <div style="font-size:17px;font-weight:800;letter-spacing:-.01em;color:{{ ink }};margin-bottom:8px">Нет эфиров по специальности «{{ spec }}»</div>
+      <div style="font-size:14px;line-height:1.6;color:{{ inkFaint }};margin-bottom:22px">На неделе 14–20 июля эфиров по этому направлению нет. Выберите другую специальность или откройте месяц.</div>
+      <button onClick="{{ resetSpec }}" style="font:inherit;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:13px 26px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Показать все эфиры</button>
+    </div>
+    </sc-if>
+  </main>
+
+  <footer style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:0 auto;box-sizing:content-box;gap:16px;flex-wrap:wrap">
+    {{ footLogoEl }}
+    <div style="font-size:12.5px;font-weight:600;color:{{ inkFaint }}">Врачи учат врачей · 2026</div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
+    isMobile: false,
+    spec: 'Все',
+    filterOpen: false,
+    week: 0,
+    selDay: null
+  };
+  componentDidMount() {
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.upd = () => this.setState({ isMobile: this.mq.matches });
+    this.upd();
+    this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
+  }
+  renderVals() {
+    const d = this.state.dark, m = this.state.isMobile;
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const shadow = d ? '#6BB1F7' : '#114D9E';
+    const shadowSm = d ? '#1F69C8' : '#AED4FB';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const hairline = d ? 'rgba(255,255,255,.16)' : 'oklch(.922 .006 250)';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const chipInk = d ? '#AED4FB' : '#114D9E';
+    const chipBorder = d ? 'rgba(107,177,247,.45)' : '#AED4FB';
+
+    // Месяцы для поповера
+    const past = ['Янв','Фев','Мар','Апр','Май','Июн'];
+    const future = [['Июл','142',true],['Авг','118'],['Сен','156'],['Окт','149'],['Ноя','131'],['Дек','87']];
+    const moCell = (bg, col, bd) => `padding:10px 6px;text-align:center;border:2px solid ${bd};color:${col};cursor:pointer;background:${bg}`;
+    const months = [];
+    past.forEach(n => months.push({ name: n, note: 'прошёл', style: moCell('transparent', d?'rgba(255,255,255,.4)':'oklch(.704 .01 250)', 'transparent') }));
+    future.forEach(([n, cnt, cur]) => months.push({ name: n, note: cnt + (cnt==='131'||cnt==='87'?' эфир'+(cnt==='87'?'ов':'ов'):' эфиров'),
+      style: cur ? moCell(btnBg, btnFg, btnBg) : moCell('transparent', chipInk, chipBorder) }));
+
+    // ===== Данные по неделям =====
+    const week = this.state.week, selDay = this.state.selDay;
+    const S = (name, org) => ({ name, org });
+    const weeksData = [
+      {
+        range: '14 – 20 июля',
+        days: [
+          { dow:'пн', date:14, kind:'past' }, { dow:'вт', date:15, kind:'past' },
+          { dow:'ср', date:16, kind:'today', count:2, live:true }, { dow:'чт', date:17, kind:'future', count:2 },
+          { dow:'пт', date:18, kind:'future', count:1 }, { dow:'сб', date:19, kind:'none' }, { dow:'вс', date:20, kind:'none' }
+        ],
+        groups: [
+          { date:16, label:'Сегодня — 16 июля, среда', events:[
+            { variant:'live', num:'Эфир № 042', time:'19:00', timeSub:'идёт 24 мин · 214 смотрят', cta:'Войти в эфир ↗', ctaHref:'Комната эфира.dc.html', href:'Вебинар.dc.html', school:'Школа травматологии и ортопедии', title:'Пластика ахиллова сухожилия: разбор клинических случаев', chips:['Травматология','Ортопедия','Спортивная медицина'], speakers:[S('Анна Соколова','НМИЦ им. Пирогова'),S('Михаил Верещагин','Сеченовский университет')] },
+            { variant:'scheduled', num:'Эфир № 043', time:'20:30', timeSub:'сегодня · МСК', href:'Вебинар.dc.html', school:'Школа гастроэнтерологии', title:'СИБР и СРК: что нового в 2026 году', chips:['Гастроэнтерология','Терапия'], speakers:[S('Дарья Литвинова','ММА, клиника «Рассвет»')] }
+          ]},
+          { date:17, label:'Завтра — 17 июля, четверг', events:[
+            { variant:'scheduled', num:'Эфир № 044', time:'18:00', timeSub:'17 июля · МСК', href:'Вебинар.dc.html', school:'Школа кардиологии', title:'ХСН с сохранной фракцией выброса: амбулаторное ведение', chips:['Кардиология','Терапия'], speakers:[S('Пётр Малахов','НМИЦ кардиологии'),S('Ирина Северова','РНИМУ им. Пирогова')] },
+            { variant:'scheduled', num:'Эфир № 045', time:'19:30', timeSub:'17 июля · МСК', href:'Вебинар.dc.html', school:'Школа педиатрии', title:'Атопический дерматит у детей: ступенчатая терапия', chips:['Педиатрия','Дерматология'], speakers:[S('Ольга Ким','ДГКБ им. Башляевой')] }
+          ]},
+          { date:18, label:'18 июля, пятница', events:[
+            { variant:'scheduled', num:'Эфир № 046', time:'18:00', timeSub:'18 июля · МСК', href:'Вебинар.dc.html', school:'Школа эндокринологии', title:'Сахарный диабет 2 типа: старт инсулинотерапии', chips:['Эндокринология'], speakers:[S('Марат Гареев','НМИЦ эндокринологии')] }
+          ]}
+        ]
+      },
+      {
+        range: '21 – 27 июля',
+        days: [
+          { dow:'пн', date:21, kind:'future', count:1 }, { dow:'вт', date:22, kind:'future', count:2 },
+          { dow:'ср', date:23, kind:'future', count:1 }, { dow:'чт', date:24, kind:'future', count:1 },
+          { dow:'пт', date:25, kind:'future', count:1 }, { dow:'сб', date:26, kind:'none' }, { dow:'вс', date:27, kind:'none' }
+        ],
+        groups: [
+          { date:21, label:'21 июля, понедельник', events:[
+            { variant:'scheduled', num:'Эфир № 047', time:'19:00', timeSub:'21 июля · МСК', href:'Вебинар.dc.html', school:'Школа неврологии', title:'Мигрень: современная CGRP-терапия', chips:['Неврология'], speakers:[S('Сергей Донцов','НМИЦ неврологии')] }
+          ]},
+          { date:22, label:'22 июля, вторник', events:[
+            { variant:'scheduled', num:'Эфир № 048', time:'18:00', timeSub:'22 июля · МСК', href:'Вебинар.dc.html', school:'Школа гематологии', title:'ЖДА у беременных: диагностика и терапия', chips:['Гематология'], speakers:[S('Алла Жукова','НМИЦ гематологии')] },
+            { variant:'scheduled', num:'Эфир № 049', time:'20:00', timeSub:'22 июля · МСК', href:'Вебинар.dc.html', school:'Школа травматологии и ортопедии', title:'Артроскопия коленного сустава: разбор техник', chips:['Травматология','Ортопедия'], speakers:[S('Игорь Панин','НМИЦ травматологии')] }
+          ]},
+          { date:23, label:'23 июля, среда', events:[
+            { variant:'scheduled', num:'Эфир № 050', time:'19:00', timeSub:'23 июля · МСК', href:'Вебинар.dc.html', school:'Школа пульмонологии', title:'ХОБЛ: тройная терапия и ведение обострений', chips:['Пульмонология','Терапия'], speakers:[S('Алла Жукова','НИИ пульмонологии')] }
+          ]},
+          { date:24, label:'24 июля, четверг', events:[
+            { variant:'scheduled', num:'Эфир № 051', time:'18:30', timeSub:'24 июля · МСК', href:'Вебинар.dc.html', school:'Школа дерматологии', title:'Меланома: скрининг и настороженность', chips:['Дерматология','Онкология'], speakers:[S('Вера Ильина','НМИЦ онкологии')] }
+          ]},
+          { date:25, label:'25 июля, пятница', events:[
+            { variant:'scheduled', num:'Эфир № 052', time:'17:00', timeSub:'25 июля · МСК', href:'Вебинар.dc.html', school:'Школа педиатрии', title:'Лихорадка без очага у детей', chips:['Педиатрия'], speakers:[S('Ольга Ким','ДГКБ им. Башляевой')] }
+          ]}
+        ]
+      }
+    ];
+    const wd = weeksData[week];
+    const activeDate = selDay != null ? selDay : (week === 0 ? 16 : null);
+
+    // Дни недели (строка)
+    const muted = d?'rgba(255,255,255,.4)':'oklch(.704 .01 250)';
+    const dayBase = (extra) => `flex:none;min-width:78px;padding:12px 8px;text-align:center;${extra}`;
+    const days = wd.days.map((x, i) => {
+      const last = i === wd.days.length - 1;
+      const clickable = x.kind === 'future' || x.kind === 'today';
+      const sel = activeDate === x.date;
+      const onClick = clickable ? (() => this.setState(s => ({ selDay: s.selDay === x.date ? null : x.date }))) : (() => {});
+      let col, bg = '', cur = clickable ? 'cursor:pointer' : '';
+      if (sel) { col = '#fff'; bg = 'background:' + btnBg; }
+      else if (clickable) { col = chipInk; }
+      else { col = muted; }
+      const dowFull = (x.kind === 'today') ? (x.dow + ' · сегодня') : x.dow;
+      const note = x.kind === 'past' ? 'прошёл' : (x.kind === 'none' ? '—' : (x.count + ' эфир' + (x.count === 1 ? '' : 'а')));
+      const style = dayBase(`color:${col};${bg};${cur};${!last ? 'border-right:1px solid ' + hairline : ''}`);
+      const mStyle = `font:inherit;flex:1;min-width:0;padding:9px 2px 8px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px;border:0;background:${sel ? btnBg : 'transparent'};cursor:${clickable ? 'pointer' : 'default'};${!last ? 'border-right:1px solid ' + hairline : ''}`;
+      const mDow = `font-size:9.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:${sel ? '#fff' : muted}`;
+      const mDate = `font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1;color:${sel ? '#fff' : (x.kind === 'past' || x.kind === 'none' ? muted : ink)}`;
+      const hasDot = x.kind === 'today' || x.kind === 'future';
+      const dotColor = x.live ? '#C81E1E' : (sel ? '#fff' : accent);
+      const dotStyle = `width:6px;height:6px;border-radius:50%;background:${hasDot ? dotColor : 'transparent'}`;
+      return { dow: dowFull, dowShort: x.dow, date: x.date, note, style, mStyle, mDow, mDate, dotStyle, onClick };
+    });
+
+    const faint = d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)';
+    const spec = this.state.spec, filterOpen = this.state.filterOpen;
+
+    const matchSpec = (e) => spec === 'Все' || (e.chips || []).indexOf(spec) !== -1;
+    const filtered = wd.groups
+      .filter(g => selDay == null || g.date === selDay)
+      .map(g => ({ label: g.label, events: g.events.filter(matchSpec) }))
+      .filter(g => g.events.length > 0);
+    const hasResults = filtered.length > 0;
+
+    // Специальности (29)
+    const allSpecs = ['Травматология','Ортопедия','Спортивная медицина','Кардиология','Терапия','Гастроэнтерология','Педиатрия','Дерматология','Эндокринология','Неврология','Пульмонология','Гематология','Ревматология','Нефрология','Урология','Гинекология','Офтальмология','Оториноларингология','Онкология','Инфекционные болезни','Психиатрия','Анестезиология','Хирургия','Кардиохирургия','Аллергология','Гастрохирургия','Функциональная диагностика','Реабилитация','Общая практика'];
+    const selectSpec = (name) => () => this.setState({ spec: name, filterOpen: false });
+    const rowStyle = (active) => 'font:inherit;display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:13px 16px;font-size:15px;text-align:left;border:0;border-bottom:1px solid ' + hairline + ';cursor:pointer;font-weight:' + (active ? 800 : 600) + ';color:' + (active ? btnFg : ink) + ';background:' + (active ? btnBg : surface);
+    const specRows = ['Все'].concat(allSpecs).map(name => ({
+      name, onClick: selectSpec(name), style: rowStyle(spec === name),
+      checkStyle: 'font-size:14px;flex:none;color:' + btnFg + ';' + (spec === name ? '' : 'display:none')
+    }));
+    const chipStyle = (active) => 'font:inherit;font-size:13px;font-weight:' + (active ? 800 : 700) + ';cursor:pointer;padding:6px 13px;color:' + (active ? btnFg : chipInk) + ';background:' + (active ? btnBg : 'transparent') + ';border:2px solid ' + (active ? btnBg : chipBorder);
+    const quickChips = ['Все','Травматология','Кардиология','Гастроэнтерология','Педиатрия'].map(name => ({ name, onClick: selectSpec(name), style: chipStyle(spec === name) }));
+    const panelChipStyle = (active) => 'font:inherit;font-size:13px;font-weight:' + (active ? 800 : 700) + ';cursor:pointer;padding:10px 12px;text-align:left;color:' + (active ? btnFg : chipInk) + ';background:' + (active ? btnBg : 'transparent') + ';border:2px solid ' + (active ? btnBg : chipBorder) + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    const panelChips = ['Все'].concat(allSpecs).map(name => ({ name, onClick: selectSpec(name), style: panelChipStyle(spec === name) }));
+
+    return {
+      dark: d, isMobile: m, isDesktop: !m,
+      spec, filterOpen,
+      isFiltered: spec !== 'Все',
+      hasResults, noResults: !hasResults,
+      filtered,
+      specLabel: spec === 'Все' ? 'Все специальности' : spec,
+      filterCaret: filterOpen ? '▲' : '▼',
+      moreLabel: filterOpen ? 'Свернуть ✕' : 'Ещё 24 специальности',
+      specRows, quickChips, panelChips,
+      toggleFilter: () => this.setState(s => ({ filterOpen: !s.filterOpen })),
+      resetSpec: () => this.setState({ spec: 'Все', filterOpen: false }),
+      filterBadgeWrap: m ? 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:18px 0 2px' : 'display:flex;align-items:center;gap:12px;margin:28px 0 0',
+      nextWeekWrap: m ? 'display:flex;justify-content:center;margin-top:28px' : 'display:flex;justify-content:center;margin-top:44px',
+      weekRange: wd.range,
+      weekBtnLabel: week === 0 ? 'Показать следующую неделю ↓' : '↑ Вернуться к текущей неделе',
+      weekBtnAction: () => this.setState({ week: week === 0 ? 1 : 0, selDay: null }),
+      prevWeek: () => this.setState(s => ({ week: Math.max(0, s.week - 1), selDay: null })),
+      nextWeek: () => this.setState(s => ({ week: Math.min(1, s.week + 1), selDay: null })),
+      emptyWrap: 'text-align:center;padding:' + (m ? '40px 16px' : '56px 24px') + ';border:2px dashed ' + (d ? 'rgba(255,255,255,.3)' : 'oklch(.8 .01 250)') + ';margin-top:' + (m ? '20px' : '32px'),
+      toggleTheme: () => this.setState(s => { const dark=!s.dark; try{localStorage.setItem('ds-theme',dark?'dark':'light');}catch(e){} return {dark}; }),
+      themeIcon: d ? '☀' : '☾',
+      pageBg: d ? 'oklch(.16 .02 250)' : '#fff',
+      headerBg: d ? '#114D9E' : '#2D84F2',
+      headerShadow: d ? 'oklch(.16 .02 250)' : '#114D9E',
+      surface, ink, border, shadow, shadowSm, accent, hairline, btnBg, btnFg, chipInk, chipBorder,
+      inkFaint: d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)',
+      footLogoEl: React.createElement('img', { src: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo-color.svg', alt: 'Doctor.School', style: { height: '22px', display: 'block' } }),
+      months, days,
+      secMargin: m ? '30px 0 18px' : '48px 0 24px',
+      mainPad: m ? '0 16px 64px' : '0 clamp(16px,4vw,48px) 96px',
+      dayHeaderStyle: m
+        ? 'margin:0 -16px;padding:14px 16px 12px;background:' + (d ? 'oklch(.185 .02 250)' : 'oklch(.955 .004 250)') + ';display:flex;align-items:center'
+        : 'display:flex;align-items:baseline;gap:18px;margin:48px 0 24px',
+      dayRuleStyle: m ? 'display:none' : 'flex:1;border-top:2px solid ' + ink,
+      cardWrap: m ? 'display:flex;flex-direction:column;gap:0;margin:0 -16px' : 'display:flex;flex-direction:column;gap:28px',
+      cardWrapSingle: m ? 'margin:0 -16px 28px' : 'margin-bottom:40px',
+      filtersWrap: m ? 'flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px' : 'flex-wrap:wrap',
+      dnOuter: m ? 'display:flex;flex-direction:column;gap:12px' : 'display:flex;align-items:stretch;gap:12px;flex-wrap:wrap',
+      dnToggle: m ? 'display:grid;grid-template-columns:1fr 1fr' : 'display:inline-grid;grid-template-columns:auto auto'
+    };
+  }
+}
+</script>
+</body>
+</html>

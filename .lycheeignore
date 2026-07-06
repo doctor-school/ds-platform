@@ -37,3 +37,10 @@ design-source/support\.js
 # (e.g. a MEMORY.md fixture mimicking the auto-memory index). They are test data,
 # not docs — exclude the whole fixture tree from the link check. See #293.
 tools/lint/guard-tests/fixtures/
+
+# Vendored Claude Design canvas sources (design-source/*.dc.html): verbatim
+# spec artifacts, not documentation. Their {{ template }} hrefs and
+# canvas-relative links (Эфиры.dc.html, Мои события.dc.html, …) resolve only
+# inside the Claude Design project, never in this repo — lychee sees them as
+# file:// links and reports false File-not-found errors (#514).
+^file://.*/design-source/.*$

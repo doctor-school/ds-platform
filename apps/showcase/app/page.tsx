@@ -51,6 +51,13 @@ const SECTIONS: readonly Section[] = [
     href: "/blocks",
   },
   {
+    title: "Layout & rhythm",
+    description:
+      "The §09 spatial system in a live composition — the Container (1104/1240) centring + gutters, the ≤900px edge-to-edge collapse on resize, and the semantic spacing roles (inset / stack / section / controls / inline / day-band bleed) driving a webinar list. Both themes via the in-page toggle.",
+    issue: "#514",
+    href: "/rhythm",
+  },
+  {
     title: "Candidates (Stage-A)",
     description:
       "The candidate/adopted seam — 2–3 researched candidate variants of an element class rendered beside the adopted entry, role-labelled, for the owner's Stage-A pick on the live URL.",

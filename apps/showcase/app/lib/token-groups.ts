@@ -163,6 +163,15 @@ const CLASSIFIERS: {
     label: (n) => n.slice("--space-".length),
   },
   {
+    id: "container",
+    title: "Layout · container",
+    description:
+      "§09 content-column max-widths — `content` (1104px) and `calendar` (1240px). Surface as `max-w-content` / `max-w-calendar`; the Container primitive centres + gutters the column and drops the cap below the `layout` breakpoint (edge-to-edge).",
+    kind: "value",
+    match: (n) => n.startsWith("--container-"),
+    label: (n) => n.slice("--container-".length),
+  },
+  {
     id: "radius",
     title: "Radius",
     description: "Corner radii — the base scale and per-component radii.",

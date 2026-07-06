@@ -136,6 +136,20 @@ function semanticColorRoles() {
   );
 }
 
+/** The semantic spacing ROLE names (inset, stack, section, controls, inline,
+ * day-band, gutter) defined under `semantic.json` `space.*`. These — and ONLY
+ * these — surface as named Tailwind spacing utilities via the `--spacing-<role>`
+ * @theme namespace; the numeric `space.N` primitives stay unmapped (§243 note in
+ * themeVar). Read from source so a new role added to semantic.json flows through. */
+function semanticSpaceRoles() {
+  const raw = JSON.parse(
+    readFileSync(join(TOKENS_DIR, "semantic.json"), "utf8"),
+  );
+  return new Set(
+    Object.keys(raw.space ?? {}).filter((k) => !k.startsWith("$")),
+  );
+}
+
 /**
  * Map a token path onto a Tailwind v4 `@theme` namespace variable, so the
  * existing utilities (`bg-primary`, `font-sans`, `text-2xl`, …) resolve to our
@@ -143,12 +157,12 @@ function semanticColorRoles() {
  * scale + animations are appended manually). `roles` gates color tokens to the
  * semantic role set.
  */
-function themeVar(path, roles) {
+function themeVar(path, colorRoles, spaceRoles) {
   const [head, ...rest] = path;
   switch (head) {
     case "color":
       // Only the semantic color roles surface as Tailwind colors.
-      return rest.length === 1 && roles.has(rest[0])
+      return rest.length === 1 && colorRoles.has(rest[0])
         ? `--color-${rest.join("-")}`
         : null;
     case "font":
@@ -157,15 +171,23 @@ function themeVar(path, roles) {
       if (rest[0] === "weight") return `--font-weight-${rest.slice(1).join("-")}`;
       return null;
     case "space":
-      // The `space.*` primitives surface ONLY as `:root` `--space-N` vars and as
-      // the derived `spacingScalePx` (rhythmguard). They are deliberately NOT
-      // mapped onto a Tailwind `@theme` namespace: under Tailwind v4 the numeric
-      // spacing utilities (`p-4`, `gap-2`, `h-10`) derive from the single
+      // The numeric `space.N` PRIMITIVES surface ONLY as `:root` `--space-N` vars
+      // and as the derived `spacingScalePx` (rhythmguard). They are deliberately
+      // NOT mapped onto a Tailwind `@theme` namespace: under Tailwind v4 the
+      // numeric spacing utilities (`p-4`, `gap-2`, `h-10`) derive from the single
       // `--spacing` multiplier via `calc()`, so per-step `--spacing-N` `@theme`
-      // keys drive no utility — emitting them only advertised an inert mapping a
-      // reader would misread as "`p-4` → `--spacing-4`" (it does not). Dropped in
-      // #243. See the spacing-scale note in build() for the SoT derivation.
-      return null;
+      // keys drive no utility (dropped in #243). The §09 semantic spacing ROLES
+      // (semantic.json `space.<role>`) are the exception — a NAMED spacing key
+      // (`--spacing-inset`) does drive a named utility (`p-inset`, `gap-controls`,
+      // `space-y-section`, `-mx-gutter`, …), with no numeric collision — so those
+      // and only those map through. See semanticSpaceRoles() / the README §09.
+      return rest.length === 1 && spaceRoles.has(rest[0])
+        ? `--spacing-${rest.join("-")}`
+        : null;
+    case "container":
+      // §09 content-column max-widths → the Tailwind v4 `--container-*` namespace,
+      // which generates `max-w-content` / `max-w-calendar`.
+      return `--container-${rest.join("-")}`;
     case "shadow":
       return `--shadow-${rest.join("-")}`;
     case "breakpoint":
@@ -197,6 +219,7 @@ async function build() {
   assertNoDanglingRefs(darkLeaves, "dark");
 
   const roles = semanticColorRoles();
+  const spaceRoles = semanticSpaceRoles();
 
   // `:root` custom properties = every light leaf (primitive + semantic +
   // component) EXCEPT breakpoints, which are emitted as literal `@theme` values
@@ -222,7 +245,7 @@ async function build() {
   // `@media (width >= …)` queries, and a `var()` is invalid inside a media query.
   const themeEntries = [];
   for (const l of lightLeaves) {
-    const tv = themeVar(l.path, roles);
+    const tv = themeVar(l.path, roles, spaceRoles);
     if (!tv) continue;
     const ref =
       l.path[0] === "breakpoint"
@@ -266,6 +289,22 @@ async function build() {
   themeEntries.push({
     name: "--tracking-micro",
     ref: "var(--font-letter-spacing-micro)",
+  });
+  // Numeric/time tracking as a token-backed `tracking-numeric` utility (#514).
+  // The big tabular time on the webinar-card plate (56px desktop / 40px mobile,
+  // source webinar-card.dc.html) tracks at −.04em — the `numeric` letter-spacing
+  // token — which no default Tailwind rung carries (`tracking-tight` is −.025em).
+  themeEntries.push({
+    name: "--tracking-numeric",
+    ref: "var(--font-letter-spacing-numeric)",
+  });
+  // The webinar-card time-plate width as a SIZING utility (`w-time-plate`, #514).
+  // A named `--spacing-*` key drives the sizing utilities (`w-*` / `basis-*`) the
+  // same way the §09 role keys drive gap/padding; the value lives in the component
+  // token (component.json `webinar-card.time-plate`, 196px — source grid column).
+  themeEntries.push({
+    name: "--spacing-time-plate",
+    ref: "var(--webinar-card-time-plate)",
   });
 
   // --- assemble tokens.css -------------------------------------------------
@@ -323,7 +362,7 @@ async function build() {
   // name so it lines up with `themeKeys`.
   const breakpoints = lightLeaves
     .filter((l) => l.path[0] === "breakpoint")
-    .map((l) => ({ name: themeVar(l.path, roles), value: cssValue(l) }))
+    .map((l) => ({ name: themeVar(l.path, roles, spaceRoles), value: cssValue(l) }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   // --- token references + usage descriptions (raw source) ------------------

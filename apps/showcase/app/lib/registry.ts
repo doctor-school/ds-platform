@@ -69,6 +69,9 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "skeleton", section: "primitives" },
   { id: "day-band", section: "primitives" },
 
+  // ── Layout primitive (spec §3.2, #514) — the §09 content-column container.
+  { id: "container", section: "primitives" },
+
   // ── Field primitives (spec §3.2, the `fields/*` set) — `./fields` components.
   { id: "EmailField", section: "primitives" },
   { id: "PhoneField", section: "primitives" },

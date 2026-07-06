@@ -1,0 +1,5 @@
+---
+"@ds/design-system": minor
+---
+
+Re-skin the core interactive primitives to the neo-brutalist visual language (button, input, label, link, tabs, form, card, input-otp, and the `fields/*` composites). Built from the vendored canvas fidelity SoT (`design-source/design-system.dc.html`): square corners (radius 0), a hard 2px structural border, and hard offset shadows (blur-0) whose **cast colour is per-variant** — a filled action casts in the ink `border` tone, a bordered surface casts in the soft `elevation-soft` tone (new component-shadow tokens, since `--shadow-md` bakes the blue `elevation` cast). Interaction: hover translates `(2px,2px)` as the offset shrinks, press translates `(4px,4px)` as it collapses, focus adds the 3px ring alongside. Tabs become a segmented control; the card sits on the 6px elevation cast; OTP slots are 40px squares (hairline → ink border when filled); the inline form error takes the source's `⚠` + weight-700 danger tone. Both themes. No API change — visual re-skin only.

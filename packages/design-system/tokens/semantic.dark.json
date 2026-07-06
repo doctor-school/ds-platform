@@ -27,6 +27,7 @@
     "warning": { "$value": "{color.amber.400}" },
     "destructive": { "$value": "{color.red.400}" },
     "destructive-foreground": { "$value": "{color.neutral.50}" },
+    "destructive-tint": { "$value": "#3a1414" },
     "border": { "$value": "{color.white}" },
     "hairline": { "$value": "{color.neutral.alpha-16}" },
     "input": { "$value": "{color.white}" },

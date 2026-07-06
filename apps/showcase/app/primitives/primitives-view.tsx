@@ -60,19 +60,17 @@ const POINTER_STATES = new Set(["hover", "focus", "active"]);
 /**
  * Statically-forced focus ring — applied to the `focus` state cell so the ring
  * is visible on a static read (and screenshot) without tabbing, instead of a
- * pointer-only state. It MIRRORS the exported `interactiveBase` focus contract
- * (`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
- * focus-visible:ring-offset-2`, see `@ds/design-system` → `interactive-base.ts`)
- * with the `focus-visible:` prefixes dropped so it paints unconditionally.
+ * pointer-only state. It MIRRORS the neo-brutalist focus contract every re-skinned
+ * primitive now carries (#512): the flush 3px `shadow-focus` ring (source global
+ * `:focus-visible` 3px blue outline), applied here unconditionally (no
+ * `focus-visible:` prefix) so it paints on a static read.
  *
- * Written as a LITERAL (not `interactiveBase.replace(...)`): Tailwind's content
- * scanner only emits utilities it sees as literal strings, so a runtime-computed
- * class string would silently fail to generate. `ring-ring` resolves to the
- * `--color-ring` token, so the ring stays token-driven and matches the real
- * focus ring; keep this in sync if the `interactiveBase` ring ever changes.
+ * Written as a LITERAL (not a runtime-computed string): Tailwind's content
+ * scanner only emits utilities it sees as literal strings. `shadow-focus`
+ * resolves to the `--shadow-focus` token, so the ring stays token-driven and
+ * matches the real focus ring; keep this in sync if that token ever changes.
  */
-const FORCED_FOCUS =
-  "outline-none ring-2 ring-ring ring-offset-2 ring-offset-background";
+const FORCED_FOCUS = "outline-none shadow-focus";
 
 type StateSpec = { name: string; note?: string };
 

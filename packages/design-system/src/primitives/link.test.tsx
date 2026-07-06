@@ -22,7 +22,7 @@ describe("Link variant classes", () => {
     expect(cls).not.toMatch(/(?:^|\s)text-primary(?:\s|$)/);
     expect(cls).toMatch(/hover:underline/);
     expect(cls).toMatch(/underline-offset-4/);
-    expect(cls).toMatch(/focus-visible:ring-2/);
+    expect(cls).toMatch(/focus-visible:shadow-focus/);
     expect(cls).toMatch(/active:text-primary-action\/80/);
     // disabled dim via aria-disabled (anchors have no native :disabled).
     expect(cls).toMatch(/aria-disabled:opacity-50/);
@@ -42,7 +42,7 @@ describe("Link rendering + routing", () => {
     const link = screen.getByRole("link", { name: "Sign in" });
     expect(link).toHaveAttribute("href", "/login");
     expect(link).toHaveClass("text-primary-action", "hover:underline");
-    expect(link).toHaveClass("focus-visible:ring-2");
+    expect(link).toHaveClass("focus-visible:shadow-focus");
   });
 
   it("asChild composes onto a wrapped anchor (next/link route carrier) without adding a second element", () => {

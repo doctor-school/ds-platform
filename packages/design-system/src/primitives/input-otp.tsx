@@ -49,8 +49,15 @@ const InputOTPSlot = React.forwardRef<
     <div
       ref={ref}
       className={cn(
-        "relative flex h-9 w-9 items-center justify-center border-y border-r border-input text-sm shadow-sm transition-all first:rounded-l-md first:border-l last:rounded-r-md",
-        isActive && "z-10 ring-2 ring-ring",
+        // Neo-brutalist OTP slot (#512, source §07): a 40px square cell
+        // (`--otp-slot-size` = 2.5rem = h-10/w-10) with a hard 2px border, tabular
+        // uppercase digits. Shared edges via `border-y-2 border-r-2` + `first:border-l-2`
+        // so neighbours don't double. Empty = `hairline`; FILLED switches to the ink
+        // `border` (source "filled ⇒ border ink"); the ACTIVE slot takes the brand
+        // `ring` border + the flush 3px `shadow-focus`. Token-only → light + `.dark`.
+        "relative flex h-10 w-10 items-center justify-center border-y-2 border-r-2 first:border-l-2 text-sm font-bold uppercase tabular-nums text-foreground transition-all",
+        char ? "border-border" : "border-hairline",
+        isActive && "z-10 border-ring shadow-focus",
         className,
       )}
       {...props}

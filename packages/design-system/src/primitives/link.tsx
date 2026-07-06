@@ -3,7 +3,6 @@ import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "../lib/utils";
-import { interactiveBase } from "./interactive-base";
 
 /**
  * `Link` primitive (#324) — the `link` row of the per-clickable interaction-state
@@ -33,10 +32,11 @@ import { interactiveBase } from "./interactive-base";
  * Next while the interaction states come from this primitive.
  */
 const linkVariants = cva(
-  cn(
-    interactiveBase,
-    "rounded-sm text-primary-action underline-offset-4 hover:underline active:text-primary-action/80 aria-disabled:pointer-events-none aria-disabled:opacity-50",
-  ),
+  // Neo-brutalist link (#512): brand-anchored `primary-action` colour, hover
+  // underline, and the flush 3px `shadow-focus` keyboard ring (the source's
+  // global `:focus-visible` 3px blue outline) — consistent with every other
+  // re-skinned control, instead of the generic ring-with-offset. Token-only.
+  "text-primary-action underline-offset-4 transition-colors font-bold hover:underline active:text-primary-action/80 focus-visible:outline-none focus-visible:shadow-focus aria-disabled:pointer-events-none aria-disabled:opacity-50",
   {
     variants: {
       variant: {

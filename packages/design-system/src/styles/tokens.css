@@ -66,6 +66,7 @@
   --color-warning-foreground: oklch(0.16 0.02 250);
   --color-destructive: #c81e1e;
   --color-destructive-foreground: #ffffff;
+  --color-destructive-tint: #fdecec;
   --color-border: oklch(0.21 0.02 250);
   --color-hairline: oklch(0.922 0.006 250);
   --color-input: oklch(0.21 0.02 250);
@@ -134,6 +135,12 @@
   --shadow-md: 4px 4px 0 var(--color-elevation);
   --shadow-lg: 6px 6px 0 var(--color-elevation);
   --shadow-focus: 0 0 0 3px rgba(107, 177, 247, 0.5);
+  --shadow-btn: 4px 4px 0 var(--color-border);
+  --shadow-btn-hover: 2px 2px 0 var(--color-border);
+  --shadow-btn-focus: 4px 4px 0 var(--color-border), 0 0 0 3px rgba(107, 177, 247, 0.5);
+  --shadow-ghost: 4px 4px 0 var(--color-elevation-soft);
+  --shadow-ghost-hover: 2px 2px 0 var(--color-elevation-soft);
+  --shadow-ghost-focus: 4px 4px 0 var(--color-elevation-soft), 0 0 0 3px rgba(107, 177, 247, 0.5);
   --duration-fast: 150ms;
   --duration-base: 200ms;
   --duration-slow: 300ms;
@@ -206,6 +213,7 @@
   --color-warning-foreground: oklch(0.16 0.02 250);
   --color-destructive: #e15555;
   --color-destructive-foreground: oklch(0.985 0.002 250);
+  --color-destructive-tint: #3a1414;
   --color-border: #ffffff;
   --color-hairline: oklch(1 0 0 / 16%);
   --color-input: #ffffff;
@@ -244,6 +252,7 @@
   --color-warning-foreground: var(--color-warning-foreground);
   --color-destructive: var(--color-destructive);
   --color-destructive-foreground: var(--color-destructive-foreground);
+  --color-destructive-tint: var(--color-destructive-tint);
   --color-border: var(--color-border);
   --color-hairline: var(--color-hairline);
   --color-input: var(--color-input);
@@ -277,6 +286,12 @@
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
   --shadow-focus: var(--shadow-focus);
+  --shadow-btn: var(--shadow-btn);
+  --shadow-btn-hover: var(--shadow-btn-hover);
+  --shadow-btn-focus: var(--shadow-btn-focus);
+  --shadow-ghost: var(--shadow-ghost);
+  --shadow-ghost-hover: var(--shadow-ghost-hover);
+  --shadow-ghost-focus: var(--shadow-ghost-focus);
   --breakpoint-sm: 40rem;
   --breakpoint-md: 48rem;
   --breakpoint-lg: 64rem;

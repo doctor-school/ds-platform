@@ -4,7 +4,6 @@ import * as React from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 
 import { cn } from "../lib/utils";
-import { interactiveBase } from "./interactive-base";
 
 /**
  * Segmented-control / tabs built on `@radix-ui/react-tabs`. Radix supplies the
@@ -22,11 +21,11 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      // K-2 (#333): `gap-2` opens a visible track between segments so an inactive
-      // segment's hover fill never butts flush against the active segment — the
-      // slice-B defect was hover-gluing (two segments reading as one block on
-      // hover), which a transparent border alone did not fix.
-      "inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-muted p-1 text-muted-foreground",
+      // Neo-brutalist segment control (#512, source §05 "Сегмент-контрол"): a
+      // single hard 2px-bordered container, no rounding, no gap, no padding — the
+      // segments butt together and are divided by a 2px rule (owned per-trigger
+      // via `border-l-2`, dropped on the first). Full-width like the old list.
+      "inline-flex w-full items-stretch border-2 border-border bg-background",
       className,
     )}
     {...props}
@@ -41,15 +40,14 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      interactiveBase,
-      // transition-all (not just colors) so the active shadow animates too.
-      // #4 tab inset (ADR-0013 §7): every trigger carries a persistent
-      // `border border-transparent` so the active state's `bg-background` +
-      // `shadow` never shifts its inactive neighbour — the inactive hover reads
-      // as an inset chip inside the `px-3 py-1` padding, not a flush block.
-      // Inactive resting is the AA-safe quiet tier `text-muted-foreground` (full
-      // strength, #270 — not an opacity-dimmed foreground) → `hover:text-foreground`.
-      "inline-flex flex-1 items-center justify-center whitespace-nowrap rounded-md border border-transparent px-3 py-1 text-sm font-medium transition-all disabled:pointer-events-none data-[state=inactive]:text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow data-[state=inactive]:hover:bg-background/50 data-[state=inactive]:hover:text-foreground",
+      // Neo-brutalist segment (source §05): selected = `primary-action` fill +
+      // `primary-foreground` weight 800; unselected = surface + `tint-foreground`
+      // weight 700. Divider = a 2px left border between segments (`first:border-l-0`
+      // drops it on the leading segment). Focus = the flush 3px `shadow-focus` ring
+      // (z-10 so it is not clipped by the container border). Font 13px = `text-caption`.
+      "relative z-0 inline-flex flex-1 items-center justify-center whitespace-nowrap border-l-2 border-border first:border-l-0 px-4.5 py-3 text-caption transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-40",
+      "data-[state=active]:bg-primary-action data-[state=active]:text-primary-foreground data-[state=active]:font-extrabold",
+      "data-[state=inactive]:bg-background data-[state=inactive]:text-tint-foreground data-[state=inactive]:font-bold data-[state=inactive]:hover:bg-tint",
       className,
     )}
     {...props}
@@ -64,7 +62,7 @@ const TabsContent = React.forwardRef<
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
-      "mt-4 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      "mt-4 focus-visible:outline-none focus-visible:shadow-focus",
       className,
     )}
     {...props}

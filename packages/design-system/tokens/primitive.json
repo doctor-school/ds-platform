@@ -238,7 +238,31 @@
     "base": { "$value": "2px 2px 0 var(--color-elevation-soft)" },
     "md": { "$value": "4px 4px 0 var(--color-elevation)" },
     "lg": { "$value": "6px 6px 0 var(--color-elevation)" },
-    "focus": { "$value": "0 0 0 3px rgba(107, 177, 247, 0.5)" }
+    "focus": { "$value": "0 0 0 3px rgba(107, 177, 247, 0.5)" },
+    "btn": {
+      "$description": "Filled-button rest offset shadow — 4px hard cast in the INK/structural border colour (neutral.900 → white in dark), the source's 4px offset in the border tone. The generic md/lg shadows cast in the blue elevation tone; a filled primary/destructive action casts in ink, so it needs its own token, not md (fidelity trap: per-variant shadow colour).",
+      "$value": "4px 4px 0 var(--color-border)"
+    },
+    "btn-hover": {
+      "$description": "Filled-button hover offset shadow — shrinks to 2px as the button translates (2px,2px) into its own cast. Same ink colour as `btn`.",
+      "$value": "2px 2px 0 var(--color-border)"
+    },
+    "btn-focus": {
+      "$description": "Filled-button focus shadow — the rest 4px ink cast PLUS the 3px keyboard focus ring, composited in one box-shadow so the offset and the ring coexist on focus.",
+      "$value": "4px 4px 0 var(--color-border), 0 0 0 3px rgba(107, 177, 247, 0.5)"
+    },
+    "ghost": {
+      "$description": "Bordered-surface (ghost / secondary) rest offset shadow — 4px hard cast in the SOFT elevation-soft tone (blue.200 → blue.600 dark), the source's 4px offset in the soft shadow tone. Distinct from btn (ink) — the fidelity trap the brief calls out.",
+      "$value": "4px 4px 0 var(--color-elevation-soft)"
+    },
+    "ghost-hover": {
+      "$description": "Bordered-surface hover offset shadow — 2px soft cast as the control translates into it.",
+      "$value": "2px 2px 0 var(--color-elevation-soft)"
+    },
+    "ghost-focus": {
+      "$description": "Bordered-surface focus shadow — the 4px soft cast PLUS the 3px focus ring, composited in one box-shadow.",
+      "$value": "4px 4px 0 var(--color-elevation-soft), 0 0 0 3px rgba(107, 177, 247, 0.5)"
+    }
   },
 
   "duration": {

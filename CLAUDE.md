@@ -40,12 +40,13 @@ Canon: AGENTS.md §3 + §3.4. Project work uses the catalog `apps/docs/content/s
 
 ## Subagent context economy (#534)
 
-A subagent's final message lands in the lead's context and is re-read until session end — that, not dispatch count, is what burns the limit. Four rules:
+A subagent's final message lands in the lead's context and is re-read until session end — that, not dispatch count, is what burns the limit. Five rules:
 
 1. **Return contract in every brief.** Every subagent brief ends with a return contract: final message = verdict / diff summary / artifact paths, **≤30 lines**; heavy content (full reports, exploration transcripts, DOM dumps) goes to a file or PR comment, never into the reply.
 2. **Model routing.** Mechanical fan-out (find/enumerate/collect) goes to **`ds-explorer`** (`.claude/agents/`, Sonnet, read-only); judgment work (Mode-a review, architecture) stays on Opus (`ds-reviewer` / `general-purpose`).
 3. **Browser payloads are dispatched.** Interactive Playwright browsing during orchestration runs inside a subagent, not the lead — rule in `.claude/rules/dev-stand.md`.
 4. **Lead-only tools are never delegated.** A tool absent from the subagent environment (DesignSync, etc.) the lead runs itself **before** dispatch — vendoring canvases into `design-source/` is the lead's first step; the subagent gets only the mechanical follow-on (README, refs, PR). Dispatching a task that dead-ends on a lead-only tool = a guaranteed block plus its bytes pumped through the lead's context anyway (session e2e357ff, ~300K).
+5. **Briefs in English.** Subagent briefs are authored in English (token economy + model comprehension) even when the owner chat is Russian; RU appears only where the RU string is itself the artifact (owner quotes, UI copy). User-facing replies stay RU (memory `feedback_subagent_briefs_in_english`).
 
 ## Shell gotchas
 

@@ -126,6 +126,14 @@ export const CORRECTION_RE = new RegExp(
     // stays unflagged; the trailing «\sа\s» keeps «а» a standalone contrastive
     // conjunction, not a mid-word match.
     'не [^\\s,]+,\\s+а\\s',
+    // 2026-07-06 513989fd wrap retro — the owner correction «Важное замечание …
+    // промпты … обязаны быть на английском» scored 0: a norm-statement framing
+    // («обязан(ы)» = must/obliged-to) plus the explicit «замечание» (remark)
+    // label, neither in the lexicon. «обязан» is a stem that covers
+    // обязан/обязаны/обязана/обязано but NOT the benign «обязательно» (the stem
+    // diverges at «обязат»); «замечани» covers замечание/замечания/замечаний —
+    // in owner chat both frame a norm the agent violated, i.e. pushback.
+    'обязан', 'замечани',
     'why ', 'instead', 'should have', 'you were supposed', 'wrong', 'no,', 'stop',
     'revert', 'undo', "don't", 'do not', 'not what', 'i asked', 'i told you', 'again', 'did you',
   ].join('|'),

@@ -21,7 +21,12 @@ import {
   InputOTPSeparator,
   InputOTPSlot,
 } from "@ds/design-system/input-otp";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ds/design-system/tabs";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@ds/design-system/tabs";
 import { FilterChip } from "@ds/design-system/filter-chip";
 import { Badge } from "@ds/design-system/badge";
 import { Avatar } from "@ds/design-system/avatar";
@@ -100,7 +105,9 @@ function StateColumns({
             {s.name}
           </span>
           <div
-            data-showcase-force={POINTER_STATES.has(s.name) ? s.name : undefined}
+            data-showcase-force={
+              POINTER_STATES.has(s.name) ? s.name : undefined
+            }
           >
             {render(s.name)}
           </div>
@@ -205,7 +212,10 @@ function ButtonSection() {
               <span className="font-mono text-xs text-muted-foreground">
                 {size}
               </span>
-              <Button size={size} aria-label={size === "icon" ? "icon" : undefined}>
+              <Button
+                size={size}
+                aria-label={size === "icon" ? "icon" : undefined}
+              >
                 {size === "icon" ? "★" : "Button"}
               </Button>
             </div>
@@ -320,10 +330,15 @@ function InputSection() {
 
 function LabelSection() {
   return (
-    <PrimitiveSection title="Label" exportsLine="Label — default / peer-disabled">
+    <PrimitiveSection
+      title="Label"
+      exportsLine="Label — default / peer-disabled"
+    >
       <div className="flex flex-wrap gap-8">
         <div className="flex flex-col gap-1.5">
-          <span className="font-mono text-xs text-muted-foreground">default</span>
+          <span className="font-mono text-xs text-muted-foreground">
+            default
+          </span>
           <Label htmlFor="label-demo-default">Email address</Label>
           <Input id="label-demo-default" className="w-48" placeholder="…" />
         </div>
@@ -457,7 +472,9 @@ function OtpSection() {
           </InputOTP>
         </div>
         <div className="flex flex-col gap-1.5">
-          <span className="font-mono text-xs text-muted-foreground">disabled</span>
+          <span className="font-mono text-xs text-muted-foreground">
+            disabled
+          </span>
           <InputOTP
             maxLength={4}
             value="12"
@@ -685,7 +702,13 @@ function FieldsSection() {
   );
 }
 
-function FieldGrid({ label, children }: { label: string; children: ReactNode }) {
+function FieldGrid({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
   return (
     <SubRow label={label}>
       <div className="grid grid-cols-1 gap-x-10 gap-y-4 md:grid-cols-2">
@@ -721,9 +744,7 @@ function FormPrimitivesSection() {
                 <FormControl>
                   <Input placeholder="Dr. Doctorova" {...field} />
                 </FormControl>
-                <FormDescription>
-                  Shown on your public profile.
-                </FormDescription>
+                <FormDescription>Shown on your public profile.</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -737,11 +758,18 @@ function FormPrimitivesSection() {
 /**
  * The new-language primitives (#513, source §05–§08) each carry theme-flipping
  * SEMANTIC tokens, so a single-theme render proves only half the contract. Every
- * §513 section renders its states TWICE — a light panel and a `.dark` panel side by
- * side — so both themes are visible on one page (the `.dark` class flips the token
- * CSS vars for its subtree exactly as the product apps do). The `render(theme)`
- * signature also lets grouped controls (radios) carry a per-panel `name`, so the
- * light and dark radio groups stay independent.
+ * §513 section renders its states TWICE — a light panel and a dark panel side by
+ * side — so both themes are visible on one page AND the backend-free CI axe scan
+ * (#351), which lands in the default theme, still sees dark-mode contrast.
+ *
+ * Each panel FORCES its theme with an explicit `.light` / `.dark` class (both flip
+ * the token CSS vars for their subtree exactly as the product apps do). Forcing
+ * `.light` — not merely omitting the class — is what keeps the light panel light
+ * even when the runtime page toggle (#515) has set `.dark` on the ancestor `<html>`:
+ * custom properties inherit, so an unclassed panel would follow the toggle; the
+ * `.light` reset (tokens.css) pins it. The `render(theme)` signature also lets
+ * grouped controls (radios) carry a per-panel `name`, so the light and dark radio
+ * groups stay independent.
  */
 function ThemePair({
   render,
@@ -754,11 +782,13 @@ function ThemePair({
         <div
           key={theme}
           className={
-            "flex flex-col items-start gap-4 border-2 border-border bg-background p-6" +
-            (theme === "dark" ? " dark" : "")
+            "flex flex-col items-start gap-4 border-2 border-border bg-background p-6 " +
+            theme
           }
         >
-          <span className="font-mono text-xs text-muted-foreground">{theme}</span>
+          <span className="font-mono text-xs text-muted-foreground">
+            {theme}
+          </span>
           {render(theme)}
         </div>
       ))}
@@ -795,6 +825,16 @@ function FilterChipSection() {
       <SubRow label="Live sample (click to toggle selection)">
         <FilterChipLive />
       </SubRow>
+      {/* AA carve-out note: the `disabled` copy is `muted-2` (neutral.400) — the
+          faintest non-body tier, intentionally below body-text AA. It is only ever
+          used on a DISABLED / decorative label (here, and in checkbox / radio /
+          switch / button disabled states), never for active body text (#511). */}
+      <p className="max-w-2xl text-sm text-muted-foreground">
+        The disabled label uses{" "}
+        <code className="font-mono text-xs">muted-2</code> (neutral.400) — the
+        faintest tier, below body AA by design and reserved for disabled /
+        decorative text only.
+      </p>
       <SubRow label="States (source §06) — light + dark">
         <ThemePair
           render={() => (
@@ -826,7 +866,10 @@ function FilterChipSection() {
 
 function BadgeSection() {
   return (
-    <PrimitiveSection title="Badge" exportsLine="Badge · badgeVariants — variant">
+    <PrimitiveSection
+      title="Badge"
+      exportsLine="Badge · badgeVariants — variant"
+    >
       <ThemePair
         render={() => (
           <div className="flex flex-wrap items-center gap-3">
@@ -842,7 +885,10 @@ function BadgeSection() {
 
 function AvatarSection() {
   return (
-    <PrimitiveSection title="Avatar" exportsLine="Avatar · avatarVariants — variant">
+    <PrimitiveSection
+      title="Avatar"
+      exportsLine="Avatar · avatarVariants — variant"
+    >
       <ThemePair
         render={() => (
           <div className="flex flex-wrap items-center gap-3">
@@ -861,7 +907,10 @@ function AvatarSection() {
 
 function CheckboxSection() {
   return (
-    <PrimitiveSection title="Checkbox" exportsLine="Checkbox — state (real native checkbox)">
+    <PrimitiveSection
+      title="Checkbox"
+      exportsLine="Checkbox — state (real native checkbox)"
+    >
       <SubRow label="Live sample (click / tab + space)">
         <Checkbox defaultChecked>Присылать напоминания об эфирах</Checkbox>
       </SubRow>
@@ -891,7 +940,10 @@ function CheckboxSection() {
 
 function RadioSection() {
   return (
-    <PrimitiveSection title="Radio" exportsLine="Radio — state (real native radio group)">
+    <PrimitiveSection
+      title="Radio"
+      exportsLine="Radio — state (real native radio group)"
+    >
       <SubRow label="States (source §07) — light + dark">
         <ThemePair
           render={(theme) => (
@@ -900,10 +952,20 @@ function RadioSection() {
                 <Radio name={`dir-${theme}`} value="off" aria-label="off" />
               </Cell>
               <Cell label="on">
-                <Radio name={`dir-${theme}`} value="on" defaultChecked aria-label="on" />
+                <Radio
+                  name={`dir-${theme}`}
+                  value="on"
+                  defaultChecked
+                  aria-label="on"
+                />
               </Cell>
               <Cell label="disabled">
-                <Radio name={`dir-dis-${theme}`} value="d" disabled aria-label="disabled" />
+                <Radio
+                  name={`dir-dis-${theme}`}
+                  value="d"
+                  disabled
+                  aria-label="disabled"
+                />
               </Cell>
             </div>
           )}
@@ -942,12 +1004,28 @@ function SwitchSection() {
 
 function AlertSection() {
   return (
-    <PrimitiveSection title="Alert" exportsLine="Alert · alertVariants — variant">
+    <PrimitiveSection
+      title="Alert"
+      exportsLine="Alert · alertVariants — variant"
+    >
+      {/* AA carve-out note: the success VARIANT reads on the `success-tint`
+          surface (AA-safe for body copy), NOT on the raw `success` fill. The
+          `success` fill + `success-foreground` pair (white on green.500) is
+          3.68:1 — the large/bold ≥3:1 carve-out only (#511), never normal-weight
+          body text. The alert body deliberately never sits on the fill. */}
+      <p className="max-w-2xl text-sm text-muted-foreground">
+        Body copy reads on the <code className="font-mono text-xs">*-tint</code>{" "}
+        surface. The raw <code className="font-mono text-xs">success</code> fill
+        + <code className="font-mono text-xs">success-foreground</code> pair
+        (white on green.500, 3.68:1) is the large/bold ≥3:1 carve-out only — not
+        for normal-weight body text.
+      </p>
       <ThemePair
         render={() => (
           <div className="flex w-full flex-col gap-3">
             <Alert variant="info">
-              <b>Инфо.</b> Эфир начнётся через 15 минут — мы пришлём напоминание.
+              <b>Инфо.</b> Эфир начнётся через 15 минут — мы пришлём
+              напоминание.
             </Alert>
             <Alert variant="success">
               <b>Успех.</b> Вы записаны на эфир — добавили в календарь.
@@ -956,7 +1034,8 @@ function AlertSection() {
               <b>Внимание.</b> Запись эфира будет доступна только 30 дней.
             </Alert>
             <Alert variant="danger">
-              <b>Ошибка.</b> Не удалось подключиться к эфиру — обновите страницу.
+              <b>Ошибка.</b> Не удалось подключиться к эфиру — обновите
+              страницу.
             </Alert>
           </div>
         )}
@@ -965,28 +1044,85 @@ function AlertSection() {
   );
 }
 
+/**
+ * The correct loading pattern for the Skeleton primitive. Each `Skeleton` is
+ * decorative and always `aria-hidden` (it carries no content a screen reader
+ * should announce), so on its own a skeleton block is INVISIBLE to assistive
+ * tech — a non-sighted user would get silence while the region loads. The
+ * accessible-name + busy signal must therefore live on the WRAPPER: an
+ * `aria-busy="true"` region with `role="status"` and an sr-only label, so the
+ * loading state is announced once and the hidden skeletons are pure visual
+ * placeholder. When the real content arrives the app flips `aria-busy` to
+ * `false` and swaps the skeletons for the content.
+ */
+function LoadingCard() {
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+      className="flex w-full items-center gap-4 border-2 border-border bg-card p-4"
+    >
+      {/* sr-only status text — the only thing assistive tech announces here; the
+          skeletons themselves stay aria-hidden. */}
+      <span className="sr-only">Loading profile…</span>
+      <Skeleton className="size-14" />
+      <div className="flex flex-1 flex-col gap-2.5">
+        <Skeleton className="h-3 w-3/5" />
+        <Skeleton className="h-3 w-5/6" />
+        <Skeleton className="h-3 w-2/5" />
+      </div>
+    </div>
+  );
+}
+
 function SkeletonSection() {
   return (
-    <PrimitiveSection title="Skeleton" exportsLine="Skeleton — composable loading placeholder">
-      <ThemePair
-        render={() => (
-          <div className="flex w-full items-center gap-4">
-            <Skeleton className="size-14" />
-            <div className="flex flex-1 flex-col gap-2.5">
-              <Skeleton className="h-3 w-3/5" />
-              <Skeleton className="h-3 w-5/6" />
-              <Skeleton className="h-3 w-2/5" />
+    <PrimitiveSection
+      title="Skeleton"
+      exportsLine="Skeleton — composable loading placeholder"
+    >
+      <SubRow label="Composition (each block is decorative, aria-hidden)">
+        <ThemePair
+          render={() => (
+            <div className="flex w-full items-center gap-4">
+              <Skeleton className="size-14" />
+              <div className="flex flex-1 flex-col gap-2.5">
+                <Skeleton className="h-3 w-3/5" />
+                <Skeleton className="h-3 w-5/6" />
+                <Skeleton className="h-3 w-2/5" />
+              </div>
             </div>
-          </div>
-        )}
-      />
+          )}
+        />
+      </SubRow>
+
+      <SubRow label='Loading pattern — aria-busy="true" region wraps the hidden skeletons'>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          A <code className="font-mono text-xs">Skeleton</code> is always{" "}
+          <code className="font-mono text-xs">aria-hidden</code>, so it is
+          invisible to assistive tech. Model the loading state on the WRAPPER:
+          an{" "}
+          <code className="font-mono text-xs">aria-busy=&quot;true&quot;</code>{" "}
+          <code className="font-mono text-xs">role=&quot;status&quot;</code>{" "}
+          region with an sr-only label announces &ldquo;Loading…&rdquo; once;
+          the skeletons stay pure visual placeholder. Flip{" "}
+          <code className="font-mono text-xs">aria-busy</code> to{" "}
+          <code className="font-mono text-xs">false</code> and swap in the real
+          content when it arrives.
+        </p>
+        <ThemePair render={() => <LoadingCard />} />
+      </SubRow>
     </PrimitiveSection>
   );
 }
 
 function DayBandSection() {
   return (
-    <PrimitiveSection title="Day-band" exportsLine="DayBand — full-bleed section plate">
+    <PrimitiveSection
+      title="Day-band"
+      exportsLine="DayBand — full-bleed section plate"
+    >
       <ThemePair
         render={() => (
           <div className="w-full">
@@ -1007,12 +1143,14 @@ function ContainerSection() {
       <p className="text-sm text-muted-foreground">
         The §09 layout container centres the content column, caps it (
         <code className="font-mono text-xs">content</code> 1104px /{" "}
-        <code className="font-mono text-xs">calendar</code> 1240px) and applies the
-        responsive gutter. Below the <code className="font-mono text-xs">layout</code>{" "}
-        breakpoint (≤900px) it goes edge-to-edge on a fixed 16px gutter — resize the
-        window, or open the{" "}
+        <code className="font-mono text-xs">calendar</code> 1240px) and applies
+        the responsive gutter. Below the{" "}
+        <code className="font-mono text-xs">layout</code> breakpoint (≤900px) it
+        goes edge-to-edge on a fixed 16px gutter — resize the window, or open
+        the{" "}
         <span className="font-medium text-foreground">Layout &amp; rhythm</span>{" "}
-        section, to watch the cap engage. The dashed rule marks the viewport edge.
+        section, to watch the cap engage. The dashed rule marks the viewport
+        edge.
       </p>
       {(["content", "calendar"] as const).map((variant) => (
         <SubRow key={variant} label={`variant="${variant}"`}>

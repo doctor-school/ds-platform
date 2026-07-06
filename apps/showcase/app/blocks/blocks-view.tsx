@@ -176,7 +176,7 @@ function LockGlyph({ className }: { className?: string }) {
 /* ------------------------------------------------------------------ */
 
 const AUTH_CARD_PROPS: PropRow[] = [
-  { name: "icon", type: "ReactNode", required: false, description: "Leading icon beside the title." },
+  { name: "icon", type: "ReactNode", required: false, description: "Glyph rendered in a tint badge tile above the title." },
   { name: "title", type: "ReactNode", required: true, description: "Card title." },
   { name: "description", type: "ReactNode", required: false, description: "Sub-copy under the title." },
   { name: "children", type: "ReactNode", required: true, description: "App-owned form / body — composes any primitives." },
@@ -192,7 +192,7 @@ function NeutralAuthCard({ className }: { className?: string }) {
   return (
     <AuthCard
       className={className}
-      icon={<LockGlyph />}
+      icon={<LockGlyph className="text-tint-foreground" />}
       title="Sign in"
       description="Enter your details to continue."
       footer={
@@ -336,7 +336,7 @@ function NestedAuthCard() {
   });
   return (
     <AuthCard
-      icon={<LockGlyph />}
+      icon={<LockGlyph className="text-tint-foreground" />}
       title="Sign in"
       description="Enter your details to continue."
       footer={
@@ -382,7 +382,8 @@ function AuthLayoutSection() {
         semantic <code className="font-mono text-xs">primary-surface</code> token (the block&apos;s
         own branding); the <code className="font-mono text-xs">logo</code> and the panel{" "}
         <code className="font-mono text-xs">aside</code> are app-supplied. The two-column split
-        appears at <code className="font-mono text-xs">lg+</code>; the block&apos;s{" "}
+        engages at the semantic <code className="font-mono text-xs">layout</code> breakpoint
+        (≥901px, §09 — the token match for the canvas ≤900px fold); the block&apos;s{" "}
         <code className="font-mono text-xs">min-h-screen</code> is neutralised to{" "}
         <code className="font-mono text-xs">min-h-0</code> here so it sizes to content at catalogue
         scale.

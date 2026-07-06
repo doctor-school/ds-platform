@@ -67,21 +67,23 @@ export function AuthShell({ children }: { children: ReactNode }) {
               three-zone split rather than an even distribution with a void up top.
               #518: composed to the canvas panel shape (`auth.dc.html`, mirrored by the
               showcase `NeutralAside`) — an eyebrow caps-label above a heavy headline +
-              sub-copy. Quiet tiers use element `opacity`, never a foreground-token
-              opacity (the aa-contrast rule), and copy inherits the block's own
-              `text-primary-surface-foreground`. */}
+              sub-copy. The headline inherits the block's own white
+              `text-primary-surface-foreground`; the quiet tiers (eyebrow / sub-copy /
+              footer) use the `text-primary-surface-muted` token — one weight below the
+              white headline, AA on the blue.700 panel in both themes (#537, replacing
+              the prior element `opacity-*` dim). */}
           <div className="flex flex-1 flex-col justify-center gap-5">
-            <p className="text-eyebrow font-extrabold uppercase tracking-micro opacity-80">
+            <p className="text-eyebrow font-extrabold uppercase tracking-micro text-primary-surface-muted">
               {t("eyebrow")}
             </p>
             <p className="max-w-lg text-3xl font-extrabold leading-tight tracking-tight">
               {t("headline")}
             </p>
-            <p className="max-w-md text-lg leading-snug opacity-90">
+            <p className="max-w-md text-lg leading-snug text-primary-surface-muted">
               {t("subcopy")}
             </p>
           </div>
-          <p className="text-sm font-semibold opacity-80">{t("footer")}</p>
+          <p className="text-sm font-semibold text-primary-surface-muted">{t("footer")}</p>
         </>
       }
     >

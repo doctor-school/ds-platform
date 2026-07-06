@@ -50,6 +50,10 @@
       "$value": "{color.white}",
       "$description": "Text and icon colour ON a `primary-surface` fill. White in BOTH themes (the surface stays blue.700 in dark, white 8.14:1) — deliberately NOT overridden in semantic.dark.json, unlike `primary-foreground` which pairs with the theme-flipping action fill."
     },
+    "primary-surface-muted": {
+      "$value": "#cfdbec",
+      "$description": "Quiet supporting-copy tier ON a `primary-surface` fill — the eyebrow / value-prop / footer under a white headline (e.g. the auth brand panel). A fixed muted white (5.81:1 on blue.700, AA in BOTH themes since the surface is invariant), it REPLACES an element `opacity-*` dim on the sub-copy (#537): an opacity dim reads as translucent and is fragile to recolour, so the quiet tier is a real token, one visible weight below `primary-surface-foreground`. Pair with `bg-primary-surface`."
+    },
     "secondary": {
       "$value": "{color.neutral.100}",
       "$description": "Low-emphasis tonal fill (secondary buttons, subtle chips). Pair with `secondary-foreground`."
@@ -138,13 +142,17 @@
       "$value": "{color.white}",
       "$description": "Text and icon colour on a `destructive` fill."
     },
+    "destructive-text": {
+      "$value": "{color.red.500}",
+      "$description": "Danger as FOREGROUND TEXT on a neutral surface — the inline field error / form error message (`FormMessage` / `FormError`, source §07 `⚠ <msg>`). Split from the `destructive` FILL role (#537): a FILL under white text must be dark enough for AA (red.500 #C81E1E, white 5.74:1), but the SAME red AS TEXT on the near-black dark card is only 3.09:1 — so the two roles need different darks. Light red.500 #C81E1E (5.74:1 on the white card); dark red.400 #E15555 (4.75:1 on the dark card) — the error message stays legible in both themes while the button fill lifts to the darker AA-safe red. Pair on `background` / `card`, never as a fill foreground."
+    },
     "destructive-tint": {
       "$value": "#fdecec",
       "$description": "Pale-red field/error surface (danger tint) behind an invalid input — the source's `dangerTint`. Carries normal `foreground` ink; the destructive border + `⚠` message carry the error. Theme-aware: pale-red light → deep-maroon dark."
     },
     "live": {
       "$value": "{color.red.500}",
-      "$description": "Flat live/danger red (#C81E1E) — the fill of a `live` badge (\"в эфире\") and the border + leading icon of a danger callout/alert. The source's `danger`/`live` constant: INVARIANT across themes (same #C81E1E on the light page and the dark maroon tint), so it does NOT track the theme-flipping `destructive` token (whose dark variant lifts to red.400 for AA on the dark card fill). Pair with `live-foreground`."
+      "$description": "Flat live/danger red (#C81E1E) — the fill of a `live` badge (\"в эфире\") and the border + leading icon of a danger callout/alert. The source's `danger`/`live` constant: INVARIANT across themes (same #C81E1E on the light page and the dark maroon tint). It shares the red.500 primitive with the `destructive` FILL (which is also #C81E1E in both themes since #537), but stays a distinct role: `live` is the non-text danger accent (badge fill / alert border+icon), `destructive` is the interactive danger fill (button / invalid input), and `destructive-text` is the danger error MESSAGE (which alone lifts to the lighter red.400 in dark for text AA). Pair with `live-foreground`."
     },
     "live-foreground": {
       "$value": "{color.white}",

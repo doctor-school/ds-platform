@@ -50,6 +50,7 @@
   --color-primary-pressed: #0d3a77;
   --color-primary-surface: #114d9e;
   --color-primary-surface-foreground: #ffffff;
+  --color-primary-surface-muted: #cfdbec;
   --color-secondary: oklch(0.968 0.004 250);
   --color-secondary-foreground: oklch(0.21 0.02 250);
   --color-muted: oklch(0.968 0.004 250);
@@ -71,6 +72,7 @@
   --color-warning-tint: #fdf4e3;
   --color-destructive: #c81e1e;
   --color-destructive-foreground: #ffffff;
+  --color-destructive-text: #c81e1e;
   --color-destructive-tint: #fdecec;
   --color-live: #c81e1e;
   --color-live-foreground: #ffffff;
@@ -218,6 +220,7 @@
   --color-primary-pressed: #aed4fb;
   --color-primary-surface: #114d9e;
   --color-primary-surface-foreground: #ffffff;
+  --color-primary-surface-muted: #cfdbec;
   --color-secondary: oklch(0.372 0.016 250);
   --color-secondary-foreground: oklch(0.985 0.002 250);
   --color-muted: oklch(0.372 0.016 250);
@@ -237,8 +240,9 @@
   --color-warning: #f5b740;
   --color-warning-foreground: oklch(0.16 0.02 250);
   --color-warning-tint: #332612;
-  --color-destructive: #e15555;
+  --color-destructive: #c81e1e;
   --color-destructive-foreground: oklch(0.985 0.002 250);
+  --color-destructive-text: #e15555;
   --color-destructive-tint: #3a1414;
   --color-live: #c81e1e;
   --color-live-foreground: #ffffff;
@@ -264,6 +268,7 @@
   --color-primary-pressed: #0d3a77;
   --color-primary-surface: #114d9e;
   --color-primary-surface-foreground: #ffffff;
+  --color-primary-surface-muted: #cfdbec;
   --color-secondary: oklch(0.968 0.004 250);
   --color-secondary-foreground: oklch(0.21 0.02 250);
   --color-muted: oklch(0.968 0.004 250);
@@ -285,6 +290,7 @@
   --color-warning-tint: #fdf4e3;
   --color-destructive: #c81e1e;
   --color-destructive-foreground: #ffffff;
+  --color-destructive-text: #c81e1e;
   --color-destructive-tint: #fdecec;
   --color-live: #c81e1e;
   --color-live-foreground: #ffffff;
@@ -310,6 +316,7 @@
   --color-primary-pressed: var(--color-primary-pressed);
   --color-primary-surface: var(--color-primary-surface);
   --color-primary-surface-foreground: var(--color-primary-surface-foreground);
+  --color-primary-surface-muted: var(--color-primary-surface-muted);
   --color-secondary: var(--color-secondary);
   --color-secondary-foreground: var(--color-secondary-foreground);
   --color-muted: var(--color-muted);
@@ -331,6 +338,7 @@
   --color-warning-tint: var(--color-warning-tint);
   --color-destructive: var(--color-destructive);
   --color-destructive-foreground: var(--color-destructive-foreground);
+  --color-destructive-text: var(--color-destructive-text);
   --color-destructive-tint: var(--color-destructive-tint);
   --color-live: var(--color-live);
   --color-live-foreground: var(--color-live-foreground);

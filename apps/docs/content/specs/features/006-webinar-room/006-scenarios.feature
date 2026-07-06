@@ -1,0 +1,168 @@
+# 006 — Webinar room scenarios
+# Gherkin for the room vertical of the Webinars epic wave 1 (server-side-gated room = embed
+# player from an explicit provider enum + live chat over Centrifugo + server-authoritative
+# heartbeat presence capture). Happy paths + failure branches. Translated to Playwright via
+# playwright-bdd — this is a user-facing spec, so the browser run is a required deliverable
+# (owned + tracked by the 006 portal-integration + E2E child Issue, open-ears-issues step 3a),
+# not a bare footnote.
+# Tags map scenarios to EARS handlers in 006-requirements-en.md; each EARS realizes a US-N in 006-product.md.
+
+Feature: Webinar room — a registered doctor watches live, chats in real time, and is silently counted present
+
+  Background:
+    Given the portal serves the webinar surfaces on its configured origin
+    And the auth foundation (feature 003) is available for login and signup
+    And the event page and join path (feature 004) are available
+    And the registration record and EventRoster (feature 005) are available
+    And the event read model is seeded with events in each lifecycle state, with stream config
+    And Centrifugo is available for the room chat channel
+    And the heartbeat cadence N is a server-side config defaulting to 60 seconds
+    And all absolute times are presented in Europe/Moscow labeled МСК
+
+  # --- Room admission & composition (US-1, US-5) ---
+
+  @EARS-1 @EARS-2 @happy
+  Scenario: A registered doctor enters a live room and sees the player and chat
+    Given a registered doctor on a live event
+    When the doctor enters the room
+    Then the server issues a RoomAccess grant
+    And the room renders the embed player and the live chat to the canvas composition
+    And the player is instantiated from the event stream config provider enum, not by URL-sniffing
+
+  @EARS-2 @failure
+  Scenario Outline: The player is instantiated from the explicit provider enum
+    Given a live event whose stream config provider is "<provider>"
+    When a gated doctor opens the room
+    Then the embed player for "<provider>" is instantiated from the enum value
+    And the provider is never inferred from the stream URL string
+
+    Examples:
+      | provider |
+      | rutube   |
+      | youtube  |
+
+  @EARS-2 @edge
+  Scenario: An unknown or absent provider yields a truthful stream-unavailable state
+    Given a live event whose stream config provider is unknown or absent
+    When a gated doctor opens the room
+    Then the room shows a truthful "stream unavailable" state
+    And no guessed embed is rendered
+
+  # --- Live chat (US-2) ---
+
+  @EARS-3 @happy
+  Scenario: A posted chat message reaches other participants in real time
+    Given two registered doctors in the same live room
+    When one doctor posts a chat message
+    Then the message fans out to the other doctor in real time
+    And the other doctor sees it without reloading the page
+
+  @EARS-3 @EARS-8 @failure
+  Scenario: A client cannot publish to the room channel without the gated command
+    Given a client holding only a subscribe-scoped chat token
+    When the client attempts to publish directly to the room channel
+    Then the direct publish is rejected
+    And a message is posted only through the server-gated command
+
+  # --- Heartbeat presence capture (US-3) ---
+
+  @EARS-4 @happy
+  Scenario: Presence is captured by an invisible heartbeat every N seconds
+    Given a registered doctor watching in a live room
+    When the doctor stays in the room
+    Then the client posts an authenticated heartbeat every N seconds
+    And each accepted beat appends one durable row (doctor, event, instant) to the presence table
+    And the doctor never clicks anything to prove presence
+
+  # --- Presence-minute derivation (US-3, US-4) ---
+
+  @EARS-5 @happy
+  Scenario: Concurrent tabs do not inflate a doctor's presence minutes
+    Given a doctor with two tabs open in the same live room
+    When both tabs post heartbeats over the same minute
+    Then the doctor's presence minutes count that minute only once
+    And the parallel beats coalesce into one presence timeline
+
+  @EARS-5 @happy
+  Scenario: The captured data yields per-doctor minutes sufficient for the manual sponsor export
+    Given a live room that captured heartbeats from several doctors
+    When the operator derives presence minutes over the cadence N
+    Then each doctor has actual presence minutes computed from the beats
+    And the data is sufficient to produce the sponsor report by manual export
+    And no report UI is required in wave 1
+
+  @EARS-5 @edge
+  Scenario: Changing the heartbeat cadence changes config, not spec or code
+    Given the presence minutes computed at the default cadence of 60 seconds
+    When an operator confirms a different cadence and updates the server config
+    Then the presence minutes recompute over the new cadence
+    And no spec or code change is required
+
+  # --- Denied-access routing (US-1, US-5) ---
+
+  @EARS-6 @failure
+  Scenario Outline: An unadmissible caller is routed truthfully, never shown a soft wall
+    Given a caller who is "<condition>" for a room
+    When the caller reaches the room
+    Then the caller is routed to "<destination>"
+    And no soft UI wall renders the player
+
+    Examples:
+      | condition                     | destination                                  |
+      | unauthenticated               | the auth flow (feature 003), then re-evaluated |
+      | authenticated but unregistered| register for the event (feature 005)         |
+      | on an event that is not live  | the truthful lifecycle state (feature 004)   |
+
+  # --- Room close stops capture (US-3, US-4) ---
+
+  @EARS-7 @happy
+  Scenario: Closing the room stops heartbeat and chat acceptance
+    Given a live room with a doctor present
+    When the director closes the room and the event leaves the live state
+    Then a late heartbeat for that event is refused
+    And a late chat post for that event is refused
+    And the room degrades to the truthful ended state
+    And the doctor's minutes are computed over the window the room was open
+
+  # --- Cross-cutting (US-5, US-1) ---
+
+  @EARS-8 @failure
+  Scenario: A doctor cannot read another doctor's room data or the roster
+    Given two doctors and a live event one of them is registered for
+    When the other doctor requests the room config, chat identity, presence, or roster of the first
+    Then no other doctor's room data is returned
+    And the room config, chat, and heartbeat endpoints require authentication and registration
+
+  @EARS-8 @failure
+  Scenario: The presence data is never exposed on a public surface
+    Given a live event with captured presence beats
+    When any public endpoint is requested
+    Then no per-doctor presence data or registrant PII is returned
+
+  @EARS-9 @happy
+  Scenario: The room embeds the stream as a frame only
+    Given a gated doctor in a live room
+    When the room renders the external stream
+    Then the stream is embedded as a configured frame only
+    And the room does not transcode, re-host, proxy, DRM-sign, record, or telemeter the stream
+
+  @EARS-10 @happy
+  Scenario: Absolute room times render in МСК regardless of the viewer's timezone
+    Given a viewer whose browser timezone is not Europe/Moscow
+    When the viewer opens the «О эфире» program in the room
+    Then every absolute date and time is presented in Europe/Moscow labeled МСК
+    And no time drifts to the viewer's local timezone
+
+  @EARS-11 @happy
+  Scenario Outline: The room renders to the vendored canvas at both breakpoints and themes
+    Given a gated doctor's live room
+    When it renders at the "<breakpoint>" breakpoint in the "<theme>" theme
+    Then the layout matches the vendored neo-brutalist webinar-room canvas geometry
+    And no arbitrary Tailwind value is used (token-lint green)
+
+    Examples:
+      | breakpoint | theme |
+      | desktop    | light |
+      | desktop    | dark  |
+      | mobile     | light |
+      | mobile     | dark  |

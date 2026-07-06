@@ -177,6 +177,9 @@ export function OtpFocusScreen<T extends FieldValues>({
           size="sm"
           onClick={onChangeMethod}
           data-testid={changeMethodTestId}
+          // `shrink-0` so the change-method control keeps its size and the resend
+          // label is the flex item that yields when the row is cramped (#542).
+          className="shrink-0"
         >
           {changeMethodLabel}
         </Button>
@@ -190,8 +193,11 @@ export function OtpFocusScreen<T extends FieldValues>({
           // `tabular-nums` so the countdown digits are fixed-width — the label no
           // longer jitters as the remaining-seconds digit changes (#227/#267 owner
           // finding). `text-right` keeps it anchored at the row edge while the text
-          // length varies between the countdown and the resend label.
-          className="text-right tabular-nums"
+          // length varies between the countdown and the resend label. `min-w-0` +
+          // `whitespace-normal` override the Button base `whitespace-nowrap` so the
+          // label WRAPS instead of overflowing the card at any width (#542 — the
+          // overflow the owner saw on /reset with the longer copy).
+          className="min-w-0 whitespace-normal text-right tabular-nums"
         >
           {resendDisabled ? resendCountdownLabel(remaining) : resendLabel}
         </Button>

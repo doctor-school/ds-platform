@@ -172,6 +172,39 @@
     }
   },
 
+  "space": {
+    "$type": "dimension",
+    "$description": "§09 «Раскладка и ритм» semantic spacing ROLES over the §03 4px scale — space is composed by ROLE, not by eye. Each role names WHERE a gap belongs so surfaces stay in rhythm; the source states a small set per role and these tokens carry the canonical (modal) value, with the fuller range noted in the package README. Surfaced as Tailwind spacing utilities via the `--spacing-<role>` @theme namespace: `p-inset`, `gap-controls`, `gap-inline`, `space-y-section`, `px-gutter`, `-mx-gutter` (bleed), … The two responsive roles compose with the `layout:` breakpoint variant: STACK collapses to 0 on mobile (`space-y-0 layout:space-y-stack`); GUTTER is a fixed 16px on mobile and the clamp on desktop (owned by the Container primitive). DAY-BAND is 0 — the day plate bleeds flush to its cards.",
+    "gutter": {
+      "$value": "clamp(1rem, 4vw, 3rem)",
+      "$description": "Container horizontal gutter on desktop (≥ layout breakpoint): clamp(16px, 4vw, 48px). On mobile the Container uses a fixed 16px gutter instead (edge-to-edge, so day-band/cards bleed cleanly by -16px). Also the negative-margin bleed unit (`-mx-gutter`)."
+    },
+    "inset": {
+      "$value": "{space.6}",
+      "$description": "Padding INSIDE cards, panels and buttons (canonical 24px; the source spans 16 · 20 · 24 · 30 — reach for `p-4`/`p-5` for tighter insets)."
+    },
+    "stack": {
+      "$value": "{space.7}",
+      "$description": "Gap BETWEEN cards in a list — 28px on desktop, collapsing to 0 on mobile where cards go edge-to-edge. Compose responsively: `space-y-0 layout:space-y-stack`."
+    },
+    "section": {
+      "$value": "{space.12}",
+      "$description": "Rhythm BETWEEN meaning blocks / sections (canonical 48px; the source spans 44 · 48)."
+    },
+    "controls": {
+      "$value": "{space.3}",
+      "$description": "Gap between adjacent controls — chips, buttons, fields (canonical 12px; the source spans 8 · 10 · 12 — `gap-2`/`gap-2.5` for tighter clusters)."
+    },
+    "inline": {
+      "$value": "{space.2}",
+      "$description": "Gap on the inline axis — icon ↔ text, label ↔ value (canonical 8px; the source spans 6 · 8 — `gap-1.5` for the tighter pair)."
+    },
+    "day-band": {
+      "$value": "{space.0}",
+      "$description": "The day plate sits FLUSH (0) against its cards and bleeds to the container edges — see the `-mx-gutter` bleed pattern."
+    }
+  },
+
   "radius": {
     "$type": "dimension",
     "control": { "$value": "{radius.base}" }

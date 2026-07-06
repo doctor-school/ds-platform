@@ -192,6 +192,58 @@ defects — a `min-h-*` reserved blank line on a message (K-1), a duplicate
   flush against the active segment (the slice-B hover-gluing defect, K-2). The
   transparent-border-only inset was not enough — the gap is the fix.
 
+## Layout & spatial rhythm (source §09)
+
+Space is composed by **semantic ROLE**, not by eye. Each role names _where_ a gap
+belongs and resolves to a §03-scale value through a generated token, so every
+surface stays in the same rhythm. The roles are DTCG tokens (`semantic.json`
+`space.*`) surfaced as named Tailwind v4 spacing utilities via the
+`--spacing-<role>` `@theme` namespace — `p-inset`, `gap-controls`, `space-y-section`,
+`-mx-gutter`, … — exactly like `p-4`/`gap-2`, but token-named. **Token-only: reach
+for the role utility, not a raw step, when the gap has a role.**
+
+| Role       | Token / utility                         | Canonical | Source set         | Where                                          |
+| ---------- | --------------------------------------- | --------- | ------------------ | ---------------------------------------------- |
+| `inset`    | `p-inset` (`--spacing-inset`)           | 24px      | 16 · 20 · 24 · 30  | Padding INSIDE cards, panels, buttons          |
+| `stack`    | `space-y-0 layout:space-y-stack`        | 0 → 28px  | 0 mob · 28 desktop | Gap BETWEEN cards in a list                    |
+| `section`  | `space-y-section` (`--spacing-section`) | 48px      | 44 · 48            | Rhythm BETWEEN meaning blocks / sections       |
+| `controls` | `gap-controls` (`--spacing-controls`)   | 12px      | 8 · 10 · 12        | Between chips, buttons, fields                 |
+| `inline`   | `gap-inline` (`--spacing-inline`)       | 8px       | 6 · 8              | Icon ↔ text, label ↔ value                     |
+| `day-band` | `-mx-4 layout:-mx-gutter` (bleed)       | 0 (bleed) | —                  | The day plate sits flush + bleeds to the edges |
+
+The two **responsive** roles compose with the `layout:` breakpoint variant rather
+than a second token: `stack` collapses to 0 on mobile (`space-y-0
+layout:space-y-stack`), and the gutter switches from a fixed 16px to the clamp —
+both owned for you by `Container` (below).
+
+### Container (`./container`)
+
+The **content column**. It centres the page column, caps its width, and owns the
+responsive gutter + breakpoint so surfaces never re-derive layout by eye:
+
+```tsx
+import { Container } from "@ds/design-system/container";
+
+<Container>{/* content — capped 1104px, centred, clamp gutter */}</Container>
+<Container variant="calendar">{/* wider calendar surfaces — 1240px */}</Container>
+```
+
+- **`content`** (default) caps at **1104px** (`max-w-content`); **`calendar`** caps
+  at **1240px** (`max-w-calendar`) — the `--container-*` tokens.
+- **≥ 901px** (the `layout:` breakpoint, `--breakpoint-layout`) — the cap engages,
+  the column centres (`mx-auto`), the gutter is `clamp(16px, 4vw, 48px)`
+  (`px-gutter`), and the offset shadows sit clear of the viewport edge.
+- **≤ 900px** — edge-to-edge: **no** max-width cap, a **fixed 16px** gutter (`px-4`).
+  The fixed gutter is what lets a `DayBand` plate or a card bleed to the viewport
+  edge cleanly (`-mx-4 layout:-mx-gutter`).
+
+Baseline (source §09 «Hit-target»): interactive targets ≥ **44×44**, a **3px**
+focus ring (`shadow-focus`), **AA** text contrast — all already carried by the
+primitives' interaction contract above.
+
+The live rhythm composition (Container + stack + section + day-band bleed, both
+breakpoints × both themes) is the `apps/showcase` **Layout & rhythm** section.
+
 ## Adding a component later
 
 This package follows the shadcn **owned-code** convention: components are copied

@@ -217,6 +217,13 @@
     "16": { "$value": "4rem" }
   },
 
+  "container": {
+    "$type": "dimension",
+    "$description": "§09 «Раскладка и ритм» content-column max-widths. `content` (1104px = 69rem) caps article / list / form / detail surfaces; `calendar` (1240px = 77.5rem) caps the wider calendar surfaces. The Container primitive centres the column (margin:0 auto) and applies the responsive gutter; below the `layout` breakpoint the cap is dropped (edge-to-edge). Surface as Tailwind `max-w-content` / `max-w-calendar` via the `--container-*` @theme namespace.",
+    "content": { "$value": "69rem" },
+    "calendar": { "$value": "77.5rem" }
+  },
+
   "radius": {
     "$type": "dimension",
     "$description": "Neo-brutalism has NO rounded corners — the structural radius is 0. Every semantic/component radius collapses onto this.",
@@ -301,10 +308,12 @@
 
   "breakpoint": {
     "$type": "dimension",
+    "$description": "Responsive width thresholds surfaced as Tailwind v4 `@media (width >= …)` variants. `sm`–`2xl` are the default ladder. `layout` (56.3125rem = 901px) is the §09 «Раскладка и ритм» threshold: at/above it the Container gains its max-width cap + clamp gutter and the offset shadows sit clear of the viewport edge; below it (≤900px) surfaces go edge-to-edge on a fixed 16px gutter so day-band plates and cards can bleed.",
     "sm": { "$value": "40rem" },
     "md": { "$value": "48rem" },
     "lg": { "$value": "64rem" },
     "xl": { "$value": "80rem" },
-    "2xl": { "$value": "96rem" }
+    "2xl": { "$value": "96rem" },
+    "layout": { "$value": "56.3125rem" }
   }
 }

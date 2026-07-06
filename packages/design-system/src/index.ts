@@ -49,6 +49,13 @@ export { Alert, alertVariants, type AlertProps } from "./primitives/alert";
 export { Skeleton } from "./primitives/skeleton";
 export { DayBand } from "./primitives/day-band";
 
+// ── Layout primitive (#514, source §09 «Раскладка и ритм») ─────────────────────
+export {
+  Container,
+  containerVariants,
+  type ContainerProps,
+} from "./primitives/container";
+
 // ── Field primitives (#197) ───────────────────────────────────────────────────
 export {
   EmailField,

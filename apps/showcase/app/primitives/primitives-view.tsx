@@ -31,6 +31,7 @@ import { Switch } from "@ds/design-system/switch";
 import { Alert } from "@ds/design-system/alert";
 import { Skeleton } from "@ds/design-system/skeleton";
 import { DayBand } from "@ds/design-system/day-band";
+import { Container } from "@ds/design-system/container";
 import {
   Form,
   FormControl,
@@ -997,6 +998,37 @@ function DayBandSection() {
   );
 }
 
+function ContainerSection() {
+  return (
+    <PrimitiveSection
+      title="Container"
+      exportsLine="Container · containerVariants — §09 content column (content | calendar)"
+    >
+      <p className="text-sm text-muted-foreground">
+        The §09 layout container centres the content column, caps it (
+        <code className="font-mono text-xs">content</code> 1104px /{" "}
+        <code className="font-mono text-xs">calendar</code> 1240px) and applies the
+        responsive gutter. Below the <code className="font-mono text-xs">layout</code>{" "}
+        breakpoint (≤900px) it goes edge-to-edge on a fixed 16px gutter — resize the
+        window, or open the{" "}
+        <span className="font-medium text-foreground">Layout &amp; rhythm</span>{" "}
+        section, to watch the cap engage. The dashed rule marks the viewport edge.
+      </p>
+      {(["content", "calendar"] as const).map((variant) => (
+        <SubRow key={variant} label={`variant="${variant}"`}>
+          <div className="w-full border-x border-dashed border-muted-foreground/40">
+            <Container variant={variant} className="bg-section py-4">
+              <div className="border-2 border-border bg-card p-inset text-sm text-foreground">
+                Centred {variant} column · gutter + max-width from §09 tokens
+              </div>
+            </Container>
+          </div>
+        </SubRow>
+      ))}
+    </PrimitiveSection>
+  );
+}
+
 export function PrimitivesView() {
   return (
     <div className="flex flex-col gap-2">
@@ -1018,6 +1050,7 @@ export function PrimitivesView() {
       <AlertSection />
       <SkeletonSection />
       <DayBandSection />
+      <ContainerSection />
     </div>
   );
 }

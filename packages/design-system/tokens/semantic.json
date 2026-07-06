@@ -193,7 +193,11 @@
     },
     "section": {
       "$value": "{space.12}",
-      "$description": "Rhythm BETWEEN meaning blocks / sections (canonical 48px; the source spans 44 · 48)."
+      "$description": "Rhythm BETWEEN meaning blocks / sections (canonical 48px; the source spans 44 · 48). On mobile the between-day-group rhythm narrows to `section-sm` (32px)."
+    },
+    "section-sm": {
+      "$value": "{space.8}",
+      "$description": "Mobile rhythm BETWEEN day groups — 32px of air above the next day's band, clearly larger than the intra-day `stack-sm` (20). Recorded product-owner Stage-B decision (2026-07-06, extends the stack-sm override: mobile rhythm = 20 intra-day / 32 between days), superseding the canvas's flush mobile day header (webinars-listing.dc.html dayHeaderStyle margin 0). Compose `mt-section-sm layout:mt-0` on every day-group wrapper EXCEPT the first — desktop keeps the full `section` rhythm (48) via the day header's own margins, and the band still sits FLUSH (0) to its own first card (day-band role)."
     },
     "controls": {
       "$value": "{space.3}",

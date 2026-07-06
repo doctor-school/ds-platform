@@ -137,6 +137,7 @@
   --space-stack: 1.75rem;
   --space-stack-sm: 1.25rem;
   --space-section: 3rem;
+  --space-section-sm: 2rem;
   --space-controls: 0.75rem;
   --space-inline: 0.5rem;
   --space-day-band: 0rem;
@@ -319,6 +320,7 @@
   --spacing-stack: var(--space-stack);
   --spacing-stack-sm: var(--space-stack-sm);
   --spacing-section: var(--space-section);
+  --spacing-section-sm: var(--space-section-sm);
   --spacing-controls: var(--space-controls);
   --spacing-inline: var(--space-inline);
   --spacing-day-band: var(--space-day-band);

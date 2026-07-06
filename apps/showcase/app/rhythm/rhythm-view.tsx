@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import NextLink from "next/link";
 import { Container } from "@ds/design-system/container";
 import { DayBand } from "@ds/design-system/day-band";
 import { Badge } from "@ds/design-system/badge";
 import { Button } from "@ds/design-system/button";
 import { FilterChip } from "@ds/design-system/filter-chip";
+import { Link } from "@ds/design-system/link";
 
 /**
  * Layout & spatial rhythm demo (#514). Fidelity SoT: the vendored canvases
@@ -32,8 +33,8 @@ import { FilterChip } from "@ds/design-system/filter-chip";
  *   header, still FLUSH against its own first card (§09 day-band = 0, unchanged).
  *
  * Everything is `@ds/design-system` exports + token-backed utilities (no
- * arbitrary values); the in-page theme toggle flips the `.dark` token cascade so
- * both themes are verifiable on the one live URL.
+ * arbitrary values); the shell's runtime theme toggle (#515, top-right) flips the
+ * `.dark` token cascade page-wide, so both themes are verifiable on the one live URL.
  */
 
 type Speaker = { name: string; org: string };
@@ -234,75 +235,69 @@ function DayHeader({ label }: { label: string }) {
 }
 
 export function RhythmView() {
-  const [dark, setDark] = useState(false);
   return (
-    <div className={dark ? "dark" : undefined}>
-      <div className="min-h-screen bg-background text-foreground">
-        {/* Chrome: back + theme toggle. The toggle flips the token cascade so both
-            themes are verifiable on the one live URL (Stage-B). */}
-        <div className="flex items-center justify-between gap-controls border-b-2 border-border bg-header px-4 py-3 text-header-foreground layout:px-gutter">
-          <a href="/" className="text-sm font-bold underline underline-offset-4">
-            ← Showcase home
-          </a>
-          <button
-            type="button"
-            onClick={() => setDark((v) => !v)}
-            className="border-2 border-header-foreground px-3 py-1.5 text-2xs font-extrabold uppercase tracking-micro"
-          >
-            {dark ? "☀ Светлая тема" : "☾ Тёмная тема"}
-          </button>
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Back-nav chrome. Theme is flipped page-wide by the shell's runtime toggle
+          (#515, top-right) — this whole §09 composition re-themes with it, so both
+          token cascades are verifiable on the one live URL (Stage-B). The back
+          affordance is the real DS `Link` primitive on the background surface
+          (AA-safe), not small text on the `header` fill (the header carve-out is
+          large/bold-only). */}
+      <div className="border-b-2 border-border px-4 py-3 layout:px-gutter">
+        <Link asChild variant="standalone" className="text-sm">
+          <NextLink href="/">← Showcase home</NextLink>
+        </Link>
+      </div>
+
+      <Container className="pb-16 pt-inset layout:pb-24">
+        <header className="space-y-inline">
+          <span className="text-2xs font-extrabold uppercase tracking-micro text-info">
+            09 · Раскладка и ритм
+          </span>
+          <h1 className="text-3xl font-extrabold leading-none tracking-tight">
+            Расписание эфиров
+          </h1>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Живая композиция §09 по канвасам «Эфиры» + «ВебинарКарточка»:
+            контейнер 1104, брейкпоинт 900, роли inset / stack / section /
+            controls / day-band. Сузьте окно ниже 900px — карточки станут
+            плоскими и уйдут в край без рамок; переключите тему тумблером в
+            правом верхнем углу для обоих каскадов токенов.
+          </p>
+        </header>
+
+        {/* Quick filter chips (the listing's filter row). The mobile bottom
+              margin separates the chips from the FIRST day plate. */}
+        <div className="mb-6 mt-6 flex flex-wrap gap-2 layout:mb-0">
+          {CHIPS.map((c, i) => (
+            <FilterChip key={c} selected={i === 0}>
+              {c}
+            </FilterChip>
+          ))}
         </div>
 
-        <Container className="pb-16 pt-inset layout:pb-24">
-          <header className="space-y-inline">
-            <span className="text-2xs font-extrabold uppercase tracking-micro text-info">
-              09 · Раскладка и ритм
-            </span>
-            <h1 className="text-3xl font-extrabold leading-none tracking-tight">
-              Расписание эфиров
-            </h1>
-            <p className="max-w-2xl text-sm text-muted-foreground">
-              Живая композиция §09 по канвасам «Эфиры» + «ВебинарКарточка»:
-              контейнер 1104, брейкпоинт 900, роли inset / stack / section /
-              controls / day-band. Сузьте окно ниже 900px — карточки станут
-              плоскими и уйдут в край без рамок; переключите тему для обоих
-              каскадов токенов.
-            </p>
-          </header>
-
-          {/* Quick filter chips (the listing's filter row). The mobile bottom
-              margin separates the chips from the FIRST day plate. */}
-          <div className="mb-6 mt-6 flex flex-wrap gap-2 layout:mb-0">
-            {CHIPS.map((c, i) => (
-              <FilterChip key={c} selected={i === 0}>
-                {c}
-              </FilterChip>
-            ))}
-          </div>
-
-          {/* Day groups. Desktop rhythm comes from the header's own mt-section
+        {/* Day groups. Desktop rhythm comes from the header's own mt-section
               (48). Mobile: 32px of air ABOVE each day band except the first
               (`section-sm` — owner Stage-B decision 2026-07-06, extends the
               stack-sm override: mobile rhythm = 20 intra-day / 32 between days,
               supersedes the canvas's flush day header); the band itself stays
               flush to its own first card (day-band = 0). */}
-          {DAYS.map((day, i) => (
-            <section
-              key={day.label}
-              className={i === 0 ? undefined : "mt-section-sm layout:mt-0"}
-            >
-              <DayHeader label={day.label} />
-              {/* stack role: 20px mobile (`stack-sm` — owner Stage-B decision
+        {DAYS.map((day, i) => (
+          <section
+            key={day.label}
+            className={i === 0 ? undefined : "mt-section-sm layout:mt-0"}
+          >
+            <DayHeader label={day.label} />
+            {/* stack role: 20px mobile (`stack-sm` — owner Stage-B decision
                   2026-07-06, supersedes the canvas gap:0) / 28px desktop. */}
-              <div className="-mx-4 space-y-stack-sm layout:mx-0 layout:space-y-stack">
-                {day.events.map((w) => (
-                  <WebinarCard key={w.num} w={w} />
-                ))}
-              </div>
-            </section>
-          ))}
-        </Container>
-      </div>
+            <div className="-mx-4 space-y-stack-sm layout:mx-0 layout:space-y-stack">
+              {day.events.map((w) => (
+                <WebinarCard key={w.num} w={w} />
+              ))}
+            </div>
+          </section>
+        ))}
+      </Container>
     </div>
   );
 }

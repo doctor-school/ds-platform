@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import type { CSSProperties, ReactNode } from "react";
 import { Inter } from "next/font/google";
 
+import { ThemeToggle } from "./_components/theme-toggle";
+
 export const metadata: Metadata = {
   title: "DS Platform — Design System Showcase",
   description:
@@ -50,6 +52,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <body className="min-h-screen bg-background text-foreground antialiased">
         {children}
+        {/* Runtime page-level theme toggle (#515) — flips `.dark` on <html> so a
+            reviewer can verify the whole catalogue in either theme on the live URL.
+            Rendered LAST (fixed-positioned top-right) so primary content leads the
+            keyboard tab order; the toggle is a supplementary control reached last. */}
+        <ThemeToggle />
       </body>
     </html>
   );

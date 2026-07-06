@@ -168,7 +168,8 @@ function themeVar(path, colorRoles, spaceRoles) {
     case "font":
       if (rest[0] === "family") return `--font-${rest.slice(1).join("-")}`;
       if (rest[0] === "size") return `--text-${rest.slice(1).join("-")}`;
-      if (rest[0] === "weight") return `--font-weight-${rest.slice(1).join("-")}`;
+      if (rest[0] === "weight")
+        return `--font-weight-${rest.slice(1).join("-")}`;
       return null;
     case "space":
       // The numeric `space.N` PRIMITIVES surface ONLY as `:root` `--space-N` vars
@@ -239,6 +240,21 @@ async function build() {
     value: cssValue(l),
   }));
 
+  // `.light` FORCED-LIGHT reset = the SAME semantic color roles at their light
+  // values. `:root` already declares the light theme document-wide, but it cannot
+  // reset a subtree nested INSIDE a `.dark` ancestor (custom properties inherit, so
+  // a descendant with no theme class keeps the inherited `.dark` value). Emitting
+  // the light roles under an explicit `.light` class lets a region force light
+  // regardless of an ancestor theme — the mirror of `.dark`. Used by the showcase
+  // to render its light/dark specimen pairs side-by-side under a runtime page-level
+  // theme toggle (#515); a product app that pins a forced-light island (e.g. a
+  // print preview) gets the same affordance. Only the semantic roles are emitted (never
+  // primitives), exactly like `.dark`.
+  const lightVars = lightLeaves.filter(isColorRole).map((l) => ({
+    name: `--${cssName(l.path)}`,
+    value: cssValue(l),
+  }));
+
   // `@theme` keys -> point at the `:root` var so utilities resolve to tokens and
   // dark-mode overrides flow through automatically. EXCEPTION: breakpoints must
   // be LITERAL values, never `var(...)` — Tailwind v4 inlines them into
@@ -248,9 +264,7 @@ async function build() {
     const tv = themeVar(l.path, roles, spaceRoles);
     if (!tv) continue;
     const ref =
-      l.path[0] === "breakpoint"
-        ? cssValue(l)
-        : `var(--${cssName(l.path)})`;
+      l.path[0] === "breakpoint" ? cssValue(l) : `var(--${cssName(l.path)})`;
     themeEntries.push({ name: tv, ref });
   }
   // Radius scale: the neo-brutalist visual language is a FLAT, radius-0 system, so the
@@ -275,7 +289,10 @@ async function build() {
   // reference the ONE `live-pulse` keyframe defined in globals.css (alongside
   // caret-blink); the `prefers-reduced-motion` base-reset neutralises them.
   themeEntries.push(
-    { name: "--animate-live-pulse", ref: "live-pulse 1.6s ease-in-out infinite" },
+    {
+      name: "--animate-live-pulse",
+      ref: "live-pulse 1.6s ease-in-out infinite",
+    },
     {
       name: "--animate-skeleton-pulse",
       ref: "live-pulse 1.4s ease-in-out infinite",
@@ -317,6 +334,12 @@ async function build() {
     "",
     ".dark {",
     ...darkVars.map((v) => `  ${v.name}: ${v.value};`),
+    "}",
+    "",
+    // Forced-light reset — the light semantic roles under an explicit class so a
+    // subtree can override an ancestor `.dark` (see lightVars above). Mirrors `.dark`.
+    ".light {",
+    ...lightVars.map((v) => `  ${v.name}: ${v.value};`),
     "}",
     "",
     "@theme inline {",
@@ -362,7 +385,10 @@ async function build() {
   // name so it lines up with `themeKeys`.
   const breakpoints = lightLeaves
     .filter((l) => l.path[0] === "breakpoint")
-    .map((l) => ({ name: themeVar(l.path, roles, spaceRoles), value: cssValue(l) }))
+    .map((l) => ({
+      name: themeVar(l.path, roles, spaceRoles),
+      value: cssValue(l),
+    }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   // --- token references + usage descriptions (raw source) ------------------
@@ -402,7 +428,7 @@ async function build() {
   );
 
   console.log(
-    `[tokens] wrote ${rootVars.length} :root vars, ${darkVars.length} .dark overrides, ${themeEntries.length} @theme keys, ${allowed.tokenPaths.length} allowed tokens, spacing scale [${spacingScalePx.join(", ")}]px.`,
+    `[tokens] wrote ${rootVars.length} :root vars, ${darkVars.length} .dark overrides, ${lightVars.length} .light resets, ${themeEntries.length} @theme keys, ${allowed.tokenPaths.length} allowed tokens, spacing scale [${spacingScalePx.join(", ")}]px.`,
   );
 }
 
@@ -412,7 +438,9 @@ function assertNoDanglingRefs(leaves, label) {
     (l) => typeof l.value === "string" && /\{[^}]+\}/.test(l.value),
   );
   if (bad.length > 0) {
-    const list = bad.map((l) => `  ${l.path.join(".")} = ${l.value}`).join("\n");
+    const list = bad
+      .map((l) => `  ${l.path.join(".")} = ${l.value}`)
+      .join("\n");
     throw new Error(
       `[tokens] ${bad.length} dangling reference(s) in the ${label} tree:\n${list}`,
     );

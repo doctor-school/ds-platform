@@ -248,6 +248,51 @@
   --color-elevation-soft: #1f69c8;
 }
 
+.light {
+  --color-accent: oklch(0.968 0.004 250);
+  --color-background: #ffffff;
+  --color-foreground: oklch(0.21 0.02 250);
+  --color-section: oklch(0.955 0.004 250);
+  --color-card: #ffffff;
+  --color-card-foreground: oklch(0.21 0.02 250);
+  --color-primary: #2d84f2;
+  --color-primary-foreground: #ffffff;
+  --color-primary-action: #114d9e;
+  --color-primary-hover: #0d3a77;
+  --color-primary-pressed: #0d3a77;
+  --color-primary-surface: #114d9e;
+  --color-secondary: oklch(0.968 0.004 250);
+  --color-secondary-foreground: oklch(0.21 0.02 250);
+  --color-muted: oklch(0.968 0.004 250);
+  --color-muted-foreground: oklch(0.45 0.014 250);
+  --color-faint: oklch(0.556 0.012 250);
+  --color-muted-2: oklch(0.704 0.01 250);
+  --color-accent-foreground: oklch(0.21 0.02 250);
+  --color-tint: #d3e8fd;
+  --color-tint-foreground: #114d9e;
+  --color-info: #2d84f2;
+  --color-chip-border: #aed4fb;
+  --color-header: #2d84f2;
+  --color-header-foreground: #ffffff;
+  --color-success: #009959;
+  --color-success-foreground: #ffffff;
+  --color-success-tint: #e6f6ee;
+  --color-warning: #b5791a;
+  --color-warning-foreground: oklch(0.16 0.02 250);
+  --color-warning-tint: #fdf4e3;
+  --color-destructive: #c81e1e;
+  --color-destructive-foreground: #ffffff;
+  --color-destructive-tint: #fdecec;
+  --color-live: #c81e1e;
+  --color-live-foreground: #ffffff;
+  --color-border: oklch(0.21 0.02 250);
+  --color-hairline: oklch(0.922 0.006 250);
+  --color-input: oklch(0.21 0.02 250);
+  --color-ring: #6bb1f7;
+  --color-elevation: #114d9e;
+  --color-elevation-soft: #aed4fb;
+}
+
 @theme inline {
   --color-accent: var(--color-accent);
   --color-background: var(--color-background);

@@ -67,4 +67,11 @@ The public face of a webinar: an event page that any visitor can read **without 
 
 ## Approved mockup
 
-_To be filled at Stage A by `author-design-mockup` (product-owner choice recorded before implementation)._
+Vendored canvas source (byte-verbatim from the Claude Design project «Doctor.School визуальный язык» — build to these files, see [`design-source/README.md`](../../../../../../design-source/README.md)):
+
+- [`design-source/webinar-page.dc.html`](../../../../../../design-source/webinar-page.dc.html) — the public event page (US-1, US-2, US-3, US-5); lifecycle states `upcoming / live / ended` (US-6) via the canvas `status` prop.
+- [`design-source/webinars-listing.dc.html`](../../../../../../design-source/webinars-listing.dc.html) — the upcoming-broadcasts listing (US-4), day-grouped week view.
+- [`design-source/webinars-month.dc.html`](../../../../../../design-source/webinars-month.dc.html) — the month-calendar view of the listing (paired with the week view via the canvas «Неделя / Месяц» switcher).
+- [`design-source/webinar-card.dc.html`](../../../../../../design-source/webinar-card.dc.html) — the card unit the listings render.
+
+**Status:** composition authored by the product owner on the Claude Design canvas (project «Doctor.School визуальный язык»); Stage-A re-confirmation at the next owner checkpoint.

@@ -67,4 +67,4 @@ The minimal operator/director tooling that makes the other three features possib
 
 ## Approved mockup
 
-_To be filled at Stage A by `author-design-mockup` (product-owner choice recorded before implementation)._
+**No canvas exists for this feature (known Stage-A gap).** The Claude Design project «Doctor.School визуальный язык» covers the portal-facing webinar surfaces (see [`design-source/README.md`](../../../../../../design-source/README.md)); the admin surface lives in the `admin` app on Refine (ADR-0004) and follows Refine's stock UI in wave 1. Owner decision at the next Stage-A checkpoint: keep stock Refine for the minimal admin, or commission an admin canvas.

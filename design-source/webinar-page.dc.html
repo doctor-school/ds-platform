@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}</style></helmet>
+
+<div style="min-height:100vh;background:{{ pageBg }}">
+  <header data-screen-label="Страница вебинара" style="background:{{ headerBg }};padding:16px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
+    <a href="Эфиры.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
+        <details style="position:relative">
+          <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 {{ headerShadow }}">≡</summary>
+          <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:200px;z-index:20">
+            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:800;color:{{ headerBg }};text-decoration:none">Эфиры</a>
+            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Школы</a>
+            <a href="Мои события.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Мои события</a>
+          </nav>
+        </details>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+      <nav style="display:flex;align-items:center;gap:28px;font-size:14px;font-weight:700">
+        <a href="Эфиры.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px">Эфиры</a>
+        <a href="Эфиры.dc.html" style="color:#D3E8FD;text-decoration:none">Школы</a>
+        <a href="Мои события.dc.html" style="color:#D3E8FD;text-decoration:none">Мои события</a>
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
+        <button style="font:inherit;font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;border:0;padding:11px 22px;cursor:pointer;box-shadow:3px 3px 0 {{ headerShadow }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">Войти</button>
+      </nav>
+    </sc-if>
+  </header>
+
+  <!-- Плакатное поле -->
+  <div style="background:{{ headerBg }};padding:clamp(24px,4vw,36px) clamp(16px,4vw,48px) 132px;position:relative">
+    <div style="max-width:1104px;margin:0 auto">
+      <div style="display:flex;align-items:center;gap:10px;font-size:12.5px;font-weight:700;color:#AED4FB;margin-bottom:32px;flex-wrap:wrap">
+        <a href="Эфиры.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Эфиры</a><span>/</span><span>Травматология</span><span>/</span><span>Эфир № 042</span>
+      </div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:32px;flex-wrap:wrap">
+        <div style="max-width:760px">
+          <div style="font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#D3E8FD;margin-bottom:16px">Школа травматологии и ортопедии · Эфир № 042</div>
+          <h1 style="margin:0;font-size:clamp(30px,5.5vw,50px);line-height:1.06;font-weight:800;letter-spacing:-.035em;color:#fff">Пластика ахиллова сухожилия: разбор клинических случаев</h1>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:24px">
+            <span style="font-size:12.5px;font-weight:700;color:#fff;border:2px solid #6BB1F7;padding:5px 12px">Травматология</span>
+            <span style="font-size:12.5px;font-weight:700;color:#fff;border:2px solid #6BB1F7;padding:5px 12px">Ортопедия</span>
+            <span style="font-size:12.5px;font-weight:700;color:#fff;border:2px solid #6BB1F7;padding:5px 12px">Спортивная медицина</span>
+          </div>
+        </div>
+        <span style="{{ heroBadgeStyle }}">{{ heroBadgeEl }}</span>
+      </div>
+    </div>
+  </div>
+
+  <main style="max-width:1104px;margin:-80px auto 0;padding:{{ mainPad }};position:relative;z-index:1">
+    <!-- Статус-карточка (одинакова с карточкой эфира) -->
+    <div style="{{ regCardStyle }}">
+      <div style="{{ regTimeCol }}">
+        <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+          <span style="{{ regLiveBadge }}"><span style="width:7px;height:7px;border-radius:50%;background:#fff;animation:livePulse 1.6s ease-in-out infinite"></span>В эфире</span>
+          <div>
+            <div style="font-size:40px;font-weight:800;line-height:1;letter-spacing:-.04em;color:{{ tintInk }};font-variant-numeric:tabular-nums">{{ regTime }}</div>
+            <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ tintInk }};margin-top:6px">{{ regTimeLabel }}</div>
+            <div style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:{{ regTimeSubColor }};line-height:1.45;margin-top:3px">{{ regTimeSubM }}</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ tintInk }}">{{ regTimeLabel }}</div>
+          <div style="font-size:{{ regTimeSize }};font-weight:800;line-height:1;letter-spacing:-.04em;color:{{ tintInk }};font-variant-numeric:tabular-nums">{{ regTime }}</div>
+          <div style="font-size:12.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:{{ regTimeSubColor }};line-height:1.6">{{ regTimeSub }}</div>
+        </sc-if>
+      </div>
+      <div style="{{ regBodyStyle }}">
+        <div style="min-width:200px">
+          <div style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:{{ ink }};margin-bottom:8px">{{ regHead }}</div>
+          <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">{{ regSub }}</div>
+        </div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap">{{ regCtaEl }}</div>
+      </div>
+    </div>
+
+    <!-- Две колонки -->
+    <div style="display:grid;grid-template-columns:{{ colsTemplate }};gap:clamp(32px,4vw,56px);margin-top:64px">
+      <div>
+        <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:28px">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">О чём эфир</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <p style="margin:0 0 36px;font-size:16px;line-height:1.7;color:{{ inkBody }};text-wrap:pretty">Разбираем три реальных случая пластики ахиллова сухожилия — от выбора техники до реабилитационного протокола. Без лекционной воды: снимки, интраоперационные видео, осложнения и честный разбор ошибок. Вопросы спикерам — прямо в чате эфира.</p>
+
+        <div style="display:grid;gap:0">
+          <div style="display:grid;grid-template-columns:96px 1fr;gap:24px;padding:22px 0;border-top:1px solid {{ hairline }}">
+            <div><div style="font-size:26px;font-weight:800;color:{{ accent }};letter-spacing:-.02em">01</div><div style="font-size:12px;font-weight:700;color:{{ inkFaint }};margin-top:4px;font-variant-numeric:tabular-nums">19:00–19:30</div></div>
+            <div><div style="font-size:16.5px;font-weight:700;color:{{ ink }};margin-bottom:6px">Открытая пластика: когда она всё ещё лучший выбор</div><div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">Случай №1 — спортсмен-любитель, застарелый разрыв. Анна Соколова.</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:96px 1fr;gap:24px;padding:22px 0;border-top:1px solid {{ hairline }}">
+            <div><div style="font-size:26px;font-weight:800;color:{{ accent }};letter-spacing:-.02em">02</div><div style="font-size:12px;font-weight:700;color:{{ inkFaint }};margin-top:4px;font-variant-numeric:tabular-nums">19:30–20:10</div></div>
+            <div><div style="font-size:16.5px;font-weight:700;color:{{ ink }};margin-bottom:6px">Малоинвазивные техники и шовные системы 2026</div><div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">Случай №2 и №3 — сравнение доступов, интраоперационное видео. Михаил Верещагин.</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:96px 1fr;gap:24px;padding:22px 0;border-top:1px solid {{ hairline }};border-bottom:1px solid {{ hairline }}">
+            <div><div style="font-size:26px;font-weight:800;color:{{ accent }};letter-spacing:-.02em">03</div><div style="font-size:12px;font-weight:700;color:{{ inkFaint }};margin-top:4px;font-variant-numeric:tabular-nums">20:10–20:30</div></div>
+            <div><div style="font-size:16.5px;font-weight:700;color:{{ ink }};margin-bottom:6px">Ответы на вопросы из чата</div><div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">Оба спикера. Самые залайканные вопросы — первыми: решает аудитория, а не регламент.</div></div>
+          </div>
+        </div>
+
+        <div style="margin-top:48px;border:2px solid {{ hairline }};padding:24px 28px;display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+          <div style="width:120px;height:56px;border:2px dashed {{ dashBorder }};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:{{ inkFaint }};flex:none;text-align:center">Лого<br>спонсора</div>
+          <div style="font-size:13px;line-height:1.65;color:{{ inkMuted }};min-width:180px;flex:1"><b style="color:{{ ink }};text-transform:uppercase;font-size:11px;letter-spacing:.1em">При поддержке</b><br>Спонсор оплачивает эфир и не влияет на программу. Содержание определяют спикеры и школа.</div>
+        </div>
+      </div>
+
+      <aside>
+        <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:28px">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Спикеры</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:24px">
+          <div style="border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadowSm }};padding:24px;display:flex;gap:18px;background:{{ surface }}">
+            <span style="width:64px;height:64px;background:{{ tint }};color:{{ tintInk }};display:inline-flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;flex:none">АС</span>
+            <div>
+              <div style="font-size:16px;font-weight:700;color:{{ ink }}">Анна Соколова</div>
+              <div style="font-size:13px;line-height:1.6;color:{{ inkMuted }};margin-top:6px">Травматолог-ортопед, к.м.н. · НМИЦ им. Пирогова</div>
+              <div style="font-size:12px;font-weight:700;color:{{ accent }};margin-top:10px">12 эфиров на платформе →</div>
+            </div>
+          </div>
+          <div style="border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadowSm }};padding:24px;display:flex;gap:18px;background:{{ surface }}">
+            <span style="width:64px;height:64px;background:{{ tint }};color:{{ tintInk }};display:inline-flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;flex:none">МВ</span>
+            <div>
+              <div style="font-size:16px;font-weight:700;color:{{ ink }}">Михаил Верещагин</div>
+              <div style="font-size:13px;line-height:1.6;color:{{ inkMuted }};margin-top:6px">Хирург, профессор · Сеченовский университет</div>
+              <div style="font-size:12px;font-weight:700;color:{{ accent }};margin-top:10px">7 эфиров на платформе →</div>
+            </div>
+          </div>
+          <div style="background:{{ tint }};padding:24px;font-size:13.5px;line-height:1.65;color:{{ tintInk }}"><b>Школа травматологии и ортопедии</b> — 38 эфиров, 12 400 подписчиков. Ведут практикующие врачи, программа формируется голосами аудитории.<br><a href="Эфиры.dc.html" style="display:inline-block;margin-top:12px;font-weight:700;color:{{ tintInk }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Все эфиры школы</a></div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <!-- Нижний CTA -->
+  <div style="background:{{ headerBg }};padding:clamp(36px,5vw,56px) clamp(16px,4vw,48px)">
+    <div style="max-width:1104px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:32px;flex-wrap:wrap">
+      <div style="font-size:clamp(24px,4vw,32px);font-weight:800;letter-spacing:-.03em;color:#fff">{{ footCtaTitle }}<br><span style="color:#D3E8FD">{{ footCtaSub }}</span></div>
+      <a href="{{ footCtaHref }}" style="font-size:16px;font-weight:800;color:#114D9E;background:#fff;border:0;padding:18px 34px;white-space:nowrap;box-shadow:4px 4px 0 {{ headerShadow }};text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ headerShadow }}">{{ footCtaLabel }}</a>
+    </div>
+  </div>
+
+  <footer style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:0 auto;box-sizing:content-box;gap:16px;flex-wrap:wrap">
+    {{ footLogoEl }}
+    <div style="font-size:12.5px;font-weight:600;color:{{ inkFaint }}">Врачи учат врачей · 2026</div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1104,&quot;height&quot;:760},&quot;status&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;upcoming&quot;,&quot;live&quot;,&quot;ended&quot;],&quot;default&quot;:&quot;live&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние эфира&quot;}}">
+class Component extends DCLogic {
+  state = {
+    dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
+    isMobile: false
+  };
+  componentDidMount() {
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.upd = () => this.setState({ isMobile: this.mq.matches });
+    this.upd();
+    this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
+  }
+  renderVals() {
+    const d = this.state.dark, m = this.state.isMobile;
+    const status = this.props.status || 'live';
+    const isLive = status === 'live';
+    const R = React.createElement;
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const shadow = d ? '#6BB1F7' : '#114D9E';
+    const shadowSm = d ? '#1F69C8' : '#AED4FB';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const tint = d ? '#0D3A77' : '#D3E8FD';
+    const tintInk = d ? '#fff' : '#114D9E';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+
+    const solidCta = (label, href) => R('a', { href: href || '#',
+      style: { fontSize: '15px', fontWeight: 800, color: btnFg, background: btnBg, border: '2px solid ' + btnBg,
+        padding: '15px 28px', whiteSpace: 'nowrap', boxShadow: '4px 4px 0 ' + border, textDecoration: 'none', display: 'inline-block' } }, label);
+    const ghostCta = (label) => R('button', {
+      style: { font: 'inherit', fontSize: '15px', fontWeight: 700, color: ink, background: surface, border: '2px solid ' + border,
+        padding: '15px 22px', cursor: 'pointer', whiteSpace: 'nowrap', boxShadow: '4px 4px 0 ' + shadowSm } }, label);
+
+    // Бейдж в hero
+    const badgeBase = 'display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#fff;padding:9px 16px;transform:rotate(3deg);flex:none;margin-top:8px;box-shadow:3px 3px 0 ' + shadow;
+
+    let heroBadgeEl, heroBadgeStyle, regTimeLabel, regTime, regTimeSub, regTimeSubM, regTimeSubColor, regHead, regSub, regCtaEl,
+        footCtaTitle, footCtaSub, footCtaLabel, footCtaHref, regTimeSize = m ? '46px' : '56px';
+
+    if (status === 'upcoming') {
+      heroBadgeStyle = badgeBase + ';background:#0D8A5F';
+      heroBadgeEl = 'Скоро · через 2 дня';
+      regTimeLabel = 'Начало'; regTime = '19:00'; regTimeSub = '16 июля · среда\nМСК · 90 минут'; regTimeSubM = '16 июля · 90 мин';
+      regTimeSubColor = d ? 'rgba(255,255,255,.75)' : 'oklch(.21 .02 250)';
+      regHead = 'Регистрация открыта — 128 врачей уже записались';
+      regSub = 'Бесплатно. Пришлём ссылку на почту и напомним за час до старта.';
+      regCtaEl = [solidCta('Записаться на эфир ↗'), ghostCta('В календарь')].map((e,i)=>R('span',{key:i,style:{display:'inline-flex'}},e));
+      footCtaTitle = 'Эфир — послезавтра.'; footCtaSub = 'Займите место заранее.'; footCtaLabel = 'Записаться ↗'; footCtaHref = '#';
+    } else if (status === 'ended') {
+      heroBadgeStyle = badgeBase + ';background:oklch(.45 .02 250);transform:rotate(-2deg)';
+      heroBadgeEl = 'Эфир завершён';
+      regTimeLabel = 'Запись'; regTime = '90'; regTimeSub = 'минут · было 16 июля\nдоступна 30 дней'; regTimeSubM = 'мин · было 16 июля';
+      regTimeSubColor = d ? 'rgba(255,255,255,.75)' : 'oklch(.21 .02 250)';
+      regHead = 'Запись готова — смотрели 214 врачей';
+      regSub = 'Полная запись эфира и материалы доступны 30 дней. Сертификат — после просмотра.';
+      regCtaEl = [solidCta('Смотреть запись ↗', 'Комната эфира.dc.html'), ghostCta('Материалы')].map((e,i)=>R('span',{key:i,style:{display:'inline-flex'}},e));
+      footCtaTitle = 'Пропустили эфир?'; footCtaSub = 'Запись доступна ещё 30 дней.'; footCtaLabel = 'Смотреть запись ↗'; footCtaHref = 'Комната эфира.dc.html';
+    } else { // live
+      heroBadgeStyle = badgeBase + ';background:#C81E1E';
+      heroBadgeEl = R(React.Fragment, null, R('span', { style: { width: '8px', height: '8px', borderRadius: '50%', background: '#fff', animation: 'livePulse 1.6s ease-in-out infinite' } }), 'В эфире');
+      regTimeLabel = 'Сейчас'; regTime = '19:00'; regTimeSub = '16 июля · среда\nМСК · идёт 24 мин'; regTimeSubM = 'Идёт 24 мин · МСК';
+      regTimeSubColor = d ? 'rgba(255,255,255,.75)' : 'oklch(.21 .02 250)';
+      regHead = 'Эфир уже идёт — 214 врачей смотрят';
+      regSub = 'Бесплатно. Нужна регистрация врача — почта и специальность, две минуты.';
+      regCtaEl = [solidCta('Участвовать ↗', 'Комната эфира.dc.html'), ghostCta('В календарь')].map((e,i)=>R('span',{key:i,style:{display:'inline-flex'}},e));
+      footCtaTitle = 'Эфир уже идёт.'; footCtaSub = 'Присоединяйтесь сейчас.'; footCtaLabel = 'Участвовать ↗'; footCtaHref = 'Комната эфира.dc.html';
+    }
+
+    return {
+      isMobile: m, isDesktop: !m,
+      toggleTheme: () => this.setState(s => { const dark=!s.dark; try{localStorage.setItem('ds-theme',dark?'dark':'light');}catch(e){} return {dark}; }),
+      themeIcon: d ? '☀' : '☾',
+      pageBg: d ? 'oklch(.16 .02 250)' : '#fff',
+      headerBg: d ? '#114D9E' : '#2D84F2',
+      headerShadow: d ? 'oklch(.16 .02 250)' : '#114D9E',
+      surface, ink, border, shadow, shadowSm, accent, tint, tintInk, btnBg, btnFg,
+      inkBody: d ? 'rgba(255,255,255,.82)' : 'oklch(.27 .018 250)',
+      inkMuted: d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)',
+      inkFaint: d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)',
+      hairline: d ? 'rgba(255,255,255,.18)' : 'oklch(.922 .006 250)',
+      dashBorder: d ? 'rgba(255,255,255,.4)' : 'oklch(.704 .01 250)',
+      footLogoEl: React.createElement('img', { src: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo-color.svg', alt: 'Doctor.School', style: { height: '22px', display: 'block' } }),
+      colsTemplate: m ? '1fr' : '1fr 380px',
+      mainPad: m ? '0 16px 64px' : '0 clamp(16px,4vw,48px) 96px',
+      regCardStyle: m
+        ? 'background:' + surface + ';border:0;box-shadow:none;display:block;margin:0 -16px'
+        : 'background:' + surface + ';border:2px solid ' + border + ';box-shadow:6px 6px 0 ' + shadow + ';display:grid;grid-template-columns:196px 1fr',
+      regTimeCol: 'background:' + tint + ';display:flex;' + (m
+        ? 'flex-direction:column;align-items:stretch;gap:10px;padding:14px 16px'
+        : 'flex-direction:column;gap:14px;padding:30px 24px;border-right:2px solid ' + border),
+      regBodyStyle: m
+        ? 'padding:20px;display:flex;flex-direction:column;gap:16px'
+        : 'padding:28px 32px;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap',
+      regLiveBadge: (isLive && m)
+        ? 'align-self:flex-start;display:inline-flex;align-items:center;gap:7px;font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#fff;background:#C81E1E;padding:5px 11px'
+        : 'display:none',
+      heroBadgeEl, heroBadgeStyle, regTimeLabel, regTime, regTimeSub, regTimeSubColor, regTimeSize,
+      regHead, regSub, regCtaEl, footCtaTitle, footCtaSub, footCtaLabel, footCtaHref, regTimeSubM
+    };
+  }
+}
+</script>
+</body>
+</html>

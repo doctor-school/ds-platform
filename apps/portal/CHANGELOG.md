@@ -1,5 +1,40 @@
 # @ds/portal
 
+## 0.8.0
+
+### Minor Changes
+
+- [#540](https://github.com/doctor-school/ds-platform/pull/540) [`6ae9995`](https://github.com/doctor-school/ds-platform/commit/6ae99952fc7a23e506597c8182b3c1b423b47d1b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Re-skin the `/login` surface to the neo-brutalist language ([#518](https://github.com/doctor-school/ds-platform/issues/518)). The screen now
+  composes the already-re-skinned design-system blocks (`AuthCard`, `AuthLayout`,
+  `OtpFocusScreen`, `Tabs`, `Button` — [#512](https://github.com/doctor-school/ds-platform/issues/512)/[#517](https://github.com/doctor-school/ds-platform/issues/517)) into the canvas `auth.dc.html`
+  composition: the brand panel gains an eyebrow caps-label above a heavier headline +
+  sub-copy (the shared `AuthShell` aside, mirrored by the showcase `NeutralAside`), the
+  password ⇄ one-time-code segment control and the «Эл. почта | SMS» channel selector
+  read in the canvas language and split the row into equal halves. Purely visual — no
+  form logic, BFF call, resend cooldown, OTP length (still 8), or behaviour changed.
+
+- [#541](https://github.com/doctor-school/ds-platform/pull/541) [`5d2f1b2`](https://github.com/doctor-school/ds-platform/commit/5d2f1b2fb0251b045f7ffae0733af0f86250d12b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Re-skin the `/register`, `/verify` and `/reset` surfaces to the neo-brutalist
+  language ([#519](https://github.com/doctor-school/ds-platform/issues/519)). Each screen now composes the already-re-skinned design-system blocks
+  (`AuthCard`, `AuthLayout`, `OtpFocusScreen`, `Alert`, `Button` — [#512](https://github.com/doctor-school/ds-platform/issues/512)/[#513](https://github.com/doctor-school/ds-platform/issues/513)/[#517](https://github.com/doctor-school/ds-platform/issues/517)) into
+  the canvas `auth.dc.html` composition, matching the merged `/login` re-skin ([#518](https://github.com/doctor-school/ds-platform/issues/518)):
+
+  - register: canvas title/description/consent copy.
+  - verify: the two co-equal sections gain the canvas eyebrow caps-labels; the accepted
+    code shows a «Код принят — входим…» success row (the DS `Alert` success variant)
+    while the auto-login replay routes; «Войти» reads as the primary action.
+  - reset: the card title tracks the stage («Сброс пароля» → «Новый пароль»), canvas
+    code/label copy, and the «← Вернуться ко входу» back link.
+
+  Purely visual — no form logic, BFF call, resend cooldown, OTP length (verify/reset
+  still 6), or consent semantics changed.
+
+### Patch Changes
+
+- [#543](https://github.com/doctor-school/ds-platform/pull/543) [`63e72ce`](https://github.com/doctor-school/ds-platform/commit/63e72ce6667e233eb05e3733a73778f31a216298) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Fix the resend-cooldown row overflowing the auth card frame ([#542](https://github.com/doctor-school/ds-platform/issues/542)). The `Button` base carries `whitespace-nowrap`, so the longer verify/reset resend copy («Отправить повторно можно через N с») could neither wrap nor shrink in the `justify-between` row and pushed past the card's right border (owner-reported on /reset). Two changes: (1) the verify + reset resend copy now matches the canvas canonical form the login OTP screen already uses — «Отправить снова» / «Отправить снова · N с»; (2) the resend control on the shared `<OtpFocusScreen>` block and the inline reset/verify rows gains `min-w-0 whitespace-normal text-right` (with `shrink-0` on the neighbouring change-method / start-over control) so the cooldown label wraps instead of overflowing at any width, both themes. Cooldown timing/logic unchanged.
+
+- Updated dependencies [[`2dbd927`](https://github.com/doctor-school/ds-platform/commit/2dbd927442738b81d533492563482da36a811b93), [`63e72ce`](https://github.com/doctor-school/ds-platform/commit/63e72ce6667e233eb05e3733a73778f31a216298), [`8ae9f6f`](https://github.com/doctor-school/ds-platform/commit/8ae9f6f448896e6aca92f24cee2264dc95bbf796), [`2e95bcd`](https://github.com/doctor-school/ds-platform/commit/2e95bcd2892b4fe56895d5561a0980b9aaf75a69), [`42ce21f`](https://github.com/doctor-school/ds-platform/commit/42ce21f6999cea3f784d5d051cb53ce43dbd2031), [`d7327b4`](https://github.com/doctor-school/ds-platform/commit/d7327b440490d50e8e146b6649e6778f18b01cf9), [`3812ebb`](https://github.com/doctor-school/ds-platform/commit/3812ebb910ff24efc7012b3e44cdf0b477f29e53), [`c58320b`](https://github.com/doctor-school/ds-platform/commit/c58320b97509472f15fbc5e73406ba758855e76d)]:
+  - @ds/design-system@0.6.0
+
 ## 0.7.2
 
 ### Patch Changes

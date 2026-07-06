@@ -297,7 +297,10 @@ function VerifyCard() {
                   data-testid="verify-resend"
                   // `tabular-nums` — fixed-width digits so the countdown label does
                   // not jitter as the seconds tick down (#227/#267 owner finding).
-                  className="tabular-nums"
+                  // `min-w-0` + `whitespace-normal` override the Button base
+                  // `whitespace-nowrap` so the label wraps instead of overflowing the
+                  // card at any width (#542).
+                  className="min-w-0 whitespace-normal text-right tabular-nums"
                 >
                   {resendDisabled
                     ? t("resendIn", { seconds: remaining })

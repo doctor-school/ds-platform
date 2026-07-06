@@ -349,6 +349,9 @@ function ResetCompleteForm({
             size="sm"
             onClick={onRestart}
             data-testid="reset-restart"
+            // `shrink-0` — «Начать заново» keeps its size; the resend label is the
+            // flex item that yields when the row is cramped (#542).
+            className="shrink-0"
           >
             {t("startOver")}
           </Button>
@@ -360,8 +363,10 @@ function ResetCompleteForm({
             onClick={() => void onResend()}
             data-testid="reset-resend"
             // `tabular-nums` — fixed-width digits so the countdown does not jitter
-            // (#227/#267 owner finding).
-            className="tabular-nums"
+            // (#227/#267 owner finding). `min-w-0` + `whitespace-normal` override the
+            // Button base `whitespace-nowrap` so the cooldown label WRAPS instead of
+            // overflowing the card frame at any width (#542 — the owner-reported bug).
+            className="min-w-0 whitespace-normal text-right tabular-nums"
           >
             {resendDisabled
               ? t("resendIn", { seconds: remaining })

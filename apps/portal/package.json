@@ -1,6 +1,6 @@
 {
   "name": "@ds/portal",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "description": "DS Platform user portal — app.doctor.school (Next.js 16 App Router, ADR-0004 §3/§7).",

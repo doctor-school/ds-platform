@@ -35,23 +35,30 @@ schema; consume it as the input to stage 2.
 **Resolve the current session's log id first** — pass it to the retro agent so it
 analyzes _this_ session, not the whole corpus:
 
-- The logs live in `~/.claude/projects/<repo-slug>/*.jsonl`, where `<repo-slug>`
+- The logs live under `~/.claude/projects/<repo-slug>/*.jsonl`, where `<repo-slug>`
   is the repo-root path with `[\\/:]` replaced by `-` (the same slug
   `tools/retro/extract.mjs` → `defaultLogDir()` and
   `tools/lint/instruction-budget-lint.ts` → `memoryPath()` derive). On this box:
   `C--Users-sidor-repos-ds-platform`.
-- Pick the **newest-mtime `*.jsonl`** in that dir — that is the session running
-  `/wrap`. Resolve it deterministically, e.g.:
-
-  ```bash
-  ls -t ~/.claude/projects/C--Users-sidor-repos-ds-platform/*.jsonl | head -1
-  ```
-
+- **The log dir RE-SLUGS on `EnterWorktree`.** When the session enters a worktree,
+  its logs move to `~/.claude/projects/<repo-slug>--claude-worktrees-<N>/`, so a
+  single session's segments may span **multiple** slug dirs — the main-tree slug
+  and one per worktree it entered. Globbing only the main slug misses the worktree
+  segments, and a newest-mtime pick in the main dir lands on the wrong session.
+- **Resolve by CONTENT, not mtime.** Grep every candidate dir
+  (`~/.claude/projects/*<repo-slug>*/*.jsonl`) for a marker unique to _this_
+  session — its PR/issue numbers, or a distinctive phrase from its first user
+  message — and take the file(s) that match. Newest-mtime is only a **tiebreaker**
+  among content-matched candidates, never the primary selector.
 - **Exclude the dispatched retro agent's own log.** A subagent writes its own
   `*.jsonl`; once dispatched it can become newest-mtime. So **capture the id
-  BEFORE dispatching** the retro agent (resolve newest-mtime first, then dispatch
+  BEFORE dispatching** the retro agent (resolve by content first, then dispatch
   with that fixed `--session <id>`). The retro agent must also skip its own log —
   it is given the explicit id, so it never globs.
+
+> **Failure this closes:** the 2026-07-06 wrap picked newest-mtime in the main
+> slug dir, analyzed the wrong session (`ad1b4fa1`), and cost two retro dispatches
+> before the right log was found.
 
 Brief the agent with: the resolved `--session <id>`, the `run-session-retro`
 SKILL.md path, and the instruction to run `tools/retro/extract.mjs` +

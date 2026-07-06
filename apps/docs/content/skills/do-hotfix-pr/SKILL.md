@@ -35,6 +35,17 @@ mode: inline
 9. **`write-iteration-summary`** (inline).
 10. **`merge-when-green`** (inline).
 
+### Polish lane (behavior-preserving fix to an already-approved design)
+
+For a **behavior-preserving copy/layout/polish** fix to a design the product owner has **already approved** — typically a one-line adjustment from owner Stage-B feedback (an overflow, a spacing nudge, a copy string) — run a **proportionate** path, not the full new-surface pipeline:
+
+- **No separate Issue** when an epic or a Stage-B gate Issue already tracks the surface — reference it in the PR body instead (`polish for #<gate>`).
+- **MAY reuse** an existing session worktree + already-running stand when the branch base matches the fix — no fresh worktree/stand spin-up.
+- **Live-verify ONLY the touched surface/state** (the changed element at the affected breakpoint/theme) — not the full field-kind × surface × breakpoint matrix.
+- **Still mandatory:** the PR, the `request-mode-a-review` Mode-a review, and green CI. The UI pre-flight gate (step 3) applies as written; only the _scope_ of live-verify narrows.
+
+Driver: on 2026-07-06 the owner pushed back on cost after a one-line overflow fix ran the full new-feature pipeline (fresh Issue + fresh stand + full matrix) for an already-approved surface.
+
 Skipped vs `do-feature-iteration`:
 
 - `read-relevant-adrs` is **not** invoked by default. If the bug touches an architectural boundary (e.g., the fix changes an HTTP contract or a DB constraint), explicitly invoke it and cite the relevant ADR section in the PR description.

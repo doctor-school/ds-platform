@@ -111,7 +111,9 @@ export default function ResetPage() {
     <AuthShell>
       <AuthCard
         icon={<KeyRound className="text-primary" aria-hidden />}
-        title={t("title")}
+        // Canvas: the title tracks the stage — «Сброс пароля» on the request step,
+        // «Новый пароль» once the code + new-password step is showing.
+        title={stage === "request" ? t("title") : t("titleComplete")}
         description={
           stage === "request"
             ? t("descriptionRequest")

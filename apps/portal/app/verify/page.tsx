@@ -23,6 +23,7 @@ import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 import { useResendCooldown } from "@/lib/use-resend-cooldown";
 
 import { Button } from "@ds/design-system/button";
+import { Alert } from "@ds/design-system/alert";
 import {
   AuthCard,
   maskDestination,
@@ -108,6 +109,12 @@ function VerifyCard() {
   // owner; re-notifying per resend is noise + abuse-amplification). This also fixes
   // the "dead button" — the resend re-armed the cooldown but acknowledged nothing.
   const [notice, setNotice] = useState<string | null>(null);
+  // Canvas `verified` success row: once the code is accepted the surface confirms
+  // «Код принят — входим…» while the auto-login replay (below) completes and routes.
+  // Presentation only — set AFTER `authClient.verify` resolves (never optimistically),
+  // so it never asserts acceptance the server has not confirmed; cleared if the
+  // login replay then fails (back to the error slot) or on a resend.
+  const [succeeded, setSucceeded] = useState(false);
   // Resend is an abuse-prone unauthenticated surface (EARS-17), so the EARS-25
   // endpoint is `@BotProtected("verify-resend")`. The widget token rides as
   // `captchaToken`; when no provider is configured (the dev default)
@@ -146,6 +153,7 @@ function VerifyCard() {
     onBeforeResend: () => {
       setError(null);
       setNotice(null);
+      setSucceeded(false);
     },
     // #326: neutral confirmation, conditionally phrased so it asserts nothing about
     // account existence (identical for every visitor — see the `notice` comment above).
@@ -175,6 +183,9 @@ function VerifyCard() {
     const identifier = email ?? "";
     try {
       await authClient.verify(values);
+      // Code accepted (server-confirmed) — show the success row while we replay the
+      // login below and route. Reverted in the catch if the replay itself fails.
+      setSucceeded(true);
       // EARS-3 verify proved channel ownership but mints no session. Consume the
       // in-memory password handed over from `/register` (cleared atomically by
       // takePendingRegistration, on this success OR the catch below) and replay
@@ -201,6 +212,7 @@ function VerifyCard() {
       // store is already wiped by takePendingRegistration — the password is gone
       // and the user signs in manually at /login. EARS-16: the verify/auth
       // outcome stays generic; only 429/5xx/network surface a specific message.
+      setSucceeded(false);
       setError(authErrorMessage(err, te, te("verifyFailed")));
     }
   }
@@ -227,7 +239,7 @@ function VerifyCard() {
         {/* (a) New-registrant path — enter the email code (unchanged auto-submit
             + post-verify auto-login). A co-equal affordance, not the only one. */}
         <section className="space-y-3" aria-label={t("newAccountHeading")}>
-          <h2 className="text-sm font-medium text-muted-foreground">
+          <h2 className="text-eyebrow font-extrabold uppercase tracking-micro text-muted-foreground">
             {t("newAccountHeading")}
           </h2>
           <Form {...form}>
@@ -245,6 +257,14 @@ function VerifyCard() {
                   />
                 )}
               />
+              {/* Canvas success row: confirms acceptance while the auto-login replay
+                  completes. Adopts the DS `Alert` success variant (✓ + success-tint
+                  frame, role=status) — no bespoke callout. */}
+              {succeeded ? (
+                <Alert variant="success" data-testid="verify-succeeded">
+                  {t("codeAccepted")}
+                </Alert>
+              ) : null}
               <FormError>{error}</FormError>
               <Button
                 type="submit"
@@ -309,14 +329,14 @@ function VerifyCard() {
           className="space-y-3 border-t pt-6"
           aria-label={t("existingAccountHeading")}
         >
-          <h2 className="text-sm font-medium text-muted-foreground">
+          <h2 className="text-eyebrow font-extrabold uppercase tracking-micro text-muted-foreground">
             {t("existingAccountHeading")}
           </h2>
           <p className="text-sm text-muted-foreground">
             {t("existingAccountHint")}
           </p>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button asChild variant="secondary" className="flex-1">
+            <Button asChild variant="default" className="flex-1">
               <Link href="/login" data-testid="verify-go-to-login">
                 {t("goToSignIn")}
               </Link>

@@ -49,6 +49,7 @@
   --color-primary-hover: #0d3a77;
   --color-primary-pressed: #0d3a77;
   --color-primary-surface: #114d9e;
+  --color-primary-surface-foreground: #ffffff;
   --color-secondary: oklch(0.968 0.004 250);
   --color-secondary-foreground: oklch(0.21 0.02 250);
   --color-muted: oklch(0.968 0.004 250);
@@ -216,6 +217,7 @@
   --color-primary-hover: #aed4fb;
   --color-primary-pressed: #aed4fb;
   --color-primary-surface: #114d9e;
+  --color-primary-surface-foreground: #ffffff;
   --color-secondary: oklch(0.372 0.016 250);
   --color-secondary-foreground: oklch(0.985 0.002 250);
   --color-muted: oklch(0.372 0.016 250);
@@ -261,6 +263,7 @@
   --color-primary-hover: #0d3a77;
   --color-primary-pressed: #0d3a77;
   --color-primary-surface: #114d9e;
+  --color-primary-surface-foreground: #ffffff;
   --color-secondary: oklch(0.968 0.004 250);
   --color-secondary-foreground: oklch(0.21 0.02 250);
   --color-muted: oklch(0.968 0.004 250);
@@ -306,6 +309,7 @@
   --color-primary-hover: var(--color-primary-hover);
   --color-primary-pressed: var(--color-primary-pressed);
   --color-primary-surface: var(--color-primary-surface);
+  --color-primary-surface-foreground: var(--color-primary-surface-foreground);
   --color-secondary: var(--color-secondary);
   --color-secondary-foreground: var(--color-secondary-foreground);
   --color-muted: var(--color-muted);

@@ -63,9 +63,13 @@ describe("<AuthLayout>", () => {
     const aside = screen.getByRole("complementary");
     expect(aside).toHaveTextContent("brand-aside");
     // The panel is the branded surface — AA-safe token fill (primary-surface = blue.700,
-    // white 8.14:1), not `primary` (blue.500, 3.69:1) and not a hardcoded color.
+    // white 8.14:1), not `primary` (blue.500, 3.69:1) and not a hardcoded color. The copy
+    // MUST use the PAIRED `primary-surface-foreground` (white in BOTH themes): the
+    // action-pair `primary-foreground` repoints to dark ink in `.dark` (where the action
+    // fill lifts to light blue), which rendered the dark panel unreadable (#517 review).
     expect(aside.className).toContain("bg-primary-surface");
-    expect(aside.className).toContain("text-primary-foreground");
+    expect(aside.className).toContain("text-primary-surface-foreground");
+    expect(aside.className).not.toMatch(/text-primary-foreground(?:\s|"|$)/);
   });
 
   it("places the brand panel left and the form right at layout (recorded #237 column-order)", () => {

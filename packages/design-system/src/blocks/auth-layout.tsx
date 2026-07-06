@@ -32,11 +32,16 @@ import { cn } from "../lib/utils";
  *
  * The brand panel is filled with the semantic `primary-surface` token (Doctor School
  * brand blue.700 #114D9E — the AA-safe brand fill, white 8.14:1) via
- * `bg-primary-surface` / `text-primary-foreground`, never a hardcoded color (the lint
- * guardrails block arbitrary values). It carries normal-weight white copy (sub-copy /
- * footer), so it must NOT use `primary` (blue.500, 3.69:1) which only clears AA for
- * large/bold text (ADR-0013 §7). Omit `aside` for a plain, centered form-only screen
- * (the panel is then not rendered at all).
+ * `bg-primary-surface` / its PAIRED `text-primary-surface-foreground` (white in BOTH
+ * themes), never a hardcoded color (the lint guardrails block arbitrary values). It
+ * must NOT use `primary-foreground` — that token pairs with the ACTION fill and
+ * repoints to dark ink in `.dark` (where `primary-action` lifts to a light-blue fill),
+ * which painted the dark-theme panel dark-on-dark (~1.2:1, the #517 review blocker;
+ * the mispairing is now flagged statically by `aa-contrast-lint`). It carries
+ * normal-weight white copy (sub-copy / footer), so it must NOT use `primary`
+ * (blue.500, 3.69:1) which only clears AA for large/bold text (ADR-0013 §7). Omit
+ * `aside` for a plain, centered form-only screen (the panel is then not rendered at
+ * all).
  */
 export function AuthLayout({
   logo,
@@ -74,7 +79,7 @@ export function AuthLayout({
           the brand. At `layout:` it takes the LEFT column (`layout:order-1`) per the
           recorded #237 decision. */}
       {aside ? (
-        <aside className="hidden flex-col justify-between gap-8 bg-primary-surface p-12 text-primary-foreground layout:order-1 layout:flex">
+        <aside className="hidden flex-col justify-between gap-8 bg-primary-surface p-12 text-primary-surface-foreground layout:order-1 layout:flex">
           {aside}
         </aside>
       ) : null}

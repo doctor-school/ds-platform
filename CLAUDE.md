@@ -36,7 +36,15 @@ Canon: AGENTS.md §3 + §3.4. Project work uses the catalog `apps/docs/content/s
 
 ## PR-review subagent (Mode a)
 
-`feature-dev:code-reviewer` has no Bash/`gh`. For a Mode (a) review of a branch **not in the working tree**, dispatch `general-purpose` (Opus) so it can `gh pr diff` (memory `feedback_pr_review_subagent_needs_gh`).
+`feature-dev:code-reviewer` has no Bash/`gh`. Dispatch the project agent **`ds-reviewer`** (`.claude/agents/ds-reviewer.md` — Opus, read-only + `gh`) so it can `gh pr diff` a branch not in the working tree; `general-purpose` (Opus) is the fallback if project agents are unavailable (memory `feedback_pr_review_subagent_needs_gh`).
+
+## Subagent context economy (#534)
+
+A subagent's final message lands in the lead's context and is re-read until session end — that, not dispatch count, is what burns the limit. Three rules:
+
+1. **Return contract in every brief.** Every subagent brief ends with a return contract: final message = verdict / diff summary / artifact paths, **≤30 lines**; heavy content (full reports, exploration transcripts, DOM dumps) goes to a file or PR comment, never into the reply.
+2. **Model routing.** Mechanical fan-out (find/enumerate/collect) goes to **`ds-explorer`** (`.claude/agents/`, Sonnet, read-only); judgment work (Mode-a review, architecture) stays on Opus (`ds-reviewer` / `general-purpose`).
+3. **Browser payloads are dispatched.** Interactive Playwright browsing during orchestration runs inside a subagent, not the lead — rule in `.claude/rules/dev-stand.md`.
 
 ## Shell gotchas
 

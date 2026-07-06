@@ -77,6 +77,8 @@ VERDICT: <APPROVE | REQUEST_CHANGES>
 
 The `VERDICT:` line is mandatory. `APPROVE` is allowed only when there are zero `[BLOCKER]` findings.
 
+**Return contract — final message to the lead (context economy, #534).** After posting the PR comment, your reply to the lead is ONLY: the `VERDICT:` line, the `[BLOCKER]` findings one line each, and the PR-comment URL — ≤20 lines total. Do not restate the full report in the reply: it already lives in the PR comment, and everything in the reply sits in the lead's context until session end.
+
 ### Failure mode
 
 - Returning a free-form review without the `VERDICT:` line — the orchestration skill (`do-feature-iteration` / `do-hotfix-pr` / `do-adr-revision`) cannot parse the verdict and must re-dispatch. This is the primary enforcement for G11 finding F-14 — the agent forgot to dispatch review at all, then forgot again, until the human prompted. The verdict line is the artifact that proves review happened.

@@ -22,11 +22,12 @@ import { FilterChip } from "@ds/design-system/filter-chip";
  *   (`layout:mt-section layout:mb-6`); cards gap 28 (`layout:space-y-stack`).
  *
  *   MOBILE (≤900): cards FLAT — border 0, shadow none (CTA shadows none too),
- *   display block, full-bleed (`-mx-4` on the list wrapper), gap 0; the tint
- *   time plate turns into a horizontal top band (padding 14px 16px, time 40px);
- *   body 16px 16px 18px, title 20px; the gray `DayBand` plate (full-bleed,
- *   `section` surface) is the MOBILE-only day header. No borders between cards —
- *   separation IS the next card's tint plate / the day plate (§09 day-band = 0).
+ *   display block, full-bleed (`-mx-4` on the list wrapper), stack 20px
+ *   (`space-y-stack-sm` — recorded owner Stage-B decision 2026-07-06, supersedes
+ *   the canvas's flush gap:0); the tint time plate turns into a horizontal top
+ *   band (padding 14px 16px, time 40px); body 16px 16px 18px, title 20px; the
+ *   gray `DayBand` plate (full-bleed, `section` surface) is the MOBILE-only day
+ *   header, still FLUSH against its first card (§09 day-band = 0, unchanged).
  *
  * Everything is `@ds/design-system` exports + token-backed utilities (no
  * arbitrary values); the in-page theme toggle flips the `.dark` token cascade so
@@ -283,7 +284,9 @@ export function RhythmView() {
           {DAYS.map((day) => (
             <section key={day.label}>
               <DayHeader label={day.label} />
-              <div className="-mx-4 space-y-0 layout:mx-0 layout:space-y-stack">
+              {/* stack role: 20px mobile (`stack-sm` — owner Stage-B decision
+                  2026-07-06, supersedes the canvas gap:0) / 28px desktop. */}
+              <div className="-mx-4 space-y-stack-sm layout:mx-0 layout:space-y-stack">
                 {day.events.map((w) => (
                   <WebinarCard key={w.num} w={w} />
                 ))}

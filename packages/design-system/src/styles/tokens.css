@@ -135,6 +135,7 @@
   --space-gutter: clamp(1rem, 4vw, 3rem);
   --space-inset: 1.5rem;
   --space-stack: 1.75rem;
+  --space-stack-sm: 1.25rem;
   --space-section: 3rem;
   --space-controls: 0.75rem;
   --space-inline: 0.5rem;
@@ -316,6 +317,7 @@
   --spacing-gutter: var(--space-gutter);
   --spacing-inset: var(--space-inset);
   --spacing-stack: var(--space-stack);
+  --spacing-stack-sm: var(--space-stack-sm);
   --spacing-section: var(--space-section);
   --spacing-controls: var(--space-controls);
   --spacing-inline: var(--space-inline);

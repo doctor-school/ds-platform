@@ -202,19 +202,21 @@ surface stays in the same rhythm. The roles are DTCG tokens (`semantic.json`
 `-mx-gutter`, … — exactly like `p-4`/`gap-2`, but token-named. **Token-only: reach
 for the role utility, not a raw step, when the gap has a role.**
 
-| Role       | Token / utility                         | Canonical | Source set         | Where                                          |
-| ---------- | --------------------------------------- | --------- | ------------------ | ---------------------------------------------- |
-| `inset`    | `p-inset` (`--spacing-inset`)           | 24px      | 16 · 20 · 24 · 30  | Padding INSIDE cards, panels, buttons          |
-| `stack`    | `space-y-0 layout:space-y-stack`        | 0 → 28px  | 0 mob · 28 desktop | Gap BETWEEN cards in a list                    |
-| `section`  | `space-y-section` (`--spacing-section`) | 48px      | 44 · 48            | Rhythm BETWEEN meaning blocks / sections       |
-| `controls` | `gap-controls` (`--spacing-controls`)   | 12px      | 8 · 10 · 12        | Between chips, buttons, fields                 |
-| `inline`   | `gap-inline` (`--spacing-inline`)       | 8px       | 6 · 8              | Icon ↔ text, label ↔ value                     |
-| `day-band` | `-mx-4 layout:-mx-gutter` (bleed)       | 0 (bleed) | —                  | The day plate sits flush + bleeds to the edges |
+| Role       | Token / utility                         | Canonical | Source set                                                                       | Where                                          |
+| ---------- | --------------------------------------- | --------- | -------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `inset`    | `p-inset` (`--spacing-inset`)           | 24px      | 16 · 20 · 24 · 30                                                                | Padding INSIDE cards, panels, buttons          |
+| `stack`    | `space-y-stack-sm layout:space-y-stack` | 20 → 28px | 20 моб · 28 десктоп — owner Stage-B decision 2026-07-06, supersedes canvas gap:0 | Gap BETWEEN cards in a list                    |
+| `section`  | `space-y-section` (`--spacing-section`) | 48px      | 44 · 48                                                                          | Rhythm BETWEEN meaning blocks / sections       |
+| `controls` | `gap-controls` (`--spacing-controls`)   | 12px      | 8 · 10 · 12                                                                      | Between chips, buttons, fields                 |
+| `inline`   | `gap-inline` (`--spacing-inline`)       | 8px       | 6 · 8                                                                            | Icon ↔ text, label ↔ value                     |
+| `day-band` | `-mx-4 layout:-mx-gutter` (bleed)       | 0 (bleed) | —                                                                                | The day plate sits flush + bleeds to the edges |
 
-The two **responsive** roles compose with the `layout:` breakpoint variant rather
-than a second token: `stack` collapses to 0 on mobile (`space-y-0
-layout:space-y-stack`), and the gutter switches from a fixed 16px to the clamp —
-both owned for you by `Container` (below).
+The two **responsive** roles compose with the `layout:` breakpoint variant:
+`stack` narrows to `stack-sm` (20px) on mobile (`space-y-stack-sm
+layout:space-y-stack` — the mobile value is a recorded product-owner Stage-B
+decision, 2026-07-06, superseding the canvas's flush `gap:0`), and the gutter
+switches from a fixed 16px to the clamp — the gutter switch is owned for you by
+`Container` (below).
 
 ### Container (`./container`)
 

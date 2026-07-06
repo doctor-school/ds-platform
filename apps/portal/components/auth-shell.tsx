@@ -64,16 +64,24 @@ export function AuthShell({ children }: { children: ReactNode }) {
           />
           {/* Value prop — grows to fill the gap between the top mark and the bottom
               footer and centres itself there, so the panel reads as a deliberate
-              three-zone split rather than an even distribution with a void up top. */}
-          <div className="flex flex-1 flex-col justify-center space-y-4">
-            <p className="max-w-lg text-4xl font-semibold leading-tight tracking-tight">
+              three-zone split rather than an even distribution with a void up top.
+              #518: composed to the canvas panel shape (`auth.dc.html`, mirrored by the
+              showcase `NeutralAside`) — an eyebrow caps-label above a heavy headline +
+              sub-copy. Quiet tiers use element `opacity`, never a foreground-token
+              opacity (the aa-contrast rule), and copy inherits the block's own
+              `text-primary-surface-foreground`. */}
+          <div className="flex flex-1 flex-col justify-center gap-5">
+            <p className="text-eyebrow font-extrabold uppercase tracking-micro opacity-80">
+              {t("eyebrow")}
+            </p>
+            <p className="max-w-lg text-3xl font-extrabold leading-tight tracking-tight">
               {t("headline")}
             </p>
             <p className="max-w-md text-lg leading-snug opacity-90">
               {t("subcopy")}
             </p>
           </div>
-          <p className="text-sm opacity-80">{t("footer")}</p>
+          <p className="text-sm font-semibold opacity-80">{t("footer")}</p>
         </>
       }
     >

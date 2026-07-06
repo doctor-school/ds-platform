@@ -3,6 +3,8 @@
 This folder holds the **actual design source** for the Doctor.School neo-brutalist visual language, imported verbatim from the Claude Design project **«Doctor.School визуальный язык»** (`8cc2f39a-d58e-4491-b539-4337881ced4f`).
 
 > **Build to these files, NOT to issue-body prose.** The `.dc.html` inline styles carry the exact values — px, border widths, colors (light + dark), states, and placeholder copy. Issue descriptions are a lossy transcription and a coverage checklist, **not** the fidelity spec. Where prose and this source disagree, **the source wins**. (The neo-brutalist re-skin diverged the first time precisely because it was built from prose instead of this HTML.)
+>
+> **Vendor EVERY canvas the surface renders — not only the headline one.** If a demo/composition renders a unit whose spec lives in a separate canvas (a card, a block, a screen fragment), that canvas must land here BEFORE building. The #514 rhythm demo repeated the founding error one layer down: its webinar card was built from §09 prose while `ВебинарКарточка.dc.html` sat unimported.
 
 ## Files
 
@@ -30,3 +32,4 @@ This folder holds the **actual design source** for the Doctor.School neo-brutali
 - The canvas references logo assets `assets/ds-logo-{color,icon,white}.svg`. Those live in the Claude Design project; the repository's own brand marks are at `apps/portal/public/brand/`. They are intentionally not duplicated here — this folder is a **spec reference**, not a runnable app.
 - Per ADR-0014 §4 the canvas is *source*, the repo holds the *built artifact* (the `@ds/design-system` React components). This folder is the pinned build reference the components are verified against; it is not itself shipped.
 - This folder is `.prettierignore`d so the imported bytes stay verbatim.
+- The lychee link-check ignores everything under this folder (`.lycheeignore` → `^file://.*/design-source/.*$`): canvas `{{ template }}` hrefs and cross-canvas `.dc.html` links resolve only inside the Claude Design project. Vendoring a new canvas needs **no** extra lychee work.

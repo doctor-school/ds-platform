@@ -22,6 +22,18 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/hooks/context-budget.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

@@ -13,11 +13,13 @@ The webinar event module. It hosts two surfaces over one aggregate:
   the 006 room consumes; **EARS-5** lands the director's two air-day commands,
   `OpenRoom` (`POST /v1/admin/events/:id/open`, `published → live`) and
   `CloseRoom` (`POST /v1/admin/events/:id/close`, `live → ended`), each running
-  through the EARS-7 guard and appending its terminal `audit_ledger` row. The
-  edit command and the remaining named transition (archive) with its product
-  side-effects + `audit_ledger` row are sibling handlers (EARS-2/6). The
-  rendered stock-Refine admin surface + the browser E2E journey (incl. the admin
-  publish action) are the integration slice (#595).
+  through the EARS-7 guard and appending its terminal `audit_ledger` row;
+  **EARS-6** lands the operator's manual `ArchiveEvent`
+  (`POST /v1/admin/events/:id/archive`, `ended → archived`), the last named
+  transition, after which the event leaves all public surfaces. The edit command
+  (EARS-2) is the remaining sibling handler. The rendered stock-Refine admin
+  surface + the browser E2E journey (incl. the admin publish/archive actions)
+  are the integration slice (#595).
 - **004 public read (read side)** — two **public** endpoints over publish-safe
   projections: the event-page endpoint (`GET /v1/public/events/:idOrSlug` →
   `PublicEventPage`, 004 EARS-1) and the upcoming-broadcasts listing
@@ -95,6 +97,26 @@ from its valid state via `EventAdminDetail.validTransitions`) + the browser E2E
 are the integration slice (#595); this handler ships the backend commands + their
 Vitest e2e.
 
+## EARS-6 — the archive transition (`ArchiveEvent`)
+
+`ArchiveEvent` (`POST /v1/admin/events/:id/archive`) is the operator's **manual**
+post-broadcast action — the last named lifecycle transition, running through the
+EARS-7 guard on the shared `namedTransition` helper (the same guarded, audited
+path as publish/open/close). It applies `ended → archived` — **refused with a 409
+unless the event is in `ended`** — and appends one terminal `audit_ledger` row
+(`event_type = event.archived`; on refusal the state is untouched and no row is
+written). After archive the event **leaves all public surfaces** off the same
+`EventLifecycleState` (EARS-9): 004's upcoming listing drops it by state and its
+public event page degrades to the archived-notice body (a **200**, never a dead
+404 — 004 EARS-5 renders it). `archived` is **terminal** — there is no reopen
+(EARS-7). Archive is manual by design — **LD-2**: wave 1 has **no scheduler and no
+time-based automation** that could fire the transition; a time-based auto-archive
+policy is a named wave-2 candidate (a source-scan test asserts no timer primitive
+exists in this module). `platform_admin`-only (EARS-8). The admin archive
+**action** (stock Refine, offered only from `ended` via
+`EventAdminDetail.validTransitions`) + the browser E2E are the integration slice
+(#595); this handler ships the backend command + its Vitest e2e.
+
 ## EARS-3 — the stream config (`ConfigureStream`)
 
 `ConfigureStream` (`PUT /v1/admin/events/:id/stream`) records the event's stream
@@ -118,14 +140,14 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
 
 ## What's here
 
-| Concern                                                                                 | File                          |
-| --------------------------------------------------------------------------------------- | ----------------------------- |
-| Module wiring                                                                           | `events.module.ts`            |
-| Admin HTTP surface (create + reads + stream config + publish + open/close + transition) | `events.admin.controller.ts`  |
-| Public HTTP surface (event-page read + upcoming listing)                                | `events.public.controller.ts` |
-| Command body DTOs (`{ to }`, `{ provider, embedRef }`)                                  | `events.dto.ts`               |
-| Authoring + guard + projection logic                                                    | `events.service.ts`           |
-| Drizzle data access (insert, reads, state update)                                       | `events.repository.ts`        |
+| Concern                                                                                           | File                          |
+| ------------------------------------------------------------------------------------------------- | ----------------------------- |
+| Module wiring                                                                                     | `events.module.ts`            |
+| Admin HTTP surface (create + reads + stream config + publish + open/close + archive + transition) | `events.admin.controller.ts`  |
+| Public HTTP surface (event-page read + upcoming listing)                                          | `events.public.controller.ts` |
+| Command body DTOs (`{ to }`, `{ provider, embedRef }`)                                            | `events.dto.ts`               |
+| Authoring + guard + projection logic                                                              | `events.service.ts`           |
+| Drizzle data access (insert, reads, state update)                                                 | `events.repository.ts`        |
 
 ## Exported symbols
 
@@ -143,7 +165,11 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
   row atomically keyed to the acting admin), `openRoom()` / `closeRoom()` (007
   EARS-5: the director's `published → live` / `live → ended` room-control
   commands — the same guarded, audited path as publish via the shared private
-  `namedTransition()` helper, appending `event.went_live` / `event.ended`), and
+  `namedTransition()` helper, appending `event.went_live` / `event.ended`),
+  `archive()` (007 EARS-6: the operator's manual `ended → archived` command — the
+  same guarded, audited path via `namedTransition()`, appending `event.archived`;
+  after it the event leaves all public surfaces off the single
+  `EventLifecycleState`, LD-2 — no scheduler), and
   `publicEventPage()` (004 EARS-1:
   applies the
   visibility policy — `draft` → null → 404 — and projects the publish-safe
@@ -175,15 +201,16 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
 
 ## Endpoints
 
-| Route                                  | Access               | Command / read                                                                                         |
-| -------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------ |
-| `POST /v1/admin/events`                | `platform_admin`     | `CreateEvent` (multipart: `payload` JSON + optional `programPdf` file)                                 |
-| `GET /v1/admin/events`                 | `platform_admin`     | `EventAdminList`                                                                                       |
-| `GET /v1/admin/events/:id`             | `platform_admin`     | `EventAdminDetail`                                                                                     |
-| `PUT /v1/admin/events/:id/stream`      | `platform_admin`     | `ConfigureStream` (EARS-3 `{ provider ∈ rutube\|youtube, embedRef }`; upsert; 409 past pre-air window) |
-| `POST /v1/admin/events/:id/publish`    | `platform_admin`     | `PublishEvent` (EARS-4 `draft → published`; refused ≠ `draft`; +1 audit row)                           |
-| `POST /v1/admin/events/:id/open`       | `platform_admin`     | `OpenRoom` (EARS-5 `published → live`; refused ≠ `published`; +1 `event.went_live` audit row)          |
-| `POST /v1/admin/events/:id/close`      | `platform_admin`     | `CloseRoom` (EARS-5 `live → ended`; refused ≠ `live`; +1 `event.ended` audit row)                      |
-| `POST /v1/admin/events/:id/transition` | `platform_admin`     | `TransitionEvent` (EARS-7 closed-set guard; body `{ to }`)                                             |
-| `GET /v1/public/events/:idOrSlug`      | **public** (no auth) | `PublicEventPage` (004 EARS-1) — `draft`/unknown → 404                                                 |
-| `GET /v1/public/events` (`?upcoming`)  | **public** (no auth) | `UpcomingBroadcastCard[]` (004 EARS-7) — nearest first; empty → `[]`                                   |
+| Route                                  | Access               | Command / read                                                                                            |
+| -------------------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------- |
+| `POST /v1/admin/events`                | `platform_admin`     | `CreateEvent` (multipart: `payload` JSON + optional `programPdf` file)                                    |
+| `GET /v1/admin/events`                 | `platform_admin`     | `EventAdminList`                                                                                          |
+| `GET /v1/admin/events/:id`             | `platform_admin`     | `EventAdminDetail`                                                                                        |
+| `PUT /v1/admin/events/:id/stream`      | `platform_admin`     | `ConfigureStream` (EARS-3 `{ provider ∈ rutube\|youtube, embedRef }`; upsert; 409 past pre-air window)    |
+| `POST /v1/admin/events/:id/publish`    | `platform_admin`     | `PublishEvent` (EARS-4 `draft → published`; refused ≠ `draft`; +1 audit row)                              |
+| `POST /v1/admin/events/:id/open`       | `platform_admin`     | `OpenRoom` (EARS-5 `published → live`; refused ≠ `published`; +1 `event.went_live` audit row)             |
+| `POST /v1/admin/events/:id/close`      | `platform_admin`     | `CloseRoom` (EARS-5 `live → ended`; refused ≠ `live`; +1 `event.ended` audit row)                         |
+| `POST /v1/admin/events/:id/archive`    | `platform_admin`     | `ArchiveEvent` (EARS-6 `ended → archived`; manual/LD-2; refused ≠ `ended`; +1 `event.archived` audit row) |
+| `POST /v1/admin/events/:id/transition` | `platform_admin`     | `TransitionEvent` (EARS-7 closed-set guard; body `{ to }`)                                                |
+| `GET /v1/public/events/:idOrSlug`      | **public** (no auth) | `PublicEventPage` (004 EARS-1) — `draft`/unknown → 404                                                    |
+| `GET /v1/public/events` (`?upcoming`)  | **public** (no auth) | `UpcomingBroadcastCard[]` (004 EARS-7) — nearest first; empty → `[]`                                      |

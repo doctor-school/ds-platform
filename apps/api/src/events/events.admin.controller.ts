@@ -291,8 +291,43 @@ export class EventsAdminController {
   }
 
   /**
+   * EARS-6 — `ArchiveEvent` (`POST /v1/admin/events/:id/archive`): the named
+   * `ended → archived` transition, the operator's **manual** post-broadcast
+   * action (LD-2 — no scheduler, no time-based automation fires it in wave 1).
+   * It runs through the EARS-7 guard (archive is refused with a 409 unless the
+   * event is in `ended`) and, on success, appends exactly one terminal
+   * `audit_ledger` row keyed to the acting `platform_admin` (ADR-0003 §6). After
+   * archive the event leaves all public surfaces off the same
+   * `EventLifecycleState` (EARS-9): 004 drops it from the upcoming listing and
+   * its public page degrades to the archived notice (004 EARS-5, a consumer
+   * slice). `archived` is terminal — there is no reopen (EARS-7).
+   */
+  @Post(":id/archive")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    // Endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8): a `platform_admin`
+    // write, not an auth security event — no AuthAuditLog emission (low-stakes).
+    // The EARS-6 domain `audit_ledger` row is a separate ADR-0003 §6 obligation
+    // written atomically in the service, not this classification field.
+    audit: "low-stakes",
+    tests: ["EARS-6", "EARS-8"],
+  })
+  async archive(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+  ): Promise<EventAdminDetail> {
+    return this.namedTransition(id, req, (eventId, actorSub) =>
+      this.events.archive(eventId, actorSub),
+    );
+  }
+
+  /**
    * Shared body of the named, audited transition commands (publish / open /
-   * close — EARS-4/5): resolve the acting admin `sub` off the request (the 003
+   * close / archive — EARS-4/5/6): resolve the acting admin `sub` off the request
+   * (the 003
    * session hook attaches it; the `AuthzGuard` has already refused any
    * unauthenticated caller — EARS-8), invoke the service command, map a missing
    * event to a 404 and the EARS-7 guard's {@link InvalidTransitionError} to a

@@ -5,11 +5,14 @@ The webinar event module. It hosts two surfaces over one aggregate:
 - **007 authoring (write side)** — the admin **write model** of the webinar
   aggregate the rest of the epic reads projections of. `CreateEvent` + the two
   admin reads landed here; **EARS-7** lands the single closed-set lifecycle state
-  machine — the server-enforced transition guard. The edit / stream-config
-  commands and the four **named** transition commands with their product
-  side-effects + `audit_ledger` rows are sibling handlers (EARS-2…6). The
-  rendered stock-Refine admin surface + the browser E2E journey are the
-  integration slice (#595).
+  machine — the server-enforced transition guard; **EARS-4** lands the first
+  **named** transition command, `PublishEvent`
+  (`POST /v1/admin/events/:id/publish`), which runs through that guard and
+  appends its terminal `audit_ledger` row. The edit / stream-config commands and
+  the remaining named transitions (open / close / archive) with their product
+  side-effects + `audit_ledger` rows are sibling handlers (EARS-2/3/5/6). The
+  rendered stock-Refine admin surface + the browser E2E journey (incl. the admin
+  publish action) are the integration slice (#595).
 - **004 public read (read side)** — two **public** endpoints over publish-safe
   projections: the event-page endpoint (`GET /v1/public/events/:idOrSlug` →
   `PublicEventPage`, 004 EARS-1) and the upcoming-broadcasts listing
@@ -47,16 +50,34 @@ and can never disagree with the server. This bare guarded transition is what the
 named commands (EARS-4/5/6) run through, layering their side-effects + audit rows
 on top; it carries no `audit_ledger` row itself.
 
+## EARS-4 — the publish transition (`draft → published`)
+
+`PublishEvent` (`POST /v1/admin/events/:id/publish`) is the first **named**
+lifecycle command. It runs through the EARS-7 guard — publish is refused with a
+**409** unless the event is in `draft` (any non-draft origin raises
+`InvalidTransitionError`, the state untouched) — and, on success, applies the
+`draft → published` move **and appends exactly one** terminal `audit_ledger` row
+**atomically** (`updateStateWithAudit`, one transaction), keyed to the acting
+`platform_admin` (`event_type = event.published`; `metadata` carries the
+aggregate id + `from`/`to`, no PD — ADR-0003 §6). Publishing is the single
+visibility signal: the same `EventLifecycleState` write flips the 004 public
+page + upcoming listing reachable and opens 005 registration gating — one state,
+no second boolean flag (EARS-9). There is no idempotent re-publish (a second
+publish from `published` is the guard's 409). The admin publish **action** (stock
+Refine, offered only from `draft` via `EventAdminDetail.validTransitions`) + the
+browser E2E are the integration slice (#595); this handler ships the backend
+command + its Vitest e2e.
+
 ## What's here
 
-| Concern                                                  | File                          |
-| -------------------------------------------------------- | ----------------------------- |
-| Module wiring                                            | `events.module.ts`            |
-| Admin HTTP surface (create + admin reads + transition)   | `events.admin.controller.ts`  |
-| Public HTTP surface (event-page read + upcoming listing) | `events.public.controller.ts` |
-| Transition command body DTO (`{ to }`)                   | `events.dto.ts`               |
-| Authoring + guard + projection logic                     | `events.service.ts`           |
-| Drizzle data access (insert, reads, state update)        | `events.repository.ts`        |
+| Concern                                                          | File                          |
+| ---------------------------------------------------------------- | ----------------------------- |
+| Module wiring                                                    | `events.module.ts`            |
+| Admin HTTP surface (create + admin reads + publish + transition) | `events.admin.controller.ts`  |
+| Public HTTP surface (event-page read + upcoming listing)         | `events.public.controller.ts` |
+| Transition command body DTO (`{ to }`)                           | `events.dto.ts`               |
+| Authoring + guard + projection logic                             | `events.service.ts`           |
+| Drizzle data access (insert, reads, state update)                | `events.repository.ts`        |
 
 ## Exported symbols
 
@@ -69,7 +90,10 @@ on top; it carries no `audit_ledger` row itself.
   rows), `list()` (`EventAdminList`), `detail()` (`EventAdminDetail`),
   `transition()` (007 EARS-7: the closed-set guard — validates `current → to` via
   `canTransition`, refuses an invalid move with `InvalidTransitionError`, else
-  persists the new state), and `publicEventPage()` (004 EARS-1: applies the
+  persists the new state), `publish()` (007 EARS-4: the named `draft → published`
+  command — runs the guard, then persists the move + one terminal `audit_ledger`
+  row atomically keyed to the acting admin), and `publicEventPage()` (004 EARS-1:
+  applies the
   visibility policy — `draft` → null → 404 — and projects the publish-safe
   allow-list `PublicEventPage`, mapping the internal `regalia`/`partnerRef` to
   the public `credentials`/`partners[].label`, omitting `programPdfUrl` when
@@ -83,6 +107,8 @@ on top; it carries no `audit_ledger` row itself.
 - **`EventsRepository`** (`events.repository.ts`) — the transactional insert
   (event + speakers land together or not at all), the list/detail reads,
   `updateState()` (the bare lifecycle-state write behind the guard),
+  `updateStateWithAudit()` (the state write + one terminal `audit_ledger` row in
+  a single transaction — behind the named transition commands, EARS-4),
   `findByIdOrSlug()` (resolves the public read by stable slug or id), and
   `listUpcoming()` (the `published`/`live`-at-or-after-cutoff read ordered nearest
   first, with speaker rows batched in one query — no N+1) over the `events` /
@@ -90,11 +116,12 @@ on top; it carries no `audit_ledger` row itself.
 
 ## Endpoints
 
-| Route                                  | Access               | Command / read                                                         |
-| -------------------------------------- | -------------------- | ---------------------------------------------------------------------- |
-| `POST /v1/admin/events`                | `platform_admin`     | `CreateEvent` (multipart: `payload` JSON + optional `programPdf` file) |
-| `GET /v1/admin/events`                 | `platform_admin`     | `EventAdminList`                                                       |
-| `GET /v1/admin/events/:id`             | `platform_admin`     | `EventAdminDetail`                                                     |
-| `POST /v1/admin/events/:id/transition` | `platform_admin`     | `TransitionEvent` (EARS-7 closed-set guard; body `{ to }`)             |
-| `GET /v1/public/events/:idOrSlug`      | **public** (no auth) | `PublicEventPage` (004 EARS-1) — `draft`/unknown → 404                 |
-| `GET /v1/public/events` (`?upcoming`)  | **public** (no auth) | `UpcomingBroadcastCard[]` (004 EARS-7) — nearest first; empty → `[]`   |
+| Route                                  | Access               | Command / read                                                               |
+| -------------------------------------- | -------------------- | ---------------------------------------------------------------------------- |
+| `POST /v1/admin/events`                | `platform_admin`     | `CreateEvent` (multipart: `payload` JSON + optional `programPdf` file)       |
+| `GET /v1/admin/events`                 | `platform_admin`     | `EventAdminList`                                                             |
+| `GET /v1/admin/events/:id`             | `platform_admin`     | `EventAdminDetail`                                                           |
+| `POST /v1/admin/events/:id/publish`    | `platform_admin`     | `PublishEvent` (EARS-4 `draft → published`; refused ≠ `draft`; +1 audit row) |
+| `POST /v1/admin/events/:id/transition` | `platform_admin`     | `TransitionEvent` (EARS-7 closed-set guard; body `{ to }`)                   |
+| `GET /v1/public/events/:idOrSlug`      | **public** (no auth) | `PublicEventPage` (004 EARS-1) — `draft`/unknown → 404                       |
+| `GET /v1/public/events` (`?upcoming`)  | **public** (no auth) | `UpcomingBroadcastCard[]` (004 EARS-7) — nearest first; empty → `[]`         |

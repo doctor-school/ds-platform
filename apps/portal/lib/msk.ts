@@ -63,3 +63,18 @@ export function formatMskDayLabel(isoInstant: string): string {
   const { date } = formatMskParts(isoInstant);
   return `${date}, ${MSK_WEEKDAY.format(new Date(isoInstant))}`;
 }
+
+/**
+ * The abbreviated Moscow weekday (`ср`) for a listing card's day sub-label
+ * (`16 июля · ср`, the §09 canvas time-plate). Computed in Europe/Moscow so it
+ * agrees with {@link formatMskParts}; the `ru-RU` short form yields `ср.` — the
+ * trailing period is stripped to match the canvas token.
+ */
+const MSK_WEEKDAY_SHORT = new Intl.DateTimeFormat("ru-RU", {
+  timeZone: MSK_TIME_ZONE,
+  weekday: "short",
+});
+
+export function formatMskWeekdayShort(isoInstant: string): string {
+  return MSK_WEEKDAY_SHORT.format(new Date(isoInstant)).replace(/\.$/, "");
+}

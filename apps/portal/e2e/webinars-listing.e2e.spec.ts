@@ -44,6 +44,33 @@ test("EARS-7: a seeded upcoming event appears as a card linking to its page", as
   await expect(cardLink).toBeVisible();
 });
 
+test("EARS-8: the card carries the full choose-set and navigates to the event page on click", async ({
+  page,
+}) => {
+  test.skip(!SLUG, "requires a seeded upcoming event slug");
+  await page.goto(`${BASE}/webinars`, { waitUntil: "domcontentloaded" });
+
+  const card = page.locator(`a[href="/webinars/${SLUG}"]`).first();
+  await expect(card).toBeVisible();
+
+  // The webinar-card.dc.html choose-set (EARS-8): time+МСК, school, title,
+  // specialty chips, and speakers all render inside the card link.
+  await expect(card).toContainText("МСК");
+  await expect(card).toContainText(
+    process.env.E2E_WEBINAR_SCHOOL ?? "Школа",
+  );
+  if (process.env.E2E_WEBINAR_SPECIALTY) {
+    await expect(card).toContainText(process.env.E2E_WEBINAR_SPECIALTY);
+  }
+  if (process.env.E2E_WEBINAR_SPEAKER) {
+    await expect(card).toContainText(process.env.E2E_WEBINAR_SPEAKER);
+  }
+
+  // Clicking the card navigates to the correct event page (EARS-8 → EARS-1).
+  await card.click();
+  await expect(page).toHaveURL(new RegExp(`/webinars/${SLUG}$`));
+});
+
 test("EARS-11: with no upcoming event, the listing renders the empty-state", async ({
   page,
 }) => {

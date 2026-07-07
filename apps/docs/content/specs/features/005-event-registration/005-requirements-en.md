@@ -2,7 +2,7 @@
 title: "005 — Event registration & «мои события» (webinar registration on top of auth 003)"
 description: "Requirements: registration for a webinar built on the shipped auth foundation (003) — logged-in one-tap registration, guest-through-auth completion that never loses the event context, the registered state on the event page, and a «мои события» account surface closing the legacy 'registered but can't find it' gap. Write side of the Webinars epic wave 1: the durable registration record (basis for room admission 006 + the sponsor roster) plus two per-user read models. Event authoring/lifecycle owned by 007; the public event page + listing by 004; the room by 006."
 slug: 005-event-registration
-status: Draft
+status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
 parent_issue: https://github.com/doctor-school/ds-platform/issues/471

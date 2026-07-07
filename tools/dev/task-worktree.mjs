@@ -42,9 +42,20 @@ import { fileURLToPath } from "node:url";
 
 // ── pure derivation helpers (unit-tested in guard-tests) ────────────────────
 
-/** Map a GitHub kind label to its branch prefix (repo-conventions §Branches). */
+/**
+ * Map a GitHub kind label to its branch prefix (repo-conventions §Branches).
+ *
+ * Two label families coexist: the bare kinds (`feature`/`bug`/…) and the newer
+ * `kind:*` family the board applies to feature-iteration Issues
+ * (`kind:ears-handler`, `kind:integration`). Both denote production feature
+ * code, so both resolve to `feat` — without the `kind:*` rows an ears-handler
+ * Issue fell through to the `chore` default and produced a `chore/` branch on
+ * #594 and #550 (#607).
+ */
 const KIND_PREFIX = {
   feature: "feat",
+  "kind:ears-handler": "feat",
+  "kind:integration": "feat",
   bug: "fix",
   chore: "chore",
   refactor: "refactor",
@@ -52,7 +63,14 @@ const KIND_PREFIX = {
   tooling: "tooling",
 };
 
-/** First recognized kind label → its branch prefix; `chore` when none match. */
+/**
+ * First recognized kind label → its branch prefix.
+ *
+ * Default fallback: `chore` — used only when NO label matches a `KIND_PREFIX`
+ * key (an Issue with no kind label at all, or gh being unavailable). It is a
+ * deliberately safe, non-`feat` default: a mislabelled maintenance branch is
+ * cheaper to rename than a stray `feat/` that trips versioning expectations.
+ */
 export function branchPrefixFromLabels(labels) {
   for (const l of labels ?? []) {
     if (Object.prototype.hasOwnProperty.call(KIND_PREFIX, l)) {

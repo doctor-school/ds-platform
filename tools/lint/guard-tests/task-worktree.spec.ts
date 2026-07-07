@@ -42,6 +42,21 @@ describe("task-worktree branchPrefixFromLabels()", () => {
     expect(branchPrefixFromLabels(["bug"])).toBe("fix");
   });
 
+  it("maps the kind:* label family to a branch prefix (#607)", () => {
+    // EARS-handler / integration Issues carry `kind:ears-handler` /
+    // `kind:integration` — production feature code → `feat/`, not `chore/`
+    // (the #594/#550 regression this test locks down).
+    expect(branchPrefixFromLabels(["kind:ears-handler"])).toBe("feat");
+    expect(branchPrefixFromLabels(["kind:integration"])).toBe("feat");
+    expect(
+      branchPrefixFromLabels([
+        "kind:ears-handler",
+        "agent-ready",
+        "feature:007-event-admin-minimal",
+      ]),
+    ).toBe("feat");
+  });
+
   it("ignores non-kind labels and picks the first kind it recognizes", () => {
     expect(branchPrefixFromLabels(["agent-ready", "refactor", "feature"])).toBe(
       "refactor",

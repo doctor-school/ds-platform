@@ -30,13 +30,13 @@ Execute the steps in order. Each `→` is a hard gate: the next step does not be
    1. Run the **`build-ui-from-design-system` registry-research gate** ([../build-ui-from-design-system/SKILL.md](../build-ui-from-design-system/SKILL.md)) — adopt before bespoke, and record the adoption decision as a `registry-research:` line in the PR body (`adopted <block> from <registry>` or `bespoke — <why empty>`). Enforced by the `registry-research` CI gate (#251) + AGENTS.md §6.
    2. **Live-verify** in the actual running UI — drive **every field kind on every surface** in a browser (Playwright) on the dev-stand per [`.claude/rules/dev-stand.md`](../../../../../.claude/rules/dev-stand.md) and AGENTS.md §6, watching rendered error language + timing. No user-facing dev placeholders (enforced by the `no-stub` CI gate, #251).
 
-   If this feature came through `do-product-discovery`, build the **approved mockup** referenced in `NNN-product.md` — the *screen-composition* Stage A is pre-satisfied there (ADR-0014 §5); any element class not yet in the constitution still runs its own element-class Stage A. This gate is then composition + adoption + live-verify, not a fresh layout decision.
+   If this feature came through `do-product-discovery`, build the **approved mockup** referenced in `NNN-product.md` — the _screen-composition_ Stage A is pre-satisfied there (ADR-0014 §5); any element class not yet in the constitution still runs its own element-class Stage A. This gate is then composition + adoption + live-verify, not a fresh layout decision.
 
    This makes the §6 UI Hard rules _fire from the executing procedure_, not just sit in the constitution. Skip only for a genuinely backend-only handler (`surface: backend-only`).
 
 6. **`run-iteration-end-checklist`** (dispatch) — verdict-gated. If `BLOCKED on #X`, fix item X and re-dispatch. Do **not** continue past a BLOCKED verdict.
 7. **`surface-decision-debt`** (inline) — required invocation; output may be `[]` but the invocation itself is required.
-8. `git push` + `gh pr create` with the PR template filled (label, `Closes #N`, `author:*`).
+8. `git push` + `gh pr create` with the PR template filled (kind label **and the `feature:NNN-<slug>` label**, `Closes #N`, `author:*`). Without the feature label, `pr:preflight`'s `spec-status-fresh` passes **vacuously** (no linked spec to check — the #606 hole; fail-loud guard tracked in #608); the label goes on at PR creation, not as a lead post-hoc fix.
 9. **`request-mode-a-review`** (dispatch) — verdict-gated. If `REQUEST_CHANGES`, route to `respond-to-review`. Re-dispatch until APPROVE.
 10. **`respond-to-review`** (inline) — fix or reject-with-rationale per finding. Loop with step 9 until APPROVE + green CI.
 11. **`write-iteration-summary`** (inline) — Issue comment with file paths, decisions taken, decision-debt items, links.

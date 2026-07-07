@@ -18,7 +18,7 @@ At the end of any task you report to the user (a merged PR, a completed engineer
 ## The report shape (fixed)
 
 1. **✅ #N — title · status** (merged / closed / blocked).
-2. **Для пользователя (plain language):** the product / user-visible impact in 1–3 sentences, no jargon — what a person would actually notice.
+2. **Для пользователя (plain language):** the product / user-visible impact in 1–3 sentences, no jargon — what a person would actually notice. **Name the product entity explicitly** — the webinar, the doctor's registration, the admin's event form — never a bare mechanism («серверный гард жизненного цикла», "read endpoint with an allow-list projection"): «жизненный цикл/страница/гард ЧЕГО?» must be answerable from the sentence itself. Layer/mechanism vocabulary belongs only in the collapsed appendix (§6).
 3. **🖼 Проверить глазами — MANDATORY, always exactly one of:**
    - `ДА → <path / URL>` with a rendered **before/after** (for ANY task that changed visible UI — always, don't wait to be asked), **delivered to a user-visible location** (see recipe). For UI/DS-visual work the value is a **LIVE URL** you boot yourself from fresh `main` BEFORE reporting (showcase `/blocks` for DS units, the portal page for screens); a screenshots folder / before-after images are a supplement to the URL, never its substitute (memory `feedback_live_url_not_screenshots`), or
    - `НЕТ — backend/infra/agent-internal; проверяемо так: <test / behaviour / command>`. For a **hook-driven / agent-internal** deliverable (runs automatically in SessionStart, a guard, etc.) phrase the verify line as the **automatic trigger** — "работает само при старте сессии, тебе делать ничего не нужно" — never "запусти X" (the user reads a bare command as a new per-session chore).
@@ -49,7 +49,7 @@ A confirmation or report visual the user **cannot see** is worthless — images 
 ## Failure modes
 
 - **Asking for visual confirmation while the screenshot is only in the agent's CLI** — the user cannot see `Read` images; deliver to a folder and open it.
-- **Engineering-jargon-first report** with no product framing and no explicit visual-to-check line.
+- **Engineering-jargon-first report** with no product framing and no explicit visual-to-check line — including a **wave/orchestration closeout summary**: the shape applies to every user-facing completion report (multi-Issue wave summaries too), and a mechanism-named deliverable with no product entity («гард жизненного цикла» — чего?) is this failure even when everything merged green (session 35991795).
 - **Omitting the before/after** for a visible-UI change, or showing only the "after".
 - **Opening a decision request mid-thread with no "why this surfaced" context.**
 - **An owner question in internal shorthand** — jargon, a token name, or a «см. Issue/отчёт» redirect instead of the self-contained что-случилось / почему / что-изменит / где-посмотреть block.

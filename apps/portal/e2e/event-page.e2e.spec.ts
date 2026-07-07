@@ -51,3 +51,34 @@ test("EARS-1: the page is complete HTML from the server (raw response carries th
   expect(html).toContain("МСК");
   if (EXPECTED_TITLE) expect(html).toContain(EXPECTED_TITLE);
 });
+
+/**
+ * 004 EARS-3 — the event page carries EXACTLY ONE primary «Участвовать» CTA that
+ * routes a guest into the registration flow (feature 005) through auth (003),
+ * carrying the event context so it survives the round-trip. 004 owns only the CTA
+ * and the context handoff; the registration mechanics + the guest→auth→registered
+ * completion are 005/003, so the handoff target is stubbed here — this test
+ * asserts the CTA ENTERS the flow carrying the event context, not that 005
+ * completes it (design §8 seam). Requires the seeded `published`/upcoming event
+ * (the CTA is absent for `ended`, EARS-3 invariant).
+ */
+test("EARS-3: a guest sees exactly one primary «Участвовать» CTA that enters the registration handoff carrying the event context", async ({
+  page,
+  context,
+}) => {
+  await context.clearCookies();
+  await page.goto(`${BASE}/webinars/${SLUG}`, { waitUntil: "domcontentloaded" });
+
+  // Exactly ONE primary participation CTA on the page.
+  const cta = page.getByRole("link", { name: "Участвовать", exact: true });
+  await expect(cta).toHaveCount(1);
+  await expect(cta).toBeVisible();
+
+  // Activating it (as a guest) enters the registration/auth flow carrying the
+  // event context as a same-origin returnTo to this event's page.
+  await cta.click();
+  await page.waitForURL(/\/register\?/);
+  const url = new URL(page.url());
+  expect(url.pathname).toBe("/register");
+  expect(url.searchParams.get("returnTo")).toBe(`/webinars/${SLUG}`);
+});

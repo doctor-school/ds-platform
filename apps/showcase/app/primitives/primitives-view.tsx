@@ -37,6 +37,7 @@ import { Alert } from "@ds/design-system/alert";
 import { Skeleton } from "@ds/design-system/skeleton";
 import { DayBand } from "@ds/design-system/day-band";
 import { WebinarCard } from "@ds/design-system/webinar-card";
+import { WebinarPageContent } from "@ds/design-system/webinar-page-content";
 import { Container } from "@ds/design-system/container";
 import {
   Form,
@@ -1213,6 +1214,54 @@ function WebinarCardSection() {
   );
 }
 
+function WebinarPageContentSection() {
+  return (
+    <PrimitiveSection
+      title="Webinar-page-content"
+      exportsLine="WebinarPageContent — event-page body (description · program PDF · sponsor plate · speakers)"
+    >
+      <p className="text-sm text-muted-foreground">
+        The event-page content set (source{" "}
+        <code className="font-mono text-xs">webinar-page.dc.html</code>, 004
+        EARS-2): the complete decision set from the{" "}
+        <code className="font-mono text-xs">PublicEventPage</code> projection —
+        the «О чём эфир» description, the downloadable program PDF, the sponsor
+        plate (backing partners), and the «Спикеры» aside cards. Desktop → the
+        canvas <span className="font-medium text-foreground">1fr / 380px</span>{" "}
+        two-column split; ≤900px → stacked. All copy is injected (EARS-13). The
+        program affordance is omitted when the event carries no PDF.
+      </p>
+      <ThemePair
+        render={() => (
+          <div className="w-full">
+            <WebinarPageContent
+              description="Разбираем три реальных случая пластики ахиллова сухожилия — от выбора техники до реабилитационного протокола. Без лекционной воды: снимки, интраоперационные видео, осложнения и честный разбор ошибок."
+              speakers={[
+                {
+                  name: "Анна Соколова",
+                  credentials: "Травматолог-ортопед, к.м.н. · НМИЦ им. Пирогова",
+                },
+                {
+                  name: "Михаил Верещагин",
+                  credentials: "Хирург, профессор · Сеченовский университет",
+                },
+              ]}
+              partners={[{ label: "Acme Pharma" }]}
+              programPdfUrl="#"
+              aboutLabel="О чём эфир"
+              programLabel="Программа"
+              programDownloadLabel="Скачать программу (PDF)"
+              speakersLabel="Спикеры"
+              sponsorEyebrow="При поддержке"
+              sponsorNote="Спонсор оплачивает эфир и не влияет на программу. Содержание определяют спикеры и школа."
+            />
+          </div>
+        )}
+      />
+    </PrimitiveSection>
+  );
+}
+
 export function PrimitivesView() {
   return (
     <div className="flex flex-col gap-2">
@@ -1235,6 +1284,7 @@ export function PrimitivesView() {
       <SkeletonSection />
       <DayBandSection />
       <WebinarCardSection />
+      <WebinarPageContentSection />
       <ContainerSection />
     </div>
   );

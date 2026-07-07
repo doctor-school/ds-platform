@@ -10,9 +10,12 @@ The webinar event module. It hosts two surfaces over one aggregate:
   (`POST /v1/admin/events/:id/publish`), which runs through that guard and
   appends its terminal `audit_ledger` row; **EARS-3** lands `ConfigureStream`
   (`PUT /v1/admin/events/:id/stream`), the explicit-provider-enum stream config
-  the 006 room consumes. The edit command and the remaining named transitions
-  (open / close / archive) with their product side-effects + `audit_ledger` rows
-  are sibling handlers (EARS-2/5/6). The
+  the 006 room consumes; **EARS-5** lands the director's two air-day commands,
+  `OpenRoom` (`POST /v1/admin/events/:id/open`, `published → live`) and
+  `CloseRoom` (`POST /v1/admin/events/:id/close`, `live → ended`), each running
+  through the EARS-7 guard and appending its terminal `audit_ledger` row. The
+  edit command and the remaining named transition (archive) with its product
+  side-effects + `audit_ledger` row are sibling handlers (EARS-2/6). The
   rendered stock-Refine admin surface + the browser E2E journey (incl. the admin
   publish action) are the integration slice (#595).
 - **004 public read (read side)** — two **public** endpoints over publish-safe
@@ -70,6 +73,28 @@ Refine, offered only from `draft` via `EventAdminDetail.validTransitions`) + the
 browser E2E are the integration slice (#595); this handler ships the backend
 command + its Vitest e2e.
 
+## EARS-5 — the room-control transitions (`OpenRoom` / `CloseRoom`)
+
+The director's two air-day commands, both named lifecycle transitions running
+through the EARS-7 guard on top of the shared `namedTransition` helper (the same
+guard + atomic `updateStateWithAudit` path as publish). `OpenRoom`
+(`POST /v1/admin/events/:id/open`) applies `published → live` — **refused with a
+409 unless the event is in `published`** — and appends one terminal
+`audit_ledger` row (`event_type = event.went_live`); it opens the 006 room
+(admission of registered doctors + presence capture start) and flips 004's "live
+now" signal off the same `EventLifecycleState`. `CloseRoom`
+(`POST /v1/admin/events/:id/close`) applies `live → ended` — **refused with a 409
+unless the event is in `live`** — and appends one terminal `audit_ledger` row
+(`event_type = event.ended`); it closes the 006 room (admission + heartbeat/chat
+acceptance stop) and **bounds the presence window** (006 EARS-7). On refusal the
+state is untouched and no audit row is written. 006's own admission/heartbeat/chat
+refusal logic **consumes** this `live` window — it is out of this handler's scope
+(publish EARS-4 and archive EARS-6 are the sibling transitions). `platform_admin`
+-only (EARS-8). The admin open/close **actions** (stock Refine, each offered only
+from its valid state via `EventAdminDetail.validTransitions`) + the browser E2E
+are the integration slice (#595); this handler ships the backend commands + their
+Vitest e2e.
+
 ## EARS-3 — the stream config (`ConfigureStream`)
 
 `ConfigureStream` (`PUT /v1/admin/events/:id/stream`) records the event's stream
@@ -93,14 +118,14 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
 
 ## What's here
 
-| Concern                                                                    | File                          |
-| -------------------------------------------------------------------------- | ----------------------------- |
-| Module wiring                                                              | `events.module.ts`            |
-| Admin HTTP surface (create + reads + stream config + publish + transition) | `events.admin.controller.ts`  |
-| Public HTTP surface (event-page read + upcoming listing)                   | `events.public.controller.ts` |
-| Command body DTOs (`{ to }`, `{ provider, embedRef }`)                     | `events.dto.ts`               |
-| Authoring + guard + projection logic                                       | `events.service.ts`           |
-| Drizzle data access (insert, reads, state update)                          | `events.repository.ts`        |
+| Concern                                                                                 | File                          |
+| --------------------------------------------------------------------------------------- | ----------------------------- |
+| Module wiring                                                                           | `events.module.ts`            |
+| Admin HTTP surface (create + reads + stream config + publish + open/close + transition) | `events.admin.controller.ts`  |
+| Public HTTP surface (event-page read + upcoming listing)                                | `events.public.controller.ts` |
+| Command body DTOs (`{ to }`, `{ provider, embedRef }`)                                  | `events.dto.ts`               |
+| Authoring + guard + projection logic                                                    | `events.service.ts`           |
+| Drizzle data access (insert, reads, state update)                                       | `events.repository.ts`        |
 
 ## Exported symbols
 
@@ -115,7 +140,11 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
   `canTransition`, refuses an invalid move with `InvalidTransitionError`, else
   persists the new state), `publish()` (007 EARS-4: the named `draft → published`
   command — runs the guard, then persists the move + one terminal `audit_ledger`
-  row atomically keyed to the acting admin), and `publicEventPage()` (004 EARS-1:
+  row atomically keyed to the acting admin), `openRoom()` / `closeRoom()` (007
+  EARS-5: the director's `published → live` / `live → ended` room-control
+  commands — the same guarded, audited path as publish via the shared private
+  `namedTransition()` helper, appending `event.went_live` / `event.ended`), and
+  `publicEventPage()` (004 EARS-1:
   applies the
   visibility policy — `draft` → null → 404 — and projects the publish-safe
   allow-list `PublicEventPage`, mapping the internal `regalia`/`partnerRef` to
@@ -153,6 +182,8 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
 | `GET /v1/admin/events/:id`             | `platform_admin`     | `EventAdminDetail`                                                                                     |
 | `PUT /v1/admin/events/:id/stream`      | `platform_admin`     | `ConfigureStream` (EARS-3 `{ provider ∈ rutube\|youtube, embedRef }`; upsert; 409 past pre-air window) |
 | `POST /v1/admin/events/:id/publish`    | `platform_admin`     | `PublishEvent` (EARS-4 `draft → published`; refused ≠ `draft`; +1 audit row)                           |
+| `POST /v1/admin/events/:id/open`       | `platform_admin`     | `OpenRoom` (EARS-5 `published → live`; refused ≠ `published`; +1 `event.went_live` audit row)          |
+| `POST /v1/admin/events/:id/close`      | `platform_admin`     | `CloseRoom` (EARS-5 `live → ended`; refused ≠ `live`; +1 `event.ended` audit row)                      |
 | `POST /v1/admin/events/:id/transition` | `platform_admin`     | `TransitionEvent` (EARS-7 closed-set guard; body `{ to }`)                                             |
 | `GET /v1/public/events/:idOrSlug`      | **public** (no auth) | `PublicEventPage` (004 EARS-1) — `draft`/unknown → 404                                                 |
 | `GET /v1/public/events` (`?upcoming`)  | **public** (no auth) | `UpcomingBroadcastCard[]` (004 EARS-7) — nearest first; empty → `[]`                                   |

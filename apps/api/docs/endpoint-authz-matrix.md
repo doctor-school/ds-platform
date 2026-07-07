@@ -10,6 +10,8 @@
 | GET /v1/public/events/:idOrSlug       | public        | —              | none       | —            | false   | none        | EARS-1, EARS-10          |
 | GET /v1/ready                         | public        | —              | none       | —            | false   | none        | EARS-1, EARS-2           |
 | POST /v1/admin/events                 | authenticated | platform_admin | fast-path  | —            | false   | low-stakes  | EARS-1, EARS-8           |
+| POST /v1/admin/events/:id/close       | authenticated | platform_admin | fast-path  | —            | false   | low-stakes  | EARS-5, EARS-8           |
+| POST /v1/admin/events/:id/open        | authenticated | platform_admin | fast-path  | —            | false   | low-stakes  | EARS-5, EARS-8           |
 | POST /v1/admin/events/:id/publish     | authenticated | platform_admin | fast-path  | —            | false   | low-stakes  | EARS-4, EARS-8           |
 | POST /v1/admin/events/:id/transition  | authenticated | platform_admin | fast-path  | —            | false   | low-stakes  | EARS-7, EARS-8           |
 | POST /v1/auth/login                   | public        | —              | none       | —            | false   | high-stakes | EARS-5, EARS-8, EARS-17  |

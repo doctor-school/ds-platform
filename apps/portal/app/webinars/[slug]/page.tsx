@@ -1,9 +1,12 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { Badge } from "@ds/design-system/badge";
+import { Button } from "@ds/design-system/button";
 import { Container } from "@ds/design-system/container";
 import { WebinarPageContent } from "@ds/design-system/webinar-page-content";
 import { fetchPublicEventPage } from "../../../lib/public-events";
+import { buildRegistrationHref } from "../../../lib/registration-handoff";
 import { formatMskParts } from "../../../lib/msk";
 
 /**
@@ -16,9 +19,18 @@ import { formatMskParts } from "../../../lib/msk";
  * badge; the two-column body below it is the complete decision set from the
  * `PublicEventPage` projection — description, program PDF, backing partners, and
  * speakers — laid out to `webinar-page.dc.html` via the `WebinarPageContent`
- * design-system primitive (EARS-2). The «Участвовать» CTA / status card
- * (EARS-3), the lifecycle status-swap (EARS-4), and the archived notice (EARS-5)
- * are siblings and are intentionally NOT built here.
+ * design-system primitive (EARS-2).
+ *
+ * EARS-3: the page carries EXACTLY ONE primary «Участвовать» CTA that routes the
+ * visitor into the registration flow (feature 005) through auth (feature 003),
+ * carrying the event context as a same-origin `returnTo` (see
+ * `lib/registration-handoff`). 004 owns only the CTA and this handoff — the
+ * registration mechanics + guest→auth→registered round-trip are 005/003 (a
+ * tracked seam, parent #549). The CTA is present for a participable event
+ * (`published` / `live`) and absent for `ended` (no dead link, EARS-3 invariant);
+ * the full per-state affordance swap (badge / time plate / room-routing / footer
+ * band) and the status-card geometry are EARS-4, and the archived notice EARS-5 —
+ * siblings intentionally NOT built here.
  *
  * Rendered per request (`force-dynamic`) — the page reflects a live read model
  * whose lifecycle state can change, so a static prerender would go stale.
@@ -78,6 +90,20 @@ export default async function WebinarEventPage({
       </header>
 
       <Container className="py-12 layout:py-16">
+        {/* EARS-3 — the single primary «Участвовать» participation CTA. Present
+            only for a participable event (`published` / `live`); `ended` carries
+            no CTA (never a dead link). The default Button variant is the filled
+            blue.700 primary action (#270). */}
+        {event.state === "published" || event.state === "live" ? (
+          <div className="mb-12">
+            <Button asChild size="lg">
+              <Link href={buildRegistrationHref(event.slug)}>
+                {t("cta.participate")}
+              </Link>
+            </Button>
+          </div>
+        ) : null}
+
         <WebinarPageContent
           description={event.description}
           speakers={event.speakers}

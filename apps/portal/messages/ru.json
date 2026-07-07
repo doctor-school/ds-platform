@@ -102,6 +102,9 @@
   "webinar": {
     "breadcrumb": "Эфиры",
     "startsAt": "{time} МСК · {date}",
+    "cta": {
+      "participate": "Участвовать"
+    },
     "state": {
       "published": "Скоро",
       "live": "В эфире",

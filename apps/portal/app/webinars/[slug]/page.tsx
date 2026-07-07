@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { Badge } from "@ds/design-system/badge";
 import { Container } from "@ds/design-system/container";
+import { WebinarPageContent } from "@ds/design-system/webinar-page-content";
 import { fetchPublicEventPage } from "../../../lib/public-events";
 import { formatMskParts } from "../../../lib/msk";
 
@@ -10,12 +11,14 @@ import { formatMskParts } from "../../../lib/msk";
  * sponsor-distributed link (`/webinars/:slug`) resolves to complete HTML for an
  * UNAUTHENTICATED recipient: no cookie is read, no client soft-wall, no gated
  * section (the retired legacy "авторизуйтесь для просмотра" overlay is a banned
- * pattern — 004 design §1). This iteration ships the minimal route SHELL — the
- * poster header with the school kicker, the title, the МСК start time, and the
- * lifecycle-state badge. The full decision-set content layout (description,
- * speakers, program PDF, specialties, the «Участвовать» CTA, the archived
- * notice) is the sibling handler EARS-2/EARS-3/EARS-5 (#551…), built to
- * `webinar-page.dc.html`; it is intentionally NOT pre-built here.
+ * pattern — 004 design §1). The poster header carries the school kicker, the
+ * title, the target specialty chips, the МСК start time, and the lifecycle-state
+ * badge; the two-column body below it is the complete decision set from the
+ * `PublicEventPage` projection — description, program PDF, backing partners, and
+ * speakers — laid out to `webinar-page.dc.html` via the `WebinarPageContent`
+ * design-system primitive (EARS-2). The «Участвовать» CTA / status card
+ * (EARS-3), the lifecycle status-swap (EARS-4), and the archived notice (EARS-5)
+ * are siblings and are intentionally NOT built here.
  *
  * Rendered per request (`force-dynamic`) — the page reflects a live read model
  * whose lifecycle state can change, so a static prerender would go stale.
@@ -49,6 +52,18 @@ export default async function WebinarEventPage({
           <h1 className="mt-3 max-w-3xl text-3xl font-extrabold tracking-tight text-balance layout:text-5xl">
             {event.title}
           </h1>
+          {event.specialties.length > 0 ? (
+            <div className="mt-6 flex flex-wrap gap-2">
+              {event.specialties.map((specialty) => (
+                <span
+                  key={specialty}
+                  className="border-2 border-ring px-3 py-1.5 text-caption font-bold text-header-foreground"
+                >
+                  {specialty}
+                </span>
+              ))}
+            </div>
+          ) : null}
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <span className="text-base font-bold tabular-nums">
               {t("startsAt", { time, date })}
@@ -61,6 +76,21 @@ export default async function WebinarEventPage({
           </div>
         </Container>
       </header>
+
+      <Container className="py-12 layout:py-16">
+        <WebinarPageContent
+          description={event.description}
+          speakers={event.speakers}
+          partners={event.partners}
+          programPdfUrl={event.programPdfUrl}
+          aboutLabel={t("page.about")}
+          programLabel={t("page.program")}
+          programDownloadLabel={t("page.programDownload")}
+          speakersLabel={t("page.speakers")}
+          sponsorEyebrow={t("page.sponsorEyebrow")}
+          sponsorNote={t("page.sponsorNote")}
+        />
+      </Container>
     </main>
   );
 }

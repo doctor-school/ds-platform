@@ -13,6 +13,7 @@ import { AuthModule } from "./auth/auth.module.js";
 import { ObservabilityModule } from "./observability/observability.module.js";
 import { StorageModule } from "./storage/storage.module.js";
 import { EventsModule } from "./events/events.module.js";
+import { RegistrationModule } from "./registration/registration.module.js";
 
 @Module({
   imports: [
@@ -40,6 +41,9 @@ import { EventsModule } from "./events/events.module.js";
     StorageModule,
     // 007 event-admin authoring surface (CreateEvent + admin reads).
     EventsModule,
+    // 005 registration write + per-user EventRegistrationState read
+    // (doctor_guest-authenticated).
+    RegistrationModule,
     HealthModule,
     ReadinessModule,
   ],

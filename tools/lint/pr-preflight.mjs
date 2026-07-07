@@ -61,8 +61,14 @@ export const GUARDS = [
  * `file` = tools/lint entrypoint. Deliberately EXCLUDES: the four PR-gated guards
  * in `GUARDS` + `tdd-signal` (PR-event-gated, need `gh pr view`) and
  * `endpoint-authz` (boots a Nest application context).
+ *
+ * `frontmatter-yaml` (#597) is the one entry with NO dedicated CI job: the
+ * `docs-build` job already fails hard-red in CI on a malformed frontmatter YAML
+ * block (fumadocs compile), so this guard is the LOCAL pre-push mirror of that
+ * existing gate — its `name` labels the local run, not a CI job.
  */
 export const STATIC_GUARDS = [
+  { name: "frontmatter-yaml", file: "frontmatter-yaml-lint.ts" },
   { name: "events-drift", file: "events-lint.ts" },
   { name: "module-readme", file: "module-readme-lint.ts" },
   { name: "glossary-mdx", file: "glossary-mdx-lint.ts" },

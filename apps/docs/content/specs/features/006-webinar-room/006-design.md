@@ -16,7 +16,7 @@ Feature 006 is the **room vertical**: one registration-and-live-gated read (`Roo
 ```mermaid
 flowchart LR
   subgraph Browser
-    RM[Portal /webinars/:slug/room — player + chat + invisible heartbeat]
+    RM[Portal /webinars/:slug/room — player + chat + visibility-gated heartbeat]
   end
   subgraph apps_api[apps/api]
     Q1[GET /v1/events/:idOrSlug/room — RoomConfig  authenticated·doctor_guest·policy]
@@ -140,6 +140,7 @@ erDiagram
 
 - **Append-only.** Each accepted heartbeat is one immutable row `(user_id, event_id, beat_at)` — no in-place update, no client-supplied minute count (ADR-0003 §3). The room open/close and first-entry facts are appended to `audit_ledger` (§6, ADR-0003 §6).
 - **Cadence N is server config, default 60 s.** `RoomConfig.heartbeatIntervalSeconds` carries N to the client, which posts on that interval. The presence-minute derivation is **parameterized over N** — an operator-confirmed different cadence changes the config value, not the spec or the code (owner decision 2026-07-06). Legacy evidence was 60 s (recon §10-3), the default.
+- **Visibility-gated client loop.** The client posts beats **only while the room tab is the visible, active tab** (Page Visibility API — `document.hidden` false). A backgrounded tab emits no beats, so its minutes never count toward the sponsor report; the loop resumes when the tab becomes visible again (EARS-4, owner decision 2026-07-07). This is a **client-side capture gate** — the server still refuses any beat from an ungated caller or a closed room (§2, §6), and tab-coalescing is unchanged: two _visible_ sessions in the same interval still count once (concurrent-tabs bullet, EARS-5). NMO thresholds and interactive presence confirmations remain wave 2.
 - **Concurrent tabs never inflate.** Per-doctor minutes are computed from the **distinct covered time**, not the raw beat count: beats from a doctor's parallel sessions for the same event **coalesce into one presence timeline** (e.g. bucket beats to the N-second grid and count distinct buckets, or union the covered intervals). Two tabs open in the same minute count as **one** minute (EARS-5). This is asserted in the presence-minutes e2e.
 - **Minutes formula (illustrative).** `minutes ≈ (distinct N-second buckets a doctor emitted a beat in during the open window) × N / 60`, clamped to the room-open window (EARS-7). The exact aggregation is an implementation detail of the derivation, but it MUST be (a) parameterized over N and (b) tab-coalesced.
 - **Wave-1 export is manual.** No report UI: the derivation yields a per-doctor `{ doctor, event, minutes }` set the operator exports manually for the first webinar's sponsor (EARS-5). The wave-2 auto-report «Отчёт партнёра V2» and auto-NMO consume this same data — 006 only captures it; the exact V2 columns/joins are a wave-2 owner call (PRD open question).
@@ -189,7 +190,7 @@ Built from `@ds/design-system` tokens to the vendored `webinar-room.dc.html` (AD
 - **Mobile**: a full-bleed `16/9` player, a slim "what's on air" bar, then a tab strip. **Wave-1 tab set = Чат / О эфире** (the canvas's **Вопросы** tab is the named wave-2 deferral, §requirements Out of scope) — Чат is the live chat; О эфире is the read-only event context (title, speakers, program). The composer sits pinned at the bottom of the Чат tab.
 - **The «Задать вопрос» / «Вопросы» affordances are not built** in wave 1 (question-to-lecturer is wave 2) — the desktop aside is a single chat pane, and the mobile tab strip omits Вопросы. This is the exact analogue of 005 shipping only the `my-events` Предстоящие tab.
 - **"Stream unavailable" state** (EARS-2): when the provider is unknown/absent, the player frame renders a truthful unavailable state (no guessed embed), keeping the room chrome.
-- **Invisible heartbeat** (EARS-4): no visible affordance — the heartbeat loop runs from the room mount on the `RoomConfig.heartbeatIntervalSeconds` cadence, with **no** doctor-facing "prove you're here" control.
+- **Visibility-gated heartbeat** (EARS-4): no visible affordance — the heartbeat loop runs from the room mount on the `RoomConfig.heartbeatIntervalSeconds` cadence **while the room tab is the visible, active tab** (Page Visibility API — `document.hidden`), with **no** doctor-facing "prove you're here" control; when the tab is backgrounded the loop pauses (its minutes do not count toward the sponsor report) and re-focusing the tab resumes it.
 
 ### 8.2 Time, copy & i18n
 

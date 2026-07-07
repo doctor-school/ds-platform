@@ -67,12 +67,21 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
   # --- Heartbeat presence capture (US-3) ---
 
   @EARS-4 @happy
-  Scenario: Presence is captured by an invisible heartbeat every N seconds
-    Given a registered doctor watching in a live room
+  Scenario: Presence is captured by a visibility-gated heartbeat every N seconds
+    Given a registered doctor watching in a live room with the room tab visible and active
     When the doctor stays in the room
     Then the client posts an authenticated heartbeat every N seconds
     And each accepted beat appends one durable row (doctor, event, instant) to the presence table
     And the doctor never clicks anything to prove presence
+
+  @EARS-4 @edge
+  Scenario: A backgrounded tab pauses the heartbeat and resumes when visible again
+    Given a registered doctor in a live room posting heartbeats
+    When the room tab is backgrounded so document.hidden becomes true
+    Then the client stops posting heartbeats
+    And the backgrounded tab's minutes do not count toward the sponsor report
+    When the room tab becomes visible again
+    Then the client resumes posting an authenticated heartbeat every N seconds
 
   # --- Presence-minute derivation (US-3, US-4) ---
 

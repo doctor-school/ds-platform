@@ -69,6 +69,16 @@ export const EVENT_WENT_LIVE_AUDIT_TYPE = "event.went_live";
 export const EVENT_ENDED_AUDIT_TYPE = "event.ended";
 
 /**
+ * Canonical `audit_ledger` event id for the `ended → archived` transition — the
+ * operator's manual post-broadcast archive (EARS-6, LD-2; ADR-0003 §6). Same
+ * `event.<transition>` namespace as the sibling transitions; consumed by 004
+ * (the event leaves the upcoming listing and its public page degrades to the
+ * archived notice). There is no scheduler — the row is written only by an
+ * explicit operator command.
+ */
+export const EVENT_ARCHIVED_AUDIT_TYPE = "event.archived";
+
+/**
  * The EARS-7 guard's refusal: the requested move is not one of the four legal
  * forward transitions from the event's current state. HTTP-agnostic — the
  * controller maps it to a 4xx state conflict — so the guard stays a pure domain
@@ -449,8 +459,38 @@ export class EventsService {
   }
 
   /**
+   * EARS-6 — `ArchiveEvent`: the `ended → archived` transition, the operator's
+   * **manual** post-broadcast action (LD-2 — no scheduler, no time-based
+   * automation in wave 1 fires it). After it, the event **leaves all public
+   * surfaces**: 004's upcoming listing drops it by state and its public event
+   * page degrades to the archived-notice body (004 EARS-5) — both consuming the
+   * single `EventLifecycleState` this writes, never a second flag (EARS-9). Runs
+   * through the same EARS-7 closed-set guard as every transition
+   * ({@link canTransition}): archive is **refused unless the event is in
+   * `ended`** — any other origin raises {@link InvalidTransitionError} with the
+   * state left untouched and no audit row. On success the state change and
+   * exactly one terminal `audit_ledger` row are written atomically
+   * ({@link EventsRepository.updateStateWithAudit}), keyed to the acting
+   * `platform_admin` (`actorSub`). `archived` is terminal (no reopen — EARS-7).
+   *
+   * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
+   */
+  async archive(
+    id: string,
+    actorSub: string | null,
+  ): Promise<EventAdminDetail | null> {
+    return this.namedTransition(
+      id,
+      "archived",
+      EVENT_ARCHIVED_AUDIT_TYPE,
+      actorSub,
+    );
+  }
+
+  /**
    * The shared body of every named, audited transition command (publish / open /
-   * close — EARS-4/5): load the aggregate, run the EARS-7 closed-set guard
+   * close / archive — EARS-4/5/6): load the aggregate, run the EARS-7 closed-set
+   * guard
    * ({@link canTransition}) — refusing an invalid jump with
    * {@link InvalidTransitionError}, state untouched — then write the state change
    * and exactly one terminal `audit_ledger` row atomically. Keeps the four named

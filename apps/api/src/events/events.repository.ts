@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import type { DrizzleHandle, Event, NewEvent, NewEventSpeaker } from "@ds/db";
 import { auditLedger, eventSpeakers, events, streamConfig } from "@ds/db";
-import type { ConfigureStreamRequest, StreamConfig } from "@ds/schemas";
+import {
+  type ConfigureStreamRequest,
+  type StreamConfig,
+  UPCOMING_BROADCAST_STATES,
+} from "@ds/schemas";
 import { and, asc, desc, eq, gte, inArray, or } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 
@@ -172,13 +176,17 @@ export class EventsRepository {
   }
 
   /**
-   * 004 EARS-7 — the upcoming-broadcasts read. Returns every `published` or
-   * `live` event whose `starts_at` is at or after `cutoff` (`now − airWindow`, so
-   * a recently-started live event still lists), ordered NEAREST air date first
-   * (`starts_at ASC`). The state filter is applied in SQL — an `ended`/`archived`
-   * event drops from the listing by state, never by time. Speaker rows for the
-   * matched events are read in one batched query (no N+1) and grouped back by
-   * event in `position` order. An empty match is a valid empty list (EARS-11).
+   * 004 EARS-7 + EARS-6 — the upcoming-broadcasts read. Returns every `published`
+   * or `live` event whose `starts_at` is at or after `cutoff` (`now − airWindow`,
+   * so a recently-started live event still lists), ordered NEAREST air date first
+   * (`starts_at ASC`). The state filter is the {@link UPCOMING_BROADCAST_STATES}
+   * SSOT (the same closed set the `UpcomingBroadcastState` card type derives from,
+   * so the query and the projection can never disagree about what may appear) —
+   * applied in SQL, so a `draft`/`ended`/`archived` event drops from the listing
+   * by STATE, never by time (EARS-6: draft/ended/archived never list). Speaker
+   * rows for the matched events are read in one batched query (no N+1) and grouped
+   * back by event in `position` order. An empty match is a valid empty list
+   * (EARS-11).
    */
   async listUpcoming(cutoff: Date): Promise<EventWithSpeakers[]> {
     const rows = await this.db
@@ -186,7 +194,7 @@ export class EventsRepository {
       .from(events)
       .where(
         and(
-          inArray(events.state, ["published", "live"]),
+          inArray(events.state, [...UPCOMING_BROADCAST_STATES]),
           gte(events.startsAt, cutoff),
         ),
       )

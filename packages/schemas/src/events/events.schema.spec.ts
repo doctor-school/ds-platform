@@ -4,8 +4,10 @@ import {
   ConfigureStreamRequestSchema,
   CreateEventRequestSchema,
   EVENT_LIFECYCLE_STATES,
+  isPubliclyReachable,
   LIFECYCLE_TRANSITIONS,
   mskLocalToInstant,
+  PUBLIC_EVENT_STATES,
   STREAM_PROVIDERS,
   TransitionEventRequestSchema,
   UpdateEventRequestSchema,
@@ -88,6 +90,31 @@ describe("007 events schema", () => {
             validTransitions(from).includes(to),
           );
         }
+      }
+    });
+  });
+
+  describe("isPubliclyReachable (004 EARS-6 — the non-public visibility policy)", () => {
+    it("EARS-6: a draft is the sole non-publicly-reachable state (page → not-found)", () => {
+      expect(isPubliclyReachable("draft")).toBe(false);
+    });
+
+    it("EARS-6: published / live / ended / archived are all publicly reachable", () => {
+      expect(isPubliclyReachable("published")).toBe(true);
+      expect(isPubliclyReachable("live")).toBe(true);
+      expect(isPubliclyReachable("ended")).toBe(true);
+      // An archived direct link resolves to the EARS-5 notice body, never a 404 —
+      // so it is reachable (the render differs, the reachability does not).
+      expect(isPubliclyReachable("archived")).toBe(true);
+    });
+
+    it("EARS-6: the predicate is derived from the PUBLIC_EVENT_STATES allow-list (not a draft denylist)", () => {
+      // Any state added to the machine is not-found BY DEFAULT until it is added
+      // to the public allow-list — the structural guard the denylist form lacked.
+      for (const s of EVENT_LIFECYCLE_STATES) {
+        expect(isPubliclyReachable(s)).toBe(
+          (PUBLIC_EVENT_STATES as readonly string[]).includes(s),
+        );
       }
     });
   });

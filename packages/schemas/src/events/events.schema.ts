@@ -303,6 +303,23 @@ export const PublicEventStateSchema = z.enum(PUBLIC_EVENT_STATES);
 export type PublicEventState = z.infer<typeof PublicEventStateSchema>;
 
 /**
+ * The EARS-6 event-page reachability predicate — the single SSOT the public
+ * visibility policy reads. `true` iff a public event-page request for an event in
+ * `state` resolves to a body, i.e. `state` is one of the publicly-renderable
+ * {@link PUBLIC_EVENT_STATES} (`published`/`live`/`ended`/`archived`). `draft` is
+ * the sole non-reachable state: its page is not-found, indistinguishable from a
+ * non-existent id, so a hidden draft leaks no "exists but private" oracle (004
+ * design §2). Derived from the same allow-list the {@link PublicEventState}
+ * projection type is — an allow-list, not a blocklist — so any future non-public
+ * state added to the machine is not-found BY DEFAULT and can never leak (this is
+ * the structural half of EARS-6/EARS-10, mirroring the projection's allow-list
+ * posture, not a `state === 'draft'` denylist that a new state would slip past).
+ */
+export function isPubliclyReachable(state: EventLifecycleState): boolean {
+  return (PUBLIC_EVENT_STATES as readonly EventLifecycleState[]).includes(state);
+}
+
+/**
  * A publish-safe speaker entry (004 design §3) — display `name` + `credentials`
  * only. The internal write model's free-text `regalia` is projected to
  * `credentials`; no contact detail or other PII is ever exposed (EARS-10).

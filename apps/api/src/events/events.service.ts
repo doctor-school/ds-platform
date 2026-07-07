@@ -8,6 +8,7 @@ import {
   type EventAdminDetail,
   type EventAdminListItem,
   type EventLifecycleState,
+  isPubliclyReachable,
   mskLocalToInstant,
   type PublicEventPage,
   type PublicEventState,
@@ -522,20 +523,22 @@ export class EventsService {
   }
 
   /**
-   * 004 EARS-1 — the public event-page projection resolved by slug or id. The
-   * visibility policy (004 design §2) is applied here: a `draft` event has no
-   * public projection (returns null → the controller answers 404,
-   * indistinguishable from an unknown id, EARS-6); `published` / `live` / `ended`
-   * / `archived` all return the publish-safe {@link PublicEventPage} (an archived
-   * event resolves to a 200 body labeled `archived`, never a 404 — EARS-5). The
-   * projection is an ALLOW-LIST: only publish-safe fields are read onto the body
-   * (EARS-10).
+   * 004 EARS-1 + EARS-6 — the public event-page projection resolved by slug or
+   * id, under the non-public visibility policy (004 design §2). The reachability
+   * gate is the {@link isPubliclyReachable} SSOT predicate (derived from the
+   * publicly-renderable allow-list, not a `draft` denylist): a state outside that
+   * allow-list has no public projection (returns null → the controller answers
+   * 404, indistinguishable from an unknown id — a hidden `draft` leaks no oracle,
+   * EARS-6). `published` / `live` / `ended` / `archived` all return the
+   * publish-safe {@link PublicEventPage} (an archived event resolves to a 200 body
+   * labeled `archived`, never a 404 — EARS-5). The projection is an ALLOW-LIST:
+   * only publish-safe fields are read onto the body (EARS-10).
    */
   async publicEventPage(idOrSlug: string): Promise<PublicEventPage | null> {
     const found = await this.repo.findByIdOrSlug(idOrSlug);
     if (!found) return null;
     const state = found.event.state as EventLifecycleState;
-    if (state === "draft") return null;
+    if (!isPubliclyReachable(state)) return null;
     return this.toPublicPage(found, state);
   }
 

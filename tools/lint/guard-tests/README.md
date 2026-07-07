@@ -52,9 +52,10 @@ Covered here (FS / gh / memory seams): `interaction-states`, `form-error`,
 (js-yaml under the hood — faithful for the malformed-frontmatter class
 `docs-build` fails on) and fails with a `<file>:<line>` message on a
 malformed block — the #596 class, where an unquoted `: ` inside a list entry
-parses as a nested mapping and breaks the docs build. It is wired into
-`pnpm pr:preflight --static` as the LOCAL pre-push mirror of the `docs-build` CI
-job (no dedicated CI job of its own).
+parses as a nested mapping and breaks the docs build. It runs in the
+`pnpm pr:preflight` static family (on by default in PR-number mode since #633;
+also via standalone `--static`) as the LOCAL pre-push mirror of the `docs-build`
+CI job (no dedicated CI job of its own).
 
 The last three grew real behaviour in #448 (they were exit-0 stubs, baseline
 hard-red in the `ci` needs-list per #440). All three are FS-scan

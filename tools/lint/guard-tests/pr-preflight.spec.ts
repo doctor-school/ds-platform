@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   GUARDS,
   STATIC_GUARDS,
+  hasNoStaticFlag,
   hasStaticFlag,
   parsePrNumber,
+  resolvePlan,
   summarize,
 } from "../pr-preflight.mjs";
 
@@ -61,6 +63,59 @@ describe("pr-preflight hasStaticFlag()", () => {
     expect(hasStaticFlag(["406", "--static"])).toBe(true);
     expect(hasStaticFlag(["406"])).toBe(false);
     expect(hasStaticFlag([])).toBe(false);
+  });
+});
+
+describe("pr-preflight hasNoStaticFlag()", () => {
+  it("detects the --no-static opt-out anywhere in argv", () => {
+    expect(hasNoStaticFlag(["--no-static"])).toBe(true);
+    expect(hasNoStaticFlag(["633", "--no-static"])).toBe(true);
+    expect(hasNoStaticFlag(["633"])).toBe(false);
+    expect(hasNoStaticFlag(["--static"])).toBe(false);
+    expect(hasNoStaticFlag([])).toBe(false);
+  });
+});
+
+describe("pr-preflight resolvePlan() (#633)", () => {
+  it("runs the static family by DEFAULT in PR-number mode", () => {
+    const plan = resolvePlan(["633"]);
+    expect(plan.prNumber).toBe("633");
+    expect(plan.runPrGated).toBe(true);
+    expect(plan.runStatic).toBe(true);
+    expect(plan.usageError).toBe(false);
+  });
+
+  it("skips the static family when --no-static is passed with a PR number", () => {
+    const plan = resolvePlan(["633", "--no-static"]);
+    expect(plan.runPrGated).toBe(true);
+    expect(plan.runStatic).toBe(false);
+    expect(plan.usageError).toBe(false);
+  });
+
+  it("runs static-only for standalone --static (no PR number), unchanged", () => {
+    const plan = resolvePlan(["--static"]);
+    expect(plan.prNumber).toBeNull();
+    expect(plan.runPrGated).toBe(false);
+    expect(plan.runStatic).toBe(true);
+    expect(plan.usageError).toBe(false);
+  });
+
+  it("runs both families for --static with a PR number, unchanged", () => {
+    const plan = resolvePlan(["--static", "633"]);
+    expect(plan.runPrGated).toBe(true);
+    expect(plan.runStatic).toBe(true);
+    expect(plan.usageError).toBe(false);
+  });
+
+  it("is a usage error when nothing is selected", () => {
+    expect(resolvePlan([]).usageError).toBe(true);
+    // --no-static alone selects nothing to run.
+    expect(resolvePlan(["--no-static"]).usageError).toBe(true);
+  });
+
+  it("lets explicit --static win over --no-static", () => {
+    const plan = resolvePlan(["633", "--static", "--no-static"]);
+    expect(plan.runStatic).toBe(true);
   });
 });
 

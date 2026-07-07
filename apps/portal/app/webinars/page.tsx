@@ -1,9 +1,11 @@
+import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import type { UpcomingBroadcastCard } from "@ds/schemas";
 import { Badge } from "@ds/design-system/badge";
 import { Card } from "@ds/design-system/card";
 import { Container } from "@ds/design-system/container";
 import { DayBand } from "@ds/design-system/day-band";
+import { Link as DsLink } from "@ds/design-system/link";
 import { fetchUpcomingBroadcasts } from "../../lib/public-events";
 import { formatMskDayLabel, formatMskParts, mskDayKey } from "../../lib/msk";
 
@@ -124,26 +126,34 @@ function WebinarCard({
   liveLabel: string;
 }) {
   return (
-    <a
-      href={`/webinars/${card.slug}`}
-      className="group block border-b-2 border-border last:border-b-0 layout:border-b-0"
+    // The card link routes through the DS `Link` primitive (ADR-0013 §7 link
+    // row) composed over `next/link` — hover/active/focus states come from the
+    // primitive, routing stays with Next. This is a block-level CARD link, so
+    // the canvas hover affordance stays the card's own (title underline + lift,
+    // per `webinar-card.dc.html`) — `hover:no-underline` suppresses only the
+    // primitive's whole-card text underline, not its focus ring or states.
+    <DsLink
+      asChild
+      className="group block border-b-2 border-border last:border-b-0 hover:no-underline layout:border-b-0"
     >
-      <Card className="border-0 p-5 shadow-none layout:border-2 layout:p-6 layout:shadow-lg layout:transition-transform layout:group-hover:-translate-y-0.5">
-        <div className="flex items-center gap-3">
-          <span className="text-xl font-extrabold tabular-nums tracking-tight">
-            {timeLabel}
-          </span>
-          {card.state === "live" ? (
-            <Badge variant="live">{liveLabel}</Badge>
-          ) : null}
-        </div>
-        <p className="mt-3 text-caption font-extrabold uppercase tracking-micro text-primary">
-          {card.school}
-        </p>
-        <h2 className="mt-1 text-lg font-bold leading-snug tracking-tight group-hover:underline layout:text-xl">
-          {card.title}
-        </h2>
-      </Card>
-    </a>
+      <Link href={`/webinars/${card.slug}`}>
+        <Card className="border-0 p-5 shadow-none layout:border-2 layout:p-6 layout:shadow-lg layout:transition-transform layout:group-hover:-translate-y-0.5">
+          <div className="flex items-center gap-3">
+            <span className="text-xl font-extrabold tabular-nums tracking-tight">
+              {timeLabel}
+            </span>
+            {card.state === "live" ? (
+              <Badge variant="live">{liveLabel}</Badge>
+            ) : null}
+          </div>
+          <p className="mt-3 text-caption font-extrabold uppercase tracking-micro text-primary">
+            {card.school}
+          </p>
+          <h2 className="mt-1 text-lg font-bold leading-snug tracking-tight group-hover:underline layout:text-xl">
+            {card.title}
+          </h2>
+        </Card>
+      </Link>
+    </DsLink>
   );
 }

@@ -22,7 +22,7 @@ The repo auto-memory lives at `~/.claude/projects/<project>/memory/`. Only the f
 
 1. **`gh` CLI** — primary for GitHub Issues, PRs, releases (JSON via `--json` is AI-friendly).
 2. **MCP `mcp__plugin_github_github__*`** — only for read-tasks `gh` doesn't cover (rare).
-3. **`plane-pp-cli`** (reads) + **Plane MCP `mcp__plane-pp-mcp__*`** (writes) — Plane work-items only. **Not for code-level Issues.** (Binary is `plane-pp-cli`, not `pp-plane`; PowerShell PATH only — memory `reference_pp_plane_cli_readonly`.)
+3. **`plane-pp-cli`** — Plane work-items only, **full CRUD** under `projects issues` (`list-work-items` / `create-work-item` / `update-work-item` / `create-work-item-comment`); the top-level `work-items` tag is get+search only (looks read-only — isn't). MCP `mcp__plane-pp-mcp__*` is an optional alternative, **not** required for writes. **Not for code-level Issues.** (Binary is `plane-pp-cli`, not `pp-plane`; PowerShell PATH only — memory `reference_pp_plane_cli_readonly`.)
 
 ## Skill priorities (superpowers reminder)
 

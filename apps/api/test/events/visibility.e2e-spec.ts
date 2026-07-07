@@ -181,7 +181,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       },
     );
 
-    it("EARS-6.3 (EARS-10 invariant): the active-broadcasts listing never carries a non-public body — every card is published or live, never draft/ended/archived", async () => {
+    it("EARS-6.3: the active-broadcasts listing never carries a non-public body (EARS-10 invariant) — every card is published or live, never draft/ended/archived", async () => {
       // One event in each of the five states, all inside the air window.
       await seedEvent({ state: "draft" });
       const published = await seedEvent({ state: "published" });

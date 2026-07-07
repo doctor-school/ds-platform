@@ -46,16 +46,45 @@
  *     away real gaps.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * DEFERRAL ALLOWLIST (#437)
+ * SPEC-SCOPED DEFERRALS (#612, grounded in ADR-0006 §4)
+ * ─────────────────────────────────────────────────────────────────────────────
+ * EARS numbering is flat **per feature-spec**, so an id like `EARS-4` is only
+ * unique *within* a spec — feature 003 (registration verify) and feature 007
+ * (publish transition) each own a distinct, unrelated `EARS-4`. The forward
+ * COVERAGE + ORPHAN directions stay in a single global id keyspace on purpose:
+ * an `EARS-N` requirement declared in several specs (a cross-feature id, or a
+ * cross-reference the whole-doc scan picks up) is satisfied by any `EARS-N` test,
+ * exactly as before. Splitting forward-coverage per feature is not just noisier —
+ * it is **unsatisfiable** for the acceptance contract: 007's `EARS-4` is uncovered
+ * on `main` (its test ships later) yet covered on that later branch, so no single
+ * static deferral list could keep both green.
+ *
+ * The DEFERRAL allowlist, by contrast, IS spec-scoped — that is where the collision
+ * actually bites. A deferral key is `feature:id` (e.g. `003:EARS-4`); its coverage
+ * and staleness are resolved only against tests whose feature scope is COMPATIBLE
+ * with the deferral's feature. A test file's feature scope is any `NNN EARS-…`
+ * prefix in its `it`/`test`/`describe` titles (e.g. `describe("007 EARS-4 …")`
+ * scopes the whole file to 007), validated against the real feature-spec dirs so a
+ * stray `#222 EARS-13` Issue reference is not mistaken for a scope. A file with no
+ * such prefix is feature-agnostic. A deferral and a test file are scope-compatible
+ * when either side is agnostic or the file carries the deferral's feature — so a
+ * 007-scoped `EARS-4` test can neither satisfy nor stale-flag the 003 `EARS-4`
+ * deferral (the #612 defect), while a legacy bare (agnostic) deferral key still
+ * behaves globally as before.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * DEFERRAL ALLOWLIST (#437, spec-scoped #612)
  * ─────────────────────────────────────────────────────────────────────────────
  * A requirement whose real test genuinely cannot be added cheaply (needs a live
  * dependency, or an unbuilt future path) is an accepted, TRACKED deferral — NOT a
  * silent gap (AGENTS.md §6 "no untracked seam"). Each deferral is an entry in
- * `BUILTIN_DEFERRALS` mapping the EARS id to an OPEN tracking Issue + a reason;
- * the guard reports it as an `info:` line (referencing the Issue) instead of a
- * finding, so `main` runs clean while the obligation stays visible. If an
- * allowlisted id later becomes covered, the guard flags the entry as **stale**
- * (a finding) so the allowlist is pruned — the ratchet only tightens.
+ * `BUILTIN_DEFERRALS` mapping a spec-scoped `feature:id` key (e.g. `003:EARS-4`)
+ * to an OPEN tracking Issue + a reason; the guard reports it as an `info:` line
+ * (referencing the Issue) instead of a finding, so `main` runs clean while the
+ * obligation stays visible. If the deferred requirement later becomes covered by
+ * a scope-compatible test, the guard flags the entry as **stale** (a finding) so
+ * the allowlist is pruned — the ratchet only tightens. A legacy **bare** key
+ * (`EARS-4`, no `feature:` prefix) is still accepted and treated as agnostic.
  * The `LINT_EARS_DEFERRALS` env seam replaces this map for deterministic tests.
  *
  * ─────────────────────────────────────────────────────────────────────────────
@@ -83,6 +112,15 @@ const EARS_ID_RE = /\bEARS-\d+(?:\.\d+)*\b/g;
 const EARS_TOKEN_RE = /\bEARS-\d+(?:[./]\d+)*\b/g;
 // `it(` / `test(` / `describe(` title — the first string-literal argument.
 const TITLE_RE = /\b(?:it|test|describe)\s*\(\s*(['"`])([\s\S]*?)\1/g;
+// A test file's OWNING feature is declared by a title that STARTS with a
+// `NNN EARS-…` prefix (e.g. `describe.skipIf(cond)("007 EARS-4 publish …")`). The
+// leading-quote anchor (a) captures the title even under a chained `.skipIf(…)` /
+// `.each(…)` the generic TITLE_RE misses, and (b) ignores a mid-prose/comment
+// cross-reference like `(004 EARS-6)` which is not a title opener. See the
+// SPEC-SCOPED DEFERRALS header. Scanned over the whole file, not per-title.
+const FEATURE_SCOPE_RE = /['"`](\d{3})\s+EARS-\d/g;
+// The feature number `NNN` of a spec file lives in its `.../features/NNN-<slug>/…` path.
+const SPEC_FEATURE_RE = /specs\/features\/(\d+)-/;
 
 interface Deferral {
   issue: number;
@@ -102,7 +140,7 @@ interface Deferral {
  *   path lands with its own `EARS-4` test.
  */
 const BUILTIN_DEFERRALS: Record<string, Deferral> = {
-  'EARS-4': {
+  '003:EARS-4': {
     issue: 454,
     reason:
       'registration verify is email-only; the future secondary-phone verify path is unbuilt (needs live Zitadel)',
@@ -159,6 +197,18 @@ function matches(idA: string, idB: string): boolean {
   return isPrefix(a, b) || isPrefix(b, a);
 }
 
+/** The `NNN` feature number of a spec file, from its `.../features/NNN-<slug>/…` path. */
+function specFeature(relPath: string): string | null {
+  return relPath.replace(/\\/g, '/').match(SPEC_FEATURE_RE)?.[1] ?? null;
+}
+
+/** Parse a deferral allowlist key into `{ feature, id }` — bare `EARS-N` → agnostic. */
+function parseDeferralKey(key: string): { feature: string | null; id: string } {
+  const idx = key.indexOf(':');
+  if (idx === -1) return { feature: null, id: key };
+  return { feature: key.slice(0, idx), id: key.slice(idx + 1) };
+}
+
 /** EARS ids declared in a requirements spec (whole-doc scan — specs are prose). */
 async function extractSpecIds(file: string): Promise<Set<string>> {
   const ids = new Set<string>();
@@ -171,9 +221,16 @@ async function extractSpecIds(file: string): Promise<Set<string>> {
   return ids;
 }
 
-/** EARS ids cited in a test file's `it`/`test`/`describe` TITLES only. */
-async function extractTestIds(file: string): Promise<Set<string>> {
+/**
+ * EARS ids cited in a test file's `it`/`test`/`describe` TITLES, plus the file's
+ * feature scope — the set of `NNN` numbers whose title opens with a `NNN EARS-…`
+ * prefix (empty = feature-agnostic). The feature scan runs over the whole file so
+ * it also sees a `describe.skipIf(cond)("NNN EARS-… ")` header the per-title
+ * TITLE_RE cannot; the leading-quote anchor keeps comment cross-refs out.
+ */
+async function extractTest(file: string): Promise<{ ids: Set<string>; features: Set<string> }> {
   const ids = new Set<string>();
+  const features = new Set<string>();
   try {
     const text = await readFile(file, 'utf8');
     for (const title of text.matchAll(TITLE_RE)) {
@@ -181,10 +238,11 @@ async function extractTestIds(file: string): Promise<Set<string>> {
         for (const id of expandToken(tok[0])) ids.add(id);
       }
     }
+    for (const fm of text.matchAll(FEATURE_SCOPE_RE)) features.add(fm[1]);
   } catch (e) {
     warn(`could not read ${relative(REPO_ROOT, file)}: ${(e as Error).message.split('\n')[0]}`);
   }
-  return ids;
+  return { ids, features };
 }
 
 async function main(): Promise<void> {
@@ -201,12 +259,20 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  // specId → list of spec files where it appears
+  // Forward COVERAGE + ORPHAN stay in a single global id keyspace (see the
+  // SPEC-SCOPED DEFERRALS header for why per-feature forward-coverage is
+  // unsatisfiable here). `knownFeatures` is the set of real feature-spec dir
+  // numbers — a test-title `NNN` prefix only counts as a feature scope if it is
+  // one of these, so a stray `#222 EARS-13` Issue reference is not read as a scope.
   const specIds = new Map<string, string[]>();
+  const knownFeatures = new Set<string>();
   for (const f of specFiles) {
+    const rel = relative(REPO_ROOT, f);
+    const feature = specFeature(rel);
+    if (feature) knownFeatures.add(feature);
     for (const id of await extractSpecIds(f)) {
       const list = specIds.get(id) ?? [];
-      list.push(relative(REPO_ROOT, f));
+      list.push(rel);
       specIds.set(id, list);
     }
   }
@@ -232,12 +298,20 @@ async function main(): Promise<void> {
     },
   );
 
-  // testId → list of test files where it appears
+  // Per-file test entries: the ids cited in its titles + its validated feature
+  // scope (the `NNN EARS-…` title prefixes that name a real feature-spec dir).
+  // `testIds` (global id → files) drives the forward/orphan directions unchanged;
+  // the per-file feature scope is consulted ONLY by the spec-scoped deferral logic.
   const testIds = new Map<string, string[]>();
+  const testEntries: { rel: string; ids: Set<string>; features: Set<string> }[] = [];
   for (const f of testFiles) {
-    for (const id of await extractTestIds(f)) {
+    const rel = relative(REPO_ROOT, f);
+    const { ids, features } = await extractTest(f);
+    const scoped = new Set([...features].filter((n) => knownFeatures.has(n)));
+    testEntries.push({ rel, ids, features: scoped });
+    for (const id of ids) {
       const list = testIds.get(id) ?? [];
-      list.push(relative(REPO_ROOT, f));
+      list.push(rel);
       testIds.set(id, list);
     }
   }
@@ -245,41 +319,62 @@ async function main(): Promise<void> {
 
   const testIdList = [...testIds.keys()];
   const specIdList = [...specIds.keys()];
-  const deferrals = loadDeferrals();
+  const deferralList = Object.entries(loadDeferrals()).map(([key, d]) => {
+    const { feature, id } = parseDeferralKey(key);
+    // `label` = the scoped `feature:id` key, or the bare id for a legacy agnostic entry.
+    return { feature, id, label: feature ? key : id, ...d };
+  });
 
-  /** Some test id fold-matches this spec id (covered). */
-  const isCovered = (specId: string): boolean =>
-    testIdList.some((t) => matches(specId, t));
-  /** Some spec id fold-matches this test id (declared → not an orphan). */
-  const isDeclared = (testId: string): boolean =>
-    specIdList.some((s) => matches(testId, s));
+  /** Some test id fold-matches this spec id (covered — global keyspace). */
+  const isCovered = (specId: string): boolean => testIdList.some((t) => matches(specId, t));
+  /** Some spec id fold-matches this test id (declared → not an orphan — global keyspace). */
+  const isDeclared = (testId: string): boolean => specIdList.some((s) => matches(testId, s));
+  /**
+   * A deferral is "really covered" when some test whose FILE scope is compatible
+   * with the deferral's feature fold-matches the deferred id. A file is compatible
+   * when the deferral is agnostic, the file is agnostic (no scope), or the file
+   * carries the deferral's feature. So a 007-scoped test never covers `003:EARS-4`.
+   */
+  const deferralCovered = (feature: string | null, id: string): boolean =>
+    testEntries.some(
+      (e) =>
+        (feature === null || e.features.size === 0 || e.features.has(feature)) &&
+        [...e.ids].some((tid) => matches(id, tid)),
+    );
 
   let findings = 0;
 
-  // Forward: declared in a spec, cited (foldably) by no test title.
+  // Forward: declared in a spec, cited (foldably) by no test title. A deferred id is
+  // resolved scope-aware — a scope-incompatible test (e.g. 007's EARS-4) does not
+  // satisfy the 003 deferral, so its `info:` line still prints and the obligation
+  // stays visible even while another spec's same-numbered id is genuinely covered.
   for (const [id, specs] of specIds) {
-    if (isCovered(id)) continue;
-    const deferral = deferrals[id];
+    const deferral = deferralList.find((d) => d.id === id);
     if (deferral) {
-      info(`deferred: ${id} uncovered — tracked in #${deferral.issue} (${deferral.reason})`);
+      // Covered-by-compatible-test is handled by the stale loop below; either way
+      // this is not an uncovered finding.
+      if (!deferralCovered(deferral.feature, id)) {
+        info(`deferred: ${deferral.label} uncovered — tracked in #${deferral.issue} (${deferral.reason})`);
+      }
       continue;
     }
+    if (isCovered(id)) continue;
     warn(`${id} declared in ${specs.join(', ')} but no test title references it`);
     findings++;
   }
 
-  // Stale allowlist: an id is deferred yet actually covered → prune it.
-  for (const id of Object.keys(deferrals)) {
-    if (isCovered(id)) {
+  // Stale allowlist: a deferred id is now covered by a scope-compatible test → prune it.
+  for (const d of deferralList) {
+    if (deferralCovered(d.feature, d.id)) {
       warn(
-        `stale deferral: ${id} is now covered by a test — remove it from the ` +
-          `ears-test-lint allowlist (#${deferrals[id].issue})`,
+        `stale deferral: ${d.label} is now covered by a test — remove it from the ` +
+          `ears-test-lint allowlist (#${d.issue})`,
       );
       findings++;
     }
   }
 
-  // Backward: cited in a test title, declared (foldably) by no spec (orphan).
+  // Backward: cited in a test title, declared (foldably) by no spec (orphan — global).
   for (const [id, tests] of testIds) {
     if (!isDeclared(id)) {
       warn(`Orphan EARS reference ${id} in test(s) ${tests.join(', ')} (not declared in any spec)`);

@@ -19,6 +19,13 @@ import { caseDir, runGuard } from "./run-guard";
  *   - sibling-gap      : a sibling nested id (EARS-3.1) does NOT cover EARS-3.2.
  *   - cross-number     : EARS-1 and EARS-18 never fold (component-wise prefix).
  *   - deferred/stale   : the allowlist mechanism (accept + stale-detection).
+ *
+ * Spec-scoping (#612 — EARS ids are unique only WITHIN a feature-spec, ADR-0006
+ * §4). Coverage, orphan-detection, and the deferral allowlist are all keyed by
+ * `feature:id`, and a test file inherits a feature scope from any `NNN EARS-…`
+ * prefix in its titles (absent → feature-agnostic, the legacy default):
+ *   - cross-spec-collision : a 007-scoped `EARS-4` test neither covers nor stales
+ *     003's separately-numbered `EARS-4` deferral.
  */
 const GUARD = "ears-test-lint.ts";
 const dir = (name: string) => caseDir("ears-test", name);
@@ -100,5 +107,42 @@ describe("ears-test-lint", () => {
     expect(code).toBe(1);
     expect(stdout).toContain("stale");
     expect(stdout).toContain("EARS-7");
+  });
+
+  // #612 — a 007-scoped `EARS-4` test must neither satisfy nor stale-flag the
+  // 003-scoped `EARS-4` deferral (the two features own unrelated EARS-4s). The
+  // deferral's `info:` line still prints and no stale finding fires.
+  it("cross-spec-collision: 003:EARS-4 deferral is honored and NOT staled by a 007 EARS-4 test → exit 0", () => {
+    const { code, stdout } = runGuard(GUARD, dir("cross-spec-collision"), {
+      env: {
+        LINT_EARS_DEFERRALS: JSON.stringify({
+          "003:EARS-4": { issue: 454, reason: "scoped fixture deferral" },
+        }),
+      },
+    });
+    expect(code).toBe(0);
+    expect(stdout).toContain("deferred");
+    expect(stdout).toContain("003:EARS-4");
+    expect(stdout).toContain("#454");
+    // The 007 test is scope-incompatible with 003 → it must not stale the deferral.
+    expect(stdout).not.toContain("stale");
+    // The 007 EARS-4 test is declared in 007's spec → not an orphan.
+    expect(stdout).toContain("no orphans");
+  });
+
+  // #612 — the scoped-key staleness path still fires when a SCOPE-COMPATIBLE test
+  // covers the deferred id (here an agnostic EARS-7 test against a `003:EARS-7`
+  // deferral). Proves the ratchet still tightens under the scoped keyspace.
+  it("scoped stale-deferral: a 003:EARS-7 deferral covered by a compatible test → stale finding, exit 1", () => {
+    const { code, stdout } = runGuard(GUARD, dir("stale-deferral"), {
+      env: {
+        LINT_EARS_DEFERRALS: JSON.stringify({
+          "003:EARS-7": { issue: 999, reason: "scoped fixture deferral" },
+        }),
+      },
+    });
+    expect(code).toBe(1);
+    expect(stdout).toContain("stale");
+    expect(stdout).toContain("003:EARS-7");
   });
 });

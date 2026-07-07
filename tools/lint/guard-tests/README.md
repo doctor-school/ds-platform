@@ -88,6 +88,13 @@ plus the slug/prefix/path derivation of
 task:worktree`). Same entry-point-guard discipline — the import fires no
 `git`/`gh` subprocess.
 
+`worktree-teardown.spec.ts` unit-covers the pure `resolveWorktreePath()` of
+[`tools/dev/worktree-teardown.mjs`](../../dev/worktree-teardown.mjs) (`pnpm
+worktree:teardown`, #598): a bare name resolves against the primary tree's
+`.claude/worktrees/<name>` (mirroring `task:worktree`), while explicit
+absolute/relative paths are honored as-given, with `root`/`exists` injected so
+no `git` subprocess or real filesystem is touched.
+
 **`endpoint-authz` is covered in `apps/api`, not here.** It boots Nest (needs
 `@nestjs/*`, runs in the `api-e2e` job), so the Nest-boot strategy lives where
 the dependency does:

@@ -14,8 +14,17 @@
 // into). On non-Windows the long-path dance is a no-op — plain remove suffices.
 //
 // Usage:
-//   node tools/dev/worktree-teardown.mjs <worktree-path> [--keep-branch] [--branch <name>]
-//   pnpm worktree:teardown <worktree-path>                # alias
+//   node tools/dev/worktree-teardown.mjs <worktree|path> [--keep-branch] [--branch <name>]
+//   pnpm worktree:teardown 598                            # bare name → .claude/worktrees/598
+//   pnpm worktree:teardown spec-006                       # bare slug → .claude/worktrees/spec-006
+//   pnpm worktree:teardown .claude/worktrees/598          # explicit path (still works)
+//
+// The argument mirrors `task:worktree` name-resolution (#598): a BARE name (no
+// path separator) resolves against the PRIMARY tree's `.claude/worktrees/<name>`
+// — so a teardown fired from INSIDE another worktree targets the right tree, not
+// the current cwd. An explicit path (absolute or with a separator) is honored
+// as-given, and a bare name with nothing under `.claude/worktrees/` also falls
+// back to path-as-given.
 //
 // What it does, in order:
 //   1. resolve the worktree's branch from `git worktree list --porcelain`,
@@ -33,7 +42,8 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve, win32 } from "node:path";
+import { dirname, isAbsolute, join, resolve, win32 } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const IS_WIN = process.platform === "win32";
 
@@ -62,6 +72,39 @@ function run(cmd, args) {
 /** Normalize a path for cross-tool comparison (lowercase, forward slashes). */
 const norm = (p) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 
+/**
+ * The primary working tree's root, even when invoked from inside a linked
+ * worktree (mirrors task-worktree.mjs). Returns null if not resolvable (not a
+ * git repo) — bare-name resolution then falls back to path-as-given.
+ */
+function mainRepoRoot() {
+  const res = run("git", ["rev-parse", "--git-common-dir"]);
+  if (res.status !== 0) return null;
+  // --git-common-dir → "<root>/.git" — resolve against cwd, root is its parent.
+  return dirname(resolve(res.stdout.trim()));
+}
+
+/**
+ * Resolve the teardown argument to an absolute worktree path, mirroring
+ * `task:worktree` name-resolution (#598). A BARE name (no path separator, not
+ * absolute) resolves against the PRIMARY tree's `.claude/worktrees/<name>`, so
+ * `pnpm worktree:teardown <slug>` fired from inside another worktree targets the
+ * right tree rather than the current cwd. An explicit path (absolute or
+ * containing a separator) is honored as-given, and a bare name with nothing
+ * under `.claude/worktrees/` also falls back to path-as-given.
+ *
+ * Pure + injectable (`root`, `exists`) so the guard-test harness can drive it
+ * without a git subprocess or a real filesystem.
+ */
+export function resolveWorktreePath(rawArg, root, exists = existsSync) {
+  if (isAbsolute(rawArg) || /[\\/]/.test(rawArg)) return resolve(rawArg);
+  if (root) {
+    const candidate = join(root, ".claude", "worktrees", rawArg);
+    if (exists(candidate)) return candidate;
+  }
+  return resolve(rawArg);
+}
+
 /** Find the branch checked out in the worktree at `absPath`, or null (detached). */
 function resolveWorktreeBranch(absPath) {
   const res = run("git", ["worktree", "list", "--porcelain"]);
@@ -89,7 +132,17 @@ function purgeDirWindows(absPath) {
   // robocopy exit codes < 8 are success-ish (1/2/3 = copied/extra/mismatch).
   const empty = mkdtempSync(join(tmpdir(), "wt-empty-"));
   try {
-    run("robocopy", [empty, winPath, "/MIR", "/NFL", "/NDL", "/NJH", "/NJS", "/NC", "/NS"]);
+    run("robocopy", [
+      empty,
+      winPath,
+      "/MIR",
+      "/NFL",
+      "/NDL",
+      "/NJH",
+      "/NJS",
+      "/NC",
+      "/NS",
+    ]);
     run("cmd", ["/c", "rmdir", "/s", "/q", longPath]);
   } finally {
     rmSync(empty, { recursive: true, force: true });
@@ -120,7 +173,8 @@ function cleanupBranch(branch) {
   if (merged.status === 0) {
     const res = run("git", ["branch", "-d", branch]);
     if (res.status === 0) out(`deleted merged branch '${branch}'.`);
-    else warn(`could not delete merged branch '${branch}': ${res.stderr.trim()}`);
+    else
+      warn(`could not delete merged branch '${branch}': ${res.stderr.trim()}`);
   } else {
     warn(
       `branch '${branch}' is not merged into main — kept (delete by hand if intended, or pass --branch to override).`,
@@ -136,17 +190,18 @@ function main() {
   for (let i = 0; i < args.length; i += 1) {
     const a = args[i];
     if (a === "--keep-branch") keepBranch = true;
-    else if (a === "--branch") branchOverride = args[(i += 1)]; // consume the value
+    else if (a === "--branch")
+      branchOverride = args[(i += 1)]; // consume the value
     else if (a.startsWith("--")) die(`unknown flag '${a}'`);
     else positional.push(a);
   }
 
   if (positional.length !== 1) {
     die(
-      "Usage: node tools/dev/worktree-teardown.mjs <worktree-path> [--keep-branch] [--branch <name>]",
+      "Usage: node tools/dev/worktree-teardown.mjs <worktree|path> [--keep-branch] [--branch <name>]",
     );
   }
-  const absPath = resolve(positional[0]);
+  const absPath = resolveWorktreePath(positional[0], mainRepoRoot());
 
   // 1. Capture the branch before removal deregisters the worktree.
   const branch = branchOverride ?? resolveWorktreeBranch(absPath);
@@ -160,15 +215,23 @@ function main() {
       `git deregistered worktree '${absPath}' (FS delete hit the long-path limit — purging below).`,
     );
   } else if (/is not a working tree|No such/i.test(removed.stderr)) {
-    warn(`'${absPath}' is not a registered worktree — purging any orphan dir anyway.`);
+    warn(
+      `'${absPath}' is not a registered worktree — purging any orphan dir anyway.`,
+    );
   } else if (removed.status !== 0) {
-    warn(`git worktree remove returned ${removed.status}: ${removed.stderr.trim()}`);
+    warn(
+      `git worktree remove returned ${removed.status}: ${removed.stderr.trim()}`,
+    );
   }
 
   // 3. Purge any orphan directory left on disk.
   if (existsSync(absPath)) {
     if (purgeDir(absPath)) out(`purged orphan directory '${absPath}'.`);
-    else die(`could not remove orphan directory '${absPath}' — remove by hand.`, 1);
+    else
+      die(
+        `could not remove orphan directory '${absPath}' — remove by hand.`,
+        1,
+      );
   } else {
     out("no orphan directory left on disk.");
   }
@@ -178,11 +241,19 @@ function main() {
   out("git worktree prune done.");
 
   // 5. Branch cleanup.
-  if (keepBranch) out(`--keep-branch: leaving branch '${branch ?? "(detached)"}' in place.`);
+  if (keepBranch)
+    out(`--keep-branch: leaving branch '${branch ?? "(detached)"}' in place.`);
   else cleanupBranch(branch);
 
   out(`teardown complete for '${absPath}'.`);
   process.exit(0);
 }
 
-main();
+// Run only as the entry point — the IS_ENTRY guard keeps `resolveWorktreePath`
+// importable from the guard-test harness without firing `main()` / its
+// git + filesystem side effects (mirrors task-worktree.mjs).
+const INVOKED = process.argv[1] ? resolve(process.argv[1]) : "";
+const SELF = resolve(fileURLToPath(import.meta.url));
+if (INVOKED === SELF) {
+  main();
+}

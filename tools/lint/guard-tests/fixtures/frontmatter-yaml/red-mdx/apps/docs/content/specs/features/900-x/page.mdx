@@ -1,0 +1,10 @@
+---
+title: Malformed frontmatter in an MDX page
+prior_decisions:
+  - ADR-0001 — unquoted entry with `access: authenticated`, `required_roles: admin` inside
+---
+
+# MDX body
+
+Fumadocs compiles `.mdx` too — a malformed frontmatter block here breaks the
+docs build exactly like the `.md` case.

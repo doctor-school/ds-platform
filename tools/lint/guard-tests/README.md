@@ -48,8 +48,9 @@ Covered here (FS / gh / memory seams): `interaction-states`, `form-error`,
 `glossary-roundtrip`, `frontmatter-yaml`.
 
 `frontmatter-yaml` (#597) is a FS-scan guard that parses every
-`apps/docs/content/**/*.md` frontmatter block with **gray-matter** (the fumadocs
-engine, js-yaml under the hood) and fails with a `<file>:<line>` message on a
+`apps/docs/content/**/*.{md,mdx}` frontmatter block with **gray-matter**
+(js-yaml under the hood — faithful for the malformed-frontmatter class
+`docs-build` fails on) and fails with a `<file>:<line>` message on a
 malformed block — the #596 class, where an unquoted `: ` inside a list entry
 parses as a nested mapping and breaks the docs build. It is wired into
 `pnpm pr:preflight --static` as the LOCAL pre-push mirror of the `docs-build` CI

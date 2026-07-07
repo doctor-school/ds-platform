@@ -13,10 +13,12 @@
  * (`docs-build` / `build` / `ci` all went red on #596), never at the keyboard.
  *
  * ── The rule (exact) ──────────────────────────────────────────────────────────
- * Every `apps/docs/content/** /*.md` file must have a frontmatter block that
- * parses as valid YAML. The guard parses each file with **gray-matter** — the
- * SAME frontmatter engine fumadocs uses (js-yaml under the hood) — so it bites on
- * exactly the class that breaks the build, no more and no less. A file whose
+ * Every `apps/docs/content/** /*.{md,mdx}` file (fumadocs compiles both) must
+ * have a frontmatter block that parses as valid YAML. The guard parses each file
+ * with **gray-matter** (js-yaml under the hood) — faithful for the
+ * malformed-frontmatter class `docs-build` fails on (fumadocs runs its own
+ * parser, so exotic edge-case divergence is possible, but a YAML block that
+ * throws here throws there too). A file whose
  * frontmatter YAML throws FAILS with a `<file>:<line>` message (the line is the
  * offending frontmatter line, so a developer can jump straight to it). A file
  * with no frontmatter block, or a well-formed one, passes.
@@ -68,7 +70,7 @@ function fileLine(err: YamlException): number | null {
 }
 
 async function main(): Promise<void> {
-  const files = await fg("apps/docs/content/**/*.md", {
+  const files = await fg("apps/docs/content/**/*.{md,mdx}", {
     cwd: REPO_ROOT,
     ignore: ["**/node_modules/**"],
   });

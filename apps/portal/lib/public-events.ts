@@ -1,4 +1,4 @@
-import type { PublicEventPage } from "@ds/schemas";
+import type { PublicEventPage, UpcomingBroadcastCard } from "@ds/schemas";
 
 /**
  * Server-side reader for the 004 public event-page projection (EARS-1). The
@@ -34,4 +34,26 @@ export async function fetchPublicEventPage(
     throw new Error(`public event page fetch failed (${res.status})`);
   }
   return (await res.json()) as PublicEventPage;
+}
+
+/**
+ * Fetch the upcoming-broadcasts listing (004 EARS-7) — the `UpcomingBroadcastCard[]`
+ * projection ordered nearest air date first. Public + cacheable like the event
+ * page; a `[]` is a valid result (the listing renders the empty-state, EARS-11).
+ * Same env-driven upstream, no cookie — the body carries no per-session variation.
+ */
+export async function fetchUpcomingBroadcasts(): Promise<
+  UpcomingBroadcastCard[]
+> {
+  const res = await fetch(`${API_BASE}/v1/public/events?upcoming`, {
+    headers: { accept: "application/json" },
+    // Mirror the endpoint's short Cache-Control so a lifecycle transition
+    // (published→live→ended) surfaces on the SSR listing within the window
+    // (004 design §4).
+    next: { revalidate: 30 },
+  });
+  if (!res.ok) {
+    throw new Error(`upcoming broadcasts fetch failed (${res.status})`);
+  }
+  return (await res.json()) as UpcomingBroadcastCard[];
 }

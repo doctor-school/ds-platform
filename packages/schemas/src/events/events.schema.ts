@@ -261,3 +261,58 @@ export const PublicEventPageSchema = z.object({
   state: PublicEventStateSchema,
 });
 export type PublicEventPage = z.infer<typeof PublicEventPageSchema>;
+
+/**
+ * The two lifecycle states an event may carry on the upcoming listing (004
+ * design §3, §4, EARS-7). Only a `published` or a currently-airing `live` event
+ * is listed — `ended`/`archived` drop from the listing (EARS-9) and `draft` is
+ * never public. A card whose event has left these two states is dropped on the
+ * next read, so the card's `state` is a closed two-value subset, not the full
+ * public-page enum.
+ */
+export const UPCOMING_BROADCAST_STATES = ["published", "live"] as const;
+export const UpcomingBroadcastStateSchema = z.enum(UPCOMING_BROADCAST_STATES);
+export type UpcomingBroadcastState = z.infer<typeof UpcomingBroadcastStateSchema>;
+
+/**
+ * A card speaker (004 design §3) — display `name` only. The listing card's
+ * choose-set is deliberately thinner than the event page's: no `credentials`, no
+ * contact detail, no PII. The write model's `regalia` is not projected onto the
+ * card at all.
+ */
+export const UpcomingBroadcastSpeakerSchema = z.object({
+  name: z.string(),
+});
+export type UpcomingBroadcastSpeaker = z.infer<
+  typeof UpcomingBroadcastSpeakerSchema
+>;
+
+/**
+ * `UpcomingBroadcastCard` — the publish-safe projection returned by
+ * `GET /v1/public/events?upcoming` (004 design §3, §4, EARS-7). A THINNER
+ * allow-list than {@link PublicEventPageSchema}: only the card choose-set (EARS-8)
+ * — `id, slug, title, school, startsAt, specialties[], speakers[]{name}, state` —
+ * with **no** description, partners, program PDF, duration, or any
+ * operator/commercial field or registrant PII (the structural half of EARS-10).
+ * Like the event-page projection it is an allow-list, not a redactor: a new
+ * internal column stays invisible on the card until explicitly added here.
+ *
+ * `startsAt` is the canonical UTC instant (ISO-8601); every surface renders it in
+ * `Europe/Moscow` labeled МСК (EARS-12). Cards are returned ordered nearest air
+ * date first (`starts_at ASC`); an empty result is a valid `[]` (EARS-11).
+ */
+export const UpcomingBroadcastCardSchema = z.object({
+  id: z.uuid(),
+  slug: z.string(),
+  title: z.string(),
+  school: z.string(),
+  startsAt: z.iso.datetime({ offset: true }),
+  specialties: z.array(z.string()),
+  speakers: z.array(UpcomingBroadcastSpeakerSchema),
+  state: UpcomingBroadcastStateSchema,
+});
+export type UpcomingBroadcastCard = z.infer<typeof UpcomingBroadcastCardSchema>;
+
+/** The listing endpoint returns a bare array (an empty result is a valid `[]`, EARS-11). */
+export const UpcomingBroadcastListSchema = z.array(UpcomingBroadcastCardSchema);
+export type UpcomingBroadcastList = z.infer<typeof UpcomingBroadcastListSchema>;

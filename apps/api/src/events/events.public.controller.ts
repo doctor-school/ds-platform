@@ -5,7 +5,7 @@ import {
   NotFoundException,
   Param,
 } from "@nestjs/common";
-import type { PublicEventPage } from "@ds/schemas";
+import type { PublicEventPage, UpcomingBroadcastCard } from "@ds/schemas";
 import { Authz, Public } from "../authz/index.js";
 import { EventsService } from "./events.service.js";
 
@@ -24,12 +24,38 @@ import { EventsService } from "./events.service.js";
  * 404; `published`/`live`/`ended`/`archived` → 200 (an archived link degrades to
  * a public notice body, never a dead 404 — EARS-5). Event authoring and the
  * lifecycle transitions that move the state are feature 007; 004 reads the state
- * they leave (seam → parent #549). The upcoming-broadcasts listing endpoint is
- * the sibling handler EARS-7 (out of this iteration's scope).
+ * they leave (seam → parent #549).
+ *
+ * Two routes: the single event page (`GET /v1/public/events/:idOrSlug`, EARS-1)
+ * and the upcoming-broadcasts listing (`GET /v1/public/events`, EARS-7) — the
+ * portal's `/webinars` listing reads the latter. Both are classified public with
+ * the identical publish-safe posture (EARS-10).
  */
 @Controller({ path: "public/events", version: "1" })
 export class EventsPublicController {
   constructor(private readonly events: EventsService) {}
+
+  /**
+   * 004 EARS-7 — the upcoming-broadcasts listing (`GET /v1/public/events`, the
+   * `?upcoming` selector). Returns the `UpcomingBroadcastCard[]` projection —
+   * `published`/`live` events at or after the air-window cutoff, ordered nearest
+   * air date first. Wave-1 ships only this listing (no facets / paging / month /
+   * search — named out-of-scope). Public + cacheable like the event page; an
+   * empty result is a valid `200 []` (the portal renders the empty-state,
+   * EARS-11). Placed before `:idOrSlug` so the bare-path listing is unambiguous.
+   */
+  @Get()
+  @Public()
+  @Header("Cache-Control", "public, max-age=30")
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "none",
+    tests: ["EARS-7", "EARS-10"],
+  })
+  listUpcoming(): Promise<UpcomingBroadcastCard[]> {
+    return this.events.listUpcoming();
+  }
 
   @Get(":idOrSlug")
   @Public()

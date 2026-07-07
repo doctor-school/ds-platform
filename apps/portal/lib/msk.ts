@@ -30,3 +30,36 @@ export function formatMskParts(isoInstant: string): MskParts {
   }).format(instant);
   return { date, time };
 }
+
+/**
+ * A stable calendar-day key (`YYYY-MM-DD`) for the instant **in Europe/Moscow**
+ * — the grouping key for the day-grouped listing (004 EARS-7, design §5.2). Two
+ * events on the same МСК day share this key regardless of the server's/browser's
+ * timezone, so the day grouping never drifts (EARS-12). `en-CA` yields the
+ * ISO-ordered `YYYY-MM-DD` form directly.
+ */
+const MSK_DAY_KEY = new Intl.DateTimeFormat("en-CA", {
+  timeZone: MSK_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+export function mskDayKey(isoInstant: string): string {
+  return MSK_DAY_KEY.format(new Date(isoInstant));
+}
+
+/**
+ * The day-header label for a listing group — `«16 июля, среда»` (date first,
+ * weekday after), matching the §09 canvas rhythm. Computed in Europe/Moscow so
+ * the grouping label agrees with {@link mskDayKey}.
+ */
+const MSK_WEEKDAY = new Intl.DateTimeFormat("ru-RU", {
+  timeZone: MSK_TIME_ZONE,
+  weekday: "long",
+});
+
+export function formatMskDayLabel(isoInstant: string): string {
+  const { date } = formatMskParts(isoInstant);
+  return `${date}, ${MSK_WEEKDAY.format(new Date(isoInstant))}`;
+}

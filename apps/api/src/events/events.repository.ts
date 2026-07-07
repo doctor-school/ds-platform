@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { DrizzleHandle, Event, NewEvent, NewEventSpeaker } from "@ds/db";
 import { eventSpeakers, events } from "@ds/db";
-import { asc, desc, eq, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, or } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 
 /** Canonical UUID v-agnostic shape — used to decide whether `:idOrSlug` can match the uuid `id` column. */
@@ -50,6 +50,47 @@ export class EventsRepository {
 
   async listAll(): Promise<Event[]> {
     return this.db.select().from(events).orderBy(desc(events.createdAt));
+  }
+
+  /**
+   * 004 EARS-7 — the upcoming-broadcasts read. Returns every `published` or
+   * `live` event whose `starts_at` is at or after `cutoff` (`now − airWindow`, so
+   * a recently-started live event still lists), ordered NEAREST air date first
+   * (`starts_at ASC`). The state filter is applied in SQL — an `ended`/`archived`
+   * event drops from the listing by state, never by time. Speaker rows for the
+   * matched events are read in one batched query (no N+1) and grouped back by
+   * event in `position` order. An empty match is a valid empty list (EARS-11).
+   */
+  async listUpcoming(cutoff: Date): Promise<EventWithSpeakers[]> {
+    const rows = await this.db
+      .select()
+      .from(events)
+      .where(
+        and(
+          inArray(events.state, ["published", "live"]),
+          gte(events.startsAt, cutoff),
+        ),
+      )
+      .orderBy(asc(events.startsAt));
+    if (rows.length === 0) return [];
+
+    const ids = rows.map((r) => r.id);
+    const speakerRows = await this.db
+      .select()
+      .from(eventSpeakers)
+      .where(inArray(eventSpeakers.eventId, ids))
+      .orderBy(asc(eventSpeakers.position));
+
+    const byEvent = new Map<string, EventWithSpeakers["speakers"]>();
+    for (const s of speakerRows) {
+      const list = byEvent.get(s.eventId) ?? [];
+      list.push({ name: s.name, regalia: s.regalia, position: s.position });
+      byEvent.set(s.eventId, list);
+    }
+    return rows.map((event) => ({
+      event,
+      speakers: byEvent.get(event.id) ?? [],
+    }));
   }
 
   /**

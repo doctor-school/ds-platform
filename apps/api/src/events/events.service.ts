@@ -10,6 +10,8 @@ import {
   mskLocalToInstant,
   type PublicEventPage,
   type PublicEventState,
+  type UpcomingBroadcastCard,
+  type UpcomingBroadcastState,
   validTransitions,
 } from "@ds/schemas";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/index.js";
@@ -17,6 +19,19 @@ import {
   type EventWithSpeakers,
   EventsRepository,
 } from "./events.repository.js";
+
+/**
+ * The upcoming-listing air window (004 EARS-7). An event is "currently airing or
+ * still to come" when `starts_at ≥ now − AIR_WINDOW_MS` — the grace behind the
+ * event's start that keeps a `live` broadcast (whose start instant is already in
+ * the past) on the listing until it is transitioned to `ended` by feature 007.
+ * A fixed constant, not the per-event duration: the design filters on
+ * `starts_at ≥ now() − airWindow` (design §4), and the lifecycle state (not the
+ * clock) is what removes an event when it ends. Six hours generously bounds the
+ * longest realistic broadcast so a genuinely current live event never falls off
+ * before 007 ends it, while a long-past not-yet-ended event still ages out.
+ */
+export const AIR_WINDOW_MS = 6 * 60 * 60 * 1000;
 
 /** A program PDF extracted from the multipart request. */
 export interface UploadedPdf {
@@ -183,6 +198,39 @@ export class EventsService {
     const state = found.event.state as EventLifecycleState;
     if (state === "draft") return null;
     return this.toPublicPage(found, state);
+  }
+
+  /**
+   * 004 EARS-7 — the upcoming-broadcasts listing. Returns the thin
+   * {@link UpcomingBroadcastCard} projection for every `published`/`live` event
+   * at or after the air-window cutoff (`now − {@link AIR_WINDOW_MS}`), ordered
+   * nearest air date first. An empty result is a valid `[]` (the portal renders
+   * the empty-state, EARS-11). `now` is injectable for deterministic tests.
+   */
+  async listUpcoming(now: Date = new Date()): Promise<UpcomingBroadcastCard[]> {
+    const cutoff = new Date(now.getTime() - AIR_WINDOW_MS);
+    const rows = await this.repo.listUpcoming(cutoff);
+    return rows.map((r) => this.toUpcomingCard(r));
+  }
+
+  private toUpcomingCard(a: EventWithSpeakers): UpcomingBroadcastCard {
+    const e = a.event;
+    return {
+      id: e.id,
+      slug: e.slug,
+      title: e.title,
+      school: e.school,
+      startsAt: e.startsAt.toISOString(),
+      specialties: e.specialties,
+      // Card speakers are name-only — no `regalia`/credentials cross onto the
+      // listing (thinner than the event page, EARS-10).
+      speakers: a.speakers
+        .slice()
+        .sort((x, y) => x.position - y.position)
+        .map((s) => ({ name: s.name })),
+      // The repo filters to published/live, so the residual is the card subset.
+      state: e.state as UpcomingBroadcastState,
+    };
   }
 
   private toPublicPage(

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
-import type { Event } from "@ds/db";
+import type { Event, NewEvent } from "@ds/db";
 import {
   canTransition,
   type ConfigureStreamRequest,
@@ -13,6 +13,7 @@ import {
   type PublicEventState,
   type UpcomingBroadcastCard,
   type UpcomingBroadcastState,
+  type UpdateEventRequest,
   validTransitions,
 } from "@ds/schemas";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/index.js";
@@ -118,6 +119,35 @@ export class StreamNotConfigurableError extends Error {
   }
 }
 
+/**
+ * The lifecycle states in which an event's authored fields may be edited (EARS-2,
+ * requirements Scope). Editing is a **pre-archive** action — `draft` / `published`
+ * / `live` / `ended` are all editable (the operator corrects a detail without any
+ * state reversal — there is no unpublish, EARS-7). An `archived` event has left
+ * every public surface and is terminal, so it is not editable. Kept as the
+ * complement of the single terminal state so the window can never silently widen.
+ */
+export const EVENT_EDITABLE_STATES: readonly EventLifecycleState[] = [
+  "draft",
+  "published",
+  "live",
+  "ended",
+];
+
+/**
+ * The EARS-2 refusal: `UpdateEvent` was called on an `archived` event, outside
+ * the pre-archive edit window ({@link EVENT_EDITABLE_STATES}). HTTP-agnostic —
+ * the controller maps it to a 409 state conflict — so the rule stays a pure
+ * domain rule. `state` is the offending current state; the aggregate is untouched
+ * and no program PDF is replaced.
+ */
+export class EventNotEditableError extends Error {
+  constructor(readonly state: EventLifecycleState) {
+    super(`event is not editable while ${state}`);
+    this.name = "EventNotEditableError";
+  }
+}
+
 /** Slugify a (possibly non-ASCII) title into a URL-safe, collision-resistant handle. */
 function slugify(title: string): string {
   const ascii = title
@@ -165,16 +195,7 @@ export class EventsService {
   ): Promise<EventAdminDetail> {
     const slug = slugify(input.title);
 
-    let programPdfRef: string | null = null;
-    if (pdf) {
-      const key = `events/programs/${slug}/${Date.now()}-${safeName(pdf.filename)}`;
-      const stored = await this.storage.put({
-        key,
-        body: pdf.body,
-        contentType: pdf.contentType,
-      });
-      programPdfRef = stored.key;
-    }
+    const programPdfRef = pdf ? await this.storeProgramPdf(slug, pdf) : null;
 
     const aggregate = await this.repo.insert(
       {
@@ -197,6 +218,94 @@ export class EventsService {
     );
 
     return this.toDetail(aggregate);
+  }
+
+  /**
+   * Upload a program PDF to object storage under a fresh, event-scoped key and
+   * return the stored reference. A **new** key per upload (title slug + a
+   * monotonic timestamp) means a replacement (EARS-2) never overwrites the
+   * superseded object in place — the aggregate simply points at the new key, so
+   * the 004 page serves the current file while the prior bytes stay addressable
+   * for audit but are no longer served.
+   */
+  private async storeProgramPdf(
+    slug: string,
+    pdf: UploadedPdf,
+  ): Promise<string> {
+    const key = `events/programs/${slug}/${Date.now()}-${safeName(pdf.filename)}`;
+    const stored = await this.storage.put({
+      key,
+      body: pdf.body,
+      contentType: pdf.contentType,
+    });
+    return stored.key;
+  }
+
+  /**
+   * EARS-2 — `UpdateEvent`: edit an event's authored fields at any **pre-archive**
+   * state and, when a replacement `programPdf` rides the request, supersede the
+   * stored object reference so the 004 public page serves the **current** file and
+   * the superseded file is no longer served. The operator never has to unpublish
+   * to correct a detail — an edit is not a state reversal (the lifecycle `state`
+   * is untouched here; it moves only through the guarded transition commands,
+   * EARS-7). An edit to an `archived` event is refused with
+   * {@link EventNotEditableError} ({@link EVENT_EDITABLE_STATES}) — the aggregate
+   * is untouched and no PDF is replaced. Only the fields present in `input` are
+   * overwritten (an omitted key leaves that field; `partnerRef: null` explicitly
+   * clears it); a present `speakers` list replaces the stored ordered list
+   * wholesale. The МСК re-entry is re-folded into one canonical instant, the
+   * single SSOT conversion ({@link mskLocalToInstant}).
+   *
+   * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
+   */
+  async update(
+    id: string,
+    input: UpdateEventRequest,
+    pdf?: UploadedPdf,
+  ): Promise<EventAdminDetail | null> {
+    const current = await this.repo.findById(id);
+    if (!current) return null;
+
+    const state = current.event.state as EventLifecycleState;
+    if (!EVENT_EDITABLE_STATES.includes(state)) {
+      throw new EventNotEditableError(state);
+    }
+
+    const patch: Partial<
+      Pick<
+        NewEvent,
+        | "title"
+        | "school"
+        | "startsAt"
+        | "durationMin"
+        | "description"
+        | "specialties"
+        | "partnerRef"
+        | "programPdfRef"
+      >
+    > = {};
+    if (input.title !== undefined) patch.title = input.title;
+    if (input.school !== undefined) patch.school = input.school;
+    if (input.startsAtMsk !== undefined)
+      patch.startsAt = mskLocalToInstant(input.startsAtMsk);
+    if (input.durationMin !== undefined) patch.durationMin = input.durationMin;
+    if (input.description !== undefined) patch.description = input.description;
+    if (input.specialties !== undefined) patch.specialties = input.specialties;
+    // `null` clears the reference, a string sets it, `undefined` leaves it.
+    if (input.partnerRef !== undefined) patch.partnerRef = input.partnerRef;
+    // A replacement PDF supersedes the stored reference (EARS-2).
+    if (pdf)
+      patch.programPdfRef = await this.storeProgramPdf(current.event.slug, pdf);
+
+    const speakers = input.speakers?.map((s, position) => ({
+      position,
+      name: s.name,
+      regalia: s.regalia,
+    }));
+
+    const updated = await this.repo.updateEvent(id, patch, speakers);
+    // The row existed a moment ago; a concurrent delete is the only null path.
+    return updated ? this.toDetail(updated) : null;
   }
 
   /** `EventAdminList` — all events regardless of state (`platform_admin`-only). */
@@ -511,7 +620,9 @@ export class EventsService {
       specialties: e.specialties,
       partnerRef: e.partnerRef,
       programPdfRef: e.programPdfRef,
-      programPdfUrl: e.programPdfRef ? this.storage.urlFor(e.programPdfRef) : null,
+      programPdfUrl: e.programPdfRef
+        ? this.storage.urlFor(e.programPdfRef)
+        : null,
       streamConfig: a.streamConfig,
       state: e.state as EventLifecycleState,
       validTransitions: validTransitions(e.state as EventLifecycleState),

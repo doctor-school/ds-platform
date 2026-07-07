@@ -74,7 +74,9 @@ export function canTransition(
 export const TransitionEventRequestSchema = z.object({
   to: EventLifecycleStateSchema,
 });
-export type TransitionEventRequest = z.infer<typeof TransitionEventRequestSchema>;
+export type TransitionEventRequest = z.infer<
+  typeof TransitionEventRequestSchema
+>;
 
 /**
  * Canonical Moscow-time handling (EARS-1, EARS-10, design §3). The operator
@@ -175,7 +177,11 @@ export const CreateEventRequestSchema = z.object({
   startsAtMsk: z.string().regex(MSK_LOCAL_DATETIME, {
     message: "expected a МСК wall-clock datetime (YYYY-MM-DDTHH:mm)",
   }),
-  durationMin: z.coerce.number().int().positive().max(24 * 60),
+  durationMin: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(24 * 60),
   description: z.string().trim().max(20_000).default(""),
   /** Ordered free-text speakers (LD-1). */
   speakers: z.array(SpeakerEntrySchema).max(50).default([]),
@@ -185,6 +191,46 @@ export const CreateEventRequestSchema = z.object({
   partnerRef: z.string().trim().max(300).nullish(),
 });
 export type CreateEventRequest = z.infer<typeof CreateEventRequestSchema>;
+
+/**
+ * `UpdateEvent` request (EARS-2). The edit form's JSON field — a **partial** of
+ * the authored aggregate: every field is optional and carries **no default**, so
+ * an omitted key leaves that field untouched (a `.partial()` of the create schema
+ * would re-apply create's `""`/`[]` defaults and silently blank an omitted field
+ * — the wrong semantics for an edit). A present key overwrites; `partnerRef:
+ * null` explicitly clears the reference (nullish), while an omitted `partnerRef`
+ * leaves it. The program-PDF **binary** is not in this JSON — like create it
+ * rides the same multipart request as the `programPdf` file part, and a present
+ * replacement supersedes the stored object reference (the 004 page then serves
+ * the current file). The lifecycle `state` is **never** client-supplied here — an
+ * edit is not a state reversal (there is no unpublish, EARS-7); state moves only
+ * through the guarded transition commands. Editing is a **pre-archive** action;
+ * the server refuses an edit to an `archived` event (EARS-2, requirements Scope).
+ */
+export const UpdateEventRequestSchema = z.object({
+  title: z.string().trim().min(1).max(300).optional(),
+  school: z.string().trim().min(1).max(200).optional(),
+  /** Date + time re-entered as МСК wall-clock (`YYYY-MM-DDTHH:mm`); re-folded into one canonical instant. */
+  startsAtMsk: z
+    .string()
+    .regex(MSK_LOCAL_DATETIME, {
+      message: "expected a МСК wall-clock datetime (YYYY-MM-DDTHH:mm)",
+    })
+    .optional(),
+  durationMin: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(24 * 60)
+    .optional(),
+  description: z.string().trim().max(20_000).optional(),
+  /** Ordered free-text speakers (LD-1); a present list replaces the stored list wholesale. */
+  speakers: z.array(SpeakerEntrySchema).max(50).optional(),
+  specialties: z.array(z.string().trim().min(1).max(100)).max(100).optional(),
+  /** `null` clears the sponsor/partner reference; an omitted key leaves it. */
+  partnerRef: z.string().trim().max(300).nullish(),
+});
+export type UpdateEventRequest = z.infer<typeof UpdateEventRequestSchema>;
 
 /**
  * The full editable aggregate for one event (`EventAdminDetail` read model,
@@ -318,7 +364,9 @@ export type PublicEventPage = z.infer<typeof PublicEventPageSchema>;
  */
 export const UPCOMING_BROADCAST_STATES = ["published", "live"] as const;
 export const UpcomingBroadcastStateSchema = z.enum(UPCOMING_BROADCAST_STATES);
-export type UpcomingBroadcastState = z.infer<typeof UpcomingBroadcastStateSchema>;
+export type UpcomingBroadcastState = z.infer<
+  typeof UpcomingBroadcastStateSchema
+>;
 
 /**
  * A card speaker (004 design §3) — display `name` only. The listing card's

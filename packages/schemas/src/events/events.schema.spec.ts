@@ -8,6 +8,7 @@ import {
   mskLocalToInstant,
   STREAM_PROVIDERS,
   TransitionEventRequestSchema,
+  UpdateEventRequestSchema,
   validTransitions,
 } from "./events.schema.js";
 
@@ -83,7 +84,9 @@ describe("007 events schema", () => {
     it("EARS-7.5: agrees with validTransitions across the whole matrix", () => {
       for (const from of EVENT_LIFECYCLE_STATES) {
         for (const to of EVENT_LIFECYCLE_STATES) {
-          expect(canTransition(from, to)).toBe(validTransitions(from).includes(to));
+          expect(canTransition(from, to)).toBe(
+            validTransitions(from).includes(to),
+          );
         }
       }
     });
@@ -97,9 +100,9 @@ describe("007 events schema", () => {
     });
 
     it("rejects a target outside the closed enum", () => {
-      expect(TransitionEventRequestSchema.safeParse({ to: "cancelled" }).success).toBe(
-        false,
-      );
+      expect(
+        TransitionEventRequestSchema.safeParse({ to: "cancelled" }).success,
+      ).toBe(false);
       expect(TransitionEventRequestSchema.safeParse({}).success).toBe(false);
     });
   });
@@ -122,8 +125,10 @@ describe("007 events schema", () => {
 
     it("rejects a malformed МСК datetime", () => {
       expect(
-        CreateEventRequestSchema.safeParse({ ...base, startsAtMsk: "2026-07-17 19:00" })
-          .success,
+        CreateEventRequestSchema.safeParse({
+          ...base,
+          startsAtMsk: "2026-07-17 19:00",
+        }).success,
       ).toBe(false);
     });
 
@@ -187,6 +192,52 @@ describe("007 events schema", () => {
           embedRef: "  vid-42  ",
         }).embedRef,
       ).toBe("vid-42");
+    });
+  });
+
+  describe("UpdateEventRequestSchema (EARS-2 — partial edit, no defaults)", () => {
+    it("EARS-2: an omitted field stays undefined (leaves the stored value) — no create defaults are applied", () => {
+      const parsed = UpdateEventRequestSchema.parse({
+        title: "Новое название",
+      });
+      expect(parsed.title).toBe("Новое название");
+      // Unlike the create schema, omitted fields do NOT acquire ""/[] defaults —
+      // an omitted key must leave the stored field untouched, not blank it.
+      expect(parsed.description).toBeUndefined();
+      expect(parsed.speakers).toBeUndefined();
+      expect(parsed.specialties).toBeUndefined();
+      expect("partnerRef" in parsed).toBe(false);
+    });
+
+    it("EARS-2: an empty payload is a valid no-op patch", () => {
+      expect(UpdateEventRequestSchema.parse({})).toEqual({});
+    });
+
+    it("EARS-2: partnerRef: null explicitly clears the reference; a string sets it", () => {
+      expect(
+        UpdateEventRequestSchema.parse({ partnerRef: null }).partnerRef,
+      ).toBe(null);
+      expect(
+        UpdateEventRequestSchema.parse({ partnerRef: "sponsor:x" }).partnerRef,
+      ).toBe("sponsor:x");
+    });
+
+    it("EARS-2: a present field is validated (a non-МСК datetime / blank title is rejected)", () => {
+      expect(
+        UpdateEventRequestSchema.safeParse({ startsAtMsk: "17.07.2026 20:00" })
+          .success,
+      ).toBe(false);
+      expect(UpdateEventRequestSchema.safeParse({ title: "" }).success).toBe(
+        false,
+      );
+    });
+
+    it("EARS-2: the lifecycle state is not an editable field (an edit is never a state reversal)", () => {
+      // `state` is server-owned — it is not in the edit contract, so a client
+      // cannot smuggle a state change (e.g. an unpublish) through UpdateEvent.
+      expect(
+        "state" in UpdateEventRequestSchema.parse({ state: "draft" }),
+      ).toBe(false);
     });
   });
 });

@@ -16,10 +16,12 @@ The webinar event module. It hosts two surfaces over one aggregate:
   through the EARS-7 guard and appending its terminal `audit_ledger` row;
   **EARS-6** lands the operator's manual `ArchiveEvent`
   (`POST /v1/admin/events/:id/archive`, `ended → archived`), the last named
-  transition, after which the event leaves all public surfaces. The edit command
-  (EARS-2) is the remaining sibling handler. The rendered stock-Refine admin
-  surface + the browser E2E journey (incl. the admin publish/archive actions)
-  are the integration slice (#595).
+  transition, after which the event leaves all public surfaces; and **EARS-2**
+  lands the edit command, `UpdateEvent` (`PATCH /v1/admin/events/:id`), a
+  pre-archive field edit with a **replaceable program PDF** (a new upload
+  supersedes the stored reference so the 004 page serves the current file). The
+  rendered stock-Refine admin surface + the browser E2E journey (incl. the admin
+  publish/archive actions and the edit form) are the integration slice (#595).
 - **004 public read (read side)** — two **public** endpoints over publish-safe
   projections: the event-page endpoint (`GET /v1/public/events/:idOrSlug` →
   `PublicEventPage`, 004 EARS-1) and the upcoming-broadcasts listing
@@ -97,6 +99,35 @@ from its valid state via `EventAdminDetail.validTransitions`) + the browser E2E
 are the integration slice (#595); this handler ships the backend commands + their
 Vitest e2e.
 
+## EARS-2 — the edit command + replaceable program PDF (`UpdateEvent`)
+
+`UpdateEvent` (`PATCH /v1/admin/events/:id`) edits an event's authored fields at
+any **pre-archive** state and, when a replacement `programPdf` rides the same
+`multipart/form-data` request, **supersedes the stored object reference** so the
+004 public page serves the **current** file and the superseded file is no longer
+served. The operator **never has to unpublish** to correct a detail — an edit is
+**not a state reversal**: the lifecycle `state` is untouched here (the PRD names
+no `published → draft`, EARS-7), and `state` is not even a field of the edit
+contract, so a client cannot smuggle a transition through the edit. The request
+mirrors create — a `payload` JSON field (validated against the **partial**
+`UpdateEventRequestSchema` in `@ds/schemas`, every field optional with **no
+default** so an omitted key leaves the stored value and `partnerRef: null`
+explicitly clears it) plus an **optional** `programPdf` file (a PDF-only
+replacement carries no field edits, so an absent payload is an empty patch, not a
+400). A present `speakers` list replaces the stored ordered list wholesale; the
+МСК re-entry is re-folded into one canonical instant (`mskLocalToInstant`). A new
+program PDF lands under a **fresh, event-scoped key** — the replacement never
+overwrites the superseded object in place, so the aggregate simply points at the
+new key. An edit to an **`archived`** event is refused with a **409**
+(`EventNotEditableError`, `EVENT_EDITABLE_STATES` being the pre-archive
+complement of the single terminal state); an unknown id is a **404**; a malformed
+field is a **400**, and on any refusal the aggregate is untouched.
+`platform_admin`-only (EARS-8); like create it is an authoring write, not a
+lifecycle transition, so it owes **no** `audit_ledger` row (that obligation
+attaches to EARS-4/5/6). The admin edit **form** (stock Refine, incl. the PDF
+re-upload affordance) + its browser E2E are the integration slice (#595); this
+handler ships the backend command + its Vitest e2e.
+
 ## EARS-6 — the archive transition (`ArchiveEvent`)
 
 `ArchiveEvent` (`POST /v1/admin/events/:id/archive`) is the operator's **manual**
@@ -140,14 +171,14 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
 
 ## What's here
 
-| Concern                                                                                           | File                          |
-| ------------------------------------------------------------------------------------------------- | ----------------------------- |
-| Module wiring                                                                                     | `events.module.ts`            |
-| Admin HTTP surface (create + reads + stream config + publish + open/close + archive + transition) | `events.admin.controller.ts`  |
-| Public HTTP surface (event-page read + upcoming listing)                                          | `events.public.controller.ts` |
-| Command body DTOs (`{ to }`, `{ provider, embedRef }`)                                            | `events.dto.ts`               |
-| Authoring + guard + projection logic                                                              | `events.service.ts`           |
-| Drizzle data access (insert, reads, state update)                                                 | `events.repository.ts`        |
+| Concern                                                                                                  | File                          |
+| -------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| Module wiring                                                                                            | `events.module.ts`            |
+| Admin HTTP surface (create + edit + reads + stream config + publish + open/close + archive + transition) | `events.admin.controller.ts`  |
+| Public HTTP surface (event-page read + upcoming listing)                                                 | `events.public.controller.ts` |
+| Command body DTOs (`{ to }`, `{ provider, embedRef }`)                                                   | `events.dto.ts`               |
+| Authoring + guard + projection logic                                                                     | `events.service.ts`           |
+| Drizzle data access (insert, reads, state update)                                                        | `events.repository.ts`        |
 
 ## Exported symbols
 
@@ -157,7 +188,12 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
 - **`EventsService`** (`events.service.ts`) — `create()` (007 EARS-1: folds the
   МСК wall-clock into one canonical instant via `mskLocalToInstant`, uploads the
   program PDF to object storage, inserts the `draft` aggregate + ordered speaker
-  rows), `list()` (`EventAdminList`), `detail()` (`EventAdminDetail`),
+  rows), `update()` (007 EARS-2: the pre-archive field edit — refuses an
+  `archived` event with `EventNotEditableError`, folds a МСК re-entry into one
+  instant, replaces the ordered speaker list when present, and supersedes the
+  program-PDF reference when a replacement rides the request, leaving the
+  lifecycle `state` untouched), `list()` (`EventAdminList`), `detail()`
+  (`EventAdminDetail`),
   `transition()` (007 EARS-7: the closed-set guard — validates `current → to` via
   `canTransition`, refuses an invalid move with `InvalidTransitionError`, else
   persists the new state), `publish()` (007 EARS-4: the named `draft → published`
@@ -186,11 +222,16 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
   state reversal),
 - **`InvalidTransitionError`** (`events.service.ts`) — the guard's HTTP-agnostic
   refusal (`from`/`to`); the controller maps it to a 409 state conflict.
+- **`EventNotEditableError`** (`events.service.ts`) — EARS-2: `UpdateEvent`
+  called on an `archived` event, outside the pre-archive edit window
+  (`EVENT_EDITABLE_STATES`); the controller maps it to a 409 state conflict.
 - **`StreamNotConfigurableError`** (`events.service.ts`) — EARS-3: `ConfigureStream`
   called outside the `draft`/`published` pre-air window; the controller maps it to
   a 409 state conflict. `STREAM_CONFIGURABLE_STATES` is the closed window set.
 - **`EventsRepository`** (`events.repository.ts`) — the transactional insert
-  (event + speakers land together or not at all), the list/detail reads,
+  (event + speakers land together or not at all), `updateEvent()` (the
+  transactional field-patch + optional wholesale speaker-list replacement behind
+  the EARS-2 edit command), the list/detail reads,
   `updateState()` (the bare lifecycle-state write behind the guard),
   `updateStateWithAudit()` (the state write + one terminal `audit_ledger` row in
   a single transaction — behind the named transition commands, EARS-4),
@@ -201,16 +242,17 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
 
 ## Endpoints
 
-| Route                                  | Access               | Command / read                                                                                            |
-| -------------------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------- |
-| `POST /v1/admin/events`                | `platform_admin`     | `CreateEvent` (multipart: `payload` JSON + optional `programPdf` file)                                    |
-| `GET /v1/admin/events`                 | `platform_admin`     | `EventAdminList`                                                                                          |
-| `GET /v1/admin/events/:id`             | `platform_admin`     | `EventAdminDetail`                                                                                        |
-| `PUT /v1/admin/events/:id/stream`      | `platform_admin`     | `ConfigureStream` (EARS-3 `{ provider ∈ rutube\|youtube, embedRef }`; upsert; 409 past pre-air window)    |
-| `POST /v1/admin/events/:id/publish`    | `platform_admin`     | `PublishEvent` (EARS-4 `draft → published`; refused ≠ `draft`; +1 audit row)                              |
-| `POST /v1/admin/events/:id/open`       | `platform_admin`     | `OpenRoom` (EARS-5 `published → live`; refused ≠ `published`; +1 `event.went_live` audit row)             |
-| `POST /v1/admin/events/:id/close`      | `platform_admin`     | `CloseRoom` (EARS-5 `live → ended`; refused ≠ `live`; +1 `event.ended` audit row)                         |
-| `POST /v1/admin/events/:id/archive`    | `platform_admin`     | `ArchiveEvent` (EARS-6 `ended → archived`; manual/LD-2; refused ≠ `ended`; +1 `event.archived` audit row) |
-| `POST /v1/admin/events/:id/transition` | `platform_admin`     | `TransitionEvent` (EARS-7 closed-set guard; body `{ to }`)                                                |
-| `GET /v1/public/events/:idOrSlug`      | **public** (no auth) | `PublicEventPage` (004 EARS-1) — `draft`/unknown → 404                                                    |
-| `GET /v1/public/events` (`?upcoming`)  | **public** (no auth) | `UpcomingBroadcastCard[]` (004 EARS-7) — nearest first; empty → `[]`                                      |
+| Route                                  | Access               | Command / read                                                                                                                                 |
+| -------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /v1/admin/events`                | `platform_admin`     | `CreateEvent` (multipart: `payload` JSON + optional `programPdf` file)                                                                         |
+| `PATCH /v1/admin/events/:id`           | `platform_admin`     | `UpdateEvent` (EARS-2 pre-archive edit; multipart: optional `payload` JSON + optional `programPdf`; replace supersedes ref; 409 if `archived`) |
+| `GET /v1/admin/events`                 | `platform_admin`     | `EventAdminList`                                                                                                                               |
+| `GET /v1/admin/events/:id`             | `platform_admin`     | `EventAdminDetail`                                                                                                                             |
+| `PUT /v1/admin/events/:id/stream`      | `platform_admin`     | `ConfigureStream` (EARS-3 `{ provider ∈ rutube\|youtube, embedRef }`; upsert; 409 past pre-air window)                                         |
+| `POST /v1/admin/events/:id/publish`    | `platform_admin`     | `PublishEvent` (EARS-4 `draft → published`; refused ≠ `draft`; +1 audit row)                                                                   |
+| `POST /v1/admin/events/:id/open`       | `platform_admin`     | `OpenRoom` (EARS-5 `published → live`; refused ≠ `published`; +1 `event.went_live` audit row)                                                  |
+| `POST /v1/admin/events/:id/close`      | `platform_admin`     | `CloseRoom` (EARS-5 `live → ended`; refused ≠ `live`; +1 `event.ended` audit row)                                                              |
+| `POST /v1/admin/events/:id/archive`    | `platform_admin`     | `ArchiveEvent` (EARS-6 `ended → archived`; manual/LD-2; refused ≠ `ended`; +1 `event.archived` audit row)                                      |
+| `POST /v1/admin/events/:id/transition` | `platform_admin`     | `TransitionEvent` (EARS-7 closed-set guard; body `{ to }`)                                                                                     |
+| `GET /v1/public/events/:idOrSlug`      | **public** (no auth) | `PublicEventPage` (004 EARS-1) — `draft`/unknown → 404                                                                                         |
+| `GET /v1/public/events` (`?upcoming`)  | **public** (no auth) | `UpcomingBroadcastCard[]` (004 EARS-7) — nearest first; empty → `[]`                                                                           |

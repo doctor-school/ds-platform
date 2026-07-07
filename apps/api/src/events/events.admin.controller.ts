@@ -8,6 +8,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Put,
   Req,
 } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
@@ -17,10 +18,14 @@ import {
   type EventAdminList,
 } from "@ds/schemas";
 import { Authz } from "../authz/index.js";
-import { TransitionEventRequestDto } from "./events.dto.js";
+import {
+  ConfigureStreamRequestDto,
+  TransitionEventRequestDto,
+} from "./events.dto.js";
 import {
   EventsService,
   InvalidTransitionError,
+  StreamNotConfigurableError,
   type UploadedPdf,
 } from "./events.service.js";
 
@@ -131,6 +136,50 @@ export class EventsAdminController {
     const found = await this.events.detail(id);
     if (!found) throw new NotFoundException("event not found");
     return found;
+  }
+
+  /**
+   * EARS-3 — `ConfigureStream` (`PUT /v1/admin/events/:id/stream`): record the
+   * event's stream config from an **explicit** provider in the closed enum
+   * `rutube | youtube` plus an embed reference. The provider enum is validated by
+   * the `ZodValidationPipe` before this handler runs, so an unknown provider is a
+   * 400 and no config is recorded for it (EARS-3). The write is an idempotent
+   * upsert — one config per event — so a wrong reference is correctable while
+   * `published` with no state reversal (US-3). Configuring outside the pre-air
+   * window (design §2) is a 409. `platform_admin`-only (EARS-8). The 006 room
+   * later instantiates the player from exactly this config, never sniffing the
+   * URL. `PUT` because the resource is the single stream-config sub-resource of
+   * the event (create-or-replace).
+   */
+  @Put(":id/stream")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    // A `platform_admin` authoring write, not a lifecycle transition — no
+    // terminal `audit_ledger` row is owed (the audit obligation attaches to the
+    // transitions, EARS-4/5/6), so it is low-stakes like create.
+    audit: "low-stakes",
+    tests: ["EARS-3", "EARS-8"],
+  })
+  async configureStream(
+    @Param("id") id: string,
+    @Body() dto: ConfigureStreamRequestDto,
+  ): Promise<EventAdminDetail> {
+    try {
+      const updated = await this.events.configureStream(id, dto);
+      if (!updated) throw new NotFoundException("event not found");
+      return updated;
+    } catch (err) {
+      if (err instanceof StreamNotConfigurableError) {
+        throw new ConflictException({
+          message: "stream config is not editable in the event's current state",
+          state: err.state,
+        });
+      }
+      throw err;
+    }
   }
 
   /**

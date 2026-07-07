@@ -80,7 +80,7 @@ If the session is launched with `--dangerously-skip-permissions`, the agent assu
 
 ### 3.7 Plane lifecycle entry (if applicable)
 
-If the active task is a Plane work-item (DSP-XXX / DSO-XXX), the first action after identifying task kind is the Plane lifecycle entry: (1) move the task to `In Progress`, (2) post a start comment describing the planned approach — before any code or doc edit. The end-of-session counterpart (move to `Done` + result comment) is a §6 Hard rule. **Tooling:** `plane-pp-cli` reads work-items but is read-only for them — state changes and comments go through the Plane MCP (`mcp__plane-pp-mcp__*`).
+If the active task is a Plane work-item (DSP-XXX / DSO-XXX), the first action after identifying task kind is the Plane lifecycle entry: (1) move the task to `In Progress`, (2) post a start comment describing the planned approach — before any code or doc edit. The end-of-session counterpart (move to `Done` + result comment) is a §6 Hard rule. **Tooling:** both reads and writes go through `plane-pp-cli` (`projects issues list-work-items` / `update-work-item` / `create-work-item-comment`); the Plane MCP (`mcp__plane-pp-mcp__*`) is an equivalent alternative, not required.
 
 ### 3.8 Engineering-task discipline (no orchestration skill)
 

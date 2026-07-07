@@ -50,6 +50,13 @@
       "when": 1783407168416,
       "tag": "0006_superb_snowbird",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1783426462772,
+      "tag": "0007_registrations",
+      "breakpoints": true
     }
   ]
 }

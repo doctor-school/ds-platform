@@ -50,10 +50,11 @@ export class RegistrationController {
     check: "fast-path",
     // A `doctor_guest` domain write, not an auth/security event — no
     // AuthAuditLog emission (low-stakes). The registration's own terminal
-    // `audit_ledger` row (design §5) is a separate ADR-0003 §6 obligation landed
-    // with the durable-record handler (EARS-8), not this classification field.
+    // `audit_ledger` row (design §5, `webinar.registration.created`) is a
+    // separate ADR-0003 §6 obligation the service writes on first insert only
+    // (EARS-3), not this classification field.
     audit: "low-stakes",
-    tests: ["EARS-1", "EARS-10"],
+    tests: ["EARS-1", "EARS-3", "EARS-10"],
   })
   register(
     @Param("idOrSlug") idOrSlug: string,

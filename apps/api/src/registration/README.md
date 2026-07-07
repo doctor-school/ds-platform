@@ -37,14 +37,29 @@ non-`published`/`live` state is a 409, a missing event a 404.
 - `RegistrationRepository` — Drizzle access: writes the `registrations` record;
   reads `events` (007) and `users` (003) read-only.
 
+**EARS-3** layers the one-registration invariant on top of that record:
+
+- The DB `UNIQUE (user_id, event_id)` constraint (migration
+  `0008_registrations_unique.sql`, which dedups any pre-existing duplicate rows
+  keeping the earliest `registered_at` before adding the constraint) is the
+  structural guard — at most one registration per `(doctor, event)` (ADR-0003
+  §5), not client discipline.
+- `RegisterForEvent` is an idempotent `INSERT … ON CONFLICT (user_id, event_id)
+DO NOTHING` upsert + read-back: a repeat via **any** path (one-tap,
+  guest-through-auth, «мои события» re-entry) returns the existing row and
+  creates no duplicate; the insert-race resolves on the constraint.
+- On the **first insert only**, one terminal `audit_ledger` row
+  (`webinar.registration.created`) is appended in the same transaction — the
+  durable `DoctorRegisteredForEvent`; an idempotent repeat emits none (the
+  exactly-one-then-none invariant, EARS-3/EARS-8; design §5).
+
 ## Boundaries & tracked seams
 
 - The durable `registrations` record shape is `(id, user_id, event_id,
 registered_at)` — no cancelled state in wave 1 (owner decision). The
-  `UNIQUE (user_id, event_id)` constraint + the idempotent `ON CONFLICT DO
-NOTHING` upsert (the one-registration invariant) and the terminal
-  `audit_ledger` row are sibling handlers (**EARS-3** / **EARS-8**), an additive
-  migration on top of this record.
+  `EventRoster` (the roster's membership basis, consumed by 006 + the wave-2
+  sponsor report) is "every registration row for the event" — its read model is
+  the sibling **EARS-8** handler on top of this record.
 - The broader per-user reads — the event-page overlay that leaves 004's public
   cache untouched (**EARS-4**), `MyEvents` / «мои события» (**EARS-6**) — and the
   guest-through-auth event-context carry (**EARS-2**) build on this command.

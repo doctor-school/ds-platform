@@ -29,6 +29,7 @@
     "./day-band": "./src/primitives/day-band.tsx",
     "./webinar-card": "./src/primitives/webinar-card.tsx",
     "./webinar-page-content": "./src/primitives/webinar-page-content.tsx",
+    "./webinar-status-card": "./src/primitives/webinar-status-card.tsx",
     "./container": "./src/primitives/container.tsx",
     "./fields": "./src/primitives/fields/index.ts",
     "./blocks": "./src/blocks/index.ts"

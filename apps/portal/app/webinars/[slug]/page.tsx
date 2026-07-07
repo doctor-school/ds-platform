@@ -5,8 +5,9 @@ import { Badge } from "@ds/design-system/badge";
 import { Button } from "@ds/design-system/button";
 import { Container } from "@ds/design-system/container";
 import { WebinarPageContent } from "@ds/design-system/webinar-page-content";
+import { WebinarStatusCard } from "@ds/design-system/webinar-status-card";
 import { fetchPublicEventPage } from "../../../lib/public-events";
-import { buildRegistrationHref } from "../../../lib/registration-handoff";
+import { resolvePrimaryCta, toCanvasStatus } from "../../../lib/event-lifecycle";
 import { formatMskParts } from "../../../lib/msk";
 
 /**
@@ -15,22 +16,25 @@ import { formatMskParts } from "../../../lib/msk";
  * UNAUTHENTICATED recipient: no cookie is read, no client soft-wall, no gated
  * section (the retired legacy "авторизуйтесь для просмотра" overlay is a banned
  * pattern — 004 design §1). The poster header carries the school kicker, the
- * title, the target specialty chips, the МСК start time, and the lifecycle-state
- * badge; the two-column body below it is the complete decision set from the
- * `PublicEventPage` projection — description, program PDF, backing partners, and
- * speakers — laid out to `webinar-page.dc.html` via the `WebinarPageContent`
- * design-system primitive (EARS-2).
+ * title, the target specialty chips, and the lifecycle-state hero badge; the
+ * pulled-up status card + the two-column body below it are the complete decision
+ * set from the `PublicEventPage` projection, laid out to `webinar-page.dc.html`.
  *
- * EARS-3: the page carries EXACTLY ONE primary «Участвовать» CTA that routes the
- * visitor into the registration flow (feature 005) through auth (feature 003),
- * carrying the event context as a same-origin `returnTo` (see
- * `lib/registration-handoff`). 004 owns only the CTA and this handoff — the
- * registration mechanics + guest→auth→registered round-trip are 005/003 (a
- * tracked seam, parent #549). The CTA is present for a participable event
- * (`published` / `live`) and absent for `ended` (no dead link, EARS-3 invariant);
- * the full per-state affordance swap (badge / time plate / room-routing / footer
- * band) and the status-card geometry are EARS-4, and the archived notice EARS-5 —
- * siblings intentionally NOT built here.
+ * EARS-4: the page reflects the event's current lifecycle from the single
+ * `EventLifecycleState`, swapping the hero badge, the status-card time plate, the
+ * CTA affordance, and the footer band per the canvas `status` enum
+ * (`upcoming | live | ended`) — never a signal that contradicts the machine (the
+ * swap lives in `lib/event-lifecycle`; the geometry in the `WebinarStatusCard`
+ * DS primitive):
+ *   • upcoming (`published`) — «Участвовать» → registration (005) via auth (003),
+ *     carrying a same-origin `returnTo` (EARS-3, `lib/registration-handoff`).
+ *   • live — a "live now" signal + the single «Участвовать» CTA routing TOWARD
+ *     the room (feature 006, `buildRoomHref`); 004 asserts the route, not the room.
+ *   • ended — the ended affordance with NO participation CTA (never a dead link,
+ *     the exactly-one-CTA invariant).
+ * The archived "в архиве" notice is the sibling EARS-5 (a fourth render mode) —
+ * intentionally NOT built here; an archived event renders the body without the
+ * lifecycle status card until EARS-5 lands.
  *
  * Rendered per request (`force-dynamic`) — the page reflects a live read model
  * whose lifecycle state can change, so a static prerender would go stale.
@@ -44,79 +48,126 @@ export default async function WebinarEventPage({
 }) {
   const { slug } = await params;
   const event = await fetchPublicEventPage(slug);
-  // Draft / unknown / archived-not-yet-handled → not-found (EARS-6); the branded
-  // archived notice is EARS-5 (sibling).
+  // Draft / unknown → not-found (EARS-6); the branded archived notice is EARS-5.
   if (!event) notFound();
 
   const t = await getTranslations("webinar");
   const { date, time } = formatMskParts(event.startsAt);
 
+  // EARS-4 — the single lifecycle render mode read from the projection state,
+  // and the single primary participation CTA target (register / room / none).
+  const status = toCanvasStatus(event.state);
+  const cta = resolvePrimaryCta(event.state, event.slug);
+  const showStatusCard = status !== "archived";
+  // The footer conversion band mirrors the status card's route but only for a
+  // participable event (upcoming / live); `ended` (and archived) carries none.
+  const showFooterBand = status === "upcoming" || status === "live";
+
   return (
     <main className="min-h-screen bg-background text-foreground">
       <header className="bg-header text-header-foreground">
-        <Container className="py-10 layout:py-16">
+        <Container className="pt-10 pb-28 layout:pt-16 layout:pb-36">
           <p className="text-2xs font-extrabold uppercase tracking-micro opacity-80">
             {t("breadcrumb")}
           </p>
-          <p className="mt-6 text-caption font-extrabold uppercase tracking-micro opacity-90">
-            {event.school}
-          </p>
-          <h1 className="mt-3 max-w-3xl text-3xl font-extrabold tracking-tight text-balance layout:text-5xl">
-            {event.title}
-          </h1>
-          {event.specialties.length > 0 ? (
-            <div className="mt-6 flex flex-wrap gap-2">
-              {event.specialties.map((specialty) => (
-                <span
-                  key={specialty}
-                  className="border-2 border-ring px-3 py-1.5 text-caption font-bold text-header-foreground"
-                >
-                  {specialty}
-                </span>
-              ))}
+          <div className="mt-6 flex items-start justify-between gap-8">
+            <div className="max-w-3xl">
+              <p className="text-caption font-extrabold uppercase tracking-micro opacity-90">
+                {event.school}
+              </p>
+              <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-balance layout:text-5xl">
+                {event.title}
+              </h1>
+              {event.specialties.length > 0 ? (
+                <div className="mt-6 flex flex-wrap gap-2">
+                  {event.specialties.map((specialty) => (
+                    <span
+                      key={specialty}
+                      className="border-2 border-ring px-3 py-1.5 text-caption font-bold text-header-foreground"
+                    >
+                      {specialty}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </div>
-          ) : null}
-          <div className="mt-8 flex flex-wrap items-center gap-4">
-            <span className="text-base font-bold tabular-nums">
-              {t("startsAt", { time, date })}
-            </span>
+            {/* Hero lifecycle badge (EARS-4 swap): live → the pulsing «В эфире»
+                danger tag; every other state → the pale label with its state copy
+                («Скоро» / «Эфир завершён» / «В архиве»). */}
             {event.state === "live" ? (
-              <Badge variant="live">{t("state.live")}</Badge>
+              <Badge variant="live" className="mt-1 shrink-0">
+                {t("state.live")}
+              </Badge>
             ) : (
-              <Badge variant="label">{t(`state.${event.state}`)}</Badge>
+              <Badge variant="label" className="mt-1 shrink-0">
+                {t(`state.${event.state}`)}
+              </Badge>
             )}
           </div>
         </Container>
       </header>
 
-      <Container className="py-12 layout:py-16">
-        {/* EARS-3 — the single primary «Участвовать» participation CTA. Present
-            only for a participable event (`published` / `live`); `ended` carries
-            no CTA (never a dead link). The default Button variant is the filled
-            blue.700 primary action (#270). */}
-        {event.state === "published" || event.state === "live" ? (
-          <div className="mb-12">
-            <Button asChild size="lg">
-              <Link href={buildRegistrationHref(event.slug)}>
-                {t("cta.participate")}
-              </Link>
-            </Button>
+      <Container className="pb-12 layout:pb-16">
+        {/* EARS-4 — the pulled-up status card overlaps the poster (canvas -80px).
+            It swaps the time plate + head/sub + the single CTA per lifecycle
+            state; the `ended` render passes no CTA (no dead link). */}
+        {showStatusCard ? (
+          <div className="relative z-10 -mt-20">
+            <WebinarStatusCard
+              live={status === "live"}
+              liveLabel={t("state.live")}
+              timeLabel={t(`statusCard.${status}.timeLabel`)}
+              time={time}
+              timeSub={t(`statusCard.${status}.timeSub`, {
+                date,
+                duration: event.durationMin,
+              })}
+              head={t(`statusCard.${status}.head`)}
+              sub={t(`statusCard.${status}.sub`)}
+            >
+              {cta.kind !== "none" ? (
+                <Button asChild size="lg">
+                  <Link href={cta.href}>{t("cta.participate")}</Link>
+                </Button>
+              ) : null}
+            </WebinarStatusCard>
           </div>
         ) : null}
 
-        <WebinarPageContent
-          description={event.description}
-          speakers={event.speakers}
-          partners={event.partners}
-          programPdfUrl={event.programPdfUrl}
-          aboutLabel={t("page.about")}
-          programLabel={t("page.program")}
-          programDownloadLabel={t("page.programDownload")}
-          speakersLabel={t("page.speakers")}
-          sponsorEyebrow={t("page.sponsorEyebrow")}
-          sponsorNote={t("page.sponsorNote")}
-        />
+        <div className="mt-16">
+          <WebinarPageContent
+            description={event.description}
+            speakers={event.speakers}
+            partners={event.partners}
+            programPdfUrl={event.programPdfUrl}
+            aboutLabel={t("page.about")}
+            programLabel={t("page.program")}
+            programDownloadLabel={t("page.programDownload")}
+            speakersLabel={t("page.speakers")}
+            sponsorEyebrow={t("page.sponsorEyebrow")}
+            sponsorNote={t("page.sponsorNote")}
+          />
+        </div>
       </Container>
+
+      {/* EARS-4 — the bottom conversion band swaps per state and drops entirely
+          for `ended` (no dead CTA). Its action reuses the single CTA route with a
+          distinct footer verb, so the page keeps exactly one «Участвовать» primary
+          CTA (EARS-3 invariant): upcoming → «Записаться» (registration), live →
+          «Смотреть эфир» (room seam 006). */}
+      {showFooterBand && cta.kind !== "none" ? (
+        <div className="bg-header text-header-foreground">
+          <Container className="flex flex-wrap items-center justify-between gap-8 py-12 layout:py-14">
+            <p className="text-2xl font-extrabold tracking-tight text-balance layout:text-3xl">
+              {t(`footer.${status}.title`)}{" "}
+              <span className="opacity-80">{t(`footer.${status}.sub`)}</span>
+            </p>
+            <Button asChild size="lg">
+              <Link href={cta.href}>{t(`footer.${status}.cta`)}</Link>
+            </Button>
+          </Container>
+        </div>
+      ) : null}
     </main>
   );
 }

@@ -59,6 +59,10 @@ export {
   type WebinarPageSpeaker,
   type WebinarPagePartner,
 } from "./primitives/webinar-page-content";
+export {
+  WebinarStatusCard,
+  type WebinarStatusCardProps,
+} from "./primitives/webinar-status-card";
 
 // ── Layout primitive (#514, source §09 «Раскладка и ритм») ─────────────────────
 export {

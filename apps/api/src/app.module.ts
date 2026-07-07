@@ -11,6 +11,8 @@ import { TimingEqualizationModule } from "./auth/timing/timing-equalization.modu
 import { LoginChallengeModule } from "./auth/login-challenge/login-challenge.module.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { ObservabilityModule } from "./observability/observability.module.js";
+import { StorageModule } from "./storage/storage.module.js";
+import { EventsModule } from "./events/events.module.js";
 
 @Module({
   imports: [
@@ -33,6 +35,11 @@ import { ObservabilityModule } from "./observability/observability.module.js";
     LoginChallengeModule,
     AuthModule,
     DatabaseModule,
+    // Object storage for the 007 program-PDF binary (real S3/MinIO when
+    // configured, in-memory fake otherwise).
+    StorageModule,
+    // 007 event-admin authoring surface (CreateEvent + admin reads).
+    EventsModule,
     HealthModule,
     ReadinessModule,
   ],

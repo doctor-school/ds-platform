@@ -173,6 +173,23 @@ export const ApiEnvSchema = z.looseObject({
   // it is unset in a non-test runtime (a deterministic test pepper is used under
   // VITEST so the e2e suite runs without provisioning one).
   AUDIT_IDENTIFIER_PEPPER: z.string().optional(),
+
+  // Object storage (007 — the program-PDF binary; ADR-0003 §, `.claude/rules/
+  // dev-stand.md`). Timeweb Object Storage in prod; MinIO on the dev stand. All
+  // optional at the schema level so the dev-stand / CI boot without a configured
+  // bucket — the StorageModule binds the real S3 client only when S3_ENDPOINT +
+  // bucket + credentials are present, and falls back to an in-memory fake
+  // otherwise (mirrors the IdP fake). Endpoint/bucket are ALWAYS read from here,
+  // never hardcoded (EARS-1 AC; AGENTS.md §9). `S3_FORCE_PATH_STYLE` defaults on
+  // because MinIO serves path-style; a virtual-hosted-style prod bucket sets it off.
+  S3_ENDPOINT: z.url().optional(),
+  S3_REGION: z.string().default("us-east-1"),
+  S3_BUCKET_UPLOADS: z.string().optional(),
+  S3_ACCESS_KEY: z.string().optional(),
+  S3_SECRET_KEY: z.string().optional(),
+  S3_FORCE_PATH_STYLE: z
+    .stringbool({ truthy: ["true", "1"], falsy: ["false", "0", ""] })
+    .default(true),
 });
 
 export type ApiEnv = z.infer<typeof ApiEnvSchema>;

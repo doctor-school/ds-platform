@@ -5,6 +5,7 @@ import {
   FastifyAdapter,
   type NestFastifyApplication,
 } from '@nestjs/platform-fastify';
+import multipart from '@fastify/multipart';
 import { AppModule } from './app.module.js';
 import { initSentry } from './observability/instrument.js';
 
@@ -16,6 +17,9 @@ async function bootstrap(): Promise<void> {
     AppModule,
     new FastifyAdapter(),
   );
+  // Multipart for the 007 CreateEvent program-PDF upload (parsed off the
+  // Fastify request in the events controller).
+  await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024 } });
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   // Enable shutdown hooks so OnModuleDestroy fires on SIGTERM/SIGINT — the
   // Unleash SDK poll timer (FeatureFlagsService) and the delivery-reconcile

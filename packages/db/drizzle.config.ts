@@ -16,6 +16,7 @@ export default defineConfig({
     "../../packages/db/src/schema/users.ts",
     "../../packages/db/src/schema/consent-records.ts",
     "../../packages/db/src/schema/audit-ledger.ts",
+    "../../packages/db/src/schema/events.ts",
   ],
   out: "../../apps/api/drizzle",
   dialect: "postgresql",

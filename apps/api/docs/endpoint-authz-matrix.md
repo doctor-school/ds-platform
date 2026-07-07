@@ -2,9 +2,12 @@
 
 | endpoint                              | access        | required_roles | auth_check | object_attrs | step_up | audit       | test_coverage            |
 | ------------------------------------- | ------------- | -------------- | ---------- | ------------ | ------- | ----------- | ------------------------ |
+| GET /v1/admin/events                  | authenticated | platform_admin | fast-path  | —            | false   | none        | EARS-8                   |
+| GET /v1/admin/events/:id              | authenticated | platform_admin | fast-path  | —            | false   | none        | EARS-8                   |
 | GET /v1/auth/session                  | authenticated | doctor_guest   | fast-path  | —            | false   | low-stakes  | EARS-8                   |
 | GET /v1/health                        | public        | —              | none       | —            | false   | none        | EARS-1                   |
 | GET /v1/ready                         | public        | —              | none       | —            | false   | none        | EARS-1, EARS-2           |
+| POST /v1/admin/events                 | authenticated | platform_admin | fast-path  | —            | false   | low-stakes  | EARS-1, EARS-8           |
 | POST /v1/auth/login                   | public        | —              | none       | —            | false   | high-stakes | EARS-5, EARS-8, EARS-17  |
 | POST /v1/auth/login/otp               | public        | —              | none       | —            | false   | high-stakes | EARS-6, EARS-7, EARS-8   |
 | POST /v1/auth/login/otp/request       | public        | —              | none       | —            | false   | high-stakes | EARS-6, EARS-7, EARS-14  |

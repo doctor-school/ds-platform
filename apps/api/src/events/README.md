@@ -8,9 +8,11 @@ The webinar event module. It hosts two surfaces over one aggregate:
   machine — the server-enforced transition guard; **EARS-4** lands the first
   **named** transition command, `PublishEvent`
   (`POST /v1/admin/events/:id/publish`), which runs through that guard and
-  appends its terminal `audit_ledger` row. The edit / stream-config commands and
-  the remaining named transitions (open / close / archive) with their product
-  side-effects + `audit_ledger` rows are sibling handlers (EARS-2/3/5/6). The
+  appends its terminal `audit_ledger` row; **EARS-3** lands `ConfigureStream`
+  (`PUT /v1/admin/events/:id/stream`), the explicit-provider-enum stream config
+  the 006 room consumes. The edit command and the remaining named transitions
+  (open / close / archive) with their product side-effects + `audit_ledger` rows
+  are sibling handlers (EARS-2/5/6). The
   rendered stock-Refine admin surface + the browser E2E journey (incl. the admin
   publish action) are the integration slice (#595).
 - **004 public read (read side)** — two **public** endpoints over publish-safe
@@ -68,16 +70,37 @@ Refine, offered only from `draft` via `EventAdminDetail.validTransitions`) + the
 browser E2E are the integration slice (#595); this handler ships the backend
 command + its Vitest e2e.
 
+## EARS-3 — the stream config (`ConfigureStream`)
+
+`ConfigureStream` (`PUT /v1/admin/events/:id/stream`) records the event's stream
+config as `{ provider, embedRef }`: the provider is an **explicit** member of the
+closed enum `rutube | youtube` (`StreamProviderSchema` in `@ds/schemas`), and the
+embed reference is the **provider-scoped stream id — never a URL to be sniffed**
+(the legacy mistake, recon §5). An out-of-enum provider is a **400** at the
+`ZodValidationPipe`, before the handler, so **no config is recorded** for an
+unknown provider. The write is an **idempotent upsert** — one `stream_config` row
+per event (`event_id` PK) — so a wrong reference is **correctable while
+`published`** by replacing the single row, **with no state reversal** (US-3).
+Configuring outside the pre-air window (`draft` / `published` only, design §2 —
+`STREAM_CONFIGURABLE_STATES`) is a **409** (`StreamNotConfigurableError`); the
+config is meaningless once the broadcast is live/ended/archived. `platform_admin`
+-only (EARS-8); it owes **no** `audit_ledger` row (that obligation attaches to the
+lifecycle transitions, EARS-4/5/6). The config is surfaced on `EventAdminDetail`
+(`streamConfig`, `null` until configured) and the 006 room instantiates the
+player from exactly this persisted config, switching on `provider`. The admin
+stream-config **form** (stock Refine) + its browser E2E are the integration slice
+(#595); this handler ships the backend command + its Vitest e2e/unit.
+
 ## What's here
 
-| Concern                                                          | File                          |
-| ---------------------------------------------------------------- | ----------------------------- |
-| Module wiring                                                    | `events.module.ts`            |
-| Admin HTTP surface (create + admin reads + publish + transition) | `events.admin.controller.ts`  |
-| Public HTTP surface (event-page read + upcoming listing)         | `events.public.controller.ts` |
-| Transition command body DTO (`{ to }`)                           | `events.dto.ts`               |
-| Authoring + guard + projection logic                             | `events.service.ts`           |
-| Drizzle data access (insert, reads, state update)                | `events.repository.ts`        |
+| Concern                                                                    | File                          |
+| -------------------------------------------------------------------------- | ----------------------------- |
+| Module wiring                                                              | `events.module.ts`            |
+| Admin HTTP surface (create + reads + stream config + publish + transition) | `events.admin.controller.ts`  |
+| Public HTTP surface (event-page read + upcoming listing)                   | `events.public.controller.ts` |
+| Command body DTOs (`{ to }`, `{ provider, embedRef }`)                     | `events.dto.ts`               |
+| Authoring + guard + projection logic                                       | `events.service.ts`           |
+| Drizzle data access (insert, reads, state update)                          | `events.repository.ts`        |
 
 ## Exported symbols
 
@@ -102,8 +125,15 @@ command + its Vitest e2e.
   thin `UpcomingBroadcastCard` allow-list — name-only speakers, no
   operator/commercial field). Projects rows to the `@ds/schemas` read models,
   including `validTransitions` from the shared closed transition map.
+  `configureStream()` (007 EARS-3: the closed-provider-enum stream config — validates
+  the pre-air window, then upserts the single `stream_config` row via
+  `upsertStreamConfig`, so a correction while `published` replaces it with no
+  state reversal),
 - **`InvalidTransitionError`** (`events.service.ts`) — the guard's HTTP-agnostic
   refusal (`from`/`to`); the controller maps it to a 409 state conflict.
+- **`StreamNotConfigurableError`** (`events.service.ts`) — EARS-3: `ConfigureStream`
+  called outside the `draft`/`published` pre-air window; the controller maps it to
+  a 409 state conflict. `STREAM_CONFIGURABLE_STATES` is the closed window set.
 - **`EventsRepository`** (`events.repository.ts`) — the transactional insert
   (event + speakers land together or not at all), the list/detail reads,
   `updateState()` (the bare lifecycle-state write behind the guard),
@@ -116,12 +146,13 @@ command + its Vitest e2e.
 
 ## Endpoints
 
-| Route                                  | Access               | Command / read                                                               |
-| -------------------------------------- | -------------------- | ---------------------------------------------------------------------------- |
-| `POST /v1/admin/events`                | `platform_admin`     | `CreateEvent` (multipart: `payload` JSON + optional `programPdf` file)       |
-| `GET /v1/admin/events`                 | `platform_admin`     | `EventAdminList`                                                             |
-| `GET /v1/admin/events/:id`             | `platform_admin`     | `EventAdminDetail`                                                           |
-| `POST /v1/admin/events/:id/publish`    | `platform_admin`     | `PublishEvent` (EARS-4 `draft → published`; refused ≠ `draft`; +1 audit row) |
-| `POST /v1/admin/events/:id/transition` | `platform_admin`     | `TransitionEvent` (EARS-7 closed-set guard; body `{ to }`)                   |
-| `GET /v1/public/events/:idOrSlug`      | **public** (no auth) | `PublicEventPage` (004 EARS-1) — `draft`/unknown → 404                       |
-| `GET /v1/public/events` (`?upcoming`)  | **public** (no auth) | `UpcomingBroadcastCard[]` (004 EARS-7) — nearest first; empty → `[]`         |
+| Route                                  | Access               | Command / read                                                                                         |
+| -------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------ |
+| `POST /v1/admin/events`                | `platform_admin`     | `CreateEvent` (multipart: `payload` JSON + optional `programPdf` file)                                 |
+| `GET /v1/admin/events`                 | `platform_admin`     | `EventAdminList`                                                                                       |
+| `GET /v1/admin/events/:id`             | `platform_admin`     | `EventAdminDetail`                                                                                     |
+| `PUT /v1/admin/events/:id/stream`      | `platform_admin`     | `ConfigureStream` (EARS-3 `{ provider ∈ rutube\|youtube, embedRef }`; upsert; 409 past pre-air window) |
+| `POST /v1/admin/events/:id/publish`    | `platform_admin`     | `PublishEvent` (EARS-4 `draft → published`; refused ≠ `draft`; +1 audit row)                           |
+| `POST /v1/admin/events/:id/transition` | `platform_admin`     | `TransitionEvent` (EARS-7 closed-set guard; body `{ to }`)                                             |
+| `GET /v1/public/events/:idOrSlug`      | **public** (no auth) | `PublicEventPage` (004 EARS-1) — `draft`/unknown → 404                                                 |
+| `GET /v1/public/events` (`?upcoming`)  | **public** (no auth) | `UpcomingBroadcastCard[]` (004 EARS-7) — nearest first; empty → `[]`                                   |

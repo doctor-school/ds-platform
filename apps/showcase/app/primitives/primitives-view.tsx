@@ -36,6 +36,7 @@ import { Switch } from "@ds/design-system/switch";
 import { Alert } from "@ds/design-system/alert";
 import { Skeleton } from "@ds/design-system/skeleton";
 import { DayBand } from "@ds/design-system/day-band";
+import { WebinarCard } from "@ds/design-system/webinar-card";
 import { Container } from "@ds/design-system/container";
 import {
   Form,
@@ -1167,6 +1168,51 @@ function ContainerSection() {
   );
 }
 
+function WebinarCardSection() {
+  return (
+    <PrimitiveSection
+      title="Webinar-card"
+      exportsLine="WebinarCard — listing unit (time plate · chips · speakers), block link"
+    >
+      <p className="text-sm text-muted-foreground">
+        The §09 listing unit (source{" "}
+        <code className="font-mono text-xs">webinar-card.dc.html</code>): a tinted
+        196px time plate (56px display time, explicit МСК label) and the content
+        column (school kicker, title, specialty chips, speakers), the whole card
+        a single block link to its event page. Desktop → the bordered, raised
+        grid; ≤900px → flat full-bleed with a bottom divider. Resize to watch the
+        split. The <span className="font-medium text-foreground">live</span>{" "}
+        variant surfaces the «В эфире» signal.
+      </p>
+      {(["scheduled", "live"] as const).map((variant) => (
+        <SubRow key={variant} label={`variant="${variant}"`}>
+          <ThemePair
+            render={() => (
+              <div className="w-full">
+                <WebinarCard
+                  href="#"
+                  time="19:00"
+                  tzLabel="МСК"
+                  dateLabel="16 июля · ср"
+                  school="Школа травматологии и ортопедии"
+                  title="Пластика ахиллова сухожилия: разбор клинических случаев"
+                  specialties={["Травматология", "Ортопедия"]}
+                  speakers={[
+                    { name: "Анна Соколова", org: "Травматолог-ортопед, к.м.н." },
+                    { name: "Михаил Верещагин", org: "Хирург, профессор" },
+                  ]}
+                  live={variant === "live"}
+                  liveLabel="В эфире"
+                />
+              </div>
+            )}
+          />
+        </SubRow>
+      ))}
+    </PrimitiveSection>
+  );
+}
+
 export function PrimitivesView() {
   return (
     <div className="flex flex-col gap-2">
@@ -1188,6 +1234,7 @@ export function PrimitivesView() {
       <AlertSection />
       <SkeletonSection />
       <DayBandSection />
+      <WebinarCardSection />
       <ContainerSection />
     </div>
   );

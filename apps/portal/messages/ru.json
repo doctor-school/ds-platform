@@ -113,7 +113,8 @@
     "breadcrumb": "Эфиры",
     "title": "Расписание эфиров",
     "subtitle": "Ближайшие эфиры · время — МСК",
-    "cardTime": "{time} МСК",
+    "cardTz": "МСК",
+    "cardDate": "{date} · {weekday}",
     "live": "В эфире",
     "empty": {
       "title": "Нет предстоящих эфиров",

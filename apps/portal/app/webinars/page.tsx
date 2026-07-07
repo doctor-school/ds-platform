@@ -1,13 +1,15 @@
-import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import type { UpcomingBroadcastCard } from "@ds/schemas";
-import { Badge } from "@ds/design-system/badge";
-import { Card } from "@ds/design-system/card";
 import { Container } from "@ds/design-system/container";
 import { DayBand } from "@ds/design-system/day-band";
-import { Link as DsLink } from "@ds/design-system/link";
+import { WebinarCard } from "@ds/design-system/webinar-card";
 import { fetchUpcomingBroadcasts } from "../../lib/public-events";
-import { formatMskDayLabel, formatMskParts, mskDayKey } from "../../lib/msk";
+import {
+  formatMskDayLabel,
+  formatMskParts,
+  formatMskWeekdayShort,
+  mskDayKey,
+} from "../../lib/msk";
 
 /**
  * 004 EARS-7 — the public upcoming-broadcasts listing, server-rendered at
@@ -20,10 +22,12 @@ import { formatMskDayLabel, formatMskParts, mskDayKey } from "../../lib/msk";
  *
  * Wave-1 minimal cut (requirements Scope): the vendored canvas also carries a
  * specialty filter, week-paging, a «Неделя / Месяц» switch and a month view —
- * those are wave 2 and are intentionally NOT built here. Each card is the minimal
- * shell (time + МСК + live signal + school + title, linking to the event page);
- * the full `webinar-card.dc.html` choose-set (specialty chips, speakers, CTA,
- * full geometry) is the sibling handler EARS-8 (#557).
+ * those are wave 2 and are intentionally NOT built here. Each card is the full
+ * `webinar-card.dc.html` unit (the `@ds/design-system` `WebinarCard` primitive):
+ * the tinted time plate (МСК + day·weekday), school kicker, title, specialty
+ * chips, and speakers, linking to its event page (EARS-8). The card's own CTA
+ * row belongs to the event PAGE (EARS-3), so on the listing the whole card is
+ * the single link affordance instead.
  *
  * Rendered per request (`force-dynamic`) — a lifecycle transition can add/remove
  * a card, so a static prerender would go stale.
@@ -96,16 +100,27 @@ export default async function WebinarsListingPage() {
                 </div>
 
                 <div className="-mx-4 flex flex-col layout:mx-0 layout:gap-7">
-                  {group.cards.map((card) => (
-                    <WebinarCard
-                      key={card.id}
-                      card={card}
-                      timeLabel={t("cardTime", {
-                        time: formatMskParts(card.startsAt).time,
-                      })}
-                      liveLabel={t("live")}
-                    />
-                  ))}
+                  {group.cards.map((card) => {
+                    const parts = formatMskParts(card.startsAt);
+                    return (
+                      <WebinarCard
+                        key={card.id}
+                        href={`/webinars/${card.slug}`}
+                        time={parts.time}
+                        tzLabel={t("cardTz")}
+                        dateLabel={t("cardDate", {
+                          date: parts.date,
+                          weekday: formatMskWeekdayShort(card.startsAt),
+                        })}
+                        school={card.school}
+                        title={card.title}
+                        specialties={card.specialties}
+                        speakers={card.speakers}
+                        live={card.state === "live"}
+                        liveLabel={t("live")}
+                      />
+                    );
+                  })}
                 </div>
               </section>
             ))}
@@ -113,47 +128,5 @@ export default async function WebinarsListingPage() {
         )}
       </Container>
     </main>
-  );
-}
-
-function WebinarCard({
-  card,
-  timeLabel,
-  liveLabel,
-}: {
-  card: UpcomingBroadcastCard;
-  timeLabel: string;
-  liveLabel: string;
-}) {
-  return (
-    // The card link routes through the DS `Link` primitive (ADR-0013 §7 link
-    // row) composed over `next/link` — hover/active/focus states come from the
-    // primitive, routing stays with Next. This is a block-level CARD link, so
-    // the canvas hover affordance stays the card's own (title underline + lift,
-    // per `webinar-card.dc.html`) — `hover:no-underline` suppresses only the
-    // primitive's whole-card text underline, not its focus ring or states.
-    <DsLink
-      asChild
-      className="group block border-b-2 border-border last:border-b-0 hover:no-underline layout:border-b-0"
-    >
-      <Link href={`/webinars/${card.slug}`}>
-        <Card className="border-0 p-5 shadow-none layout:border-2 layout:p-6 layout:shadow-lg layout:transition-transform layout:group-hover:-translate-y-0.5">
-          <div className="flex items-center gap-3">
-            <span className="text-xl font-extrabold tabular-nums tracking-tight">
-              {timeLabel}
-            </span>
-            {card.state === "live" ? (
-              <Badge variant="live">{liveLabel}</Badge>
-            ) : null}
-          </div>
-          <p className="mt-3 text-caption font-extrabold uppercase tracking-micro text-primary">
-            {card.school}
-          </p>
-          <h2 className="mt-1 text-lg font-bold leading-snug tracking-tight group-hover:underline layout:text-xl">
-            {card.title}
-          </h2>
-        </Card>
-      </Link>
-    </DsLink>
   );
 }

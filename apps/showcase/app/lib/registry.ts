@@ -69,6 +69,9 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "skeleton", section: "primitives" },
   { id: "day-band", section: "primitives" },
 
+  // ── Listing unit (004 EARS-8, #557) — the webinar-card.dc.html §09 unit.
+  { id: "webinar-card", section: "primitives" },
+
   // ── Layout primitive (spec §3.2, #514) — the §09 content-column container.
   { id: "container", section: "primitives" },
 

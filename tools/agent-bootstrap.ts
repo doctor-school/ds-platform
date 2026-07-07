@@ -18,6 +18,7 @@ import { readFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
+import { evaluateMainSync, mainSyncMessage, probeMainSync } from "./main-sync";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -522,7 +523,7 @@ function ts(): string {
 }
 
 async function main(): Promise<void> {
-  const [git, working, awaiting, ready, prs, openCount, conc] =
+  const [git, working, awaiting, ready, prs, openCount, conc, syncProbe] =
     await Promise.all([
       gitState(),
       ghIssues(["--assignee", "@me", "--label", "agent-working"]),
@@ -533,7 +534,9 @@ async function main(): Promise<void> {
       ghPRs(),
       ghOpenIssueCount(),
       concurrency(),
+      probeMainSync(REPO_ROOT),
     ]);
+  const sync = evaluateMainSync(syncProbe);
 
   const activeSpecs = await Promise.all(
     working.map(async (i) => {
@@ -548,6 +551,21 @@ async function main(): Promise<void> {
   const out: string[] = [];
   out.push(`# Agent bootstrap — ${ts()} UTC`);
   out.push("");
+
+  // Freshness banner (#630): loud header warning when the LOCAL `main` ref is
+  // behind `origin/main` — running tools (triage, this bootstrap) against stale
+  // main code / a stale graph is the #624/#418 miss. A fetch failure (offline)
+  // degrades to the softer stale banner and never blocks.
+  const syncMsg = mainSyncMessage(sync);
+  if (sync.kind === "behind") {
+    out.push(
+      `> 🛑 **STALE MAIN — ${syncMsg}.** Your local \`main\` is behind \`origin/main\`, so readiness and tooling computed now may be stale (#630/#418). Run \`git pull --ff-only origin main\` (or rebase this branch onto \`origin/main\`) before trusting triage.`,
+    );
+    out.push("");
+  } else if (syncMsg) {
+    out.push(`> ${syncMsg}`);
+    out.push("");
+  }
 
   out.push("## Git");
   const aheadStr =

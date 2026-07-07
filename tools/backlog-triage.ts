@@ -38,6 +38,12 @@
 import { execa } from "execa";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  evaluateMainSync,
+  mainSyncMessage,
+  probeMainSync,
+  shouldRefuseTriage,
+} from "./main-sync";
 
 // ── pure model ──────────────────────────────────────────────────────────────
 
@@ -559,6 +565,22 @@ export function formatReport(triaged: Triage[]): string {
 }
 
 async function main(): Promise<void> {
+  // Freshness gate (#630): fetch origin/main first, then REFUSE if the local
+  // `main` ref is behind — readiness computed from stale tool code / a stale
+  // dependency graph is exactly the #624/#418 miss this command must prevent. A
+  // fetch failure (offline) degrades to a stale banner and proceeds, never dies.
+  const sync = evaluateMainSync(await probeMainSync(REPO_ROOT));
+  if (shouldRefuseTriage(sync)) {
+    process.stderr.write(
+      `🛑 [backlog-triage] REFUSING to triage: ${mainSyncMessage(sync)}.\n` +
+        `The local tool code and dependency graph may be stale (#630/#418). ` +
+        `Run \`git pull --ff-only origin main\` (or rebase this branch onto ` +
+        `\`origin/main\`) first, then re-run \`pnpm backlog:triage\`.\n`,
+    );
+    process.exit(1);
+  }
+  const staleBanner = mainSyncMessage(sync); // null only when in-sync
+
   let issues: RawIssue[] = [];
   try {
     issues = await listOpenIssues();
@@ -585,7 +607,9 @@ async function main(): Promise<void> {
     triaged.push(classify(input, deps));
   }
 
-  const out: string[] = [formatReport(triaged)];
+  const out: string[] = [];
+  if (staleBanner) out.push(`> ${staleBanner}`, "");
+  out.push(formatReport(triaged));
   if (warnings.length > 0) {
     out.push("## Warnings");
     for (const w of warnings) out.push(`- ${w.source}: ${w.message}`);

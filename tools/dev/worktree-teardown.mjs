@@ -37,7 +37,10 @@
 //      main (ancestor check) — an unmerged non-temp branch is kept + warned.
 //
 // Exit codes: 0 = torn down clean (dir gone, branch handled); 1 = the orphan
-// directory could not be removed; 2 = usage error.
+// directory could not be removed; 2 = usage error; 3 = unresolvable target —
+// the argument names neither a registered worktree nor a directory under
+// `.claude/worktrees/` (a shell-mangled backslash path or a typo slug). Fail
+// loud instead of a WARN + exit 0 that masquerades as a clean teardown (#603).
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
@@ -103,6 +106,44 @@ export function resolveWorktreePath(rawArg, root, exists = existsSync) {
     if (exists(candidate)) return candidate;
   }
   return resolve(rawArg);
+}
+
+/**
+ * Classify a teardown target so the caller can fail loud on an unresolvable one
+ * (#603) instead of the old WARN + exit 0. Given the resolved absolute path, the
+ * registered-worktree paths (from `git worktree list`), and an `exists` probe:
+ *   - "registered"   — matches a live registered worktree → normal teardown,
+ *   - "orphan"       — not registered but a directory is still on disk → the
+ *                      long-path deregistered-but-present case (keeps exit 0),
+ *   - "unresolvable" — neither → a shell-mangled backslash path or typo slug
+ *                      that must NOT masquerade as a clean teardown.
+ *
+ * Pure + injectable (`registeredPaths`, `exists`) so the guard-test harness can
+ * drive every branch without a git subprocess or a real filesystem. Comparison
+ * is via `norm()` so git's forward-slash output and `resolve()`'s Windows
+ * backslashes/drive-letter case still match.
+ */
+export function classifyTeardownTarget(
+  absPath,
+  registeredPaths,
+  exists = existsSync,
+) {
+  const want = norm(absPath);
+  if (registeredPaths.some((p) => norm(p) === want)) return "registered";
+  if (exists(absPath)) return "orphan";
+  return "unresolvable";
+}
+
+/** All registered worktree absolute paths, from `git worktree list --porcelain`. */
+function listWorktreePaths() {
+  const res = run("git", ["worktree", "list", "--porcelain"]);
+  if (res.status !== 0) return [];
+  const paths = [];
+  for (const line of res.stdout.split(/\r?\n/)) {
+    if (line.startsWith("worktree "))
+      paths.push(line.slice("worktree ".length));
+  }
+  return paths;
 }
 
 /** Find the branch checked out in the worktree at `absPath`, or null (detached). */
@@ -202,6 +243,28 @@ function main() {
     );
   }
   const absPath = resolveWorktreePath(positional[0], mainRepoRoot());
+
+  // 0. Fail loud on an unresolvable target BEFORE any destructive git call
+  //    (#603). A shell-mangled backslash path or a typo slug resolves to neither
+  //    a registered worktree nor a dir on disk; the old code WARN'd + exited 0,
+  //    silently no-op'ing while the real worktree stayed registered.
+  const registeredPaths = listWorktreePaths();
+  if (
+    classifyTeardownTarget(absPath, registeredPaths, existsSync) ===
+    "unresolvable"
+  ) {
+    const listing = registeredPaths.length
+      ? registeredPaths.map((p) => `    ${p}`).join("\n")
+      : "    (none registered)";
+    die(
+      `'${positional[0]}' resolved to '${absPath}', which is neither a registered ` +
+        `worktree nor a directory under .claude/worktrees/ — nothing was torn down.\n` +
+        `Registered worktrees:\n${listing}\n` +
+        `Hint: pass the bare slug (e.g. 'pnpm worktree:teardown 603'); a backslashed ` +
+        `Windows path can be mangled by the shell into an unresolvable string.`,
+      3,
+    );
+  }
 
   // 1. Capture the branch before removal deregisters the worktree.
   const branch = branchOverride ?? resolveWorktreeBranch(absPath);

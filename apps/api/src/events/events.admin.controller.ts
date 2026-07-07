@@ -134,6 +134,56 @@ export class EventsAdminController {
   }
 
   /**
+   * EARS-4 — `PublishEvent` (`POST /v1/admin/events/:id/publish`): the named
+   * `draft → published` transition. It runs through the EARS-7 guard (publish is
+   * refused with a 409 unless the event is in `draft`) and, on success, appends
+   * exactly one terminal `audit_ledger` row keyed to the acting `platform_admin`
+   * (ADR-0003 §6). Publishing is the single visibility signal — the event
+   * becomes publicly reachable on 004 and 005 registration opens off the same
+   * `EventLifecycleState`, with no second flag (EARS-9). Idempotent re-publish is
+   * NOT offered: a second publish from `published` is a 409 (no self-transition),
+   * matching the closed transition set.
+   */
+  @Post(":id/publish")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    // `audit` here is the endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8) — a
+    // `platform_admin` write, not an auth security event, so it owes no
+    // AuthAuditLog emission (low-stakes, as create/transition). The EARS-4
+    // domain `audit_ledger` transition row is a separate ADR-0003 §6 obligation,
+    // written atomically in the service — not this classification field.
+    audit: "low-stakes",
+    tests: ["EARS-4", "EARS-8"],
+  })
+  async publish(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+  ): Promise<EventAdminDetail> {
+    // The 003 session hook attaches the authenticated subject; the acting admin
+    // `sub` keys the audit row (ADR-0003 §6). Null only if unresolved — the
+    // AuthzGuard has already refused any unauthenticated caller (EARS-8).
+    const actorSub =
+      (req as { user?: { sub?: string } }).user?.sub ?? null;
+    try {
+      const updated = await this.events.publish(id, actorSub);
+      if (!updated) throw new NotFoundException("event not found");
+      return updated;
+    } catch (err) {
+      if (err instanceof InvalidTransitionError) {
+        throw new ConflictException({
+          message: "event is not in draft — publish is refused",
+          from: err.from,
+          to: err.to,
+        });
+      }
+      throw err;
+    }
+  }
+
+  /**
    * EARS-7 — the single closed-set lifecycle transition, server-enforced. Moves
    * the event to the target state iff `current → to` is one of the four legal
    * forward moves; an in-enum-but-out-of-order target (a skip-forward, any

@@ -1,8 +1,22 @@
+import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import type { DrizzleHandle, Event, NewEvent, NewEventSpeaker } from "@ds/db";
-import { eventSpeakers, events } from "@ds/db";
+import { auditLedger, eventSpeakers, events } from "@ds/db";
 import { and, asc, desc, eq, gte, inArray, or } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+
+/**
+ * The terminal `audit_ledger` row a named lifecycle transition appends (EARS-4;
+ * ADR-0003 §6). `eventType` is the canonical domain event id (e.g.
+ * `event.published`); `subjectId` is the acting `platform_admin` Zitadel `sub`
+ * (or `null` when unavailable). The `from`/`to` states + the aggregate id land
+ * in `metadata` — no PD is ever stored (ADR-0001 §7, ADR-0003 §6).
+ */
+export interface TransitionAudit {
+  eventType: string;
+  subjectId: string | null;
+  from: Event["state"];
+}
 
 /** Canonical UUID v-agnostic shape — used to decide whether `:idOrSlug` can match the uuid `id` column. */
 const UUID_RE =
@@ -122,6 +136,51 @@ export class EventsRepository {
         position: s.position,
       })),
     };
+  }
+
+  /**
+   * Apply a lifecycle state change AND append exactly one terminal
+   * `audit_ledger` row (EARS-4; ADR-0003 §6) in a single transaction — the state
+   * write and its audit row land together or not at all, so a transition can
+   * never be applied without its ledger row (nor a spurious row written without
+   * the state change). The caller (the named transition command in
+   * `EventsService`) has already validated the move against the closed
+   * transition set (the EARS-7 guard). Returns the updated aggregate, or `null`
+   * when the id does not exist.
+   */
+  async updateStateWithAudit(
+    id: string,
+    state: Event["state"],
+    audit: TransitionAudit,
+  ): Promise<EventWithSpeakers | null> {
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(events)
+        .set({ state, updatedAt: new Date() })
+        .where(eq(events.id, id))
+        .returning();
+      if (!row) return null;
+      await tx.insert(auditLedger).values({
+        eventId: randomUUID(),
+        eventType: audit.eventType,
+        subjectId: audit.subjectId,
+        // No PD — only the aggregate id + the from/to states (ADR-0003 §6).
+        metadata: { aggregateId: id, from: audit.from, to: state },
+      });
+      const speakerRows = await tx
+        .select()
+        .from(eventSpeakers)
+        .where(eq(eventSpeakers.eventId, id))
+        .orderBy(asc(eventSpeakers.position));
+      return {
+        event: row,
+        speakers: speakerRows.map((s) => ({
+          name: s.name,
+          regalia: s.regalia,
+          position: s.position,
+        })),
+      };
+    });
   }
 
   async findById(id: string): Promise<EventWithSpeakers | null> {

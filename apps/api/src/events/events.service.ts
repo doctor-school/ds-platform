@@ -41,6 +41,15 @@ export interface UploadedPdf {
 }
 
 /**
+ * Canonical `audit_ledger` event id for the `draft → published` transition
+ * (EARS-4; ADR-0003 §6). The `event.<transition>` namespace mirrors the auth
+ * ledger's `auth.<class>.<event>` taxonomy (ADR-0001 §7.3) for the webinar
+ * aggregate; the sibling transitions (open/close/archive — EARS-5/6) add
+ * `event.went_live` / `event.ended` / `event.archived` alongside it.
+ */
+export const EVENT_PUBLISHED_AUDIT_TYPE = "event.published";
+
+/**
  * The EARS-7 guard's refusal: the requested move is not one of the four legal
  * forward transitions from the event's current state. HTTP-agnostic — the
  * controller maps it to a 4xx state conflict — so the guard stays a pure domain
@@ -178,6 +187,41 @@ export class EventsService {
     }
 
     const updated = await this.repo.updateState(id, to);
+    // The row existed a moment ago; a concurrent delete is the only null path.
+    return updated ? this.toDetail(updated) : null;
+  }
+
+  /**
+   * EARS-4 — `PublishEvent`: the `draft → published` transition, the single
+   * visibility signal that makes the event publicly reachable on the 004 event
+   * page + upcoming listing and opens 005 registration gating (one state write,
+   * no boolean flag — EARS-9). Runs through the same EARS-7 closed-set guard as
+   * every other transition ({@link canTransition}): publish is **refused unless
+   * the event is in `draft`** — any non-draft origin raises
+   * {@link InvalidTransitionError} and the state is left untouched. On success
+   * the state change and exactly one terminal `audit_ledger` row are written
+   * atomically ({@link EventsRepository.updateStateWithAudit}), keyed to the
+   * acting `platform_admin` (`actorSub`).
+   *
+   * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
+   */
+  async publish(
+    id: string,
+    actorSub: string | null,
+  ): Promise<EventAdminDetail | null> {
+    const current = await this.repo.findById(id);
+    if (!current) return null;
+
+    const from = current.event.state as EventLifecycleState;
+    if (!canTransition(from, "published")) {
+      throw new InvalidTransitionError(from, "published");
+    }
+
+    const updated = await this.repo.updateStateWithAudit(id, "published", {
+      eventType: EVENT_PUBLISHED_AUDIT_TYPE,
+      subjectId: actorSub,
+      from,
+    });
     // The row existed a moment ago; a concurrent delete is the only null path.
     return updated ? this.toDetail(updated) : null;
   }

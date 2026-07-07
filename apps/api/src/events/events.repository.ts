@@ -1,8 +1,12 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { DrizzleHandle, Event, NewEvent, NewEventSpeaker } from "@ds/db";
 import { eventSpeakers, events } from "@ds/db";
-import { asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq, or } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+
+/** Canonical UUID v-agnostic shape — used to decide whether `:idOrSlug` can match the uuid `id` column. */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Db = DrizzleHandle["db"];
 
@@ -82,10 +86,29 @@ export class EventsRepository {
   async findById(id: string): Promise<EventWithSpeakers | null> {
     const [row] = await this.db.select().from(events).where(eq(events.id, id));
     if (!row) return null;
+    return this.withSpeakers(row);
+  }
+
+  /**
+   * Resolve one event by its stable public slug OR its id (004 EARS-1 — the
+   * sponsor-distributed link keys on the slug; id is the fallback). A non-UUID
+   * `idOrSlug` matches the slug only — never fed to the uuid `id` column, whose
+   * comparison would raise on a malformed value.
+   */
+  async findByIdOrSlug(idOrSlug: string): Promise<EventWithSpeakers | null> {
+    const where = UUID_RE.test(idOrSlug)
+      ? or(eq(events.id, idOrSlug), eq(events.slug, idOrSlug))
+      : eq(events.slug, idOrSlug);
+    const [row] = await this.db.select().from(events).where(where);
+    if (!row) return null;
+    return this.withSpeakers(row);
+  }
+
+  private async withSpeakers(row: Event): Promise<EventWithSpeakers> {
     const speakerRows = await this.db
       .select()
       .from(eventSpeakers)
-      .where(eq(eventSpeakers.eventId, id))
+      .where(eq(eventSpeakers.eventId, row.id))
       .orderBy(asc(eventSpeakers.position));
     return {
       event: row,

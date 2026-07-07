@@ -12,13 +12,17 @@
  *   1. the native GitHub `blocked_by` graph (REST
  *      `…/issues/{n}/dependencies/blocked_by`) to each blocker's real open/closed
  *      state, AND
- *   2. every prose "Blocked by #N" issue ref (resolved to its live state) and
- *      every prose "Blocked by <named subsystem>" clause that names an
+ *   2. every prose "Blocked by #N" issue ref (resolved to its live state); every
+ *      prose "Blocked by EARS-N …" clause naming same-feature sibling handlers
+ *      (resolved to the sibling Issue carrying that `EARS-N` under the same
+ *      `feature:NNN-*` label — a CLOSED sibling satisfies the dependency, #622);
+ *      and every prose "Blocked by <named subsystem>" clause that names an
  *      owning-subsystem with no tracked Issue — an ABSENT dependency.
  *
  * It prints a ready-vs-blocked split where each blocked item carries its
  * concrete unblocking condition (which dep Issue + verified state, or which
- * absent owning subsystem).
+ * absent owning subsystem), and each takeable item that an EARS prose-ref
+ * unblocked carries a `prose ref resolved: EARS-N closed as #M` note.
  *
  * `decision-debt` is NOT treated as "blocked" — it is a DEFERRED-decision label;
  * an item is takeable the moment its resolved deps are all closed (AGENTS.md §6,
@@ -48,6 +52,13 @@ export interface DepRef {
   title?: string;
   /** A named owning-subsystem with no tracked Issue (an ABSENT dependency). */
   subsystem?: string;
+  /**
+   * The EARS handler number this dep was named as in the prose (e.g. "Blocked by
+   * EARS-1 …"), when the clause references a same-feature sibling handler rather
+   * than a subsystem or an explicit `#N`. Set alongside `number`/`state` once the
+   * sibling Issue carrying that `EARS-N` has been resolved to its live state.
+   */
+  ears?: number;
 }
 
 export interface IssueInput {
@@ -69,6 +80,11 @@ export interface Triage {
   title: string;
   readiness: Readiness;
   reasons: BlockReason[];
+  /**
+   * Informational annotations for a TAKEABLE item — currently the prose-ref
+   * resolutions (`prose ref resolved: EARS-N closed as #M`) that unblocked it.
+   */
+  notes: string[];
   isDecisionDebt: boolean;
 }
 
@@ -78,6 +94,33 @@ export interface ProseBlocker {
   issues: number[];
   /** A named subsystem, when the clause references no Issue. */
   subsystem?: string;
+  /**
+   * EARS handler numbers named in the clause (e.g. "Blocked by EARS-7 (…) and
+   * EARS-1 (…)"). Each resolves against a same-feature sibling Issue carrying
+   * that `EARS-N` in its title. When set, `subsystem` (if present) is only the
+   * conservative fallback text used for any EARS that resolves to no sibling.
+   */
+  ears?: number[];
+}
+
+/** A same-feature sibling Issue candidate for an EARS prose-ref resolution. */
+export interface SiblingIssue {
+  number: number;
+  title: string;
+  state: IssueState;
+}
+
+/**
+ * Find the sibling Issue carrying `EARS-<ears>` in its title (word-bounded so
+ * `EARS-1` never matches `EARS-12`). The caller has already scoped `siblings` to
+ * one `feature:NNN-*` label, so a title match is an unambiguous handler hit.
+ */
+export function findSiblingByEars(
+  siblings: SiblingIssue[],
+  ears: number,
+): SiblingIssue | undefined {
+  const re = new RegExp(`\\bEARS-${ears}\\b`);
+  return siblings.find((s) => re.test(s.title));
 }
 
 function truncateTitle(t: string, max = 52): string {
@@ -168,9 +211,24 @@ export function parseProseBlockers(body: string): ProseBlocker[] {
     );
     if (issues.length > 0) {
       blockers.push({ issues });
-    } else {
-      const name = subsystemName(item);
-      if (name) blockers.push({ issues: [], subsystem: name });
+      continue;
+    }
+    // No explicit `#N` — a clause that names one or more EARS handlers of the
+    // same feature (e.g. "Blocked by EARS-7 (…) and EARS-1 (…)") is resolved
+    // against sibling Issues at state-resolution time; the subsystem name is
+    // kept only as the conservative fallback for any EARS that finds no sibling.
+    const ears = Array.from(item.matchAll(/\bEARS-(\d+)\b/gi)).map((x) =>
+      Number(x[1]),
+    );
+    const name = subsystemName(item);
+    if (ears.length > 0) {
+      blockers.push({
+        issues: [],
+        ears: Array.from(new Set(ears)),
+        subsystem: name || undefined,
+      });
+    } else if (name) {
+      blockers.push({ issues: [], subsystem: name });
     }
   }
   return blockers;
@@ -185,7 +243,9 @@ export function parseProseBlockers(body: string): ProseBlocker[] {
  */
 export function classify(issue: IssueInput, deps: DepRef[]): Triage {
   const reasons: BlockReason[] = [];
+  const notes: string[] = [];
   const seen = new Set<string>();
+  const notesSeen = new Set<string>();
 
   for (const d of deps) {
     if (d.number != null) {
@@ -193,13 +253,24 @@ export function classify(issue: IssueInput, deps: DepRef[]): Triage {
         const key = `#${d.number}`;
         if (seen.has(key)) continue;
         seen.add(key);
+        // An EARS prose-ref whose sibling Issue is still OPEN blocks, named as
+        // the concrete open sibling it resolved to.
+        const earsTag = d.ears != null ? `EARS-${d.ears} → ` : "";
         reasons.push({
           kind: "open-issue",
           number: d.number,
-          text: `blocked by open #${d.number}${
+          text: `blocked by open ${earsTag}#${d.number}${
             d.title ? ` (${truncateTitle(d.title)})` : ""
           }`,
         });
+      } else if (d.ears != null && d.state === "closed") {
+        // A prose "Blocked by EARS-N" ref resolved to a CLOSED sibling Issue:
+        // the dependency is satisfied — record it as an unblocking note, not a
+        // blocker (the #468 / #557 false-blocked pattern this command fixes).
+        const key = `ears:${d.ears}`;
+        if (notesSeen.has(key)) continue;
+        notesSeen.add(key);
+        notes.push(`prose ref resolved: EARS-${d.ears} closed as #${d.number}`);
       }
       // A closed blocking Issue is resolved — not a blocker.
     } else if (d.subsystem) {
@@ -218,6 +289,7 @@ export function classify(issue: IssueInput, deps: DepRef[]): Triage {
     title: issue.title,
     readiness: reasons.length > 0 ? "blocked" : "takeable",
     reasons,
+    notes,
     isDecisionDebt: issue.labels.includes("decision-debt"),
   };
 }
@@ -320,12 +392,70 @@ function makeStateResolver(openNumbers: Set<number>) {
   };
 }
 
+/**
+ * Resolve a same-feature EARS prose-ref to its sibling Issue, cached per
+ * `feature:NNN-*` label. All Issues carrying the label (any state) are listed
+ * once, then `findSiblingByEars` matches the title. A list failure degrades to
+ * "no sibling" (the ref stays a conservative blocker) with a printed warning.
+ */
+function makeSiblingResolver() {
+  const cache = new Map<string, SiblingIssue[]>();
+  async function siblingsFor(featureLabel: string): Promise<SiblingIssue[]> {
+    const hit = cache.get(featureLabel);
+    if (hit) return hit;
+    let sibs: SiblingIssue[] = [];
+    try {
+      const { stdout } = await execa(
+        "gh",
+        [
+          "issue",
+          "list",
+          "--state",
+          "all",
+          "--label",
+          featureLabel,
+          "--limit",
+          "300",
+          "--json",
+          "number,title,state",
+        ],
+        { cwd: REPO_ROOT },
+      );
+      sibs = (
+        JSON.parse(stdout) as Array<{
+          number: number;
+          title: string;
+          state: string;
+        }>
+      ).map((s) => ({
+        number: s.number,
+        title: s.title,
+        state: s.state.toLowerCase() === "open" ? "open" : "closed",
+      }));
+    } catch (e) {
+      note(`siblings ${featureLabel}`, e);
+    }
+    cache.set(featureLabel, sibs);
+    return sibs;
+  }
+  return async function resolveSibling(
+    featureLabel: string,
+    ears: number,
+  ): Promise<SiblingIssue | undefined> {
+    return findSiblingByEars(await siblingsFor(featureLabel), ears);
+  };
+}
+
 async function resolveDeps(
   issue: RawIssue,
   resolveState: (n: number) => Promise<{
     state: IssueState | "unknown";
     title?: string;
   }>,
+  resolveSibling: (
+    featureLabel: string,
+    ears: number,
+  ) => Promise<SiblingIssue | undefined>,
 ): Promise<DepRef[]> {
   const deps: DepRef[] = [];
 
@@ -339,12 +469,41 @@ async function resolveDeps(
     });
   }
 
+  const featureLabel = (issue.labels ?? [])
+    .map((l) => l.name)
+    .find((n) => n.startsWith("feature:"));
+
   // (2) prose "Blocked by …" clauses.
   for (const pb of parseProseBlockers(issue.body ?? "")) {
     if (pb.issues.length > 0) {
       for (const n of pb.issues) {
         const r = await resolveState(n);
         deps.push({ source: "prose", number: n, state: r.state, title: r.title });
+      }
+    } else if (pb.ears && pb.ears.length > 0) {
+      // A prose ref to same-feature EARS handlers — resolve each against a
+      // sibling Issue and treat a CLOSED sibling as a satisfied dependency.
+      for (const e of pb.ears) {
+        const sib = featureLabel
+          ? await resolveSibling(featureLabel, e)
+          : undefined;
+        if (sib) {
+          deps.push({
+            source: "prose",
+            ears: e,
+            number: sib.number,
+            state: sib.state,
+            title: sib.title,
+          });
+        } else {
+          // Unresolvable (no feature label, or no sibling carries this EARS):
+          // stay blocked, unchanged — fall back to the subsystem prose.
+          deps.push({
+            source: "prose",
+            ears: e,
+            subsystem: pb.subsystem ?? `EARS-${e}`,
+          });
+        }
       }
     } else if (pb.subsystem) {
       deps.push({ source: "prose", subsystem: pb.subsystem });
@@ -383,6 +542,7 @@ export function formatReport(triaged: Triage[]): string {
       ? " [decision-debt — deferred decision, deps all closed]"
       : "";
     out.push(`- #${t.number}${tag} ${truncateTitle(t.title, 80)}`);
+    for (const n of t.notes) out.push(`    ↳ (${n})`);
   }
   out.push("");
 
@@ -412,6 +572,7 @@ async function main(): Promise<void> {
 
   const openNumbers = new Set(issues.map((i) => i.number));
   const resolveState = makeStateResolver(openNumbers);
+  const resolveSibling = makeSiblingResolver();
 
   const triaged: Triage[] = [];
   for (const raw of issues) {
@@ -420,7 +581,7 @@ async function main(): Promise<void> {
       title: raw.title,
       labels: (raw.labels ?? []).map((l) => l.name),
     };
-    const deps = await resolveDeps(raw, resolveState);
+    const deps = await resolveDeps(raw, resolveState, resolveSibling);
     triaged.push(classify(input, deps));
   }
 

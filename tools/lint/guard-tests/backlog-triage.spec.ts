@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   classify,
+  findSiblingByEars,
   parseProseBlockers,
   subsystemName,
   type DepRef,
   type IssueInput,
+  type SiblingIssue,
 } from "../../backlog-triage";
 
 /**
@@ -106,6 +108,68 @@ describe("backlog-triage classify()", () => {
     ];
     expect(classify(issue(1), deps).readiness).toBe("takeable");
   });
+
+  it("an EARS prose-ref resolved to a CLOSED sibling → takeable + resolution note (#622/#551 shape)", () => {
+    const deps: DepRef[] = [
+      { source: "prose", ears: 1, number: 550, state: "closed", title: "EARS-1" },
+    ];
+    const t = classify(issue(551, ["feature:004-event-page-listing"]), deps);
+    expect(t.readiness).toBe("takeable");
+    expect(t.reasons).toHaveLength(0);
+    expect(t.notes).toEqual(["prose ref resolved: EARS-1 closed as #550"]);
+  });
+
+  it("multiple EARS prose-refs all CLOSED → takeable with one note each (#557 shape)", () => {
+    const deps: DepRef[] = [
+      { source: "prose", ears: 7, number: 556, state: "closed" },
+      { source: "prose", ears: 1, number: 550, state: "closed" },
+    ];
+    const t = classify(issue(557, ["feature:004-event-page-listing"]), deps);
+    expect(t.readiness).toBe("takeable");
+    expect(t.notes).toEqual([
+      "prose ref resolved: EARS-7 closed as #556",
+      "prose ref resolved: EARS-1 closed as #550",
+    ]);
+  });
+
+  it("an EARS prose-ref whose sibling is still OPEN → blocked, named as that sibling", () => {
+    const deps: DepRef[] = [
+      { source: "prose", ears: 9, number: 558, state: "open", title: "EARS-9" },
+    ];
+    const t = classify(issue(1, ["feature:004-event-page-listing"]), deps);
+    expect(t.readiness).toBe("blocked");
+    expect(t.reasons).toHaveLength(1);
+    expect(t.reasons[0]!.kind).toBe("open-issue");
+    expect(t.reasons[0]!.text).toContain("EARS-9 → #558");
+  });
+
+  it("mixed EARS refs — one CLOSED, one OPEN → blocked (ALL must be closed)", () => {
+    const deps: DepRef[] = [
+      { source: "prose", ears: 1, number: 550, state: "closed" },
+      { source: "prose", ears: 9, number: 558, state: "open" },
+    ];
+    const t = classify(issue(1, ["feature:004-event-page-listing"]), deps);
+    expect(t.readiness).toBe("blocked");
+    expect(t.reasons).toHaveLength(1);
+    expect(t.reasons[0]!.number).toBe(558);
+  });
+
+  it("an EARS prose-ref with no sibling match falls back to absent-subsystem → blocked", () => {
+    const deps: DepRef[] = [
+      { source: "prose", ears: 1, subsystem: "EARS-1 (the event page shell)" },
+    ];
+    const t = classify(issue(1, ["feature:004-event-page-listing"]), deps);
+    expect(t.readiness).toBe("blocked");
+    expect(t.reasons[0]!.kind).toBe("absent-subsystem");
+  });
+
+  it("dedupes a repeated EARS resolution note", () => {
+    const deps: DepRef[] = [
+      { source: "prose", ears: 1, number: 550, state: "closed" },
+      { source: "prose", ears: 1, number: 550, state: "closed" },
+    ];
+    expect(classify(issue(1), deps).notes).toHaveLength(1);
+  });
 });
 
 describe("backlog-triage parseProseBlockers()", () => {
@@ -164,6 +228,53 @@ describe("backlog-triage parseProseBlockers()", () => {
     expect(b).toHaveLength(1);
     expect(b[0]!.issues).toEqual([512]);
     expect(b[0]!.subsystem).toBeUndefined();
+  });
+
+  it("inline '**Blocked by:** EARS-1 (…)' extracts the EARS ref, no #issue (#551 shape)", () => {
+    const body =
+      "## Dependencies\n\n**Blocked by:** EARS-1 (the `PublicEventPage` endpoint + page shell must exist first). Native link set on the parent's sub-issue graph.\n";
+    const b = parseProseBlockers(body);
+    expect(b).toHaveLength(1);
+    expect(b[0]!.issues).toEqual([]);
+    expect(b[0]!.ears).toEqual([1]);
+  });
+
+  it("a clause naming several EARS extracts all of them (#557 shape)", () => {
+    const body =
+      "## Dependencies\n\n**Blocked by:** EARS-7 (listing endpoint + route) and EARS-1 (the event page the card links to). Native links on the parent's sub-issue graph.\n";
+    const b = parseProseBlockers(body);
+    expect(b).toHaveLength(1);
+    expect(b[0]!.ears).toEqual([7, 1]);
+  });
+
+  it("an explicit #N ref still wins over EARS extraction (issue-ref path unchanged)", () => {
+    const body = "## Blocked by\n\n- EARS-3 handled by #512.\n";
+    const b = parseProseBlockers(body);
+    expect(b).toHaveLength(1);
+    expect(b[0]!.issues).toEqual([512]);
+    expect(b[0]!.ears).toBeUndefined();
+  });
+});
+
+describe("backlog-triage findSiblingByEars()", () => {
+  const sibs: SiblingIssue[] = [
+    { number: 550, title: "[004] EARS-1: public event-page SSR read endpoint", state: "closed" },
+    { number: 551, title: "[004] EARS-2: event-page content set", state: "open" },
+    { number: 558, title: "[004] EARS-12: cross-surface live-state consistency", state: "open" },
+  ];
+
+  it("matches the sibling carrying EARS-N in its title", () => {
+    expect(findSiblingByEars(sibs, 1)!.number).toBe(550);
+    expect(findSiblingByEars(sibs, 2)!.number).toBe(551);
+  });
+
+  it("is word-bounded — EARS-1 never matches EARS-12", () => {
+    expect(findSiblingByEars(sibs, 1)!.number).toBe(550);
+    expect(findSiblingByEars(sibs, 12)!.number).toBe(558);
+  });
+
+  it("returns undefined when no sibling carries the EARS", () => {
+    expect(findSiblingByEars(sibs, 9)).toBeUndefined();
   });
 });
 

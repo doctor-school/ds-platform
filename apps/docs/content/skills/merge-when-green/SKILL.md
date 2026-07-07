@@ -17,6 +17,8 @@ mode: inline
 
 ## Procedure
 
+**Step 0 — conflict pre-check (before ANY CI wait).** `gh pr view <N> --json mergeStateStatus -q .mergeStateStatus`. **`DIRTY` = merge conflict with base ⇒ GitHub cannot build the `pull_request` merge-ref, so CI will never start on the current head** — do NOT wait/poll for checks (a 20-minute poll on #606 waited for a run that could not exist). Rebase + resolve + `git push --force-with-lease` first, then enter Step 1 on the new head. Orchestration corollary: when sequential PRs touch the same module, rebase the trailing PR **immediately after** the leading one merges — don't discover the conflict at merge time. (`DIRTY` is a reliable signal here; `BEHIND` is not — see Step 1a.)
+
 **Step 1 — confirm CI green BY HAND first (Phase-0 manual gate).** In Phase 0 the repo is GitHub Free + private, so there is **no server-side required-checks gate**: `--auto` does **not** hold the merge for CI — it merges the instant an approval exists, even while checks are still pending (this is what merged L1 #278 ahead of a pending CI). So the real gate is manual. Run the deterministic wait helper, which blocks until **every** check is `pass`/`skipping` and exits non-zero if any is `fail`/`cancel` or still `pending` at timeout:
 
 ```bash

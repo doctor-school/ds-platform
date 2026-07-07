@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import type { Event } from "@ds/db";
 import {
+  canTransition,
   type CreateEventRequest,
   type EventAdminDetail,
   type EventAdminListItem,
@@ -20,6 +21,22 @@ export interface UploadedPdf {
   filename: string;
   contentType: string;
   body: Buffer;
+}
+
+/**
+ * The EARS-7 guard's refusal: the requested move is not one of the four legal
+ * forward transitions from the event's current state. HTTP-agnostic — the
+ * controller maps it to a 4xx state conflict — so the guard stays a pure domain
+ * rule, testable without a transport. `from`/`to` are the offending pair.
+ */
+export class InvalidTransitionError extends Error {
+  constructor(
+    readonly from: EventLifecycleState,
+    readonly to: EventLifecycleState,
+  ) {
+    super(`illegal lifecycle transition ${from} → ${to}`);
+    this.name = "InvalidTransitionError";
+  }
 }
 
 /** Slugify a (possibly non-ASCII) title into a URL-safe, collision-resistant handle. */
@@ -113,6 +130,39 @@ export class EventsService {
   async detail(id: string): Promise<EventAdminDetail | null> {
     const found = await this.repo.findById(id);
     return found ? this.toDetail(found) : null;
+  }
+
+  /**
+   * EARS-7 — the single closed-set lifecycle guard. Move the event `to` a new
+   * state iff `current → to` is one of the four legal forward transitions
+   * ({@link canTransition}); every invalid jump (skip-forward, backward, reopen
+   * `archived`, the `published → draft` unpublish the PRD names none, or a
+   * self-transition) is refused with {@link InvalidTransitionError} — the state
+   * is never mutated. Enforcement is server-side, from the same closed map the
+   * read-side `validTransitions` derives, so the admin UI and the API cannot
+   * disagree about what is legal.
+   *
+   * This is the bare guarded transition every command runs through; the named
+   * transition commands (publish / open / close / archive — EARS-4/5/6) layer
+   * their product side-effects and the terminal `audit_ledger` row on top of it.
+   *
+   * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
+   */
+  async transition(
+    id: string,
+    to: EventLifecycleState,
+  ): Promise<EventAdminDetail | null> {
+    const current = await this.repo.findById(id);
+    if (!current) return null;
+
+    const from = current.event.state as EventLifecycleState;
+    if (!canTransition(from, to)) {
+      throw new InvalidTransitionError(from, to);
+    }
+
+    const updated = await this.repo.updateState(id, to);
+    // The row existed a moment ago; a concurrent delete is the only null path.
+    return updated ? this.toDetail(updated) : null;
   }
 
   private toDetail(a: EventWithSpeakers): EventAdminDetail {

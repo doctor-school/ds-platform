@@ -49,6 +49,34 @@ export function validTransitions(
 }
 
 /**
+ * The closed-set guard predicate (EARS-7). `true` iff moving `from → to` is one
+ * of the four legal forward transitions. Every other move — a skip-forward, any
+ * backward move, reopening `archived`, the `published → draft` unpublish the PRD
+ * names none, and any self-transition — is `false`. This is the single predicate
+ * the server-side guard and the read-side `validTransitions` derive from, so the
+ * admin UI (which offers only valid moves) and the API refusal can never drift.
+ */
+export function canTransition(
+  from: EventLifecycleState,
+  to: EventLifecycleState,
+): boolean {
+  return LIFECYCLE_TRANSITIONS[from].includes(to);
+}
+
+/**
+ * The `TransitionEvent` command body (EARS-7). Carries only the target state,
+ * constrained to the closed lifecycle enum — a target outside the enum is a
+ * validation error (400) at the I/O boundary, before the guard runs; an
+ * in-enum-but-out-of-order target is the guard's own refusal (a 4xx state
+ * conflict). The transition is server-assigned through the guard, never a raw
+ * client-supplied state write.
+ */
+export const TransitionEventRequestSchema = z.object({
+  to: EventLifecycleStateSchema,
+});
+export type TransitionEventRequest = z.infer<typeof TransitionEventRequestSchema>;
+
+/**
  * Canonical Moscow-time handling (EARS-1, EARS-10, design §3). The operator
  * enters a date + time understood as **МСК**; the system stores ONE canonical
  * UTC instant. Moscow is permanently UTC+3 (Russia abolished seasonal DST in

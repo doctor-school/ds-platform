@@ -51,6 +51,23 @@ export interface UploadedPdf {
 export const EVENT_PUBLISHED_AUDIT_TYPE = "event.published";
 
 /**
+ * Canonical `audit_ledger` event id for the `published → live` transition — the
+ * director opening the room (EARS-5; ADR-0003 §6). Same `event.<transition>`
+ * namespace as {@link EVENT_PUBLISHED_AUDIT_TYPE}; consumed by 006 (the room
+ * starts admitting registered doctors + presence capture) and 004 (the "live
+ * now" signal).
+ */
+export const EVENT_WENT_LIVE_AUDIT_TYPE = "event.went_live";
+
+/**
+ * Canonical `audit_ledger` event id for the `live → ended` transition — the
+ * director closing the room (EARS-5; ADR-0003 §6). Same `event.<transition>`
+ * namespace; consumed by 006 (admission + heartbeat/chat acceptance stop, the
+ * presence window is bounded) and 004 (the ended state).
+ */
+export const EVENT_ENDED_AUDIT_TYPE = "event.ended";
+
+/**
  * The EARS-7 guard's refusal: the requested move is not one of the four legal
  * forward transitions from the event's current state. HTTP-agnostic — the
  * controller maps it to a 4xx state conflict — so the guard stays a pure domain
@@ -268,16 +285,86 @@ export class EventsService {
     id: string,
     actorSub: string | null,
   ): Promise<EventAdminDetail | null> {
+    return this.namedTransition(
+      id,
+      "published",
+      EVENT_PUBLISHED_AUDIT_TYPE,
+      actorSub,
+    );
+  }
+
+  /**
+   * EARS-5 — `OpenRoom`: the `published → live` transition, the director's
+   * air-day action that opens the 006 room (admission of registered doctors +
+   * presence capture start) and flips 004's "live now" signal off the same
+   * `EventLifecycleState` (no second flag — EARS-9). Runs through the same EARS-7
+   * closed-set guard as every transition ({@link canTransition}): open is
+   * **refused unless the event is in `published`** — any other origin raises
+   * {@link InvalidTransitionError} and the state is left untouched. On success
+   * the state change and exactly one terminal `audit_ledger` row are written
+   * atomically ({@link EventsRepository.updateStateWithAudit}), keyed to the
+   * acting `platform_admin` (`actorSub`). 006's own admission/heartbeat/chat
+   * logic consumes this `live` window — it is not this handler's concern.
+   *
+   * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
+   */
+  async openRoom(
+    id: string,
+    actorSub: string | null,
+  ): Promise<EventAdminDetail | null> {
+    return this.namedTransition(
+      id,
+      "live",
+      EVENT_WENT_LIVE_AUDIT_TYPE,
+      actorSub,
+    );
+  }
+
+  /**
+   * EARS-5 — `CloseRoom`: the `live → ended` transition, the director's action
+   * that closes the 006 room (admission + heartbeat/chat acceptance stop) and
+   * **bounds the presence window** (006 EARS-7), and flips 004 to the ended
+   * state off the same `EventLifecycleState`. Runs through the same EARS-7
+   * closed-set guard: close is **refused unless the event is in `live`** — any
+   * other origin raises {@link InvalidTransitionError} with the state untouched.
+   * On success the state change and exactly one terminal `audit_ledger` row are
+   * written atomically, keyed to the acting `platform_admin`.
+   *
+   * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
+   */
+  async closeRoom(
+    id: string,
+    actorSub: string | null,
+  ): Promise<EventAdminDetail | null> {
+    return this.namedTransition(id, "ended", EVENT_ENDED_AUDIT_TYPE, actorSub);
+  }
+
+  /**
+   * The shared body of every named, audited transition command (publish / open /
+   * close — EARS-4/5): load the aggregate, run the EARS-7 closed-set guard
+   * ({@link canTransition}) — refusing an invalid jump with
+   * {@link InvalidTransitionError}, state untouched — then write the state change
+   * and exactly one terminal `audit_ledger` row atomically. Keeps the four named
+   * commands a single source of truth for the guard + audit obligation.
+   *
+   * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
+   */
+  private async namedTransition(
+    id: string,
+    to: EventLifecycleState,
+    auditType: string,
+    actorSub: string | null,
+  ): Promise<EventAdminDetail | null> {
     const current = await this.repo.findById(id);
     if (!current) return null;
 
     const from = current.event.state as EventLifecycleState;
-    if (!canTransition(from, "published")) {
-      throw new InvalidTransitionError(from, "published");
+    if (!canTransition(from, to)) {
+      throw new InvalidTransitionError(from, to);
     }
 
-    const updated = await this.repo.updateStateWithAudit(id, "published", {
-      eventType: EVENT_PUBLISHED_AUDIT_TYPE,
+    const updated = await this.repo.updateStateWithAudit(id, to, {
+      eventType: auditType,
       subjectId: actorSub,
       from,
     });

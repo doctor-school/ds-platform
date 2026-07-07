@@ -233,6 +233,99 @@ export class EventsAdminController {
   }
 
   /**
+   * EARS-5 — `OpenRoom` (`POST /v1/admin/events/:id/open`): the named
+   * `published → live` transition, the director's air-day action that opens the
+   * 006 room (admission of registered doctors + presence capture start). It runs
+   * through the EARS-7 guard (open is refused with a 409 unless the event is in
+   * `published`) and, on success, appends exactly one terminal `audit_ledger`
+   * row keyed to the acting `platform_admin` (ADR-0003 §6). The `live` state is
+   * the single source of truth the 006 room gates admission on (EARS-9).
+   */
+  @Post(":id/open")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    // Endpoint-authz AUTH-audit tier (ADR-0001 §2.5/§8): a `platform_admin`
+    // write, not an auth security event — no AuthAuditLog emission (low-stakes).
+    // The EARS-5 domain `audit_ledger` row is a separate ADR-0003 §6 obligation
+    // written atomically in the service, not this classification field.
+    audit: "low-stakes",
+    tests: ["EARS-5", "EARS-8"],
+  })
+  async open(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+  ): Promise<EventAdminDetail> {
+    return this.namedTransition(id, req, (eventId, actorSub) =>
+      this.events.openRoom(eventId, actorSub),
+    );
+  }
+
+  /**
+   * EARS-5 — `CloseRoom` (`POST /v1/admin/events/:id/close`): the named
+   * `live → ended` transition, the director's action that closes the 006 room
+   * (admission + heartbeat/chat acceptance stop) and **bounds the presence
+   * window** (006 EARS-7). It runs through the EARS-7 guard (close is refused
+   * with a 409 unless the event is in `live`) and, on success, appends exactly
+   * one terminal `audit_ledger` row keyed to the acting `platform_admin`
+   * (ADR-0003 §6).
+   */
+  @Post(":id/close")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    audit: "low-stakes",
+    tests: ["EARS-5", "EARS-8"],
+  })
+  async close(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+  ): Promise<EventAdminDetail> {
+    return this.namedTransition(id, req, (eventId, actorSub) =>
+      this.events.closeRoom(eventId, actorSub),
+    );
+  }
+
+  /**
+   * Shared body of the named, audited transition commands (publish / open /
+   * close — EARS-4/5): resolve the acting admin `sub` off the request (the 003
+   * session hook attaches it; the `AuthzGuard` has already refused any
+   * unauthenticated caller — EARS-8), invoke the service command, map a missing
+   * event to a 404 and the EARS-7 guard's {@link InvalidTransitionError} to a
+   * 409 state conflict (state left untouched, no audit row).
+   */
+  private async namedTransition(
+    id: string,
+    req: FastifyRequest,
+    run: (
+      id: string,
+      actorSub: string | null,
+    ) => Promise<EventAdminDetail | null>,
+  ): Promise<EventAdminDetail> {
+    // The acting admin `sub` keys the audit row (ADR-0003 §6). Null only if
+    // unresolved — the AuthzGuard has already refused any unauthenticated caller.
+    const actorSub = (req as { user?: { sub?: string } }).user?.sub ?? null;
+    try {
+      const updated = await run(id, actorSub);
+      if (!updated) throw new NotFoundException("event not found");
+      return updated;
+    } catch (err) {
+      if (err instanceof InvalidTransitionError) {
+        throw new ConflictException({
+          message: "illegal lifecycle transition",
+          from: err.from,
+          to: err.to,
+        });
+      }
+      throw err;
+    }
+  }
+
+  /**
    * EARS-7 — the single closed-set lifecycle transition, server-enforced. Moves
    * the event to the target state iff `current → to` is one of the four legal
    * forward moves; an in-enum-but-out-of-order target (a skip-forward, any

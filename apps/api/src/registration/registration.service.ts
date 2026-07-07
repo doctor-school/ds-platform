@@ -56,12 +56,18 @@ export class RegistrationService {
   constructor(private readonly repo: RegistrationRepository) {}
 
   /**
-   * EARS-1 — `RegisterForEvent`: record a registration against the authenticated
-   * doctor's account in **one action** and return the registered state so the
-   * event page flips immediately, no confirmation round-trip. Gating: the event
-   * must be `published`/`live` (else {@link EventNotRegistrableError}); the event
-   * must exist (else {@link RegistrationEventNotFoundError}); the subject must
-   * resolve to a mirror row (else {@link UnknownSubjectError}).
+   * `RegisterForEvent` (EARS-1 + EARS-3): record a registration against the
+   * authenticated doctor's account in **one action** and return the registered
+   * state so the event page flips immediately, no confirmation round-trip.
+   * Idempotent (EARS-3) — a repeat via any path is a no-op that returns the
+   * existing registration ({@link RegistrationRepository.upsertRegistration}):
+   * the DB `UNIQUE (user_id, event_id)` constraint guarantees at most one row,
+   * and the terminal `audit_ledger` entry is written once, on the first insert
+   * only. Both the first insert and an idempotent repeat return
+   * `{ registered: true, registeredAt }` (design §5). Gating: the event must be
+   * `published`/`live` (else {@link EventNotRegistrableError}); the event must
+   * exist (else {@link RegistrationEventNotFoundError}); the subject must resolve
+   * to a mirror row (else {@link UnknownSubjectError}).
    */
   async register(
     idOrSlug: string,
@@ -72,7 +78,11 @@ export class RegistrationService {
     if (!isRegistrable(event.state)) {
       throw new EventNotRegistrableError(event.state);
     }
-    const registeredAt = await this.repo.insertRegistration(userId, event.id);
+    const { registeredAt } = await this.repo.upsertRegistration(
+      userId,
+      event.id,
+      sub,
+    );
     return { registered: true, registeredAt: registeredAt.toISOString() };
   }
 

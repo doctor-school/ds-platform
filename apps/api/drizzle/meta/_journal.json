@@ -57,6 +57,13 @@
       "when": 1783426462772,
       "tag": "0007_registrations",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783427971617,
+      "tag": "0008_registrations_unique",
+      "breakpoints": true
     }
   ]
 }

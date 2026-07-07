@@ -27,9 +27,14 @@ The webinar event module. It hosts two surfaces over one aggregate:
   `PublicEventPage`, 004 EARS-1) and the upcoming-broadcasts listing
   (`GET /v1/public/events` → `UpcomingBroadcastCard[]`, 004 EARS-7). Both are
   unauthenticated, cacheable, with no per-session variation (004 EARS-10). The
-  page's visibility policy (draft → 404, archived → 200 notice body) and the
-  listing's filter (`published`/`live` at or after the air-window cutoff, ordered
-  nearest air date first; empty → `[]`, EARS-11) live in the service. 004 owns no
+  page's **non-public visibility policy** (004 EARS-6: `draft`/unknown → 404,
+  byte-for-byte indistinguishable so a hidden draft leaks no oracle; archived →
+  200 notice body) and the listing's filter both derive from a single `@ds/schemas`
+  SSOT — the page gate is the `isPubliclyReachable(state)` predicate (built from the
+  `PUBLIC_EVENT_STATES` allow-list, not a `draft` denylist), the listing reads the
+  `UPCOMING_BROADCAST_STATES` set (`published`/`live` at or after the air-window
+  cutoff, ordered nearest air date first; `draft`/`ended`/`archived` never list;
+  empty → `[]`, EARS-11). 004 owns no
   write path — it reads the state 007's transitions leave; until the 007 admin
   surface ships end-to-end, the read side is driven against **seeded fixture
   events** (seam → parent #549).
@@ -206,9 +211,11 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
   same guarded, audited path via `namedTransition()`, appending `event.archived`;
   after it the event leaves all public surfaces off the single
   `EventLifecycleState`, LD-2 — no scheduler), and
-  `publicEventPage()` (004 EARS-1:
-  applies the
-  visibility policy — `draft` → null → 404 — and projects the publish-safe
+  `publicEventPage()` (004 EARS-1 + EARS-6:
+  applies the non-public
+  visibility policy via the `isPubliclyReachable` SSOT predicate — a
+  non-publicly-reachable state (`draft`) → null → 404, indistinguishable from an
+  unknown id — and projects the publish-safe
   allow-list `PublicEventPage`, mapping the internal `regalia`/`partnerRef` to
   the public `credentials`/`partners[].label`, omitting `programPdfUrl` when
   absent), and `listUpcoming()` (004 EARS-7: reads the `published`/`live` events

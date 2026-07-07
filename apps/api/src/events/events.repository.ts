@@ -68,6 +68,74 @@ export class EventsRepository {
   }
 
   /**
+   * EARS-2 — edit one event's authored fields and (optionally) replace its
+   * ordered speaker list, in a single transaction so a partial edit is never
+   * persisted. `patch` carries only the columns to overwrite (an omitted column
+   * is untouched); `updated_at` is always bumped. When `speakers` is provided the
+   * stored list is replaced wholesale (delete-then-insert, preserving order); when
+   * it is `undefined` the speaker rows are left as they are. The caller (the
+   * service) has already validated the pre-archive edit window and folded any
+   * program-PDF replacement into `patch.programPdfRef`. Returns the updated
+   * aggregate, or `null` when the id does not exist.
+   */
+  async updateEvent(
+    id: string,
+    patch: Partial<
+      Pick<
+        NewEvent,
+        | "title"
+        | "school"
+        | "startsAt"
+        | "durationMin"
+        | "description"
+        | "specialties"
+        | "partnerRef"
+        | "programPdfRef"
+      >
+    >,
+    speakers?: Omit<NewEventSpeaker, "eventId">[],
+  ): Promise<EventWithSpeakers | null> {
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(events)
+        .set({ ...patch, updatedAt: new Date() })
+        .where(eq(events.id, id))
+        .returning();
+      if (!row) return null;
+
+      if (speakers) {
+        await tx.delete(eventSpeakers).where(eq(eventSpeakers.eventId, id));
+        if (speakers.length > 0) {
+          await tx
+            .insert(eventSpeakers)
+            .values(speakers.map((s) => ({ ...s, eventId: id })));
+        }
+      }
+
+      const speakerRows = await tx
+        .select()
+        .from(eventSpeakers)
+        .where(eq(eventSpeakers.eventId, id))
+        .orderBy(asc(eventSpeakers.position));
+      const [streamRow] = await tx
+        .select()
+        .from(streamConfig)
+        .where(eq(streamConfig.eventId, id));
+      return {
+        event: row,
+        speakers: speakerRows.map((s) => ({
+          name: s.name,
+          regalia: s.regalia,
+          position: s.position,
+        })),
+        streamConfig: streamRow
+          ? { provider: streamRow.provider, embedRef: streamRow.embedRef }
+          : null,
+      };
+    });
+  }
+
+  /**
    * EARS-3 — persist (upsert) the stream config for one event. One config per
    * event: the `event_id` PK makes this an idempotent write, so correcting the
    * config while `published` replaces the single row (no state reversal). The
@@ -89,7 +157,9 @@ export class EventsRepository {
   }
 
   /** Load the stream config for one event, or `null` when unconfigured. */
-  private async loadStreamConfig(eventId: string): Promise<StreamConfig | null> {
+  private async loadStreamConfig(
+    eventId: string,
+  ): Promise<StreamConfig | null> {
     const [row] = await this.db
       .select()
       .from(streamConfig)

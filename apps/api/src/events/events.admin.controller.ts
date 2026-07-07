@@ -7,6 +7,7 @@ import {
   HttpCode,
   NotFoundException,
   Param,
+  Patch,
   Post,
   Put,
   Req,
@@ -16,6 +17,7 @@ import {
   CreateEventRequestSchema,
   type EventAdminDetail,
   type EventAdminList,
+  UpdateEventRequestSchema,
 } from "@ds/schemas";
 import { Authz } from "../authz/index.js";
 import {
@@ -23,6 +25,7 @@ import {
   TransitionEventRequestDto,
 } from "./events.dto.js";
 import {
+  EventNotEditableError,
   EventsService,
   InvalidTransitionError,
   StreamNotConfigurableError,
@@ -61,13 +64,37 @@ export class EventsAdminController {
     tests: ["EARS-1", "EARS-8"],
   })
   async create(@Req() req: FastifyRequest): Promise<EventAdminDetail> {
+    const { payloadRaw, pdf } = await this.readMultipart(req);
+    if (payloadRaw === undefined) {
+      throw new BadRequestException("missing 'payload' form field");
+    }
+    const parsed = CreateEventRequestSchema.safeParse(
+      this.parseJson(payloadRaw),
+    );
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: "invalid event payload",
+        issues: parsed.error.issues,
+      });
+    }
+    return this.events.create(parsed.data, pdf);
+  }
+
+  /**
+   * Read the shared `multipart/form-data` authoring body — a `payload` JSON field
+   * plus an optional `programPdf` file (create EARS-1 / edit EARS-2). The JSON+file
+   * shape does not fit `@Body()` DTO validation, so the payload is Zod-parsed by
+   * each command; the file is validated (size + `application/pdf`) here before it
+   * reaches object storage. An unexpected file part is drained, never stored.
+   */
+  private async readMultipart(
+    req: FastifyRequest,
+  ): Promise<{ payloadRaw: string | undefined; pdf: UploadedPdf | undefined }> {
     if (typeof req.isMultipart !== "function" || !req.isMultipart()) {
       throw new BadRequestException("multipart/form-data is required");
     }
-
     let payloadRaw: string | undefined;
     let pdf: UploadedPdf | undefined;
-
     for await (const part of req.parts()) {
       if (part.type === "file") {
         if (part.fieldname !== "programPdf") {
@@ -82,34 +109,76 @@ export class EventsAdminController {
         if (part.mimetype !== "application/pdf") {
           throw new BadRequestException("the program file must be a PDF");
         }
-        pdf = {
-          filename: part.filename,
-          contentType: part.mimetype,
-          body,
-        };
+        pdf = { filename: part.filename, contentType: part.mimetype, body };
       } else if (part.fieldname === "payload") {
         payloadRaw = String(part.value);
       }
     }
+    return { payloadRaw, pdf };
+  }
 
-    if (payloadRaw === undefined) {
-      throw new BadRequestException("missing 'payload' form field");
-    }
-    let json: unknown;
+  /** Parse a form `payload` field as JSON, mapping a malformed body to a 400. */
+  private parseJson(raw: string): unknown {
     try {
-      json = JSON.parse(payloadRaw);
+      return JSON.parse(raw);
     } catch {
       throw new BadRequestException("'payload' is not valid JSON");
     }
-    const parsed = CreateEventRequestSchema.safeParse(json);
+  }
+
+  /**
+   * EARS-2 — `UpdateEvent` (`PATCH /v1/admin/events/:id`): edit an event's
+   * authored fields at any **pre-archive** state and, when a replacement
+   * `programPdf` rides the same multipart request, supersede the stored object
+   * reference so the 004 public page serves the **current** file (the superseded
+   * file is no longer served). The operator never has to unpublish to correct a
+   * detail — an edit is not a state reversal (there is no `published → draft`,
+   * EARS-7). `payload` is optional (a PDF-only replacement carries no field
+   * edits); a present payload is validated against the `@ds/schemas` partial SSOT
+   * — a bad field (e.g. a non-МСК datetime) is a 400 and nothing is mutated. An
+   * edit to an `archived` event is a 409 ({@link EventNotEditableError}). A
+   * missing event id is a 404. `platform_admin`-only (EARS-8); like create it is a
+   * `platform_admin` authoring write, not a lifecycle transition, so it owes no
+   * terminal `audit_ledger` row (that obligation attaches to EARS-4/5/6).
+   */
+  @Patch(":id")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    audit: "low-stakes",
+    tests: ["EARS-2", "EARS-8"],
+  })
+  async update(
+    @Param("id") id: string,
+    @Req() req: FastifyRequest,
+  ): Promise<EventAdminDetail> {
+    const { payloadRaw, pdf } = await this.readMultipart(req);
+    // `payload` is optional on an edit: a PDF-only replacement carries no fields,
+    // so an absent payload is an empty patch, not a 400.
+    const parsed = UpdateEventRequestSchema.safeParse(
+      payloadRaw === undefined ? {} : this.parseJson(payloadRaw),
+    );
     if (!parsed.success) {
       throw new BadRequestException({
         message: "invalid event payload",
         issues: parsed.error.issues,
       });
     }
-
-    return this.events.create(parsed.data, pdf);
+    try {
+      const updated = await this.events.update(id, parsed.data, pdf);
+      if (!updated) throw new NotFoundException("event not found");
+      return updated;
+    } catch (err) {
+      if (err instanceof EventNotEditableError) {
+        throw new ConflictException({
+          message: "event is archived — editing is refused",
+          state: err.state,
+        });
+      }
+      throw err;
+    }
   }
 
   @Get()
@@ -214,8 +283,7 @@ export class EventsAdminController {
     // The 003 session hook attaches the authenticated subject; the acting admin
     // `sub` keys the audit row (ADR-0003 §6). Null only if unresolved — the
     // AuthzGuard has already refused any unauthenticated caller (EARS-8).
-    const actorSub =
-      (req as { user?: { sub?: string } }).user?.sub ?? null;
+    const actorSub = (req as { user?: { sub?: string } }).user?.sub ?? null;
     try {
       const updated = await this.events.publish(id, actorSub);
       if (!updated) throw new NotFoundException("event not found");

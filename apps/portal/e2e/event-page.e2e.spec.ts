@@ -22,6 +22,8 @@ const EXPECTED_TITLE = process.env.E2E_WEBINAR_TITLE;
 // seam). The upcoming/published event is `SLUG`; live + ended are their own seeds.
 const SLUG_LIVE = process.env.E2E_WEBINAR_SLUG_LIVE;
 const SLUG_ENDED = process.env.E2E_WEBINAR_SLUG_ENDED;
+// EARS-5 — the archived direct-link notice needs its own seeded `archived` event.
+const SLUG_ARCHIVED = process.env.E2E_WEBINAR_SLUG_ARCHIVED;
 
 test.skip(
   !process.env.E2E_PORTAL_URL || !SLUG,
@@ -168,6 +170,62 @@ test.describe("004 EARS-4 lifecycle render swap (e2e)", () => {
     ).toHaveCount(0);
     await expect(
       page.getByRole("link", { name: "Записаться", exact: true }),
+    ).toHaveCount(0);
+  });
+});
+
+/**
+ * 004 EARS-5 — an archived event reached via a previously-distributed direct
+ * link renders a public «мероприятие в архиве» notice with NO participation CTA
+ * (owner decision, variant «а»): the sponsor link degrades gracefully in place
+ * instead of dead-ending on a 404 or bouncing to the listing. The archived
+ * notice is the FOURTH render mode on the same page shell (beyond the canvas's
+ * upcoming/live/ended), a text notice replacing the status card's CTA column —
+ * no new geometry (design §5.1). Requires a seeded `archived` event slug (the
+ * 004↔007 fixture seam, parent #549).
+ */
+test.describe("004 EARS-5 archived direct-link notice (e2e)", () => {
+  test("EARS-5: an archived direct link renders the «в архиве» notice on the page (a reachable 200, not a 404 or a redirect)", async ({
+    page,
+    context,
+  }) => {
+    test.skip(!SLUG_ARCHIVED, "requires a seeded archived event slug");
+    await context.clearCookies();
+
+    // The distributed link degrades to a reachable page, never a 404 dead-end
+    // and never a 3xx bounce to the listing (owner variant «а»).
+    const response = await page.goto(`${BASE}/webinars/${SLUG_ARCHIVED}`, {
+      waitUntil: "domcontentloaded",
+    });
+    expect(response?.status()).toBe(200);
+    // It stayed on the event URL — not redirected to the listing.
+    expect(new URL(page.url()).pathname).toBe(`/webinars/${SLUG_ARCHIVED}`);
+
+    // The «в архиве» hero badge + the archived notice are present.
+    await expect(page.getByText("В архиве", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Мероприятие в архиве").first()).toBeVisible();
+  });
+
+  test("EARS-5: the archived render carries NO participation CTA (no dead link)", async ({
+    page,
+    context,
+  }) => {
+    test.skip(!SLUG_ARCHIVED, "requires a seeded archived event slug");
+    await context.clearCookies();
+    await page.goto(`${BASE}/webinars/${SLUG_ARCHIVED}`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    // No participation affordance in any of its verbs — the archived notice is
+    // the fourth CTA-less render mode (EARS-5, mirroring the `ended` invariant).
+    await expect(
+      page.getByRole("link", { name: "Участвовать", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: "Записаться", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: "Смотреть эфир", exact: true }),
     ).toHaveCount(0);
   });
 });

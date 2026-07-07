@@ -32,9 +32,13 @@ import { formatMskParts } from "../../../lib/msk";
  *     the room (feature 006, `buildRoomHref`); 004 asserts the route, not the room.
  *   • ended — the ended affordance with NO participation CTA (never a dead link,
  *     the exactly-one-CTA invariant).
- * The archived "в архиве" notice is the sibling EARS-5 (a fourth render mode) —
- * intentionally NOT built here; an archived event renders the body without the
- * lifecycle status card until EARS-5 lands.
+ *
+ * EARS-5: the archived «мероприятие в архиве» notice is the FOURTH render mode on
+ * the same page shell (beyond the canvas's upcoming/live/ended) — a text notice
+ * replacing the status card's CTA column, no new geometry (design §5.1). A
+ * previously-distributed direct link to an archived event degrades gracefully in
+ * place (owner variant «а»): it renders this notice with NO participation CTA,
+ * never a 404, a redirect, or a dead link.
  *
  * Rendered per request (`force-dynamic`) — the page reflects a live read model
  * whose lifecycle state can change, so a static prerender would go stale.
@@ -58,9 +62,13 @@ export default async function WebinarEventPage({
   // and the single primary participation CTA target (register / room / none).
   const status = toCanvasStatus(event.state);
   const cta = resolvePrimaryCta(event.state, event.slug);
-  const showStatusCard = status !== "archived";
+  // EARS-5 — archived is the fourth render mode on the SAME status-card shell: a
+  // text notice replaces the CTA column (no button, no dead link), no new
+  // geometry. Every state now renders the status card (the archived body swaps
+  // its own time-plate/head/sub copy + the CTA-column notice).
+  const isArchived = status === "archived";
   // The footer conversion band mirrors the status card's route but only for a
-  // participable event (upcoming / live); `ended` (and archived) carries none.
+  // participable event (upcoming / live); `ended` and `archived` carry none.
   const showFooterBand = status === "upcoming" || status === "live";
 
   return (
@@ -108,31 +116,39 @@ export default async function WebinarEventPage({
       </header>
 
       <Container className="pb-12 layout:pb-16">
-        {/* EARS-4 — the pulled-up status card overlaps the poster (canvas -80px).
-            It swaps the time plate + head/sub + the single CTA per lifecycle
-            state; the `ended` render passes no CTA (no dead link). */}
-        {showStatusCard ? (
-          <div className="relative z-10 -mt-20">
-            <WebinarStatusCard
-              live={status === "live"}
-              liveLabel={t("state.live")}
-              timeLabel={t(`statusCard.${status}.timeLabel`)}
-              time={time}
-              timeSub={t(`statusCard.${status}.timeSub`, {
-                date,
-                duration: event.durationMin,
-              })}
-              head={t(`statusCard.${status}.head`)}
-              sub={t(`statusCard.${status}.sub`)}
-            >
-              {cta.kind !== "none" ? (
-                <Button asChild size="lg">
-                  <Link href={cta.href}>{t("cta.participate")}</Link>
-                </Button>
-              ) : null}
-            </WebinarStatusCard>
-          </div>
-        ) : null}
+        {/* EARS-4/EARS-5 — the pulled-up status card overlaps the poster (canvas
+            -80px). It swaps the time plate + head/sub + the single CTA per
+            lifecycle state; the `ended` render passes no CTA (no dead link), and
+            the `archived` render (EARS-5) replaces the CTA column with a plain
+            text notice — no participation affordance, no new geometry. */}
+        <div className="relative z-10 -mt-20">
+          <WebinarStatusCard
+            live={status === "live"}
+            liveLabel={t("state.live")}
+            timeLabel={t(`statusCard.${status}.timeLabel`)}
+            time={time}
+            timeSub={t(`statusCard.${status}.timeSub`, {
+              date,
+              duration: event.durationMin,
+            })}
+            head={t(`statusCard.${status}.head`)}
+            sub={t(`statusCard.${status}.sub`)}
+          >
+            {isArchived ? (
+              // The CTA column becomes a non-interactive «в архиве» notice — no
+              // button, no link (EARS-5, owner variant «а»). `text-primary-action`
+              // (blue.700) is the card-safe AA token on `bg-card` (never
+              // `text-primary`, the #270 precedent).
+              <p className="text-sm font-bold text-primary-action">
+                {t("statusCard.archived.notice")}
+              </p>
+            ) : cta.kind !== "none" ? (
+              <Button asChild size="lg">
+                <Link href={cta.href}>{t("cta.participate")}</Link>
+              </Button>
+            ) : null}
+          </WebinarStatusCard>
+        </div>
 
         <div className="mt-16">
           <WebinarPageContent

@@ -67,7 +67,9 @@ export class EventsPublicController {
     access: "public",
     check: "none",
     audit: "none",
-    tests: ["EARS-1", "EARS-10"],
+    // EARS-5: an archived direct link resolves to a 200 archived-notice body on
+    // this same route (never a 404/redirect) — its contract is pinned here too.
+    tests: ["EARS-1", "EARS-5", "EARS-10"],
   })
   async page(@Param("idOrSlug") idOrSlug: string): Promise<PublicEventPage> {
     const found = await this.events.publicEventPage(idOrSlug);

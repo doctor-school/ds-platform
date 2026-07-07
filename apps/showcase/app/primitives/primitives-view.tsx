@@ -38,6 +38,7 @@ import { Skeleton } from "@ds/design-system/skeleton";
 import { DayBand } from "@ds/design-system/day-band";
 import { WebinarCard } from "@ds/design-system/webinar-card";
 import { WebinarPageContent } from "@ds/design-system/webinar-page-content";
+import { WebinarStatusCard } from "@ds/design-system/webinar-status-card";
 import { Container } from "@ds/design-system/container";
 import {
   Form,
@@ -1262,6 +1263,85 @@ function WebinarPageContentSection() {
   );
 }
 
+function WebinarStatusCardSection() {
+  const states = [
+    {
+      key: "upcoming",
+      timeLabel: "Начало",
+      time: "19:00",
+      timeSub: "16 июля · МСК · 90 мин",
+      head: "Регистрация открыта",
+      sub: "Бесплатно. Пришлём ссылку на почту и напомним за час до старта.",
+      cta: "Участвовать",
+      live: false,
+    },
+    {
+      key: "live",
+      timeLabel: "Сейчас",
+      time: "19:00",
+      timeSub: "16 июля · МСК · идёт",
+      head: "Эфир уже идёт",
+      sub: "Бесплатно. Нужна регистрация врача — почта и специальность, две минуты.",
+      cta: "Участвовать",
+      live: true,
+    },
+    {
+      key: "ended",
+      timeLabel: "Прошёл",
+      time: "19:00",
+      timeSub: "16 июля · МСК",
+      head: "Эфир завершён",
+      sub: "Этот эфир уже прошёл. Регистрация закрыта.",
+      cta: null,
+      live: false,
+    },
+  ] as const;
+  return (
+    <PrimitiveSection
+      title="Webinar-status-card"
+      exportsLine="WebinarStatusCard — event-page lifecycle status card (time plate · head/sub · CTA slot)"
+    >
+      <p className="text-sm text-muted-foreground">
+        The event-page status card (source{" "}
+        <code className="font-mono text-xs">webinar-page.dc.html</code>, 004
+        EARS-4): the lifecycle affordance the page swaps per{" "}
+        <code className="font-mono text-xs">EventLifecycleState</code> — the
+        webinar-card time plate + a head/sub signal + a single primary-CTA slot.
+        The <span className="font-medium text-foreground">live</span> render
+        surfaces the «В эфире» signal; the{" "}
+        <span className="font-medium text-foreground">ended</span> render passes
+        no CTA (no dead link). Desktop → the 196px time-plate grid; ≤900px → flat
+        full-bleed.
+      </p>
+      {states.map((s) => (
+        <SubRow key={s.key} label={`status="${s.key}"`}>
+          <ThemePair
+            render={() => (
+              <div className="w-full">
+                <WebinarStatusCard
+                  live={s.live}
+                  liveLabel="В эфире"
+                  timeLabel={s.timeLabel}
+                  time={s.time}
+                  timeSub={s.timeSub}
+                  head={s.head}
+                  sub={s.sub}
+                >
+                  {s.cta ? (
+                    <Button asChild size="lg">
+                      <a href="#">{s.cta}</a>
+                    </Button>
+                  ) : null}
+                </WebinarStatusCard>
+              </div>
+            )}
+          />
+        </SubRow>
+      ))}
+    </PrimitiveSection>
+  );
+}
+
 export function PrimitivesView() {
   return (
     <div className="flex flex-col gap-2">
@@ -1285,6 +1365,7 @@ export function PrimitivesView() {
       <DayBandSection />
       <WebinarCardSection />
       <WebinarPageContentSection />
+      <WebinarStatusCardSection />
       <ContainerSection />
     </div>
   );

@@ -16,7 +16,7 @@ import {
 
 const SLUG = "ahilles-plastika";
 
-describe("toCanvasStatus — projection state → canvas status enum (EARS-4)", () => {
+describe("004 EARS-4 toCanvasStatus — projection state → canvas status enum", () => {
   it("EARS-4: when the event is published, the system shall render the upcoming status", () => {
     expect(toCanvasStatus("published")).toBe("upcoming");
   });
@@ -34,7 +34,7 @@ describe("toCanvasStatus — projection state → canvas status enum (EARS-4)", 
   });
 });
 
-describe("resolvePrimaryCta — the single participation CTA target (EARS-4)", () => {
+describe("004 EARS-4 resolvePrimaryCta — the single participation CTA target", () => {
   it("EARS-4: when the event is upcoming (published), the CTA shall route into the registration flow carrying the event context", () => {
     const cta = resolvePrimaryCta("published", SLUG);
     expect(cta.kind).toBe("register");
@@ -58,7 +58,7 @@ describe("resolvePrimaryCta — the single participation CTA target (EARS-4)", (
   });
 });
 
-describe("buildRoomHref — the room seam route (EARS-4, feature 006)", () => {
+describe("004 EARS-4 buildRoomHref — the room seam route (feature 006)", () => {
   it("EARS-4: the room href is a same-origin /webinars/:slug/room path", () => {
     expect(buildRoomHref(SLUG)).toBe(`/webinars/${SLUG}/room`);
   });

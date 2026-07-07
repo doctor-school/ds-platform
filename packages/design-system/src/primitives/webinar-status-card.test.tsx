@@ -22,7 +22,7 @@ const BASE = {
   sub: "Бесплатно. Пришлём ссылку на почту.",
 };
 
-describe("WebinarStatusCard — time plate + signal (EARS-4)", () => {
+describe("004 EARS-4 WebinarStatusCard — time plate + signal", () => {
   it("EARS-4: when the page renders the status card, the system shall show the time plate — label, time, and the МСК sub-label", () => {
     render(<WebinarStatusCard {...BASE} />);
     expect(screen.getByText("Начало")).toBeInTheDocument();
@@ -32,7 +32,14 @@ describe("WebinarStatusCard — time plate + signal (EARS-4)", () => {
   });
 
   it("EARS-4: when the event is live, the system shall surface the «В эфире» live signal", () => {
-    render(<WebinarStatusCard {...BASE} live liveLabel="В эфире" head="Эфир уже идёт" />);
+    render(
+      <WebinarStatusCard
+        {...BASE}
+        live
+        liveLabel="В эфире"
+        head="Эфир уже идёт"
+      />,
+    );
     expect(screen.getByText("В эфире")).toBeInTheDocument();
   });
 
@@ -42,7 +49,7 @@ describe("WebinarStatusCard — time plate + signal (EARS-4)", () => {
   });
 });
 
-describe("WebinarStatusCard — CTA slot swap (EARS-4)", () => {
+describe("004 EARS-4 WebinarStatusCard — CTA slot swap", () => {
   it("EARS-4: when a participation CTA is provided, the system shall render it in the card", () => {
     render(
       <WebinarStatusCard {...BASE}>
@@ -54,12 +61,14 @@ describe("WebinarStatusCard — CTA slot swap (EARS-4)", () => {
   });
 
   it("EARS-4: when the ended render passes no CTA, the system shall render no participation link (no dead CTA)", () => {
-    render(<WebinarStatusCard {...BASE} timeLabel="Прошёл" head="Эфир завершён" />);
+    render(
+      <WebinarStatusCard {...BASE} timeLabel="Прошёл" head="Эфир завершён" />,
+    );
     expect(screen.queryByRole("link")).toBeNull();
   });
 });
 
-describe("WebinarStatusCard — geometry + tokens (EARS-14)", () => {
+describe("004 EARS-14 WebinarStatusCard — geometry + tokens", () => {
   it("EARS-14: the desktop split is the 196px time-plate grid on a bordered, raised card", () => {
     const { container } = render(<WebinarStatusCard {...BASE} />);
     const card = container.firstElementChild as HTMLElement;

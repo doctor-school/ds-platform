@@ -99,6 +99,16 @@
     "mfaDisabled": "отключена",
     "signOut": "Выйти"
   },
+  "webinar": {
+    "breadcrumb": "Эфиры",
+    "startsAt": "{time} МСК · {date}",
+    "state": {
+      "published": "Скоро",
+      "live": "В эфире",
+      "ended": "Эфир завершён",
+      "archived": "В архиве"
+    }
+  },
   "errors": {
     "registerFailed": "Не удалось завершить регистрацию. Проверьте введённые данные.",
     "loginFailed": "Не удалось войти. Проверьте данные и попробуйте снова.",

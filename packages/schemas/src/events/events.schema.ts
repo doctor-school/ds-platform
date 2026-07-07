@@ -187,3 +187,77 @@ export const EventAdminListSchema = z.object({
   total: z.number().int().nonnegative(),
 });
 export type EventAdminList = z.infer<typeof EventAdminListSchema>;
+
+// ── 004 — public read side (PublicEventPage projection) ──────────────────────
+// The publish-safe projections the 004 public (unauthenticated) query endpoints
+// return. These are consumed read-only over the 007 write model; 004 owns no
+// write path (004 design §3, requirements EARS-1/EARS-10).
+
+/**
+ * The public event-page lifecycle states — the subset of
+ * {@link EVENT_LIFECYCLE_STATES} the public read surface may render. `draft` is
+ * deliberately EXCLUDED: a draft event has no public projection (a request for
+ * one is not-found, EARS-6), so `draft` can never appear on a `PublicEventPage`
+ * body. `archived` is present — an archived direct link resolves to a public
+ * notice body (EARS-5), never a 404.
+ */
+export const PUBLIC_EVENT_STATES = [
+  "published",
+  "live",
+  "ended",
+  "archived",
+] as const;
+export const PublicEventStateSchema = z.enum(PUBLIC_EVENT_STATES);
+export type PublicEventState = z.infer<typeof PublicEventStateSchema>;
+
+/**
+ * A publish-safe speaker entry (004 design §3) — display `name` + `credentials`
+ * only. The internal write model's free-text `regalia` is projected to
+ * `credentials`; no contact detail or other PII is ever exposed (EARS-10).
+ */
+export const PublicSpeakerSchema = z.object({
+  name: z.string(),
+  credentials: z.string(),
+});
+export type PublicSpeaker = z.infer<typeof PublicSpeakerSchema>;
+
+/**
+ * A backing partner as shown publicly — a display `label` only. No commercial
+ * terms, sponsor contract data, or operator notes cross onto the public body
+ * (EARS-10).
+ */
+export const PublicPartnerSchema = z.object({
+  label: z.string(),
+});
+export type PublicPartner = z.infer<typeof PublicPartnerSchema>;
+
+/**
+ * `PublicEventPage` — the publish-safe projection returned by
+ * `GET /v1/public/events/:idOrSlug` (004 design §3, EARS-1). It is an
+ * ALLOW-LIST, not a redactor: only the fields named here are ever exposed, so a
+ * new internal column stays invisible to the public API until it is explicitly
+ * added to this projection (the structural guard behind EARS-10 — the recon §6
+ * `getEmailsForOrder` roster can never touch a public surface). It carries NO
+ * operator/commercial field (the raw partner ref, the program storage key, the
+ * row timestamps, the admin `validTransitions`) and NO registrant PII.
+ *
+ * `startsAt` is the canonical UTC instant (ISO-8601); every surface renders it
+ * in `Europe/Moscow` labeled МСК (EARS-12). `programPdfUrl` is OMITTED (not
+ * null) when the event has no program PDF — the page renders the program section
+ * without a download affordance rather than a broken link (EARS-2).
+ */
+export const PublicEventPageSchema = z.object({
+  id: z.uuid(),
+  slug: z.string(),
+  title: z.string(),
+  school: z.string(),
+  startsAt: z.iso.datetime({ offset: true }),
+  durationMin: z.number().int(),
+  description: z.string(),
+  speakers: z.array(PublicSpeakerSchema),
+  specialties: z.array(z.string()),
+  partners: z.array(PublicPartnerSchema),
+  programPdfUrl: z.string().optional(),
+  state: PublicEventStateSchema,
+});
+export type PublicEventPage = z.infer<typeof PublicEventPageSchema>;

@@ -8,6 +8,8 @@ import {
   type EventAdminListItem,
   type EventLifecycleState,
   mskLocalToInstant,
+  type PublicEventPage,
+  type PublicEventState,
   validTransitions,
 } from "@ds/schemas";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/index.js";
@@ -163,6 +165,55 @@ export class EventsService {
     const updated = await this.repo.updateState(id, to);
     // The row existed a moment ago; a concurrent delete is the only null path.
     return updated ? this.toDetail(updated) : null;
+  }
+
+  /**
+   * 004 EARS-1 — the public event-page projection resolved by slug or id. The
+   * visibility policy (004 design §2) is applied here: a `draft` event has no
+   * public projection (returns null → the controller answers 404,
+   * indistinguishable from an unknown id, EARS-6); `published` / `live` / `ended`
+   * / `archived` all return the publish-safe {@link PublicEventPage} (an archived
+   * event resolves to a 200 body labeled `archived`, never a 404 — EARS-5). The
+   * projection is an ALLOW-LIST: only publish-safe fields are read onto the body
+   * (EARS-10).
+   */
+  async publicEventPage(idOrSlug: string): Promise<PublicEventPage | null> {
+    const found = await this.repo.findByIdOrSlug(idOrSlug);
+    if (!found) return null;
+    const state = found.event.state as EventLifecycleState;
+    if (state === "draft") return null;
+    return this.toPublicPage(found, state);
+  }
+
+  private toPublicPage(
+    a: EventWithSpeakers,
+    state: EventLifecycleState,
+  ): PublicEventPage {
+    const e = a.event;
+    const page: PublicEventPage = {
+      id: e.id,
+      slug: e.slug,
+      title: e.title,
+      school: e.school,
+      startsAt: e.startsAt.toISOString(),
+      durationMin: e.durationMin,
+      description: e.description,
+      speakers: a.speakers
+        .slice()
+        .sort((x, y) => x.position - y.position)
+        .map((s) => ({ name: s.name, credentials: s.regalia })),
+      specialties: e.specialties,
+      // `partner_ref` is free text in wave 1; publicly it is a display label
+      // only (no commercial terms). Absent ref ⇒ empty list, never a null entry.
+      partners: e.partnerRef ? [{ label: e.partnerRef }] : [],
+      // `draft` is excluded above, so the residual states are the public subset.
+      state: state as PublicEventState,
+    };
+    // Omit (not null) the field when the event carries no program PDF (EARS-2).
+    if (e.programPdfRef) {
+      page.programPdfUrl = this.storage.urlFor(e.programPdfRef);
+    }
+    return page;
   }
 
   private toDetail(a: EventWithSpeakers): EventAdminDetail {

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  canTransition,
   CreateEventRequestSchema,
+  EVENT_LIFECYCLE_STATES,
   LIFECYCLE_TRANSITIONS,
   mskLocalToInstant,
+  TransitionEventRequestSchema,
   validTransitions,
 } from "./events.schema.js";
 
@@ -40,6 +43,62 @@ describe("007 events schema", () => {
     it("never offers a backward move or an unpublish", () => {
       const all = Object.values(LIFECYCLE_TRANSITIONS).flat();
       expect(all).not.toContain("draft"); // nothing transitions back to draft
+    });
+  });
+
+  describe("canTransition (EARS-7 — the closed-set guard predicate)", () => {
+    it("EARS-7.1: permits exactly the four legal forward moves", () => {
+      expect(canTransition("draft", "published")).toBe(true);
+      expect(canTransition("published", "live")).toBe(true);
+      expect(canTransition("live", "ended")).toBe(true);
+      expect(canTransition("ended", "archived")).toBe(true);
+    });
+
+    it("EARS-7.2: refuses every skip-forward move", () => {
+      expect(canTransition("draft", "live")).toBe(false);
+      expect(canTransition("draft", "ended")).toBe(false);
+      expect(canTransition("draft", "archived")).toBe(false);
+      expect(canTransition("published", "ended")).toBe(false);
+      expect(canTransition("published", "archived")).toBe(false);
+      expect(canTransition("live", "archived")).toBe(false);
+    });
+
+    it("EARS-7.3: refuses every backward move (no unpublish, no reopen)", () => {
+      expect(canTransition("published", "draft")).toBe(false); // no unpublish
+      expect(canTransition("live", "published")).toBe(false);
+      expect(canTransition("ended", "live")).toBe(false);
+      expect(canTransition("archived", "ended")).toBe(false);
+      expect(canTransition("archived", "published")).toBe(false); // no reopen
+      expect(canTransition("archived", "draft")).toBe(false);
+    });
+
+    it("EARS-7.4: refuses a self-transition from every state", () => {
+      for (const s of EVENT_LIFECYCLE_STATES) {
+        expect(canTransition(s, s)).toBe(false);
+      }
+    });
+
+    it("EARS-7.5: agrees with validTransitions across the whole matrix", () => {
+      for (const from of EVENT_LIFECYCLE_STATES) {
+        for (const to of EVENT_LIFECYCLE_STATES) {
+          expect(canTransition(from, to)).toBe(validTransitions(from).includes(to));
+        }
+      }
+    });
+  });
+
+  describe("TransitionEventRequestSchema (EARS-7 — the transition command body)", () => {
+    it("accepts a target from the closed state enum", () => {
+      expect(TransitionEventRequestSchema.parse({ to: "published" }).to).toBe(
+        "published",
+      );
+    });
+
+    it("rejects a target outside the closed enum", () => {
+      expect(TransitionEventRequestSchema.safeParse({ to: "cancelled" }).success).toBe(
+        false,
+      );
+      expect(TransitionEventRequestSchema.safeParse({}).success).toBe(false);
     });
   });
 

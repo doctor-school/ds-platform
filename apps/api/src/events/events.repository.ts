@@ -48,6 +48,37 @@ export class EventsRepository {
     return this.db.select().from(events).orderBy(desc(events.createdAt));
   }
 
+  /**
+   * Persist a lifecycle state change and bump `updated_at`. The caller (the
+   * EARS-7 guard in `EventsService`) has already validated the move against the
+   * closed transition set — this is the bare write. Returns the updated
+   * aggregate, or `null` when the id does not exist.
+   */
+  async updateState(
+    id: string,
+    state: Event["state"],
+  ): Promise<EventWithSpeakers | null> {
+    const [row] = await this.db
+      .update(events)
+      .set({ state, updatedAt: new Date() })
+      .where(eq(events.id, id))
+      .returning();
+    if (!row) return null;
+    const speakerRows = await this.db
+      .select()
+      .from(eventSpeakers)
+      .where(eq(eventSpeakers.eventId, id))
+      .orderBy(asc(eventSpeakers.position));
+    return {
+      event: row,
+      speakers: speakerRows.map((s) => ({
+        name: s.name,
+        regalia: s.regalia,
+        position: s.position,
+      })),
+    };
+  }
+
   async findById(id: string): Promise<EventWithSpeakers | null> {
     const [row] = await this.db.select().from(events).where(eq(events.id, id));
     if (!row) return null;

@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  Body,
+  ConflictException,
   Controller,
   Get,
   HttpCode,
@@ -15,7 +17,12 @@ import {
   type EventAdminList,
 } from "@ds/schemas";
 import { Authz } from "../authz/index.js";
-import { EventsService, type UploadedPdf } from "./events.service.js";
+import { TransitionEventRequestDto } from "./events.dto.js";
+import {
+  EventsService,
+  InvalidTransitionError,
+  type UploadedPdf,
+} from "./events.service.js";
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
 
@@ -124,5 +131,47 @@ export class EventsAdminController {
     const found = await this.events.detail(id);
     if (!found) throw new NotFoundException("event not found");
     return found;
+  }
+
+  /**
+   * EARS-7 — the single closed-set lifecycle transition, server-enforced. Moves
+   * the event to the target state iff `current → to` is one of the four legal
+   * forward moves; an in-enum-but-out-of-order target (a skip-forward, any
+   * backward move, reopening `archived`, or the `published → draft` unpublish
+   * the PRD names none) is refused with a 409 state conflict, never applied. A
+   * target outside the closed enum is a 400 (the `ZodValidationPipe`, before the
+   * guard). The four named transition commands + their side-effects / audit rows
+   * are sibling handlers (EARS-4/5/6); this is the guard they all run through.
+   */
+  @Post(":id/transition")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["platform_admin"],
+    check: "fast-path",
+    // The bare guarded state change carries no terminal audit row — that
+    // obligation attaches to the named transition commands (EARS-4/5/6), each
+    // of which appends exactly one `audit_ledger` row on top of this guard.
+    audit: "low-stakes",
+    tests: ["EARS-7", "EARS-8"],
+  })
+  async transition(
+    @Param("id") id: string,
+    @Body() dto: TransitionEventRequestDto,
+  ): Promise<EventAdminDetail> {
+    try {
+      const updated = await this.events.transition(id, dto.to);
+      if (!updated) throw new NotFoundException("event not found");
+      return updated;
+    } catch (err) {
+      if (err instanceof InvalidTransitionError) {
+        throw new ConflictException({
+          message: "illegal lifecycle transition",
+          from: err.from,
+          to: err.to,
+        });
+      }
+      throw err;
+    }
   }
 }

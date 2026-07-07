@@ -145,10 +145,15 @@ const WebinarCard = React.forwardRef<HTMLAnchorElement, WebinarCardProps>(
 
       {/* Content. */}
       <div className="px-4 pt-4 pb-[18px] layout:px-8 layout:py-[30px]">
-        <div className="mb-3 text-xs font-extrabold uppercase tracking-micro text-primary">
+        {/* Kicker + title-hover paint `primary-action` (blue.700 light / #6BB1F7
+            dark — the AA link-text token, #270 Primary Button precedent), NOT
+            `primary` (blue.500): semantic.json flags blue.500 as fails-AA
+            (3.69:1) for text on card surfaces — it is AA only on the pale tint.
+            In dark the token IS the canvas accent (#6BB1F7) exactly. */}
+        <div className="mb-3 text-xs font-extrabold uppercase tracking-micro text-primary-action">
           {school}
         </div>
-        <h3 className="mb-4 text-lg font-bold leading-snug tracking-tight text-card-foreground group-hover:text-primary layout:text-title-lg">
+        <h3 className="mb-4 text-lg font-bold leading-snug tracking-tight text-card-foreground group-hover:text-primary-action layout:text-title-lg">
           {title}
         </h3>
 

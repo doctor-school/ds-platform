@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   canTransition,
+  ConfigureStreamRequestSchema,
   CreateEventRequestSchema,
   EVENT_LIFECYCLE_STATES,
   LIFECYCLE_TRANSITIONS,
   mskLocalToInstant,
+  STREAM_PROVIDERS,
   TransitionEventRequestSchema,
   validTransitions,
 } from "./events.schema.js";
@@ -138,6 +140,53 @@ describe("007 events schema", () => {
           speakers: [{ name: "", regalia: "x" }],
         }).success,
       ).toBe(false);
+    });
+  });
+
+  describe("ConfigureStreamRequestSchema (EARS-3 — explicit closed provider enum)", () => {
+    it("EARS-3: the closed provider set is exactly rutube | youtube (no additive drift)", () => {
+      // Locks the wave-1 enum — extending it later is a deliberate additive
+      // migration (owner decision 2026-07-06), never a silent widening.
+      expect([...STREAM_PROVIDERS]).toEqual(["rutube", "youtube"]);
+    });
+
+    it("EARS-3: accepts each provider from the closed enum + an embed reference", () => {
+      for (const provider of STREAM_PROVIDERS) {
+        const parsed = ConfigureStreamRequestSchema.parse({
+          provider,
+          embedRef: "abc123XYZ",
+        });
+        expect(parsed.provider).toBe(provider);
+        expect(parsed.embedRef).toBe("abc123XYZ");
+      }
+    });
+
+    it("EARS-3: rejects a provider outside the closed enum (unknown provider)", () => {
+      expect(
+        ConfigureStreamRequestSchema.safeParse({
+          provider: "vimeo",
+          embedRef: "abc123",
+        }).success,
+      ).toBe(false);
+      // The provider is explicit — a missing provider is never inferred.
+      expect(
+        ConfigureStreamRequestSchema.safeParse({ embedRef: "abc123" }).success,
+      ).toBe(false);
+    });
+
+    it("EARS-3: rejects an empty embed reference and trims surrounding space", () => {
+      expect(
+        ConfigureStreamRequestSchema.safeParse({
+          provider: "rutube",
+          embedRef: "   ",
+        }).success,
+      ).toBe(false);
+      expect(
+        ConfigureStreamRequestSchema.parse({
+          provider: "youtube",
+          embedRef: "  vid-42  ",
+        }).embedRef,
+      ).toBe("vid-42");
     });
   });
 });

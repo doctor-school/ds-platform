@@ -106,6 +106,50 @@ export function mskLocalToInstant(local: string): Date {
 }
 
 /**
+ * The closed stream-provider enum (007 requirements EARS-3, design §3). The
+ * provider is chosen **explicitly** by the operator — it is NEVER inferred by
+ * sniffing the embed URL (the legacy mistake, recon §5). The 006 room switches
+ * on this value to instantiate the right player. Wave 1 is exactly
+ * `rutube | youtube`; extending the set later is an additive migration, not a
+ * shape 007 pre-builds (mirrors the 006 owner decision 2026-07-06). This is the
+ * shared SSOT the API, the Refine admin app, and the 006 consumer all read.
+ */
+export const STREAM_PROVIDERS = ["rutube", "youtube"] as const;
+export const StreamProviderSchema = z.enum(STREAM_PROVIDERS);
+export type StreamProvider = z.infer<typeof StreamProviderSchema>;
+
+/**
+ * `ConfigureStream` request body (EARS-3). Records `{ provider, embedRef }`: the
+ * provider is an explicit member of the closed enum (an out-of-enum value is a
+ * 400 at the I/O boundary, before any handler runs, so no config is recorded for
+ * an unknown provider); `embedRef` is the **provider-scoped stream id / embed
+ * reference**, a bounded free token — never a URL to be sniffed. Configuring is
+ * an idempotent upsert (one config per event); it is correctable while the event
+ * is `published` (US-3), so a wrong reference is fixed with an edit, never a
+ * state reversal.
+ */
+export const ConfigureStreamRequestSchema = z.object({
+  provider: StreamProviderSchema,
+  embedRef: z.string().trim().min(1).max(300),
+});
+export type ConfigureStreamRequest = z.infer<
+  typeof ConfigureStreamRequestSchema
+>;
+
+/**
+ * `StreamConfig` — the produced read model the 006 room consumes to instantiate
+ * the player (design §3, §Read models). It is exactly `{ provider, embedRef }`;
+ * the room switches on `provider` (never parsing the URL) and embeds `embedRef`.
+ * Surfaced on {@link EventAdminDetailSchema} (`null` until configured) and read
+ * by 006 over the same aggregate — one source, no drift.
+ */
+export const StreamConfigSchema = z.object({
+  provider: StreamProviderSchema,
+  embedRef: z.string(),
+});
+export type StreamConfig = z.infer<typeof StreamConfigSchema>;
+
+/**
  * A speaker entry — an ordered free-text `{ name, regalia }` pair (LD-1). Wave 1
  * validates text only; real-record references are wave 2 (bundled with the
  * speaker directory). The array order IS the presentation order (position).
@@ -162,6 +206,8 @@ export const EventAdminDetailSchema = z.object({
   partnerRef: z.string().nullable(),
   programPdfRef: z.string().nullable(),
   programPdfUrl: z.string().nullable(),
+  /** The stream config the 006 room consumes (EARS-3); `null` until configured. */
+  streamConfig: StreamConfigSchema.nullable(),
   state: EventLifecycleStateSchema,
   validTransitions: z.array(EventLifecycleStateSchema),
   createdAt: z.iso.datetime({ offset: true }),

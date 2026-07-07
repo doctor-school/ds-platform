@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import type { DrizzleHandle, Event, NewEvent, NewEventSpeaker } from "@ds/db";
-import { auditLedger, eventSpeakers, events } from "@ds/db";
+import { auditLedger, eventSpeakers, events, streamConfig } from "@ds/db";
+import type { ConfigureStreamRequest, StreamConfig } from "@ds/schemas";
 import { and, asc, desc, eq, gte, inArray, or } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 
@@ -24,10 +25,12 @@ const UUID_RE =
 
 type Db = DrizzleHandle["db"];
 
-/** One event aggregate with its ordered speaker rows. */
+/** One event aggregate with its ordered speaker rows and (optional) stream config. */
 export interface EventWithSpeakers {
   event: Event;
   speakers: { name: string; regalia: string; position: number }[];
+  /** The `{ provider, embedRef }` the 006 room consumes (EARS-3); `null` until configured. */
+  streamConfig: StreamConfig | null;
 }
 
 /**
@@ -58,8 +61,40 @@ export class EventsRepository {
           regalia: s.regalia ?? "",
           position: s.position,
         })),
+        // A brand-new event carries no stream config until ConfigureStream runs.
+        streamConfig: null,
       };
     });
+  }
+
+  /**
+   * EARS-3 — persist (upsert) the stream config for one event. One config per
+   * event: the `event_id` PK makes this an idempotent write, so correcting the
+   * config while `published` replaces the single row (no state reversal). The
+   * caller (the service) has already validated the state window. Returns `null`
+   * when the id does not exist.
+   */
+  async upsertStreamConfig(
+    eventId: string,
+    input: ConfigureStreamRequest,
+  ): Promise<EventWithSpeakers | null> {
+    await this.db
+      .insert(streamConfig)
+      .values({ eventId, provider: input.provider, embedRef: input.embedRef })
+      .onConflictDoUpdate({
+        target: streamConfig.eventId,
+        set: { provider: input.provider, embedRef: input.embedRef },
+      });
+    return this.findById(eventId);
+  }
+
+  /** Load the stream config for one event, or `null` when unconfigured. */
+  private async loadStreamConfig(eventId: string): Promise<StreamConfig | null> {
+    const [row] = await this.db
+      .select()
+      .from(streamConfig)
+      .where(eq(streamConfig.eventId, eventId));
+    return row ? { provider: row.provider, embedRef: row.embedRef } : null;
   }
 
   async listAll(): Promise<Event[]> {
@@ -104,6 +139,8 @@ export class EventsRepository {
     return rows.map((event) => ({
       event,
       speakers: byEvent.get(event.id) ?? [],
+      // The upcoming-listing card (004) does not read the stream config.
+      streamConfig: null,
     }));
   }
 
@@ -135,6 +172,7 @@ export class EventsRepository {
         regalia: s.regalia,
         position: s.position,
       })),
+      streamConfig: await this.loadStreamConfig(id),
     };
   }
 
@@ -172,6 +210,10 @@ export class EventsRepository {
         .from(eventSpeakers)
         .where(eq(eventSpeakers.eventId, id))
         .orderBy(asc(eventSpeakers.position));
+      const [streamRow] = await tx
+        .select()
+        .from(streamConfig)
+        .where(eq(streamConfig.eventId, id));
       return {
         event: row,
         speakers: speakerRows.map((s) => ({
@@ -179,6 +221,9 @@ export class EventsRepository {
           regalia: s.regalia,
           position: s.position,
         })),
+        streamConfig: streamRow
+          ? { provider: streamRow.provider, embedRef: streamRow.embedRef }
+          : null,
       };
     });
   }
@@ -217,6 +262,7 @@ export class EventsRepository {
         regalia: s.regalia,
         position: s.position,
       })),
+      streamConfig: await this.loadStreamConfig(row.id),
     };
   }
 }

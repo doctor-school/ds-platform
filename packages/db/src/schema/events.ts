@@ -80,7 +80,33 @@ export const eventSpeakers = pgTable(
   ],
 );
 
+/**
+ * The closed stream-provider enum (design §3, EARS-3). A real Postgres enum
+ * mirroring `StreamProviderSchema` in `@ds/schemas` — wave 1 is exactly
+ * `rutube | youtube`; extending it later is an additive migration, never a
+ * URL-sniffed inference. drizzle-kit emits the `CREATE TYPE` in the migration.
+ */
+export const streamProvider = pgEnum("stream_provider", ["rutube", "youtube"]);
+
+/**
+ * The event's stream config (design §3, EARS-3) — the `{ provider, embed_ref }`
+ * the 006 room instantiates the player from, authored in 007. One config per
+ * event: `event_id` is the PK **and** the FK, so `ConfigureStream` is an
+ * idempotent upsert (a correction replaces the single row, never a state
+ * reversal). `embed_ref` is the provider-scoped stream id — never a URL to be
+ * sniffed. Cascade-deleted with its event.
+ */
+export const streamConfig = pgTable("stream_config", {
+  eventId: uuid("event_id")
+    .primaryKey()
+    .references(() => events.id, { onDelete: "cascade" }),
+  provider: streamProvider("provider").notNull(),
+  embedRef: text("embed_ref").notNull(),
+});
+
 export type Event = typeof events.$inferSelect;
 export type NewEvent = typeof events.$inferInsert;
 export type EventSpeaker = typeof eventSpeakers.$inferSelect;
 export type NewEventSpeaker = typeof eventSpeakers.$inferInsert;
+export type StreamConfigRow = typeof streamConfig.$inferSelect;
+export type NewStreamConfigRow = typeof streamConfig.$inferInsert;

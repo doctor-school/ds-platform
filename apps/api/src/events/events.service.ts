@@ -3,6 +3,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import type { Event } from "@ds/db";
 import {
   canTransition,
+  type ConfigureStreamRequest,
   type CreateEventRequest,
   type EventAdminDetail,
   type EventAdminListItem,
@@ -62,6 +63,31 @@ export class InvalidTransitionError extends Error {
   ) {
     super(`illegal lifecycle transition ${from} → ${to}`);
     this.name = "InvalidTransitionError";
+  }
+}
+
+/**
+ * The lifecycle states in which the stream config may be authored or corrected
+ * (design §2 — the config is *authorable* in `draft` and *still correctable* in
+ * `published`, i.e. the pre-air window). Once the room is live the broadcast is
+ * on air and the config is locked; `ended`/`archived` are terminal. Kept as a
+ * closed set so the window can never silently widen.
+ */
+export const STREAM_CONFIGURABLE_STATES: readonly EventLifecycleState[] = [
+  "draft",
+  "published",
+];
+
+/**
+ * The EARS-3 refusal: `ConfigureStream` was called on an event outside the
+ * configurable window ({@link STREAM_CONFIGURABLE_STATES}). HTTP-agnostic — the
+ * controller maps it to a 409 state conflict — so the rule stays a pure domain
+ * rule. `state` is the offending current state; no config is recorded.
+ */
+export class StreamNotConfigurableError extends Error {
+  constructor(readonly state: EventLifecycleState) {
+    super(`stream config is not editable while the event is ${state}`);
+    this.name = "StreamNotConfigurableError";
   }
 }
 
@@ -156,6 +182,39 @@ export class EventsService {
   async detail(id: string): Promise<EventAdminDetail | null> {
     const found = await this.repo.findById(id);
     return found ? this.toDetail(found) : null;
+  }
+
+  /**
+   * EARS-3 — `ConfigureStream`: record the event's stream config from an
+   * **explicit** provider in the closed enum `rutube | youtube` plus an embed
+   * reference (the provider-scoped stream id, never a URL to be sniffed — the
+   * enum is validated at the I/O boundary by `ConfigureStreamRequestSchema`, so
+   * an unknown provider is a 400 and never reaches here, and no config is
+   * recorded for it). The write is an idempotent upsert (one config per event),
+   * so correcting a wrong reference while `published` replaces the single row
+   * with **no state reversal** (US-3). Configuring is refused
+   * ({@link StreamNotConfigurableError}) outside the pre-air window (design §2,
+   * {@link STREAM_CONFIGURABLE_STATES}); the 006 room later instantiates the
+   * player from exactly this persisted config, switching on `provider` — never
+   * inferring it from the URL string.
+   *
+   * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
+   */
+  async configureStream(
+    id: string,
+    input: ConfigureStreamRequest,
+  ): Promise<EventAdminDetail | null> {
+    const current = await this.repo.findById(id);
+    if (!current) return null;
+
+    const state = current.event.state as EventLifecycleState;
+    if (!STREAM_CONFIGURABLE_STATES.includes(state)) {
+      throw new StreamNotConfigurableError(state);
+    }
+
+    const updated = await this.repo.upsertStreamConfig(id, input);
+    // The row existed a moment ago; a concurrent delete is the only null path.
+    return updated ? this.toDetail(updated) : null;
   }
 
   /**
@@ -326,6 +385,7 @@ export class EventsService {
       partnerRef: e.partnerRef,
       programPdfRef: e.programPdfRef,
       programPdfUrl: e.programPdfRef ? this.storage.urlFor(e.programPdfRef) : null,
+      streamConfig: a.streamConfig,
       state: e.state as EventLifecycleState,
       validTransitions: validTransitions(e.state as EventLifecycleState),
       createdAt: e.createdAt.toISOString(),

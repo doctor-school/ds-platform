@@ -43,6 +43,13 @@
       "when": 1783389802985,
       "tag": "0005_red_human_torch",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783407168416,
+      "tag": "0006_superb_snowbird",
+      "breakpoints": true
     }
   ]
 }

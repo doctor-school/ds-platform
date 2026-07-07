@@ -116,6 +116,9 @@
       "@nestjs/core",
       "esbuild",
       "simple-git-hooks"
-    ]
+    ],
+    "overrides": {
+      "fastify": "5.10.0"
+    }
   }
 }

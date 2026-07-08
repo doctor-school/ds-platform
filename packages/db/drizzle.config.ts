@@ -18,6 +18,7 @@ export default defineConfig({
     "../../packages/db/src/schema/audit-ledger.ts",
     "../../packages/db/src/schema/events.ts",
     "../../packages/db/src/schema/registrations.ts",
+    "../../packages/db/src/schema/presence-beats.ts",
   ],
   out: "../../apps/api/drizzle",
   dialect: "postgresql",

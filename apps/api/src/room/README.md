@@ -1,4 +1,4 @@
-# `room` — webinar room admission gate + embed provider (006 EARS-1, EARS-2)
+# `room` — webinar room admission gate + embed provider + heartbeat presence (006 EARS-1, EARS-2, EARS-4)
 
 The webinar-room module — the **server-side admission gate** of feature 006
 (Webinar room), the foundation the watch side builds on. It hosts the **first
@@ -29,6 +29,21 @@ the `fast-path` `doctor_guest` writes/reads).
   caller). The `RoomRepository` `LEFT JOIN`s the `stream_config` child so an
   unconfigured `live` event resolves with `streamConfig: null`.
 
+**EARS-4** adds the gated heartbeat command behind the **same** gate:
+
+- `RecordPresenceHeartbeat` (`POST /v1/events/:idOrSlug/heartbeat`) — appends one
+  immutable `(doctor, event, instant)` row to the durable **append-only**
+  `presence_beats` table and returns a server-authoritative `PresenceHeartbeatAck`
+  (`{ eventId, beatAt }`). It evaluates the identical `authenticated ∧ registered
+∧ live` gate as the config read (one gate, reused — `RoomService.admit`): a
+  guest (401), an unregistered doctor (403), and a non-`live` / `ended` event
+  (409) each append **nothing** (EARS-8). The instant is **server-stamped**, never
+  a client-supplied count — presence is server-authoritative and durable. The
+  client posts on the server-config cadence N (`heartbeatIntervalSeconds` from the
+  grant), visibility-gated in the portal (a backgrounded tab emits none). The raw
+  beats are the EARS-5 per-doctor-minute derivation's input (coalesced there, not
+  suppressed at write time).
+
 ## The gate — one policy, evaluated server-side
 
 Admission is `authenticated ∧ registered ∧ live` (design §2), evaluated in that
@@ -57,32 +72,38 @@ evaluates the resource-scoped rule and refuses server-side. See
 
 ## Exported symbols
 
-- `RoomModule` — the Nest module (controller + service + repository + the
+- `RoomModule` — the Nest module (controller + service + repositories + the
   `ROOM_HEARTBEAT_INTERVAL_SECONDS` config binding). Imports `RegistrationModule`
   (the 005 `EventRoster` read).
-- `RoomService` — the admission gate (`roomConfig(idOrSlug, sub)`), issuing the
-  `RoomConfig` grant on success. Domain errors: `RoomEventNotFoundError` (→ 404),
-  `NotRegisteredError` (→ 403), `RoomNotLiveError` (→ 409); the registration
-  layer's `UnknownSubjectError` propagates (→ 401).
+- `RoomService` — the admission gate (`admit`, reused by both operations),
+  `roomConfig(idOrSlug, sub)` issuing the `RoomConfig` grant, and
+  `recordHeartbeat(idOrSlug, sub)` appending one beat + returning the ack. Domain
+  errors: `RoomEventNotFoundError` (→ 404), `NotRegisteredError` (→ 403),
+  `RoomNotLiveError` (→ 409); the registration layer's `UnknownSubjectError`
+  propagates (→ 401).
 - `RoomRepository` — the thin read-only `{ id, state, streamConfig }` view of the
   `events` aggregate + its `stream_config` child (the `live` condition + the
   EARS-2 embed source); reads the 004/007 lifecycle state + stream config, never
   writes them.
+- `PresenceRepository` — the EARS-4 durable append-only presence write:
+  `appendBeat(userId, eventId)` (INSERT-only, server-stamped instant) +
+  `findUserIdBySub` (the 003 mirror read, read-only). No update/delete surface —
+  the structural half of the append-only contract.
 - `resolveRoomStream` (`provider-enum.ts`) — the pure EARS-2 read: the stream
   config → the grant's `stream`, provider from the closed enum, fail-closed to
   `null` on absent/unknown provider (never URL-sniffed).
-- `RoomController` — `GET /v1/events/:idOrSlug/room`, `doctor_guest`-authenticated
-  with the resource-scoped `policy` gate (EARS-1, EARS-8).
+- `RoomController` — `GET /v1/events/:idOrSlug/room` (EARS-1) + `POST
+/v1/events/:idOrSlug/heartbeat` (EARS-4), both `doctor_guest`-authenticated with
+  the resource-scoped `policy` gate (EARS-8).
 
 ## Boundaries & tracked seams
 
-- **Sibling handlers layer onto this gate.** The gated commands
-  `PostChatMessage` (EARS-3, Centrifugo publish) and `RecordPresenceHeartbeat`
-  (EARS-4, durable append-only presence table) evaluate the **same** admission
-  decision before any publish/append; the Centrifugo chat token (EARS-3) extends
-  the `RoomConfig` shape **additively** (as EARS-2's `stream` already does). EARS-1
-  owns the gate and the grant vehicle; the chat/heartbeat commands are not built
-  here.
+- **Sibling handlers layer onto this gate.** The gated `RecordPresenceHeartbeat`
+  command (EARS-4) already evaluates the **same** `admit` decision before its
+  append. The remaining gated command `PostChatMessage` (EARS-3, Centrifugo
+  publish) will evaluate the same decision before any publish, and its Centrifugo
+  chat token extends the `RoomConfig` shape **additively** (as EARS-2's `stream`
+  and EARS-4's cadence already do). EARS-3 chat is not built here.
 - **Seam → feature 007.** The `live` window (room open/close) and the stream
   config are authored/driven by 007; until 007 lands, the gate is built +
   E2E-driven against **seeded live events with a seeded roster** (tracked on

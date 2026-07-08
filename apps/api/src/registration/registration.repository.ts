@@ -4,6 +4,7 @@ import type { DrizzleHandle } from "@ds/db";
 import { auditLedger, events, registrations, users } from "@ds/db";
 import {
   type EventLifecycleState,
+  type EventRosterEntry,
   type MyEventItem,
   REGISTRABLE_EVENT_STATES,
 } from "@ds/schemas";
@@ -192,6 +193,37 @@ export class RegistrationRepository {
       startsAt: r.startsAt.toISOString(),
       // Narrowed to the registrable set by the SQL state filter above.
       state: r.state as MyEventItem["state"],
+    }));
+  }
+
+  /**
+   * The `EventRoster` read (EARS-8; design §2/§4): the set of **current**
+   * registrations for one event, each carrying no more than the `(doctor, event,
+   * registeredAt)` fact — `{ userId, eventId, registeredAt }`. Owned by 005;
+   * **consumed** by feature 006 (room admission) and the wave-2 sponsor report.
+   *
+   * Because wave 1 has **no** cancelled state and no soft-delete (owner
+   * decision), the roster is simply every registration row for the event — no
+   * `status`/`cancelled` filter, and every row is current (Invariants). Selects
+   * ONLY the three record columns — no join to the `users` mirror, so no
+   * registrant PII is ever read here (a consumer that needs identity joins to 003
+   * itself, EARS-8/EARS-10). Ordered nearest-registered first
+   * (`registered_at ASC`); an event with no registrations returns an empty list.
+   */
+  async findEventRoster(eventId: string): Promise<EventRosterEntry[]> {
+    const rows = await this.db
+      .select({
+        userId: registrations.userId,
+        eventId: registrations.eventId,
+        registeredAt: registrations.registeredAt,
+      })
+      .from(registrations)
+      .where(eq(registrations.eventId, eventId))
+      .orderBy(asc(registrations.registeredAt));
+    return rows.map((r) => ({
+      userId: r.userId,
+      eventId: r.eventId,
+      registeredAt: r.registeredAt.toISOString(),
     }));
   }
 

@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import {
   type EventLifecycleState,
   type EventRegistrationState,
+  type EventRoster,
   isRegistrable,
   type MyEvents,
 } from "@ds/schemas";
@@ -118,6 +119,24 @@ export class RegistrationService {
     const userId = await this.resolveUser(sub);
     const cutoff = new Date(now.getTime() - AIR_WINDOW_MS);
     return this.repo.findMyEvents(userId, cutoff);
+  }
+
+  /**
+   * `EventRoster` (EARS-8; design §2/§4): the set of **current** registrations
+   * for one event — the durable basis 005 owns and feature 006 (room admission)
+   * + the wave-2 sponsor report **consume** to admit/attribute exactly the
+   * recorded registrations. Resolves the event by slug/id (a missing event is a
+   * {@link RegistrationEventNotFoundError}, never a silent empty list), then reads
+   * every registration row for it — wave 1 has no cancelled state, so the roster
+   * is every row and every entry is current (Invariants). Each entry carries no
+   * more than the `(doctor, event, registeredAt)` fact; no registrant PII, and no
+   * public exposure — this is an INTERNAL read with no HTTP route (design §4;
+   * EARS-8, EARS-10). It is the read 006 will call in-process; 005 owns and tests
+   * it here.
+   */
+  async eventRoster(idOrSlug: string): Promise<EventRoster> {
+    const event = await this.resolveEvent(idOrSlug);
+    return this.repo.findEventRoster(event.id);
   }
 
   private async resolveUser(sub: string): Promise<string> {

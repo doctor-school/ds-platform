@@ -85,3 +85,36 @@ export type MyEventItem = z.infer<typeof MyEventItemSchema>;
  */
 export const MyEventsSchema = z.array(MyEventItemSchema);
 export type MyEvents = z.infer<typeof MyEventsSchema>;
+
+/**
+ * `EventRosterEntry` — one row of the {@link EventRosterSchema}: a single current
+ * registration for an event, carrying **no more than the `(doctor, event,
+ * registeredAt)` fact** (design §2, EARS-8). `doctor` is the domain `user_id`
+ * (the 003 UserMirror key), `event` the `event_id`, `registeredAt` the canonical
+ * UTC instant (ISO-8601). It is deliberately the THINNEST possible shape — no
+ * email, name, or any denormalized registrant PII. The sponsor roster and room
+ * admission (006) join to the `users` mirror (003) at read time for whatever
+ * identity they need; 005 never copies PII onto this record and never exposes it
+ * on a public 004 surface (EARS-8, EARS-10; recon §6).
+ */
+export const EventRosterEntrySchema = z.object({
+  userId: z.uuid(),
+  eventId: z.uuid(),
+  registeredAt: z.iso.datetime({ offset: true }),
+});
+export type EventRosterEntry = z.infer<typeof EventRosterEntrySchema>;
+
+/**
+ * `EventRoster` — the set of **current** registrations for one event (design §2,
+ * §4; EARS-8). Owned by 005; it is the durable basis **consumed** by feature 006
+ * (room admission) and the wave-2 sponsor report — the roster admits/attributes
+ * exactly the recorded registrations. Because wave 1 has **no** cancelled state
+ * and no soft-delete (owner decision), the roster is simply "every registration
+ * row for the event" — no filter, and every entry is current (Invariants). It is
+ * an **internal** read model with **no public endpoint**: it is never exposed on
+ * a 004 public surface and never leaks a registrant (design §4; EARS-8, EARS-10).
+ * Ordered nearest-registered first (`registered_at ASC`); an event with no
+ * registrations is a valid empty `[]`.
+ */
+export const EventRosterSchema = z.array(EventRosterEntrySchema);
+export type EventRoster = z.infer<typeof EventRosterSchema>;

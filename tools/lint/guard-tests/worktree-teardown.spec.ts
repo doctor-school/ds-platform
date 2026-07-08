@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveWorktreePath } from "../../dev/worktree-teardown.mjs";
+import {
+  classifyTeardownTarget,
+  resolveWorktreePath,
+} from "../../dev/worktree-teardown.mjs";
 
 /**
  * Unit cover for `tools/dev/worktree-teardown.mjs`'s pure name-resolution helper
@@ -71,5 +74,61 @@ describe("worktree-teardown resolveWorktreePath()", () => {
     const resolved = norm(resolveWorktreePath("spec-006", null, () => true));
     expect(resolved).not.toBe("/repo/.claude/worktrees/spec-006");
     expect(resolved.endsWith("/spec-006")).toBe(true);
+  });
+});
+
+/**
+ * Unit cover for the fail-loud classifier (#603). A teardown target is one of:
+ *   "registered"   — a live worktree in `git worktree list` (normal teardown),
+ *   "orphan"       — deregistered but a directory still on disk (long-path case),
+ *   "unresolvable" — neither registered nor present (mangled path / typo slug),
+ *                    which MUST fail non-zero instead of masquerading as clean.
+ * `registeredPaths` + `exists` are injected so no git subprocess / real FS runs.
+ */
+describe("worktree-teardown classifyTeardownTarget()", () => {
+  const REG = "/repo/.claude/worktrees/603";
+
+  it("classifies an unresolvable target (the mangled-path retro bug) as unresolvable", () => {
+    // The retro scenario: backslashes eaten by the shell → a path that is
+    // neither registered nor a real directory. Previous behavior: exit 0.
+    const mangled = "/cwd/C:Userssidorreposds-platform.claudeworktrees598";
+    expect(classifyTeardownTarget(mangled, [REG], () => false)).toBe(
+      "unresolvable",
+    );
+  });
+
+  it("classifies a typo slug (nothing on disk, not registered) as unresolvable", () => {
+    expect(
+      classifyTeardownTarget(
+        "/repo/.claude/worktrees/ghost",
+        [REG],
+        () => false,
+      ),
+    ).toBe("unresolvable");
+  });
+
+  it("classifies a registered worktree path as registered", () => {
+    expect(classifyTeardownTarget(REG, [REG], () => false)).toBe("registered");
+  });
+
+  it("classifies a deregistered-but-present orphan dir as orphan (long-path case keeps exit 0)", () => {
+    // Not in the registered list, but the directory is still on disk.
+    expect(
+      classifyTeardownTarget("/repo/.claude/worktrees/598", [REG], () => true),
+    ).toBe("orphan");
+  });
+
+  it("registered takes precedence over a present directory", () => {
+    expect(classifyTeardownTarget(REG, [REG], () => true)).toBe("registered");
+  });
+
+  it("matches the registered list case-insensitively and across separators", () => {
+    // git worktree list yields forward slashes; resolve() on Windows yields
+    // backslashes + a drive-letter case that may differ — norm() bridges both.
+    const absWin = "C:\\Repo\\.claude\\worktrees\\603";
+    const registeredPosix = "c:/repo/.claude/worktrees/603";
+    expect(classifyTeardownTarget(absWin, [registeredPosix], () => false)).toBe(
+      "registered",
+    );
   });
 });

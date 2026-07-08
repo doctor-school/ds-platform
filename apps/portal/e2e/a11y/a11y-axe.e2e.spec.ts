@@ -22,7 +22,8 @@ import {
  * -state additions, and their standing axe contrast findings are 004 debt tracked
  * separately (see the #574 PR decision-debt), not a 005 regression. The scan
  * therefore targets exactly the 005-composed regions: the status card (`bg-card`,
- * the «вы записаны» confirmation + room CTA) and the «мои события» card list.
+ * the «вы записаны» confirmation + join signposting — no room link until the 006
+ * room surface ships, #584) and the «мои события» card list.
  *
  * Dev-stand-gated like the BDD journey: it provisions a real 003 doctor (register +
  * verify via Mailpit) and registers them for the seeded event, then scans. It

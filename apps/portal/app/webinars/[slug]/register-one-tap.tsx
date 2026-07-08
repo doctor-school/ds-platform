@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@ds/design-system/button";
 import { FormError } from "@ds/design-system/form";
 
-import { registerForEvent, RegistrationError } from "@/lib/registration-client";
+import { registerForEvent } from "@/lib/registration-client";
 
 /**
  * 005 EARS-1 — the logged-in one-tap register affordance on the event page.
@@ -48,11 +48,10 @@ export function RegisterOneTap({
       // Re-read the per-user state server-side so the page swaps to the registered
       // confirmation from the REAL read model (not an optimistic client guess).
       startRefresh(() => router.refresh());
-    } catch (err) {
+    } catch {
       // A gating refusal (409), an expired session (401), or a transient error:
       // surface a single retryable message and let the doctor try again. Firing
       // again after a real registration is an idempotent no-op (EARS-3).
-      void (err instanceof RegistrationError);
       setError(errorLabel);
       setBusy(false);
     }

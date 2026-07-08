@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { CircleCheck } from "lucide-react";
 import { Badge } from "@ds/design-system/badge";
 import { Button } from "@ds/design-system/button";
 import { Container } from "@ds/design-system/container";
@@ -8,6 +10,10 @@ import { WebinarPageContent } from "@ds/design-system/webinar-page-content";
 import { WebinarStatusCard } from "@ds/design-system/webinar-status-card";
 import { fetchPublicEventPage } from "../../../lib/public-events";
 import { resolvePrimaryCta, toCanvasStatus } from "../../../lib/event-lifecycle";
+import {
+  fetchEventRegistrationState,
+  showRegisteredConfirmation,
+} from "../../../lib/registration-state";
 import { formatMskParts } from "../../../lib/msk";
 
 /**
@@ -40,6 +46,17 @@ import { formatMskParts } from "../../../lib/msk";
  * place (owner variant «а»): it renders this notice with NO participation CTA,
  * never a 404, a redirect, or a dead link.
  *
+ * 005 EARS-4: the page also composes the AUTHENTICATED doctor's per-user
+ * `EventRegistrationState` onto this 004 render — a SEPARATE authenticated read
+ * (`lib/registration-state`) that forwards the request's session cookie, never
+ * folded into the public `fetchPublicEventPage` projection or its shared cache
+ * (the public read above stays cookie-free + content-identical for guest and
+ * principal). When the caller is registered on an upcoming event, the register
+ * CTA is replaced by a «вы записаны» confirmation + a join-signpost placeholder
+ * (the full join signposting is EARS-5, #569) — a registered doctor is never
+ * shown the register CTA as if unregistered. A guest never issues the read and
+ * sees 004's register CTA unchanged.
+ *
  * Rendered per request (`force-dynamic`) — the page reflects a live read model
  * whose lifecycle state can change, so a static prerender would go stale.
  */
@@ -62,14 +79,32 @@ export default async function WebinarEventPage({
   // and the single primary participation CTA target (register / room / none).
   const status = toCanvasStatus(event.state);
   const cta = resolvePrimaryCta(event.state, event.slug);
+
+  // 005 EARS-4 — the per-user registration state, a SEPARATE authenticated read
+  // forwarding the request's session cookie (guest → null → 004's register CTA).
+  // `showRegisteredConfirmation` swaps only when the register CTA would otherwise
+  // show (upcoming) AND the caller is registered — so the register CTA is never
+  // shown to a registered doctor, and the `live` room route / `ended` renders are
+  // left untouched (EARS-5 #569 / 006 own those).
+  const h = await headers();
+  const registrationState = await fetchEventRegistrationState(slug, {
+    cookie: h.get("cookie") ?? "",
+    // The session is fingerprint-bound (ADR-0001 §6) — forward the same surface
+    // the browser bound at login so the authed read is not 401'd (see the lib).
+    userAgent: h.get("user-agent") ?? "",
+    acceptLanguage: h.get("accept-language") ?? "",
+  });
+  const registered = showRegisteredConfirmation(registrationState, cta);
   // EARS-5 — archived is the fourth render mode on the SAME status-card shell: a
   // text notice replaces the CTA column (no button, no dead link), no new
   // geometry. Every state now renders the status card (the archived body swaps
   // its own time-plate/head/sub copy + the CTA-column notice).
   const isArchived = status === "archived";
   // The footer conversion band mirrors the status card's route but only for a
-  // participable event (upcoming / live); `ended` and `archived` carry none.
-  const showFooterBand = status === "upcoming" || status === "live";
+  // participable event (upcoming / live); `ended` and `archived` carry none. A
+  // registered doctor's footer «Записаться» band is suppressed too (005 EARS-4)
+  // — never re-offer registration to an already-registered doctor.
+  const showFooterBand = (status === "upcoming" || status === "live") && !registered;
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -131,8 +166,8 @@ export default async function WebinarEventPage({
               date,
               duration: event.durationMin,
             })}
-            head={t(`statusCard.${status}.head`)}
-            sub={t(`statusCard.${status}.sub`)}
+            head={registered ? t("registered.head") : t(`statusCard.${status}.head`)}
+            sub={registered ? t("registered.sub") : t(`statusCard.${status}.sub`)}
           >
             {isArchived ? (
               // The CTA column becomes a non-interactive «в архиве» notice — no
@@ -141,6 +176,15 @@ export default async function WebinarEventPage({
               // `text-primary`, the #270 precedent).
               <p className="text-sm font-bold text-primary-action">
                 {t("statusCard.archived.notice")}
+              </p>
+            ) : registered ? (
+              // 005 EARS-4 — the registered confirmation REPLACES the register CTA
+              // (join-signpost placeholder; the full signposting is EARS-5 #569).
+              // `text-primary-action` (blue.700) is the card-safe AA token on
+              // `bg-card` (never `text-primary`, the #270 precedent).
+              <p className="inline-flex items-center gap-2 text-sm font-bold text-primary-action">
+                <CircleCheck aria-hidden className="size-5" />
+                {t("registered.confirmation")}
               </p>
             ) : cta.kind !== "none" ? (
               <Button asChild size="lg">

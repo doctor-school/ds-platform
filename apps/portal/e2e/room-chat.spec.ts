@@ -137,4 +137,86 @@ test.describe("006 EARS-3 live chat over Centrifugo (e2e)", () => {
       await ctx.close();
     }
   });
+
+  test("006 EARS-3: a doctor joining mid-webinar reads the recent conversation (history hydration on subscribe)", async ({
+    browser,
+  }) => {
+    const ctxA = await browser.newContext();
+    const ctxB = await browser.newContext();
+    try {
+      // Doctor A posts BEFORE doctor B is in the room at all.
+      const pageA = await ctxA.newPage();
+      await login(pageA, DOCTOR_A_EMAIL!, DOCTOR_A_PASSWORD!);
+      const composerA = await openRoomChat(pageA);
+      const earlier = `Сообщение до подключения коллеги — ${Date.now()}`;
+      await composerA.fill(earlier);
+      await pageA
+        .getByRole("button", { name: /отправить|send/i })
+        .first()
+        .click();
+      await expect(
+        pageA.getByTestId("room-chat-message").filter({ hasText: earlier }),
+      ).toBeVisible({ timeout: 15_000 });
+
+      // Doctor B joins AFTERWARDS and still reads it — hydrated from the channel's
+      // bounded history on subscribe, not an empty pane.
+      const pageB = await ctxB.newPage();
+      await login(pageB, DOCTOR_B_EMAIL!, DOCTOR_B_PASSWORD!);
+      await openRoomChat(pageB);
+      await expect(
+        pageB.getByTestId("room-chat-message").filter({ hasText: earlier }),
+      ).toBeVisible({ timeout: 15_000 });
+    } finally {
+      await ctxA.close();
+      await ctxB.close();
+    }
+  });
+
+  /**
+   * Token-expiry survival (the getToken refresh path). Requires the api booted
+   * with a SHORT `CHAT_TOKEN_TTL_SECONDS` (e.g. 8) and that value exported as
+   * `E2E_CHAT_TOKEN_TTL_SECONDS` — skipped otherwise (the 3600 s default cannot
+   * be waited out in a test). The reader waits PAST the token TTL, then a message
+   * is posted: it still arrives, proving the SDK refreshed the connection token
+   * through the gated `getToken` path and the server-side subscription survived
+   * the expiry (the mid-webinar chat-death class the TTL would otherwise cause).
+   */
+  test("006 EARS-3: the chat connection survives token expiry — a message posted after the TTL still reaches the reader (getToken refresh)", async ({
+    browser,
+  }) => {
+    const ttl = Number(process.env.E2E_CHAT_TOKEN_TTL_SECONDS ?? "0");
+    test.skip(
+      !ttl || ttl > 30,
+      "requires the api booted with a short CHAT_TOKEN_TTL_SECONDS, exported as E2E_CHAT_TOKEN_TTL_SECONDS",
+    );
+    test.setTimeout(ttl * 3000 + 60_000);
+    const ctxA = await browser.newContext();
+    const ctxB = await browser.newContext();
+    try {
+      const pageA = await ctxA.newPage();
+      const pageB = await ctxB.newPage();
+      await login(pageA, DOCTOR_A_EMAIL!, DOCTOR_A_PASSWORD!);
+      await login(pageB, DOCTOR_B_EMAIL!, DOCTOR_B_PASSWORD!);
+      const composerA = await openRoomChat(pageA);
+      await openRoomChat(pageB);
+
+      // Wait out the token TTL (plus margin) — the initial connection token B
+      // connected with is now expired; the SDK must have refreshed via getToken.
+      await pageB.waitForTimeout(ttl * 1500 + 3000);
+
+      const afterExpiry = `Сообщение после истечения токена — ${Date.now()}`;
+      await composerA.fill(afterExpiry);
+      await pageA
+        .getByRole("button", { name: /отправить|send/i })
+        .first()
+        .click();
+      // B still receives it live — the subscription survived the expiry.
+      await expect(
+        pageB.getByTestId("room-chat-message").filter({ hasText: afterExpiry }),
+      ).toBeVisible({ timeout: 15_000 });
+    } finally {
+      await ctxA.close();
+      await ctxB.close();
+    }
+  });
 });

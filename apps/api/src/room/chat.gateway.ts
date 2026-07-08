@@ -115,10 +115,17 @@ export class CentrifugoChatGateway {
    * EARS-8). Stable across a doctor's messages (a SHA-256 prefix of the id), so
    * their posts read consistently, and the same doctor's `selfTag` in
    * {@link credential} matches, letting the client mark its own messages without
-   * the server exposing more than the tag chat legitimately shows.
+   * the server exposing more than the tag chat legitimately shows. 8 hex chars
+   * (32 bits): birthday-collision odds in a few-hundred-doctor room are ~1e-5,
+   * so two doctors sharing a tag (one seeing the other's message mislabeled as
+   * their own via the `selfTag` match) is not a practical event.
    */
   authorTag(userId: string): string {
-    return createHash("sha256").update(userId).digest("hex").slice(0, 4).toUpperCase();
+    return createHash("sha256")
+      .update(userId)
+      .digest("hex")
+      .slice(0, 8)
+      .toUpperCase();
   }
 
   /**

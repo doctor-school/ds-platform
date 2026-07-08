@@ -115,6 +115,16 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       specialties: ["cardiology"],
     };
 
+    /**
+     * Realistic provider-scoped embed ids per the `@ds/schemas`
+     * `EMBED_REF_SHAPES` SSOT (#665): YouTube = the 11-char video id,
+     * Rutube = the 32-char lowercase-hex video id.
+     */
+    const VALID_EMBED_REFS: Record<(typeof STREAM_PROVIDERS)[number], string> = {
+      rutube: "caafe83ff1c6ed38d394635b83ece578",
+      youtube: "dQw4w9WgXcQ",
+    };
+
     /** Create a fresh draft event through the EARS-1 create endpoint; return its id + slug. */
     async function createDraft(
       cookie: string,
@@ -206,7 +216,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       for (const provider of STREAM_PROVIDERS) {
         const { id } = await createDraft(cookie);
-        const embedRef = `${provider}-stream-42`;
+        const embedRef = VALID_EMBED_REFS[provider];
 
         const res = await configureStream(cookie, id, { provider, embedRef });
         expect(res.statusCode).toBe(200);
@@ -237,14 +247,35 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(await persistedConfig(id)).toBeUndefined();
     });
 
+    it("EARS-3: a garbage embed id matching no provider shape is rejected (400) with no config recorded (Stage-B «ччсапп», #665)", async () => {
+      const cookie = await session(uniqueEmail("admin"), "platform_admin");
+      const { id } = await createDraft(cookie);
+
+      // The owner's Stage-B repro: a keyboard-mash token previously persisted
+      // with a success banner. The per-provider `EMBED_REF_SHAPES` SSOT now
+      // refuses it at the DTO boundary for every provider in the enum.
+      for (const provider of STREAM_PROVIDERS) {
+        const res = await configureStream(cookie, id, {
+          provider,
+          embedRef: "ччсапп",
+        });
+        expect(res.statusCode, `garbage id must 400 for ${provider}`).toBe(400);
+      }
+      expect(await persistedConfig(id)).toBeUndefined();
+    });
+
     it("EARS-3: the config is correctable while published, replacing the reference with no state reversal", async () => {
       const cookie = await session(uniqueEmail("admin"), "platform_admin");
       const { id } = await createDraft(cookie);
 
-      // Author an initial (wrong) config while draft.
+      // Author an initial (wrong-for-the-event but well-formed) config while draft.
       expect(
-        (await configureStream(cookie, id, { provider: "rutube", embedRef: "wrong-ref" }))
-          .statusCode,
+        (
+          await configureStream(cookie, id, {
+            provider: "rutube",
+            embedRef: "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          })
+        ).statusCode,
       ).toBe(200);
 
       // Publish (draft → published) so the correction happens on a live event.
@@ -259,7 +290,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // unpublish. The provider may switch too (still explicit, still enum).
       const fix = await configureStream(cookie, id, {
         provider: "youtube",
-        embedRef: "corrected-ref",
+        embedRef: "c0rrectedYt",
       });
       expect(fix.statusCode).toBe(200);
       const body = fix.json() as {
@@ -270,12 +301,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(body.state).toBe("published");
       expect(body.streamConfig).toEqual({
         provider: "youtube",
-        embedRef: "corrected-ref",
+        embedRef: "c0rrectedYt",
       });
       // Exactly one row per event — the correction replaced, not appended.
       expect(await persistedConfig(id)).toEqual({
         provider: "youtube",
-        embed_ref: "corrected-ref",
+        embed_ref: "c0rrectedYt",
       });
     });
 
@@ -287,7 +318,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await forceState(id, state);
         const res = await configureStream(cookie, id, {
           provider: "rutube",
-          embedRef: "too-late",
+          embedRef: VALID_EMBED_REFS.rutube,
         });
         expect(res.statusCode, `configure must be refused from ${state}`).toBe(
           409,
@@ -301,7 +332,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const res = await configureStream(
         cookie,
         "00000000-0000-0000-0000-000000000000",
-        { provider: "rutube", embedRef: "x" },
+        { provider: "rutube", embedRef: VALID_EMBED_REFS.rutube },
       );
       expect(res.statusCode).toBe(404);
     });
@@ -312,7 +343,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const doc = await session(uniqueEmail("doc"), "doctor_guest");
       const res = await configureStream(doc, id, {
         provider: "rutube",
-        embedRef: "guest-attempt",
+        embedRef: VALID_EMBED_REFS.rutube,
       });
       expect(res.statusCode).toBe(403);
       expect(await persistedConfig(id)).toBeUndefined();
@@ -323,7 +354,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const { id } = await createDraft(admin);
       const res = await configureStream(undefined, id, {
         provider: "rutube",
-        embedRef: "anon-attempt",
+        embedRef: VALID_EMBED_REFS.rutube,
       });
       expect(res.statusCode).toBe(401);
       expect(await persistedConfig(id)).toBeUndefined();

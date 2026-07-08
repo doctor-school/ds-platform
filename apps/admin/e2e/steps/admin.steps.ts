@@ -120,11 +120,20 @@ When(
   },
 );
 
+/**
+ * Realistic provider-scoped embed ids (the `@ds/schemas` `EMBED_REF_SHAPES`
+ * SSOT, #665): YouTube = the 11-char video id, Rutube = the 32-hex video id.
+ */
+const VALID_EMBED_REF: Record<string, string> = {
+  rutube: "caafe83ff1c6ed38d394635b83ece578",
+  youtube: "dQw4w9WgXcQ",
+};
+
 When(
   "the operator configures the stream with provider {string}",
   async ({ page, world }, provider: string) => {
     await page.getByTestId("provider").selectOption(provider);
-    await page.getByTestId("embed-ref").fill("live-stream-42");
+    await page.getByTestId("embed-ref").fill(VALID_EMBED_REF[provider] ?? "");
     await page.getByTestId("save-stream").click();
     await expect(page.getByTestId("stream-ok")).toBeVisible();
     world.provider = provider;
@@ -286,4 +295,33 @@ Then("the operator stays on the create-event screen", async ({ page }) => {
 
 Then("the stream configuration is not saved", async ({ page }) => {
   await expect(page.getByTestId("stream-ok")).toHaveCount(0);
+});
+
+// ── #665 rework — login form DS RU validation (Stage-B: native bubbles) ───────
+
+Given("an anonymous visitor on the admin login screen", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page.getByTestId("login-submit")).toBeVisible();
+});
+
+Then(
+  "native browser validation is suppressed on the login form",
+  async ({ page }) => {
+    // The Stage-B finding: the login form surfaced native «Please fill out this
+    // field.» bubbles. With `noValidate` the browser never intercepts the submit,
+    // so the DS RU errors below are the ONLY validation surface.
+    await expect(page.getByTestId("login-form")).toHaveAttribute("novalidate", "");
+  },
+);
+
+When(
+  "the visitor submits the login form with no fields filled",
+  async ({ page }) => {
+    await page.getByTestId("login-submit").click();
+  },
+);
+
+Then("the visitor stays on the login screen", async ({ page }) => {
+  await expect(page).toHaveURL(/\/login/);
+  await expect(page.getByTestId("login-form")).toBeVisible();
 });

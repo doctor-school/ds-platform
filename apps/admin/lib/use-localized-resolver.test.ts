@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { EventFormSchema, StreamConfigFormSchema } from "./form-schemas";
+import {
+  EventFormSchema,
+  LoginFormSchema,
+  StreamConfigFormSchema,
+} from "./form-schemas";
 import { translateIssue, type ZodIssueLike } from "./use-localized-resolver";
 
 /**
@@ -115,5 +119,36 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
         embedRef: "https://rutube.ru/video/abc/",
       }),
     ).toContain("embedRefUrl");
+  });
+
+  it("maps a garbage embed id to the provider-specific shape key (Stage-B «ччсапп», #665)", () => {
+    // The Stage-B repro: a keyboard-mash token is neither a URL nor a valid
+    // provider id — the SSOT `EMBED_REF_SHAPES` refinement flags it with
+    // `params.shape`, and the resolver renders the provider-named RU guidance
+    // (never the generic URL copy, never fallback).
+    expect(
+      keysFor(StreamConfigFormSchema, { provider: "rutube", embedRef: "ччсапп" }),
+    ).toEqual(["embedRefRutube"]);
+    expect(
+      keysFor(StreamConfigFormSchema, { provider: "youtube", embedRef: "ччсапп" }),
+    ).toEqual(["embedRefYoutube"]);
+  });
+
+  it("login form: every field's real failing rule maps to a specific key, never fallback", () => {
+    // Empty submit — the Stage-B finding: the login form showed NATIVE browser
+    // bubbles («Please fill out this field.») instead of DS RU errors.
+    const empty = keysFor(LoginFormSchema, { email: "", password: "" });
+    expect(empty).toContain("email");
+    expect(empty).toContain("passwordTooShort");
+    expect(empty).not.toContain("fallback");
+
+    // A malformed email and an over-long password map to their own keys.
+    const malformed = keysFor(LoginFormSchema, {
+      email: "not-an-email",
+      password: "x".repeat(300),
+    });
+    expect(malformed).toContain("email");
+    expect(malformed).toContain("maxLength");
+    expect(malformed).not.toContain("fallback");
   });
 });

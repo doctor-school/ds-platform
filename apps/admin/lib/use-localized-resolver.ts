@@ -27,8 +27,9 @@ import type { z } from "zod";
  */
 export function useLocalizedResolver<TFieldValues extends FieldValues, Out>(
   schema: z.ZodType<Out, TFieldValues>,
+  namespace: "events.validation" | "login.validation" = "events.validation",
 ): Resolver<TFieldValues, unknown, Out> {
-  const t = useTranslations("events.validation");
+  const t = useTranslations(namespace);
 
   return useMemo(
     () =>
@@ -47,6 +48,8 @@ export interface ZodIssueLike {
   format?: string;
   path?: PropertyKey[];
   message?: string;
+  /** `custom`-issue params (e.g. the SSOT `EMBED_REF_SHAPES` provider tag). */
+  params?: Record<string, unknown>;
 }
 
 export type Translator = (key: string) => string;
@@ -61,12 +64,28 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
   const path = issue.path ?? [];
   const has = (key: string) => path.includes(key);
 
-  // Stream `embedRef` URL guard (the SSOT `EmbedRefSchema` `.refine`, EARS-3) —
-  // "paste the whole share link" is refused with actionable copy.
+  // Stream `embedRef` (EARS-3): a `custom` issue is either the SSOT per-provider
+  // shape refinement (`EMBED_REF_SHAPES`, tagged `params.shape` — the Stage-B
+  // «ччсапп» garbage-id class, #665) or the URL guard (`EmbedRefSchema.refine`,
+  // untagged) — "paste the whole share link" gets its own actionable copy.
   if (has("embedRef")) {
-    if (issue.code === "custom") return t("embedRefUrl");
+    if (issue.code === "custom") {
+      const shape = issue.params?.shape;
+      if (shape === "rutube") return t("embedRefRutube");
+      if (shape === "youtube") return t("embedRefYoutube");
+      return t("embedRefUrl");
+    }
     if (issue.code === "too_big") return t("maxLength");
     return t("required");
+  }
+
+  // Admin login (007 EARS-8 surface, #665 rework): the email box renders the
+  // email-shape guidance for any violation (empty or malformed — `z.email()`
+  // reports both as `invalid_format`); the current-password box mirrors the
+  // portal copy: too short (incl. empty, the SSOT min-8 login guard) vs too long.
+  if (has("email")) return t("email");
+  if (has("password")) {
+    return issue.code === "too_big" ? t("maxLength") : t("passwordTooShort");
   }
 
   // Duration (minutes) — a positive integer, ≤ 24h. An empty/NaN/zero/negative

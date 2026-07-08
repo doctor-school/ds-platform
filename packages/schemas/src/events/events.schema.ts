@@ -150,19 +150,61 @@ export const EmbedRefSchema = z
   .refine((value) => !EMBED_REF_LOOKS_LIKE_URL.test(value));
 
 /**
+ * Per-provider embed-id shapes (EARS-3, #665 Stage-B). The provider's REAL id
+ * format, researched from the providers' own embed contracts — not an invented
+ * pattern — so a keyboard-mash token (the Stage-B repro `ччсапп`) is refused at
+ * the SSOT boundary instead of persisting a reference the 006 player cannot embed:
+ *
+ * - `youtube` — the 11-character video id, alphabet `[A-Za-z0-9_-]` (the id in
+ *   `youtu.be/<id>`, `watch?v=<id>`, `/live/<id>`; live streams carry a regular
+ *   video id). Length and alphabet per YouTube's modified-base64 id scheme.
+ * - `rutube` — the 32-character lowercase-hex video id (the id in
+ *   `rutube.ru/video/<id>/` and `rutube.ru/play/embed/<id>`, per Rutube's own
+ *   embed FAQ, rutube.ru/info/embed). Ids are machine-copied from the URL, so
+ *   the canonical lowercase is required — an uppercase variant is not a valid
+ *   Rutube path segment.
+ *
+ * Extending {@link STREAM_PROVIDERS} later MUST add the new provider's shape here
+ * (the `satisfies` clause makes a missing entry a compile error).
+ */
+export const EMBED_REF_SHAPES = {
+  rutube: /^[0-9a-f]{32}$/,
+  youtube: /^[A-Za-z0-9_-]{11}$/,
+} as const satisfies Record<StreamProvider, RegExp>;
+
+/**
  * `ConfigureStream` request body (EARS-3). Records `{ provider, embedRef }`: the
  * provider is an explicit member of the closed enum (an out-of-enum value is a
  * 400 at the I/O boundary, before any handler runs, so no config is recorded for
  * an unknown provider); `embedRef` is the **provider-scoped stream id / embed
- * reference** ({@link EmbedRefSchema}), a bounded free token — never a URL to be
- * sniffed. Configuring is an idempotent upsert (one config per event); it is
+ * reference** ({@link EmbedRefSchema}), and it must match the chosen provider's
+ * real id shape ({@link EMBED_REF_SHAPES}) — never a URL to be sniffed, never a
+ * free token. Configuring is an idempotent upsert (one config per event); it is
  * correctable while the event is `published` (US-3), so a wrong reference is fixed
  * with an edit, never a state reversal.
  */
-export const ConfigureStreamRequestSchema = z.object({
-  provider: StreamProviderSchema,
-  embedRef: EmbedRefSchema,
-});
+// NB: the cross-field shape check lives on the OBJECT (the shape depends on the
+// chosen provider) and stays silent while either field is still invalid on its
+// own — each problem renders exactly one issue. As with EmbedRefSchema, NO baked
+// `message` (#200); consumers key on `custom` + `embedRef` path + `params.shape`
+// (the provider), which is how the admin resolver picks the provider-specific RU
+// copy.
+export const ConfigureStreamRequestSchema = z
+  .object({
+    provider: StreamProviderSchema,
+    embedRef: EmbedRefSchema,
+  })
+  .superRefine((value, ctx) => {
+    if (!StreamProviderSchema.safeParse(value.provider).success) return;
+    if (!EmbedRefSchema.safeParse(value.embedRef).success) return;
+    if (!EMBED_REF_SHAPES[value.provider].test(value.embedRef)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["embedRef"],
+        params: { shape: value.provider },
+      });
+    }
+  });
 export type ConfigureStreamRequest = z.infer<
   typeof ConfigureStreamRequestSchema
 >;

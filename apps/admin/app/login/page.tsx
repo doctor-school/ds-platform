@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useForm } from "react-hook-form";
 import { useLogin } from "@refinedev/core";
 import { useTranslations } from "next-intl";
 import {
@@ -13,21 +14,54 @@ import {
   CardTitle,
   Input,
 } from "@ds/design-system";
-import { Field } from "@/components/fields";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@ds/design-system/form";
+import { LoginFormSchema, type LoginFormFields } from "@/lib/form-schemas";
+import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 /**
  * Admin login (007 EARS-8). Reuses the shipped 003 password login via the Refine
  * `useLogin` binding → `authProvider.login` → `/v1/auth/login`; the provider then
  * admits ONLY a `platform_admin` session (a `doctor_guest`/non-admin is refused
  * with `login.errorForbidden`). 007 adds no auth primitive — this is the 003 flow.
- * Copy from the RU catalog (EARS-10); stock DS card + input (EARS-11).
+ * Copy from the RU catalog (EARS-10); stock DS card + form + input (EARS-11).
+ *
+ * #665 rework (Stage-B finding: native «Please fill out this field.» bubbles):
+ * client validation is RHF + the `@ds/design-system` field-schema fragments
+ * ({@link LoginFormSchema}) rendered as RU `<FormMessage>` copy on blur — native
+ * browser validation is suppressed (`noValidate`), matching every other admin form.
  */
 export default function LoginPage() {
   const t = useTranslations();
   const { mutate: login, isLoading } = useLogin();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const form = useForm<LoginFormFields>({
+    mode: "onTouched",
+    resolver: useLocalizedResolver(LoginFormSchema, "login.validation"),
+    defaultValues: { email: "", password: "" },
+  });
+
+  function submit(values: LoginFormFields) {
+    setError(null);
+    login(values, {
+      onSuccess: (data) => {
+        if (!data.success) {
+          setError(
+            data.error?.message === "login.errorForbidden"
+              ? t("login.errorForbidden")
+              : t("login.errorGeneric"),
+          );
+        }
+      },
+      onError: () => setError(t("login.errorGeneric")),
+    });
+  }
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md items-center px-6">
@@ -37,60 +71,60 @@ export default function LoginPage() {
           <CardDescription>{t("login.description")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setError(null);
-              login(
-                { email, password },
-                {
-                  onSuccess: (data) => {
-                    if (!data.success) {
-                      setError(
-                        data.error?.message === "login.errorForbidden"
-                          ? t("login.errorForbidden")
-                          : t("login.errorGeneric"),
-                      );
-                    }
-                  },
-                  onError: () => setError(t("login.errorGeneric")),
-                },
-              );
-            }}
-          >
-            {error ? (
-              <Alert variant="danger" data-testid="login-error">
-                {error}
-              </Alert>
-            ) : null}
-            <Field label={t("login.email")} htmlFor="email">
-              <Input
-                id="email"
-                type="email"
+          <Form {...form}>
+            <form
+              className="flex flex-col gap-4"
+              data-testid="login-form"
+              noValidate
+              onSubmit={form.handleSubmit(submit)}
+            >
+              {error ? (
+                <Alert variant="danger" data-testid="login-error">
+                  {error}
+                </Alert>
+              ) : null}
+              <FormField
+                control={form.control}
                 name="email"
-                autoComplete="username"
-                placeholder={t("login.emailPlaceholder")}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel htmlFor="email">{t("login.email")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        id="email"
+                        type="email"
+                        autoComplete="username"
+                        placeholder={t("login.emailPlaceholder")}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </Field>
-            <Field label={t("login.password")} htmlFor="password">
-              <Input
-                id="password"
-                type="password"
+              <FormField
+                control={form.control}
                 name="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel htmlFor="password">{t("login.password")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        id="password"
+                        type="password"
+                        autoComplete="current-password"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </Field>
-            <Button type="submit" loading={isLoading} data-testid="login-submit">
-              {t("login.submit")}
-            </Button>
-          </form>
+              <Button type="submit" loading={isLoading} data-testid="login-submit">
+                {t("login.submit")}
+              </Button>
+            </form>
+          </Form>
         </CardContent>
       </Card>
     </div>

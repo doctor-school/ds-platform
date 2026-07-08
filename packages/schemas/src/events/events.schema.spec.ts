@@ -17,6 +17,16 @@ import {
 // 007 EARS-1 pure contract logic — the МСК→instant fold, the closed transition
 // map, and the create-request validation. Framework-free unit coverage that
 // runs in the shared CI unit job (no infra), complementing the API e2e.
+
+/**
+ * Realistic provider-scoped embed ids (EARS-3, #665): YouTube = the 11-char
+ * video id (`youtu.be/<id>`, `/watch?v=<id>`, `/live/<id>`); Rutube = the
+ * 32-char lowercase-hex video id (`rutube.ru/video/<id>/`, `/play/embed/<id>`).
+ */
+const VALID_EMBED_REFS = {
+  rutube: "caafe83ff1c6ed38d394635b83ece578",
+  youtube: "dQw4w9WgXcQ",
+} as const;
 describe("007 events schema", () => {
   describe("mskLocalToInstant (EARS-1/EARS-10 — one canonical instant)", () => {
     it("folds a МСК wall-clock into the UTC instant (UTC+3, no DST)", () => {
@@ -182,14 +192,12 @@ describe("007 events schema", () => {
       expect([...STREAM_PROVIDERS]).toEqual(["rutube", "youtube"]);
     });
 
-    it("EARS-3: accepts each provider from the closed enum + an embed reference", () => {
+    it("EARS-3: accepts each provider from the closed enum + a realistic provider-scoped id", () => {
       for (const provider of STREAM_PROVIDERS) {
-        const parsed = ConfigureStreamRequestSchema.parse({
-          provider,
-          embedRef: "abc123XYZ",
-        });
+        const embedRef = VALID_EMBED_REFS[provider];
+        const parsed = ConfigureStreamRequestSchema.parse({ provider, embedRef });
         expect(parsed.provider).toBe(provider);
-        expect(parsed.embedRef).toBe("abc123XYZ");
+        expect(parsed.embedRef).toBe(embedRef);
       }
     });
 
@@ -216,9 +224,62 @@ describe("007 events schema", () => {
       expect(
         ConfigureStreamRequestSchema.parse({
           provider: "youtube",
-          embedRef: "  vid-42  ",
+          embedRef: "  dQw4w9WgXcQ  ",
         }).embedRef,
-      ).toBe("vid-42");
+      ).toBe("dQw4w9WgXcQ");
+    });
+
+    it("EARS-3: rejects a garbage embed reference matching no provider id shape (Stage-B «ччсапп», #665)", () => {
+      // The owner's Stage-B repro: a keyboard-mash Cyrillic token sailed through
+      // the loose bounded-string rule and was persisted with a success banner.
+      // The per-provider shape refuses it with a structured `custom` issue on the
+      // `embedRef` path carrying `params.shape = <provider>`, which the admin
+      // resolver renders as the provider-specific RU message.
+      for (const provider of STREAM_PROVIDERS) {
+        const result = ConfigureStreamRequestSchema.safeParse({
+          provider,
+          embedRef: "ччсапп",
+        });
+        expect(result.success, `garbage id must be refused for ${provider}`).toBe(
+          false,
+        );
+        const issue = result.success ? undefined : result.error.issues[0];
+        expect(issue?.code).toBe("custom");
+        expect(issue?.path).toEqual(["embedRef"]);
+        expect((issue as { params?: { shape?: string } })?.params).toEqual({
+          shape: provider,
+        });
+      }
+    });
+
+    it("EARS-3: rejects a cross-provider id (a YouTube id is not a Rutube id and vice versa)", () => {
+      expect(
+        ConfigureStreamRequestSchema.safeParse({
+          provider: "rutube",
+          embedRef: VALID_EMBED_REFS.youtube,
+        }).success,
+      ).toBe(false);
+      expect(
+        ConfigureStreamRequestSchema.safeParse({
+          provider: "youtube",
+          embedRef: VALID_EMBED_REFS.rutube,
+        }).success,
+      ).toBe(false);
+    });
+
+    it("EARS-3: the shape check reports ONE issue per problem — a base violation (empty/URL) is not doubled", () => {
+      // An empty or URL-shaped value already fails the base EmbedRefSchema; the
+      // per-provider shape refinement stays silent then, so each problem renders
+      // exactly one message on the form.
+      for (const embedRef of ["   ", "https://rutube.ru/video/abc123/"]) {
+        const result = ConfigureStreamRequestSchema.safeParse({
+          provider: "rutube",
+          embedRef,
+        });
+        expect(result.success).toBe(false);
+        const issues = result.success ? [] : result.error.issues;
+        expect(issues).toHaveLength(1);
+      }
     });
 
     it("EARS-3: rejects a URL-shaped embed reference (a provider-scoped id is never a URL)", () => {

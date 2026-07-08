@@ -80,6 +80,30 @@ Feature: Minimal event admin — one operator creates, streams, runs, and archiv
     Then the form shows the RU validation error "Укажите идентификатор потока у провайдера, а не ссылку (URL)."
     And the stream configuration is not saved
 
+  @EARS-3 @validation @failure
+  Scenario: A garbage stream embed id is refused with a provider-specific RU error (Stage-B «ччсапп»)
+    Given a platform_admin operator in the admin app
+    When the operator creates a draft event with a program PDF
+    And the operator saves the stream with embed reference "ччсапп"
+    Then the form shows the RU validation error "Неверный идентификатор Rutube"
+    And the stream configuration is not saved
+
+  @EARS-3 @validation @happy
+  Scenario: A realistic provider-scoped embed id is accepted for each provider
+    Given a platform_admin operator in the admin app
+    When the operator creates a draft event with a program PDF
+    And the operator configures the stream with provider "youtube"
+    And the operator configures the stream with provider "rutube"
+
+  @EARS-8 @validation @failure
+  Scenario: The login form refuses an empty submit with rendered RU errors, never native bubbles
+    Given an anonymous visitor on the admin login screen
+    Then native browser validation is suppressed on the login form
+    When the visitor submits the login form with no fields filled
+    Then the form shows the RU validation error "Укажите корректный адрес электронной почты."
+    And the form shows the RU validation error "Пароль — не короче 8 символов."
+    And the visitor stays on the login screen
+
   @EARS-10 @validation @happy
   Scenario: A corrected create form clears the errors and creates the event
     Given a platform_admin operator in the admin app

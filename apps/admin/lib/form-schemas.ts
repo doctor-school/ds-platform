@@ -4,6 +4,10 @@ import {
   CreateEventRequestSchema,
   type SpeakerEntry,
 } from "@ds/schemas";
+import {
+  CurrentPasswordFieldSchema,
+  EmailFieldSchema,
+} from "@ds/design-system/fields";
 
 /**
  * Admin-form client validation schemas (#665), DERIVED from the `@ds/schemas` SSOT
@@ -78,6 +82,26 @@ export interface EventFormFields {
 
 /** The stream-config form validator — the SSOT request schema verbatim (EARS-3). */
 export const StreamConfigFormSchema = ConfigureStreamRequestSchema;
+
+/**
+ * The admin login form (007 EARS-8 surface, #665 rework — the Stage-B finding:
+ * native browser bubbles instead of DS RU errors). Composed from the semantic
+ * field-schema fragments the design-system field primitives own (#197 — the same
+ * fragments the portal auth forms use): the email box is the `z.email()` SSOT
+ * shape, the password box the permissive login guard (min 8 / ≤256, NO complexity
+ * — never lock out a legacy credential client-side; #147). Applied ONLY as the RHF
+ * resolver; the submitted body stays the loose `LoginRequestSchema` contract and
+ * Zitadel remains the credential authority.
+ */
+export const LoginFormSchema = z.object({
+  email: EmailFieldSchema,
+  password: CurrentPasswordFieldSchema,
+});
+
+export interface LoginFormFields {
+  email: string;
+  password: string;
+}
 
 export interface StreamConfigFields {
   provider: (typeof ConfigureStreamRequestSchema)["_output"]["provider"];

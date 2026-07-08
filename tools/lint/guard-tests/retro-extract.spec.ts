@@ -215,6 +215,48 @@ describe("retro extract — CORRECTION_RE «не X, а Y» contrastive recall (#
   });
 });
 
+// ── CORRECTION_RE — RU interrogative / reproach recall (#609) ────────────────
+// The /wrap retro of session 35991795 scored 0 on TWO genuine owner corrections,
+// both phrased as interrogative reproaches — a common RU register the lexicon
+// could not see: «Сколько он должен идти по времени? Уже 20 минут» (a duration
+// reproach: how long is this STILL running) and «…гард жизненного цикла — чего?
+// …Я вроде просил…» (a "but I thought I asked …" reproach). Added, each anchored
+// on a reproach marker so plain information questions stay unflagged: the
+// «сколько … уже …» duration form (both «сколько» and «уже» Cyrillic-anchored so
+// «несколько … уже» / «хуже» never fire), the «(я) вроде прос/говор/договор…»
+// broken-agreement form, and the English «didn't I ask» reproach. Bare «почему»
+// / «чего?» are deliberately NOT new tokens — «почему» already flags and a bare
+// interrogative floods on benign info questions.
+describe("retro extract — CORRECTION_RE RU interrogative reproach recall (#609)", () => {
+  it("flags the two session-35991795 interrogative-reproach misses", () => {
+    // duration reproach — «сколько … уже …»
+    expect(CORRECTION_RE.test("Сколько он должен идти по времени? Уже 20 минут")).toBe(true);
+    // broken-agreement reproach — «Я вроде просил …»
+    expect(
+      CORRECTION_RE.test("…гард жизненного цикла — чего?…Я вроде просил…"),
+    ).toBe(true);
+  });
+
+  it("flags adjacent interrogative-reproach shapes", () => {
+    expect(CORRECTION_RE.test("сколько это уже длится?")).toBe(true);
+    expect(CORRECTION_RE.test("я вроде говорил не трогать этот файл")).toBe(true);
+    expect(CORRECTION_RE.test("мы вроде договорились на другом варианте")).toBe(true);
+    expect(CORRECTION_RE.test("didn't I ask you to stop?")).toBe(true);
+  });
+
+  it("precision guard: plain information questions stay unflagged", () => {
+    // a plain quantity question — no «уже» reproach marker
+    expect(CORRECTION_RE.test("сколько это будет стоить?")).toBe(false);
+    // «несколько … уже» must not fire (сколько is left-anchored)
+    expect(CORRECTION_RE.test("несколько задач уже готовы")).toBe(false);
+    // «хуже» must not fire the «уже» anchor
+    expect(CORRECTION_RE.test("стало хуже после сколь-нибудь заметной паузы")).toBe(false);
+    // benign «вроде» ack with no request/agreement verb
+    expect(CORRECTION_RE.test("вроде всё работает, спасибо")).toBe(false);
+    expect(CORRECTION_RE.test("да, вроде так и есть")).toBe(false);
+  });
+});
+
 // ── SELF_CATCH lexicon recall (#362) ────────────────────────────────────────
 // The assistant-side self-correction lexicon missed clean RU markers the corpus
 // surfaced («я зря …», «я перепутал …»). The additions are high-precision: the

@@ -134,6 +134,25 @@ export const CORRECTION_RE = new RegExp(
     // diverges at «обязат»); «замечани» covers замечание/замечания/замечаний —
     // in owner chat both frame a norm the agent violated, i.e. pushback.
     'обязан', 'замечани',
+    // 2026-07-07 35991795 wrap retro — TWO owner corrections scored 0, both
+    // interrogative reproaches (a common RU register the lexicon could not see):
+    // «Сколько он должен идти по времени? Уже 20 минут» (duration reproach: how
+    // long is this STILL running) and «…Я вроде просил…» (broken-agreement: "but
+    // I thought I asked …"). Each is anchored on a reproach marker so a plain
+    // information question never flags — bare «почему»/«чего?» are deliberately
+    // NOT tokens (a bare interrogative floods on benign info questions; «почему»
+    // already flags, «опять/снова/ещё раз» already carry the repetition reproach).
+    // «сколько … уже …»: the impatience form. Both stems are Cyrillic-anchored —
+    // «сколько» left-anchored so «несколько … уже» (quantifier) never fires, «уже»
+    // both-side anchored so «хуже» never fires; the ≤40-char gap keeps the two
+    // words in one clause. «вроде + прос/говор/договор/…»: the broken-agreement
+    // reproach; «вроде» is anchored to a request/recall verb so the benign ack
+    // «вроде всё работает» / «вроде так и есть» stays quiet. «didn't i »: the
+    // English reproach interrogative («didn't I ask/tell»); "why is this still" is
+    // already covered by the «why » token.
+    '(?<![а-яё])сколько[\\s\\S]{0,40}(?<![а-яё])уже(?![а-яё])',
+    'вроде\\s+(?:же\\s+)?(?:прос|говор|договор|сказал|указыв|обсужд)',
+    "didn.t i ",
     'why ', 'instead', 'should have', 'you were supposed', 'wrong', 'no,', 'stop',
     'revert', 'undo', "don't", 'do not', 'not what', 'i asked', 'i told you', 'again', 'did you',
   ].join('|'),

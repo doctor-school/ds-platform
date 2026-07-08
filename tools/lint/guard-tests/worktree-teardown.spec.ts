@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   classifyTeardownTarget,
+  collectProtectedPids,
+  commandLineReferencesPath,
   resolveWorktreePath,
+  selectWorktreeProcesses,
 } from "../../dev/worktree-teardown.mjs";
 
 /**
@@ -130,5 +133,146 @@ describe("worktree-teardown classifyTeardownTarget()", () => {
     expect(classifyTeardownTarget(absWin, [registeredPosix], () => false)).toBe(
       "registered",
     );
+  });
+});
+
+/**
+ * Unit cover for the pre-purge process sweep's kill-scope (#616). The impure
+ * half (Win32_Process snapshot, taskkill) is exercised live; these tests prove
+ * the SAFETY property on the pure selectors: only processes whose command line
+ * references the exact target worktree path are ever selected, and the
+ * teardown's own process chain is shielded.
+ */
+const WT = "C:\\Users\\dev\\repos\\ds-platform\\.claude\\worktrees\\556";
+
+describe("worktree-teardown commandLineReferencesPath()", () => {
+  it("matches a command line holding a file under the worktree (the retro nest-start chain)", () => {
+    expect(
+      commandLineReferencesPath(
+        'node "C:\\Users\\dev\\repos\\ds-platform\\.claude\\worktrees\\556\\apps\\api\\dist\\main.js"',
+        WT,
+      ),
+    ).toBe(true);
+  });
+
+  it("matches across separator style and case (posix command line vs windows path)", () => {
+    expect(
+      commandLineReferencesPath(
+        "node c:/users/DEV/repos/ds-platform/.claude/worktrees/556/apps/api/dist/main.js",
+        WT,
+      ),
+    ).toBe(true);
+  });
+
+  it("matches the bare worktree path at end-of-string and before a quote", () => {
+    expect(commandLineReferencesPath(`cmd /c cd ${WT}`, WT)).toBe(true);
+    expect(commandLineReferencesPath(`powershell -Command "${WT}"`, WT)).toBe(
+      true,
+    );
+  });
+
+  it("NEVER matches a sibling worktree whose name extends the target's (61 vs 616)", () => {
+    // The safety core: substring-contains alone would let worktree '61' kill
+    // worktree '616' processes. The boundary check forbids it, both directions.
+    const wt61 = "C:\\repo\\.claude\\worktrees\\61";
+    const cmd616 = "node C:\\repo\\.claude\\worktrees\\616\\apps\\api\\main.js";
+    expect(commandLineReferencesPath(cmd616, wt61)).toBe(false);
+    const cmd61 = "node C:\\repo\\.claude\\worktrees\\61\\apps\\api\\main.js";
+    expect(commandLineReferencesPath(cmd61, wt61)).toBe(true);
+  });
+
+  it("NEVER matches the main tree or another worktree", () => {
+    expect(
+      commandLineReferencesPath(
+        "node C:\\Users\\dev\\repos\\ds-platform\\apps\\api\\dist\\main.js",
+        WT,
+      ),
+    ).toBe(false);
+    expect(
+      commandLineReferencesPath(
+        "node C:\\Users\\dev\\repos\\ds-platform\\.claude\\worktrees\\608\\apps\\api\\dist\\main.js",
+        WT,
+      ),
+    ).toBe(false);
+  });
+
+  it("returns false for a null command line (Win32_Process yields null for protected processes)", () => {
+    expect(commandLineReferencesPath(null, WT)).toBe(false);
+    expect(commandLineReferencesPath("", WT)).toBe(false);
+  });
+});
+
+describe("worktree-teardown collectProtectedPids()", () => {
+  it("shields self plus the full ancestor chain (node ← pnpm ← shell)", () => {
+    const table = [
+      { pid: 100, ppid: 10, name: "node.exe", commandLine: null },
+      { pid: 10, ppid: 1, name: "pnpm.cmd", commandLine: null },
+      { pid: 1, ppid: 0, name: "powershell.exe", commandLine: null },
+      { pid: 200, ppid: 1, name: "node.exe", commandLine: null },
+    ];
+    const shielded = collectProtectedPids(table, 100);
+    expect([...shielded].sort((a, b) => a - b)).toEqual([1, 10, 100]);
+  });
+
+  it("shields self even when absent from the snapshot, and survives a ppid cycle", () => {
+    expect([...collectProtectedPids([], 42)]).toEqual([42]);
+    const cyclic = [
+      { pid: 100, ppid: 10, name: "a", commandLine: null },
+      { pid: 10, ppid: 100, name: "b", commandLine: null }, // PID-reuse loop
+    ];
+    const shielded = collectProtectedPids(cyclic, 100);
+    expect(shielded.has(100)).toBe(true);
+    expect(shielded.has(10)).toBe(true);
+  });
+});
+
+describe("worktree-teardown selectWorktreeProcesses()", () => {
+  const table = [
+    // The retro orphan chain — all reference worktree 556.
+    { pid: 300, ppid: 1, name: "node.exe", commandLine: `node ${WT}\\x.js` },
+    { pid: 301, ppid: 300, name: "cmd.exe", commandLine: `cmd /c cd ${WT}` },
+    // Another worktree + the main tree — must never be selected.
+    {
+      pid: 400,
+      ppid: 1,
+      name: "node.exe",
+      commandLine:
+        "node C:\\Users\\dev\\repos\\ds-platform\\.claude\\worktrees\\608\\x.js",
+    },
+    {
+      pid: 401,
+      ppid: 1,
+      name: "node.exe",
+      commandLine: "node C:\\Users\\dev\\repos\\ds-platform\\x.js",
+    },
+    // A protected system process (null command line) and the System PID.
+    { pid: 500, ppid: 1, name: "svchost.exe", commandLine: null },
+    { pid: 4, ppid: 0, name: "System", commandLine: `${WT}` },
+  ];
+
+  it("selects only processes whose command line references the target worktree", () => {
+    const picked = selectWorktreeProcesses(table, WT);
+    expect(picked.map((p) => p.pid).sort((a, b) => a - b)).toEqual([300, 301]);
+  });
+
+  it("never selects a shielded self/ancestor PID even when its command line matches", () => {
+    // The teardown invoked with the ABSOLUTE worktree path: its own command
+    // line (and pnpm's) contain the path — the shield must exclude them.
+    const withSelf = [
+      ...table,
+      { pid: 600, ppid: 10, name: "node.exe", commandLine: `node t.mjs ${WT}` },
+    ];
+    const picked = selectWorktreeProcesses(withSelf, WT, new Set([600, 10]));
+    expect(picked.map((p) => p.pid).sort((a, b) => a - b)).toEqual([300, 301]);
+  });
+
+  it("never selects the Windows Idle/System PIDs (<= 4)", () => {
+    const picked = selectWorktreeProcesses(table, WT);
+    expect(picked.some((p) => p.pid === 4)).toBe(false);
+  });
+
+  it("selects nothing for a clean worktree (no behavior change)", () => {
+    const clean = "C:\\Users\\dev\\repos\\ds-platform\\.claude\\worktrees\\999";
+    expect(selectWorktreeProcesses(table, clean)).toEqual([]);
   });
 });

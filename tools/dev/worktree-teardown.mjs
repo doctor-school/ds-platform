@@ -27,12 +27,18 @@
 // back to path-as-given.
 //
 // What it does, in order:
-//   1. resolve the worktree's branch from `git worktree list --porcelain`,
-//   2. `git worktree remove --force` (tolerating the long-path FS error),
-//   3. delete any orphan dir: Windows → `cmd /c rmdir /s /q \\?\<path>` then a
+//   1. kill worktree-scoped orphan processes (#616): Windows-only sweep of
+//      `Win32_Process` for command lines referencing the target worktree path
+//      (strictly path-scoped; self + ancestor PIDs shielded) — a surviving
+//      `nest start` chain otherwise holds handles that fail the FS purge
+//      ("used by another process"). Non-Windows / no-PowerShell → skipped
+//      gracefully (POSIX rm does not fail on held handles),
+//   2. resolve the worktree's branch from `git worktree list --porcelain`,
+//   3. `git worktree remove --force` (tolerating the long-path FS error),
+//   4. delete any orphan dir: Windows → `cmd /c rmdir /s /q \\?\<path>` then a
 //      robocopy-mirror-from-empty retry; POSIX → fs.rmSync recursive,
-//   4. `git worktree prune`,
-//   5. branch cleanup (unless --keep-branch): a temp `worktree-agent-*` branch
+//   5. `git worktree prune`,
+//   6. branch cleanup (unless --keep-branch): a temp `worktree-agent-*` branch
 //      is deleted unconditionally; any other branch only if already merged into
 //      main (ancestor check) — an unmerged non-temp branch is kept + warned.
 //
@@ -63,7 +69,12 @@ function die(msg, code = 2) {
 
 /** Run a command, never throw; return {status, stdout, stderr}. */
 function run(cmd, args) {
-  const res = spawnSync(cmd, args, { encoding: "utf8" });
+  // maxBuffer raised above the 1 MiB default: the Win32_Process JSON dump for
+  // the process sweep (#616) can exceed it on a busy box.
+  const res = spawnSync(cmd, args, {
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
   return {
     status: res.status,
     stdout: res.stdout ?? "",
@@ -132,6 +143,167 @@ export function classifyTeardownTarget(
   if (registeredPaths.some((p) => norm(p) === want)) return "registered";
   if (exists(absPath)) return "orphan";
   return "unresolvable";
+}
+
+/**
+ * True when a process command line references the worktree at `absPath` (#616).
+ * Matching is strictly path-scoped and boundary-aware: after normalizing both
+ * sides (backslashes → `/`, lowercase), the worktree path must appear followed
+ * by a path separator, whitespace, a quote, or end-of-string — so the worktree
+ * `…/worktrees/61` never matches a command line referencing `…/worktrees/616`,
+ * and nothing outside the exact worktree subtree can ever match.
+ *
+ * Pure (string → bool) so the guard-test harness can drive it directly.
+ */
+export function commandLineReferencesPath(commandLine, absPath) {
+  if (typeof commandLine !== "string" || commandLine.length === 0) return false;
+  const cmd = commandLine.replace(/\\/g, "/").toLowerCase();
+  const want = norm(absPath);
+  if (!want) return false;
+  let idx = cmd.indexOf(want);
+  while (idx !== -1) {
+    const next = cmd[idx + want.length];
+    if (
+      next === undefined ||
+      next === "/" ||
+      next === '"' ||
+      next === "'" ||
+      /\s/.test(next)
+    ) {
+      return true;
+    }
+    idx = cmd.indexOf(want, idx + 1);
+  }
+  return false;
+}
+
+/**
+ * The PID set the sweep must never touch (#616): this process plus its ancestor
+ * chain (pnpm → shell → the dispatching agent session). When the teardown is
+ * invoked with the worktree's ABSOLUTE path as its argument, the teardown's own
+ * command line — and its ancestors' — contain that path, so without this shield
+ * the sweep would kill itself mid-teardown.
+ *
+ * Pure + injectable (`processes` rows carry {pid, ppid}, `selfPid` explicit) so
+ * the guard-test harness can drive it. The walk is cycle-safe (PID-reuse can
+ * make ppid chains loop).
+ */
+export function collectProtectedPids(processes, selfPid) {
+  const byPid = new Map(processes.map((p) => [p.pid, p]));
+  const shielded = new Set([selfPid]);
+  let cur = byPid.get(selfPid);
+  while (
+    cur &&
+    Number.isInteger(cur.ppid) &&
+    cur.ppid > 0 &&
+    !shielded.has(cur.ppid)
+  ) {
+    shielded.add(cur.ppid);
+    cur = byPid.get(cur.ppid);
+  }
+  return shielded;
+}
+
+/**
+ * Select the processes the pre-purge sweep may kill (#616): command line
+ * references the target worktree path (boundary-aware, see
+ * `commandLineReferencesPath`), PID is a real user process (> 4 — never the
+ * Windows Idle/System PIDs), and PID is not in the shielded self/ancestor set.
+ *
+ * Pure + injectable so the guard-test harness proves the kill scope without a
+ * live process table.
+ */
+export function selectWorktreeProcesses(
+  processes,
+  absPath,
+  protectedPids = new Set(),
+) {
+  return processes.filter(
+    (p) =>
+      Number.isInteger(p.pid) &&
+      p.pid > 4 &&
+      !protectedPids.has(p.pid) &&
+      commandLineReferencesPath(p.commandLine, absPath),
+  );
+}
+
+/**
+ * Snapshot the live process table via `Win32_Process` (Windows only). Returns
+ * rows of {pid, ppid, name, commandLine} or null when enumeration is
+ * unavailable/failed — the caller then skips the sweep gracefully rather than
+ * blocking the teardown.
+ */
+function listProcessesWindows() {
+  const script =
+    "Get-CimInstance Win32_Process | " +
+    "Select-Object ProcessId,ParentProcessId,Name,CommandLine | " +
+    "ConvertTo-Json -Compress";
+  const res = run("powershell.exe", [
+    "-NoProfile",
+    "-NonInteractive",
+    "-Command",
+    script,
+  ]);
+  if (res.error || res.status !== 0) return null;
+  try {
+    const parsed = JSON.parse(res.stdout);
+    const rows = Array.isArray(parsed) ? parsed : [parsed];
+    return rows.map((r) => ({
+      pid: r.ProcessId,
+      ppid: r.ParentProcessId,
+      name: r.Name ?? "",
+      commandLine: r.CommandLine ?? null,
+    }));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pre-purge process sweep (#616): kill processes whose command line references
+ * the target worktree, so held handles (e.g. a subagent's surviving `nest
+ * start` chain) stop failing the FS purge with "used by another process".
+ * Subagent self-reports about process teardown are structurally unreliable —
+ * this puts the sweep in the deterministic teardown step instead.
+ *
+ * Windows-only by design: on POSIX `rm -rf` does not fail on held handles, so
+ * the sweep is skipped gracefully there (and also when `Get-CimInstance` is
+ * unavailable or fails).
+ */
+function sweepWorktreeProcesses(absPath) {
+  if (!IS_WIN) {
+    out(
+      "process sweep skipped (non-Windows: held handles do not block the purge).",
+    );
+    return;
+  }
+  const procs = listProcessesWindows();
+  if (!procs) {
+    warn(
+      "process sweep unavailable (Win32_Process enumeration failed) — proceeding; the purge may fail on held handles.",
+    );
+    return;
+  }
+  const shielded = collectProtectedPids(procs, process.pid);
+  const matched = selectWorktreeProcesses(procs, absPath, shielded);
+  if (matched.length === 0) {
+    out("no processes reference the worktree — nothing to kill.");
+    return;
+  }
+  for (const p of matched) {
+    const res = run("taskkill", ["/PID", String(p.pid), "/F"]);
+    if (res.status === 0) {
+      out(
+        `killed orphan process pid=${p.pid} name=${p.name} (command line references '${absPath}').`,
+      );
+    } else {
+      // Non-fatal: the process may have exited between snapshot and kill; the
+      // purge below is the real gate and still fails loud on a held handle.
+      warn(
+        `could not kill pid=${p.pid} name=${p.name}: ${(res.stderr || res.stdout).trim()}`,
+      );
+    }
+  }
 }
 
 /** All registered worktree absolute paths, from `git worktree list --porcelain`. */
@@ -266,10 +438,14 @@ function main() {
     );
   }
 
-  // 1. Capture the branch before removal deregisters the worktree.
+  // 1. Kill worktree-scoped orphan processes BEFORE any FS delete (#616) — a
+  //    surviving process chain holding the worktree otherwise fails the purge.
+  sweepWorktreeProcesses(absPath);
+
+  // 2. Capture the branch before removal deregisters the worktree.
   const branch = branchOverride ?? resolveWorktreeBranch(absPath);
 
-  // 2. Deregister via git (tolerate the long-path FS-delete failure).
+  // 3. Deregister via git (tolerate the long-path FS-delete failure).
   const removed = run("git", ["worktree", "remove", "--force", absPath]);
   if (removed.status === 0) {
     out(`git deregistered + removed worktree '${absPath}'.`);
@@ -287,7 +463,7 @@ function main() {
     );
   }
 
-  // 3. Purge any orphan directory left on disk.
+  // 4. Purge any orphan directory left on disk.
   if (existsSync(absPath)) {
     if (purgeDir(absPath)) out(`purged orphan directory '${absPath}'.`);
     else
@@ -299,11 +475,11 @@ function main() {
     out("no orphan directory left on disk.");
   }
 
-  // 4. Prune stale worktree administrative entries.
+  // 5. Prune stale worktree administrative entries.
   run("git", ["worktree", "prune"]);
   out("git worktree prune done.");
 
-  // 5. Branch cleanup.
+  // 6. Branch cleanup.
   if (keepBranch)
     out(`--keep-branch: leaving branch '${branch ?? "(detached)"}' in place.`);
   else cleanupBranch(branch);

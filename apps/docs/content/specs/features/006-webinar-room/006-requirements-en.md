@@ -2,7 +2,7 @@
 title: "006 — Webinar room: embed player, live chat, heartbeat presence (the authenticated room)"
 description: "Requirements: the server-side-gated webinar room in the portal app where a registered doctor watches the live broadcast — an embed player instantiated from an explicit provider enum (rutube | youtube, never URL-sniffing), a live chat over Centrifugo, and a server-authoritative heartbeat that appends durable presence beats to Postgres (the per-doctor minutes the sponsor report draws from). Wave 1 of the Webinars epic; the MVP-critical surface for the 2026-07-17 live webinar. Admission gates on the 005 registration record + the single event lifecycle state; director open/close of the room and stream-config authoring are owned by 007 (a tracked seam)."
 slug: 006-webinar-room
-status: Draft
+status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
 parent_issue: https://github.com/doctor-school/ds-platform/issues/471

@@ -3,7 +3,7 @@ title: "Feature 006 — Webinar room: embed player, live chat, presence capture 
 description: "Product requirements for the authenticated webinar room in the portal app: external-stream embed player behind an explicit provider enum, live chat over Centrifugo, and server-authoritative heartbeat presence capture that drives the sponsor attendance report. Wave 1 of the Webinars epic; source of the 006 EARS triplet (ADR-0014)."
 slug: webinars-006-webinar-room-product
 epic: ../../product/webinars/brief.md
-status: Draft
+status: In dev
 surface: user-facing
 lang: en
 ---

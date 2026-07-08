@@ -2,7 +2,7 @@
 title: "007 — Minimal event admin: create/edit, stream config, room control, lifecycle (Design)"
 description: "Design: the authoring vertical — the event-aggregate write model + stream_config + program-PDF-in-object-storage, the single EventLifecycleState state machine (draft → published → live → ended → archived) with a server-enforced closed transition set, the seven platform_admin commands (Create/Update/ConfigureStream/Publish/OpenRoom/CloseRoom/Archive) and two admin reads, the produced projections 004/005/006 consume, and the producer side of the 004↔007 / 005↔007 / 006↔007 seams the read-side slices carried on seeds. Built on stock Refine (no admin canvas — Stage-A gap)."
 slug: 007-event-admin-minimal
-status: Draft
+status: Shipped
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
 lang: en
 ---

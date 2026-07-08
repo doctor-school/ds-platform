@@ -2,7 +2,7 @@
 title: "006 — Webinar room: embed player, live chat, heartbeat presence (Design)"
 description: "Design: the room vertical — a registration-and-live-gated RoomConfig read (provider enum rutube|youtube, embed ref, Centrifugo chat token, heartbeat interval N), the PostChatMessage command publishing to a Centrifugo room channel, the RecordPresenceHeartbeat command appending to a durable append-only Postgres presence table, the concurrent-tab-coalesced per-doctor presence-minute derivation parameterized over N, the three denied-access branches (auth 003 / register 005 / not-live 004), room-close stopping capture, and the seams to 003 (auth), 004 (event page/join), 005 (roster admission basis), 007 (director open/close + stream config). Built to the webinar-room.dc.html canvas from @ds/design-system tokens."
 slug: 006-webinar-room
-status: Draft
+status: In dev
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
 lang: en
 ---

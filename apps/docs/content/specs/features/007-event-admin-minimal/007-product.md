@@ -3,7 +3,7 @@ title: "Feature 007 — Minimal event admin: create/edit, stream config, room co
 description: "Product requirements for the minimal webinar admin in the admin app (Refine, ADR-0004): create/edit an event, configure the stream link, open/close the live room, and drive the single event state machine. Wave 1 of the Webinars epic; source of the 007 EARS triplet (ADR-0014)."
 slug: webinars-007-event-admin-minimal-product
 epic: ../../product/webinars/brief.md
-status: Draft
+status: Shipped
 surface: user-facing
 lang: en
 ---

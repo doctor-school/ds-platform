@@ -2,7 +2,7 @@
 title: "006 — Вебинарная комната: embed-плеер, живой чат, heartbeat-присутствие (аутентифицированная комната)"
 description: "Требования: закрытая на сервере вебинарная комната в приложении portal, где зарегистрированный врач смотрит живой эфир — embed-плеер, инстанцируемый из явного enum провайдера (rutube | youtube, никогда не URL-sniffing), живой чат через Centrifugo и server-authoritative heartbeat, дописывающий долговечные сигналы присутствия в Postgres (минуты по каждому врачу, из которых берётся спонсорский отчёт). Волна 1 эпика «Вебинары»; MVP-критичная поверхность для живого вебинара 2026-07-17. Допуск гейтируется записью регистрации 005 + единым состоянием жизненного цикла мероприятия; режиссёрское открытие/закрытие комнаты и авторство стрим-конфига — за 007 (отслеживаемый шов)."
 slug: 006-webinar-room-ru
-status: Draft
+status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
 parent_issue: https://github.com/doctor-school/ds-platform/issues/471

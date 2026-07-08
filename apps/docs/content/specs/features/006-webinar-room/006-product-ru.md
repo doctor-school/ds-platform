@@ -3,7 +3,7 @@ title: "Фича 006 — Вебинарная комната: embed-плеер, 
 description: "Продуктовые требования к аутентифицированной вебинарной комнате в приложении portal: embed-плеер внешнего стрима за явным enum провайдера, живой чат через Centrifugo и server-authoritative heartbeat-фиксация присутствия, питающая спонсорский отчёт посещаемости. Волна 1 эпика «Вебинары»; источник EARS-триплета 006 (ADR-0014)."
 slug: webinars-006-webinar-room-product-ru
 epic: ../../product/webinars/brief-ru.md
-status: Draft
+status: In dev
 surface: user-facing
 lang: ru
 ---

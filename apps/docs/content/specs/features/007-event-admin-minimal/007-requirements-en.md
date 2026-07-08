@@ -2,7 +2,7 @@
 title: "007 — Minimal event admin: create/edit, stream config, room control, lifecycle (the authoring vertical)"
 description: "Requirements: the minimal operator/director tooling in the admin app (Refine, ADR-0004) that authors the webinar aggregate the rest of the epic reads — create/edit an event (title, date/time МСК, description, speakers, target specialties, program PDF, sponsor), configure the stream with an explicit provider enum (rutube | youtube) + embed reference, and drive the single event state machine draft → published → live → ended → archived. 007 is the PRODUCER of the EventLifecycleState, the public event projection (surfaced by 004), the stream config (consumed by 006), and the open/close-room transitions (consumed by 006): its 'done against the real dependency' criterion closes the 004↔007 / 005↔007 / 006↔007 tracked seams those slices carried on seeds. Wave 1 of the Webinars epic; the minimal create → publish → configure → open → close path must run for the 2026-07-17 live webinar. No admin canvas exists (known Stage-A gap) — wave 1 uses stock Refine UI."
 slug: 007-event-admin-minimal
-status: In dev
+status: Shipped
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
 parent_issue: https://github.com/doctor-school/ds-platform/issues/471

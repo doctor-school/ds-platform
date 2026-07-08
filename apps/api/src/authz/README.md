@@ -89,9 +89,22 @@ are tracked so they are filled, not forgotten:
 - **Authentication.** Populating the request subject (BFF session / JWT) is 003
   F2 (#86). Until then the guard denies every `access: authenticated` route
   (fail-closed); no such route ships before F2.
-- **Policy engine.** `check: "policy"` delegates object-level evaluation to
-  `IPolicyEngine` (ADR-0002 §3.2 / DSO-27). The guard fails closed on `policy`
-  until the engine is selected; the v1 auth set never uses it (spec §7.2).
+- **Object-level policy engine.** An **object-level** `check: "policy"` route —
+  one that declares `objectAttrs` (an ABAC predicate such as
+  `course.author_id == actor.id`) — delegates that evaluation to `IPolicyEngine`
+  (ADR-0002 §3.2 / DSO-27). The guard fails closed on such a route until the
+  engine is selected; the 003 v1 auth set never uses it (spec §7.2).
+
+  A **resource-scoped** `check: "policy"` route WITHOUT `objectAttrs` (the first
+  is the 006 room admission gate — `authenticated ∧ registered ∧ live`) is a
+  domain decision the classified handler/service evaluates against its read
+  models, refusing server-side. `policy` (not `fast-path`) records that the role
+  alone is not sufficient; the guard enforces the role as the necessary
+  precondition and lets the handler run to evaluate the resource-scoped rule.
+  This mirrors how a `fast-path` route's domain gating (e.g. 005's
+  published/live registration check) already lives in its service — the matrix
+  value records the authorization SHAPE, the handler enforces the specifics.
+
 - **OpenAPI `x-authz` projection.** Spec §5 also projects the metadata into the
   OpenAPI document. That is wired when the OpenAPI snapshot + `api-drift` job
   land (G8); the `.md` table is the E3 projection.

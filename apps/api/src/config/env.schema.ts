@@ -174,6 +174,17 @@ export const ApiEnvSchema = z.looseObject({
   // VITEST so the e2e suite runs without provisioning one).
   AUDIT_IDENTIFIER_PEPPER: z.string().optional(),
 
+  // 006 webinar-room heartbeat cadence N (seconds) — the server-side config the
+  // `RoomConfig` grant carries to the client (design §5: "cadence N is server
+  // config, default 60 s"). The presence-minute derivation is parameterized over
+  // N, so an operator-confirmed different cadence changes THIS value, not the
+  // spec or the code. Read from config here, never a hardcoded constant.
+  ROOM_HEARTBEAT_INTERVAL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60),
+
   // Object storage (007 — the program-PDF binary; ADR-0003 §, `.claude/rules/
   // dev-stand.md`). Timeweb Object Storage in prod; MinIO on the dev stand. All
   // optional at the schema level so the dev-stand / CI boot without a configured

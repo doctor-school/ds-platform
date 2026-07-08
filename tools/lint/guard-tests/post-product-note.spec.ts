@@ -8,7 +8,11 @@ import { describe, expect, it } from "vitest";
 // them does NOT fire the script's `main()` — it is guarded behind an entry-point
 // check, the same idiom as tools/retro/extract.mjs. Issue #657 adds the mandatory
 // DEV/prod environment footer, covered here (the #655 delivery-seam NIT).
-import { buildPayload, envFooter } from "../../ci/post-product-note.mjs";
+import {
+  buildPayload,
+  envFooter,
+  extractNote,
+} from "../../ci/post-product-note.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = resolve(HERE, "..", "..", "ci", "post-product-note.mjs");
@@ -66,6 +70,51 @@ describe("post-product-note — environment footer (pure)", () => {
     );
     expect(text.endsWith(DEV_FOOTER)).toBe(true);
     expect(text).toContain("[feat: thing](https://x/1)");
+  });
+});
+
+// ── section-extraction stop boundary (Issue #659) ───────────────────────────
+describe("post-product-note — extractNote stop boundary (pure)", () => {
+  it("stops at a `---` thematic break — no English bleed (PR #658 shape)", () => {
+    // The note sits at the top of the body, then a divider, then the English PR
+    // summary + a `## What changed` heading — exactly the shape that leaked EN
+    // text into the delivered message before the fix.
+    const body = [
+      "## Product note (RU)",
+      "",
+      "Мы починили доставку заметок в канал обновлений.",
+      "",
+      "---",
+      "",
+      "This English summary must not bleed into the delivered note.",
+      "",
+      "## What changed",
+      "",
+      "- extraction stop boundary",
+    ].join("\n");
+    expect(extractNote(body)).toBe(
+      "Мы починили доставку заметок в канал обновлений.",
+    );
+  });
+
+  it("stops at a spaced thematic break (`- - -`) too", () => {
+    const body =
+      "## Product note (RU)\n\nЗаметка на русском.\n\n- - -\n\nEnglish tail.";
+    expect(extractNote(body)).toBe("Заметка на русском.");
+  });
+
+  it("stops at the next `##` heading — unchanged behavior", () => {
+    const body =
+      "## Product note (RU)\n\nЗаметка на русском.\n\n## What changed\n\nEnglish tail.";
+    expect(extractNote(body)).toBe("Заметка на русском.");
+  });
+
+  it("captures to end of body when there is no divider/heading — unchanged", () => {
+    const body =
+      "## Product note (RU)\n\nЗаметка на русском.\nВторая строка заметки.\n\n";
+    expect(extractNote(body)).toBe(
+      "Заметка на русском.\nВторая строка заметки.",
+    );
   });
 });
 

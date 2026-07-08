@@ -1,8 +1,16 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { EventLifecycleState, RoomConfig } from "@ds/schemas";
-import { RegistrationService } from "../registration/registration.service.js";
+import type {
+  EventLifecycleState,
+  PresenceHeartbeatAck,
+  RoomConfig,
+} from "@ds/schemas";
+import {
+  RegistrationService,
+  UnknownSubjectError,
+} from "../registration/registration.service.js";
+import { PresenceRepository } from "./presence.repository.js";
 import { resolveRoomStream } from "./provider-enum.js";
-import { RoomRepository } from "./room.repository.js";
+import { RoomRepository, type EventForRoom } from "./room.repository.js";
 import { ROOM_HEARTBEAT_INTERVAL_SECONDS } from "./room.tokens.js";
 
 /**
@@ -79,24 +87,29 @@ export class RoomService {
     @Inject(RoomRepository) private readonly rooms: RoomRepository,
     @Inject(RegistrationService)
     private readonly registration: RegistrationService,
+    @Inject(PresenceRepository) private readonly presence: PresenceRepository,
     @Inject(ROOM_HEARTBEAT_INTERVAL_SECONDS)
     private readonly heartbeatIntervalSeconds: number,
   ) {}
 
   /**
-   * Evaluate the admission gate for `(idOrSlug, sub)` and, on success, issue the
-   * server-side `RoomAccess` grant as a {@link RoomConfig}. The conditions are
-   * evaluated in the design §2 order so the refusal maps to the correct EARS-6
-   * branch: the event must exist ({@link RoomEventNotFoundError} → 404), the
-   * caller must be registered ({@link NotRegisteredError} → 403, before the live
-   * check), and the event must be `live` ({@link RoomNotLiveError} → 409). An
-   * authenticated subject with no 003 mirror row cannot own a registration and
-   * is refused with the registration layer's `UnknownSubjectError` (→ 401),
-   * never silently admitted.
+   * The single server-side admission gate (`authenticated ∧ registered ∧ live`)
+   * every room operation evaluates before serving content or accepting a write
+   * (design §2). Reused verbatim by the `RoomConfig` read (EARS-1) and the gated
+   * `RecordPresenceHeartbeat` command (EARS-4) — there is ONE gate, not a
+   * per-operation copy, so a beat can never be accepted on a laxer rule than the
+   * config read. Conditions are evaluated in the design §2 order so a refusal
+   * maps to the correct EARS-6 branch: the event must exist
+   * ({@link RoomEventNotFoundError} → 404), the caller must be registered
+   * ({@link NotRegisteredError} → 403, before the live check), and the event must
+   * be `live` ({@link RoomNotLiveError} → 409). An authenticated subject with no
+   * 003 mirror row cannot own a registration and is refused with the registration
+   * layer's `UnknownSubjectError` (→ 401), never silently admitted. Returns the
+   * resolved event on success.
    */
-  async roomConfig(idOrSlug: string, sub: string): Promise<RoomConfig> {
+  private async admit(idOrSlug: string, sub: string): Promise<EventForRoom> {
     // Resolve the event first: a missing event is a 404, and the `live` check
-    // needs its canonical state + id (the grant's room identity).
+    // needs its canonical state + id (the grant's / beat's room identity).
     const event = await this.rooms.findEventForRoom(idOrSlug);
     if (!event) throw new RoomEventNotFoundError(idOrSlug);
 
@@ -111,15 +124,49 @@ export class RoomService {
     // Live condition — the room is open only while the event is `live`.
     if (event.state !== "live") throw new RoomNotLiveError(event.state);
 
-    // All three hold → issue the RoomAccess grant. The EARS-2 embed source is
-    // resolved from the 007-authored stream config: the provider is read from
-    // the closed enum (never URL-sniffed), and an absent/unknown provider yields
-    // `stream: null` — the truthful "stream unavailable" room state, still a
-    // valid grant (the gate admitted the caller).
+    return event;
+  }
+
+  /**
+   * Evaluate the admission gate for `(idOrSlug, sub)` and, on success, issue the
+   * server-side `RoomAccess` grant as a {@link RoomConfig} (EARS-1). The grant
+   * carries the server-config heartbeat cadence N the client drives its presence
+   * loop from (EARS-4) and the EARS-2 embed source resolved from the 007-authored
+   * stream config: the provider is read from the closed enum (never URL-sniffed),
+   * and an absent/unknown provider yields `stream: null` — the truthful "stream
+   * unavailable" room state, still a valid grant (the gate admitted the caller).
+   */
+  async roomConfig(idOrSlug: string, sub: string): Promise<RoomConfig> {
+    const event = await this.admit(idOrSlug, sub);
     return {
       eventId: event.id,
       heartbeatIntervalSeconds: this.heartbeatIntervalSeconds,
       stream: resolveRoomStream(event.streamConfig),
     };
+  }
+
+  /**
+   * `RecordPresenceHeartbeat` (EARS-4; design §5) — behind the SAME gate as the
+   * config read: a guest / unregistered / non-`live` caller is refused
+   * server-side ({@link admit}) and NO beat is appended (EARS-8). On admission it
+   * appends exactly one immutable `(doctor, event, instant)` row to the durable
+   * append-only presence table and returns the server-authoritative ack. The beat
+   * is attributed to the acting doctor resolved from the authenticated `sub`; the
+   * `registered` check inside `admit` already proved a 003 mirror row exists, so
+   * the resolve succeeds — the `null` guard is fail-closed defence in depth (→
+   * 401), never a silent admission. Concurrent tabs each append a raw beat; the
+   * coalescing into one presence timeline is the EARS-5 read-time derivation, not
+   * a write-time suppression here — presence is server-authoritative and durable,
+   * never a client-trusted count.
+   */
+  async recordHeartbeat(
+    idOrSlug: string,
+    sub: string,
+  ): Promise<PresenceHeartbeatAck> {
+    const event = await this.admit(idOrSlug, sub);
+    const userId = await this.presence.findUserIdBySub(sub);
+    if (!userId) throw new UnknownSubjectError(sub);
+    const { beatAt } = await this.presence.appendBeat(userId, event.id);
+    return { eventId: event.id, beatAt: beatAt.toISOString() };
   }
 }

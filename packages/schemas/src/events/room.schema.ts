@@ -42,3 +42,27 @@ export const RoomConfigSchema = z.object({
   stream: StreamConfigSchema.nullable(),
 });
 export type RoomConfig = z.infer<typeof RoomConfigSchema>;
+
+/**
+ * `PresenceHeartbeatAck` — the acknowledgement of one accepted presence beat
+ * (EARS-4; design §5, §7). Returned by `POST /v1/events/:idOrSlug/heartbeat`
+ * **only** to a caller the same server-side gate admits (authenticated ∧
+ * registered ∧ live) — an ungated caller is refused (401 / 403 / 409) and never
+ * receives this body, exactly like the `RoomConfig` read (EARS-1, EARS-8).
+ *
+ * Each accepted beat appends exactly one immutable row `(doctor, event, instant)`
+ * to the durable append-only presence table (ADR-0003 §3) — the durable basis
+ * for the per-doctor sponsor minutes (EARS-5 derives them, parameterized over N,
+ * concurrent-tab-coalesced). The ack is **server-authoritative**: `eventId` is the
+ * resolved room identity and `beatAt` is the **server-stamped** canonical instant
+ * the row was appended at — never a client-supplied count or timestamp (a client
+ * cannot inflate its own presence; requirements Constraints "server-authoritative
+ * and durable"). It intentionally carries no minute total: the count/minutes are a
+ * server-side derivation over the append table, never a value the client is told
+ * or trusted with.
+ */
+export const PresenceHeartbeatAckSchema = z.object({
+  eventId: z.uuid(),
+  beatAt: z.iso.datetime({ offset: true }),
+});
+export type PresenceHeartbeatAck = z.infer<typeof PresenceHeartbeatAckSchema>;

@@ -30,6 +30,13 @@ const DOCTOR_PASSWORD = process.env.E2E_DOCTOR_PASSWORD;
 const SLUG_YOUTUBE = process.env.E2E_ROOM_SLUG_YOUTUBE;
 const SLUG_RUTUBE = process.env.E2E_ROOM_SLUG_RUTUBE;
 const SLUG_UNAVAILABLE = process.env.E2E_ROOM_SLUG_UNAVAILABLE;
+// EARS-4 presence loop: any seeded LIVE room the doctor is registered for (a
+// provider-configured room reuses SLUG_YOUTUBE by default). The heartbeat cadence
+// N is server config (ROOM_HEARTBEAT_INTERVAL_SECONDS) delivered in the grant; the
+// live-verify api is booted with a SHORT N so the cadence is observable in a test
+// window — the test reads that same value from E2E_ROOM_HEARTBEAT_SECONDS.
+const SLUG_LIVE = process.env.E2E_ROOM_SLUG_LIVE ?? SLUG_YOUTUBE;
+const HEARTBEAT_SECONDS = Number(process.env.E2E_ROOM_HEARTBEAT_SECONDS ?? "2");
 
 test.skip(
   !process.env.E2E_PORTAL_URL || !DOCTOR_EMAIL || !DOCTOR_PASSWORD,
@@ -111,5 +118,90 @@ test.describe("006 EARS-2 room composition + embed player from the provider enum
     await expect(page.getByTestId("room-player-youtube")).toHaveCount(0);
     await expect(page.getByTestId("room-player-rutube")).toHaveCount(0);
     await expect(page.getByTestId("room-chat").first()).toBeVisible();
+  });
+});
+
+// The leading `006 EARS-4 ` prefix is the ears-test-lint feature scope — a
+// parenthesized mid-title does NOT scope.
+test.describe("006 EARS-4 server-authoritative heartbeat presence (e2e)", () => {
+  /** Count heartbeat POSTs the page fires to the gated endpoint. */
+  function trackHeartbeats(page: Page): () => number {
+    let count = 0;
+    page.on("request", (req) => {
+      if (
+        req.method() === "POST" &&
+        /\/v1\/events\/[^/]+\/heartbeat$/.test(req.url())
+      ) {
+        count += 1;
+      }
+    });
+    return () => count;
+  }
+
+  test("006 EARS-4: the room fires an authenticated heartbeat on the N-second cadence with no doctor action", async ({
+    page,
+  }) => {
+    test.skip(!SLUG_LIVE, "requires a seeded live room the doctor is registered for");
+    const heartbeats = trackHeartbeats(page);
+    await login(page);
+    await page.goto(`${BASE}/webinars/${SLUG_LIVE}/room`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    // NO doctor action — beats fire from mount purely on the timer. Over ~3
+    // intervals a visible tab must fire more than one beat (an immediate beat on
+    // mount + at least one on the N-second grid), proving the cadence, not a
+    // single one-shot ping.
+    await page.waitForTimeout(HEARTBEAT_SECONDS * 3200);
+    expect(heartbeats()).toBeGreaterThanOrEqual(2);
+  });
+
+  /**
+   * Drive the Page Visibility signal directly (the standard Playwright pattern):
+   * headless Chromium keeps every page "visible", so `bringToFront()` on another
+   * tab does not toggle `document.hidden` on the room tab. Overriding `hidden` +
+   * dispatching `visibilitychange` exercises the exact handler the loop registers.
+   */
+  async function setHidden(page: Page, hidden: boolean): Promise<void> {
+    await page.evaluate((h) => {
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        get: () => h,
+      });
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        get: () => (h ? "hidden" : "visible"),
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    }, hidden);
+  }
+
+  test("006 EARS-4: backgrounding the tab (document.hidden) pauses beats; re-focusing resumes them", async ({
+    page,
+  }) => {
+    test.skip(!SLUG_LIVE, "requires a seeded live room the doctor is registered for");
+    const heartbeats = trackHeartbeats(page);
+    await login(page);
+    await page.goto(`${BASE}/webinars/${SLUG_LIVE}/room`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    // Let the visible loop fire a couple of beats.
+    await page.waitForTimeout(HEARTBEAT_SECONDS * 2200);
+    expect(heartbeats()).toBeGreaterThanOrEqual(1);
+
+    // Background the room tab → `document.hidden` true.
+    await setHidden(page, true);
+    await page.waitForTimeout(200);
+    const whileHidden = heartbeats();
+
+    // While hidden, the loop emits NO beats — the count does not grow.
+    await page.waitForTimeout(HEARTBEAT_SECONDS * 3000);
+    expect(heartbeats()).toBe(whileHidden);
+
+    // Re-focus the room tab → the loop resumes and beats grow again.
+    await setHidden(page, false);
+    await page.waitForTimeout(HEARTBEAT_SECONDS * 2200);
+    expect(heartbeats()).toBeGreaterThan(whileHidden);
   });
 });

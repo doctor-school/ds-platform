@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { fetchPublicEventPage } from "../../../../lib/public-events";
 import { fetchRoomConfig } from "../../../../lib/room-config";
+import { PresenceHeartbeat } from "./presence-heartbeat";
 import { RoomView } from "./room-view";
 
 /**
@@ -66,6 +67,13 @@ export default async function RoomPage({
 
   return (
     <main className="flex min-h-screen flex-col bg-background text-foreground">
+      {/* EARS-4 — the visibility-gated server-authoritative heartbeat loop. No
+          rendered affordance; it POSTs a beat every N seconds while the tab is
+          visible (N from the grant), capturing presence from mount. */}
+      <PresenceHeartbeat
+        slug={slug}
+        intervalSeconds={access.config.heartbeatIntervalSeconds}
+      />
       <RoomView
         config={access.config}
         context={{ school: event.school, title: event.title, speakers }}

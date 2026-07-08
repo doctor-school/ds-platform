@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { loadEnv } from "../config/env.schema.js";
 import { RegistrationModule } from "../registration/registration.module.js";
+import { PresenceRepository } from "./presence.repository.js";
 import { RoomController } from "./room.controller.js";
 import { RoomRepository } from "./room.repository.js";
 import { RoomService } from "./room.service.js";
@@ -16,8 +17,12 @@ import { ROOM_HEARTBEAT_INTERVAL_SECONDS } from "./room.tokens.js";
  * `EventLifecycleState` (the `live` condition) read-only through its own thin
  * {@link RoomRepository} view of the `events` aggregate. The heartbeat cadence N
  * the grant carries is bound from config (`ROOM_HEARTBEAT_INTERVAL_SECONDS`),
- * never a hardcoded constant. The gated chat/heartbeat commands (EARS-3/4) are
- * sibling handlers that will layer onto this same gate.
+ * never a hardcoded constant.
+ *
+ * EARS-4 layers the gated `RecordPresenceHeartbeat` command onto the SAME gate:
+ * {@link PresenceRepository} owns the durable append-only presence table's
+ * INSERT-only write (design §5). The gated chat command (EARS-3) is the remaining
+ * sibling handler that will layer onto this same gate.
  */
 @Module({
   imports: [RegistrationModule],
@@ -25,6 +30,7 @@ import { ROOM_HEARTBEAT_INTERVAL_SECONDS } from "./room.tokens.js";
   providers: [
     RoomService,
     RoomRepository,
+    PresenceRepository,
     {
       provide: ROOM_HEARTBEAT_INTERVAL_SECONDS,
       useFactory: (): number => loadEnv().ROOM_HEARTBEAT_INTERVAL_SECONDS,

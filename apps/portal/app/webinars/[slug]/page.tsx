@@ -15,6 +15,7 @@ import {
   resolveJoinSignpost,
 } from "../../../lib/registration-state";
 import { formatMskParts } from "../../../lib/msk";
+import { RegisterOneTap } from "./register-one-tap";
 
 /**
  * 004 EARS-1 — the public webinar event page, server-rendered. A
@@ -104,6 +105,12 @@ export default async function WebinarEventPage({
   // → 004's render stands (unregistered / guest / ended / archived).
   const signpost = resolveJoinSignpost(registrationState, cta);
   const registered = signpost.kind !== "none";
+  // 005 EARS-1 — a non-null per-user state means a session rode the request (a
+  // logged-in doctor, registered or not); `null` is a guest (no cookie) or an
+  // expired/fingerprint-mismatched session that falls back to the public render.
+  // A logged-in, NOT-yet-registered doctor on a registrable event gets the
+  // one-tap command button; a guest gets the `/register` auth handoff (EARS-2).
+  const isAuthenticated = registrationState !== null;
   // EARS-5 — archived is the fourth render mode on the SAME status-card shell: a
   // text notice replaces the CTA column (no button, no dead link), no new
   // geometry. Every state now renders the status card (the archived body swaps
@@ -112,8 +119,16 @@ export default async function WebinarEventPage({
   // The footer conversion band mirrors the status card's route but only for a
   // participable event (upcoming / live); `ended` and `archived` carry none. A
   // registered doctor's footer «Записаться» band is suppressed too (005 EARS-4)
-  // — never re-offer registration to an already-registered doctor.
-  const showFooterBand = (status === "upcoming" || status === "live") && !registered;
+  // — never re-offer registration to an already-registered doctor. It is ALSO
+  // suppressed for a logged-in, not-yet-registered doctor on an `upcoming` event
+  // (005 EARS-1): its «Записаться» links to the `/register` guest auth handoff,
+  // which would wrongly route a logged-in doctor to the signup form — that doctor
+  // already has the status-card one-tap command above. The band stays for guests
+  // (drives them to signup) and for `live` (its CTA routes to the room).
+  const showFooterBand =
+    (status === "upcoming" || status === "live") &&
+    !registered &&
+    !(status === "upcoming" && isAuthenticated);
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -223,6 +238,16 @@ export default async function WebinarEventPage({
                   <Link href={signpost.roomHref}>{t("registered.live.cta")}</Link>
                 </Button>
               </>
+            ) : cta.kind === "register" && isAuthenticated ? (
+              // 005 EARS-1 — logged-in doctor, not yet registered on a registrable
+              // (upcoming/`published`) event: the CTA is a ONE-ACTION command that
+              // POSTs `RegisterForEvent` and re-reads the state, not a trip through
+              // auth. The guest path keeps the `/register` handoff link below.
+              <RegisterOneTap
+                slug={event.slug}
+                label={t("cta.participate")}
+                errorLabel={t("cta.registerError")}
+              />
             ) : cta.kind !== "none" ? (
               <Button asChild size="lg">
                 <Link href={cta.href}>{t("cta.participate")}</Link>

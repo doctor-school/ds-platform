@@ -103,7 +103,8 @@
     "breadcrumb": "Эфиры",
     "startsAt": "{time} МСК · {date}",
     "cta": {
-      "participate": "Участвовать"
+      "participate": "Участвовать",
+      "registerError": "Не удалось записаться. Попробуйте ещё раз."
     },
     "registered": {
       "confirmation": "Вы записаны",

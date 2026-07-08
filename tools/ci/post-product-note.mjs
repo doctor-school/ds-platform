@@ -27,7 +27,13 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const HEADING_RE = /^#{1,6}\s*product\s+note\b[^\n]*$/im;
-const NEXT_HEADING_RE = /\n#{1,6}\s/;
+// The section capture stops at the FIRST of: the next ATX heading (any level
+// `#`–`######`), a markdown thematic break line (`---`/`***`/`___`, including the
+// spaced variants `- - -` / `* * *` / `_ _ _`), or end of body. Anchored on a
+// line boundary (leading `\n`, `$` under the `m` flag) so a `---` divider after a
+// top-of-body note no longer lets the English PR summary bleed in (Issue #659).
+const SECTION_STOP_RE =
+  /\n(?:#{1,6}\s|[ \t]{0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$)/m;
 const MARKER_RE = /^[ \t>*-]*product[- ]note\s*:\s*(.*)$/im;
 const HTML_COMMENT_RE = /<!--[\s\S]*?-->/g;
 const NONE_RE = /^none[.!]?$/i;
@@ -38,7 +44,7 @@ function sectionBody(body) {
   const h = body.match(HEADING_RE);
   if (h?.index === undefined || h.index === null) return null;
   const rest = body.slice(h.index + h[0].length);
-  const next = rest.search(NEXT_HEADING_RE);
+  const next = rest.search(SECTION_STOP_RE);
   return next === -1 ? rest : rest.slice(0, next);
 }
 

@@ -2,8 +2,12 @@ import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import type { DrizzleHandle } from "@ds/db";
 import { auditLedger, events, registrations, users } from "@ds/db";
-import type { EventLifecycleState } from "@ds/schemas";
-import { and, eq, or } from "drizzle-orm";
+import {
+  type EventLifecycleState,
+  type MyEventItem,
+  REGISTRABLE_EVENT_STATES,
+} from "@ds/schemas";
+import { and, asc, eq, gte, inArray, or } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 
 type Db = DrizzleHandle["db"];
@@ -144,6 +148,51 @@ export class RegistrationRepository {
       }
       return { registeredAt: existing.registeredAt, created: false };
     });
+  }
+
+  /**
+   * The `MyEvents` read (EARS-6; design §4/§5): the caller's registered
+   * **upcoming** events — `published`/`live` (the {@link REGISTRABLE_EVENT_STATES}
+   * SSOT, the same closed set the {@link MyEventItem} `state` type derives from, so
+   * the query and the projection can never disagree about what may appear) whose
+   * `starts_at` is at or after `cutoff` (`now − airWindow`, so a recently-started
+   * live event still lists — mirrors the 004 upcoming listing) — ordered NEAREST
+   * air date first (`starts_at ASC`). A `draft`/`ended`/`archived` registration
+   * drops by STATE, never by time (EARS-6: ended/archived never list). Joined on
+   * `registrations.event_id` filtered to `user_id = userId`, so it returns ONLY the
+   * caller's own registrations — never another doctor's (EARS-10). An empty match
+   * is a valid empty list (design §5). No registrant PII, no roster — only the thin
+   * per-event choose-set the «мои события» card renders.
+   */
+  async findMyEvents(userId: string, cutoff: Date): Promise<MyEventItem[]> {
+    const rows = await this.db
+      .select({
+        eventId: events.id,
+        slug: events.slug,
+        title: events.title,
+        school: events.school,
+        startsAt: events.startsAt,
+        state: events.state,
+      })
+      .from(registrations)
+      .innerJoin(events, eq(events.id, registrations.eventId))
+      .where(
+        and(
+          eq(registrations.userId, userId),
+          inArray(events.state, [...REGISTRABLE_EVENT_STATES]),
+          gte(events.startsAt, cutoff),
+        ),
+      )
+      .orderBy(asc(events.startsAt));
+    return rows.map((r) => ({
+      eventId: r.eventId,
+      slug: r.slug,
+      title: r.title,
+      school: r.school,
+      startsAt: r.startsAt.toISOString(),
+      // Narrowed to the registrable set by the SQL state filter above.
+      state: r.state as MyEventItem["state"],
+    }));
   }
 
   /**

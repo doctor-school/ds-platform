@@ -46,3 +46,42 @@ export const EventRegistrationStateSchema = z.object({
 export type EventRegistrationState = z.infer<
   typeof EventRegistrationStateSchema
 >;
+
+/**
+ * `MyEventItem` — one row of the authenticated doctor's «мои события»
+ * **Предстоящие** list (design §4/§5, EARS-6). The thin per-event projection the
+ * `MyEvents` read model returns for each of the caller's registered **upcoming**
+ * events: `{ eventId, slug, title, school, startsAt, state }` — exactly the
+ * choose-set the «мои события» card needs to render a day-grouped row that links
+ * back to `/webinars/:slug`, and NOTHING more (no roster, no registrant PII, no
+ * other doctor's data — EARS-10). It is a THINNER allow-list than the 004
+ * `UpcomingBroadcastCard`: no specialties/speakers, because the surface renders
+ * from the registration list, not the public listing projection.
+ *
+ * `startsAt` is the canonical UTC instant (ISO-8601); the «мои события» surface
+ * renders it in `Europe/Moscow` labeled МСК (EARS-11), never the viewer's local
+ * timezone. `state` is constrained to {@link RegistrableEventStateSchema}
+ * (`published`/`live`) — an `ended`/`archived` registration never appears on this
+ * list (EARS-6), so the closed two-value set the query filters on IS the field
+ * type, and the two can never drift.
+ */
+export const MyEventItemSchema = z.object({
+  eventId: z.uuid(),
+  slug: z.string(),
+  title: z.string(),
+  school: z.string(),
+  startsAt: z.iso.datetime({ offset: true }),
+  state: RegistrableEventStateSchema,
+});
+export type MyEventItem = z.infer<typeof MyEventItemSchema>;
+
+/**
+ * `MyEvents` — the authenticated doctor's registered **upcoming** events
+ * (`published`/`live`, future or currently airing), ordered **nearest `startsAt`
+ * first** (`starts_at ASC`), returned by `GET /v1/me/events` (design §5, EARS-6).
+ * A bare array; an empty result is a valid `[]` (the «мои события» surface renders
+ * the canvas empty-state, EARS-6/EARS-12). It carries only the caller's own
+ * registrations — never another doctor's (EARS-10).
+ */
+export const MyEventsSchema = z.array(MyEventItemSchema);
+export type MyEvents = z.infer<typeof MyEventsSchema>;

@@ -26,16 +26,34 @@ non-`doctor_guest` role (403) before the handler runs — never a silent success
 Gating reads the single `EventLifecycleState` (owned by 007, read-only): a
 non-`published`/`live` state is a 409, a missing event a 404.
 
+**EARS-6** adds the `MyEvents` «мои события» read:
+
+- `MyEvents` (`GET /v1/me/events`) — the authenticated doctor's registered
+  **upcoming** events (`published`/`live`, future or currently airing), ordered
+  **nearest `startsAt` first**, each `{ eventId, slug, title, school, startsAt,
+state }`. Feeds the portal «мои события» Предстоящие tab (`/account/events`); an
+  empty result is a valid `[]` (the surface renders the canvas empty-state). The
+  temporal window mirrors the 004 upcoming listing (`starts_at ≥ now −
+AIR_WINDOW_MS`), with the lifecycle STATE the primary filter — `ended`/`archived`
+  registrations never list (EARS-6). The read returns ONLY the caller's own
+  registrations, never another doctor's (EARS-10); a just-registered event appears
+  on the next read (EARS-7).
+
 ## Exported symbols
 
-- `RegistrationModule` — the Nest module (controller + service + repository).
-- `RegistrationService` — the `RegisterForEvent` command + the
-  `EventRegistrationState` read; resolves the acting doctor's `user_id` from the
-  authenticated Zitadel `sub` (003 mirror) and the target event from its slug/id
-  (007 read model). Domain errors: `EventNotRegistrableError` (→ 409),
-  `RegistrationEventNotFoundError` (→ 404), `UnknownSubjectError` (→ 401).
+- `RegistrationModule` — the Nest module (both controllers + service +
+  repository).
+- `RegistrationService` — the `RegisterForEvent` command, the
+  `EventRegistrationState` read, and the `MyEvents` list; resolves the acting
+  doctor's `user_id` from the authenticated Zitadel `sub` (003 mirror) and the
+  target event from its slug/id (007 read model). Domain errors:
+  `EventNotRegistrableError` (→ 409), `RegistrationEventNotFoundError` (→ 404),
+  `UnknownSubjectError` (→ 401).
+- `RegistrationController` — the `/events/:idOrSlug/registration` write + state
+  read; `MyEventsController` — the `/me/events` list (`/me` path prefix, the
+  caller's own resources). Both `doctor_guest`-authenticated (EARS-10).
 - `RegistrationRepository` — Drizzle access: writes the `registrations` record;
-  reads `events` (007) and `users` (003) read-only.
+  reads `events` (007) and `users` (003) read-only, including the `MyEvents` join.
 
 **EARS-3** layers the one-registration invariant on top of that record:
 

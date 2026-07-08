@@ -24,6 +24,7 @@ const SEED = {
   // A SECOND registrable event so the one-tap path drives an event the doctor is
   // not yet registered for, independently of the guest journey's event.
   oneTap: process.env.E2E_ONE_TAP_SLUG ?? "seed-005-upcoming-2",
+  live: process.env.E2E_WEBINAR_SLUG_LIVE ?? "seed-005-live",
   ended: process.env.E2E_WEBINAR_SLUG_ENDED ?? "seed-005-ended",
   archived: process.env.E2E_WEBINAR_SLUG_ARCHIVED ?? "seed-005-archived",
 } as const;
@@ -155,6 +156,51 @@ Then("the event page immediately shows the registered state", async ({ page }) =
     page.getByText(CONFIRMATION, { exact: false }).first(),
   ).toBeVisible();
 });
+
+// ── Register-during-live (EARS-1 + EARS-9, the #673 Stage-B rework) ──────────
+
+Given(
+  "a logged-in doctor on the live, not-yet-registered event page",
+  async ({ page, world }) => {
+    world.slug = SEED.live;
+    // A fresh 003 doctor (register + verify + auto-login) — never registered for
+    // the seeded live event, so the one-tap command button must be offered
+    // (EARS-9: `live` is a registrable state, same affordance as `published`).
+    await provisionLoggedInDoctor(page);
+    await page.goto(`/webinars/${world.slug}`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("event-register-one-tap")).toBeVisible();
+  },
+);
+
+Then(
+  "the doctor is still on that live event page, not a 404",
+  async ({ page, world }) => {
+    // The rework finding: the live-event «Участвовать» must never navigate to the
+    // not-yet-built 006 room (`/webinars/:slug/room` → 404). The one-tap COMMAND
+    // registers in place and the SAME page re-renders registered.
+    await expect(page).toHaveURL(new RegExp(`/webinars/${world.slug}(?:$|[?#])`));
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  },
+);
+
+Given("a guest on the live event page", async ({ page, context, world }) => {
+  world.slug = SEED.live;
+  await context.clearCookies();
+  await page.goto(`/webinars/${world.slug}`, { waitUntil: "domcontentloaded" });
+});
+
+Then(
+  "the guest is taken into the auth flow carrying that live event, not a 404",
+  async ({ page, world }) => {
+    // EARS-2 on a live event: the guest CTA is the same `/register?returnTo=…`
+    // auth handoff as `published` — registration first (EARS-9), the room is 006
+    // (#584). The event context (slug) rides the returnTo, never a dead room link.
+    await page.waitForURL(/\/register\?/);
+    expect(page.url()).toContain(
+      `returnTo=${encodeURIComponent(`/webinars/${world.slug}`)}`,
+    );
+  },
+);
 
 // ── Lifecycle gating (EARS-9) ────────────────────────────────────────────────
 

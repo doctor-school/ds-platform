@@ -1,6 +1,6 @@
 import type { EventRegistrationState } from "@ds/schemas";
 
-import type { PrimaryCta } from "./event-lifecycle";
+import type { CanvasStatus } from "./event-lifecycle";
 
 /**
  * 005 EARS-4 — the per-user `EventRegistrationState` composed onto the 004 event
@@ -86,43 +86,45 @@ export async function fetchEventRegistrationState(
 
 /**
  * 005 EARS-5 — the registered doctor's join-signpost render mode: HOW/WHEN they
- * will join, layered on top of the 004 lifecycle CTA (`lib/event-lifecycle`).
- * There are exactly two signpost renders plus the no-signpost fall-through:
+ * will join, layered on top of the 004 lifecycle render (`lib/event-lifecycle`).
+ * The signpost derives from the registration state + the canvas lifecycle
+ * `status` — never from the primary CTA (a registered doctor has no register
+ * CTA to key off). There are exactly two signpost renders plus the fall-through:
  *
- *   • `upcoming` — the doctor is registered on an `upcoming` (`published`) event
- *     whose primary CTA is the `register` action: signpost that they are
- *     registered and when the broadcast starts (date/time МСК). The register CTA
- *     is replaced by a static confirmation — no second action (EARS-4/EARS-5).
- *   • `live` — the doctor is registered on a `live` event whose primary CTA
- *     routes toward the room (feature 006): signpost an obvious ONWARD path to
- *     the room, carrying the room `roomHref` through so the page renders the link
- *     without re-deriving the route (EARS-5). 005 asserts the route, 006 owns the
- *     room + its server-side join gating.
+ *   • `upcoming` — the doctor is registered on an `upcoming` (`published`)
+ *     event: signpost that they are registered and when the broadcast starts
+ *     (date/time МСК). The register CTA is replaced by a static confirmation —
+ *     no second action (EARS-4/EARS-5).
+ *   • `live` — the doctor is registered on a `live` event: signpost that the
+ *     broadcast is on and they are on the participant list. The interactive
+ *     onward-to-room affordance is the 006 room surface (#584) — until the room
+ *     ships, the signpost is textual (a `/room` link would be a dead link / 404,
+ *     a banned pattern; the deferral is tracked on #584).
  *   • `none` — every other case: `ended` / `archived` (no participation CTA — 004
  *     owns those renders), an unregistered doctor, or a guest (004's register CTA
  *     stands). No signpost is composed onto the public page.
  */
 export type JoinSignpost =
   | { readonly kind: "upcoming" }
-  | { readonly kind: "live"; readonly roomHref: string }
+  | { readonly kind: "live" }
   | { readonly kind: "none" };
 
 export function resolveJoinSignpost(
   state: EventRegistrationState | null,
-  cta: PrimaryCta,
+  status: CanvasStatus,
 ): JoinSignpost {
   // Only an authenticated, registered caller ever gets a signpost — a guest
   // (null) or an unregistered doctor sees 004's public render unchanged.
   if (state?.registered !== true) return { kind: "none" };
-  switch (cta.kind) {
+  switch (status) {
     // Upcoming (`published`) → the register CTA is replaced by the confirmation +
-    // МСК start signpost. The room route is not yet the destination.
-    case "register":
+    // МСК start signpost.
+    case "upcoming":
       return { kind: "upcoming" };
-    // Live → the primary CTA already routes toward the room (feature 006); carry
-    // that route through so the signpost renders the onward-to-room link.
-    case "room":
-      return { kind: "live", roomHref: cta.href };
+    // Live → the confirmation + "the broadcast is on" signpost (the room link
+    // arrives with the 006 room surface, #584).
+    case "live":
+      return { kind: "live" };
     // `ended` / `archived` carry no participation CTA — no signpost (004 owns it).
     default:
       return { kind: "none" };
@@ -132,21 +134,19 @@ export function resolveJoinSignpost(
 /**
  * 005 EARS-4 — the pure state→render decision: show the registered confirmation
  * (replacing the register CTA) exactly when the caller is registered AND the page
- * would otherwise render the 004 «Участвовать» REGISTER CTA (i.e. an upcoming /
- * `published` event). This is exactly the `upcoming` arm of
+ * would otherwise render the 004 «Участвовать» REGISTER CTA for an upcoming /
+ * `published` event. This is exactly the `upcoming` arm of
  * {@link resolveJoinSignpost} — the register-CTA swap.
  *
- * The swap only ever replaces a `register` CTA: on a `live` event the primary CTA
- * routes toward the room (feature 006) and a registered doctor still needs that
- * route; the `live`-state onward-to-room signposting for a registered doctor is
- * EARS-5 (the `live` arm of {@link resolveJoinSignpost}), not this primitive.
- * `ended` / `archived` carry no register CTA at all. So a registered doctor is
- * never shown the register CTA as if unregistered (EARS-4 invariant), and no
- * other lifecycle affordance is disturbed.
+ * The registered-`live` render is EARS-5's `live` signpost (the confirmation +
+ * "the broadcast is on"), not this primitive; `ended` / `archived` carry no
+ * register CTA at all. So a registered doctor is never shown the register CTA as
+ * if unregistered (EARS-4 invariant), and no other lifecycle affordance is
+ * disturbed.
  */
 export function showRegisteredConfirmation(
   state: EventRegistrationState | null,
-  cta: PrimaryCta,
+  status: CanvasStatus,
 ): boolean {
-  return resolveJoinSignpost(state, cta).kind === "upcoming";
+  return resolveJoinSignpost(state, status).kind === "upcoming";
 }

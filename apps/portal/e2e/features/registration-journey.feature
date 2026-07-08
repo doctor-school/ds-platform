@@ -43,6 +43,26 @@ Feature: 005 Webinar registration journey — guest through auth to «мои с�
     Then the event page immediately shows the registered state
     And the register CTA is no longer offered
 
+  # --- Register-during-live (US-1, EARS-9: live is a registrable state) ---
+  # The Stage-B rework finding (#574/#673): on a LIVE event «Участвовать» must FIRE
+  # the registration and flip the page to the registered state — never navigate to
+  # the not-yet-built 006 room (a 404) and never lose the registration. The onward
+  # room affordance for a registered doctor arrives with the room itself (#584).
+
+  @EARS-1 @EARS-9 @happy
+  Scenario: A logged-in doctor registers in one tap on a LIVE event — no 404, no lost registration
+    Given a logged-in doctor on the live, not-yet-registered event page
+    When the doctor activates the one-tap «Участвовать» command
+    Then the event page immediately shows the registered state
+    And the doctor is still on that live event page, not a 404
+    And the register CTA is no longer offered
+
+  @EARS-2 @EARS-9 @happy
+  Scenario: A guest's «Участвовать» on a LIVE event leads into the auth flow, never a 404
+    Given a guest on the live event page
+    When the guest activates «Участвовать»
+    Then the guest is taken into the auth flow carrying that live event, not a 404
+
   # --- Lifecycle gating (US-1/US-2) ---
 
   @EARS-9 @failure

@@ -91,3 +91,83 @@ test("EARS-6: with no registrations, the surface renders the empty-state", async
     page.getByText("Пока нет предстоящих событий"),
   ).toBeVisible();
 });
+
+/**
+ * 005 EARS-7 — a just-registered event appears in «мои события» IMMEDIATELY on
+ * the next read, with no read-model staleness window. This drives the invariant
+ * in the ACTUAL running stack (browser → portal SSR → `/v1/*` rewrite → api →
+ * Postgres): a logged-in doctor who is NOT yet registered for `E2E_FRESH_EVENT_SLUG`
+ * fires the real `RegisterForEvent` command the portal client uses (a same-origin
+ * `fetch('/v1/events/:slug/registration', { method:'POST', credentials:'include' })`
+ * — `lib/registration-client.ts`), and the very NEXT `/account/events` read shows
+ * the event. Firing the command from the page's own `fetch` carries the browser's
+ * real session cookie + fingerprint surface (UA + accept-language), exactly as the
+ * portal client does, so the authenticated read is not 401'd (ADR-0001 §6).
+ *
+ * Both registration paths converge on this ONE command (design §3): the logged-in
+ * one-tap path (this test's trigger) and the guest-through-auth completion fire
+ * the identical `RegisterForEvent`, so the freshness invariant this asserts is
+ * path-independent. The per-path assertion (one-tap + guest-through-auth) is owned
+ * authoritatively by the Vitest e2e (`apps/api/test/registration/freshness.e2e-spec.ts`,
+ * both paths); the full guest→003→registered browser journey is the 005
+ * portal-integration + E2E child Issue's deliverable.
+ *
+ * Live-stand-gated: needs a running portal + api + Postgres, a real 003 doctor
+ * account (`E2E_DOCTOR_EMAIL` / `E2E_DOCTOR_PASSWORD`), and a registrable
+ * (`published`/`live`) event the doctor is NOT yet registered for
+ * (`E2E_FRESH_EVENT_SLUG`, the 005↔007 fixture seam). Inert on a bare CI run.
+ */
+const FRESH_SLUG = process.env.E2E_FRESH_EVENT_SLUG;
+const DOCTOR_EMAIL = process.env.E2E_DOCTOR_EMAIL;
+const DOCTOR_PASSWORD = process.env.E2E_DOCTOR_PASSWORD;
+
+test.describe("005 EARS-7 my-events freshness (e2e)", () => {
+  test("005 EARS-7: a just-registered event appears in «мои события» on the very next read (no staleness window)", async ({
+    page,
+  }) => {
+    test.skip(
+      !FRESH_SLUG || !DOCTOR_EMAIL || !DOCTOR_PASSWORD,
+      "requires a live portal + a 003 doctor account + a registrable event the doctor is not yet registered for",
+    );
+
+    // Log the doctor in through the real 003 flow — the session cookie is bound to
+    // this browser's fingerprint surface, which the SSR «мои события» read forwards.
+    await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
+    await page.getByLabel(/почта|email/i).fill(DOCTOR_EMAIL!);
+    await page.getByLabel(/пароль|password/i).fill(DOCTOR_PASSWORD!);
+    await page.getByRole("button", { name: /войти|продолжить/i }).click();
+    await page.waitForURL(/\/account|\/webinars/);
+
+    const cardSelector = `a[href="/webinars/${FRESH_SLUG}"]`;
+
+    // Before the write: the fresh event is absent from «мои события» (the read
+    // genuinely reflects registration state, not a coincidental pre-population).
+    await page.goto(`${BASE}/account/events`, { waitUntil: "domcontentloaded" });
+    await expect(page.locator(cardSelector)).toHaveCount(0);
+
+    // Fire the real `RegisterForEvent` command from the page's own origin (the
+    // exact same-origin POST the portal client uses) — carries the browser session.
+    const status = await page.evaluate(async (slug) => {
+      const res = await fetch(
+        `/v1/events/${encodeURIComponent(slug)}/registration`,
+        {
+          method: "POST",
+          headers: { accept: "application/json" },
+          credentials: "include",
+        },
+      );
+      return res.status;
+    }, FRESH_SLUG!);
+    expect(status).toBe(200);
+
+    // The VERY NEXT read of «мои события» must already list the just-registered
+    // event — immediately, no staleness window (EARS-7).
+    await page.goto(`${BASE}/account/events`, { waitUntil: "domcontentloaded" });
+    const card = page.locator(cardSelector).first();
+    await expect(card).toBeVisible();
+
+    // …and it links back to that event's page (EARS-6), reachable from the list.
+    await card.click();
+    await expect(page).toHaveURL(new RegExp(`/webinars/${FRESH_SLUG}$`));
+  });
+});

@@ -151,6 +151,22 @@ When("the caller opens the events page", async ({ page }) => {
   await page.goto("/events");
 });
 
+When("the operator opens the create-event screen", async ({ page }) => {
+  await page.goto("/events/create");
+  await expect(page.getByTestId("event-form")).toBeVisible();
+});
+
+Then(
+  "a one-click link returns the operator to the events list",
+  async ({ page }) => {
+    // The back-to-list affordance (#664) — one click from any inner admin
+    // screen (create / edit) lands on the events list, never a dead end.
+    await page.getByTestId("back-to-list").click();
+    await page.waitForURL(/\/events$/);
+    await expect(page.getByTestId("create-event")).toBeVisible();
+  },
+);
+
 Then(
   "the event is shown in the {string} state",
   async ({ page }, state: string) => {

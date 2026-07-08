@@ -44,6 +44,14 @@ Feature: Minimal event admin — one operator creates, streams, runs, and archiv
     Then the event air time renders as "19:00" МСК in the admin list
     And no untranslated catalog key is visible on the surface
 
+  @nav @happy
+  Scenario: Every inner admin screen offers one-click return to the events list
+    Given a platform_admin operator in the admin app
+    When the operator opens the create-event screen
+    Then a one-click link returns the operator to the events list
+    When the operator creates a draft event with a program PDF
+    Then a one-click link returns the operator to the events list
+
   @EARS-8 @failure
   Scenario: A non-admin caller cannot reach the admin surface
     Given a doctor_guest caller with a session

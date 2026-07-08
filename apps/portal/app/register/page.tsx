@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { useTranslations } from "next-intl";
@@ -19,6 +19,7 @@ import {
   clearPendingRegistration,
   setPendingRegistration,
 } from "@/lib/pending-registration";
+import { withReturnTarget } from "@/lib/registration-handoff";
 import { registerFormSchema } from "@/lib/identifier-validation";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
@@ -38,13 +39,35 @@ import { Form, FormField, FormError } from "@ds/design-system/form";
  * `pending_verification` ack routes to `/verify?email=…` carrying the email so the
  * registrant can submit the code Zitadel mailed. Consent is captured here
  * (EARS-20) — the BFF refuses an empty array — using the canonical ToS pair.
+ *
+ * 005 EARS-2: a guest entering from an event's «Участвовать» CTA arrives with
+ * `?returnTo=/webinars/:slug` (004 EARS-3 handoff). The event context is carried
+ * ONWARD through both hops this page owns — the post-submit `/verify` navigation
+ * and the «уже есть аккаунт» `/login` link — via the guard-cleaning
+ * `withReturnTarget` (a hostile returnTo is dropped at the hop, never
+ * propagated). `useSearchParams` requires a Suspense boundary in the App Router,
+ * so the card is split out and wrapped below.
  */
 
 export default function RegisterPage() {
+  return (
+    <AuthShell>
+      <Suspense fallback={null}>
+        <RegisterCard />
+      </Suspense>
+    </AuthShell>
+  );
+}
+
+function RegisterCard() {
   const router = useRouter();
   const t = useTranslations("register");
   const tc = useTranslations("common");
   const te = useTranslations("errors");
+  // 005 EARS-2: the carried registration-intent (validated at every consumption
+  // point by `parseReturnTarget` inside `withReturnTarget` — this page only
+  // forwards it, never navigates to it).
+  const returnTo = useSearchParams().get("returnTo");
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,8 +114,14 @@ export default function RegisterPage() {
         identifier: values.email,
         password: values.password,
       });
-      // Carry the email into verification (registration is email-only, #202).
-      router.push(`/verify?email=${encodeURIComponent(values.email)}`);
+      // Carry the email into verification (registration is email-only, #202) —
+      // plus the event context, when a safe one rode in (005 EARS-2).
+      router.push(
+        withReturnTarget(
+          `/verify?email=${encodeURIComponent(values.email)}`,
+          returnTo,
+        ),
+      );
     } catch (err) {
       // EARS-16: identical ack for new vs already-registered — the auth OUTCOME
       // stays the generic ack; only 429/5xx/network get a specific message.
@@ -101,14 +130,17 @@ export default function RegisterPage() {
   }
 
   return (
-    <AuthShell>
-      <AuthCard
+    <AuthCard
         icon={<UserPlus className="text-primary" aria-hidden />}
         title={t("title")}
         description={t("description")}
         footer={
           <DsLink asChild>
-            <Link href="/login">{t("haveAccount")}</Link>
+            {/* 005 EARS-2: the already-registered guest's path — the event
+                context rides onward into /login so it survives this hop too. */}
+            <Link href={withReturnTarget("/login", returnTo)}>
+              {t("haveAccount")}
+            </Link>
           </DsLink>
         }
       >
@@ -158,6 +190,5 @@ export default function RegisterPage() {
           </form>
         </Form>
       </AuthCard>
-    </AuthShell>
   );
 }

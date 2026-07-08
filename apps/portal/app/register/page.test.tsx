@@ -17,8 +17,10 @@ import RegisterPage from "./page";
  */
 
 const push = vi.fn();
+let searchParams = new URLSearchParams();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
+  useSearchParams: () => searchParams,
 }));
 
 // Passthrough i18n: return the key (the test asserts on stable testids, not copy).
@@ -48,6 +50,7 @@ beforeEach(() => {
   push.mockClear();
   register.mockClear();
   resolveRegister = undefined;
+  searchParams = new URLSearchParams();
 });
 afterEach(() => {
   // Drain any still-pending submit so it does not leak across tests.
@@ -75,5 +78,57 @@ describe("/register submit pending affordance (#337)", () => {
       expect(submit).toHaveAttribute("aria-busy", "true");
     });
     expect(submit.querySelector("svg.animate-spin")).not.toBeNull();
+  });
+});
+
+/**
+ * 005 EARS-2 — the /register hop of the guest-through-auth round-trip: a guest
+ * who entered the 003 flow from an event's «Участвовать» CTA arrives here with
+ * `?returnTo=/webinars/:slug` (004 EARS-3 handoff). The event context must
+ * survive BOTH onward hops this page owns — the post-submit `/verify`
+ * navigation and the «уже есть аккаунт» `/login` link — while a hostile
+ * (cross-origin / open-redirect) value is dropped at the hop, never propagated.
+ */
+describe("005 EARS-2 event-context carry through /register", () => {
+  async function submitRegistration() {
+    const user = userEvent.setup();
+    render(<RegisterPage />);
+    await user.type(screen.getByLabelText("email"), EMAIL);
+    await user.type(screen.getByLabelText("password"), PASSWORD);
+    await user.click(screen.getByTestId("register-submit"));
+    await waitFor(() => expect(register).toHaveBeenCalledTimes(1));
+    resolveRegister?.();
+  }
+
+  it("EARS-2: the system shall carry a safe event returnTo onward into the /verify navigation", async () => {
+    searchParams = new URLSearchParams({ returnTo: "/webinars/ahilles-042" });
+    await submitRegistration();
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        `/verify?email=${encodeURIComponent(EMAIL)}&returnTo=%2Fwebinars%2Fahilles-042`,
+      ),
+    );
+  });
+
+  it("EARS-2: a cross-origin / open-redirect returnTo shall be dropped from the /verify navigation", async () => {
+    searchParams = new URLSearchParams({ returnTo: "//evil.example" });
+    await submitRegistration();
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        `/verify?email=${encodeURIComponent(EMAIL)}`,
+      ),
+    );
+  });
+
+  it("EARS-2: the «already have an account» link carries the event context onward into /login", () => {
+    searchParams = new URLSearchParams({ returnTo: "/webinars/ahilles-042" });
+    render(<RegisterPage />);
+
+    expect(screen.getByRole("link", { name: "haveAccount" })).toHaveAttribute(
+      "href",
+      "/login?returnTo=%2Fwebinars%2Fahilles-042",
+    );
   });
 });

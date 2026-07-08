@@ -1,7 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { useTranslations } from "next-intl";
@@ -29,6 +36,8 @@ import {
   LoginIdentifierFormSchema,
   otpIdentifierFormSchema,
 } from "@/lib/identifier-validation";
+import { withReturnTarget } from "@/lib/registration-handoff";
+import { completeReturnTarget } from "@/lib/registration-resume";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 import { Button } from "@ds/design-system/button";
@@ -64,12 +73,34 @@ import {
  * CONSTRUCTION no channel switcher or secondary links, so the user cannot wander off
  * the issued challenge (the #192/#196/#200/#211/#212/#227 papercut class). The whole
  * surface is wrapped in the brand `<AuthShell>` (the approved split-screen look).
+ *
+ * 005 EARS-2: a guest carried into this flow from an event's «Участвовать» CTA
+ * arrives with `?returnTo=/webinars/:slug` (the safe registration-intent, 004
+ * EARS-3 → 005 design §3.2). On login success — password or OTP — the carried
+ * registration completes (`completeReturnTarget` fires the same EARS-1
+ * `RegisterForEvent`, then lands on that event page registered); the
+ * create-account link carries the context onward into /register. A hostile
+ * returnTo is rejected by the `parseReturnTarget` guard at every consumption
+ * point — never navigated to, never propagated. `useSearchParams` requires a
+ * Suspense boundary in the App Router, so the card is split out and wrapped.
  */
 
 export default function LoginPage() {
-  const t = useTranslations("login");
   return (
     <AuthShell>
+      <Suspense fallback={null}>
+        <LoginCard />
+      </Suspense>
+    </AuthShell>
+  );
+}
+
+function LoginCard() {
+  const t = useTranslations("login");
+  // 005 EARS-2: the carried registration-intent (guard-validated at every
+  // consumption point; this surface only forwards or completes it).
+  const returnTo = useSearchParams().get("returnTo");
+  return (
       <AuthCard
         icon={<ShieldCheck className="text-primary" aria-hidden />}
         title={t("title")}
@@ -77,7 +108,11 @@ export default function LoginPage() {
         footer={
           <>
             <DsLink asChild>
-              <Link href="/register">{t("createAccount")}</Link>
+              {/* 005 EARS-2: signup is a co-equal auth path — the event context
+                  rides onward into /register so it survives this hop too. */}
+              <Link href={withReturnTarget("/register", returnTo)}>
+                {t("createAccount")}
+              </Link>
             </DsLink>
             <DsLink asChild>
               <Link href="/reset">{t("forgotPassword")}</Link>
@@ -101,19 +136,18 @@ export default function LoginPage() {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="password">
-            <PasswordLogin />
+            <PasswordLogin returnTo={returnTo} />
           </TabsContent>
           <TabsContent value="otp">
-            <OtpLogin />
+            <OtpLogin returnTo={returnTo} />
           </TabsContent>
         </Tabs>
       </AuthCard>
-    </AuthShell>
   );
 }
 
 /** EARS-5 password login. */
-function PasswordLogin() {
+function PasswordLogin({ returnTo }: { returnTo: string | null }) {
   const router = useRouter();
   const t = useTranslations("login");
   const tc = useTranslations("common");
@@ -143,7 +177,10 @@ function PasswordLogin() {
         ...(captchaToken ? { captchaToken } : {}),
       });
       // The BFF set the `__Host-` cookie; the session shell reads it server-side.
-      router.push("/account");
+      // 005 EARS-2: with a carried event context the session now exists, so the
+      // registration completes and the doctor lands back on that event page;
+      // without one this is the shipped `/account` landing.
+      router.push(await completeReturnTarget(returnTo));
     } catch (err) {
       // EARS-16: the login OUTCOME (wrong credential / unknown account) stays the
       // generic message so the UI never leaks an existence/error oracle. Only the
@@ -214,7 +251,7 @@ function PasswordLogin() {
 const RESEND_COOLDOWN_SECONDS = 30;
 
 /** EARS-6/7 passwordless OTP login: request a code, then the focus-screen takes over. */
-function OtpLogin() {
+function OtpLogin({ returnTo }: { returnTo: string | null }) {
   const t = useTranslations("login");
   const tc = useTranslations("common");
   const te = useTranslations("errors");
@@ -374,6 +411,7 @@ function OtpLogin() {
         <OtpVerifyForm
           identifier={identifier}
           channel={channel}
+          returnTo={returnTo}
           error={error}
           cooldownSeconds={RESEND_COOLDOWN_SECONDS}
           resendNonce={resendNonce}
@@ -416,6 +454,7 @@ const LOGIN_OTP_LENGTH = 8;
 function OtpVerifyForm({
   identifier,
   channel,
+  returnTo,
   error,
   cooldownSeconds,
   resendNonce,
@@ -425,6 +464,8 @@ function OtpVerifyForm({
 }: {
   identifier: string;
   channel: OtpChannel;
+  /** 005 EARS-2: the carried registration-intent, completed on verify success. */
+  returnTo: string | null;
   error: string | null;
   cooldownSeconds: number;
   resendNonce: number;
@@ -459,7 +500,9 @@ function OtpVerifyForm({
   async function onVerify(values: OtpVerify) {
     try {
       await authClient.loginWithOtp({ ...values, identifier, channel });
-      router.push("/account");
+      // 005 EARS-2: complete the carried registration (if any) now the session
+      // exists, landing on the event page — else the shipped `/account` landing.
+      router.push(await completeReturnTarget(returnTo));
     } catch (err) {
       onError(authErrorMessage(err, te, te("otpVerifyFailed")));
     }

@@ -19,6 +19,8 @@ import { OtpField } from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import { takePendingRegistration } from "@/lib/pending-registration";
+import { withReturnTarget } from "@/lib/registration-handoff";
+import { completeReturnTarget } from "@/lib/registration-resume";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 import { useResendCooldown } from "@/lib/use-resend-cooldown";
 
@@ -99,6 +101,11 @@ function VerifyCard() {
   const te = useTranslations("errors");
   const params = useSearchParams();
   const email = params.get("email") ?? undefined;
+  // 005 EARS-2: the carried registration-intent riding the guest-through-auth
+  // round-trip. Consumed ONLY through the `parseReturnTarget` guard (inside
+  // `completeReturnTarget` / `withReturnTarget`), so a hostile value can neither
+  // be navigated to nor propagated onward.
+  const returnTo = params.get("returnTo");
   const [error, setError] = useState<string | null>(null);
   // #326: neutral, enumeration-safe resend acknowledgement. The on-screen response
   // to a resend is generic and IDENTICAL in every case (registered / unregistered /
@@ -199,13 +206,16 @@ function VerifyCard() {
           password: held.password,
         } as LoginRequest);
         // The BFF set the `__Host-` cookie (EARS-8); replace so verify is not in
-        // the back-stack.
-        router.replace("/account");
+        // the back-stack. 005 EARS-2: with a carried event context the session
+        // now exists, so the SAME RegisterForEvent (EARS-1) fires for that event
+        // and the doctor lands back on its page registered; without one this is
+        // the shipped `/account` landing.
+        router.replace(await completeReturnTarget(returnTo));
         return;
       }
       // No held credential (deep-link / reload / abandoned) — fall back to the
-      // manual sign-in round-trip.
-      router.push("/login");
+      // manual sign-in round-trip, carrying the event context onward (EARS-2).
+      router.push(withReturnTarget("/login", returnTo));
     } catch (err) {
       // If verify itself failed the store was never read (the user retries the
       // code, still auto-logs-in on success). If the login REPLAY failed, the
@@ -340,7 +350,13 @@ function VerifyCard() {
           </p>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button asChild variant="default" className="flex-1">
-              <Link href="/login" data-testid="verify-go-to-login">
+              {/* 005 EARS-2: the already-registered owner's sign-in path — the
+                  event context rides onward into /login so completing auth there
+                  still finishes the carried registration. */}
+              <Link
+                href={withReturnTarget("/login", returnTo)}
+                data-testid="verify-go-to-login"
+              >
                 {t("goToSignIn")}
               </Link>
             </Button>

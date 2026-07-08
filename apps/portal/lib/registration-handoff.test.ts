@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { buildRegistrationHref } from "./registration-handoff";
+import {
+  buildRegistrationHref,
+  withReturnTarget,
+} from "./registration-handoff";
 
 /**
  * 004 EARS-3 — the event-context handoff the single «Участвовать» CTA carries
@@ -43,6 +46,47 @@ describe("buildRegistrationHref (004 EARS-3 context handoff)", () => {
       expect(returnTo!.startsWith("/webinars/")).toBe(true);
       expect(returnTo).not.toMatch(/^\/\//);
       expect(returnTo).not.toMatch(/^https?:/i);
+    }
+  });
+});
+
+/**
+ * 005 EARS-2 — the ONWARD carry: intermediate auth navigations (`/register →
+ * /verify`, the `/verify → /login` fallback, the cross links between the auth
+ * pages) re-append the carried returnTo ONLY when it is a safe same-origin event
+ * target, so the event context survives every hop of the 003 round-trip while a
+ * hostile value is dropped at the first hop (requirements Constraints).
+ */
+describe("005 EARS-2 returnTo onward carry (withReturnTarget)", () => {
+  it("EARS-2: the system shall carry a safe event returnTo onto the next auth navigation, preserving the event context across the hop", () => {
+    expect(withReturnTarget("/login", "/webinars/ahilles-042")).toBe(
+      "/login?returnTo=%2Fwebinars%2Fahilles-042",
+    );
+    // Appends with `&` when the path already carries a query.
+    expect(
+      withReturnTarget("/verify?email=doc%40example.com", "/webinars/x1"),
+    ).toBe("/verify?email=doc%40example.com&returnTo=%2Fwebinars%2Fx1");
+  });
+
+  it("EARS-2: an absent returnTo leaves the navigation untouched (no empty param)", () => {
+    expect(withReturnTarget("/login", null)).toBe("/login");
+    expect(withReturnTarget("/verify?email=a%40b.c", null)).toBe(
+      "/verify?email=a%40b.c",
+    );
+  });
+
+  it("EARS-2: a cross-origin / open-redirect returnTo shall be dropped at the hop — never propagated onward", () => {
+    for (const evil of [
+      "https://evil.example/webinars/x",
+      "//evil.example",
+      "/\\evil.example",
+      "/account",
+      "/webinars/../account",
+      "/webinars/a/b",
+    ]) {
+      expect(withReturnTarget("/login", evil), `must drop: ${evil}`).toBe(
+        "/login",
+      );
     }
   });
 });

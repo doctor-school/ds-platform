@@ -4,30 +4,30 @@ import { Badge } from "@ds/design-system/badge";
 import { WebinarRoomLayout } from "@ds/design-system/webinar-room";
 import { resolveEmbed } from "../../../../lib/room-player";
 import type { RoomConfig } from "@ds/schemas";
+import { RoomChat } from "./room-chat";
 
 /**
- * 006 EARS-2 / EARS-9 / EARS-11 — the room composition for a gated caller. The
- * server component ({@link RoomPage}) has already consumed the EARS-1 `RoomAccess`
- * grant; this client view renders the neo-brutalist composition to the vendored
- * `webinar-room.dc.html` geometry via the {@link WebinarRoomLayout} DS primitive:
- * the embed player (instantiated from the explicit provider enum, EARS-2), the
- * event context, and the chat aside COMPOSITION SHELL (chat behaviour — live
- * read/post over Centrifugo — is EARS-3 / #579; the full both-breakpoints × both-
- * themes fidelity + Stage-B live confirmation is the integration slice #584).
+ * 006 EARS-2 / EARS-3 / EARS-9 / EARS-11 — the room composition for a gated
+ * caller. The server component ({@link RoomPage}) has already consumed the EARS-1
+ * `RoomAccess` grant; this client view renders the neo-brutalist composition to
+ * the vendored `webinar-room.dc.html` geometry via the {@link WebinarRoomLayout}
+ * DS primitive: the embed player (instantiated from the explicit provider enum,
+ * EARS-2), the event context, and the LIVE chat aside — {@link RoomChat} reads +
+ * posts over Centrifugo (EARS-3) when the grant carried a chat credential, else a
+ * truthful "chat unavailable" state (Centrifugo unconfigured). The full
+ * both-breakpoints × both-themes fidelity + Stage-B live confirmation is the
+ * integration slice #584.
  *
- * All copy is injected from the message catalog by the server component (EARS-10)
- * — no hardcoded user-facing string lives here.
+ * All copy is injected from the message catalog (EARS-10) — no hardcoded
+ * user-facing string lives here; {@link RoomChat} reads its own copy from the same
+ * catalog via `useTranslations`.
  */
 export interface RoomCopy {
   liveBadge: string;
   onAir: string;
   chatTab: string;
   infoTab: string;
-  chatHeading: string;
-  moderatorPin: string;
-  chatEmpty: string;
-  composerPlaceholder: string;
-  composerSend: string;
+  chatUnavailable: string;
   unavailableTitle: string;
   unavailableBody: string;
   playerTitle: string;
@@ -103,45 +103,29 @@ function EventContext({
   );
 }
 
-function ChatPanel({ copy }: { copy: RoomCopy }) {
+/**
+ * The truthful "chat unavailable" state — shown ONLY when the grant carried no
+ * chat credential (`config.chat` is null, i.e. Centrifugo is not configured on
+ * this runtime). It is a truthful state, NOT a disabled composer placeholder: the
+ * room never presents a dead affordance a doctor could type into with no effect.
+ */
+function ChatUnavailable({ copy }: { copy: RoomCopy }) {
   return (
     <div data-testid="room-chat" className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b-2 border-border bg-primary-action px-4 py-3 text-center text-sm font-extrabold text-primary-foreground">
-        {copy.chatHeading}
-      </div>
-      <div className="border-b-2 border-border bg-tint px-4 py-3 text-caption leading-relaxed text-tint-foreground">
-        {copy.moderatorPin}
-      </div>
       <div className="flex flex-1 items-center justify-center px-4 py-8 text-center text-sm text-muted-foreground">
-        {copy.chatEmpty}
-      </div>
-      {/* Composer — composition shell only; posting rides Centrifugo in EARS-3
-          (#579). Presented, not yet wired: the room's live chat lands with #579. */}
-      <div className="flex gap-3 border-t-2 border-border p-4">
-        <input
-          placeholder={copy.composerPlaceholder}
-          aria-label={copy.composerPlaceholder}
-          disabled
-          className="min-w-0 flex-1 border-2 border-hairline bg-card px-4 py-3 text-sm text-foreground"
-        />
-        <button
-          type="button"
-          disabled
-          aria-label={copy.composerSend}
-          className="border-2 border-border bg-primary-action px-4 py-3 text-sm font-extrabold text-primary-foreground shadow-sm"
-        >
-          {copy.composerSend}
-        </button>
+        {copy.chatUnavailable}
       </div>
     </div>
   );
 }
 
 export function RoomView({
+  slug,
   config,
   context,
   copy,
 }: {
+  slug: string;
   config: RoomConfig;
   context: RoomContext;
   copy: RoomCopy;
@@ -152,7 +136,13 @@ export function RoomView({
       infoTabLabel={copy.infoTab}
       player={<PlayerFrame config={config} copy={copy} />}
       context={<EventContext context={context} copy={copy} />}
-      chat={<ChatPanel copy={copy} />}
+      chat={
+        config.chat ? (
+          <RoomChat slug={slug} chat={config.chat} />
+        ) : (
+          <ChatUnavailable copy={copy} />
+        )
+      }
       slimBar={
         <div className="border-b-2 border-border bg-card px-4 py-3">
           <p className="text-2xs font-extrabold uppercase tracking-micro text-primary-action">

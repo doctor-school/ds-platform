@@ -1,13 +1,17 @@
+import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import type {
   EventLifecycleState,
+  PostChatMessageAck,
   PresenceHeartbeatAck,
+  RoomChatMessage,
   RoomConfig,
 } from "@ds/schemas";
 import {
   RegistrationService,
   UnknownSubjectError,
 } from "../registration/registration.service.js";
+import { CentrifugoChatGateway } from "./chat.gateway.js";
 import { PresenceRepository } from "./presence.repository.js";
 import { resolveRoomStream } from "./provider-enum.js";
 import { RoomRepository, type EventForRoom } from "./room.repository.js";
@@ -88,6 +92,8 @@ export class RoomService {
     @Inject(RegistrationService)
     private readonly registration: RegistrationService,
     @Inject(PresenceRepository) private readonly presence: PresenceRepository,
+    @Inject(CentrifugoChatGateway)
+    private readonly chat: CentrifugoChatGateway,
     @Inject(ROOM_HEARTBEAT_INTERVAL_SECONDS)
     private readonly heartbeatIntervalSeconds: number,
   ) {}
@@ -138,11 +144,53 @@ export class RoomService {
    */
   async roomConfig(idOrSlug: string, sub: string): Promise<RoomConfig> {
     const event = await this.admit(idOrSlug, sub);
+    // Resolve the acting doctor so the grant carries a gate-scoped, subscribe-only
+    // chat credential minted for THIS caller + THIS room (EARS-3). `admit` already
+    // proved a 003 mirror row exists (the `registered` check), so the resolve
+    // succeeds; the `null` guard is fail-closed defence — a caller with no
+    // resolvable id gets `chat: null`, never a token for a mis-attributed subject.
+    const userId = await this.presence.findUserIdBySub(sub);
     return {
       eventId: event.id,
       heartbeatIntervalSeconds: this.heartbeatIntervalSeconds,
       stream: resolveRoomStream(event.streamConfig),
+      chat: userId ? this.chat.credential(userId, event.id) : null,
     };
+  }
+
+  /**
+   * `PostChatMessage` (EARS-3; design §4) — behind the SAME gate as the config
+   * read and the heartbeat: a guest / unregistered / non-`live` caller is refused
+   * server-side ({@link admit}) and NO message is published (EARS-8). On admission
+   * it mints a server-authoritative, PII-free {@link RoomChatMessage} (server
+   * `id`, server `at`, a non-reversible `authorTag` derived from the acting
+   * doctor — never their roster identity) and publishes it to the room channel
+   * over Centrifugo, fanning it out to every subscriber in real time. Posting is
+   * server-mediated: this is the ONLY publish path, so a client can never publish
+   * directly to the channel with its subscribe-only token. Returns the ack the
+   * poster's own client renders immediately (no fan-out round-trip wait).
+   *
+   * `text` arrives already validated + trimmed by the `PostChatMessageRequest`
+   * DTO (the `packages/schemas` SSOT the portal composer shares); a Centrifugo
+   * outage throws `ChatUnavailableError` (→ 503) rather than reporting a phantom
+   * post — the message is never silently dropped.
+   */
+  async postChatMessage(
+    idOrSlug: string,
+    sub: string,
+    text: string,
+  ): Promise<PostChatMessageAck> {
+    const event = await this.admit(idOrSlug, sub);
+    const userId = await this.presence.findUserIdBySub(sub);
+    if (!userId) throw new UnknownSubjectError(sub);
+    const message: RoomChatMessage = {
+      id: randomUUID(),
+      authorTag: this.chat.authorTag(userId),
+      text,
+      at: new Date().toISOString(),
+    };
+    await this.chat.publish(event.id, message);
+    return { eventId: event.id, message };
   }
 
   /**

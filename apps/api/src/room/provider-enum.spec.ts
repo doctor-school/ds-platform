@@ -62,14 +62,17 @@ describe("006 EARS-2 embed provider resolution — explicit enum, never URL-snif
   });
 
   it("EARS-2: the RoomConfig grant carries the resolved stream additively (nullable), and the stream provider is the closed enum", () => {
-    // The grant is the EARS-1 shape extended ADDITIVELY with the stream section.
-    // A gated caller for an event with a configured stream carries it; an event
-    // with no / unknown stream config carries `stream: null` (still a valid grant
-    // — the gate passed — rendering the "stream unavailable" room state).
+    // The grant is the EARS-1 shape extended ADDITIVELY with the stream section
+    // (EARS-2) and the chat credential (EARS-3, nullable — `chat: null` when
+    // Centrifugo is unconfigured). A gated caller for an event with a configured
+    // stream carries it; an event with no / unknown stream config carries
+    // `stream: null` (still a valid grant — the gate passed — rendering the
+    // "stream unavailable" room state).
     const withStream = RoomConfigSchema.safeParse({
       eventId: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
       heartbeatIntervalSeconds: 60,
       stream: { provider: "youtube", embedRef: "dQw4w9WgXcQ" },
+      chat: null,
     });
     expect(withStream.success).toBe(true);
 
@@ -77,6 +80,7 @@ describe("006 EARS-2 embed provider resolution — explicit enum, never URL-snif
       eventId: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
       heartbeatIntervalSeconds: 60,
       stream: null,
+      chat: null,
     });
     expect(unavailable.success).toBe(true);
 
@@ -85,6 +89,7 @@ describe("006 EARS-2 embed provider resolution — explicit enum, never URL-snif
       eventId: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
       heartbeatIntervalSeconds: 60,
       stream: { provider: "vimeo", embedRef: "x" },
+      chat: null,
     });
     expect(badProvider.success).toBe(false);
   });

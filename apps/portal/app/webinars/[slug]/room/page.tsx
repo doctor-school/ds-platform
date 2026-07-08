@@ -75,6 +75,7 @@ export default async function RoomPage({
         intervalSeconds={access.config.heartbeatIntervalSeconds}
       />
       <RoomView
+        slug={slug}
         config={access.config}
         context={{ school: event.school, title: event.title, speakers }}
         copy={{
@@ -82,11 +83,7 @@ export default async function RoomPage({
           onAir: t("onAir"),
           chatTab: t("chatTab"),
           infoTab: t("infoTab"),
-          chatHeading: t("chatHeading"),
-          moderatorPin: t("moderatorPin"),
-          chatEmpty: t("chatEmpty"),
-          composerPlaceholder: t("composerPlaceholder"),
-          composerSend: t("composerSend"),
+          chatUnavailable: t("chatUnavailable"),
           unavailableTitle: t("unavailableTitle"),
           unavailableBody: t("unavailableBody"),
           playerTitle: t("playerTitle"),

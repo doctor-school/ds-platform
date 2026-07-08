@@ -11,3 +11,14 @@
 export const ROOM_HEARTBEAT_INTERVAL_SECONDS = Symbol(
   "ROOM_HEARTBEAT_INTERVAL_SECONDS",
 );
+
+/**
+ * DI token for the resolved Centrifugo chat configuration (006 EARS-3, design
+ * §4) — a {@link RoomChatConfig} or `null` when Centrifugo is not configured
+ * (the shared-CI / Centrifugo-less default; chat degrades to the truthful
+ * unavailable state). Bound in {@link RoomModule} from `CENTRIFUGO_*` env
+ * (env.schema) via `resolveRoomChatConfig`, so the endpoint + keys are read from
+ * config, never hardcoded. {@link CentrifugoChatGateway} consumes it to mint the
+ * gate-scoped subscribe-only token and to publish over the HTTP API.
+ */
+export const ROOM_CHAT_CONFIG = Symbol("ROOM_CHAT_CONFIG");

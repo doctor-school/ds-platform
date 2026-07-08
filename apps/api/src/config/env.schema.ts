@@ -185,6 +185,34 @@ export const ApiEnvSchema = z.looseObject({
     .positive()
     .default(60),
 
+  // 006 EARS-3 — live chat over Centrifugo (design §4). Centrifugo is already in
+  // the stack (dev stand + engineering-readiness); the room adds a
+  // `room:event:<id>` channel + a gate-scoped subscribe-only connection token, not
+  // a new transport. All three are OPTIONAL at the schema level so the shared CI /
+  // Centrifugo-less runtime boots — when any is absent the room grant carries
+  // `chat: null` (fail-closed, like the IdP / Redis / S3 fakes) and the portal
+  // shows the truthful chat-unavailable state. On the dev-stand and in prod all
+  // three are set; endpoint + keys are ALWAYS read here, never hardcoded
+  // (requirements Constraints; AGENTS.md §9).
+  //   • CENTRIFUGO_URL — the Centrifugo origin: the HTTP-API base the server
+  //     publishes over, and the source the browser websocket endpoint is derived
+  //     from (http→ws, https→wss). e.g. `http://truenas.local:8100` on the stand.
+  //   • CENTRIFUGO_API_KEY — the `http_api` key the server presents to publish
+  //     (`X-API-Key`) — the credential a browser NEVER holds, so a post can only
+  //     ride the gated command server-side.
+  //   • CENTRIFUGO_TOKEN_HMAC_SECRET — the HS256 secret the connection token is
+  //     signed with; MUST match centrifugo config.json
+  //     `client.token.hmac_secret_key` (the dev placeholder is
+  //     `dev-only-not-a-secret`).
+  CENTRIFUGO_URL: z.url().optional(),
+  CENTRIFUGO_API_KEY: z.string().optional(),
+  CENTRIFUGO_TOKEN_HMAC_SECRET: z.string().optional(),
+  // The subscribe-only connection-token TTL (seconds). The token is gate-scoped to
+  // the caller's one room channel; a modest default keeps a stale token from
+  // outliving the room by much (the room re-issues it on each grant read).
+  // Config-driven, never a hardcoded constant.
+  CHAT_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(3600),
+
   // Object storage (007 — the program-PDF binary; ADR-0003 §, `.claude/rules/
   // dev-stand.md`). Timeweb Object Storage in prod; MinIO on the dev stand. All
   // optional at the schema level so the dev-stand / CI boot without a configured

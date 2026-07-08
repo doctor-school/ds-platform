@@ -1,0 +1,5 @@
+{
+  "number": 203,
+  "body": "## Summary\n\nBump the CI runner image.\n\n## Product note (RU)\n\nnone\n\n## Linked\n\nCloses #198\n",
+  "labels": [{ "name": "chore" }]
+}

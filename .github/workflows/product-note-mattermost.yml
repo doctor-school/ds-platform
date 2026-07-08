@@ -1,0 +1,41 @@
+name: Product note → Mattermost
+
+# Deterministic delivery of a merged PR's "Product note (RU)" section to the team's
+# Mattermost channel via an incoming webhook (Issue #654). No agent in the delivery
+# path: the source of truth is the PR body, rendered by tools/ci/post-product-note.mjs.
+#
+# Secret-optional by design: the job is not blocked on the webhook being provisioned
+# — when MATTERMOST_WEBHOOK_URL is unset the script logs and skips green. It also
+# skips green when the note is `none`/absent (internal-only PRs).
+#
+# Injection safety: the PR body/title/url are passed through `env:` (never
+# interpolated into a shell `run:` string), so a `$(...)`/backtick in the body
+# cannot be executed. The script builds the webhook JSON with JSON.stringify.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+# The event payload already carries the PR body/title/url, so no `gh` call and no
+# `pull-requests` scope are needed — least privilege.
+permissions:
+  contents: read
+
+jobs:
+  deliver:
+    # Only merged PRs (a closed-without-merge PR delivers nothing).
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+      - name: Post the Product note to Mattermost
+        env:
+          MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_WEBHOOK_URL }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: node tools/ci/post-product-note.mjs

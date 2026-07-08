@@ -720,6 +720,35 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
 
+  # product-note: a user-facing PR (kind label `feature`/`bug`) must carry a real
+  # `Product note (RU)` section in its body — the source of truth the merge-time
+  # Mattermost delivery renders (Issue #654). `none`/absent is allowed only on an
+  # internal-only PR (chore/CI/refactor/deps). PR-event-gated (reads labels+body via
+  # `gh pr view`; exits 0 outside a PR; also run by `pnpm pr:preflight`). WARN v1 per
+  # the ADR-0007 §2.6 new-guard posture — promote to BLOCK once stable. Excluded
+  # from the `ci` needs-list while WARN.
+  #
+  # `gh pr view` wiring — see the spec-link/tdd-signal note (Issue #10 root cause 1):
+  # the job carries `permissions: { contents: read, pull-requests: read }` and the
+  # invoking step carries `GH_TOKEN`/`PR_NUMBER` (enforced by the workflow-auth guard).
+  product-note:
+    needs: setup
+    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:product-note
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+
   # ─── Workflow-auth meta-guard (Issue-#10 pattern enforcement, #462) ───
   # workflow-auth: enforces the "Issue-#10 auth pattern" on ci.yml ITSELF — every
   # job that runs `gh` or a PR-event-gated guard (a `tools/lint/lib/gh.ts`

@@ -1,0 +1,5 @@
+{
+  "number": 200,
+  "body": "## Summary\n\nAdd the doctor registration flow.\n\n## Product note (RU)\n\n<!-- authoring guidance -->\n\nТеперь врач может зарегистрироваться на вебинар в один клик прямо со страницы события. После записи он сразу видит статус «вы зарегистрированы» и получает напоминание.\n\n## Linked\n\nCloses #199\n",
+  "labels": [{ "name": "feature" }]
+}

@@ -1,6 +1,6 @@
 ---
 title: "report-task-outcome"
-description: "Procedural skill (inline): the fixed end-of-task report shape — product-first impact, a MANDATORY 'visual to check' line (a rendered before/after DELIVERED to the user, or an explicit 'nothing visual + how to verify'), a 'why this surfaced' context line, and a collapsed technical appendix. Carries the reusable render-and-deliver-a-visual recipe."
+description: "Procedural skill (inline): the fixed end-of-task report shape — product-first impact, a MANDATORY 'visual to check' line (a rendered before/after DELIVERED to the user, or an explicit 'nothing visual + how to verify'), a MANDATORY '% of planned realized' section (session/feature/epic ratios from the tracker graph), a 'why this surfaced' context line, and a collapsed technical appendix. Carries the reusable render-and-deliver-a-visual recipe."
 name: report-task-outcome
 mode: inline
 ---
@@ -24,9 +24,10 @@ At the end of any task you report to the user (a merged PR, a completed engineer
    - `НЕТ — backend/infra/agent-internal; проверяемо так: <test / behaviour / command>`. For a **hook-driven / agent-internal** deliverable (runs automatically in SessionStart, a guard, etc.) phrase the verify line as the **automatic trigger** — "работает само при старте сессии, тебе делать ничего не нужно" — never "запусти X" (the user reads a bare command as a new per-session chore).
 4. **📐 Отличия от утверждённого макета — MANDATORY when the shipped slice is a PARTIAL cut of a canvas-approved surface** (a vendored `design-source/*.dc.html` exists and the delivered render is not yet the full canvas). Before the owner opens the visual, list what is **intentionally absent vs. the canvas** and where each piece lands — element → Issue # / wave (e.g. «карточки без спикеров/тегов/CTA → #557; фасеты, календарная лента, поиск → wave-2; финальная сверка с канвасом → Stage-B гейт #559»). The owner compares every screenshot against the approved mockup — a spec-sanctioned staged slice with no delta line reads as an unexplained design regression (2026-07-07: «почему всё выглядит совсем не так, как было спроектировано?» on the wave-1 `/webinars` listing). Skip only when the render IS the full canvas or the surface has no canvas.
 5. **Откуда всплыло / где в очереди:** one line of task-chain context (which epic/issue, why now) — on the report AND on any mid-thread decision request.
-6. **Трекер:** PR #, Issue #, board Status, what was unblocked/closed.
-7. **▸ Технически (collapsed appendix, at the END):** files, tokens, changeset, CI — full detail on request only. The report reads as a product report, not a diff.
-8. **Дальше / отложено:** next queue item, deferred items + why.
+6. **📈 % от запланированного — MANDATORY (owner standard, 2026-07-08):** shipped-vs-planned as explicit ratios, **computed from the tracker graph** (closed vs total via `gh`), never estimated by eye. Three levels, as many as apply: (a) **session** — units shipped / units planned this session (e.g. «3/6 = 50%», with the stop reason when under plan); (b) **feature** — handlers closed / handlers total for the active spec; (c) **epic/milestone** — closed / total Issues. A wave/orchestration closeout summary is a completion report and carries this section too.
+7. **Трекер:** PR #, Issue #, board Status, what was unblocked/closed.
+8. **▸ Технически (collapsed appendix, at the END):** files, tokens, changeset, CI — full detail on request only. The report reads as a product report, not a diff.
+9. **Дальше / отложено:** next queue item, deferred items + why.
 
 ## Owner-question shape (mandatory gate)
 
@@ -50,6 +51,7 @@ A confirmation or report visual the user **cannot see** is worthless — images 
 ## Failure modes
 
 - **Asking for visual confirmation while the screenshot is only in the agent's CLI** — the user cannot see `Read` images; deliver to a folder and open it.
+- **A report without the «📈 % от запланированного» section** — the owner cannot see what was done product-wise or how much of the plan landed; the ratio is a required field of the shape (owner directive 2026-07-08), not optional prose. Applies to wave/orchestration closeouts too.
 - **Engineering-jargon-first report** with no product framing and no explicit visual-to-check line — including a **wave/orchestration closeout summary**: the shape applies to every user-facing completion report (multi-Issue wave summaries too), and a mechanism-named deliverable with no product entity («гард жизненного цикла» — чего?) is this failure even when everything merged green (session 35991795).
 - **Omitting the before/after** for a visible-UI change, or showing only the "after".
 - **Shipping a partial slice of a canvas-approved surface with no «📐 Отличия от макета» line** — burying the deferrals in the collapsed appendix guarantees the owner's "this isn't the mockup" reaction (2026-07-07 `/webinars` wave-1).

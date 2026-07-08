@@ -1,0 +1,6 @@
+{
+  "number": 605,
+  "labels": [{ "name": "tooling" }],
+  "files": [{ "path": "tools/lint/foo.ts" }],
+  "body": "## Summary\n\nTooling fix.\n\nCloses #80\n\nauthor:claude"
+}

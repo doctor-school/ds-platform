@@ -1,0 +1,6 @@
+{
+  "number": 606,
+  "labels": [{ "name": "feature" }],
+  "files": [{ "path": "apps/api/src/foo/foo.controller.ts" }],
+  "body": "## Summary\n\nImplements the handler.\n\nCloses #81\n\nauthor:claude"
+}

@@ -1,0 +1,119 @@
+{
+  "app": {
+    "title": "Doctor.School — Администрирование",
+    "brand": "Doctor.School",
+    "eyebrow": "Панель администратора",
+    "nav": {
+      "events": "Мероприятия"
+    },
+    "signOut": "Выйти"
+  },
+  "common": {
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "back": "Назад",
+    "loading": "Загрузка…",
+    "yes": "Да",
+    "no": "Нет",
+    "required": "Обязательное поле",
+    "notSet": "—"
+  },
+  "login": {
+    "title": "Вход для администраторов",
+    "description": "Доступ к панели администрирования Doctor.School.",
+    "email": "Электронная почта",
+    "password": "Пароль",
+    "emailPlaceholder": "admin@doctor.school",
+    "submit": "Войти",
+    "otpTitle": "Введите код из письма",
+    "otpDescription": "Мы отправили одноразовый код на вашу почту.",
+    "otpCode": "Код из письма",
+    "otpSubmit": "Подтвердить и войти",
+    "errorGeneric": "Не удалось войти. Проверьте данные и попробуйте снова.",
+    "errorForbidden": "У этой учётной записи нет прав администратора.",
+    "signedInAs": "Вы вошли как {email}"
+  },
+  "events": {
+    "listTitle": "Мероприятия",
+    "listDescription": "Все вебинары платформы — от черновика до архива.",
+    "createButton": "Создать мероприятие",
+    "empty": "Мероприятий пока нет. Создайте первое.",
+    "columns": {
+      "title": "Название",
+      "school": "Школа / серия",
+      "startsAt": "Дата и время (МСК)",
+      "state": "Статус",
+      "stream": "Трансляция",
+      "actions": "Действия"
+    },
+    "streamConfigured": "Настроена",
+    "streamMissing": "Не настроена",
+    "mskSuffix": "МСК",
+    "edit": "Редактировать",
+    "createTitle": "Новое мероприятие",
+    "editTitle": "Редактирование мероприятия",
+    "sections": {
+      "details": "Основные сведения",
+      "speakers": "Спикеры",
+      "program": "Программа (PDF)",
+      "stream": "Настройка трансляции",
+      "lifecycle": "Жизненный цикл"
+    },
+    "fields": {
+      "title": "Название",
+      "school": "Школа / серия",
+      "startsAtMsk": "Дата и время (МСК)",
+      "startsAtHint": "Время указывается по Москве (МСК) и хранится как один момент времени.",
+      "durationMin": "Длительность (мин)",
+      "description": "Описание",
+      "specialties": "Целевые специальности",
+      "specialtiesHint": "Через запятую (например: cardiology, therapy).",
+      "partnerRef": "Спонсор / партнёр",
+      "speakerName": "Имя",
+      "speakerRegalia": "Регалии",
+      "addSpeaker": "Добавить спикера",
+      "removeSpeaker": "Удалить",
+      "programPdf": "Файл программы (PDF)",
+      "programPdfCurrent": "Текущий файл",
+      "programPdfReplaceHint": "Загрузка нового файла заменит текущий — публичная страница будет отдавать новый файл.",
+      "provider": "Провайдер",
+      "embedRef": "Идентификатор трансляции (embed)",
+      "embedRefHint": "Идентификатор потока у провайдера — не URL."
+    },
+    "providers": {
+      "rutube": "RuTube",
+      "youtube": "YouTube"
+    },
+    "state": {
+      "draft": "Черновик",
+      "published": "Опубликовано",
+      "live": "В эфире",
+      "ended": "Завершено",
+      "archived": "В архиве"
+    },
+    "action": {
+      "publish": "Опубликовать",
+      "open": "Открыть эфир",
+      "close": "Закрыть эфир",
+      "archive": "Архивировать",
+      "configureStream": "Сохранить настройки трансляции",
+      "none": "Нет доступных переходов из текущего статуса."
+    },
+    "toast": {
+      "created": "Мероприятие создано (черновик).",
+      "updated": "Изменения сохранены.",
+      "streamConfigured": "Настройки трансляции сохранены.",
+      "transitioned": "Статус обновлён.",
+      "programReplaced": "Файл программы заменён."
+    },
+    "errors": {
+      "createFailed": "Не удалось создать мероприятие.",
+      "updateFailed": "Не удалось сохранить изменения.",
+      "streamFailed": "Не удалось сохранить настройки трансляции.",
+      "transitionRefused": "Недопустимый переход статуса — действие отклонено сервером.",
+      "invalidPdf": "Файл программы должен быть в формате PDF.",
+      "invalidDateTime": "Укажите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ (МСК).",
+      "notFound": "Мероприятие не найдено."
+    }
+  }
+}

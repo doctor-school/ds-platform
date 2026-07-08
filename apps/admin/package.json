@@ -1,5 +1,44 @@
 {
   "name": "@ds/admin",
-  "version": "0.0.0",
-  "private": true
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DS Platform admin — admin.doctor.school (Next.js 16 + Refine CSR shell, ADR-0004 §3/§5). Feature 007 event-admin surface.",
+  "scripts": {
+    "dev": "next dev -p 3200",
+    "build": "next build",
+    "start": "next start -p 3200",
+    "lint": "next lint || true",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "bddgen && playwright test",
+    "test:axe": "playwright test --config=playwright.axe.config.ts"
+  },
+  "dependencies": {
+    "@ds/design-system": "workspace:*",
+    "@ds/schemas": "workspace:*",
+    "@refinedev/core": "^4.57.10",
+    "@refinedev/nextjs-router": "^6.2.3",
+    "lucide-react": "^1.23.0",
+    "next": "16.2.10",
+    "next-intl": "^4.13.1",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "react-hook-form": "^7.81.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/test": "^1.61.1",
+    "@tailwindcss/postcss": "^4.3.2",
+    "@types/node": "^26.1.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "playwright-bdd": "^9.2.0",
+    "postcss": "^8.5.16",
+    "tailwindcss": "^4.3.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
 }

@@ -139,6 +139,26 @@ export default [
     },
   },
   {
+    // 007 EARS-10 — RU-i18n coverage gate for the admin event surface (#595).
+    // Every user-facing string on the admin pages/components MUST flow through the
+    // next-intl catalog (`apps/admin/messages/ru.json`) via `useTranslations`, so
+    // RU coverage is guaranteed and the English-leak class is prevented (mirrors
+    // the portal auth-surface gate above). Scoped to the admin app/component tree
+    // (not the config/provider plumbing, which carries no display copy). Rides the
+    // existing `eslint .` → `lint` CI job.
+    files: [
+      "apps/admin/app/**/*.tsx",
+      "apps/admin/components/**/*.tsx",
+    ],
+    languageOptions: {
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    plugins: { local: localRules },
+    rules: {
+      "local/no-hardcoded-display-string": "error",
+    },
+  },
+  {
     // #234 — design-system lint guardrails (spec §4), Layer-3 (project ESLint
     // rules) + the rhythmguard scale gate, blocking on the `apps/**` surfaces.
     // These ride the existing `eslint .` → `lint` CI job (no new job) and the

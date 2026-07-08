@@ -47,4 +47,37 @@ describe("spec-status-lint", () => {
     expect(code).toBe(0);
     expect(stdout).toContain("no feature:NNN-<slug> label");
   });
+
+  // #608 — a missing feature label must not produce a vacuous pass when the PR
+  // closes an ears-handler Issue (PR #606 green-lit a Draft spec exactly this way).
+  it("red: PR closes a kind:ears-handler Issue but carries no feature:NNN-<slug> label → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      caseDir("spec-status", "red-ears-no-label"),
+      { env: prEnv("604", "red-ears-no-label") },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("kind:ears-handler");
+    expect(stderr).toContain("feature:NNN-<slug>");
+  });
+
+  it("skip: unlabeled PR closes only non-ears Issues (tooling/hotfix/docs) → exit 0", () => {
+    const { code, stdout } = runGuard(
+      GUARD,
+      caseDir("spec-status", "skip-non-ears-closes"),
+      { env: prEnv("605", "skip-non-ears-closes") },
+    );
+    expect(code).toBe(0);
+    expect(stdout).toContain("no feature:NNN-<slug> label");
+  });
+
+  it("red: unlabeled PR's linked Issue cannot be fetched → fail closed, exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      caseDir("spec-status", "red-ears-fetch-fail"),
+      { env: prEnv("606", "red-ears-fetch-fail") },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("could not fetch");
+  });
 });

@@ -62,3 +62,6 @@ apps/docs/brandbook/
 
 # wrap-init local audit state (machine-specific /wrap-init re-run state, not repo content — #484)
 .claude/commands/.wrap-init.json
+
+# playwright-bdd generated tests + reports (apps/admin, #595)
+.features-gen/

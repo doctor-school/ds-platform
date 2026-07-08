@@ -1,0 +1,7 @@
+/*
+ * Admin global stylesheet. Pulls in the shared design-system tokens, which in
+ * turn import Tailwind and declare the `:root` / `.dark` theme variables. The
+ * admin app owns no tokens of its own — the single source of truth lives in
+ * @ds/design-system (ADR-0004 §6.3, 007 EARS-11 token discipline).
+ */
+@import "@ds/design-system/globals.css";

@@ -21,12 +21,23 @@ interface AuthzSubject {
  * served — so a classification gap can never be exploited between merge and the
  * next CI run.
  *
- * SEAM — authentication & policy: populating the request subject (session/JWT)
- * is the 003 BFF work (F2, #86) and object-level `policy` evaluation is the
- * `IPolicyEngine` (ADR-0002 §3.2 / DSO-27). Until those land, the guard enforces
+ * SEAM — authentication & object-level policy: populating the request subject
+ * (session/JWT) is the 003 BFF work (F2, #86), and OBJECT-LEVEL (ABAC) `policy`
+ * evaluation — a `policy` route that declares `objectAttrs` (e.g.
+ * `course.author_id == actor.id`) — is delegated to the `IPolicyEngine`
+ * (ADR-0002 §3.2 / DSO-27), which is not yet wired; such a route stays
+ * fail-closed until it lands.
+ *
+ * A `policy` route WITHOUT `objectAttrs` is a **resource-scoped domain policy**:
+ * the authorization decision depends on the resource (e.g. the 006 room gate —
+ * is this doctor registered for this event, is the event `live`) and is
+ * evaluated by the classified handler/service against its read models, refusing
+ * server-side. `policy` (not `fast-path`) records that the role alone is not
+ * sufficient; the guard still enforces the role as the necessary precondition
+ * and lets the handler evaluate the resource-scoped rule. The guard enforces
  * what it can fail-closed: deny unclassified, allow `public`, require a subject
- * with a matching role for `fast-path`, and deny `policy` outright. No v1 auth
- * endpoint uses `policy` (spec §7.2), so nothing is blocked that should serve.
+ * with a matching role for `fast-path` and resource-scoped `policy`, and deny an
+ * object-level `policy` (objectAttrs present) outright until DSO-27.
  */
 @Injectable()
 export class AuthzGuard implements CanActivate {
@@ -62,15 +73,20 @@ export class AuthzGuard implements CanActivate {
       throw new UnauthorizedException("authentication required");
     }
 
-    if (meta.check === "policy") {
-      // Object-level evaluation via IPolicyEngine is wired in DSO-27. Fail-closed
-      // until then; the v1 auth set never reaches this branch (spec §7.2).
+    if (meta.check === "policy" && (meta.objectAttrs?.length ?? 0) > 0) {
+      // Object-level (ABAC) evaluation via IPolicyEngine is wired in DSO-27.
+      // Fail-closed until then. A resource-scoped `policy` WITHOUT objectAttrs
+      // (e.g. the 006 room gate) does not reach here — it falls through to the
+      // role check below, then its handler evaluates the domain rule.
       throw new ForbiddenException(
-        "policy-engine evaluation is not yet wired (DSO-27)",
+        "object-level policy evaluation is not yet wired (DSO-27)",
       );
     }
 
-    // fast-path — in-guard RBAC role check.
+    // fast-path (and resource-scoped `policy` without objectAttrs) — in-guard
+    // RBAC role check; the role is the necessary precondition. For a
+    // resource-scoped `policy` the classified handler then evaluates the domain
+    // rule (registered ∧ live, …) and refuses server-side.
     const held = new Set(subject.roles ?? []);
     const required = (meta.roles ?? []) as Role[];
     if (!required.some((r) => held.has(r))) {

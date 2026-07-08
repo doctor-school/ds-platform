@@ -6,6 +6,7 @@
 | GET /v1/admin/events/:id               | authenticated | platform_admin | fast-path  | —            | false   | none        | EARS-8                          |
 | GET /v1/auth/session                   | authenticated | doctor_guest   | fast-path  | —            | false   | low-stakes  | EARS-8                          |
 | GET /v1/events/:idOrSlug/registration  | authenticated | doctor_guest   | fast-path  | —            | false   | none        | EARS-1, EARS-10                 |
+| GET /v1/events/:idOrSlug/room          | authenticated | doctor_guest   | policy     | —            | false   | none        | EARS-1, EARS-8                  |
 | GET /v1/health                         | public        | —              | none       | —            | false   | none        | EARS-1                          |
 | GET /v1/me/events                      | authenticated | doctor_guest   | fast-path  | —            | false   | none        | EARS-6, EARS-7, EARS-10         |
 | GET /v1/public/events                  | public        | —              | none       | —            | false   | none        | EARS-7, EARS-10                 |

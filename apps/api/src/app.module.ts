@@ -14,6 +14,7 @@ import { ObservabilityModule } from "./observability/observability.module.js";
 import { StorageModule } from "./storage/storage.module.js";
 import { EventsModule } from "./events/events.module.js";
 import { RegistrationModule } from "./registration/registration.module.js";
+import { RoomModule } from "./room/room.module.js";
 
 @Module({
   imports: [
@@ -44,6 +45,9 @@ import { RegistrationModule } from "./registration/registration.module.js";
     // 005 registration write + per-user EventRegistrationState read
     // (doctor_guest-authenticated).
     RegistrationModule,
+    // 006 webinar-room server-side admission gate + RoomConfig grant read
+    // (doctor_guest-authenticated, registration-and-live `policy` gate).
+    RoomModule,
     HealthModule,
     ReadinessModule,
   ],

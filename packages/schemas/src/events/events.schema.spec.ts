@@ -220,6 +220,30 @@ describe("007 events schema", () => {
         }).embedRef,
       ).toBe("vid-42");
     });
+
+    it("EARS-3: rejects a URL-shaped embed reference (a provider-scoped id is never a URL)", () => {
+      // The embed reference is a provider-scoped stream id — pasting the whole
+      // share link is the legacy mistake (recon §5), refused at the boundary.
+      for (const url of [
+        "https://rutube.ru/video/abc123/",
+        "http://youtu.be/dQw4w9WgXcQ",
+        "www.youtube.com/watch?v=abc",
+        "rutube://embed/xyz",
+      ]) {
+        expect(
+          ConfigureStreamRequestSchema.safeParse({ provider: "rutube", embedRef: url })
+            .success,
+          `URL-shaped embedRef must be rejected: ${url}`,
+        ).toBe(false);
+      }
+      // A bare provider-scoped id is still accepted.
+      expect(
+        ConfigureStreamRequestSchema.safeParse({
+          provider: "youtube",
+          embedRef: "dQw4w9WgXcQ",
+        }).success,
+      ).toBe(true);
+    });
   });
 
   describe("UpdateEventRequestSchema (EARS-2 — partial edit, no defaults)", () => {

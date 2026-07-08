@@ -121,18 +121,47 @@ export const StreamProviderSchema = z.enum(STREAM_PROVIDERS);
 export type StreamProvider = z.infer<typeof StreamProviderSchema>;
 
 /**
+ * A value that LOOKS LIKE a URL — a scheme separator (`://`), a leading
+ * `http(s):`, or a leading `www.`. An `embedRef` must be a provider-scoped stream
+ * id, never a URL to be sniffed (EARS-3, the legacy mistake recon §5), so the SSOT
+ * rejects a URL-shaped value at the boundary — the server AND the admin form (which
+ * derives its client validation from this schema) agree, and a wrong "paste the
+ * whole share link" entry is refused rather than silently persisted for the 006
+ * room to choke on.
+ */
+export const EMBED_REF_LOOKS_LIKE_URL = /:\/\/|^\s*(?:https?:|www\.)/i;
+
+/**
+ * The `embedRef` field validator (EARS-3) — a bounded free token that is a
+ * provider-scoped stream id / embed reference, **never a URL**. Trimmed, 1–300
+ * chars, and refused when it is URL-shaped ({@link EMBED_REF_LOOKS_LIKE_URL}). The
+ * single SSOT the api DTO and the admin client resolver both read, so the two can
+ * never drift.
+ */
+// NB: deliberately NO baked `message` on the refine — a zod v4 schema-level
+// message outranks a consumer's per-parse error map, which would leak English
+// into the admin form's RU rendering (the 003 precedent, #200). Consumers key
+// on the `custom` issue code + `embedRef` path instead.
+export const EmbedRefSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(300)
+  .refine((value) => !EMBED_REF_LOOKS_LIKE_URL.test(value));
+
+/**
  * `ConfigureStream` request body (EARS-3). Records `{ provider, embedRef }`: the
  * provider is an explicit member of the closed enum (an out-of-enum value is a
  * 400 at the I/O boundary, before any handler runs, so no config is recorded for
  * an unknown provider); `embedRef` is the **provider-scoped stream id / embed
- * reference**, a bounded free token — never a URL to be sniffed. Configuring is
- * an idempotent upsert (one config per event); it is correctable while the event
- * is `published` (US-3), so a wrong reference is fixed with an edit, never a
- * state reversal.
+ * reference** ({@link EmbedRefSchema}), a bounded free token — never a URL to be
+ * sniffed. Configuring is an idempotent upsert (one config per event); it is
+ * correctable while the event is `published` (US-3), so a wrong reference is fixed
+ * with an edit, never a state reversal.
  */
 export const ConfigureStreamRequestSchema = z.object({
   provider: StreamProviderSchema,
-  embedRef: z.string().trim().min(1).max(300),
+  embedRef: EmbedRefSchema,
 });
 export type ConfigureStreamRequest = z.infer<
   typeof ConfigureStreamRequestSchema
@@ -173,10 +202,10 @@ export const CreateEventRequestSchema = z.object({
   title: z.string().trim().min(1).max(300),
   /** School / series kicker. */
   school: z.string().trim().min(1).max(200),
-  /** Date + time entered as МСК wall-clock (`YYYY-MM-DDTHH:mm`); stored as one canonical instant. */
-  startsAtMsk: z.string().regex(MSK_LOCAL_DATETIME, {
-    message: "expected a МСК wall-clock datetime (YYYY-MM-DDTHH:mm)",
-  }),
+  /** Date + time entered as МСК wall-clock (`YYYY-MM-DDTHH:mm`); stored as one
+   * canonical instant. NO baked `message` — it would outrank a consumer's
+   * per-parse error map and leak English into the admin RU rendering (#200). */
+  startsAtMsk: z.string().regex(MSK_LOCAL_DATETIME),
   durationMin: z.coerce
     .number()
     .int()
@@ -210,13 +239,9 @@ export type CreateEventRequest = z.infer<typeof CreateEventRequestSchema>;
 export const UpdateEventRequestSchema = z.object({
   title: z.string().trim().min(1).max(300).optional(),
   school: z.string().trim().min(1).max(200).optional(),
-  /** Date + time re-entered as МСК wall-clock (`YYYY-MM-DDTHH:mm`); re-folded into one canonical instant. */
-  startsAtMsk: z
-    .string()
-    .regex(MSK_LOCAL_DATETIME, {
-      message: "expected a МСК wall-clock datetime (YYYY-MM-DDTHH:mm)",
-    })
-    .optional(),
+  /** Date + time re-entered as МСК wall-clock (`YYYY-MM-DDTHH:mm`); re-folded
+   * into one canonical instant. NO baked `message` (see create schema note). */
+  startsAtMsk: z.string().regex(MSK_LOCAL_DATETIME).optional(),
   durationMin: z.coerce
     .number()
     .int()

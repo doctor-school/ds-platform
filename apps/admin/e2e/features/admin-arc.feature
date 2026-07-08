@@ -57,3 +57,33 @@ Feature: Minimal event admin — one operator creates, streams, runs, and archiv
     Given a doctor_guest caller with a session
     When the caller opens the events page
     Then the caller is bounced to the login screen
+
+  @EARS-10 @validation @failure
+  Scenario: The create form refuses invalid input with rendered RU validation errors
+    Given a platform_admin operator in the admin app
+    When the operator submits the create-event form with no fields filled
+    Then the form shows the RU validation error "Обязательное поле."
+    And the form shows the RU validation error "Укажите дату и время (МСК)."
+    And the operator stays on the create-event screen
+    When the operator enters "0" as the duration
+    Then the form shows the RU validation error "Длительность — целое число минут, не меньше 1."
+    When the operator adds a speaker and leaves the name empty
+    Then the form shows the RU validation error "Укажите имя спикера или удалите строку."
+    When the operator attaches a non-PDF program file
+    Then the form shows the RU validation error "Файл программы должен быть в формате PDF."
+
+  @EARS-3 @validation @failure
+  Scenario: A URL pasted as the stream embed reference is refused client-side with an RU error
+    Given a platform_admin operator in the admin app
+    When the operator creates a draft event with a program PDF
+    And the operator saves the stream with embed reference "https://rutube.ru/video/abc/"
+    Then the form shows the RU validation error "Укажите идентификатор потока у провайдера, а не ссылку (URL)."
+    And the stream configuration is not saved
+
+  @EARS-10 @validation @happy
+  Scenario: A corrected create form clears the errors and creates the event
+    Given a platform_admin operator in the admin app
+    When the operator submits the create-event form with no fields filled
+    Then the operator stays on the create-event screen
+    When the operator creates a draft event with a program PDF
+    Then the event is shown in the "draft" state

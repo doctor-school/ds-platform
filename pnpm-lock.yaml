@@ -83,6 +83,9 @@ importers:
       '@ds/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
+      '@hookform/resolvers':
+        specifier: ^5.2.2
+        version: 5.4.0(react-hook-form@7.81.0(react@19.2.7))
       '@refinedev/core':
         specifier: ^4.57.10
         version: 4.58.0(@tanstack/react-query@4.44.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)

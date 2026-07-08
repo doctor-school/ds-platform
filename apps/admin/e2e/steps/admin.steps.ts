@@ -190,6 +190,9 @@ Then("no lifecycle action is offered", async ({ page }) => {
 });
 
 Then("the stream provider choices are exactly rutube and youtube", async ({ page }) => {
+  // `evaluateAll` has no auto-wait — anchor on the rendered select first (the edit
+  // page loads the detail via useOne, so the stream form appears a beat later).
+  await expect(page.getByTestId("provider")).toBeVisible();
   const options = await page
     .getByTestId("provider")
     .locator("option")
@@ -218,4 +221,69 @@ Then("no untranslated catalog key is visible on the surface", async ({ page }) =
 Then("the caller is bounced to the login screen", async ({ page }) => {
   await page.waitForURL(/\/login/);
   await expect(page.getByTestId("login-submit")).toBeVisible();
+});
+
+// ── #665 client-side validation with rendered RU errors ──────────────────────
+
+When(
+  "the operator submits the create-event form with no fields filled",
+  async ({ page }) => {
+    await page.goto("/events/create");
+    await expect(page.getByTestId("event-form")).toBeVisible();
+    await page.getByTestId("submit-event").click();
+  },
+);
+
+When("the operator enters {string} as the duration", async ({ page }, value: string) => {
+  await page.locator("#durationMin").fill(value);
+  // `mode: onTouched` — blur surfaces the inline error without a submit.
+  await page.locator("#durationMin").blur();
+});
+
+When(
+  "the operator adds a speaker and leaves the name empty",
+  async ({ page }) => {
+    await page.getByTestId("add-speaker").click();
+    await expect(page.getByTestId("speaker-name-0")).toBeVisible();
+    // Re-submit: the row was added AFTER the first submit, and RHF revalidates
+    // an untouched field only on the next submit — which surfaces the required
+    // speaker-name error inline under the new row.
+    await page.getByTestId("submit-event").click();
+  },
+);
+
+When("the operator attaches a non-PDF program file", async ({ page }) => {
+  await page.getByTestId("program-pdf").setInputFiles({
+    name: "program.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("not a pdf"),
+  });
+  await expect(page.getByTestId("program-pdf-error")).toBeVisible();
+});
+
+When(
+  "the operator saves the stream with embed reference {string}",
+  async ({ page }, ref: string) => {
+    await page.getByTestId("embed-ref").fill(ref);
+    await page.getByTestId("save-stream").click();
+  },
+);
+
+Then(
+  "the form shows the RU validation error {string}",
+  async ({ page }, message: string) => {
+    // The error renders inline (role=alert) under its control, in Russian (EARS-10).
+    const error = page.getByText(message, { exact: false }).first();
+    await expect(error).toBeVisible();
+    await expect(error).toHaveText(/[А-Яа-яЁё]/);
+  },
+);
+
+Then("the operator stays on the create-event screen", async ({ page }) => {
+  await expect(page).toHaveURL(/\/events\/create/);
+  await expect(page.getByTestId("event-form")).toBeVisible();
+});
+
+Then("the stream configuration is not saved", async ({ page }) => {
+  await expect(page.getByTestId("stream-ok")).toHaveCount(0);
 });

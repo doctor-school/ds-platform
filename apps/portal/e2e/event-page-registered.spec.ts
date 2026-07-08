@@ -91,3 +91,86 @@ test.describe("005 EARS-4 registered-state overlay on the event page (e2e)", () 
     ).toHaveCount(0);
   });
 });
+
+/**
+ * 005 EARS-5 — for a registered doctor the event page signposts HOW/WHEN they
+ * will join. This binds the two registered signpost modes to the live stand:
+ *   • `upcoming` → the МСК start date/time is on the page + a «вы записаны»
+ *     confirmation (EARS-5 + EARS-11: no viewer-local drift — the МСК unit is
+ *     unit-tested in `lib/msk-signpost.test.ts` with a `timezoneId` override here);
+ *   • `live` → an obvious ONWARD path toward the room (feature 006 route
+ *     `/webinars/:slug/room`), asserted as the routing target only (006 owns the
+ *     room + admission).
+ *
+ * Same live-stand-gated tier as the EARS-4 block above: it needs a running portal
+ * + api + a seeded event and a registered doctor. The registered-`live` case also
+ * needs a seeded event in the `live` lifecycle state (`E2E_WEBINAR_SLUG_LIVE`) —
+ * the 005↔007 fixture seam (lifecycle transitions are feature 007); it `test.skip`s
+ * when that seed is absent so the suite stays inert on a bare stand.
+ */
+const SLUG_LIVE = process.env.E2E_WEBINAR_SLUG_LIVE;
+// The Europe/Moscow render must not drift to the browser's timezone (EARS-11): the
+// whole EARS-5 block runs under a deliberately non-Moscow browser TZ.
+test.use({ timezoneId: "Asia/Tokyo" });
+
+test.describe("005 EARS-5 registered join signposting on the event page (e2e)", () => {
+  test("005 EARS-5: registered + upcoming — the page signposts the МСК start and «вы записаны», no register CTA", async ({
+    page,
+  }) => {
+    test.skip(
+      !DOCTOR_EMAIL || !DOCTOR_PASSWORD,
+      "requires a doctor account registered for the seeded upcoming event",
+    );
+
+    await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
+    await page.getByLabel(/почта|email/i).fill(DOCTOR_EMAIL!);
+    await page.getByLabel(/пароль|password/i).fill(DOCTOR_PASSWORD!);
+    await page.getByRole("button", { name: /войти|продолжить/i }).click();
+    await page.waitForURL(/\/account|\/webinars/);
+
+    await page.goto(`${BASE}/webinars/${SLUG}`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    // The registered confirmation is present…
+    await expect(
+      page.getByText("Вы записаны", { exact: false }).first(),
+    ).toBeVisible();
+    // …the МСК start is signposted (the «МСК» label rides the status-card time
+    // plate) regardless of the Asia/Tokyo browser timezone (EARS-11, no drift)…
+    await expect(page.getByText("МСК", { exact: false }).first()).toBeVisible();
+    // …and no register CTA is re-offered.
+    await expect(
+      page.getByRole("link", { name: "Участвовать", exact: true }),
+    ).toHaveCount(0);
+  });
+
+  test("005 EARS-5: registered + live — the page shows an obvious onward path to the room (feature 006 route)", async ({
+    page,
+  }) => {
+    test.skip(
+      !SLUG_LIVE || !DOCTOR_EMAIL || !DOCTOR_PASSWORD,
+      "requires a seeded LIVE event + a doctor registered for it (005↔007 fixture seam)",
+    );
+
+    await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
+    await page.getByLabel(/почта|email/i).fill(DOCTOR_EMAIL!);
+    await page.getByLabel(/пароль|password/i).fill(DOCTOR_PASSWORD!);
+    await page.getByRole("button", { name: /войти|продолжить/i }).click();
+    await page.waitForURL(/\/account|\/webinars/);
+
+    await page.goto(`${BASE}/webinars/${SLUG_LIVE}`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    // The confirmation is present (a registered doctor is signposted, not gated)…
+    await expect(
+      page.getByText("Вы записаны", { exact: false }).first(),
+    ).toBeVisible();
+    // …and the onward path targets the 006 room route for THIS event — 005 asserts
+    // the ROUTE only (`/webinars/:slug/room`), not that the room admits.
+    const roomLink = page.getByRole("link", { name: "Войти в эфир", exact: true });
+    await expect(roomLink).toBeVisible();
+    await expect(roomLink).toHaveAttribute("href", `/webinars/${SLUG_LIVE}/room`);
+  });
+});

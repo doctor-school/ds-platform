@@ -39,21 +39,37 @@ AIR_WINDOW_MS`), with the lifecycle STATE the primary filter — `ended`/`archiv
   registrations, never another doctor's (EARS-10); a just-registered event appears
   on the next read (EARS-7).
 
+**EARS-8** adds the durable `EventRoster` read model on top of the record:
+
+- `EventRoster` (`RegistrationService.eventRoster(idOrSlug)`) — the set of
+  **current** registrations for one event, each carrying no more than the
+  `(doctor, event, registeredAt)` fact (`{ userId, eventId, registeredAt }`).
+  Wave 1 has **no** cancelled state and no soft-delete (owner decision), so the
+  roster is every registration row for the event — no filter, every entry
+  current. It is the durable basis **consumed** by feature 006 (room admission)
+  and the wave-2 sponsor report; 005 owns and tests it here (cross-feature wiring
+  is not done here). It is an **internal** read with **no HTTP route** — never
+  exposed on a 004 public surface, and it selects only the three record columns
+  (no join to the `users` mirror), so no registrant PII is ever read or leaked
+  (EARS-8, EARS-10; cross-checked against the public projection).
+
 ## Exported symbols
 
 - `RegistrationModule` — the Nest module (both controllers + service +
   repository).
 - `RegistrationService` — the `RegisterForEvent` command, the
-  `EventRegistrationState` read, and the `MyEvents` list; resolves the acting
-  doctor's `user_id` from the authenticated Zitadel `sub` (003 mirror) and the
-  target event from its slug/id (007 read model). Domain errors:
-  `EventNotRegistrableError` (→ 409), `RegistrationEventNotFoundError` (→ 404),
-  `UnknownSubjectError` (→ 401).
+  `EventRegistrationState` read, the `MyEvents` list, and the internal
+  `EventRoster` read (`eventRoster`, consumed in-process by 006 + the report);
+  resolves the acting doctor's `user_id` from the authenticated Zitadel `sub`
+  (003 mirror) and the target event from its slug/id (007 read model). Domain
+  errors: `EventNotRegistrableError` (→ 409), `RegistrationEventNotFoundError`
+  (→ 404), `UnknownSubjectError` (→ 401).
 - `RegistrationController` — the `/events/:idOrSlug/registration` write + state
   read; `MyEventsController` — the `/me/events` list (`/me` path prefix, the
   caller's own resources). Both `doctor_guest`-authenticated (EARS-10).
 - `RegistrationRepository` — Drizzle access: writes the `registrations` record;
-  reads `events` (007) and `users` (003) read-only, including the `MyEvents` join.
+  reads `events` (007) and `users` (003) read-only, including the `MyEvents` join
+  and the `findEventRoster` roster read (record columns only, no PII join).
 
 **EARS-3** layers the one-registration invariant on top of that record:
 
@@ -75,9 +91,10 @@ DO NOTHING` upsert + read-back: a repeat via **any** path (one-tap,
 
 - The durable `registrations` record shape is `(id, user_id, event_id,
 registered_at)` — no cancelled state in wave 1 (owner decision). The
-  `EventRoster` (the roster's membership basis, consumed by 006 + the wave-2
-  sponsor report) is "every registration row for the event" — its read model is
-  the sibling **EARS-8** handler on top of this record.
+  `EventRoster` read model (the roster's membership basis, **EARS-8**, consumed
+  by 006 + the wave-2 sponsor report) is "every registration row for the event" —
+  landed here as `eventRoster` / `findEventRoster`; the cross-feature consumers
+  are 006 (admission) and the report vertical, not wired here.
 - The broader per-user reads — the event-page overlay that leaves 004's public
   cache untouched (**EARS-4**), `MyEvents` / «мои события» (**EARS-6**) — and the
   guest-through-auth event-context carry (**EARS-2**) build on this command.

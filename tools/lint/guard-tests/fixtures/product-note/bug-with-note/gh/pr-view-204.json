@@ -1,0 +1,5 @@
+{
+  "number": 204,
+  "body": "## Summary\n\nFix the event date showing in the wrong timezone.\n\n## Product note (RU)\n\nДата и время вебинара теперь показываются в часовом поясе врача, а не сервера — раньше событие могло выглядеть сдвинутым на несколько часов.\n\n## Linked\n\nCloses #197\n",
+  "labels": [{ "name": "bug" }]
+}

@@ -54,6 +54,7 @@ export const GUARDS = [
   { name: "spec-link", file: "spec-link-lint.ts" },
   { name: "prior-decisions", file: "prior-decisions-lint.ts" },
   { name: "spec-status-fresh", file: "spec-status-lint.ts" },
+  { name: "product-note", file: "product-note-lint.ts" },
 ];
 
 /**

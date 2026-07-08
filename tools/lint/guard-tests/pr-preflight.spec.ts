@@ -18,12 +18,13 @@ import {
  * (imports the pure exports, never fires `main()`).
  */
 describe("pr-preflight GUARDS roster", () => {
-  it("runs exactly the four PR-event-gated guards", () => {
+  it("runs exactly the five PR-event-gated guards", () => {
     expect(GUARDS.map((g) => g.name)).toEqual([
       "registry-research",
       "spec-link",
       "prior-decisions",
       "spec-status-fresh",
+      "product-note",
     ]);
   });
 

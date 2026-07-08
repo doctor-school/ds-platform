@@ -1,0 +1,5 @@
+{
+  "number": 201,
+  "body": "## Summary\n\nAdd the doctor registration flow.\n\n## Product note (RU)\n\n<!-- 2-4 sentences of the user-visible change in plain product Russian. Write `none` for internal-only PRs. -->\n\n## Linked\n\nCloses #199\n",
+  "labels": [{ "name": "feature" }]
+}

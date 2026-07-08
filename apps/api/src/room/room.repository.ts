@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { DrizzleHandle } from "@ds/db";
-import { events } from "@ds/db";
-import type { EventLifecycleState } from "@ds/schemas";
+import { events, streamConfig } from "@ds/db";
+import type { EventLifecycleState, StreamConfig } from "@ds/schemas";
 import { eq, or } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 
@@ -11,10 +11,17 @@ type Db = DrizzleHandle["db"];
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** The room gate's view of an event: its id + the single lifecycle state. */
+/**
+ * The room gate's view of an event: its id + the single lifecycle state, plus the
+ * 007-authored stream config (`{ provider, embedRef }`) the EARS-2 player is
+ * instantiated from — `null` until 007 configures it. 006 reads all three
+ * read-only from the `events` aggregate + its `stream_config` child; it never
+ * mutates them (F-22 boundary).
+ */
 export interface EventForRoom {
   id: string;
   state: EventLifecycleState;
+  streamConfig: StreamConfig | null;
 }
 
 /**
@@ -34,20 +41,39 @@ export class RoomRepository {
 
   /**
    * Resolve an event by its stable public slug OR its id (mirrors 004/005
-   * resolution) to its `{ id, state }` gating view. A non-UUID `idOrSlug`
-   * matches the slug only — never fed to the uuid `id` column, whose comparison
-   * would raise on a malformed value. `null` when no event matches.
+   * resolution) to its `{ id, state, streamConfig }` gating view. A non-UUID
+   * `idOrSlug` matches the slug only — never fed to the uuid `id` column, whose
+   * comparison would raise on a malformed value. `null` when no event matches.
+   *
+   * The stream config is `LEFT JOIN`ed (a `live` event may still be
+   * unconfigured — the 007 seam), so an unconfigured event resolves with
+   * `streamConfig: null`, which the EARS-2 read maps to the truthful "stream
+   * unavailable" room state. The provider is read from the enum column; the
+   * embedRef is a provider-scoped id — never URL-sniffed at any layer.
    */
   async findEventForRoom(idOrSlug: string): Promise<EventForRoom | null> {
     const where = UUID_RE.test(idOrSlug)
       ? or(eq(events.id, idOrSlug), eq(events.slug, idOrSlug))
       : eq(events.slug, idOrSlug);
     const [row] = await this.db
-      .select({ id: events.id, state: events.state })
+      .select({
+        id: events.id,
+        state: events.state,
+        provider: streamConfig.provider,
+        embedRef: streamConfig.embedRef,
+      })
       .from(events)
+      .leftJoin(streamConfig, eq(streamConfig.eventId, events.id))
       .where(where)
       .limit(1);
     if (!row) return null;
-    return { id: row.id, state: row.state as EventLifecycleState };
+    return {
+      id: row.id,
+      state: row.state as EventLifecycleState,
+      streamConfig:
+        row.provider !== null && row.embedRef !== null
+          ? { provider: row.provider, embedRef: row.embedRef }
+          : null,
+    };
   }
 }

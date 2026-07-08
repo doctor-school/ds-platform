@@ -78,6 +78,10 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   // ── Event-page status card (004 EARS-4, #553) — the lifecycle status swap.
   { id: "webinar-status-card", section: "primitives" },
 
+  // ── Webinar room layout (006 EARS-2/EARS-11, #578) — the webinar-room.dc.html
+  //    composition shell (desktop 1fr 400px player + chat aside; mobile tabs).
+  { id: "webinar-room", section: "primitives" },
+
   // ── Layout primitive (spec §3.2, #514) — the §09 content-column container.
   { id: "container", section: "primitives" },
 

@@ -1,4 +1,4 @@
-# `room` — webinar room admission gate (006 EARS-1)
+# `room` — webinar room admission gate + embed provider (006 EARS-1, EARS-2)
 
 The webinar-room module — the **server-side admission gate** of feature 006
 (Webinar room), the foundation the watch side builds on. It hosts the **first
@@ -17,6 +17,17 @@ the `fast-path` `doctor_guest` writes/reads).
   renders the room for an ungated caller (EARS-1, EARS-8). A direct room URL, a
   shared link, or a crafted/forged-cookie request that fails any of the three
   conditions never yields a grant.
+
+**EARS-2** adds the embed player source to the grant (additively):
+
+- The grant carries `stream` — `{ provider, embedRef } | null` — resolved from the
+  event's 007-authored stream config by `resolveRoomStream` (`provider-enum.ts`).
+  The provider is read from the **closed enum** (`rutube | youtube`), **never**
+  sniffed from the embed reference (the legacy mistake). An absent or unknown
+  provider fails **closed** to `stream: null` — the truthful "stream unavailable"
+  room state the portal renders, still a valid grant (the gate admitted the
+  caller). The `RoomRepository` `LEFT JOIN`s the `stream_config` child so an
+  unconfigured `live` event resolves with `streamConfig: null`.
 
 ## The gate — one policy, evaluated server-side
 
@@ -53,9 +64,13 @@ evaluates the resource-scoped rule and refuses server-side. See
   `RoomConfig` grant on success. Domain errors: `RoomEventNotFoundError` (→ 404),
   `NotRegisteredError` (→ 403), `RoomNotLiveError` (→ 409); the registration
   layer's `UnknownSubjectError` propagates (→ 401).
-- `RoomRepository` — the thin read-only `{ id, state }` view of the `events`
-  aggregate (the `live` condition); reads the 004/007 lifecycle state, never
-  writes it.
+- `RoomRepository` — the thin read-only `{ id, state, streamConfig }` view of the
+  `events` aggregate + its `stream_config` child (the `live` condition + the
+  EARS-2 embed source); reads the 004/007 lifecycle state + stream config, never
+  writes them.
+- `resolveRoomStream` (`provider-enum.ts`) — the pure EARS-2 read: the stream
+  config → the grant's `stream`, provider from the closed enum, fail-closed to
+  `null` on absent/unknown provider (never URL-sniffed).
 - `RoomController` — `GET /v1/events/:idOrSlug/room`, `doctor_guest`-authenticated
   with the resource-scoped `policy` gate (EARS-1, EARS-8).
 
@@ -64,9 +79,10 @@ evaluates the resource-scoped rule and refuses server-side. See
 - **Sibling handlers layer onto this gate.** The gated commands
   `PostChatMessage` (EARS-3, Centrifugo publish) and `RecordPresenceHeartbeat`
   (EARS-4, durable append-only presence table) evaluate the **same** admission
-  decision before any publish/append; the player provider enum + embed reference
-  (EARS-2) and the Centrifugo chat token (EARS-3) extend the `RoomConfig` shape
-  **additively**. EARS-1 owns the gate and the grant; those are not built here.
+  decision before any publish/append; the Centrifugo chat token (EARS-3) extends
+  the `RoomConfig` shape **additively** (as EARS-2's `stream` already does). EARS-1
+  owns the gate and the grant vehicle; the chat/heartbeat commands are not built
+  here.
 - **Seam → feature 007.** The `live` window (room open/close) and the stream
   config are authored/driven by 007; until 007 lands, the gate is built +
   E2E-driven against **seeded live events with a seeded roster** (tracked on

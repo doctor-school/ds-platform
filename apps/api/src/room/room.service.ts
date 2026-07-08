@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { EventLifecycleState, RoomConfig } from "@ds/schemas";
 import { RegistrationService } from "../registration/registration.service.js";
+import { resolveRoomStream } from "./provider-enum.js";
 import { RoomRepository } from "./room.repository.js";
 import { ROOM_HEARTBEAT_INTERVAL_SECONDS } from "./room.tokens.js";
 
@@ -110,10 +111,15 @@ export class RoomService {
     // Live condition — the room is open only while the event is `live`.
     if (event.state !== "live") throw new RoomNotLiveError(event.state);
 
-    // All three hold → issue the RoomAccess grant.
+    // All three hold → issue the RoomAccess grant. The EARS-2 embed source is
+    // resolved from the 007-authored stream config: the provider is read from
+    // the closed enum (never URL-sniffed), and an absent/unknown provider yields
+    // `stream: null` — the truthful "stream unavailable" room state, still a
+    // valid grant (the gate admitted the caller).
     return {
       eventId: event.id,
       heartbeatIntervalSeconds: this.heartbeatIntervalSeconds,
+      stream: resolveRoomStream(event.streamConfig),
     };
   }
 }

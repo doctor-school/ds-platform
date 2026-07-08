@@ -54,7 +54,7 @@ export class RegistrationController {
     // separate ADR-0003 §6 obligation the service writes on first insert only
     // (EARS-3), not this classification field.
     audit: "low-stakes",
-    tests: ["EARS-1", "EARS-3", "EARS-10"],
+    tests: ["EARS-1", "EARS-3", "EARS-7", "EARS-10"],
   })
   register(
     @Param("idOrSlug") idOrSlug: string,

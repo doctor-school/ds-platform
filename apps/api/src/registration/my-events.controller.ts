@@ -34,7 +34,7 @@ export class MyEventsController {
     roles: ["doctor_guest"],
     check: "fast-path",
     audit: "none",
-    tests: ["EARS-6", "EARS-10"],
+    tests: ["EARS-6", "EARS-7", "EARS-10"],
   })
   async list(@Req() req: FastifyRequest): Promise<MyEvents> {
     const sub = (req as { user?: { sub?: string } }).user?.sub;

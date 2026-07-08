@@ -3,7 +3,9 @@ import {
   type EventLifecycleState,
   type EventRegistrationState,
   isRegistrable,
+  type MyEvents,
 } from "@ds/schemas";
+import { AIR_WINDOW_MS } from "../events/events.service.js";
 import { RegistrationRepository } from "./registration.repository.js";
 
 /**
@@ -99,6 +101,23 @@ export class RegistrationService {
     return registeredAt
       ? { registered: true, registeredAt: registeredAt.toISOString() }
       : { registered: false };
+  }
+
+  /**
+   * `MyEvents` (EARS-6; design §4/§5): the authenticated doctor's registered
+   * **upcoming** events (`published`/`live`, future or currently airing), ordered
+   * NEAREST `startsAt` first. Returns only the caller's own registrations
+   * (EARS-10); an empty result is a valid `[]` (the «мои события» surface renders
+   * the empty-state). The temporal window mirrors the 004 upcoming listing — an
+   * event the doctor registered for appears here iff it would still appear as
+   * upcoming/live publicly (`starts_at ≥ now − {@link AIR_WINDOW_MS}`), with the
+   * lifecycle STATE (not the clock) the primary filter (`ended`/`archived` never
+   * list). A just-registered event appears on the next read (EARS-7).
+   */
+  async myEvents(sub: string, now: Date = new Date()): Promise<MyEvents> {
+    const userId = await this.resolveUser(sub);
+    const cutoff = new Date(now.getTime() - AIR_WINDOW_MS);
+    return this.repo.findMyEvents(userId, cutoff);
   }
 
   private async resolveUser(sub: string): Promise<string> {

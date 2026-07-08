@@ -102,10 +102,12 @@ test("EARS-3: a guest sees exactly one primary «Участвовать» CTA th
  * plate, and the CTA affordance per the canvas `status` enum — never a signal
  * contradicting the machine. Three renders are driven on three seeded fixtures:
  *   • upcoming (`published`) — «Скоро» badge + «Участвовать» → registration.
- *   • live — «В эфире» live signal + «Участвовать» routing TOWARD the room (006);
- *     004 asserts the routing TARGET only (`/webinars/:slug/room`), not the room.
+ *   • live — «В эфире» live signal + «Участвовать» → registration TOO (005
+ *     EARS-1/EARS-9: register-during-live is a normal path). The room and its
+ *     navigation are 006 (#584) — no render links to `/room` until it ships
+ *     (a `/room` link would 404, the #673 Stage-B rework finding).
  *   • ended — «Эфир завершён» + NO participation CTA (no dead link).
- * The room + registration flows are seams (005/006) — asserted by route, not driven.
+ * The registration flow is a seam (005) — asserted by route, not driven here.
  */
 test.describe("004 EARS-4 lifecycle render swap (e2e)", () => {
   test("EARS-4: the upcoming render shows the «Скоро» hero badge, the status-card time plate, and a register-routing «Участвовать» CTA", async ({
@@ -132,7 +134,7 @@ test.describe("004 EARS-4 lifecycle render swap (e2e)", () => {
     );
   });
 
-  test("EARS-4: the live render shows the «В эфире» signal and routes the «Участвовать» CTA toward the room (feature 006)", async ({
+  test("EARS-4: the live render shows the «В эфире» signal and routes the «Участвовать» CTA into the registration handoff (005 register-during-live)", async ({
     page,
     context,
   }) => {
@@ -145,11 +147,15 @@ test.describe("004 EARS-4 lifecycle render swap (e2e)", () => {
     // The "live now" signal is present (hero badge + mobile time-plate tag).
     await expect(page.getByText("В эфире").first()).toBeVisible();
 
-    // The single «Участвовать» CTA points TOWARD the room — 004 asserts the route
-    // target only (the room is 006; it is not navigated here).
+    // The single «Участвовать» CTA routes into the registration handoff — a
+    // guest registers first (005 EARS-2/EARS-9); it must NEVER point at the
+    // not-yet-built 006 room (`/webinars/:slug/room` → 404, the #673 finding).
     const cta = page.getByRole("link", { name: "Участвовать", exact: true });
     await expect(cta).toHaveCount(1);
-    await expect(cta).toHaveAttribute("href", `/webinars/${SLUG_LIVE}/room`);
+    await expect(cta).toHaveAttribute(
+      "href",
+      `/register?returnTo=${encodeURIComponent(`/webinars/${SLUG_LIVE}`)}`,
+    );
   });
 
   test("EARS-4: the ended render shows the ended affordance and carries NO participation CTA (no dead link)", async ({

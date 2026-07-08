@@ -15,6 +15,7 @@ import {
   resolveJoinSignpost,
 } from "../../../lib/registration-state";
 import { formatMskParts } from "../../../lib/msk";
+import { RegisterOneTap } from "./register-one-tap";
 
 /**
  * 004 EARS-1 — the public webinar event page, server-rendered. A
@@ -34,8 +35,11 @@ import { formatMskParts } from "../../../lib/msk";
  * DS primitive):
  *   • upcoming (`published`) — «Участвовать» → registration (005) via auth (003),
  *     carrying a same-origin `returnTo` (EARS-3, `lib/registration-handoff`).
- *   • live — a "live now" signal + the single «Участвовать» CTA routing TOWARD
- *     the room (feature 006, `buildRoomHref`); 004 asserts the route, not the room.
+ *   • live — a "live now" signal + the single «Участвовать» CTA that REGISTERS
+ *     (005 EARS-1/EARS-9: register-during-live is a normal path — one-tap for an
+ *     authenticated doctor, the auth handoff for a guest). The room and its
+ *     onward navigation are the 006 surface (#584) — no render links to `/room`
+ *     until it ships (a dead link / 404 is a banned pattern).
  *   • ended — the ended affordance with NO participation CTA (never a dead link,
  *     the exactly-one-CTA invariant).
  *
@@ -56,11 +60,13 @@ import { formatMskParts } from "../../../lib/msk";
  * unchanged.
  *
  * 005 EARS-5: for a registered doctor the page signposts HOW/WHEN they join,
- * layered on the lifecycle CTA (`resolveJoinSignpost`): `upcoming` → the «вы
+ * layered on the lifecycle render (`resolveJoinSignpost`): `upcoming` → the «вы
  * записаны» confirmation + the МСК start (the status card time plate), replacing
- * the register CTA; `live` → the confirmation + an obvious ONWARD path to the
- * room (feature 006 route). МСК presentation (EARS-11) reuses the shared
- * `formatMskParts` formatter; all copy resolves through the catalog (EARS-12).
+ * the register CTA; `live` → the confirmation + the "broadcast is on" signpost.
+ * The interactive onward-to-room affordance is the 006 room surface (#584) and
+ * lands with it — never a dead `/room` link here. МСК presentation (EARS-11)
+ * reuses the shared `formatMskParts` formatter; all copy resolves through the
+ * catalog (EARS-12).
  *
  * Rendered per request (`force-dynamic`) — the page reflects a live read model
  * whose lifecycle state can change, so a static prerender would go stale.
@@ -98,22 +104,32 @@ export default async function WebinarEventPage({
     acceptLanguage: h.get("accept-language") ?? "",
   });
   // 005 EARS-5 — the registered doctor's join signposting (how/when they join),
-  // layered on the 004 lifecycle CTA: `upcoming` → the confirmation + МСК start
-  // signpost (replacing the register CTA); `live` → the confirmation + an obvious
-  // ONWARD path toward the room (feature 006 route, carried in `roomHref`); `none`
-  // → 004's render stands (unregistered / guest / ended / archived).
-  const signpost = resolveJoinSignpost(registrationState, cta);
-  const registered = signpost.kind !== "none";
+  // layered on the 004 lifecycle render: `upcoming` → the confirmation + МСК
+  // start signpost (replacing the register CTA); `live` → the confirmation + the
+  // "broadcast is on" signpost (the onward room affordance is the 006 room
+  // surface, #584); `none` → 004's render stands (unregistered / guest / ended /
+  // archived).
+  const signpost = resolveJoinSignpost(registrationState, status);
+  // 005 EARS-1 — a non-null per-user state means a session rode the request (a
+  // logged-in doctor, registered or not); `null` is a guest (no cookie) or an
+  // expired/fingerprint-mismatched session that falls back to the public render.
+  // A logged-in, NOT-yet-registered doctor on a registrable event gets the
+  // one-tap command button; a guest gets the `/register` auth handoff (EARS-2).
+  const isAuthenticated = registrationState !== null;
   // EARS-5 — archived is the fourth render mode on the SAME status-card shell: a
   // text notice replaces the CTA column (no button, no dead link), no new
   // geometry. Every state now renders the status card (the archived body swaps
   // its own time-plate/head/sub copy + the CTA-column notice).
   const isArchived = status === "archived";
   // The footer conversion band mirrors the status card's route but only for a
-  // participable event (upcoming / live); `ended` and `archived` carry none. A
-  // registered doctor's footer «Записаться» band is suppressed too (005 EARS-4)
-  // — never re-offer registration to an already-registered doctor.
-  const showFooterBand = (status === "upcoming" || status === "live") && !registered;
+  // participable event (upcoming / live); `ended` and `archived` carry none. It
+  // is a GUEST conversion band: its CTA links to the `/register` auth handoff,
+  // which would wrongly route a logged-in doctor to the signup form — an
+  // authenticated doctor already has the status-card affordance above (the
+  // one-tap command when unregistered, 005 EARS-1; the registered confirmation
+  // otherwise, 005 EARS-4 — never re-offer registration to a registered doctor).
+  const showFooterBand =
+    (status === "upcoming" || status === "live") && !isAuthenticated;
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -210,19 +226,27 @@ export default async function WebinarEventPage({
                 {t("registered.confirmation")}
               </p>
             ) : signpost.kind === "live" ? (
-              // 005 EARS-5 — registered + live: the «вы записаны» confirmation PLUS
-              // an obvious onward path to the room. The room route (feature 006) is
-              // carried in `signpost.roomHref` — 005 asserts the ROUTE, 006 owns the
-              // room + its server-side join gating.
-              <>
-                <p className="inline-flex items-center gap-2 text-sm font-bold text-primary-action">
-                  <CircleCheck aria-hidden className="size-5" />
-                  {t("registered.confirmation")}
-                </p>
-                <Button asChild size="lg">
-                  <Link href={signpost.roomHref}>{t("registered.live.cta")}</Link>
-                </Button>
-              </>
+              // 005 EARS-5 — registered + live: the «вы записаны» confirmation +
+              // the "broadcast is on" signpost (the card head/sub). The interactive
+              // onward-to-room affordance is the 006 room surface (#584) — until it
+              // ships, no link renders here (a `/room` link would 404, a banned
+              // dead-end; the deferral is tracked on #584).
+              <p className="inline-flex items-center gap-2 text-sm font-bold text-primary-action">
+                <CircleCheck aria-hidden className="size-5" />
+                {t("registered.confirmation")}
+              </p>
+            ) : cta.kind === "register" && isAuthenticated ? (
+              // 005 EARS-1 — logged-in doctor, not yet registered on a registrable
+              // (upcoming/`published` OR `live`, EARS-9) event: the CTA is a
+              // ONE-ACTION command that POSTs `RegisterForEvent` and re-reads the
+              // state — never a trip through auth, never a navigation to the
+              // not-yet-built 006 room. The guest path keeps the `/register`
+              // handoff link below.
+              <RegisterOneTap
+                slug={event.slug}
+                label={t("cta.participate")}
+                errorLabel={t("cta.registerError")}
+              />
             ) : cta.kind !== "none" ? (
               <Button asChild size="lg">
                 <Link href={cta.href}>{t("cta.participate")}</Link>
@@ -250,8 +274,8 @@ export default async function WebinarEventPage({
       {/* EARS-4 — the bottom conversion band swaps per state and drops entirely
           for `ended` (no dead CTA). Its action reuses the single CTA route with a
           distinct footer verb, so the page keeps exactly one «Участвовать» primary
-          CTA (EARS-3 invariant): upcoming → «Записаться» (registration), live →
-          «Смотреть эфир» (room seam 006). */}
+          CTA (EARS-3 invariant): upcoming AND live → «Записаться» (registration —
+          register-during-live is a normal path, 005 EARS-9; the room is 006/#584). */}
       {showFooterBand && cta.kind !== "none" ? (
         <div className="bg-header text-header-foreground">
           <Container className="flex flex-wrap items-center justify-between gap-8 py-12 layout:py-14">

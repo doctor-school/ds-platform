@@ -68,8 +68,8 @@ test.describe("005 EARS-4 registered-state overlay on the event page (e2e)", () 
 
     // Log the doctor in through the real 003 flow (identifier + password).
     await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-    await page.getByLabel(/почта|email/i).fill(DOCTOR_EMAIL!);
-    await page.getByLabel(/пароль|password/i).fill(DOCTOR_PASSWORD!);
+    await page.getByRole("textbox", { name: /почта|email/i }).fill(DOCTOR_EMAIL!);
+    await page.getByRole("textbox", { name: /пароль|password/i }).fill(DOCTOR_PASSWORD!);
     await page.getByRole("button", { name: /войти|продолжить/i }).click();
     await page.waitForURL(/\/account|\/webinars/);
 
@@ -98,9 +98,9 @@ test.describe("005 EARS-4 registered-state overlay on the event page (e2e)", () 
  *   • `upcoming` → the МСК start date/time is on the page + a «вы записаны»
  *     confirmation (EARS-5 + EARS-11: no viewer-local drift — the МСК unit is
  *     unit-tested in `lib/msk-signpost.test.ts` with a `timezoneId` override here);
- *   • `live` → an obvious ONWARD path toward the room (feature 006 route
- *     `/webinars/:slug/room`), asserted as the routing target only (006 owns the
- *     room + admission).
+ *   • `live` → the confirmation + the "broadcast is on" signpost. The interactive
+ *     onward-to-room affordance is the 006 room surface (#584) — until it ships,
+ *     NO `/room` link renders (a dead link 404s — the #673 Stage-B finding).
  *
  * Same live-stand-gated tier as the EARS-4 block above: it needs a running portal
  * + api + a seeded event and a registered doctor. The registered-`live` case also
@@ -123,8 +123,8 @@ test.describe("005 EARS-5 registered join signposting on the event page (e2e)", 
     );
 
     await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-    await page.getByLabel(/почта|email/i).fill(DOCTOR_EMAIL!);
-    await page.getByLabel(/пароль|password/i).fill(DOCTOR_PASSWORD!);
+    await page.getByRole("textbox", { name: /почта|email/i }).fill(DOCTOR_EMAIL!);
+    await page.getByRole("textbox", { name: /пароль|password/i }).fill(DOCTOR_PASSWORD!);
     await page.getByRole("button", { name: /войти|продолжить/i }).click();
     await page.waitForURL(/\/account|\/webinars/);
 
@@ -145,7 +145,7 @@ test.describe("005 EARS-5 registered join signposting on the event page (e2e)", 
     ).toHaveCount(0);
   });
 
-  test("005 EARS-5: registered + live — the page shows an obvious onward path to the room (feature 006 route)", async ({
+  test("005 EARS-5: registered + live — the page signposts «эфир идёт — вы записаны» with NO dead room link", async ({
     page,
   }) => {
     test.skip(
@@ -154,8 +154,8 @@ test.describe("005 EARS-5 registered join signposting on the event page (e2e)", 
     );
 
     await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-    await page.getByLabel(/почта|email/i).fill(DOCTOR_EMAIL!);
-    await page.getByLabel(/пароль|password/i).fill(DOCTOR_PASSWORD!);
+    await page.getByRole("textbox", { name: /почта|email/i }).fill(DOCTOR_EMAIL!);
+    await page.getByRole("textbox", { name: /пароль|password/i }).fill(DOCTOR_PASSWORD!);
     await page.getByRole("button", { name: /войти|продолжить/i }).click();
     await page.waitForURL(/\/account|\/webinars/);
 
@@ -167,11 +167,19 @@ test.describe("005 EARS-5 registered join signposting on the event page (e2e)", 
     await expect(
       page.getByText("Вы записаны", { exact: false }).first(),
     ).toBeVisible();
-    // …and the onward path targets the 006 room route for THIS event — 005 asserts
-    // the ROUTE only (`/webinars/:slug/room`), not that the room admits.
-    const roomLink = page.getByRole("link", { name: "Войти в эфир", exact: true });
-    await expect(roomLink).toBeVisible();
-    await expect(roomLink).toHaveAttribute("href", `/webinars/${SLUG_LIVE}/room`);
+    // …the "broadcast is on" signpost rides the status card head…
+    await expect(
+      page.getByText("Эфир идёт — вы записаны", { exact: false }).first(),
+    ).toBeVisible();
+    // …and NO link points at the not-yet-built 006 room — the onward-to-room
+    // affordance lands with the room surface itself (#584); a `/room` link here
+    // dead-ends in a 404 (the #673 Stage-B finding).
+    await expect(page.locator(`a[href*="/room"]`)).toHaveCount(0);
+    // No register affordance is re-offered to a registered doctor (EARS-4).
+    await expect(
+      page.getByRole("link", { name: "Участвовать", exact: true }),
+    ).toHaveCount(0);
+    await expect(page.getByTestId("event-register-one-tap")).toHaveCount(0);
   });
 });
 
@@ -183,8 +191,8 @@ test.describe("005 EARS-5 registered join signposting on the event page (e2e)", 
  *     (the ended render carries no participation CTA — 004 EARS-4);
  *   • archived → likewise no affordance, plus the «в архиве» notice (004 EARS-5);
  *   • register-during-live → a normal path: the single «Участвовать» CTA leads
- *     STRAIGHT TOWARD the room (feature 006 route `/webinars/:slug/room`) —
- *     005 asserts the routing target only (006 owns the room + admission).
+ *     into REGISTRATION (one-tap when authenticated, the `/register` auth handoff
+ *     for a guest) — never toward the not-yet-built 006 room (#584).
  *
  * The server-side refusal (the `RegisterForEvent` command 4xx for ended/archived)
  * is the sibling assertion in `apps/api/test/registration/gating.e2e-spec.ts`;
@@ -246,7 +254,7 @@ test.describe("005 EARS-9 registration lifecycle gating on the event page (e2e)"
     await expect(page.getByText("в архиве", { exact: false }).first()).toBeVisible();
   });
 
-  test("005 EARS-9: register-during-live — the «Участвовать» CTA leads straight toward the room (feature 006 route)", async ({
+  test("005 EARS-9: register-during-live — a guest's «Участвовать» CTA routes into the registration handoff, never the not-yet-built room", async ({
     page,
     context,
   }) => {
@@ -255,9 +263,10 @@ test.describe("005 EARS-9 registration lifecycle gating on the event page (e2e)"
       "requires a seeded live event (005↔007 fixture seam)",
     );
 
-    // A guest / unregistered doctor on a live event: registration is OFFERED, and
-    // the single «Участвовать» CTA routes STRAIGHT toward the room (feature 006).
-    // 005 asserts the routing target only — 006 owns the room + its admission.
+    // A guest on a live event: registration is OFFERED (register-during-live is a
+    // normal path), and the single «Участвовать» CTA routes into the `/register`
+    // auth handoff carrying the event context — NEVER toward the 006 room, which
+    // does not exist yet (#584; a `/room` link 404s — the #673 Stage-B finding).
     await context.clearCookies();
     await page.goto(`${BASE}/webinars/${SLUG_LIVE}`, {
       waitUntil: "domcontentloaded",
@@ -265,6 +274,9 @@ test.describe("005 EARS-9 registration lifecycle gating on the event page (e2e)"
 
     const cta = page.getByRole("link", { name: "Участвовать", exact: true });
     await expect(cta).toBeVisible();
-    await expect(cta).toHaveAttribute("href", `/webinars/${SLUG_LIVE}/room`);
+    await expect(cta).toHaveAttribute(
+      "href",
+      `/register?returnTo=${encodeURIComponent(`/webinars/${SLUG_LIVE}`)}`,
+    );
   });
 });

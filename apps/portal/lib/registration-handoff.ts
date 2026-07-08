@@ -20,6 +20,8 @@
  *     protocol-relative or cross-origin return target.
  */
 
+import { parseReturnTarget } from "@ds/schemas";
+
 /** The shipped 003 registration entry the guest «Участвовать» path routes through. */
 const REGISTRATION_ENTRY = "/register";
 
@@ -34,4 +36,23 @@ export function buildRegistrationHref(slug: string): string {
   const returnTo = `/webinars/${encodeURIComponent(slug)}`;
   const params = new URLSearchParams({ returnTo });
   return `${REGISTRATION_ENTRY}?${params.toString()}`;
+}
+
+/**
+ * 005 EARS-2 — carry a `returnTo` event context ONWARD through an intermediate
+ * auth navigation (e.g. `/register → /verify`, or a `/verify → /login` fallback),
+ * appending it to `path` ONLY when it is a SAFE same-origin event target (the
+ * `@ds/schemas` `parseReturnTarget` guard). An absent or hostile `returnTo` is
+ * dropped, so a cross-origin / open-redirect value can never be propagated across
+ * the round-trip — the returnTo the next page reads is always guard-clean. The
+ * appended value is the canonical `/webinars/<slug>` the guard reconstructs.
+ */
+export function withReturnTarget(
+  path: string,
+  rawReturnTo: string | null,
+): string {
+  const intent = parseReturnTarget(rawReturnTo);
+  if (!intent) return path;
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}returnTo=${encodeURIComponent(intent.returnTo)}`;
 }

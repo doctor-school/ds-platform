@@ -54,9 +54,18 @@ vi.mock("@/lib/auth-client", () => ({
   AuthError: class extends Error {},
 }));
 
-// No held password by default (deep-link path → route to /login after verify).
+// No held password by default (deep-link path → route to /login after verify);
+// the 005 EARS-2 tests below set a held credential to drive the auto-login replay.
+let heldRegistration: { identifier: string; password: string } | null = null;
 vi.mock("@/lib/pending-registration", () => ({
-  takePendingRegistration: () => null,
+  takePendingRegistration: () => heldRegistration,
+}));
+
+// 005 EARS-2: the post-auth registration resume fires the real EARS-1 command
+// through this client — mocked so these tests assert the resume wiring only.
+const registerForEvent = vi.fn().mockResolvedValue({ registered: true });
+vi.mock("@/lib/registration-client", () => ({
+  registerForEvent: (slug: string) => registerForEvent(slug),
 }));
 
 const EMAIL = "doc@example.com";
@@ -68,6 +77,8 @@ beforeEach(() => {
   verify.mockClear();
   login.mockClear();
   resendVerification.mockClear();
+  registerForEvent.mockClear();
+  heldRegistration = null;
   searchParams = new URLSearchParams({ email: EMAIL });
 });
 afterEach(cleanup);
@@ -201,5 +212,82 @@ describe("/verify dual-affordance + resend (#227/#267)", () => {
       expect(submit).toHaveAttribute("aria-busy", "true");
     });
     expect(submit.querySelector("svg.animate-spin")).not.toBeNull();
+  });
+});
+
+/**
+ * 005 EARS-2 — the /verify hop of the guest-through-auth round-trip: the guest
+ * registered carrying `?returnTo=/webinars/:slug`; once the code is accepted and
+ * the auto-login replay establishes the session, the SAME `RegisterForEvent`
+ * (EARS-1) fires for the carried event and the doctor lands back on that event
+ * page registered — never re-searching, never tapping «Участвовать» again. With
+ * no held credential the /login fallback carries the context onward; a hostile
+ * returnTo is rejected at the guard (land on /account, register nothing).
+ */
+describe("005 EARS-2 guest-through-auth completion on /verify", () => {
+  async function enterCode() {
+    const user = userEvent.setup();
+    render(<VerifyPage />);
+    const codeInput = screen.getByRole("textbox");
+    await user.click(codeInput);
+    await user.keyboard(VERIFY_CODE);
+  }
+
+  it("EARS-2: on verify success with a held credential and a carried event context, the system shall register for that event and land on its page", async () => {
+    searchParams = new URLSearchParams({
+      email: EMAIL,
+      returnTo: "/webinars/ahilles-042",
+    });
+    heldRegistration = { identifier: EMAIL, password: "Sup3r$ecretPw!9" };
+    await enterCode();
+
+    await waitFor(() => {
+      // The auto-login replay establishes the session…
+      expect(login).toHaveBeenCalledTimes(1);
+      // …then the SAME RegisterForEvent fires for the carried slug…
+      expect(registerForEvent).toHaveBeenCalledWith("ahilles-042");
+      // …and the doctor lands back on the originally chosen event page.
+      expect(replace).toHaveBeenCalledWith("/webinars/ahilles-042");
+    });
+  });
+
+  it("EARS-2: with no held credential, the /login fallback carries the event context onward", async () => {
+    searchParams = new URLSearchParams({
+      email: EMAIL,
+      returnTo: "/webinars/ahilles-042",
+    });
+    await enterCode();
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        "/login?returnTo=%2Fwebinars%2Fahilles-042",
+      ),
+    );
+    expect(registerForEvent).not.toHaveBeenCalled();
+  });
+
+  it("EARS-2: a cross-origin returnTo is rejected — the auto-login lands on /account, nothing registers", async () => {
+    searchParams = new URLSearchParams({
+      email: EMAIL,
+      returnTo: "//evil.example",
+    });
+    heldRegistration = { identifier: EMAIL, password: "Sup3r$ecretPw!9" };
+    await enterCode();
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/account"));
+    expect(registerForEvent).not.toHaveBeenCalled();
+  });
+
+  it("EARS-2: the co-equal «Войти» action carries the event context onward into /login", () => {
+    searchParams = new URLSearchParams({
+      email: EMAIL,
+      returnTo: "/webinars/ahilles-042",
+    });
+    render(<VerifyPage />);
+
+    expect(screen.getByTestId("verify-go-to-login")).toHaveAttribute(
+      "href",
+      "/login?returnTo=%2Fwebinars%2Fahilles-042",
+    );
   });
 });

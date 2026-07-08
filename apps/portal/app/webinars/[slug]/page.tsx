@@ -12,7 +12,7 @@ import { fetchPublicEventPage } from "../../../lib/public-events";
 import { resolvePrimaryCta, toCanvasStatus } from "../../../lib/event-lifecycle";
 import {
   fetchEventRegistrationState,
-  showRegisteredConfirmation,
+  resolveJoinSignpost,
 } from "../../../lib/registration-state";
 import { formatMskParts } from "../../../lib/msk";
 
@@ -51,11 +51,16 @@ import { formatMskParts } from "../../../lib/msk";
  * (`lib/registration-state`) that forwards the request's session cookie, never
  * folded into the public `fetchPublicEventPage` projection or its shared cache
  * (the public read above stays cookie-free + content-identical for guest and
- * principal). When the caller is registered on an upcoming event, the register
- * CTA is replaced by a «вы записаны» confirmation + a join-signpost placeholder
- * (the full join signposting is EARS-5, #569) — a registered doctor is never
- * shown the register CTA as if unregistered. A guest never issues the read and
- * sees 004's register CTA unchanged.
+ * principal). A registered doctor is never shown the register CTA as if
+ * unregistered; a guest never issues the read and sees 004's register CTA
+ * unchanged.
+ *
+ * 005 EARS-5: for a registered doctor the page signposts HOW/WHEN they join,
+ * layered on the lifecycle CTA (`resolveJoinSignpost`): `upcoming` → the «вы
+ * записаны» confirmation + the МСК start (the status card time plate), replacing
+ * the register CTA; `live` → the confirmation + an obvious ONWARD path to the
+ * room (feature 006 route). МСК presentation (EARS-11) reuses the shared
+ * `formatMskParts` formatter; all copy resolves through the catalog (EARS-12).
  *
  * Rendered per request (`force-dynamic`) — the page reflects a live read model
  * whose lifecycle state can change, so a static prerender would go stale.
@@ -82,10 +87,8 @@ export default async function WebinarEventPage({
 
   // 005 EARS-4 — the per-user registration state, a SEPARATE authenticated read
   // forwarding the request's session cookie (guest → null → 004's register CTA).
-  // `showRegisteredConfirmation` swaps only when the register CTA would otherwise
-  // show (upcoming) AND the caller is registered — so the register CTA is never
-  // shown to a registered doctor, and the `live` room route / `ended` renders are
-  // left untouched (EARS-5 #569 / 006 own those).
+  // `resolveJoinSignpost` (below) turns it into the registered render mode; the
+  // register CTA is never shown to a registered doctor.
   const h = await headers();
   const registrationState = await fetchEventRegistrationState(slug, {
     cookie: h.get("cookie") ?? "",
@@ -94,7 +97,13 @@ export default async function WebinarEventPage({
     userAgent: h.get("user-agent") ?? "",
     acceptLanguage: h.get("accept-language") ?? "",
   });
-  const registered = showRegisteredConfirmation(registrationState, cta);
+  // 005 EARS-5 — the registered doctor's join signposting (how/when they join),
+  // layered on the 004 lifecycle CTA: `upcoming` → the confirmation + МСК start
+  // signpost (replacing the register CTA); `live` → the confirmation + an obvious
+  // ONWARD path toward the room (feature 006 route, carried in `roomHref`); `none`
+  // → 004's render stands (unregistered / guest / ended / archived).
+  const signpost = resolveJoinSignpost(registrationState, cta);
+  const registered = signpost.kind !== "none";
   // EARS-5 — archived is the fourth render mode on the SAME status-card shell: a
   // text notice replaces the CTA column (no button, no dead link), no new
   // geometry. Every state now renders the status card (the archived body swaps
@@ -166,8 +175,20 @@ export default async function WebinarEventPage({
               date,
               duration: event.durationMin,
             })}
-            head={registered ? t("registered.head") : t(`statusCard.${status}.head`)}
-            sub={registered ? t("registered.sub") : t(`statusCard.${status}.sub`)}
+            head={
+              signpost.kind === "upcoming"
+                ? t("registered.upcoming.head")
+                : signpost.kind === "live"
+                  ? t("registered.live.head")
+                  : t(`statusCard.${status}.head`)
+            }
+            sub={
+              signpost.kind === "upcoming"
+                ? t("registered.upcoming.sub")
+                : signpost.kind === "live"
+                  ? t("registered.live.sub")
+                  : t(`statusCard.${status}.sub`)
+            }
           >
             {isArchived ? (
               // The CTA column becomes a non-interactive «в архиве» notice — no
@@ -177,15 +198,31 @@ export default async function WebinarEventPage({
               <p className="text-sm font-bold text-primary-action">
                 {t("statusCard.archived.notice")}
               </p>
-            ) : registered ? (
-              // 005 EARS-4 — the registered confirmation REPLACES the register CTA
-              // (join-signpost placeholder; the full signposting is EARS-5 #569).
+            ) : signpost.kind === "upcoming" ? (
+              // 005 EARS-5 — registered + upcoming: the register CTA is replaced by
+              // a static «вы записаны» confirmation. The МСК start date/time is the
+              // status card's own time plate (`time` + `timeSub`), and the how/when
+              // signposting is the head/sub above — no second action.
               // `text-primary-action` (blue.700) is the card-safe AA token on
               // `bg-card` (never `text-primary`, the #270 precedent).
               <p className="inline-flex items-center gap-2 text-sm font-bold text-primary-action">
                 <CircleCheck aria-hidden className="size-5" />
                 {t("registered.confirmation")}
               </p>
+            ) : signpost.kind === "live" ? (
+              // 005 EARS-5 — registered + live: the «вы записаны» confirmation PLUS
+              // an obvious onward path to the room. The room route (feature 006) is
+              // carried in `signpost.roomHref` — 005 asserts the ROUTE, 006 owns the
+              // room + its server-side join gating.
+              <>
+                <p className="inline-flex items-center gap-2 text-sm font-bold text-primary-action">
+                  <CircleCheck aria-hidden className="size-5" />
+                  {t("registered.confirmation")}
+                </p>
+                <Button asChild size="lg">
+                  <Link href={signpost.roomHref}>{t("registered.live.cta")}</Link>
+                </Button>
+              </>
             ) : cta.kind !== "none" ? (
               <Button asChild size="lg">
                 <Link href={cta.href}>{t("cta.participate")}</Link>

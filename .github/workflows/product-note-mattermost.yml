@@ -8,6 +8,11 @@ name: Product note → Mattermost
 # — when MATTERMOST_WEBHOOK_URL is unset the script logs and skips green. It also
 # skips green when the note is `none`/absent (internal-only PRs).
 #
+# Environment marker (Issue #657): every delivered message carries an explicit
+# DEV/prod footer, driven by DELIVERY_ENV. A merge into main only reaches the DEV
+# stand (deploy:prod is manual), so the delivery step sets DELIVERY_ENV: dev; the
+# script refuses to post (exit 1) if the marker is unset/unknown.
+#
 # Injection safety: the PR body/title/url are passed through `env:` (never
 # interpolated into a shell `run:` string), so a `$(...)`/backtick in the body
 # cannot be executed. The script builds the webhook JSON with JSON.stringify.
@@ -35,6 +40,9 @@ jobs:
       - name: Post the Product note to Mattermost
         env:
           MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_WEBHOOK_URL }}
+          # Merge into main = the change is live on the DEV stand only (deploy:prod is a
+          # separate manual step), so a merge-triggered note is DEV by definition (Issue #657).
+          DELIVERY_ENV: dev
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_URL: ${{ github.event.pull_request.html_url }}

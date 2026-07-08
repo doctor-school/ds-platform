@@ -7,11 +7,18 @@
 // process ENV (never interpolated into a shell string) so a `$(...)` or backtick
 // in the body cannot be executed — the injection-safe path the Issue mandates.
 //
-// Behaviour (all exit 0 — a skip is a clean success, never a red delivery job):
-//   - MATTERMOST_WEBHOOK_URL unset  → log + skip (webhook not provisioned yet).
-//   - note is `none`/absent/blank   → log + skip (internal-only PR, nothing to post).
-//   - otherwise                     → POST a minimal markdown message
-//                                     (the note, then the PR title linked to its URL).
+// Behaviour:
+//   - MATTERMOST_WEBHOOK_URL unset  → log + skip (webhook not provisioned yet, exit 0).
+//   - note is `none`/absent/blank   → log + skip (internal-only PR, nothing to post, exit 0).
+//   - DELIVERY_ENV unset/unknown    → FAIL LOUDLY (exit 1) — the mandatory environment
+//                                     marker is the point, so an unmarked post is impossible.
+//   - otherwise                     → POST a minimal markdown message: the note, then the PR
+//                                     title linked to its URL, then the DELIVERY_ENV footer.
+//
+// Validation order (Issue #657): the DELIVERY_ENV check runs AFTER the two skip checks,
+// immediately before the payload is built — so a legitimate skip (no webhook / `none` note)
+// stays a clean green success and is never turned into a red job by a missing marker, while
+// every message that is actually POSTed is guaranteed to carry its environment footer.
 //
 // The section-extraction mirrors tools/lint/product-note-lint.ts so the guard and
 // the delivery read the same source of truth.
@@ -55,10 +62,29 @@ export function noteIsReal(note) {
   return note.trim().length >= 8;
 }
 
-/** Build the Mattermost `{ text }` payload: the note, then the linked PR title. */
-export function buildPayload(note, prTitle, prUrl) {
+/** The mandatory environment footer, keyed by DELIVERY_ENV (Issue #657). */
+const ENV_FOOTERS = {
+  dev: "🧪 Среда: DEV — смержено в разработку; на проде появится со следующим релизом.",
+  prod: "🚀 Среда: PROD — выкачено на продакшен.",
+};
+
+/**
+ * The environment footer for a DELIVERY_ENV value, or null for unset/unknown.
+ * Case- and whitespace-insensitive so `DEV`/` dev ` still resolve; anything
+ * outside {dev, prod} returns null → the caller fails loudly (no unmarked post).
+ */
+export function envFooter(deliveryEnv) {
+  const key = (deliveryEnv ?? "").trim().toLowerCase();
+  return ENV_FOOTERS[key] ?? null;
+}
+
+/**
+ * Build the Mattermost `{ text }` payload: the note, the linked PR title, then
+ * the mandatory environment footer as the last line.
+ */
+export function buildPayload(note, prTitle, prUrl, footer) {
   const title = (prTitle ?? "").trim() || "PR";
-  const text = `${note.trim()}\n\n[${title}](${prUrl})`;
+  const text = `${note.trim()}\n\n[${title}](${prUrl})\n\n${footer}`;
   return { text };
 }
 
@@ -73,7 +99,9 @@ async function main() {
   const prUrl = process.env.PR_URL ?? "";
 
   if (!webhook) {
-    log("MATTERMOST_WEBHOOK_URL is not configured — skipping delivery (green).");
+    log(
+      "MATTERMOST_WEBHOOK_URL is not configured — skipping delivery (green).",
+    );
     return;
   }
 
@@ -85,7 +113,19 @@ async function main() {
     return;
   }
 
-  const payload = buildPayload(note, prTitle, prUrl);
+  // Every POSTed message MUST carry its environment marker — an unmarked post is
+  // impossible. Validated here (after the skip checks) so a legitimate skip stays
+  // green, but a message that WILL post always has a footer.
+  const footer = envFooter(process.env.DELIVERY_ENV);
+  if (footer === null) {
+    throw new Error(
+      `DELIVERY_ENV must be 'dev' or 'prod' to mark the environment; got ${JSON.stringify(
+        process.env.DELIVERY_ENV ?? null,
+      )}. Refusing to post an unmarked Product note.`,
+    );
+  }
+
+  const payload = buildPayload(note, prTitle, prUrl, footer);
   const res = await fetch(webhook, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

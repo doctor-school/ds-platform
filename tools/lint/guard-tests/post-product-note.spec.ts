@@ -1,0 +1,122 @@
+import { spawnSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { describe, expect, it } from "vitest";
+
+// Pure seams exported from the Mattermost delivery script (Issue #654). Importing
+// them does NOT fire the script's `main()` — it is guarded behind an entry-point
+// check, the same idiom as tools/retro/extract.mjs. Issue #657 adds the mandatory
+// DEV/prod environment footer, covered here (the #655 delivery-seam NIT).
+import { buildPayload, envFooter } from "../../ci/post-product-note.mjs";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const SCRIPT = resolve(HERE, "..", "..", "ci", "post-product-note.mjs");
+
+const DEV_FOOTER =
+  "🧪 Среда: DEV — смержено в разработку; на проде появится со следующим релизом.";
+const PROD_FOOTER = "🚀 Среда: PROD — выкачено на продакшен.";
+
+/** Run the script as a subprocess with a controlled env, returning code + streams. */
+function runScript(env: Record<string, string | undefined>): {
+  code: number;
+  stdout: string;
+  stderr: string;
+} {
+  const res = spawnSync(process.execPath, [SCRIPT], {
+    // Start from a clean env so a stray DELIVERY_ENV / webhook in the shell can't leak in.
+    env: { PATH: process.env.PATH, ...env } as NodeJS.ProcessEnv,
+    encoding: "utf8",
+  });
+  return {
+    code: res.status ?? -1,
+    stdout: res.stdout ?? "",
+    stderr: res.stderr ?? "",
+  };
+}
+
+// ── pure-logic unit cover ───────────────────────────────────────────────────
+describe("post-product-note — environment footer (pure)", () => {
+  it("envFooter: `dev` → the DEV marker", () => {
+    expect(envFooter("dev")).toBe(DEV_FOOTER);
+  });
+
+  it("envFooter: `prod` → the PROD marker", () => {
+    expect(envFooter("prod")).toBe(PROD_FOOTER);
+  });
+
+  it("envFooter: case- and whitespace-insensitive", () => {
+    expect(envFooter(" DEV ")).toBe(DEV_FOOTER);
+    expect(envFooter("Prod")).toBe(PROD_FOOTER);
+  });
+
+  it("envFooter: unset/blank/unknown → null (caller must fail loudly)", () => {
+    expect(envFooter(undefined)).toBeNull();
+    expect(envFooter("")).toBeNull();
+    expect(envFooter("staging")).toBeNull();
+    expect(envFooter("production")).toBeNull();
+  });
+
+  it("buildPayload: the footer is the last line of the message", () => {
+    const { text } = buildPayload(
+      "Новая фича.",
+      "feat: thing",
+      "https://x/1",
+      DEV_FOOTER,
+    );
+    expect(text.endsWith(DEV_FOOTER)).toBe(true);
+    expect(text).toContain("[feat: thing](https://x/1)");
+  });
+});
+
+// ── end-to-end invariant cover (no network: skip/throw both precede fetch) ───
+describe("post-product-note — DELIVERY_ENV invariant (subprocess)", () => {
+  const realNoteBody =
+    "## Product note (RU)\n\nМы выкатили новую заметную фичу для команды.";
+
+  it("unset DELIVERY_ENV with a real note + webhook → exit 1 (no unmarked post)", () => {
+    const { code, stderr } = runScript({
+      MATTERMOST_WEBHOOK_URL: "https://mattermost.invalid/hooks/x",
+      PR_BODY: realNoteBody,
+      PR_TITLE: "feat: thing",
+      PR_URL: "https://x/1",
+      // DELIVERY_ENV intentionally unset
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("DELIVERY_ENV");
+  });
+
+  it("unknown DELIVERY_ENV → exit 1", () => {
+    const { code, stderr } = runScript({
+      MATTERMOST_WEBHOOK_URL: "https://mattermost.invalid/hooks/x",
+      PR_BODY: realNoteBody,
+      PR_TITLE: "feat: thing",
+      PR_URL: "https://x/1",
+      DELIVERY_ENV: "staging",
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain("DELIVERY_ENV");
+  });
+
+  it("no webhook + unset DELIVERY_ENV → exit 0 (the env check never breaks a legitimate skip)", () => {
+    const { code, stdout } = runScript({
+      PR_BODY: realNoteBody,
+      PR_TITLE: "feat: thing",
+      PR_URL: "https://x/1",
+      // no MATTERMOST_WEBHOOK_URL, no DELIVERY_ENV
+    });
+    expect(code).toBe(0);
+    expect(stdout).toContain("not configured");
+  });
+
+  it("`none` note + unset DELIVERY_ENV → exit 0 (skip precedes the env check)", () => {
+    const { code, stdout } = runScript({
+      MATTERMOST_WEBHOOK_URL: "https://mattermost.invalid/hooks/x",
+      PR_BODY: "## Product note (RU)\n\nnone",
+      PR_TITLE: "chore: thing",
+      PR_URL: "https://x/2",
+    });
+    expect(code).toBe(0);
+    expect(stdout).toContain("nothing to deliver");
+  });
+});

@@ -1,4 +1,5 @@
 import {
+  Body,
   ConflictException,
   Controller,
   ForbiddenException,
@@ -8,15 +9,22 @@ import {
   Param,
   Post,
   Req,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
-import type { PresenceHeartbeatAck, RoomConfig } from "@ds/schemas";
+import type {
+  PostChatMessageAck,
+  PresenceHeartbeatAck,
+  RoomConfig,
+} from "@ds/schemas";
 import { Authz } from "../authz/index.js";
 import {
   RegistrationEventNotFoundError,
   UnknownSubjectError,
 } from "../registration/registration.service.js";
+import { ChatUnavailableError } from "./chat.gateway.js";
+import { PostChatMessageRequestDto } from "./room.dto.js";
 import {
   NotRegisteredError,
   RoomEventNotFoundError,
@@ -91,6 +99,29 @@ export class RoomController {
     return this.gated(req, (sub) => this.room.recordHeartbeat(idOrSlug, sub));
   }
 
+  @Post(":idOrSlug/chat")
+  @HttpCode(200)
+  @Authz({
+    access: "authenticated",
+    roles: ["doctor_guest"],
+    // Same resource-scoped policy as the config read + the heartbeat: the
+    // registration-and-live gate is evaluated in RoomService BEFORE any Centrifugo
+    // publish (design §2, §4). A post is a transient realtime fan-out, not the
+    // durable presence record, and not an auth/security event — no AuthAuditLog.
+    check: "policy",
+    audit: "none",
+    tests: ["EARS-3", "EARS-8"],
+  })
+  chat(
+    @Param("idOrSlug") idOrSlug: string,
+    @Body() dto: PostChatMessageRequestDto,
+    @Req() req: FastifyRequest,
+  ): Promise<PostChatMessageAck> {
+    return this.gated(req, (sub) =>
+      this.room.postChatMessage(idOrSlug, sub, dto.text),
+    );
+  }
+
   /**
    * Shared handler shell for the two gated room operations: resolve the
    * authenticated subject (the guard guarantees one; a null `sub` is fail-closed
@@ -129,6 +160,12 @@ export class RoomController {
       // registration — a 401, never a silent admission (EARS-8).
       if (err instanceof UnknownSubjectError) {
         throw new UnauthorizedException("authentication required");
+      }
+      // Chat transport (Centrifugo) is momentarily unreachable — a 503, so the
+      // gated command surfaces the failure rather than reporting a phantom post
+      // (EARS-3). The gate already passed; only the fan-out could not complete.
+      if (err instanceof ChatUnavailableError) {
+        throw new ServiceUnavailableException("chat is temporarily unavailable");
       }
       throw err;
     }

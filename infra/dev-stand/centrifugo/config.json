@@ -14,5 +14,16 @@
     "enabled": true,
     "password": "dev",
     "secret": "dev-only-not-a-secret"
+  },
+  "//channel": "006 webinar-room chat (EARS-3). The `room` namespace backs the per-event chat channel `room:event:<id>`. Clients are subscribed SERVER-SIDE via the connection token's `channels` claim (the gate-scoped subscribe-only token the api mints), and CANNOT publish (allow_publish_for_client stays false) — every post rides the server-side gated PostChatMessage command over the HTTP API. History is kept so a (re)subscribing client can hydrate recent messages.",
+  "channel": {
+    "namespaces": [
+      {
+        "name": "room",
+        "history_size": 100,
+        "history_ttl": "600s",
+        "presence": true
+      }
+    ]
   }
 }

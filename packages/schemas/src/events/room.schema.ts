@@ -12,6 +12,37 @@ import { StreamConfigSchema } from "./events.schema.js";
 // and the grant vehicle.
 
 /**
+ * `RoomChatCredential` — the gate-scoped, **subscribe-only** Centrifugo access the
+ * `RoomConfig` grant carries so a gated doctor can READ the live chat (EARS-3;
+ * design §4). It is minted server-side ONLY for a caller the admission gate
+ * admitted, and it is deliberately NOT a publish capability:
+ *
+ * - `token` is a Centrifugo connection JWT (HS256, HMAC) whose `channels` claim
+ *   lists **exactly** this caller's room channel — Centrifugo subscribes the
+ *   connection to it SERVER-SIDE on connect, so the token grants read of this one
+ *   room and nothing else (gate-scoped: a doctor gated for event A cannot use it
+ *   to read event B). It carries **no** publish capability — the `room` namespace
+ *   keeps `allow_publish_for_client` off, so a client can never publish directly.
+ * - `channel` is the room channel (`room:event:<id>`) the client listens on.
+ * - `url` is the Centrifugo **websocket** endpoint the browser connects to (read
+ *   from `CENTRIFUGO_URL`, never hardcoded — requirements Constraints).
+ * - `selfTag` is the caller's own non-PII author tag, so the client can mark its
+ *   own messages without the server ever leaking another doctor's identity beyond
+ *   the tag chat legitimately shows (EARS-8).
+ *
+ * Posting is **server-mediated**: a message is sent through the gated
+ * `PostChatMessage` command (below), never with this credential. This keeps the
+ * post path behind the same server-side gate as everything else (design §4).
+ */
+export const RoomChatCredentialSchema = z.object({
+  url: z.string().min(1),
+  token: z.string().min(1),
+  channel: z.string().min(1),
+  selfTag: z.string().min(1),
+});
+export type RoomChatCredential = z.infer<typeof RoomChatCredentialSchema>;
+
+/**
  * `RoomConfig` — the server-issued `RoomAccess` grant payload (design §2, §7).
  * Served by `GET /v1/events/:idOrSlug/room` **only** to a caller the server-side
  * gate admits — authenticated AND registered for the event (005 `EventRoster`)
@@ -22,9 +53,9 @@ import { StreamConfigSchema } from "./events.schema.js";
  * The EARS-1 grant carries the room identity (`eventId`) and the server-config
  * heartbeat cadence `heartbeatIntervalSeconds` (N, the value the client's later
  * presence loop is driven by — the loop itself and the durable append table are
- * the EARS-4 sibling). The Centrifugo chat token (EARS-3) is added to this shape
- * ADDITIVELY by its handler — the schema is the growing SSOT, never a re-cut per
- * slice.
+ * the EARS-4 sibling). The Centrifugo chat credential (EARS-3) is added to this
+ * shape ADDITIVELY by its handler — the schema is the growing SSOT, never a re-cut
+ * per slice.
  *
  * `stream` (EARS-2) is the embed player's source, resolved from the event's
  * 007-authored stream config: the **explicit provider enum** (`rutube | youtube`)
@@ -35,13 +66,85 @@ import { StreamConfigSchema } from "./events.schema.js";
  * or carries an unknown provider still receives a valid grant (the gate passed)
  * with `stream: null` — the portal renders the truthful "stream unavailable" room
  * state rather than a guessed embed (design §3).
+ *
+ * `chat` (EARS-3) is the gate-scoped subscribe-only chat credential. It is
+ * **nullable** on the same fail-closed principle: when Centrifugo is not
+ * configured (no `CENTRIFUGO_URL` / API key / token secret — the shared-CI /
+ * Centrifugo-less default, mirroring the IdP / Redis / S3 fakes) the grant is
+ * still valid (the gate admitted the caller) with `chat: null`, and the portal
+ * renders the truthful "chat unavailable" state rather than a broken connection.
+ * On the dev-stand and in production Centrifugo is configured, so `chat` is
+ * present for every live room.
  */
 export const RoomConfigSchema = z.object({
   eventId: z.uuid(),
   heartbeatIntervalSeconds: z.number().int().positive(),
   stream: StreamConfigSchema.nullable(),
+  chat: RoomChatCredentialSchema.nullable(),
 });
 export type RoomConfig = z.infer<typeof RoomConfigSchema>;
+
+/**
+ * The chat-message text validator (EARS-3) — the SINGLE SSOT rule the portal
+ * composer and the `PostChatMessage` command both enforce, so a client can never
+ * post what the server would reject and the reject path is identical on both
+ * sides. Trimmed (leading/trailing whitespace is not content), non-empty after
+ * trim (a whitespace-only message is rejected — the garbage-input reject path),
+ * and bounded at 2000 chars (a chat line, not a document). `.trim()` normalises
+ * before the length checks so the persisted/published text carries no padding.
+ */
+export const ChatMessageTextSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(2000);
+
+/**
+ * `PostChatMessage` request body (EARS-3) — the gated command's only input. The
+ * `idOrSlug` room identity is the path parameter (not the body); the body carries
+ * only the `text`, validated by the {@link ChatMessageTextSchema} SSOT so a
+ * malformed post is a 400 before the handler runs (nestjs-zod at the boundary).
+ */
+export const PostChatMessageRequestSchema = z.object({
+  text: ChatMessageTextSchema,
+});
+export type PostChatMessageRequest = z.infer<
+  typeof PostChatMessageRequestSchema
+>;
+
+/**
+ * `RoomChatMessage` — the shape fanned out over the room channel and echoed to the
+ * poster in the command ack (EARS-3; design §4). Server-authoritative and
+ * **PII-free**: `authorTag` is a stable, non-reversible tag derived from the
+ * doctor's domain id (never their email / phone / roster identity, EARS-8),
+ * `id` + `at` are server-minted (a client cannot forge a message id or backdate a
+ * post), and `text` is the validated content. The portal renders the author label
+ * from its message catalog around `authorTag` (EARS-10) — the server ships the
+ * tag, not a user-facing string.
+ */
+export const RoomChatMessageSchema = z.object({
+  id: z.uuid(),
+  authorTag: z.string().min(1),
+  text: z.string().min(1),
+  at: z.iso.datetime({ offset: true }),
+});
+export type RoomChatMessage = z.infer<typeof RoomChatMessageSchema>;
+
+/**
+ * `PostChatMessage` acknowledgement (EARS-3) — returned by
+ * `POST /v1/events/:idOrSlug/chat` **only** to a caller the same server-side gate
+ * admits (authenticated ∧ registered ∧ live); an ungated caller is refused
+ * (401 / 403 / 409) and no message is published (EARS-8), exactly like the
+ * `RoomConfig` read and the heartbeat command. The ack echoes the resolved room
+ * identity and the server-authoritative {@link RoomChatMessage} that was published
+ * to the channel — the poster's own client renders it immediately without waiting
+ * for the fan-out round-trip.
+ */
+export const PostChatMessageAckSchema = z.object({
+  eventId: z.uuid(),
+  message: RoomChatMessageSchema,
+});
+export type PostChatMessageAck = z.infer<typeof PostChatMessageAckSchema>;
 
 /**
  * `PresenceHeartbeatAck` — the acknowledgement of one accepted presence beat

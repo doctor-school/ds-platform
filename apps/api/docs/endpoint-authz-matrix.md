@@ -30,6 +30,7 @@
 | POST /v1/auth/verify                   | public        | —              | none       | —            | false   | high-stakes | EARS-3, EARS-4                  |
 | POST /v1/auth/verify/resend            | public        | —              | none       | —            | false   | high-stakes | EARS-25, EARS-16                |
 | POST /v1/auth/zitadel/webhook          | public        | —              | none       | —            | false   | low-stakes  | EARS-19                         |
+| POST /v1/events/:idOrSlug/chat         | authenticated | doctor_guest   | policy     | —            | false   | none        | EARS-3, EARS-8                  |
 | POST /v1/events/:idOrSlug/heartbeat    | authenticated | doctor_guest   | policy     | —            | false   | none        | EARS-4, EARS-8                  |
 | POST /v1/events/:idOrSlug/registration | authenticated | doctor_guest   | fast-path  | —            | false   | low-stakes  | EARS-1, EARS-3, EARS-7, EARS-10 |
 | PUT /v1/admin/events/:id/stream        | authenticated | platform_admin | fast-path  | —            | false   | low-stakes  | EARS-3, EARS-8                  |

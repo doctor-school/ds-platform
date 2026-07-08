@@ -1,4 +1,4 @@
-# `room` — webinar room admission gate + embed provider + heartbeat presence (006 EARS-1, EARS-2, EARS-4)
+# `room` — webinar room admission gate + embed provider + live chat + heartbeat presence (006 EARS-1, EARS-2, EARS-3, EARS-4)
 
 The webinar-room module — the **server-side admission gate** of feature 006
 (Webinar room), the foundation the watch side builds on. It hosts the **first
@@ -43,6 +43,27 @@ the `fast-path` `doctor_guest` writes/reads).
   grant), visibility-gated in the portal (a backgrounded tab emits none). The raw
   beats are the EARS-5 per-doctor-minute derivation's input (coalesced there, not
   suppressed at write time).
+
+**EARS-3** adds the gated chat command + the subscribe-only credential behind the
+**same** gate:
+
+- The `RoomConfig` grant carries `chat` — `{ url, token, channel, selfTag } | null`
+  (additively, alongside `stream`). The `token` is a Centrifugo connection JWT
+  (HS256, HMAC) whose `channels` claim lists **exactly** the caller's room channel
+  (`room:event:<id>`) — Centrifugo subscribes the connection **server-side** on
+  connect, so it is **gate-scoped** (this one room, no other) and **subscribe-only**
+  (the `room` namespace keeps `allow_publish_for_client` off — a client can never
+  publish directly). It fails **closed** to `chat: null` when Centrifugo is
+  unconfigured (the truthful "chat unavailable" state).
+- `PostChatMessage` (`POST /v1/events/:idOrSlug/chat`) — the **only** publish path.
+  It evaluates the identical `admit` gate, then publishes a server-authoritative,
+  PII-free `RoomChatMessage` (`{ id, authorTag, text, at }` — server `id`/`at`, a
+  non-reversible `authorTag` derived from the doctor's domain id, never their roster
+  identity, EARS-8) to the room channel over the Centrifugo HTTP API, credentialed
+  with the `http_api` key a browser never holds. It fans out to every subscriber in
+  real time (no reload). A guest (401), an unregistered doctor (403), and a
+  non-`live` / `ended` room (409) publish **nothing** (EARS-8); a Centrifugo outage
+  is a 503, never a phantom post.
 
 ## The gate — one policy, evaluated server-side
 
@@ -92,18 +113,34 @@ evaluates the resource-scoped rule and refuses server-side. See
 - `resolveRoomStream` (`provider-enum.ts`) — the pure EARS-2 read: the stream
   config → the grant's `stream`, provider from the closed enum, fail-closed to
   `null` on absent/unknown provider (never URL-sniffed).
+- `CentrifugoChatGateway` (`chat.gateway.ts`) — the EARS-3 chat gateway:
+  `credential(userId, eventId)` (mint the gate-scoped subscribe-only connection
+  token, or `null` when unconfigured), `publish(eventId, message)` (the sole
+  server-mediated publish over the Centrifugo HTTP API), `authorTag(userId)` (the
+  stable, non-reversible, PII-free author tag), and `channelForEvent`. Its config
+  (`ROOM_CHAT_CONFIG`) is resolved from `CENTRIFUGO_*` env by `resolveRoomChatConfig`
+  (`null` ⇒ chat disabled). Domain error: `ChatUnavailableError` (→ 503).
 - `RoomController` — `GET /v1/events/:idOrSlug/room` (EARS-1) + `POST
-/v1/events/:idOrSlug/heartbeat` (EARS-4), both `doctor_guest`-authenticated with
-  the resource-scoped `policy` gate (EARS-8).
+/v1/events/:idOrSlug/heartbeat` (EARS-4) + `POST /v1/events/:idOrSlug/chat`
+  (EARS-3), all `doctor_guest`-authenticated with the resource-scoped `policy` gate
+  (EARS-8).
 
 ## Boundaries & tracked seams
 
 - **Sibling handlers layer onto this gate.** The gated `RecordPresenceHeartbeat`
-  command (EARS-4) already evaluates the **same** `admit` decision before its
-  append. The remaining gated command `PostChatMessage` (EARS-3, Centrifugo
-  publish) will evaluate the same decision before any publish, and its Centrifugo
-  chat token extends the `RoomConfig` shape **additively** (as EARS-2's `stream`
-  and EARS-4's cadence already do). EARS-3 chat is not built here.
+  command (EARS-4) and `PostChatMessage` (EARS-3) both evaluate the **same** `admit`
+  decision before their append / publish, and both extend the `RoomConfig` shape
+  **additively** (EARS-4's cadence, EARS-2's `stream`, EARS-3's `chat` credential).
+  The remaining sibling is room-close refusal (EARS-7, #583) — the same gate already
+  refuses a post/beat once the event leaves `live`; EARS-7 adds the explicit
+  ended-state coverage.
+- **Chat rides Centrifugo (already in the stack).** EARS-3 adds a `room:event:<id>`
+  channel + a gate-scoped subscribe-only connection token — **no** new transport.
+  The `room` namespace (history + presence, client-publish off) is declared in the
+  dev-stand `infra/dev-stand/centrifugo/config.json`; the token HMAC secret is
+  `CENTRIFUGO_TOKEN_HMAC_SECRET` (must match the Centrifugo config's
+  `client.token.hmac_secret_key`). Centrifugo endpoint/keys are read from
+  `CENTRIFUGO_*` env, never hardcoded.
 - **Seam → feature 007.** The `live` window (room open/close) and the stream
   config are authored/driven by 007; until 007 lands, the gate is built +
   E2E-driven against **seeded live events with a seeded roster** (tracked on

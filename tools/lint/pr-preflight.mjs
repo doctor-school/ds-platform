@@ -14,25 +14,27 @@
 //      dispatching the Mode (a) review, against the LIVE PR (each guard's
 //      `gh pr view <N>` reads the real PR via the developer's authenticated gh CLI).
 //
-//   2. The STATIC tree-scan family (`STATIC_GUARDS`, opt-in via `--static`) — the
-//      cheap `tools/lint/*.ts` guards that need NO PR context, NO playwright/e2e,
-//      and NO Nest boot. PR #452 opened with the sibling `ears-naming` static guard
-//      red (non-canonical EARS headings the same PR added) — a CI-red rework loop a
-//      local static run would have caught pre-push. A `tools/lint`-touching branch
-//      runs `pnpm pr:preflight --static` before `gh pr create` (Issue #462;
-//      memory `feedback_orchestration_brief_full_lint_before_pr`). Excluded from
-//      this family: the four PR-gated guards above (they run in the base sweep),
+//   2. The STATIC tree-scan family (`STATIC_GUARDS`) — the cheap `tools/lint/*.ts`
+//      guards that need NO PR context, NO playwright/e2e, and NO Nest boot. In
+//      PR-number mode this family runs BY DEFAULT (#633), merged into the same
+//      summary + non-zero exit as the PR-gated family, so a static-guard violation
+//      (e.g. a non-canonical `ears-naming` heading, as in PR #452 / PR #632) fails
+//      at the post-PR preflight every author already runs — not later, in CI or a
+//      Mode-a review. `--no-static` opts out for the rare case it must be skipped;
+//      standalone (no PR number) it runs only via `--static`. Excluded from this
+//      family: the four PR-gated guards above (they run in the base sweep),
 //      `endpoint-authz` (boots a Nest context), and `tdd-signal` (also PR-gated).
 //
 // ── CLI contract ──────────────────────────────────────────────────────────────
-//   pnpm pr:preflight <N>            # PR-gated family only, against live PR #N
-//   pnpm pr:preflight --static       # static family only (standalone, pre-push)
-//   pnpm pr:preflight --static <N>   # BOTH: PR-gated (vs #N) + static family
-//   pnpm pr:preflight                # usage error (need a PR number or --static)
+//   pnpm pr:preflight <N>              # PR-gated (vs live PR #N) + static family (DEFAULT)
+//   pnpm pr:preflight <N> --no-static  # PR-gated only (opt out of the static family)
+//   pnpm pr:preflight --static         # static family only (standalone, pre-push)
+//   pnpm pr:preflight --static <N>     # both families (same as `<N>`)
+//   pnpm pr:preflight                  # usage error (need a PR number or --static)
 //
 // Canon: AGENTS.md §4 / `.claude/rules/repo-conventions.md` → "PR-event-gated
 // guards run only after push — pre-flight them locally"; ADR-0007 §2.6 (guard
-// table). Issues #406, #462.
+// table). Issues #406, #462, #633.
 //
 // Exit codes: 0 = all selected guards passed; 1 = at least one failed; 2 = usage
 // error.
@@ -57,6 +59,7 @@ export const GUARDS = [
 /**
  * The cheap STATIC tree-scan guards — every `tools/lint/*.ts` guard that needs no
  * PR context, no playwright/e2e, and no Nest boot — in CI-job order. Run by
+ * default in PR-number mode (#633; opt-out `--no-static`) and via standalone
  * `--static` for a full local sweep before `gh pr create`. `name` = CI job name,
  * `file` = tools/lint entrypoint. Deliberately EXCLUDES: the four PR-gated guards
  * in `GUARDS` + `tdd-signal` (PR-event-gated, need `gh pr view`) and
@@ -100,9 +103,41 @@ export function parsePrNumber(argv) {
   return n;
 }
 
-/** True when the `--static` flag is present (opt-in to the static guard family). */
+/** True when the `--static` flag is present (force the static guard family). */
 export function hasStaticFlag(argv) {
   return argv.includes("--static");
+}
+
+/**
+ * True when the `--no-static` opt-out flag is present. In PR-number mode the
+ * static family runs by default (#633); `--no-static` is the escape hatch for the
+ * rare case it must be skipped.
+ */
+export function hasNoStaticFlag(argv) {
+  return argv.includes("--no-static");
+}
+
+/**
+ * Resolve argv into the run plan — which guard families to run and whether the
+ * invocation is a usage error. The single pure seam the CLI branches on:
+ *
+ *   - PR-gated family runs iff a PR number is present.
+ *   - Static family runs by DEFAULT in PR-number mode (#633), opt-out via
+ *     `--no-static`; standalone it runs only when `--static` is passed. An
+ *     explicit `--static` always wins over `--no-static`.
+ *   - Usage error when nothing is selected (no PR number and no `--static`).
+ *
+ * @param {string[]} argv `process.argv.slice(2)`
+ * @returns {{prNumber: string|null, runPrGated: boolean, runStatic: boolean, usageError: boolean}}
+ */
+export function resolvePlan(argv) {
+  const prNumber = parsePrNumber(argv);
+  const staticFlag = hasStaticFlag(argv);
+  const noStatic = hasNoStaticFlag(argv);
+  const runPrGated = prNumber !== null;
+  const runStatic = staticFlag || (runPrGated && !noStatic);
+  const usageError = !runPrGated && !staticFlag;
+  return { prNumber, runPrGated, runStatic, usageError };
 }
 
 /**
@@ -160,22 +195,22 @@ function runGuard(guard, root, extraEnv) {
 
 function main() {
   const argv = process.argv.slice(2);
-  const prNumber = parsePrNumber(argv);
-  const runStatic = hasStaticFlag(argv);
+  const { prNumber, runPrGated, runStatic, usageError } = resolvePlan(argv);
 
-  if (!prNumber && !runStatic) {
+  if (usageError) {
     die(
       "Usage:\n" +
-        "  pnpm pr:preflight <N>           PR-event-gated guards vs live PR #N\n" +
-        "  pnpm pr:preflight --static      static tree-scan guards (pre-push)\n" +
-        "  pnpm pr:preflight --static <N>  both families in one sweep",
+        "  pnpm pr:preflight <N>              PR-event-gated guards vs live PR #N + static family (default)\n" +
+        "  pnpm pr:preflight <N> --no-static  PR-event-gated guards only (skip the static family)\n" +
+        "  pnpm pr:preflight --static         static tree-scan guards only (pre-push, no PR number)\n" +
+        "  pnpm pr:preflight --static <N>     both families in one sweep (same as `<N>`)",
     );
   }
 
   const root = repoRoot();
   const results = [];
 
-  if (prNumber) {
+  if (runPrGated) {
     out(
       `pre-flighting PR #${prNumber} against ${GUARDS.length} PR-event-gated guard(s)…`,
     );
@@ -193,11 +228,14 @@ function main() {
   for (const line of lines) process.stdout.write(`${line}\n`);
 
   if (!ok) {
+    // Re-run hint mirrors the invocation: PR-number mode runs the static family
+    // by default (#633), so no `--static` is appended there.
+    const rerun = runPrGated
+      ? `pnpm pr:preflight ${prNumber}`
+      : "pnpm pr:preflight --static";
     die(
-      `one or more guards failed — fix the finding(s) above, then re-run \`pnpm pr:preflight${
-        runStatic ? " --static" : ""
-      }${prNumber ? ` ${prNumber}` : ""}\` before ${
-        prNumber ? "dispatching the Mode (a) review" : "`gh pr create`"
+      `one or more guards failed — fix the finding(s) above, then re-run \`${rerun}\` before ${
+        runPrGated ? "dispatching the Mode (a) review" : "`gh pr create`"
       }.`,
       1,
     );

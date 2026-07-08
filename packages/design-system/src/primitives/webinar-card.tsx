@@ -57,6 +57,16 @@ export interface WebinarCardProps
   live?: boolean;
   /** Live-signal copy — «В эфире» (from the catalog); required visually when `live`. */
   liveLabel?: string;
+  /**
+   * Whether the VIEWER is registered for this event — surfaces the canvas
+   * `registered` variant's «вы записаны» marker (the green `✓` line, semantic
+   * `success` token). Composed by the caller from the viewer's own registration
+   * set (005 `MyEvents`); the public card projection itself never carries
+   * per-user state (004 EARS-10 publish-safe invariant).
+   */
+  registered?: boolean;
+  /** Registered-marker copy — «Вы записаны» (from the catalog); required visually when `registered`. */
+  registeredLabel?: string;
 }
 
 /** The pulsing round dot shared by the desktop sticker and the mobile live tag. */
@@ -83,6 +93,8 @@ const WebinarCard = React.forwardRef<HTMLAnchorElement, WebinarCardProps>(
       speakers = [],
       live = false,
       liveLabel,
+      registered = false,
+      registeredLabel,
       ...props
     },
     ref,
@@ -179,6 +191,32 @@ const WebinarCard = React.forwardRef<HTMLAnchorElement, WebinarCardProps>(
                 {i < speakers.length - 1 ? <br /> : null}
               </React.Fragment>
             ))}
+          </p>
+        ) : null}
+
+        {/* Registered marker — the canvas `registered` variant's «✓ …» line,
+            sitting where the canvas CTA row lives (the listing card renders no
+            CTA row — the whole card is the link). 13px/800 → text-caption +
+            font-extrabold; `role="status"` mirrors the live signal (an
+            at-a-glance state, not decoration). AA remap (the #270 precedent —
+            canvas colors failing AA on `bg-card` take the card-safe token): the
+            canvas paints the whole line green.500 (#009959), which is 3.68:1 on
+            the light card — below the 4.5:1 normal-text floor — and the palette
+            has no darker AA green. So the LABEL takes AA ink (`text-foreground`)
+            and only the decorative ✓ keeps the success hue (`text-success`) —
+            it is redundant with the adjacent label (WCAG 1.4.11 exempt). The
+            canvas's «Отменить» affordance is feature 005's un-register command —
+            not built, so no dead control renders here. */}
+        {registered && registeredLabel ? (
+          <p
+            role="status"
+            data-registered-marker=""
+            className="mt-4 inline-flex items-center gap-1.5 text-caption font-extrabold text-foreground"
+          >
+            <span aria-hidden="true" className="text-success">
+              ✓
+            </span>
+            {registeredLabel}
           </p>
         ) : null}
       </div>

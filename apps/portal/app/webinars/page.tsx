@@ -1,9 +1,11 @@
+import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import type { UpcomingBroadcastCard } from "@ds/schemas";
 import { Container } from "@ds/design-system/container";
 import { DayBand } from "@ds/design-system/day-band";
 import { WebinarCard } from "@ds/design-system/webinar-card";
 import { fetchUpcomingBroadcasts } from "../../lib/public-events";
+import { fetchMyEvents } from "../../lib/my-events";
 import {
   formatMskDayLabel,
   formatMskParts,
@@ -55,9 +57,40 @@ function groupByDay(cards: UpcomingBroadcastCard[]): DayGroup[] {
   return groups;
 }
 
+/**
+ * The viewer's own registered-event slugs (004 EARS-8 registered marker, owner
+ * decision on #559): composed in the PORTAL layer from the 005 `MyEvents` read —
+ * the public `UpcomingBroadcastCard` projection stays publish-safe (EARS-10, no
+ * per-user field on the public endpoint). A guest (no session cookie) issues no
+ * read and gets the unchanged public render; the marker is a per-viewer overlay
+ * enhancement, so a failed read degrades to the public render instead of taking
+ * the PUBLIC listing down with it.
+ */
+async function fetchRegisteredSlugs(): Promise<ReadonlySet<string>> {
+  const h = await headers();
+  try {
+    const result = await fetchMyEvents({
+      cookie: h.get("cookie") ?? "",
+      // The session is fingerprint-bound (ADR-0001 §6) — forward the same
+      // surface the browser bound at login (mirrors the event page's read).
+      userAgent: h.get("user-agent") ?? "",
+      acceptLanguage: h.get("accept-language") ?? "",
+    });
+    return new Set(
+      result.authenticated ? result.events.map((e) => e.slug) : [],
+    );
+  } catch {
+    // Per-viewer overlay only — never fail the public listing over it.
+    return new Set();
+  }
+}
+
 export default async function WebinarsListingPage() {
   const t = await getTranslations("webinars");
-  const cards = await fetchUpcomingBroadcasts();
+  const [cards, registeredSlugs] = await Promise.all([
+    fetchUpcomingBroadcasts(),
+    fetchRegisteredSlugs(),
+  ]);
   const groups = groupByDay(cards);
 
   return (
@@ -118,6 +151,8 @@ export default async function WebinarsListingPage() {
                         speakers={card.speakers}
                         live={card.state === "live"}
                         liveLabel={t("live")}
+                        registered={registeredSlugs.has(card.slug)}
+                        registeredLabel={t("registered")}
                       />
                     );
                   })}

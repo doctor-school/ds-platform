@@ -13,6 +13,7 @@ import {
 } from "@ds/design-system";
 import type { EventAdminDetail } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
+import { BackToList } from "@/components/back-to-list";
 import { EventForm } from "@/components/event-form";
 import { StreamConfigForm } from "@/components/stream-config-form";
 import { LifecycleActions } from "@/components/lifecycle-actions";
@@ -50,6 +51,7 @@ export default function EventEditPage() {
           <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
         ) : (
           <div className="flex flex-col gap-6">
+            <BackToList />
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-xl font-extrabold text-foreground">

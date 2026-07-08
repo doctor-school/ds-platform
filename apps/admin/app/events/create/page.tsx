@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { Alert } from "@ds/design-system";
 import type { EventAdminDetail } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
+import { BackToList } from "@/components/back-to-list";
 import { EventForm } from "@/components/event-form";
 import type { CreateEventVars } from "@/providers/data-provider";
 
@@ -25,6 +26,9 @@ export default function CreateEventPage() {
   return (
     <Authenticated key="events-create" redirectOnFail="/login">
       <AppShell>
+        <div className="mb-4">
+          <BackToList />
+        </div>
         <h1 className="mb-6 text-xl font-extrabold text-foreground">
           {t("events.createTitle")}
         </h1>

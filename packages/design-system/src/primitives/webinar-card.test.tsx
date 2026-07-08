@@ -83,6 +83,33 @@ describe("WebinarCard — geometry + tokens (EARS-14)", () => {
   });
 });
 
+describe("004 EARS-8 WebinarCard — registered variant (canvas `registered`)", () => {
+  it("EARS-8: the registered variant surfaces the «Вы записаны» marker — success-hued ✓ + AA ink label", () => {
+    render(<WebinarCard {...BASE} registered registeredLabel="Вы записаны" />);
+    const marker = screen.getByText("Вы записаны");
+    expect(marker).toBeInTheDocument();
+    // The #270 AA remap: the LABEL is card-safe ink (canvas green.500 is 3.68:1
+    // on the light card — sub-AA); only the decorative ✓ keeps the success hue.
+    expect(marker.className).toContain("text-foreground");
+    const glyph = marker.querySelector("[aria-hidden]");
+    expect(glyph?.className).toContain("text-success");
+    // An at-a-glance state signal, not decoration — mirrors the live signal.
+    expect(marker.getAttribute("role")).toBe("status");
+  });
+
+  it("EARS-8: an unregistered card carries no registered marker", () => {
+    render(<WebinarCard {...BASE} registeredLabel="Вы записаны" />);
+    expect(screen.queryByText("Вы записаны")).toBeNull();
+  });
+
+  it("EARS-8: the marker never renders without its catalog label (no hardcoded copy)", () => {
+    const { container } = render(<WebinarCard {...BASE} registered />);
+    // No label prop → no marker element at all (copy comes from the catalog,
+    // EARS-13 — the component ships no user-facing string of its own).
+    expect(container.querySelector("[data-registered-marker]")).toBeNull();
+  });
+});
+
 describe("WebinarCard — live variant (EARS-9)", () => {
   it("EARS-9: the live variant surfaces the «В эфире» signal", () => {
     render(<WebinarCard {...BASE} live liveLabel="В эфире" />);

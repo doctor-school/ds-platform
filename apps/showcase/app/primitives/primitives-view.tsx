@@ -39,6 +39,7 @@ import { DayBand } from "@ds/design-system/day-band";
 import { WebinarCard } from "@ds/design-system/webinar-card";
 import { WebinarPageContent } from "@ds/design-system/webinar-page-content";
 import { WebinarStatusCard } from "@ds/design-system/webinar-status-card";
+import { WebinarRoomLayout } from "@ds/design-system/webinar-room";
 import { Container } from "@ds/design-system/container";
 import {
   Form,
@@ -1178,13 +1179,14 @@ function WebinarCardSection() {
     >
       <p className="text-sm text-muted-foreground">
         The §09 listing unit (source{" "}
-        <code className="font-mono text-xs">webinar-card.dc.html</code>): a tinted
-        196px time plate (56px display time, explicit МСК label) and the content
-        column (school kicker, title, specialty chips, speakers), the whole card
-        a single block link to its event page. Desktop → the bordered, raised
-        grid; ≤900px → flat full-bleed with a bottom divider. Resize to watch the
-        split. The <span className="font-medium text-foreground">live</span>{" "}
-        variant surfaces the «В эфире» signal.
+        <code className="font-mono text-xs">webinar-card.dc.html</code>): a
+        tinted 196px time plate (56px display time, explicit МСК label) and the
+        content column (school kicker, title, specialty chips, speakers), the
+        whole card a single block link to its event page. Desktop → the
+        bordered, raised grid; ≤900px → flat full-bleed with a bottom divider.
+        Resize to watch the split. The{" "}
+        <span className="font-medium text-foreground">live</span> variant
+        surfaces the «В эфире» signal.
       </p>
       {(["scheduled", "live"] as const).map((variant) => (
         <SubRow key={variant} label={`variant="${variant}"`}>
@@ -1200,7 +1202,10 @@ function WebinarCardSection() {
                   title="Пластика ахиллова сухожилия: разбор клинических случаев"
                   specialties={["Травматология", "Ортопедия"]}
                   speakers={[
-                    { name: "Анна Соколова", org: "Травматолог-ортопед, к.м.н." },
+                    {
+                      name: "Анна Соколова",
+                      org: "Травматолог-ортопед, к.м.н.",
+                    },
                     { name: "Михаил Верещагин", org: "Хирург, профессор" },
                   ]}
                   live={variant === "live"}
@@ -1240,7 +1245,8 @@ function WebinarPageContentSection() {
               speakers={[
                 {
                   name: "Анна Соколова",
-                  credentials: "Травматолог-ортопед, к.м.н. · НМИЦ им. Пирогова",
+                  credentials:
+                    "Травматолог-ортопед, к.м.н. · НМИЦ им. Пирогова",
                 },
                 {
                   name: "Михаил Верещагин",
@@ -1310,8 +1316,8 @@ function WebinarStatusCardSection() {
         The <span className="font-medium text-foreground">live</span> render
         surfaces the «В эфире» signal; the{" "}
         <span className="font-medium text-foreground">ended</span> render passes
-        no CTA (no dead link). Desktop → the 196px time-plate grid; ≤900px → flat
-        full-bleed.
+        no CTA (no dead link). Desktop → the 196px time-plate grid; ≤900px →
+        flat full-bleed.
       </p>
       {states.map((s) => (
         <SubRow key={s.key} label={`status="${s.key}"`}>
@@ -1342,6 +1348,94 @@ function WebinarStatusCardSection() {
   );
 }
 
+function WebinarRoomSection() {
+  // A static demo of the composition shell — a placeholder player frame (no real
+  // embed iframe in the showcase), the event context, and the chat aside shell.
+  const playerFrame = (
+    <div className="relative aspect-video border-2 border-border bg-neutral-950 shadow-lg">
+      <Badge variant="live" className="absolute left-5 top-5">
+        В эфире
+      </Badge>
+      <div className="absolute inset-0 flex items-center justify-center text-sm text-neutral-300">
+        Плеер эфира
+      </div>
+    </div>
+  );
+  const context = (
+    <div>
+      <p className="text-caption font-extrabold uppercase tracking-micro text-primary-action">
+        Школа травматологии и ортопедии
+      </p>
+      <h1 className="mt-2.5 text-2xl font-extrabold tracking-tight text-foreground">
+        Пластика ахиллова сухожилия: разбор случаев
+      </h1>
+      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+        Анна Соколова · Михаил Верещагин
+      </p>
+    </div>
+  );
+  const chat = (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="border-b-2 border-border bg-primary-action px-4 py-3 text-center text-sm font-extrabold text-primary-foreground">
+        Чат
+      </div>
+      <div className="border-b-2 border-border bg-tint px-4 py-3 text-caption leading-relaxed text-tint-foreground">
+        📌 Модератор: вопросы можно задавать прямо в чате.
+      </div>
+      <div className="flex flex-1 items-center justify-center px-4 py-8 text-center text-sm text-muted-foreground">
+        Пока нет сообщений.
+      </div>
+      <div className="flex gap-3 border-t-2 border-border p-4">
+        <input
+          placeholder="Написать в чат…"
+          aria-label="Написать в чат"
+          disabled
+          className="min-w-0 flex-1 border-2 border-hairline bg-card px-4 py-3 text-sm text-foreground"
+        />
+        <button
+          type="button"
+          disabled
+          className="border-2 border-border bg-primary-action px-4 py-3 text-sm font-extrabold text-primary-foreground shadow-sm"
+        >
+          Отправить
+        </button>
+      </div>
+    </div>
+  );
+  return (
+    <PrimitiveSection
+      title="Webinar-room"
+      exportsLine="WebinarRoomLayout — the webinar room composition shell (player + chat aside; mobile Чат / О эфире tabs)"
+    >
+      <p className="text-sm text-muted-foreground">
+        The webinar room layout (source{" "}
+        <code className="font-mono text-xs">webinar-room.dc.html</code>, 006
+        EARS-2/EARS-11): desktop a{" "}
+        <code className="font-mono text-xs">1fr 400px</code> grid (player +
+        context left, chat aside right); mobile a full-bleed player + Чат / О
+        эфире tabs. The embed player is instantiated from the explicit provider
+        enum (never URL-sniffed); the chat aside is the composition shell
+        (behaviour is EARS-3).
+      </p>
+      <SubRow label="composition">
+        <ThemePair
+          render={() => (
+            <div className="w-full">
+              <WebinarRoomLayout
+                chatTabLabel="Чат"
+                infoTabLabel="О эфире"
+                player={playerFrame}
+                context={context}
+                chat={chat}
+              />
+            </div>
+          )}
+        />
+      </SubRow>
+    </PrimitiveSection>
+  );
+}
+
 export function PrimitivesView() {
   return (
     <div className="flex flex-col gap-2">
@@ -1366,6 +1460,7 @@ export function PrimitivesView() {
       <WebinarCardSection />
       <WebinarPageContentSection />
       <WebinarStatusCardSection />
+      <WebinarRoomSection />
       <ContainerSection />
     </div>
   );

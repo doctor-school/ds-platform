@@ -63,6 +63,10 @@ export {
   WebinarStatusCard,
   type WebinarStatusCardProps,
 } from "./primitives/webinar-status-card";
+export {
+  WebinarRoomLayout,
+  type WebinarRoomLayoutProps,
+} from "./primitives/webinar-room";
 
 // ── Layout primitive (#514, source §09 «Раскладка и ритм») ─────────────────────
 export {

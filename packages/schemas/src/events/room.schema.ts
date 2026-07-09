@@ -169,3 +169,52 @@ export const PresenceHeartbeatAckSchema = z.object({
   beatAt: z.iso.datetime({ offset: true }),
 });
 export type PresenceHeartbeatAck = z.infer<typeof PresenceHeartbeatAckSchema>;
+
+/**
+ * `DoctorPresenceMinutes` — one doctor's derived presence for an event (EARS-5;
+ * design §5). The per-doctor `{ doctor, event, minutes }` unit the sponsor
+ * report draws from:
+ *
+ * - `userId` is the doctor's opaque domain id (the 003 `users` mirror row the
+ *   beats attribute to) — **never** a registrant's email / phone / roster
+ *   identity, so the derivation carries no PII onto any surface (EARS-8).
+ * - `eventId` is the event the minutes were captured for.
+ * - `minutes` are **derived**, not stored: `(distinct N-second buckets the doctor
+ *   emitted a beat in) × N / 60` over the durable append-only `presence_beats`
+ *   (design §5). Concurrent tabs coalesce into one presence timeline (two tabs in
+ *   the same bucket count once), so the value never inflates past real covered
+ *   time; it is `nonnegative` (a doctor with no beats does not appear at all).
+ *
+ * There is no minute count in the durable table — the value is a server-side
+ * read-time derivation, never a client-supplied or client-trusted number
+ * (requirements Constraints "server-authoritative and durable").
+ */
+export const DoctorPresenceMinutesSchema = z.object({
+  userId: z.uuid(),
+  eventId: z.uuid(),
+  minutes: z.number().nonnegative(),
+});
+export type DoctorPresenceMinutes = z.infer<typeof DoctorPresenceMinutesSchema>;
+
+/**
+ * `EventPresence` — the per-event presence read model (EARS-5; design §5, read
+ * models). The set of per-doctor minutes derived from the append-only beats,
+ * **parameterized over N**: `intervalSeconds` is the heartbeat cadence the
+ * minutes were computed at (the server config `ROOM_HEARTBEAT_INTERVAL_SECONDS`
+ * by default), so an operator-confirmed different cadence recomputes the SAME
+ * beats with no code change (owner decision 2026-07-06). `doctors` carries only
+ * the doctors who emitted at least one beat.
+ *
+ * This is the shape the **wave-1 manual sponsor export** reads — there is **no**
+ * report UI and **no** public endpoint in wave 1 (EARS-5); the derivation is
+ * produced by a standalone ops read (`RoomModule` `PresenceDerivationService`,
+ * surfaced by the `presence:export` CLI) and is **never** exposed on a public
+ * surface (EARS-8). The wave-2 auto report «Отчёт партнёра V2» + auto-NMO consume
+ * this same derivation; the exact V2 columns/joins are a wave-2 owner call.
+ */
+export const EventPresenceSchema = z.object({
+  eventId: z.uuid(),
+  intervalSeconds: z.number().int().positive(),
+  doctors: z.array(DoctorPresenceMinutesSchema),
+});
+export type EventPresence = z.infer<typeof EventPresenceSchema>;

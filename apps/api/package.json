@@ -11,6 +11,7 @@
     "build:smoke": "node scripts/build-smoke.mjs",
     "start": "node dist/main.js",
     "reconcile:sweep": "tsx scripts/reconcile-sweep.ts",
+    "presence:export": "tsx scripts/presence-export.ts",
     "seed:events": "tsx scripts/seed-events.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

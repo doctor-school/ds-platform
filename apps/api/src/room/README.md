@@ -1,4 +1,4 @@
-# `room` — webinar room admission gate + embed provider + live chat + heartbeat presence (006 EARS-1, EARS-2, EARS-3, EARS-4)
+# `room` — webinar room admission gate + embed provider + live chat + heartbeat presence + presence-minute derivation (006 EARS-1, EARS-2, EARS-3, EARS-4, EARS-5)
 
 The webinar-room module — the **server-side admission gate** of feature 006
 (Webinar room), the foundation the watch side builds on. It hosts the **first
@@ -65,6 +65,50 @@ the `fast-path` `doctor_guest` writes/reads).
   non-`live` / `ended` room (409) publish **nothing** (EARS-8); a Centrifugo outage
   is a 503, never a phantom post.
 
+**EARS-5** derives the per-doctor sponsor minutes from those same beats (read-time,
+no new write):
+
+- `PresenceDerivationService.deriveForEvent(eventId, intervalSeconds?)` reads the
+  durable append-only `presence_beats` and yields the `EventPresence` read model —
+  per-doctor `{ userId, eventId, minutes }`. The minutes are **derived**, never
+  stored: `(distinct N-second buckets a doctor emitted a beat in) × N / 60`
+  (`PresenceRepository.deriveEventMinutes`, a `count(DISTINCT floor(epoch/N))`
+  scan on the composite `(event, user, beat_at)` index).
+- **Parameterized over N.** `intervalSeconds` defaults to the server cadence N
+  (`ROOM_HEARTBEAT_INTERVAL_SECONDS`); an operator-confirmed different cadence
+  recomputes the SAME beats with **no code change** (an explicit override does a
+  what-if / re-cadenced export). The returned `intervalSeconds` records which N
+  the minutes were computed at.
+- **Concurrent tabs never inflate.** A doctor's parallel-session beats for the
+  same event land in the same N-second buckets and collapse under `DISTINCT` — two
+  tabs beating in one bucket count once, not twice. The coalescing is this
+  read-time derivation, not a write-time suppression (every raw beat is still
+  durably appended by EARS-4).
+- **No public surface (EARS-8).** There is **no** report UI and **no** public
+  endpoint in wave 1 — the derivation is never exposed on a public surface, and it
+  carries no registrant PII (the per-doctor unit is the opaque domain `userId`
+  only, never an email / phone / roster identity). It is a standalone ops read.
+
+### Wave-1 manual sponsor export (the operator recipe)
+
+The first webinar's sponsor report is a **manual export** from this derivation
+(design §5) — run the `presence:export` CLI (an HTTP-less Nest context, mirroring
+the #119 reconcile CLI), with the dev-stand / production env injected:
+
+```sh
+set -a; source ~/.ds-platform/.env.local; set +a
+pnpm --filter @ds/api presence:export -- <event-id-or-slug> [intervalSeconds]
+```
+
+It prints the `EventPresence` JSON (`{ eventId, intervalSeconds, doctors: [{ userId,
+eventId, minutes }] }`) to stdout — the operator hands the per-doctor minutes to
+the sponsor. `<event-id-or-slug>` resolves by the same `idOrSlug` the room gate
+uses; the optional `[intervalSeconds]` overrides N for a re-cadenced export
+(omitted ⇒ the server-config default). The wave-2 auto report «Отчёт партнёра V2»
+
+- auto-NMO consume this same derivation; the exact V2 columns/joins are a wave-2
+  owner call.
+
 ## The gate — one policy, evaluated server-side
 
 Admission is `authenticated ∧ registered ∧ live` (design §2), evaluated in that
@@ -108,8 +152,16 @@ evaluates the resource-scoped rule and refuses server-side. See
   writes them.
 - `PresenceRepository` — the EARS-4 durable append-only presence write:
   `appendBeat(userId, eventId)` (INSERT-only, server-stamped instant) +
-  `findUserIdBySub` (the 003 mirror read, read-only). No update/delete surface —
-  the structural half of the append-only contract.
+  `findUserIdBySub` (the 003 mirror read, read-only) + the EARS-5 read-time
+  `deriveEventMinutes(eventId, intervalSeconds)` (the `count(DISTINCT
+floor(epoch/N))` per-doctor bucket scan). No update/delete surface — the
+  structural half of the append-only contract.
+- `PresenceDerivationService` — the EARS-5 per-doctor minute derivation:
+  `deriveForEvent(eventId, intervalSeconds?)` → the `EventPresence` read model
+  (parameterized over N from `ROOM_HEARTBEAT_INTERVAL_SECONDS` by default,
+  concurrent-tab-coalesced). Surfaced by the `presence:export` CLI
+  (`presence-export-cli.ts` → `scripts/presence-export.ts`) for the wave-1 manual
+  sponsor export — NOT a public endpoint (EARS-8).
 - `resolveRoomStream` (`provider-enum.ts`) — the pure EARS-2 read: the stream
   config → the grant's `stream`, provider from the closed enum, fail-closed to
   `null` on absent/unknown provider (never URL-sniffed).
@@ -131,7 +183,9 @@ evaluates the resource-scoped rule and refuses server-side. See
   command (EARS-4) and `PostChatMessage` (EARS-3) both evaluate the **same** `admit`
   decision before their append / publish, and both extend the `RoomConfig` shape
   **additively** (EARS-4's cadence, EARS-2's `stream`, EARS-3's `chat` credential).
-  The remaining sibling is room-close refusal (EARS-7, #583) — the same gate already
+  EARS-5 (`PresenceDerivationService`) reads those same beats at read time (the
+  sponsor minutes) — it adds no write and no public surface. The remaining sibling
+  is room-close refusal (EARS-7, #583) — the same gate already
   refuses a post/beat once the event leaves `live`; EARS-7 adds the explicit
   ended-state coverage.
 - **Chat rides Centrifugo (already in the stack).** EARS-3 adds a `room:event:<id>`

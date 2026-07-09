@@ -13,6 +13,7 @@ import { resolvePrimaryCta, toCanvasStatus } from "../../../lib/event-lifecycle"
 import {
   fetchEventRegistrationState,
   resolveJoinSignpost,
+  resolveRoomEntryHref,
 } from "../../../lib/registration-state";
 import { formatMskParts } from "../../../lib/msk";
 import { RegisterOneTap } from "./register-one-tap";
@@ -37,9 +38,10 @@ import { RegisterOneTap } from "./register-one-tap";
  *     carrying a same-origin `returnTo` (EARS-3, `lib/registration-handoff`).
  *   • live — a "live now" signal + the single «Участвовать» CTA that REGISTERS
  *     (005 EARS-1/EARS-9: register-during-live is a normal path — one-tap for an
- *     authenticated doctor, the auth handoff for a guest). The room and its
- *     onward navigation are the 006 surface (#584) — no render links to `/room`
- *     until it ships (a dead link / 404 is a banned pattern).
+ *     authenticated doctor, the auth handoff for a guest). For a doctor already
+ *     registered on the live event the CTA becomes the 006 EARS-6 ENTER-ROOM link
+ *     into the shipped room surface (`/webinars/:slug/room`) — a real front door,
+ *     never a dead link.
  *   • ended — the ended affordance with NO participation CTA (never a dead link,
  *     the exactly-one-CTA invariant).
  *
@@ -62,11 +64,11 @@ import { RegisterOneTap } from "./register-one-tap";
  * 005 EARS-5: for a registered doctor the page signposts HOW/WHEN they join,
  * layered on the lifecycle render (`resolveJoinSignpost`): `upcoming` → the «вы
  * записаны» confirmation + the МСК start (the status card time plate), replacing
- * the register CTA; `live` → the confirmation + the "broadcast is on" signpost.
- * The interactive onward-to-room affordance is the 006 room surface (#584) and
- * lands with it — never a dead `/room` link here. МСК presentation (EARS-11)
- * reuses the shared `formatMskParts` formatter; all copy resolves through the
- * catalog (EARS-12).
+ * the register CTA; `live` → the confirmation + the "broadcast is on" signpost +
+ * the 006 EARS-6 enter-room CTA (`resolveRoomEntryHref`) into the now-shipped room
+ * surface (`/webinars/:slug/room`) — the onward affordance that landed with the
+ * room, never a dead link. МСК presentation (EARS-11) reuses the shared
+ * `formatMskParts` formatter; all copy resolves through the catalog (EARS-12).
  *
  * Rendered per request (`force-dynamic`) — the page reflects a live read model
  * whose lifecycle state can change, so a static prerender would go stale.
@@ -118,6 +120,12 @@ export default async function WebinarEventPage({
   // surface, #584); `none` → 004's render stands (unregistered / guest / ended /
   // archived).
   const signpost = resolveJoinSignpost(registrationState, status);
+  // 006 EARS-6 — the registered-live room front door: the room surface shipped
+  // (`/webinars/:slug/room`, EARS-1..7), so the entry CTA deferred to #584 is
+  // restored. Non-null EXACTLY when a registered doctor is on a `live` event (the
+  // same condition the room gate admits them under) → the canonical, hardened room
+  // path; `null` in every other branch, so no room link renders.
+  const roomEntryHref = resolveRoomEntryHref(registrationState, status, event.slug);
   // 005 EARS-1 — a non-null per-user state means a session rode the request (a
   // logged-in doctor, registered or not); `null` is a guest (no cookie) or an
   // expired/fingerprint-mismatched session that falls back to the public render.
@@ -263,16 +271,22 @@ export default async function WebinarEventPage({
                 <CircleCheck aria-hidden className="size-5" />
                 {t("registered.confirmation")}
               </p>
-            ) : signpost.kind === "live" ? (
-              // 005 EARS-5 — registered + live: the «вы записаны» confirmation +
-              // the "broadcast is on" signpost (the card head/sub). The interactive
-              // onward-to-room affordance is the 006 room surface (#584) — until it
-              // ships, no link renders here (a `/room` link would 404, a banned
-              // dead-end; the deferral is tracked on #584).
-              <p className="inline-flex items-center gap-2 text-sm font-bold text-primary-action">
-                <CircleCheck aria-hidden className="size-5" />
-                {t("registered.confirmation")}
-              </p>
+            ) : roomEntryHref ? (
+              // 005 EARS-5 + 006 EARS-6 — registered + live: the «вы записаны»
+              // confirmation + the "broadcast is on" signpost (the card head/sub),
+              // and now the restored ENTER-ROOM CTA. The 006 room surface shipped
+              // (`/webinars/:slug/room`, EARS-1..7), so the onward-to-room affordance
+              // deferred to #584 lands here — a real link into the room the doctor is
+              // gated into, its label catalog-sourced (EARS-10), never a dead link.
+              <div className="flex flex-col items-start gap-3">
+                <p className="inline-flex items-center gap-2 text-sm font-bold text-primary-action">
+                  <CircleCheck aria-hidden className="size-5" />
+                  {t("registered.confirmation")}
+                </p>
+                <Button asChild size="lg">
+                  <Link href={roomEntryHref}>{t("registered.live.cta")}</Link>
+                </Button>
+              </div>
             ) : cta.kind === "register" && isAuthenticated ? (
               // 005 EARS-1 — logged-in doctor, not yet registered on a registrable
               // (upcoming/`published` OR `live`, EARS-9) event: the CTA is a

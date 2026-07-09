@@ -98,9 +98,10 @@ test.describe("005 EARS-4 registered-state overlay on the event page (e2e)", () 
  *   • `upcoming` → the МСК start date/time is on the page + a «вы записаны»
  *     confirmation (EARS-5 + EARS-11: no viewer-local drift — the МСК unit is
  *     unit-tested in `lib/msk-signpost.test.ts` with a `timezoneId` override here);
- *   • `live` → the confirmation + the "broadcast is on" signpost. The interactive
- *     onward-to-room affordance is the 006 room surface (#584) — until it ships,
- *     NO `/room` link renders (a dead link 404s — the #673 Stage-B finding).
+ *   • `live` → the confirmation + the "broadcast is on" signpost + the 006 EARS-6
+ *     ENTER-ROOM CTA. The room surface shipped (`/webinars/:slug/room`, EARS-1..7),
+ *     so the onward-to-room affordance deferred to #584 now renders as a real link
+ *     into the room the doctor is gated into — never a dead link.
  *
  * Same live-stand-gated tier as the EARS-4 block above: it needs a running portal
  * + api + a seeded event and a registered doctor. The registered-`live` case also
@@ -145,7 +146,7 @@ test.describe("005 EARS-5 registered join signposting on the event page (e2e)", 
     ).toHaveCount(0);
   });
 
-  test("005 EARS-5: registered + live — the page signposts «эфир идёт — вы записаны» with NO dead room link", async ({
+  test("005 EARS-5 / 006 EARS-6: registered + live — the page signposts «эфир идёт — вы записаны» and offers the enter-room CTA", async ({
     page,
   }) => {
     test.skip(
@@ -171,10 +172,12 @@ test.describe("005 EARS-5 registered join signposting on the event page (e2e)", 
     await expect(
       page.getByText("Эфир идёт — вы записаны", { exact: false }).first(),
     ).toBeVisible();
-    // …and NO link points at the not-yet-built 006 room — the onward-to-room
-    // affordance lands with the room surface itself (#584); a `/room` link here
-    // dead-ends in a 404 (the #673 Stage-B finding).
-    await expect(page.locator(`a[href*="/room"]`)).toHaveCount(0);
+    // …and the 006 EARS-6 enter-room CTA now points at the shipped room surface —
+    // the onward-to-room affordance that landed with the room (#584); a registered
+    // doctor on a live event gets a real link into `/webinars/:slug/room`.
+    await expect(
+      page.getByRole("link", { name: "Войти в эфир", exact: true }),
+    ).toHaveAttribute("href", `/webinars/${SLUG_LIVE}/room`);
     // No register affordance is re-offered to a registered doctor (EARS-4).
     await expect(
       page.getByRole("link", { name: "Участвовать", exact: true }),

@@ -1,0 +1,6 @@
+{
+  "number": 204,
+  "body": "## Summary\nRoom polish.\n\nStage-B: TBD\n",
+  "labels": [],
+  "files": [{ "path": "apps/portal/src/app/room/header.tsx" }]
+}

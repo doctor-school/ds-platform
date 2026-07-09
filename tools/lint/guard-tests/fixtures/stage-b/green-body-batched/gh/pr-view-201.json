@@ -1,0 +1,6 @@
+{
+  "number": 201,
+  "body": "## Summary\nAdmin event row.\n\nStage-B: batched at #700\n",
+  "labels": [],
+  "files": [{ "path": "apps/admin/src/app/events/row.tsx" }]
+}

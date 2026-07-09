@@ -45,7 +45,15 @@ pnpm ci:wait <N>   # must exit 0 again on the rebased head
 
 Only once the rebased head is green (and the ancestry check says `fresh`) proceed to Step 2. **Precedent:** two parallel branches cut off a pre-merge base each added the same dependency; the second to merge carried a `pnpm-lock.yaml` generated against the old tree, and the `setup` job went red on `main` post-merge (#218, memory `feedback_rebase_parallel_branches_for_lockfile`). The ancestry check catches exactly this class before it lands.
 
-**Step 2 — merge.** Once step 1 is green and step 1a says `fresh`, run exactly one command:
+**Step 1b — Stage-B pre-merge gate (user-facing PRs).** For a `user-facing` surface the rendered result must be re-confirmed by the product owner on the LIVE stand before merge, and an unanswered Stage-B question BLOCKS the merge (AGENTS.md §6). Run the deterministic gate against the live PR right before merging:
+
+```bash
+pnpm pr:preflight <N> --pre-merge   # runs the stage-b guard (#692)
+```
+
+Exit `0` = the PR touches no user-facing render surface, OR it carries a recorded `Stage-B: GO` / `Stage-B: batched at #<gate>` in the PR body or a linked-Issue comment → proceed to Step 2. Exit `1` = a user-facing PR with no Stage-B record → do **NOT** merge: get (and record) the owner's live verdict first. This is the mechanical enforcement of the passive §6 rule the 006 room slice (#691) slipped through — the guard is WARN-first (ADR-0007 §2.6) but the merge procedure treats a non-zero pre-merge gate as blocking. (The batched-gate carve-out: a child PR under an epic's batched Stage-B Issue records `Stage-B: batched at #<gate>` and passes.)
+
+**Step 2 — merge.** Once step 1 is green, step 1a says `fresh`, and step 1b passed, run exactly one command:
 
 ```bash
 gh pr merge <N> --auto --squash --delete-branch

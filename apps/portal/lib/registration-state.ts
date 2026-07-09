@@ -1,6 +1,7 @@
 import type { EventRegistrationState } from "@ds/schemas";
 
 import type { CanvasStatus } from "./event-lifecycle";
+import { buildRoomReturnHref } from "./room-return";
 
 /**
  * 005 EARS-4 — the per-user `EventRegistrationState` composed onto the 004 event
@@ -149,4 +150,28 @@ export function showRegisteredConfirmation(
   status: CanvasStatus,
 ): boolean {
   return resolveJoinSignpost(state, status).kind === "upcoming";
+}
+
+/**
+ * 006 EARS-6 — the registered-live room front door on the event page. The room
+ * surface (`/webinars/:slug/room`) shipped in EARS-1..7, so the entry CTA that was
+ * deliberately deferred to #584 (rendering a `/room` link before the room existed
+ * would have dead-ended in a 404 — the #673 Stage-B finding) is now restored.
+ *
+ * The pure state→href decision: exactly when the caller is registered AND the event
+ * is `live` (the `live` arm of {@link resolveJoinSignpost} — the same condition the
+ * room gate admits them under server-side), return the canonical same-origin room
+ * path; every other case (registered on a non-live event, unregistered, or a guest)
+ * returns `null` and no room link renders. The href is built through the hardened
+ * {@link buildRoomReturnHref} so a hostile slug can never front a cross-origin or
+ * protocol-relative target.
+ */
+export function resolveRoomEntryHref(
+  state: EventRegistrationState | null,
+  status: CanvasStatus,
+  slug: string,
+): string | null {
+  return resolveJoinSignpost(state, status).kind === "live"
+    ? buildRoomReturnHref(slug)
+    : null;
 }

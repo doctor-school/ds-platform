@@ -15,9 +15,10 @@ import LoginPage from "./page";
  */
 
 const push = vi.fn();
+const replace = vi.fn();
 let searchParams = new URLSearchParams();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push }),
+  useRouter: () => ({ push, replace }),
   useSearchParams: () => searchParams,
 }));
 
@@ -35,11 +36,17 @@ const requestOtp = vi.fn(
     new Promise<void>((resolve) => (resolveRequestOtp = resolve)),
 );
 const loginWithOtp = vi.fn().mockResolvedValue({});
+// #675: rendering the page now mounts the <AuthShell> auth-surface guard, which
+// reads `authClient.session()` on mount. Default it to the unauthenticated path
+// (resolves `null`) so the form renders as before; the guard's authed branch is
+// covered by components/auth-shell.test.tsx.
+const session = vi.fn().mockResolvedValue(null);
 vi.mock("@/lib/auth-client", () => ({
   authClient: {
     login: (body: unknown) => login(body),
     requestOtp: (body: unknown) => requestOtp(body),
     loginWithOtp: (body: unknown) => loginWithOtp(body),
+    session: () => session(),
   },
   AuthError: class extends Error {},
 }));
@@ -55,8 +62,19 @@ vi.mock("@/lib/registration-client", () => ({
 const EMAIL = "doc@example.com";
 const PASSWORD = "Sup3r$ecretPw!9";
 
+/**
+ * Render /login and wait past the #675 <AuthShell> session-guard. The guard renders
+ * nothing until `session()` resolves (to `null` here → the anonymous path), so the
+ * form appears asynchronously; gate on a stable form control before interacting.
+ */
+async function renderLogin() {
+  render(<LoginPage />);
+  await screen.findByTestId("login-method-password");
+}
+
 beforeEach(() => {
   push.mockClear();
+  replace.mockClear();
   login.mockClear();
   requestOtp.mockClear();
   loginWithOtp.mockClear();
@@ -74,7 +92,7 @@ afterEach(() => {
 describe("/login submit pending affordances (#337)", () => {
   it("shows spinner + aria-busy on the password submit while the login request is in flight", async () => {
     const user = userEvent.setup();
-    render(<LoginPage />);
+    await renderLogin();
 
     await user.type(screen.getByLabelText("emailOrPhone"), EMAIL);
     await user.type(screen.getByLabelText("password"), PASSWORD);
@@ -93,7 +111,7 @@ describe("/login submit pending affordances (#337)", () => {
 
   it("shows spinner + aria-busy on the OTP send submit while the code request is in flight", async () => {
     const user = userEvent.setup();
-    render(<LoginPage />);
+    await renderLogin();
 
     // Switch to the passwordless OTP method (Radix unmounts the password tab).
     await user.click(screen.getByTestId("login-method-otp"));
@@ -124,7 +142,7 @@ describe("005 EARS-2 guest-through-auth completion on /login", () => {
   it("EARS-2: on password-login success with a carried event context, the system shall register for that event and land on its page", async () => {
     searchParams = new URLSearchParams({ returnTo: "/webinars/ahilles-042" });
     const user = userEvent.setup();
-    render(<LoginPage />);
+    await renderLogin();
 
     await user.type(screen.getByLabelText("emailOrPhone"), EMAIL);
     await user.type(screen.getByLabelText("password"), PASSWORD);
@@ -143,7 +161,7 @@ describe("005 EARS-2 guest-through-auth completion on /login", () => {
 
   it("EARS-2: without a carried event context, password-login success lands on /account and registers nothing", async () => {
     const user = userEvent.setup();
-    render(<LoginPage />);
+    await renderLogin();
 
     await user.type(screen.getByLabelText("emailOrPhone"), EMAIL);
     await user.type(screen.getByLabelText("password"), PASSWORD);
@@ -159,7 +177,7 @@ describe("005 EARS-2 guest-through-auth completion on /login", () => {
   it("EARS-2: a cross-origin returnTo is rejected — login success lands on /account, nothing registers", async () => {
     searchParams = new URLSearchParams({ returnTo: "//evil.example" });
     const user = userEvent.setup();
-    render(<LoginPage />);
+    await renderLogin();
 
     await user.type(screen.getByLabelText("emailOrPhone"), EMAIL);
     await user.type(screen.getByLabelText("password"), PASSWORD);
@@ -175,7 +193,7 @@ describe("005 EARS-2 guest-through-auth completion on /login", () => {
   it("EARS-2: on OTP-login success with a carried event context, the system shall register for that event and land on its page", async () => {
     searchParams = new URLSearchParams({ returnTo: "/webinars/ahilles-042" });
     const user = userEvent.setup();
-    render(<LoginPage />);
+    await renderLogin();
 
     // Request a code on the passwordless method…
     await user.click(screen.getByTestId("login-method-otp"));
@@ -199,9 +217,9 @@ describe("005 EARS-2 guest-through-auth completion on /login", () => {
     });
   });
 
-  it("EARS-2: the create-account link carries the event context onward into /register", () => {
+  it("EARS-2: the create-account link carries the event context onward into /register", async () => {
     searchParams = new URLSearchParams({ returnTo: "/webinars/ahilles-042" });
-    render(<LoginPage />);
+    await renderLogin();
 
     const createAccount = screen.getByRole("link", { name: "createAccount" });
     expect(createAccount).toHaveAttribute(

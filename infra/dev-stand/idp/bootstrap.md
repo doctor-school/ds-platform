@@ -140,7 +140,8 @@ Then flip `IDP_BOOTSTRAP=` back off (so normal boots don't re-trigger init).
 web/OIDC application (`authorization_code` + `refresh_token`, BASIC auth, dev-mode
 http redirect URIs), the project-role assertion so
 `urn:zitadel:iam:org:project:roles` is emitted in the token, and seeds the
-`doctor_guest` role. It also **ensures the Login V2 instance feature** (a no-op if
+`doctor_guest` and `platform_admin` project roles (#662). It also **ensures the
+Login V2 instance feature** (a no-op if
 the FIRSTINSTANCE default already set it — converges instances created before that
 default), **grants `IAM_LOGIN_CLIENT`** to the `ds-bootstrap` machine user —
 without it the EARS-8 session-link call returns `403 No matching permissions found`
@@ -295,7 +296,7 @@ IDP_CLIENT_ID=<from provision.sh>             # the numeric Zitadel client id
 IDP_CLIENT_SECRET=<from provision.sh>
 IDP_PROJECT_ID=<from provision.sh>            # the IDP_PROJECT_ID= line the script
                                               # emits; the project owning the
-                                              # doctor_guest role.
+                                              # doctor_guest + platform_admin roles.
                                               # Required to grant the project role per
                                               # user on register/webhook/reconcile (#157)
                                               # — the OIDC token's project-roles claim is

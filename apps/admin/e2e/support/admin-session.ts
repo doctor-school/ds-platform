@@ -77,10 +77,10 @@ async function grantAdminRole(sub: string): Promise<void> {
   };
 
   // Ensure the `platform_admin` project role exists on the IdP before granting it
-  // (idempotent — 409 = already present). The dev-stand Zitadel provisioning today
-  // defines only `doctor_guest`; `platform_admin` must exist for the grant to
-  // resolve (`Errors.Project.Role.NotFound` otherwise). This is a stand-provisioning
-  // gap surfaced by #595 — see the PR decision-debt.
+  // (idempotent — 409 = already present). As of #662 the dev-stand Zitadel
+  // provisioning (`infra/dev-stand/idp/provision.sh`) seeds `platform_admin`
+  // alongside `doctor_guest`, so this inline ensure is now a DEFENSIVE guard only
+  // (it converges an out-of-band or pre-#662 stand) — it is no longer load-bearing.
   const roleRes = await fetch(
     `${issuer}/management/v1/projects/${projectId}/roles`,
     {

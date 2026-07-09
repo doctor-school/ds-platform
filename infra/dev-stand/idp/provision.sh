@@ -5,7 +5,8 @@
 # the dev-stand Zitadel: a project, a web/OIDC application (authorization_code +
 # refresh_token), redirect URIs for the api and portal, and the project-role
 # claim assertion so `urn:zitadel:iam:org:project:roles` is emitted in the token
-# (003 F2 parses it). It also seeds the `doctor_guest` project role.
+# (003 F2 parses it). It also seeds the `doctor_guest` and `platform_admin`
+# project roles.
 #
 # This replaces console click-paths with a committed, re-runnable script. Every
 # step is idempotent: re-running it converges, it does not duplicate.
@@ -36,8 +37,10 @@ APP_NAME="${IDP_APP_NAME:-ds-platform-dev}"
 # api callback path mirrors the BFF OIDC callback route. Override via env.
 REDIRECT_URIS="${IDP_REDIRECT_URIS:-http://localhost:3000/auth/callback,http://localhost:3100/auth/callback}"
 POST_LOGOUT_URIS="${IDP_POST_LOGOUT_URIS:-http://localhost:3000,http://localhost:3100}"
-# Project role to seed (the live BFF test asserts the roles claim is parsed).
-SEED_ROLE="${IDP_SEED_ROLE:-doctor_guest}"
+# Project roles to seed, comma-separated (the live BFF test asserts the roles
+# claim is parsed). `doctor_guest` is the default registrant role; `platform_admin`
+# is the admin role the 007 admin surface + admin E2E depend on (#662).
+SEED_ROLE="${IDP_SEED_ROLE:-doctor_guest,platform_admin}"
 
 # Delivery-mode flags (#176) — switch Zitadel's email/SMS providers between the
 # free dev sinks (default) and the REAL providers, the env-flag precedent of
@@ -171,7 +174,9 @@ else
   echo "reusing project ${PROJECT_ID}" >&2
 fi
 
-# ── 2. ensure seed project role ──────────────────────────────────────────────
+# ── 2. ensure seed project roles ─────────────────────────────────────────────
+# Seeds ALL roles in the SEED_ROLE CSV (doctor_guest + platform_admin) — each is
+# search-by-key/create-if-absent, so this loop is idempotent per role.
 IFS=',' read -r -a _roles <<< "$SEED_ROLE"
 for role in "${_roles[@]}"; do
   role="$(echo "$role" | tr -d ' ')"

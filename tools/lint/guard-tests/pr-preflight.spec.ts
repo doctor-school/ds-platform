@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   GUARDS,
+  MERGE_GUARDS,
   STATIC_GUARDS,
   hasNoStaticFlag,
+  hasPreMergeFlag,
   hasStaticFlag,
   parsePrNumber,
   resolvePlan,
@@ -55,6 +57,30 @@ describe("pr-preflight STATIC_GUARDS roster (#462)", () => {
   it("has no duplicate entrypoints", () => {
     const files = STATIC_GUARDS.map((g) => g.file);
     expect(new Set(files).size).toBe(files.length);
+  });
+});
+
+describe("pr-preflight MERGE_GUARDS roster (#692)", () => {
+  it("holds the stage-b pre-merge gate mapped to its entrypoint", () => {
+    expect(MERGE_GUARDS.map((g) => g.name)).toEqual(["stage-b"]);
+    for (const g of MERGE_GUARDS) expect(g.file).toMatch(/-lint\.ts$/);
+  });
+
+  it("is disjoint from the PR-gated and static families", () => {
+    const other = new Set([
+      ...GUARDS.map((g) => g.file),
+      ...STATIC_GUARDS.map((g) => g.file),
+    ]);
+    for (const g of MERGE_GUARDS) expect(other.has(g.file)).toBe(false);
+  });
+});
+
+describe("pr-preflight hasPreMergeFlag() (#692)", () => {
+  it("detects --pre-merge and the --stage-b alias anywhere in argv", () => {
+    expect(hasPreMergeFlag(["692", "--pre-merge"])).toBe(true);
+    expect(hasPreMergeFlag(["692", "--stage-b"])).toBe(true);
+    expect(hasPreMergeFlag(["692"])).toBe(false);
+    expect(hasPreMergeFlag([])).toBe(false);
   });
 });
 
@@ -117,6 +143,16 @@ describe("pr-preflight resolvePlan() (#633)", () => {
   it("lets explicit --static win over --no-static", () => {
     const plan = resolvePlan(["633", "--static", "--no-static"]);
     expect(plan.runStatic).toBe(true);
+  });
+
+  it("runs the pre-merge gate only with --pre-merge AND a PR number (#692)", () => {
+    expect(resolvePlan(["692", "--pre-merge"]).runMergeGate).toBe(true);
+    expect(resolvePlan(["692", "--stage-b"]).runMergeGate).toBe(true);
+    // default create-time preflight never runs the merge gate
+    expect(resolvePlan(["692"]).runMergeGate).toBe(false);
+    // --pre-merge without a PR number selects nothing runnable → usage error
+    expect(resolvePlan(["--pre-merge"]).runMergeGate).toBe(false);
+    expect(resolvePlan(["--pre-merge"]).usageError).toBe(true);
   });
 });
 

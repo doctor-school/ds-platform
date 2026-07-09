@@ -71,6 +71,21 @@ export const GUARDS = [
  * block (fumadocs compile), so this guard is the LOCAL pre-push mirror of that
  * existing gate — its `name` labels the local run, not a CI job.
  */
+/**
+ * The PRE-MERGE gate family — guards whose evidence exists only at MERGE time,
+ * not at PR-create time, so they must NOT run in the default post-create
+ * preflight (they would false-fail). Selected by `--pre-merge` (alias
+ * `--stage-b`) in PR-number mode and run as a HARD gate, contributing to the
+ * non-zero exit. The merge procedure (`merge-when-green`) runs
+ * `pnpm pr:preflight <N> --pre-merge` right before `gh pr merge`.
+ *
+ * `stage-b` (#692): a user-facing PR must carry a recorded product-owner Stage-B
+ * GO (AGENTS.md §6) — a Stage-B verdict is only recorded after the owner's live
+ * approval, which happens just before merge, so at create time there is nothing
+ * to check yet.
+ */
+export const MERGE_GUARDS = [{ name: "stage-b", file: "stage-b-lint.ts" }];
+
 export const STATIC_GUARDS = [
   { name: "frontmatter-yaml", file: "frontmatter-yaml-lint.ts" },
   { name: "events-drift", file: "events-lint.ts" },
@@ -119,6 +134,15 @@ export function hasNoStaticFlag(argv) {
 }
 
 /**
+ * True when the pre-merge gate is requested — `--pre-merge` or its `--stage-b`
+ * alias (#692). Runs the MERGE_GUARDS family as a hard gate; only meaningful with
+ * a PR number.
+ */
+export function hasPreMergeFlag(argv) {
+  return argv.includes("--pre-merge") || argv.includes("--stage-b");
+}
+
+/**
  * Resolve argv into the run plan — which guard families to run and whether the
  * invocation is a usage error. The single pure seam the CLI branches on:
  *
@@ -128,17 +152,22 @@ export function hasNoStaticFlag(argv) {
  *     explicit `--static` always wins over `--no-static`.
  *   - Usage error when nothing is selected (no PR number and no `--static`).
  *
+ *   - Pre-merge gate runs iff `--pre-merge` (or `--stage-b`) is passed WITH a PR
+ *     number — it is a merge-time hard gate, never a create-time default.
+ *
  * @param {string[]} argv `process.argv.slice(2)`
- * @returns {{prNumber: string|null, runPrGated: boolean, runStatic: boolean, usageError: boolean}}
+ * @returns {{prNumber: string|null, runPrGated: boolean, runStatic: boolean, runMergeGate: boolean, usageError: boolean}}
  */
 export function resolvePlan(argv) {
   const prNumber = parsePrNumber(argv);
   const staticFlag = hasStaticFlag(argv);
   const noStatic = hasNoStaticFlag(argv);
+  const preMerge = hasPreMergeFlag(argv);
   const runPrGated = prNumber !== null;
   const runStatic = staticFlag || (runPrGated && !noStatic);
+  const runMergeGate = preMerge && runPrGated;
   const usageError = !runPrGated && !staticFlag;
-  return { prNumber, runPrGated, runStatic, usageError };
+  return { prNumber, runPrGated, runStatic, runMergeGate, usageError };
 }
 
 /**
@@ -196,13 +225,15 @@ function runGuard(guard, root, extraEnv) {
 
 function main() {
   const argv = process.argv.slice(2);
-  const { prNumber, runPrGated, runStatic, usageError } = resolvePlan(argv);
+  const { prNumber, runPrGated, runStatic, runMergeGate, usageError } =
+    resolvePlan(argv);
 
   if (usageError) {
     die(
       "Usage:\n" +
         "  pnpm pr:preflight <N>              PR-event-gated guards vs live PR #N + static family (default)\n" +
         "  pnpm pr:preflight <N> --no-static  PR-event-gated guards only (skip the static family)\n" +
+        "  pnpm pr:preflight <N> --pre-merge  add the Stage-B pre-merge gate (run right before `gh pr merge`)\n" +
         "  pnpm pr:preflight --static         static tree-scan guards only (pre-push, no PR number)\n" +
         "  pnpm pr:preflight --static <N>     both families in one sweep (same as `<N>`)",
     );
@@ -210,18 +241,25 @@ function main() {
 
   const root = repoRoot();
   const results = [];
+  const prEnv = { GITHUB_EVENT_NAME: "pull_request", PR_NUMBER: prNumber };
 
   if (runPrGated) {
     out(
       `pre-flighting PR #${prNumber} against ${GUARDS.length} PR-event-gated guard(s)…`,
     );
-    const prEnv = { GITHUB_EVENT_NAME: "pull_request", PR_NUMBER: prNumber };
     for (const g of GUARDS) results.push(runGuard(g, root, prEnv));
   }
 
   if (runStatic) {
     out(`running ${STATIC_GUARDS.length} static tree-scan guard(s)…`);
     for (const g of STATIC_GUARDS) results.push(runGuard(g, root, {}));
+  }
+
+  if (runMergeGate) {
+    out(
+      `running ${MERGE_GUARDS.length} pre-merge gate guard(s) (Stage-B) vs live PR #${prNumber}…`,
+    );
+    for (const g of MERGE_GUARDS) results.push(runGuard(g, root, prEnv));
   }
 
   const { ok, lines } = summarize(results);

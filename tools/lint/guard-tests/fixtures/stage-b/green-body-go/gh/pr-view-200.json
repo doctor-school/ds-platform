@@ -1,0 +1,6 @@
+{
+  "number": 200,
+  "body": "## Summary\nRoom header chrome.\n\nStage-B: GO — product owner confirmed live 2026-07-09.\n",
+  "labels": [],
+  "files": [{ "path": "apps/portal/src/app/room/header.tsx" }]
+}

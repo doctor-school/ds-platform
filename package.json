@@ -38,6 +38,7 @@
     "lint:showcase-coverage": "tsx tools/lint/showcase-coverage-lint.ts",
     "lint:showcase-snippet": "tsx tools/lint/showcase-snippet-lint.ts",
     "lint:spec-status": "tsx tools/lint/spec-status-lint.ts",
+    "lint:stage-b": "tsx tools/lint/stage-b-lint.ts",
     "lint:submit-pending": "tsx tools/lint/submit-pending-lint.ts",
     "lint:tdd-signal": "tsx tools/lint/tdd-signal-lint.ts",
     "lint:workflow-auth": "tsx tools/lint/workflow-auth-lint.ts",

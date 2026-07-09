@@ -1,0 +1,7 @@
+{
+  "number": 301,
+  "title": "room header",
+  "milestone": null,
+  "body": "Issue body — stop-state names Stage-B as merge-blocking but no GO was recorded.",
+  "comments": [{ "body": "Dispatched the impl subagent." }]
+}

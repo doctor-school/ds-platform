@@ -1,0 +1,6 @@
+{
+  "number": 203,
+  "body": "## Summary\nRoom header chrome — merged without a Stage-B record (this is #691).\n\nCloses #301\n",
+  "labels": [],
+  "files": [{ "path": "apps/portal/src/app/room/header.tsx" }]
+}

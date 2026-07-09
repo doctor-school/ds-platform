@@ -1,0 +1,8 @@
+{
+  "number": 208,
+  "body": "## Summary\nRestyle the WebinarCard primitive.\n\nStage-B: GO — owner live-approved 2026-07-09.\n",
+  "labels": [{ "name": "feature:006-webinar-room" }],
+  "files": [
+    { "path": "packages/design-system/src/components/webinar-card.tsx" }
+  ]
+}

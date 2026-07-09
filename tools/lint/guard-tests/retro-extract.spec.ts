@@ -13,6 +13,7 @@ import {
   auqUserStrings,
   CORRECTION_RE,
   isAuqAnswer,
+  queuedCommandPrompt,
 } from "../../retro/extract.mjs";
 // SELF_CATCH is the assistant-side self-correction lexicon; #362 made it
 // exportable behind the same entry-point guard so it is unit testable.
@@ -93,6 +94,44 @@ describe("retro extract — AUQ answer detection (pure)", () => {
   it("CORRECTION_RE flags an AUQ free-text correction, not a benign preset", () => {
     expect(CORRECTION_RE.test("почему ты не создал своё рабочее дерево?")).toBe(true);
     expect(CORRECTION_RE.test("Вариант A")).toBe(false);
+  });
+});
+
+// ── queued_command interjection detection (pure) ────────────────────────────
+// A mid-stream owner interjection queued while the agent is busy is journaled as
+// a standalone `attachment`/`queued_command` entry (no `message`, type !==
+// 'user'), which the typed-message path skips — so a correction queued this way
+// was reported as 0. Only the `commandMode: 'prompt'` variant is real human
+// input; `commandMode: 'task-notification'` is a system/background wrapper and
+// must never be read as owner text.
+describe("retro extract — queued_command interjection detection (pure)", () => {
+  it("returns the prompt for a real `commandMode: 'prompt'` interjection", () => {
+    expect(
+      queuedCommandPrompt({
+        type: "attachment",
+        attachment: {
+          type: "queued_command",
+          prompt: "стоп, опять не то — верни как было",
+          commandMode: "prompt",
+        },
+      }),
+    ).toBe("стоп, опять не то — верни как было");
+  });
+
+  it("returns null for a `task-notification` wrapper and for a non-queued entry", () => {
+    expect(
+      queuedCommandPrompt({
+        type: "attachment",
+        attachment: {
+          type: "queued_command",
+          prompt: "<task-notification>…почему…</task-notification>",
+          commandMode: "task-notification",
+        },
+      }),
+    ).toBeNull();
+    expect(
+      queuedCommandPrompt({ type: "user", message: { role: "user", content: "hi" } }),
+    ).toBeNull();
   });
 });
 
@@ -298,15 +337,21 @@ describe("retro extract — AUQ corrections end-to-end", () => {
     return { summary, texts };
   }
 
-  it("flags the AUQ answer-value, the annotation note, and the content-string fallback", () => {
+  it("flags the AUQ answer-value, the annotation note, the content-string fallback, and the queued_command interjection", () => {
     const { summary, texts } = run();
-    // typed correction (entry 3) + AUQ value (4) + AUQ note (5) + fallback (8)
-    expect(summary.totalCorrectionFlagged).toBe(4);
+    // typed correction (entry 3) + AUQ value (4) + AUQ note (5) + fallback (8) +
+    // the mid-stream queued_command prompt interjection (9)
+    expect(summary.totalCorrectionFlagged).toBe(5);
     expect(texts).toContain("почему ты не создал своё рабочее дерево?");
     expect(texts).toContain(
       "это неправильно — guest по нашей спеке без MFA, исключаем из скоупа",
     );
     expect(texts).toContain("нет, я просил другое");
+    // the queued mid-stream owner interjection is now counted…
+    expect(texts).toContain("стоп, опять не то — верни как было в прошлый раз");
+    // …but a `task-notification` queued_command (entry 10) is a system wrapper,
+    // never owner text — its «почему-то» must not leak in as a correction.
+    expect(texts.some((t: string) => t.includes("Background command"))).toBe(false);
   });
 
   it("does not regress typed-turn detection or handoff exclusion", () => {

@@ -103,6 +103,43 @@ export function shouldRefuseTriage(status: MainSyncStatus): boolean {
 }
 
 /**
+ * The EXACT one-command self-remediation for a behind-`main` tree — a command,
+ * not "go figure out how to update main". `main` is a shared ref checked out in
+ * the PRIMARY worktree, so a linked feature worktree cannot fast-forward it in
+ * place; the fix targets the primary tree explicitly with `git -C`. The trailing
+ * comment states the precondition (the primary tree is clean & idle) so a caller
+ * pasting it knows when it is safe.
+ */
+export function mainSyncFixCommand(primaryPath: string): string {
+  return `git -C ${primaryPath} pull --ff-only origin main   # safe when the primary tree is clean & idle`;
+}
+
+/**
+ * Resolve the PRIMARY (non-linked) worktree path — where `main` is checked out.
+ * The primary tree's root is the parent of the shared `--git-common-dir`; this
+ * holds whether `cwd` is the primary tree or a linked worktree. Never throws:
+ * falls back to `cwd` when git is unavailable, so the fix hint always prints
+ * something runnable.
+ */
+export async function primaryWorktreePath(cwd: string): Promise<string> {
+  try {
+    const { stdout } = await execa(
+      "git",
+      ["rev-parse", "--git-common-dir"],
+      { cwd },
+    );
+    const common = stdout.trim();
+    if (common) {
+      const { dirname, resolve } = await import("node:path");
+      return dirname(resolve(cwd, common));
+    }
+  } catch {
+    /* fall through to cwd */
+  }
+  return cwd;
+}
+
+/**
  * Fetch `origin/main` and measure how far the LOCAL `main` ref is behind it.
  * Never throws: a fetch failure or an uncomputable count is captured in the
  * returned probe, so callers degrade to a banner instead of crashing.

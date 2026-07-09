@@ -6,6 +6,8 @@ import { useTranslations } from "next-intl";
 
 import { AuthLayout } from "@ds/design-system/blocks";
 
+import { useRedirectIfAuthenticated } from "@/lib/use-redirect-if-authenticated";
+
 /**
  * `<AuthShell>` (#237) — the portal-side glue that fills the design-system
  * `<AuthLayout>` split-screen block with the Doctor School brand: the wordmark logo
@@ -33,6 +35,12 @@ import { AuthLayout } from "@ds/design-system/blocks";
  */
 export function AuthShell({ children }: { children: ReactNode }) {
   const t = useTranslations("brand");
+  // #675: an already-authenticated visitor is redirected to `/account` and NO auth
+  // chrome is rendered. While the session check is pending — and once it resolves to
+  // an authenticated principal — the shell renders nothing (both hooks above run
+  // unconditionally first, satisfying the rules of hooks).
+  const guard = useRedirectIfAuthenticated();
+  if (guard !== "anonymous") return null;
   return (
     <AuthLayout
       logo={

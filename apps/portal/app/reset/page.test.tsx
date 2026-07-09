@@ -29,8 +29,9 @@ import ResetPage from "./page";
  */
 
 const push = vi.fn();
+const replace = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push }),
+  useRouter: () => ({ push, replace }),
 }));
 
 // Passthrough i18n: return the key (the test asserts on stable testids / roles, not
@@ -41,26 +42,46 @@ vi.mock("next-intl", () => ({
 
 const requestPasswordReset = vi.fn().mockResolvedValue({});
 const completePasswordReset = vi.fn().mockResolvedValue({});
+// #675: rendering the page mounts the <AuthShell> auth-surface guard, which reads
+// `authClient.session()` on mount — default it to the unauthenticated path so the
+// form renders as before (the authed branch lives in components/auth-shell.test.tsx).
+const session = vi.fn().mockResolvedValue(null);
 vi.mock("@/lib/auth-client", () => ({
   authClient: {
     requestPasswordReset: (body: unknown) => requestPasswordReset(body),
     completePasswordReset: (body: unknown) => completePasswordReset(body),
+    session: () => session(),
   },
   AuthError: class extends Error {},
 }));
 
 beforeEach(() => {
   push.mockClear();
+  replace.mockClear();
   requestPasswordReset.mockClear();
   completePasswordReset.mockClear();
 });
 afterEach(cleanup);
+
+/**
+ * Flush the #675 <AuthShell> session-guard microtask under FAKE timers. The guard
+ * renders nothing until `session()` resolves (to `null` → anonymous), and a
+ * `findBy*` poll would hang while timers are faked — so drain the resolved-promise
+ * microtask directly, after which the request form is in the DOM.
+ */
+async function flushAuthGuard() {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
 
 const IDENTIFIER = "user@example.com";
 const RESET_CODE = "PVDC3R";
 const NEW_PASSWORD = "Sup3r$ecretPw!9";
 
 async function advanceToCompleteStage(user: ReturnType<typeof userEvent.setup>) {
+  // #675: wait past the <AuthShell> session-guard so the request form is mounted.
+  await screen.findByTestId("reset-request-submit");
   // Request step: fill the union identifier box and submit to toggle stage→complete.
   const identifierInput = screen.getByRole("textbox");
   await user.type(identifierInput, IDENTIFIER);
@@ -79,6 +100,7 @@ describe("/reset complete step — resend with cooldown (#267)", () => {
     vi.useFakeTimers();
     try {
       render(<ResetPage />);
+      await flushAuthGuard(); // #675: mount the request form past the session-guard.
 
       // Request step → complete step, via synchronous events.
       fireEvent.change(screen.getByRole("textbox"), {
@@ -132,6 +154,7 @@ describe("/reset complete step — resend with cooldown (#267)", () => {
       vi.useFakeTimers();
       try {
         render(<ResetPage />);
+        await flushAuthGuard(); // #675: mount the request form past the session-guard.
         fireEvent.change(screen.getByRole("textbox"), {
           target: { value: idValue },
         });
@@ -242,6 +265,8 @@ describe("/reset submit pending affordances (#337)", () => {
     const user = userEvent.setup();
     requestPasswordReset.mockImplementationOnce(() => new Promise(() => {}));
     render(<ResetPage />);
+    // #675: wait past the <AuthShell> session-guard so the request form is mounted.
+    await screen.findByTestId("reset-request-submit");
 
     await user.type(screen.getByRole("textbox"), IDENTIFIER);
     const submit = screen.getByTestId("reset-request-submit");

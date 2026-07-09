@@ -45,11 +45,16 @@ vi.mock("next-intl", () => ({
 const verify = vi.fn().mockResolvedValue({ status: "verified" });
 const login = vi.fn().mockResolvedValue({});
 const resendVerification = vi.fn().mockResolvedValue({ status: "resend_requested" });
+// #675: rendering the page mounts the <AuthShell> auth-surface guard, which reads
+// `authClient.session()` on mount — default it to the unauthenticated path so the
+// surface renders as before (the authed branch lives in components/auth-shell.test.tsx).
+const session = vi.fn().mockResolvedValue(null);
 vi.mock("@/lib/auth-client", () => ({
   authClient: {
     verify: (body: unknown) => verify(body),
     login: (body: unknown) => login(body),
     resendVerification: (body: unknown) => resendVerification(body),
+    session: () => session(),
   },
   AuthError: class extends Error {},
 }));
@@ -83,9 +88,29 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+/**
+ * Wait past the #675 <AuthShell> session-guard (real timers): the guard renders
+ * nothing until `session()` resolves (to `null` → anonymous), so gate on a stable
+ * verify control before interacting.
+ */
+async function renderVerify() {
+  render(<VerifyPage />);
+  await screen.findByTestId("verify-submit");
+}
+
+/**
+ * Flush the #675 session-guard microtask under FAKE timers (a `findBy*` poll would
+ * hang while timers are faked), after which the verify surface is in the DOM.
+ */
+async function flushAuthGuard() {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
+
 describe("/verify dual-affordance + resend (#227/#267)", () => {
-  it("keeps BOTH co-equal paths: the code form AND the sign-in / reset actions", () => {
-    render(<VerifyPage />);
+  it("keeps BOTH co-equal paths: the code form AND the sign-in / reset actions", async () => {
+    await renderVerify();
     // (a) code entry path.
     expect(screen.getByTestId("verify-submit")).toBeInTheDocument();
     // (b) already-registered owner's prominent path — NOT collapsed away.
@@ -100,6 +125,7 @@ describe("/verify dual-affordance + resend (#227/#267)", () => {
     vi.useFakeTimers();
     try {
       render(<VerifyPage />);
+      await flushAuthGuard(); // #675: mount the verify surface past the session-guard.
       const resend = screen.getByTestId("verify-resend");
       // Starts in the 30s cooldown — disabled, no request can fire.
       expect(resend).toBeDisabled();
@@ -144,6 +170,7 @@ describe("/verify dual-affordance + resend (#227/#267)", () => {
       vi.useFakeTimers();
       try {
         render(<VerifyPage />);
+        await flushAuthGuard(); // #675: mount the verify surface past the session-guard.
         const resend = screen.getByTestId("verify-resend");
         act(() => {
           vi.advanceTimersByTime(30_000);
@@ -166,9 +193,9 @@ describe("/verify dual-affordance + resend (#227/#267)", () => {
     expect(first).not.toBe("");
   });
 
-  it("hides resend when there is no email destination to target (bare deep-link)", () => {
+  it("hides resend when there is no email destination to target (bare deep-link)", async () => {
     searchParams = new URLSearchParams();
-    render(<VerifyPage />);
+    await renderVerify();
     expect(screen.queryByTestId("verify-resend")).not.toBeInTheDocument();
     // …but the dual-affordance paths still render.
     expect(screen.getByTestId("verify-submit")).toBeInTheDocument();
@@ -177,7 +204,7 @@ describe("/verify dual-affordance + resend (#227/#267)", () => {
 
   it("auto-submits the fixed-length code (no manual click) and verifies it (EARS-16 path preserved)", async () => {
     const user = userEvent.setup();
-    render(<VerifyPage />);
+    await renderVerify();
 
     const codeInput = screen.getByRole("textbox");
     await user.click(codeInput);
@@ -198,7 +225,7 @@ describe("/verify dual-affordance + resend (#227/#267)", () => {
     // call pending so the in-flight state is observable.
     const user = userEvent.setup();
     verify.mockImplementationOnce(() => new Promise(() => {}));
-    render(<VerifyPage />);
+    await renderVerify();
 
     const submit = screen.getByTestId("verify-submit");
     expect(submit).not.toHaveAttribute("aria-busy");
@@ -227,7 +254,7 @@ describe("/verify dual-affordance + resend (#227/#267)", () => {
 describe("005 EARS-2 guest-through-auth completion on /verify", () => {
   async function enterCode() {
     const user = userEvent.setup();
-    render(<VerifyPage />);
+    await renderVerify();
     const codeInput = screen.getByRole("textbox");
     await user.click(codeInput);
     await user.keyboard(VERIFY_CODE);
@@ -278,12 +305,12 @@ describe("005 EARS-2 guest-through-auth completion on /verify", () => {
     expect(registerForEvent).not.toHaveBeenCalled();
   });
 
-  it("EARS-2: the co-equal «Войти» action carries the event context onward into /login", () => {
+  it("EARS-2: the co-equal «Войти» action carries the event context onward into /login", async () => {
     searchParams = new URLSearchParams({
       email: EMAIL,
       returnTo: "/webinars/ahilles-042",
     });
-    render(<VerifyPage />);
+    await renderVerify();
 
     expect(screen.getByTestId("verify-go-to-login")).toHaveAttribute(
       "href",

@@ -17,9 +17,10 @@ import RegisterPage from "./page";
  */
 
 const push = vi.fn();
+const replace = vi.fn();
 let searchParams = new URLSearchParams();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push }),
+  useRouter: () => ({ push, replace }),
   useSearchParams: () => searchParams,
 }));
 
@@ -36,9 +37,14 @@ const register = vi.fn(
       resolveRegister = resolve;
     }),
 );
+// #675: rendering the page mounts the <AuthShell> auth-surface guard, which reads
+// `authClient.session()` on mount — default it to the unauthenticated path so the
+// form renders as before (the authed branch lives in components/auth-shell.test.tsx).
+const session = vi.fn().mockResolvedValue(null);
 vi.mock("@/lib/auth-client", () => ({
   authClient: {
     register: (body: unknown) => register(body),
+    session: () => session(),
   },
   AuthError: class extends Error {},
 }));
@@ -46,8 +52,19 @@ vi.mock("@/lib/auth-client", () => ({
 const EMAIL = "doc@example.com";
 const PASSWORD = "Sup3r$ecretPw!9";
 
+/**
+ * Render /register and wait past the #675 <AuthShell> session-guard. The guard
+ * renders nothing until `session()` resolves (to `null` here → the anonymous path),
+ * so the form appears asynchronously; gate on the submit before interacting.
+ */
+async function renderRegister() {
+  render(<RegisterPage />);
+  await screen.findByTestId("register-submit");
+}
+
 beforeEach(() => {
   push.mockClear();
+  replace.mockClear();
   register.mockClear();
   resolveRegister = undefined;
   searchParams = new URLSearchParams();
@@ -61,7 +78,7 @@ afterEach(() => {
 describe("/register submit pending affordance (#337)", () => {
   it("shows the spinner + aria-busy on the submit while the register request is in flight", async () => {
     const user = userEvent.setup();
-    render(<RegisterPage />);
+    await renderRegister();
 
     await user.type(screen.getByLabelText("email"), EMAIL);
     await user.type(screen.getByLabelText("password"), PASSWORD);
@@ -92,7 +109,7 @@ describe("/register submit pending affordance (#337)", () => {
 describe("005 EARS-2 event-context carry through /register", () => {
   async function submitRegistration() {
     const user = userEvent.setup();
-    render(<RegisterPage />);
+    await renderRegister();
     await user.type(screen.getByLabelText("email"), EMAIL);
     await user.type(screen.getByLabelText("password"), PASSWORD);
     await user.click(screen.getByTestId("register-submit"));
@@ -122,9 +139,9 @@ describe("005 EARS-2 event-context carry through /register", () => {
     );
   });
 
-  it("EARS-2: the «already have an account» link carries the event context onward into /login", () => {
+  it("EARS-2: the «already have an account» link carries the event context onward into /login", async () => {
     searchParams = new URLSearchParams({ returnTo: "/webinars/ahilles-042" });
-    render(<RegisterPage />);
+    await renderRegister();
 
     expect(screen.getByRole("link", { name: "haveAccount" })).toHaveAttribute(
       "href",

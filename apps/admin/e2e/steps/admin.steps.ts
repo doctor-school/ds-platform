@@ -232,6 +232,23 @@ Then("the caller is bounced to the login screen", async ({ page }) => {
   await expect(page.getByTestId("login-submit")).toBeVisible();
 });
 
+// ── #675 authenticated-session auth-surface guard ────────────────────────────
+
+When("the operator opens the login screen", async ({ page }) => {
+  await page.goto("/login");
+});
+
+Then(
+  "the operator is redirected to the events list without a login form",
+  async ({ page }) => {
+    // #675: the admin `/login` wraps its form in Refine's <Authenticated> — an
+    // already-admitted platform_admin is sent to the `events` resource root and the
+    // login form is never rendered (the fallback shows only when unauthenticated).
+    await page.waitForURL(/\/events/);
+    await expect(page.getByTestId("login-form")).toHaveCount(0);
+  },
+);
+
 // ── #665 client-side validation with rendered RU errors ──────────────────────
 
 When(

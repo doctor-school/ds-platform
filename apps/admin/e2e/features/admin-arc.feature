@@ -58,6 +58,12 @@ Feature: Minimal event admin — one operator creates, streams, runs, and archiv
     When the caller opens the events page
     Then the caller is bounced to the login screen
 
+  @EARS-8 @auth-guard @happy
+  Scenario: An already-authenticated admin visiting the login screen is redirected to the events list
+    Given a platform_admin operator in the admin app
+    When the operator opens the login screen
+    Then the operator is redirected to the events list without a login form
+
   @EARS-10 @validation @failure
   Scenario: The create form refuses invalid input with rendered RU validation errors
     Given a platform_admin operator in the admin app

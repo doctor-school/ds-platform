@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { useLogin } from "@refinedev/core";
+import { Authenticated, useLogin } from "@refinedev/core";
+import { NavigateToResource } from "@refinedev/nextjs-router";
 import { useTranslations } from "next-intl";
 import {
   Alert,
@@ -36,8 +37,16 @@ import { useLocalizedResolver } from "@/lib/use-localized-resolver";
  * client validation is RHF + the `@ds/design-system` field-schema fragments
  * ({@link LoginFormSchema}) rendered as RU `<FormMessage>` copy on blur — native
  * browser validation is suppressed (`noValidate`), matching every other admin form.
+ *
+ * #675 auth-surface guard: the default export wraps this form in Refine's
+ * `<Authenticated>`. An already-admitted `platform_admin` (the same
+ * `authProvider.check` used everywhere — no new gate) renders the children
+ * (`<NavigateToResource resource="events">` → the admin root `/events`); an
+ * unauthenticated caller renders the `fallback` (this form, unchanged). `loading`
+ * is `null` while `check` runs, so no login form flashes before the redirect
+ * resolves.
  */
-export default function LoginPage() {
+function LoginForm() {
   const t = useTranslations();
   const { mutate: login, isLoading } = useLogin();
   const [error, setError] = useState<string | null>(null);
@@ -128,5 +137,25 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/**
+ * #675: redirect an already-authenticated admin away from `/login`. When
+ * `authProvider.check` admits the caller (a `platform_admin` session) the children
+ * render → `<NavigateToResource>` sends them to the `events` resource (admin root);
+ * otherwise the `fallback` login form renders exactly as before. `loading={null}`
+ * suppresses any pre-resolution flash of the form.
+ */
+export default function LoginPage() {
+  return (
+    <Authenticated
+      key="login-redirect"
+      fallback={<LoginForm />}
+      loading={null}
+      v3LegacyAuthProviderCompatible={false}
+    >
+      <NavigateToResource resource="events" />
+    </Authenticated>
   );
 }

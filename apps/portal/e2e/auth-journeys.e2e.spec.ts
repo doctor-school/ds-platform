@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { fetchMessage, fetchOtpCode } from "./support/mailpit";
 import { NOTIFICATION_SUBJECTS } from "./support/notification-subjects";
 import { fetchSmsOtpCode } from "./support/sms-sink";
+import { provisionLoggedInDoctor } from "./support/doctor-session";
 import {
   createUserWithPhone,
   deleteUser,
@@ -133,6 +134,36 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await page.waitForURL(/\/login/);
     const after = await page.context().cookies();
     expect(after.find((c) => c.name === SESSION_COOKIE)?.value || "").toBe("");
+  });
+
+  // #675 — an ALREADY-authenticated session must not be able to re-walk the auth
+  // flow. After minting a real logged-in doctor (lands on /account), visiting each
+  // of the four portal auth surfaces redirects straight back to /account with NO
+  // auth form rendered. Selectors stay locale-agnostic (`data-testid`), never RU
+  // text. The <AuthShell> guard (client `GET /v1/auth/session`) is the mechanism.
+  test("authenticated session is redirected off every auth surface to /account (no form)", async ({
+    page,
+  }) => {
+    // Mint a real logged-in doctor via the shipped 003 flow (ends on /account).
+    await provisionLoggedInDoctor(page);
+    await page.waitForURL(/\/account/);
+
+    // Each auth surface, with the submit control that exists ONLY on the
+    // unauthenticated form — its absence proves no auth form was rendered.
+    const surfaces: { route: string; submitTestId: string }[] = [
+      { route: "/login", submitTestId: "password-login-submit" },
+      { route: "/register", submitTestId: "register-submit" },
+      { route: "/reset", submitTestId: "reset-request-submit" },
+      { route: "/verify", submitTestId: "verify-submit" },
+    ];
+
+    for (const { route, submitTestId } of surfaces) {
+      await page.goto(route);
+      // The guard redirects the authenticated visitor straight to /account…
+      await page.waitForURL(/\/account/);
+      // …and never rendered the auth form on the way (no flash of the submit).
+      await expect(page.getByTestId(submitTestId)).toHaveCount(0);
+    }
   });
 
   test("email-OTP: register+verify → request code → login → session", async ({

@@ -6,6 +6,7 @@ import {
   resolveRoomChatConfig,
   type RoomChatConfig,
 } from "./chat.gateway.js";
+import { PresenceDerivationService } from "./presence-derivation.service.js";
 import { PresenceRepository } from "./presence.repository.js";
 import { RoomController } from "./room.controller.js";
 import { RoomRepository } from "./room.repository.js";
@@ -36,6 +37,12 @@ import {
  * (design §4). Its config (`ROOM_CHAT_CONFIG`) is bound from `CENTRIFUGO_*` env; a
  * Centrifugo-less runtime binds `null` and chat degrades to the truthful
  * unavailable state (grant carries `chat: null`).
+ *
+ * EARS-5 adds the read-time {@link PresenceDerivationService}: it derives the
+ * per-doctor `EventPresence` minutes from the SAME append-only beats (parameterized
+ * over N, concurrent-tab-coalesced) for the wave-1 manual sponsor export. It is a
+ * standalone ops read (the `presence:export` CLI), NOT a public endpoint — the
+ * derivation is never exposed on a public surface (EARS-8).
  */
 @Module({
   imports: [RegistrationModule],
@@ -44,6 +51,7 @@ import {
     RoomService,
     RoomRepository,
     PresenceRepository,
+    PresenceDerivationService,
     CentrifugoChatGateway,
     {
       provide: ROOM_HEARTBEAT_INTERVAL_SECONDS,

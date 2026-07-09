@@ -1,7 +1,8 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { DrizzleHandle } from "@ds/db";
+import type { DoctorPresenceMinutes } from "@ds/schemas";
 import { presenceBeats, users } from "@ds/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 
 type Db = DrizzleHandle["db"];
@@ -57,5 +58,55 @@ export class PresenceRepository {
     // defence, never a silent no-op that would lose a captured beat.
     if (!row) throw new Error("presence beat insert returned no row");
     return { beatAt: row.beatAt };
+  }
+
+  /**
+   * Derive per-doctor presence minutes for one event from the append-only beats
+   * (006 EARS-5; design §5). Read-only — the durable beats are never mutated.
+   *
+   * The derivation is **parameterized over N** (`intervalSeconds`, the server
+   * heartbeat cadence): each beat is bucketed to the N-second grid
+   * (`floor(epoch(beat_at) / N)`) and the minutes are the count of **distinct**
+   * buckets a doctor emitted a beat in, `× N / 60`. Two consequences the design
+   * makes load-bearing fall straight out of the DISTINCT count:
+   *
+   * - **Concurrent tabs never inflate.** A doctor's parallel-session beats for the
+   *   same event land in the same buckets and collapse under `DISTINCT` — two tabs
+   *   beating in the same N-second bucket count once, not twice (the coalescing is
+   *   this read-time derivation, not a write-time suppression — every raw beat is
+   *   still durably appended by {@link appendBeat}).
+   * - **No stored count.** The minutes are computed here at read time; there is no
+   *   client-supplied or client-trusted count column (requirements Constraints).
+   *
+   * Passing a different `intervalSeconds` recomputes the SAME beats with no code
+   * change — an operator-confirmed different cadence changes CONFIG, not this
+   * query. Only doctors with at least one beat appear (a `GROUP BY user_id` over
+   * the event's beats); the composite `(event, user, beat_at)` index serves the
+   * scan. Minutes are rounded to whole seconds' worth of precision (3 dp) so a
+   * fractional cadence — e.g. N=30 ⇒ 0.5-minute buckets — carries no float noise.
+   */
+  async deriveEventMinutes(
+    eventId: string,
+    intervalSeconds: number,
+  ): Promise<DoctorPresenceMinutes[]> {
+    const result = await this.db.execute<{ userId: string; buckets: string }>(
+      sql`
+        SELECT
+          ${presenceBeats.userId} AS "userId",
+          count(DISTINCT floor(
+            extract(epoch from ${presenceBeats.beatAt}) / ${intervalSeconds}
+          )) AS buckets
+        FROM ${presenceBeats}
+        WHERE ${presenceBeats.eventId} = ${eventId}
+        GROUP BY ${presenceBeats.userId}
+        ORDER BY ${presenceBeats.userId}
+      `,
+    );
+    return result.rows.map((row) => ({
+      userId: row.userId,
+      eventId,
+      minutes:
+        Math.round(((Number(row.buckets) * intervalSeconds) / 60) * 1000) / 1000,
+    }));
   }
 }

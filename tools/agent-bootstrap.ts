@@ -18,7 +18,13 @@ import { readFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
-import { evaluateMainSync, mainSyncMessage, probeMainSync } from "./main-sync";
+import {
+  evaluateMainSync,
+  mainSyncFixCommand,
+  mainSyncMessage,
+  primaryWorktreePath,
+  probeMainSync,
+} from "./main-sync";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -558,8 +564,9 @@ async function main(): Promise<void> {
   // degrades to the softer stale banner and never blocks.
   const syncMsg = mainSyncMessage(sync);
   if (sync.kind === "behind") {
+    const fix = mainSyncFixCommand(await primaryWorktreePath(REPO_ROOT));
     out.push(
-      `> 🛑 **STALE MAIN — ${syncMsg}.** Your local \`main\` is behind \`origin/main\`, so readiness and tooling computed now may be stale (#630/#418). Run \`git pull --ff-only origin main\` (or rebase this branch onto \`origin/main\`) before trusting triage.`,
+      `> 🛑 **STALE MAIN — ${syncMsg}.** Your local \`main\` is behind \`origin/main\`, so readiness and tooling computed now may be stale (#630/#418). Run this exact command, then re-run bootstrap/triage before trusting readiness:\n> \`${fix}\``,
     );
     out.push("");
   } else if (syncMsg) {

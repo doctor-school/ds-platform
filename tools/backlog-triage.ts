@@ -40,7 +40,9 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   evaluateMainSync,
+  mainSyncFixCommand,
   mainSyncMessage,
+  primaryWorktreePath,
   probeMainSync,
   shouldRefuseTriage,
 } from "./main-sync";
@@ -571,11 +573,12 @@ async function main(): Promise<void> {
   // fetch failure (offline) degrades to a stale banner and proceeds, never dies.
   const sync = evaluateMainSync(await probeMainSync(REPO_ROOT));
   if (shouldRefuseTriage(sync)) {
+    const fix = mainSyncFixCommand(await primaryWorktreePath(REPO_ROOT));
     process.stderr.write(
       `🛑 [backlog-triage] REFUSING to triage: ${mainSyncMessage(sync)}.\n` +
         `The local tool code and dependency graph may be stale (#630/#418). ` +
-        `Run \`git pull --ff-only origin main\` (or rebase this branch onto ` +
-        `\`origin/main\`) first, then re-run \`pnpm backlog:triage\`.\n`,
+        `Run this exact command, then re-run \`pnpm backlog:triage\`:\n` +
+        `  ${fix}\n`,
     );
     process.exit(1);
   }

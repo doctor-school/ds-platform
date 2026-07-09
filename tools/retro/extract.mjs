@@ -232,6 +232,26 @@ export function auqUserStrings(e) {
   return out;
 }
 
+// ── queued_command interjections ───────────────────────────────────────────
+// A mid-stream owner interjection typed WHILE the agent is busy is journaled not
+// as a `type: 'user'` turn but as a standalone `attachment` entry (no `message`)
+// whose payload is a `queued_command`. The typed-message path below only ever
+// sees `type: 'user'` entries, so these escaped the extractor entirely — a
+// mid-stream correction queued this way was reported as 0 (this session: 2 real
+// owner corrections seen as 0).
+//
+// Only the `commandMode: 'prompt'` variant is real human input. The other
+// variant, `commandMode: 'task-notification'`, is a system/background wrapper
+// (a `<task-notification>` / agent-finished envelope) the retro must NEVER read
+// as owner text — so classification keys on `commandMode`, and `isNoise`/handoff
+// filtering still applies to the extracted prompt as a second line of defence.
+export function queuedCommandPrompt(e) {
+  const att = e && e.attachment;
+  if (!att || att.type !== 'queued_command') return null;
+  if (att.commandMode !== 'prompt') return null;
+  return typeof att.prompt === 'string' ? att.prompt : null;
+}
+
 function textOf(content) {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
@@ -336,6 +356,27 @@ function main() {
       if (e.gitBranch) meta.branches.add(e.gitBranch);
       if (e.version) meta.version = e.version;
       if (e.isCompactSummary) meta.hasCompact = true;
+
+      // A mid-stream owner interjection queued while the agent is busy arrives as
+      // an `attachment`/`queued_command` entry (not a `type: 'user'` turn), so
+      // the typed-message path below never reaches it. Capture the real `prompt`
+      // variant as a human message and run correction detection over it.
+      const queued = queuedCommandPrompt(e);
+      if (queued != null) {
+        const text = queued;
+        if (!isNoise(text)) {
+          const handoff = isHandoff(text);
+          meta.humanMsgs.push({
+            ts: e.timestamp || null,
+            text,
+            handoff,
+            imageOnly: false,
+            source: 'queued_command',
+            correction: !handoff && CORRECTION_RE.test(text),
+          });
+        }
+        continue;
+      }
 
       if (e.type !== 'user' || !e.message || e.message.role !== 'user') continue;
       if (e.isMeta) continue;

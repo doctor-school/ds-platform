@@ -1,4 +1,4 @@
-# `room` — webinar room admission gate + embed provider + live chat + heartbeat presence + presence-minute derivation (006 EARS-1, EARS-2, EARS-3, EARS-4, EARS-5)
+# `room` — webinar room admission gate + embed provider + live chat + heartbeat presence + presence-minute derivation + room-close (006 EARS-1, EARS-2, EARS-3, EARS-4, EARS-5, EARS-7)
 
 The webinar-room module — the **server-side admission gate** of feature 006
 (Webinar room), the foundation the watch side builds on. It hosts the **first
@@ -184,10 +184,16 @@ floor(epoch/N))` per-doctor bucket scan). No update/delete surface — the
   decision before their append / publish, and both extend the `RoomConfig` shape
   **additively** (EARS-4's cadence, EARS-2's `stream`, EARS-3's `chat` credential).
   EARS-5 (`PresenceDerivationService`) reads those same beats at read time (the
-  sponsor minutes) — it adds no write and no public surface. The remaining sibling
-  is room-close refusal (EARS-7, #583) — the same gate already
-  refuses a post/beat once the event leaves `live`; EARS-7 adds the explicit
-  ended-state coverage.
+  sponsor minutes) — it adds no write and no public surface.
+- **Room-close stops capture (EARS-7).** Once the event leaves `live` (the director
+  closes the room, feature 007) the shared `admit` gate's `live` condition fails, so
+  the grant read, the heartbeat, and the chat post are each refused server-side with
+  a `409` carrying the truthful `ended` state — a late beat/post lands nothing, and
+  the sponsor minutes (EARS-5) are computed over the beats captured while the room
+  was open (a refused-after-close beat never exists). EARS-7 adds no new code path;
+  it PINS the close semantics as one coherent story
+  (`test/room/room-close.e2e-spec.ts` + the portal `e2e/room-close.spec.ts`
+  ended-degradation run).
 - **Chat rides Centrifugo (already in the stack).** EARS-3 adds a `room:event:<id>`
   channel + a gate-scoped subscribe-only connection token — **no** new transport.
   The `room` namespace (history + presence, client-publish off) is declared in the

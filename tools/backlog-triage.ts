@@ -544,6 +544,9 @@ export function formatReport(triaged: Triage[]): string {
   out.push("");
 
   out.push(`## Takeable (${takeable.length})`);
+  out.push(
+    "Rank takeable by value + readiness ONLY — owner Stage-B is a handback, not a deprioritizer (F-22; memory feedback_own_lead_decisions).",
+  );
   if (takeable.length === 0) out.push("(none)");
   for (const t of takeable) {
     const tag = t.isDecisionDebt

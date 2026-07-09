@@ -3,6 +3,7 @@
 import { parseReturnTarget } from "@ds/schemas";
 
 import { registerForEvent } from "./registration-client";
+import { parseRoomReturnTarget } from "./room-return";
 
 /**
  * 005 EARS-2 — resume the carried event-registration once the 003 session exists.
@@ -51,6 +52,16 @@ export function currentReturnTarget(): string | null {
 export async function completeReturnTarget(
   rawReturnTo: string | null,
 ): Promise<string> {
+  // 006 EARS-6 — a visitor bounced from the room to auth carries a ROOM return
+  // (`/webinars/<slug>/room`). On success route BACK to the room so the
+  // server-side gate RE-EVALUATES; fire NO registration — an unauthenticated
+  // visitor is never silently joined to the roster (a still-unregistered doctor is
+  // then guided to register by the re-evaluation, not auto-admitted). Checked
+  // before the registration-intent so the room's trailing `/room` is not mistaken
+  // for an event-page intent.
+  const roomReturn = parseRoomReturnTarget(rawReturnTo);
+  if (roomReturn) return roomReturn.returnTo;
+
   const intent = parseReturnTarget(rawReturnTo);
   if (!intent) return DEFAULT_LANDING;
   try {

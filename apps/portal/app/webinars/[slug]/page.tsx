@@ -75,8 +75,10 @@ export const dynamic = "force-dynamic";
 
 export default async function WebinarEventPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ from?: string | string[] }>;
 }) {
   const { slug } = await params;
   const event = await fetchPublicEventPage(slug);
@@ -84,6 +86,12 @@ export default async function WebinarEventPage({
   if (!event) notFound();
 
   const t = await getTranslations("webinar");
+  // 006 EARS-6 / EARS-10 — access-branch guidance: a doctor bounced from the room
+  // for being unregistered arrives with `?from=room`. The catalog-sourced guidance
+  // (`room` namespace) is surfaced above the 005 register front door below, so the
+  // routing is a truthful, guided front door — not a silent redirect.
+  const tRoom = await getTranslations("room");
+  const fromRoom = (await searchParams).from === "room";
   const { date, time } = formatMskParts(event.startsAt);
 
   // EARS-4 — the single lifecycle render mode read from the projection state,
@@ -130,9 +138,39 @@ export default async function WebinarEventPage({
   // otherwise, 005 EARS-4 — never re-offer registration to a registered doctor).
   const showFooterBand =
     (status === "upcoming" || status === "live") && !isAuthenticated;
+  // 006 EARS-6 — show the room access-branch guidance ONLY when the doctor arrived
+  // from the room (`?from=room`) AND the 005 register front door is actually the
+  // rendered affordance (authenticated, unregistered, registrable — the exact
+  // `RegisterOneTap` condition below). A registered doctor, a guest, or an
+  // ended/archived event never sees a stale «register to join» banner.
+  const showRoomAccessGuidance =
+    fromRoom &&
+    isAuthenticated &&
+    !isArchived &&
+    signpost.kind === "none" &&
+    cta.kind === "register";
 
   return (
     <main className="min-h-screen bg-background text-foreground">
+      {showRoomAccessGuidance ? (
+        // A light strip above the poster (card-safe AA tokens on `bg-card` — the
+        // #270 precedent, `text-primary-action` = blue.700, never `text-primary`).
+        // No new geometry, no CTA of its own — the 005 register front door below is
+        // the single action.
+        <div
+          data-testid="room-access-guidance"
+          className="border-b-2 border-border bg-card"
+        >
+          <Container className="py-4">
+            <p className="text-sm font-extrabold text-primary-action">
+              {tRoom("accessGuidance.title")}
+            </p>
+            <p className="mt-1 text-sm text-foreground">
+              {tRoom("accessGuidance.body")}
+            </p>
+          </Container>
+        </div>
+      ) : null}
       <header className="bg-header text-header-foreground">
         <Container className="pt-10 pb-28 layout:pt-16 layout:pb-36">
           <p className="text-2xs font-extrabold uppercase tracking-micro opacity-80">

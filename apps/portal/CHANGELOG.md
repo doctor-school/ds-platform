@@ -1,5 +1,400 @@
 # @ds/portal
 
+## 0.9.0
+
+### Minor Changes
+
+- [#629](https://github.com/doctor-school/ds-platform/pull/629) [`f27ecbf`](https://github.com/doctor-school/ds-platform/commit/f27ecbf5cf35ab6b4d8bc853086886c5ee8b8642) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(events): 004 EARS-3 — single «Участвовать» CTA + event-context handoff to 005/003
+
+  The public event page (`/webinars/:slug`) now carries exactly **one** primary
+  «Участвовать» CTA that routes the visitor into the registration flow (feature 005) through auth (feature 003), carrying the event context so it survives the
+  round-trip (feature 004, EARS-3; realizes US-3).
+
+  - `@ds/portal` — the CTA is the adopted `@ds/design-system` `Button` (filled
+    blue.700 primary action, [#270](https://github.com/doctor-school/ds-platform/issues/270)) linking to a same-origin registration href
+    (`lib/registration-handoff`): `/register?returnTo=/webinars/:slug`. The event
+    context rides as a **safe, same-origin** `returnTo` (no PII, no credential, no
+    open-redirect — the slug is escaped and always anchored under `/webinars/`),
+    matching the intent contract 005's design pins (§3.2). The CTA is present for a
+    participable event (`published` / `live`) and **absent** for `ended` (never a
+    dead link, EARS-3 invariant). Copy resolves through the 003 message catalog
+    (EARS-13); DS tokens only (EARS-14).
+
+  004 owns the CTA and the context handoff only — the registration mechanics and
+  the guest→auth→registered round-trip are owned by 005/003 (a tracked seam, parent
+  [#549](https://github.com/doctor-school/ds-platform/issues/549); the handoff target is stubbed in 004's E2E). The full per-state affordance
+  swap (badge / time plate / room-routing / footer band) is EARS-4; the archived
+  notice EARS-5.
+
+- [#635](https://github.com/doctor-school/ds-platform/pull/635) [`774f018`](https://github.com/doctor-school/ds-platform/commit/774f01864032e0f95d5f11d56ec7e784ebc8d70a) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(events): 004 EARS-4 — event-page lifecycle render swap (upcoming/live/ended)
+
+  The public event page (`/webinars/:slug`) now reflects the event's current
+  lifecycle from the single `EventLifecycleState`, swapping the hero badge, the
+  status-card time plate, the CTA affordance, and the footer band per the canvas
+  `status` enum — never a signal that contradicts the machine (feature 004,
+  EARS-4; realizes US-6).
+
+  - `@ds/design-system` — new `WebinarStatusCard` primitive: the pulled-up
+    «статус-карточка» from `webinar-page.dc.html`, reusing the webinar-card
+    time-plate geometry (desktop `196px 1fr` grid, 2px border, `6px 6px 0` cast,
+    56px time) with a head/sub signal and a single primary-CTA **slot**. Off-scale
+    geometry lives in the DS SoT; tokens only, both themes; the `ended` render
+    passes no CTA (no dead link). Registered in the showcase `/primitives` route
+    (unit-as-subject) so the `playwright-axe` gate scans it — WCAG AA in both themes.
+  - `@ds/portal` — `/webinars/:slug` composes the status card + footer band and
+    drives the per-state swap via the pure `lib/event-lifecycle` mapping:
+    **upcoming** (`published`) → «Участвовать» into the registration handoff
+    (EARS-3); **live** → a «В эфире» signal + «Участвовать» routing TOWARD the
+    room (feature 006, `buildRoomHref` → `/webinars/:slug/room`; 004 asserts the
+    route, not the room); **ended** → the ended affordance with NO participation
+    CTA and no footer band. The single primary «Участвовать» CTA is preserved
+    (EARS-3 invariant); the footer band carries a distinct verb («Записаться» /
+    «Смотреть эфир»). МСК time (EARS-12), catalog copy (EARS-13), DS tokens
+    (EARS-14). Archived is the sibling EARS-5 notice — not built here.
+
+  004 asserts the live-state routing target only — the webinar room and its
+  server-side join gating are feature 006 (a tracked seam, parent [#549](https://github.com/doctor-school/ds-platform/issues/549), design §8).
+
+- [#638](https://github.com/doctor-school/ds-platform/pull/638) [`51d7e66`](https://github.com/doctor-school/ds-platform/commit/51d7e6673d52c765f6c2886a7aeea3c30faafce5) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(events): 004 EARS-5 — archived direct-link public «в архиве» notice (no CTA)
+
+  A previously-distributed direct link to an event that has since been `archived`
+  now degrades gracefully in place instead of dead-ending (feature 004, EARS-5;
+  realizes US-6, US-5; owner decision, variant «а»).
+
+  - `@ds/portal` — the public event page (`/webinars/:slug`) renders the archived
+    «мероприятие в архиве» notice as the **fourth** render mode on the same
+    `WebinarStatusCard` shell (beyond the canvas's `upcoming | live | ended`): a
+    plain text notice replaces the status card's CTA column — **no** participation
+    CTA, **no** dead link, **no** new geometry (design §5.1). The hero badge reads
+    «В архиве» and the footer conversion band is absent. All copy resolves through
+    the 003 message catalog (`statusCard.archived.*`, EARS-13); DS tokens only, the
+    notice using the card-safe `text-primary-action` (blue.700) on `bg-card`
+    (the [#270](https://github.com/doctor-school/ds-platform/issues/270) precedent), never `text-primary` (EARS-14).
+
+  The API side is unchanged: `GET /v1/public/events/:idOrSlug` already resolves an
+  `archived` event to a `200 PublicEventPage {state: archived}` (never a 404, never
+  a redirect) — the archived-link contract is now pinned by a dedicated Vitest e2e
+  (`archived.e2e-spec.ts`) and driven end-to-end on the live stand by the portal
+  Playwright coverage. Event authoring / lifecycle transitions remain feature 007
+  (a tracked seam, parent [#549](https://github.com/doctor-school/ds-platform/issues/549); archived events are seeded until 007 lands).
+
+- [#619](https://github.com/doctor-school/ds-platform/pull/619) [`67b3da5`](https://github.com/doctor-school/ds-platform/commit/67b3da505dcfc35fac2b7ba7dd13e6d8d0bcec1e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(events): 004 EARS-8 — full webinar-card listing unit + event-page link
+
+  Replaces the wave-1 minimal listing card with the full `webinar-card.dc.html`
+  unit and links each card to its event page (feature 004, EARS-8; carries
+  EARS-12/13/14 on the card).
+
+  - `@ds/design-system` — new `WebinarCard` listing primitive
+    (`@ds/design-system/webinar-card`): the tinted 196px time plate (56px display
+    time, explicit МСК label, day·weekday sub-label), school kicker, title,
+    specialty chips, and speakers, rendered as a single block-level link. Off-scale
+    canvas geometry lives in the design-system SoT (the app-scoped arbitrary-value +
+    rhythm gates forbid it in `apps/*`); colour + type flow through tokens, both
+    themes, desktop grid / mobile flat full-bleed per the canvas.
+  - `@ds/portal` — the `/webinars` listing now renders each card as the `WebinarCard`
+    unit (МСК times, no local drift; RU copy via the message catalog), each linking
+    to `/webinars/:slug`.
+
+- [#646](https://github.com/doctor-school/ds-platform/pull/646) [`1547fa4`](https://github.com/doctor-school/ds-platform/commit/1547fa4afa1ffcf84290e28a9b2eef368743763c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(events): 005 EARS-2 — guest-through-auth completion carrying event context (003 round-trip)
+
+  A guest activating «Участвовать» is now carried through the shipped 003
+  login/signup flow with the **event context** and comes out **registered for that
+  same event**, landing back on that event page — no re-search, no second
+  «Участвовать» tap (feature 005, EARS-2; realizes US-2). This retires the legacy
+  "postponed registration" parking mechanism: there is **no** server-side pending
+  record — the intent lives only in the round-trip and the real `RegisterForEvent`
+  (EARS-1) fires once, after the session exists.
+
+  - `@ds/schemas` (additive) — `RegistrationIntent` / `RegistrationIntentSchema`
+    (strict: the intent carries the event slug + a same-origin
+    `returnTo=/webinars/:slug` only — **never** PII or a credential; any extra
+    field is rejected) and the `parseReturnTarget` / `isSafeReturnTarget`
+    open-redirect guard: a cross-origin, protocol-relative, backslash,
+    multi-segment, traversal, or percent-encoded-separator return target resolves
+    to `null`, and a safe one reconstructs the canonical `/webinars/<slug>` from
+    the validated slug.
+  - `@ds/portal` — the returnTo survives every hop of the auth round-trip
+    (`/register → /verify`, the `/verify → /login` fallback, and the cross links
+    between the auth pages) via the guard-cleaning `withReturnTarget`; on auth
+    success — password login, OTP login, or the post-verify auto-login replay —
+    `completeReturnTarget` fires the same `RegisterForEvent` through the
+    same-origin BFF path (`lib/registration-client`) and lands the doctor on the
+    event page registered (best-effort: a transient register failure still lands
+    on the event page, where the per-user state read / idempotent retry recovers).
+    Without a carried context the shipped `/account` landing is unchanged; a
+    hostile returnTo is dropped at every hop and never navigated to.
+
+  The live browser E2E for the full guest journey is batched at the 005
+  portal-integration slice ([#574](https://github.com/doctor-school/ds-platform/issues/574)).
+
+- [#647](https://github.com/doctor-school/ds-platform/pull/647) [`4b7ef74`](https://github.com/doctor-school/ds-platform/commit/4b7ef743f3be8f39fd5807ccb70242b18adead19) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(events): 005 EARS-4 — per-user EventRegistrationState on the event page (no public-page contamination)
+
+  The webinar event page now reflects the **authenticated** doctor's true
+  registration state (feature 005, EARS-4; realizes US-3). A registered doctor sees
+  a «вы записаны» confirmation + a join-signpost placeholder **replacing** the
+  register CTA — never the «Участвовать» CTA as if unregistered; an unregistered
+  doctor (and a guest) sees the shipped 004 register CTA unchanged.
+
+  - `@ds/portal` — the SSR `/webinars/:slug` route composes the per-user state onto
+    the 004 page via a **separate authenticated read** (`lib/registration-state` →
+    `GET /v1/events/:idOrSlug/registration`), forwarding the request's session
+    cookie **and** its fingerprint surface (`user-agent` + `accept-language`, the
+    ADR-0001 §6 session binding) so the api resolves the `__Host-` session
+    server-side. It is `cache: "no-store"` and never folded into the public
+    `GetPublicEventPage` projection or its shared data cache — 004's public page
+    stays byte-for-byte content-identical for guest and principal (a guest never
+    issues the read). The registered swap replaces only the `register` CTA
+    (upcoming), suppressing the footer «Записаться» band too; the `live` room route
+    and `ended`/`archived` renders are untouched (the registered `live` onward path
+    is EARS-5, [#569](https://github.com/doctor-school/ds-platform/issues/569)).
+
+  The full join-signposting content is EARS-5 ([#569](https://github.com/doctor-school/ds-platform/issues/569)); the live browser E2E for the
+  end-to-end registered journey is batched at the 005 portal-integration slice
+  ([#574](https://github.com/doctor-school/ds-platform/issues/574)). Verified live on the dev stand (registered doctor: confirmation + no
+  register CTA; guest: 004 register CTA + public page uncontaminated).
+
+- [#684](https://github.com/doctor-school/ds-platform/pull/684) [`59bbc2e`](https://github.com/doctor-school/ds-platform/commit/59bbc2ed5ff990402c97f755b230a03696c84ff3) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(room): 006 EARS-3 — live chat over Centrifugo (gated read + real-time post)
+
+  Where the room is open, a gated doctor reads the live chat and posts messages that
+  fan out to every participant in real time without a reload, over the room channel
+  keyed by event id (feature 006, EARS-3; realizes US-2). Chat rides Centrifugo,
+  already in the stack — 006 adds a `room:event:<id>` channel + a gate-scoped,
+  subscribe-only connection token, not a new transport.
+
+  - `@ds/schemas` — the room DTOs grow additively: `RoomConfig.chat`
+    (`{ url, token, channel, selfTag } | null`, the subscribe-only Centrifugo
+    credential), `PostChatMessageRequest` (`{ text }`, validated by the
+    `ChatMessageTextSchema` SSOT — trimmed, non-empty, ≤2000), the published
+    `RoomChatMessage` (`{ id, authorTag, text, at }` — PII-free), and
+    `PostChatMessageAck`.
+  - `@ds/api` — `POST /v1/events/:idOrSlug/chat` (`PostChatMessage`), behind the
+    **same** admission gate as EARS-1 (`authenticated ∧ registered ∧ live`): the
+    backend authorizes, then publishes to Centrifugo over the HTTP API — the **only**
+    publish path. The `RoomConfig` grant carries a connection JWT whose `channels`
+    claim is gate-scoped to exactly the caller's room channel and grants **no**
+    publish capability, so a client can never publish directly. A guest (401),
+    unregistered (403), or non-`live` (409) caller publishes nothing (EARS-8); a
+    Centrifugo outage is a 503. Author identity is a non-reversible, non-PII tag
+    (`authorTag`), never the roster identity. Classified `authenticated` /
+    `doctor_guest` / `policy` in the endpoint-authz matrix. Config (`CENTRIFUGO_*`)
+    is read from env; unconfigured ⇒ `chat: null` (fail-closed).
+  - `@ds/portal` — the room's chat aside is now live: it subscribes over Centrifugo
+    (`centrifuge`, MIT) and renders others' messages in real time without a reload,
+    and the composer posts through the gated command. The composer enforces the same
+    `ChatMessageTextSchema` reject rule as the server (empty / whitespace-only stays
+    unsendable). All copy resolves through the typed message catalog (EARS-10); built
+    from `@ds/design-system` tokens (EARS-11).
+
+  Room-close refusal of posts (EARS-7, [#583](https://github.com/doctor-school/ds-platform/issues/583)) and the full both-breakpoints × both-
+  themes fidelity + Stage-B live confirmation ([#584](https://github.com/doctor-school/ds-platform/issues/584)) are tracked separately.
+
+- [#683](https://github.com/doctor-school/ds-platform/pull/683) [`f20f1da`](https://github.com/doctor-school/ds-platform/commit/f20f1da596fce75b03c6696b968e52f95566934c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(room): 006 EARS-4 — server-authoritative heartbeat presence capture (append-only)
+
+  While a gated doctor is in a live room with the tab visible, the client posts an
+  authenticated heartbeat every N seconds and the backend appends each accepted
+  beat to a durable append-only Postgres table — the durable basis for the
+  per-doctor sponsor minutes (feature 006, EARS-4; realizes US-3).
+
+  - `@ds/schemas` — new `PresenceHeartbeatAckSchema` (`{ eventId, beatAt }`): the
+    server-authoritative ack of one accepted beat. `beatAt` is the server-stamped
+    instant the row was appended, never a client-supplied count/timestamp — a
+    client cannot inflate its own presence (requirements Constraints).
+  - `@ds/db` — new append-only `presence_beats` table `(id, user_id, event_id,
+beat_at)` (ADR-0003 §3). Immutable rows (no mutable column → nothing to update
+    in place); `beat_at` defaults to the server clock; a composite
+    `(event_id, user_id, beat_at)` index serves the EARS-5 derivation read.
+  - `@ds/api` — `POST /v1/events/:idOrSlug/heartbeat` → `RecordPresenceHeartbeat`,
+    behind the **same** server-side gate as the EARS-1 `RoomConfig` read (one gate,
+    reused): a guest (401), an unregistered doctor (403), and a non-`live` / `ended`
+    event (409) are each refused server-side and append **nothing** (EARS-8). On
+    admission it appends exactly one row and returns the ack. Classified
+    `authenticated` / `doctor_guest` / `policy` in the endpoint-authz matrix.
+  - `@ds/portal` — the room mounts a visibility-gated `PresenceHeartbeat` loop (no
+    doctor-facing affordance): it POSTs a beat every N seconds — N from
+    `RoomConfig.heartbeatIntervalSeconds` (server config, default 60 s) — while the
+    tab is the visible, active tab (Page Visibility API); a backgrounded tab
+    (`document.hidden`) emits none, and the loop resumes on re-visibility.
+
+  Cadence N is server config, parameterized downstream: the per-doctor
+  minute derivation + concurrent-tab coalescing is EARS-5 ([#581](https://github.com/doctor-school/ds-platform/issues/581)), room-close
+  refusal is EARS-7 ([#583](https://github.com/doctor-school/ds-platform/issues/583)), chat is EARS-3 ([#579](https://github.com/doctor-school/ds-platform/issues/579)). The 006↔007 lifecycle seam
+  (live/ended driven by seeded events until 007 lands) is unchanged.
+
+- [#685](https://github.com/doctor-school/ds-platform/pull/685) [`46f6b9f`](https://github.com/doctor-school/ds-platform/commit/46f6b9fbfd5c2a31bbb22586aa386358383abf77) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(room): 006 EARS-6 — denied-access routing (auth/register/not-live front door)
+
+  When a caller reaches `/webinars/:slug/room` but is not admissible, the room now
+  routes them TRUTHFULLY per the server-side gate outcome (EARS-1) — never a soft
+  wall over a rendered player (feature 006, EARS-6; realizes US-1, US-5). The room
+  adds no auth or registration primitive; it consumes the shipped 003 auth and 005
+  register flows and makes each denied branch a complete, guided front door.
+
+  - Unauthenticated → through the 003 auth flow carrying a `returnTo` back to the
+    ROOM url, so on login (or signup) the gate RE-RUNS on return and admits a
+    registered doctor to a live room. New `lib/room-return.ts` guard parses the
+    room-return target (`/webinars/<slug>/room`) reusing the hardened `@ds/schemas`
+    slug validation (open-redirect-safe); `completeReturnTarget` routes a room
+    return to the room and fires NO registration (a visitor is never silently joined
+    to the roster), and `withReturnTarget` carries it through the signup hop.
+  - Authenticated-but-unregistered → guided to the 005 register front door on the
+    event page (`?from=room`), which surfaces catalog-sourced access-branch guidance
+    (EARS-10) above the one-tap register CTA; on register the doctor re-enters the
+    room, admitted.
+  - Event not `live` → the truthful 004 lifecycle state on the event page, with no
+    watchable room and no register banner.
+
+  All copy resolves through the typed message catalog (new `room.accessGuidance`,
+  EARS-10). Verified end-to-end on the live stand
+  (`e2e/room-access-branches.spec.ts`, all three branches) — no branch renders the
+  player, chat, or room composition. The 006↔007 lifecycle seam (live/ended driven
+  by seeded events until 007 lands) is unchanged; Stage-B canvas fidelity is batched
+  at [#584](https://github.com/doctor-school/ds-platform/issues/584).
+
+- [#679](https://github.com/doctor-school/ds-platform/pull/679) [`ae1465d`](https://github.com/doctor-school/ds-platform/commit/ae1465d24c3aa4e9cabe13e8f5036bebb3852180) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 004 portal integration + browser-E2E slice ([#559](https://github.com/doctor-school/ds-platform/issues/559)). User-facing: the `/webinars`
+  listing card of an event the viewer is REGISTERED for now carries the canvas
+  `registered` variant's «Вы записаны» marker (owner decision on the [#559](https://github.com/doctor-school/ds-platform/issues/559) Stage-B
+  gate) — composed in the portal layer from the viewer's own 005 `MyEvents` read,
+  so the public listing projection stays publish-safe (EARS-10) and a guest's
+  render is unchanged. `WebinarCard` gains the additive `registered` /
+  `registeredLabel` props (AA remap per the [#270](https://github.com/doctor-school/ds-platform/issues/270) precedent: ink label + a
+  success-hued decorative ✓ — canvas green.500 is sub-AA on the light card).
+  Ships with the 004 all-states DISCOVERY journey translated to `playwright-bdd`
+  (sponsor direct link → read page → open listing → click card → back, across
+  upcoming/live/ended/archived — the requirements Verification `all` row), the
+  surface-wide cross-cutting assertions (EARS-11 empty-state on the real route,
+  EARS-12 МСК no-drift under a non-Moscow browser timezone, EARS-13
+  no-hardcoded-strings), and a guest-only axe-core WCAG 2 A/AA scan of the public
+  webinar surfaces.
+
+- [#648](https://github.com/doctor-school/ds-platform/pull/648) [`d1f8e15`](https://github.com/doctor-school/ds-platform/commit/d1f8e154938b8a66d95fbb55353bb22ce4476b62) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 005 EARS-5 — registered-doctor join signposting on the webinar event page. For a
+  registered doctor the page now signposts how/when they join, layered on the 004
+  lifecycle CTA: `upcoming` shows the broadcast start (date/time МСК) + a «вы
+  записаны» confirmation replacing the register CTA; `live` shows the confirmation
+
+  - an obvious onward path to the room (feature 006 route). Built to the vendored
+    `webinar-page.dc.html` registered states from `@ds/design-system` tokens (EARS-13),
+    with МСК presentation and no viewer-local drift (EARS-11).
+
+- [#649](https://github.com/doctor-school/ds-platform/pull/649) [`bac9f1e`](https://github.com/doctor-school/ds-platform/commit/bac9f1eaceca4fb20da17b4e1bdba5fe8effdd66) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(events): 005 EARS-6 — «мои события» Предстоящие tab + `MyEvents` read model
+
+  The portal account gains a «мои события» surface (the **Предстоящие** tab of
+  `my-events.dc.html`) listing the authenticated doctor's registered **upcoming**
+  events, closing the legacy "registered but can't find it" gap (feature 005,
+  EARS-6; realizes US-4). Carries the EARS-10 (authz), EARS-11 (МСК), EARS-13
+  (canvas fidelity) cross-cutting ACs.
+
+  - `@ds/schemas` — the `MyEventItem` / `MyEvents` DTOs: the caller's registered
+    upcoming events, each `{ eventId, slug, title, school, startsAt, state }`,
+    `state` constrained to the `published`/`live` registrable set.
+  - `@ds/api` — the `MyEvents` read model: `GET /v1/me/events`,
+    **`doctor_guest`-authenticated** (EARS-10), returning the caller's registered
+    `published`/`live` events (future or currently airing, `starts_at ≥ now −
+AIR_WINDOW_MS` — mirroring the 004 upcoming listing), ordered **nearest
+    `startsAt` first**. Returns ONLY the caller's own registrations; `ended`/
+    `archived` and other doctors' registrations are absent. An empty result is a
+    valid `[]`. The endpoint-authz matrix carries the new classified route.
+  - `@ds/portal` — the «мои события» page at `/account/events` (SSR, authenticated;
+    a guest is redirected to login). Day-grouped, nearest-first, each row the
+    reused `@ds/design-system` `WebinarCard` unit (built to the canvas geometry:
+    2px borders, `6px 6px 0` shadow, time plate) linking to `/webinars/:slug`, with
+    date/time in `Europe/Moscow` labeled **МСК** (EARS-11) and the canvas
+    empty-state when the list is empty. Copy resolves through the message catalog
+    (EARS-12); DS tokens only (EARS-13). Wave-1 cut: the Записи / Сертификаты tabs
+    and the specialty filter are a named deferral — not built.
+
+- [#673](https://github.com/doctor-school/ds-platform/pull/673) [`8d1c9bb`](https://github.com/doctor-school/ds-platform/commit/8d1c9bb0f488e524b08f3ff504be50b3a9b99e76) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 005 portal integration + browser-E2E slice ([#574](https://github.com/doctor-school/ds-platform/issues/574)). User-facing: a logged-in
+  doctor now registers for a webinar in ONE action on the event page — the
+  «Участвовать» CTA becomes a one-tap command that records the registration and
+  swaps the page to the registered state, instead of routing an already-authenticated
+  doctor through the guest signup flow (EARS-1). Ships with the all-states
+  registration JOURNEY translated to `playwright-bdd` (guest → «Участвовать» → 003
+  auth → returns registered → «мои события» → back to the event page, plus logged-in
+  one-tap and ended/archived gating — the requirements Verification `all` row), the
+  surface-wide cross-cutting assertions (EARS-10 `doctor_guest` authz, EARS-11 МСК
+  no-drift under a non-Moscow browser timezone, EARS-12 no-hardcoded-strings), and an
+  axe-core WCAG 2 A/AA scan of the touched webinar surfaces.
+
+- [#628](https://github.com/doctor-school/ds-platform/pull/628) [`6bdb1c3`](https://github.com/doctor-school/ds-platform/commit/6bdb1c308506b5a5394cfa38fb6c7fd600a4e87a) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(events): 004 EARS-2 — event-page content set from PublicEventPage projection
+
+  Builds the public event page's complete decision set (feature 004, EARS-2;
+  carries EARS-12/13/14 on the surface), laid out to `webinar-page.dc.html`.
+
+  - `@ds/design-system` — new `WebinarPageContent` primitive
+    (`@ds/design-system/webinar-page-content`): the two-column event-page body —
+    the «О чём эфир» description, the downloadable program-PDF affordance, the
+    sponsor plate (backing partners), and the «Спикеры» aside cards (64px tint
+    initials square, name + credentials). The program affordance and the sponsor
+    plate are omitted (not null-broken) when absent. Off-scale canvas geometry (the
+    `1fr 380px` split, the 64px avatar) lives in the design-system SoT — the
+    app-scoped arbitrary-value gate forbids it in `apps/*`; colour + type flow
+    through tokens, both themes, desktop grid / mobile stacked per the canvas.
+  - `@ds/portal` — the `/webinars/:slug` event page now renders the target
+    specialty chips in the poster header and the full content set below it via
+    `WebinarPageContent` (МСК times, no local drift; RU copy via the 003 message
+    catalog).
+
+- [#606](https://github.com/doctor-school/ds-platform/pull/606) [`c959008`](https://github.com/doctor-school/ds-platform/commit/c9590083f62c08b274311dbfe101ba914425d873) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(events): 004 EARS-1 — public event-page read endpoint + portal SSR shell
+
+  Adds the read side of the Webinars public surface: `GET /v1/public/events/:idOrSlug`
+  (NestJS, classified **public** in the endpoint-authz matrix — no auth, no cookie)
+  returning the publish-safe `PublicEventPage` projection (an allow-list — no
+  operator/commercial fields, no registrant PII), resolving by slug or id;
+  `published`/`live`/`ended`/`archived` → 200, `draft`/unknown → 404. Plus the
+  server-rendered portal `/webinars/:slug` route shell (complete HTML for an
+  unauthenticated recipient, no client soft-wall) and a shared МСК time formatter.
+  Read against seeded fixture events until feature 007 delivers authoring/transitions
+  (tracked seam, parent [#549](https://github.com/doctor-school/ds-platform/issues/549)). Full content layout, CTA, listing, and lifecycle swap
+  are sibling handlers.
+
+- [#613](https://github.com/doctor-school/ds-platform/pull/613) [`9d5fc7c`](https://github.com/doctor-school/ds-platform/commit/9d5fc7c14cc44a0e4db071329e8581ddc3d5a211) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(events): 004 EARS-7 — upcoming-broadcasts listing endpoint + day-grouped portal route
+
+  Adds the listing side of the Webinars public surface: `GET /v1/public/events?upcoming`
+  (NestJS, classified **public** in the endpoint-authz matrix — no auth, no cookie)
+  returning the thin publish-safe `UpcomingBroadcastCard[]` projection (an allow-list —
+  name-only speakers, no operator/commercial fields, no registrant PII) filtered to
+  `published`/`live` events at or after the air-window cutoff, ordered nearest air date
+  first; an empty result is a valid `200 []` (EARS-11). Plus the server-rendered portal
+  `/webinars` route — a day-grouped nearest-first list built to the §09 canvas rhythm
+  (full-bleed day band on mobile, label + rule on desktop) with the canvas empty-state
+  when the projection is empty. Wave-1 minimal cut — no facets, week-paging, month view,
+  or search. Cards are the minimal shell (time · МСК · live signal · school · title,
+  linking to the event page); the full webinar-card choose-set is sibling EARS-8 ([#557](https://github.com/doctor-school/ds-platform/issues/557)).
+  Read against seeded fixture events until feature 007 delivers authoring/transitions
+  (tracked seam, parent [#549](https://github.com/doctor-school/ds-platform/issues/549)).
+
+### Patch Changes
+
+- [#687](https://github.com/doctor-school/ds-platform/pull/687) [`d57ac0c`](https://github.com/doctor-school/ds-platform/commit/d57ac0c7b609f1ace068c67af2181c54ee1181e2) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(room): 006 EARS-7 — room-close stops heartbeat + chat capture
+
+  When the event leaves `live` (the director closes the room, feature 007), the
+  system stops accepting heartbeats and chat posts for that event and the room
+  degrades to the truthful ended state (feature 006, EARS-7; realizes US-3, US-4).
+  This handler adds no new code path — the refusal is the SAME server-side admission
+  gate as EARS-1 (`authenticated ∧ registered ∧ live`): once the event leaves `live`
+  the `live` condition fails and every room operation is refused server-side. EARS-7
+  pins that close semantics as one coherent, verified story.
+
+  - `@ds/api` — the `RoomConfig` grant read, the gated heartbeat, and the gated chat
+    post are each refused with a `409` carrying the truthful `ended` state once the
+    room closes. A beat/post accepted while the room was open is refused the instant
+    it closes, and NO beat or post lands after close (`presence_beats` does not grow).
+    Per-doctor presence minutes (EARS-5) are therefore computed over the beats
+    captured **while the room was open** — a beat refused after close never exists,
+    so it cannot inflate the sponsor minutes. Pinned by the Vitest e2e
+    (`apps/api/test/room/room-close.e2e-spec.ts`).
+  - `@ds/portal` — the room surface degrades TRUTHFULLY: after close the gate no
+    longer issues the grant, so the `not-live` branch routes the doctor to the 004
+    ended lifecycle state («Эфир завершён») with no watchable player, no writable
+    chat, and no room composition — never a soft wall over a dead room. Verified
+    end-to-end on the live stand (`apps/portal/e2e/room-close.spec.ts`).
+
+  The 006↔007 lifecycle seam is unchanged (the live → ended transition is driven by
+  seeded events until 007's director controls land, tracked on parent [#576](https://github.com/doctor-school/ds-platform/issues/576));
+  Stage-B canvas fidelity is batched at [#584](https://github.com/doctor-school/ds-platform/issues/584).
+
+- Updated dependencies [[`774f018`](https://github.com/doctor-school/ds-platform/commit/774f01864032e0f95d5f11d56ec7e784ebc8d70a), [`70f5e3e`](https://github.com/doctor-school/ds-platform/commit/70f5e3e80c90a1738096c2909165a682dd6ee9c7), [`67b3da5`](https://github.com/doctor-school/ds-platform/commit/67b3da505dcfc35fac2b7ba7dd13e6d8d0bcec1e), [`ce4b05d`](https://github.com/doctor-school/ds-platform/commit/ce4b05dd06d5d0c2ed39e04b87f7cca2d396185b), [`1547fa4`](https://github.com/doctor-school/ds-platform/commit/1547fa4afa1ffcf84290e28a9b2eef368743763c), [`31b97f2`](https://github.com/doctor-school/ds-platform/commit/31b97f246adfad18d56c336a6559234b1a26c26a), [`e3ce9eb`](https://github.com/doctor-school/ds-platform/commit/e3ce9eb7780d283d52e32321e1fc145ec1720981), [`59bbc2e`](https://github.com/doctor-school/ds-platform/commit/59bbc2ed5ff990402c97f755b230a03696c84ff3), [`f20f1da`](https://github.com/doctor-school/ds-platform/commit/f20f1da596fce75b03c6696b968e52f95566934c), [`b46b15a`](https://github.com/doctor-school/ds-platform/commit/b46b15ad2e7b37d0129db0461240979544438c10), [`2993933`](https://github.com/doctor-school/ds-platform/commit/29939330ee4c3e904842e699e512fe632d8deb9f), [`1b80b39`](https://github.com/doctor-school/ds-platform/commit/1b80b39a7e69c490425d96fd0eedab1bb63d24e7), [`c99ba53`](https://github.com/doctor-school/ds-platform/commit/c99ba534eb7b7e3b1816b43baa7b645edec98550), [`074d2e7`](https://github.com/doctor-school/ds-platform/commit/074d2e78c828fe86687c31038ed61e7285e681d9), [`ae1465d`](https://github.com/doctor-school/ds-platform/commit/ae1465d24c3aa4e9cabe13e8f5036bebb3852180), [`bac9f1e`](https://github.com/doctor-school/ds-platform/commit/bac9f1eaceca4fb20da17b4e1bdba5fe8effdd66), [`05f0964`](https://github.com/doctor-school/ds-platform/commit/05f0964d92f288ba58e05364e82ae01076afb9e2), [`da579b0`](https://github.com/doctor-school/ds-platform/commit/da579b0450b90ea48e40c37f5c7051b3e32e6f75), [`6bdb1c3`](https://github.com/doctor-school/ds-platform/commit/6bdb1c308506b5a5394cfa38fb6c7fd600a4e87a), [`c959008`](https://github.com/doctor-school/ds-platform/commit/c9590083f62c08b274311dbfe101ba914425d873), [`9d5fc7c`](https://github.com/doctor-school/ds-platform/commit/9d5fc7c14cc44a0e4db071329e8581ddc3d5a211)]:
+  - @ds/design-system@0.8.0
+  - @ds/schemas@1.0.0
+
 ## 0.8.1
 
 ### Patch Changes

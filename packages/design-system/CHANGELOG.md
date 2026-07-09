@@ -1,5 +1,107 @@
 # @ds/design-system
 
+## 0.8.0
+
+### Minor Changes
+
+- [#635](https://github.com/doctor-school/ds-platform/pull/635) [`774f018`](https://github.com/doctor-school/ds-platform/commit/774f01864032e0f95d5f11d56ec7e784ebc8d70a) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(events): 004 EARS-4 — event-page lifecycle render swap (upcoming/live/ended)
+
+  The public event page (`/webinars/:slug`) now reflects the event's current
+  lifecycle from the single `EventLifecycleState`, swapping the hero badge, the
+  status-card time plate, the CTA affordance, and the footer band per the canvas
+  `status` enum — never a signal that contradicts the machine (feature 004,
+  EARS-4; realizes US-6).
+
+  - `@ds/design-system` — new `WebinarStatusCard` primitive: the pulled-up
+    «статус-карточка» from `webinar-page.dc.html`, reusing the webinar-card
+    time-plate geometry (desktop `196px 1fr` grid, 2px border, `6px 6px 0` cast,
+    56px time) with a head/sub signal and a single primary-CTA **slot**. Off-scale
+    geometry lives in the DS SoT; tokens only, both themes; the `ended` render
+    passes no CTA (no dead link). Registered in the showcase `/primitives` route
+    (unit-as-subject) so the `playwright-axe` gate scans it — WCAG AA in both themes.
+  - `@ds/portal` — `/webinars/:slug` composes the status card + footer band and
+    drives the per-state swap via the pure `lib/event-lifecycle` mapping:
+    **upcoming** (`published`) → «Участвовать» into the registration handoff
+    (EARS-3); **live** → a «В эфире» signal + «Участвовать» routing TOWARD the
+    room (feature 006, `buildRoomHref` → `/webinars/:slug/room`; 004 asserts the
+    route, not the room); **ended** → the ended affordance with NO participation
+    CTA and no footer band. The single primary «Участвовать» CTA is preserved
+    (EARS-3 invariant); the footer band carries a distinct verb («Записаться» /
+    «Смотреть эфир»). МСК time (EARS-12), catalog copy (EARS-13), DS tokens
+    (EARS-14). Archived is the sibling EARS-5 notice — not built here.
+
+  004 asserts the live-state routing target only — the webinar room and its
+  server-side join gating are feature 006 (a tracked seam, parent [#549](https://github.com/doctor-school/ds-platform/issues/549), design §8).
+
+- [#619](https://github.com/doctor-school/ds-platform/pull/619) [`67b3da5`](https://github.com/doctor-school/ds-platform/commit/67b3da505dcfc35fac2b7ba7dd13e6d8d0bcec1e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(events): 004 EARS-8 — full webinar-card listing unit + event-page link
+
+  Replaces the wave-1 minimal listing card with the full `webinar-card.dc.html`
+  unit and links each card to its event page (feature 004, EARS-8; carries
+  EARS-12/13/14 on the card).
+
+  - `@ds/design-system` — new `WebinarCard` listing primitive
+    (`@ds/design-system/webinar-card`): the tinted 196px time plate (56px display
+    time, explicit МСК label, day·weekday sub-label), school kicker, title,
+    specialty chips, and speakers, rendered as a single block-level link. Off-scale
+    canvas geometry lives in the design-system SoT (the app-scoped arbitrary-value +
+    rhythm gates forbid it in `apps/*`); colour + type flow through tokens, both
+    themes, desktop grid / mobile flat full-bleed per the canvas.
+  - `@ds/portal` — the `/webinars` listing now renders each card as the `WebinarCard`
+    unit (МСК times, no local drift; RU copy via the message catalog), each linking
+    to `/webinars/:slug`.
+
+- [#679](https://github.com/doctor-school/ds-platform/pull/679) [`ae1465d`](https://github.com/doctor-school/ds-platform/commit/ae1465d24c3aa4e9cabe13e8f5036bebb3852180) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 004 portal integration + browser-E2E slice ([#559](https://github.com/doctor-school/ds-platform/issues/559)). User-facing: the `/webinars`
+  listing card of an event the viewer is REGISTERED for now carries the canvas
+  `registered` variant's «Вы записаны» marker (owner decision on the [#559](https://github.com/doctor-school/ds-platform/issues/559) Stage-B
+  gate) — composed in the portal layer from the viewer's own 005 `MyEvents` read,
+  so the public listing projection stays publish-safe (EARS-10) and a guest's
+  render is unchanged. `WebinarCard` gains the additive `registered` /
+  `registeredLabel` props (AA remap per the [#270](https://github.com/doctor-school/ds-platform/issues/270) precedent: ink label + a
+  success-hued decorative ✓ — canvas green.500 is sub-AA on the light card).
+  Ships with the 004 all-states DISCOVERY journey translated to `playwright-bdd`
+  (sponsor direct link → read page → open listing → click card → back, across
+  upcoming/live/ended/archived — the requirements Verification `all` row), the
+  surface-wide cross-cutting assertions (EARS-11 empty-state on the real route,
+  EARS-12 МСК no-drift under a non-Moscow browser timezone, EARS-13
+  no-hardcoded-strings), and a guest-only axe-core WCAG 2 A/AA scan of the public
+  webinar surfaces.
+
+- [#680](https://github.com/doctor-school/ds-platform/pull/680) [`da579b0`](https://github.com/doctor-school/ds-platform/commit/da579b0450b90ea48e40c37f5c7051b3e32e6f75) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 006 EARS-2 — room composition + embed player from the explicit provider enum.
+
+  - `@ds/schemas`: `RoomConfigSchema` gains the additive, nullable `stream`
+    (`{ provider, embedRef } | null`) reusing the `StreamConfig` SSOT — the
+    server-produced embed source the room instantiates the player from. A gated
+    caller for a `live` event with no/unknown stream config still receives a grant
+    with `stream: null` (the truthful "stream unavailable" room state); the provider
+    is read from the closed enum, never URL-sniffed.
+  - `@ds/design-system`: new `WebinarRoomLayout` primitive — the neo-brutalist room
+    composition shell to the `webinar-room.dc.html` geometry (desktop `1fr 400px`
+    player + chat aside; mobile full-bleed player + Чат / О эфире tabs).
+
+- [#628](https://github.com/doctor-school/ds-platform/pull/628) [`6bdb1c3`](https://github.com/doctor-school/ds-platform/commit/6bdb1c308506b5a5394cfa38fb6c7fd600a4e87a) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(events): 004 EARS-2 — event-page content set from PublicEventPage projection
+
+  Builds the public event page's complete decision set (feature 004, EARS-2;
+  carries EARS-12/13/14 on the surface), laid out to `webinar-page.dc.html`.
+
+  - `@ds/design-system` — new `WebinarPageContent` primitive
+    (`@ds/design-system/webinar-page-content`): the two-column event-page body —
+    the «О чём эфир» description, the downloadable program-PDF affordance, the
+    sponsor plate (backing partners), and the «Спикеры» aside cards (64px tint
+    initials square, name + credentials). The program affordance and the sponsor
+    plate are omitted (not null-broken) when absent. Off-scale canvas geometry (the
+    `1fr 380px` split, the 64px avatar) lives in the design-system SoT — the
+    app-scoped arbitrary-value gate forbids it in `apps/*`; colour + type flow
+    through tokens, both themes, desktop grid / mobile stacked per the canvas.
+  - `@ds/portal` — the `/webinars/:slug` event page now renders the target
+    specialty chips in the poster header and the full content set below it via
+    `WebinarPageContent` (МСК times, no local drift; RU copy via the 003 message
+    catalog).
+
+### Patch Changes
+
+- Updated dependencies [[`70f5e3e`](https://github.com/doctor-school/ds-platform/commit/70f5e3e80c90a1738096c2909165a682dd6ee9c7), [`ce4b05d`](https://github.com/doctor-school/ds-platform/commit/ce4b05dd06d5d0c2ed39e04b87f7cca2d396185b), [`1547fa4`](https://github.com/doctor-school/ds-platform/commit/1547fa4afa1ffcf84290e28a9b2eef368743763c), [`31b97f2`](https://github.com/doctor-school/ds-platform/commit/31b97f246adfad18d56c336a6559234b1a26c26a), [`e3ce9eb`](https://github.com/doctor-school/ds-platform/commit/e3ce9eb7780d283d52e32321e1fc145ec1720981), [`59bbc2e`](https://github.com/doctor-school/ds-platform/commit/59bbc2ed5ff990402c97f755b230a03696c84ff3), [`f20f1da`](https://github.com/doctor-school/ds-platform/commit/f20f1da596fce75b03c6696b968e52f95566934c), [`b46b15a`](https://github.com/doctor-school/ds-platform/commit/b46b15ad2e7b37d0129db0461240979544438c10), [`2993933`](https://github.com/doctor-school/ds-platform/commit/29939330ee4c3e904842e699e512fe632d8deb9f), [`1b80b39`](https://github.com/doctor-school/ds-platform/commit/1b80b39a7e69c490425d96fd0eedab1bb63d24e7), [`c99ba53`](https://github.com/doctor-school/ds-platform/commit/c99ba534eb7b7e3b1816b43baa7b645edec98550), [`074d2e7`](https://github.com/doctor-school/ds-platform/commit/074d2e78c828fe86687c31038ed61e7285e681d9), [`bac9f1e`](https://github.com/doctor-school/ds-platform/commit/bac9f1eaceca4fb20da17b4e1bdba5fe8effdd66), [`05f0964`](https://github.com/doctor-school/ds-platform/commit/05f0964d92f288ba58e05364e82ae01076afb9e2), [`da579b0`](https://github.com/doctor-school/ds-platform/commit/da579b0450b90ea48e40c37f5c7051b3e32e6f75), [`c959008`](https://github.com/doctor-school/ds-platform/commit/c9590083f62c08b274311dbfe101ba914425d873), [`9d5fc7c`](https://github.com/doctor-school/ds-platform/commit/9d5fc7c14cc44a0e4db071329e8581ddc3d5a211)]:
+  - @ds/schemas@1.0.0
+
 ## 0.7.0
 
 ### Minor Changes

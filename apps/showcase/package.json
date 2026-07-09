@@ -1,6 +1,6 @@
 {
   "name": "@ds/showcase",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "private": true,
   "type": "module",
   "description": "DS Platform design-system living showcase — the rendered SSOT viewer of @ds/design-system (design-system-showcase spec §2.1). Internal dev surface, not a product app.",

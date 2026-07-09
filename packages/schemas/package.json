@@ -1,6 +1,6 @@
 {
   "name": "@ds/schemas",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Zod schemas — API SSOT (ADR-0002 §3, ADR-0006 §6.2). Framework-agnostic; depends on zod only.",

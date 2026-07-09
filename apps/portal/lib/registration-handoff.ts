@@ -22,6 +22,8 @@
 
 import { parseReturnTarget } from "@ds/schemas";
 
+import { parseRoomReturnTarget } from "./room-return";
+
 /** The shipped 003 registration entry the guest «Участвовать» path routes through. */
 const REGISTRATION_ENTRY = "/register";
 
@@ -51,8 +53,15 @@ export function withReturnTarget(
   path: string,
   rawReturnTo: string | null,
 ): string {
-  const intent = parseReturnTarget(rawReturnTo);
-  if (!intent) return path;
+  // A safe carry is EITHER the 005 registration-intent (`/webinars/<slug>`) or the
+  // 006 room-return target (`/webinars/<slug>/room`, EARS-6) — both survive the
+  // onward hop so the event/room context is not lost if a visitor bounced from the
+  // room chooses the signup path; anything hostile is dropped at the hop. The
+  // canonical (guard-reconstructed) value is appended, never the raw input.
+  const safe =
+    parseRoomReturnTarget(rawReturnTo)?.returnTo ??
+    parseReturnTarget(rawReturnTo)?.returnTo;
+  if (!safe) return path;
   const sep = path.includes("?") ? "&" : "?";
-  return `${path}${sep}returnTo=${encodeURIComponent(intent.returnTo)}`;
+  return `${path}${sep}returnTo=${encodeURIComponent(safe)}`;
 }

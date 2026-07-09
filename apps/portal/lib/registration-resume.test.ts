@@ -65,6 +65,16 @@ describe("005 EARS-2 guest-through-auth completion (registration resume)", () =>
     );
   });
 
+  it("006 EARS-6: a room-return target lands back on the ROOM url and fires NO registration (the gate re-evaluates on return)", async () => {
+    // An unauthenticated visitor bounced from the room carries a `/room` returnTo.
+    // On login success the doctor returns to the room URL so the server-side gate
+    // RE-RUNS — the room feature never silently registers them (an unregistered
+    // doctor is then guided to register by the re-evaluation, not auto-admitted).
+    const landing = await completeReturnTarget("/webinars/ahilles-042/room");
+    expect(landing).toBe("/webinars/ahilles-042/room");
+    expect(registerForEvent).not.toHaveBeenCalled();
+  });
+
   it("EARS-2: currentReturnTarget reads the carried returnTo off the current URL query", () => {
     window.history.replaceState(
       null,

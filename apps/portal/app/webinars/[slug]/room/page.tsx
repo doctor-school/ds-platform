@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { fetchPublicEventPage } from "../../../../lib/public-events";
 import { fetchRoomConfig } from "../../../../lib/room-config";
+import { buildRoomReturnHref } from "../../../../lib/room-return";
 import { PresenceHeartbeat } from "./presence-heartbeat";
 import { RoomView } from "./room-view";
 
@@ -12,11 +13,19 @@ import { RoomView } from "./room-view";
  * the gate) and renders the room composition ONLY where the grant exists.
  *
  * The grant's three refusals route TRUTHFULLY (never a soft wall over a rendered
- * player — the full EARS-6 denied-access routing is its own handler; this surface
- * consumes the grant and routes minimally so no branch dead-ends):
- *   • auth      → the 003 login flow, carrying a same-origin returnTo back here;
- *   • register  → the 004/005 event page (its register CTA is the front door);
- *   • not-live  → the 004 event page (the truthful lifecycle state, no room);
+ * player — this is the EARS-6 denied-access routing, «the front door»):
+ *   • auth      → the 003 login flow, carrying a same-origin `returnTo` back to
+ *                 THIS room url so the gate RE-RUNS on return (re-evaluated); on
+ *                 success the doctor lands on the room again, admitted iff now
+ *                 registered ∧ live, else re-routed by the same three branches. No
+ *                 registration is fired on the visitor's behalf (`room-return`).
+ *   • register  → the 004/005 event page carrying `?from=room`, which surfaces the
+ *                 catalog-sourced access-branch guidance (EARS-10) above the 005
+ *                 one-tap register front door; on register the doctor re-enters the
+ *                 room (admitted on success).
+ *   • not-live  → the 004 event page (the truthful lifecycle state — upcoming /
+ *                 ended / archived — with no watchable room; no register banner,
+ *                 the lifecycle render is itself the truthful signal).
  *   • not-found → Next.js not-found (unknown / draft — no "exists" oracle).
  *
  * The embed player is instantiated from the grant's explicit provider enum
@@ -42,16 +51,26 @@ export default async function RoomPage({
     acceptLanguage: h.get("accept-language") ?? "",
   });
 
-  const returnTo = `/webinars/${slug}/room`;
+  const roomReturn = buildRoomReturnHref(slug);
+  const eventPage = `/webinars/${encodeURIComponent(slug)}`;
   switch (access.kind) {
     case "auth":
-      redirect(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+      // Carry a `returnTo` back to THIS room url so the gate re-evaluates on
+      // return — after login (or signup) the doctor lands on the room again, not on
+      // `/account` (the room return is guard-parsed by `completeReturnTarget`, which
+      // routes to the room and fires no registration).
+      redirect(`/login?returnTo=${encodeURIComponent(roomReturn)}`);
     // eslint-disable-next-line no-fallthrough -- redirect() throws; unreachable
     case "register":
+      // Guide an authenticated-but-unregistered doctor to the 005 register front
+      // door on the event page; `?from=room` surfaces the access-branch guidance
+      // (EARS-10) so the doctor understands why they were routed here.
+      redirect(`${eventPage}?from=room`);
+    // eslint-disable-next-line no-fallthrough -- redirect() throws; unreachable
     case "not-live":
-      // Route to the 004/005 event page: the register front door (unregistered)
-      // or the truthful lifecycle state (not-live). No room renders in either.
-      redirect(`/webinars/${slug}`);
+      // The truthful 004 lifecycle state (upcoming / ended / archived) — no room,
+      // no register banner (the lifecycle render is the truthful signal on its own).
+      redirect(eventPage);
     // eslint-disable-next-line no-fallthrough -- redirect() throws; unreachable
     case "not-found":
       notFound();

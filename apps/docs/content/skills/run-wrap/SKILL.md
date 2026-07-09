@@ -50,6 +50,15 @@ analyzes _this_ session, not the whole corpus:
   session — its PR/issue numbers, or a distinctive phrase from its first user
   message — and take the file(s) that match. Newest-mtime is only a **tiebreaker**
   among content-matched candidates, never the primary selector.
+- **Verify each resolved segment BEFORE dispatch — grep its assistant `model`
+  field + a task marker (`#N`).** Re-slug on `EnterWorktree` plus adjacent same-day
+  sessions defeat both mtime and first-glance content matching, so confirm every
+  candidate id against the expected assistant `model` (e.g. `claude-opus-*` vs a
+  `claude-fable-*` baseline) **and** a session-unique `#N` before passing it on — a
+  wrong id looks right until the retro analyzes the wrong session. Precedent
+  2026-07-09: the lead resolved **two** wrong ids (a Jul-2 session as the main
+  segment; an opus session mislabeled as the Fable baseline); the retro corrected
+  both — main `ff4304ff`, Fable `520537c1` / `claude-fable-5`.
 - **Exclude the dispatched retro agent's own log.** A subagent writes its own
   `*.jsonl`; once dispatched it can become newest-mtime. So **capture the id
   BEFORE dispatching** the retro agent (resolve by content first, then dispatch

@@ -24,6 +24,8 @@ This file is the slim core. The full always-on set auto-loads at session start: 
 
 DS Platform is the medical-education platform for Doctor.School (B2B pharma sponsor → B2D doctor audience). Greenfield monorepo in **Phase 0** — architectural ADRs (0001–0008) accepted, engineering scaffolding in progress. Pre-pilot target: **2026 Q3**.
 
+**Production is not empty.** A live production deployment runs on Timeweb (ru-3) at the `doctor.school` domains — `app.doctor.school` (portal: the feature-003 auth vertical — new registration + passwordless email/SMS-OTP login), `api.`/`id.` alongside; stood up via DSO-100. Deployed scope = **003 auth only** (webinars/admin/CMS/mobile are NOT deployed). "Phase 0 / pre-pilot" is overall maturity — it does **not** mean "no production". **Never tell the owner "there is no production"**; establish deploy topology from `infra/deploy/` + the owner, never inferred from these docs. Detail: memory `reference_prod_deploy_reality`.
+
 Stack at a glance (full reference in `apps/docs/content/adr/`): **Backend** NestJS + Zod + REST + openapi-typescript SDK (ADR-0002); **Data** Postgres 17 + Drizzle + pgvector (ADR-0003); **Frontend** Next.js 15 + Refine — 4 apps: promo / portal / admin / cms-Payload-v3 (ADR-0004); **Mobile** React Native + Expo + WatermelonDB (ADR-0005); **Docs** Fumadocs + Keystatic + glossary.yaml (ADR-0006). Long-form context: `README.md`.
 
 ---

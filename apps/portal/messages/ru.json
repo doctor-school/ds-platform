@@ -175,6 +175,8 @@
   "room": {
     "liveBadge": "В эфире",
     "onAir": "Идёт эфир",
+    "brandHome": "На страницу эфиров",
+    "exit": "Выйти из комнаты",
     "chatTab": "Чат",
     "infoTab": "О эфире",
     "chatHeading": "Чат",

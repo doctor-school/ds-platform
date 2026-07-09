@@ -5,6 +5,7 @@ import { fetchPublicEventPage } from "../../../../lib/public-events";
 import { fetchRoomConfig } from "../../../../lib/room-config";
 import { buildRoomReturnHref } from "../../../../lib/room-return";
 import { PresenceHeartbeat } from "./presence-heartbeat";
+import { RoomHeader } from "./room-header";
 import { RoomView } from "./room-view";
 
 /**
@@ -86,6 +87,18 @@ export default async function RoomPage({
 
   return (
     <main className="flex min-h-screen flex-col bg-background text-foreground">
+      {/* 006 EARS-2 / EARS-11 — the room's top app-header bar (canvas header,
+          ADR-0013 canvas-wins): brand-home wordmark + reused live pill on the
+          left, truthful exit to the 004 event page on the right. `flex-none` so
+          the room body flexes to full height below it (mobile full-height). */}
+      <RoomHeader
+        eventHref={eventPage}
+        copy={{
+          brandHome: t("brandHome"),
+          liveBadge: t("liveBadge"),
+          exit: t("exit"),
+        }}
+      />
       {/* EARS-4 — the visibility-gated server-authoritative heartbeat loop. No
           rendered affordance; it POSTs a beat every N seconds while the tab is
           visible (N from the grant), capturing presence from mount. */}

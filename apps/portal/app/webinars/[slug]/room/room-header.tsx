@@ -70,7 +70,7 @@ export function RoomHeader({
             from the real go-live instant (EARS-5/EARS-10). The suffix renders inside
             the pill so it inherits the badge's uppercase micro-type, matching the
             canvas «В ЭФИРЕ · 24 МИН». A null `liveAt` renders «В эфире» alone. */}
-        <Badge variant="live">
+        <Badge variant="live" className="whitespace-nowrap">
           {copy.liveBadge}
           <LiveDuration liveAt={liveAt} />
         </Badge>

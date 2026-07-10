@@ -53,14 +53,20 @@ test.describe("004 EARS-8 listing-card registered marker (e2e)", () => {
     await page.getByTestId("event-register-one-tap").click();
     await expect(page.getByText(MARKER, { exact: false }).first()).toBeVisible();
 
-    // The listing now marks EXACTLY the registered card.
+    // The listing now marks EXACTLY the registered card. The «вы записаны» marker
+    // is a sibling of the card's stretched title link, so scope to the card
+    // CONTAINER (`[data-webinar-card]`), not the title anchor.
     await page.goto("/webinars", { waitUntil: "domcontentloaded" });
-    const registeredCard = page.locator(`a[href="/webinars/${SLUG}"]`).first();
+    const registeredCard = page.locator("[data-webinar-card]", {
+      has: page.locator(`a[href="/webinars/${SLUG}"]`),
+    });
     await expect(registeredCard).toBeVisible();
     await expect(registeredCard.getByText(MARKER, { exact: false })).toBeVisible();
 
     // …and every other card is unchanged — no marker outside the registered card.
-    const controlCard = page.locator(`a[href="/webinars/${CONTROL_SLUG}"]`).first();
+    const controlCard = page.locator("[data-webinar-card]", {
+      has: page.locator(`a[href="/webinars/${CONTROL_SLUG}"]`),
+    });
     await expect(controlCard).toBeVisible();
     await expect(controlCard.getByText(MARKER, { exact: false })).toHaveCount(0);
     await expect(page.getByText(MARKER, { exact: false })).toHaveCount(1);

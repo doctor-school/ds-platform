@@ -1175,21 +1175,40 @@ function WebinarCardSection() {
   return (
     <PrimitiveSection
       title="Webinar-card"
-      exportsLine="WebinarCard — listing unit (time plate · chips · speakers), block link"
+      exportsLine="WebinarCard — listing unit (time plate · chips · speakers), stretched title link + optional room CTA"
     >
       <p className="text-sm text-muted-foreground">
         The §09 listing unit (source{" "}
         <code className="font-mono text-xs">webinar-card.dc.html</code>): a
         tinted 196px time plate (56px display time, explicit МСК label) and the
-        content column (school kicker, title, specialty chips, speakers), the
-        whole card a single block link to its event page. Desktop → the
-        bordered, raised grid; ≤900px → flat full-bleed with a bottom divider.
-        Resize to watch the split. The{" "}
+        content column (school kicker, title, specialty chips, speakers). The
+        card root is a container and the title is a stretched link, so the whole
+        card opens its event page while a second action can sit alongside without
+        nesting anchors. Desktop → the bordered, raised grid; ≤900px → flat
+        full-bleed with a bottom divider. Resize to watch the split. The{" "}
         <span className="font-medium text-foreground">live</span> variant
-        surfaces the «В эфире» signal.
+        surfaces the «В эфире» signal; the{" "}
+        <span className="font-medium text-foreground">live + room-CTA</span>{" "}
+        variant (006 EARS-6, «мои события») adds the sibling «Войти в эфир»
+        room-entry button that routes to <code className="font-mono text-xs">
+          /webinars/:slug/room
+        </code>.
       </p>
-      {(["scheduled", "live"] as const).map((variant) => (
-        <SubRow key={variant} label={`variant="${variant}"`}>
+      {(
+        [
+          { key: "scheduled", live: false, cta: false },
+          { key: "live", live: true, cta: false },
+          { key: "live + room-CTA", live: true, cta: true },
+        ] as const
+      ).map((variant) => (
+        <SubRow
+          key={variant.key}
+          label={
+            variant.cta
+              ? 'live + ctaHref/ctaLabel="Войти в эфир"'
+              : `variant="${variant.key}"`
+          }
+        >
           <ThemePair
             render={() => (
               <div className="w-full">
@@ -1208,8 +1227,10 @@ function WebinarCardSection() {
                     },
                     { name: "Михаил Верещагин", org: "Хирург, профессор" },
                   ]}
-                  live={variant === "live"}
+                  live={variant.live}
                   liveLabel="В эфире"
+                  ctaHref={variant.cta ? "#room" : undefined}
+                  ctaLabel={variant.cta ? "Войти в эфир" : undefined}
                 />
               </div>
             )}

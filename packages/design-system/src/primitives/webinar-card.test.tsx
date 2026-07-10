@@ -47,7 +47,8 @@ describe("WebinarCard — content set (EARS-8)", () => {
     render(<WebinarCard {...BASE} />);
     const link = screen.getByRole("link");
     expect(link).toHaveAttribute("href", BASE.href);
-    // The title is reachable inside that link (the card is the affordance).
+    // The title is the accessible label of that (stretched) link, and the whole
+    // card is the affordance (the link's `::after` overlays the card).
     expect(within(link).getByText(BASE.title)).toBeInTheDocument();
   });
 
@@ -64,14 +65,16 @@ describe("WebinarCard — content set (EARS-8)", () => {
 
 describe("WebinarCard — geometry + tokens (EARS-14)", () => {
   it("EARS-14: the desktop split is the 196px time-plate grid on a bordered, raised card", () => {
-    render(<WebinarCard {...BASE} />);
-    const link = screen.getByRole("link");
+    const { container } = render(<WebinarCard {...BASE} />);
+    // The geometry lives on the card ROOT container (the canvas `div`, not the
+    // stretched title link) — the card is no longer a whole-card anchor.
+    const root = container.firstElementChild as HTMLElement;
     // 196px time column + 1fr content, only at the layout (>900px) breakpoint.
-    expect(link.className).toContain("layout:grid-cols-[196px_1fr]");
+    expect(root.className).toContain("layout:grid-cols-[196px_1fr]");
     // 2px structural border + the 6px elevation cast, token-only.
-    expect(link.className).toContain("layout:border-2");
-    expect(link.className).toContain("layout:shadow-lg");
-    expect(link.className).toContain("bg-card");
+    expect(root.className).toContain("layout:border-2");
+    expect(root.className).toContain("layout:shadow-lg");
+    expect(root.className).toContain("bg-card");
   });
 
   it("EARS-14: the time plate uses the tint surface and the 56px display time token", () => {
@@ -120,5 +123,57 @@ describe("WebinarCard — live variant (EARS-9)", () => {
   it("EARS-9: a scheduled card shows no live signal", () => {
     render(<WebinarCard {...BASE} liveLabel="В эфире" />);
     expect(screen.queryByText("В эфире")).toBeNull();
+  });
+});
+
+/**
+ * 006 EARS-6 — the «мои события» room-entry front door on the listing card. On a
+ * registered + `live` event the card hosts a secondary room-entry CTA («Войти в
+ * эфир», routing to `/webinars/:slug/room`) ALONGSIDE the whole-card link to the
+ * event page. The canvas (`webinar-card.dc.html`) never nests that CTA inside the
+ * card link — the card root is a container, the title is a stretched link, and the
+ * CTA is a sibling — so the affordance is added without an anchor nested in an
+ * anchor (an invalid, a11y-hostile structure). The CTA copy is caller-injected
+ * (catalog-sourced, EARS-10) — the primitive ships no user-facing string.
+ */
+describe("006 EARS-6 WebinarCard — room-entry CTA slot (no nested anchor)", () => {
+  const LIVE = { ...BASE, live: true, liveLabel: "В эфире" } as const;
+  const ROOM = "/webinars/ahilles-plastika/room";
+
+  it("EARS-6: renders the room-entry CTA linking to the room when ctaHref + ctaLabel are given", () => {
+    render(<WebinarCard {...LIVE} ctaHref={ROOM} ctaLabel="Войти в эфир" />);
+    const cta = screen.getByRole("link", { name: "Войти в эфир" });
+    expect(cta).toHaveAttribute("href", ROOM);
+  });
+
+  it("EARS-6: the room CTA is a SIBLING of the event-page link — never an anchor nested inside another anchor", () => {
+    const { container } = render(
+      <WebinarCard {...LIVE} ctaHref={ROOM} ctaLabel="Войти в эфир" />,
+    );
+    // No anchor anywhere in the card is a descendant of another anchor.
+    for (const anchor of Array.from(container.querySelectorAll("a"))) {
+      expect(anchor.parentElement?.closest("a")).toBeNull();
+    }
+  });
+
+  it("EARS-6: with a CTA the card exposes exactly two links — the event page and the room — both reachable", () => {
+    render(<WebinarCard {...LIVE} ctaHref={ROOM} ctaLabel="Войти в эфир" />);
+    const hrefs = screen
+      .getAllByRole("link")
+      .map((l) => l.getAttribute("href"));
+    expect(hrefs).toHaveLength(2);
+    expect(hrefs).toContain(BASE.href); // the stretched card link → event page
+    expect(hrefs).toContain(ROOM); // the room-entry CTA
+  });
+
+  it("EARS-6: renders no CTA without its catalog label (no dead control, no hardcoded copy)", () => {
+    render(<WebinarCard {...LIVE} ctaHref={ROOM} />);
+    // Only the card's own event-page link — no CTA element without its label.
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+  });
+
+  it("EARS-6: a card given no ctaHref stays a single link (back-compat listing card)", () => {
+    render(<WebinarCard {...BASE} />);
+    expect(screen.getAllByRole("link")).toHaveLength(1);
   });
 });

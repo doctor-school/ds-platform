@@ -5,6 +5,8 @@ import { Container } from "@ds/design-system/container";
 import { DayBand } from "@ds/design-system/day-band";
 import { WebinarCard } from "@ds/design-system/webinar-card";
 import { fetchMyEvents, groupMyEventsByDay } from "../../../lib/my-events";
+import { toCanvasStatus } from "../../../lib/event-lifecycle";
+import { resolveRoomEntryHref } from "../../../lib/registration-state";
 import {
   formatMskParts,
   formatMskWeekdayShort,
@@ -42,6 +44,10 @@ export const dynamic = "force-dynamic";
 
 export default async function MyEventsPage() {
   const t = await getTranslations("myEvents");
+  // 006 EARS-6 — the room-entry CTA copy («Войти в эфир») is the SAME catalog key
+  // the event-page enter-room CTA uses (`webinar.registered.live.cta`), reused
+  // verbatim so «мои события» never carries a hardcoded or divergent string.
+  const tWebinar = await getTranslations("webinar");
   const h = await headers();
   const result = await fetchMyEvents({
     cookie: h.get("cookie") ?? "",
@@ -107,6 +113,18 @@ export default async function MyEventsPage() {
                 <div className="-mx-4 flex flex-col layout:mx-0 layout:gap-7">
                   {group.events.map((event) => {
                     const parts = formatMskParts(event.startsAt);
+                    // 006 EARS-6 — every «мои события» row is one of the caller's
+                    // OWN registrations (the read returns only registered events),
+                    // so a `live` row admits the doctor into the room. Reuse the
+                    // hardened `resolveRoomEntryHref` (with the known-registered
+                    // state) so the room path is built through the same open-
+                    // redirect defence as the event-page CTA — non-null only for a
+                    // `live` event, `null` otherwise (no CTA renders).
+                    const roomEntryHref = resolveRoomEntryHref(
+                      { registered: true },
+                      toCanvasStatus(event.state),
+                      event.slug,
+                    );
                     return (
                       <WebinarCard
                         key={event.eventId}
@@ -121,6 +139,12 @@ export default async function MyEventsPage() {
                         title={event.title}
                         live={event.state === "live"}
                         liveLabel={t("live")}
+                        ctaHref={roomEntryHref ?? undefined}
+                        ctaLabel={
+                          roomEntryHref
+                            ? tWebinar("registered.live.cta")
+                            : undefined
+                        }
                       />
                     );
                   })}

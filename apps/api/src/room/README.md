@@ -10,8 +10,13 @@ the `fast-path` `doctor_guest` writes/reads).
 - `RoomConfig` read (`GET /v1/events/:idOrSlug/room`) — the server-issued
   **`RoomAccess` grant**, served **only** to a caller the gate admits:
   authenticated **AND** registered for the event (005 `EventRoster`) **AND** the
-  event `live`. The grant carries the room identity (`eventId`) and the
-  server-config heartbeat cadence N (`heartbeatIntervalSeconds`). A guest, an
+  event `live`. The grant carries the room identity (`eventId`), the
+  server-config heartbeat cadence N (`heartbeatIntervalSeconds`), the actual
+  go-live instant (`liveAt` — stamped by 007 `OpenRoom`, `null` on a legacy
+  `live` row; the room's «В эфире · N мин» pill counts from it, never the
+  scheduled `startsAt`, #690), and the live room-presence count (`presenceCount`
+  — distinct doctors with a beat inside the freshness window `2 × N`, an
+  **aggregate** integer, never per-doctor identity or the roster, #690). A guest, an
   unregistered doctor, or a non-`live` event is refused **server-side** (401 /
   403 / 409) and never receives room content — there is no soft UI wall that
   renders the room for an ungated caller (EARS-1, EARS-8). A direct room URL, a
@@ -34,7 +39,8 @@ the `fast-path` `doctor_guest` writes/reads).
 - `RecordPresenceHeartbeat` (`POST /v1/events/:idOrSlug/heartbeat`) — appends one
   immutable `(doctor, event, instant)` row to the durable **append-only**
   `presence_beats` table and returns a server-authoritative `PresenceHeartbeatAck`
-  (`{ eventId, beatAt }`). It evaluates the identical `authenticated ∧ registered
+  (`{ eventId, beatAt, presenceCount }` — the ack refreshes the live «N врачей в
+  комнате» count on every beat, #690). It evaluates the identical `authenticated ∧ registered
 ∧ live` gate as the config read (one gate, reused — `RoomService.admit`): a
   guest (401), an unregistered doctor (403), and a non-`live` / `ended` event
   (409) each append **nothing** (EARS-8). The instant is **server-stamped**, never

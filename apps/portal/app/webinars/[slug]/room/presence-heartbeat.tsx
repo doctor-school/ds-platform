@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+import { PresenceHeartbeatAckSchema } from "@ds/schemas";
+import { usePresenceCountSetter } from "./room-presence";
 
 /**
  * 006 EARS-4 — the client presence-capture loop. While the room tab is the
@@ -24,6 +26,11 @@ import { useEffect } from "react";
  * post is swallowed: presence capture never surfaces an error to the doctor, and
  * concurrent-tab coalescing is an EARS-5 server-side read-time derivation, so a
  * duplicate beat on rapid re-focus is harmless.
+ *
+ * **Live presence count (EARS-5).** Each accepted beat's ack carries the live
+ * room-presence count (distinct doctors within the freshness window — a server-side
+ * aggregate, never PII); the loop pushes it into {@link RoomPresenceProvider} so the
+ * header's «N врачей в комнате» indicator refreshes every beat with no extra poll.
  */
 export function PresenceHeartbeat({
   slug,
@@ -32,6 +39,7 @@ export function PresenceHeartbeat({
   slug: string;
   intervalSeconds: number;
 }) {
+  const setPresenceCount = usePresenceCountSetter();
   useEffect(() => {
     // A non-positive cadence is inert — never a busy-loop (defence in depth; the
     // schema pins N positive, but the client does not trust that blindly).
@@ -46,11 +54,19 @@ export function PresenceHeartbeat({
         method: "POST",
         credentials: "include",
         headers: { accept: "application/json" },
-        // A beat is a fire-and-forget signal; never block or surface the result.
+        // A beat is a fire-and-forget signal; never block on the result.
         keepalive: true,
-      }).catch(() => {
-        // Presence capture is best-effort — a failed beat never reaches the doctor.
-      });
+      })
+        .then(async (res) => {
+          // Refresh the live presence count from the ack (best-effort — a parse
+          // failure or a refused beat leaves the last known count untouched).
+          if (!res.ok) return;
+          const ack = PresenceHeartbeatAckSchema.safeParse(await res.json());
+          if (ack.success) setPresenceCount(ack.data.presenceCount);
+        })
+        .catch(() => {
+          // Presence capture is best-effort — a failed beat never reaches the doctor.
+        });
     };
 
     const start = (): void => {
@@ -78,7 +94,7 @@ export function PresenceHeartbeat({
       stop();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [slug, intervalSeconds]);
+  }, [slug, intervalSeconds, setPresenceCount]);
 
   return null;
 }

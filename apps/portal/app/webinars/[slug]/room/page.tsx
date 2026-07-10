@@ -6,6 +6,7 @@ import { fetchRoomConfig } from "../../../../lib/room-config";
 import { buildRoomReturnHref } from "../../../../lib/room-return";
 import { PresenceHeartbeat } from "./presence-heartbeat";
 import { RoomHeader } from "./room-header";
+import { RoomPresenceProvider } from "./room-presence";
 import { RoomView } from "./room-view";
 
 /**
@@ -87,41 +88,50 @@ export default async function RoomPage({
 
   return (
     <main className="flex min-h-screen flex-col bg-background text-foreground">
-      {/* 006 EARS-2 / EARS-11 — the room's top app-header bar (canvas header,
-          ADR-0013 canvas-wins): brand-home wordmark + reused live pill on the
-          left, truthful exit to the 004 event page on the right. `flex-none` so
-          the room body flexes to full height below it (mobile full-height). */}
-      <RoomHeader
-        eventHref={eventPage}
-        copy={{
-          brandHome: t("brandHome"),
-          liveBadge: t("liveBadge"),
-          exit: t("exit"),
-        }}
-      />
-      {/* EARS-4 — the visibility-gated server-authoritative heartbeat loop. No
-          rendered affordance; it POSTs a beat every N seconds while the tab is
-          visible (N from the grant), capturing presence from mount. */}
-      <PresenceHeartbeat
-        slug={slug}
-        intervalSeconds={access.config.heartbeatIntervalSeconds}
-      />
-      <RoomView
-        slug={slug}
-        config={access.config}
-        context={{ school: event.school, title: event.title, speakers }}
-        copy={{
-          liveBadge: t("liveBadge"),
-          onAir: t("onAir"),
-          chatTab: t("chatTab"),
-          infoTab: t("infoTab"),
-          chatUnavailable: t("chatUnavailable"),
-          unavailableTitle: t("unavailableTitle"),
-          unavailableBody: t("unavailableBody"),
-          playerTitle: t("playerTitle"),
-          programNow: t("programNow"),
-        }}
-      />
+      {/* 006 EARS-5 — the live room-presence count («N врачей в комнате») is a
+          client aggregate shared between the invisible heartbeat loop (which owns
+          the beat→ack) and the header (which renders it). The provider seeds it
+          from the EARS-1 grant and the loop refreshes it each beat. */}
+      <RoomPresenceProvider initialCount={access.config.presenceCount}>
+        {/* 006 EARS-2 / EARS-5 / EARS-11 — the room's top app-header bar (canvas
+            header, ADR-0013 canvas-wins): brand-home wordmark + reused live pill
+            with the «· N мин» duration on the left, the live presence count +
+            truthful exit on the right. `flex-none` so the room body flexes to full
+            height below it (mobile full-height). */}
+        <RoomHeader
+          eventHref={eventPage}
+          liveAt={access.config.liveAt}
+          copy={{
+            brandHome: t("brandHome"),
+            liveBadge: t("liveBadge"),
+            exit: t("exit"),
+          }}
+        />
+        {/* EARS-4 — the visibility-gated server-authoritative heartbeat loop. No
+            rendered affordance; it POSTs a beat every N seconds while the tab is
+            visible (N from the grant), capturing presence from mount and pushing
+            the live presence count from each ack into the provider (EARS-5). */}
+        <PresenceHeartbeat
+          slug={slug}
+          intervalSeconds={access.config.heartbeatIntervalSeconds}
+        />
+        <RoomView
+          slug={slug}
+          config={access.config}
+          context={{ school: event.school, title: event.title, speakers }}
+          copy={{
+            liveBadge: t("liveBadge"),
+            onAir: t("onAir"),
+            chatTab: t("chatTab"),
+            infoTab: t("infoTab"),
+            chatUnavailable: t("chatUnavailable"),
+            unavailableTitle: t("unavailableTitle"),
+            unavailableBody: t("unavailableBody"),
+            playerTitle: t("playerTitle"),
+            programNow: t("programNow"),
+          }}
+        />
+      </RoomPresenceProvider>
     </main>
   );
 }

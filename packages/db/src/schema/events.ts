@@ -48,6 +48,19 @@ export const events = pgTable("events", {
   /** Object-storage key for the current program PDF; null until one is uploaded. */
   programPdfRef: text("program_pdf_ref"),
   state: eventLifecycleState("state").notNull().default("draft"),
+  /**
+   * The actual go-live instant — server-stamped exactly once when the director
+   * opens the room (the `published → live` transition, 007 EARS-5 `OpenRoom`),
+   * `null` until then and on any event that never went live. Distinct from
+   * `starts_at` (the *scheduled* wall-clock): the 006 room's live-elapsed
+   * indicator («В эфире · N мин») is truthfully derived from the moment the room
+   * actually opened, never from the schedule (a broadcast that starts late must
+   * not show inflated elapsed minutes). Set once and never overwritten — the
+   * closed lifecycle map forbids re-entering `live`, so there is no second
+   * go-live to record; a legacy `live` row predating this column stays `null`
+   * and the room renders the pill with no suffix (truthful, not back-filled).
+   */
+  liveAt: timestamp("live_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

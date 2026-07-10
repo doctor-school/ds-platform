@@ -1,5 +1,59 @@
 # @ds/portal
 
+## 0.10.0
+
+### Minor Changes
+
+- [#703](https://github.com/doctor-school/ds-platform/pull/703) [`29ae731`](https://github.com/doctor-school/ds-platform/commit/29ae731096a929745d64800e97d059bded702605) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(room): 006 [#690](https://github.com/doctor-school/ds-platform/issues/690) — realize deferred webinar-room header canvas elements (live presence count + live-duration)
+
+  Realizes two of the four canvas header elements [#584](https://github.com/doctor-school/ds-platform/issues/584) deferred as tracked
+  decision-debt, each now backed by real data (no faked/hardcoded values):
+
+  - **Live presence count** («N врачей в комнате») — a server-side aggregate over
+    the existing append-only `presence_beats`: the count of distinct doctors with a
+    beat inside the freshness window (2 × the heartbeat cadence N). It rides the
+    EARS-1 `RoomConfig` grant (initial value) and every heartbeat ack (live
+    refresh), and the portal header renders it desktop-only per the canvas. An
+    integer aggregate only — never per-doctor identity or the roster (EARS-8).
+  - **Live-duration «· N мин»** on the live pill — counted from the event's actual
+    go-live instant. Adds a nullable `events.live_at` column stamped once by 007
+    `OpenRoom` (the `published → live` transition); the grant exposes it and the
+    room counts elapsed minutes from it, never the scheduled `startsAt`. A legacy
+    `live` row with no `live_at` renders the pill with no suffix (truthful).
+
+  Additive schema growth (`RoomConfig.liveAt` + `RoomConfig.presenceCount`,
+  `PresenceHeartbeatAck.presenceCount`) and one additive migration
+  (`events.live_at`). The theme toggle (re-deferred to [#702](https://github.com/doctor-school/ds-platform/issues/702), dark theme with it)
+  and the doctor avatar (no server-side display name exists — re-deferred) remain
+  canvas omissions, never dead affordances.
+
+- [#704](https://github.com/doctor-school/ds-platform/pull/704) [`54e425d`](https://github.com/doctor-school/ds-platform/commit/54e425dda80c41de342e87c3b405bc7c1606197f) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(webinars): 006 EARS-6 — «мои события» room-entry CTA + WebinarCard nested-anchor resolution ([#689](https://github.com/doctor-school/ds-platform/issues/689))
+
+  A registered doctor could enter a live webinar room from the event page ([#584](https://github.com/doctor-school/ds-platform/issues/584)) but
+  not from «мои события», where each event renders as a `WebinarCard`. The card was a
+  whole-card `<a>`, so a room-entry CTA could not be added without nesting interactive
+  content inside an anchor.
+
+  - `@ds/design-system`: `WebinarCard` now matches its canvas — the root is a
+    container and the title is a stretched link (`::after` overlay), so the whole card
+    still opens its event page while an optional secondary action fits alongside with
+    no nested anchor. Two additive props (`ctaHref`, `ctaLabel`) render a room-entry
+    button (`Button`, filled primary) as a sibling with its own stacking context;
+    omitting them keeps the listing card rendering as a single link. **BREAKING:**
+    `WebinarCard`'s root element changes `<a>` → `<div>`, its forwarded ref type
+    changes `HTMLAnchorElement` → `HTMLDivElement`, and its props base changes
+    `ComponentPropsWithoutRef<"a">` → `ComponentPropsWithoutRef<"div">` (anchor-only
+    props such as `target`/`rel` are no longer accepted on the card root).
+  - `@ds/portal`: `/account/events` renders the «Войти в эфир» room-entry CTA on a
+    registered + `live` event, routing to `/webinars/:slug/room` via the hardened
+    `resolveRoomEntryHref`; copy reuses the `webinar.registered.live.cta` catalog key.
+
+### Patch Changes
+
+- Updated dependencies [[`29ae731`](https://github.com/doctor-school/ds-platform/commit/29ae731096a929745d64800e97d059bded702605), [`54e425d`](https://github.com/doctor-school/ds-platform/commit/54e425dda80c41de342e87c3b405bc7c1606197f)]:
+  - @ds/schemas@1.1.0
+  - @ds/design-system@1.0.0
+
 ## 0.9.1
 
 ### Patch Changes

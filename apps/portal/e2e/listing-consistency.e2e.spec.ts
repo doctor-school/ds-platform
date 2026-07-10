@@ -32,7 +32,9 @@ test.describe("004 EARS-9 cross-surface live-state consistency (e2e)", () => {
   }) => {
     await page.goto(`${BASE}/webinars`, { waitUntil: "domcontentloaded" });
 
-    const card = page.locator(`a[href="/webinars/${SLUG_LIVE}"]`).first();
+    const card = page.locator("[data-webinar-card]", {
+      has: page.locator(`a[href="/webinars/${SLUG_LIVE}"]`),
+    });
     await expect(card).toBeVisible();
     // The live signal is inside the card itself (derived from state === 'live').
     await expect(card).toContainText(LIVE_LABEL);

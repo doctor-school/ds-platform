@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { LIVE_STAND, provisionLoggedInDoctor } from "./support/doctor-session";
 
 /**
  * 005 EARS-6 / EARS-10 / EARS-11 — the «мои события» Предстоящие tab renders
@@ -67,12 +68,15 @@ test("EARS-6: the Предстоящие list shows the registered event with М
   await expect(page.getByRole("heading", { name: "Мои события" })).toBeVisible();
   await expect(page.locator("body")).toContainText("МСК");
 
-  // The registered event is a card linking to its event page (EARS-6).
+  // The registered event is a card linking to its event page (EARS-6). The title
+  // is the card's stretched link; the school kicker is a sibling in the card
+  // container, so scope content assertions to `[data-webinar-card]`.
   const cardLink = page.locator(`a[href="/webinars/${SLUG}"]`).first();
-  await expect(cardLink).toBeVisible();
-  await expect(cardLink).toContainText(process.env.E2E_MY_EVENT_SCHOOL ?? "Школа");
+  const card = page.locator("[data-webinar-card]", { has: cardLink });
+  await expect(card).toBeVisible();
+  await expect(card).toContainText(process.env.E2E_MY_EVENT_SCHOOL ?? "Школа");
   if (process.env.E2E_MY_EVENT_TITLE) {
-    await expect(cardLink).toContainText(process.env.E2E_MY_EVENT_TITLE);
+    await expect(card).toContainText(process.env.E2E_MY_EVENT_TITLE);
   }
 
   // Clicking the card navigates to that event page (EARS-6 → the event page).
@@ -169,5 +173,68 @@ test.describe("005 EARS-7 my-events freshness (e2e)", () => {
     // …and it links back to that event's page (EARS-6), reachable from the list.
     await card.click();
     await expect(page).toHaveURL(new RegExp(`/webinars/${FRESH_SLUG}$`));
+  });
+});
+
+/**
+ * 006 EARS-6 — the «мои события» room-entry front door (#689). US-1 says a
+ * registered doctor enters the room "from the event page (004) OR «мои события»
+ * (005)". #584 shipped the event-page CTA; this pins the «мои события» half: on a
+ * registered + `live` event the card hosts a «Войти в эфир» CTA routing to
+ * `/webinars/:slug/room`, ALONGSIDE (never nested inside) the whole-card link to
+ * the event page. This drives the invariant in the ACTUAL running stack (browser →
+ * portal SSR → `/v1/*` rewrite → api → Postgres → the room gate).
+ *
+ * Self-provisioning (like the freshness journey above): a fresh 003 doctor
+ * registers for the seeded `live` event through the REAL `RegisterForEvent` command
+ * (its session + fingerprint surface ride the same-origin POST), then reads «мои
+ * события». Live-stand-gated (portal + real Zitadel + Mailpit) via `LIVE_STAND`;
+ * inert on a bare CI run. The `live` event is the `seed:events` fixture
+ * `seed-005-live` (override with `E2E_LIVE_SLUG`).
+ */
+const LIVE_SLUG = process.env.E2E_LIVE_SLUG ?? "seed-005-live";
+
+test.describe("006 EARS-6 my-events room-entry CTA (e2e)", () => {
+  test("006 EARS-6: a registered doctor on a live event sees «Войти в эфир» on «мои события», routing to the room with no nested anchor", async ({
+    page,
+  }) => {
+    test.skip(!LIVE_STAND, "requires a live portal + real Zitadel + Mailpit");
+
+    // Real 003 signup → a logged-in doctor landing on /account.
+    await provisionLoggedInDoctor(page);
+
+    // Register for the seeded LIVE event via the REAL same-origin RegisterForEvent
+    // command (the exact POST the portal client fires) — carries the browser session.
+    const status = await page.evaluate(async (slug) => {
+      const res = await fetch(
+        `/v1/events/${encodeURIComponent(slug)}/registration`,
+        { method: "POST", headers: { accept: "application/json" }, credentials: "include" },
+      );
+      return res.status;
+    }, LIVE_SLUG);
+    expect(status).toBe(200);
+
+    // «мои события» now lists the live event; the card carries the room-entry CTA.
+    await page.goto(`${BASE}/account/events`, { waitUntil: "domcontentloaded" });
+    const card = page.locator("[data-webinar-card]", {
+      has: page.locator(`a[href="/webinars/${LIVE_SLUG}"]`),
+    });
+    await expect(card).toBeVisible();
+
+    // The room CTA: catalog copy («Войти в эфир»), the hardened room route, and a
+    // SIBLING of the card's stretched title link — no anchor nested in an anchor.
+    const roomCta = card.getByRole("link", { name: "Войти в эфир", exact: true });
+    await expect(roomCta).toHaveAttribute("href", `/webinars/${LIVE_SLUG}/room`);
+    expect(await card.locator("a a").count()).toBe(0);
+
+    // The card's own event-page link still resolves (the stretched title link).
+    await expect(
+      card.locator(`a[href="/webinars/${LIVE_SLUG}"]`),
+    ).toBeVisible();
+
+    // Clicking the CTA routes into the room — the gate admits a registered doctor
+    // on a live event (006 EARS-1/EARS-6).
+    await roomCta.click();
+    await expect(page).toHaveURL(new RegExp(`/webinars/${LIVE_SLUG}/room`));
   });
 });

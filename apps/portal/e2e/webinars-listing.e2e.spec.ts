@@ -50,11 +50,13 @@ test("EARS-8: the card carries the full choose-set and navigates to the event pa
   test.skip(!SLUG, "requires a seeded upcoming event slug");
   await page.goto(`${BASE}/webinars`, { waitUntil: "domcontentloaded" });
 
-  const card = page.locator(`a[href="/webinars/${SLUG}"]`).first();
+  const cardLink = page.locator(`a[href="/webinars/${SLUG}"]`).first();
+  const card = page.locator("[data-webinar-card]", { has: cardLink });
   await expect(card).toBeVisible();
 
   // The webinar-card.dc.html choose-set (EARS-8): time+МСК, school, title,
-  // specialty chips, and speakers all render inside the card link.
+  // specialty chips, and speakers all render in the card (its title is the
+  // stretched link; the choose-set lives in the card container around it).
   await expect(card).toContainText("МСК");
   await expect(card).toContainText(
     process.env.E2E_WEBINAR_SCHOOL ?? "Школа",
@@ -67,7 +69,7 @@ test("EARS-8: the card carries the full choose-set and navigates to the event pa
   }
 
   // Clicking the card navigates to the correct event page (EARS-8 → EARS-1).
-  await card.click();
+  await cardLink.click();
   await expect(page).toHaveURL(new RegExp(`/webinars/${SLUG}$`));
 });
 

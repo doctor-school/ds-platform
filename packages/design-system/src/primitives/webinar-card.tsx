@@ -1,12 +1,13 @@
 import * as React from "react";
 
 import { cn } from "../lib/utils";
+import { Button } from "./button";
 
 /**
  * Neo-brutalist webinar listing card (004 EARS-8, source
  * `design-source/webinar-card.dc.html`). The reusable listing UNIT that carries
- * the `UpcomingBroadcastCard` choose-set and links the whole card to its event
- * page (EARS-1). Two visual pieces map straight onto the canvas:
+ * the `UpcomingBroadcastCard` choose-set and links to its event page (EARS-1).
+ * Two visual pieces map straight onto the canvas:
  *
  *   • time plate  the tinted left column (desktop `196px` grid track, mobile a
  *                 full-bleed top strip): the 56px display time (`text-4xl`,
@@ -24,9 +25,16 @@ import { cn } from "../lib/utils";
  * `6px 6px 0` elevation cast (`shadow-lg`) on desktop; flat full-bleed with a
  * bottom divider ≤900px, matching the canvas responsive split.
  *
- * The whole card is ONE block-level link (no nested interactive) — on the
- * listing the affordance is "open the event page", so the canvas's own CTA row
- * (which belongs to the event PAGE, EARS-3) is intentionally not rendered here.
+ * STRUCTURE — the card matches the canvas: the root is a non-anchor CONTAINER,
+ * the TITLE is the link, and its `::after` stretches over the whole card so the
+ * entire surface stays the "open the event page" affordance (`after:inset-0`,
+ * the Bootstrap `stretched-link` pattern). This — not a whole-card `<a>` — is
+ * what lets the card host a SECOND action without nesting an anchor inside an
+ * anchor. On a registered + `live` event (006 EARS-6, «мои события») the caller
+ * passes `ctaHref`/`ctaLabel` and the card renders a room-entry CTA («Войти в
+ * эфир» → `/webinars/:slug/room`) as a SIBLING with a higher stacking context
+ * (`relative z-10`), keeping both links keyboard-reachable and DOM-valid. The
+ * public listing (004) simply omits the CTA and reads as a single card link.
  */
 export interface WebinarCardSpeaker {
   /** Speaker display name (the card projection is name-only — no PII/credentials). */
@@ -36,8 +44,8 @@ export interface WebinarCardSpeaker {
 }
 
 export interface WebinarCardProps
-  extends Omit<React.ComponentPropsWithoutRef<"a">, "title" | "children"> {
-  /** The event page URL the whole card links to (`/webinars/:slug`, EARS-8). */
+  extends Omit<React.ComponentPropsWithoutRef<"div">, "title" | "children"> {
+  /** The event page URL the card's stretched title link points to (`/webinars/:slug`, EARS-8). */
   href: string;
   /** Start time already formatted in Europe/Moscow, e.g. `19:00` (EARS-12). */
   time: string;
@@ -67,6 +75,20 @@ export interface WebinarCardProps
   registered?: boolean;
   /** Registered-marker copy — «Вы записаны» (from the catalog); required visually when `registered`. */
   registeredLabel?: string;
+  /**
+   * 006 EARS-6 — the room-entry CTA target (`/webinars/:slug/room`). Set by the
+   * caller ONLY for a registered + `live` event (the «мои события» surface),
+   * composed from the hardened `resolveRoomEntryHref` — never a raw string. When
+   * present WITH {@link ctaLabel}, the card renders a secondary room-entry button
+   * as a sibling of the card link (no nested anchor); absent → no CTA renders.
+   */
+  ctaHref?: string;
+  /**
+   * Room-entry CTA copy — «Войти в эфир» (from the catalog, EARS-10); required
+   * visually when {@link ctaHref} is set. The primitive ships no user-facing
+   * string of its own, so with no label no CTA element renders (no hardcoded copy).
+   */
+  ctaLabel?: string;
 }
 
 /** The pulsing round dot shared by the desktop sticker and the mobile live tag. */
@@ -79,7 +101,7 @@ function LiveDot() {
   );
 }
 
-const WebinarCard = React.forwardRef<HTMLAnchorElement, WebinarCardProps>(
+const WebinarCard = React.forwardRef<HTMLDivElement, WebinarCardProps>(
   (
     {
       className,
@@ -95,21 +117,22 @@ const WebinarCard = React.forwardRef<HTMLAnchorElement, WebinarCardProps>(
       liveLabel,
       registered = false,
       registeredLabel,
+      ctaHref,
+      ctaLabel,
       ...props
     },
     ref,
   ) => (
-    <a
+    <div
       ref={ref}
-      href={href}
+      data-webinar-card=""
       className={cn(
         // Base (≤900px): flat, full-bleed, borderless with a bottom divider that
         // drops on the last card of a day group (the canvas mobile rhythm).
-        "group relative block bg-card text-card-foreground no-underline",
+        "group relative block bg-card text-card-foreground",
         "border-b-2 border-border last:border-b-0",
         // Desktop (>900px): the 196px time-plate grid on a bordered, raised card.
         "layout:grid layout:grid-cols-[196px_1fr] layout:border-2 layout:border-border layout:shadow-lg layout:last:border-2",
-        "focus-visible:outline-none focus-visible:shadow-focus",
         className,
       )}
       {...props}
@@ -165,8 +188,19 @@ const WebinarCard = React.forwardRef<HTMLAnchorElement, WebinarCardProps>(
         <div className="mb-3 text-xs font-extrabold uppercase tracking-micro text-primary-action">
           {school}
         </div>
-        <h3 className="mb-4 text-lg font-bold leading-snug tracking-tight text-card-foreground group-hover:text-primary-action layout:text-title-lg">
-          {title}
+        {/* The TITLE is the card's link. Its `::after` stretches over the whole
+            root (`after:inset-0`, the root is `relative`), so clicking anywhere on
+            the card opens the event page while only ONE anchor exists in the DOM —
+            the structure that lets a secondary CTA sit alongside without nesting
+            anchors. The focus ring rides the link (keyboard target); hover paints
+            via the root `group`. */}
+        <h3 className="mb-4 text-lg font-bold leading-snug tracking-tight layout:text-title-lg">
+          <a
+            href={href}
+            className="text-card-foreground no-underline outline-none after:absolute after:inset-0 after:content-[''] group-hover:text-primary-action focus-visible:text-primary-action focus-visible:after:shadow-focus"
+          >
+            {title}
+          </a>
         </h3>
 
         {specialties.length > 0 ? (
@@ -219,8 +253,23 @@ const WebinarCard = React.forwardRef<HTMLAnchorElement, WebinarCardProps>(
             {registeredLabel}
           </p>
         ) : null}
+
+        {/* 006 EARS-6 — room-entry CTA («Войти в эфир»). A SIBLING of the card's
+            stretched title link (never nested inside it), lifted above the
+            stretched-link overlay with its own stacking context (`relative z-10`)
+            so it is the click target here and stays independently keyboard-
+            reachable. Rendered only for a registered + `live` event (caller passes
+            the hardened `ctaHref` + the catalog label); mirrors the event-page
+            enter-room CTA styling (the DS `Button`, filled primary). */}
+        {ctaHref && ctaLabel ? (
+          <div className="relative z-10 mt-5">
+            <Button asChild size="lg">
+              <a href={ctaHref}>{ctaLabel}</a>
+            </Button>
+          </div>
+        ) : null}
       </div>
-    </a>
+    </div>
   ),
 );
 WebinarCard.displayName = "WebinarCard";

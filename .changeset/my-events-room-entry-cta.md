@@ -1,5 +1,5 @@
 ---
-"@ds/design-system": minor
+"@ds/design-system": major
 "@ds/portal": minor
 ---
 
@@ -15,8 +15,11 @@ content inside an anchor.
   still opens its event page while an optional secondary action fits alongside with
   no nested anchor. Two additive props (`ctaHref`, `ctaLabel`) render a room-entry
   button (`Button`, filled primary) as a sibling with its own stacking context;
-  omitting them keeps the listing card a single link (back-compatible). The
-  forwarded ref now targets the root `<div>` (was the card `<a>`).
+  omitting them keeps the listing card rendering as a single link. **BREAKING:**
+  `WebinarCard`'s root element changes `<a>` → `<div>`, its forwarded ref type
+  changes `HTMLAnchorElement` → `HTMLDivElement`, and its props base changes
+  `ComponentPropsWithoutRef<"a">` → `ComponentPropsWithoutRef<"div">` (anchor-only
+  props such as `target`/`rel` are no longer accepted on the card root).
 - `@ds/portal`: `/account/events` renders the «Войти в эфир» room-entry CTA on a
   registered + `live` event, routing to `/webinars/:slug/room` via the hardened
   `resolveRoomEntryHref`; copy reuses the `webinar.registered.live.cta` catalog key.

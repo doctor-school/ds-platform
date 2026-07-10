@@ -68,9 +68,13 @@ describe("006 EARS-2 embed provider resolution — explicit enum, never URL-snif
     // stream carries it; an event with no / unknown stream config carries
     // `stream: null` (still a valid grant — the gate passed — rendering the
     // "stream unavailable" room state).
+    // #690 grant additions (required keys): the actual go-live instant (nullable —
+    // a legacy live row carries null) + the live room-presence count.
     const withStream = RoomConfigSchema.safeParse({
       eventId: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
       heartbeatIntervalSeconds: 60,
+      liveAt: "2026-07-17T16:03:00.000Z",
+      presenceCount: 1,
       stream: { provider: "youtube", embedRef: "dQw4w9WgXcQ" },
       chat: null,
     });
@@ -79,6 +83,8 @@ describe("006 EARS-2 embed provider resolution — explicit enum, never URL-snif
     const unavailable = RoomConfigSchema.safeParse({
       eventId: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
       heartbeatIntervalSeconds: 60,
+      liveAt: null,
+      presenceCount: 0,
       stream: null,
       chat: null,
     });
@@ -88,6 +94,8 @@ describe("006 EARS-2 embed provider resolution — explicit enum, never URL-snif
     const badProvider = RoomConfigSchema.safeParse({
       eventId: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
       heartbeatIntervalSeconds: 60,
+      liveAt: null,
+      presenceCount: 0,
       stream: { provider: "vimeo", embedRef: "x" },
       chat: null,
     });

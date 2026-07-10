@@ -17,6 +17,10 @@ import { fetchFreshChatToken } from "./room-chat-token";
 const GRANT = {
   eventId: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
   heartbeatIntervalSeconds: 60,
+  // #690 grant additions (required keys — the refresh re-parses the FULL grant):
+  // the actual go-live instant + the live room-presence count.
+  liveAt: "2026-07-17T16:03:00.000Z",
+  presenceCount: 1,
   stream: null,
   chat: {
     url: "ws://stand.example/connection/websocket",

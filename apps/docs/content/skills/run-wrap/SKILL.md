@@ -18,12 +18,26 @@ runs the task lifecycle to completion, and emits a handoff. It is **connective**
 each stage **invokes an existing skill** and does not restate it. If a stage's
 detail is wrong, fix it in the owning skill.
 
-> **Cannot proceed without** — stage 1 must return the schema'd findings array
+> **Cannot proceed without** — stage 0 has confirmed no dispatched agent is still
+> in flight; stage 1 must return the schema'd findings array
 > from an _independent_ agent (never self-review); stage 2's approval gate is
 > mandatory before any edit lands; stage 3 must leave `pnpm lint:instruction-budget`
 > green by **compacting**, never by appending.
 
-## The five stages
+## The stages
+
+### 0. In-flight agent gate (before anything else)
+
+Enumerate live dispatched agents — impl subagents, reviewers, background
+monitors. **Wait for every one to return — in all cases** — and run its bounded
+closeout (stand-ops/main-tree audit, Mode-a dispatch, tracker stop-state)
+**before** dispatching the stage-1 retro: a session error may be surfaced
+precisely by an in-flight agent's result, so a retro launched earlier analyzes
+an incomplete session and its findings miss the tail (owner directive
+2026-07-10, #707). Recording the agent id + worktree/branch-DB/ports + relaunch
+recipe in the Issue stop-state and the handoff is the **fallback only** for a
+genuinely unreapable agent (harness-killed, no return possible) — never an
+alternative to waiting.
 
 ### 1. Retro — independent, single-session (dispatch)
 
@@ -172,6 +186,9 @@ section template).
 
 ## Failure modes
 
+- **Dispatching the retro over a still-running agent** — stage 0 waits for every
+  dispatched agent in all cases; a premature retro analyzes an incomplete
+  session (#707, owner-corrected 2026-07-10).
 - **Self-reviewing the retro** — stage 1 must be a separate, independent agent
   (#252). The lead running the analysis itself is the banned shortcut.
 - **Skipping the approval gate** — stage 2 is non-bypassable; no edit lands

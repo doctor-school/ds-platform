@@ -10,12 +10,18 @@ modes and the field detail) is the **`run-wrap`** catalog skill —
 five stages below in order. Each stage **invokes an existing skill**; do not
 re-implement any of them.
 
-> Hard constraints (from epic #247 / #252): stage 1 is a **separate independent
-> agent** (never self-review); stage 2's approval gate is **mandatory**; stage 3
-> must **compact, never just append**, and leave the anti-bloat budget green.
-> Never stage or commit `.audit-tmp/`.
+> Hard constraints (from epic #247 / #252 / #707): stage 1 fires only after
+> **every in-flight dispatched agent has returned** and its bounded closeout ran
+> (run-wrap Stage 0 — wait in all cases; premature retro = incomplete session);
+> stage 1 is a **separate independent agent** (never self-review); stage 2's
+> approval gate is **mandatory**; stage 3 must **compact, never just append**,
+> and leave the anti-bloat budget green. Never stage or commit `.audit-tmp/`.
 
 ## 1. Retro — independent, single-session (dispatch)
+
+**Stage 0 gate first (run-wrap §0):** enumerate live dispatched agents and wait
+for every one to return — in all cases — before resolving the session id and
+dispatching the retro.
 
 Resolve the CURRENT session's log id, then dispatch `run-session-retro` in
 single-session mode as a fresh-context **Opus** agent (independent — not

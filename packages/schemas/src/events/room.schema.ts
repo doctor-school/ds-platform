@@ -76,9 +76,32 @@ export type RoomChatCredential = z.infer<typeof RoomChatCredentialSchema>;
  * On the dev-stand and in production Centrifugo is configured, so `chat` is
  * present for every live room.
  */
+/**
+ * `liveAt` (EARS-10 live-elapsed indicator) is the **actual go-live instant** the
+ * director opened the room at (007 `OpenRoom`, the `published → live` transition),
+ * so the room's «В эфире · N мин» pill counts elapsed minutes from the moment the
+ * broadcast actually started — never from the *scheduled* `startsAt` (a late start
+ * must not show inflated minutes). It is **nullable**: a `live` event whose go-live
+ * instant predates the column (a legacy row) still receives a valid grant with
+ * `liveAt: null`, and the room renders the pill with **no** minute suffix (truthful,
+ * never back-filled from the schedule).
+ *
+ * `presenceCount` (the canvas «N врачей в комнате» indicator) is the **live count of
+ * distinct doctors currently in the room** — the number of distinct users who
+ * emitted a presence beat within the freshness window (≈ `2 ×
+ * heartbeatIntervalSeconds`, so a doctor who missed one beat still counts, but one
+ * who left ages out within two cadences). It is a server-side **aggregate** derived
+ * at read time over the same append-only `presence_beats` the EARS-5 minutes draw
+ * from — an integer, never a per-doctor identity or the roster, so it leaks no PII
+ * (EARS-8: aggregate presence ≠ another doctor's presence data). It is the initial
+ * value the client renders; each heartbeat ack refreshes it (below). `0` is valid
+ * (the first doctor in an empty room; the beat this read follows makes it ≥ 1).
+ */
 export const RoomConfigSchema = z.object({
   eventId: z.uuid(),
   heartbeatIntervalSeconds: z.number().int().positive(),
+  liveAt: z.iso.datetime({ offset: true }).nullable(),
+  presenceCount: z.number().int().nonnegative(),
   stream: StreamConfigSchema.nullable(),
   chat: RoomChatCredentialSchema.nullable(),
 });
@@ -167,6 +190,17 @@ export type PostChatMessageAck = z.infer<typeof PostChatMessageAckSchema>;
 export const PresenceHeartbeatAckSchema = z.object({
   eventId: z.uuid(),
   beatAt: z.iso.datetime({ offset: true }),
+  /**
+   * The live room-presence count **after** this beat was appended — the count of
+   * distinct doctors with a beat inside the freshness window (≈ `2 × N`), the same
+   * server-side aggregate the `RoomConfig` grant seeds `presenceCount` with. The
+   * client refreshes the header's «N врачей в комнате» indicator from it on every
+   * beat, so the count tracks doctors joining and ageing out without a separate
+   * poll. An aggregate integer only — never a per-doctor identity, presence detail,
+   * or the roster (EARS-8). It is ≥ 1 in this ack (this caller's own just-appended
+   * beat is inside the window).
+   */
+  presenceCount: z.number().int().nonnegative(),
 });
 export type PresenceHeartbeatAck = z.infer<typeof PresenceHeartbeatAckSchema>;
 

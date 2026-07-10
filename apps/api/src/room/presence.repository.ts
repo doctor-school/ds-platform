@@ -61,6 +61,36 @@ export class PresenceRepository {
   }
 
   /**
+   * The **live** room-presence count: the number of **distinct** doctors who
+   * emitted a beat within the freshness window `[now − windowSeconds, now]` (006
+   * EARS-5, the canvas «N врачей в комнате» indicator). Read-only over the same
+   * append-only `presence_beats` the minute derivation reads — no separate presence
+   * store, no Centrifugo presence dependency (the durable beats already carry it).
+   *
+   * The window (the caller passes `≈ 2 × N`, two heartbeat cadences) is what makes
+   * the count *live* rather than cumulative: a doctor who dropped one beat still
+   * counts, but a doctor who left the room ages out within two cadences — so the
+   * number tracks who is *currently* watching, not everyone who ever beat. `DISTINCT
+   * user_id` coalesces a doctor's concurrent tabs to one (the same non-inflation
+   * rule as the minutes). It is an **aggregate** — a single integer, never a
+   * per-doctor identity or the roster — so it exposes no PII (EARS-8).
+   */
+  async countLivePresence(
+    eventId: string,
+    windowSeconds: number,
+  ): Promise<number> {
+    const result = await this.db.execute<{ count: number }>(
+      sql`
+        SELECT count(DISTINCT ${presenceBeats.userId})::int AS count
+        FROM ${presenceBeats}
+        WHERE ${presenceBeats.eventId} = ${eventId}
+          AND ${presenceBeats.beatAt} >= now() - make_interval(secs => ${windowSeconds})
+      `,
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
+  /**
    * Derive per-doctor presence minutes for one event from the append-only beats
    * (006 EARS-5; design §5). Read-only — the durable beats are never mutated.
    *

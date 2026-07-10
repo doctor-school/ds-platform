@@ -21,6 +21,13 @@ const UUID_RE =
 export interface EventForRoom {
   id: string;
   state: EventLifecycleState;
+  /**
+   * The actual go-live instant (007 `OpenRoom` stamps it on `published → live`),
+   * `null` until then and on legacy `live` rows predating the column. The grant
+   * exposes it so the room's «В эфире · N мин» pill counts from the real go-live,
+   * never the scheduled `startsAt`.
+   */
+  liveAt: Date | null;
   streamConfig: StreamConfig | null;
 }
 
@@ -59,6 +66,7 @@ export class RoomRepository {
       .select({
         id: events.id,
         state: events.state,
+        liveAt: events.liveAt,
         provider: streamConfig.provider,
         embedRef: streamConfig.embedRef,
       })
@@ -70,6 +78,7 @@ export class RoomRepository {
     return {
       id: row.id,
       state: row.state as EventLifecycleState,
+      liveAt: row.liveAt,
       streamConfig:
         row.provider !== null && row.embedRef !== null
           ? { provider: row.provider, embedRef: row.embedRef }

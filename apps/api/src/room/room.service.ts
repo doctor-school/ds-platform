@@ -150,12 +150,35 @@ export class RoomService {
     // succeeds; the `null` guard is fail-closed defence — a caller with no
     // resolvable id gets `chat: null`, never a token for a mis-attributed subject.
     const userId = await this.presence.findUserIdBySub(sub);
+    const presenceCount = await this.presence.countLivePresence(
+      event.id,
+      this.presenceWindowSeconds(),
+    );
     return {
       eventId: event.id,
       heartbeatIntervalSeconds: this.heartbeatIntervalSeconds,
+      // The truthful go-live instant (007 `OpenRoom`) — `null` on a legacy live
+      // row, where the room renders the pill with no minute suffix rather than
+      // back-fill from the schedule. Serialized ISO-8601 with offset.
+      liveAt: event.liveAt ? event.liveAt.toISOString() : null,
+      // The live aggregate count seeded into the header on first render (EARS-8:
+      // an integer, never per-doctor identity or the roster).
+      presenceCount,
       stream: resolveRoomStream(event.streamConfig),
       chat: userId ? this.chat.credential(userId, event.id) : null,
     };
+  }
+
+  /**
+   * The freshness window (seconds) the live presence count is derived over — two
+   * heartbeat cadences (`2 × N`), so a doctor who dropped a single beat still
+   * counts as present while one who actually left ages out within two cadences.
+   * Derived from the SAME server-config `N` the client drives its beat loop from,
+   * so an operator-confirmed different cadence widens the window with no code
+   * change (the EARS-5 parameterized-over-N discipline).
+   */
+  private presenceWindowSeconds(): number {
+    return this.heartbeatIntervalSeconds * 2;
   }
 
   /**
@@ -215,6 +238,13 @@ export class RoomService {
     const userId = await this.presence.findUserIdBySub(sub);
     if (!userId) throw new UnknownSubjectError(sub);
     const { beatAt } = await this.presence.appendBeat(userId, event.id);
-    return { eventId: event.id, beatAt: beatAt.toISOString() };
+    // Read the live count AFTER the append so this caller's own beat is inside the
+    // window (the ack's count is therefore ≥ 1). The client refreshes the header's
+    // «N врачей в комнате» indicator from it on every beat — no separate poll.
+    const presenceCount = await this.presence.countLivePresence(
+      event.id,
+      this.presenceWindowSeconds(),
+    );
+    return { eventId: event.id, beatAt: beatAt.toISOString(), presenceCount };
   }
 }

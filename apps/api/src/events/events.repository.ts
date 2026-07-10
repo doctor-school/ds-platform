@@ -7,7 +7,7 @@ import {
   type StreamConfig,
   UPCOMING_BROADCAST_STATES,
 } from "@ds/schemas";
-import { and, asc, desc, eq, gte, inArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 
 /**
@@ -272,7 +272,19 @@ export class EventsRepository {
     return this.db.transaction(async (tx) => {
       const [row] = await tx
         .update(events)
-        .set({ state, updatedAt: new Date() })
+        .set({
+          state,
+          updatedAt: new Date(),
+          // Stamp the actual go-live instant exactly on the `published → live`
+          // transition (007 `OpenRoom`), and only if it is still unset —
+          // `coalesce` makes the write idempotent so a re-run never overwrites the
+          // original go-live moment. `live` is unreachable a second time under the
+          // closed lifecycle map, so this is set-once in practice; the guard is
+          // defence in depth. Every other transition leaves `live_at` untouched.
+          ...(state === "live"
+            ? { liveAt: sql`coalesce(${events.liveAt}, now())` }
+            : {}),
+        })
         .where(eq(events.id, id))
         .returning();
       if (!row) return null;

@@ -132,7 +132,7 @@ apps/
 **Every app holds its own host-only cookie:**
 
 - `doctor.school` (promo) — `__Host-ds_promo_session` if authenticated state is needed for CTA / lead forms (usually not — promo is anonymous by default).
-- `app.doctor.school` (portal) — `__Host-ds_portal_session`, host-only, `HttpOnly`, `Secure`, `SameSite=Lax`.
+- `app.doctor.school` (portal) — `__Host-ds_session`, host-only, `HttpOnly`, `Secure`, `SameSite=Lax`.
 - `admin.doctor.school` (admin) — **staged session model**. Wave 1 (through the 2026-07-17 live-webinar scope — feature 007, minimal event-admin): the admin app authenticates via the shipped 003 session cookie `__Host-ds_session` (host-only, `HttpOnly`, `Secure`, `SameSite=Lax`, no 2FA), sent same-origin through the admin `/v1/*` proxy — accepted for one trusted `platform_admin` group whose mutations already ride the high-stakes introspection tier (ADR-0001 §2.5/§8). Pre-pilot hardening (required before the 2026 Q3 pilot, tracked by Issue [#718](https://github.com/doctor-school/ds-platform/issues/718)): dedicated `__Host-ds_admin_session` cookie, host-only, `SameSite=Strict`, plus mandatory 2FA for `platform_admin` sessions — the target session model of this ADR.
 - `cms.doctor.school` (cms) — `__Host-ds_cms_session`, host-only, for the marketing team.
 - `docs.doctor.school` (docs) — `__Host-ds_docs_session` if auth is needed (internal SSOT for the team, typically via VPN).
@@ -150,7 +150,7 @@ Cross-app login continuity between portal, admin, promo, docs, cms is achieved v
 import { NextResponse } from "next/server";
 
 export async function middleware(req: NextRequest) {
-  const session = req.cookies.get("__Host-ds_" + APP_NAME + "_session");
+  const session = req.cookies.get(APP_SESSION_COOKIE); // portal: "__Host-ds_session"; other apps: "__Host-ds_<app>_session"
   if (session) return NextResponse.next();
 
   // No local session → silent re-auth attempt via IdP

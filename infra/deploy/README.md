@@ -2,7 +2,8 @@
 
 Applied Terraform topology + **apply-ready** on-box deploy payload for deploying the
 built product verticals — auth (feature 003, epic #80) + webinars wave-1 (admin app,
-Centrifugo room chat, program-PDF uploads; payload wiring lands with #729) — onto an
+Centrifugo room chat, program-PDF uploads; payload wiring shipped with #729, live
+apply per [Wave-1 apply order](#wave-1-apply-order-729--dso-134)) — onto an
 **always-on** Timeweb production environment with live SMS + Email.
 
 > **Design (SSOT):** [`apps/docs/content/specs/tech/2026-07-02-ds-platform-prepilot-deploy-slice-design-en.md`](../../apps/docs/content/specs/tech/2026-07-02-ds-platform-prepilot-deploy-slice-design-en.md).
@@ -28,7 +29,8 @@ Centrifugo room chat, program-PDF uploads; payload wiring lands with #729) — o
   **out of slice** — deploying only what the built features actually run
   (spec §2.3, §8). The webinars wave-1 additions (admin app, Centrifugo,
   S3 `uploads` bucket) are **in-slice** (spec §2.1, §6.3); their compose/Caddy/
-  Terraform wiring is #729's deliverable and is not yet in this payload.
+  Terraform wiring is in this payload (#729) — live apply is owner-gated, see
+  [Wave-1 apply order](#wave-1-apply-order-729--dso-134).
 
 ## Layout
 
@@ -38,12 +40,14 @@ infra/deploy/
   terraform/          twc harness: providers, variables, network (vpc+firewall),
                       api-prod, data-prod, s3 (pgbackrest repo), outputs
   cloud-init/         first-boot base hardening (non-root deploy user, ufw, docker)
-  api.env.example     /etc/ds-platform/api.env template (api + portal + sms-adapter + migrate)
+  api.env.example     /etc/ds-platform/api.env template (api + portal + admin +
+                      centrifugo + sms-adapter + migrate)
   zitadel.env.example /etc/ds-platform/zitadel.env template (masterkey, DB, FIRSTINSTANCE)
   data.env.example    /etc/ds-platform/data.env template (POSTGRES_PASSWORD, pgbackrest S3)
   compose/
-    api-prod/         Caddyfile + compose: caddy + api + portal + zitadel +
-                      zitadel-login + sms-aero-adapter + a one-shot `migrate` service
+    api-prod/         Caddyfile + compose: caddy + api + portal + admin + centrifugo +
+                      zitadel + zitadel-login + sms-aero-adapter + a one-shot
+                      `migrate` service, plus centrifugo/config.json (non-secret)
     data-prod/        compose: postgres + redis + pgbackrest, plus
                       postgres/  (Dockerfile pgvector+partman+pgbackrest, postgresql.conf, init.sql)
                       pgbackrest/(Dockerfile, pgbackrest.conf, crontab, entrypoint.sh, backup.sh)
@@ -54,7 +58,9 @@ infra/deploy/
 | Service          | Port          | Key env (from `env_file`)                                                                        |
 | ---------------- | ------------- | ------------------------------------------------------------------------------------------------ |
 | api (NestJS)     | 3000 (`PORT`) | `DATABASE_URL` `REDIS_URL` `IDP_*` `AUDIT_IDENTIFIER_PEPPER` `*_DELIVERY_MODE` `IDP_SMTP_REAL_*` |
-| portal (Next.js) | 3001          | `API_PROXY_TARGET=http://api:3000` (build-arg `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY`, off)          |
+| portal (Next.js) | 3001          | `API_PROXY_TARGET=http://api:3000` (build-arg `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY` — wave-1 ON)   |
+| admin (Next.js)  | 3002          | `API_PROXY_TARGET=http://api:3000` (build-time, same routes-manifest bake as the portal)         |
+| centrifugo       | 8000          | `CENTRIFUGO_HTTP_API_KEY` `CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY` (native names, from api.env) |
 | zitadel core     | 8080 (h2c)    | `ZITADEL_MASTERKEY` `ZITADEL_DATABASE_POSTGRES_*` `ZITADEL_EXTERNAL*`                            |
 | zitadel-login    | 3000          | `ZITADEL_API_URL` + the ds-bootstrap PAT file mount                                              |
 | sms-aero-adapter | 8091          | `SMSAERO_EMAIL` `SMSAERO_API_KEY` `SMSAERO_SIGN` (from api.env)                                  |
@@ -142,7 +148,8 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    join the VPC via a `local_network {id,ip,mode}` block — DSO-100 2026-07-02).
    Review the plan (region/preset/cost) before `apply`.
 4. **DNS (manual, at Beget — the zone is NOT at Timeweb):** point A-records
-   `api.` / `app.` / `id.doctor.school` at the `api_prod_public_ip` output. Root
+   `api.` / `app.` / `id.` / `admin.doctor.school` at the `api_prod_public_ip`
+   output (`admin.` is the wave-1 addition — Wave-1 apply order step 2). Root
    `doctor.school` A-record is untouched. Email records (MX/SPF/DKIM/DMARC) are
    already live (memory `reference_doctor_school_email_dns`).
 5. **Get the committed `main` source onto both boxes (images build on-box, no registry).**
@@ -313,6 +320,127 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
     (SMS-Aero); `/me/*` behind a session; valid TLS on all three hostnames; a
     pgbackrest basebackup + WAL in S3 with a restore dry-run (RTO ≤ 2 h).
 
+## Wave-1 apply order (#729 / DSO-134)
+
+The webinars wave-1 increment onto the already-live 003 stand: admin app
+(`admin.doctor.school`), Centrifugo room chat, S3 `uploads` bucket, prod
+SmartCaptcha (#186). The repo payload (compose/Caddy/Terraform/env templates) is
+apply-ready; the steps below are the **one-time** wave-1 provisioning — after
+them, `pnpm deploy:prod` covers steady-state redeploys (it already builds every
+`build:` service, admin included, and the migrate step picks up the wave-1
+events/rooms migrations like any other).
+
+> Steps marked **[OWNER-GATED]** are irreversible/paid provider actions or
+> product-owner calls — they need an explicit owner "go" (AGENTS.md §6,
+> live-infra pre-flight) and are run by / with the owner, never autonomously.
+
+1. **[OWNER-GATED] Terraform S3 delta — `uploads` bucket.** From
+   `infra/deploy/terraform/`: `terraform plan` must show exactly **one additive
+   resource** (`twc_s3_bucket.uploads`) plus its four outputs — plus the known
+   pending `twc_firewall_rule.glitchtip_ingest` (DSO-125, additive, see the
+   GlitchTip section). Anything else in the plan = STOP and reconcile first.
+   Then `terraform apply` (paid resource, ~79₽/mo at 10 GB base) and capture:
+
+   ```bash
+   terraform output -raw uploads_bucket_full_name   # → S3_BUCKET_UPLOADS
+   terraform output -raw uploads_s3_hostname        # → S3_ENDPOINT (as https://<host>)
+   terraform output -raw uploads_s3_access_key      # → S3_ACCESS_KEY
+   terraform output -raw uploads_s3_secret_key      # → S3_SECRET_KEY
+   ```
+
+   DD-6 applies: these keys sit in the gitignored tfstate; they go into
+   `api.env` by hand, never into a committed file.
+
+2. **[OWNER-GATED] Beget DNS — `admin.doctor.school` A-record.** At Beget (the
+   zone is NOT at Timeweb), add the A-record `admin.doctor.school` → the
+   existing `api_prod_public_ip` output (same target as `api.`/`app.`/`id.`).
+   Caddy auto-issues the cert on first request once the record resolves — no
+   manual cert step.
+
+3. **[OWNER-GATED] SmartCaptcha keypair (#186).** In the Yandex Cloud console,
+   create a prod SmartCaptcha with **allowed domains = `app.doctor.school`**
+   (the widget renders on the portal registration surface). Capture the pair:
+   the **site key** (public, build-time) and the **server key** (secret).
+   This step precedes the image builds on purpose — the site key is baked into
+   the portal bundle at `next build` (a portal image built before the key
+   exists must be rebuilt).
+
+4. **Extend the on-box env (out-of-band, root:root 0600).** On api-prod, add to
+   `/etc/ds-platform/api.env` the wave-1 blocks from `api.env.example`:
+   - the Centrifugo triple (`CENTRIFUGO_URL=https://api.doctor.school`,
+     `CENTRIFUGO_API_KEY`, `CENTRIFUGO_TOKEN_HMAC_SECRET` — `openssl rand -hex 32`
+     each) **plus** their Centrifugo-native duplicates
+     (`CENTRIFUGO_HTTP_API_KEY`, `CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY` —
+     byte-equal to their twins; the centrifugo container reads the same file);
+   - the S3 six-key set from step 1 (**mandatory** — with `S3_ENDPOINT` unset
+     the api silently fail-opens to in-memory `FakeObjectStorage`, spec §5.4);
+   - `BOT_PROTECTION_ENABLED=true` + `SMARTCAPTCHA_SERVER_KEY` from step 3.
+
+   And in the **non-secret** `.env` beside `compose/api-prod/compose.yml` (the
+   `DEPLOY_SHA` interpolation file), add the build-time site key:
+
+   ```bash
+   echo "SMARTCAPTCHA_SITE_KEY=<site-key-from-step-3>" >> ~/ds-platform/infra/deploy/compose/api-prod/.env
+   ```
+
+5. **Ship source + build images.** Ship the merged `origin/main` tree to the
+   boxes (Apply order step 5 / `pnpm deploy:prod` does this), then on api-prod:
+
+   ```bash
+   cd ~/ds-platform/infra/deploy/compose/api-prod
+   sudo BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker compose build admin portal api
+   # admin is NEW; portal MUST rebuild (bakes the captcha site key); api rebuilds
+   # to the wave-1 code. centrifugo is pulled (centrifugo/centrifugo:v6).
+   ```
+
+6. **One-shot migrations.** The wave-1 events/rooms migrations are ordinary
+   Drizzle migrations through the existing one-shot service — no new mechanism.
+   (A pgbackrest pre-migrate checkpoint first, per DSO-129 — `pnpm deploy:prod`
+   does this automatically on the scripted path.)
+
+   ```bash
+   sudo docker compose --profile migrate run --rm migrate
+   ```
+
+7. **Bring up the extended stack.**
+
+   ```bash
+   sudo docker compose up -d    # adds admin + centrifugo; recreates api/portal on the new images
+   sudo docker compose ps       # all healthy; admin :3002 and centrifugo :8000 in-network
+   ```
+
+8. **Provision `platform_admin` (spec §6.4).** The admin app's operator access
+   rides the `platform_admin` role in prod Zitadel, seeded idempotently by the
+   existing dev-stand converge script — the same one that activates the real
+   SMTP/SMS providers (Apply order step 9):
+
+   ```bash
+   set -a; . /etc/ds-platform/api.env; set +a
+   cd ~/ds-platform/infra/dev-stand/idp
+   IDP_BASE_URL=https://id.doctor.school \
+     IDP_SEED_ROLE=platform_admin \
+     ./provision.sh --pat-file /etc/ds-platform/idp-bootstrap-pat.txt
+   # then grant the role to the operator's user (Zitadel console or the script's
+   # grant path) — an account WITHOUT platform_admin must be rejected by the
+   # admin surface (in-service role-based authz, spec §2.3).
+   ```
+
+9. **[OWNER-GATED] Wave-1 smoke (spec §10.7–10.8).** Drive the journey in the
+   live UI: a `platform_admin` operator creates a test event (with a program
+   PDF upload) via `https://admin.doctor.school` → a doctor registers for it
+   from `https://app.doctor.school` (SmartCaptcha widget live on registration)
+   → enters the room → exchanges **live chat** messages (real Centrifugo path,
+   wss on `api.doctor.school/connection/websocket`) → fetches the program PDF
+   back through the portal. **Real-S3 assertion (mandatory, spec §10.8):**
+
+   ```bash
+   sudo docker compose exec api node -e "console.log(process.env.S3_ENDPOINT || 'FAKE-STORAGE!')"
+   # must print the Timeweb S3 endpoint — the api fail-opens to FakeObjectStorage
+   # when S3_ENDPOINT is unset, and a fake in prod is a silent failure mode.
+   ```
+
+   TLS valid on **all four** hostnames (admin.doctor.school included).
+
 ## Verify-on-box
 
 The workstation has no Docker, so the following are **build/run-verify-only** on the
@@ -322,6 +450,12 @@ first `apply` (report, don't assume green):
   (add `--legacy` if pnpm 10 requires it); `node dist/main.js` boot.
 - `apps/portal/Dockerfile` — the Next standalone COPY paths (the pinned
   `outputFileTracingRoot` should land the entry at `apps/portal/server.js`).
+- `apps/admin/Dockerfile` (#729) — same standalone pattern, entry expected at
+  `apps/admin/server.js`; NO `public/` COPY (the app has no public dir — brand
+  assets ride the bundle). If a build adds `apps/admin/public/`, add the COPY.
+- `compose/api-prod/centrifugo/config.json` (#729) — env-name overrides landing
+  (`CENTRIFUGO_HTTP_API_KEY` / `CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY`), the
+  `/health` check, and a real wss handshake through the Caddy route.
 - `compose/data-prod/pgbackrest` — `stanza-create` + `check` succeeding against S3,
   the socket-based backup connection (local `trust`), and a real full/incr + restore.
 - Caddy ACME issuance for all three hostnames (needs the Beget A-records live first).
@@ -342,8 +476,10 @@ conflate them:
   by retention — the **last 3** SHAs), rewrites the `DEPLOY_SHA` `.env`, and
   re-smokes. It does **not** rebuild, migrate, or touch the DB. If the target SHA
   was already pruned, roll **forward** instead (check out that commit's `main`,
-  `pnpm deploy:prod`). Manual equivalent on the box:
-  `cd ~/ds-platform/infra/deploy/compose/api-prod && printf 'DEPLOY_SHA=<sha>\n' > .env && sudo docker compose up -d`.
+  `pnpm deploy:prod`). Manual equivalent on the box: edit the `DEPLOY_SHA=` line
+  in `~/ds-platform/infra/deploy/compose/api-prod/.env` (do NOT `printf … > .env`
+  — the file also carries `SMARTCAPTCHA_SITE_KEY`, #729) then
+  `sudo docker compose up -d`.
 
 - **Bad MIGRATION** (schema/data corruption) → **pgbackrest restore** to the
   pre-migrate checkpoint (DSO-129 took one right before `migrate`; restore is

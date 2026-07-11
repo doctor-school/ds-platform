@@ -1,8 +1,10 @@
-# Caddy vhosts for the 003 slice (spec §5.2). Automatic Let's Encrypt (HTTP-01 over
-# :80), auto-renew, no manual certs. Upstream ports verified against the built code
-# (DSO-100): api = 3000 (apps/api/src/main.ts PORT default), portal = 3001
-# (apps/portal/Dockerfile ENV PORT=3001), zitadel core = 8080 (h2c), zitadel-login
-# = 3000. Certs persist in the caddy_data volume (compose.yml).
+# Caddy vhosts for the 003 slice + webinars wave-1 (spec §5.2; #729 / DSO-134).
+# Automatic Let's Encrypt (HTTP-01 over :80), auto-renew, no manual certs. Upstream
+# ports verified against the built code (DSO-100): api = 3000 (apps/api/src/main.ts
+# PORT default), portal = 3001 (apps/portal/Dockerfile ENV PORT=3001), admin = 3002
+# (apps/admin/Dockerfile ENV PORT=3002), centrifugo = 8000 (dev-stand parity),
+# zitadel core = 8080 (h2c), zitadel-login = 3000. Certs persist in the caddy_data
+# volume (compose.yml).
 
 {
 	# ACME contact for expiry notices (spec §5.2).
@@ -14,10 +16,37 @@ app.doctor.school {
 	reverse_proxy portal:3001
 }
 
+# Admin app (Next.js + Refine standalone) — operator event/program management
+# (webinars wave-1, #729). Same auto-ACME treatment as the other vhosts (spec §5.2);
+# the admin app proxies /v1/* to the api internally (same-origin __Host- cookie,
+# apps/admin/next.config.ts).
+admin.doctor.school {
+	reverse_proxy admin:3002
+}
+
 # NestJS BFF/API. The portal proxies /v1/* to the api internally (same-origin
 # __Host- cookie), but the api is also directly reachable at api.doctor.school.
+# This vhost ALSO carries the realtime plane (webinars wave-1, #729): the api
+# derives BOTH the browser wss URL (wss://<host>/connection/websocket) and its
+# server-side HTTP-API base (<CENTRIFUGO_URL>/api/*) from the ONE CENTRIFUGO_URL
+# env (apps/api/src/room/chat.gateway.ts), so api.env sets
+# CENTRIFUGO_URL=https://api.doctor.school and this vhost routes those two path
+# families to the centrifugo container. Path safety: the NestJS api serves under
+# /v1/* (+ /auth/*), so /connection/* and /api/* are free on this origin. The
+# Centrifugo server API is key-gated (X-API-Key) — public exposure over TLS is
+# authenticated, and clients hold no publish capability (config namespace).
 api.doctor.school {
-	reverse_proxy api:3000
+	# Browser websocket connections (portal room chat).
+	handle /connection/websocket {
+		reverse_proxy centrifugo:8000
+	}
+	# Centrifugo server HTTP API (the api's gated publish path; X-API-Key).
+	handle /api/* {
+		reverse_proxy centrifugo:8000
+	}
+	handle {
+		reverse_proxy api:3000
+	}
 }
 
 # Zitadel OIDC issuer — single-origin split: Login V2 UI vs core (dev-stand

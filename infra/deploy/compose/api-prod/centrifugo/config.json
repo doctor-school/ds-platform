@@ -1,0 +1,21 @@
+{
+  "//": "DS Platform prod — Centrifugo v6 config for webinar room chat (#729 / DSO-134, deploy-slice spec §2.1). NON-SECRET shape only.",
+  "//secrets": "The two secrets are injected as env vars from /etc/ds-platform/api.env (compose env_file) using Centrifugo's native names: CENTRIFUGO_HTTP_API_KEY (= the api's CENTRIFUGO_API_KEY) and CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY (= the api's CENTRIFUGO_TOKEN_HMAC_SECRET). Env overrides config, so no placeholder values live in this file — a missing env var fail-closes (no valid tokens / no authorized publish), never falls back to a committed default.",
+  "//origins": "Browsers connect from the portal room page (app.doctor.school) to wss://api.doctor.school/connection/websocket (Caddy route). Pin the browser origin — the dev-stand's \"*\" is a dev-only convenience.",
+  "client": {
+    "allowed_origins": ["https://app.doctor.school"]
+  },
+  "//channel": "Same `room` namespace contract as the dev-stand (infra/dev-stand/centrifugo/config.json — 006 EARS-3): clients are subscribed server-side via the token's `channels` claim, can NEVER publish (allow_publish_for_client pinned false; every post rides the api's gated PostChatMessage over the HTTP API), and may read bounded history to hydrate mid-webinar joins.",
+  "channel": {
+    "namespaces": [
+      {
+        "name": "room",
+        "history_size": 100,
+        "history_ttl": "600s",
+        "presence": true,
+        "allow_publish_for_client": false,
+        "allow_history_for_client": true
+      }
+    ]
+  }
+}

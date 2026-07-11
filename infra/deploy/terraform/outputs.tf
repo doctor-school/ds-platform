@@ -58,3 +58,30 @@ output "pgbackrest_s3_secret_key" {
   value     = twc_s3_bucket.pgbackrest.secret_key
   sensitive = true
 }
+
+# --- uploads bucket (webinars wave-1, #729 / spec §6.3) — feeds api.env S3_* ---
+
+output "uploads_bucket_full_name" {
+  description = "Real (account-prefixed) uploads bucket name — api.env S3_BUCKET_UPLOADS."
+  value       = twc_s3_bucket.uploads.full_name
+}
+
+output "uploads_s3_hostname" {
+  description = "S3 endpoint host of the uploads bucket — api.env S3_ENDPOINT is https://<this> (path-style)."
+  value       = twc_s3_bucket.uploads.hostname
+}
+
+# Timeweb-generated bucket creds — same DD-6 pattern as pgbackrest above:
+# `sensitive` suppresses CLI display only; the values DO sit in the gitignored
+# tfstate (spec §5.4 DD-6, accepted + mitigated). Consumed via
+# `terraform output -raw` into api.env (S3_ACCESS_KEY / S3_SECRET_KEY) — never
+# rendered into any committed file.
+output "uploads_s3_access_key" {
+  value     = twc_s3_bucket.uploads.access_key
+  sensitive = true
+}
+
+output "uploads_s3_secret_key" {
+  value     = twc_s3_bucket.uploads.secret_key
+  sensitive = true
+}

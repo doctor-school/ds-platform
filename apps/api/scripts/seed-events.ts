@@ -27,7 +27,11 @@
  * runs on events authored + transitioned + stream-configured through 007, at
  * which point this seed is retired. It writes the 007-owned `events` +
  * `stream_config` write models directly (a fixture, not a product path) — never a
- * hack in a runtime handler.
+ * hack in a runtime handler. Live-state specs also stamp `events.live_at`
+ * (= `startsAt` — the event went live when it started; #717): in the product
+ * path 007's lifecycle transition stamps it, so without the seed doing the same
+ * the room-header live-duration element (#703) is not demonstrable on a stand.
+ * Non-live states leave `live_at` untouched (null).
  *
  * Idempotent: upserts by the stable `seed-005-*` / `seed-006-*` slug (and the
  * `stream_config` row by its `event_id` PK), so re-running refreshes the instants
@@ -141,8 +145,11 @@ function specs(now: number): SeedSpec[] {
       speakers: [{ name: "Проф. Е. Морозова", regalia: "д.м.н., невролог" }],
       // 006 (#584): the happy-path live room — SLUG_LIVE for the EARS-3 chat +
       // EARS-4 heartbeat E2E — carries a `rutube` stream config so the room read
-      // resolves a non-null player instead of "stream unavailable".
-      stream: { provider: "rutube", embedRef: "caafe83ff1c6ed38d394635b83ece578" },
+      // resolves a non-null player instead of "stream unavailable". The embedRef
+      // is a verified PUBLICLY playable video (#717): its detail API returns 200
+      // with `is_hidden:false` (an author-hidden id returns 403 and the player
+      // renders «Автор скрыл это видео» instead of content).
+      stream: { provider: "rutube", embedRef: "cef3a41b70985eedeefe504452a69adc" },
     },
     // ── 006 room-integration live fixtures (#584) ──────────────────────────────
     // The EARS-2 provider-variant live rooms `apps/portal/e2e/room.spec.ts` drives:
@@ -232,6 +239,12 @@ async function main(): Promise<void> {
   const result: Record<string, string> = {};
   try {
     for (const spec of specs(Date.now())) {
+      // 007-seam (#717): a `live` event went live when it started — stamp
+      // `live_at` so the room-header live-duration element renders. `undefined`
+      // is skipped by Drizzle in both clauses, so non-live states leave the
+      // column untouched (null).
+      const liveAt = spec.state === "live" ? spec.startsAt : undefined;
+
       // Upsert the event by its stable slug so re-runs refresh the instant + state
       // in place (no duplicate rows, no table truncation — branch-safe).
       const [row] = await db
@@ -246,6 +259,7 @@ async function main(): Promise<void> {
           specialties: spec.specialties,
           partnerRef: spec.partnerRef,
           state: spec.state,
+          liveAt,
           updatedAt: new Date(),
         })
         .onConflictDoUpdate({
@@ -259,6 +273,7 @@ async function main(): Promise<void> {
             specialties: spec.specialties,
             partnerRef: spec.partnerRef,
             state: spec.state,
+            liveAt,
             updatedAt: new Date(),
           },
         })

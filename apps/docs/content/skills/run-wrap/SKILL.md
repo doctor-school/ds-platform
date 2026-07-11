@@ -173,6 +173,12 @@ Run the existing `handoff-prompt` skill (a global Claude Code skill, triggers on
 hand-roll the handoff format — `handoff-prompt` owns it (≤ 300 tokens, fixed
 section template).
 
+The handoff cites only document paths that exist at emit time (stat/`Read` each
+before including) and carries the canonical tracker id (GitHub Issue / Plane item)
+of the next task; «where we stopped» premises come from tracker comments, not the
+session's memory of itself. Resume side: an agent that cannot locate a cited
+document STOPS and asks the owner instead of substituting its own reading.
+
 ## Output
 
 - Stage 1: the schema'd findings array from an independent retro agent + the

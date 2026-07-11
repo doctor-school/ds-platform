@@ -3,14 +3,18 @@
 // (tools/dev/smoke.mjs) retargeted at the live public prod origins.
 //
 // Unlike the dev smoke — which probes internal LAN service ports read from a
-// personal `.env.local` — this drives the THREE public prod hostnames end to
+// personal `.env.local` — this drives the FOUR public prod hostnames end to
 // end, over real TLS, exactly as a browser / the api's callers reach them:
 //
 //   api    GET https://api.doctor.school/v1/health   → 200 + status:"ok" (+ SHA)
 //          GET https://api.doctor.school/v1/ready     → 200 + postgres+pgvector ok
 //   portal GET https://app.doctor.school/             → < 500 (Next renders)
+//   admin  GET https://admin.doctor.school/           → < 500 (Next renders; #729)
+//   chat   GET https://api.doctor.school/connection/websocket → < 500 (Caddy →
+//          centrifugo route alive; a non-upgrade GET draws Centrifugo's 400,
+//          while a down/unrouted centrifugo surfaces Caddy's 502; #729)
 //   login  GET https://id.doctor.school/ui/v2/login   → < 400 (Zitadel Login V2)
-//   TLS    api. / app. / id.doctor.school             → cert valid, not near expiry
+//   TLS    api. / app. / admin. / id.doctor.school    → cert valid, not near expiry
 //
 // The prod hostnames ARE the contract here (Caddy vhosts + Beget A-records +
 // the deploy design spec) — not a per-developer recipe — so they are the
@@ -32,6 +36,7 @@ const TLS_MIN_DAYS = 7;
 
 const API_HOST = process.env.PROD_API_HOST || "api.doctor.school";
 const PORTAL_HOST = process.env.PROD_PORTAL_HOST || "app.doctor.school";
+const ADMIN_HOST = process.env.PROD_ADMIN_HOST || "admin.doctor.school";
 const ID_HOST = process.env.PROD_ID_HOST || "id.doctor.school";
 
 // --expect-sha <sha> (or EXPECT_DEPLOY_SHA) — assert the live build matches.
@@ -163,13 +168,32 @@ function probeTls(host) {
 
 // --- runner ---------------------------------------------------------------
 
+async function probeAdmin() {
+  const res = await httpsGet(`https://${ADMIN_HOST}/`);
+  if (res.status >= 500) throw new Error(`/ → ${res.status}`);
+  return `${res.status} (admin renders)`;
+}
+
+// The Caddy → centrifugo route (#729): a plain GET (no websocket upgrade) draws
+// Centrifugo's own 400, so any < 500 proves the container is up AND routed;
+// 502 = centrifugo down; 404 = the Caddy handle block is missing.
+async function probeChatRoute() {
+  const res = await httpsGet(`https://${API_HOST}/connection/websocket`);
+  if (res.status >= 500 || res.status === 404)
+    throw new Error(`/connection/websocket → ${res.status}`);
+  return `${res.status} (centrifugo routed; 400 = expected non-upgrade reply)`;
+}
+
 const PROBES = [
   ["api /v1/health", probeApiHealth],
   ["api /v1/ready", probeApiReady],
   ["portal /", probePortal],
+  ["admin /", probeAdmin],
+  ["chat ws route", probeChatRoute],
   ["login /ui/v2/login", probeLogin],
   [`TLS ${API_HOST}`, () => probeTls(API_HOST)],
   [`TLS ${PORTAL_HOST}`, () => probeTls(PORTAL_HOST)],
+  [`TLS ${ADMIN_HOST}`, () => probeTls(ADMIN_HOST)],
   [`TLS ${ID_HOST}`, () => probeTls(ID_HOST)],
 ];
 
@@ -184,7 +208,7 @@ function withTimeout(promise, ms) {
 
 async function main() {
   console.log(
-    `prod smoke — api=${API_HOST} portal=${PORTAL_HOST} id=${ID_HOST}` +
+    `prod smoke — api=${API_HOST} portal=${PORTAL_HOST} admin=${ADMIN_HOST} id=${ID_HOST}` +
       (EXPECT_SHA ? ` — expect-sha=${EXPECT_SHA}` : "") +
       ` — ${new Date().toISOString()}`,
   );

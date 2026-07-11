@@ -17,7 +17,7 @@
 //   ship        git archive <sha> → api-prod + data-prod over ssh (no registry)
 //   data-prod   up -d --build (idempotent; attestations off → no-op ≠ recreate, #486)
 //   checkpoint  pgbackrest pre-migrate incr backup  (DSO-129 — BEFORE migrate)
-//   api-prod    migrate → build (ds-api:<sha>, ds-portal:<sha>) → up -d
+//   api-prod    migrate → build (ds-api:<sha>, ds-portal:<sha>, ds-admin:<sha>) → up -d
 //   retention   keep the last 3 SHA-tagged images per repo  (DSO-127)
 //   smoke       tools/deploy/smoke-prod.mjs --expect-sha <sha>  (DSO-128)
 //
@@ -256,11 +256,14 @@ async function verifyRunningSha(sha) {
 while true; do
   api_img=$(sudo docker inspect ds-api-prod-api-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent)
   portal_img=$(sudo docker inspect ds-api-prod-portal-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent)
+  admin_img=$(sudo docker inspect ds-api-prod-admin-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent)
   api_h=$(sudo docker inspect ds-api-prod-api-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo absent)
   portal_h=$(sudo docker inspect ds-api-prod-portal-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo absent)
-  state="api=$api_img($api_h) portal=$portal_img($portal_h)"
+  admin_h=$(sudo docker inspect ds-api-prod-admin-1 --format '{{.State.Health.Status}}' 2>/dev/null || echo absent)
+  state="api=$api_img($api_h) portal=$portal_img($portal_h) admin=$admin_img($admin_h)"
   if [ "$api_img" = "ds-api:${sha}" ] && [ "$portal_img" = "ds-portal:${sha}" ] \\
-     && [ "$api_h" = healthy ] && [ "$portal_h" = healthy ]; then
+     && [ "$admin_img" = "ds-admin:${sha}" ] \\
+     && [ "$api_h" = healthy ] && [ "$portal_h" = healthy ] && [ "$admin_h" = healthy ]; then
     echo "OK $state"; break
   fi
   if [ "$(date +%s)" -ge "$deadline" ]; then
@@ -278,7 +281,7 @@ done`,
       { rollbackHint: true },
     );
   }
-  ok(`api + portal RUN ds-*:${sha.slice(0, 12)} and are healthy`);
+  ok(`api + portal + admin RUN ds-*:${sha.slice(0, 12)} and are healthy`);
 }
 
 // Ship the committed tree to a box: git archive <sha> | ssh box 'rm -rf && tar x'.
@@ -374,7 +377,11 @@ sudo docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info
   await sshScript(
     API_PROD,
     `cd ${API_COMPOSE}
-printf 'DEPLOY_SHA=%s\\n' '${sha}' > .env
+# Rewrite ONLY the DEPLOY_SHA line — this .env also carries other non-secret
+# compose-interpolation vars (SMARTCAPTCHA_SITE_KEY, #729/#186: the portal's
+# BUILD-time captcha site key) that a clobbering '>' would silently wipe,
+# baking an empty site key into the very portal image built two lines below.
+{ { [ -f .env ] && grep -v '^DEPLOY_SHA=' .env; } || true; printf 'DEPLOY_SHA=%s\\n' '${sha}'; } > .env.next && mv .env.next .env
 echo '── migrate (drizzle-kit; idempotent) ──'
 # --build: rebuild the migrate image from the freshly shipped tree, else the
 #   run reuses a stale ds-api-migrate:local and applies OLD migrations.
@@ -382,7 +389,7 @@ echo '── migrate (drizzle-kit; idempotent) ──'
 #   let it read this shell's stdin (see REMOTE_BASH; defense in depth).
 # ${NO_ATTEST}: reproducible image IDs so a same-SHA re-run is a true no-op (#486).
 sudo ${NO_ATTEST} docker compose --profile migrate run --build --rm migrate </dev/null
-echo '── build ds-api:${sha.slice(0, 12)}… + ds-portal ──'
+echo '── build ds-api:${sha.slice(0, 12)}… + ds-portal + ds-admin ──'
 sudo ${NO_ATTEST} docker compose build
 echo '── up -d ──'
 sudo docker compose up -d
@@ -413,6 +420,7 @@ sudo docker compose up -d
 }
 prune_repo ds-api ${IMAGE_RETENTION}
 prune_repo ds-portal ${IMAGE_RETENTION}
+prune_repo ds-admin ${IMAGE_RETENTION}
 echo "retained ds-api tags:"; sudo docker images ds-api --format '  {{.Tag}} ({{.CreatedAt}})'
 `,
     { label: "retention" },
@@ -465,12 +473,14 @@ async function rollback(shaArg) {
   } catch {
     die(`cannot resolve ${shaArg} to a commit in the local repo`);
   }
-  step(`App-only rollback → ds-api:${sha.slice(0, 12)} / ds-portal:${sha.slice(0, 12)}`);
+  step(
+    `App-only rollback → ds-api:${sha.slice(0, 12)} / ds-portal:${sha.slice(0, 12)} / ds-admin:${sha.slice(0, 12)}`,
+  );
 
   // The target images must still be on the box (retention keeps the last 3).
   const present = await sshCapture(
     API_PROD,
-    `for img in ds-api:${sha} ds-portal:${sha}; do
+    `for img in ds-api:${sha} ds-portal:${sha} ds-admin:${sha}; do
   if sudo docker image inspect "$img" >/dev/null 2>&1; then echo "$img OK"; else echo "$img MISSING"; fi
 done`,
   );
@@ -486,7 +496,9 @@ done`,
   await sshScript(
     API_PROD,
     `cd ${API_COMPOSE}
-printf 'DEPLOY_SHA=%s\\n' '${sha}' > .env
+# Same DEPLOY_SHA-only rewrite as the deploy path — never clobber the other
+# non-secret interpolation vars (SMARTCAPTCHA_SITE_KEY, #729/#186).
+{ { [ -f .env ] && grep -v '^DEPLOY_SHA=' .env; } || true; printf 'DEPLOY_SHA=%s\\n' '${sha}'; } > .env.next && mv .env.next .env
 sudo docker compose up -d
 `,
     { label: "rollback up" },

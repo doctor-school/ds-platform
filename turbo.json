@@ -11,7 +11,7 @@
         "src/styles/tokens.css",
         "src/styles/allowed-tokens.json"
       ],
-      "env": ["API_PROXY_TARGET"]
+      "env": ["API_PROXY_TARGET", "NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY"]
     },
     "dev": {
       "cache": false,

@@ -1,11 +1,13 @@
-# api-prod — public plane for the 003 auth slice (spec §2.1). Apply-ready (DSO-100).
+# api-prod — public plane for the 003 auth slice + webinars wave-1 (spec §2.1).
+# Apply-ready (DSO-100; wave-1 increment #729 / DSO-134).
 #
-# On-box image builds, NO registry (bbm-portal precedent): api + portal build from
-# `build:` with the REPO ROOT as context (the box has a shallow git clone via a
-# read-only deploy key — README apply steps). Zitadel + zitadel-login pull upstream
-# pinned images. Runs ONLY what 003 exercises (spec §2.3): caddy + api + portal +
-# zitadel + zitadel-login + sms-aero-adapter. NOT here: nginx (Caddy instead),
-# BullMQ workers (no queues in 003), centrifugo (deferred), cerbos (SEAM / DSO-27).
+# On-box image builds, NO registry (bbm-portal precedent): api + portal + admin
+# build from `build:` with the REPO ROOT as context (the box has a shallow git
+# clone via a read-only deploy key — README apply steps). Zitadel + zitadel-login
+# + centrifugo pull upstream pinned images. Runs ONLY what the deployed code
+# exercises (spec §2.3): caddy + api + portal + admin + centrifugo + zitadel +
+# zitadel-login + sms-aero-adapter. NOT here: nginx (Caddy instead), BullMQ
+# workers (no queues deployed), cerbos (SEAM / DSO-27).
 #
 # sms-aero-adapter IS required for the DoD's live SMS (spec §6.2 / §10.3): Zitadel's
 # generic HTTP SMS provider POSTs each OTP to it and it forwards to SMS-Aero. The
@@ -36,6 +38,10 @@ services:
       api:
         condition: service_started
       portal:
+        condition: service_started
+      admin:
+        condition: service_started
+      centrifugo:
         condition: service_started
       zitadel:
         condition: service_healthy
@@ -87,9 +93,15 @@ services:
       context: ../../../..
       dockerfile: apps/portal/Dockerfile
       args:
-        # OFF for the 003 slice (bot protection disabled). Set a real Yandex
-        # SmartCaptcha site key here to bake the live widget (build-time inlined).
-        NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY: ""
+        # Yandex SmartCaptcha CLIENT key (#186, wave-1) — BUILD-time inlined into
+        # the client bundle (NEXT_PUBLIC_*). Sourced from the non-secret `.env`
+        # beside this compose file (same mechanism as DEPLOY_SHA): put
+        # `SMARTCAPTCHA_SITE_KEY=<site-key>` there before `docker compose build`.
+        # The site key is PUBLIC by design (it ships in the served JS); the
+        # SERVER key stays in api.env (SMARTCAPTCHA_SERVER_KEY). Empty ⇒ bot
+        # protection renders an inactive placeholder (003-slice behavior).
+        # A portal image built before the key was set must be REBUILT.
+        NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY: ${SMARTCAPTCHA_SITE_KEY:-}
         # BUILD-time on purpose (DSO-100): Next evaluates `rewrites()` at `next
         # build` and freezes the destination into .next/routes-manifest.json — a
         # runtime-only API_PROXY_TARGET is ignored and the baked localhost fallback
@@ -123,6 +135,80 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  # --- admin — Next.js + Refine standalone, operator app (admin.doctor.school) -----
+  # Webinars wave-1 (#729 / DSO-134, spec §2.1): event/program management. Same
+  # standalone pattern as the portal; API_PROXY_TARGET is BUILD-time for the same
+  # routes-manifest reason (the `__Host-ds_session` cookie forces the /v1/* BFF
+  # under the admin origin — apps/admin/next.config.ts). Operator access rides the
+  # `platform_admin` role (provision.sh IDP_SEED_ROLE — README wave-1 step);
+  # session posture is the shared cookie per ADR-0004 §3.2.1 (hardening: #718).
+  admin:
+    build:
+      context: ../../../..
+      dockerfile: apps/admin/Dockerfile
+      args:
+        API_PROXY_TARGET: http://api:3000
+    # SHA-tagged in lockstep with api/portal (DSO-127); `:local` fallback for the
+    # manual README path.
+    image: ds-admin:${DEPLOY_SHA:-local}
+    restart: unless-stopped
+    env_file: [/etc/ds-platform/api.env]
+    environment:
+      # Pin explicitly (portal precedent, DSO-100): the shared api.env env_file
+      # must never leak a PORT value into the admin app. compose `environment:`
+      # outranks env_file. 3002 matches the Dockerfile ENV + Caddy upstream.
+      PORT: "3002"
+    depends_on:
+      api:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3002/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # --- centrifugo — real-time fan-out for webinar room chat (#729 / DSO-134) -------
+  # Image pin + healthcheck + config contract mirror the dev-stand
+  # (infra/dev-stand/compose.core.yml `centrifugo`); the prod config file beside
+  # this compose pins the browser origin and carries NO secrets. Secrets arrive
+  # via env_file api.env under Centrifugo's NATIVE env names
+  # (CENTRIFUGO_HTTP_API_KEY / CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY), which
+  # MUST equal the api's CENTRIFUGO_API_KEY / CENTRIFUGO_TOKEN_HMAC_SECRET in the
+  # same file — one secret set for the api↔centrifugo pair (spec §5.4). Centrifugo
+  # logs "unknown env var" warnings for the api-named duplicates — benign.
+  # Room chat is FAIL-CLOSED api-side without the triple (spec §5.4).
+  # No published ports: browsers reach it ONLY via Caddy on api.doctor.school
+  # (/connection/websocket + /api/* — Caddyfile), which is also what the api's
+  # CENTRIFUGO_URL points at (one origin derives both the wss URL and the
+  # HTTP-API base — apps/api/src/room/chat.gateway.ts).
+  centrifugo:
+    image: centrifugo/centrifugo:v6
+    restart: unless-stopped
+    command: centrifugo --config=/centrifugo/config.json --health.enabled
+    env_file: [/etc/ds-platform/api.env] # CENTRIFUGO_HTTP_API_KEY + CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY
+    volumes:
+      - ./centrifugo/config.json:/centrifugo/config.json:ro
+      - centrifugo_data:/centrifugo/data
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    expose:
+      - "8000" # in-network only; Caddy fronts the public paths
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # --- zitadel — OIDC issuer core (id.doctor.school). TLS at Caddy (§5.2) ----------
   # Mirrors the dev-stand `idp` service (infra/dev-stand/compose.core.yml) with PROD
@@ -247,3 +333,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  centrifugo_data:

@@ -1,6 +1,6 @@
 ---
-title: "DS Platform — Pre-pilot Deploy Slice (auth 003 on always-on prod) — Design [EN]"
-description: "Deploy the built auth vertical (feature 003, epic #80) onto an always-on Timeweb production environment with live SMS + Email — the narrow 'deploy-what-exists' slice, not the full 23-blocker pre-pilot. Two-VPS docker-compose per ADR-0012, self-hosted Postgres per ADR-0003, DNS at Beget, own Terraform harness in this repo."
+title: "DS Platform — Pre-pilot Deploy Slice (auth 003 + webinars wave-1 on always-on prod) — Design [EN]"
+description: "Deploy the built product verticals — auth (feature 003, epic #80) and webinars wave-1 (admin-created events, doctor registration, rooms, live chat, program PDFs) — onto an always-on Timeweb production environment with live SMS + Email — the narrow 'deploy-what-exists' slice, not the full 23-blocker pre-pilot. Two-VPS docker-compose per ADR-0012, self-hosted Postgres per ADR-0003, DNS at Beget, own Terraform harness in this repo."
 slug: prepilot-deploy-slice
 status: Draft
 lang: en
@@ -8,24 +8,24 @@ lang: en
 
 > **EN (this)** — tech-spec, EN-only (RU split is for product feature-specs only).
 
-# DS Platform — Pre-pilot Deploy Slice (auth 003 on always-on prod) — Design
+# DS Platform — Pre-pilot Deploy Slice (auth 003 + webinars wave-1 on always-on prod) — Design
 
 **Date:** 2026-07-02
 **Status:** Draft (design locked in brainstorm 2026-07-02; topology applied live 2026-07-03, on-box deploy payload apply-ready)
 **Type:** Platform-level deployment design + applied IaC (Terraform) + on-box deploy payload (docker-compose + Dockerfiles + runbook). Not an ADR — it _applies_ ADR-0012 (topology) and ADR-0003 (data layer) to one concrete slice; it does not re-decide them.
-**Tracker:** Plane **DSO-100** (`plane.bbm.academy`, project DSO), child of milestone **DSO-10** (infra readiness). Child: **DSO-101** (tenancy-spec "Managed PG" reconcile).
-**Applies (not inherits):** ADR-0001 (Identity — Zitadel), ADR-0002 (NestJS + Fastify + BullMQ), ADR-0003 (Postgres 17 + Drizzle + pgvector + Redis + backup topology §2.4), ADR-0011 (egress control plane), ADR-0012 (deployment topology v1 — 2-VPS docker-compose), engineering-readiness spec (§"Pre-pilot deployment slice").
-**Implements the deploy of:** feature **003** (identity/auth — epic #80): passwordless email/SMS-OTP login + registration, session→token exchange, PD-lifecycle `/me/*`, live SMS (SMS-Aero) + Email (mail.ru business relay).
+**Tracker:** Plane **DSO-100** (`plane.bbm.academy`, project DSO), child of milestone **DSO-10** (infra readiness). Child: **DSO-101** (tenancy-spec "Managed PG" reconcile). Webinars wave-1 increment: **DSO-134** (GitHub #728 spec, #729 infra payload).
+**Applies (not inherits):** ADR-0001 (Identity — Zitadel), ADR-0002 (NestJS + Fastify + BullMQ), ADR-0003 (Postgres 17 + Drizzle + pgvector + Redis + backup topology §2.4), ADR-0004 (frontend apps — portal/admin, incl. §3.2.1 admin session posture), ADR-0011 (egress control plane), ADR-0012 (deployment topology v1 — 2-VPS docker-compose), engineering-readiness spec (§"Pre-pilot deployment slice").
+**Implements the deploy of:** feature **003** (identity/auth — epic #80): passwordless email/SMS-OTP login + registration, session→token exchange, PD-lifecycle `/me/*`, live SMS (SMS-Aero) + Email (mail.ru business relay); **webinars wave-1**: admin-created events + programs (admin app), doctor registration with SmartCaptcha (#186), room entry, live room chat (Centrifugo), program-PDF uploads (S3).
 
 ---
 
 ## 0. Purpose and non-purpose
 
-**Purpose.** Stand up **real, always-on** infrastructure and deploy the auth vertical that already exists on `main` (feature 003), so that (a) the team can exercise it on a prod-like stand with **live SMS + Email**, and (b) there is a running platform onto which subsequent product features deploy incrementally.
+**Purpose.** Stand up **real, always-on** infrastructure and deploy the product verticals that already exist on `main` — the auth vertical (feature 003) and the **webinars wave-1** vertical (admin-created events, doctor registration, room entry, live chat, program PDFs) — so that (a) the team can exercise them on a prod-like stand with **live SMS + Email**, and (b) there is a running platform onto which subsequent product features deploy incrementally.
 
-**This is a slice, not the pre-pilot.** The engineering-readiness spec enumerates 23 pre-pilot blockers; this design deliberately ships a **subset** — "deploy what 003 actually needs to run" — and defers the rest as tracked DSO child tasks (§8). The slice is a vertical (F-22): a doctor can complete the auth journey end-to-end on the live stand, not "all backend handlers are merged".
+**This is a slice, not the pre-pilot.** The engineering-readiness spec enumerates 23 pre-pilot blockers; this design deliberately ships a **subset** — "deploy what the built features actually need to run" — and defers the rest as tracked DSO child tasks (§8). The slice is a vertical (F-22): a doctor can complete the auth journey and the webinar journey (register → enter the room → chat live) end-to-end on the live stand, not "all backend handlers are merged".
 
-**Non-purpose (explicitly out — see §8 for the tracked list):** admin app, Payload CMS, promo app, mobile, Cerbos, BullMQ workers, Centrifugo, Unleash, Tempo, WAF, HA/replicas, load balancer, CDN, preview-vps, Beget S3 offsite. None are required to run 003.
+**Non-purpose (explicitly out — see §8 for the tracked list):** Payload CMS, promo app, mobile, Cerbos, BullMQ workers, Unleash, Tempo, WAF, HA/replicas, load balancer, CDN, preview-vps, Beget S3 offsite. None are required to run the deployed features.
 
 **Legal note.** Onboarding the first real doctor is gated by RKN/ФСТЭК registration — that gate is on _first-user onboarding_, **not** on this deploy. The stand may run with synthetic operators before legal clearance.
 
@@ -45,17 +45,19 @@ Both VPSes (and the router floating IP) are pinned to the **same RF availability
 
 ---
 
-## 2. Process inventory — what the 003 slice actually runs
+## 2. Process inventory — what the deployed slice actually runs
 
-This inventory is derived from **what the code on `main` actually calls**, not from ADR-0012's v1 _target_ inventory. Verified against the 003 source (see §2.3 for the reconcile against ADR-0012):
+This inventory is derived from **what the code on `main` actually calls**, not from ADR-0012's v1 _target_ inventory. Verified against the deployed feature source — 003 auth + webinars wave-1 (see §2.3 for the reconcile against ADR-0012):
 
 ### 2.1 `api-prod` (public)
 
 | Container          | Image (approx.)                                         | Purpose                                                                                                                                                                                 |
 | ------------------ | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `caddy`            | `caddy:2`                                               | TLS termination (automatic Let's Encrypt), reverse-proxy vhosts, single-origin IdP routing                                                                                              |
-| `api`              | `ds-api:<tag>` (NestJS, `node dist/main.js`)            | main HTTP BFF/API (auth, sessions, `/me/*`, mailer, SMS-budget)                                                                                                                         |
-| `portal`           | `ds-portal:<tag>` (Next.js standalone)                  | user-facing auth screens (`app.doctor.school`)                                                                                                                                          |
+| `api`              | `ds-api:<tag>` (NestJS, `node dist/main.js`)            | main HTTP BFF/API (auth, sessions, `/me/*`, mailer, SMS-budget, events/rooms, chat-token minting, program-PDF uploads)                                                                  |
+| `portal`           | `ds-portal:<tag>` (Next.js standalone)                  | user-facing portal (`app.doctor.school`): auth screens, webinar registration, room + live chat                                                                                          |
+| `admin`            | `ds-admin:<tag>` (Next.js + Refine standalone)          | operator app (`admin.doctor.school`): event/program management for webinars wave-1. Dockerfile lands with the infra payload (#729); `API_PROXY_TARGET` is **build-time** (§5.4)         |
+| `centrifugo`       | `centrifugo/centrifugo` (pin matched to the dev-stand)  | real-time fan-out for webinar room chat. The api mints connection tokens (HMAC) and publishes over the server API — room chat is **fail-closed** without the env triple (§5.4)          |
 | `zitadel`          | `ghcr.io/zitadel/zitadel:v4.15.0`                       | IdP core (OIDC issuer `id.doctor.school`)                                                                                                                                               |
 | `zitadel-login`    | `ghcr.io/zitadel/zitadel-login:v4.15.0`                 | Zitadel Login V2 UI (pinned in lockstep with core — dev-stand precedent)                                                                                                                |
 | `sms-aero-adapter` | `node:22-alpine` (dev-stand `server.mjs`, bind-mounted) | HTTP SMS bridge: Zitadel's generic HTTP SMS provider POSTs each OTP → adapter → SMS-Aero Gate API v2. Required by the DoD's live SMS (§6.2, §10.3); reuses the dev-stand adapter script |
@@ -76,12 +78,11 @@ Postgres image must carry **pgvector** (ADR-0003) — this is the decisive reaso
 
 ADR-0012 §Process-inventory lists components this slice does **not** deploy. Each omission is grounded in the built code, not a silent skip:
 
-| ADR-0012 target component                          | Slice status      | Why                                                                                                                                                                                                                                                                                         |
-| -------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `nginx` (TLS/reverse-proxy)                        | **Caddy instead** | Automatic ACME with no manual agent intervention (engineering-readiness §1 permits Caddy/Traefik; dev-stand IdP already uses Caddy). ADR-0012 §1 names nginx → 1-line reconcile (§7 decision-debt).                                                                                         |
-| `generic-worker` + `notifications-worker` (BullMQ) | **not deployed**  | 003 has **no** BullMQ queues/workers (verified: no `bullmq`/`Queue`/`Processor` in `apps/api/src`). The mailer sends via SMTP synchronously; SMS via the SMS-Aero adapter. Workers deploy when the first queue lands.                                                                       |
-| `centrifugo`                                       | **not deployed**  | Real-time is deferred to pilot (engineering-readiness "Deferred to pilot"); 003 has no realtime surface.                                                                                                                                                                                    |
-| Cerbos (embedded in `api`)                         | **not deployed**  | 003's `AuthzGuard` is role-based + fail-closed; object-level `IPolicyEngine`/Cerbos is an explicit unimplemented **SEAM** (`apps/api/src/authz/authz.guard.ts`, DSO-27). No code path calls Cerbos — `CERBOS_URL` has zero TS usages. Deploying it would provision infra nothing exercises. |
+| ADR-0012 target component                          | Slice status      | Why                                                                                                                                                                                                                                                                                                                                          |
+| -------------------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nginx` (TLS/reverse-proxy)                        | **Caddy instead** | Automatic ACME with no manual agent intervention (engineering-readiness §1 permits Caddy/Traefik; dev-stand IdP already uses Caddy). ADR-0012 §1 names nginx → 1-line reconcile (§7 decision-debt).                                                                                                                                          |
+| `generic-worker` + `notifications-worker` (BullMQ) | **not deployed**  | The deployed features have **no** BullMQ queues/workers (verified: no `bullmq`/`Queue`/`Processor` in `apps/api/src`). The mailer sends via SMTP synchronously; SMS via the SMS-Aero adapter. Workers deploy when the first queue lands.                                                                                                     |
+| Cerbos (embedded in `api`)                         | **not deployed**  | The deployed `AuthzGuard` is role-based + fail-closed — webinars wave-1 authz is **in-service**; object-level `IPolicyEngine`/Cerbos is an explicit unimplemented **SEAM** (`apps/api/src/authz/authz.guard.ts`, DSO-27). No code path calls Cerbos — `CERBOS_URL` has zero TS usages. Deploying it would provision infra nothing exercises. |
 
 This is `slice ⊂ target`, not a contradiction: ADR-0012 remains the v1 destination; the slice ships the subset 003 exercises today and each deferred component is a tracked DSO child (§8).
 
@@ -104,13 +105,13 @@ Backups (§6) go to Timeweb Object Storage via pgbackrest. This choice **superse
 
 Prices from the live Timeweb API (`GET /api/v1/presets/servers`, RF, 2026-07; see `reference_timeweb_terraform_harness`). Presets are Terraform **variables** with the defaults below — validated on `apply`.
 
-| VPS                           | Preset (default)                   | vCPU/RAM/disk | Zone    | Public IPv4                | ₽/mo (approx.)      |
-| ----------------------------- | ---------------------------------- | ------------- | ------- | -------------------------- | ------------------- |
-| `api-prod`                    | `4803` (ru-3 msk, cheapest 4/8/80) | 4 / 8 / 80    | `msk-1` | **yes** (+180 ₽)           | 1800 + 180          |
-| `data-prod`                   | `4803` (same class)                | 4 / 8 / 80    | `msk-1` | **no** (egress via router) | 1800                |
-| `twc_router` (NAT gateway)    | `2009` (ru-3 msk, 1/1, cheapest)   | 1 / 1 / —     | `msk-1` | floating IP (NAT source)   | ~450                |
-| Timeweb S3 (pgbackrest repo)  | Hot, ~50 GB                        | —             | RF      | —                          | ~200–400            |
-| **Total slice (prod-direct)** |                                    |               |         |                            | **~4400–4650 ₽/mo** |
+| VPS                                           | Preset (default)                   | vCPU/RAM/disk | Zone    | Public IPv4                | ₽/mo (approx.)      |
+| --------------------------------------------- | ---------------------------------- | ------------- | ------- | -------------------------- | ------------------- |
+| `api-prod`                                    | `4803` (ru-3 msk, cheapest 4/8/80) | 4 / 8 / 80    | `msk-1` | **yes** (+180 ₽)           | 1800 + 180          |
+| `data-prod`                                   | `4803` (same class)                | 4 / 8 / 80    | `msk-1` | **no** (egress via router) | 1800                |
+| `twc_router` (NAT gateway)                    | `2009` (ru-3 msk, 1/1, cheapest)   | 1 / 1 / —     | `msk-1` | floating IP (NAT source)   | ~450                |
+| Timeweb S3 (pgbackrest repo + uploads bucket) | Hot, ~50 GB                        | —             | RF      | —                          | ~200–400            |
+| **Total slice (prod-direct)**                 |                                    |               |         |                            | **~4400–4650 ₽/mo** |
 
 Well under the ADR-0012 ≤30k ₽/month envelope (this is a slice; observability reuses bbm's `mon-prod-tw` at no incremental ds cost). The NAT router (+ its floating IP) is the price of an IP-less data plane — Timeweb has no per-server SNAT, so a public-IP-less host's egress must come from a network router (§5.1).
 
@@ -135,17 +136,18 @@ Well under the ADR-0012 ≤30k ₽/month envelope (this is a slice; observabilit
 
 ### 5.2 TLS — Caddy with automatic Let's Encrypt
 
-Caddy on `api-prod` terminates TLS for all three public hostnames and auto-renews without operator intervention (engineering-readiness §1). HTTP-01 challenge over `:80`. No manual certificate handling — the deploy discipline requires "auto-renewal without manual agent intervention".
+Caddy on `api-prod` terminates TLS for all four public hostnames (`api.` / `app.` / `id.` / `admin.doctor.school` — the admin vhost gets the same automatic-ACME treatment as the rest) and auto-renews without operator intervention (engineering-readiness §1). HTTP-01 challenge over `:80`. No manual certificate handling — the deploy discipline requires "auto-renewal without manual agent intervention".
 
 ### 5.3 DNS — at Beget (not Timeweb)
 
 The `doctor.school` zone lives at **Beget** (`ns1/ns2.beget.com`), so Terraform does **not** manage DNS (no `twc_dns_zone`). The following A-records are created **manually at Beget**, pointing at `api-prod`'s public IPv4 (from the Terraform `api_prod_public_ip` output):
 
-| Hostname            | Target             | Purpose                                                     |
-| ------------------- | ------------------ | ----------------------------------------------------------- |
-| `api.doctor.school` | api-prod public IP | NestJS BFF/API                                              |
-| `app.doctor.school` | api-prod public IP | portal (Next.js)                                            |
-| `id.doctor.school`  | api-prod public IP | Zitadel OIDC issuer (`IDP_ISSUER=https://id.doctor.school`) |
+| Hostname              | Target             | Purpose                                                     |
+| --------------------- | ------------------ | ----------------------------------------------------------- |
+| `api.doctor.school`   | api-prod public IP | NestJS BFF/API                                              |
+| `app.doctor.school`   | api-prod public IP | portal (Next.js)                                            |
+| `admin.doctor.school` | api-prod public IP | admin app (Next.js + Refine)                                |
+| `id.doctor.school`    | api-prod public IP | Zitadel OIDC issuer (`IDP_ISSUER=https://id.doctor.school`) |
 
 Root `doctor.school` A-record (`92.118.115.14`, the existing site) is untouched. Email records (MX `emx.mail.ru`, SPF, DKIM selectors, `_dmarc p=none`) are already live at Beget (`reference_doctor_school_email_dns`) — no change in this slice; DMARC tightening to `p=quarantine` is a separate, later step after ~2 weeks of `rua` review.
 
@@ -159,13 +161,20 @@ Per the brainstorm decision (#7) and the dev-stand precedent, the **application/
 | `/etc/ds-platform/zitadel.env` | `ZITADEL_MASTERKEY` (exactly 32 chars), the Zitadel DB host + user/admin passwords, first-boot `ZITADEL_FIRSTINSTANCE_*` bootstrap. **Note:** the real SMTP provider is configured by `idp/provision.sh` from the `IDP_SMTP_REAL_*` values in **`api.env`**, not by this file.                                                  |
 | `/etc/ds-platform/data.env`    | `POSTGRES_PASSWORD`, pgbackrest S3 creds + repo cipher passphrase                                                                                                                                                                                                                                                               |
 
+**Webinars wave-1 runtime env** (in `api.env` unless noted, same out-of-band discipline):
+
+- **Centrifugo** — `CENTRIFUGO_URL`, `CENTRIFUGO_API_KEY`, `CENTRIFUGO_TOKEN_HMAC_SECRET`, plus `CHAT_TOKEN_TTL_SECONDS`. Room chat is **fail-closed** without the triple — no connection tokens are minted and the chat surface degrades, so all three are mandatory in prod. The `centrifugo` container is configured with the same API key / HMAC secret values (compose `environment:` sourced from the same file) so the api↔Centrifugo pair converges on one secret set.
+- **S3 uploads (program PDFs)** — `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET_UPLOADS`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_FORCE_PATH_STYLE`, pointing at the Timeweb S3 `uploads` bucket (§6.3). **Fail-open caveat:** with `S3_ENDPOINT` unset the api silently falls back to an in-memory `FakeObjectStorage` — fake storage in prod is a silent failure mode, so §10 pins an explicit real-S3 assertion.
+- **SmartCaptcha (#186, rides this release)** — server-side `SMARTCAPTCHA_SERVER_KEY` (+ optional `SMARTCAPTCHA_VALIDATE_URL` override) in `api.env`. The portal's `NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY` is **build-time** (a Next.js Docker build-arg baked at `next build`) — and a build ARG only reaches `next build` if it is declared in `turbo.json` `env` (turbo strict-env strips undeclared vars, `reference_turbo_strict_env_build_args`).
+- **Admin runtime** — the admin app's `API_PROXY_TARGET` is likewise **build-time**. The admin app has no Dockerfile yet; it is added by the infra payload Issue **#729** together with the compose/Caddy wiring.
+
 `TWC_TOKEN` for Terraform lives in `infra/deploy/.env` (gitignored), same account as bbm, **project-scope `ds-platform`**. Migration to Vault (KEK for encrypted backups, ADR-0003 §2.4) is a tracked follow-up — env is the interim bootstrap default + fail-closed fallback (the same pattern 003 uses for delivery-mode flags until Unleash lands).
 
 **Terraform-generated secrets are the exception (DD-6).** The pgbackrest S3 access/secret keys are **generated by Timeweb when the bucket is created** and surfaced as `sensitive` outputs — they therefore **do land in `terraform.tfstate` in plaintext** (`sensitive` only suppresses CLI display, not at-rest storage). So the "not in Terraform state" rule above is scoped to the on-box `.env` secrets (DB password, IdP tokens, masterkey, pepper) that Terraform never touches; the S3 backup creds are the one class that state holds. Mitigation for the slice: `*.tfstate` is gitignored and kept off any shared location; the operator copies the keys into `data.env` via `terraform output -raw` (§9 README). Encrypted remote state / Vault-managed backup creds is the tracked follow-up (DD-6, §7).
 
 ---
 
-## 6. Email, SMS, backups
+## 6. Email, SMS, object storage, backups, IdP provisioning
 
 ### 6.1 Email — mail.ru business relay (live)
 
@@ -177,7 +186,15 @@ Per the brainstorm decision (#7) and the dev-stand precedent, the **application/
 
 SMS-OTP via the `sms-aero-adapter` (SMS-Aero Gate API v2, `reference_sms_provider_smsaero`). Set `SMS_DELIVERY_MODE=real`; creds (`SMSAERO_EMAIL`/`SMSAERO_API_KEY`) in `api.env`. **Real SMS costs money** — the SMS budget service (`SmsBudgetService`, #87) is the runtime guard; exercise the live path with one supervised paid test.
 
-### 6.3 Backups — pgbackrest → Timeweb S3
+### 6.3 Object storage — S3 `uploads` bucket (program PDFs)
+
+The api's object-storage adapter serves program-PDF uploads/downloads from a dedicated Timeweb S3 **`uploads` bucket** — a **Terraform delta to the existing S3 config** (`s3.tf` gains a second `twc_s3_bucket` alongside the pgbackrest repo; same project scope, Hot v2). Its access/secret keys are Timeweb-generated `sensitive` outputs, so the DD-6 state caveat applies identically: the operator copies them into `api.env` via `terraform output -raw` (§5.4 `S3_*` keys). The pgbackrest repo bucket and the uploads bucket stay **separate** — backup creds never enter `api.env`, upload creds never enter `data.env`.
+
+### 6.4 IdP provisioning — `platform_admin` role
+
+The admin app's operator access rides the `platform_admin` role in prod Zitadel, provisioned via the **existing dev-stand tooling script** (`idp/provision.sh`, `IDP_SEED_ROLE`) — the same converge-style script that already configures the real SMTP provider (§6.1). No new mechanism: run `provision.sh` sourcing `api.env` on deploy (`IDP_SEED_ROLE` names the role) and it seeds the role idempotently.
+
+### 6.5 Backups — pgbackrest → Timeweb S3
 
 Per ADR-0003 §2.4, on `data-prod`:
 
@@ -192,17 +209,18 @@ Per ADR-0003 §2.4, on `data-prod`:
 
 ## 7. Decision debt (deviations from documented conventions — surfaced per AGENTS.md §6)
 
-| #    | Deviation                                                                      | Convention                                           | Disposition                                                                                                                                                                                                                                                                                                                                                                                                              |
-| ---- | ------------------------------------------------------------------------------ | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| DD-1 | TLS via **Caddy**, not nginx                                                   | ADR-0012 §1 process inventory names `nginx`          | Intentional (auto-ACME, engineering-readiness §1 permits it). 1-line ADR-0012 reconcile: "nginx" → "Caddy or nginx (operator choice)".                                                                                                                                                                                                                                                                                   |
-| DD-2 | Zitadel **co-located on `api-prod`**, not on a separate `shared-tooling` VPS   | ADR-0012 §6 lists Zitadel as shared-tooling infra    | Intentional: ds has no shared-tooling VPS (bbm's `mon` is observability-only). Co-location is correct for a single-product slice; revisit if a shared IdP is needed across products.                                                                                                                                                                                                                                     |
-| DD-3 | Cerbos / BullMQ workers / Centrifugo **not deployed**                          | ADR-0012 §Process-inventory lists them in v1 target  | Intentional slice-subset — none is called by 003 code (§2.3). Each is a tracked DSO child (§8).                                                                                                                                                                                                                                                                                                                          |
-| DD-4 | `data-prod` on **80 GB** preset                                                | ADR-0012 cost table sketched 200 GB                  | Intentional: 0 users + WAL/basebackup → S3. Documented upgrade trigger (§4).                                                                                                                                                                                                                                                                                                                                             |
-| DD-5 | Tenancy-spec says **"Managed PG"**                                             | bbm tenancy design line                              | Superseded by ADR-0003/ADR-0012 self-hosted PG. Reconcile tracked as **DSO-101**.                                                                                                                                                                                                                                                                                                                                        |
-| DD-6 | pgbackrest **S3 creds land in `terraform.tfstate`** (plaintext at rest)        | §5.4 "secrets not in Terraform state"                | Unavoidable: Timeweb generates the bucket keys, exposed as `sensitive` outputs. Scoped exception to §5.4 (on-box `.env` secrets stay out of state). Mitigation: gitignored state off shared locations; follow-up = encrypted remote state / Vault-managed backup creds.                                                                                                                                                  |
-| DD-7 | **Mandatory public IPv6 on both VPSes** (incl. the "IP-less" `data-prod`)      | §5.1 "`data-prod` has no public path"                | Provider-forced: every Timeweb VPS gets a public IPv6 even when public IPv4 is declined. The cloud `twc_firewall` default-deny still holds — the whitelist is v4-only, so it matches **no** IPv6 inbound. Host-level `ufw` v6 hardening on both boxes is a tracked follow-up (not a slice blocker: default-deny already closes v6 inbound).                                                                              |
-| DD-8 | **Router gateway IP pinned as a Terraform variable** (`vpc_router_gateway_ip`) | IaC normally derives addresses from resource outputs | The `twc_router` provider resource has no `gateway` attribute, so the VPC-internal gateway (Timeweb-assigned, observed `192.168.0.4`) cannot be read back and must be pinned as a variable to render `data-prod`'s cloud-init default route. Verify-after-recreate procedure documented in `variables.tf` (re-read `GET /api/v1/routers → networks[].gateway` after any router recreate and update the var if it moved). |
-| DD-9 | **Cosmetic ghost firewall links to destroyed server ids**                      | Clean provider state has no dangling links           | Timeweb re-link bug: during the rebuild the provider left firewall→server link records pointing at destroyed server ids, and the backend refuses their deletion. They match no live server (the firewalls re-bind to the current servers via `link`), so they are inert; no follow-up beyond awareness.                                                                                                                  |
+| #     | Deviation                                                                      | Convention                                           | Disposition                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ----- | ------------------------------------------------------------------------------ | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| DD-1  | TLS via **Caddy**, not nginx                                                   | ADR-0012 §1 process inventory names `nginx`          | Intentional (auto-ACME, engineering-readiness §1 permits it). 1-line ADR-0012 reconcile: "nginx" → "Caddy or nginx (operator choice)".                                                                                                                                                                                                                                                                                   |
+| DD-2  | Zitadel **co-located on `api-prod`**, not on a separate `shared-tooling` VPS   | ADR-0012 §6 lists Zitadel as shared-tooling infra    | Intentional: ds has no shared-tooling VPS (bbm's `mon` is observability-only). Co-location is correct for a single-product slice; revisit if a shared IdP is needed across products.                                                                                                                                                                                                                                     |
+| DD-3  | Cerbos / BullMQ workers **not deployed**                                       | ADR-0012 §Process-inventory lists them in v1 target  | Intentional slice-subset — neither is called by the deployed code (§2.3). Each is a tracked DSO child (§8).                                                                                                                                                                                                                                                                                                              |
+| DD-4  | `data-prod` on **80 GB** preset                                                | ADR-0012 cost table sketched 200 GB                  | Intentional: 0 users + WAL/basebackup → S3. Documented upgrade trigger (§4).                                                                                                                                                                                                                                                                                                                                             |
+| DD-5  | Tenancy-spec says **"Managed PG"**                                             | bbm tenancy design line                              | Superseded by ADR-0003/ADR-0012 self-hosted PG. Reconcile tracked as **DSO-101**.                                                                                                                                                                                                                                                                                                                                        |
+| DD-6  | pgbackrest **S3 creds land in `terraform.tfstate`** (plaintext at rest)        | §5.4 "secrets not in Terraform state"                | Unavoidable: Timeweb generates the bucket keys, exposed as `sensitive` outputs. Scoped exception to §5.4 (on-box `.env` secrets stay out of state). Mitigation: gitignored state off shared locations; follow-up = encrypted remote state / Vault-managed backup creds.                                                                                                                                                  |
+| DD-7  | **Mandatory public IPv6 on both VPSes** (incl. the "IP-less" `data-prod`)      | §5.1 "`data-prod` has no public path"                | Provider-forced: every Timeweb VPS gets a public IPv6 even when public IPv4 is declined. The cloud `twc_firewall` default-deny still holds — the whitelist is v4-only, so it matches **no** IPv6 inbound. Host-level `ufw` v6 hardening on both boxes is a tracked follow-up (not a slice blocker: default-deny already closes v6 inbound).                                                                              |
+| DD-8  | **Router gateway IP pinned as a Terraform variable** (`vpc_router_gateway_ip`) | IaC normally derives addresses from resource outputs | The `twc_router` provider resource has no `gateway` attribute, so the VPC-internal gateway (Timeweb-assigned, observed `192.168.0.4`) cannot be read back and must be pinned as a variable to render `data-prod`'s cloud-init default route. Verify-after-recreate procedure documented in `variables.tf` (re-read `GET /api/v1/routers → networks[].gateway` after any router recreate and update the var if it moved). |
+| DD-9  | **Cosmetic ghost firewall links to destroyed server ids**                      | Clean provider state has no dangling links           | Timeweb re-link bug: during the rebuild the provider left firewall→server link records pointing at destroyed server ids, and the backend refuses their deletion. They match no live server (the firewalls re-bind to the current servers via `link`), so they are inert; no follow-up beyond awareness.                                                                                                                  |
+| DD-10 | Admin ships wave-1 on the **shared-cookie session posture**                    | Dedicated admin session hardening (ADR-0004 §3.2.1)  | Intentional wave-1 posture per ADR-0004 §3.2.1: the admin app rides the shared session cookie. The dedicated `__Host-ds_admin_session` cookie + mandatory 2FA for `platform_admin` is tracked at **#718** (pre-pilot hardening) — an explicit deferral, never a silent skip.                                                                                                                                             |
 
 ---
 
@@ -210,13 +228,12 @@ Per ADR-0003 §2.4, on `data-prod`:
 
 Each is an explicit, tracked deferral (not a silent default). To become DSO children of DSO-100 with a "done against the real dependency" criterion:
 
-- **Cerbos deploy** — lands with `IPolicyEngine` (DSO-27); no deploy value before object-level policies exist.
+- **Cerbos deploy** — lands with `IPolicyEngine` (DSO-27); no deploy value before object-level policies exist (wave-1 authz is in-service, §2.3).
 - **BullMQ workers** — deploy with the first queue.
-- **Centrifugo** — deploy if/when a realtime surface ships (pilot trigger).
 - **Unleash self-hosted** — env-flag interim until then (#184/#185).
 - **Beget S3 offsite backups** — weekly sync after the base backup path is proven.
 - **preview-vps** (per-PR environments) — ADR-0012 §2.
-- **admin / cms / promo / mobile apps** — later product slices.
+- **cms / promo / mobile apps** — later product slices.
 - **WAF** (Coraza/ModSecurity on the reverse proxy) — deferred.
 - **Tempo** (tracing), **HA/replicas**, **LB**, **CDN** — post-v1 (ADR-0012 OQ-T2/T3).
 - **Observability wiring** — reuse bbm `mon-prod-tw` (Loki/Prometheus/Grafana/Alloy) with DS dashboard folders + alert channels + GlitchTip; Alloy agents on both VPSes ship logs/metrics. (In-slice-adjacent; sized on bbm, not here.)
@@ -248,8 +265,8 @@ infra/deploy/
     data-prod.yaml             route-first hardening (netplan default route via router gw, THEN apt/docker via runcmd)
   compose/
     api-prod/
-      compose.yml              caddy + api + portal + zitadel + zitadel-login + sms-aero-adapter + one-shot migrate (build contexts = repo root)
-      Caddyfile                vhost + IdP single-origin routing
+      compose.yml              caddy + api + portal + admin + centrifugo + zitadel + zitadel-login + sms-aero-adapter + one-shot migrate (build contexts = repo root)
+      Caddyfile                vhosts (api/app/admin/id) + IdP single-origin routing
     data-prod/
       compose.yml              postgres + redis + pgbackrest
       postgres/                Dockerfile (pg17 + pgvector) + init.sql (ds_prod/zitadel split) + postgresql.conf
@@ -258,25 +275,30 @@ infra/deploy/
 # image builds (repo root context, on-box, no registry):
 apps/api/Dockerfile            NestJS runtime + `migrate` target (drizzle-kit)
 apps/portal/Dockerfile         Next.js standalone
+apps/admin/Dockerfile          Next.js + Refine standalone (lands with #729)
 .dockerignore                  (repo root) prunes the on-box build context
 ```
 
-The `compose/**`, Dockerfiles, cloud-init, and env templates are an **apply-ready on-box deploy payload**, not a skeleton: image builds wire from the repo root as the Docker context (on-box git clone, no registry — bbm-portal precedent), the pgbackrest sidecar carries its full repo config, and every `.env.example` names exactly the keys the built 003 code reads. The Terraform topology is **applied live** (`terraform plan` clean); state and `.tfvars` are gitignored (never committed). Remaining gaps are the tracked follow-ups in §7/§8 (Vault-managed secrets, encrypted remote state, host-level v6 `ufw`), not silent stubs.
+The `s3.tf` module holds **both** buckets — the pgbackrest repo and the `uploads` bucket (§6.3). DB schema changes deploy through the **existing one-shot `migrate` service** already in the payload: the wave-1 events/rooms migrations are ordinary Drizzle migrations it applies on the next deploy — no new migration mechanism.
+
+The `compose/**`, Dockerfiles, cloud-init, and env templates are an **apply-ready on-box deploy payload**, not a skeleton: image builds wire from the repo root as the Docker context (on-box git clone, no registry — bbm-portal precedent), the pgbackrest sidecar carries its full repo config, and every `.env.example` names exactly the keys the built code (003 + webinars wave-1, §5.4) reads. The Terraform topology is **applied live** (`terraform plan` clean); state and `.tfvars` are gitignored (never committed). Remaining gaps are the tracked follow-ups in §7/§8 (Vault-managed secrets, encrypted remote state, host-level v6 `ufw`), not silent stubs.
 
 ---
 
 ## 10. Verification (definition of done for the slice)
 
-The slice is done when, on the live always-on stand, a user can complete the auth vertical end-to-end in the **actual running UI** (`app.doctor.school`, Playwright on the live stand — AGENTS.md §6 "Verify UI live"):
+The slice is done when, on the live always-on stand, a user can complete both verticals end-to-end in the **actual running UI** (`app.doctor.school` / `admin.doctor.school`, Playwright on the live stand — AGENTS.md §6 "Verify UI live"):
 
 1. Register with email → receive a **real** verification email (mail.ru) → verify.
 2. Passwordless email-OTP login → receive a real OTP email → land authenticated.
 3. Passwordless SMS-OTP login → receive a **real** SMS (SMS-Aero, one supervised paid test) → land authenticated.
 4. `/me/*` PD-lifecycle endpoints respond behind a valid session.
-5. TLS valid on all three hostnames (Caddy auto-cert); Zitadel Login V2 reachable at `id.doctor.school`.
+5. TLS valid on all four hostnames (Caddy auto-cert); Zitadel Login V2 reachable at `id.doctor.school`.
 6. pgbackrest: a basebackup + WAL land in Timeweb S3; a restore dry-run meets RTO ≤ 2 h.
+7. **Webinars prod smoke:** a `platform_admin` operator creates a test event via the admin app (`admin.doctor.school`) → a doctor registers for it from the portal → enters the room → exchanges **live chat** messages through the real Centrifugo path. Authz for the whole journey is in-service role-based — Cerbos stays out of the slice (§2.3).
+8. **Real object storage:** the api runs against the real Timeweb S3 `uploads` bucket, **not** the in-memory `FakeObjectStorage` — assert `S3_ENDPOINT` is set in the running api container env, then upload a program PDF via the admin app and fetch it back through the portal. (The api **fail-opens** to fake storage when `S3_ENDPOINT` is unset — fake storage in prod is a silent failure mode, so this assertion is mandatory, §5.4.)
 
-Build/typecheck/lint/Mode-a are necessary but **not** sufficient — the live email + SMS deliveries and the browser journey are the gate.
+Build/typecheck/lint/Mode-a are necessary but **not** sufficient — the live email + SMS deliveries and the browser journeys are the gate.
 
 ---
 
@@ -284,7 +306,10 @@ Build/typecheck/lint/Mode-a are necessary but **not** sufficient — the live em
 
 - **ADR-0012** — deployment topology v1 (2-VPS docker-compose, SLO 99.0%, maintenance window). This slice applies it; DD-1/DD-3 note the reconciles.
 - **ADR-0003 §2.4 / §8** — backup topology + Redis single-node policy + pgvector requirement.
+- **ADR-0004 §3.2.1** — admin session posture (shared cookie at wave-1; dedicated `__Host-ds_admin_session` + mandatory 2FA tracked at #718, DD-10).
 - **ADR-0001** — Zitadel IdP.
+- **#729** — webinars wave-1 infra payload (admin Dockerfile, compose/Caddy wiring, uploads-bucket Terraform delta).
+- **DSO-134** — webinars wave-1 prod-scope increment (owner-confirmed; target 2026-07-16).
 - **engineering-readiness §"Pre-pilot deployment slice"** — the authoritative IN/Deferred list; this slice is a subset.
 - **`reference_timeweb_terraform_harness`** — twc provider, presets, prices, Managed-PG pgvector gap.
 - **`reference_doctor_school_email_dns`** — Beget zone, mail.ru relay, DMARC, sender inventory.

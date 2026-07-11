@@ -1,8 +1,9 @@
 # `infra/deploy/` — DS Platform pre-pilot deploy slice (DSO-100)
 
 Applied Terraform topology + **apply-ready** on-box deploy payload for deploying the
-built auth vertical (feature 003, epic #80) onto an **always-on** Timeweb production
-environment with live SMS + Email.
+built product verticals — auth (feature 003, epic #80) + webinars wave-1 (admin app,
+Centrifugo room chat, program-PDF uploads; payload wiring lands with #729) — onto an
+**always-on** Timeweb production environment with live SMS + Email.
 
 > **Design (SSOT):** [`apps/docs/content/specs/tech/2026-07-02-ds-platform-prepilot-deploy-slice-design-en.md`](../../apps/docs/content/specs/tech/2026-07-02-ds-platform-prepilot-deploy-slice-design-en.md).
 > Read it first — this README is the operational runbook, the spec is the decisions.
@@ -22,9 +23,12 @@ environment with live SMS + Email.
   hosts/network/S3 (attribute shapes verified against `timeweb-cloud/timeweb-cloud`
   v1.7.1 — `terraform validate` passes) but the region/zone reconcile is a
   fast-follow (DD-8, see `terraform.tfvars`); `cloud-init/*` is base hardening.
-- **Is NOT:** the full pre-pilot. Cerbos, BullMQ workers, Centrifugo, Unleash,
-  admin/cms/promo/mobile, WAF, HA, LB, CDN, preview-vps, Beget S3 offsite are all
-  **out of slice** — deploying only what 003 actually runs (spec §2.3, §8).
+- **Is NOT:** the full pre-pilot. Cerbos, BullMQ workers, Unleash,
+  cms/promo/mobile, WAF, HA, LB, CDN, preview-vps, Beget S3 offsite are all
+  **out of slice** — deploying only what the built features actually run
+  (spec §2.3, §8). The webinars wave-1 additions (admin app, Centrifugo,
+  S3 `uploads` bucket) are **in-slice** (spec §2.1, §6.3); their compose/Caddy/
+  Terraform wiring is #729's deliverable and is not yet in this payload.
 
 ## Layout
 

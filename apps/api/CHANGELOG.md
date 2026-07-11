@@ -1,5 +1,13 @@
 # @ds/api
 
+## 0.15.1
+
+### Patch Changes
+
+- [#723](https://github.com/doctor-school/ds-platform/pull/723) [`589f68f`](https://github.com/doctor-school/ds-platform/commit/589f68f6cac69db3dfa2b7a93e9493edc2578efc) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 007 EARS-2 ([#627](https://github.com/doctor-school/ds-platform/issues/627)): garbage-collect superseded program-PDF objects on reference swap. A successful PDF replacement now deletes the superseded object key from object storage after the swap is durably committed (best-effort — a storage failure warn-logs the orphan key and never fails the edit). The `ObjectStorage` port gains `delete(key)` (S3 adapter + in-memory fake).
+
+- [#724](https://github.com/doctor-school/ds-platform/pull/724) [`cbda29f`](https://github.com/doctor-school/ds-platform/commit/cbda29f6a06bf0dcf25fd2ac30864a252b5f2a33) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Fix [#709](https://github.com/doctor-school/ds-platform/issues/709): an IdP-authenticated session whose `zitadel_sub` had no `users` mirror row (webhook miss/lag, or a mirror row lost while the IdP session stayed alive) bounced every mirror-backed authenticated surface into a silent `/login` → `/account` redirect carousel via the generic 401. The session auth hook now lazily self-heals the mirror on an authenticated read (EARS-26): a targeted `IdpClient.getUser(sub)` fetch + the same idempotent `UserMirrorService.upsert` and `doctor_guest` re-grant the Zitadel webhook and reconciliation sweep perform, before the handler runs. EARS-16 generic-401 semantics for genuinely unauthenticated callers are unchanged.
+
 ## 0.15.0
 
 ### Minor Changes

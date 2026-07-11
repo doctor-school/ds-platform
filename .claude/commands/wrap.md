@@ -95,4 +95,6 @@ outstanding work — do not restate it:
 ## 5. Handoff
 
 Run the existing `handoff-prompt` skill to emit the next-session prompt. Do not
-hand-roll the format — that skill owns it.
+hand-roll the format — that skill owns it. Chunk the handoff's queue into waves
+of **≤3 full PR-cycles** («this session: 1–3; next: 4–6») — never a flat ranked
+list (run-wrap §5).

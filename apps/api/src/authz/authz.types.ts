@@ -32,7 +32,13 @@ export type AuthzAccess = "public" | "authenticated";
  * Engine-neutral enforcement strength (spec §3):
  * - `none`      — no subject/role/policy evaluation (only valid with `public`).
  * - `fast-path` — JWT/role claim check only (RBAC, in the guard, no external call).
- * - `policy`    — full evaluation through the `IPolicyEngine` (ADR-0002 §3.2).
+ * - `policy`    — the role alone is not sufficient (two sub-modes, spec §3):
+ *                 with `objectAttrs`, the ABAC predicate is evaluated through
+ *                 the `IPolicyEngine` (ADR-0002 §3.2 / DSO-27; the guard fails
+ *                 closed until it is wired); without `objectAttrs`, the guard
+ *                 enforces the role and the classified handler/service
+ *                 evaluates the resource-scoped domain rule in-service (e.g.
+ *                 the 006 room gate, `registered ∧ live`).
  */
 export type AuthzCheck = "none" | "fast-path" | "policy";
 

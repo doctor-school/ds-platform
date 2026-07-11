@@ -179,6 +179,14 @@ of the next task; «where we stopped» premises come from tracker comments, not 
 session's memory of itself. Resume side: an agent that cannot locate a cited
 document STOPS and asks the owner instead of substituting its own reading.
 
+**The handoff's queue is chunked into waves of ≤3 full PR-cycles** («this
+session: items 1–3; next: 4–6») — never one flat ranked list: the wave cap
+(memory `feedback_wave_plan_by_touch_set`) must fire at handoff-authoring time,
+not after the next session has already over-dispatched (2026-07-11 retro: a flat
+6-item queue produced 5 dispatches in 5 minutes and 6 PR-cycles in one session).
+The dispatch-time counterpart is item 0 of memory
+`feedback_orchestration_brief_full_lint_before_pr`.
+
 ## Output
 
 - Stage 1: the schema'd findings array from an independent retro agent + the

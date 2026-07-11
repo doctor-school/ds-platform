@@ -1,7 +1,8 @@
 # 006 — Webinar room scenarios
 # Gherkin for the room vertical of the Webinars epic wave 1 (server-side-gated room = embed
 # player from an explicit provider enum + live chat over Centrifugo + server-authoritative
-# heartbeat presence capture). Happy paths + failure branches. Translated to Playwright via
+# heartbeat presence capture + the room-header theme toggle and JIT display-name avatar).
+# Happy paths + failure branches. Translated to Playwright via
 # playwright-bdd — this is a user-facing spec, so the browser run is a required deliverable
 # (owned + tracked by the 006 portal-integration + E2E child Issue, open-ears-issues step 3a),
 # not a bare footnote.
@@ -175,3 +176,62 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
       | desktop    | dark  |
       | mobile     | light |
       | mobile     | dark  |
+
+  # --- Room theme: header toggle + portal-wide mechanism (US-6) ---
+
+  @EARS-12 @happy
+  Scenario: The header toggle switches the theme and the choice persists across reloads
+    Given a gated doctor in a live room rendered in the light theme
+    When the doctor activates the room-header theme toggle
+    Then the portal switches to the dark theme by toggling the .dark class on the html element
+    When the doctor reloads the room
+    Then the room renders in the dark theme from first paint
+    And the page never flashes the wrong theme
+
+  @EARS-12 @happy
+  Scenario: With no stored choice the theme follows the system preference, and an explicit choice wins
+    Given a doctor with no persisted theme choice whose system prefers the dark scheme
+    When the doctor opens the room
+    Then the room renders in the dark theme
+    When the doctor explicitly selects the light theme with the header toggle
+    Then the room renders in the light theme on this and every later visit
+    And the persisted choice wins over the system preference
+
+  @EARS-13 @happy
+  Scenario: The portal accessibility sweep covers both themes
+    Given the portal axe end-to-end sweep
+    When it drives its covered surfaces in the light and the dark theme
+    Then the dark rendering introduces no new accessibility violations relative to light
+
+  # --- Display name & avatar: JIT collection, self-only exposure (US-7) ---
+
+  @EARS-14 @happy
+  Scenario: The first room entry asks once for the doctor's name
+    Given a gated doctor whose display name is not set
+    When the doctor enters a live room for the first time
+    Then the portal prompts once for «Имя и фамилия» before rendering the room
+    When the doctor submits a real name
+    Then the trimmed name is saved to the doctor's user record via the authenticated endpoint
+    And the room renders
+    And no later room entry shows the prompt again
+
+  @EARS-14 @failure
+  Scenario: An empty or whitespace-only name is rejected
+    Given the one-time name prompt before a doctor's first room entry
+    When the doctor submits an empty or whitespace-only value
+    Then the value is rejected with a truthful error
+    And the room does not render until a real name is saved
+
+  @EARS-15 @happy
+  Scenario: The room header avatar shows the initials of the real saved name
+    Given a gated doctor with a saved display name
+    When the room renders
+    Then the header avatar shows the initials derived from the saved name
+    And the initials are never fabricated from an email address or a placeholder profile
+
+  @EARS-16 @failure
+  Scenario: The display name is served only to its owner and never enters chat payloads
+    Given two doctors in the same live room, one of them with a saved display name
+    When the other doctor requests that name or reads the room chat
+    Then no endpoint returns another doctor's display name
+    And the chat identity remains the non-PII author tag

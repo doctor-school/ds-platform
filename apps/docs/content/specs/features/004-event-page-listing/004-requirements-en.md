@@ -2,7 +2,7 @@
 title: "004 — Public event page & upcoming-broadcasts listing (net-new webinar discovery)"
 description: "Requirements: the publicly-readable webinar event page (pre-live, live, ended, archived-notice states) plus a minimal upcoming-broadcasts listing in the portal app. Read-side of the Webinars epic wave 1 — public SSR event page, day-grouped nearest-first listing, single «Участвовать» CTA handing off to registration (005) through auth (003), lifecycle reflected from the single event state machine. Backend read model + public query endpoints owned here; event authoring / lifecycle transitions owned by 007."
 slug: 004-event-page-listing
-status: In dev
+status: Shipped
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
 parent_issue: https://github.com/doctor-school/ds-platform/issues/471

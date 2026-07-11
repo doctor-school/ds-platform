@@ -191,25 +191,25 @@ The state 007 writes is the **only** state everything reads (EARS-9). There is n
 
 All 007 authoring commands, lifecycle transitions, and admin reads are classified **`access: authenticated`, `required_roles: platform_admin`, `auth_check: fast-path`** in the endpoint-authz matrix (ADR-0001 §2). Wave 1 is one trusted admin group (LD-3), so role alone is sufficient — no object-level `policy` scoping (that arrives with wave-2 manager/owner-of-record lists). DTOs are Zod schemas in `packages/schemas/` (ADR-0002 SSOT), shared by the API and the Refine admin app via the generated SDK.
 
-| Endpoint                            | Command / read     | access        | required_roles   | auth_check | step_up (posture)                      |
-| ----------------------------------- | ------------------ | ------------- | ---------------- | ---------- | -------------------------------------- |
-| `POST /v1/admin/events`             | `CreateEvent`      | authenticated | `platform_admin` | fast-path  | high-stakes tier (admin app 2FA-gated) |
-| `PATCH /v1/admin/events/:id`        | `UpdateEvent`      | authenticated | `platform_admin` | fast-path  | high-stakes tier                       |
-| `PUT /v1/admin/events/:id/stream`   | `ConfigureStream`  | authenticated | `platform_admin` | fast-path  | high-stakes tier                       |
-| `POST /v1/admin/events/:id/publish` | `PublishEvent`     | authenticated | `platform_admin` | fast-path  | high-stakes tier                       |
-| `POST /v1/admin/events/:id/open`    | `OpenRoom`         | authenticated | `platform_admin` | fast-path  | high-stakes tier                       |
-| `POST /v1/admin/events/:id/close`   | `CloseRoom`        | authenticated | `platform_admin` | fast-path  | high-stakes tier                       |
-| `POST /v1/admin/events/:id/archive` | `ArchiveEvent`     | authenticated | `platform_admin` | fast-path  | high-stakes tier                       |
-| `GET /v1/admin/events`              | `EventAdminList`   | authenticated | `platform_admin` | fast-path  | —                                      |
-| `GET /v1/admin/events/:id`          | `EventAdminDetail` | authenticated | `platform_admin` | fast-path  | —                                      |
+| Endpoint                            | Command / read     | access        | required_roles   | auth_check | step_up (posture)                |
+| ----------------------------------- | ------------------ | ------------- | ---------------- | ---------- | -------------------------------- |
+| `POST /v1/admin/events`             | `CreateEvent`      | authenticated | `platform_admin` | fast-path  | high-stakes tier (introspection) |
+| `PATCH /v1/admin/events/:id`        | `UpdateEvent`      | authenticated | `platform_admin` | fast-path  | high-stakes tier                 |
+| `PUT /v1/admin/events/:id/stream`   | `ConfigureStream`  | authenticated | `platform_admin` | fast-path  | high-stakes tier                 |
+| `POST /v1/admin/events/:id/publish` | `PublishEvent`     | authenticated | `platform_admin` | fast-path  | high-stakes tier                 |
+| `POST /v1/admin/events/:id/open`    | `OpenRoom`         | authenticated | `platform_admin` | fast-path  | high-stakes tier                 |
+| `POST /v1/admin/events/:id/close`   | `CloseRoom`        | authenticated | `platform_admin` | fast-path  | high-stakes tier                 |
+| `POST /v1/admin/events/:id/archive` | `ArchiveEvent`     | authenticated | `platform_admin` | fast-path  | high-stakes tier                 |
+| `GET /v1/admin/events`              | `EventAdminList`   | authenticated | `platform_admin` | fast-path  | —                                |
+| `GET /v1/admin/events/:id`          | `EventAdminDetail` | authenticated | `platform_admin` | fast-path  | —                                |
 
 - **Never `doctor_guest` / public (EARS-8).** No lifecycle transition or authoring write is ever callable by a doctor or a public caller; the endpoint-authz matrix + the `endpoint-authz` BLOCK guard (AGENTS.md §5) enforce it.
-- **Admin mutations are high-stakes.** ADR-0001 §2.5/§8 routes admin mutations through the introspection validation tier, and the Refine admin app is 2FA-gated (ADR-0004 §3) — that is the wave-1 step-up posture; no bespoke per-action step-up is added.
+- **Admin mutations are high-stakes.** ADR-0001 §2.5/§8 routes admin mutations through the introspection validation tier — that is the wave-1 step-up posture; no bespoke per-action step-up is added. The admin session follows ADR-0004's **staged model** (design §3.2): wave 1 rides the shipped 003 session cookie `__Host-ds_session`; the dedicated `__Host-ds_admin_session` + mandatory 2FA for `platform_admin` is pre-pilot hardening (#718).
 - **Produced public projections stay `public`.** `PublicEventPage`/`UpcomingBroadcastCard` keep 004's `public` classification — 007 authors the data, 004 owns the public read.
 
 ## 8. Admin surface (stock Refine — no canvas)
 
-Built on **stock Refine UI** (ADR-0004 §3: Refine + custom data/auth/access providers over the NestJS API, 2FA, `admin.doctor.school`). **No admin canvas exists** (recorded Stage-A gap, PRD «Approved mockup») — so, unlike 004/005/006, 007 carries **no** canvas-fidelity requirement (EARS-11).
+Built on **stock Refine UI** (ADR-0004 §3: Refine + custom data/auth/access providers over the NestJS API, `admin.doctor.school`). **No admin canvas exists** (recorded Stage-A gap, PRD «Approved mockup») — so, unlike 004/005/006, 007 carries **no** canvas-fidelity requirement (EARS-11).
 
 - **Resources.** A Refine `events` resource: a list (all states, current lifecycle badge, air date/time in МСК, stream-config completeness), a create/edit form (the aggregate fields incl. the program-PDF upload and the ordered speaker list), and lifecycle **actions** (publish / open / close / archive) whose availability derives from `EventAdminDetail.validTransitions` — an action for a transition the current state disallows is never rendered (§2).
 - **Adopt-before-bespoke (EARS-11).** The `build-ui-from-design-system` gate runs before any bespoke element; stock Refine components are the default. ADR-0013 token discipline (no arbitrary Tailwind) applies to any bespoke styling; token-lint stays green.

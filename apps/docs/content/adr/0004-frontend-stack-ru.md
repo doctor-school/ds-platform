@@ -60,7 +60,7 @@ apps/admin/    # Refine + 2FA, admin.doctor.school
 apps/cms/      # Payload v3 inside Next.js, cms.doctor.school
 ```
 
-Cookies: **host-only `__Host-` cookie per app** (`__Host-ds_portal_session`, `__Host-ds_admin_session`, `__Host-ds_cms_session`, etc.). Cross-app SSO continuity — через OIDC silent re-auth (`prompt=none`) у IdP, не через shared cookie на `.doctor.school`. Single source of truth: ADR-0001 §6.
+Cookies: **host-only `__Host-` cookie per app** (`__Host-ds_portal_session`, `__Host-ds_admin_session`, `__Host-ds_cms_session`, etc.). Cross-app SSO continuity — через OIDC silent re-auth (`prompt=none`) у IdP, не через shared cookie на `.doctor.school`. Single source of truth: ADR-0001 §6. Session model админки — **staged**: волна 1 (в объёме live-вебинара 2026-07-17, фича 007) аутентифицируется через отгруженную 003 session cookie `__Host-ds_session` (`SameSite=Lax`, без 2FA); выделенная `__Host-ds_admin_session` (`SameSite=Strict`) + обязательная 2FA для `platform_admin` — pre-pilot hardening, трекается Issue [#718](https://github.com/doctor-school/ds-platform/issues/718) (детали: design spec §3.2).
 
 Deployment v1-v2: один VPS "frontend-prod" + 4 Docker контейнера + nginx reverse-proxy. v3+ trigger — split при 1M MAU.
 

@@ -134,7 +134,7 @@ apps/
 
 - `doctor.school` (promo) — `__Host-ds_promo_session` если требуется аутентифицированное состояние для CTA / lead-форм (обычно нет — promo анонимен по умолчанию).
 - `app.doctor.school` (portal) — `__Host-ds_portal_session`, host-only, `HttpOnly`, `Secure`, `SameSite=Lax`.
-- `admin.doctor.school` (admin) — `__Host-ds_admin_session`, host-only, `SameSite=Strict`, 2FA mandatory.
+- `admin.doctor.school` (admin) — **staged session model**. Волна 1 (в объёме live-вебинара 2026-07-17 — фича 007, минимальный event-admin): admin-приложение аутентифицируется через отгруженную 003 session cookie `__Host-ds_session` (host-only, `HttpOnly`, `Secure`, `SameSite=Lax`, без 2FA), отправляемую same-origin через admin `/v1/*` proxy — принято для одной доверенной группы `platform_admin`, чьи мутации уже идут через high-stakes introspection tier (ADR-0001 §2.5/§8). Pre-pilot hardening (обязателен до пилота 2026 Q3, трекается Issue [#718](https://github.com/doctor-school/ds-platform/issues/718)): выделенная cookie `__Host-ds_admin_session`, host-only, `SameSite=Strict`, плюс обязательная 2FA для сессий `platform_admin` — целевая session model этого ADR.
 - `cms.doctor.school` (cms) — `__Host-ds_cms_session`, host-only, для маркетинг-team.
 - `docs.doctor.school` (docs) — `__Host-ds_docs_session` если требуется auth (внутренняя SSOT для команды, обычно через VPN).
 

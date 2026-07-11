@@ -25,7 +25,7 @@ Room composition for the 2026-07-17 webinar: **embed player + live chat + heartb
 - **US-3** — As a **doctor**, my presence in the room is captured automatically the whole time I watch — I never click anything to "prove" I'm there (presence-confirmation widgets are a wave-2 NMO mechanic, not a wave-1 requirement).
 - **US-4** — As a **pharma sponsor**, after the webinar I receive per-doctor actual presence minutes (with contacts) for my report — for the first webinar, produced as a manual export from the captured data.
 - **US-5** — As an **unauthenticated or unregistered visitor**, I cannot reach the room content; instead I'm guided to log in / register for the event — enforced by the server, not hidden by the UI.
-- **US-6** — As a **doctor in the room**, I switch the room between light and dark with the toggle in the room header; until I choose, the portal follows my system preference, and once I choose, my choice sticks across reloads and visits.
+- **US-6** — As a **doctor in the room**, I switch the room between light and dark with the toggle in the room header; until I choose, the room is **dark** — the platform's default look — and once I choose, my choice sticks across reloads and visits.
 - **US-7** — As a **doctor**, before my first webinar room I'm asked **once** for my name («Имя и фамилия»); after that the room header shows an avatar with the initials of my real name. My name is shown only to me, and registration stays as short as it is today.
 
 ## Flows
@@ -46,7 +46,7 @@ Room composition for the 2026-07-17 webinar: **embed player + live chat + heartb
 
 **Theme (US-6):**
 
-- Until the doctor makes a choice, the room follows the system light/dark preference; the header toggle switches the theme instantly, and the explicit choice persists across reloads and visits, winning over the system preference.
+- Until the doctor makes a choice, the room renders the **dark** theme — the product default (the system preference is not consulted); the header toggle switches the theme instantly, and the explicit choice persists across reloads and visits.
 
 **Access branches (US-5):**
 
@@ -66,7 +66,7 @@ Room composition for the 2026-07-17 webinar: **embed player + live chat + heartb
 - Chat is **real-time**: a posted message reaches other room participants without reload (Centrifugo transport); chat is available while the room is open.
 - Presence heartbeats are **server-authoritative and durable**: authenticated beats append to a Postgres table with enough fidelity to compute actual per-doctor presence minutes; concurrent tabs do not inflate a doctor's minutes.
 - The captured data is sufficient to hand the first webinar's sponsor a per-doctor presence-minutes report via **manual export** — no report UI required in wave 1.
-- The room header carries a light/dark **theme toggle**: the default follows the system preference, an explicit choice wins and persists across reloads and visits, and pages render in the resolved theme from first paint — never a flash of the wrong theme. The toggle ships **only** in the webinar-room header; its placement on other portal surfaces is deferred to the unified portal chrome re-skin (#510).
+- The room header carries a light/dark **theme toggle** — the canvas 44×44 icon-button: the default is the **dark** theme (the system preference is not consulted), an explicit choice wins and persists across reloads and visits, and pages render in the resolved theme from first paint — never a flash of the wrong theme. The toggle ships **only** in the webinar-room header; its placement on other portal surfaces is deferred to the unified portal chrome re-skin (#510).
 - Before the first webinar-room entry the doctor is asked **once** for «Имя и фамилия»; an empty or whitespace-only value is rejected; registration collects nothing new. The header avatar shows the initials of the real saved name — never initials faked from an email or a placeholder — and the name is served only to the doctor themself.
 - On 2026-07-17: real doctors watch live in this room end-to-end with **zero platform-caused "could not join" complaints**.
 

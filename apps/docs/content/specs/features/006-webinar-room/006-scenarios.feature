@@ -184,18 +184,19 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
     Given a gated doctor in a live room rendered in the light theme
     When the doctor activates the room-header theme toggle
     Then the portal switches to the dark theme by toggling the .dark class on the html element
+    And the header icon-button reflects the dark state with its glyph and aria-pressed
     When the doctor reloads the room
     Then the room renders in the dark theme from first paint
     And the page never flashes the wrong theme
 
   @EARS-12 @happy
-  Scenario: With no stored choice the theme follows the system preference, and an explicit choice wins
-    Given a doctor with no persisted theme choice whose system prefers the dark scheme
+  Scenario: With no stored choice the portal renders dark by default, and an explicit choice wins
+    Given a doctor with no persisted theme choice
     When the doctor opens the room
-    Then the room renders in the dark theme
+    Then the room renders in the dark theme regardless of the system color-scheme preference
     When the doctor explicitly selects the light theme with the header toggle
     Then the room renders in the light theme on this and every later visit
-    And the persisted choice wins over the system preference
+    And the persisted choice always wins over the dark default
 
   @EARS-13 @happy
   Scenario: The portal accessibility sweep covers both themes

@@ -14,23 +14,24 @@ durable `audit_ledger` writer).
 
 ## What's here
 
-| Concern                                         | File                     | EARS                    |
-| ----------------------------------------------- | ------------------------ | ----------------------- |
-| Registration + verify routes                    | `auth.controller.ts`     | 1, 2, 3, 4, 19          |
-| Login + session-read routes                     | `auth.controller.ts`     | 5, 8                    |
-| Passwordless OTP-login routes                   | `auth.controller.ts`     | 6, 7, 8, 14             |
-| Refresh + logout routes                         | `auth.controller.ts`     | 9, 10                   |
-| Password-reset routes                           | `auth.controller.ts`     | 11, 12                  |
-| Cascade + login + OTP + reset orchestration     | `auth.service.ts`        | 1–7, 11, 12, 14, 16, 20 |
-| SMS toll-fraud budget                           | `sms-budget/`            | 14                      |
-| Rate limiter (per-user/IP/ASN)                  | `rate-limit/`            | 13                      |
-| Timing equalization                             | `timing/`                | 16                      |
-| Login captcha-after-N policy                    | `login-challenge/`       | 17                      |
-| Durable audit_ledger writer                     | `session/auth-audit.*`   | 9, 10, 12, 15, 18       |
-| `doctor_guest` mirror row                       | `user-mirror.service.ts` | 3, 4, 19                |
-| Reconciliation sweep                            | `reconcile.service.ts`   | 19                      |
-| IdP port + adapters                             | `idp/`                   | (design §2)             |
-| BFF session establish/refresh/logout/revoke-all | `session/`               | 5, 8, 9, 10, 12         |
+| Concern                                         | File                          | EARS                    |
+| ----------------------------------------------- | ----------------------------- | ----------------------- |
+| Registration + verify routes                    | `auth.controller.ts`          | 1, 2, 3, 4, 19          |
+| Login + session-read routes                     | `auth.controller.ts`          | 5, 8                    |
+| Passwordless OTP-login routes                   | `auth.controller.ts`          | 6, 7, 8, 14             |
+| Refresh + logout routes                         | `auth.controller.ts`          | 9, 10                   |
+| Password-reset routes                           | `auth.controller.ts`          | 11, 12                  |
+| Cascade + login + OTP + reset orchestration     | `auth.service.ts`             | 1–7, 11, 12, 14, 16, 20 |
+| SMS toll-fraud budget                           | `sms-budget/`                 | 14                      |
+| Rate limiter (per-user/IP/ASN)                  | `rate-limit/`                 | 13                      |
+| Timing equalization                             | `timing/`                     | 16                      |
+| Login captcha-after-N policy                    | `login-challenge/`            | 17                      |
+| Durable audit_ledger writer                     | `session/auth-audit.*`        | 9, 10, 12, 15, 18       |
+| `doctor_guest` mirror row                       | `user-mirror.service.ts`      | 3, 4, 19, 26            |
+| Reconciliation sweep                            | `reconcile.service.ts`        | 19                      |
+| Read-path mirror self-heal                      | `mirror-self-heal.service.ts` | 26                      |
+| IdP port + adapters                             | `idp/`                        | (design §2)             |
+| BFF session establish/refresh/logout/revoke-all | `session/`                    | 5, 8, 9, 10, 12         |
 
 ## BFF session model (`session/`, design §3, ADR-0001 §6)
 
@@ -73,7 +74,19 @@ keyed by the cookie's `sid`. No token is ever in a response body (EARS-8).
   subject the global `AuthzGuard` reads (the seam in `authz/authz.guard.ts`). It
   is a hook, not a Nest middleware, because Fastify middleware sees the _raw_
   request, invisible to the guard; the hook rejects a cookie whose re-derived
-  fingerprint diverges from the bound one.
+  fingerprint diverges from the bound one. Once the subject resolves, the hook
+  also runs the EARS-26 read-path mirror self-heal (below) before the handler.
+- **`MirrorSelfHealService`** (EARS-26, GH #709) — the third mirror-sync layer
+  (webhook primary, sweep backstop, this lazy): an authenticated subject whose
+  `users` mirror row is absent (webhook miss/lag inside a sweep interval, or a
+  row lost while IdP sessions stay alive) is re-materialized per-sub from
+  `IdpClient.getUser(sub)` with the same idempotent upsert + `doctor_guest`
+  re-grant the webhook/sweep use — so the orphaned-session state can never
+  bounce mirror-backed surfaces into the portal's silent `/login` → `/account`
+  carousel via the generic 401. Fail-soft: an unknown-at-IdP or identifier-less
+  sub heals nothing and the handler keeps its fail-closed 401; a heal fault
+  logs, never throws. Provided (with `UserMirrorService`) in `SessionModule` —
+  the auth hook is the earliest consumer in the request lifecycle. Design §4.
 
 ## The IdP boundary (design §2 — the hard rule)
 

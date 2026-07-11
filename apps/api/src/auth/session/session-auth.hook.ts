@@ -4,6 +4,7 @@ import {
   type OnApplicationBootstrap,
 } from "@nestjs/common";
 import { HttpAdapterHost } from "@nestjs/core";
+import { MirrorSelfHealService } from "../mirror-self-heal.service.js";
 import { SessionService } from "./session.service.js";
 import {
   computeFingerprint,
@@ -77,6 +78,7 @@ export class SessionAuthHook implements OnApplicationBootstrap {
   constructor(
     private readonly adapterHost: HttpAdapterHost,
     private readonly session: SessionService,
+    private readonly selfHeal: MirrorSelfHealService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -93,7 +95,16 @@ export class SessionAuthHook implements OnApplicationBootstrap {
 
     fastify.addHook("onRequest", async (req: HookRequest) => {
       const subject = await resolveSubject(this.session, req);
-      if (subject) req.user = subject;
+      if (subject) {
+        req.user = subject;
+        // EARS-26 (#709): an authenticated subject whose `users` mirror row is
+        // absent (webhook miss/lag, or a row lost while the IdP session stays
+        // alive) is lazily re-materialized BEFORE the handler runs, so a
+        // mirror-backed read serves instead of feeding the generic-401 →
+        // `/login` → `/account` carousel. Awaited: the heal must land before
+        // the handler resolves the sub. Never throws (fail-soft inside).
+        await this.selfHeal.ensureMirrored(subject.sub);
+      }
     });
   }
 }

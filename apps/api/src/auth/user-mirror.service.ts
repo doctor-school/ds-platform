@@ -62,6 +62,20 @@ export class UserMirrorService {
       .onConflictDoUpdate({ target: users.zitadelSub, set });
   }
 
+  /**
+   * EARS-26 (#709): does a mirror row exist for `zitadel_sub`? The read-path
+   * self-heal's presence probe — a single indexed lookup on the unique
+   * `zitadel_sub` key, run per authenticated request by the session auth hook.
+   */
+  async existsBySub(zitadelSub: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.zitadelSub, zitadelSub))
+      .limit(1);
+    return row !== undefined;
+  }
+
   async findByEmail(email: string): Promise<User | undefined> {
     const [row] = await this.db
       .select()

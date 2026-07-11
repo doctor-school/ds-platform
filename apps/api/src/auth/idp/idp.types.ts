@@ -222,6 +222,17 @@ export interface IdpClient {
   /** Enumerate users for the reconciliation sweep (EARS-19). */
   listUsers(): Promise<IdpUser[]>;
   /**
+   * EARS-26 (#709): fetch ONE user by its Zitadel `sub`, for the read-path
+   * mirror self-heal. Unlike {@link listUsers} (the sweep's full enumerator)
+   * this is a targeted per-sub read, invoked only in the rare orphaned-session
+   * state (a valid session whose mirror row is absent), so the heal never pulls
+   * the whole user directory per request. Resolves to `null` when the sub does
+   * not exist at the IdP or on any provider hiccup — the heal then no-ops and
+   * the request proceeds to today's fail-closed behavior; it never throws, so a
+   * flaky IdP cannot 500 an otherwise-valid authenticated read.
+   */
+  getUser(sub: string): Promise<IdpUser | null>;
+  /**
    * EARS-6: trigger a Zitadel `otp_email` **login** code for `identifier`.
    * Resolves identically whether or not the identifier exists — a code is sent
    * only if it does, but the result never reveals which (enumeration-safe,

@@ -436,6 +436,21 @@ export class FakeIdpClient implements IdpClient {
     );
   }
 
+  getUser(sub: string): Promise<IdpUser | null> {
+    // EARS-26 (#709): targeted per-sub read for the read-path mirror self-heal.
+    // Mirrors the real adapter's fail-soft contract: an unknown sub is `null`,
+    // never a throw.
+    const r = this.bySub.get(sub);
+    if (!r) return Promise.resolve(null);
+    return Promise.resolve({
+      sub: r.sub,
+      email: r.email,
+      phone: r.phone,
+      emailVerified: r.emailVerified,
+      phoneVerified: r.phoneVerified,
+    });
+  }
+
   /**
    * Seed a user directly, bypassing the registration cascade — models a Zitadel
    * user whose create webhook was never delivered, so the reconciliation sweep

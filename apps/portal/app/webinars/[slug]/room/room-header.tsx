@@ -55,7 +55,11 @@ export function RoomHeader({
 }) {
   return (
     <header className="flex flex-none items-center justify-between gap-3 border-b-2 border-border bg-header px-4 py-3 text-header-foreground layout:px-10">
-      <div className="flex min-w-0 items-center gap-4">
+      {/* Mobile gap = the canvas `headGap` 10px (desktop 24px group rhythm keeps
+          the shipped gap-4); `overflow-hidden` realizes the canvas `min-width:0`
+          intent — when the live pill outgrows a narrow viewport it clips at the
+          group boundary instead of painting under the right-group controls. */}
+      <div className="flex min-w-0 items-center gap-2.5 overflow-hidden layout:gap-4">
         {/* The canvas logo routes to the эфиры list — the wordmark is the brand
             home affordance, labelled for assistive tech (the visual is the copy).
             The interaction states (hover + focus ring) are owned by the DS `Link`
@@ -63,7 +67,7 @@ export function RoomHeader({
             override its brand-blue default (ADR-0013 §7 / no raw styled link). */}
         <DsLink
           asChild
-          className="text-lg font-extrabold tracking-tight text-header-foreground"
+          className="text-base font-extrabold tracking-tight text-header-foreground layout:text-lg"
         >
           <Link href="/webinars" aria-label={copy.brandHome}>
             Doctor.School
@@ -72,13 +76,20 @@ export function RoomHeader({
         {/* The reused live pill — «В эфире» plus the live «· N мин» duration counted
             from the real go-live instant (EARS-5/EARS-10). The suffix renders inside
             the pill so it inherits the badge's uppercase micro-type, matching the
-            canvas «В ЭФИРЕ · 24 МИН». A null `liveAt` renders «В эфире» alone. */}
+            canvas «В ЭФИРЕ · 24 МИН». A null `liveAt` renders «В эфире» alone.
+            The suffix is DESKTOP-ONLY (same collapse rule as the presence count):
+            with the #702 theme toggle in the right group, wordmark + full pill +
+            toggle + ✕ physically exceed a 390px viewport (the canvas mock's own
+            metrics only fit from ~430px), so the narrow render keeps the truthful
+            «В эфире» pill whole rather than clipping the minute tail mid-glyph. */}
         <Badge variant="live" className="whitespace-nowrap">
           {copy.liveBadge}
-          <LiveDuration liveAt={liveAt} />
+          <span className="hidden layout:inline">
+            <LiveDuration liveAt={liveAt} />
+          </span>
         </Badge>
       </div>
-      <div className="flex flex-none items-center gap-5">
+      <div className="flex flex-none items-center gap-2.5 layout:gap-5">
         {/* The live «N врачей в комнате» presence count (canvas line 21) — desktop
             only. A server-side aggregate refreshed by the heartbeat loop (EARS-5),
             never per-doctor PII. The canvas tints this a muted light-blue (#AED4FB);

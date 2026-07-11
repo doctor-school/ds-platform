@@ -59,11 +59,15 @@ const SLUG = process.env.E2E_ROOM_SLUG_LIVE ?? "seed-005-live";
 async function scan(page: Page, theme: (typeof THEMES)[number]) {
   await page.locator("main, body").first().waitFor({ state: "visible" });
   // Apply the theme under scan via the SAME mechanism the room-header toggle
-  // uses — the `.dark` class on `<html>` (006 EARS-12/13, the DS token scope).
+  // uses — the `.dark` class on `<html>` (006 EARS-12/13, the DS token scope) —
+  // then let colour TRANSITIONS settle: DS interactive primitives carry
+  // `transition-all`/`transition-colors`, and an immediate post-toggle analyze
+  // reads MID-TRANSITION computed colours (a phantom contrast failure).
   await page.evaluate(
     (dark) => document.documentElement.classList.toggle("dark", dark),
     theme === "dark",
   );
+  await page.waitForTimeout(400);
   const results = await new AxeBuilder({ page })
     .withTags(WCAG_TAGS)
     // The provider embed subtree is outside the EARS-9 frame boundary — see the

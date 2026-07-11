@@ -41,11 +41,15 @@ const SEED = {
 async function scan(page: Page, theme: (typeof THEMES)[number]) {
   await page.locator("main, body").first().waitFor({ state: "visible" });
   // Apply the theme under scan via the SAME mechanism the portal uses — the
-  // `.dark` class on `<html>` (006 EARS-12/13, the DS token scope).
+  // `.dark` class on `<html>` (006 EARS-12/13, the DS token scope) — then let
+  // colour TRANSITIONS settle: DS interactive primitives carry `transition-all`/
+  // `transition-colors`, and an immediate post-toggle analyze reads MID-TRANSITION
+  // computed colours (a phantom contrast failure that vanishes on re-run).
   await page.evaluate(
     (dark) => document.documentElement.classList.toggle("dark", dark),
     theme === "dark",
   );
+  await page.waitForTimeout(400);
   const results = await new AxeBuilder({ page })
     .withTags(WCAG_TAGS)
     // 004's dark poster header + footer band — see the scope note above.

@@ -78,6 +78,20 @@ async function seedStoredTheme(page: Page, theme: "light" | "dark") {
   );
 }
 
+/** The room-header theme switch (the DS `switch.tsx` `role="switch"` input). */
+function themeSwitch(page: Page) {
+  return page.getByRole("switch", { name: "Переключить тему" });
+}
+
+/**
+ * The user's CLICK surface: the DS switch keeps its real checkbox visually
+ * hidden (`sr-only`), so a pointer activation lands on the wrapping label/track
+ * — exactly what a doctor clicks. Keyboard (space) still targets the input.
+ */
+function themeSwitchClickTarget(page: Page) {
+  return themeSwitch(page).locator("xpath=ancestor::label[1]");
+}
+
 /** Log the doctor in through the real 003 flow (identifier + password). */
 async function login(page: Page): Promise<void> {
   await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
@@ -177,13 +191,13 @@ test.describe("006 EARS-12 room-header theme toggle — flips .dark live, persis
     });
     await page.waitForURL(new RegExp(`/webinars/${SLUG_LIVE}/room$`));
 
-    const toggle = page.getByRole("switch", { name: "Переключить тему" });
-    await expect(toggle).toBeVisible();
+    const toggle = themeSwitch(page);
+    await expect(themeSwitchClickTarget(page)).toBeVisible();
     await expect(toggle).not.toBeChecked();
     expect(await isDark(page)).toBe(false);
 
     // Flip to dark — the class lands LIVE (no reload) and the choice persists.
-    await toggle.click();
+    await themeSwitchClickTarget(page).click();
     await expect(toggle).toBeChecked();
     expect(await isDark(page)).toBe(true);
     expect(await storedTheme(page)).toBe("dark");
@@ -193,9 +207,7 @@ test.describe("006 EARS-12 room-header theme toggle — flips .dark live, persis
     await page.reload({ waitUntil: "domcontentloaded" });
     expect(await firstFrameDark(page)).toBe(true);
     expect(await isDark(page)).toBe(true);
-    await expect(
-      page.getByRole("switch", { name: "Переключить тему" }),
-    ).toBeChecked();
+    await expect(themeSwitch(page)).toBeChecked();
 
     // The choice rides across routes (portal-wide mechanism, room-only control).
     await page.goto(`${BASE}/webinars`, { waitUntil: "domcontentloaded" });
@@ -205,9 +217,9 @@ test.describe("006 EARS-12 room-header theme toggle — flips .dark live, persis
     await page.goto(`${BASE}/webinars/${SLUG_LIVE}/room`, {
       waitUntil: "domcontentloaded",
     });
-    const toggleAgain = page.getByRole("switch", { name: "Переключить тему" });
+    const toggleAgain = themeSwitch(page);
     await expect(toggleAgain).toBeChecked();
-    await toggleAgain.click();
+    await themeSwitchClickTarget(page).click();
     await expect(toggleAgain).not.toBeChecked();
     expect(await isDark(page)).toBe(false);
     expect(await storedTheme(page)).toBe("light");
@@ -229,9 +241,7 @@ test.describe("006 EARS-12 room-header theme toggle — flips .dark live, persis
     });
     await page.waitForURL(new RegExp(`/webinars/${SLUG_LIVE}/room$`));
     expect(await isDark(page)).toBe(false);
-    await expect(
-      page.getByRole("switch", { name: "Переключить тему" }),
-    ).not.toBeChecked();
+    await expect(themeSwitch(page)).not.toBeChecked();
     await context.close();
   });
 });

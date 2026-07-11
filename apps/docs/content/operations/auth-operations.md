@@ -134,9 +134,10 @@ never crashes the process.
 ### Manual trigger
 
 Ops can run a sweep on demand. It is a **standalone-Nest CLI script**, not an
-HTTP endpoint — v1 has no admin-auth surface (`platform_admin` MFA is still a §7
-seam), so an HTTP reconcile-trigger would open an under-authorized mirror-write
-surface mirroring the webhook. The script boots an HTTP-less Nest application
+HTTP endpoint — the wave-1 admin session rides the shared 003 session without
+mandatory `platform_admin` MFA (ADR-0004 staged model; hardening #718), so an
+HTTP reconcile-trigger would open an under-authorized mirror-write surface
+mirroring the webhook. The script boots an HTTP-less Nest application
 context, runs one `sweep()`, prints `{ "reconciled": N }`, and exits non-zero on
 failure:
 

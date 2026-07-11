@@ -4,7 +4,8 @@ import { ReconcileService } from "./reconcile.service.js";
 
 /**
  * #119: the ops manual-trigger. A standalone-Nest CLI (NOT an HTTP endpoint —
- * v1 has no admin-auth surface, so a reconcile-trigger endpoint would open an
+ * the wave-1 admin session has no mandatory platform_admin MFA (ADR-0004
+ * staged model; hardening #718), so a reconcile-trigger endpoint would open an
  * under-authorized mirror-write mirror of the webhook; the runbook references
  * the script). The unit proves the wiring: the trigger resolves the SAME
  * `ReconcileService.sweep()` the scheduler calls and surfaces its result. The

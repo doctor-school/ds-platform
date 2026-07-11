@@ -15,7 +15,8 @@ import { bootstrapAndSweep } from "../src/auth/reconcile-cli.js";
  *   pnpm --filter @ds/api reconcile:sweep
  *
  * Exits non-zero on failure so a cron / ops wrapper sees it. NOT an HTTP
- * endpoint: v1 has no admin-auth surface, so a reconcile-trigger route would
+ * endpoint: the wave-1 admin session has no mandatory platform_admin MFA
+ * (ADR-0004 staged model; hardening #718), so a reconcile-trigger route would
  * open an under-authorized mirror-write surface (see reconcile-cli.ts).
  */
 async function main(): Promise<void> {

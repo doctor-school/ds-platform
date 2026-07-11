@@ -115,8 +115,10 @@ export function RoomHeader({
             </span>
           </Link>
         </DsLink>
-        {/* 006 EARS-12 — the light/dark theme toggle (canvas line 25), the DS
-            `switch.tsx` primitive per design §7 (adopt-before-bespoke). Renders on
+        {/* 006 EARS-12 — the light/dark theme toggle: the canvas 44×44
+            icon-button (canvas line 25, ADR-0013 canvas-wins; owner Stage-B
+            decision 2026-07-12 — never the DS form switch), sitting in the
+            header's icon-button family beside the 44px mobile ✕. Renders on
             BOTH breakpoints like the canvas control; `order-first` re-seats it
             before the mobile ✕ (canvas mobile order: toggle → ✕) while desktop
             keeps it last in the group (canvas desktop order: exit → toggle). It

@@ -11,24 +11,12 @@ import {
 
 // 006 EARS-12 — the portal-wide theme mechanism (design §10): the theme is the
 // `.dark` class on `<html>`; resolution order is the `ds-theme` localStorage key
-// (explicit user choice, always wins) → the system `prefers-color-scheme`; the
-// inline FOUC-guard script applies the SAME resolution before first paint. These
-// unit tests pin the resolution SSOT and prove the inline script (a self-contained
-// string — it cannot import this module) stays behaviourally identical to
-// `resolveTheme` across every stored × system combination.
-
-/** Stub the system `prefers-color-scheme: dark` media query. */
-function stubSystemDark(dark: boolean) {
-  vi.stubGlobal(
-    "matchMedia",
-    vi.fn((query: string) => ({
-      matches: query.includes("prefers-color-scheme: dark") ? dark : false,
-      media: query,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })),
-  );
-}
+// (explicit user choice, always wins) → else DARK (the product default — the
+// system `prefers-color-scheme` is NEVER consulted); the inline FOUC-guard script
+// applies the SAME resolution before first paint. These unit tests pin the
+// resolution SSOT and prove the inline script (a self-contained string — it
+// cannot import this module) stays behaviourally identical to `resolveTheme`
+// across every stored value.
 
 /**
  * Stub an in-memory `localStorage`. jsdom 29's REAL Storage schedules an internal
@@ -58,8 +46,22 @@ function stubStorage(opts: { throwOnAccess?: boolean } = {}) {
   return fake;
 }
 
+/**
+ * Assert the module never consults the system scheme: any `matchMedia` call is a
+ * spec violation (design §10 — the system `prefers-color-scheme` is never
+ * consulted; owner Stage-B decision 2026-07-12).
+ */
+function stubForbiddenMatchMedia() {
+  const spy = vi.fn(() => {
+    throw new Error("matchMedia must never be consulted (EARS-12)");
+  });
+  vi.stubGlobal("matchMedia", spy);
+  return spy;
+}
+
 beforeEach(() => {
   stubStorage();
+  stubForbiddenMatchMedia();
   document.documentElement.classList.remove("dark");
 });
 
@@ -67,24 +69,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("006 EARS-12 theme resolution — stored explicit choice wins over the system scheme", () => {
+describe("006 EARS-12 theme resolution — stored explicit choice wins, else dark (system never consulted)", () => {
   it("EARS-12: the storage key is the spec-pinned `ds-theme`", () => {
     expect(THEME_STORAGE_KEY).toBe("ds-theme");
   });
 
-  it("EARS-12: with no stored choice the theme follows the system prefers-color-scheme", () => {
-    expect(resolveTheme(null, false)).toBe("light");
-    expect(resolveTheme(null, true)).toBe("dark");
+  it("EARS-12: with no stored choice the theme is DARK — the product default", () => {
+    expect(resolveTheme(null)).toBe("dark");
   });
 
-  it("EARS-12: a stored explicit choice wins over the system value", () => {
-    expect(resolveTheme("light", true)).toBe("light");
-    expect(resolveTheme("dark", false)).toBe("dark");
+  it("EARS-12: a stored explicit choice always wins", () => {
+    expect(resolveTheme("light")).toBe("light");
+    expect(resolveTheme("dark")).toBe("dark");
   });
 
-  it("EARS-12: a corrupt stored value is ignored — the system value applies", () => {
-    expect(resolveTheme("blue", true)).toBe("dark");
-    expect(resolveTheme("", false)).toBe("light");
+  it("EARS-12: a corrupt stored value is ignored — dark applies", () => {
+    expect(resolveTheme("blue")).toBe("dark");
+    expect(resolveTheme("")).toBe("dark");
   });
 
   it("EARS-12: readStoredTheme returns only the two legal values, else null", () => {
@@ -105,7 +106,6 @@ describe("006 EARS-12 theme resolution — stored explicit choice wins over the 
   });
 
   it("EARS-12: persistTheme writes the explicit choice to localStorage AND applies it", () => {
-    stubSystemDark(false);
     persistTheme("dark");
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
@@ -118,61 +118,48 @@ describe("006 EARS-12 theme resolution — stored explicit choice wins over the 
 describe("006 EARS-12 FOUC-guard inline script — same resolution as resolveTheme, no flash inputs missed", () => {
   /** Execute the inline script exactly as the browser parser would. */
   function runInitScript() {
-     
     new Function(THEME_INIT_SCRIPT)();
   }
 
-  it("EARS-12.1: with no stored choice it applies the system scheme (both directions)", () => {
-    stubSystemDark(true);
+  it("EARS-12.1: with no stored choice it applies DARK — never reading the system scheme", () => {
     runInitScript();
     expect(document.documentElement.classList.contains("dark")).toBe(true);
-
-    document.documentElement.classList.remove("dark");
-    stubSystemDark(false);
-    runInitScript();
-    expect(document.documentElement.classList.contains("dark")).toBe(false);
   });
 
-  it("EARS-12.2: a stored explicit choice wins over the system scheme (both directions)", () => {
-    stubSystemDark(false);
-    localStorage.setItem(THEME_STORAGE_KEY, "dark");
-    runInitScript();
-    expect(document.documentElement.classList.contains("dark")).toBe(true);
-
-    stubSystemDark(true);
+  it("EARS-12.2: a stored explicit choice wins (both directions)", () => {
     localStorage.setItem(THEME_STORAGE_KEY, "light");
     runInitScript();
     expect(document.documentElement.classList.contains("dark")).toBe(false);
+
+    localStorage.setItem(THEME_STORAGE_KEY, "dark");
+    runInitScript();
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
   });
 
   it("EARS-12.3: it also REMOVES a stale `.dark` (bfcache/restored DOM) when light resolves", () => {
-    stubSystemDark(false);
+    localStorage.setItem(THEME_STORAGE_KEY, "light");
     document.documentElement.classList.add("dark");
     runInitScript();
     expect(document.documentElement.classList.contains("dark")).toBe(false);
   });
 
-  it("EARS-12.4: it never throws when storage is unavailable — falls back to the system scheme", () => {
+  it("EARS-12.4: it never throws when storage is unavailable — falls back to dark", () => {
     stubStorage({ throwOnAccess: true });
-    stubSystemDark(true);
     expect(runInitScript).not.toThrow();
     expect(document.documentElement.classList.contains("dark")).toBe(true);
   });
 
-  it("EARS-12.5: the script matches resolveTheme across every stored × system combination", () => {
+  it("EARS-12.5: the script matches resolveTheme across every stored value", () => {
     for (const stored of [null, "light", "dark", "junk"] as const) {
-      for (const systemDark of [false, true]) {
-        localStorage.clear();
-        if (stored !== null) localStorage.setItem(THEME_STORAGE_KEY, stored);
-        stubSystemDark(systemDark);
-        document.documentElement.classList.remove("dark");
-        runInitScript();
-        const expected = resolveTheme(stored, systemDark) === "dark";
-        expect(
-          document.documentElement.classList.contains("dark"),
-          `stored=${String(stored)} systemDark=${String(systemDark)}`,
-        ).toBe(expected);
-      }
+      localStorage.clear();
+      if (stored !== null) localStorage.setItem(THEME_STORAGE_KEY, stored);
+      document.documentElement.classList.remove("dark");
+      runInitScript();
+      const expected = resolveTheme(stored) === "dark";
+      expect(
+        document.documentElement.classList.contains("dark"),
+        `stored=${String(stored)}`,
+      ).toBe(expected);
     }
   });
 });

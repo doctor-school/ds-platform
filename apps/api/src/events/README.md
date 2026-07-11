@@ -127,6 +127,20 @@ new key. An edit to an **`archived`** event is refused with a **409**
 (`EventNotEditableError`, `EVENT_EDITABLE_STATES` being the pre-archive
 complement of the single terminal state); an unknown id is a **404**; a malformed
 field is a **400**, and on any refusal the aggregate is untouched.
+
+**GC-on-supersede (#627).** Once the reference swap is durably committed, the
+superseded object key is **deleted from object storage** (`ObjectStorage.delete`)
+so the bucket's steady state stays exactly the referenced set — a bucket
+age-based lifecycle rule was rejected because it cannot distinguish referenced
+from unreferenced keys (an event's current PDF may be arbitrarily old; a blanket
+rule would delete live objects), while delete-on-supersede is bounded and needs
+no periodic machinery. The delete fires **only after** the commit (a crash
+between delete and commit must never lose a still-referenced object) and is
+**best-effort by documented policy**: a storage failure is warn-logged with the
+orphan key (`superseded program-PDF delete failed …`) and the edit still
+succeeds — a rare orphan from a failed delete is acceptable; the upload is never
+failed over GC. Full rationale: 007 design §3.
+
 `platform_admin`-only (EARS-8); like create it is an authoring write, not a
 lifecycle transition, so it owes **no** `audit_ledger` row (that obligation
 attaches to EARS-4/5/6). The admin edit **form** (stock Refine, incl. the PDF
@@ -196,7 +210,9 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
   rows), `update()` (007 EARS-2: the pre-archive field edit — refuses an
   `archived` event with `EventNotEditableError`, folds a МСК re-entry into one
   instant, replaces the ordered speaker list when present, and supersedes the
-  program-PDF reference when a replacement rides the request, leaving the
+  program-PDF reference when a replacement rides the request — then, after the
+  swap commits, best-effort-deletes the superseded object from storage
+  (GC-on-supersede, #627) — leaving the
   lifecycle `state` untouched), `list()` (`EventAdminList`), `detail()`
   (`EventAdminDetail`),
   `transition()` (007 EARS-7: the closed-set guard — validates `current → to` via

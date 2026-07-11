@@ -1,4 +1,5 @@
 import {
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -82,5 +83,13 @@ export class S3ObjectStorage implements ObjectStorage {
     } catch {
       return null;
     }
+  }
+
+  async delete(key: string): Promise<void> {
+    // S3 DeleteObject is idempotent (deleting an absent key succeeds); a real
+    // storage failure rejects and the caller applies its best-effort policy.
+    await this.client.send(
+      new DeleteObjectCommand({ Bucket: this.config.bucket, Key: key }),
+    );
   }
 }

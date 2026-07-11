@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { Event, NewEvent } from "@ds/db";
 import {
   canTransition,
@@ -179,6 +179,8 @@ function safeName(filename: string): string {
  */
 @Injectable()
 export class EventsService {
+  private readonly logger = new Logger(EventsService.name);
+
   constructor(
     @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
     private readonly repo: EventsRepository,
@@ -225,9 +227,9 @@ export class EventsService {
    * Upload a program PDF to object storage under a fresh, event-scoped key and
    * return the stored reference. A **new** key per upload (title slug + a
    * monotonic timestamp) means a replacement (EARS-2) never overwrites the
-   * superseded object in place — the aggregate simply points at the new key, so
-   * the 004 page serves the current file while the prior bytes stay addressable
-   * for audit but are no longer served.
+   * superseded object in place — the aggregate points at the new key only once
+   * the swap commits, so a crash mid-replace can never corrupt the served file;
+   * the superseded object is then GC'd post-commit ({@link update}, #627).
    */
   private async storeProgramPdf(
     slug: string,
@@ -256,6 +258,13 @@ export class EventsService {
    * clears it); a present `speakers` list replaces the stored ordered list
    * wholesale. The МСК re-entry is re-folded into one canonical instant, the
    * single SSOT conversion ({@link mskLocalToInstant}).
+   *
+   * **GC-on-supersede (#627).** Once the reference swap is durably committed,
+   * the superseded object key is deleted from object storage — never before the
+   * commit (a crash between delete and commit must not lose a still-referenced
+   * object). The delete is **best-effort**: a storage failure is warn-logged
+   * with the orphan key and the edit still succeeds (a rare orphan from a
+   * failed delete is acceptable by documented policy — design §3).
    *
    * @returns the updated `EventAdminDetail`, or `null` when the id does not exist.
    */
@@ -306,7 +315,31 @@ export class EventsService {
 
     const updated = await this.repo.updateEvent(id, patch, speakers);
     // The row existed a moment ago; a concurrent delete is the only null path.
-    return updated ? this.toDetail(updated) : null;
+    if (!updated) return null;
+
+    // GC-on-supersede (#627): the swap is durably committed above, so the
+    // superseded object is now unreferenced — delete it so the bucket's steady
+    // state stays exactly the referenced set. Best-effort: a failed delete
+    // leaves a warn-logged orphan, never a failed edit.
+    const superseded = current.event.programPdfRef;
+    if (
+      pdf &&
+      superseded &&
+      patch.programPdfRef !== undefined &&
+      superseded !== patch.programPdfRef
+    ) {
+      try {
+        await this.storage.delete(superseded);
+      } catch (err) {
+        this.logger.warn(
+          `superseded program-PDF delete failed — orphan object left in storage: key=${superseded} eventId=${id} error=${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
+
+    return this.toDetail(updated);
   }
 
   /** `EventAdminList` — all events regardless of state (`platform_admin`-only). */

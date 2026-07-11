@@ -318,6 +318,50 @@ describe.skipIf(
     expect(page.programPdfUrl).not.toBe(storage.urlFor(oldRef));
   });
 
+  it("EARS-2: a successful supersede garbage-collects the superseded object — the old key no longer exists in storage while the new file is served (#627)", async () => {
+    const cookie = await session(uniqueEmail("admin"), "platform_admin");
+    const created = await createEvent(cookie);
+    const id = created.id as string;
+    const slug = created.slug as string;
+    const oldRef = created.programPdfRef as string;
+    expect(await storage.exists(oldRef)).toBe(true);
+    await transition(cookie, id, "published");
+
+    const replace = multipartBody(
+      { payload: JSON.stringify({}) },
+      {
+        field: "programPdf",
+        filename: "program-v2.pdf",
+        contentType: "application/pdf",
+        body: pdfV2,
+      },
+    );
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/v1/admin/events/${id}`,
+      headers: admHeaders(cookie, replace.contentType),
+      payload: replace.body,
+    });
+    expect(res.statusCode).toBe(200);
+    const newRef = (res.json() as Record<string, unknown>)
+      .programPdfRef as string;
+
+    // GC-on-supersede (#627): the superseded object is deleted from the real
+    // bucket once the reference swap commits — orphans do not accumulate.
+    expect(await storage.exists(oldRef)).toBe(false);
+    expect(await storage.getBytes(oldRef)).toBeNull();
+    // The current object is intact and is what the 004 page serves.
+    expect(await storage.getBytes(newRef)).toEqual(pdfV2);
+    const pub = await app.inject({
+      method: "GET",
+      url: `/v1/public/events/${slug}`,
+    });
+    expect(pub.statusCode).toBe(200);
+    expect((pub.json() as Record<string, unknown>).programPdfUrl).toBe(
+      storage.urlFor(newRef),
+    );
+  });
+
   it("EARS-2: an edit to an archived event is refused (409) — editing is a pre-archive action", async () => {
     const cookie = await session(uniqueEmail("admin"), "platform_admin");
     const created = await createEvent(cookie);

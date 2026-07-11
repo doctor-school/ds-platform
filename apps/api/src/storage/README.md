@@ -29,7 +29,9 @@ a bare unit run (mirrors the IdP fake).
 - **`OBJECT_STORAGE`** (`storage.types.ts`) — DI token for the `ObjectStorage`
   port.
 - **`ObjectStorage`** (`storage.types.ts`) — the port: `put()`, `urlFor()`,
-  `exists()`, `getBytes()`.
+  `exists()`, `getBytes()`, `delete()` (GC of a superseded program PDF, #627 —
+  the caller owns the best-effort policy; deleting an absent key is not an
+  error).
 - **`S3ObjectStorage`** (`storage.s3.ts`) — the AWS-SDK v3 adapter; path-style
   URL composition for MinIO (config-driven).
 - **`FakeObjectStorage`** (`storage.fake.ts`) — in-memory implementation for the

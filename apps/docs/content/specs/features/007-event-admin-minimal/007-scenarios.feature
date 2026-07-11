@@ -67,7 +67,16 @@ Feature: Minimal event admin — one operator creates, publishes, streams, runs,
     Then the stored program PDF reference is updated
     And the public event page (feature 004) serves the current file
     And the superseded file is no longer served
+    And the superseded object is deleted from object storage once the swap commits
     And the operator did not have to unpublish to make the change
+
+  @EARS-2 @unwanted
+  Scenario: A failed superseded-object delete never fails the edit (best-effort GC)
+    Given a published event with a program PDF
+    And object storage refuses the delete of the superseded object
+    When the operator uploads a replacement program PDF
+    Then the edit succeeds and the public event page serves the current file
+    And the orphaned object key is warn-logged for the operator
 
   # --- Stream configuration (US-3) ---
 

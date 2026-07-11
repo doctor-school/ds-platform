@@ -27,6 +27,12 @@ export interface ObjectStorage {
   exists(key: string): Promise<boolean>;
   /** Fetch the stored bytes (or null when absent). */
   getBytes(key: string): Promise<Buffer | null>;
+  /**
+   * Delete a stored object (GC of a superseded program PDF, #627). Rejects on
+   * a storage failure — the caller owns the best-effort policy (log the orphan,
+   * never fail the supersede); deleting an absent key is not an error.
+   */
+  delete(key: string): Promise<void>;
 }
 
 /** Nest DI token for the {@link ObjectStorage} port. */

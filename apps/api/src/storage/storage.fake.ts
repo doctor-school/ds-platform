@@ -30,4 +30,9 @@ export class FakeObjectStorage implements ObjectStorage {
   getBytes(key: string): Promise<Buffer | null> {
     return Promise.resolve(this.objects.get(key) ?? null);
   }
+
+  delete(key: string): Promise<void> {
+    this.objects.delete(key);
+    return Promise.resolve();
+  }
 }

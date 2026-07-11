@@ -2,26 +2,27 @@ import Link from "next/link";
 import { Badge } from "@ds/design-system/badge";
 import { Link as DsLink } from "@ds/design-system/link";
 import { LiveDuration, PresenceCount } from "./room-presence";
+import { ThemeToggle } from "./theme-toggle";
 
 /**
- * 006 EARS-2 / EARS-5 / EARS-11 — the room's top app-header bar, rendered atop the
- * gated room composition to the vendored `webinar-room.dc.html` header geometry
- * (lines 14-30, ADR-0013 canvas-wins). A full-width `header`-token blue brand bar
- * with a 2px bottom border: LEFT a "Doctor.School" wordmark linking to the эфиры
- * list (the canvas logo → `/webinars`) plus the reused DS {@link Badge} `live` pill
- * — «В эфире» with the live «· N мин» duration suffix ({@link LiveDuration}); RIGHT
- * (desktop) the «N врачей в комнате» live presence count ({@link PresenceCount})
- * beside a single truthful exit link back to the 004 event page (mobile collapses
- * the count away and shows a compact ✕ glyph).
+ * 006 EARS-2 / EARS-5 / EARS-11 / EARS-12 — the room's top app-header bar,
+ * rendered atop the gated room composition to the vendored `webinar-room.dc.html`
+ * header geometry (lines 14-30, ADR-0013 canvas-wins). A full-width `header`-token
+ * blue brand bar with a 2px bottom border: LEFT a "Doctor.School" wordmark linking
+ * to the эфиры list (the canvas logo → `/webinars`) plus the reused DS
+ * {@link Badge} `live` pill — «В эфире» with the live «· N мин» duration suffix
+ * ({@link LiveDuration}); RIGHT (desktop) the «N врачей в комнате» live presence
+ * count ({@link PresenceCount}) beside a single truthful exit link back to the 004
+ * event page (mobile collapses the count away and shows a compact ✕ glyph), plus
+ * the light/dark **theme toggle** ({@link ThemeToggle}, both breakpoints — the
+ * portal's ONLY visible theme control until #510; the portal-wide mechanism it
+ * drives lives in `lib/theme.ts` + the root layout's FOUC guard).
  *
  * #690 realized the two data-backed canvas header elements #584 deferred: the live
  * presence count (a server-side aggregate over the append-only beats, EARS-5) and
- * the live-duration suffix (from the actual go-live instant `liveAt`, EARS-10). Two
- * canvas header elements remain deferred, each needing infra this surface does not
- * own — omissions, never dead affordances:
- *   • the **theme toggle** — re-deferred to **#702** (portal-wide theming: a FOUC
- *     guard + persistence provider, its own slice; a room-local non-persisted
- *     toggle would be a half-feature). Dark theme rides that Issue.
+ * the live-duration suffix (from the actual go-live instant `liveAt`, EARS-10).
+ * One canvas header element remains deferred, needing infra this surface does not
+ * own — an omission, never a dead affordance:
  *   • the **doctor avatar** (initials) — re-deferred: 003 self-service registration
  *     collects NO name (the Zitadel profile is a placeholder never surfaced, and
  *     the `users` mirror has no name column), so there is no real display name to
@@ -38,6 +39,8 @@ export interface RoomHeaderCopy {
   brandHome: string;
   liveBadge: string;
   exit: string;
+  /** The theme toggle's accessible name («Переключить тему», EARS-12). */
+  themeToggle: string;
 }
 
 export function RoomHeader({
@@ -101,6 +104,17 @@ export function RoomHeader({
             </span>
           </Link>
         </DsLink>
+        {/* 006 EARS-12 — the light/dark theme toggle (canvas line 25), the DS
+            `switch.tsx` primitive per design §7 (adopt-before-bespoke). Renders on
+            BOTH breakpoints like the canvas control; `order-first` re-seats it
+            before the mobile ✕ (canvas mobile order: toggle → ✕) while desktop
+            keeps it last in the group (canvas desktop order: exit → toggle). It
+            flips `.dark` on <html> and persists the explicit `ds-theme` choice —
+            the portal's only visible theme control until #510. */}
+        <ThemeToggle
+          label={copy.themeToggle}
+          className="order-first layout:order-none"
+        />
       </div>
     </header>
   );

@@ -30,24 +30,26 @@ import {
  * `test.skip`s unless the live stand env is present, so a stray CI invocation is
  * inert.
  *
- * LIGHT-ONLY (mirrors the 007 admin a11y precedent, #595): the wave-1 portal wires
- * NO theme toggle — `<html>` never gets `.dark`, so light is the ONLY theme a user
- * can reach on these surfaces, and the only reachable state to scan here. The DS
- * dark-theme tokens are already covered (both themes) by the CI `playwright-axe`
- * BLOCK gate via the showcase. A portal dark theme is a later affordance (add the
- * toggle → re-enable `"dark"` here). The full canvas-fidelity eyes-on verification
+ * BOTH THEMES (006 EARS-13, #702): the portal now ships a runtime theme — the
+ * room-header toggle flips `.dark` on `<html>` portal-wide and the choice
+ * persists, so BOTH themes are user-reachable on every portal surface and both
+ * are scanned (`THEMES` drives the matrix; the scan applies the theme through the
+ * same class mechanism the toggle uses). A dark render must introduce no new axe
+ * violations relative to light. The full canvas-fidelity eyes-on verification
  * (both breakpoints × both themes) is a separate verification brief.
  */
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
-const THEMES = ["light"] as const;
+const THEMES = ["light", "dark"] as const;
 const SEED = process.env.E2E_WEBINAR_SLUG ?? "seed-005-upcoming";
 
 async function scan(page: Page, theme: (typeof THEMES)[number]) {
   await page.locator("main, body").first().waitFor({ state: "visible" });
-  // Light is the only reachable portal theme (see LIGHT-ONLY above) — ensure no
-  // stray `.dark` is present before scanning.
-  void theme;
-  await page.evaluate(() => document.documentElement.classList.remove("dark"));
+  // Apply the theme under scan via the SAME mechanism the portal uses — the
+  // `.dark` class on `<html>` (006 EARS-12/13, the DS token scope).
+  await page.evaluate(
+    (dark) => document.documentElement.classList.toggle("dark", dark),
+    theme === "dark",
+  );
   const results = await new AxeBuilder({ page })
     .withTags(WCAG_TAGS)
     // 004's dark poster header + footer band — see the scope note above.
@@ -67,7 +69,7 @@ test.describe.configure({ mode: "serial" });
 test.describe("005 EARS-13 axe-core a11y scan of the portal webinar surfaces", () => {
   test.skip(!LIVE_STAND, "dev-stand env absent (E2E_PORTAL_URL / IDP_ISSUER / MAILPIT_URL) — manual gate");
 
-  test("the guest published event page passes WCAG 2 A/AA (light)", async ({
+  test("the guest published event page passes WCAG 2 A/AA (both themes)", async ({
     page,
     context,
   }) => {
@@ -76,7 +78,7 @@ test.describe("005 EARS-13 axe-core a11y scan of the portal webinar surfaces", (
     for (const theme of THEMES) await scan(page, theme);
   });
 
-  test("the registered event page + «мои события» pass WCAG 2 A/AA (light)", async ({
+  test("the registered event page + «мои события» pass WCAG 2 A/AA (both themes)", async ({
     page,
   }) => {
     // Provision a doctor and register them for the seeded event by riding the

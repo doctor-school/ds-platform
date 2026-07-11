@@ -1,6 +1,6 @@
 ---
 title: "006 — Webinar room: embed player, live chat, heartbeat presence (Design)"
-description: "Design: the room vertical — a registration-and-live-gated RoomConfig read (provider enum rutube|youtube, embed ref, Centrifugo chat token, heartbeat interval N), the PostChatMessage command publishing to a Centrifugo room channel, the RecordPresenceHeartbeat command appending to a durable append-only Postgres presence table, the concurrent-tab-coalesced per-doctor presence-minute derivation parameterized over N, the three denied-access branches (auth 003 / register 005 / not-live 004), room-close stopping capture, and the seams to 003 (auth), 004 (event page/join), 005 (roster admission basis), 007 (director open/close + stream config). Built to the webinar-room.dc.html canvas from @ds/design-system tokens."
+description: "Design: the room vertical — a registration-and-live-gated RoomConfig read (provider enum rutube|youtube, embed ref, Centrifugo chat token, heartbeat interval N), the PostChatMessage command publishing to a Centrifugo room channel, the RecordPresenceHeartbeat command appending to a durable append-only Postgres presence table, the concurrent-tab-coalesced per-doctor presence-minute derivation parameterized over N, the three denied-access branches (auth 003 / register 005 / not-live 004), room-close stopping capture, and the seams to 003 (auth), 004 (event page/join), 005 (roster admission basis), 007 (director open/close + stream config). The room header carries the portal's first light/dark theme toggle (portal-wide .dark mechanism, FOUC-guarded, localStorage-persisted) and an initials avatar from a just-in-time collected display name (users-mirror column, self-only exposure). Built to the webinar-room.dc.html canvas from @ds/design-system tokens."
 slug: 006-webinar-room
 status: In dev
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
@@ -191,6 +191,7 @@ Built from `@ds/design-system` tokens to the vendored `webinar-room.dc.html` (AD
 - **The «Задать вопрос» / «Вопросы» affordances are not built** in wave 1 (question-to-lecturer is wave 2) — the desktop aside is a single chat pane, and the mobile tab strip omits Вопросы. This is the exact analogue of 005 shipping only the `my-events` Предстоящие tab.
 - **"Stream unavailable" state** (EARS-2): when the provider is unknown/absent, the player frame renders a truthful unavailable state (no guessed embed), keeping the room chrome.
 - **Visibility-gated heartbeat** (EARS-4): no visible affordance — the heartbeat loop runs from the room mount on the `RoomConfig.heartbeatIntervalSeconds` cadence **while the room tab is the visible, active tab** (Page Visibility API — `document.hidden`), with **no** doctor-facing "prove you're here" control; when the tab is backgrounded the loop pauses (its minutes do not count toward the sponsor report) and re-focusing the tab resumes it.
+- **Room header (canvas):** alongside the room chrome the header carries two doctor-facing controls from the canvas — the light/dark **theme toggle** (the portal's only visible theme control until #510; mechanism in §10) and the **initials avatar** derived from the doctor's real display name (JIT-collected; §11). Both are DS primitives already shipped (`switch.tsx` / `avatar.tsx` in `@ds/design-system`) — no net-new bespoke unit.
 
 ### 8.2 Time, copy & i18n
 
@@ -212,8 +213,59 @@ Each seam is a **tracked** dependency, not a silent stub (AGENTS.md §6 F-22; wi
 
 006 is completable end-to-end **as its own vertical** on seeds + real 003/004/005: a registered doctor opens a seeded live event's room → the player renders from the seeded provider enum → chat posts fan out over Centrifugo → the heartbeat loop appends beats → per-doctor minutes derive (tab-coalesced, over N) → the room closes and capture stops. That is the F-22 "vertical slice is completable" bar for 006; the 007 open/close, the wave-2 report, and auto-NMO are the boundaries of _other_ slices, not unfinished parts of this one.
 
-## 10. Test strategy
+## 10. Theme — portal-wide mechanism, room-header control (EARS-12, EARS-13)
+
+The portal gains its first **runtime theme mechanism**; the `@ds/design-system` dark tokens have been shipping unused (`packages/design-system/tokens/semantic.dark.json` + `.dark`-scoped CSS in `packages/design-system/src/styles/tokens.css`) — 006 wires the class application they wait on.
+
+- **Application.** The theme is the `.dark` class on `<html>` (`document.documentElement`), matching the `.dark` scope the DS token CSS already targets. Light = class absent, dark = class present.
+- **Resolution order.** `localStorage` key **`ds-theme`** (`"light" | "dark"`; key absent = no explicit choice) → system `prefers-color-scheme`. A stored explicit choice always wins; with no stored choice the portal follows the system value live (a media-query change re-resolves).
+- **FOUC guard.** An inline `<script>` in the portal root layout `<head>` (`apps/portal/app/layout.tsx`), executed synchronously **before first paint and hydration**, reads `localStorage` + the media query and sets the class — the page never flashes the wrong theme on load or reload.
+- **The control.** The room-header toggle (DS `switch.tsx`-based, per the canvas) flips the class and writes `ds-theme`. It is the **only** visible theme control in the portal; rolling the control out across portal chrome is the tracked **#510** unified-portal-chrome deferral (owner decision 2026-07-11) — the mechanism itself (class, guard, storage) is portal-wide from day one, so #510 adds placement, not plumbing.
+- **A11y gate.** The portal axe e2e (`apps/portal/e2e/a11y/a11y-axe.e2e.spec.ts`) extends its `THEMES` matrix to `["light", "dark"]` — dark must introduce no new violations (EARS-13).
+- **No backend footprint.** No endpoint, no column, no event — client-only (`<html>` class + `localStorage`).
+
+## 11. Display name & avatar — JIT collection, self-only exposure (EARS-14…16)
+
+No display name exists server-side today: `users` has no name column, registration collects email+password only, and the Zitadel profile is an explicit never-read placeholder — that stays true. 006 adds the SSOT column and the one-time room-entry collection.
+
+```mermaid
+erDiagram
+    users {
+      uuid id
+      text display_name "nullable; set once via the JIT room-entry prompt (US-7)"
+    }
+```
+
+```mermaid
+sequenceDiagram
+  participant B as Browser (gated doctor)
+  participant API as apps/api
+  B->>API: GET /v1/events/:slug/room (admission gate, §2)
+  API-->>B: 200 RoomConfig
+  B->>API: read own profile → displayName?
+  alt displayName unset (first room entry)
+    B->>B: one-time «Имя и фамилия» prompt (before the room renders)
+    B->>API: PUT /v1/me/display-name { displayName }
+    alt empty / whitespace-only
+      API-->>B: 400 → truthful rendered error, room not rendered yet
+    else valid
+      API-->>B: 200 → users.display_name written
+      B->>B: room renders, header avatar = initials of the real name
+    end
+  else displayName set
+    B->>B: room renders immediately — the prompt never reappears
+  end
+```
+
+- **Endpoint.** `PUT /v1/me/display-name` → `SetDisplayName`. Classified `access: authenticated`, `required_roles: doctor_guest`, `auth_check: fast-path` (self-scoped — no room policy gate) in the endpoint-authz matrix. Zod schema in `packages/schemas/`: trimmed, non-empty after trim (whitespace-only rejected), bounded length. The caller's own profile read returns `displayName` (nullable) — never another user's.
+- **Ordering.** The JIT prompt is a **portal pre-render step after admission** (§2's server gate is unchanged — `authenticated ∧ registered ∧ live`); the name is not a fourth admission condition. The prompt fires only when the gated doctor's own `displayName` is unset, exactly once per user lifetime.
+- **Avatar initials.** Derived client-side from the saved name: the first letters of the first and last words, uppercased (a single-word name yields one initial), rendered in the DS `avatar.tsx` primitive. **Forbidden fallbacks:** initials from the email, the never-read Zitadel placeholder, or any stand-in — with no saved name, no fabricated avatar renders (EARS-15).
+- **PII stance.** `users.display_name` is served only to its owner's session (EARS-16). It never enters chat payloads — chat identity stays the SHA-256-derived non-PII author tag — never appears on a public surface, and the Zitadel profile placeholder stays never-read. Registration is untouched (owner decision 2026-07-11 — zero added funnel friction on live prod).
+- **Migration.** One nullable column on the `users` mirror (Drizzle; snapshot-first per dev-stand rules). No backfill — every existing user simply hits the JIT prompt on their first room entry.
+
+## 12. Test strategy
 
 - **API gate + write/read side (Vitest e2e + unit, `apps/api`):** the three-condition gate (EARS-1, EARS-8), the provider-enum-not-URL-sniff read (EARS-2), the chat publish gate (EARS-3), the heartbeat append + append-only shape (EARS-4), the presence-minute derivation parameterized over N + concurrent-tab coalescing (EARS-5), room-close refusal (EARS-7), and the embed-boundary contract (EARS-9) — against dev-stand Postgres + Zitadel + Centrifugo, `skipIf(!DATABASE_URL || !IDP_ISSUER || !CENTRIFUGO_URL)`.
 - **Portal browser E2E (Playwright, `apps/portal`):** the required user-journey deliverable (requirements Verification, `all` row) — a registered doctor enters a live room → the player renders from the provider enum → a message posts and fans out to a second doctor **without reload** (real Centrifugo) → the heartbeat network call fires on the N-second cadence with no doctor action → the three access branches (guest → 003, unregistered → 005, not-live → 004) → room close stops capture. Owned + tracked by the 006 portal-integration + E2E child Issue (`open-ears-issues` step 3a), never a bare footnote.
 - **Fidelity (EARS-11):** eyes-on full-page screenshots, both breakpoints × both themes, verified element-by-element against the vendored `webinar-room.dc.html` (desktop `1fr 400px` player + chat aside; mobile full-bleed player + Чат / О эфире tabs) before Stage-B (AGENTS.md §6 canvas-derived-UI rule); token-lint green (no arbitrary Tailwind).
+- **Theme + display name (EARS-12…16):** Playwright drives the header toggle (`.dark` class flip, `localStorage` persistence across reload, system-default via emulated `prefers-color-scheme`, stored-override precedence, resolved-theme first paint) and the both-theme axe sweep (`THEMES = ["light", "dark"]`); Vitest e2e covers `SetDisplayName` (reject empty/whitespace-only + unauthenticated, accept trimmed real name, self-only authz, no display name in chat payloads); the browser run drives the JIT prompt (appears once before the first room render, reject + accept with rendered error language, never re-prompts) and the avatar initials (two-word + single-word names; no fabricated avatar when unset).

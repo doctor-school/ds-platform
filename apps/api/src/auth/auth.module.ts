@@ -8,7 +8,6 @@ import { MailerModule } from "../mailer/mailer.module.js";
 import { SessionModule } from "./session/session.module.js";
 import { AuthController } from "./auth.controller.js";
 import { AuthService } from "./auth.service.js";
-import { UserMirrorService } from "./user-mirror.service.js";
 import { ReconcileService } from "./reconcile.service.js";
 import { ReconcileScheduler } from "./reconcile.scheduler.js";
 import {
@@ -43,7 +42,9 @@ import {
   controllers: [AuthController],
   providers: [
     AuthService,
-    UserMirrorService,
+    // UserMirrorService moved to SessionModule (EARS-26, #709): the session
+    // auth hook is now its earliest consumer (read-path self-heal), and this
+    // module resolves the exported single instance via its SessionModule import.
     ReconcileService,
     ReconcileScheduler,
     { provide: APP_PIPE, useClass: ZodValidationPipe },

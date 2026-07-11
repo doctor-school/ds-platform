@@ -1217,4 +1217,42 @@ export class ZitadelIdpClient implements IdpClient {
       phoneVerified: u.human?.phone?.isVerified ?? false,
     }));
   }
+
+  async getUser(sub: string): Promise<IdpUser | null> {
+    // EARS-26 (#709): targeted per-sub read for the read-path mirror self-heal.
+    // Same User v2 search surface `listUsers` parses, narrowed to one sub via
+    // `inUserIdsQuery` so the heal never enumerates the directory. Fails soft —
+    // any non-2xx, network fault, or empty result resolves `null` (the heal
+    // no-ops; a flaky IdP must not 500 a valid authenticated read).
+    try {
+      const res = await this.fetchImpl(this.url("/v2/users"), {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({
+          queries: [{ inUserIdsQuery: { userIds: [sub] } }],
+        }),
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as {
+        result?: Array<{
+          userId?: string;
+          human?: {
+            email?: { email?: string; isVerified?: boolean };
+            phone?: { phone?: string; isVerified?: boolean };
+          };
+        }>;
+      };
+      const hit = data.result?.[0];
+      if (!hit?.userId) return null;
+      return {
+        sub: hit.userId,
+        email: hit.human?.email?.email,
+        phone: hit.human?.phone?.phone,
+        emailVerified: hit.human?.email?.isVerified ?? false,
+        phoneVerified: hit.human?.phone?.isVerified ?? false,
+      };
+    } catch {
+      return null;
+    }
+  }
 }

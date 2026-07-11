@@ -200,3 +200,19 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the periodic reconciliation sweep runs
     Then the missing doctor_guest UserMirror row is created
     And the role grant is ensured
+
+  @EARS-26 @happy
+  Scenario: An orphaned session self-heals its mirror on the next authenticated read
+    Given a doctor_guest user with a valid BFF session
+    And the user's UserMirror row is absent while the IdP session stays alive
+    When the user requests an authenticated mirror-backed surface
+    Then the UserMirror row is re-materialized from the IdP with the doctor_guest grant
+    And the request is served normally instead of the generic 401
+    And the portal never enters the silent /login to /account redirect carousel
+
+  @EARS-26 @EARS-16 @failure
+  Scenario: An unauthenticated read heals nothing and stays generic
+    Given no session cookie
+    When a client requests an authenticated mirror-backed surface
+    Then the response is the generic 401
+    And no UserMirror row is created

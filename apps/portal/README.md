@@ -30,7 +30,7 @@ app/
 ```
 
 `app/login/page.tsx` exercises the full form stack but does **not** call the BFF.
-The real authentication — `/v1/auth/*` over the BFF, the `__Host-ds_portal_session`
+The real authentication — `/v1/auth/*` over the BFF, the `__Host-ds_session`
 cookie, and the OIDC silent-re-auth `middleware.ts` (ADR-0004 §3.2.1) — lands with
 feature 003: F2 (#86) password + session, F3 (#87) email/SMS-OTP. The sign-in
 schema moves to the `@ds/schemas` SSOT then; here it is local and illustrative.

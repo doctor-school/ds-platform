@@ -2,7 +2,7 @@
 title: "003 — Аутентификация пользователя (net-new web → doctor_guest)"
 description: "Требования: самостоятельная веб-аутентификация для портала врача — регистрация, верификация email/телефона, вход по паролю и беспарольно (email-OTP / SMS-OTP), BFF-сессия поверх __Host- cookie, ротация токенов, выход и сброс пароля. Создаёт backend-зеркало doctor_guest поверх Zitadel как IdP. Первая продуктовая feature-спека."
 slug: 003-user-authentication
-status: In dev
+status: Shipped
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/3
 parent_issue: https://github.com/doctor-school/ds-platform/issues/80

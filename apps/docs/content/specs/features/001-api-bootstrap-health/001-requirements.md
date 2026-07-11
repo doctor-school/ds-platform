@@ -2,7 +2,7 @@
 title: "001 — apps/api bootstrap + GET /v1/health"
 description: "Requirements: scaffold apps/api as NestJS 11 + Fastify + nestjs-zod and expose GET /v1/health (status, uptime, timestamp). First feature spec, first use of @ds/schemas as Zod SSOT."
 slug: 001-api-bootstrap-health
-status: In dev
+status: Shipped
 tracker: https://github.com/doctor-school/ds-platform/milestone/1
 parent_issue: https://github.com/doctor-school/ds-platform/issues/7
 prior_decisions:

@@ -13,20 +13,20 @@ lang: en
 
 > **EN (this)** · **RU:** [`brief-ru.md`](./brief-ru.md)
 
-> **Scope (owner decision, brainstorm 2026-07-12).** This epic covers **only the portal shell / information architecture** that binds the already-product-grade webinar surfaces (epic 004–007, shipped) into one coherent personal cabinet (LK): a persistent app-shell header with an account menu, the public discovery front-door at `/`, and a read-only doctor profile. Profile **editing**, notifications, and any new content surface are **explicitly out** — each is a future iteration. This is an IA / wrapper epic, not a new content vertical.
+> **Scope (owner decision, brainstorm 2026-07-12).** This epic covers **only the portal shell / information architecture** that binds the already-product-grade webinar surfaces (epic 004–007, shipped) into one coherent personal cabinet (LK): a persistent app-shell header (top-nav + an avatar icon to the profile), the public discovery front-door at `/`, and a read-only doctor profile. Profile **editing**, notifications, and any new content surface are **explicitly out** — each is a future iteration. This is an IA / wrapper epic, not a new content vertical.
 
 ---
 
 ## Problem
 
 - The webinar surfaces shipped as product-grade rooms and pages (epic 004–007), but the portal **around** them is still scaffold. `/` is a placeholder «Каркас приложения» card whose only action is a "go to sign in" button (`apps/portal/app/page.tsx`); `/account` is a raw **session-claims debug dump** — it renders the caller's `sub` in monospace, a `roles[]` array, and an `mfa` boolean straight from `GET /v1/auth/session` (`apps/portal/app/account/page.tsx`). Both are testers' surfaces, not a product LK.
-- A logged-in doctor has **no home**: no persistent header, no account menu, no way to reach «Мои события» (`/account/events`, feature 005) or a profile from anywhere in the portal. The shipped webinar surfaces float unbound — reachable only by direct link.
+- A logged-in doctor has **no home**: no persistent header, no top-nav or profile entry, no way to reach «Мои события» (`/account/events`, feature 005) or a profile from anywhere in the portal. The shipped webinar surfaces float unbound — reachable only by direct link.
 - **Post-login lands nowhere meaningful** — the auth flow returns to a scaffold, not to anything a doctor would use.
 - The legacy Doctor.School LK proved a doctor needs a single account home tying together event discovery, «мои события», and a profile; today the new platform has the pieces but no IA that composes them.
 
 ## Jobs-to-be-done
 
-- **Doctor:** after login, land somewhere useful — the discovery listing of upcoming broadcasts; from any page, reach «мои события» and my profile through a persistent account menu; see my own account details (name, email, phone, security state) as readable copy; sign out.
+- **Doctor:** after login, land somewhere useful — the discovery listing of upcoming broadcasts; from any page, reach «мои события» from the persistent top-nav and my profile via the header's avatar icon; see my own account details (name, email, phone, security state) as readable copy; sign out.
 - **Guest:** open the same public discovery front-door and, from a persistent header, get a clear way in («Войти»).
 
 ## Cross-cutting information architecture
@@ -56,13 +56,13 @@ Two `user-facing` features, approved variant **A**, each with a co-located PRD; 
 
 ## Success metrics
 
-- A logged-in doctor **lands on `/` discovery after login** and can reach «Мои события» and their profile from **any** portal page via the persistent account menu.
+- A logged-in doctor **lands on `/` discovery after login** and can reach «Мои события» and their profile from **any** portal page via the persistent header (top-nav to «Мои события», avatar icon to the profile).
 - **No scaffold or debug surface remains reachable in the portal** — the `/` «Каркас приложения» placeholder and the `/account` session-claims dump are both retired.
 - The profile shows the doctor's **real name, email, phone, and security state as product copy** — never raw claims — served by a real authenticated endpoint.
 
 ## Prior art — source system
 
-The legacy Doctor.School Bubble stack was mined read-only for the Webinars epic; the full functional evidence lives in [`../webinars/legacy-recon.md`](../webinars/legacy-recon.md) — this epic reuses that mining rather than re-running it. In one paragraph: the legacy LK proved the doctor needs a **single account home** that ties together event **discovery**, **«мои события»**, and a **profile**; it did so with the legacy scatter (booleans, a sprawling event aggregate, surfaces reachable only by luck). We rebuild that same IA cleanly and **discovery-first** — one public front-door at `/`, a persistent account menu binding «мои события» and profile, and a read-only profile — without inheriting the legacy scatter or its UI. The recon is a look-and-take-the-domain reference, never a target schema or layout (ADR-0014 §3).
+The legacy Doctor.School Bubble stack was mined read-only for the Webinars epic; the full functional evidence lives in [`../webinars/legacy-recon.md`](../webinars/legacy-recon.md) — this epic reuses that mining rather than re-running it. In one paragraph: the legacy LK proved the doctor needs a **single account home** that ties together event **discovery**, **«мои события»**, and a **profile**; it did so with the legacy scatter (booleans, a sprawling event aggregate, surfaces reachable only by luck). We rebuild that same IA cleanly and **discovery-first** — one public front-door at `/`, a persistent header binding «мои события» (top-nav) and the profile (avatar icon), and a read-only profile — without inheriting the legacy scatter or its UI. The recon is a look-and-take-the-domain reference, never a target schema or layout (ADR-0014 §3).
 
 ---
 

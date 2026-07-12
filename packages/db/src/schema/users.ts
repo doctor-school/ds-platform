@@ -30,6 +30,11 @@ export const users = pgTable(
     zitadelSub: text("zitadel_sub").notNull().unique(),
     email: citext("email").unique(),
     phone: text("phone").unique(),
+    // Display name SSOT (006-design §11). Nullable — collected just-in-time at
+    // first webinar-room entry via the JIT prompt (EARS-14), never at
+    // registration. No backfill: existing users hit the prompt on first entry.
+    // Served only to the owner's own session (EARS-16); never in chat payloads.
+    displayName: text("display_name"),
     emailVerified: boolean("email_verified").notNull().default(false),
     phoneVerified: boolean("phone_verified").notNull().default(false),
     role: text("role").notNull().default("doctor_guest"),

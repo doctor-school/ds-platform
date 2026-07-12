@@ -15,6 +15,7 @@ import { StorageModule } from "./storage/storage.module.js";
 import { EventsModule } from "./events/events.module.js";
 import { RegistrationModule } from "./registration/registration.module.js";
 import { RoomModule } from "./room/room.module.js";
+import { MeModule } from "./me/me.module.js";
 
 @Module({
   imports: [
@@ -48,6 +49,9 @@ import { RoomModule } from "./room/room.module.js";
     // 006 webinar-room server-side admission gate + RoomConfig grant read
     // (doctor_guest-authenticated, registration-and-live `policy` gate).
     RoomModule,
+    // 006 self-scoped display name — the JIT room-entry «Имя и фамилия» write +
+    // owner-only read (authenticated ∧ doctor_guest ∧ fast-path; EARS-14/16).
+    MeModule,
     HealthModule,
     ReadinessModule,
   ],

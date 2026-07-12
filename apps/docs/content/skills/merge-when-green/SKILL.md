@@ -53,7 +53,7 @@ pnpm pr:preflight <N> --pre-merge   # runs the stage-b guard (#692)
 
 Exit `0` = the PR touches no user-facing render surface, OR it carries a recorded `Stage-B: GO` / `Stage-B: batched at #<gate>` in the PR body or a linked-Issue comment → proceed to Step 2. Exit `1` = a user-facing PR with no Stage-B record → do **NOT** merge: get (and record) the owner's live verdict first. This is the mechanical enforcement of the passive §6 rule the 006 room slice (#691) slipped through — the guard is WARN-first (ADR-0007 §2.6) but the merge procedure treats a non-zero pre-merge gate as blocking. (The batched-gate carve-out: a child PR under an epic's batched Stage-B Issue records `Stage-B: batched at #<gate>` and passes.)
 
-**Step 2 — merge.** Once step 1 is green, step 1a says `fresh`, and step 1b passed, run exactly one command:
+**Step 2 — merge.** Once step 1 is green, step 1a says `fresh`, and step 1b passed: **if you are inside a worktree, first return to the main tree** (`ExitWorktree action:keep`, or `cd` to the primary tree) — an ordered pre-merge step, not a preference, because `--delete-branch`'s local cleanup fails from inside the worktree (it recurred on BOTH PRs of one session, 2026-07-12). Then run exactly one command:
 
 ```bash
 gh pr merge <N> --auto --squash --delete-branch
@@ -63,7 +63,7 @@ gh pr merge <N> --auto --squash --delete-branch
 
 Per ADR-0007 §2.4 + §2.10: a positive Mode (a) or Mode (b) verdict + green CI is sufficient to merge. **Human-merge is not required.** Mode (c) reviews remain a single human decision.
 
-**Step 2a — merging from a git worktree (AGENTS.md §6 worktree-per-session).** **Prefer to run `gh pr merge` from the MAIN tree, not from inside the worktree** — `ExitWorktree action:keep` first (or `cd` to the primary tree), then merge. `--delete-branch` fails its local cleanup when run inside the worktree, and merging from `main` sidesteps the error and the follow-up re-verify entirely. If you _do_ merge from inside the worktree: `gh pr merge … --delete-branch` **errors on its local cleanup** — `fatal: 'main' is already used by worktree at <primary>` — because it tries to check `main` out locally while the primary tree holds it. **The remote squash-merge still succeeds**; only the local branch deletion fails. Either way:
+**Step 2a — merging from a git worktree (AGENTS.md §6 worktree-per-session).** Step 2's ordered pre-merge action is to **return to the MAIN tree before merging** (`ExitWorktree action:keep`, or `cd` to the primary tree) — merging from `main` sidesteps the local-cleanup error and the follow-up re-verify entirely. If you nonetheless merge from inside the worktree: `gh pr merge … --delete-branch` **errors on its local cleanup** — `fatal: 'main' is already used by worktree at <primary>` — because it tries to check `main` out locally while the primary tree holds it. **The remote squash-merge still succeeds**; only the local branch deletion fails. Either way: `gh pr merge … --delete-branch` **errors on its local cleanup** — `fatal: 'main' is already used by worktree at <primary>` — because it tries to check `main` out locally while the primary tree holds it. **The remote squash-merge still succeeds**; only the local branch deletion fails. Either way:
 
 1. Confirm the merge landed: `gh pr view <N> --json state,mergedAt` → `state:MERGED`, `mergedAt` set.
 2. The **remote** branch is already deleted by `--delete-branch`; verify `git ls-remote --heads origin <branch>` is empty.

@@ -1,5 +1,16 @@
 # @ds/portal
 
+## 0.11.0
+
+### Minor Changes
+
+- [#747](https://github.com/doctor-school/ds-platform/pull/747) [`3dd3039`](https://github.com/doctor-school/ds-platform/commit/3dd303994ae9f7b439bd85282938940fbde36ab4) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Portal-wide light/dark theming (006 EARS-12/13, [#702](https://github.com/doctor-school/ds-platform/issues/702)): the theme is the `.dark` class on `<html>` resolved from the `ds-theme` localStorage choice → system `prefers-color-scheme` (an explicit choice always wins, and is followed live while none is stored), applied before first paint by an inline FOUC-guard script in the root layout; the webinar-room header gains the portal's only visible theme toggle — the canvas 44×44 icon-button (`aria-pressed`, glyph ☾ light / ☀ dark, `header-hairline` border) — which flips the theme live and persists the choice; the portal axe e2e suites now sweep both themes.
+
+### Patch Changes
+
+- Updated dependencies [[`3dd3039`](https://github.com/doctor-school/ds-platform/commit/3dd303994ae9f7b439bd85282938940fbde36ab4)]:
+  - @ds/design-system@1.1.0
+
 ## 0.10.0
 
 ### Minor Changes

@@ -1,5 +1,11 @@
 # @ds/design-system
 
+## 1.1.0
+
+### Minor Changes
+
+- [#747](https://github.com/doctor-school/ds-platform/pull/747) [`3dd3039`](https://github.com/doctor-school/ds-platform/commit/3dd303994ae9f7b439bd85282938940fbde36ab4) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - New `header-hairline` semantic token (006 design §10, [#702](https://github.com/doctor-school/ds-platform/issues/702)): the on-header muted border — white at 50% over the header band, the canvas `rgba(255,255,255,.5)` — same value in both theme sets; used by the webinar-room header's icon-button family (the theme toggle's 2px resting border, hover raising to full-strength `header-foreground`).
+
 ## 1.0.0
 
 ### Major Changes

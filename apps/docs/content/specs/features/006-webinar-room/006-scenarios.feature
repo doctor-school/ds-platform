@@ -190,13 +190,13 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
     And the page never flashes the wrong theme
 
   @EARS-12 @happy
-  Scenario: With no stored choice the portal renders dark by default, and an explicit choice wins
-    Given a doctor with no persisted theme choice
+  Scenario: With no stored choice the theme follows the system preference, and an explicit choice wins
+    Given a doctor with no persisted theme choice whose system prefers the dark scheme
     When the doctor opens the room
-    Then the room renders in the dark theme regardless of the system color-scheme preference
+    Then the room renders in the dark theme
     When the doctor explicitly selects the light theme with the header toggle
     Then the room renders in the light theme on this and every later visit
-    And the persisted choice always wins over the dark default
+    And the persisted choice wins over the system preference
 
   @EARS-13 @happy
   Scenario: The portal accessibility sweep covers both themes

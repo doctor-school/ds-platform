@@ -20,7 +20,7 @@ mode: inline
 
    ```bash
    gh label create "feature:NNN-<slug>" --color BFD4F2 --description "Feature NNN <slug>"
-   gh label create "kind:ears-handler" --color D4C5F9 --description "Single EARS handler"
+   gh label create "kind:ears-handler" --color D4C5F9 --description "Single/grouped EARS handler(s)"
    gh label create "kind:integration" --color D4C5F9 --description "Vertical-slice / integration work (not a single EARS handler)"
    gh label create "agent-ready" --color 0E8A16 --description "Ready for an AI agent to pick up"
    ```
@@ -44,6 +44,8 @@ mode: inline
 
 - **`surface: backend-only`** → skip this step; the handler Issues are the complete WBS.
 - **`surface: user-facing`** → for every user-facing slice that **no handler Issue owns** (the form/page existence, the request→enter-code two-step UX, error display, redirect-after-auth, the portal↔BFF wiring), open an **integration Issue** with `kind:integration` (not `kind:ears-handler`) and the browser/E2E acceptance baked into its AC. If the slice is a **named** out-of-scope deferral from the spec, open a tracked follow-up Issue for it rather than leaving it implicit. Wire it into the native graph in step 4 like any child. A scaffold/stub whose code comment promises future wiring ("wired in F2/F3") **MUST** have a corresponding open Issue — a code comment is not a tracked obligation. **Batched-UI slices are re-cut at open time (the #595 lesson):** when the handler children are expected to merge backend-only with «Stage-B: batched at #NNN», the batched slice Issue MUST itself be decomposed into separate children by deliverable class — the surface wiring (Refine/portal UI), the browser-E2E journey, and any cross-cutting test suites — never one Issue folding them all into a single unit of work (one such combined brief consumed >1h / ~465K tokens in a single subagent, 2026-07-08; memory `feedback_decompose_integration_slices_before_dispatch`).
+
+3b. **Grouping — tightly-coupled EARS may share one child, but not silently.** The 1-EARS-1-Issue default of step 3 is for handlers workable independently. When several EARS have an **intersecting file-touch set and cannot be parallelized** (e.g. one shell component + one route own EARS-1…13), they MAY collapse into a single child — but only with **(a)** the title reading `EARS-a..b` and the body listing the folded `EARS-N` ids explicitly, and **(b)** a `surface-decision-debt` note recording the grouping (it is a documented deviation from the 1:1 default, AGENTS.md §6). Do **not** bundle EARS under `kind:ears-handler` without both. This touch-set rationale governs **OPEN-time** WBS grouping; `feedback_wave_plan_by_touch_set` governs the distinct **DISPATCH-time** serialization of the same intersecting set.
 
 4. **Wire the native relationships** (mandatory — prose in the body is not machine-readable, and the board ordering procedure reads only the native graph). Two relationship types, set via the GitHub REST API through `gh api`:
    - **Sub-issue hierarchy** — attach every child as a sub-issue of the parent.

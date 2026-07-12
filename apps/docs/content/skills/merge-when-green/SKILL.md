@@ -56,10 +56,10 @@ Exit `0` = the PR touches no user-facing render surface, OR it carries a recorde
 **Step 2 — merge.** Once step 1 is green, step 1a says `fresh`, and step 1b passed: **if you are inside a worktree, first return to the main tree** (`ExitWorktree action:keep`, or `cd` to the primary tree) — an ordered pre-merge step, not a preference, because `--delete-branch`'s local cleanup fails from inside the worktree (it recurred on BOTH PRs of one session, 2026-07-12). Then run exactly one command:
 
 ```bash
-gh pr merge <N> --auto --squash --delete-branch
+gh pr merge <N> --squash --delete-branch
 ```
 
-`--auto`/`--squash`/`--delete-branch` is the canonical merge command per ADR-0008 §2.6 (server-side branch protection is the target-state contract, deferred while on GitHub Free + private). `--auto` is harmless once step 1 is already green and keeps the command canonical; `--squash` enforces linear history; `--delete-branch` cleans up the head branch. **`--auto` is not a substitute for step 1** — it does not block on CI here.
+`--squash`/`--delete-branch` is the **Phase-0 operational** merge command: `--squash` enforces linear history, `--delete-branch` cleans up the head branch. **Do not add `--auto` in Phase 0** — on GitHub Free `--auto` is rejected with `Pull request is in clean status` once the PR is already clean-green (auto-merge cannot be queued for a PR that could merge now — observed #798, 2026-07-12), and where it is accepted it does **not** block on CI (it once merged #62 into a red aggregate). `--auto --squash --delete-branch` is the ADR-0008 §2.6 **target-state** command for when server-side branch protection is reactivated — not the Phase-0 command (memory `feedback_phase0_merge_gate_manual`).
 
 Per ADR-0007 §2.4 + §2.10: a positive Mode (a) or Mode (b) verdict + green CI is sufficient to merge. **Human-merge is not required.** Mode (c) reviews remain a single human decision.
 
@@ -84,10 +84,10 @@ Run `pnpm install` in the worktree only when the task touches code that needs th
 
 ## Output
 
-- PR merged into `main` (or queued for `--auto` merge once CI clears).
+- PR merged into `main`.
 - Head branch deleted.
 
 ## Failure mode
 
-- Any other merge command (`gh pr merge <N>` without `--auto`, with `--merge` instead of `--squash`, without `--delete-branch`, or `git push origin main` directly) is a process violation per ADR-0008 §2.6 (interim process-level merge contract).
+- Any other merge command (`--merge` instead of `--squash`, omitting `--delete-branch`, adding `--auto` in Phase 0, or `git push origin main` directly) is a process violation per ADR-0008 §2.6 (interim process-level merge contract).
 - Invoking this skill while the latest review verdict is `REQUEST_CHANGES` or absent — process violation per `request-mode-a-review`'s `Cannot proceed without` clause.

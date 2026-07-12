@@ -27,10 +27,12 @@ import {
  * The 006 room-header band is now IN SCOPE: the two contrast findings this
  * scan surfaced on 2026-07-10 (the presence count `room-presence-count` and
  * the desktop exit-link label, formerly white `header-foreground` on
- * `bg-header` = 3.69:1) were remediated in #713 by seating both on a
- * `primary-surface` (blue.700) AA plate (`primary-surface-foreground`,
- * 8.14:1, both themes). The `.bg-header` exclude that tracked that debt is
- * gone; the header is scanned like the rest of the room composition.
+ * `bg-header` = 3.69:1) were remediated in #713 by deepening the shared
+ * `header` band from blue.500 to blue.700 (white 8.14:1, AA in both themes) —
+ * the text stays plain `header-foreground`, no plate, matching the canvas. The
+ * same darker band also clears the on-header theme-toggle glyph. The
+ * `.bg-header` exclude that tracked that debt is gone; the header is scanned
+ * like the rest of the room composition.
  *
  * Dev-stand-gated like the sibling 005 scan: it provisions a real 003 doctor
  * (register + Mailpit OTP verify, auto-login) carrying a `returnTo` that also

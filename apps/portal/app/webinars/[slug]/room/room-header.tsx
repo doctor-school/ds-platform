@@ -92,11 +92,9 @@ export function RoomHeader({
       <div className="flex flex-none items-center gap-2.5 layout:gap-5">
         {/* The live «N врачей в комнате» presence count (canvas line 21) — desktop
             only. A server-side aggregate refreshed by the heartbeat loop (EARS-5),
-            never per-doctor PII. The canvas tints this a muted light-blue (#AED4FB);
-            we render it full-strength `header-foreground` to match the sibling exit
-            link and stay AA-clean (the exact muted-header tint needs a dedicated
-            token, deferred with the dark-theme work at #702 — no opacity-dimmed
-            foreground token, ADR-0013 §7). */}
+            never per-doctor PII. Plain white `header-foreground` on the `bg-header`
+            band (canvas layout, no plate) — AA-clean because the band is now the
+            accessible blue.700 (white = 8.14:1), deepened from blue.500 for #713. */}
         <PresenceCount className="hidden text-sm font-bold text-header-foreground layout:inline" />
         {/* The truthful exit target — the 004 event page (never a soft close). One
             link, two visual variants: a desktop labelled text and a mobile compact

@@ -24,19 +24,15 @@ import {
  * `.bg-header` exclusion of the 004 poster). The truthful stream-unavailable
  * state (`room-player-unavailable`) is OUR OWN surface and is NOT excluded.
  *
- * `.bg-header` EXCLUDED AS TRACKED 006 DEBT (#713) — the room route renders no
- * 004 poster; its only `.bg-header` surface is the 006-OWNED room app-header
- * bar (`room-header.tsx`), which carries two REAL AA contrast findings this
- * scan surfaced on 2026-07-10: the presence count (`room-presence-count`) and
- * the desktop exit-link label, both white `header-foreground` on `bg-header`
- * (blue.500) at `text-sm` bold = 3.69:1 < the 4.5:1 normal-text minimum (the
- * `header` token's large/bold ≥3:1 carve-out starts at 18.67px and was
- * misapplied to 14px-bold text). The design fix (size bump vs. a dedicated AA
- * header token vs. the #702 theming bundle) is Issue #713; excluding the band
- * keeps this scan a live regression gate for the REST of the room composition
- * meanwhile — the same tracked-debt pattern as the 004 poster `.bg-header`
- * exclusions in the sibling specs. Narrowing/removing this exclude is an
- * acceptance criterion of #713.
+ * The 006 room-header band is now IN SCOPE: the two contrast findings this
+ * scan surfaced on 2026-07-10 (the presence count `room-presence-count` and
+ * the desktop exit-link label, formerly white `header-foreground` on
+ * `bg-header` = 3.69:1) were remediated in #713 by deepening the shared
+ * `header` band from blue.500 to blue.700 (white 8.14:1, AA in both themes) —
+ * the text stays plain `header-foreground`, no plate, matching the canvas. The
+ * same darker band also clears the on-header theme-toggle glyph. The
+ * `.bg-header` exclude that tracked that debt is gone; the header is scanned
+ * like the rest of the room composition.
  *
  * Dev-stand-gated like the sibling 005 scan: it provisions a real 003 doctor
  * (register + Mailpit OTP verify, auto-login) carrying a `returnTo` that also
@@ -74,9 +70,6 @@ async function scan(page: Page, theme: (typeof THEMES)[number]) {
     // scope note above. `room-player-unavailable` (ours) stays in scope.
     .exclude('[data-testid="room-player-rutube"]')
     .exclude('[data-testid="room-player-youtube"]')
-    // The 006 room-header band — REAL AA contrast debt tracked as #713 (see the
-    // scope note above); removed/narrowed when #713 lands.
-    .exclude(".bg-header")
     .analyze();
   const summary = results.violations.map((v) => ({
     id: v.id,

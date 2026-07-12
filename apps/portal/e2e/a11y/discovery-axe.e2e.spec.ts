@@ -20,13 +20,17 @@ import AxeBuilder from "@axe-core/playwright";
  * decision-debt), not a regression this slice introduces. The scan targets exactly
  * the composed body regions (the status card `bg-card`, the day-grouped card list).
  *
- * LIGHT-ONLY (mirrors the 005 precedent): the wave-1 portal wires NO theme toggle,
- * so light is the only theme a user can reach on these surfaces. The DS dark-theme
- * tokens are covered (both themes) by the CI `playwright-axe` gate via the showcase;
- * the 004 canvas-fidelity eyes-on verification (both breakpoints × both themes) is
- * the separate EARS-14 screenshot brief. A portal dark theme is a later affordance.
+ * BOTH THEMES (006 EARS-13, #702): the portal now ships a runtime theme — the
+ * webinar-room-header toggle flips `.dark` on `<html>` portal-wide and the choice
+ * persists across routes, so both themes are user-reachable on these public
+ * surfaces too and both are scanned (`THEMES` drives the matrix; the scan applies
+ * the theme through the same class mechanism the toggle uses). A dark render must
+ * introduce no new axe violations relative to light. The 004 canvas-fidelity
+ * eyes-on verification (both breakpoints × both themes) is the separate EARS-14
+ * screenshot brief.
  */
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
+const THEMES = ["light", "dark"] as const;
 const SEED = {
   upcoming: process.env.E2E_WEBINAR_SLUG ?? "seed-005-upcoming",
   live: process.env.E2E_WEBINAR_SLUG_LIVE ?? "seed-005-live",
@@ -34,10 +38,18 @@ const SEED = {
   archived: process.env.E2E_WEBINAR_SLUG_ARCHIVED ?? "seed-005-archived",
 } as const;
 
-async function scan(page: Page) {
+async function scan(page: Page, theme: (typeof THEMES)[number]) {
   await page.locator("main, body").first().waitFor({ state: "visible" });
-  // Light is the only reachable portal theme — ensure no stray `.dark` before scan.
-  await page.evaluate(() => document.documentElement.classList.remove("dark"));
+  // Apply the theme under scan via the SAME mechanism the portal uses — the
+  // `.dark` class on `<html>` (006 EARS-12/13, the DS token scope) — then let
+  // colour TRANSITIONS settle: DS interactive primitives carry `transition-all`/
+  // `transition-colors`, and an immediate post-toggle analyze reads MID-TRANSITION
+  // computed colours (a phantom contrast failure that vanishes on re-run).
+  await page.evaluate(
+    (dark) => document.documentElement.classList.toggle("dark", dark),
+    theme === "dark",
+  );
+  await page.waitForTimeout(400);
   const results = await new AxeBuilder({ page })
     .withTags(WCAG_TAGS)
     // 004's dark poster header + footer band — see the scope note above.
@@ -49,7 +61,7 @@ async function scan(page: Page) {
     help: v.help,
     nodes: v.nodes.map((n) => n.target).flat(),
   }));
-  expect(summary, `axe violations on ${page.url()}`).toEqual([]);
+  expect(summary, `axe violations on ${page.url()} (${theme})`).toEqual([]);
 }
 
 test.describe.configure({ mode: "serial" });
@@ -60,23 +72,23 @@ test.describe("004 EARS-13 axe-core a11y scan of the public webinar surfaces", (
     "requires a live portal (E2E_PORTAL_URL) — manual gate",
   );
 
-  test("the guest upcoming-broadcasts listing passes WCAG 2 A/AA (light)", async ({
+  test("the guest upcoming-broadcasts listing passes WCAG 2 A/AA (both themes)", async ({
     page,
     context,
   }) => {
     await context.clearCookies();
     await page.goto("/webinars", { waitUntil: "domcontentloaded" });
-    await scan(page);
+    for (const theme of THEMES) await scan(page, theme);
   });
 
   for (const [state, slug] of Object.entries(SEED)) {
-    test(`the guest ${state} event page passes WCAG 2 A/AA (light)`, async ({
+    test(`the guest ${state} event page passes WCAG 2 A/AA (both themes)`, async ({
       page,
       context,
     }) => {
       await context.clearCookies();
       await page.goto(`/webinars/${slug}`, { waitUntil: "domcontentloaded" });
-      await scan(page);
+      for (const theme of THEMES) await scan(page, theme);
     });
   }
 });

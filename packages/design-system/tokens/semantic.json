@@ -110,6 +110,10 @@
       "$value": "{color.white}",
       "$description": "Text, logo and icon colour on the `header` band (white)."
     },
+    "header-hairline": {
+      "$value": "rgba(255, 255, 255, 0.5)",
+      "$description": "On-header muted border — the half-strength (white @ 50%) hairline of the header's icon-button family (the canvas `rgba(255,255,255,.5)`); hover raises to full-strength `header-foreground`. Same value in both theme sets — the header band does not change with the theme (006 design §10)."
+    },
     "success": {
       "$value": "{color.green.500}",
       "$description": "Positive-status fill, border or icon. Pair with `success-foreground` (white is large/bold on green.500 = 3.68:1)."

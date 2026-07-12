@@ -64,6 +64,7 @@
   --color-chip-border: #aed4fb;
   --color-header: #2d84f2;
   --color-header-foreground: #ffffff;
+  --color-header-hairline: rgba(255, 255, 255, 0.5);
   --color-success: #009959;
   --color-success-foreground: #ffffff;
   --color-success-tint: #e6f6ee;
@@ -234,6 +235,7 @@
   --color-chip-border: rgba(107, 177, 247, 0.45);
   --color-header: #114d9e;
   --color-header-foreground: #ffffff;
+  --color-header-hairline: rgba(255, 255, 255, 0.5);
   --color-success: #4ade80;
   --color-success-foreground: oklch(0.16 0.02 250);
   --color-success-tint: #0e2a1c;
@@ -282,6 +284,7 @@
   --color-chip-border: #aed4fb;
   --color-header: #2d84f2;
   --color-header-foreground: #ffffff;
+  --color-header-hairline: rgba(255, 255, 255, 0.5);
   --color-success: #009959;
   --color-success-foreground: #ffffff;
   --color-success-tint: #e6f6ee;
@@ -330,6 +333,7 @@
   --color-chip-border: var(--color-chip-border);
   --color-header: var(--color-header);
   --color-header-foreground: var(--color-header-foreground);
+  --color-header-hairline: var(--color-header-hairline);
   --color-success: var(--color-success);
   --color-success-foreground: var(--color-success-foreground);
   --color-success-tint: var(--color-success-tint);

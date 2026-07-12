@@ -2,26 +2,27 @@ import Link from "next/link";
 import { Badge } from "@ds/design-system/badge";
 import { Link as DsLink } from "@ds/design-system/link";
 import { LiveDuration, PresenceCount } from "./room-presence";
+import { ThemeToggle } from "./theme-toggle";
 
 /**
- * 006 EARS-2 / EARS-5 / EARS-11 — the room's top app-header bar, rendered atop the
- * gated room composition to the vendored `webinar-room.dc.html` header geometry
- * (lines 14-30, ADR-0013 canvas-wins). A full-width `header`-token blue brand bar
- * with a 2px bottom border: LEFT a "Doctor.School" wordmark linking to the эфиры
- * list (the canvas logo → `/webinars`) plus the reused DS {@link Badge} `live` pill
- * — «В эфире» with the live «· N мин» duration suffix ({@link LiveDuration}); RIGHT
- * (desktop) the «N врачей в комнате» live presence count ({@link PresenceCount})
- * beside a single truthful exit link back to the 004 event page (mobile collapses
- * the count away and shows a compact ✕ glyph).
+ * 006 EARS-2 / EARS-5 / EARS-11 / EARS-12 — the room's top app-header bar,
+ * rendered atop the gated room composition to the vendored `webinar-room.dc.html`
+ * header geometry (lines 14-30, ADR-0013 canvas-wins). A full-width `header`-token
+ * blue brand bar with a 2px bottom border: LEFT a "Doctor.School" wordmark linking
+ * to the эфиры list (the canvas logo → `/webinars`) plus the reused DS
+ * {@link Badge} `live` pill — «В эфире» with the live «· N мин» duration suffix
+ * ({@link LiveDuration}); RIGHT (desktop) the «N врачей в комнате» live presence
+ * count ({@link PresenceCount}) beside a single truthful exit link back to the 004
+ * event page (mobile collapses the count away and shows a compact ✕ glyph), plus
+ * the light/dark **theme toggle** ({@link ThemeToggle}, both breakpoints — the
+ * portal's ONLY visible theme control until #510; the portal-wide mechanism it
+ * drives lives in `lib/theme.ts` + the root layout's FOUC guard).
  *
  * #690 realized the two data-backed canvas header elements #584 deferred: the live
  * presence count (a server-side aggregate over the append-only beats, EARS-5) and
- * the live-duration suffix (from the actual go-live instant `liveAt`, EARS-10). Two
- * canvas header elements remain deferred, each needing infra this surface does not
- * own — omissions, never dead affordances:
- *   • the **theme toggle** — re-deferred to **#702** (portal-wide theming: a FOUC
- *     guard + persistence provider, its own slice; a room-local non-persisted
- *     toggle would be a half-feature). Dark theme rides that Issue.
+ * the live-duration suffix (from the actual go-live instant `liveAt`, EARS-10).
+ * One canvas header element remains deferred, needing infra this surface does not
+ * own — an omission, never a dead affordance:
  *   • the **doctor avatar** (initials) — re-deferred: 003 self-service registration
  *     collects NO name (the Zitadel profile is a placeholder never surfaced, and
  *     the `users` mirror has no name column), so there is no real display name to
@@ -38,6 +39,8 @@ export interface RoomHeaderCopy {
   brandHome: string;
   liveBadge: string;
   exit: string;
+  /** The theme toggle's accessible name («Переключить тему», EARS-12). */
+  themeToggle: string;
 }
 
 export function RoomHeader({
@@ -52,7 +55,11 @@ export function RoomHeader({
 }) {
   return (
     <header className="flex flex-none items-center justify-between gap-3 border-b-2 border-border bg-header px-4 py-3 text-header-foreground layout:px-10">
-      <div className="flex min-w-0 items-center gap-4">
+      {/* Mobile gap = the canvas `headGap` 10px (desktop 24px group rhythm keeps
+          the shipped gap-4); `overflow-hidden` realizes the canvas `min-width:0`
+          intent — when the live pill outgrows a narrow viewport it clips at the
+          group boundary instead of painting under the right-group controls. */}
+      <div className="flex min-w-0 items-center gap-2.5 overflow-hidden layout:gap-4">
         {/* The canvas logo routes to the эфиры list — the wordmark is the brand
             home affordance, labelled for assistive tech (the visual is the copy).
             The interaction states (hover + focus ring) are owned by the DS `Link`
@@ -60,7 +67,7 @@ export function RoomHeader({
             override its brand-blue default (ADR-0013 §7 / no raw styled link). */}
         <DsLink
           asChild
-          className="text-lg font-extrabold tracking-tight text-header-foreground"
+          className="text-base font-extrabold tracking-tight text-header-foreground layout:text-lg"
         >
           <Link href="/webinars" aria-label={copy.brandHome}>
             Doctor.School
@@ -69,13 +76,20 @@ export function RoomHeader({
         {/* The reused live pill — «В эфире» plus the live «· N мин» duration counted
             from the real go-live instant (EARS-5/EARS-10). The suffix renders inside
             the pill so it inherits the badge's uppercase micro-type, matching the
-            canvas «В ЭФИРЕ · 24 МИН». A null `liveAt` renders «В эфире» alone. */}
+            canvas «В ЭФИРЕ · 24 МИН». A null `liveAt` renders «В эфире» alone.
+            The suffix is DESKTOP-ONLY (same collapse rule as the presence count):
+            with the #702 theme toggle in the right group, wordmark + full pill +
+            toggle + ✕ physically exceed a 390px viewport (the canvas mock's own
+            metrics only fit from ~430px), so the narrow render keeps the truthful
+            «В эфире» pill whole rather than clipping the minute tail mid-glyph. */}
         <Badge variant="live" className="whitespace-nowrap">
           {copy.liveBadge}
-          <LiveDuration liveAt={liveAt} />
+          <span className="hidden layout:inline">
+            <LiveDuration liveAt={liveAt} />
+          </span>
         </Badge>
       </div>
-      <div className="flex flex-none items-center gap-5">
+      <div className="flex flex-none items-center gap-2.5 layout:gap-5">
         {/* The live «N врачей в комнате» presence count (canvas line 21) — desktop
             only. A server-side aggregate refreshed by the heartbeat loop (EARS-5),
             never per-doctor PII. The canvas tints this a muted light-blue (#AED4FB);
@@ -101,6 +115,19 @@ export function RoomHeader({
             </span>
           </Link>
         </DsLink>
+        {/* 006 EARS-12 — the light/dark theme toggle: the canvas 44×44
+            icon-button (canvas line 25, ADR-0013 canvas-wins; owner Stage-B
+            decision 2026-07-12 — never the DS form switch), sitting in the
+            header's icon-button family beside the 44px mobile ✕. Renders on
+            BOTH breakpoints like the canvas control; `order-first` re-seats it
+            before the mobile ✕ (canvas mobile order: toggle → ✕) while desktop
+            keeps it last in the group (canvas desktop order: exit → toggle). It
+            flips `.dark` on <html> and persists the explicit `ds-theme` choice —
+            the portal's only visible theme control until #510. */}
+        <ThemeToggle
+          label={copy.themeToggle}
+          className="order-first layout:order-none"
+        />
       </div>
     </header>
   );

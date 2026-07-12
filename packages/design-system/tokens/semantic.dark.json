@@ -24,6 +24,7 @@
     "info": { "$value": "{color.blue.300}" },
     "chip-border": { "$value": "rgba(107, 177, 247, 0.45)" },
     "header": { "$value": "{color.blue.700}" },
+    "header-hairline": { "$value": "rgba(255, 255, 255, 0.5)" },
     "success": { "$value": "{color.green.400}" },
     "success-foreground": { "$value": "{color.neutral.950}" },
     "success-tint": { "$value": "#0e2a1c" },

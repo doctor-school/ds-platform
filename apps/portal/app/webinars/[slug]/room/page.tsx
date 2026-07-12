@@ -105,6 +105,7 @@ export default async function RoomPage({
             brandHome: t("brandHome"),
             liveBadge: t("liveBadge"),
             exit: t("exit"),
+            themeToggle: t("themeToggle"),
           }}
         />
         {/* EARS-4 — the visibility-gated server-authoritative heartbeat loop. No

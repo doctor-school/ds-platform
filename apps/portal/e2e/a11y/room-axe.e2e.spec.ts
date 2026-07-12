@@ -44,19 +44,30 @@ import {
  * room and scans. It `test.skip`s unless the live stand env is present, so a
  * stray CI invocation is inert.
  *
- * LIGHT-ONLY (mirrors the sibling precedent): the wave-1 portal wires NO theme
- * toggle — `<html>` never gets `.dark` (the room-header theme toggle is deferred
- * to #702), so light is the only theme a doctor can reach here. The DS
- * dark-theme tokens are covered (both themes) by the CI `playwright-axe` gate
- * via the showcase.
+ * BOTH THEMES (006 EARS-13, #702): the room header now ships the portal's theme
+ * toggle — `.dark` on `<html>` is user-reachable on this very surface, so the
+ * composed room is scanned in light AND dark (`THEMES` drives the matrix; the
+ * scan applies the theme through the same class mechanism the toggle uses). A
+ * dark render must introduce no new axe violations relative to light. The DS
+ * primitive geometry is additionally covered (both themes) by the CI
+ * `playwright-axe` gate via the showcase.
  */
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
+const THEMES = ["light", "dark"] as const;
 const SLUG = process.env.E2E_ROOM_SLUG_LIVE ?? "seed-005-live";
 
-async function scan(page: Page) {
+async function scan(page: Page, theme: (typeof THEMES)[number]) {
   await page.locator("main, body").first().waitFor({ state: "visible" });
-  // Light is the only reachable portal theme — ensure no stray `.dark` before scan.
-  await page.evaluate(() => document.documentElement.classList.remove("dark"));
+  // Apply the theme under scan via the SAME mechanism the room-header toggle
+  // uses — the `.dark` class on `<html>` (006 EARS-12/13, the DS token scope) —
+  // then let colour TRANSITIONS settle: DS interactive primitives carry
+  // `transition-all`/`transition-colors`, and an immediate post-toggle analyze
+  // reads MID-TRANSITION computed colours (a phantom contrast failure).
+  await page.evaluate(
+    (dark) => document.documentElement.classList.toggle("dark", dark),
+    theme === "dark",
+  );
+  await page.waitForTimeout(400);
   const results = await new AxeBuilder({ page })
     .withTags(WCAG_TAGS)
     // The provider embed subtree is outside the EARS-9 frame boundary — see the
@@ -73,7 +84,7 @@ async function scan(page: Page) {
     help: v.help,
     nodes: v.nodes.map((n) => n.target).flat(),
   }));
-  expect(summary, `axe violations on ${page.url()}`).toEqual([]);
+  expect(summary, `axe violations on ${page.url()} (${theme})`).toEqual([]);
 }
 
 test.describe.configure({ mode: "serial" });
@@ -84,7 +95,7 @@ test.describe("006 EARS-11 axe-core a11y scan of the portal room route", () => {
     "dev-stand env absent (E2E_PORTAL_URL / IDP_ISSUER / MAILPIT_URL) — manual gate",
   );
 
-  test("the gated live room composition passes WCAG 2 A/AA (light)", async ({
+  test("the gated live room composition passes WCAG 2 A/AA (both themes)", async ({
     page,
   }) => {
     // Provision a doctor REGISTERED for the seeded live room by riding the
@@ -109,6 +120,6 @@ test.describe("006 EARS-11 axe-core a11y scan of the portal room route", () => {
     await expect(page.getByTestId("room-chat").first()).toBeVisible();
     await expect(page.getByTestId("room-player-rutube")).toBeVisible();
 
-    await scan(page);
+    for (const theme of THEMES) await scan(page, theme);
   });
 });

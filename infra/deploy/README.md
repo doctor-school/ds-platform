@@ -72,6 +72,23 @@ Health: `/v1/health` (api), `/v1/ready` (api — probes Postgres + pgvector).
 Note: redis runs AOF with **no `maxmemory` / eviction policy set yet** — fine at
 0 users (pre-pilot); tune per ADR-0003 §6 as a tracked follow-up, not an on-box edit.
 
+## Workstation prerequisites (every apply/deploy session)
+
+- **terraform binary** — not on PATH on this box; the working copy is bbm's
+  vendored `bbm/infra/timeweb/terraform/.bin/terraform.exe` (1.15.5 — compatible
+  with this harness's twc v1.7.1 lock). Run it from `infra/deploy/terraform/`
+  with the token sourced: `set -a; . ../.env; set +a` (`TWC_TOKEN` lives in
+  `infra/deploy/.env`, gitignored). Never ask the owner for Timeweb keys — they
+  are already on the workstation.
+- **SSH to the boxes is gated by `admin_ssh_cidr`** (gitignored
+  `terraform.tfvars`): the api-prod firewall allows port 22 only from that /32.
+  An SSH **timeout** with a green `https://api.doctor.school/v1/health` almost
+  always means the workstation's egress IP changed (verify: `curl
+  https://api.ipify.org`), NOT a downed box — update `admin_ssh_cidr` in
+  tfvars, then `terraform plan` (expect exactly one in-place
+  `twc_firewall_rule.api_ssh` update) and `apply`. Happened live 2026-07-12
+  (#729 wave-1 apply).
+
 ## Deploy — one command (`pnpm deploy:prod`)
 
 The **steady-state redeploy** is a single idempotent command (DSO-126) that

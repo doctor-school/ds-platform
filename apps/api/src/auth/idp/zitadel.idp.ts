@@ -1193,29 +1193,71 @@ export class ZitadelIdpClient implements IdpClient {
     );
   }
 
+  /**
+   * Enumerate EVERY Zitadel user for the reconcile sweep (EARS-19). Since #753
+   * the sweep soft-deletes a mirror row whose sub is **absent** from this set, so
+   * completeness and trustworthiness are load-bearing:
+   *
+   * - **Paginated in full.** The User v2 search is capped at 100 rows/page, so a
+   *   single unpaged call would silently truncate a >100-user directory and the
+   *   absent-detection pass would soft-delete every mirror row past page 1. This
+   *   loops `offset`/`limit` until the whole `totalResult` set is collected (a
+   *   hard page cap guards against a runaway loop).
+   * - **Throws on failure.** A non-2xx (an outage, an auth blip) THROWS rather
+   *   than returning `[]` — an enumeration failure must never read as "Zitadel
+   *   has zero users", which would otherwise wipe the whole mirror. The sweep is
+   *   fail-soft at the scheduler/CLI (a thrown sweep is caught + retried), so a
+   *   transient failure defers the sweep instead of corrupting the mirror.
+   */
   async listUsers(): Promise<IdpUser[]> {
-    const res = await this.fetchImpl(this.url("/v2/users"), {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify({}),
-    });
-    if (!res.ok) return [];
-    const data = (await res.json()) as {
-      result?: Array<{
-        userId?: string;
-        human?: {
-          email?: { email?: string; isVerified?: boolean };
-          phone?: { phone?: string; isVerified?: boolean };
-        };
-      }>;
-    };
-    return (data.result ?? []).map((u) => ({
-      sub: u.userId ?? "",
-      email: u.human?.email?.email,
-      phone: u.human?.phone?.phone,
-      emailVerified: u.human?.email?.isVerified ?? false,
-      phoneVerified: u.human?.phone?.isVerified ?? false,
-    }));
+    const PAGE_LIMIT = 100;
+    const MAX_PAGES = 1000; // hard stop: 100k users — a runaway-loop guard
+    const out: IdpUser[] = [];
+
+    for (let page = 0; page < MAX_PAGES; page += 1) {
+      const res = await this.fetchImpl(this.url("/v2/users"), {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({
+          query: { offset: String(page * PAGE_LIMIT), limit: PAGE_LIMIT },
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(
+          `zitadel listUsers failed: HTTP ${res.status} (enumeration must not be read as an empty user set — #753)`,
+        );
+      }
+      const data = (await res.json()) as {
+        details?: { totalResult?: string | number };
+        result?: Array<{
+          userId?: string;
+          state?: string;
+          human?: {
+            email?: { email?: string; isVerified?: boolean };
+            phone?: { phone?: string; isVerified?: boolean };
+          };
+        }>;
+      };
+      const rows = data.result ?? [];
+      for (const u of rows) {
+        out.push({
+          sub: u.userId ?? "",
+          email: u.human?.email?.email,
+          phone: u.human?.phone?.phone,
+          emailVerified: u.human?.email?.isVerified ?? false,
+          phoneVerified: u.human?.phone?.isVerified ?? false,
+          // #753: default `true` when `state` is absent (backward-safe); only an
+          // explicit non-active state marks the user inactive for the sweep.
+          active: u.state == null ? true : u.state === "USER_STATE_ACTIVE",
+        });
+      }
+      // Stop when this page is short (last page) or the running total covers the
+      // reported `totalResult`. An empty page also terminates.
+      const total = Number(data.details?.totalResult ?? 0);
+      if (rows.length < PAGE_LIMIT || (total > 0 && out.length >= total)) break;
+    }
+
+    return out;
   }
 
   async getUser(sub: string): Promise<IdpUser | null> {
@@ -1236,6 +1278,7 @@ export class ZitadelIdpClient implements IdpClient {
       const data = (await res.json()) as {
         result?: Array<{
           userId?: string;
+          state?: string;
           human?: {
             email?: { email?: string; isVerified?: boolean };
             phone?: { phone?: string; isVerified?: boolean };
@@ -1250,6 +1293,7 @@ export class ZitadelIdpClient implements IdpClient {
         phone: hit.human?.phone?.phone,
         emailVerified: hit.human?.email?.isVerified ?? false,
         phoneVerified: hit.human?.phone?.isVerified ?? false,
+        active: hit.state == null ? true : hit.state === "USER_STATE_ACTIVE",
       };
     } catch {
       return null;

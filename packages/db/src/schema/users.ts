@@ -33,6 +33,16 @@ export const users = pgTable(
     emailVerified: boolean("email_verified").notNull().default(false),
     phoneVerified: boolean("phone_verified").notNull().default(false),
     role: text("role").notNull().default("doctor_guest"),
+    // Soft-delete flag (EARS-19 reconcile depth, #753). Null = active; a
+    // timestamp = the mirror row was deactivated because Zitadel (the identity
+    // SoT) reported the user removed or inactive. The row is NEVER hard-deleted:
+    // `audit_ledger` / `consent_records` / `registrations` / sessions reference
+    // `users` (the audit trail must survive) and the `users_email_or_phone`
+    // CHECK requires identifiers to persist. This is a downstream projection
+    // flag, NOT an authz gate — authz stays Zitadel-token-driven (a
+    // Zitadel-deactivated user already cannot obtain tokens). Reactivation
+    // clears it back to null when the user reappears active in Zitadel.
+    deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

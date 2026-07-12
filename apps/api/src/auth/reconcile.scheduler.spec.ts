@@ -52,9 +52,11 @@ function fakeSweep(): {
   const service = {
     sweep: vi.fn(() => {
       calls += 1;
-      return new Promise<{ reconciled: number }>((resolve) => {
-        resolvers.push(() => resolve({ reconciled: 0 }));
-      });
+      return new Promise<{ reconciled: number; deactivated: number }>(
+        (resolve) => {
+          resolvers.push(() => resolve({ reconciled: 0, deactivated: 0 }));
+        },
+      );
     }),
   } as unknown as ReconcileService;
   return {

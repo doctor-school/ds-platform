@@ -103,6 +103,15 @@ export interface IdpUser {
   phone?: string | undefined;
   emailVerified: boolean;
   phoneVerified: boolean;
+  /**
+   * Whether Zitadel reports the account **active** (EARS-19 reconcile depth,
+   * #753). The real adapter derives it from the User v2 `state`
+   * (`USER_STATE_ACTIVE`), defaulting `true` when `state` is absent so an older
+   * wire shape stays backward-safe. The reconcile sweep soft-deletes the mirror
+   * row of a present-but-inactive user (and skips its `doctor_guest` re-grant);
+   * a user that reappears `active` is reactivated.
+   */
+  active: boolean;
 }
 
 /**

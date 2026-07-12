@@ -21,7 +21,7 @@ import { ReconcileService } from "./reconcile.service.js";
 /** Run one sweep against an already-booted Nest context, then close it. */
 export async function runReconcileSweep(
   app: INestApplicationContext,
-): Promise<{ reconciled: number }> {
+): Promise<{ reconciled: number; deactivated: number }> {
   try {
     const reconcile = app.get(ReconcileService);
     return await reconcile.sweep();
@@ -35,7 +35,7 @@ export async function runReconcileSweep(
  * count. The entry script ({@link file://./../../scripts/reconcile-sweep.ts})
  * calls this; it is also importable for an ops harness.
  */
-export async function bootstrapAndSweep(): Promise<{ reconciled: number }> {
+export async function bootstrapAndSweep(): Promise<{ reconciled: number; deactivated: number }> {
   const logger = new Logger("ReconcileCli");
   // Lazy imports so the unit test of `runReconcileSweep` never boots Nest.
   const { NestFactory } = await import("@nestjs/core");

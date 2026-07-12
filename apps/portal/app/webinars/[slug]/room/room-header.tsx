@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { Avatar } from "@ds/design-system/avatar";
 import { Badge } from "@ds/design-system/badge";
 import { Link as DsLink } from "@ds/design-system/link";
+import { initialsFromDisplayName } from "../../../../lib/display-name";
 import { LiveDuration, PresenceCount } from "./room-presence";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -21,14 +23,13 @@ import { ThemeToggle } from "./theme-toggle";
  * #690 realized the two data-backed canvas header elements #584 deferred: the live
  * presence count (a server-side aggregate over the append-only beats, EARS-5) and
  * the live-duration suffix (from the actual go-live instant `liveAt`, EARS-10).
- * One canvas header element remains deferred, needing infra this surface does not
- * own — an omission, never a dead affordance:
- *   • the **doctor avatar** (initials) — re-deferred: 003 self-service registration
- *     collects NO name (the Zitadel profile is a placeholder never surfaced, and
- *     the `users` mirror has no name column), so there is no real display name to
- *     project. Fabricating initials from the email would be a faked value — exactly
- *     what #584 refused. Blocked on a session display-name projection (its own
- *     Issue), never faked here.
+ *
+ * #705 ships the last canvas header element, the **doctor avatar** (EARS-15): its
+ * initials are derived from the doctor's REAL saved display name (the JIT
+ * room-entry prompt now collects one, 006-design §11 — the page renders this
+ * header only on the name-set path, so `displayName` here is always a real name),
+ * via the DS {@link Avatar} primitive. Desktop-only per the canvas geometry. It is
+ * never fabricated from an email/placeholder — the value #584 refused to fake.
  *
  * All copy is injected from the message catalog (EARS-10) — no hardcoded
  * user-facing string lives here; the parent {@link RoomPage} reads the strings via
@@ -41,16 +42,22 @@ export interface RoomHeaderCopy {
   exit: string;
   /** The theme toggle's accessible name («Переключить тему», EARS-12). */
   themeToggle: string;
+  /** The avatar's accessible name («Ваш профиль: <name>», EARS-15). */
+  avatarLabel: string;
 }
 
 export function RoomHeader({
   eventHref,
   liveAt,
+  displayName,
   copy,
 }: {
   eventHref: string;
   /** The actual go-live instant (EARS-1 grant `liveAt`); `null` → no «· N мин» suffix. */
   liveAt: string | null;
+  /** The doctor's REAL saved display name (EARS-15) — the header renders only on
+   *  the name-set path, so this is always a real, non-empty name. */
+  displayName: string;
   copy: RoomHeaderCopy;
 }) {
   return (
@@ -113,6 +120,21 @@ export function RoomHeader({
             </span>
           </Link>
         </DsLink>
+        {/* 006 EARS-15 — the doctor's own initials avatar (canvas line 23), seated
+            between the exit link and the theme toggle per the canvas desktop order.
+            Desktop-only (`hidden … layout:inline-flex`, same collapse rule as the
+            presence count). The `bg-card text-card-foreground shadow-md` override
+            makes it the white-chip-on-blue-band look matching the sibling mobile ✕
+            chip (tailwind-merge resolves it against the primitive's default
+            `bg-primary-action`); the initials come ONLY from the real saved name
+            (EARS-15), never fabricated — with no name the page renders the JIT
+            prompt instead, so this never sees a placeholder. */}
+        <Avatar
+          aria-label={copy.avatarLabel}
+          className="hidden size-10 bg-card text-card-foreground shadow-md layout:inline-flex"
+        >
+          {initialsFromDisplayName(displayName)}
+        </Avatar>
         {/* 006 EARS-12 — the light/dark theme toggle: the canvas 44×44
             icon-button (canvas line 25, ADR-0013 canvas-wins; owner Stage-B
             decision 2026-07-12 — never the DS form switch), sitting in the

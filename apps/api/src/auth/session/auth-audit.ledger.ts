@@ -155,6 +155,18 @@ export function toLedgerRow(
         reason: null,
         metadata: { channel: event.channel },
       };
+    case "ReconcileDivergence":
+      // EARS-19 reconcile depth (#753): the sweep overwrote mirror identity
+      // fields Zitadel diverged on (Zitadel-wins). Keyed by the opaque subject;
+      // the changed **field names** ride in metadata — never the values, so the
+      // ledger stays PD-free (ADR-0001 §7, ADR-0003 §6).
+      return {
+        eventType: "auth.reconcile.divergence",
+        subjectId: event.sub,
+        sid: null,
+        reason: null,
+        metadata: { fields: event.fields },
+      };
   }
 }
 

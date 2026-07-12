@@ -67,7 +67,15 @@ export type AuthAuditEvent =
   // opaque subject + the verified `channel` — mirroring `Registered`'s shape (a
   // single channel-discriminated row, not split Email/Phone variants), per the
   // §7.3 single-event-per-outcome convention. No raw PD: keyed by `sub` only.
-  | { type: "IdentifierVerified"; sub: string; channel: AuthChannel };
+  | { type: "IdentifierVerified"; sub: string; channel: AuthChannel }
+  // EARS-19 reconcile depth (#753): the eventual-consistency sweep found Zitadel
+  // (the identity SoT) diverged from the mirror on one or more identity fields
+  // and overwrote them (Zitadel-wins). `fields` names ONLY the changed column
+  // names (`email` / `phone` / `email_verified` / `phone_verified`) — never the
+  // values (PII-minimal); keyed by the opaque subject. Emitted by the reconcile
+  // sweep, not an HTTP route, so it is outside the high-stakes-route emission
+  // registry (`test/authz/audit-emission-coverage.e2e-spec.ts`).
+  | { type: "ReconcileDivergence"; sub: string; fields: string[] };
 
 /**
  * The runtime-enumerable taxonomy of event `type` discriminants — the same set
@@ -89,6 +97,7 @@ export const AUTH_AUDIT_EVENT_TYPES = [
   "PasswordResetCompleted",
   "AccountLocked",
   "IdentifierVerified",
+  "ReconcileDivergence",
 ] as const satisfies readonly AuthAuditEvent["type"][];
 
 export type AuthAuditEventType = (typeof AUTH_AUDIT_EVENT_TYPES)[number];

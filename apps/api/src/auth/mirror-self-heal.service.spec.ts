@@ -12,17 +12,21 @@ import type { UserMirrorService } from "./user-mirror.service.js";
  * swallowed (fail-soft — a heal failure must never 500 a valid request).
  */
 
-function fakeIdp(user: IdpUser | null): {
+function fakeIdp(user: Omit<IdpUser, "active"> | null): {
   idp: IdpClient;
   granted: string[];
   getUserCalls: string[];
 } {
   const granted: string[] = [];
   const getUserCalls: string[] = [];
+  // The self-heal path does not branch on `active` (an authenticated subject is
+  // active by construction); default it so the fixtures stay focused on the
+  // identity fields the heal actually reads.
+  const resolved: IdpUser | null = user ? { ...user, active: true } : null;
   const idp = {
     getUser: (sub: string) => {
       getUserCalls.push(sub);
-      return Promise.resolve(user);
+      return Promise.resolve(resolved);
     },
     grantProjectRole: (sub: string) => {
       granted.push(sub);

@@ -78,6 +78,13 @@
       "when": 1783667540952,
       "tag": "0010_charming_changeling",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1783834710590,
+      "tag": "0011_users_deactivated_at",
+      "breakpoints": true
     }
   ]
 }

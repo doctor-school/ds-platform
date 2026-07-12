@@ -191,7 +191,7 @@ gate touches no other call site:
   `auth.lockout.triggered`. The counter, lock, and notification email are native.
 - **Audit ledger** (EARS-18) — see the `AuthAuditLog` port above.
 
-## Reconciliation sweep schedule (built — #119)
+## Reconciliation sweep schedule + depth (built — #119, #753)
 
 - **Periodic reconcile schedule** — `ReconcileScheduler` registers a config-driven
   `@nestjs/schedule` interval that calls `ReconcileService.sweep()` (the EARS-19
@@ -201,10 +201,41 @@ gate touches no other call site:
   is the ops manual trigger — not an HTTP endpoint, since v1 has no admin-auth
   surface. Operating detail: `apps/docs/content/operations/auth-operations.md`.
 
-## Seams (not built yet)
+- **Conflict-resolution policy (#753, design §11)** — Zitadel is the identity SoT
+  (ADR-0001), so `UserMirrorService.upsert` resolves a mirror-vs-Zitadel
+  divergence **Zitadel-wins** on the identity fields and **mirror-owns** the
+  local projection:
 
-- **Deeper reconciliation** — conflict resolution + soft-delete handling beyond
-  the simple upsert sweep is deferred (design §11).
+  | Field(s)                                             | Owner       | On sweep                         |
+  | ---------------------------------------------------- | ----------- | -------------------------------- |
+  | `email`, `phone`, `email_verified`, `phone_verified` | **Zitadel** | overwritten (Zitadel-wins)       |
+  | `role`                                               | **mirror**  | preserved (local authz seam)     |
+  | `id`, `created_at`                                   | **mirror**  | preserved                        |
+  | `deactivated_at`                                     | **mirror**  | cleared on upsert (reactivation) |
+
+  When an upsert actually changes an identity field on an existing row, the sweep
+  appends an **`auth.reconcile.divergence`** audit event (`AUTH_AUDIT`) carrying
+  only the **changed field names** — never the values (PD-minimal, ADR-0001 §7 /
+  ADR-0003 §6). A brand-new row and a no-op pass emit nothing.
+
+- **Soft-delete / deactivation (#753)** — a user Zitadel reports **inactive**
+  (`state != USER_STATE_ACTIVE`), or one **absent** from the fully-paginated
+  `listUsers()` enumeration (hard-deleted at the IdP), has its still-active mirror
+  row soft-deleted (`users.deactivated_at = now()`, `UserMirrorService.softDelete`)
+  and is **not** re-granted `doctor_guest`. A user that reappears active is
+  **reactivated** (its `deactivated_at` cleared) on the next upsert. Rows are
+  **never hard-deleted** — the `audit_ledger` / `consent_records` / `registrations`
+  / session references and the `users_email_or_phone` CHECK require identifiers to
+  persist. Two safety guards keep a failed enumeration from wiping the mirror: the
+  real adapter's `listUsers()` **throws** on a non-2xx (an outage must not read as
+  "zero users") and paginates in full (a >100-user page must not truncate), and the
+  sweep **skips** the absent-row pass on an empty enumeration.
+
+  > `deactivated_at` is a downstream **projection flag, NOT an authz gate** — it is
+  > deliberately not wired into `AuthzGuard` or the login path. Authz stays
+  > Zitadel-token-driven; a Zitadel-deactivated user already cannot obtain tokens,
+  > so gating on this column would only add a redundant, drift-prone second gate.
+  > Hard-purge / GDPR erasure of soft-deleted rows is out of 003 scope.
 
 ## Constructor-ordering constraint
 

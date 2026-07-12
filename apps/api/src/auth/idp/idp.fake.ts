@@ -29,6 +29,8 @@ interface FakeRecord {
   phone?: string | undefined;
   emailVerified: boolean;
   phoneVerified: boolean;
+  /** #753: whether Zitadel reports the account active. A deactivated record stays enumerable (the sweep must see it as present-but-inactive). */
+  active: boolean;
   /** The BFF forwards the password to the IdP at create; the fake keeps it so the password check (EARS-5) is exercised. Never stored by `apps/api` itself (design §2). */
   password?: string | undefined;
 }
@@ -119,6 +121,7 @@ export class FakeIdpClient implements IdpClient {
       phone,
       emailVerified: false,
       phoneVerified: false,
+      active: true,
       password: input.password,
     };
     this.bySub.set(sub, record);
@@ -432,6 +435,7 @@ export class FakeIdpClient implements IdpClient {
         phone: r.phone,
         emailVerified: r.emailVerified,
         phoneVerified: r.phoneVerified,
+        active: r.active,
       })),
     );
   }
@@ -448,24 +452,85 @@ export class FakeIdpClient implements IdpClient {
       phone: r.phone,
       emailVerified: r.emailVerified,
       phoneVerified: r.phoneVerified,
+      active: r.active,
     });
   }
 
   /**
    * Seed a user directly, bypassing the registration cascade — models a Zitadel
    * user whose create webhook was never delivered, so the reconciliation sweep
-   * (EARS-19) has a divergence to close.
+   * (EARS-19) has a divergence to close. `active` defaults true; pass
+   * `active: false` to seed a present-but-deactivated user (#753).
    */
-  seedUser(input: { sub: string; email?: string; phone?: string }): void {
+  seedUser(input: {
+    sub: string;
+    email?: string;
+    phone?: string;
+    active?: boolean;
+  }): void {
     const record: FakeRecord = {
       sub: input.sub,
       email: input.email?.toLowerCase(),
       phone: input.phone,
       emailVerified: false,
       phoneVerified: false,
+      active: input.active ?? true,
     };
     this.bySub.set(record.sub, record);
     if (record.email) this.byEmail.set(record.email, record);
     if (record.phone) this.byPhone.set(record.phone, record);
+  }
+
+  /**
+   * #753 test control: flip a user's Zitadel `state` between active and
+   * inactive. A deactivated user stays enumerable by {@link listUsers} (present
+   * but `active: false`) so the sweep sees the deactivation; reactivating clears
+   * it so the sweep can restore the mirror row. Unknown sub throws (a test bug).
+   */
+  setActive(sub: string, active: boolean): void {
+    const record = this.bySub.get(sub);
+    if (!record) throw new Error(`setActive: unknown sub ${sub}`);
+    record.active = active;
+  }
+
+  /**
+   * #753 test control: model a user **hard-deleted** in Zitadel — it drops out
+   * of the enumeration entirely (not merely inactive), which the sweep detects
+   * as an absent sub and soft-deletes the mirror row for.
+   */
+  removeUser(sub: string): void {
+    const record = this.bySub.get(sub);
+    if (!record) return;
+    this.bySub.delete(sub);
+    if (record.email) this.byEmail.delete(record.email);
+    if (record.phone) this.byPhone.delete(record.phone);
+  }
+
+  /** #753 test/seed helper: update a user's identity fields, modelling a Zitadel-side edit the sweep must reconcile onto the mirror (Zitadel-wins). */
+  setIdentity(
+    sub: string,
+    fields: {
+      email?: string;
+      phone?: string;
+      emailVerified?: boolean;
+      phoneVerified?: boolean;
+    },
+  ): void {
+    const record = this.bySub.get(sub);
+    if (!record) throw new Error(`setIdentity: unknown sub ${sub}`);
+    if (fields.email !== undefined) {
+      if (record.email) this.byEmail.delete(record.email);
+      record.email = fields.email.toLowerCase();
+      this.byEmail.set(record.email, record);
+    }
+    if (fields.phone !== undefined) {
+      if (record.phone) this.byPhone.delete(record.phone);
+      record.phone = fields.phone;
+      this.byPhone.set(record.phone, record);
+    }
+    if (fields.emailVerified !== undefined)
+      record.emailVerified = fields.emailVerified;
+    if (fields.phoneVerified !== undefined)
+      record.phoneVerified = fields.phoneVerified;
   }
 }

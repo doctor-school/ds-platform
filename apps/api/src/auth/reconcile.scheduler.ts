@@ -96,8 +96,10 @@ export class ReconcileScheduler implements OnModuleInit, OnModuleDestroy {
     }
     this.running = true;
     try {
-      const { reconciled } = await this.reconcile.sweep();
-      this.logger.log(`reconcile sweep complete — reconciled ${reconciled}`);
+      const { reconciled, deactivated } = await this.reconcile.sweep();
+      this.logger.log(
+        `reconcile sweep complete — reconciled ${reconciled}, deactivated ${deactivated}`,
+      );
     } catch (err) {
       this.logger.error(
         `reconcile sweep failed (backstop, will retry next tick): ${

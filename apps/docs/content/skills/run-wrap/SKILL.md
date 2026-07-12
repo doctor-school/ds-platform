@@ -11,6 +11,8 @@ mode: inline
 
 This is the procedure behind the **`/wrap`** slash command ([`.claude/commands/wrap.md`](../../../../../.claude/commands/wrap.md)) — the capstone of epic #247's feedback-improvement loop: at end of session it turns the just-finished session's deviations into durable instruction/memory fixes, runs the task lifecycle to completion, and emits a handoff. It is **connective** — each stage **invokes an existing skill** and does not restate it. If a stage's detail is wrong, fix it in the owning skill.
 
+> **This skill is the single source of the wrap procedure.** `.claude/commands/wrap.md` is only a thin entry pointer that says "read this skill and run it" — it carries no stage detail of its own, so the stages, gates, and failure modes below are never duplicated there (#758).
+
 > **Cannot proceed without** — stage 0 has confirmed no dispatched agent is still in flight; stage 1 must return the schema'd findings array from an _independent_ agent (never self-review); stage 2's approval gate is mandatory before any edit lands; stage 3 must leave `pnpm lint:instruction-budget` green by **compacting**, never by appending.
 
 ## The stages

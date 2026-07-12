@@ -22,8 +22,12 @@ import { parseRoomReturnTarget } from "./room-return";
  * command fires once, here, after the session exists (design §3.2).
  */
 
-/** The default landing when no (or no safe) event context rode the round-trip. */
-const DEFAULT_LANDING = "/account";
+/**
+ * The default landing when no (or no safe) event context rode the round-trip.
+ * #769 facade re-point — «Мои события» (`/account/events`, already
+ * product-grade), not the 003-era `/account` session dump.
+ */
+const DEFAULT_LANDING = "/account/events";
 
 /**
  * Read the carried `returnTo` off the current URL's query, if any. Runs only in
@@ -40,14 +44,15 @@ export function currentReturnTarget(): string | null {
  * return WHERE to land:
  *   • a SAFE event intent → fire `RegisterForEvent` for its slug, then land on the
  *     event page (`intent.returnTo`), already registered (EARS-2);
- *   • no / an unsafe target → the default `/account` landing (never an open
- *     redirect — an attacker-supplied cross-origin `returnTo` is dropped by the
- *     `parseReturnTarget` guard before it can be navigated to).
+ *   • no / an unsafe target → the default «Мои события» landing
+ *     (`/account/events`) — never an open redirect (an attacker-supplied
+ *     cross-origin `returnTo` is dropped by the `parseReturnTarget` guard before
+ *     it can be navigated to).
  *
  * The register call is best-effort: if it throws (a transient error, a gating
  * refusal), the doctor is still landed on the event page — the per-user
  * registered-state read (EARS-4) or a retry surfaces there — never stranded on
- * `/account`. Firing again on a retry is a server-side idempotent no-op (EARS-3).
+ * «Мои события». Firing again on a retry is a server-side idempotent no-op (EARS-3).
  */
 export async function completeReturnTarget(
   rawReturnTo: string | null,

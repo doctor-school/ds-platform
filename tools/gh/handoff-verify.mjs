@@ -10,7 +10,7 @@
  *
  * Canon: `.claude/rules/repo-conventions.md` → Issue conventions (handoff
  * premises are hypotheses); wired into `/wrap` handoff emission
- * (`.claude/commands/wrap.md` §5) and resume guidance.
+ * (`apps/docs/content/skills/run-wrap/SKILL.md` §5) and resume guidance.
  *
  * Usage:
  *   pnpm handoff:verify <handoff-file>

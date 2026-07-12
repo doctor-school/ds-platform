@@ -12,10 +12,14 @@ import { UserMirrorService } from "./user-mirror.service.js";
  * that closes a webhook-miss divergence (ADR-0001 Consequences) by upserting a
  * mirror row — and ensuring the `doctor_guest` grant — for every Zitadel user.
  *
- * SEAM: the periodic schedule (cron via `@nestjs/schedule`) is not wired in F1;
- * `sweep()` is the unit the scheduler will call. Wiring the trigger + the deeper
- * conflict-resolution/soft-delete reconciliation is deferred (design §11) and
- * surfaced as decision-debt.
+ * The periodic trigger IS wired (#119): `ReconcileScheduler` registers a
+ * config-driven `@nestjs/schedule` interval (`RECONCILE_SWEEP_INTERVAL_MS`)
+ * that calls `sweep()`; a manual ops trigger exists as
+ * `pnpm --filter @ds/api reconcile:sweep`. The remaining deferral is the
+ * deeper reconciliation depth — conflict resolution for mirror-vs-Zitadel
+ * divergence and soft-delete/deactivation handling for users removed in
+ * Zitadel (the sweep only upserts) — tracked as decision-debt #753
+ * (design §11).
  */
 @Injectable()
 export class ReconcileService {

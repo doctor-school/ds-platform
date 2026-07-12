@@ -7,7 +7,7 @@ import { test, expect, type Page } from "@playwright/test";
  *     default; the system `prefers-color-scheme` is NEVER consulted (asserted
  *     under BOTH emulated schemes);
  *   • the room-header toggle — the canvas 44×44 icon-button (`aria-pressed`
- *     tracking the dark state, glyph ☾ in light / ☀ in dark) — switches
+ *     tracking the dark state, glyph ☾︎ in light / ☀︎ in dark) — switches
  *     light↔dark by toggling `.dark` on `<html>` and persists the explicit
  *     choice under `ds-theme`;
  *   • a persisted explicit choice WINS (an explicit `light` beats the dark
@@ -91,8 +91,8 @@ function themeButton(page: Page) {
   return page.getByRole("button", { name: "Переключить тему" });
 }
 
-/** The toggle's glyph — ☾ in light (act to go dark), ☀ in dark (act to go light). */
-async function expectGlyph(page: Page, glyph: "☾" | "☀") {
+/** The toggle's glyph — ☾︎ in light (act to go dark), ☀︎ in dark (act to go light). */
+async function expectGlyph(page: Page, glyph: "☾︎" | "☀︎") {
   await expect(themeButton(page)).toContainText(glyph);
 }
 
@@ -213,11 +213,11 @@ test.describe("006 EARS-12 room-header theme toggle — canvas icon-button flips
     await page.waitForURL(new RegExp(`/webinars/${SLUG_LIVE}/room$`));
 
     // Fresh room entry: the dark default renders — the toggle is a `<button>`
-    // pressed for dark, showing the ☀ "switch to light" glyph.
+    // pressed for dark, showing the ☀︎ "switch to light" glyph.
     const toggle = themeButton(page);
     await expect(toggle).toBeVisible();
     await expect(toggle).toHaveAttribute("aria-pressed", "true");
-    await expectGlyph(page, "☀");
+    await expectGlyph(page, "☀︎");
     expect(await isDark(page)).toBe(true);
     expect(await storedTheme(page), "the default is not a stored choice").toBeNull();
 
@@ -225,7 +225,7 @@ test.describe("006 EARS-12 room-header theme toggle — canvas icon-button flips
     // the now-EXPLICIT choice persists.
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
-    await expectGlyph(page, "☾");
+    await expectGlyph(page, "☾︎");
     expect(await isDark(page)).toBe(false);
     expect(await storedTheme(page)).toBe("light");
 
@@ -249,7 +249,7 @@ test.describe("006 EARS-12 room-header theme toggle — canvas icon-button flips
     await expect(toggleAgain).toHaveAttribute("aria-pressed", "false");
     await toggleAgain.click();
     await expect(toggleAgain).toHaveAttribute("aria-pressed", "true");
-    await expectGlyph(page, "☀");
+    await expectGlyph(page, "☀︎");
     expect(await isDark(page)).toBe(true);
     expect(await storedTheme(page)).toBe("dark");
     await page.reload({ waitUntil: "domcontentloaded" });
@@ -271,7 +271,7 @@ test.describe("006 EARS-12 room-header theme toggle — canvas icon-button flips
     await page.waitForURL(new RegExp(`/webinars/${SLUG_LIVE}/room$`));
     expect(await isDark(page)).toBe(false);
     await expect(themeButton(page)).toHaveAttribute("aria-pressed", "false");
-    await expectGlyph(page, "☾");
+    await expectGlyph(page, "☾︎");
     await context.close();
   });
 });

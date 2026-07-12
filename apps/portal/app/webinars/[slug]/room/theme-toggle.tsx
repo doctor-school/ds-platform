@@ -77,8 +77,11 @@ export function ThemeToggle({
       )}
     >
       {/* The canvas themeIcon glyph — decorative; the button's aria-label carries
-          the accessible name (the glyph must not pollute it). */}
-      <span aria-hidden="true">{dark ? "☀" : "☾"}</span>
+          the accessible name (the glyph must not pollute it). U+FE0E (VARIATION
+          SELECTOR-15) forces monochrome TEXT presentation — bare U+2600 ☀
+          rasterizes via Segoe UI Emoji as a COLOR emoji that ignores CSS color
+          and would never take `text-header-foreground` (spec §10). */}
+      <span aria-hidden="true">{dark ? "☀︎" : "☾︎"}</span>
     </button>
   );
 }

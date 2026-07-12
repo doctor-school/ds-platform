@@ -1,6 +1,6 @@
 ---
 title: "Feature 008 — Portal shell & discovery front-door (PRD)"
-description: "Product requirements for the persistent portal app-shell header + account menu and the public discovery front-door at `/`. Portal surface IA epic; source of the 008 EARS triplet (ADR-0014). Retires the `/` scaffold placeholder."
+description: "Product requirements for the persistent portal app-shell header (logo, nav, theme toggle, avatar-icon→profile) and the public discovery front-door at `/`. Portal surface IA epic; source of the 008 EARS triplet (ADR-0014). Retires the `/` scaffold placeholder."
 slug: portal-surface-ia-008-portal-shell-product
 epic: ../../product/portal-surface-ia/brief.md
 status: Draft
@@ -14,55 +14,54 @@ lang: en
 
 ## Feature summary
 
-The spine of the personal cabinet: a **persistent app-shell header** present across the portal, carrying an **account menu** that binds the shipped surfaces into one LK — for a logged-in doctor **[Мои события · Профиль · Выйти]**, for a guest **[Войти]** — and **`/` as the canonical public discovery front-door**, the upcoming-broadcasts listing shown identically to a guest and a logged-in doctor. This feature **retires the `/` scaffold** (the «Каркас приложения» placeholder card whose only action is "go to sign in") and makes **`/` the post-login landing**. The discovery listing reuses the listing surface already vendored for feature 004; the header itself is likely a new design-system block that needs its own design mini-iteration before build.
+The spine of the personal cabinet: a **persistent app-shell header** present across the portal — carrying the logo (→ `/`), the top-nav **[Эфиры · Школы · Мои события]**, a theme toggle, and, for a logged-in doctor, an **avatar icon (initials) that navigates directly to the profile `/account`**; a guest sees a **«Войти»** button instead — and **`/` as the canonical public discovery front-door**, the upcoming-broadcasts listing shown identically to a guest and a logged-in doctor. The header is **already designed in the «Doctor.School визуальный язык» canvas and vendored across all portal screens**; this feature wires it as the persistent portal shell, makes **`/`** (the vendored `Эфиры.dc.html` = [`design-source/webinars-listing.dc.html`](../../../../../../design-source/webinars-listing.dc.html)) both the **discovery front-door** and the **post-login landing**, and **retires the `/` scaffold** (the «Каркас приложения» placeholder card whose only action is "go to sign in"). The account entry is an **avatar icon → `/account`** (profile), not a dropdown menu; sign-out lives on the profile screen (feature 009).
 
 ## User stories
 
-- **US-1** — As a **doctor**, wherever I am in the portal a persistent header gives me an account menu — **Мои события**, **Профиль**, **Выйти** — so I can navigate my personal cabinet from any page, not just by direct link.
-- **US-2** — As a **guest**, that same persistent header shows a clear **Войти**, so I always have an obvious way in.
+- **US-1** — As a **doctor**, wherever I am in the portal a persistent header carries the logo (→ `/`), the top-nav **Эфиры · Школы · Мои события**, and a theme toggle — so I can navigate my personal cabinet from any page, not just by direct link («Мои события» → `/account/events`, feature 005).
+- **US-2** — As a **guest**, that same persistent header shows a clear **Войти** button, so I always have an obvious way in.
 - **US-3** — As a **doctor**, after I log in I land on **`/`** — the discovery listing of upcoming broadcasts — not a placeholder card and not a dead dashboard.
 - **US-4** — As a **doctor or guest**, `/` is the **public** discovery front-door listing upcoming webinars, shown the **same** way regardless of whether I am signed in — so discovery never depends on auth state.
-- **US-5** — As a **doctor**, from the account menu I reach **«Мои события»** (`/account/events`) and my **profile** (`/account`) in one tap.
-- **US-6** — As a **doctor**, I can **sign out** from the account menu anywhere in the portal, and I am returned to a sensible public state.
+- **US-5** — As a **doctor**, the header shows an **avatar icon with my initials** that takes me straight to my **profile `/account`** (feature 009) in one tap — an icon, not a dropdown menu.
+- **US-6** — _Retired._ Sign-out is not a header affordance; it lives on the profile screen (feature 009, US-3). Id kept to preserve numbering.
 
 ## Flows
 
 **Persistent shell (US-1, US-2, US-5):**
 
-1. On any portal page, the app-shell header renders. If the visitor is a logged-in doctor, the account menu offers Мои события · Профиль · Выйти; if a guest, it offers Войти.
-2. The doctor opens the account menu → taps Мои события → lands on `/account/events` (feature 005); or taps Профиль → lands on `/account` (feature 009).
+1. On any portal page, the app-shell header renders: logo (→ `/`), top-nav **Эфиры · Школы · Мои события**, theme toggle, and — for a logged-in doctor — an avatar icon with the doctor's initials; for a guest, a **Войти** button.
+2. The doctor taps **Мои события** in the nav → lands on `/account/events` (feature 005); or taps the **avatar icon** → lands on the profile `/account` (feature 009).
 
 **Post-login landing (US-3, US-4):**
 
 1. Doctor completes login (feature 003) → is returned to **`/`**, the public discovery listing.
-2. The same `/` renders for a guest — the discovery front-door does not branch on auth state; only the header's account menu differs.
-
-**Sign-out (US-6):**
-
-1. Doctor opens the account menu → taps Выйти → the session ends (feature 003 logout) → the doctor is returned to a public state.
+2. The same `/` renders for a guest — the discovery front-door does not branch on auth state; only the header's account affordance differs (avatar icon vs. «Войти»).
 
 ## Product acceptance criteria
 
-- A **persistent header** is present across portal surfaces and carries the account menu: **logged-in** → **Мои события · Профиль · Выйти**; **guest** → **Войти**. The menu contents truthfully reflect auth state.
-- **`/` is the canonical public discovery listing** of upcoming broadcasts, rendered **identically** for a guest and a logged-in doctor (it reuses the feature-004 listing surface). No separate dashboard exists.
+- A **persistent header** is present across portal surfaces and carries: the **logo** (→ `/`), the top-nav **Эфиры · Школы · Мои события**, a **theme toggle**, and — **logged-in** → an **avatar icon (initials) that navigates to `/account`** (the profile); **guest** → a **«Войти»** button. This is explicitly **not a dropdown menu**, and there is **no «Выйти» in the header** (sign-out lives on the profile, feature 009). The header truthfully reflects auth state.
+- **`/` is the canonical public discovery listing** of upcoming broadcasts, rendered **identically** for a guest and a logged-in doctor (it reuses the feature-004 listing surface, the vendored `webinars-listing.dc.html`). No separate dashboard exists.
 - **Post-login landing is `/`.** The auth flow returns the doctor to the discovery front-door, never to a scaffold.
-- The account menu's links resolve to the **shipped** surfaces: «Мои события» → `/account/events` (feature 005), «Профиль» → `/account` (feature 009), «Выйти» → logout (feature 003).
+- The header's navigation resolves to the **shipped** surfaces: «Мои события» → `/account/events` (feature 005), the avatar icon → `/account` (feature 009, the profile).
 - **The `/` scaffold is retired** — the «Каркас приложения» placeholder card (whose only action is a "go to sign in" button) is no longer reachable in the portal.
 
 ## Out of scope
 
-- **The header's visual design / component composition** — it is likely a **new design-system block** (persistent app-shell header + account-menu dropdown) not yet in `@ds/design-system`; it gets its own `research-ui-element` / DS mini-iteration and Stage-A mockup before build (ADR-0013 / ADR-0014 §4–5). This PRD fixes _what the shell must do_, not _how it looks_.
+- **«Школы»** — a designed nav item in the header with **no feature or canvas yet** → **not built in this epic**; it renders as a deferred/inert nav target (or is omitted), a tracked future surface. This epic does not expand into it.
 - The discovery listing's internals (cards, ordering, lifecycle signalling) — owned by feature 004.
 - «Мои события» content and the room — features 005 / 006.
-- Profile content — feature 009.
+- Profile content and sign-out — feature 009.
 - Search, facets, notifications, a richer LK home — future iterations (epic brief).
 
 ## Open questions
 
-- Header composition beyond the account menu (logo, brand lockup, any top-level nav) and its **mobile** form (inline vs. drawer) — owner taste call at the Stage-A mockup.
-- Whether the guest header surfaces anything beyond **Войти** (e.g. a «Регистрация» affordance) — owner decision before the 008 EARS triplet fixes it.
-- Whether the account menu is a dropdown, a slide-over, or an avatar-anchored popover — a Stage-A composition choice, delegated to the header design mini-iteration.
+None — the shell is fully designed in the vendored canvas: the persistent header is present across all portal canvases (logo→`/`, top-nav [Эфиры · Школы · Мои события], theme toggle, avatar-icon→profile for a logged-in doctor / «Войти» for a guest), and mobile collapses the nav into a `≡` dropdown [Эфиры · Школы · Мои события].
 
 ## Approved mockup
 
-**Status:** Stage-A mockup pending — owner pick in [claude.ai/design](https://claude.ai) (project «Doctor.School визуальный язык»); recorded here at the discovery→delivery gate. The header being a likely new design-system block, its Stage-A runs together with the `research-ui-element` / DS mini-iteration that builds it. The discovery listing surface it wraps is already vendored for feature 004 ([`design-source/webinars-listing.dc.html`](../../../../../../design-source/webinars-listing.dc.html)).
+Vendored canvas source (byte-verbatim from the Claude Design project «Doctor.School визуальный язык» — build to these files, see [`design-source/README.md`](../../../../../../design-source/README.md)):
+
+- [`design-source/webinars-listing.dc.html`](../../../../../../design-source/webinars-listing.dc.html) — the discovery front-door `/` (canvas `Эфиры.dc.html`), shown identically to a guest and a logged-in doctor and used as the post-login landing.
+- The **persistent app-shell header** is the vendored-canvas header present across **all** portal screens — [`design-source/my-events.dc.html`](../../../../../../design-source/my-events.dc.html), [`design-source/webinars-listing.dc.html`](../../../../../../design-source/webinars-listing.dc.html), [`design-source/webinar-page.dc.html`](../../../../../../design-source/webinar-page.dc.html) — carrying logo→`/`, top-nav [Эфиры · Школы · Мои события], a theme toggle, and the avatar-icon→profile (logged-in) / «Войти» (guest); mobile collapses the nav into a `≡` dropdown. The avatar-icon→profile behaviour is per the owner clarification 2026-07-12.
+
+**Status:** composition authored by the product owner on the Claude Design canvas (project «Doctor.School визуальный язык»); Stage-B live-verify on the running stand before merge.

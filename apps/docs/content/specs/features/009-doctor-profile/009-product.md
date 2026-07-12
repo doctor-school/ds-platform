@@ -48,7 +48,7 @@ The doctor's account home: **`/account` becomes a read-only profile**. The docto
 - Avatar / photo, specialty, NMO progress, or any richer profile content — future iterations.
 - Security management UI (enabling/disabling MFA, changing password) — the profile _shows_ the security state; it does not manage it here.
 - Notification preferences.
-- The persistent header and account menu that link to `/account` — feature 008.
+- The persistent header (and its avatar-icon entry) that links to `/account` — feature 008.
 
 ## Open questions
 
@@ -58,4 +58,4 @@ The doctor's account home: **`/account` becomes a read-only profile**. The docto
 
 ## Approved mockup
 
-**Status:** Stage-A mockup pending — owner pick in [claude.ai/design](https://claude.ai) (project «Doctor.School визуальный язык»); recorded here at the discovery→delivery gate. Do not build before the owner's Stage-A pick (ADR-0014 §4–5).
+**Status:** **composed from the established neo-brutalist design language** — there is **no dedicated canvas** for the profile (owner decision 2026-07-12). It is built from `@ds/design-system` primitives (**Container / Card / Badge / Button**) inside the vendored portal-shell header (feature 008), following the «Doctor.School визуальный язык». No claude.ai/design Stage-A pick is required for this surface; the design gate before merge is the **Stage-B live-verify on the running dev stand** (ADR-0014 §4–5).

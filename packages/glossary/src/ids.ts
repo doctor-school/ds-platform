@@ -2,9 +2,21 @@
 // Run `pnpm generate:glossary` to regenerate. Verified by the `glossary-roundtrip` guard.
 export const GLOSSARY_IDS = {
   consent_gate: "consent_gate",
+  display_name: "display_name",
   doctor_guest: "doctor_guest",
   enumeration_resistance: "enumeration_resistance",
+  event: "event",
+  event_lifecycle_state: "event_lifecycle_state",
+  event_registration: "event_registration",
+  event_roster: "event_roster",
+  my_events: "my_events",
+  presence_heartbeat: "presence_heartbeat",
+  presence_minutes: "presence_minutes",
+  sponsor: "sponsor",
+  sponsor_report: "sponsor_report",
+  stream_config: "stream_config",
   user_mirror: "user_mirror",
+  webinar_room: "webinar_room",
 } as const;
 
 export type GlossaryId = keyof typeof GLOSSARY_IDS;
@@ -19,7 +31,19 @@ export interface GlossaryTerm {
 
 export const GLOSSARY_TERMS: readonly GlossaryTerm[] = [
   { id: "consent_gate", title: "consent gate", description: "The registration-time rule that no personal-data row is created before the registrant's per-purpose, versioned consent is recorded.", boundedContext: "compliance", lang: "en" },
+  { id: "display_name", title: "display name", description: "The doctor's real «Имя и фамилия», collected once just-in-time at first webinar-room entry and stored on the users mirror — served only to the doctor themself.", boundedContext: "identity", lang: "en" },
   { id: "doctor_guest", title: "doctor_guest", description: "The v1 self-service backend role and mirror identity granted to a net-new visitor who self-registers on the doctor portal.", boundedContext: "identity", lang: "en" },
   { id: "enumeration_resistance", title: "enumeration resistance", description: "Returning identical responses for existing vs unknown identifiers on auth surfaces, so an attacker cannot probe which accounts exist.", boundedContext: "identity", lang: "en" },
+  { id: "event", title: "event", description: "The webinar aggregate — the single authored entity (title, schedule, speakers, stream config, lifecycle state) the whole Webinars epic is built around.", boundedContext: "webinars", lang: "en" },
+  { id: "event_lifecycle_state", title: "event lifecycle state", description: "The single closed state machine (draft → published → live → ended → archived) that is the one source of truth every webinar surface reads.", boundedContext: "webinars", lang: "en" },
+  { id: "event_registration", title: "event registration", description: "The durable server-side record that one doctor is registered for one event — the basis for room admission and the sponsor roster, at most one per (doctor, event).", boundedContext: "webinars", lang: "en" },
+  { id: "event_roster", title: "event roster", description: "The set of current registrations for one event — the admission basis the webinar room gates against and the membership basis of the sponsor report.", boundedContext: "webinars", lang: "en" },
+  { id: "my_events", title: "«мои события» (my events)", description: "The authenticated portal surface listing a doctor's registered upcoming events nearest-first — closing the legacy 'registered but can't find it' gap.", boundedContext: "webinars", lang: "en" },
+  { id: "presence_heartbeat", title: "presence heartbeat", description: "The server-authoritative signal a live-room client posts every N seconds while its tab is visible — each accepted beat appended to a durable Postgres table.", boundedContext: "webinars", lang: "en" },
+  { id: "presence_minutes", title: "presence minutes", description: "The per-doctor minutes of attendance derived from the append-only heartbeat beats — the sponsor deliverable, concurrent-tab-coalesced and parameterized over N.", boundedContext: "webinars", lang: "en" },
+  { id: "sponsor", title: "sponsor", description: "The pharma partner backing a webinar (the epic's B2B side) — the party whose external stream the room embeds and who receives the attendance roster and presence-minute report.", boundedContext: "webinars", lang: "en" },
+  { id: "sponsor_report", title: "sponsor report", description: "The attendance report a sponsor receives after a webinar — in wave 1 a manual export of the per-doctor presence minutes; the automated «Отчёт партнёра V2» is wave 2.", boundedContext: "webinars", lang: "en" },
+  { id: "stream_config", title: "stream config", description: "An event's player configuration — an explicit provider from the closed enum rutube | youtube plus an embed reference — from which the room instantiates the player, never by URL-sniffing.", boundedContext: "webinars", lang: "en" },
   { id: "user_mirror", title: "domain user mirror", description: "The backend users row that projects a Zitadel identity into the domain — the UserMirror produced and reconciled by the auth feature.", boundedContext: "identity", lang: "en" },
+  { id: "webinar_room", title: "webinar room", description: "The server-side-gated portal surface where a registered doctor watches a live broadcast — embed player, live chat over Centrifugo, and heartbeat presence capture.", boundedContext: "webinars", lang: "en" },
 ];

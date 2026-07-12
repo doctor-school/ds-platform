@@ -40,8 +40,8 @@ describe("005 EARS-2 guest-through-auth completion (registration resume)", () =>
     expect(landing).toBe("/webinars/ahilles-042");
   });
 
-  it("EARS-2: with no carried event context, the system shall land on the default /account and register nothing", async () => {
-    await expect(completeReturnTarget(null)).resolves.toBe("/account");
+  it("EARS-2: with no carried event context, the system shall land on the default /account/events and register nothing", async () => {
+    await expect(completeReturnTarget(null)).resolves.toBe("/account/events");
     expect(registerForEvent).not.toHaveBeenCalled();
   });
 
@@ -53,7 +53,7 @@ describe("005 EARS-2 guest-through-auth completion (registration resume)", () =>
       "/account", // same-origin but not an event return target
       "/webinars/../account",
     ]) {
-      await expect(completeReturnTarget(evil)).resolves.toBe("/account");
+      await expect(completeReturnTarget(evil)).resolves.toBe("/account/events");
     }
     expect(registerForEvent).not.toHaveBeenCalled();
   });

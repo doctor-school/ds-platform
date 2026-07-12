@@ -3,17 +3,15 @@ import { test, expect, type Page } from "@playwright/test";
 /**
  * 006 EARS-12 — the portal-wide theme mechanism + the room-header toggle
  * (spec `apps/docs/content/specs/features/006-webinar-room/`, design §10):
- *   • fresh visit, no stored choice → the portal renders DARK — the product
- *     default; the system `prefers-color-scheme` is NEVER consulted (asserted
- *     under BOTH emulated schemes);
+ *   • fresh visit, no stored choice → the portal follows the system
+ *     `prefers-color-scheme` (both directions);
  *   • the room-header toggle — the canvas 44×44 icon-button (`aria-pressed`
  *     tracking the dark state, glyph ☾︎ in light / ☀︎ in dark) — switches
  *     light↔dark by toggling `.dark` on `<html>` and persists the explicit
  *     choice under `ds-theme`;
- *   • a persisted explicit choice WINS (an explicit `light` beats the dark
- *     default), survives reloads and rides across routes (the mechanism is
- *     portal-wide even though the only visible control is the room header's,
- *     #510);
+ *   • a persisted explicit choice WINS over the system value, survives reloads
+ *     and rides across routes (the mechanism is portal-wide even though the only
+ *     visible control is the room header's, #510);
  *   • the inline FOUC guard applies the resolved theme BEFORE first paint — the
  *     first animation frame already carries the right class (never a flash).
  *
@@ -109,33 +107,30 @@ async function login(page: Page): Promise<void> {
 
 // The leading `006 EARS-12 ` prefix is the ears-test-lint feature scope — a
 // parenthesized mid-title does NOT scope.
-test.describe("006 EARS-12 portal-wide theme mechanism — dark default, explicit override, no FOUC (e2e)", () => {
+test.describe("006 EARS-12 portal-wide theme mechanism — system default, explicit override, no FOUC (e2e)", () => {
   test.skip(
     !process.env.E2E_PORTAL_URL,
     "requires a live portal (E2E_PORTAL_URL) — manual gate",
   );
 
-  test("006 EARS-12: with no stored choice a fresh visit renders DARK — the system prefers-color-scheme is never consulted", async ({
+  test("006 EARS-12: with no stored choice a fresh visit follows the system prefers-color-scheme (both directions)", async ({
     browser,
   }) => {
-    // Both emulated system schemes yield the SAME dark render: the emulated
-    // light scheme is the proving case that the system value is not an input.
     for (const scheme of ["dark", "light"] as const) {
       const context = await browser.newContext({ colorScheme: scheme });
       const page = await context.newPage();
       await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
       expect(await storedTheme(page), "fresh visit stores nothing").toBeNull();
-      expect(await isDark(page), `system=${scheme} → still dark`).toBe(true);
+      expect(await isDark(page), `system=${scheme}`).toBe(scheme === "dark");
       await context.close();
     }
   });
 
-  test("006 EARS-12: a persisted explicit choice WINS — an explicit light beats the dark default under any system scheme", async ({
+  test("006 EARS-12: a persisted explicit choice WINS over the system value (both directions)", async ({
     browser,
   }) => {
     for (const [stored, scheme] of [
       ["light", "dark"],
-      ["light", "light"],
       ["dark", "light"],
     ] as const) {
       const context = await browser.newContext({ colorScheme: scheme });
@@ -152,30 +147,16 @@ test.describe("006 EARS-12 portal-wide theme mechanism — dark default, explici
   test("006 EARS-12: the FOUC guard applies the resolved theme BEFORE the first painted frame", async ({
     browser,
   }) => {
-    // Stored LIGHT is now the hardest case: any late application would paint
-    // the (wrong) dark default first.
-    const context = await browser.newContext({ colorScheme: "dark" });
-    const page = await context.newPage();
-    await seedStoredTheme(page, "light");
-    await armFirstPaintProbe(page);
-    await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-    expect(
-      await firstFrameDark(page),
-      "the first animation frame already resolves stored light — no wrong-theme flash",
-    ).toBe(false);
-    await context.close();
-  });
-
-  test("006 EARS-12: the dark default is applied from the very first frame on a fresh visit", async ({
-    browser,
-  }) => {
+    // Stored dark on a light-system browser — the hardest case: any late
+    // application would paint the (wrong) light default first.
     const context = await browser.newContext({ colorScheme: "light" });
     const page = await context.newPage();
+    await seedStoredTheme(page, "dark");
     await armFirstPaintProbe(page);
     await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
     expect(
       await firstFrameDark(page),
-      "the first animation frame already carries the dark default",
+      "the first animation frame already carries .dark — no wrong-theme flash",
     ).toBe(true);
     await context.close();
   });
@@ -183,12 +164,12 @@ test.describe("006 EARS-12 portal-wide theme mechanism — dark default, explici
   test("006 EARS-12: the persisted choice rides across routes — every portal surface resolves it", async ({
     browser,
   }) => {
-    const context = await browser.newContext({ colorScheme: "dark" });
+    const context = await browser.newContext({ colorScheme: "light" });
     const page = await context.newPage();
-    await seedStoredTheme(page, "light");
+    await seedStoredTheme(page, "dark");
     for (const path of ["/login", "/webinars"]) {
       await page.goto(`${BASE}${path}`, { waitUntil: "domcontentloaded" });
-      expect(await isDark(page), path).toBe(false);
+      expect(await isDark(page), path).toBe(true);
     }
     await context.close();
   });
@@ -212,53 +193,56 @@ test.describe("006 EARS-12 room-header theme toggle — canvas icon-button flips
     });
     await page.waitForURL(new RegExp(`/webinars/${SLUG_LIVE}/room$`));
 
-    // Fresh room entry: the dark default renders — the toggle is a `<button>`
-    // pressed for dark, showing the ☀︎ "switch to light" glyph.
+    // Fresh room entry on a light-system browser, no stored choice: the portal
+    // follows the system → light. The toggle is a `<button>` NOT pressed for
+    // dark, showing the ☾︎ "switch to dark" glyph, and nothing is persisted yet.
     const toggle = themeButton(page);
     await expect(toggle).toBeVisible();
-    await expect(toggle).toHaveAttribute("aria-pressed", "true");
-    await expectGlyph(page, "☀︎");
-    expect(await isDark(page)).toBe(true);
-    expect(await storedTheme(page), "the default is not a stored choice").toBeNull();
-
-    // Flip to light — the class lands LIVE (no reload), the glyph swaps, and
-    // the now-EXPLICIT choice persists.
-    await toggle.click();
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
     await expectGlyph(page, "☾︎");
     expect(await isDark(page)).toBe(false);
-    expect(await storedTheme(page)).toBe("light");
+    expect(
+      await storedTheme(page),
+      "the system default is not a stored choice",
+    ).toBeNull();
 
-    // Reload — the FOUC guard resolves the persisted light before first paint
-    // (beating the dark default).
+    // Flip to dark — the class lands LIVE (no reload), the glyph swaps, and the
+    // now-EXPLICIT choice persists.
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await expectGlyph(page, "☀︎");
+    expect(await isDark(page)).toBe(true);
+    expect(await storedTheme(page)).toBe("dark");
+
+    // Reload — the FOUC guard resolves the persisted dark before first paint.
     await armFirstPaintProbe(page);
     await page.reload({ waitUntil: "domcontentloaded" });
-    expect(await firstFrameDark(page)).toBe(false);
-    expect(await isDark(page)).toBe(false);
-    await expect(themeButton(page)).toHaveAttribute("aria-pressed", "false");
+    expect(await firstFrameDark(page)).toBe(true);
+    expect(await isDark(page)).toBe(true);
+    await expect(themeButton(page)).toHaveAttribute("aria-pressed", "true");
 
     // The choice rides across routes (portal-wide mechanism, room-only control).
     await page.goto(`${BASE}/webinars`, { waitUntil: "domcontentloaded" });
-    expect(await isDark(page)).toBe(false);
+    expect(await isDark(page)).toBe(true);
 
-    // Back in the room, flip back to dark — persisted and stable on reload.
+    // Back in the room, flip back to light — persisted and stable on reload.
     await page.goto(`${BASE}/webinars/${SLUG_LIVE}/room`, {
       waitUntil: "domcontentloaded",
     });
     const toggleAgain = themeButton(page);
-    await expect(toggleAgain).toHaveAttribute("aria-pressed", "false");
-    await toggleAgain.click();
     await expect(toggleAgain).toHaveAttribute("aria-pressed", "true");
-    await expectGlyph(page, "☀︎");
-    expect(await isDark(page)).toBe(true);
-    expect(await storedTheme(page)).toBe("dark");
+    await toggleAgain.click();
+    await expect(toggleAgain).toHaveAttribute("aria-pressed", "false");
+    await expectGlyph(page, "☾︎");
+    expect(await isDark(page)).toBe(false);
+    expect(await storedTheme(page)).toBe("light");
     await page.reload({ waitUntil: "domcontentloaded" });
-    expect(await isDark(page)).toBe(true);
+    expect(await isDark(page)).toBe(false);
 
     await context.close();
   });
 
-  test("006 EARS-12: an explicit light choice persists on every later room visit — dark default never overrides it", async ({
+  test("006 EARS-12: an explicit light choice beats a dark system scheme on every later room visit", async ({
     browser,
   }) => {
     const context = await browser.newContext({ colorScheme: "dark" });

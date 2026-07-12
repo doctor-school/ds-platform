@@ -95,6 +95,9 @@ outstanding work — do not restate it:
 ## 5. Handoff
 
 Run the existing `handoff-prompt` skill to emit the next-session prompt. Do not
-hand-roll the format — that skill owns it. Chunk the handoff's queue into waves
+hand-roll the format — that skill owns it. **Premise gate (mandatory, #743):**
+write the draft handoff to a temp file and run `pnpm handoff:verify <file>` —
+any STALE row = fix the claim before emitting; this deterministic gate replaces
+the prose-only premise check. Chunk the handoff's queue into waves
 of **≤3 full PR-cycles** («this session: 1–3; next: 4–6») — never a flat ranked
 list (run-wrap §5).

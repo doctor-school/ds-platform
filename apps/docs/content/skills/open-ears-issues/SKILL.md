@@ -16,6 +16,8 @@ mode: inline
 
 ## Procedure
 
+> **⛔ Precondition — do not emit a WBS for unconfirmed or orphan-prone scope.** Before opening anything: **(a)** the epic/feature must be confirmed **release-critical AND owner-approved per element** — a spec authored from an agent-inflated brainstorm is not a licence to open Issues ([[feedback_owner_approved_provenance]], [[feedback_remediation_scope_anchor]]); if any EARS encodes a surface/nav the owner never named (the «Школы» tell), stop and cut it upstream, don't ticket it. **(b)** Every child MUST land **blocked** unless it is the single intended **head** of the critical path — wire each to inherit the epic's release-gate or the prior EARS in sequence (step 4), so the WBS never lands as N simultaneously-takeable items. A backlog where `pnpm backlog:triage` jumps to many takeable rows after an open-ears run is the anti-pattern ([[feedback_no_orphan_issues_single_critical_path]]). Target: the run adds **at most one** new takeable item.
+
 1. **Verify the label set exists.** Run `gh label list | grep -E 'feature:NNN-<slug>|kind:ears-handler|agent-ready'`. If any label is missing, create it before opening any Issue:
 
    ```bash
@@ -80,6 +82,8 @@ mode: inline
 - Forgetting `--body` and letting the CLI hang — defensive fix at the call site.
 - Recording dependencies only as prose in the body and skipping the native links (step 4) — the board ordering procedure reads the native graph, so prose-only dependencies leave the operational surface blind. This is the gap #93 closes.
 - Opening only handler Issues for a `surface: user-facing` spec and skipping step 3a — the user-facing slices (forms, wiring, browser E2E) stay unowned and the "five green features over a non-functional product" failure recurs. This is the F-22 gap (#132); precedent #131 had to be created retroactively for 003.
+- **Landing a WBS as N simultaneously-takeable Issues** — opening children without inheriting the epic's release-gate, so `backlog:triage` fills with takeable rows outside the critical path (the #788–#796 sprawl, 28 takeable, cancelled 2026-07-12). Every child except the intended head lands blocked (Precondition (b)).
+- **Ticketing unconfirmed / invented scope** — turning an agent-inflated brainstorm into an Issue set before the owner approved each element (the «Школы» child #796). The Precondition gate exists to stop this at open time.
 
 ## Related skills
 

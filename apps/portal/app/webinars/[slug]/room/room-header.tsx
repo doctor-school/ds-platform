@@ -92,20 +92,17 @@ export function RoomHeader({
       <div className="flex flex-none items-center gap-2.5 layout:gap-5">
         {/* The live «N врачей в комнате» presence count (canvas line 21) — desktop
             only. A server-side aggregate refreshed by the heartbeat loop (EARS-5),
-            never per-doctor PII. White 14px-bold copy on the `bg-header` band was
-            only 3.69:1 (the `header` large/bold ≥3:1 carve-out does not reach 14px
-            text) — #713. Both this count and the sibling exit label now sit on a
-            `primary-surface` (blue.700) plate with `primary-surface-foreground`,
-            the DS brand-fill pattern for normal-weight white copy: 8.14:1, genuine
-            AA in BOTH themes (the surface stays blue.700 in dark). */}
-        <PresenceCount className="hidden items-center bg-primary-surface px-2.5 py-1 text-sm font-bold text-primary-surface-foreground layout:inline-flex" />
+            never per-doctor PII. Plain white `header-foreground` on the `bg-header`
+            band (canvas layout, no plate) — AA-clean because the band is now the
+            accessible blue.700 (white = 8.14:1), deepened from blue.500 for #713. */}
+        <PresenceCount className="hidden text-sm font-bold text-header-foreground layout:inline" />
         {/* The truthful exit target — the 004 event page (never a soft close). One
             link, two visual variants: a desktop labelled text and a mobile compact
             ✕ glyph (aria-hidden — the anchor's aria-label carries the accessible
-            name). The desktop label sits on the same `primary-surface` AA plate as the presence count (#713); the mobile ✕ keeps its own `bg-card` plate. DS `Link` owns hover + focus. */}
+            name). DS `Link` owns hover + focus; header-foreground overrides blue. */}
         <DsLink asChild className="flex-none text-header-foreground">
           <Link href={eventHref} aria-label={copy.exit}>
-            <span className="hidden items-center bg-primary-surface px-2.5 py-1 text-sm font-bold text-primary-surface-foreground underline decoration-2 underline-offset-4 layout:inline-flex">
+            <span className="hidden text-sm font-bold underline decoration-2 underline-offset-4 layout:inline">
               {copy.exit}
             </span>
             <span

@@ -62,7 +62,7 @@
   --color-tint-foreground: #114d9e;
   --color-info: #2d84f2;
   --color-chip-border: #aed4fb;
-  --color-header: #2d84f2;
+  --color-header: #114d9e;
   --color-header-foreground: #ffffff;
   --color-header-hairline: rgba(255, 255, 255, 0.5);
   --color-success: #009959;
@@ -282,7 +282,7 @@
   --color-tint-foreground: #114d9e;
   --color-info: #2d84f2;
   --color-chip-border: #aed4fb;
-  --color-header: #2d84f2;
+  --color-header: #114d9e;
   --color-header-foreground: #ffffff;
   --color-header-hairline: rgba(255, 255, 255, 0.5);
   --color-success: #009959;

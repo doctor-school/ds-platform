@@ -103,8 +103,8 @@
       "$description": "Resting border of an unselected filter chip — the pale brand-blue outline (blue.200 light → blue.300 @ 45% dark) that reads as a quiet, tappable outline before selection. Source `chipBorder`."
     },
     "header": {
-      "$value": "{color.blue.500}",
-      "$description": "Brand chrome band (top nav / app header) — the brand-forward blue.500. Pair with `header-foreground`; header text is large/bold brand or logo (white on blue.500 is 3.69:1, the large/bold ≥3:1 carve-out, not normal-weight body — see AA note in ADR-0013 §7)."
+      "$value": "{color.blue.700}",
+      "$description": "Brand chrome band (top nav / app header) — the accessible brand blue.700. Pair with `header-foreground`; white on blue.700 is 8.14:1, clearing WCAG-AA for normal-weight body text as well as large/bold brand or logo (deepened from blue.500 for #713 — blue.500's 3.69:1 white met only the large/bold ≥3:1 carve-out). Same value in both theme sets — the header band does not change with the theme (006 design §10)."
     },
     "header-foreground": {
       "$value": "{color.white}",

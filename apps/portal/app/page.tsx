@@ -1,29 +1,13 @@
-import Link from "next/link";
-import { useTranslations } from "next-intl";
-import { Button } from "@ds/design-system/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@ds/design-system/card";
+import { redirect } from "next/navigation";
 
+/**
+ * #769 facade re-point — the portal front door forwards to the real public
+ * upcoming-broadcasts listing (`/webinars`, 004 EARS-7). The former 003-era
+ * "Каркас приложения" scaffold card is retired now that the product surface it
+ * stood in for exists one level deeper: a visitor landing on `/` is taken
+ * straight to the live listing rather than a placeholder that only linked to
+ * sign-in.
+ */
 export default function HomePage() {
-  const t = useTranslations("home");
-  return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col items-center justify-center gap-8 px-6 py-16">
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="text-2xl">{t("title")}</CardTitle>
-          <CardDescription>{t("description")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button asChild>
-            <Link href="/login">{t("goToSignIn")}</Link>
-          </Button>
-        </CardContent>
-      </Card>
-    </main>
-  );
+  redirect("/webinars");
 }

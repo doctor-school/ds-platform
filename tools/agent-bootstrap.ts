@@ -14,7 +14,7 @@
  * always 0 (warnings reported in a "Warnings" section).
  */
 import { execa } from "execa";
-import { readFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
@@ -362,6 +362,10 @@ export interface SessionLog {
   id: string;
   mtimeMs: number;
   inSharedMainTree: boolean;
+  /** Absolute path to the `.jsonl` log — lets the PreToolUse guard re-check
+   * liveness later (a stale flag must never warn). Optional: older callers /
+   * tests omit it. */
+  logPath?: string;
 }
 
 export interface LiveSessionOpts {
@@ -380,14 +384,63 @@ export interface LiveSessionOpts {
 export function liveParallelSessions(
   logs: SessionLog[],
   opts: LiveSessionOpts,
-): { total: number; inMainTree: number } {
+): { total: number; inMainTree: number; live: SessionLog[] } {
   const live = logs.filter(
     (l) => l.id !== opts.selfId && opts.nowMs - l.mtimeMs <= opts.windowMs,
   );
   return {
     total: live.length,
     inMainTree: live.filter((l) => l.inSharedMainTree).length,
+    live,
   };
+}
+
+// ── parallel-sessions flag + directive (#823) ───────────────────────────────
+// When live parallel sessions exist AND this session is in the SHARED main
+// tree, the bootstrap (1) prints an imperative first-action directive (not an
+// advisory ⚠) and (2) drops a machine-readable flag file that the PreToolUse
+// hook `tools/hooks/main-tree-read-guard.mjs` consults to WARN on main-tree
+// source reads until the session enters a worktree. When no parallel sessions
+// exist, the flag is removed so the guard stays silent.
+
+/** MUST match `FLAG_REL` in `tools/hooks/main-tree-read-guard.mjs` (asserted
+ * equal by the guard-tests spec). Gitignored — session-local state, not repo. */
+export const PARALLEL_FLAG_REL = ".claude/parallel-sessions.flag.json";
+
+export interface ParallelSessionsFlag {
+  generatedAt: string; // ISO timestamp of the bootstrap that wrote the flag
+  liveSessions: number;
+  liveInMainTree: number;
+  sessions: Array<{ id: string; logPath: string; inSharedMainTree: boolean }>;
+}
+
+export function buildParallelFlag(
+  live: SessionLog[],
+  generatedAt: string,
+): ParallelSessionsFlag {
+  return {
+    generatedAt,
+    liveSessions: live.length,
+    liveInMainTree: live.filter((l) => l.inSharedMainTree).length,
+    sessions: live.map((l) => ({
+      id: l.id,
+      logPath: l.logPath ?? "",
+      inSharedMainTree: l.inSharedMainTree,
+    })),
+  };
+}
+
+/** Imperative first-action directive — replaces the former advisory ⚠ (#823). */
+export function mainTreeIsolationDirective(liveSessions: number): string {
+  return (
+    `> 🛑 **FIRST ACTION — ISOLATE BEFORE ANY REPO-FILE READ.** ${liveSessions} other live ` +
+    `session(s) share this repo and you are in the SHARED main tree. Run ` +
+    "`pnpm task:worktree <N>` → `EnterWorktree path:.claude/worktrees/<N>` NOW — " +
+    `before any repo-file Read/Grep/Glob, analysis reads included (#418): a parallel ` +
+    `session can advance origin/main or switch HEAD under you and sweep uncommitted ` +
+    `edits into the wrong PR (AGENTS.md §6). A PreToolUse guard warns on every ` +
+    `main-tree source read until this session enters a worktree.`
+  );
 }
 
 /**
@@ -426,8 +479,7 @@ export function encodeProjectSlug(absPath: string): string {
  */
 export function isRepoSessionDir(dirName: string, mainSlug: string): boolean {
   return (
-    dirName === mainSlug ||
-    dirName.startsWith(`${mainSlug}--claude-worktrees-`)
+    dirName === mainSlug || dirName.startsWith(`${mainSlug}--claude-worktrees-`)
   );
 }
 
@@ -435,6 +487,7 @@ interface Concurrency {
   inSharedMainTree: boolean;
   liveSessions: number;
   liveInMainTree: number;
+  liveList: SessionLog[];
   worktrees: string[];
 }
 
@@ -471,6 +524,7 @@ async function concurrency(): Promise<Concurrency> {
 
   let liveSessions = 0;
   let liveInMainTree = 0;
+  let liveList: SessionLog[] = [];
   try {
     const { readdir, stat } = await import("node:fs/promises");
     const { homedir } = await import("node:os");
@@ -497,11 +551,13 @@ async function concurrency(): Promise<Concurrency> {
       }
       for (const f of entries) {
         try {
-          const s = await stat(resolve(full, f));
+          const logPath = resolve(full, f);
+          const s = await stat(logPath);
           logs.push({
             id: f.replace(/\.jsonl$/, ""),
             mtimeMs: s.mtimeMs,
             inSharedMainTree: inMain,
+            logPath,
           });
         } catch {
           // Log vanished mid-scan — ignore.
@@ -516,11 +572,40 @@ async function concurrency(): Promise<Concurrency> {
     });
     liveSessions = counts.total;
     liveInMainTree = counts.inMainTree;
+    liveList = counts.live;
   } catch (e) {
     note("session-log scan", e);
   }
 
-  return { inSharedMainTree, liveSessions, liveInMainTree, worktrees };
+  return {
+    inSharedMainTree,
+    liveSessions,
+    liveInMainTree,
+    liveList,
+    worktrees,
+  };
+}
+
+/**
+ * Maintain the machine-readable parallel-sessions flag (#823). Only a
+ * main-tree bootstrap manages it: write when live parallel sessions exist,
+ * remove when none do (so the PreToolUse guard goes silent). A worktree
+ * bootstrap never touches it — its REPO_ROOT is the worktree, not the main
+ * tree, and the flag belongs to the main tree.
+ */
+async function syncParallelFlag(conc: Concurrency): Promise<void> {
+  if (!conc.inSharedMainTree) return;
+  const flagPath = resolve(REPO_ROOT, PARALLEL_FLAG_REL);
+  try {
+    if (conc.liveSessions > 0) {
+      const flag = buildParallelFlag(conc.liveList, new Date().toISOString());
+      await writeFile(flagPath, JSON.stringify(flag, null, 2) + "\n", "utf-8");
+    } else {
+      await rm(flagPath, { force: true });
+    }
+  } catch (e) {
+    note("parallel-sessions flag", e);
+  }
 }
 
 function ts(): string {
@@ -543,6 +628,7 @@ async function main(): Promise<void> {
       probeMainSync(REPO_ROOT),
     ]);
   const sync = evaluateMainSync(syncProbe);
+  await syncParallelFlag(conc);
 
   const activeSpecs = await Promise.all(
     working.map(async (i) => {
@@ -609,9 +695,7 @@ async function main(): Promise<void> {
   }
   if (conc.inSharedMainTree && conc.liveSessions > 0) {
     out.push("");
-    out.push(
-      `> ⚠ **${conc.liveSessions} other live session(s) and you are in the SHARED main tree.** A parallel session can switch the branch out from under you and sweep your uncommitted edits into the wrong PR (AGENTS.md §6). Before editing, isolate: \`pnpm task:worktree <N>\` → \`EnterWorktree path:.claude/worktrees/<N>\`.`,
-    );
+    out.push(mainTreeIsolationDirective(conc.liveSessions));
   }
   out.push("");
 

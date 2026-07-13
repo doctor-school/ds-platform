@@ -21,6 +21,16 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/tools/hooks/worktree-path-guard.mjs\""
           }
         ]
+      },
+      {
+        "matcher": "Read|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/hooks/main-tree-read-guard.mjs\"",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [

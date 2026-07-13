@@ -252,3 +252,27 @@ Policy (which surfaces, when) is EARS-17; mechanism lives behind the interface s
   - **Reactivation.** A soft-deleted user that reappears active in Zitadel is restored (`deactivated_at` cleared) on the next upsert — symmetric convergence in both directions.
   - `deactivated_at` is a projection flag, **not** an authz gate: authz stays Zitadel-token-driven (a Zitadel-deactivated user already cannot obtain tokens). Hard-purge / GDPR erasure of soft-deleted rows is out of 003 scope (no erasure requirement in 003) — a future product/legal concern, not open decision-debt.
 - **Zitadel Action webhook auth — decided: shared secret.** The webhook endpoint (`POST /v1/auth/zitadel/webhook`, EARS-19) authenticates Zitadel with a **shared secret** presented in the `x-zitadel-webhook-secret` header and checked against `IDP_WEBHOOK_SECRET`; an unset secret or a mismatch fails closed (`401`), so an unauthenticated mirror-write surface is never opened by default. mTLS is **rejected for v1**: Zitadel Actions v2 sends a plain HTTP POST with configurable static headers (the documented mechanism for signing/authenticating an Action target), and the BFF terminates TLS behind the platform reverse proxy (Caddy, engineering-readiness spec) rather than presenting a client cert per request — a per-Action client-cert handshake is neither what Zitadel Actions offer nor proportionate when the webhook is idempotent (it only triggers a reconciling upsert the periodic EARS-19 sweep would also close) and carries no secret beyond the user `sub`. Hardening that feeds #119: (a) rotate the secret via the platform secret store (Vault, engineering-readiness spec), not a long-lived static value; (b) replace the constant-string `!==` check with a constant-time compare (`crypto.timingSafeEqual`) to remove the timing side-channel; (c) bind the Action to the trusted LAN/zone target so the surface is not internet-reachable. The dev-stand Zitadel Actions config sets the header to `IDP_WEBHOOK_SECRET`; #119 owns provisioning the real Action against a live instance.
+
+## 12. Account profile v1 — `GET /v1/me/profile` + the `/account` surface (GH #770, EARS-27/28)
+
+**Why a new read exists.** The session claims (`sub, roles[], mfa, sid, …` — §3) deliberately carry no identity fields, and no shipped endpoint returns the session owner's email/phone: the `me` surface exposes only `GET/PUT /v1/me/display-name` and the events read. A product profile page therefore needs one thin, session-scoped self-read — nothing else. Owner Stage-A pick (Issue #770, 2026-07-13): Variant B — thin backend read increment (rejected: A — render from existing reads only, which cannot show email/phone; C — tabbed account hub, scope inflation).
+
+**`GET /v1/me/profile` (EARS-27).** Lives in the existing `MeController` (`apps/api/src/me/`), behind the same session guard as the other `/v1/me/*` reads. It projects the caller's `users` mirror row — **data that already exists; no new columns, no migration, no IdP call, no writes on any path** — into:
+
+```
+{ email: string, emailVerified: boolean, phone: string|null, phoneVerified: boolean|null, displayName: string|null }
+```
+
+Response schema is authored in `packages/schemas` (zod SSOT → generated SDK). Self-only by construction: the subject comes from the session, the route takes no identifier parameter, so no authz-matrix widening beyond the existing `doctor_guest` `/me/*` classification. Unauthenticated → the same fail-closed generic 401 as the sibling reads (EARS-16-consistent); an orphaned session heals via the EARS-26 read-path self-heal like any other mirror-backed read.
+
+**`/account` profile surface (EARS-28).** The portal replaces the raw session-claims dump at `apps/portal/app/account/page.tsx` with a product render composed of:
+
+- **Avatar initials + display name** with inline edit — persisted through the **existing** `PUT /v1/me/display-name`; no new write endpoint.
+- **Email row** with its verified state; **phone row** with an explicit «не указан» empty state (read-only — phone editing is the future secondary-identifier increment, EARS-2/4).
+- **«Сменить пароль»** — a handoff to the **existing** `/reset` flow (EARS-11/12); no in-page password form, no new backend.
+- **«Мои события»** link (`/account/events`) and **sign-out** (EARS-10).
+- **No raw claims anywhere:** `sub`, the roles array, and the raw `mfa` boolean never reach the DOM (requirements Invariants).
+
+Copy is catalog-sourced (§8.1, EARS-21); fields follow the §8.2 validation/mask rule (EARS-22). The **look is canvas-driven**: the Stage-A pick happens in claude.ai/design and the chosen canvas is vendored into `design-source/` before implementation (AGENTS.md §6) — this section pins behavior and composition, not pixels.
+
+**Out of scope, tracked (F-22).** PD-lifecycle actions (152-ФЗ export / deletion / consent withdrawal — no backend exists; ADR-0009 vertical, separate follow-up Issue), MFA management, phone editing. None of these is silently implied by the surface.

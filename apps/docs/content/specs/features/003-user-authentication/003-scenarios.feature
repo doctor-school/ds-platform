@@ -216,3 +216,35 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When a client requests an authenticated mirror-backed surface
     Then the response is the generic 401
     And no UserMirror row is created
+
+  @EARS-27 @happy
+  Scenario: An authenticated user reads their own profile
+    Given an authenticated doctor_guest session
+    When the user requests GET /v1/me/profile
+    Then the response carries the subject's own email, emailVerified, phone, phoneVerified, and displayName from the users mirror
+    And no write is performed
+
+  @EARS-27 @EARS-16 @failure
+  Scenario: An unauthenticated profile read gets the generic auth outcome
+    Given no session cookie
+    When a client requests GET /v1/me/profile
+    Then the response is the same generic 401 as the other /v1/me/* reads
+    And no profile data is disclosed
+
+  @EARS-28 @happy
+  Scenario: The /account page renders the profile surface instead of raw claims
+    Given an authenticated doctor_guest user with a verified email and no attached phone
+    When the user opens the /account page
+    Then the page renders avatar initials and the display name with inline edit
+    And the email is shown with its verified state
+    And the phone row shows the explicit "не указан" state
+    And a change-password action hands off to the existing /reset flow
+    And a link to "Мои события" and a sign-out action are present
+    And no raw session claim (sub, roles array, raw mfa boolean) appears anywhere in the page
+
+  @EARS-28 @happy
+  Scenario: Inline display-name edit persists through the existing endpoint
+    Given an authenticated doctor_guest user on the /account page
+    When the user edits the display name inline and confirms
+    Then the new value is persisted via the existing PUT /v1/me/display-name
+    And the rendered display name and avatar initials reflect the new value

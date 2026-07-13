@@ -6,7 +6,7 @@ status: Shipped
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/3
 parent_issue: https://github.com/doctor-school/ds-platform/issues/80
-issues: [81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 131, 207, 709]
+issues: [81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 131, 207, 709, 770]
 prior_decisions:
   - ADR-0001 — Identity / Auth / RBAC (IdP = Zitadel; §1 hybrid RBAC, §3 dual identifiers, §4 auth methods, §6 tokens, §7 security baseline, §7.3 audit)
   - ADR-0002 — Backend Core Stack (§3 nestjs-zod + URI versioning + Vitest)
@@ -47,6 +47,7 @@ lang: en
 - **Security baseline** (ADR-0001 §7): rate limits (per-user / per-IP / per-ASN), account lockout (native Zitadel lockout policy + our notification email), enumeration-resistant responses, SMS toll-fraud per-phone/IP/ASN limits + a global daily SMS-budget circuit-breaker.
 - **Bot-protection bootstrap.** 003 is the platform's first consumer of bot-protection, so it bootstraps the mechanism behind a `BotProtection` provider interface — a Yandex SmartCaptcha adapter (server-side token verification in `apps/api`) + the widget on the portal auth forms. The provider stays swappable per ADR-0001 open-q #7; 003 owns the policy of _where_ it applies (EARS-17).
 - **Auth audit events** written to `audit_ledger` (this section is the "spec §7.3" forward-referenced from ADR-0001 §7, §10).
+- **Account profile v1 (GH #770 increment).** A session-scoped **profile self-read** `GET /v1/me/profile` over the existing `users` mirror (read-only — no writes, no new columns), and the portal **`/account` profile surface** that renders it: avatar initials + inline-editable display name (via the existing `PUT /v1/me/display-name`), email with verified state, phone row, a change-password handoff to the existing `/reset` flow, a link to «Мои события», and sign-out (EARS-27/28, design §12).
 
 **Explicitly out** (each is a documented seam consumed by a later vertical — design §7):
 
@@ -59,6 +60,9 @@ lang: en
 - **Step-up authentication** for high-risk actions (ADR-0001 §10) — no high-risk `doctor_guest` endpoints exist yet.
 - Full **consent subsystem** (withdrawal, version migration, consent audit) — owned by the ADR-0009 vertical; 003 only captures at registration.
 - WebAuthn / Passkeys, HIBP pwned-password check, anomaly/impossible-travel detection — deferred per ADR-0001 deferred-gaps table.
+- **PD-lifecycle actions on the profile surface** (152-ФЗ personal-data export / deletion / consent withdrawal). No backend for these exists — the ADR-0009 vertical owns them; they are tracked as a separate follow-up Issue, **not** silently implied by `/account` (F-22: no untracked seam).
+- **MFA management from `/account`** (enroll / disable / factor list) — follows the MFA seam above; the v1 profile surface shows no MFA controls.
+- **Phone editing from `/account`** (attach / change / verify a phone) — the post-registration secondary-identifier increment (EARS-2/4); v1 renders the phone read-only.
 
 ## Constraints
 
@@ -158,6 +162,11 @@ The auth vertical is the platform's first real aggregate cluster (unlike the que
 
 - **EARS-26:** When an authenticated request's session subject resolves (a valid IdP session) but no `users` mirror row exists for its `zitadel_sub` — a webhook miss/lag the sweep has not yet closed, or a mirror row lost while IdP sessions for that sub stay alive — the system shall lazily re-materialize the mirror row from the IdP **before the handler runs**, performing the same idempotent upsert + `doctor_guest` re-grant the EARS-19 webhook/sweep perform, and serve the request as normal, so the orphaned-session state can never bounce authenticated surfaces into the silent `/login` → `/account` redirect carousel. A sub the IdP no longer knows (or an identifier-less machine account, not a `doctor_guest` mirror candidate) heals nothing, and the mirror-backed handler keeps its fail-closed generic 401; responses to genuinely unauthenticated callers (EARS-16) are unchanged. (GH #709 — the third mirror-sync layer: webhook primary, sweep backstop, read-path self-heal lazy. Design §4.)
 
+**Account profile v1 (GH #770)**
+
+- **EARS-27:** When an authenticated user requests `GET /v1/me/profile`, the system shall return the session subject's **own** identity fields from the `users` mirror — `{ email: string, emailVerified: boolean, phone: string|null, phoneVerified: boolean|null, displayName: string|null }` — performing no writes; the read is strictly session-scoped (self-only — no parameterized lookup of another subject exists on this route). An unauthenticated request shall receive the same generic auth outcome as the other `/v1/me/*` reads (the fail-closed generic 401, EARS-16-consistent; an orphaned-session subject heals per EARS-26 like any other mirror-backed read). (Design §12.)
+- **EARS-28:** When an authenticated user opens the portal `/account` page, the portal shall render a profile surface composed of: avatar initials + the display name with **inline edit** (persisted via the existing `PUT /v1/me/display-name`), the email with its verified state, a phone row that renders an explicit «не указан» state when no phone is attached (read-only — no phone editing, Scope), a **change-password action that hands off to the existing `/reset` flow** (no in-page password form and no new backend), a link to «Мои события» (`/account/events`), and sign-out (EARS-10). The surface shall **not** render raw session claims — no `sub`, no roles array, no raw `mfa` boolean — replacing the prior claims dump entirely. Copy comes from the message catalog (EARS-21); field validation follows EARS-22. The visual design is canvas-driven (Stage-A pick in claude.ai/design, vendored into `design-source/` before implementation) — this clause pins **behavior**, not pixels. (Design §12.)
+
 ## Invariants
 
 - Every `UserMirror` row satisfies `phone OR email NOT NULL` and carries exactly one `zitadel_sub`. Since registration is email-primary (EARS-1/2; Zitadel hard-requires email, GH #202), every registered row carries an email, so the invariant always holds via the email column; phone is the optional secondary identifier.
@@ -168,6 +177,7 @@ The auth vertical is the platform's first real aggregate cluster (unlike the que
 - Every state-changing auth command emits exactly one terminal `audit_ledger` entry (EARS-18).
 - `apps/api` contains no password hashing, no token signing, and no OTP generation — all delegated to Zitadel (Constraints, design §2).
 - The session JWT carries the `mfa` claim even though no `doctor_guest` flow requires MFA (seam for future enforcement).
+- `GET /v1/me/profile` performs no write on any path (EARS-27), and no product surface renders raw session claims (`sub`, roles array, raw `mfa`) — the `/account` profile surface shows only product-shaped identity fields (EARS-28).
 
 ## Verification
 
@@ -193,6 +203,8 @@ The auth vertical is the platform's first real aggregate cluster (unlike the que
 | 24 | Gherkin (e2e) → browser | `003-scenarios.feature` | Existing-email register lands on the uniform "check your email" `/verify` screen offering prominent Sign in / Reset password; fresh-email register still auto-submits the code and auto-logs-in. Neither path dead-ends. #207. |
 | 25 | Vitest e2e | `apps/api/test/auth/verify.e2e-spec.ts` | `it('EARS-25: ...')` resend: an existing, unverified registrant re-receives an `otp_email` code and exactly one `otp.sent` ledger row; an unknown / already-verified identifier yields the identical status + body + timing (≤ 50 ms, EARS-16) with no code issued and no ledger row; the resend is rate-limited (EARS-13) and writes no `users`/consent row. #318. |
 | 26 | Vitest e2e + unit | `apps/api/test/auth/mirror-self-heal.e2e-spec.ts` + `apps/api/src/auth/mirror-self-heal.service.spec.ts` | An authenticated read whose sub has no mirror row self-heals (the row is re-materialized with the IdP's identifiers + `doctor_guest`) and serves 200 — no generic 401, idempotent on repeat; a genuinely unauthenticated read stays the generic 401 and heals nothing (EARS-16 unchanged). The unit spec pins the skip paths: present row (no IdP call), unknown-at-IdP sub, identifier-less machine account, and fail-soft on a heal fault. #709. |
+| 27 | Vitest e2e | `apps/api/test/me/profile.e2e-spec.ts` | `it('EARS-27: ...')` authenticated read returns the subject's own `{email, emailVerified, phone, phoneVerified, displayName}` (null phone/displayName paths included); unauthenticated → the same generic 401 as the other `/v1/me/*` reads; no write is performed on any path. #770. |
+| 28 | Gherkin (e2e) → browser | `003-scenarios.feature` + live-stand Playwright drive | `/account` renders avatar initials, editable display name (inline edit persists via `PUT /v1/me/display-name`), email + verified state, the «не указан» phone state, the `/reset` change-password handoff, the «Мои события» link, and sign-out; the DOM carries no raw `sub`/roles/`mfa` claim. Browser verification owned by the #770 implementation slice (Stage-B live drive per AGENTS.md §6). #770. |
 
 ## Dependencies & sequencing
 

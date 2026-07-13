@@ -39,7 +39,20 @@
  * mega-blocker can never be relayed as ground truth. Read-only — no
  * auto-unwiring (unwiring is an owner decision).
  *
- * The pure resolution/classification seams (`parseProseBlockers`, `classify`)
+ * PARALLEL-SESSION CLAIM SIGNAL (#811): sessions run concurrently in this repo,
+ * and in-flight status used to be guessed in both directions (worktree 713
+ * believed live but abandoned; takeable #770 recommended but claimed). For every
+ * takeable item this command cross-checks (a) a worktree at
+ * `.claude/worktrees/<N>` under the PRIMARY tree and (b) the Issue's latest
+ * start/claim comment vs its latest stop-state comment, and reports matching
+ * rows as `IN-FLIGHT-ELSEWHERE (worktree|start-comment, age <a>)` instead of
+ * takeable. The age is always SURFACED, never auto-suppressed — an abandoned
+ * worktree is the human's call. The claim convention (post a one-line claim
+ * comment or create the worktree BEFORE the first edit) lives in
+ * `.claude/rules/repo-conventions.md` → Issue conventions.
+ *
+ * The pure resolution/classification seams (`parseProseBlockers`, `classify`,
+ * `detectClaim`)
  * are exported and unit-tested (tools/lint/guard-tests/backlog-triage.spec.ts)
  * WITHOUT firing the `gh` subprocesses — the `main()` entry point is guarded.
  *
@@ -122,6 +135,12 @@ export interface Triage {
    */
   notes: string[];
   isDecisionDebt: boolean;
+  /**
+   * Parallel-session claim signal (#811), attached by `main()` for TAKEABLE
+   * items only. When set, the report row prints
+   * `IN-FLIGHT-ELSEWHERE (worktree|start-comment, age <a>)` instead of takeable.
+   */
+  claim?: ClaimSignal;
 }
 
 /** A blocker parsed out of the Issue body prose, pre-state-resolution. */
@@ -405,6 +424,124 @@ export function findMegaBlockers(
     .sort((a, b) => b.edges.length - a.edges.length || a.number - b.number);
 }
 
+// ── parallel-session claim signal (#811) — pure seams ───────────────────────
+
+/** One Issue comment, reduced to what the claim detector needs. */
+export interface ClaimComment {
+  body: string;
+  /** Comment creation time in epoch ms (0 when unparseable — sorts oldest). */
+  createdAtMs: number;
+}
+
+/** Plain-data input to `detectClaim` — both probes pre-resolved by the caller. */
+export interface ClaimProbe {
+  /** mtime (epoch ms) of `.claude/worktrees/<N>` when present, else undefined. */
+  worktreeMtimeMs?: number;
+  /** The Issue's comments (any order); undefined = comments unavailable. */
+  comments?: ClaimComment[];
+  /** "now" in epoch ms — injected for testability. */
+  nowMs: number;
+}
+
+/** A detected parallel-session claim on a takeable Issue. */
+export interface ClaimSignal {
+  source: "worktree" | "start-comment";
+  /** Age of the signal (never negative — future mtimes clamp to 0). */
+  ageMs: number;
+}
+
+/**
+ * Is this comment a START/CLAIM comment (repo-conventions.md → Issue
+ * conventions, #811)? Canonical shape is a one-liner opening with `claim:`;
+ * tolerant of the other natural openers a session posts when taking an Issue
+ * (`Start…`/`Started…`/`Starting…`, `Taking…`, `In progress…`). Matched against
+ * the first non-empty line only — a mid-comment "starting with" never claims.
+ */
+export function isStartClaimComment(body: string): boolean {
+  const first = body
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .find((l) => l.trim() !== "");
+  if (!first) return false;
+  return /^\s*(?:\*\*)?\s*(?:claim(?:ed|ing)?\b|start(?:ed|ing)?\b|taking\b|in[- ]progress\b)/i.test(
+    first,
+  );
+}
+
+/**
+ * Is this comment a STOP-STATE comment (board-design §6 four-field shape)? The
+ * canonical form opens with `**Where I stopped:**` — that opener is the
+ * deterministic marker.
+ */
+export function isStopStateComment(body: string): boolean {
+  const first = body
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .find((l) => l.trim() !== "");
+  if (!first) return false;
+  return /^\s*(?:\*\*)?\s*where i stopped\b/i.test(first);
+}
+
+/** Compact claim age: `<1m`, `34m`, `2h`, `3d`. */
+export function formatClaimAge(ms: number): string {
+  const min = Math.floor(Math.max(0, ms) / 60_000);
+  if (min < 1) return "<1m";
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+}
+
+/**
+ * Detect a parallel-session claim (#811). Two independent signals:
+ *
+ *   - WORKTREE: `.claude/worktrees/<N>` exists under the primary tree. Always a
+ *     signal, however old — the age is surfaced (mtime-derived) and the human
+ *     decides whether it's live or abandoned. Never auto-suppressed.
+ *   - START-COMMENT: the Issue's latest start/claim comment is NEWER than its
+ *     latest stop-state comment (a stop-state posted after the claim releases
+ *     it — that session ended and recorded where it stopped).
+ *
+ * When both fire, the FRESHEST signal is reported (ties → worktree). Returns
+ * null when neither fires — the item stays plainly takeable.
+ */
+export function detectClaim(probe: ClaimProbe): ClaimSignal | null {
+  const signals: ClaimSignal[] = [];
+  if (probe.worktreeMtimeMs != null) {
+    signals.push({
+      source: "worktree",
+      ageMs: Math.max(0, probe.nowMs - probe.worktreeMtimeMs),
+    });
+  }
+  let latestStart: number | undefined;
+  let latestStop: number | undefined;
+  for (const c of probe.comments ?? []) {
+    if (isStartClaimComment(c.body)) {
+      if (latestStart == null || c.createdAtMs > latestStart)
+        latestStart = c.createdAtMs;
+    } else if (isStopStateComment(c.body)) {
+      if (latestStop == null || c.createdAtMs > latestStop)
+        latestStop = c.createdAtMs;
+    }
+  }
+  if (latestStart != null && (latestStop == null || latestStart > latestStop)) {
+    signals.push({
+      source: "start-comment",
+      ageMs: Math.max(0, probe.nowMs - latestStart),
+    });
+  }
+  if (signals.length === 0) return null;
+  // Freshest signal wins; Array.prototype.sort is stable, so an exact tie keeps
+  // the worktree (pushed first) — the harder artifact.
+  signals.sort((a, b) => a.ageMs - b.ageMs);
+  return signals[0]!;
+}
+
+/** Render the report label: `IN-FLIGHT-ELSEWHERE (worktree, age 2h)`. */
+export function claimLabel(claim: ClaimSignal): string {
+  return `IN-FLIGHT-ELSEWHERE (${claim.source}, age ${formatClaimAge(claim.ageMs)})`;
+}
+
 // ── gh I/O (only reached from main()) ───────────────────────────────────────
 
 const REPO_ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
@@ -535,6 +672,70 @@ function makeProvenanceResolver() {
     cache.set(n, text);
     return text;
   };
+}
+
+/**
+ * mtime (epoch ms) of the claim worktree `.claude/worktrees/<n>` under
+ * `mainRoot` (the PRIMARY tree — worktrees never nest), or undefined when
+ * absent. Absence is the common case, not an error.
+ */
+export async function worktreeClaimMtime(
+  mainRoot: string,
+  n: number,
+): Promise<number | undefined> {
+  try {
+    const { stat } = await import("node:fs/promises");
+    const s = await stat(resolve(mainRoot, ".claude", "worktrees", String(n)));
+    return s.isDirectory() ? s.mtimeMs : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Fetch Issue `n`'s comments reduced to `ClaimComment`s. Returns undefined on a
+ * fetch failure (the claim check degrades to worktree-only — never crashes the
+ * run); the caller decides whether to surface a warning.
+ */
+export async function fetchClaimComments(
+  n: number,
+  cwd: string,
+): Promise<ClaimComment[] | undefined> {
+  try {
+    const { stdout } = await execa(
+      "gh",
+      ["issue", "view", String(n), "--json", "comments"],
+      { cwd },
+    );
+    const j = JSON.parse(stdout) as {
+      comments?: Array<{ body?: string; createdAt?: string }>;
+    };
+    return (j.comments ?? []).map((c) => ({
+      body: c.body ?? "",
+      createdAtMs: Date.parse(c.createdAt ?? "") || 0,
+    }));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Full claim probe for one Issue (#811): worktree presence + start/stop
+ * comments → `detectClaim`. Shared by this command's `main()` and
+ * `tools/agent-bootstrap.ts`'s readiness rollup (single implementation, reused
+ * — never duplicated). Never throws.
+ */
+export async function probeClaim(
+  n: number,
+  mainRoot: string,
+  cwd: string,
+  nowMs = Date.now(),
+): Promise<ClaimSignal | null> {
+  const [worktreeMtimeMs, comments] = await Promise.all([
+    worktreeClaimMtime(mainRoot, n),
+    fetchClaimComments(n, cwd),
+  ]);
+  return detectClaim({ worktreeMtimeMs, comments, nowMs });
 }
 
 /**
@@ -692,7 +893,10 @@ function ts(): string {
 export function formatReport(triaged: Triage[]): string {
   const out: string[] = [];
   const takeable = triaged
-    .filter((t) => t.readiness === "takeable")
+    .filter((t) => t.readiness === "takeable" && !t.claim)
+    .sort((a, b) => a.number - b.number);
+  const inFlight = triaged
+    .filter((t) => t.readiness === "takeable" && t.claim)
     .sort((a, b) => a.number - b.number);
   const blocked = triaged
     .filter((t) => t.readiness === "blocked")
@@ -703,7 +907,9 @@ export function formatReport(triaged: Triage[]): string {
     "Readiness resolved from the native `blocked_by` graph + prose \"Blocked by\" refs — NOT labels (AGENTS.md §3.5).",
   );
   out.push(
-    `${triaged.length} open issue(s): ${takeable.length} takeable, ${blocked.length} blocked.`,
+    `${triaged.length} open issue(s): ${takeable.length} takeable, ${
+      inFlight.length > 0 ? `${inFlight.length} in-flight-elsewhere, ` : ""
+    }${blocked.length} blocked.`,
   );
   out.push("");
 
@@ -720,6 +926,22 @@ export function formatReport(triaged: Triage[]): string {
     for (const n of t.notes) out.push(`    ↳ (${n})`);
   }
   out.push("");
+
+  // Parallel-session claim signal (#811): deps all closed, but another session
+  // shows a claim (worktree / start-comment). Age is SURFACED, never
+  // auto-suppressed — an abandoned claim is the human's call.
+  if (inFlight.length > 0) {
+    out.push(`## In flight elsewhere (${inFlight.length})`);
+    out.push(
+      "Deps all closed, but a parallel session shows a claim signal — a worktree `.claude/worktrees/<N>` or a start/claim comment newer than the last stop-state (repo-conventions.md → Issue conventions, #811). Verify before taking; an old age suggests an abandoned claim — human call, never auto-suppressed.",
+    );
+    for (const t of inFlight) {
+      out.push(
+        `- #${t.number} ${claimLabel(t.claim!)} — ${truncateTitle(t.title, 80)}`,
+      );
+    }
+    out.push("");
+  }
 
   out.push(`## Blocked (${blocked.length})`);
   if (blocked.length === 0) out.push("(none)");
@@ -809,6 +1031,17 @@ async function main(): Promise<void> {
       provenanceText,
     );
     triaged.push(classify(input, deps));
+  }
+
+  // Parallel-session claim signal (#811) — takeable items only (a blocked item
+  // is not offered, so a claim on it changes nothing). Worktrees live under the
+  // PRIMARY tree even when this command runs from a linked worktree.
+  const mainRoot = await primaryWorktreePath(REPO_ROOT);
+  const nowMs = Date.now();
+  for (const t of triaged) {
+    if (t.readiness !== "takeable") continue;
+    const claim = await probeClaim(t.number, mainRoot, REPO_ROOT, nowMs);
+    if (claim) t.claim = claim;
   }
 
   const out: string[] = [];

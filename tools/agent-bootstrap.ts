@@ -25,6 +25,7 @@ import {
   primaryWorktreePath,
   probeMainSync,
 } from "./main-sync";
+import { claimLabel, probeClaim } from "./backlog-triage";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -608,6 +609,29 @@ async function syncParallelFlag(conc: Concurrency): Promise<void> {
   }
 }
 
+/**
+ * Parallel-session claim signals (#811) for the ready-queue rollup — the SAME
+ * check `pnpm backlog:triage` runs (single implementation: `probeClaim` is
+ * imported from `tools/backlog-triage.ts`, never duplicated). Returns
+ * issue-number → `IN-FLIGHT-ELSEWHERE (worktree|start-comment, age <a>)`.
+ * Never throws — a probe failure degrades to "no signal" with a warning.
+ */
+async function claimSignals(ready: GhIssue[]): Promise<Map<number, string>> {
+  const map = new Map<number, string>();
+  if (ready.length === 0) return map;
+  const mainRoot = await primaryWorktreePath(REPO_ROOT);
+  const nowMs = Date.now();
+  for (const i of ready) {
+    try {
+      const claim = await probeClaim(i.number, mainRoot, REPO_ROOT, nowMs);
+      if (claim) map.set(i.number, claimLabel(claim));
+    } catch (e) {
+      note(`claim probe #${i.number}`, e);
+    }
+  }
+  return map;
+}
+
 function ts(): string {
   // YYYY-MM-DD HH:mm UTC — stable, sortable.
   return new Date().toISOString().slice(0, 16).replace("T", " ");
@@ -629,6 +653,9 @@ async function main(): Promise<void> {
     ]);
   const sync = evaluateMainSync(syncProbe);
   await syncParallelFlag(conc);
+  // Parallel-session claim signal (#811) — same check as `pnpm backlog:triage`.
+  const claims = await claimSignals(ready);
+  const readyFree = ready.filter((i) => !claims.has(i.number));
 
   const activeSpecs = await Promise.all(
     working.map(async (i) => {
@@ -727,8 +754,13 @@ async function main(): Promise<void> {
       out.push(`- awaiting #${i.number} ${i.title} — review-response needed`);
     }
     for (const i of ready) {
+      // A claimed ready item is IN-FLIGHT-ELSEWHERE (#811), not takeable — the
+      // age is surfaced (an abandoned claim is the human's call).
+      const claim = claims.get(i.number);
       out.push(
-        `- ready    #${i.number} ${i.title} — milestone: ${i.milestone?.title ?? "(none)"}`,
+        `- ready    #${i.number} ${i.title} — milestone: ${i.milestone?.title ?? "(none)"}${
+          claim ? ` — ⚠ ${claim}` : ""
+        }`,
       );
     }
   }
@@ -784,7 +816,9 @@ async function main(): Promise<void> {
   out.push("");
 
   out.push("## Recommendation");
-  out.push(recommend(working, awaiting, prs, ready, openCount ?? 0));
+  // The pick list excludes IN-FLIGHT-ELSEWHERE items (#811) — a claimed Issue
+  // must never be recommended as free (the #770 miss).
+  out.push(recommend(working, awaiting, prs, readyFree, openCount ?? 0));
   out.push("");
 
   if (warnings.length > 0) {

@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  claimLabel,
   classify,
+  detectClaim,
   evaluateRationale,
   findMegaBlockers,
   findSiblingByEars,
+  formatClaimAge,
   formatReport,
+  isStartClaimComment,
+  isStopStateComment,
   mentionsIssue,
   parseProseBlockers,
   subsystemName,
+  type ClaimComment,
   type DepRef,
   type IssueInput,
   type SiblingIssue,
@@ -503,5 +509,147 @@ describe("backlog-triage mega-blocker rollup (#853 — the pre-unwiring #729 fix
       ]),
     ]);
     expect(report).not.toContain("## Mega-blockers");
+  });
+});
+
+// ── #811 parallel-session claim signal — IN-FLIGHT-ELSEWHERE ─────────────────
+// Pure-function cover: plain-object probes in, ClaimSignal / report label out.
+// No fs, no git, no paths — platform-agnostic by construction (CI runs Linux).
+
+const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
+const NOW = Date.parse("2026-07-13T12:00:00Z");
+
+const comment = (body: string, atMsAgo: number): ClaimComment => ({
+  body,
+  createdAtMs: NOW - atMsAgo,
+});
+
+describe("backlog-triage detectClaim() (#811)", () => {
+  it("a worktree .claude/worktrees/<N> present ⇒ IN-FLIGHT-ELSEWHERE (worktree)", () => {
+    const c = detectClaim({ worktreeMtimeMs: NOW - 2 * HOUR, nowMs: NOW });
+    expect(c).not.toBeNull();
+    expect(c!.source).toBe("worktree");
+    expect(claimLabel(c!)).toBe("IN-FLIGHT-ELSEWHERE (worktree, age 2h)");
+  });
+
+  it("a start/claim comment NEWER than the last stop-state ⇒ IN-FLIGHT-ELSEWHERE (start-comment)", () => {
+    const c = detectClaim({
+      comments: [
+        comment("**Where I stopped:** after PR #700 merged.", 3 * DAY),
+        comment("claim: session 2026-07-13 — taking the guard half", 1 * DAY),
+      ],
+      nowMs: NOW,
+    });
+    expect(c).not.toBeNull();
+    expect(c!.source).toBe("start-comment");
+    expect(claimLabel(c!)).toBe("IN-FLIGHT-ELSEWHERE (start-comment, age 1d)");
+  });
+
+  it("a stop-state NEWER than the last start-comment releases the claim ⇒ takeable (null)", () => {
+    const c = detectClaim({
+      comments: [
+        comment("Starting on this now — plan: extend the classifier.", 2 * DAY),
+        comment(
+          "**Where I stopped:** classifier extended, PR pending.\n**What remains:** wire report.",
+          1 * HOUR,
+        ),
+      ],
+      nowMs: NOW,
+    });
+    expect(c).toBeNull();
+  });
+
+  it("no signal at all ⇒ null — the item stays plainly takeable", () => {
+    expect(detectClaim({ nowMs: NOW })).toBeNull();
+    expect(
+      detectClaim({
+        comments: [comment("Result: shipped in #700. Board set to Done.", HOUR)],
+        nowMs: NOW,
+      }),
+    ).toBeNull();
+  });
+
+  it("an ABANDONED worktree still flags — age surfaced, never auto-suppressed", () => {
+    const c = detectClaim({ worktreeMtimeMs: NOW - 6 * DAY, nowMs: NOW });
+    expect(c).not.toBeNull();
+    expect(claimLabel(c!)).toBe("IN-FLIGHT-ELSEWHERE (worktree, age 6d)");
+  });
+
+  it("both signals present ⇒ the FRESHEST wins", () => {
+    const c = detectClaim({
+      worktreeMtimeMs: NOW - 5 * DAY,
+      comments: [comment("claim: taking this", 10 * 60_000)],
+      nowMs: NOW,
+    });
+    expect(c!.source).toBe("start-comment");
+    expect(claimLabel(c!)).toBe("IN-FLIGHT-ELSEWHERE (start-comment, age 10m)");
+  });
+
+  it("a future worktree mtime (clock skew) clamps to age 0, never negative", () => {
+    const c = detectClaim({ worktreeMtimeMs: NOW + HOUR, nowMs: NOW });
+    expect(c!.ageMs).toBe(0);
+    expect(claimLabel(c!)).toBe("IN-FLIGHT-ELSEWHERE (worktree, age <1m)");
+  });
+});
+
+describe("backlog-triage claim-comment shape detection (#811)", () => {
+  it("start/claim openers match on the first non-empty line", () => {
+    expect(isStartClaimComment("claim: session abc — taking #811")).toBe(true);
+    expect(isStartClaimComment("**Claim:** worktree created.")).toBe(true);
+    expect(isStartClaimComment("Starting work — plan: extend classify().")).toBe(true);
+    expect(isStartClaimComment("\n\nTaking this one for the wave-2 batch.")).toBe(true);
+    expect(isStartClaimComment("In progress — see worktree 811.")).toBe(true);
+  });
+
+  it("a mid-comment 'starting' or a result comment never claims", () => {
+    expect(isStartClaimComment("Result: done. Next session starting point: L45.")).toBe(false);
+    expect(isStartClaimComment("Blocked by #729 — parked.")).toBe(false);
+    expect(isStartClaimComment("")).toBe(false);
+  });
+
+  it("the four-field stop-state shape is detected by its canonical opener", () => {
+    expect(
+      isStopStateComment("**Where I stopped:** last commit abc123.\n**What remains:** tests."),
+    ).toBe(true);
+    expect(isStopStateComment("where I stopped: mid-review")).toBe(true);
+    expect(isStopStateComment("claim: taking this")).toBe(false);
+    expect(isStopStateComment("")).toBe(false);
+  });
+});
+
+describe("backlog-triage formatClaimAge() (#811)", () => {
+  it("renders minutes, hours, days at the expected boundaries", () => {
+    expect(formatClaimAge(30_000)).toBe("<1m");
+    expect(formatClaimAge(34 * 60_000)).toBe("34m");
+    expect(formatClaimAge(2 * HOUR)).toBe("2h");
+    expect(formatClaimAge(23 * HOUR)).toBe("23h");
+    expect(formatClaimAge(3 * DAY)).toBe("3d");
+  });
+});
+
+describe("backlog-triage formatReport() — IN-FLIGHT-ELSEWHERE rows (#811)", () => {
+  it("a takeable item with a claim moves to 'In flight elsewhere' with the age-carrying label", () => {
+    const claimed = classify(issue(811, ["tooling"], "claim signal"), []);
+    claimed.claim = { source: "worktree", ageMs: 2 * HOUR };
+    const free = classify(issue(700, ["tooling"], "free task"), []);
+    const report = formatReport([claimed, free]);
+
+    expect(report).toContain("## In flight elsewhere (1)");
+    expect(report).toContain(
+      "- #811 IN-FLIGHT-ELSEWHERE (worktree, age 2h) — claim signal",
+    );
+    expect(report).toContain("## Takeable (1)");
+    expect(report).toContain("- #700 free task");
+    expect(report).toContain("1 takeable, 1 in-flight-elsewhere, 0 blocked");
+    // The claimed row is OUT of the takeable list.
+    expect(report).not.toContain("- #811 claim signal");
+  });
+
+  it("no claims ⇒ report shape unchanged (no in-flight section, no count segment)", () => {
+    const report = formatReport([classify(issue(700, [], "free task"), [])]);
+    expect(report).not.toContain("In flight elsewhere");
+    expect(report).not.toContain("in-flight-elsewhere");
+    expect(report).toContain("1 takeable, 0 blocked");
   });
 });

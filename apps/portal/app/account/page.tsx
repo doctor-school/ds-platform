@@ -22,7 +22,7 @@ import { Button } from "@ds/design-system/button";
 import { Container } from "@ds/design-system/container";
 import { FormError } from "@ds/design-system/form";
 import { Input } from "@ds/design-system/input";
-import { Link } from "@ds/design-system/link";
+import { Link as DsLink } from "@ds/design-system/link";
 
 /*
  * 003 EARS-28 (design §12; GH #770) — the /account profile surface, replacing
@@ -92,10 +92,14 @@ function SectionHeader({ children, first = false }: {
 }
 
 /**
- * A full-row link (password / events) with helper line + chevron. Hover is the
- * CANVAS-pinned row state (`profile.dc.html` «Разделы» `style-hover` → `hoverBg`,
- * whose light value IS the `muted` token) — a bg wash, not a link underline;
- * focus is the DS neo-brutalist `shadow-focus` ring (same as every primitive).
+ * A full-row link (password / events) with helper line + chevron, composed the
+ * sanctioned DS way (Stage-B owner finding, #818): the `@ds/design-system`
+ * `Link` primitive carries the interaction contract (transition, shadow-focus
+ * keyboard ring, active state) via `asChild` over a classless `next/link`,
+ * while the CANVAS-pinned row state overrides the text-link look — hover is a
+ * bg wash (`profile.dc.html` «Разделы» `style-hover` → `hoverBg`, whose light
+ * value IS the `muted` token), never an underline, and the row text stays ink
+ * (`text-foreground`), not link blue (only the chevron carries the accent).
  */
 function RowLink({
   href,
@@ -109,23 +113,25 @@ function RowLink({
   helper: string;
 }) {
   return (
-    <NextLink
-      href={href}
-      className="flex flex-col gap-1.5 border-t border-border py-4 transition-colors hover:bg-muted focus-visible:shadow-focus focus-visible:outline-none layout:flex-row layout:items-center layout:gap-5 layout:py-5"
+    <DsLink
+      asChild
+      className="flex flex-col gap-1.5 border-t border-border py-4 font-normal text-foreground hover:bg-muted hover:no-underline active:text-foreground layout:flex-row layout:items-center layout:gap-5 layout:py-5"
     >
-      <span className="w-36 shrink-0 text-2xs font-extrabold uppercase tracking-micro text-muted-foreground">
-        {label}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block font-bold">{title}</span>
-        <span className="mt-1 block text-caption font-semibold text-muted-foreground">
-          {helper}
+      <NextLink href={href}>
+        <span className="w-36 shrink-0 text-2xs font-extrabold uppercase tracking-micro text-muted-foreground">
+          {label}
         </span>
-      </span>
-      <span aria-hidden className="text-lg font-extrabold text-primary-action">
-        →
-      </span>
-    </NextLink>
+        <span className="min-w-0 flex-1">
+          <span className="block font-bold">{title}</span>
+          <span className="mt-1 block text-caption font-semibold text-muted-foreground">
+            {helper}
+          </span>
+        </span>
+        <span aria-hidden className="text-lg font-extrabold text-primary-action">
+          →
+        </span>
+      </NextLink>
+    </DsLink>
   );
 }
 
@@ -330,7 +336,7 @@ export default function AccountPage() {
                     `Link` primitive, not hand-rolled — standalone variant (no
                     resting underline, hover:underline, `/80` reserved for the
                     ACTIVE press state, shadow-focus keyboard ring). */}
-                <Link asChild className="self-start text-sm font-extrabold layout:self-auto">
+                <DsLink asChild className="self-start text-sm font-extrabold layout:self-auto">
                   <button
                     type="button"
                     onClick={() => startEdit(profile.displayName)}
@@ -338,7 +344,7 @@ export default function AccountPage() {
                   >
                     {profile.displayName ? t("nameEdit") : t("nameAdd")}
                   </button>
-                </Link>
+                </DsLink>
               </>
             )}
           </ProfileRow>

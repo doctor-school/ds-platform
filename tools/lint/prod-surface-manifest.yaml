@@ -1,0 +1,85 @@
+# prod-surface readiness manifest (#771) — the committed source of truth for
+# which user-reachable App-Router routes are allowed to face production.
+#
+# Every `page.tsx`/`page.ts` under `apps/portal/app` and `apps/admin/app` MUST
+# have exactly one entry here; `tools/lint/prod-surface-lint.ts` (CI job
+# `prod-surface`, BLOCK) fails on any unlisted route, any stale entry, and any
+# scaffold-tell copy on a `product-ready` route.
+#
+# How to classify a route:
+#   - `product-ready` — the surface is a real product deliverable (Stage-B
+#     approved or equivalent): no placeholder/dev copy, no debug/claims dumps,
+#     no "skeleton" self-description. The scaffold-tell heuristic applies.
+#   - `deferred`      — the surface is knowingly scaffold-grade; it MUST carry
+#     `issue: "#N"` referencing the OPEN Issue tracking its real build
+#     (AGENTS.md §6 "No untracked seam / scaffold"). Deferred routes are exempt
+#     from the tell heuristic — the manifest is the only suppression mechanism.
+#
+# Adding a route without classifying it here reddens CI by design: classify it
+# honestly, never soften the heuristic to get green.
+
+routes:
+  # apps/portal — product-grade post-#769 (facade re-point) / #770 (real /account).
+  - app: portal
+    route: /
+    file: apps/portal/app/page.tsx
+    status: product-ready
+  - app: portal
+    route: /login
+    file: apps/portal/app/login/page.tsx
+    status: product-ready
+  - app: portal
+    route: /register
+    file: apps/portal/app/register/page.tsx
+    status: product-ready
+  - app: portal
+    route: /reset
+    file: apps/portal/app/reset/page.tsx
+    status: product-ready
+  - app: portal
+    route: /verify
+    file: apps/portal/app/verify/page.tsx
+    status: product-ready
+  - app: portal
+    route: /account
+    file: apps/portal/app/account/page.tsx
+    status: product-ready
+  - app: portal
+    route: /account/events
+    file: apps/portal/app/account/events/page.tsx
+    status: product-ready
+  - app: portal
+    route: /webinars
+    file: apps/portal/app/webinars/page.tsx
+    status: product-ready
+  - app: portal
+    route: /webinars/[slug]
+    file: apps/portal/app/webinars/[slug]/page.tsx
+    status: product-ready
+  - app: portal
+    route: /webinars/[slug]/room
+    file: apps/portal/app/webinars/[slug]/room/page.tsx
+    status: product-ready
+
+  # apps/admin — 007 admin console (login + events CRUD/lifecycle), all real
+  # Refine surfaces; root is a pure redirect to /events.
+  - app: admin
+    route: /
+    file: apps/admin/app/page.tsx
+    status: product-ready
+  - app: admin
+    route: /login
+    file: apps/admin/app/login/page.tsx
+    status: product-ready
+  - app: admin
+    route: /events
+    file: apps/admin/app/events/page.tsx
+    status: product-ready
+  - app: admin
+    route: /events/create
+    file: apps/admin/app/events/create/page.tsx
+    status: product-ready
+  - app: admin
+    route: /events/[id]
+    file: apps/admin/app/events/[id]/page.tsx
+    status: product-ready

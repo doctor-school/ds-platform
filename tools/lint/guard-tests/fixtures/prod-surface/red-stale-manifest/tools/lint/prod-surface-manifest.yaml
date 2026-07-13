@@ -1,0 +1,9 @@
+routes:
+  - app: portal
+    route: /
+    file: apps/portal/app/page.tsx
+    status: product-ready
+  - app: portal
+    route: /gone
+    file: apps/portal/app/gone/page.tsx
+    status: product-ready

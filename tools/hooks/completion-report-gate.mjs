@@ -28,13 +28,38 @@ export const REPORT_MARKER = "📈";
  * handoff prompts describe work in flight and use other language. */
 export const COMPLETION_VERB_RE = /смерж|выполнен|заверш[её]н|\bmerged\b/i;
 
+/** NEGATED completion verbs (#839, PR #838 review NIT): «не смержен» /
+ * "not merged" describe work still in flight, not a completion claim.
+ * Matched occurrences are stripped before the completion-verb test. The
+ * leading `(^|[^а-яa-zё])` stands in for a word boundary — JS `\b` is
+ * ASCII-only and does not fire around Cyrillic letters. */
+export const NEGATED_COMPLETION_RE =
+  /(^|[^а-яa-zё])(?:не|not)\s+(?:смерж|выполнен|заверш[её]н|merged)\S*/gi;
+
 /** PR/Issue references: `#123`, `PR 123`, `PR №123`. */
 export const REF_RE = /#\d+|\bPR\s*№?\s*\d+/i;
 
-/** Heuristic from Issue #824: completion verbs AND PR/Issue refs. */
+/** Heuristic from Issue #824 (tuned by #839): completion verbs AND PR/Issue
+ * refs, with negated verb forms discounted. */
 export function isCompletionReport(text) {
-  const t = String(text || "");
+  const t = String(text || "").replace(NEGATED_COMPLETION_RE, "$1");
   return COMPLETION_VERB_RE.test(t) && REF_RE.test(t);
+}
+
+/** Decision-request / approval-ask detector (#839): a turn that ASKS the
+ * owner something is not a completion report even when it carries completion
+ * verbs + refs (the observed 2026-07-13 /wrap stage-2 false positive).
+ * Signals: the «ЖДУ ВАС» blocked-on-owner marker anywhere, or the last
+ * non-empty line ending in a question mark (allowing trailing markdown /
+ * closing punctuation). A question buried mid-report does NOT count. */
+export function isDecisionRequest(text) {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  if (/ЖДУ ВАС/i.test(t)) return true;
+  const lines = t.split(/\r?\n/).filter((l) => l.trim());
+  const last = (lines[lines.length - 1] || "").trim();
+  const stripped = last.replace(/[\s*_`~»"'）)\]]+$/g, "");
+  return stripped.endsWith("?");
 }
 
 /**
@@ -96,11 +121,13 @@ export function blockMessage() {
 /**
  * Pure decision seam (unit-tested without a real FS): block only when this is
  * not already a post-block continuation, the last assistant message reads as a
- * completion report, and the «📈» marker is absent from it.
+ * completion report (not a decision-request/approval-ask — #839), and the
+ * «📈» marker is absent from it.
  */
 export function decideBlock({ stopHookActive, lastAssistantText }) {
   if (stopHookActive) return { block: false };
   if (!lastAssistantText) return { block: false };
+  if (isDecisionRequest(lastAssistantText)) return { block: false };
   if (!isCompletionReport(lastAssistantText)) return { block: false };
   if (lastAssistantText.includes(REPORT_MARKER)) return { block: false };
   return { block: true };

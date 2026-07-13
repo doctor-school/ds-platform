@@ -12,6 +12,7 @@ import {
   decideBlock,
   extractLastAssistantText,
   isCompletionReport,
+  isDecisionRequest,
 } from "../../hooks/completion-report-gate.mjs";
 
 /**
@@ -76,6 +77,17 @@ const COMPLETION_NO_MARKER =
 const COMPLETION_WITH_MARKER =
   COMPLETION_NO_MARKER + "\n\n📈 % от запланированного: 100% — весь скоуп.";
 
+// The observed 2026-07-13 live false positive (#839): a /wrap stage-2
+// APPROVAL-REQUEST turn — completion verbs («смержен») + Issue refs are
+// present, but the turn asks the owner a decision question instead of
+// reporting completion. The gate must stay silent on it.
+const LIVE_FP_STAGE2 =
+  "/wrap стадия 2 — предложения по ретро сессии 9d41016b:\n\n" +
+  "1. F1: фикс уже применён (commit df684b2), отдельная Issue не требуется.\n" +
+  "2. F2: PR #838 смержен ранее, но handoff-verify хук ещё не смержен — " +
+  "предлагаю Issue «tooling(hooks): напоминание pnpm handoff:verify».\n\n" +
+  "⏸ ЖДУ ВАС: одобряете открытие Issue по пункту F2 — да/нет?";
+
 describe("completion-report-gate hook (spawned end-to-end)", () => {
   it("blocks (exit 2) a completion report missing «📈», naming report-task-outcome", () => {
     const r = runHook(stopPayload(transcriptWith(COMPLETION_NO_MARKER)));
@@ -127,6 +139,34 @@ describe("completion-report-gate hook (spawned end-to-end)", () => {
     expect(r.status).toBe(0);
   });
 
+  it("allows the observed 2026-07-13 /wrap stage-2 approval-request (live FP, #839)", () => {
+    const r = runHook(stopPayload(transcriptWith(LIVE_FP_STAGE2)));
+    expect(r.status).toBe(0);
+    expect(r.stderr).toBe("");
+  });
+
+  it("allows a decision-request ending in a question despite completion verbs + refs", () => {
+    const r = runHook(
+      stopPayload(
+        transcriptWith(
+          "PR #812 смержен, Issue #811 закрыта. Открывать ли follow-up на рефактор?",
+        ),
+      ),
+    );
+    expect(r.status).toBe(0);
+  });
+
+  it("still blocks a markerless completion report that merely MENTIONS a question mid-text", () => {
+    const r = runHook(
+      stopPayload(
+        transcriptWith(
+          "Вопрос «нужен ли рефакторинг?» отложен в #825. " + COMPLETION_NO_MARKER,
+        ),
+      ),
+    );
+    expect(r.status).toBe(2);
+  });
+
   it("never blocks when stop_hook_active is true (loop guard)", () => {
     const r = runHook(
       stopPayload(transcriptWith(COMPLETION_NO_MARKER), true),
@@ -175,6 +215,44 @@ describe("isCompletionReport()", () => {
 
   it("does not treat 'merge' inside other words as the verb", () => {
     expect(isCompletionReport("Готовлю merge-план для #824.")).toBe(false);
+  });
+
+  it("does not treat NEGATED completion verbs as completion (#838 review NIT)", () => {
+    expect(isCompletionReport("PR #833 не смержен, жду вердикта.")).toBe(false);
+    expect(isCompletionReport("PR #833 ещё не смержен — CI красный.")).toBe(false);
+    expect(isCompletionReport("Итерация #815 не завершена, остался тест.")).toBe(false);
+    expect(isCompletionReport("PR #812 is not merged yet.")).toBe(false);
+    // …but a positive verb alongside a negated one still counts
+    expect(
+      isCompletionReport("PR #810 смержен; PR #833 не смержен."),
+    ).toBe(true);
+  });
+});
+
+describe("isDecisionRequest()", () => {
+  it("matches the «ЖДУ ВАС» handback marker anywhere in the turn", () => {
+    expect(isDecisionRequest(LIVE_FP_STAGE2)).toBe(true);
+  });
+
+  it("matches a turn whose last line ends with a question mark", () => {
+    expect(
+      isDecisionRequest("PR #812 смержен. Открывать ли follow-up?"),
+    ).toBe(true);
+    expect(
+      isDecisionRequest("Вариант A или B?\n\n1. A — быстрее\n2. B — чище\n\nЧто выбираем?"),
+    ).toBe(true);
+  });
+
+  it("matches a trailing question wrapped in markdown emphasis", () => {
+    expect(isDecisionRequest("Итог по #812.\n\n**Мержим сейчас?**")).toBe(true);
+  });
+
+  it("rejects a plain completion report (question only mid-text)", () => {
+    expect(isDecisionRequest(COMPLETION_NO_MARKER)).toBe(false);
+    expect(
+      isDecisionRequest("Вопрос «зачем?» закрыт в #825. Всё смержено, PR #810."),
+    ).toBe(false);
+    expect(isDecisionRequest("")).toBe(false);
   });
 });
 
@@ -269,5 +347,12 @@ describe("decideBlock()", () => {
     expect(decideBlock({ ...completion, stopHookActive: true }).block).toBe(
       false,
     );
+  });
+
+  it("never blocks a decision-request turn even with completion verbs + refs (#839)", () => {
+    expect(
+      decideBlock({ stopHookActive: false, lastAssistantText: LIVE_FP_STAGE2 })
+        .block,
+    ).toBe(false);
   });
 });

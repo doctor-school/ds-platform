@@ -1,5 +1,11 @@
 # @ds/portal
 
+## 0.13.1
+
+### Patch Changes
+
+- [#850](https://github.com/doctor-school/ds-platform/pull/850) [`41419d3`](https://github.com/doctor-school/ds-platform/commit/41419d369f3403b0bb736223d5878e6a215a876c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - fix: [#843](https://github.com/doctor-school/ds-platform/issues/843) live surfaces track lifecycle in real time — public event-page and upcoming-broadcasts SSR reads drop the 30s timer cache (`cache: "no-store"`; any future cache must be invalidated ON the lifecycle transition, never by timer), and the room-chat pane shows a distinct loading skeleton while the history bootstrap is in flight instead of flashing «Пока нет сообщений» over an active conversation
+
 ## 0.13.0
 
 ### Minor Changes

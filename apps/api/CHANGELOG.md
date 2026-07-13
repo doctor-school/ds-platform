@@ -1,5 +1,11 @@
 # @ds/api
 
+## 0.18.1
+
+### Patch Changes
+
+- [#852](https://github.com/doctor-school/ds-platform/pull/852) [`6f535b0`](https://github.com/doctor-school/ds-platform/commit/6f535b0bd1f9c9bbfaedca8c29f33f4bfc46b79b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - fix: program-PDF download from the public event page ([#842](https://github.com/doctor-school/ds-platform/issues/842)) — `ObjectStorage.urlFor` now issues a short-lived SigV4 presigned GET (15 min TTL) instead of a plain unsigned object URL, which the private prod bucket denied with `AccessDenied`. The in-memory fake mirrors the signed-GET contract (unsigned URL shape → 403), so dev/test verification can no longer pass a URL shape prod refuses.
+
 ## 0.18.0
 
 ### Minor Changes

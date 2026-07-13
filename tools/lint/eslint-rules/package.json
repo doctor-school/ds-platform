@@ -12,9 +12,9 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@typescript-eslint/parser": "^8.62.1",
-    "eslint": "^10.6.0",
-    "typescript-eslint": "^8.62.1",
-    "vitest": "^4.1.9"
+    "@typescript-eslint/parser": "^8.63.0",
+    "eslint": "^10.7.0",
+    "typescript-eslint": "^8.63.0",
+    "vitest": "^4.1.10"
   }
 }

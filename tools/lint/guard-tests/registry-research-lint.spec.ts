@@ -93,6 +93,26 @@ describe("registry-research-lint", () => {
     expect(code).toBe(0);
   });
 
+  it("regression (#746): an infra-only PR (Dockerfile, compose, env templates, dotfiles) is exempt → exit 0", () => {
+    const { code, stdout } = runGuard(
+      GUARD,
+      caseDir("registry-research", "green-infra-only"),
+      { env: prEnv("107", "green-infra-only") },
+    );
+    expect(code).toBe(0);
+    expect(stdout).toContain("rule does not apply");
+  });
+
+  it("regression (#746): a Dockerfile touch does NOT exempt the `.tsx` in the same PR → exit 1", () => {
+    const { code, stderr } = runGuard(
+      GUARD,
+      caseDir("registry-research", "red-infra-plus-tsx"),
+      { env: prEnv("108", "red-infra-plus-tsx") },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("no registry-research artifact");
+  });
+
   it("skip: not a pull_request event → exit 0", () => {
     const { code, stdout } = runGuard(
       GUARD,

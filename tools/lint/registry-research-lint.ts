@@ -64,8 +64,19 @@ const UI_PATH_RE =
 // cts,cjs}`). Before this, a test-only PR whose only non-`.test.tsx` file was
 // `packages/design-system/vitest.setup.ts` tripped the guard as if it were a
 // user-facing surface (#378, surfaced by #377).
+// NOTE on the infra/deploy family (#746): container build recipes
+// (`Dockerfile`, `Dockerfile.<variant>`), dotfiles (`.dockerignore`, `.env`,
+// `.env.example`, `.eslintrc.*`, …), non-dot env templates (`*.env.example`),
+// and YAML manifests (compose files, CI/deploy config — `*.yml`/`*.yaml`) are
+// deploy/config artifacts, never rendered UI source. Before this, an
+// infra-only PR touching `apps/admin/Dockerfile` tripped the guard and taxed
+// the author with a registry-research artifact for a change that ships no UI
+// (#648, PR #745). The exemption is PATH-based only: any `.tsx`/`.jsx`/UI
+// source file in the same diff still requires the artifact, and comment-only
+// UI-source changes still count (no content-based opt-out — see
+// `reference_registry_research_guard_no_comment_optout`).
 const UI_PATH_EXEMPT_RE =
-  /(\.md$|\.mdx$|\.json$|\.css$|\.test\.[tj]sx?$|\.spec\.[tj]sx?$|\/__tests__\/|(^|\/)e2e\/|\.config\.[mc]?[tj]s$|\.setup\.[mc]?[tj]sx?$|\/styles\/tokens\.css$|allowed-tokens\.json$)/;
+  /(\.md$|\.mdx$|\.json$|\.css$|\.test\.[tj]sx?$|\.spec\.[tj]sx?$|\/__tests__\/|(^|\/)e2e\/|\.config\.[mc]?[tj]s$|\.setup\.[mc]?[tj]sx?$|\/styles\/tokens\.css$|allowed-tokens\.json$|(^|\/)Dockerfile[^/]*$|(^|\/)\.[^/]+$|\.env\.example$|\.ya?ml$)/;
 
 // The artifact: a `registry-research:` marker line, or a `## Registry research`
 // section heading followed by its body. Either form is accepted.

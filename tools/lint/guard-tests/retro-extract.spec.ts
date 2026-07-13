@@ -296,6 +296,56 @@ describe("retro extract — CORRECTION_RE RU interrogative reproach recall (#609
   });
 });
 
+// ── CORRECTION_RE — RU hedged / question-form recall (#829) ──────────────────
+// The wrap retro of session edf902e9 scored 0 on the #818 DEFINING owner
+// correction — «Кажется hover стейты элементов не соответствуют нашей
+// дизайн-системе. Всё прошло гарды?» — a hedged observation-form correction
+// (softened «кажется» + the mismatch predicate «не соответству…»). A recurrence
+// (2026-07-13, session 85170286) added the duration-reproach register: «CI до
+// сих пор идёт? Не долго ли?». Added: «кажется», «не соответству», the bare
+// «вроде же» (the verb-anchored «вроде + прос/…» form misses the verbless
+// shape), «до сих пор» anchored to a verb-of-progress (ид/работ/вис/не), and
+// the explicit too-long interrogatives «не долго ли» / «не слишком ли долго».
+// The Issue's «почему (не|это)» / «разве не» forms are already subsumed by the
+// bare «почему» / «разве» tokens.
+describe("retro extract — CORRECTION_RE hedged/question-form recall (#829)", () => {
+  it("flags the #818 hedged design-mismatch correction (session edf902e9)", () => {
+    expect(
+      CORRECTION_RE.test(
+        "Кажется hover стейты элементов не соответствуют нашей дизайн-системе. Всё прошло гарды?",
+      ),
+    ).toBe(true);
+  });
+
+  it("flags the session-85170286 duration reproach", () => {
+    expect(CORRECTION_RE.test("CI до сих пор идёт? Не долго ли?")).toBe(true);
+  });
+
+  it("flags adjacent hedged / duration-reproach shapes", () => {
+    // hedged suspected-defect opener
+    expect(CORRECTION_RE.test("кажется ты сломал сборку этим коммитом")).toBe(true);
+    // explicit spec-mismatch report
+    expect(CORRECTION_RE.test("это не соответствует спеке 003")).toBe(true);
+    // verbless hedged broken-expectation
+    expect(CORRECTION_RE.test("вроде же было по-другому в прошлый раз")).toBe(true);
+    // duration reproach on the other progress stems
+    expect(CORRECTION_RE.test("деплой до сих пор висит")).toBe(true);
+    expect(CORRECTION_RE.test("сборка до сих пор не прошла")).toBe(true);
+    // the question-form Issue examples ride the existing bare tokens
+    expect(CORRECTION_RE.test("почему это оказалось в PR?")).toBe(true);
+    expect(CORRECTION_RE.test("разве не должно быть наоборот?")).toBe(true);
+  });
+
+  it("precision guard: benign narration stays unflagged", () => {
+    // «до сих пор» + a non-progress word — historical narration, not reproach
+    expect(CORRECTION_RE.test("до сих пор так и осталось со времён MVP")).toBe(false);
+    // benign hedged ack without «же» or a request verb (pre-existing guard shape)
+    expect(CORRECTION_RE.test("вроде всё работает, спасибо")).toBe(false);
+    // a plain «долго» estimate is not the «не долго ли» reproach
+    expect(CORRECTION_RE.test("сборка обычно долго собирается, минут пять")).toBe(false);
+  });
+});
+
 // ── SELF_CATCH lexicon recall (#362) ────────────────────────────────────────
 // The assistant-side self-correction lexicon missed clean RU markers the corpus
 // surfaced («я зря …», «я перепутал …»). The additions are high-precision: the

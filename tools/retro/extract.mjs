@@ -153,6 +153,27 @@ export const CORRECTION_RE = new RegExp(
     '(?<![а-яё])сколько[\\s\\S]{0,40}(?<![а-яё])уже(?![а-яё])',
     'вроде\\s+(?:же\\s+)?(?:прос|говор|договор|сказал|указыв|обсужд)',
     "didn.t i ",
+    // 2026-07-12 #829 (edf902e9 wrap retro) — the #818 DEFINING owner correction
+    // scored 0: «Кажется hover стейты элементов не соответствуют нашей
+    // дизайн-системе. Всё прошло гарды?» — a hedged observation-form correction
+    // (softened «кажется» + the mismatch predicate), a register the lexicon
+    // could not see. Added: «кажется» (in owner turns the hedge prefixes a
+    // suspected defect report, not small talk — the regex runs on user turns
+    // only), «не соответству» (stem covers соответствует/-уют/-овал: an explicit
+    // spec/design mismatch report), and the bare «вроде же» (hedged
+    // broken-expectation marker; the verb-anchored «вроде + прос/говор/…» form
+    // above misses the verbless «вроде же было иначе»). The Issue's
+    // «почему (не|это)» and «разве не» forms are already subsumed by the bare
+    // «почему» / «разве» tokens at the top of the lexicon — no new token needed.
+    'кажется', 'не соответству', 'вроде же',
+    // 2026-07-13 85170286 wrap retro (#829 recurrence) — the duration reproach
+    // «CI до сих пор идёт? Не долго ли?» scored 0: «до сих пор» + a
+    // verb-of-progress is the impatience register of «сколько … уже» above.
+    // «до сих пор» is anchored to the progress/negation stems (ид/работ/вис/не)
+    // so the benign historical narration «до сих пор так и было» stays quiet;
+    // «не долго ли» / «не слишком ли долго» are the explicit too-long
+    // interrogatives (no benign reading in owner chat).
+    'до сих пор (?:ид|работ|вис|не)', 'не долго ли', 'не слишком ли долго',
     'why ', 'instead', 'should have', 'you were supposed', 'wrong', 'no,', 'stop',
     'revert', 'undo', "don't", 'do not', 'not what', 'i asked', 'i told you', 'again', 'did you',
   ].join('|'),

@@ -424,6 +424,26 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:no-stub
 
+  # migration-index: Drizzle migration-index collision guard (#799). Parallel
+  # branches independently generate the same next migration index off a stale
+  # base; on merge one branch's _journal.json entry / snapshot drops the sibling
+  # (observed 2026-07-12, #705: 0011_neat_vapor vs 0011_users_deactivated_at).
+  # Fails on a branch-new idx ≤ origin/main max, a duplicate journal idx, a
+  # duplicate SQL-file prefix, or a dropped base entry. The checkout is shallow,
+  # so the guard fetches origin/main itself (falls back to SKIP, never a false
+  # red). Excluded from the `ci` meta-job needs-list while WARN.
+  migration-index:
+    needs: setup
+    continue-on-error: true # WARN v1 — promote to BLOCK per ADR-0007 §2.6 promotion policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:migration-index
+
   # showcase-coverage: the design-system living showcase (apps/showcase) is the
   # rendered viewer of @ds/design-system — it must stay *living*. This guard
   # asserts every package COMPONENT export has a catalogued entry in the showcase

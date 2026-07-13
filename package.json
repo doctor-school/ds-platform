@@ -33,6 +33,7 @@
     "lint:ears-test": "tsx tools/lint/ears-test-lint.ts",
     "lint:form-rhythm": "tsx tools/lint/form-rhythm-lint.ts",
     "lint:interaction-states": "tsx tools/lint/interaction-states-lint.ts",
+    "lint:migration-index": "tsx tools/lint/migration-index-lint.ts",
     "lint:module-readme": "tsx tools/lint/module-readme-lint.ts",
     "lint:no-stub": "tsx tools/lint/no-stub-lint.ts",
     "lint:prior-decisions": "tsx tools/lint/prior-decisions-lint.ts",

@@ -101,7 +101,7 @@
     "nameInputLabel": "Отображаемое имя",
     "nameError": "Не удалось сохранить. Попробуйте ещё раз.",
     "emailLabel": "Email",
-    "emailVerified": "✓ подтверждён",
+    "emailVerified": "подтверждён",
     "phoneLabel": "Телефон",
     "phoneEmpty": "не указан",
     "passwordLabel": "Пароль",

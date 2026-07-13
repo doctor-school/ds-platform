@@ -338,10 +338,19 @@ export default function AccountPage() {
                 {profile.email}
               </span>
               {profile.emailVerified ? (
+                // AA remap (#270 precedent, mirrored from the webinar-card
+                // registered marker): the canvas paints the badge green.500,
+                // which fails the 4.5:1 normal-text floor on the light
+                // background and the palette has no darker AA green — so the
+                // LABEL takes AA ink and only the decorative ✓ keeps the
+                // success hue (redundant with the label, WCAG 1.4.11 exempt).
                 <Badge
-                  className="border-2 border-current bg-transparent text-success"
+                  className="gap-1.5 border-2 border-current bg-transparent text-foreground"
                   data-testid="profile-email-verified"
                 >
+                  <span aria-hidden="true" className="text-success">
+                    ✓
+                  </span>
                   {t("emailVerified")}
                 </Badge>
               ) : null}

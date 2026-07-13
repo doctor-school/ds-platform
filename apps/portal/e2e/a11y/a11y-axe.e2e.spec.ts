@@ -109,10 +109,12 @@ test.describe("005 EARS-13 axe-core a11y scan of the portal webinar surfaces", (
   test("the /account profile surface passes WCAG 2 A/AA (both themes)", async ({
     page,
   }) => {
-    // A fresh doctor's default post-register landing IS /account (EARS-5 replay).
+    // Provision a fresh doctor (post-login lands on «Мои события», #807), then
+    // open the profile surface directly.
     await page.goto("/register", { waitUntil: "domcontentloaded" });
     await submitRegisterAndVerify(page);
-    await page.waitForURL(/\/account(?:$|[?#])/);
+    await page.waitForURL(/\/account/);
+    await page.goto("/account", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("profile-email")).toBeVisible();
     for (const theme of THEMES) await scan(page, theme);
 

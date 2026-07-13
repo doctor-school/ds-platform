@@ -20,9 +20,9 @@
     "@hookform/resolvers": "^5.2.2",
     "@refinedev/core": "^4.57.10",
     "@refinedev/nextjs-router": "^6.2.3",
-    "lucide-react": "^1.23.0",
+    "lucide-react": "^1.24.0",
     "next": "16.2.10",
-    "next-intl": "^4.13.1",
+    "next-intl": "^4.13.2",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-hook-form": "^7.81.0",
@@ -32,14 +32,14 @@
     "@axe-core/playwright": "^4.12.1",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4.3.2",
-    "@types/node": "^26.1.0",
+    "@types/node": "^26.1.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "playwright-bdd": "^9.2.0",
-    "postcss": "^8.5.16",
+    "postcss": "^8.5.18",
     "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   }
 }

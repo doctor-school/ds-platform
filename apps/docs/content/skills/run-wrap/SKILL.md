@@ -64,7 +64,7 @@ Run the lifecycle tail from [`run-task-lifecycle`](../run-task-lifecycle/SKILL.m
 
 ### 5. Handoff
 
-Run the existing `handoff-prompt` skill (a global Claude Code skill, triggers on `/handoff-prompt`) to emit the copy-pasteable next-session prompt. Do not hand-roll the handoff format — `handoff-prompt` owns it (≤ 300 tokens, fixed section template).
+Run the existing `handoff-prompt` skill (a global Claude Code skill, triggers on `/handoff-prompt`) to emit the copy-pasteable next-session prompt. Do not hand-roll the handoff format — `handoff-prompt` owns it (≤ 300 tokens, fixed section template) — with ONE repo-side override: the emitted block's **first line** is the literal directive `FIRST ACTION: pipe this verbatim block through \`pnpm handoff:verify\` before any tracker/git action.`The resume-side gate rides inside the artifact itself (a 2026-07-13 retro found a resume session substituting hand-rolled`gh` reconciliation for the deterministic gate — in-band beats auto-loaded prose).
 
 The handoff cites only document paths that exist at emit time (stat/`Read` each before including) and carries the canonical tracker id (GitHub Issue / Plane item) of the next task; «where we stopped» premises come from tracker comments, not the session's memory of itself. **Premise gate (mandatory, #743):** write the draft handoff to a temp file and run `pnpm handoff:verify <file>` — any STALE row = fix the claim before emitting; this deterministic gate replaces the prose-only premise check. Resume side: an agent that cannot locate a cited document STOPS and asks the owner instead of substituting its own reading.
 

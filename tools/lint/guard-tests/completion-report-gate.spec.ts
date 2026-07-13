@@ -1,0 +1,273 @@
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterAll, describe, expect, it } from "vitest";
+
+// The hook is plain ESM JS (runs under bare `node` from settings.json), so the
+// spec imports its pure seams directly — same pattern as the #823 sibling.
+import {
+  REPORT_MARKER,
+  decideBlock,
+  extractLastAssistantText,
+  isCompletionReport,
+} from "../../hooks/completion-report-gate.mjs";
+
+/**
+ * Cover for the #824 completion-report gate (Stop hook): a final assistant
+ * message that reads as a task-completion report (completion verbs + PR/Issue
+ * refs) but lacks the «📈 % от запланированного» marker blocks the stop
+ * (exit 2 + corrective stderr naming skill `report-task-outcome`); everything
+ * else — non-completion turns, marker present, `stop_hook_active`, unreadable
+ * transcript — allows the stop (exit 0, fail-open).
+ *
+ * Fixture transcripts are written into an `os.tmpdir()` temp dir at test time
+ * and every path is built via `path.join` — no drive-letter literals, so the
+ * spec runs identically on Windows and the Linux CI runner (PR #832 lesson).
+ */
+
+const HOOK = fileURLToPath(
+  new URL("../../hooks/completion-report-gate.mjs", import.meta.url),
+);
+
+const DIR = mkdtempSync(join(tmpdir(), "completion-report-gate-"));
+afterAll(() => rmSync(DIR, { recursive: true, force: true }));
+
+let fixtureN = 0;
+/** Write a JSONL transcript ending in one assistant text message. */
+function transcriptWith(lastAssistantText: string): string {
+  const p = join(DIR, `transcript-${fixtureN++}.jsonl`);
+  const lines = [
+    JSON.stringify({
+      type: "user",
+      message: { role: "user", content: "продолжай" },
+    }),
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        id: "msg_final",
+        role: "assistant",
+        content: [{ type: "text", text: lastAssistantText }],
+      },
+    }),
+  ];
+  writeFileSync(p, lines.join("\n") + "\n", "utf8");
+  return p;
+}
+
+function runHook(payload: unknown) {
+  return spawnSync(process.execPath, [HOOK], {
+    input: typeof payload === "string" ? payload : JSON.stringify(payload),
+    encoding: "utf8",
+  });
+}
+
+const stopPayload = (transcriptPath: string, stopHookActive = false) => ({
+  session_id: "s-824",
+  transcript_path: transcriptPath,
+  hook_event_name: "Stop",
+  stop_hook_active: stopHookActive,
+});
+
+const COMPLETION_NO_MARKER =
+  "Готово: PR #810 смержен (squash), Issue #806 закрыта, CI зелёный. " +
+  "Ветка удалена, board Status = Done.";
+const COMPLETION_WITH_MARKER =
+  COMPLETION_NO_MARKER + "\n\n📈 % от запланированного: 100% — весь скоуп.";
+
+describe("completion-report-gate hook (spawned end-to-end)", () => {
+  it("blocks (exit 2) a completion report missing «📈», naming report-task-outcome", () => {
+    const r = runHook(stopPayload(transcriptWith(COMPLETION_NO_MARKER)));
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("report-task-outcome");
+    expect(r.stderr).toContain(
+      "apps/docs/content/skills/report-task-outcome/SKILL.md",
+    );
+    expect(r.stderr).toContain("📈 % от запланированного");
+  });
+
+  it("allows (exit 0) the same report once the «📈» section is present", () => {
+    const r = runHook(stopPayload(transcriptWith(COMPLETION_WITH_MARKER)));
+    expect(r.status).toBe(0);
+    expect(r.stderr).toBe("");
+  });
+
+  it("allows a status update (refs but no completion verb)", () => {
+    const r = runHook(
+      stopPayload(
+        transcriptWith(
+          "PR #833 открыт, жду вердикта Mode (a); CI ещё бежит — статус сообщу.",
+        ),
+      ),
+    );
+    expect(r.status).toBe(0);
+  });
+
+  it("allows a question to the owner", () => {
+    const r = runHook(
+      stopPayload(
+        transcriptWith(
+          "⏸ ЖДУ ВАС: какой вариант дизайна для #824 выбрать — A или B?",
+        ),
+      ),
+    );
+    expect(r.status).toBe(0);
+  });
+
+  it("allows a handoff prompt (work in flight, no completion verbs)", () => {
+    const r = runHook(
+      stopPayload(
+        transcriptWith(
+          "Handoff: продолжи работу над Issue #824 — worktree создан, " +
+            "план в стоп-стейт комментарии, следующий шаг — тесты.",
+        ),
+      ),
+    );
+    expect(r.status).toBe(0);
+  });
+
+  it("never blocks when stop_hook_active is true (loop guard)", () => {
+    const r = runHook(
+      stopPayload(transcriptWith(COMPLETION_NO_MARKER), true),
+    );
+    expect(r.status).toBe(0);
+  });
+
+  it("fails open on a missing transcript file", () => {
+    const r = runHook(stopPayload(join(DIR, "does-not-exist.jsonl")));
+    expect(r.status).toBe(0);
+  });
+
+  it("fails open on a garbage transcript", () => {
+    const p = join(DIR, "garbage.jsonl");
+    writeFileSync(p, "not json at all\n{{{\n00000001", "utf8");
+    expect(runHook(stopPayload(p)).status).toBe(0);
+  });
+
+  it("fails open on garbage stdin", () => {
+    expect(runHook("not-json{{{").status).toBe(0);
+  });
+
+  it("fails open when transcript_path is absent from the payload", () => {
+    expect(
+      runHook({ session_id: "s", hook_event_name: "Stop" }).status,
+    ).toBe(0);
+  });
+});
+
+describe("isCompletionReport()", () => {
+  it("matches RU completion verbs + refs", () => {
+    expect(isCompletionReport("Задача выполнена, см. PR №812.")).toBe(true);
+    expect(isCompletionReport("Итерация завершена: #815 закрыт.")).toBe(true);
+    expect(isCompletionReport("Всё завершёно по #815.")).toBe(true);
+  });
+
+  it("matches EN merged + refs", () => {
+    expect(isCompletionReport("PR #812 merged, issue closed.")).toBe(true);
+  });
+
+  it("needs BOTH a completion verb and a ref", () => {
+    expect(isCompletionReport("PR #833 открыт, жду CI.")).toBe(false); // ref only
+    expect(isCompletionReport("Работа выполнена полностью.")).toBe(false); // verb only
+    expect(isCompletionReport("Что делаем дальше?")).toBe(false);
+  });
+
+  it("does not treat 'merge' inside other words as the verb", () => {
+    expect(isCompletionReport("Готовлю merge-план для #824.")).toBe(false);
+  });
+});
+
+describe("extractLastAssistantText()", () => {
+  it("returns only the LAST assistant turn (earlier completion text ignored)", () => {
+    const jsonl = [
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          id: "m1",
+          content: [{ type: "text", text: COMPLETION_NO_MARKER }],
+        },
+      }),
+      JSON.stringify({ type: "user", message: { content: "а дальше?" } }),
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          id: "m2",
+          content: [{ type: "text", text: "Дальше — Issue #825, план ниже." }],
+        },
+      }),
+    ].join("\n");
+    const text = extractLastAssistantText(jsonl);
+    expect(text).toBe("Дальше — Issue #825, план ниже.");
+    expect(decideBlock({ stopHookActive: false, lastAssistantText: text }))
+      .toEqual({ block: false });
+  });
+
+  it("concatenates a turn split across entries sharing one message id", () => {
+    const jsonl = [
+      JSON.stringify({
+        type: "assistant",
+        message: { id: "m9", content: [{ type: "text", text: "PR #810 смержен." }] },
+      }),
+      JSON.stringify({
+        type: "assistant",
+        message: { id: "m9", content: [{ type: "text", text: "Ветка удалена." }] },
+      }),
+    ].join("\n");
+    expect(extractLastAssistantText(jsonl)).toBe(
+      "PR #810 смержен.\nВетка удалена.",
+    );
+  });
+
+  it("handles string content and skips tool_use-only / malformed lines", () => {
+    const jsonl = [
+      "{{{ malformed",
+      JSON.stringify({
+        type: "assistant",
+        message: { id: "m3", content: "строковый контент #1 выполнен" },
+      }),
+      JSON.stringify({
+        type: "assistant",
+        message: { id: "m4", content: [{ type: "tool_use", name: "Bash" }] },
+      }),
+    ].join("\n");
+    // last turn (m4) has no text → null, and the gate stays silent on null
+    expect(extractLastAssistantText(jsonl)).toBeNull();
+    expect(
+      decideBlock({ stopHookActive: false, lastAssistantText: null }).block,
+    ).toBe(false);
+  });
+
+  it("returns null for an empty / assistant-free transcript", () => {
+    expect(extractLastAssistantText("")).toBeNull();
+    expect(
+      extractLastAssistantText(
+        JSON.stringify({ type: "user", message: { content: "hi" } }),
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("decideBlock()", () => {
+  const completion = { stopHookActive: false, lastAssistantText: COMPLETION_NO_MARKER };
+
+  it("blocks a markerless completion report", () => {
+    expect(decideBlock(completion)).toEqual({ block: true });
+  });
+
+  it("passes once the marker is present", () => {
+    expect(
+      decideBlock({
+        stopHookActive: false,
+        lastAssistantText: COMPLETION_WITH_MARKER,
+      }).block,
+    ).toBe(false);
+    expect(COMPLETION_WITH_MARKER).toContain(REPORT_MARKER);
+  });
+
+  it("never blocks under stop_hook_active", () => {
+    expect(decideBlock({ ...completion, stopHookActive: true }).block).toBe(
+      false,
+    );
+  });
+});

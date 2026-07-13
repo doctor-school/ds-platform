@@ -324,6 +324,9 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
      prod redirect URI, and activates mail.ru + SMS-Aero as the boot providers:
 
      ```bash
+     # Sourcing runs api.env through bash: values with spaces MUST be double-quoted
+     # (e.g. SMSAERO_SIGN="SMS Aero"), or the var truncates at the first space and
+     # the remainder errors as `command not found`.
      set -a; . /etc/ds-platform/api.env; set +a
      cd ~/ds-platform/infra/dev-stand/idp
      IDP_BASE_URL=https://id.doctor.school \

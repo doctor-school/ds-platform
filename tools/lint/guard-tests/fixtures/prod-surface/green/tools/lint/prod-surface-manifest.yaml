@@ -1,0 +1,10 @@
+routes:
+  - app: portal
+    route: /
+    file: apps/portal/app/page.tsx
+    status: product-ready
+  - app: portal
+    route: /legacy
+    file: apps/portal/app/legacy/page.tsx
+    status: deferred
+    issue: "#123"

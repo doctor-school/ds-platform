@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Centrifuge, type PublicationContext } from "centrifuge";
 import { useTranslations } from "next-intl";
+import { Skeleton } from "@ds/design-system";
 import {
   ChatMessageTextSchema,
   RoomChatMessageSchema,
@@ -52,6 +53,13 @@ export function RoomChat({
 }) {
   const t = useTranslations("room");
   const [messages, setMessages] = useState<RoomChatMessage[]>([]);
+  // History-bootstrap latch (#843): `chatEmpty` («Пока нет сообщений») is a
+  // STATEMENT about the room, so it must never render while the answer is
+  // still in flight — connect → subscribe → history takes seconds after a
+  // reload, and flashing the empty-state over an active conversation reads as
+  // staleness. Until the history read settles, the pane shows a loading
+  // skeleton instead.
+  const [hydrated, setHydrated] = useState(false);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -107,6 +115,11 @@ export function RoomChat({
         )
         .catch(() => {
           // Hydration is additive; live messages still arrive.
+        })
+        .finally(() => {
+          // The history read settled (either way) — only NOW is «no messages
+          // yet» a fact the pane may state (#843).
+          setHydrated(true);
         });
     };
     centrifuge.on("publication", onPublication);
@@ -169,13 +182,29 @@ export function RoomChat({
         data-testid="room-chat-messages"
         role="log"
         aria-live="polite"
+        aria-busy={messages.length === 0 && !hydrated}
         aria-label={t("chatHeading")}
         className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4"
       >
         {messages.length === 0 ? (
-          <p className="m-auto text-center text-sm text-muted-foreground">
-            {t("chatEmpty")}
-          </p>
+          !hydrated ? (
+            // History still loading — a distinct loading state, NEVER the
+            // empty-state (#843). DS `Skeleton` primitive (decorative,
+            // aria-hidden); the sr-only line carries the accessible status.
+            <div
+              data-testid="room-chat-loading"
+              className="flex flex-col gap-3"
+            >
+              <span className="sr-only">{t("chatLoading")}</span>
+              <Skeleton className="h-14 w-4/5" />
+              <Skeleton className="h-14 w-3/5" />
+              <Skeleton className="h-14 w-2/3" />
+            </div>
+          ) : (
+            <p className="m-auto text-center text-sm text-muted-foreground">
+              {t("chatEmpty")}
+            </p>
+          )
         ) : (
           messages.map((message) => {
             const own = message.authorTag === chat.selfTag;

@@ -93,6 +93,7 @@ export const STATIC_GUARDS = [
   { name: "glossary-mdx", file: "glossary-mdx-lint.ts" },
   { name: "glossary-roundtrip", file: "glossary-roundtrip-lint.ts" },
   { name: "instruction-budget", file: "instruction-budget-lint.ts" },
+  { name: "migration-index", file: "migration-index-lint.ts" },
   { name: "no-stub", file: "no-stub-lint.ts" },
   { name: "showcase-coverage", file: "showcase-coverage-lint.ts" },
   { name: "showcase-snippet", file: "showcase-snippet-lint.ts" },

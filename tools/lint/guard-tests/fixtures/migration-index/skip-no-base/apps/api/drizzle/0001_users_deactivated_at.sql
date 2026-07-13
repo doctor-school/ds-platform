@@ -1,0 +1,1 @@
+-- fixture migration: 0001_users_deactivated_at

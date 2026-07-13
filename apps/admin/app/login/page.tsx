@@ -48,7 +48,7 @@ import { useLocalizedResolver } from "@/lib/use-localized-resolver";
  */
 function LoginForm() {
   const t = useTranslations();
-  const { mutate: login, isLoading } = useLogin();
+  const { mutate: login, isPending } = useLogin();
   const [error, setError] = useState<string | null>(null);
   const form = useForm<LoginFormFields>({
     mode: "onTouched",
@@ -129,7 +129,7 @@ function LoginForm() {
                   </FormItem>
                 )}
               />
-              <Button type="submit" loading={isLoading} data-testid="login-submit">
+              <Button type="submit" loading={isPending} data-testid="login-submit">
                 {t("login.submit")}
               </Button>
             </form>
@@ -153,7 +153,6 @@ export default function LoginPage() {
       key="login-redirect"
       fallback={<LoginForm />}
       loading={null}
-      v3LegacyAuthProviderCompatible={false}
     >
       <NavigateToResource resource="events" />
     </Authenticated>

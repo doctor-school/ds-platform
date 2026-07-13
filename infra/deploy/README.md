@@ -459,6 +459,11 @@ events/rooms migrations like any other).
 > on 2026-07-13 both drivable affordances the lead skipped broke in the owner's
 > hands within minutes (#842 unsigned-S3 PDF link, #843 stale live surfaces).
 > Only after this pass does the owner get the smoke checklist.
+> The deploy and this pre-flight are **ONE atomic unit**: do not launch
+> `pnpm deploy:prod` unless the session has context headroom left to run (or
+> dispatch, paying only the ≤30-line verdict) the pre-flight tail in the SAME
+> session — prod must never cross a session boundary deployed-but-unverified
+> (2026-07-13, the #729 fix redeploy did exactly that).
 
 9. **[OWNER-GATED] Wave-1 smoke (spec §10.7–10.8).** Drive the journey in the
    live UI: a `platform_admin` operator creates a test event (with a program

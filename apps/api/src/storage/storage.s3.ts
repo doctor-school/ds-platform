@@ -5,11 +5,13 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type {
   ObjectStorage,
   PutObjectInput,
   StoredObject,
 } from "./storage.types.js";
+import { SIGNED_URL_TTL_SECONDS } from "./storage.types.js";
 
 /** The S3 config the adapter needs — resolved from env by the module (never hardcoded). */
 export interface S3StorageConfig {
@@ -25,8 +27,10 @@ export interface S3StorageConfig {
  * S3-compatible {@link ObjectStorage} adapter (MinIO on the dev stand, Timeweb
  * Object Storage in prod). Endpoint / bucket / credentials all come from the
  * resolved env config — nothing is hardcoded (EARS-1 AC; AGENTS.md §9). The
- * public URL is composed path-style for MinIO (`endpoint/bucket/key`); a
- * virtual-hosted-style prod bucket flips `forcePathStyle` off.
+ * bucket is PRIVATE (#842): `urlFor` issues a short-lived SigV4 **presigned
+ * GET** ({@link SIGNED_URL_TTL_SECONDS}) — a plain unsigned object URL
+ * (`endpoint/bucket/key`) is denied by the store with `AccessDenied`.
+ * Path-style vs virtual-hosted addressing follows `forcePathStyle`.
  */
 export class S3ObjectStorage implements ObjectStorage {
   private readonly client: S3Client;
@@ -52,14 +56,18 @@ export class S3ObjectStorage implements ObjectStorage {
         ContentType: input.contentType,
       }),
     );
-    return { key: input.key, url: this.urlFor(input.key) };
+    return { key: input.key, url: await this.urlFor(input.key) };
   }
 
-  urlFor(key: string): string {
-    const base = this.config.endpoint.replace(/\/+$/, "");
-    return this.config.forcePathStyle
-      ? `${base}/${this.config.bucket}/${key}`
-      : `${base.replace(/^https?:\/\//, (m) => `${m}${this.config.bucket}.`)}/${key}`;
+  urlFor(key: string): Promise<string> {
+    // Presigned GET (SigV4) — the ONLY browser-fetchable URL shape against the
+    // private bucket. The presigner derives path-style / virtual-hosted
+    // addressing from the client config, so no hand-composed URL here.
+    return getSignedUrl(
+      this.client,
+      new GetObjectCommand({ Bucket: this.config.bucket, Key: key }),
+      { expiresIn: SIGNED_URL_TTL_SECONDS },
+    );
   }
 
   async exists(key: string): Promise<boolean> {

@@ -1,0 +1,13 @@
+{
+  "number": 107,
+  "body": "## Summary\n\nHarden the admin container image and align compose/env templates. No UI source touched, no registry-research artifact in the body.\n",
+  "files": [
+    { "path": "apps/admin/Dockerfile" },
+    { "path": "apps/portal/Dockerfile.dev" },
+    { "path": "apps/admin/compose.yaml" },
+    { "path": "apps/portal/docker-compose.override.yml" },
+    { "path": "apps/admin/.env.example" },
+    { "path": "apps/admin/local.env.example" },
+    { "path": "apps/admin/.dockerignore" }
+  ]
+}

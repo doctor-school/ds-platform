@@ -1,0 +1,8 @@
+{
+  "number": 108,
+  "body": "## Summary\n\nContainer tweak that also reworks the admin dashboard page. No registry-research artifact in the body.\n",
+  "files": [
+    { "path": "apps/admin/Dockerfile" },
+    { "path": "apps/admin/src/app/dashboard/page.tsx" }
+  ]
+}

@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   dedupeRefs,
+  extractApprovalClaims,
   extractRefs,
   parseClaim,
+  resolveProvenance,
   verdictFor,
+  verifyApprovalClaims,
   verifyRefs,
 } from "../../gh/handoff-verify.mjs";
 
@@ -23,6 +26,7 @@ function fakeRunner(opts: {
   ancestorShas?: string[];
   knownShas?: string[];
   branches?: Record<string, string>; // branch -> head sha
+  provenance?: Record<number, { body: string; comments: { body: string }[] }>;
 }) {
   const calls: string[][] = [];
   return {
@@ -30,6 +34,11 @@ function fakeRunner(opts: {
     gh(args: string[]) {
       calls.push(["gh", ...args]);
       const [kind, , n] = args; // "issue"|"pr", "view", "<n>"
+      if (args.includes("body,comments")) {
+        const prov = (opts.provenance ?? {})[Number(n)];
+        if (!prov) return { status: 1, stdout: "", stderr: "GraphQL: not found (404)" };
+        return { status: 0, stdout: JSON.stringify(prov), stderr: "" };
+      }
       const table = kind === "pr" ? (opts.prs ?? {}) : (opts.issues ?? {});
       const state = table[Number(n)];
       if (!state) return { status: 1, stdout: "", stderr: "GraphQL: not found (404)" };
@@ -243,5 +252,127 @@ describe("handoff-verify verifyRefs() with an injected runner", () => {
     const ghViewCalls = runner.calls.filter((c) => c[0] === "gh");
     // issue-first fallback for "pr" hint is pr-first: exactly one pr view call.
     expect(ghViewCalls).toHaveLength(1);
+  });
+});
+
+describe("handoff-verify extractApprovalClaims()", () => {
+  it("extracts an EN owner-approved claim about an issue ref", () => {
+    const claims = extractApprovalClaims("epic #778 is owner-approved, build it");
+    expect(claims).toEqual([expect.objectContaining({ issue: 778, lineNo: 1 })]);
+  });
+
+  it("extracts a RU claim line (эпик #N согласован владельцем)", () => {
+    const claims = extractApprovalClaims("эпик #806 согласован владельцем");
+    expect(claims).toEqual([expect.objectContaining({ issue: 806 })]);
+  });
+
+  it("does NOT fire on Mode-a APPROVE lines without an owner token", () => {
+    expect(extractApprovalClaims("Mode-a APPROVE on #744")).toEqual([]);
+    expect(extractApprovalClaims("Mode (a) APPROVE — PR #744")).toEqual([]);
+  });
+
+  it("does NOT fire on plain approved/settled without an owner token", () => {
+    expect(extractApprovalClaims("#744 approved and merged")).toEqual([]);
+    expect(extractApprovalClaims("design for #744 is settled")).toEqual([]);
+  });
+
+  it("CODEOWNERS is not an owner token", () => {
+    expect(extractApprovalClaims("#744 approved per CODEOWNERS")).toEqual([]);
+  });
+
+  it("requires an issue ref on the claim line", () => {
+    expect(extractApprovalClaims("the epic is owner-approved")).toEqual([]);
+  });
+
+  it("dedupes per issue across lines", () => {
+    const claims = extractApprovalClaims(
+      "#10 owner-approved\nвладелец одобрил #10 и #11",
+    );
+    expect(claims.map((c) => c.issue)).toEqual([10, 11]);
+  });
+});
+
+describe("handoff-verify approval provenance with an injected runner", () => {
+  it("discovery-only provenance → STALE no-owner-provenance + stderr hint (AC1)", () => {
+    const runner = fakeRunner({
+      provenance: {
+        778: {
+          body: "Discovery: agent brainstorm produced this epic decomposition.",
+          comments: [{ body: "Follow-up: WBS drafted in the session." }],
+        },
+      },
+    });
+    const claims = extractApprovalClaims("epic #778 owner-approved");
+    const { rows, stale, hints } = verifyApprovalClaims(claims, runner);
+    expect(rows).toEqual([
+      {
+        verdict: "STALE",
+        ref: "#778",
+        claim: "owner-approved",
+        actual: "no-owner-provenance",
+      },
+    ]);
+    expect(stale).toBe(1);
+    expect(hints).toHaveLength(1);
+    expect(hints[0]).toContain("#778");
+    expect(hints[0]).toContain("no quotable owner turn");
+  });
+
+  it("owner-quoted «…» line in a comment → PASS (AC2)", () => {
+    const runner = fakeRunner({
+      provenance: {
+        779: {
+          body: "Epic body.",
+          comments: [{ body: "Владелец: «делаем вариант Б, без Школ»." }],
+        },
+      },
+    });
+    const { rows, stale } = verifyApprovalClaims(
+      extractApprovalClaims("#779 согласован владельцем"),
+      runner,
+    );
+    expect(rows).toEqual([
+      {
+        verdict: "PASS",
+        ref: "#779",
+        claim: "owner-approved",
+        actual: "owner-quoted",
+      },
+    ]);
+    expect(stale).toBe(0);
+  });
+
+  it("Stage-A: GO marker in the body → PASS", () => {
+    const runner = fakeRunner({
+      provenance: { 780: { body: "Stage-A: GO (variant 2)", comments: [] } },
+    });
+    expect(resolveProvenance(runner, 780)).toBe("owner-quoted");
+  });
+
+  it("Stage-B: GO marker in a comment → PASS", () => {
+    const runner = fakeRunner({
+      provenance: {
+        781: { body: "x", comments: [{ body: "Stage-B: GO" }] },
+      },
+    });
+    expect(resolveProvenance(runner, 781)).toBe("owner-quoted");
+  });
+
+  it("owner token WITHOUT a quoted span is not provenance", () => {
+    const runner = fakeRunner({
+      provenance: {
+        782: { body: "the owner probably wants this", comments: [] },
+      },
+    });
+    expect(resolveProvenance(runner, 782)).toBe("no-owner-provenance");
+  });
+
+  it("gh 404 → STALE not-found", () => {
+    const { rows, stale } = verifyApprovalClaims(
+      extractApprovalClaims("#999 owner-approved"),
+      fakeRunner({}),
+    );
+    expect(rows[0]).toMatchObject({ verdict: "STALE", actual: "not-found" });
+    expect(stale).toBe(1);
   });
 });

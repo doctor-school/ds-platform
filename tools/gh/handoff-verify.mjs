@@ -30,6 +30,14 @@
  * не влит (RU). Keyword present and mismatching actual → STALE; matching →
  * PASS; no keyword → INFO (actual state printed for the reader).
  *
+ * Approval-provenance domain (#806): a line pairing an issue-ref with an
+ * owner-approval claim («owner-approved», owner token + согласован/одобр/…)
+ * is verified against the issue's ACTUAL provenance (`gh issue view --json
+ * body,comments`): a quotable owner turn (Stage-A/B: GO marker, or an owner
+ * token with a quoted span «…»/"…") → PASS; discovery-only provenance with
+ * no quotable owner turn → STALE (the claim launders an agent idea as an
+ * owner decision — the exact #779 failure).
+ *
  * Output: one machine-parseable row per (ref, claim):
  *   PASS|STALE|INFO <ref> claimed=<claim|-> actual=<state>
  * then a summary line. Unknown/deleted ref (gh 404, unresolvable sha/branch)
@@ -50,6 +58,16 @@ import { pathToFileURL } from "node:url";
 const MAX_BUFFER = 16 * 1024 * 1024;
 const BRANCH_PREFIXES = ["feat", "fix", "chore", "refactor", "docs", "tooling"];
 
+// Issue/PR-number pattern, shared by ref extraction and approval-claim
+// extraction (fresh instance per use — /g regexes are stateful).
+const numRe = () =>
+  /(?:\b(PRs?|pull requests?|issues?)\s*[#№]?\s*|[#№])(\d{1,6})\b/gi;
+
+/** Owner token on a line (EN/RU), ignoring the CODEOWNERS false-positive. */
+function hasOwnerToken(line) {
+  return /владел|owner/i.test(String(line).replace(/CODEOWNERS/gi, ""));
+}
+
 /**
  * Extract every verifiable ref from the handoff text.
  * @param {string} text
@@ -64,8 +82,7 @@ export function extractRefs(text) {
     // Issue/PR numbers: a `#`/`№`-prefixed number anywhere, or a bare number
     // directly after a "PR" / "pull request" / "issue" word. A bare number
     // with neither is NOT a ref (too many false positives).
-    const numRe = /(?:\b(PRs?|pull requests?|issues?)\s*[#№]?\s*|[#№])(\d{1,6})\b/gi;
-    for (const m of line.matchAll(numRe)) {
+    for (const m of line.matchAll(numRe())) {
       const hint = (m[1] ?? "").toLowerCase();
       const kind = hint.startsWith("pr") || hint.startsWith("pull")
         ? "pr"
@@ -174,6 +191,96 @@ export function dedupeRefs(refs) {
     claims: e.claims.size > 0 ? [...e.claims] : [null],
     lineNo: e.lineNo,
   }));
+}
+
+/**
+ * Extract owner-approval CLAIMS about issue refs (#806). A line carries an
+ * approval claim when it has ≥1 issue-ref AND matches the TIGHT approval
+ * pattern: `owner-approved`/`owner approved`, or an owner token (владел/owner,
+ * not CODEOWNERS) plus an approval stem on the same line. Deliberately does
+ * NOT fire on `Mode-a APPROVE` / plain `approved` lines without an owner
+ * token — review verdicts are not owner decisions.
+ * @param {string} text
+ * @returns {{issue: number, line: string, lineNo: number}[]} deduped per issue
+ */
+export function extractApprovalClaims(text) {
+  const claims = [];
+  const seen = new Set();
+  const lines = String(text).split(/\r?\n/);
+  lines.forEach((line, i) => {
+    const isApproval =
+      /owner[-\s]approved/i.test(line) ||
+      (hasOwnerToken(line) &&
+        /согласован|одобр|утвержд|подтвердил|выбрал|approved?/i.test(line));
+    if (!isApproval) return;
+    for (const m of line.matchAll(numRe())) {
+      const issue = Number(m[2]);
+      if (seen.has(issue)) continue;
+      seen.add(issue);
+      claims.push({ issue, line, lineNo: i + 1 });
+    }
+  });
+  return claims;
+}
+
+/**
+ * Resolve an issue's approval PROVENANCE via `gh issue view --json
+ * body,comments` (its own payload — separate from the state cache).
+ * `owner-quoted` when any line of the body/comments carries a Stage-A/B GO
+ * marker or an owner token with a quoted span («…» / "…" / “…”);
+ * `no-owner-provenance` otherwise; `not-found` on gh failure/404.
+ * @param {{gh: Function}} runner
+ * @param {number} n
+ * @returns {"owner-quoted"|"no-owner-provenance"|"not-found"}
+ */
+export function resolveProvenance(runner, n) {
+  const res = runner.gh(["issue", "view", String(n), "--json", "body,comments"]);
+  if (res.status !== 0) return "not-found";
+  let payload;
+  try {
+    payload = JSON.parse(res.stdout);
+  } catch {
+    return "not-found";
+  }
+  const texts = [
+    String(payload.body ?? ""),
+    ...(Array.isArray(payload.comments)
+      ? payload.comments.map((c) => String(c?.body ?? ""))
+      : []),
+  ];
+  for (const line of texts.join("\n").split(/\r?\n/)) {
+    if (/Stage-[AB]\s*[:：]\s*GO/i.test(line)) return "owner-quoted";
+    if (hasOwnerToken(line) && /«[^«»]+»|"[^"]+"|“[^“”]+”/.test(line))
+      return "owner-quoted";
+  }
+  return "no-owner-provenance";
+}
+
+/**
+ * Verify approval claims against actual issue provenance. Rows share the
+ * machine-parseable shape of verifyRefs(); STALE rows count into the exit-1
+ * total, and each no-owner-provenance claim yields one stderr hint line.
+ * @param {ReturnType<typeof extractApprovalClaims>} claims
+ * @param {{gh: Function}} runner
+ * @returns {{rows: {verdict: string, ref: string, claim: string, actual: string}[], stale: number, hints: string[]}}
+ */
+export function verifyApprovalClaims(claims, runner) {
+  const rows = [];
+  const hints = [];
+  for (const c of claims) {
+    const actual = resolveProvenance(runner, c.issue);
+    rows.push({
+      verdict: actual === "owner-quoted" ? "PASS" : "STALE",
+      ref: `#${c.issue}`,
+      claim: "owner-approved",
+      actual,
+    });
+    if (actual === "no-owner-provenance")
+      hints.push(
+        `[handoff-verify] #${c.issue} is claimed owner-approved but its provenance has no quotable owner turn (discovery-only?) — reconcile to an owner turn before building.`,
+      );
+  }
+  return { rows, stale: rows.filter((r) => r.verdict === "STALE").length, hints };
 }
 
 /** Default runner — real `gh` / `git` via spawnSync (Windows-safe: both are exes on PATH). */
@@ -318,11 +425,15 @@ function main() {
       "[handoff-verify] WARN: git fetch origin main failed — ancestry checked against the LOCAL origin/main.\n",
     );
 
-  const { rows, stale } = verifyRefs(refs, runner);
+  const stateResult = verifyRefs(refs, runner);
+  const approvalResult = verifyApprovalClaims(extractApprovalClaims(text), runner);
+  const rows = [...stateResult.rows, ...approvalResult.rows];
+  const stale = stateResult.stale + approvalResult.stale;
   for (const r of rows)
     process.stdout.write(
       `${r.verdict} ${r.ref} claimed=${r.claim ?? "-"} actual=${r.actual}\n`,
     );
+  for (const hint of approvalResult.hints) process.stderr.write(`${hint}\n`);
   const pass = rows.filter((r) => r.verdict === "PASS").length;
   const info = rows.filter((r) => r.verdict === "INFO").length;
   process.stdout.write(

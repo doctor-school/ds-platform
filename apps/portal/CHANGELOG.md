@@ -1,5 +1,17 @@
 # @ds/portal
 
+## 0.13.0
+
+### Minor Changes
+
+- [#818](https://github.com/doctor-school/ds-platform/pull/818) [`0a49a96`](https://github.com/doctor-school/ds-platform/commit/0a49a9678325f66e56b5ea4c35c28d8a2d5a9344) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat: [#770](https://github.com/doctor-school/ds-platform/issues/770) account profile v1 — `GET /v1/me/profile` (EARS-27: session-scoped self-read of `{email, emailVerified, phone, phoneVerified, displayName}`, nullable-and-present wire shape) + the real `/account` profile surface (EARS-28: canvas «Разделы» render — avatar initials + inline display-name edit, email row with verified badge, read-only phone with explicit empty state, password-reset handoff, «Мои события» link, sign-out; raw session claims removed from the DOM)
+
+### Patch Changes
+
+- Updated dependencies [[`0a49a96`](https://github.com/doctor-school/ds-platform/commit/0a49a9678325f66e56b5ea4c35c28d8a2d5a9344)]:
+  - @ds/schemas@1.3.0
+  - @ds/design-system@1.2.1
+
 ## 0.12.0
 
 ### Minor Changes

@@ -22,6 +22,7 @@ import { Button } from "@ds/design-system/button";
 import { Container } from "@ds/design-system/container";
 import { FormError } from "@ds/design-system/form";
 import { Input } from "@ds/design-system/input";
+import { Link } from "@ds/design-system/link";
 
 /*
  * 003 EARS-28 (design §12; GH #770) — the /account profile surface, replacing
@@ -90,7 +91,12 @@ function SectionHeader({ children, first = false }: {
   );
 }
 
-/** A full-row link (password / events) with helper line + chevron. */
+/**
+ * A full-row link (password / events) with helper line + chevron. Hover is the
+ * CANVAS-pinned row state (`profile.dc.html` «Разделы» `style-hover` → `hoverBg`,
+ * whose light value IS the `muted` token) — a bg wash, not a link underline;
+ * focus is the DS neo-brutalist `shadow-focus` ring (same as every primitive).
+ */
 function RowLink({
   href,
   label,
@@ -320,14 +326,19 @@ export default function AccountPage() {
                     {profile.displayName ?? t("nameEmpty")}
                   </span>
                 </span>
-                <button
-                  type="button"
-                  onClick={() => startEdit(profile.displayName)}
-                  className="self-start text-sm font-extrabold text-primary-action underline decoration-2 underline-offset-4 transition-colors hover:text-primary-action/80 focus-visible:shadow-focus focus-visible:outline-none layout:self-auto"
-                  data-testid="profile-name-edit"
-                >
-                  {profile.displayName ? t("nameEdit") : t("nameAdd")}
-                </button>
+                {/* Stage-B owner finding (#818): link states come from the DS
+                    `Link` primitive, not hand-rolled — standalone variant (no
+                    resting underline, hover:underline, `/80` reserved for the
+                    ACTIVE press state, shadow-focus keyboard ring). */}
+                <Link asChild className="self-start text-sm font-extrabold layout:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => startEdit(profile.displayName)}
+                    data-testid="profile-name-edit"
+                  >
+                    {profile.displayName ? t("nameEdit") : t("nameAdd")}
+                  </button>
+                </Link>
               </>
             )}
           </ProfileRow>

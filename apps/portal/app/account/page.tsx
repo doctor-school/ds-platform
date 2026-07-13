@@ -20,6 +20,7 @@ import { Avatar } from "@ds/design-system/avatar";
 import { Badge } from "@ds/design-system/badge";
 import { Button } from "@ds/design-system/button";
 import { Container } from "@ds/design-system/container";
+import { FormError } from "@ds/design-system/form";
 import { Input } from "@ds/design-system/input";
 
 /*
@@ -297,12 +298,7 @@ export default function AccountPage() {
                   {t("nameCancel")}
                 </Button>
                 {saveError ? (
-                  <span
-                    role="alert"
-                    className="w-full text-caption font-semibold text-destructive-text"
-                  >
-                    {saveError}
-                  </span>
+                  <FormError className="w-full">{saveError}</FormError>
                 ) : null}
               </div>
             ) : (

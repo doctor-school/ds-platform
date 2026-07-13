@@ -12,6 +12,11 @@ import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
+import {
+  BOT_PROTECTION,
+  type BotProtection,
+  type BotProtectionResult,
+} from "../../src/bot-protection/index.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import {
   RATE_LIMIT_THRESHOLDS,
@@ -101,6 +106,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         .useValue(fake)
         .overrideProvider(RATE_LIMIT_THRESHOLDS)
         .useValue(RELAXED_RATE_LIMIT)
+        // Hermetic: the register fixture path must not depend on the recipe's
+        // bot-protection env/flag state (an enabled SmartCaptcha rejects the
+        // token-less test register with a 403). Not under test here.
+        .overrideProvider(BOT_PROTECTION)
+        .useValue({
+          verify: (): Promise<BotProtectionResult> =>
+            Promise.resolve({ ok: true }),
+        } satisfies BotProtection)
         .compile();
 
       app = moduleRef.createNestApplication<NestFastifyApplication>(
@@ -130,13 +143,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const res = await getProfile(cookieHeader(cookie));
       expect(res.statusCode).toBe(200);
       const profile = MyProfileSchema.parse(res.json());
-      // The caller's own row: email-registered, so email is present + verified
-      // per the register flow; phone was never provided and the display name
+      // The caller's own row: email-registered. The fixture registers + logs in
+      // WITHOUT completing the email-verify step (fake IdP), so the mirror's
+      // email_verified is still false — and the read serves that TRUTHFUL false,
+      // never a fabricated true. Phone was never provided and the display name
       // never collected — both are EXPLICIT nulls on the wire (design §12:
       // nullable-and-present, not optional), so the client can distinguish
       // "unset" from "field missing".
       expect(profile.email).toBe(email);
-      expect(profile.emailVerified).toBe(true);
+      expect(profile.emailVerified).toBe(false);
       expect(profile.phone).toBeNull();
       // No phone on file ⇒ the verified-state is null (meaningless for an
       // absent identifier), never a fabricated `false` "unverified phone".

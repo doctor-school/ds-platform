@@ -157,7 +157,7 @@ describe("003 EARS-28 /account profile surface", () => {
     );
   });
 
-  it("EARS-9 unchanged: a 401 profile read gets one silent refresh + retry before redirecting to /login", async () => {
+  it("EARS-9: a 401 profile read gets one silent refresh + retry before redirecting to /login (behavior unchanged)", async () => {
     getMyProfile.mockResolvedValueOnce(null).mockResolvedValueOnce(PROFILE);
     render(<AccountPage />);
 

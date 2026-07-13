@@ -49,6 +49,10 @@ test-results/
 # Claude Code — share settings.json, keep local overrides private
 .claude/settings.local.json
 
+# Session-local parallel-sessions flag written by `pnpm bootstrap`, consumed by
+# the main-tree-read-guard PreToolUse hook (#823) — machine state, not repo content
+.claude/parallel-sessions.flag.json
+
 # Brand book raw staging — the ~142 MB presentation PDF plus raw logo sources
 # (.ai / large exports). Track via Git LFS if any of it must be versioned. The
 # durable artifact is the extracted brand->token map (see

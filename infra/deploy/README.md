@@ -449,6 +449,17 @@ events/rooms migrations like any other).
    # admin surface (in-service role-based authz, spec §2.3).
    ```
 
+> **Lead pre-flight before ANY owner smoke (every release, not just wave 1).**
+> After deploy + scripted smoke go green, the lead first **drives the release's
+> key affordances end-to-end** — everything drivable without owner-only inputs:
+> every file-download link actually fetches (2xx, not a raw-S3 `AccessDenied`),
+> a write→public-read path (create/publish in admin → appears on the public
+> surface), a lifecycle transition → public render reflects it. A public-route
+> curl/screenshot sweep + grants check alone is **NOT** a green pre-flight:
+> on 2026-07-13 both drivable affordances the lead skipped broke in the owner's
+> hands within minutes (#842 unsigned-S3 PDF link, #843 stale live surfaces).
+> Only after this pass does the owner get the smoke checklist.
+
 9. **[OWNER-GATED] Wave-1 smoke (spec §10.7–10.8).** Drive the journey in the
    live UI: a `platform_admin` operator creates a test event (with a program
    PDF upload) via `https://admin.doctor.school` → a doctor registers for it

@@ -1,9 +1,11 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { fetchMyDisplayName } from "../../../../lib/my-display-name";
 import { fetchPublicEventPage } from "../../../../lib/public-events";
 import { fetchRoomConfig } from "../../../../lib/room-config";
 import { buildRoomReturnHref } from "../../../../lib/room-return";
+import { DisplayNamePrompt } from "./display-name-prompt";
 import { PresenceHeartbeat } from "./presence-heartbeat";
 import { RoomHeader } from "./room-header";
 import { RoomPresenceProvider } from "./room-presence";
@@ -45,13 +47,14 @@ export default async function RoomPage({
   const { slug } = await params;
 
   const h = await headers();
-  const access = await fetchRoomConfig(slug, {
+  // The session is fingerprint-bound (ADR-0001 §6) — forward the same surface the
+  // browser bound at login so every authed server read is not 401'd.
+  const session = {
     cookie: h.get("cookie") ?? "",
-    // The session is fingerprint-bound (ADR-0001 §6) — forward the same surface
-    // the browser bound at login so the authed read is not 401'd.
     userAgent: h.get("user-agent") ?? "",
     acceptLanguage: h.get("accept-language") ?? "",
-  });
+  };
+  const access = await fetchRoomConfig(slug, session);
 
   const roomReturn = buildRoomReturnHref(slug);
   const eventPage = `/webinars/${encodeURIComponent(slug)}`;
@@ -83,6 +86,14 @@ export default async function RoomPage({
   const event = await fetchPublicEventPage(slug);
   if (!event) notFound();
 
+  // 006 EARS-14 — the JIT display-name step, a PRE-RENDER gate BEFORE the room is
+  // composed (not a fourth admission condition — the server gate above is
+  // unchanged). A gated doctor with no saved name is prompted ONCE; the prompt PUTs
+  // the name and refreshes, so on the next read this is non-null and the room
+  // renders. Self-only read (EARS-16) — served to the owner's session alone.
+  const displayName = await fetchMyDisplayName(session);
+  if (displayName === null) return <DisplayNamePrompt />;
+
   const t = await getTranslations("room");
   const speakers = event.speakers.map((s) => s.name).join(" · ");
 
@@ -101,11 +112,13 @@ export default async function RoomPage({
         <RoomHeader
           eventHref={eventPage}
           liveAt={access.config.liveAt}
+          displayName={displayName}
           copy={{
             brandHome: t("brandHome"),
             liveBadge: t("liveBadge"),
             exit: t("exit"),
             themeToggle: t("themeToggle"),
+            avatarLabel: t("avatarLabel", { name: displayName }),
           }}
         />
         {/* EARS-4 — the visibility-gated server-authoritative heartbeat loop. No

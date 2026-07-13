@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { z } from "zod";
 
-import { OtpVerifySchema } from "@ds/schemas";
+import { OtpVerifySchema, SetDisplayNameRequestSchema } from "@ds/schemas";
 
 import {
   LoginIdentifierFormSchema,
@@ -140,6 +140,21 @@ const cases: {
     input: {},
     field: "identifier",
     expected: "required",
+  },
+  {
+    // "   " trims to empty → too_small (min 1) on the displayName field (006 EARS-14).
+    rule: "display name empty (min 1)",
+    schema: SetDisplayNameRequestSchema as unknown as z.ZodType<unknown, never>,
+    input: { displayName: "   " },
+    field: "displayName",
+    expected: "displayNameRequired",
+  },
+  {
+    rule: "display name too long (max 100)",
+    schema: SetDisplayNameRequestSchema as unknown as z.ZodType<unknown, never>,
+    input: { displayName: "и".repeat(101) },
+    field: "displayName",
+    expected: "displayNameTooLong",
   },
 ];
 

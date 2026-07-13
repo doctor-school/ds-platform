@@ -75,10 +75,15 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
       // min 1 — a required scalar; name the field where the copy differs.
       if (field === "code") return t("codeRequired");
       if (field === "identifier") return t("identifierRequired");
+      if (field === "displayName") return t("displayNameRequired");
       return t("required");
     }
 
     case "too_big":
+      // The only bounded fields are the password (max 256) and the display name
+      // (max 100) — name the display name so a >100-char name shows its own truthful
+      // copy, not the password message.
+      if (field === "displayName") return t("displayNameTooLong");
       return t("passwordTooLong");
 
     case "invalid_format":

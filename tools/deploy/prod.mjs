@@ -18,6 +18,7 @@
 //   data-prod   up -d --build (idempotent; attestations off → no-op ≠ recreate, #486)
 //   checkpoint  pgbackrest pre-migrate incr backup  (DSO-129 — BEFORE migrate)
 //   api-prod    migrate → build (ds-api:<sha>, ds-portal:<sha>, ds-admin:<sha>) → up -d
+//   caddy       reload the bind-mounted Caddyfile (`up -d` never re-reads it, #751)
 //   retention   keep the last 3 SHA-tagged images per repo  (DSO-127)
 //   smoke       tools/deploy/smoke-prod.mjs --expect-sha <sha>  (DSO-128)
 //
@@ -397,6 +398,25 @@ sudo docker compose up -d
     { label: "api-prod deploy" },
   );
   ok("migrate + build + up -d", t);
+
+  step("caddy: reload config (bind-mounted Caddyfile, #751)");
+  t = Date.now();
+  // The Caddyfile is a read-only BIND MOUNT (compose.yml), so `up -d` sees an
+  // unchanged container definition and does NOT recreate caddy when only the
+  // Caddyfile changed — new vhosts/routes stay unloaded until a reload (#729
+  // wave-1: the fresh admin.doctor.school vhost drew a Caddy 404 until a manual
+  // `docker compose restart caddy`). Always reload via caddy's admin API; if the
+  // exec fails (container just (re)created and not up yet, or stopped), fall
+  // back to a full `restart caddy` — either way the shipped Caddyfile is live.
+  await sshScript(
+    API_PROD,
+    `cd ${API_COMPOSE}
+sudo docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile \\
+  || { echo '  ⚠ caddy reload failed — falling back to: docker compose restart caddy'; sudo docker compose restart caddy; }
+`,
+    { label: "caddy reload" },
+  );
+  ok("caddy serves the shipped Caddyfile", t);
 
   step("Verify the RUNNING containers carry the deployed SHA");
   await verifyRunningSha(sha);

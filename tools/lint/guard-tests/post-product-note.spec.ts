@@ -12,6 +12,8 @@ import {
   buildPayload,
   envFooter,
   extractNote,
+  labelsAreProductKind,
+  parseLabels,
 } from "../../ci/post-product-note.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -118,17 +120,73 @@ describe("post-product-note — extractNote stop boundary (pure)", () => {
   });
 });
 
+// ── product-kind label gate (pure) — Issue #847 ─────────────────────────────
+describe("post-product-note — product-kind label gate (pure)", () => {
+  it("labelsAreProductKind: `feature` → true", () => {
+    expect(labelsAreProductKind(["feature"])).toBe(true);
+  });
+
+  it("labelsAreProductKind: `bug` → true", () => {
+    expect(labelsAreProductKind(["bug"])).toBe(true);
+  });
+
+  it("labelsAreProductKind: a product label among process labels → true", () => {
+    expect(labelsAreProductKind(["tooling", "feature"])).toBe(true);
+  });
+
+  it("labelsAreProductKind: `docs` → false", () => {
+    expect(labelsAreProductKind(["docs"])).toBe(false);
+  });
+
+  it("labelsAreProductKind: `tooling`/`dependencies` → false", () => {
+    expect(labelsAreProductKind(["tooling", "dependencies"])).toBe(false);
+  });
+
+  it("labelsAreProductKind: empty label set → false", () => {
+    expect(labelsAreProductKind([])).toBe(false);
+  });
+
+  it("labelsAreProductKind: non-array (malformed) → false", () => {
+    expect(labelsAreProductKind(undefined)).toBe(false);
+    expect(labelsAreProductKind(null)).toBe(false);
+    expect(labelsAreProductKind("feature")).toBe(false);
+  });
+
+  it("labelsAreProductKind: case- and whitespace-insensitive", () => {
+    expect(labelsAreProductKind([" Feature "])).toBe(true);
+    expect(labelsAreProductKind(["BUG"])).toBe(true);
+  });
+
+  it("parseLabels: a JSON array → the array", () => {
+    expect(parseLabels('["feature","docs"]')).toEqual(["feature", "docs"]);
+  });
+
+  it("parseLabels: empty/absent input → [] (→ suppressed)", () => {
+    expect(parseLabels("")).toEqual([]);
+    expect(parseLabels(undefined)).toEqual([]);
+  });
+
+  it("parseLabels: non-JSON → [] (fail-closed, never throws)", () => {
+    expect(parseLabels("not json")).toEqual([]);
+  });
+
+  it("parseLabels: valid JSON that is not an array → []", () => {
+    expect(parseLabels("{}")).toEqual([]);
+  });
+});
+
 // ── end-to-end invariant cover (no network: skip/throw both precede fetch) ───
 describe("post-product-note — DELIVERY_ENV invariant (subprocess)", () => {
   const realNoteBody =
     "## Product note (RU)\n\nМы выкатили новую заметную фичу для команды.";
 
-  it("unset DELIVERY_ENV with a real note + webhook → exit 1 (no unmarked post)", () => {
+  it("unset DELIVERY_ENV with a real note + product label + webhook → exit 1 (no unmarked post)", () => {
     const { code, stderr } = runScript({
       MATTERMOST_WEBHOOK_URL: "https://mattermost.invalid/hooks/x",
       PR_BODY: realNoteBody,
       PR_TITLE: "feat: thing",
       PR_URL: "https://x/1",
+      PR_LABELS: '["feature"]',
       // DELIVERY_ENV intentionally unset
     });
     expect(code).toBe(1);
@@ -141,10 +199,39 @@ describe("post-product-note — DELIVERY_ENV invariant (subprocess)", () => {
       PR_BODY: realNoteBody,
       PR_TITLE: "feat: thing",
       PR_URL: "https://x/1",
+      PR_LABELS: '["feature"]',
       DELIVERY_ENV: "staging",
     });
     expect(code).toBe(1);
     expect(stderr).toContain("DELIVERY_ENV");
+  });
+
+  it("process-kind labels + real note + webhook + valid DELIVERY_ENV → exit 0, suppressed (Issue #847)", () => {
+    // The label gate must fire BEFORE the DELIVERY_ENV/post path — a docs/tooling PR
+    // with a genuine note never reaches the product channel.
+    const { code, stdout } = runScript({
+      MATTERMOST_WEBHOOK_URL: "https://mattermost.invalid/hooks/x",
+      PR_BODY: realNoteBody,
+      PR_TITLE: "tooling(ci): thing",
+      PR_URL: "https://x/3",
+      PR_LABELS: '["tooling"]',
+      DELIVERY_ENV: "dev",
+    });
+    expect(code).toBe(0);
+    expect(stdout).toContain("not a product-kind change");
+  });
+
+  it("unset PR_LABELS (absent) + real note + webhook → exit 0, suppressed (fail-closed)", () => {
+    const { code, stdout } = runScript({
+      MATTERMOST_WEBHOOK_URL: "https://mattermost.invalid/hooks/x",
+      PR_BODY: realNoteBody,
+      PR_TITLE: "feat: thing",
+      PR_URL: "https://x/4",
+      DELIVERY_ENV: "dev",
+      // PR_LABELS intentionally unset → parseLabels("") → [] → suppressed
+    });
+    expect(code).toBe(0);
+    expect(stdout).toContain("not a product-kind change");
   });
 
   it("no webhook + unset DELIVERY_ENV → exit 0 (the env check never breaks a legitimate skip)", () => {

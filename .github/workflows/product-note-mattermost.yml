@@ -6,7 +6,9 @@ name: Product note → Mattermost
 #
 # Secret-optional by design: the job is not blocked on the webhook being provisioned
 # — when MATTERMOST_WEBHOOK_URL is unset the script logs and skips green. It also
-# skips green when the note is `none`/absent (internal-only PRs).
+# skips green when the note is `none`/absent (internal-only PRs), and when the PR is
+# not a product-kind change — only `feature`/`bug` labels deliver; process/dev PRs
+# (docs/tooling/chore/refactor/dependencies) are suppressed entirely (Issue #847).
 #
 # Environment marker (Issue #657): every delivered message carries an explicit
 # DEV/prod footer, driven by DELIVERY_ENV. A merge into main only reaches the DEV
@@ -43,6 +45,10 @@ jobs:
           # Merge into main = the change is live on the DEV stand only (deploy:prod is a
           # separate manual step), so a merge-triggered note is DEV by definition (Issue #657).
           DELIVERY_ENV: dev
+          # PR_LABELS gates delivery to product-kind PRs (feature/bug) only — process/dev
+          # PRs (docs/tooling/chore/refactor/dependencies) are suppressed (Issue #847).
+          # Passed through env: (never interpolated into run:) to keep the injection-safe posture.
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_URL: ${{ github.event.pull_request.html_url }}

@@ -412,6 +412,27 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
 
+  # ─── Prod-surface readiness gate (BLOCK) ─────────────────────────────
+  # Issue #771 (wave-1 prod-smoke retro). Deliberate exception to the Phase-0
+  # WARN posture (ADR-0007 §2.6): documented day-0 BLOCK mandate — a scaffold
+  # face on a prod-reachable route is the F-22 "no scaffold face in prod"
+  # class. GH_TOKEN enables the deferred-Issue OPEN check (skipped without it).
+  prod-surface:
+    needs: setup
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:prod-surface
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   no-stub:
     needs: setup
     continue-on-error: true # WARN v1 (promote to BLOCK once stable)
@@ -819,6 +840,7 @@ jobs:
         glossary-roundtrip,
         spec-link,
         endpoint-authz,
+        prod-surface,
         tokens-fresh,
         playwright-axe,
       ]

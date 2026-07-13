@@ -84,7 +84,7 @@ Note: redis runs AOF with **no `maxmemory` / eviction policy set yet** — fine 
   `terraform.tfvars`): the api-prod firewall allows port 22 only from that /32.
   An SSH **timeout** with a green `https://api.doctor.school/v1/health` almost
   always means the workstation's egress IP changed (verify: `curl
-  https://api.ipify.org`), NOT a downed box — update `admin_ssh_cidr` in
+https://api.ipify.org`), NOT a downed box — update `admin_ssh_cidr` in
   tfvars, then `terraform plan` (expect exactly one in-place
   `twc_firewall_rule.api_ssh` update) and `apply`. Happened live 2026-07-12
   (#729 wave-1 apply).
@@ -320,6 +320,9 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
      prod redirect URI, and activates mail.ru + SMS-Aero as the boot providers:
 
      ```bash
+     # Sourcing runs api.env through bash: values with spaces MUST be double-quoted
+     # (e.g. SMSAERO_SIGN="SMS Aero"), or the var truncates at the first space and
+     # the remainder errors as `command not found`.
      set -a; . /etc/ds-platform/api.env; set +a
      cd ~/ds-platform/infra/dev-stand/idp
      IDP_BASE_URL=https://id.doctor.school \

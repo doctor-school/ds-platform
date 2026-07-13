@@ -10,6 +10,7 @@
 | GET /v1/health                         | public        | —              | none       | —            | false   | none        | EARS-1                          |
 | GET /v1/me/display-name                | authenticated | doctor_guest   | fast-path  | —            | false   | none        | EARS-16                         |
 | GET /v1/me/events                      | authenticated | doctor_guest   | fast-path  | —            | false   | none        | EARS-6, EARS-7, EARS-10         |
+| GET /v1/me/profile                     | authenticated | doctor_guest   | fast-path  | —            | false   | none        | EARS-27                         |
 | GET /v1/public/events                  | public        | —              | none       | —            | false   | none        | EARS-7, EARS-10                 |
 | GET /v1/public/events/:idOrSlug        | public        | —              | none       | —            | false   | none        | EARS-1, EARS-5, EARS-10         |
 | GET /v1/ready                          | public        | —              | none       | —            | false   | none        | EARS-1, EARS-2                  |

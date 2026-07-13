@@ -100,4 +100,26 @@ test.describe("005 EARS-13 axe-core a11y scan of the portal webinar surfaces", (
     await expect(page.locator(`a[href="/webinars/${SEED}"]`).first()).toBeVisible();
     for (const theme of THEMES) await scan(page, theme);
   });
+
+  // 003 EARS-28 (#770) — the /account profile surface (canvas «Разделы»): the
+  // EARS-27 identity rows, the verified badge (`text-success` on `bg-background`),
+  // the inline display-name edit affordance, and the destructive sign-out row
+  // must all pass WCAG 2 A/AA in both themes. The blue poster header rides the
+  // same `.bg-header` scope note as above (004-owned band, excluded).
+  test("the /account profile surface passes WCAG 2 A/AA (both themes)", async ({
+    page,
+  }) => {
+    // A fresh doctor's default post-register landing IS /account (EARS-5 replay).
+    await page.goto("/register", { waitUntil: "domcontentloaded" });
+    await submitRegisterAndVerify(page);
+    await page.waitForURL(/\/account(?:$|[?#])/);
+    await expect(page.getByTestId("profile-email")).toBeVisible();
+    for (const theme of THEMES) await scan(page, theme);
+
+    // The inline-edit state (input + Сохранить/Отмена) is a distinct render —
+    // scan it too so the edit affordance can't ship an AA regression.
+    await page.getByTestId("profile-name-edit").click();
+    await expect(page.getByTestId("profile-name-input")).toBeVisible();
+    for (const theme of THEMES) await scan(page, theme);
+  });
 });

@@ -139,28 +139,12 @@ interface Deferral {
  *   auth post-v1 backlog #220). Prune this entry once the secondary-phone verify
  *   path lands with its own `EARS-4` test.
  *
- * - EARS-27 / EARS-28 (003): the account-profile v1 spec increment (GH #770)
- *   merged spec-first per the SDD sequencing contract (a code PR cannot precede
- *   its spec on `main` — the spec-link BLOCK guard). The tests land with the #770
- *   implementation slice (`apps/api/test/me/profile.e2e-spec.ts` + the browser
- *   drive). Prune both entries when that PR merges — the stale-detection ratchet
- *   flags them the moment a scope-compatible test appears.
  */
 const BUILTIN_DEFERRALS: Record<string, Deferral> = {
   '003:EARS-4': {
     issue: 454,
     reason:
       'registration verify is email-only; the future secondary-phone verify path is unbuilt (needs live Zitadel)',
-  },
-  '003:EARS-27': {
-    issue: 770,
-    reason:
-      'spec-first increment (SDD ordering); the GET /v1/me/profile e2e lands with the #770 implementation slice',
-  },
-  '003:EARS-28': {
-    issue: 770,
-    reason:
-      'spec-first increment (SDD ordering); the /account browser verification lands with the #770 implementation slice',
   },
 };
 

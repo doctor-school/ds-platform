@@ -37,6 +37,38 @@ export class MeRepository {
   }
 
   /**
+   * Read the caller's own identity projection for the 003 account-profile v1
+   * self-read (EARS-27, design §12) — keyed ONLY on the authenticated `sub`,
+   * like every other method here, so another user's identity fields are
+   * structurally unreachable. Returns `undefined` when no 003 mirror row exists
+   * (the caller maps that to a 401). Read-only: data that already exists — no
+   * write on any path.
+   */
+  async findProfileBySub(sub: string): Promise<
+    | {
+        email: string | null;
+        emailVerified: boolean;
+        phone: string | null;
+        phoneVerified: boolean;
+        displayName: string | null;
+      }
+    | undefined
+  > {
+    const [row] = await this.db
+      .select({
+        email: users.email,
+        emailVerified: users.emailVerified,
+        phone: users.phone,
+        phoneVerified: users.phoneVerified,
+        displayName: users.displayName,
+      })
+      .from(users)
+      .where(eq(users.zitadelSub, sub))
+      .limit(1);
+    return row;
+  }
+
+  /**
    * Write (overwrite is idempotent) the caller's own display name, scoped by
    * their authenticated `sub`. Returns the number of rows updated so the service
    * can distinguish "written" from "no mirror row for this subject" (→ 401) —

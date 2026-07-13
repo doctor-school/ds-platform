@@ -126,7 +126,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
 
     // ── Session visible (EARS-8 read side) — set by the EARS-5 login replay ──
     await page.waitForURL(/\/account/);
-    await expect(page.getByTestId("session-sub")).not.toBeEmpty();
+    await expect(page.getByTestId("profile-email")).not.toBeEmpty();
     await assertNoTokenInClient(page);
 
     // ── Logout (EARS-10) ─────────────────────────────────────────────────
@@ -223,7 +223,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await page.locator('input[autocomplete="one-time-code"]').fill(otpCode!);
 
     await page.waitForURL(/\/account/);
-    await expect(page.getByTestId("session-sub")).not.toBeEmpty();
+    await expect(page.getByTestId("profile-email")).not.toBeEmpty();
     await assertNoTokenInClient(page);
   });
 
@@ -290,7 +290,7 @@ test.describe("portal auth journeys (real Zitadel)", () => {
 
       // ── Session visible + EARS-8 no-token invariant ──────────────────────
       await page.waitForURL(/\/account/);
-      await expect(page.getByTestId("session-sub")).not.toBeEmpty();
+      await expect(page.getByTestId("profile-email")).not.toBeEmpty();
       await assertNoTokenInClient(page);
     } finally {
       if (userId) await deleteUser(userId);

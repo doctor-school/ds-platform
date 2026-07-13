@@ -46,3 +46,26 @@ export const MyDisplayNameSchema = z.object({
   displayName: z.string().nullable(),
 });
 export type MyDisplayName = z.infer<typeof MyDisplayNameSchema>;
+
+/**
+ * `MyProfile` read model (003 EARS-27, design §12) — the account-profile v1
+ * self-read served by `GET /v1/me/profile`: one thin projection of the caller's
+ * OWN `users` mirror row, session-scoped (the route takes no identifier
+ * parameter, so another user's identity fields are structurally unreachable).
+ *
+ * Wire-shape decision (settled, design §12): `phone` / `phoneVerified` /
+ * `displayName` are `.nullable()` and ALWAYS PRESENT — never `.optional()` — so
+ * a client can distinguish "unset" (an explicit `null`) from "field missing"
+ * (a contract violation). `phoneVerified` is `null` exactly when no phone is on
+ * file (a verified-state for an absent identifier is meaningless), a boolean
+ * once a phone exists. Read-only contract: no request schema exists because the
+ * endpoint accepts no input and writes nothing on any path.
+ */
+export const MyProfileSchema = z.object({
+  email: z.string(),
+  emailVerified: z.boolean(),
+  phone: z.string().nullable(),
+  phoneVerified: z.boolean().nullable(),
+  displayName: z.string().nullable(),
+});
+export type MyProfile = z.infer<typeof MyProfileSchema>;

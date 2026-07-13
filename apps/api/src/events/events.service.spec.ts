@@ -58,8 +58,8 @@ class RecordingStorage implements ObjectStorage {
     return Promise.resolve({ key: input.key, url: `memory://${input.key}` });
   }
 
-  urlFor(key: string): string {
-    return `memory://${key}`;
+  urlFor(key: string): Promise<string> {
+    return Promise.resolve(`memory://${key}`);
   }
 
   exists(): Promise<boolean> {

@@ -608,10 +608,10 @@ export class EventsService {
     };
   }
 
-  private toPublicPage(
+  private async toPublicPage(
     a: EventWithSpeakers,
     state: EventLifecycleState,
-  ): PublicEventPage {
+  ): Promise<PublicEventPage> {
     const e = a.event;
     const page: PublicEventPage = {
       id: e.id,
@@ -633,13 +633,14 @@ export class EventsService {
       state: state as PublicEventState,
     };
     // Omit (not null) the field when the event carries no program PDF (EARS-2).
+    // Signed at read time — the bucket is private, an unsigned URL is dead (#842).
     if (e.programPdfRef) {
-      page.programPdfUrl = this.storage.urlFor(e.programPdfRef);
+      page.programPdfUrl = await this.storage.urlFor(e.programPdfRef);
     }
     return page;
   }
 
-  private toDetail(a: EventWithSpeakers): EventAdminDetail {
+  private async toDetail(a: EventWithSpeakers): Promise<EventAdminDetail> {
     const e = a.event;
     return {
       id: e.id,
@@ -657,7 +658,7 @@ export class EventsService {
       partnerRef: e.partnerRef,
       programPdfRef: e.programPdfRef,
       programPdfUrl: e.programPdfRef
-        ? this.storage.urlFor(e.programPdfRef)
+        ? await this.storage.urlFor(e.programPdfRef)
         : null,
       streamConfig: a.streamConfig,
       state: e.state as EventLifecycleState,

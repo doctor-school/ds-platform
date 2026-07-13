@@ -313,9 +313,11 @@ describe.skipIf(
       url: `/v1/public/events/${slug}`,
     });
     expect(pub.statusCode).toBe(200);
+    // Signed URLs are freshly issued per read (#842) — assert on the object
+    // key they address, not byte-equality of a time-varying signature.
     const page = pub.json() as Record<string, unknown>;
-    expect(page.programPdfUrl).toBe(storage.urlFor(newRef));
-    expect(page.programPdfUrl).not.toBe(storage.urlFor(oldRef));
+    expect(page.programPdfUrl).toContain(newRef);
+    expect(page.programPdfUrl).not.toContain(oldRef);
   });
 
   it("EARS-2: a successful supersede garbage-collects the superseded object — the old key no longer exists in storage while the new file is served (#627)", async () => {
@@ -357,8 +359,8 @@ describe.skipIf(
       url: `/v1/public/events/${slug}`,
     });
     expect(pub.statusCode).toBe(200);
-    expect((pub.json() as Record<string, unknown>).programPdfUrl).toBe(
-      storage.urlFor(newRef),
+    expect((pub.json() as Record<string, unknown>).programPdfUrl).toContain(
+      newRef,
     );
   });
 

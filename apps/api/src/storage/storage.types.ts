@@ -14,15 +14,30 @@ export interface PutObjectInput {
 
 export interface StoredObject {
   key: string;
-  /** A resolvable URL for the current object (config-derived, never hardcoded). */
+  /** A browser-fetchable signed URL for the current object (config-derived, never hardcoded). */
   url: string;
 }
 
+/**
+ * TTL of a signed GET URL (seconds). The bucket is PRIVATE in prod (#842), so
+ * every public URL is a short-lived presigned GET issued at projection-read
+ * time — long enough for a page view + download click, short enough that a
+ * leaked link goes stale quickly.
+ */
+export const SIGNED_URL_TTL_SECONDS = 15 * 60;
+
 export interface ObjectStorage {
-  /** Upload (or overwrite) an object and return its key + resolvable URL. */
+  /** Upload (or overwrite) an object and return its key + signed URL. */
   put(input: PutObjectInput): Promise<StoredObject>;
-  /** Resolvable URL for a stored key (config-derived path-style / vhost). */
-  urlFor(key: string): string;
+  /**
+   * Browser-fetchable **signed** GET URL for a stored key, valid for
+   * {@link SIGNED_URL_TTL_SECONDS}. The backing bucket is private (#842): a
+   * plain unsigned object URL (`endpoint/bucket/key`) is denied by the store,
+   * so signing is part of the port contract — every implementation (real S3
+   * and the fake alike) MUST reject the unsigned shape and serve the signed one.
+   * Signing is async (SigV4 presign), hence the Promise.
+   */
+  urlFor(key: string): Promise<string>;
   /** Whether an object exists — used by the e2e to assert the PDF landed. */
   exists(key: string): Promise<boolean>;
   /** Fetch the stored bytes (or null when absent). */

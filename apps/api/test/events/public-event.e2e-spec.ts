@@ -13,6 +13,8 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { OBJECT_STORAGE, type ObjectStorage } from "../../src/storage/index.js";
+import { FakeObjectStorage } from "../../src/storage/storage.fake.js";
 
 // 004 EARS-1 + EARS-10 — the public event-page read endpoint
 // (GET /v1/public/events/:idOrSlug → PublicEventPage). A visitor opens a
@@ -41,6 +43,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
     interface SeedOptions {
       state: SeedState;
       withPdf?: boolean;
+      /** Explicit storage key for the program PDF (overrides `withPdf`'s fixed seed key). */
+      pdfRef?: string;
       partnerRef?: string | null;
     }
 
@@ -67,7 +71,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
           "Разбор клинических случаев.",
           ["traumatology", "orthopedics"],
           opts.partnerRef === undefined ? "sponsor:acme-pharma" : opts.partnerRef,
-          opts.withPdf ? "events/programs/seed/program.pdf" : null,
+          (opts.pdfRef ??
+            (opts.withPdf ? "events/programs/seed/program.pdf" : null)),
           opts.state,
         ],
       );
@@ -184,6 +189,50 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(res.statusCode).toBe(200);
       const body = res.json() as Record<string, unknown>;
       expect("programPdfUrl" in body).toBe(false);
+    });
+
+    it("EARS-2: programPdfUrl is actually FETCHABLE (2xx) through the storage seam — not merely a non-empty string (#842: prod served an unsigned URL the private bucket denied)", async () => {
+      // Put real bytes into the app's bound storage under an event-scoped key,
+      // then point the seeded event at that key — so the projection's URL must
+      // dereference to those bytes, not just look like a URL.
+      const storage = app.get<ObjectStorage>(OBJECT_STORAGE);
+      const pdfRef = `events/programs/e2e/fetchable-${randomUUID().slice(0, 8)}.pdf`;
+      const bytes = Buffer.from("%PDF-1.4 public-page fixture");
+      await storage.put({
+        key: pdfRef,
+        body: bytes,
+        contentType: "application/pdf",
+      });
+      const { slug } = await seedEvent({ state: "published", pdfRef });
+
+      try {
+        const res = await app.inject({
+          method: "GET",
+          url: `/v1/public/events/${slug}`,
+        });
+        expect(res.statusCode).toBe(200);
+        const url = (res.json() as { programPdfUrl: string }).programPdfUrl;
+        expect(typeof url).toBe("string");
+
+        // Dereference the URL the way a browser would: over HTTP for a real
+        // store; via the fake's fetch seam (same signed-GET semantics — an
+        // unsigned URL is 403, #842) when the in-memory fake is bound.
+        const fetched =
+          storage instanceof FakeObjectStorage
+            ? await storage.fetchUrl(url)
+            : await (async () => {
+                const r = await fetch(url);
+                return {
+                  status: r.status,
+                  body: Buffer.from(await r.arrayBuffer()),
+                };
+              })();
+        expect(fetched.status).toBeGreaterThanOrEqual(200);
+        expect(fetched.status).toBeLessThan(300);
+        expect(fetched.body).toEqual(bytes);
+      } finally {
+        await storage.delete(pdfRef);
+      }
     });
 
     it("EARS-10: the projection is an allow-list — no operator/commercial field or registrant PII is exposed", async () => {

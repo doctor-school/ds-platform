@@ -25,7 +25,7 @@ export function LifecycleActions({
   onTransition: () => void;
 }) {
   const t = useTranslations();
-  const { mutate, isLoading } = useCustomMutation();
+  const { mutate, mutation } = useCustomMutation();
   const [error, setError] = useState<string | null>(null);
   const actions = actionsFor(detail.validTransitions);
 
@@ -49,7 +49,7 @@ export function LifecycleActions({
           <Button
             key={action.command}
             type="button"
-            disabled={isLoading}
+            disabled={mutation.isPending}
             data-testid={action.testId}
             onClick={() => {
               setError(null);

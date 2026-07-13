@@ -45,7 +45,7 @@ export function StreamConfigForm({
   onConfigured: () => void;
 }) {
   const t = useTranslations();
-  const { mutate, isLoading } = useCustomMutation();
+  const { mutate, mutation } = useCustomMutation();
   const form = useForm<StreamConfigFields>({
     mode: "onTouched",
     resolver: useLocalizedResolver(
@@ -136,7 +136,7 @@ export function StreamConfigForm({
           )}
         />
         <div>
-          <Button type="submit" loading={isLoading} data-testid="save-stream">
+          <Button type="submit" loading={mutation.isPending} data-testid="save-stream">
             {t("events.action.configureStream")}
           </Button>
         </div>

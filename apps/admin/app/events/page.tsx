@@ -18,14 +18,15 @@ import { formatMskDateTime } from "@/lib/msk";
  */
 export default function EventsListPage() {
   const t = useTranslations();
-  const { data, isLoading } = useList<EventAdminListItem>({
+  const { result, query } = useList<EventAdminListItem>({
     resource: "events",
     pagination: { mode: "off" },
   });
-  const rows = data?.data ?? [];
+  const isLoading = query.isLoading;
+  const rows = result.data ?? [];
 
   return (
-    <Authenticated key="events-list" redirectOnFail="/login" v3LegacyAuthProviderCompatible={false}>
+    <Authenticated key="events-list" redirectOnFail="/login">
       <AppShell>
         <div className="mb-6 flex items-center justify-between">
           <div>

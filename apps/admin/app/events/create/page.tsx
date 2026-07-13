@@ -20,7 +20,7 @@ import type { CreateEventVars } from "@/providers/data-provider";
 export default function CreateEventPage() {
   const t = useTranslations();
   const router = useRouter();
-  const { mutate: create, isLoading } = useCreate();
+  const { mutate: create, mutation } = useCreate();
   const [error, setError] = useState<string | null>(null);
 
   return (
@@ -39,7 +39,7 @@ export default function CreateEventPage() {
         ) : null}
         <EventForm
           submitLabel={t("common.save")}
-          submitting={isLoading}
+          submitting={mutation.isPending}
           onSubmit={(values) => {
             setError(null);
             const vars: CreateEventVars = {

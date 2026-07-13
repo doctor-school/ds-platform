@@ -241,9 +241,9 @@ When("the operator opens the login screen", async ({ page }) => {
 Then(
   "the operator is redirected to the events list without a login form",
   async ({ page }) => {
-    // #675: the admin `/login` wraps its form in Refine's <Authenticated> — an
-    // already-admitted platform_admin is sent to the `events` resource root and the
-    // login form is never rendered (the fallback shows only when unauthenticated).
+    // #675: the admin `/login` gates on `useIsAuthenticated` — an already-admitted
+    // platform_admin is sent to the `events` resource root and the login form is
+    // never rendered (the form shows only when unauthenticated).
     await page.waitForURL(/\/events/);
     await expect(page.getByTestId("login-form")).toHaveCount(0);
   },

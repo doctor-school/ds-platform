@@ -34,15 +34,15 @@ export default function EventEditPage() {
   const t = useTranslations();
   const params = useParams();
   const id = String(params.id);
-  const { data, isLoading, refetch } = useOne<EventAdminDetail>({
+  const { result: detail, query } = useOne<EventAdminDetail>({
     resource: "events",
     id,
   });
-  const { mutate: update, isLoading: updating } = useUpdate();
+  const { isLoading, refetch } = query;
+  const { mutate: update, mutation: updateMutation } = useUpdate();
+  const updating = updateMutation.isPending;
   const [editError, setEditError] = useState<string | null>(null);
   const [editOk, setEditOk] = useState(false);
-
-  const detail = data?.data;
 
   return (
     <Authenticated key="events-edit" redirectOnFail="/login">

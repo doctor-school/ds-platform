@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Authenticated, useLogin } from "@refinedev/core";
+import { useIsAuthenticated, useLogin } from "@refinedev/core";
 import { NavigateToResource } from "@refinedev/nextjs-router";
 import { useTranslations } from "next-intl";
 import {
@@ -38,17 +38,23 @@ import { useLocalizedResolver } from "@/lib/use-localized-resolver";
  * ({@link LoginFormSchema}) rendered as RU `<FormMessage>` copy on blur — native
  * browser validation is suppressed (`noValidate`), matching every other admin form.
  *
- * #675 auth-surface guard: the default export wraps this form in Refine's
- * `<Authenticated>`. An already-admitted `platform_admin` (the same
- * `authProvider.check` used everywhere — no new gate) renders the children
- * (`<NavigateToResource resource="events">` → the admin root `/events`); an
- * unauthenticated caller renders the `fallback` (this form, unchanged). `loading`
- * is `null` while `check` runs, so no login form flashes before the redirect
- * resolves.
+ * #675 auth-surface guard: the default export gates on `useIsAuthenticated` (the
+ * same `authProvider.check` used everywhere — no new gate). An already-admitted
+ * `platform_admin` renders `<NavigateToResource resource="events">` → the admin
+ * root `/events`; an unauthenticated caller renders this form. While the FIRST
+ * `check` resolves the page renders `null`, so no login form flashes before the
+ * redirect resolves. The gate deliberately keys on `isLoading` (initial fetch,
+ * no cached data), NOT `isFetching`: Refine v5's `useLogin` invalidates the
+ * auth-check query even on a FAILED login (`success: false`), and an
+ * `isFetching`-keyed boundary (v5 `<Authenticated>`) unmounts the form on that
+ * background refetch — wiping the fields and the rendered RU error (#825
+ * live-verify regression). With `isLoading` the background re-check keeps the
+ * previous `authenticated: false` data, the form stays mounted, and the
+ * `login.errorGeneric` Alert renders exactly as pre-migration.
  */
 function LoginForm() {
   const t = useTranslations();
-  const { mutate: login, isLoading } = useLogin();
+  const { mutate: login, isPending } = useLogin();
   const [error, setError] = useState<string | null>(null);
   const form = useForm<LoginFormFields>({
     mode: "onTouched",
@@ -129,7 +135,7 @@ function LoginForm() {
                   </FormItem>
                 )}
               />
-              <Button type="submit" loading={isLoading} data-testid="login-submit">
+              <Button type="submit" loading={isPending} data-testid="login-submit">
                 {t("login.submit")}
               </Button>
             </form>
@@ -142,20 +148,15 @@ function LoginForm() {
 
 /**
  * #675: redirect an already-authenticated admin away from `/login`. When
- * `authProvider.check` admits the caller (a `platform_admin` session) the children
- * render → `<NavigateToResource>` sends them to the `events` resource (admin root);
- * otherwise the `fallback` login form renders exactly as before. `loading={null}`
- * suppresses any pre-resolution flash of the form.
+ * `authProvider.check` admits the caller (a `platform_admin` session),
+ * `<NavigateToResource>` sends them to the `events` resource (admin root);
+ * otherwise the login form renders exactly as before. `null` while the initial
+ * check resolves suppresses any pre-resolution flash of the form. See the
+ * docblock above for why this gates on `isLoading`, not v5 `<Authenticated>`.
  */
 export default function LoginPage() {
-  return (
-    <Authenticated
-      key="login-redirect"
-      fallback={<LoginForm />}
-      loading={null}
-      v3LegacyAuthProviderCompatible={false}
-    >
-      <NavigateToResource resource="events" />
-    </Authenticated>
-  );
+  const { isLoading, data } = useIsAuthenticated();
+  if (isLoading) return null;
+  if (data?.authenticated) return <NavigateToResource resource="events" />;
+  return <LoginForm />;
 }

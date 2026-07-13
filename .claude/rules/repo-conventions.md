@@ -23,6 +23,8 @@ Trunk-based; short-lived branches off `main`, squash-merge back. Naming `<prefix
 
 **Versioning:** changesets. User-facing PR → `pnpm changeset`. Internal-only (refactor/docs/chore) — no changeset.
 
+**Version-Packages release PR (`changeset-release/main`) merge gate.** The bot branch carries **no CI checks** — expected, not a red flag, and no Mode-a is needed. Gate before the squash-merge: (1) touched files are ONLY release artifacts (`.changeset/*` removals, `package.json` `version` fields, `CHANGELOG.md`, lockfile) — anything else = stop, not a pure release PR; (2) main CI is green at the consumed head (`gh run list --branch main`). Merge it when the wave it versions has landed, not mid-wave — the bot regenerates the PR on every main push, so merging mid-wave buys a second release cycle.
+
 **Bump letter** (semver, per package): `patch` = bugfix, no API or consumer-visible behavior change; `minor` = additive (new feature / exports / optional fields / endpoints), no breaking change; `major` = breaking (removed or renamed exports, changed signatures, return shapes, or field semantics, raised runtime floor, removed option). Pre-1.0 follows the same rule — a breaking `0.x` goes to `1.0`, never a hidden `0.x` minor. When unsure between `minor` and `major`, default to `major`: consumers can pin loosely but cannot recover from an undetected breaking change shipped as minor.
 
 **Pre-commit:** simple-git-hooks runs `lint-staged` (ESLint `--fix` + Prettier). `--no-verify` is a valid escape hatch — log the reason in the PR description.

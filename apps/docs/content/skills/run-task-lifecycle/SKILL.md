@@ -69,7 +69,7 @@ Invoke **`request-mode-a-review`** (Mode (a) subagent). It returns a structured 
 
 ### 5. Confirm CI green by hand (Phase-0 manual gate)
 
-`gh pr checks <N>` — confirm green **yourself**. `--auto` does **not** block on CI in Phase 0 (memory `feedback_phase0_merge_gate_manual`), so a hand-check is mandatory before merge. Baseline-already-red is noted in the PR, not silently merged over.
+`pnpm merge:gate <N>` — confirm green **yourself** via the deterministic merge gate (#836: head-SHA-pinned check-runs, zero registered runs = FAIL, structured status parsing — never an ad-hoc `gh pr checks` grep/watch; canon: skill `merge-when-green` Step 1). `--auto` does **not** block on CI in Phase 0 (memory `feedback_phase0_merge_gate_manual`), so the gate is mandatory before merge. Baseline-already-red is noted in the PR, not silently merged over.
 
 ### 6. Merge (autonomous — do not wait for the human)
 

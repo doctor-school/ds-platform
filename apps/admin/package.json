@@ -1,6 +1,6 @@
 {
   "name": "@ds/admin",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
   "type": "module",
   "description": "DS Platform admin — admin.doctor.school (Next.js 16 + Refine CSR shell, ADR-0004 §3/§5). Feature 007 event-admin surface.",

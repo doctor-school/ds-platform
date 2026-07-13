@@ -66,6 +66,9 @@ describe("WebinarPageContent — content set (EARS-2)", () => {
     render(<WebinarPageContent {...BASE} />);
     const link = screen.getByRole("link", { name: COPY.programDownloadLabel });
     expect(link).toHaveAttribute("href", BASE.programPdfUrl);
+    // #864: the PDF must open in a NEW tab, never navigate the event page away.
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noreferrer");
     expect(screen.getByText(COPY.programLabel)).toBeInTheDocument();
   });
 

@@ -163,6 +163,8 @@ const WebinarPageContent = React.forwardRef<
                 `text-primary` (blue.500, fails AA on the card surface). */}
             <a
               href={programPdfUrl}
+              target="_blank"
+              rel="noreferrer"
               className="inline-flex items-center gap-3 border-2 border-border bg-card px-6 py-4 text-sm font-bold text-primary-action no-underline shadow-ghost focus-visible:shadow-focus focus-visible:outline-none"
             >
               <span aria-hidden="true">↓</span>

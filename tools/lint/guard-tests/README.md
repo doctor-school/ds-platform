@@ -107,12 +107,16 @@ plus the slug/prefix/path derivation of
 task:worktree`). Same entry-point-guard discipline — the import fires no
 `git`/`gh` subprocess.
 
-`worktree-teardown.spec.ts` unit-covers the pure `resolveWorktreePath()` of
+`worktree-teardown.spec.ts` unit-covers the pure helpers of
 [`tools/dev/worktree-teardown.mjs`](../../dev/worktree-teardown.mjs) (`pnpm
-worktree:teardown`, #598): a bare name resolves against the primary tree's
-`.claude/worktrees/<name>` (mirroring `task:worktree`), while explicit
-absolute/relative paths are honored as-given, with `root`/`exists` injected so
-no `git` subprocess or real filesystem is touched.
+worktree:teardown`): `resolveWorktreePath()` (#598 — a bare name resolves
+against the primary tree's `.claude/worktrees/<name>`), the fail-loud
+`classifyTeardownTarget()` (#603), the pre-purge sweep selectors (#616), and
+the purge-failure holder escalation (#810 — `classifyHolders()` evidence
+matching by cwd/exe-path/cmdline + descendant expansion, the
+`DEV_TOOLING_IMAGES` kill allowlist vs FOREIGN holders, protected-PID
+shielding). All process rows, `root`, and `exists` are injected so no `git`
+subprocess, real filesystem, or live process table is touched.
 
 **`endpoint-authz` is covered in `apps/api`, not here.** It boots Nest (needs
 `@nestjs/*`, runs in the `api-e2e` job), so the Nest-boot strategy lives where

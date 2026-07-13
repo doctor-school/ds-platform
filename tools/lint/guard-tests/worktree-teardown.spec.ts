@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  classifyHolders,
   classifyTeardownTarget,
   collectProtectedPids,
   commandLineReferencesPath,
+  DEV_TOOLING_IMAGES,
+  isDevToolingImage,
+  pathIsUnder,
   resolveWorktreePath,
   selectWorktreeProcesses,
 } from "../../dev/worktree-teardown.mjs";
@@ -274,5 +278,199 @@ describe("worktree-teardown selectWorktreeProcesses()", () => {
   it("selects nothing for a clean worktree (no behavior change)", () => {
     const clean = "C:\\Users\\dev\\repos\\ds-platform\\.claude\\worktrees\\999";
     expect(selectWorktreeProcesses(table, clean)).toEqual([]);
+  });
+});
+
+/**
+ * Unit cover for the purge-failure holder escalation (#810). The retro case
+ * (aa855696, twice on 2026-07-13): a dev-stand `node.exe` whose command line
+ * did NOT reference the worktree held the tree via its CURRENT DIRECTORY, so
+ * the cmdline-only sweep missed it and the purge died with "used by another
+ * process" + a bare "remove by hand". These tests prove the escalation's pure
+ * classifier: holder evidence = cwd / exe-path / cmdline inside the tree, or
+ * descendant of such; killable iff the image is dev-tooling (allowlist);
+ * anything else is FOREIGN (reported, never killed); protected self/ancestor
+ * PIDs are shielded entirely.
+ */
+describe("worktree-teardown isDevToolingImage()", () => {
+  it("accepts the dev-tooling family, case-insensitively, with or without .exe/.cmd", () => {
+    for (const name of [
+      "node.exe",
+      "node",
+      "NODE.EXE",
+      "pnpm",
+      "pnpm.cmd",
+      "npm.cmd",
+      "tsx.exe",
+      "next",
+      "esbuild.exe",
+      "turbo.exe",
+    ]) {
+      expect(isDevToolingImage(name)).toBe(true);
+    }
+  });
+
+  it("rejects anything outside the family (foreign holders are never killable)", () => {
+    for (const name of [
+      "powershell.exe",
+      "cmd.exe",
+      "chrome.exe",
+      "Code.exe",
+      "explorer.exe",
+      "svchost.exe",
+      "nodepad.exe", // near-miss: not 'node'
+      "",
+      null,
+    ]) {
+      expect(isDevToolingImage(name as string)).toBe(false);
+    }
+  });
+
+  it("exports the allowlist constant with the exact image family", () => {
+    expect([...DEV_TOOLING_IMAGES].sort()).toEqual(
+      ["esbuild", "next", "node", "npm", "pnpm", "tsx", "turbo"].sort(),
+    );
+  });
+});
+
+describe("worktree-teardown pathIsUnder()", () => {
+  it("matches the worktree root itself and any nested path", () => {
+    expect(pathIsUnder(WT, WT)).toBe(true);
+    expect(pathIsUnder(`${WT}\\apps\\api`, WT)).toBe(true);
+  });
+
+  it("bridges separator style and case", () => {
+    expect(
+      pathIsUnder(
+        "c:/users/DEV/repos/ds-platform/.claude/worktrees/556/apps/api",
+        WT,
+      ),
+    ).toBe(true);
+  });
+
+  it("NEVER matches a sibling worktree whose name extends the target's (61 vs 616)", () => {
+    const wt61 = "C:\\repo\\.claude\\worktrees\\61";
+    expect(pathIsUnder("C:\\repo\\.claude\\worktrees\\616\\apps", wt61)).toBe(
+      false,
+    );
+    expect(pathIsUnder("C:\\repo\\.claude\\worktrees\\61\\apps", wt61)).toBe(
+      true,
+    );
+  });
+
+  it("returns false for null/empty candidates (Win32_Process yields nulls)", () => {
+    expect(pathIsUnder(null, WT)).toBe(false);
+    expect(pathIsUnder("", WT)).toBe(false);
+    expect(pathIsUnder("C:\\elsewhere", WT)).toBe(false);
+  });
+});
+
+describe("worktree-teardown classifyHolders()", () => {
+  const row = (
+    pid: number,
+    ppid: number,
+    name: string,
+    over: Record<string, unknown> = {},
+  ) => ({
+    pid,
+    ppid,
+    name,
+    executablePath: null,
+    cwd: null,
+    commandLine: null,
+    ...over,
+  });
+
+  it("catches the retro case: a node.exe whose CWD is inside the tree but whose command line is not", () => {
+    const table = [
+      row(300, 1, "node.exe", {
+        commandLine: "node apps/api/dist/main.js", // relative — the sweep missed exactly this
+        cwd: `${WT}\\apps\\api`,
+      }),
+    ];
+    const { killable, foreign } = classifyHolders(table, WT);
+    expect(killable.map((p) => p.pid)).toEqual([300]);
+    expect(killable[0].evidence).toMatch(/cwd/i);
+    expect(foreign).toEqual([]);
+  });
+
+  it("catches an exe-path holder (binary run from the worktree's node_modules)", () => {
+    const table = [
+      row(310, 1, "esbuild.exe", {
+        executablePath: `${WT}\\node_modules\\.pnpm\\esbuild\\esbuild.exe`,
+      }),
+    ];
+    const { killable, foreign } = classifyHolders(table, WT);
+    expect(killable.map((p) => p.pid)).toEqual([310]);
+    expect(killable[0].evidence).toMatch(/executable/i);
+    expect(foreign).toEqual([]);
+  });
+
+  it("expands to transitive descendants of a matched holder, cycle-safe", () => {
+    const table = [
+      row(300, 1, "node.exe", { cwd: WT }),
+      row(301, 300, "node.exe"), // child, no own evidence
+      row(302, 301, "esbuild.exe"), // grandchild, no own evidence
+      row(400, 1, "node.exe"), // unrelated — must not be swept in
+      // ppid cycle between two matched-subtree pids must not hang the walk
+      row(303, 302, "tsx.exe", { ppid: 302 }),
+    ];
+    const { killable, foreign } = classifyHolders(table, WT);
+    expect(killable.map((p) => p.pid).sort((a, b) => a - b)).toEqual([
+      300, 301, 302, 303,
+    ]);
+    expect(
+      killable.find((p) => p.pid === 302)?.evidence,
+    ).toMatch(/descendant/i);
+    expect(foreign).toEqual([]);
+  });
+
+  it("classifies a non-dev-tooling holder as FOREIGN (reported, never killable)", () => {
+    const table = [
+      row(500, 1, "powershell.exe", { cwd: `${WT}\\apps` }),
+      row(300, 1, "node.exe", { cwd: WT }),
+    ];
+    const { killable, foreign } = classifyHolders(table, WT);
+    expect(killable.map((p) => p.pid)).toEqual([300]);
+    expect(foreign.map((p) => p.pid)).toEqual([500]);
+    expect(foreign[0].evidence).toMatch(/cwd/i);
+  });
+
+  it("applies the allowlist boundary to descendants too (a chrome.exe child of a holder is foreign)", () => {
+    const table = [
+      row(300, 1, "node.exe", { cwd: WT }),
+      row(301, 300, "chrome.exe"), // descendant of a holder, but not dev-tooling
+    ];
+    const { killable, foreign } = classifyHolders(table, WT);
+    expect(killable.map((p) => p.pid)).toEqual([300]);
+    expect(foreign.map((p) => p.pid)).toEqual([301]);
+  });
+
+  it("shields protected self/ancestor PIDs entirely — no selection, no expansion through them", () => {
+    const table = [
+      // The teardown's own ancestor chain cwd'd in the tree (invoked from inside).
+      row(100, 10, "node.exe", { cwd: WT }),
+      row(10, 1, "pnpm.cmd", { cwd: WT }),
+      // A child of the protected pid with NO evidence of its own must not be
+      // swept in via descendant expansion from a shielded root.
+      row(101, 100, "node.exe"),
+    ];
+    const { killable, foreign } = classifyHolders(
+      table,
+      WT,
+      new Set([100, 10]),
+    );
+    expect(killable).toEqual([]);
+    expect(foreign).toEqual([]);
+  });
+
+  it("never selects the Windows Idle/System PIDs and ignores clean processes", () => {
+    const table = [
+      row(4, 0, "System", { cwd: WT }),
+      row(600, 1, "node.exe", { cwd: "C:\\elsewhere" }),
+    ];
+    const { killable, foreign } = classifyHolders(table, WT);
+    expect(killable).toEqual([]);
+    expect(foreign).toEqual([]);
   });
 });

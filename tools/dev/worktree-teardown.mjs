@@ -35,18 +35,34 @@
 //      gracefully (POSIX rm does not fail on held handles),
 //   2. resolve the worktree's branch from `git worktree list --porcelain`,
 //   3. `git worktree remove --force` (tolerating the long-path FS error),
-//   4. delete any orphan dir: Windows → `cmd /c rmdir /s /q \\?\<path>` then a
-//      robocopy-mirror-from-empty retry; POSIX → fs.rmSync recursive,
-//   5. `git worktree prune`,
-//   6. branch cleanup (unless --keep-branch): a temp `worktree-agent-*` branch
+//   4. delete any orphan dir: Windows → PowerShell `Remove-Item -LiteralPath
+//      "\\?\<path>" -Recurse -Force` (verified most reliable one-shot purge),
+//      then `cmd /c rmdir /s /q \\?\<path>`, then a robocopy-mirror-from-empty
+//      retry; POSIX → fs.rmSync recursive,
+//   5. on Windows purge failure, escalate to holder-PID detection (#810): the
+//      cmdline sweep in step 1 misses a holder whose command line never names
+//      the tree (retro aa855696 — a dev-stand node.exe merely CWD'd inside it),
+//      so the escalation snapshots `Win32_Process` with ExecutablePath plus a
+//      per-PID current directory (NtQueryInformationProcess → PEB), matches
+//      holders by cwd / exe-path / cmdline inside the tree + their transitive
+//      descendants, reports each holder's listening TCP ports (diagnostics
+//      only, never a kill criterion), kills only dev-tooling images
+//      (DEV_TOOLING_IMAGES — node/pnpm/npm/tsx/next/esbuild/turbo) outside the
+//      self/ancestor shield, and retries the purge ONCE. A non-dev-tooling
+//      holder is FOREIGN: named (pid + image + evidence), never killed, exit 1,
+//   6. `git worktree prune`,
+//   7. branch cleanup (unless --keep-branch): a temp `worktree-agent-*` branch
 //      is deleted unconditionally; any other branch only if already merged into
 //      main (ancestor check) — an unmerged non-temp branch is kept + warned.
 //
 // Exit codes: 0 = torn down clean (dir gone, branch handled); 1 = the orphan
-// directory could not be removed; 2 = usage error; 3 = unresolvable target —
-// the argument names neither a registered worktree nor a directory under
-// `.claude/worktrees/` (a shell-mangled backslash path or a typo slug). Fail
-// loud instead of a WARN + exit 0 that masquerades as a clean teardown (#603).
+// directory could not be removed — only with a NAMED foreign holder, or with
+// the holder state explicitly reported (killed-but-still-failing / none
+// detectable / enumeration unavailable) — never a bare "remove by hand";
+// 2 = usage error; 3 = unresolvable target — the argument names neither a
+// registered worktree nor a directory under `.claude/worktrees/` (a
+// shell-mangled backslash path or a typo slug). Fail loud instead of a WARN +
+// exit 0 that masquerades as a clean teardown (#603).
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
@@ -228,6 +244,112 @@ export function selectWorktreeProcesses(
 }
 
 /**
+ * The image-name family the holder escalation (#810) may kill: our own dev
+ * tooling and nothing else. A holder outside this family is FOREIGN — named,
+ * never killed. Matching strips a `.exe`/`.cmd`/`.bat`/`.com` extension and is
+ * case-insensitive (see `isDevToolingImage`).
+ */
+export const DEV_TOOLING_IMAGES = [
+  "node",
+  "pnpm",
+  "npm",
+  "tsx",
+  "next",
+  "esbuild",
+  "turbo",
+];
+
+/**
+ * True when a process image name belongs to the dev-tooling family (#810).
+ * Pure (string → bool) so the guard-test harness can drive it directly.
+ */
+export function isDevToolingImage(name) {
+  if (typeof name !== "string" || name.length === 0) return false;
+  const base = name.toLowerCase().replace(/\.(exe|cmd|bat|com)$/, "");
+  return DEV_TOOLING_IMAGES.includes(base);
+}
+
+/**
+ * True when `candidate` is the directory at `absPath` or anything nested under
+ * it (#810). Boundary-aware like `commandLineReferencesPath`: worktree `…/61`
+ * never contains `…/616`. Bridges separator style and case via `norm()`.
+ * Pure (string → bool) so the guard-test harness can drive it directly.
+ */
+export function pathIsUnder(candidate, absPath) {
+  if (typeof candidate !== "string" || candidate.length === 0) return false;
+  const want = norm(absPath);
+  if (!want) return false;
+  const c = norm(candidate);
+  return c === want || c.startsWith(`${want}/`);
+}
+
+/**
+ * Classify the processes holding the worktree at `absPath` for the
+ * purge-failure escalation (#810). A process is a HOLDER when its evidence
+ * roots it in THIS worktree — current directory, executable path, or command
+ * line inside the tree — or when it is a transitive descendant of such a
+ * process (ParentProcessId chain, cycle-safe). The Windows Idle/System PIDs
+ * (<= 4) and the shielded self/ancestor set are excluded entirely: never
+ * selected, never expanded through.
+ *
+ * A holder is KILLABLE iff its image name is in the dev-tooling family
+ * (`DEV_TOOLING_IMAGES`); anything else is FOREIGN — the caller names it and
+ * exits 1 without killing. Rows carry {pid, ppid, name, executablePath, cwd,
+ * commandLine}; each returned holder gains an `evidence` string.
+ *
+ * Pure + injectable so the guard-test harness proves the kill scope without a
+ * live process table.
+ */
+export function classifyHolders(processes, absPath, protectedPids = new Set()) {
+  const eligible = (p) =>
+    Number.isInteger(p.pid) && p.pid > 4 && !protectedPids.has(p.pid);
+  const evidenceOf = (p) => {
+    if (pathIsUnder(p.cwd, absPath))
+      return `cwd '${p.cwd}' is inside the worktree`;
+    if (pathIsUnder(p.executablePath, absPath))
+      return `executable '${p.executablePath}' is inside the worktree`;
+    if (commandLineReferencesPath(p.commandLine, absPath))
+      return "command line references the worktree";
+    return null;
+  };
+
+  const holders = new Map(); // pid → row + evidence
+  for (const p of processes) {
+    if (!eligible(p)) continue;
+    const evidence = evidenceOf(p);
+    if (evidence) holders.set(p.pid, { ...p, evidence });
+  }
+
+  // Transitive descendants of any matched holder are holders too (a matched
+  // parent's children inherit its handles/cwd). Cycle-safe: a pid already in
+  // `holders` is never re-queued, so PID-reuse ppid loops terminate.
+  const childrenOf = new Map();
+  for (const p of processes) {
+    if (!childrenOf.has(p.ppid)) childrenOf.set(p.ppid, []);
+    childrenOf.get(p.ppid).push(p);
+  }
+  const queue = [...holders.keys()];
+  while (queue.length > 0) {
+    const pid = queue.shift();
+    for (const child of childrenOf.get(pid) ?? []) {
+      if (!eligible(child) || holders.has(child.pid)) continue;
+      holders.set(child.pid, {
+        ...child,
+        evidence: `descendant of holder pid=${pid}`,
+      });
+      queue.push(child.pid);
+    }
+  }
+
+  const killable = [];
+  const foreign = [];
+  for (const h of holders.values()) {
+    (isDevToolingImage(h.name) ? killable : foreign).push(h);
+  }
+  return { killable, foreign };
+}
+
+/**
  * Snapshot the live process table via `Win32_Process` (Windows only). Returns
  * rows of {pid, ppid, name, commandLine} or null when enumeration is
  * unavailable/failed — the caller then skips the sweep gracefully rather than
@@ -306,6 +428,134 @@ function sweepWorktreeProcesses(absPath) {
   }
 }
 
+// C# helper compiled in-process by the escalation snapshot (#810): reads a
+// target process's CURRENT DIRECTORY via NtQueryInformationProcess → PEB →
+// RTL_USER_PROCESS_PARAMETERS.CurrentDirectory.DosPath (x64 offsets 0x20 /
+// 0x38 — the standard Add-Type snippet). Per-PID failures (access denied,
+// exited, 32-bit edge cases) return null and are skipped.
+const PROC_CWD_CSHARP = `
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class ProcCwd {
+  [DllImport("ntdll.dll")]
+  private static extern int NtQueryInformationProcess(IntPtr h, int cls, ref PBI pbi, int len, out int ret);
+  [DllImport("kernel32.dll", SetLastError=true)]
+  private static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
+  [DllImport("kernel32.dll", SetLastError=true)]
+  private static extern bool ReadProcessMemory(IntPtr h, IntPtr addr, byte[] buf, int size, out IntPtr read);
+  [DllImport("kernel32.dll")]
+  private static extern bool CloseHandle(IntPtr h);
+  [StructLayout(LayoutKind.Sequential)]
+  private struct PBI {
+    public IntPtr ExitStatus; public IntPtr PebBaseAddress; public IntPtr AffinityMask;
+    public IntPtr BasePriority; public IntPtr UniqueProcessId; public IntPtr InheritedFromUniqueProcessId;
+  }
+  public static string GetCwd(int pid) {
+    // PROCESS_QUERY_INFORMATION | PROCESS_VM_READ
+    IntPtr h = OpenProcess(0x0410u, false, pid);
+    if (h == IntPtr.Zero) return null;
+    try {
+      PBI pbi = new PBI(); int ret;
+      if (NtQueryInformationProcess(h, 0, ref pbi, Marshal.SizeOf(typeof(PBI)), out ret) != 0) return null;
+      if (pbi.PebBaseAddress == IntPtr.Zero) return null;
+      byte[] ptrBuf = new byte[8]; IntPtr read;
+      // PEB+0x20 → ProcessParameters (x64)
+      if (!ReadProcessMemory(h, IntPtr.Add(pbi.PebBaseAddress, 0x20), ptrBuf, 8, out read)) return null;
+      IntPtr pp = new IntPtr(BitConverter.ToInt64(ptrBuf, 0));
+      if (pp == IntPtr.Zero) return null;
+      // ProcessParameters+0x38 → CurrentDirectory.DosPath (UNICODE_STRING)
+      byte[] us = new byte[16];
+      if (!ReadProcessMemory(h, IntPtr.Add(pp, 0x38), us, 16, out read)) return null;
+      ushort len = BitConverter.ToUInt16(us, 0);
+      IntPtr strPtr = new IntPtr(BitConverter.ToInt64(us, 8));
+      if (len == 0 || len > 32768 || strPtr == IntPtr.Zero) return null;
+      byte[] strBuf = new byte[len];
+      if (!ReadProcessMemory(h, strPtr, strBuf, len, out read)) return null;
+      return Encoding.Unicode.GetString(strBuf).TrimEnd('\\\\');
+    } catch { return null; } finally { CloseHandle(h); }
+  }
+}
+`;
+
+/**
+ * Run a (possibly multi-line) PowerShell script via `-EncodedCommand` — the
+ * base64/UTF-16LE transport sidesteps every Windows argument-quoting and
+ * newline hazard that `-Command` has for scripts with embedded here-strings.
+ */
+function runPowerShell(script) {
+  const encoded = Buffer.from(script, "utf16le").toString("base64");
+  return run("powershell.exe", [
+    "-NoProfile",
+    "-NonInteractive",
+    "-EncodedCommand",
+    encoded,
+  ]);
+}
+
+/**
+ * Detailed process snapshot for the holder escalation (#810): `Win32_Process`
+ * rows enriched with ExecutablePath and the per-PID current directory (PEB
+ * read, try/catch per PID — inaccessible PIDs yield null cwd rather than
+ * failing the snapshot). Windows only; returns null when enumeration fails —
+ * the caller then reports the holders-undetectable state instead of killing
+ * blind.
+ */
+function listProcessesWindowsDetailed() {
+  const script =
+    `Add-Type -TypeDefinition @'\n${PROC_CWD_CSHARP}\n'@\n` +
+    "$rows = Get-CimInstance Win32_Process | ForEach-Object {\n" +
+    "  $cwd = $null\n" +
+    "  try { $cwd = [ProcCwd]::GetCwd([int]$_.ProcessId) } catch {}\n" +
+    "  [pscustomobject]@{ ProcessId = $_.ProcessId; ParentProcessId = $_.ParentProcessId;\n" +
+    "    Name = $_.Name; ExecutablePath = $_.ExecutablePath; CommandLine = $_.CommandLine; Cwd = $cwd }\n" +
+    "}\n" +
+    "ConvertTo-Json -InputObject @($rows) -Compress";
+  const res = runPowerShell(script);
+  if (res.error || res.status !== 0) return null;
+  try {
+    const parsed = JSON.parse(res.stdout);
+    const rows = Array.isArray(parsed) ? parsed : [parsed];
+    return rows.map((r) => ({
+      pid: r.ProcessId,
+      ppid: r.ParentProcessId,
+      name: r.Name ?? "",
+      executablePath: r.ExecutablePath ?? null,
+      commandLine: r.CommandLine ?? null,
+      cwd: r.Cwd ?? null,
+    }));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Listening TCP ports per owning PID (`Get-NetTCPConnection -State Listen`) —
+ * DIAGNOSTICS ONLY for the holder report (#810): a port names the stand a
+ * holder belongs to, but a port alone is never a kill criterion. Returns a
+ * Map pid → [ports], empty on any failure.
+ */
+function listListeningPortsByPid() {
+  const script =
+    "Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | " +
+    "Select-Object OwningProcess,LocalPort | ConvertTo-Json -Compress";
+  const res = runPowerShell(script);
+  const byPid = new Map();
+  if (res.error || res.status !== 0) return byPid;
+  try {
+    const parsed = JSON.parse(res.stdout);
+    const rows = Array.isArray(parsed) ? parsed : [parsed];
+    for (const r of rows) {
+      if (!Number.isInteger(r.OwningProcess)) continue;
+      if (!byPid.has(r.OwningProcess)) byPid.set(r.OwningProcess, []);
+      byPid.get(r.OwningProcess).push(r.LocalPort);
+    }
+  } catch {
+    /* diagnostics only — an unparsable dump degrades to no port info */
+  }
+  return byPid;
+}
+
 /** All registered worktree absolute paths, from `git worktree list --porcelain`. */
 function listWorktreePaths() {
   const res = run("git", ["worktree", "list", "--porcelain"]);
@@ -338,10 +588,16 @@ function resolveWorktreeBranch(absPath) {
 function purgeDirWindows(absPath) {
   const winPath = win32.normalize(absPath);
   const longPath = `\\\\?\\${winPath}`;
-  // Pass 1 — \\?\ bypasses MAX_PATH; usually enough.
+  // Pass 1 — PowerShell Remove-Item on the \\?\ literal path: verified the
+  // most reliable one-shot purge for these trees (2026-07-05 ×2, 2026-07-13).
+  runPowerShell(
+    `Remove-Item -LiteralPath '${longPath.replace(/'/g, "''")}' -Recurse -Force -ErrorAction SilentlyContinue`,
+  );
+  if (!existsSync(absPath)) return true;
+  // Pass 2 — cmd rmdir on the \\?\ path (bypasses MAX_PATH).
   run("cmd", ["/c", "rmdir", "/s", "/q", longPath]);
   if (!existsSync(absPath)) return true;
-  // Pass 2 — empty the tree with robocopy /MIR from a fresh empty dir, then retry.
+  // Pass 3 — empty the tree with robocopy /MIR from a fresh empty dir, then retry.
   // robocopy exit codes < 8 are success-ish (1/2/3 = copied/extra/mismatch).
   const empty = mkdtempSync(join(tmpdir(), "wt-empty-"));
   try {
@@ -361,6 +617,77 @@ function purgeDirWindows(absPath) {
     rmSync(empty, { recursive: true, force: true });
   }
   return !existsSync(absPath);
+}
+
+/**
+ * Purge-failure escalation (#810): detect the PIDs actually HOLDING the tree
+ * (cwd / exe-path / cmdline inside it + transitive descendants — the cmdline
+ * sweep alone missed a dev-stand node.exe merely CWD'd in the tree, retro
+ * aa855696), report each with its evidence and listening TCP ports
+ * (diagnostics only), kill only dev-tooling images outside the self/ancestor
+ * shield, and retry the purge ONCE. Exits 0 via the caller on success; exits 1
+ * here with the holder state always NAMED — a foreign holder (never killed),
+ * killed-but-still-failing, none detectable, or enumeration unavailable —
+ * never a bare "remove by hand".
+ */
+function escalatePurgeFailure(absPath) {
+  out("purge failed — escalating to holder-PID detection (#810).");
+  const procs = listProcessesWindowsDetailed();
+  if (!procs) {
+    die(
+      `could not remove orphan directory '${absPath}' — holder detection unavailable ` +
+        `(Win32_Process enumeration failed) and the purge still fails. Find the holder by ` +
+        `hand (e.g. Get-NetTCPConnection -State Listen; Stop-Process) and re-run.`,
+      1,
+    );
+  }
+  const shielded = collectProtectedPids(procs, process.pid);
+  const { killable, foreign } = classifyHolders(procs, absPath, shielded);
+  const portsByPid = listListeningPortsByPid();
+  const describe = (p) => {
+    const ports = portsByPid.get(p.pid);
+    const portNote = ports?.length
+      ? ` (listening on TCP ${[...ports].sort((a, b) => a - b).join(", ")})`
+      : "";
+    return `pid=${p.pid} name=${p.name}${portNote} — ${p.evidence}`;
+  };
+
+  for (const p of foreign) {
+    warn(`FOREIGN holder (not killed): ${describe(p)}`);
+  }
+  for (const p of killable) {
+    const res = run("taskkill", ["/PID", String(p.pid), "/F"]);
+    if (res.status === 0) out(`killed holder ${describe(p)}.`);
+    else
+      warn(
+        `could not kill holder pid=${p.pid} name=${p.name}: ${(res.stderr || res.stdout).trim()}`,
+      );
+  }
+
+  // Retry the purge ONCE after the kills.
+  if (purgeDir(absPath)) {
+    out(`purged orphan directory '${absPath}' after killing its holder(s).`);
+    return;
+  }
+  if (foreign.length > 0) {
+    die(
+      `could not remove orphan directory '${absPath}' — a FOREIGN process holds it ` +
+        `(not dev-tooling, not killed):\n` +
+        foreign.map((p) => `    ${describe(p)}`).join("\n") +
+        `\nStop it yourself if it is safe, then re-run the teardown.`,
+      1,
+    );
+  }
+  die(
+    killable.length > 0
+      ? `could not remove orphan directory '${absPath}' — its dev-tooling holder(s) were ` +
+          `killed but the purge still fails; a holder is undetectable by cwd/exe-path/cmdline ` +
+          `evidence. Find it by handle (e.g. Sysinternals 'handle.exe ${absPath}') and re-run.`
+      : `could not remove orphan directory '${absPath}' — no holder is detectable by ` +
+          `cwd/exe-path/cmdline evidence and the purge still fails. Find it by handle ` +
+          `(e.g. Sysinternals 'handle.exe ${absPath}') and re-run.`,
+    1,
+  );
 }
 
 function purgeDir(absPath) {
@@ -463,9 +790,12 @@ function main() {
     );
   }
 
-  // 4. Purge any orphan directory left on disk.
+  // 4. Purge any orphan directory left on disk; on Windows a failed purge
+  //    escalates to holder-PID detection + a single retry (#810) instead of
+  //    a bare "remove by hand".
   if (existsSync(absPath)) {
     if (purgeDir(absPath)) out(`purged orphan directory '${absPath}'.`);
+    else if (IS_WIN) escalatePurgeFailure(absPath); // die(1) inside on failure
     else
       die(
         `could not remove orphan directory '${absPath}' — remove by hand.`,

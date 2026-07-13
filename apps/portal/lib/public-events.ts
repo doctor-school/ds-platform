@@ -23,10 +23,14 @@ export async function fetchPublicEventPage(
     `${API_BASE}/v1/public/events/${encodeURIComponent(idOrSlug)}`,
     {
       headers: { accept: "application/json" },
-      // Public + cacheable; revalidate briefly so a lifecycle transition
-      // (published→live→ended) surfaces on the SSR page within the window
-      // (mirrors the endpoint's short Cache-Control, 004 design §4).
-      next: { revalidate: 30 },
+      // Live product read — uncached (#843). A lifecycle transition
+      // (published→live→ended) must surface on the very next request, never
+      // after a timer window: `revalidate: 30` let a LIVE broadcast keep
+      // advertising as upcoming for up to 30s plus one stale-while-revalidate
+      // response. If caching is ever reintroduced here, it must be invalidated
+      // ON the lifecycle transition (on-demand revalidation, e.g.
+      // revalidateTag) — never by timer.
+      cache: "no-store",
     },
   );
   if (res.status === 404) return null;
@@ -38,7 +42,7 @@ export async function fetchPublicEventPage(
 
 /**
  * Fetch the upcoming-broadcasts listing (004 EARS-7) — the `UpcomingBroadcastCard[]`
- * projection ordered nearest air date first. Public + cacheable like the event
+ * projection ordered nearest air date first. Public + uncached like the event
  * page; a `[]` is a valid result (the listing renders the empty-state, EARS-11).
  * Same env-driven upstream, no cookie — the body carries no per-session variation.
  */
@@ -47,10 +51,11 @@ export async function fetchUpcomingBroadcasts(): Promise<
 > {
   const res = await fetch(`${API_BASE}/v1/public/events?upcoming`, {
     headers: { accept: "application/json" },
-    // Mirror the endpoint's short Cache-Control so a lifecycle transition
-    // (published→live→ended) surfaces on the SSR listing within the window
-    // (004 design §4).
-    next: { revalidate: 30 },
+    // Live product read — uncached (#843): the same no-store policy as the
+    // event page above. Lifecycle transitions surface on the very next
+    // request; any future cache must be invalidated on the transition
+    // (on-demand revalidation), never by timer.
+    cache: "no-store",
   });
   if (!res.ok) {
     throw new Error(`upcoming broadcasts fetch failed (${res.status})`);

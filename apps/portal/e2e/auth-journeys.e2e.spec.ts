@@ -148,12 +148,14 @@ test.describe("portal auth journeys (real Zitadel)", () => {
     await provisionLoggedInDoctor(page);
     await page.waitForURL(/\/account/);
 
-    // Each auth surface, with the submit control that exists ONLY on the
-    // unauthenticated form — its absence proves no auth form was rendered.
+    // Each guarded auth surface, with the submit control that exists ONLY on
+    // the unauthenticated form — its absence proves no auth form was rendered.
+    // `/reset` is NOT in this list: it is the deliberate guard exemption (003
+    // EARS-28, #770) — the /account change-password action hands off there for
+    // logged-in doctors, so it must stay reachable (asserted below).
     const surfaces: { route: string; submitTestId: string }[] = [
       { route: "/login", submitTestId: "password-login-submit" },
       { route: "/register", submitTestId: "register-submit" },
-      { route: "/reset", submitTestId: "reset-request-submit" },
       { route: "/verify", submitTestId: "verify-submit" },
     ];
 
@@ -164,6 +166,11 @@ test.describe("portal auth journeys (real Zitadel)", () => {
       // …and never rendered the auth form on the way (no flash of the submit).
       await expect(page.getByTestId(submitTestId)).toHaveCount(0);
     }
+
+    // EARS-28: the /reset flow stays REACHABLE for the authenticated doctor —
+    // the request form renders instead of bouncing back to /account.
+    await page.goto("/reset");
+    await expect(page.getByTestId("reset-request-submit")).toBeVisible();
   });
 
   test("email-OTP: register+verify → request code → login → session", async ({

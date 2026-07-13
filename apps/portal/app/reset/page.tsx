@@ -108,7 +108,11 @@ export default function ResetPage() {
   }
 
   return (
-    <AuthShell>
+    // `allowAuthenticated` (#770 rework): /reset is exempt from the #675
+    // authenticated-redirect — the /account «Сменить пароль» action hands off
+    // HERE for logged-in doctors (003 EARS-28), and completing the reset
+    // revokes all sessions + auto-logs-in with the new password (EARS-12).
+    <AuthShell allowAuthenticated>
       <AuthCard
         icon={<KeyRound className="text-primary" aria-hidden />}
         // Canvas: the title tracks the stage — «Сброс пароля» on the request step,

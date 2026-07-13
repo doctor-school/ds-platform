@@ -33,13 +33,26 @@ import { useRedirectIfAuthenticated } from "@/lib/use-redirect-if-authenticated"
  * colour logo. Served `unoptimized` — a tiny static SVG needs no Next re-encode;
  * intrinsic sizes feed `next/image` (viewBox 500×164), `h-* w-auto` scales display.
  */
-export function AuthShell({ children }: { children: ReactNode }) {
+export function AuthShell({
+  children,
+  allowAuthenticated = false,
+}: {
+  children: ReactNode;
+  /**
+   * Skip the #675 authenticated-redirect for this surface. ONLY `/reset` sets it:
+   * 003 EARS-28 pins the `/account` change-password action as a handoff to the
+   * existing `/reset` flow, so a logged-in doctor must reach it (#770 rework).
+   */
+  allowAuthenticated?: boolean;
+}) {
   const t = useTranslations("brand");
   // #675: an already-authenticated visitor is redirected to `/account` and NO auth
   // chrome is rendered. While the session check is pending — and once it resolves to
   // an authenticated principal — the shell renders nothing (both hooks above run
-  // unconditionally first, satisfying the rules of hooks).
-  const guard = useRedirectIfAuthenticated();
+  // unconditionally first, satisfying the rules of hooks). With
+  // `allowAuthenticated` the guard is disabled and resolves to "anonymous"
+  // immediately (the /reset exemption — see the hook doc).
+  const guard = useRedirectIfAuthenticated(!allowAuthenticated);
   if (guard !== "anonymous") return null;
   return (
     <AuthLayout

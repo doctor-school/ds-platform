@@ -534,6 +534,26 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:interaction-states
 
+  # primitives-first: a bespoke hover:/active:/focus-visible: utility stack on a
+  # RAW interactive element (<a>/<button>/<input>/… or the file's next/link
+  # default import under ANY alias) in product-app UI source must compose the
+  # @ds/design-system primitive that owns the interaction contract instead
+  # (AGENTS.md §6 adopt-before-bespoke; the #818 aliased-NextLink gap that
+  # interaction-states scope (c) missed — #828). Reasoned per-occurrence opt-out:
+  # `primitives-first-ok: <reason>`. Static source scan — no PR/gh context
+  # needed. WARN per ADR-0007 §2.6.
+  primitives-first:
+    needs: setup
+    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:primitives-first
+
   # aa-contrast: the cheap STATIC pre-filter for the AA-contrast usage rule (ADR-0013
   # §7), left of the runtime playwright-axe tier (#351). Flags the two deterministic
   # token-level anti-patterns — an opacity-dimmed `text-*-foreground/NN` and a

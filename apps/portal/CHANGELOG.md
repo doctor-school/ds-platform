@@ -1,5 +1,23 @@
 # @ds/portal
 
+## 0.12.0
+
+### Minor Changes
+
+- [#807](https://github.com/doctor-school/ds-platform/pull/807) [`e51330a`](https://github.com/doctor-school/ds-platform/commit/e51330a7b72920589fcac3a3a1ea8203fc8559ef) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Facade re-point ([#769](https://github.com/doctor-school/ds-platform/issues/769)): the portal front door `/` now forwards to the real public
+  upcoming-broadcasts listing (`/webinars`) instead of the 003-era «Каркас приложения»
+  scaffold card, and the default post-login landing (no `returnTo`) is «Мои события»
+  (`/account/events`) instead of the `/account` session dump. The guard-validated
+  `?returnTo=/webinars/:slug` registration-resume path is unchanged.
+
+### Patch Changes
+
+- [#781](https://github.com/doctor-school/ds-platform/pull/781) [`325fef7`](https://github.com/doctor-school/ds-platform/commit/325fef762d4f36db282d2d6d07905145584673f8) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Room-header AA contrast ([#713](https://github.com/doctor-school/ds-platform/issues/713)): the live presence count and the desktop exit-link label in the webinar-room header are now plain `text-header-foreground` (white) rendered directly on the `bg-header` band, matching the canvas layout with no plate. The AA fix is delivered by deepening the shared `header` band to blue.700 (white = 8.14:1, genuine WCAG-AA in both themes) — the earlier `primary-surface` plate treatment is reverted. The room-route axe e2e scan now includes the `.bg-header` band (no longer excluded).
+
+- Updated dependencies [[`33f2156`](https://github.com/doctor-school/ds-platform/commit/33f2156dfb2da61cfd5e7657d7a158eaa25122eb), [`325fef7`](https://github.com/doctor-school/ds-platform/commit/325fef762d4f36db282d2d6d07905145584673f8)]:
+  - @ds/schemas@1.2.0
+  - @ds/design-system@1.2.0
+
 ## 0.11.0
 
 ### Minor Changes

@@ -86,6 +86,20 @@ export const GUARDS = [
  */
 export const MERGE_GUARDS = [{ name: "stage-b", file: "stage-b-lint.ts" }];
 
+/**
+ * The deterministic CI merge gate (#836) — `tools/gh/merge-gate.mjs`, run last
+ * in `--pre-merge` mode (after the cheap stage-b guard): resolves the PR head
+ * SHA, requires >0 registered check-runs for THAT SHA with every non-skipped
+ * run terminal-successful (zero runs = fresh-push race = FAIL), and refuses to
+ * run from a worktree cwd / while the PR branch is held by a registered
+ * worktree. A plain `node` script (polls `gh`), not a tools/lint tsx guard —
+ * hence the dedicated runner instead of a MERGE_GUARDS entry.
+ */
+export const MERGE_GATE = {
+  name: "merge-gate",
+  script: ["tools", "gh", "merge-gate.mjs"],
+};
+
 export const STATIC_GUARDS = [
   { name: "frontmatter-yaml", file: "frontmatter-yaml-lint.ts" },
   { name: "events-drift", file: "events-lint.ts" },
@@ -235,7 +249,7 @@ function main() {
       "Usage:\n" +
         "  pnpm pr:preflight <N>              PR-event-gated guards vs live PR #N + static family (default)\n" +
         "  pnpm pr:preflight <N> --no-static  PR-event-gated guards only (skip the static family)\n" +
-        "  pnpm pr:preflight <N> --pre-merge  add the Stage-B pre-merge gate (run right before `gh pr merge`)\n" +
+        "  pnpm pr:preflight <N> --pre-merge  add the pre-merge gates: stage-b + the deterministic CI merge gate (#836; run right before `gh pr merge`)\n" +
         "  pnpm pr:preflight --static         static tree-scan guards only (pre-push, no PR number)\n" +
         "  pnpm pr:preflight --static <N>     both families in one sweep (same as `<N>`)",
     );
@@ -262,6 +276,23 @@ function main() {
       `running ${MERGE_GUARDS.length} pre-merge gate guard(s) (Stage-B) vs live PR #${prNumber}…`,
     );
     for (const g of MERGE_GUARDS) results.push(runGuard(g, root, prEnv));
+
+    // Deterministic CI merge gate (#836): checks-registered + terminal-success
+    // for the exact head SHA, plus the worktree-cwd guard. Runs last — it may
+    // poll while CI finishes, so the cheap guards fail fast first.
+    out(`── ${MERGE_GATE.name} ──`);
+    const res = spawnSync(
+      "node",
+      [resolve(root, ...MERGE_GATE.script), prNumber],
+      {
+        cwd: root,
+        env: process.env,
+        stdio: "inherit",
+        encoding: "utf8",
+        shell: process.platform === "win32",
+      },
+    );
+    results.push({ name: MERGE_GATE.name, status: res.status ?? -1 });
   }
 
   const { ok, lines } = summarize(results);

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   GUARDS,
+  MERGE_GATE,
   MERGE_GUARDS,
   STATIC_GUARDS,
   hasNoStaticFlag,
@@ -72,6 +73,12 @@ describe("pr-preflight MERGE_GUARDS roster (#692)", () => {
       ...STATIC_GUARDS.map((g) => g.file),
     ]);
     for (const g of MERGE_GUARDS) expect(other.has(g.file)).toBe(false);
+  });
+
+  it("runs the deterministic CI merge gate in --pre-merge mode (#836)", () => {
+    expect(MERGE_GATE.name).toBe("merge-gate");
+    // a node script under tools/gh (polls gh), not a tools/lint tsx guard
+    expect(MERGE_GATE.script).toEqual(["tools", "gh", "merge-gate.mjs"]);
   });
 });
 

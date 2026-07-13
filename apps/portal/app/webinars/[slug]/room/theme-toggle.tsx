@@ -66,6 +66,9 @@ export function ThemeToggle({
   }, []);
 
   return (
+    /* primitives-first-ok: canvas-pinned header icon toggle (spec §10) — themes off
+       the header-* palette (hover:border-header-foreground), which no DS Button
+       variant carries; pre-#828 surface, DS-adoption candidate for a follow-up. */
     <button
       type="button"
       aria-pressed={dark}

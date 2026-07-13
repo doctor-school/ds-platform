@@ -114,6 +114,7 @@ export const STATIC_GUARDS = [
   { name: "showcase-snippet", file: "showcase-snippet-lint.ts" },
   { name: "asset-format", file: "asset-format-lint.ts" },
   { name: "interaction-states", file: "interaction-states-lint.ts" },
+  { name: "primitives-first", file: "primitives-first-lint.ts" },
   { name: "aa-contrast", file: "aa-contrast-lint.ts" },
   { name: "form-error", file: "form-error-lint.ts" },
   { name: "form-rhythm", file: "form-rhythm-lint.ts" },

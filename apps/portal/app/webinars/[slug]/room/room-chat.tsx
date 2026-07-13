@@ -212,6 +212,9 @@ export function RoomChat({
         </div>
       ) : null}
       <form onSubmit={submit} className="flex gap-3 border-t-2 border-border p-4">
+        {/* primitives-first-ok: canvas-pinned webinar-room composer field (room
+            canvas) — border-2 hairline box, no DS Input chrome; pre-#828 surface,
+            DS-adoption candidate for a follow-up. */}
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -220,6 +223,9 @@ export function RoomChat({
           maxLength={2000}
           className="min-w-0 flex-1 border-2 border-hairline bg-card px-4 py-3 text-sm text-foreground focus-visible:outline-none focus-visible:shadow-focus"
         />
+        {/* primitives-first-ok: canvas-pinned composer send control (room canvas) —
+            square border-2 action box outside the DS Button variants; pre-#828
+            surface, DS-adoption candidate for a follow-up. */}
         <button
           type="submit"
           disabled={!isSendable}

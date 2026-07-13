@@ -1,5 +1,16 @@
 # @ds/design-system
 
+## 1.2.0
+
+### Minor Changes
+
+- [#781](https://github.com/doctor-school/ds-platform/pull/781) [`325fef7`](https://github.com/doctor-school/ds-platform/commit/325fef762d4f36db282d2d6d07905145584673f8) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Header band deepened to blue.700 for WCAG-AA ([#713](https://github.com/doctor-school/ds-platform/issues/713)): the `header` semantic token now resolves to blue.700 (`#114d9e`) instead of blue.500 (`#2d84f2`). White `header-foreground` on the band goes from 3.69:1 (which met only the large/bold ≥3:1 carve-out) to 8.14:1, clearing AA for normal-weight body text as well. blue.700 is already the dark-theme header value, so the header band is now identical in both themes. This is a global token change — it affects every brand-chrome header band across all apps.
+
+### Patch Changes
+
+- Updated dependencies [[`33f2156`](https://github.com/doctor-school/ds-platform/commit/33f2156dfb2da61cfd5e7657d7a158eaa25122eb)]:
+  - @ds/schemas@1.2.0
+
 ## 1.1.0
 
 ### Minor Changes

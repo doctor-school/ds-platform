@@ -28,6 +28,17 @@
  * an item is takeable the moment its resolved deps are all closed (AGENTS.md §6,
  * memory `feedback_blocked_is_computed_not_labeled`).
  *
+ * PROVENANCE CHECK (#853): a `blocked_by` edge is a TECHNICAL dependency with a
+ * recorded rationale (repo-conventions.md → Issue conventions) — a body/comment
+ * line on either side naming the other Issue. An edge where NEITHER side
+ * mentions the other is a provenance-orphan (the 2026-07-13 shape: ~12 tooling
+ * Issues carried rationale-free native `blocked_by → #729` edges encoding
+ * "prod first" as a fake critical path). This command flags each such edge with
+ * `⚠ no recorded rationale` in the Blocked list, and any node blocking ≥5 open
+ * issues gets a per-edge `rationale: present|ABSENT` rollup so an unexplained
+ * mega-blocker can never be relayed as ground truth. Read-only — no
+ * auto-unwiring (unwiring is an owner decision).
+ *
  * The pure resolution/classification seams (`parseProseBlockers`, `classify`)
  * are exported and unit-tested (tools/lint/guard-tests/backlog-triage.spec.ts)
  * WITHOUT firing the `gh` subprocesses — the `main()` entry point is guarded.
@@ -51,6 +62,14 @@ import {
 
 export type IssueState = "open" | "closed";
 
+/**
+ * Provenance verdict for one `blocked_by` edge (#853): `present` — a body or
+ * comment on either side mentions the other Issue's number; `absent` — neither
+ * side does (a provenance-orphan edge to challenge); `unknown` — a provenance
+ * text could not be fetched, so no verdict is asserted (never flagged).
+ */
+export type Rationale = "present" | "absent" | "unknown";
+
 /** One resolved dependency edge feeding the classifier. */
 export interface DepRef {
   source: "native-blocked-by" | "prose";
@@ -67,6 +86,13 @@ export interface DepRef {
    * sibling Issue carrying that `EARS-N` has been resolved to its live state.
    */
   ears?: number;
+  /**
+   * Provenance verdict for this edge (#853). Prose edges are `present` by
+   * construction (the blocked body names the blocker); native edges are
+   * computed via `evaluateRationale`. Unset = not evaluated (e.g. subsystem
+   * deps) — treated like `unknown`: no orphan marker.
+   */
+  rationale?: Rationale;
 }
 
 export interface IssueInput {
@@ -81,6 +107,8 @@ export interface BlockReason {
   kind: "open-issue" | "absent-subsystem";
   number?: number;
   text: string;
+  /** Provenance verdict for the underlying edge (#853), when evaluated. */
+  rationale?: Rationale;
 }
 
 export interface Triage {
@@ -129,6 +157,37 @@ export function findSiblingByEars(
 ): SiblingIssue | undefined {
   const re = new RegExp(`\\bEARS-${ears}\\b`);
   return siblings.find((s) => re.test(s.title));
+}
+
+/**
+ * Does `text` mention Issue `n`? Matches the canonical `#N` ref (digit-bounded,
+ * so `#72` never matches inside `#729` and `#729` never matches `#7290`) and
+ * the full-URL forms GitHub renders cross-references as
+ * (`…/issues/N` / `…/pull/N`).
+ */
+export function mentionsIssue(text: string, n: number): boolean {
+  return new RegExp(`(?:#|/issues/|/pull/)${n}(?!\\d)`).test(text);
+}
+
+/**
+ * Provenance verdict for one native `blocked_by` edge (#853): the rationale is
+ * PRESENT when either side's provenance text (body + comments) mentions the
+ * other Issue's number; ABSENT when both texts were fetched and neither does;
+ * UNKNOWN when a text could not be fetched (`undefined`) and the fetched side
+ * (if any) carries no mention — a missing fetch never asserts an orphan.
+ */
+export function evaluateRationale(
+  blockedNumber: number,
+  blockerNumber: number,
+  blockedText: string | undefined,
+  blockerText: string | undefined,
+): Rationale {
+  if (blockedText != null && mentionsIssue(blockedText, blockerNumber))
+    return "present";
+  if (blockerText != null && mentionsIssue(blockerText, blockedNumber))
+    return "present";
+  if (blockedText == null || blockerText == null) return "unknown";
+  return "absent";
 }
 
 function truncateTitle(t: string, max = 52): string {
@@ -264,12 +323,17 @@ export function classify(issue: IssueInput, deps: DepRef[]): Triage {
         // An EARS prose-ref whose sibling Issue is still OPEN blocks, named as
         // the concrete open sibling it resolved to.
         const earsTag = d.ears != null ? `EARS-${d.ears} → ` : "";
+        // A provenance-orphan edge (#853) — neither side records why — is
+        // flagged inline so the lead challenges it instead of relaying it.
+        const orphanTag =
+          d.rationale === "absent" ? " ⚠ no recorded rationale" : "";
         reasons.push({
           kind: "open-issue",
           number: d.number,
+          rationale: d.rationale,
           text: `blocked by open ${earsTag}#${d.number}${
             d.title ? ` (${truncateTitle(d.title)})` : ""
-          }`,
+          }${orphanTag}`,
         });
       } else if (d.ears != null && d.state === "closed") {
         // A prose "Blocked by EARS-N" ref resolved to a CLOSED sibling Issue:
@@ -300,6 +364,45 @@ export function classify(issue: IssueInput, deps: DepRef[]): Triage {
     notes,
     isDecisionDebt: issue.labels.includes("decision-debt"),
   };
+}
+
+/** One node's mega-blocker rollup (#853): the open issues it blocks + per-edge rationale. */
+export interface MegaBlocker {
+  /** The blocking node's Issue number. */
+  number: number;
+  /** Every open Issue blocked by this node, with that edge's provenance verdict. */
+  edges: Array<{ blocked: number; rationale: Rationale | undefined }>;
+}
+
+/**
+ * Find every node blocking ≥ `threshold` open issues (#853). Computed from the
+ * classified `open-issue` block reasons — i.e. only edges to OPEN blockers of
+ * OPEN issues count (a closed dep blocks nothing). Sorted by fan-out desc, then
+ * by node number; edges sorted by blocked-issue number.
+ */
+export function findMegaBlockers(
+  triaged: Triage[],
+  threshold = 5,
+): MegaBlocker[] {
+  const byNode = new Map<number, MegaBlocker>();
+  for (const t of triaged) {
+    for (const r of t.reasons) {
+      if (r.kind !== "open-issue" || r.number == null) continue;
+      let node = byNode.get(r.number);
+      if (!node) {
+        node = { number: r.number, edges: [] };
+        byNode.set(r.number, node);
+      }
+      node.edges.push({ blocked: t.number, rationale: r.rationale });
+    }
+  }
+  return Array.from(byNode.values())
+    .filter((n) => n.edges.length >= threshold)
+    .map((n) => ({
+      ...n,
+      edges: [...n.edges].sort((a, b) => a.blocked - b.blocked),
+    }))
+    .sort((a, b) => b.edges.length - a.edges.length || a.number - b.number);
 }
 
 // ── gh I/O (only reached from main()) ───────────────────────────────────────
@@ -401,6 +504,40 @@ function makeStateResolver(openNumbers: Set<number>) {
 }
 
 /**
+ * Resolve an Issue number to its PROVENANCE TEXT — body + every comment body
+ * concatenated — cached (#853). Used to evaluate `blocked_by` edge rationale:
+ * one fetch per Issue regardless of how many edges touch it. A fetch failure
+ * degrades to `undefined` (rationale `unknown`, never a false orphan flag)
+ * with a printed warning.
+ */
+function makeProvenanceResolver() {
+  const cache = new Map<number, string | undefined>();
+  return async function provenanceText(
+    n: number,
+  ): Promise<string | undefined> {
+    if (cache.has(n)) return cache.get(n);
+    let text: string | undefined;
+    try {
+      const { stdout } = await execa(
+        "gh",
+        ["issue", "view", String(n), "--json", "body,comments"],
+        { cwd: REPO_ROOT },
+      );
+      const j = JSON.parse(stdout) as {
+        body?: string;
+        comments?: Array<{ body?: string }>;
+      };
+      text = [j.body ?? "", ...(j.comments ?? []).map((c) => c.body ?? "")]
+        .join("\n");
+    } catch (e) {
+      note(`provenance #${n}`, e);
+    }
+    cache.set(n, text);
+    return text;
+  };
+}
+
+/**
  * Resolve a same-feature EARS prose-ref to its sibling Issue, cached per
  * `feature:NNN-*` label. All Issues carrying the label (any state) are listed
  * once, then `findSiblingByEars` matches the title. A list failure degrades to
@@ -464,16 +601,34 @@ async function resolveDeps(
     featureLabel: string,
     ears: number,
   ) => Promise<SiblingIssue | undefined>,
+  provenanceText: (n: number) => Promise<string | undefined>,
 ): Promise<DepRef[]> {
   const deps: DepRef[] = [];
 
-  // (1) native blocked_by graph.
+  // (1) native blocked_by graph. Each OPEN edge gets a provenance verdict
+  // (#853): the body already in hand short-circuits the common case (a
+  // prose-documented dep); otherwise both sides' body+comments are fetched
+  // (cached) and evaluated. Closed edges never print — skip the round-trips.
   for (const d of await nativeBlockedBy(issue.number)) {
+    const state: IssueState =
+      d.state.toLowerCase() === "open" ? "open" : "closed";
+    let rationale: Rationale | undefined;
+    if (state === "open") {
+      rationale = mentionsIssue(issue.body ?? "", d.number)
+        ? "present"
+        : evaluateRationale(
+            issue.number,
+            d.number,
+            await provenanceText(issue.number),
+            await provenanceText(d.number),
+          );
+    }
     deps.push({
       source: "native-blocked-by",
       number: d.number,
-      state: d.state.toLowerCase() === "open" ? "open" : "closed",
+      state,
       title: d.title,
+      rationale,
     });
   }
 
@@ -486,7 +641,15 @@ async function resolveDeps(
     if (pb.issues.length > 0) {
       for (const n of pb.issues) {
         const r = await resolveState(n);
-        deps.push({ source: "prose", number: n, state: r.state, title: r.title });
+        // A prose edge's rationale is present BY CONSTRUCTION — the blocked
+        // body itself names the blocker (#853).
+        deps.push({
+          source: "prose",
+          number: n,
+          state: r.state,
+          title: r.title,
+          rationale: "present",
+        });
       }
     } else if (pb.ears && pb.ears.length > 0) {
       // A prose ref to same-feature EARS handlers — resolve each against a
@@ -502,6 +665,7 @@ async function resolveDeps(
             number: sib.number,
             state: sib.state,
             title: sib.title,
+            rationale: "present",
           });
         } else {
           // Unresolvable (no feature label, or no sibling carries this EARS):
@@ -566,6 +730,34 @@ export function formatReport(triaged: Triage[]): string {
   }
   out.push("");
 
+  // Mega-blocker rollup (#853): a node blocking ≥5 open issues gets a per-edge
+  // rationale present/ABSENT column, so an unexplained mega-blocker (the fake
+  // `blocked_by → #729` critical path of 2026-07-13) is never relayed as ground
+  // truth. Read-only — unwiring an orphan edge is an owner decision.
+  const mega = findMegaBlockers(triaged);
+  if (mega.length > 0) {
+    out.push(`## Mega-blockers (a single node blocking ≥5 open issues)`);
+    out.push(
+      "Per-edge provenance — an ABSENT rationale (neither side's body/comments mentions the other) is a provenance-orphan edge to challenge, not ground truth (repo-conventions.md → Issue conventions).",
+    );
+    for (const m of mega) {
+      const absent = m.edges.filter((e) => e.rationale === "absent").length;
+      out.push(
+        `- #${m.number} blocks ${m.edges.length} open issue(s)${
+          absent > 0 ? ` — ${absent} edge(s) with NO recorded rationale` : ""
+        }`,
+      );
+      for (const e of m.edges) {
+        const verdict =
+          e.rationale === "absent"
+            ? "ABSENT ⚠"
+            : (e.rationale ?? "unknown");
+        out.push(`    ↳ #${e.blocked} rationale: ${verdict}`);
+      }
+    }
+    out.push("");
+  }
+
   return out.join("\n");
 }
 
@@ -601,6 +793,7 @@ async function main(): Promise<void> {
   const openNumbers = new Set(issues.map((i) => i.number));
   const resolveState = makeStateResolver(openNumbers);
   const resolveSibling = makeSiblingResolver();
+  const provenanceText = makeProvenanceResolver();
 
   const triaged: Triage[] = [];
   for (const raw of issues) {
@@ -609,7 +802,12 @@ async function main(): Promise<void> {
       title: raw.title,
       labels: (raw.labels ?? []).map((l) => l.name),
     };
-    const deps = await resolveDeps(raw, resolveState, resolveSibling);
+    const deps = await resolveDeps(
+      raw,
+      resolveState,
+      resolveSibling,
+      provenanceText,
+    );
     triaged.push(classify(input, deps));
   }
 

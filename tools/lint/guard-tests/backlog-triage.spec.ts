@@ -2,12 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import {
   classify,
+  evaluateRationale,
+  findMegaBlockers,
   findSiblingByEars,
+  formatReport,
+  mentionsIssue,
   parseProseBlockers,
   subsystemName,
   type DepRef,
   type IssueInput,
   type SiblingIssue,
+  type Triage,
 } from "../../backlog-triage";
 
 /**
@@ -285,5 +290,218 @@ describe("backlog-triage subsystemName()", () => {
         "- **ADR-0009 `retention.ts` SSOT** — the retention duration (5y)…",
       ),
     ).toBe("ADR-0009 retention.ts SSOT");
+  });
+});
+
+// ── #853 provenance check — blocked_by edges need a recorded rationale ───────
+
+describe("backlog-triage mentionsIssue()", () => {
+  it("matches the canonical #N ref", () => {
+    expect(mentionsIssue("Blocked by #729 — prod release lands first.", 729)).toBe(
+      true,
+    );
+  });
+
+  it("is digit-bounded — #729 never matches #7290, #72 never matches inside #729", () => {
+    expect(mentionsIssue("see #7290 for detail", 729)).toBe(false);
+    expect(mentionsIssue("see #729 for detail", 72)).toBe(false);
+  });
+
+  it("matches full-URL cross-reference forms (/issues/N and /pull/N)", () => {
+    expect(
+      mentionsIssue("https://github.com/o/r/issues/729 explains why", 729),
+    ).toBe(true);
+    expect(mentionsIssue("landed via https://github.com/o/r/pull/729", 729)).toBe(
+      true,
+    );
+    expect(mentionsIssue("https://github.com/o/r/issues/7290", 729)).toBe(false);
+  });
+
+  it("finds a mention anywhere in a multi-line body+comments text", () => {
+    const text = "## Context\n\nnothing here\n\n---\ncomment: depends on #729.";
+    expect(mentionsIssue(text, 729)).toBe(true);
+    expect(mentionsIssue(text, 651)).toBe(false);
+  });
+});
+
+describe("backlog-triage evaluateRationale()", () => {
+  it("present when the BLOCKED side mentions the blocker", () => {
+    expect(evaluateRationale(651, 729, "needs #729 first", "no refs")).toBe(
+      "present",
+    );
+  });
+
+  it("present when the BLOCKER side mentions the blocked issue", () => {
+    expect(evaluateRationale(651, 729, "no refs", "unblocks #651 on close")).toBe(
+      "present",
+    );
+  });
+
+  it("absent when both texts were fetched and neither mentions the other (the #729 orphan shape)", () => {
+    expect(
+      evaluateRationale(651, 729, "tooling guard scope", "prod release plan"),
+    ).toBe("absent");
+  });
+
+  it("unknown when a text could not be fetched — never a false orphan", () => {
+    expect(evaluateRationale(651, 729, undefined, "prod release plan")).toBe(
+      "unknown",
+    );
+    expect(evaluateRationale(651, 729, "tooling guard scope", undefined)).toBe(
+      "unknown",
+    );
+    expect(evaluateRationale(651, 729, undefined, undefined)).toBe("unknown");
+  });
+
+  it("a fetched mention still wins over the other side's failed fetch", () => {
+    expect(evaluateRationale(651, 729, "needs #729 first", undefined)).toBe(
+      "present",
+    );
+  });
+});
+
+describe("backlog-triage classify() — provenance-orphan marker (#853)", () => {
+  it("an open native edge with ABSENT rationale is flagged '⚠ no recorded rationale'", () => {
+    const deps: DepRef[] = [
+      {
+        source: "native-blocked-by",
+        number: 729,
+        state: "open",
+        title: "prod release",
+        rationale: "absent",
+      },
+    ];
+    const t = classify(issue(651, ["tooling"]), deps);
+    expect(t.readiness).toBe("blocked");
+    expect(t.reasons[0]!.text).toContain("⚠ no recorded rationale");
+    expect(t.reasons[0]!.rationale).toBe("absent");
+  });
+
+  it("an edge with a recorded rationale prints unchanged — no marker", () => {
+    const deps: DepRef[] = [
+      {
+        source: "native-blocked-by",
+        number: 729,
+        state: "open",
+        title: "prod release",
+        rationale: "present",
+      },
+    ];
+    const t = classify(issue(651, ["tooling"]), deps);
+    expect(t.reasons[0]!.text).toBe("blocked by open #729 (prod release)");
+    expect(t.reasons[0]!.text).not.toContain("⚠");
+  });
+
+  it("an unknown/unevaluated rationale never flags — missing data is not an orphan verdict", () => {
+    const unknownDep: DepRef[] = [
+      { source: "native-blocked-by", number: 729, state: "open", rationale: "unknown" },
+    ];
+    expect(classify(issue(651), unknownDep).reasons[0]!.text).not.toContain("⚠");
+    const unsetDep: DepRef[] = [
+      { source: "native-blocked-by", number: 729, state: "open" },
+    ];
+    expect(classify(issue(651), unsetDep).reasons[0]!.text).not.toContain("⚠");
+  });
+});
+
+describe("backlog-triage mega-blocker rollup (#853 — the pre-unwiring #729 fixture)", () => {
+  /**
+   * Reproduces the 2026-07-13 graph shape: the 12 tooling Issues from #853's
+   * Context each carried a native `blocked_by → #729` edge with NO mention of
+   * #729 on either side (rationale absent), while one extra issue (#900) had a
+   * genuine, documented dependency on #729 (rationale present). The check must
+   * flag every fake edge and roll the node up with a per-edge verdict.
+   */
+  const FAKE_BLOCKED = [651, 676, 699, 700, 706, 746, 778, 780, 785, 787, 800, 811];
+
+  const megaFixture = (): Triage[] => {
+    const triaged = FAKE_BLOCKED.map((n) =>
+      classify(issue(n, ["tooling"], `tooling task ${n}`), [
+        {
+          source: "native-blocked-by",
+          number: 729,
+          state: "open",
+          title: "prod release readiness",
+          rationale: "absent",
+        },
+      ]),
+    );
+    triaged.push(
+      classify(issue(900, ["tooling"], "genuinely dependent task"), [
+        {
+          source: "native-blocked-by",
+          number: 729,
+          state: "open",
+          title: "prod release readiness",
+          rationale: "present",
+        },
+      ]),
+    );
+    return triaged;
+  };
+
+  it("findMegaBlockers: #729 rolls up with all 13 edges and per-edge rationale", () => {
+    const mega = findMegaBlockers(megaFixture());
+    expect(mega).toHaveLength(1);
+    expect(mega[0]!.number).toBe(729);
+    expect(mega[0]!.edges).toHaveLength(13);
+    const absent = mega[0]!.edges.filter((e) => e.rationale === "absent");
+    expect(absent.map((e) => e.blocked)).toEqual(FAKE_BLOCKED);
+    expect(
+      mega[0]!.edges.find((e) => e.blocked === 900)!.rationale,
+    ).toBe("present");
+  });
+
+  it("a node blocking fewer than 5 open issues gets no rollup", () => {
+    const triaged = [651, 676, 699, 700].map((n) =>
+      classify(issue(n), [
+        { source: "native-blocked-by", number: 729, state: "open", rationale: "absent" },
+      ]),
+    );
+    expect(findMegaBlockers(triaged)).toEqual([]);
+  });
+
+  it("closed-dep and subsystem reasons never count toward the rollup", () => {
+    const triaged = [1, 2, 3, 4, 5, 6].map((n) =>
+      classify(issue(n), [
+        { source: "native-blocked-by", number: 729, state: "closed" },
+        { source: "prose", subsystem: "retention.ts SSOT" },
+      ]),
+    );
+    expect(findMegaBlockers(triaged)).toEqual([]);
+  });
+
+  it("formatReport: every fake #729 edge is flagged in Blocked AND the rollup prints per-edge present|ABSENT", () => {
+    const report = formatReport(megaFixture());
+    // (1) each provenance-orphan edge carries the inline marker …
+    for (const n of FAKE_BLOCKED) {
+      const line = report
+        .split("\n")
+        .find((l, i, all) => all[i - 1]?.includes(`- #${n} `) && l.includes("#729"));
+      expect(line, `blocked line for #${n}`).toBeDefined();
+      expect(line).toContain("⚠ no recorded rationale");
+    }
+    // … (2) the documented edge prints unchanged …
+    const legit = report
+      .split("\n")
+      .find((l, i, all) => all[i - 1]?.includes("- #900 ") && l.includes("#729"));
+    expect(legit).toBeDefined();
+    expect(legit).not.toContain("⚠");
+    // … (3) and the mega-blocker section rolls up the node with verdicts.
+    expect(report).toContain("## Mega-blockers");
+    expect(report).toContain("- #729 blocks 13 open issue(s) — 12 edge(s) with NO recorded rationale");
+    for (const n of FAKE_BLOCKED) {
+      expect(report).toContain(`↳ #${n} rationale: ABSENT ⚠`);
+    }
+    expect(report).toContain("↳ #900 rationale: present");
+  });
+
+  it("formatReport: no mega-blocker section when no node crosses the threshold", () => {
+    const report = formatReport([
+      classify(issue(651), [
+        { source: "native-blocked-by", number: 729, state: "open", rationale: "absent" },
+      ]),
+    ]);
+    expect(report).not.toContain("## Mega-blockers");
   });
 });

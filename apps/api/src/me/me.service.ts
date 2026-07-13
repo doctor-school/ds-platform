@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { MyDisplayName } from "@ds/schemas";
+import type { MyDisplayName, MyProfile } from "@ds/schemas";
 import { MeRepository } from "./me.repository.js";
 
 /**
@@ -44,6 +44,32 @@ export class MeService {
     const row = await this.repo.findDisplayNameBySub(sub);
     if (!row) throw new UnknownSubjectError(sub);
     return { displayName: row.displayName };
+  }
+
+  /**
+   * Read the caller's own account-profile projection (003 EARS-27, design §12)
+   * — `{ email, emailVerified, phone, phoneVerified, displayName }` off the
+   * caller's OWN `users` mirror row. Read-only on every path; no mirror row →
+   * {@link UnknownSubjectError} (→ 401), never a fabricated profile.
+   *
+   * `phoneVerified` is served as `null` when no phone is on file — a
+   * verified-state for an absent identifier is meaningless, and an explicit
+   * `null` is truthful where a fabricated `false` ("unverified phone") is not.
+   * An email-less row is unreachable through any shipped flow (registration is
+   * email+password, EARS-2; the phone-register branch was removed) — if one
+   * ever appears it is refused fail-closed like an unknown subject rather than
+   * served with a fabricated address.
+   */
+  async myProfile(sub: string): Promise<MyProfile> {
+    const row = await this.repo.findProfileBySub(sub);
+    if (!row || row.email === null) throw new UnknownSubjectError(sub);
+    return {
+      email: row.email,
+      emailVerified: row.emailVerified,
+      phone: row.phone,
+      phoneVerified: row.phone === null ? null : row.phoneVerified,
+      displayName: row.displayName,
+    };
   }
 
   /**

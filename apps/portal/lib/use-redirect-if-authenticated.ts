@@ -8,10 +8,19 @@ import { authClient } from "@/lib/auth-client";
 /**
  * Auth-surface guard (#675). An ALREADY-authenticated visitor (valid
  * `__Host-ds_session` cookie) who lands on one of the portal's auth surfaces
- * (`/login`, `/register`, `/reset`, `/verify`) must NOT be able to re-walk the
+ * (`/login`, `/register`, `/verify`) must NOT be able to re-walk the
  * register→verify→login flow — they are sent straight to their destination and no
  * auth form is ever rendered. This hook is the single chokepoint the shared
- * `<AuthShell>` calls, so all four surfaces inherit the behaviour from one place.
+ * `<AuthShell>` calls, so the surfaces inherit the behaviour from one place.
+ *
+ * `/reset` is the deliberate EXEMPTION (`enabled: false` via
+ * `<AuthShell allowAuthenticated>`): 003 EARS-28 pins the `/account`
+ * change-password action as a handoff to the EXISTING `/reset` flow, so a
+ * logged-in doctor must be able to complete request+complete there (#770 rework —
+ * the redirect made that CTA a dead end; the #675 redirect itself is an Issue AC,
+ * not a spec clause). Completing a reset revokes all sessions and auto-logs-in
+ * with the new password (EARS-12), so the authenticated pass through /reset ends
+ * in a coherent, freshly-authenticated state — nothing is re-walked.
  *
  * On mount it reads the principal through the same-origin `GET /v1/auth/session`
  * (`authClient.session()` returns `null` on 401, never throws), then:
@@ -36,11 +45,16 @@ import { authClient } from "@/lib/auth-client";
  */
 export type AuthGuardState = "pending" | "authenticated" | "anonymous";
 
-export function useRedirectIfAuthenticated(): AuthGuardState {
+export function useRedirectIfAuthenticated(enabled = true): AuthGuardState {
   const router = useRouter();
-  const [state, setState] = useState<AuthGuardState>("pending");
+  const [state, setState] = useState<AuthGuardState>(
+    enabled ? "pending" : "anonymous",
+  );
 
   useEffect(() => {
+    // Guard disabled (the /reset exemption, EARS-28): no session read, no
+    // redirect — the surface renders for everyone.
+    if (!enabled) return;
     let active = true;
     void authClient.session().then((claims) => {
       if (!active) return;
@@ -54,7 +68,7 @@ export function useRedirectIfAuthenticated(): AuthGuardState {
     return () => {
       active = false;
     };
-  }, [router]);
+  }, [router, enabled]);
 
   return state;
 }

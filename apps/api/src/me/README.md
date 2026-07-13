@@ -1,4 +1,4 @@
-# `me` — self-scoped display name: JIT collection + owner-only read (006 EARS-14, EARS-16)
+# `me` — self-scoped profile reads + display name (006 EARS-14/16 · 003 EARS-27)
 
 The self-scoped profile module of feature 006 (Webinar room). It owns the one
 thing 006 adds to the caller's own account — a **display name** («Имя и
@@ -14,6 +14,12 @@ registration, and no event surface.
 
 ## Endpoints
 
+- **`GET /v1/me/profile` → `MyProfile` (003 EARS-27).** The **caller's own**
+  identity fields projected from the `users` mirror row —
+  `{ email, emailVerified, phone, phoneVerified, displayName }` (nullable fields
+  are `null`-present, never omitted). Read-only on every path (no writes, no IdP
+  call); feeds the portal `/account` profile surface (003 EARS-28). Same
+  fail-closed generic 401 + EARS-26 read-path self-heal as the sibling reads.
 - **`GET /v1/me/display-name` → `MyDisplayName` (EARS-16).** The **caller's own**
   `{ displayName }` — `null` until the JIT prompt completes. The portal reads it
   to decide the one-time room-entry prompt and to derive the header-avatar
@@ -53,14 +59,17 @@ module. The Zitadel profile placeholder stays never-read.
 ## SSOT & storage
 
 - **Schema SSOT:** `packages/schemas/src/me` — `SetDisplayNameRequestSchema`
-  (trimmed, non-empty after trim, ≤100 chars) and `MyDisplayNameSchema`
-  (`{ displayName: string | null }`).
+  (trimmed, non-empty after trim, ≤100 chars), `MyDisplayNameSchema`
+  (`{ displayName: string | null }`) and `MyProfileSchema` (`email`,
+  `emailVerified`, nullable-present `phone`/`phoneVerified`/`displayName`).
 - **Column:** `users.display_name` (`packages/db`) — one **nullable** column on
   the 003 mirror, no backfill (every existing user hits the JIT prompt on first
   room entry).
 
 ## Tests
 
+`apps/api/test/me/profile.e2e-spec.ts` — 003 EARS-27 (own-fields read incl. null
+phone/displayName paths, unauthenticated → generic 401, no write on any path).
 `apps/api/test/me/display-name.e2e-spec.ts` — EARS-14 (reject empty/whitespace +
 unauthenticated, accept + trim onto the caller's own row, over-long reject,
 idempotent overwrite) and EARS-16 (owner-only read, one caller never reaches

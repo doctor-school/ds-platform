@@ -10,6 +10,9 @@
 // Behaviour:
 //   - MATTERMOST_WEBHOOK_URL unset  → log + skip (webhook not provisioned yet, exit 0).
 //   - note is `none`/absent/blank   → log + skip (internal-only PR, nothing to post, exit 0).
+//   - labels are not feature/bug    → log + skip (process/dev PR, not a product-facing change,
+//                                     exit 0) — full suppression of docs/tooling/chore/refactor/
+//                                     dependencies notes from the product channel (Issue #847).
 //   - DELIVERY_ENV unset/unknown    → FAIL LOUDLY (exit 1) — the mandatory environment
 //                                     marker is the point, so an unmarked post is impossible.
 //   - otherwise                     → POST a minimal markdown message: the note, then the PR
@@ -68,6 +71,31 @@ export function noteIsReal(note) {
   return note.trim().length >= 8;
 }
 
+/** PR kinds that represent a product-facing change; only these deliver to the
+ *  product channel. Process PRs (docs/tooling/chore/refactor/dependencies) are
+ *  suppressed entirely (Issue #847 — owner decision 2026-07-13: full suppression). */
+const PRODUCT_KIND_LABELS = ["feature", "bug"];
+
+/** True when the PR's label set marks a product-facing change (feature|bug).
+ *  `labels` is the array of label NAME strings from the PR event payload. */
+export function labelsAreProductKind(labels) {
+  if (!Array.isArray(labels)) return false;
+  const set = new Set(labels.map((l) => String(l).trim().toLowerCase()));
+  return PRODUCT_KIND_LABELS.some((k) => set.has(k));
+}
+
+/** Parse the JSON array of label names passed via PR_LABELS. Malformed/absent
+ *  input yields [] (→ suppressed), never a throw. */
+export function parseLabels(raw) {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
 /** The mandatory environment footer, keyed by DELIVERY_ENV (Issue #657). */
 const ENV_FOOTERS = {
   dev: "🧪 Среда: DEV — смержено в разработку; на проде появится со следующим релизом.",
@@ -115,6 +143,18 @@ async function main() {
   if (!noteIsReal(note)) {
     log(
       "no real Product note (RU) in the PR body (`none`/absent) — nothing to deliver, skipping (green).",
+    );
+    return;
+  }
+
+  // Only product-kind PRs (labels feature|bug) deliver to the product channel;
+  // process/dev PRs (docs/tooling/chore/refactor/dependencies) are suppressed
+  // entirely (Issue #847). Placed before the DELIVERY_ENV fail-loud check so a
+  // process PR stays green rather than failing on a missing marker.
+  const labels = parseLabels(process.env.PR_LABELS);
+  if (!labelsAreProductKind(labels)) {
+    log(
+      "PR is not a product-kind change (labels are not feature/bug) — process/dev PR, skipping delivery (green).",
     );
     return;
   }

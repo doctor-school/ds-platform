@@ -84,7 +84,7 @@ Note: redis runs AOF with **no `maxmemory` / eviction policy set yet** — fine 
   `terraform.tfvars`): the api-prod firewall allows port 22 only from that /32.
   An SSH **timeout** with a green `https://api.doctor.school/v1/health` almost
   always means the workstation's egress IP changed (verify: `curl
-  https://api.ipify.org`), NOT a downed box — update `admin_ssh_cidr` in
+https://api.ipify.org`), NOT a downed box — update `admin_ssh_cidr` in
   tfvars, then `terraform plan` (expect exactly one in-place
   `twc_firewall_rule.api_ssh` update) and `apply`. Happened live 2026-07-12
   (#729 wave-1 apply).
@@ -120,6 +120,10 @@ Pipeline (`tools/deploy/prod.mjs`), fail-closed and stops at the first red step:
 5. **api-prod** — `migrate` (idempotent drizzle-kit) → `build` → `up -d`. Images
    are SHA-tagged **`ds-api:<sha>` / `ds-portal:<sha>`** (DSO-127) — the compose
    `image:` reads `DEPLOY_SHA` from a `.env` the script writes beside `compose.yml`.
+   The script then **reloads the caddy config automatically** (`caddy reload`,
+   falling back to `restart caddy`) — the Caddyfile is a bind mount that `up -d`
+   alone never re-reads, so Caddyfile-only changes go live without manual
+   intervention (#751).
 6. **Retention (DSO-127)** — keeps the **last 3** SHA-tagged images per repo,
    prunes older (never `:local`, never the running one).
 7. **Smoke (DSO-128)** — `tools/deploy/smoke-prod.mjs --expect-sha <sha>`; a red

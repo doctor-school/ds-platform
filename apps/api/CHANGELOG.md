@@ -1,5 +1,13 @@
 # @ds/api
 
+## 0.18.2
+
+### Patch Changes
+
+- [#891](https://github.com/doctor-school/ds-platform/pull/891) [`1dd740a`](https://github.com/doctor-school/ds-platform/commit/1dd740a9d399262c2fb31100000fcc6a6cb59376) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Identity emails no longer greet users with the internal «<local-part> guest» placeholder ([#878](https://github.com/doctor-school/ds-platform/issues/878)): user creation now sends an explicit Zitadel `displayName` = the registration email, and every user-facing IdP email greets with a neutral «Здравствуйте!» — the email-OTP login mail is fully branded code-only (subject leads with the code), and the dormant verify-phone / password-change / init templates get the same neutral greeting. Password-reset rework is tracked separately ([#880](https://github.com/doctor-school/ds-platform/issues/880)).
+
+- [#879](https://github.com/doctor-school/ds-platform/pull/879) [`e9f835e`](https://github.com/doctor-school/ds-platform/commit/e9f835eecb3343acc7c9a67f40e98a3931de9b0b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - fix: the registration verification email is code-only ([#869](https://github.com/doctor-school/ds-platform/issues/869)). Both email-verification sends (initial EARS-3 + EARS-25 resend) deliver a branded Russian mail whose subject leads with the code and whose body shows it as one unbroken, enlarged token with an explicit 1-hour expiry — no code-consuming link (mail-scanner AV prefetch GETs every URL in a delivered message, burning GET-consumed deep-links). Zitadel's default CTA into its hosted login-v2 UI is replaced by a bare portal `/verify` navigation URL (`SendEmailVerificationCode.urlTemplate`, no query/params — nothing consumed on GET); the user types the code on the portal `/verify` screen where the existing auto-login replay signs them in. The `/v1/auth/verify` contract, SMS hops, and enumeration-safety (EARS-16/24/25) are unchanged.
+
 ## 0.18.1
 
 ### Patch Changes

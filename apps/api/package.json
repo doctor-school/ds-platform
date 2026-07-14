@@ -1,6 +1,6 @@
 {
   "name": "@ds/api",
-  "version": "0.18.1",
+  "version": "0.18.2",
   "private": true,
   "type": "module",
   "description": "DS Platform backend API — NestJS 11 + Fastify (ADR-0002).",

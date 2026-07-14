@@ -179,4 +179,32 @@ describe("smoke-prod checkColdPage() — client-rendered portal /login (#885)", 
       ),
     ).toThrow(/markup "<input" missing/);
   });
+
+  it("PASSES when the cookie-less request lands on the expected path", () => {
+    expect(() =>
+      checkColdPage(
+        {
+          status: 200,
+          body: CLIENT_RENDERED_PORTAL_LOGIN_BODY,
+          url: "https://app.example/login",
+        },
+        { ...clientRendered, expectPath: "/login" },
+      ),
+    ).not.toThrow();
+  });
+
+  it("REJECTS a /login that redirected away to another path (route-identity teeth)", () => {
+    // A healthy 200 with valid app-shell markup, but landed on `/` — the exact
+    // redirect-misconfig a render-only check would wave through green.
+    expect(() =>
+      checkColdPage(
+        {
+          status: 200,
+          body: CLIENT_RENDERED_PORTAL_LOGIN_BODY,
+          url: "https://app.example/",
+        },
+        { ...clientRendered, expectPath: "/login" },
+      ),
+    ).toThrow(/redirected off "\/login" to "\/"/);
+  });
 });

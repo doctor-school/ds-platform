@@ -153,10 +153,21 @@ export function findColdErrorMarker(body) {
 // perfectly healthy cold page. The error-boundary markers above keep the #866
 // teeth either way: a blank/degraded/proxy-error body carries none of the
 // required markup and still fails.
-export function checkColdPage(res, { requireMarkup = "<input" } = {}) {
+export function checkColdPage(res, { requireMarkup = "<input", expectPath } = {}) {
   const where = res.url ? ` (${res.url})` : "";
   if (res.status !== 200)
     throw new Error(`→ ${res.status}${where} (expected 200)`);
+  // Route identity (copy-free): a cookie-less visitor to a cold login surface
+  // must LAND on that surface. A misconfig that redirects it away (e.g.
+  // /login → /) ends in a healthy 200 elsewhere and would sail past the render
+  // checks below — assert the final path instead of coupling to page copy.
+  if (expectPath && res.url) {
+    const landed = new URL(res.url).pathname;
+    if (landed !== expectPath)
+      throw new Error(
+        `redirected off ${JSON.stringify(expectPath)} to ${JSON.stringify(landed)}${where} — not the expected cold surface`,
+      );
+  }
   const marker = findColdErrorMarker(res.body);
   if (marker)
     throw new Error(
@@ -245,7 +256,7 @@ async function probePortalLoginCold() {
   // portal app server-rendered a real page. A blank/degraded/proxy-error render
   // carries no __next_f (and an error boundary trips the markers) — #866 holds.
   const res = await httpsGetFollow(`https://${PORTAL_HOST}/login`);
-  checkColdPage(res, { requireMarkup: "self.__next_f" });
+  checkColdPage(res, { requireMarkup: "self.__next_f", expectPath: "/login" });
   return `200 · Next app-shell RSC stream · no error boundary (cookie-less, client-rendered)`;
 }
 

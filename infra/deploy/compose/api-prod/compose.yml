@@ -266,20 +266,28 @@ services:
       # found"; the login container talks to core by service name, so pin the Host.
       CUSTOM_REQUEST_HEADERS: Host:id.doctor.school
     volumes:
-      # The ds-bootstrap PAT (IAM_LOGIN_CLIENT), provisioned out-of-band root:root
-      # 0600 (README init step); read-only. Absent ⇒ this container fails its
-      # healthcheck loudly (fail-closed) rather than serving a broken login.
+      # The ds-bootstrap PAT (IAM_LOGIN_CLIENT), provisioned out-of-band as
+      # owner uid 1001 / mode 0400 — uid 1001 is the image's `nextjs` user, and
+      # the perms are LOAD-BEARING (#866): a root:root 0600 file bind-mounts
+      # fine but is unreadable by uid 1001, so the service token stays empty
+      # and every cookie-less (cold) login 500s while cookie-holding sessions
+      # keep working — a 9-day silent outage. Provisioning command + verify:
+      # README step 9. Absent OR unreadable ⇒ the healthcheck below fails
+      # loudly (fail-closed) rather than serving a broken login.
       - /etc/ds-platform/idp-login-client.pat:/pat/login-client.pat:ro
     depends_on:
       zitadel:
         condition: service_healthy
     healthcheck:
+      # accessSync(R_OK) runs as the container user (uid 1001) — an unreadable
+      # PAT flips the service unhealthy at once instead of silently serving
+      # cold-login 500s behind a green /healthy endpoint (#866).
       test:
         [
           "CMD",
           "node",
           "-e",
-          "fetch('http://localhost:3000/ui/v2/login/healthy').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "const fs=require('node:fs');fs.accessSync('/pat/login-client.pat',fs.constants.R_OK);fetch('http://localhost:3000/ui/v2/login/healthy').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 5s

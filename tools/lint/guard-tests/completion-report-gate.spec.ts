@@ -13,6 +13,7 @@ import {
   extractLastAssistantText,
   isCompletionReport,
   isDecisionRequest,
+  isInterimStatus,
 } from "../../hooks/completion-report-gate.mjs";
 
 /**
@@ -88,6 +89,15 @@ const LIVE_FP_STAGE2 =
   "предлагаю Issue «tooling(hooks): напоминание pnpm handoff:verify».\n\n" +
   "⏸ ЖДУ ВАС: одобряете открытие Issue по пункту F2 — да/нет?";
 
+// #855 / 2026-07-13: a mid-wave dispatch checkpoint. It carries completion
+// verbs («смержен») + a ref, but reports an in-flight sub-step («жду CI»,
+// «пока ничего не финализировано»), not a terminal completion report. Before
+// the #855 interim-status recognizer these tripped the gate and blocked.
+const INTERIM_CHECKPOINT_ALIVE =
+  "Checkpoint пройден: #828 — ALIVE, коммиты идут. Жду вердикт ревьюера.";
+const INTERIM_CHECKPOINT_SUBSTEP =
+  "Checkpoint: #828 смержен в ветку, жду CI. Пока ничего не финализировано.";
+
 describe("completion-report-gate hook (spawned end-to-end)", () => {
   it("blocks (exit 2) a completion report missing «📈», naming report-task-outcome", () => {
     const r = runHook(stopPayload(transcriptWith(COMPLETION_NO_MARKER)));
@@ -156,11 +166,49 @@ describe("completion-report-gate hook (spawned end-to-end)", () => {
     expect(r.status).toBe(0);
   });
 
+  it("allows the 2026-07-13 in-flight checkpoint (#855: verbs+ref but ALIVE/жду вердикт)", () => {
+    const r = runHook(stopPayload(transcriptWith(INTERIM_CHECKPOINT_ALIVE)));
+    expect(r.status).toBe(0);
+    expect(r.stderr).toBe("");
+  });
+
+  it("allows an interim checkpoint carrying a SUB-STEP verb + ref (#855 regressed case)", () => {
+    const r = runHook(stopPayload(transcriptWith(INTERIM_CHECKPOINT_SUBSTEP)));
+    expect(r.status).toBe(0);
+    expect(r.stderr).toBe("");
+  });
+
+  it("allows a completion report whose «📈» heading is BOLDED (#893)", () => {
+    const r = runHook(
+      stopPayload(
+        transcriptWith(
+          COMPLETION_NO_MARKER +
+            "\n\n**📈 % от запланированного:** 100% — весь скоуп.",
+        ),
+      ),
+    );
+    expect(r.status).toBe(0);
+    expect(r.stderr).toBe("");
+  });
+
+  it("allows a completion report whose «📈» section is a `##` heading (#893)", () => {
+    const r = runHook(
+      stopPayload(
+        transcriptWith(
+          COMPLETION_NO_MARKER + "\n\n## 📈 % от запланированного\n100%.",
+        ),
+      ),
+    );
+    expect(r.status).toBe(0);
+    expect(r.stderr).toBe("");
+  });
+
   it("still blocks a markerless completion report that merely MENTIONS a question mid-text", () => {
     const r = runHook(
       stopPayload(
         transcriptWith(
-          "Вопрос «нужен ли рефакторинг?» отложен в #825. " + COMPLETION_NO_MARKER,
+          "Вопрос «нужен ли рефакторинг?» отложен в #825. " +
+            COMPLETION_NO_MARKER,
         ),
       ),
     );
@@ -168,9 +216,7 @@ describe("completion-report-gate hook (spawned end-to-end)", () => {
   });
 
   it("never blocks when stop_hook_active is true (loop guard)", () => {
-    const r = runHook(
-      stopPayload(transcriptWith(COMPLETION_NO_MARKER), true),
-    );
+    const r = runHook(stopPayload(transcriptWith(COMPLETION_NO_MARKER), true));
     expect(r.status).toBe(0);
   });
 
@@ -190,9 +236,9 @@ describe("completion-report-gate hook (spawned end-to-end)", () => {
   });
 
   it("fails open when transcript_path is absent from the payload", () => {
-    expect(
-      runHook({ session_id: "s", hook_event_name: "Stop" }).status,
-    ).toBe(0);
+    expect(runHook({ session_id: "s", hook_event_name: "Stop" }).status).toBe(
+      0,
+    );
   });
 });
 
@@ -219,13 +265,17 @@ describe("isCompletionReport()", () => {
 
   it("does not treat NEGATED completion verbs as completion (#838 review NIT)", () => {
     expect(isCompletionReport("PR #833 не смержен, жду вердикта.")).toBe(false);
-    expect(isCompletionReport("PR #833 ещё не смержен — CI красный.")).toBe(false);
-    expect(isCompletionReport("Итерация #815 не завершена, остался тест.")).toBe(false);
+    expect(isCompletionReport("PR #833 ещё не смержен — CI красный.")).toBe(
+      false,
+    );
+    expect(
+      isCompletionReport("Итерация #815 не завершена, остался тест."),
+    ).toBe(false);
     expect(isCompletionReport("PR #812 is not merged yet.")).toBe(false);
     // …but a positive verb alongside a negated one still counts
-    expect(
-      isCompletionReport("PR #810 смержен; PR #833 не смержен."),
-    ).toBe(true);
+    expect(isCompletionReport("PR #810 смержен; PR #833 не смержен.")).toBe(
+      true,
+    );
   });
 });
 
@@ -235,11 +285,13 @@ describe("isDecisionRequest()", () => {
   });
 
   it("matches a turn whose last line ends with a question mark", () => {
+    expect(isDecisionRequest("PR #812 смержен. Открывать ли follow-up?")).toBe(
+      true,
+    );
     expect(
-      isDecisionRequest("PR #812 смержен. Открывать ли follow-up?"),
-    ).toBe(true);
-    expect(
-      isDecisionRequest("Вариант A или B?\n\n1. A — быстрее\n2. B — чище\n\nЧто выбираем?"),
+      isDecisionRequest(
+        "Вариант A или B?\n\n1. A — быстрее\n2. B — чище\n\nЧто выбираем?",
+      ),
     ).toBe(true);
   });
 
@@ -250,9 +302,25 @@ describe("isDecisionRequest()", () => {
   it("rejects a plain completion report (question only mid-text)", () => {
     expect(isDecisionRequest(COMPLETION_NO_MARKER)).toBe(false);
     expect(
-      isDecisionRequest("Вопрос «зачем?» закрыт в #825. Всё смержено, PR #810."),
+      isDecisionRequest(
+        "Вопрос «зачем?» закрыт в #825. Всё смержено, PR #810.",
+      ),
     ).toBe(false);
     expect(isDecisionRequest("")).toBe(false);
+  });
+});
+
+describe("isInterimStatus() (#855)", () => {
+  it("matches in-flight checkpoint language (verbs+ref but not terminal)", () => {
+    expect(isInterimStatus(INTERIM_CHECKPOINT_ALIVE)).toBe(true);
+    expect(isInterimStatus(INTERIM_CHECKPOINT_SUBSTEP)).toBe(true);
+    expect(isInterimStatus("⏳ probe #828: STILL-CLEAN, жду CI.")).toBe(true);
+    expect(isInterimStatus("WIP: слайс в работе, ещё не завершён.")).toBe(true);
+  });
+
+  it("is FALSE for a settled completion report (no-regression)", () => {
+    expect(isInterimStatus(COMPLETION_NO_MARKER)).toBe(false);
+    expect(isInterimStatus(COMPLETION_WITH_MARKER)).toBe(false);
   });
 });
 
@@ -277,19 +345,26 @@ describe("extractLastAssistantText()", () => {
     ].join("\n");
     const text = extractLastAssistantText(jsonl);
     expect(text).toBe("Дальше — Issue #825, план ниже.");
-    expect(decideBlock({ stopHookActive: false, lastAssistantText: text }))
-      .toEqual({ block: false });
+    expect(
+      decideBlock({ stopHookActive: false, lastAssistantText: text }),
+    ).toEqual({ block: false });
   });
 
   it("concatenates a turn split across entries sharing one message id", () => {
     const jsonl = [
       JSON.stringify({
         type: "assistant",
-        message: { id: "m9", content: [{ type: "text", text: "PR #810 смержен." }] },
+        message: {
+          id: "m9",
+          content: [{ type: "text", text: "PR #810 смержен." }],
+        },
       }),
       JSON.stringify({
         type: "assistant",
-        message: { id: "m9", content: [{ type: "text", text: "Ветка удалена." }] },
+        message: {
+          id: "m9",
+          content: [{ type: "text", text: "Ветка удалена." }],
+        },
       }),
     ].join("\n");
     expect(extractLastAssistantText(jsonl)).toBe(
@@ -327,7 +402,10 @@ describe("extractLastAssistantText()", () => {
 });
 
 describe("decideBlock()", () => {
-  const completion = { stopHookActive: false, lastAssistantText: COMPLETION_NO_MARKER };
+  const completion = {
+    stopHookActive: false,
+    lastAssistantText: COMPLETION_NO_MARKER,
+  };
 
   it("blocks a markerless completion report", () => {
     expect(decideBlock(completion)).toEqual({ block: true });
@@ -354,5 +432,42 @@ describe("decideBlock()", () => {
       decideBlock({ stopHookActive: false, lastAssistantText: LIVE_FP_STAGE2 })
         .block,
     ).toBe(false);
+  });
+
+  it("never blocks an in-flight checkpoint with a sub-step verb + ref (#855)", () => {
+    expect(
+      decideBlock({
+        stopHookActive: false,
+        lastAssistantText: INTERIM_CHECKPOINT_SUBSTEP,
+      }).block,
+    ).toBe(false);
+  });
+
+  it("no-regression: interim recognizer stays clear of a real report — it still blocks (#855)", () => {
+    // COMPLETION_NO_MARKER must NOT read as interim, so the gate keeps firing.
+    expect(isInterimStatus(COMPLETION_NO_MARKER)).toBe(false);
+    expect(decideBlock(completion)).toEqual({ block: true });
+  });
+
+  it("passes a report whose 📈 section is wrapped in bold / heading markup (#893)", () => {
+    expect(
+      decideBlock({
+        stopHookActive: false,
+        lastAssistantText:
+          COMPLETION_NO_MARKER + "\n\n**📈 % от запланированного:** 100%.",
+      }).block,
+    ).toBe(false);
+    expect(
+      decideBlock({
+        stopHookActive: false,
+        lastAssistantText:
+          COMPLETION_NO_MARKER + "\n\n## 📈 % от запланированного\n100%.",
+      }).block,
+    ).toBe(false);
+  });
+
+  it("still blocks when the 📈 section is genuinely missing (#893 no-weakening)", () => {
+    expect(COMPLETION_NO_MARKER).not.toContain(REPORT_MARKER);
+    expect(decideBlock(completion)).toEqual({ block: true });
   });
 });

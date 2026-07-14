@@ -312,7 +312,18 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
      PID=$(sudo docker inspect ds-api-prod-zitadel-1 --format '{{.State.Pid}}')
      sudo cat /proc/$PID/root/pat/pat.txt | sudo tee /etc/ds-platform/idp-bootstrap-pat.txt >/dev/null
      sudo chmod 600 /etc/ds-platform/idp-bootstrap-pat.txt
-     sudo install -m 600 /etc/ds-platform/idp-bootstrap-pat.txt /etc/ds-platform/idp-login-client.pat
+     # idp-login-client.pat perms are LOAD-BEARING (#866): zitadel-login runs as
+     # uid 1001 (`nextjs`), so the copy MUST be owner uid 1001, mode 400. A
+     # root:root 600 file bind-mounts fine but is unreadable in the container →
+     # service token empty → EVERY cookie-less (cold) login 500s while sessions
+     # with existing cookies keep working (9-day silent outage). The compose
+     # healthcheck now fails closed on an unreadable PAT, and `pnpm deploy:smoke`
+     # drives the cold login surface — but provision it right at the source:
+     sudo install -m 400 -o 1001 /etc/ds-platform/idp-bootstrap-pat.txt /etc/ds-platform/idp-login-client.pat
+     sudo stat -c '%a %u %n' /etc/ds-platform/idp-login-client.pat  # MUST print: 400 1001 /etc/ds-platform/idp-login-client.pat
+     # (idp-bootstrap-pat.txt itself stays 600 root:root ON PURPOSE — its only
+     # consumers are ops steps run via sudo, e.g. provision.sh --pat-file below;
+     # no container mounts it.)
      sudo sed -i -E 's/^(ZITADEL_FIRSTINSTANCE_)/#\1/' /etc/ds-platform/zitadel.env   # re-comment so a restart never re-inits
      sudo docker compose up -d                              # now the rest: api + portal + sms-adapter + zitadel-login + caddy
      # put IDP_SERVICE_TOKEN=<that PAT> in api.env AFTER DNS + provision.sh (below);

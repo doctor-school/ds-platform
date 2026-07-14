@@ -54,7 +54,7 @@ It also includes a **UI-quality-fix round** (spacing / state / hover / reflow de
 
 ## Design-approval gate (user-facing surfaces)
 
-The _look_ is a product (taste) decision — the product owner's, not the lead's best-architecture call (AGENTS.md §6). Two non-bypassable check-ins wrap the procedure; for a `user-facing` task they gate the lifecycle (`run-task-lifecycle` step 2 — Stage A precedes board→In-Progress + branch). Detail + failure lessons: memory `feedback_ui_design_product_approval`.
+The _look_ is a product (taste) decision — the product owner's, not the lead's best-architecture call (AGENTS.md §6). Two non-bypassable check-ins wrap the procedure; for a `user-facing` task they gate the lifecycle (`run-task-lifecycle` step 2 — Stage A precedes board→In-Progress + branch). The gate's surface set is **every user-visible render, not just screens**: notification emails and SMS templates (incl. IdP-rendered message texts, e.g. Zitadel's verification email) pass the same Stage-A/Stage-B check-ins — a vendor's bundled default copy shipped on a user-visible channel is a silent Stage-A bypass (#869). Detail + failure lessons: memory `feedback_ui_design_product_approval`.
 
 **Screen composition is settled upstream (ADR-0014).** When a feature came through `do-product-discovery`, its surface LAYOUT was already picked by the owner on the Claude Design mockup (`author-design-mockup`) — build that arrangement. This gate's Stage A below remains the **element-class** pick (a class not yet in the constitution); a feature with no prior discovery mockup composes its layout here directly.
 

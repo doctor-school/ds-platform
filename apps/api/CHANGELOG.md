@@ -1,5 +1,11 @@
 # @ds/api
 
+## 0.18.3
+
+### Patch Changes
+
+- [#894](https://github.com/doctor-school/ds-platform/pull/894) [`0247f98`](https://github.com/doctor-school/ds-platform/commit/0247f98e5d2aeda24e4d8a724007d3d36be06015) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Password-reset email is code-only ([#880](https://github.com/doctor-school/ds-platform/issues/880)): the EARS-11 reset send now carries the `sendLink` oneof with a bare portal `/reset` urlTemplate, so the email's button never lands on Zitadel's hosted set-password page and no URL in the mail consumes anything on GET; the `passwordreset` message text is branded (ru+en) at provisioning with the [#869](https://github.com/doctor-school/ds-platform/issues/869) code-only contract (code as one unbroken enlarged token, subject leading with the code, explicit 1-hour expiry, ignore-if-not-requested line).
+
 ## 0.18.2
 
 ### Patch Changes

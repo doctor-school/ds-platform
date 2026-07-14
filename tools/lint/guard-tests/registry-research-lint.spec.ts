@@ -113,6 +113,36 @@ describe("registry-research-lint", () => {
     expect(stderr).toContain("no registry-research artifact");
   });
 
+  it("regression (#651): event-payload PR_BODY overrides a stale fetched body → exit 0", () => {
+    // Same fixture as `red-no-marker` (fetched body has NO artifact — the stale
+    // read of PR #685), but the workflow-injected payload body carries a valid
+    // marker. The payload must win: the guard evaluates the live body → green.
+    const { code } = runGuard(
+      GUARD,
+      caseDir("registry-research", "red-no-marker"),
+      {
+        env: {
+          ...prEnv("101", "red-no-marker"),
+          PR_BODY:
+            "## Summary\n\nregistry-research: adopted Button from shadcn (official registry).\n",
+        },
+      },
+    );
+    expect(code).toBe(0);
+  });
+
+  it("regression (#651): an EMPTY payload PR_BODY is authoritative too → exit 1", () => {
+    // Fetched fixture body carries a valid artifact, but the event payload says
+    // the body is empty — the payload wins, so the marker is absent → red.
+    const { code, stderr } = runGuard(
+      GUARD,
+      caseDir("registry-research", "green"),
+      { env: { ...prEnv("100", "green"), PR_BODY: "" } },
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("no registry-research artifact");
+  });
+
   it("skip: not a pull_request event → exit 0", () => {
     const { code, stdout } = runGuard(
       GUARD,

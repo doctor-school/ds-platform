@@ -435,7 +435,7 @@ main().catch((e) => {
 
 > **Interim semantics note:** строки `BLOCK` предполагают server-side required status check на `main`. Пока branch protection (ADR-0008 §2.6) отложен (GitHub Free + private repo блокирует branch-protection API — ADR-0008 §2.6), `BLOCK` читается операционально как **«CI job выходит red, и Tech Lead трактует это как merge-blocker по convention'у»** — тот же outcome на single-developer happy path, без server-side гарантии.
 
-Таблица выше — стартовый набор; авторитетный живой список guard'ов + per-guard severity — `.github/workflows/ci.yml`. Жизненный цикл severity — posture нового guard'а (WARN), критерий WARN→BLOCK promotion, demotion и каденция sweep'ов — живёт в нарративном ADR-0007 §2.6.
+Таблица выше — стартовый набор; авторитетный живой список guard'ов + per-guard severity — `.github/workflows/ci.yml` + `.github/workflows/pr-body-guards.yml` (семейство body-parsing guard'ов, перезапускается при правке тела PR — #651). Жизненный цикл severity — posture нового guard'а (WARN), критерий WARN→BLOCK promotion, demotion и каденция sweep'ов — живёт в нарративном ADR-0007 §2.6.
 
 ### 5.3 Custom lint скрипты
 

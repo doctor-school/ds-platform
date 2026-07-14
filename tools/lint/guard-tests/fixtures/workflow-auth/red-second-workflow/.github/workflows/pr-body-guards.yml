@@ -1,0 +1,12 @@
+name: PR body guards
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches: [main]
+jobs:
+  # gh-gated job in a SECOND workflow file, missing the Issue-#10 auth block —
+  # the guard must scan every .github/workflows/*.yml, not only ci.yml (#651).
+  spec-link:
+    runs-on: ubuntu-latest
+    steps:
+      - run: pnpm exec tsx tools/lint/spec-link-lint.ts

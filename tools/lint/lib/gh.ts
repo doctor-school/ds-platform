@@ -33,6 +33,42 @@ export type GhResult<T> =
   | { ok: false; error: string };
 
 /**
+ * CI SEAM `PR_BODY` (Issue #651): when the workflow passes the event payload's
+ * PR body via env (`PR_BODY: ${{ github.event.pull_request.body }}`), it
+ * overrides the `body` field fetched by `gh pr view` for THAT PR. Rationale:
+ * the payload body is always current for its triggering event, while a fresh
+ * REST read right after PR creation has returned a stale/absent body and
+ * produced a false-red with no body edit at all (PR #685). A retry cannot fix
+ * that class — a stale read still succeeds — so the payload is authoritative.
+ *
+ * Deliberately narrow: applies only when (a) the view is a PR (never an
+ * issue), (b) the viewed number IS the PR under test (`PR_NUMBER` — spec-link
+ * also views linked issues), and (c) the caller asked for `body` at all.
+ * `pnpm pr:preflight` never sets `PR_BODY`, so local behavior is unchanged.
+ * Applied on the fixture path too, so guard-tests can exercise the seam.
+ */
+function withEventBody<T>(
+  kind: "pr" | "issue",
+  number: string | number,
+  fields: string,
+  data: T,
+): T {
+  const body = process.env.PR_BODY;
+  if (
+    kind !== "pr" ||
+    body === undefined ||
+    String(number) !== process.env.PR_NUMBER ||
+    !fields
+      .split(",")
+      .map((f) => f.trim())
+      .includes("body")
+  ) {
+    return data;
+  }
+  return { ...(data as object), body } as T;
+}
+
+/**
  * Run `gh <kind> view <number> --json <fields>` and parse its JSON, or serve a
  * canned fixture when `LINT_GH_FIXTURE_DIR` is set. `fields` is ignored under
  * the fixture seam (the file already holds the projected shape) but is passed
@@ -49,7 +85,15 @@ export async function ghViewJson<T>(
   if (fixtureDir) {
     const file = resolve(fixtureDir, `${kind}-view-${number}.json`);
     try {
-      return { ok: true, data: JSON.parse(readFileSync(file, "utf8")) as T };
+      return {
+        ok: true,
+        data: withEventBody(
+          kind,
+          number,
+          fields,
+          JSON.parse(readFileSync(file, "utf8")) as T,
+        ),
+      };
     } catch (e) {
       return {
         ok: false,
@@ -63,7 +107,10 @@ export async function ghViewJson<T>(
       [kind, "view", String(number), "--json", fields],
       { cwd },
     );
-    return { ok: true, data: JSON.parse(stdout) as T };
+    return {
+      ok: true,
+      data: withEventBody(kind, number, fields, JSON.parse(stdout) as T),
+    };
   } catch (e) {
     return { ok: false, error: (e as Error).message.split("\n")[0] };
   }

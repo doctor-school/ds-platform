@@ -512,30 +512,15 @@ export class AuthService {
    * Registration verification is email-only (#202 — registration is
    * email-primary); EARS-4 phone verification is a future post-registration
    * secondary-identifier concern, so there is no phone branch here.
-   *
-   * #869: the request carries ONE account identity — the `email` (the classic
-   * post-register screen) or the opaque Zitadel `userId` (the verification
-   * email's CTA deep-links to the portal `/verify` screen via Zitadel's
-   * `urlTemplate`, whose only identity placeholder is `{{.UserID}}`). The
-   * userId path resolves NO mirror lookup — the sub IS the identity, and the
-   * IdP's own code check (`verifyEmail`) is the authoritative gate; a bogus or
-   * unknown sub fails that check into the same generic 400 as a bad code, so
-   * neither path is an existence/state oracle (EARS-16).
    */
   async verify(req: VerifyRequest): Promise<VerifyResponse> {
-    let sub: string | undefined;
-    if (req.email) {
-      const row = await this.mirror.findByEmail(req.email);
-      sub = row?.zitadelSub;
-    } else {
-      sub = req.userId;
-    }
-    if (!sub) throw new BadRequestException(GENERIC_FAILURE);
+    const row = await this.mirror.findByEmail(req.email);
+    if (!row) throw new BadRequestException(GENERIC_FAILURE);
 
-    const ok = await this.idp.verifyEmail(sub, req.code);
+    const ok = await this.idp.verifyEmail(row.zitadelSub, req.code);
     if (!ok) throw new BadRequestException(GENERIC_FAILURE);
 
-    await this.mirror.markEmailVerified(sub);
+    await this.mirror.markEmailVerified(row.zitadelSub);
 
     // EARS-18: one terminal `auth.account.verified` row for this state-changing
     // command (the mirror flag just flipped — the account is activated). Keyed
@@ -546,7 +531,7 @@ export class AuthService {
     // command" invariant.
     await this.audit.record({
       type: "IdentifierVerified",
-      sub,
+      sub: row.zitadelSub,
       channel: "email",
     });
 

@@ -387,56 +387,6 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
     expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({ sendCode: {} });
   });
 
-  it("EARS-3: requestEmailVerification deep-links the email CTA to the portal /verify screen via urlTemplate (#869)", async () => {
-    // #869: without a urlTemplate the Zitadel notification renders its DEFAULT
-    // CTA — a link into Zitadel's hosted login-v2 UI, a dead end for the portal
-    // registrant. With a configured portal origin the send MUST carry the
-    // SendEmailVerificationCode `urlTemplate` pointing at the portal's own
-    // /verify screen. Supported placeholders (Zitadel proto
-    // zitadel/user/v2/email.proto): {{.UserID}}, {{.OrgID}}, {{.Code}} — no
-    // LoginName/email placeholder exists, so the deep-link identity is the userId.
-    const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
-    const client = new ZitadelIdpClient({
-      ...SEND_CONFIG,
-      portalBaseUrl: "http://portal.test:3001",
-      fetchImpl,
-    });
-    await client.requestEmailVerification("user-1");
-    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({
-      sendCode: {
-        urlTemplate:
-          "http://portal.test:3001/verify?code={{.Code}}&userId={{.UserID}}",
-      },
-    });
-  });
-
-  it("EARS-3: the urlTemplate strips a trailing slash off the configured portal origin (#869)", async () => {
-    const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
-    const client = new ZitadelIdpClient({
-      ...SEND_CONFIG,
-      portalBaseUrl: "http://portal.test:3001/",
-      fetchImpl,
-    });
-    await client.requestEmailVerification("user-1");
-    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({
-      sendCode: {
-        urlTemplate:
-          "http://portal.test:3001/verify?code={{.Code}}&userId={{.UserID}}",
-      },
-    });
-  });
-
-  it("EARS-3: requestPhoneVerification stays a bare sendCode even with a portal origin configured (#869 — the SMS hop is untouched)", async () => {
-    const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
-    const client = new ZitadelIdpClient({
-      ...SEND_CONFIG,
-      portalBaseUrl: "http://portal.test:3001",
-      fetchImpl,
-    });
-    await client.requestPhoneVerification("user-1");
-    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({ sendCode: {} });
-  });
-
   it("EARS-3: requestEmailVerification throws fail-closed on a non-2xx send", async () => {
     const { fetchImpl } = recordingFetch({ ok: false, status: 404 });
     const client = new ZitadelIdpClient({ ...SEND_CONFIG, fetchImpl });
@@ -451,45 +401,6 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
     await client.requestPhoneVerification("user-1");
     expect(calls[0]?.url).toBe("http://idp.test:9080/v2/users/user-1/phone/resend");
     expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({ sendCode: {} });
-  });
-
-  it("EARS-25: resendEmailVerification carries the same portal /verify urlTemplate on the re-send hop (#869)", async () => {
-    // The EARS-25 resend re-issues the SAME registration email as the initial
-    // EARS-3 send, so its CTA must deep-link to the portal /verify screen too —
-    // otherwise only the first email is fixed and every re-sent one still dead-
-    // ends on Zitadel's hosted UI.
-    const calls: ScriptedCall[] = [];
-    const fetchImpl: FetchLike = (url, init) => {
-      calls.push({ url, method: init.method, headers: init.headers, body: init.body });
-      // Identifier-resolution hop: an existing, UNVERIFIED registrant.
-      if (url.endsWith("/v2/users")) {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: () =>
-            Promise.resolve({
-              result: [
-                { userId: "user-9", human: { email: { isVerified: false } } },
-              ],
-            }),
-        });
-      }
-      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) });
-    };
-    const client = new ZitadelIdpClient({
-      ...SEND_CONFIG,
-      portalBaseUrl: "http://portal.test:3001",
-      fetchImpl,
-    });
-    await expect(client.resendEmailVerification("user@ds.test")).resolves.toBe(true);
-    const resend = calls.find((c) => c.url.endsWith("/email/resend"));
-    expect(resend, "the resend hop was reached").toBeTruthy();
-    expect(JSON.parse(resend!.body ?? "{}")).toEqual({
-      sendCode: {
-        urlTemplate:
-          "http://portal.test:3001/verify?code={{.Code}}&userId={{.UserID}}",
-      },
-    });
   });
 
   it("EARS-3: verifyEmail POSTs /email/verify and returns true on 2xx", async () => {

@@ -243,69 +243,6 @@ describe("/verify dual-affordance + resend (#227/#267)", () => {
 });
 
 /**
- * #869 (EARS-3): the verification email's CTA deep-links straight to
- * `/verify?code=<code>&userId=<sub>` (Zitadel's urlTemplate placeholders carry
- * only {{.Code}}/{{.UserID}} — no email), so the screen must complete the
- * verification from the URL alone: prefill the code, auto-submit with the
- * userId identity, degrade the masked-destination copy gracefully (no email is
- * known), and — with no held password (a deep-link never has one) — land on the
- * existing /login fallback. The screen stays existence-agnostic: it never
- * probes verification state, and a code with NO identity simply does not fire.
- */
-describe("deep-linked email CTA → /verify?code&userId (#869, EARS-3)", () => {
-  const USER_ID = "314159265358979323";
-
-  it("EARS-3: prefills the code and auto-submits with the userId identity; no held password lands on /login", async () => {
-    searchParams = new URLSearchParams({ code: VERIFY_CODE, userId: USER_ID });
-    await renderVerify();
-
-    await waitFor(() => expect(verify).toHaveBeenCalledTimes(1));
-    expect(verify).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: USER_ID, code: VERIFY_CODE }),
-    );
-    // Deep-link ⇒ no held password ⇒ the existing manual sign-in fallback.
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/login"));
-    // No email is known, so there is nothing to resend to — control hidden.
-    expect(screen.queryByTestId("verify-resend")).not.toBeInTheDocument();
-  });
-
-  it("EARS-3: the auto-submit fires exactly once (no refire on re-render / error)", async () => {
-    verify.mockRejectedValueOnce(new Error("bad code"));
-    searchParams = new URLSearchParams({ code: VERIFY_CODE, userId: USER_ID });
-    await renderVerify();
-
-    await waitFor(() => expect(verify).toHaveBeenCalledTimes(1));
-    // The rejection re-renders the page (error slot); the deep-link submit must
-    // not loop into a second call by itself.
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(verify).toHaveBeenCalledTimes(1);
-    expect(push).not.toHaveBeenCalled();
-  });
-
-  it("EARS-16: a deep-linked code with NO identity does not fire a verify call (existence-agnostic, no probe)", async () => {
-    searchParams = new URLSearchParams({ code: VERIFY_CODE });
-    await renderVerify();
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(verify).not.toHaveBeenCalled();
-  });
-
-  it("EARS-3: an email-seeded screen keeps the manual flow — a bare ?email link never auto-submits", async () => {
-    searchParams = new URLSearchParams({ email: EMAIL });
-    await renderVerify();
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(verify).not.toHaveBeenCalled();
-  });
-});
-
-/**
  * 005 EARS-2 — the /verify hop of the guest-through-auth round-trip: the guest
  * registered carrying `?returnTo=/webinars/:slug`; once the code is accepted and
  * the auto-login replay establishes the session, the SAME `RegisterForEvent`

@@ -144,30 +144,6 @@ describe("email-primary registration shape (#202)", () => {
       false,
     );
   });
-
-  it("VerifyRequestSchema accepts the userId identity — the email-CTA deep-link (#869, EARS-3)", () => {
-    // Zitadel's urlTemplate placeholders carry only {{.UserID}}/{{.Code}} (no
-    // login-name/email), so the deep-linked /verify screen identifies the
-    // registrant by userId. The extension is ADDITIVE: `{ email, code }` keeps
-    // working unchanged; either identity (or both) satisfies the contract.
-    expect(
-      VerifyRequestSchema.safeParse({
-        userId: "314159265358979323",
-        code: "424242",
-      }).success,
-    ).toBe(true);
-    expect(
-      VerifyRequestSchema.safeParse({
-        email: "user@ds.test",
-        userId: "314159265358979323",
-        code: "424242",
-      }).success,
-    ).toBe(true);
-    // An empty userId is not an identity — still "no identifier" (generic reject).
-    expect(
-      VerifyRequestSchema.safeParse({ userId: "", code: "424242" }).success,
-    ).toBe(false);
-  });
 });
 
 describe("login password guard (#147, permissive — lockout regression guard)", () => {

@@ -101,15 +101,6 @@ function VerifyCard() {
   const te = useTranslations("errors");
   const params = useSearchParams();
   const email = params.get("email") ?? undefined;
-  // #869 (EARS-3): the verification email's CTA deep-links here as
-  // `/verify?code=<code>&userId=<sub>` (Zitadel's urlTemplate placeholders are
-  // {{.Code}}/{{.UserID}} only — the email is NOT carried), so the screen reads
-  // both: the code prefills the OTP field and auto-submits below with the
-  // userId identity. The screen stays existence-agnostic — it never probes the
-  // verification state; a bad/expired deep-link resolves to the same generic
-  // failure copy as a mistyped code (EARS-16).
-  const userId = params.get("userId") ?? undefined;
-  const deepLinkCode = params.get("code") ?? undefined;
   // 005 EARS-2: the carried registration-intent riding the guest-through-auth
   // round-trip. Consumed ONLY through the `parseReturnTarget` guard (inside
   // `completeReturnTarget` / `withReturnTarget`), so a hostile value can neither
@@ -139,11 +130,9 @@ function VerifyCard() {
 
   const form = useForm<VerifyRequest>({
     resolver: useLocalizedResolver(VerifyRequestSchema),
-    // Seed the identity from the query (registration is email-only, #202): the
-    // post-register hop carries `email`; the #869 email-CTA deep-link carries
-    // `userId` (+ the code, prefilled). Neither field is user-editable here —
-    // they only type (or arrive with) the code.
-    defaultValues: { email, userId, code: deepLinkCode ?? "" },
+    // Seed the email from the query (registration is email-only, #202); the field
+    // is not user-editable here — they only type the code.
+    defaultValues: { email, code: "" },
   });
 
   // Privacy-masked destination (#227): the screen confirms WHERE the code went
@@ -246,22 +235,6 @@ function VerifyCard() {
     if (form.formState.isSubmitting) return;
     void submit();
   }, [form.formState.isSubmitting, submit]);
-
-  // #869: complete the deep-link automatically. The email CTA arrives with a
-  // full-length code AND an identity (`userId`), so the registrant should not
-  // have to re-type anything — mirror the manual flow's onComplete auto-submit
-  // once, on mount. Fires at most once (the ref guard): a rejected deep-link
-  // (expired/superseded code) falls into the ordinary generic-error state and
-  // the user retypes/resends manually — never a retry loop. Without an identity
-  // (a bare `?code=` link) nothing fires: the screen must not probe (EARS-16).
-  const deepLinkFired = useRef(false);
-  useEffect(() => {
-    if (deepLinkFired.current) return;
-    if (!deepLinkCode || deepLinkCode.length !== VERIFY_OTP_LENGTH) return;
-    if (!email && !userId) return;
-    deepLinkFired.current = true;
-    void submit();
-  }, [deepLinkCode, email, userId, submit]);
 
   return (
     <AuthCard

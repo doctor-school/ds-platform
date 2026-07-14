@@ -143,29 +143,16 @@ export type RegisterResponse = z.infer<typeof RegisterResponseSchema>;
 
 /**
  * Verification request (EARS-3). Registration verification is **email-only**:
- * registration is email-primary (#202), so the registrant submits the OTP code
- * Zitadel sent plus ONE account identity — either the `email` they registered
- * with (the classic post-register screen) or the opaque Zitadel `userId`
- * (#869: the verification email's CTA deep-links to the portal `/verify`
- * screen via Zitadel's `urlTemplate`, whose only identity placeholder is
- * `{{.UserID}}` — there is no login-name/email placeholder). The extension is
- * additive: `{ email, code }` parses exactly as before. The dual-identifier
- * `phone` field remains removed (EARS-4 phone verification is a future
- * post-registration secondary-identifier concern, not a registration step).
- *
- * The at-least-one-identity rule is a `.refine` with a generic message — which
- * identity is missing (or whether either resolves to an account) is never
- * disclosed by the shape error (EARS-16).
+ * registration is email-primary (#202), so the registrant submits the email they
+ * registered with plus the OTP code Zitadel sent. The dual-identifier `phone`
+ * field + exactly-one `.refine` were removed with the phone-only registration
+ * channel; EARS-4 phone verification is a future post-registration
+ * secondary-identifier concern, not a registration step.
  */
-export const VerifyRequestSchema = z
-  .object({
-    email: z.email().optional(),
-    userId: z.string().min(1).optional(),
-    code: z.string().min(1),
-  })
-  .refine((v) => Boolean(v.email ?? v.userId), {
-    message: "an account identity is required",
-  });
+export const VerifyRequestSchema = z.object({
+  email: z.email(),
+  code: z.string().min(1),
+});
 export type VerifyRequest = z.infer<typeof VerifyRequestSchema>;
 
 /** Verification response — `verified` on success; failures are a generic 4xx. */

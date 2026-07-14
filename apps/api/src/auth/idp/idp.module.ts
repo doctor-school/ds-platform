@@ -1,6 +1,5 @@
 import { Global, Module } from "@nestjs/common";
 import { loadEnv } from "../../config/env.schema.js";
-import { DEFAULT_PORTAL_BASE_URL } from "../../mailer/mailer.module.js";
 import { FakeIdpClient } from "./idp.fake.js";
 import { IDP_CLIENT, type IdpClient } from "./idp.types.js";
 import { ZitadelIdpClient } from "./zitadel.idp.js";
@@ -41,10 +40,6 @@ import { ZitadelIdpClient } from "./zitadel.idp.js";
             // require in the request body. Absent ⇒ the adapter resolves it once
             // from the service account's own org and caches it.
             orgId: env.IDP_ORG_ID,
-            // #869: the portal origin the registration verification email's CTA
-            // deep-links to (its `/verify` screen). The SAME portal-origin source
-            // the mailer channel uses — never a hardcoded host (recipe-specific).
-            portalBaseUrl: env.MAILER_PORTAL_BASE_URL ?? DEFAULT_PORTAL_BASE_URL,
           });
         }
         return new FakeIdpClient();

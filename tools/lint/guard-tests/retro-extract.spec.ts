@@ -13,6 +13,7 @@ import {
   auqUserStrings,
   CORRECTION_RE,
   isAuqAnswer,
+  isHandoff,
   queuedCommandPrompt,
 } from "../../retro/extract.mjs";
 // SELF_CATCH is the assistant-side self-correction lexicon; #362 made it
@@ -343,6 +344,49 @@ describe("retro extract — CORRECTION_RE hedged/question-form recall (#829)", (
     expect(CORRECTION_RE.test("вроде всё работает, спасибо")).toBe(false);
     // a plain «долго» estimate is not the «не долго ли» reproach
     expect(CORRECTION_RE.test("сборка обычно долго собирается, минут пять")).toBe(false);
+  });
+});
+
+// ── isHandoff FIRST ACTION-opener recall (#889) ─────────────────────────────
+// This repo's canonical handoff (run-wrap stage-5 override) opens with the
+// literal `FIRST ACTION: pipe this verbatim block through `pnpm handoff:verify``
+// and carries the structural markers `Do next (wave …)` and/or `Next task:` —
+// none of which the original detector (`You are continuing` / `# Agent
+// bootstrap` / `Current task`) recognized, so a pasted handoff was miscounted as
+// an owner correction (its body trips CORRECTION_RE tokens). A handoff is never
+// a correction (run-session-retro §3): widening isHandoff is the fix point.
+describe("retro extract — isHandoff FIRST ACTION-opener recall (#889)", () => {
+  const handoff = [
+    "FIRST ACTION: pipe this verbatim block through `pnpm handoff:verify`",
+    "",
+    "You are resuming work on the retro tooling.",
+    "Do next (wave 3): widen the isHandoff detector, then open the PR.",
+    "Почему это важно: недосчёт корректировок искажает ретро.",
+  ].join("\n");
+
+  it("classifies a FIRST ACTION-opener handoff as handoff, not a correction", () => {
+    expect(isHandoff(handoff)).toBe(true);
+    // a handoff is excluded from the correction count even though its body
+    // contains correction tokens («почему») — mirrors the extractor's
+    // `!handoff && CORRECTION_RE.test(text)` classification.
+    expect(!isHandoff(handoff) && CORRECTION_RE.test(handoff)).toBe(false);
+  });
+
+  it("recognizes the corroborating structural markers", () => {
+    expect(isHandoff("Do next (wave 2): ship the guard-test extension")).toBe(true);
+    expect(isHandoff("Next task: rebase onto origin/main and re-run CI")).toBe(true);
+  });
+
+  it("keeps the three original matchers intact", () => {
+    expect(isHandoff("You are continuing a previous session")).toBe(true);
+    expect(isHandoff("# Agent bootstrap\n## Current task\nDo the thing")).toBe(true);
+    expect(isHandoff("## Current task\nresume #889")).toBe(true);
+  });
+
+  it("does not over-broaden — a genuine owner correction is still a correction", () => {
+    const correction = "Почему ты не расширил детектор? Это неправильно, верни как было";
+    expect(isHandoff(correction)).toBe(false);
+    expect(!isHandoff(correction) && CORRECTION_RE.test(correction)).toBe(true);
   });
 });
 

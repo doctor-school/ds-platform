@@ -472,10 +472,12 @@ fi
 # `verifysmsotp` (#226, step 8.bis — jargon/domain/expiry leaks), `verifyemail`
 # (#869, step 8.ter — code-only branded copy), `verifyemailotp` + the neutral
 # greetings of the dormant types (#878, step 8.quinquies — the computed
-# «<local-part> guest» display name leaked into {{.DisplayName}} greetings).
-# `passwordreset` rework is tracked as #880. (Converge mechanism for all of
-# them: PUT /admin/v1/text/message/{type}/ru — init|verifyemail|verifyphone|
-# passwordreset|verifyemailotp|verifysmsotp|password_change.)
+# «<local-part> guest» display name leaked into {{.DisplayName}} greetings),
+# `passwordreset` (#880, step 8.sexies — code-only branded copy; the bundled
+# default's CTA landed on the IdP's hosted set-password page). (Converge
+# mechanism for all of them: PUT /admin/v1/text/message/{type}/ru —
+# init|verifyemail|verifyphone|passwordreset|verifyemailotp|verifysmsotp|
+# password_change.)
 #
 # TWO levers, because the instance default alone is NOT sufficient (proven live):
 #   (a) Default language → ru. The documented fallback. Necessary, but registrants
@@ -729,8 +731,8 @@ api GET /admin/v1/policies/login | jq -r '.policy |
 # Two-sided fix: the BFF now sends displayName = the registration email (#878,
 # apps/api zitadel.idp.ts), AND every user-facing greeting drops the name
 # variable — same neutral «Здравствуйте!» technique proven live by 8.ter/#869.
-# `passwordreset` is deliberately NOT touched here: its full branded rework is
-# Issue #880.
+# `passwordreset` is deliberately NOT touched here: its full branded rework
+# lives in step 8.sexies (#880).
 #
 # (a) verifyemailotp — the LIVE email-OTP login mail (EARS-6). Fully branded,
 # code-only, matching the 8.ter copy style: neutral greeting, enlarged
@@ -787,6 +789,59 @@ for _mt in verifyphone password_change init; do
     '{"greeting":"Hello!"}' >/dev/null \
     && echo "ensured ${_mt}/en neutral greeting" >&2
 done
+
+# ── 8.sexies. brand the password-reset email — CODE-ONLY (passwordreset ru+en, #880) ─
+# The bundled passwordreset default renders a CTA button whose URL is Zitadel's
+# hosted set-password page on the identity host — a surface the product's users
+# must never see (the portal /reset screen owns the whole journey), and the
+# same scanner hazard as 8.ter: mail.ru's `checklink` AV prefetch GETs every
+# URL in a delivered mail. The reset email is therefore CODE-ONLY (the #869
+# owner Stage-A contract, re-confirmed for the button-as-subordinate-aid
+# pattern on #878): branded RU copy + the {{.Code}} the user TYPES on the
+# portal /reset screen. Nothing in the mail is consumed on GET.
+#
+# The button cannot be suppressed (empty buttonText falls through to the
+# bundled default label — proven live on v4.15.0, 8.ter), so the BFF send sets
+# `PasswordResetRequest.sendLink.urlTemplate` to the BARE portal `/reset` (no
+# {{.Code}}/{{.UserID}}/{{.OrgID}} placeholders, no query — `apps/api`
+# ZitadelIdpClient#passwordResetBody, #880) and this override demotes the
+# button label to a subordinate navigation aid.
+#
+# Copy checklist (the #869/#879 binding rules): subject < 50 chars LEADING
+# with the code (rendered ~40); the code as ONE unbroken enlarged
+# letter-spaced token ({{.Code}} raw — never grouped/split, and no copy line
+# contradicting the rendered format); explicit expiry line — the instance's
+# PASSWORD_RESET_CODE secret-generator lifetime is 3600s (admin API
+# `secretgenerators/_search`, read live 2026-07-14; code shape [A-Z0-9]{6},
+# same generator family as VERIFY_EMAIL_CODE); an explicit "if you didn't
+# request this" line. Markup: custom `text` is injected UNESCAPED into
+# Zitadel's bundled table-layout/inline-CSS MJML template (mail.ru/Yandex-
+# safe), so <br>/<strong>/inline-style spans render as HTML; literal newlines
+# do NOT survive — paragraph breaks MUST be <br>.
+RU_PWRESET_SUBJECT='{{.Code}} — код сброса пароля Doctor.School'
+RU_PWRESET_TITLE='Сброс пароля'
+RU_PWRESET_PREHEADER='Введите код на странице сброса пароля Doctor.School'
+RU_PWRESET_GREETING='Здравствуйте!'
+RU_PWRESET_TEXT='Ваш код для сброса пароля на Doctor.School:<br><br><span style="font-size:28px;letter-spacing:3px"><strong>{{.Code}}</strong></span><br><br>Введите его на странице сброса пароля, с которой вы запрашивали код. Код действует 1 час.<br><br>Если вы не запрашивали сброс пароля — проигнорируйте это письмо.'
+RU_PWRESET_BUTTON='Открыть страницу сброса'
+EN_PWRESET_SUBJECT='{{.Code}} — Doctor.School password reset code'
+EN_PWRESET_TITLE='Password reset'
+EN_PWRESET_PREHEADER='Enter the code on the Doctor.School password reset page'
+EN_PWRESET_GREETING='Hello!'
+EN_PWRESET_TEXT='Your Doctor.School password reset code:<br><br><span style="font-size:28px;letter-spacing:3px"><strong>{{.Code}}</strong></span><br><br>Enter it on the password reset page you requested the code from. The code is valid for 1 hour.<br><br>If you did not request a password reset, please ignore this email.'
+EN_PWRESET_BUTTON='Open the password reset page'
+api_idempotent PUT /admin/v1/text/message/passwordreset/ru \
+  "$(jq -nc --arg s "$RU_PWRESET_SUBJECT" --arg ti "$RU_PWRESET_TITLE" \
+        --arg p "$RU_PWRESET_PREHEADER" --arg g "$RU_PWRESET_GREETING" \
+        --arg t "$RU_PWRESET_TEXT" --arg b "$RU_PWRESET_BUTTON" \
+        '{subject:$s, title:$ti, preHeader:$p, greeting:$g, text:$t, buttonText:$b}')" >/dev/null \
+  && echo "ensured passwordreset/ru code-only branded reset email" >&2
+api_idempotent PUT /admin/v1/text/message/passwordreset/en \
+  "$(jq -nc --arg s "$EN_PWRESET_SUBJECT" --arg ti "$EN_PWRESET_TITLE" \
+        --arg p "$EN_PWRESET_PREHEADER" --arg g "$EN_PWRESET_GREETING" \
+        --arg t "$EN_PWRESET_TEXT" --arg b "$EN_PWRESET_BUTTON" \
+        '{subject:$s, title:$ti, preHeader:$p, greeting:$g, text:$t, buttonText:$b}')" >/dev/null \
+  && echo "ensured passwordreset/en code-only branded reset email" >&2
 
 # ── output (machine-parseable; secret only when freshly created) ─────────────
 echo "IDP_PROJECT_ID=${PROJECT_ID}"

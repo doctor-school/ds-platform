@@ -525,6 +525,107 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
 });
 
 /**
+ * #880 — the password-reset send (EARS-11) is CODE-ONLY, like the #869
+ * verification email and the #878 login-OTP email. Zitadel's default
+ * `password_reset` send (an empty body) renders a CTA whose URL is the IdP's
+ * hosted set-password page on the identity host — a surface the product's
+ * users must never see (the portal `/reset` screen owns the journey). The
+ * send therefore carries the `PasswordResetRequest` oneof
+ * `sendLink.urlTemplate` (proto: `SendPasswordResetLink { notification_type,
+ * url_template }` — placeholders UserID/OrgID/Code are supported and
+ * DELIBERATELY unused) pointing at the BARE portal `/reset`: no query, no
+ * placeholders, nothing consumed on GET (mail.ru `checklink` scanner safety,
+ * the #869 contract). `returnCode` is NOT used — the secret must ride the
+ * configured notifier, never the HTTP response.
+ */
+describe("003 EARS-11 password-reset send wire shape (#880)", () => {
+  const SEND_CONFIG = {
+    baseUrl: "http://idp.test:9080",
+    serviceToken: "svc-token",
+  };
+
+  /**
+   * A routing fetch double: answers the identifier-resolution hop
+   * (`POST /v2/users`) with one known user and records every call, so the
+   * follow-on `/password_reset` hop's body can be asserted.
+   */
+  function resetFetch(): { fetchImpl: FetchLike; calls: ScriptedCall[] } {
+    const calls: ScriptedCall[] = [];
+    const fetchImpl: FetchLike = (url, init) => {
+      calls.push({
+        url,
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
+      });
+      if (url.endsWith("/v2/users")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ result: [{ userId: "user-11" }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      });
+    };
+    return { fetchImpl, calls };
+  }
+
+  it("EARS-11: with a portal origin configured the reset send carries a BARE /reset sendLink urlTemplate — no code/userId params", async () => {
+    const { fetchImpl, calls } = resetFetch();
+    const client = new ZitadelIdpClient({
+      ...SEND_CONFIG,
+      portalBaseUrl: "http://portal.test:3001",
+      fetchImpl,
+    });
+    await client.requestPasswordReset("user@ds.test");
+    const reset = calls.find((c) => c.url.endsWith("/password_reset"));
+    expect(reset, "the password_reset hop was reached").toBeTruthy();
+    expect(reset?.url).toBe("http://idp.test:9080/v2/users/user-11/password_reset");
+    expect(reset?.method).toBe("POST");
+    const body = JSON.parse(reset?.body ?? "{}") as {
+      sendLink?: { notificationType?: string; urlTemplate?: string };
+    };
+    expect(body).toEqual({
+      sendLink: {
+        notificationType: "NOTIFICATION_TYPE_Email",
+        urlTemplate: "http://portal.test:3001/reset",
+      },
+    });
+    // Belt-and-braces: the scanner-safety invariant, asserted explicitly.
+    expect(body.sendLink?.urlTemplate).not.toMatch(/[?&{]/);
+  });
+
+  it("EARS-11: the urlTemplate strips a trailing slash off the configured portal origin", async () => {
+    const { fetchImpl, calls } = resetFetch();
+    const client = new ZitadelIdpClient({
+      ...SEND_CONFIG,
+      portalBaseUrl: "http://portal.test:3001/",
+      fetchImpl,
+    });
+    await client.requestPasswordReset("user@ds.test");
+    const reset = calls.find((c) => c.url.endsWith("/password_reset"));
+    expect(JSON.parse(reset?.body ?? "{}")).toEqual({
+      sendLink: {
+        notificationType: "NOTIFICATION_TYPE_Email",
+        urlTemplate: "http://portal.test:3001/reset",
+      },
+    });
+  });
+
+  it("EARS-11: without a portal origin the send keeps the empty default body", async () => {
+    const { fetchImpl, calls } = resetFetch();
+    const client = new ZitadelIdpClient({ ...SEND_CONFIG, fetchImpl });
+    await client.requestPasswordReset("user@ds.test");
+    const reset = calls.find((c) => c.url.endsWith("/password_reset"));
+    expect(JSON.parse(reset?.body ?? "{}")).toEqual({});
+  });
+});
+
+/**
  * #203 — createUser migrated to the CURRENT resource API `CreateUser`
  * (`POST /v2/users/new`), which REPLACES the deprecated `AddHumanUser`
  * (`POST /v2/users/human`). These pins lock the new wire shape proven live

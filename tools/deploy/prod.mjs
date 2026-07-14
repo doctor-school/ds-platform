@@ -326,6 +326,29 @@ async function shipTree(sha, host) {
 async function deploy() {
   const sha = preflight();
 
+  // Capture the previously-deployed prod SHA BEFORE the build/up swap — the
+  // durable deploy record IS the running api-prod container's image tag
+  // `ds-api:<sha>` (no separate persistence file). This is the anchor the
+  // release-notes digest ranges from (Issue #868). Non-fatal: any ssh error →
+  // prevSha=null (the digest then skips green — it never breaks the deploy).
+  let prevSha;
+  try {
+    const img = await sshCapture(
+      API_PROD,
+      `sudo docker inspect ds-api-prod-api-1 --format '{{.Config.Image}}' 2>/dev/null || echo absent`,
+    );
+    const m = img.trim().match(/^ds-api:([0-9a-f]{7,40})$/i);
+    prevSha = m ? m[1] : null;
+    console.log(
+      `  ↩ previous prod SHA (from running ds-api image): ${prevSha ? prevSha.slice(0, 12) : "none"}`,
+    );
+  } catch (e) {
+    prevSha = null;
+    console.log(
+      `  ⚠ could not read the previous prod SHA (${e.message}) — release-notes range disabled for this deploy.`,
+    );
+  }
+
   step(`Ship origin/main @ ${sha.slice(0, 12)} → both boxes`);
   let t = Date.now();
   await shipTree(sha, API_PROD);
@@ -450,6 +473,9 @@ echo "retained ds-api tags:"; sudo docker images ds-api --format '  {{.Tag}} ({{
   step("DSO-128: prod smoke (--expect-sha)");
   await runSmoke(sha);
 
+  step("Post the aggregated release note to Mattermost (#868)");
+  await postReleaseNotes(prevSha, sha);
+
   console.log(
     `\n✓ DEPLOY OK — origin/main @ ${sha.slice(0, 12)} live on prod` +
       ` (${((Date.now() - t0All) / 1000).toFixed(1)}s total).`,
@@ -457,6 +483,39 @@ echo "retained ds-api tags:"; sudo docker images ds-api --format '  {{.Tag}} ({{
   console.log(
     `  Verify over HTTP:  curl -s https://api.doctor.school/v1/health | jq .version`,
   );
+}
+
+// Post the aggregated PROD release note (#868). NON-FATAL by contract: the deploy
+// has already succeeded here, so a webhook/gh failure only warns and the deploy
+// exit code stays 0 — a release-notes hiccup must never turn a good deploy red.
+function postReleaseNotes(prevSha, sha) {
+  return new Promise((resolve) => {
+    const child = spawn(
+      process.execPath,
+      [
+        join(import.meta.dirname, "release-notes.mjs"),
+        "--prev-sha",
+        prevSha || "none",
+        "--new-sha",
+        sha,
+      ],
+      { stdio: "inherit", env: { ...process.env, DELIVERY_ENV: "prod" } },
+    );
+    child.on("error", (e) => {
+      console.log(
+        `  ⚠ release-notes digest failed to post (deploy already succeeded): ${e.message}`,
+      );
+      resolve();
+    });
+    child.on("close", (code) => {
+      if (code === 0) ok("release note posted (or cleanly skipped)");
+      else
+        console.log(
+          `  ⚠ release-notes digest failed to post (deploy already succeeded): exit ${code}`,
+        );
+      resolve();
+    });
+  });
 }
 
 function runSmoke(sha) {

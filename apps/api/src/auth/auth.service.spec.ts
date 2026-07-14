@@ -571,3 +571,139 @@ describe("FakeIdpClient.resendEmailVerification — parity with real adapter (#3
     await expect(idp.resendEmailVerification("v@ds.test")).resolves.toBe(false);
   });
 });
+
+// #869 (EARS-3): the verification email's CTA deep-links to the portal /verify
+// screen via Zitadel's urlTemplate, whose only identity placeholder is
+// {{.UserID}} — so `/v1/auth/verify` accepts the opaque `userId` identity
+// alongside the classic `email` one. Exercised at the service altitude over the
+// fake IdP + a recording mirror stub (no DB, no HTTP). Every failure branch
+// stays the one generic 400 (EARS-16 — no existence/state oracle).
+describe("AuthService.verify — userId identity for the deep-linked email CTA (#869, EARS-3)", () => {
+  const password = "Aa1!sufficiently-long-pw";
+
+  /** A recording mirror stub: the userId path must NEVER look up by email. */
+  function recordingMirror(rows: Record<string, string>) {
+    const marked: string[] = [];
+    const findByEmailCalls: string[] = [];
+    return {
+      marked,
+      findByEmailCalls,
+      mirror: {
+        findByEmail: (email: string) => {
+          findByEmailCalls.push(email);
+          const sub = rows[email];
+          return Promise.resolve(sub ? { zitadelSub: sub } : undefined);
+        },
+        markEmailVerified: (sub: string) => {
+          marked.push(sub);
+          return Promise.resolve();
+        },
+      },
+    };
+  }
+
+  function buildVerifyService(
+    idp: FakeIdpClient,
+    audit: InMemoryAuthAuditLog,
+    mirror: unknown,
+  ) {
+    return new AuthService(
+      idp as unknown as IdpClient,
+      explodingDb as never, // the verify path touches no DB directly
+      undefined,
+      audit,
+      new FakeMailer(),
+      new InMemoryRegisterNoticeThrottle("test-pepper"),
+      mirror as never,
+      {} as never, // sessions — unused on the verify path
+      {} as never, // smsBudget — unused on the verify path
+    );
+  }
+
+  it("EARS-3: a userId-identified verify flips the mirror flag and audits, with NO email lookup", async () => {
+    const idp = new FakeIdpClient();
+    const audit = new InMemoryAuthAuditLog();
+    const created = await idp.createUser({ email: "dl@ds.test", password });
+    const { mirror, marked, findByEmailCalls } = recordingMirror({});
+    const service = buildVerifyService(idp, audit, mirror);
+
+    const res = await service.verify({
+      userId: created.sub,
+      code: FAKE_VALID_CODE,
+    });
+
+    expect(res).toEqual({ status: "verified" });
+    expect(marked).toEqual([created.sub]);
+    // The deep-link identity is the sub itself — resolving it via the email
+    // mirror would re-couple the path to an identity the CTA does not carry.
+    expect(findByEmailCalls).toEqual([]);
+  });
+
+  it("EARS-3: the email-identified verify keeps working unchanged (additive contract)", async () => {
+    const idp = new FakeIdpClient();
+    const audit = new InMemoryAuthAuditLog();
+    const created = await idp.createUser({ email: "old@ds.test", password });
+    const { mirror, marked } = recordingMirror({ "old@ds.test": created.sub });
+    const service = buildVerifyService(idp, audit, mirror);
+
+    const res = await service.verify({
+      email: "old@ds.test",
+      code: FAKE_VALID_CODE,
+    });
+
+    expect(res).toEqual({ status: "verified" });
+    expect(marked).toEqual([created.sub]);
+  });
+
+  it("EARS-16: a wrong code on the userId path is the same generic 400 as on the email path", async () => {
+    const idp = new FakeIdpClient();
+    const audit = new InMemoryAuthAuditLog();
+    const created = await idp.createUser({ email: "x@ds.test", password });
+    const { mirror } = recordingMirror({ "x@ds.test": created.sub });
+    const service = buildVerifyService(idp, audit, mirror);
+
+    const viaUserId = await service
+      .verify({ userId: created.sub, code: "000000" })
+      .catch((e: unknown) => e);
+    const viaEmail = await service
+      .verify({ email: "x@ds.test", code: "000000" })
+      .catch((e: unknown) => e);
+
+    expect(viaUserId).toBeInstanceOf(BadRequestException);
+    expect(viaEmail).toBeInstanceOf(BadRequestException);
+    expect((viaUserId as BadRequestException).getResponse()).toEqual(
+      (viaEmail as BadRequestException).getResponse(),
+    );
+  });
+
+  it("EARS-16: an unknown userId is the same generic 400 (no existence oracle)", async () => {
+    const idp = new FakeIdpClient();
+    const audit = new InMemoryAuthAuditLog();
+    const { mirror, marked } = recordingMirror({});
+    const service = buildVerifyService(idp, audit, mirror);
+
+    const err = await service
+      .verify({ userId: "no-such-sub", code: FAKE_VALID_CODE })
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).getStatus()).toBe(400);
+    expect(marked).toEqual([]);
+  });
+
+  it("EARS-16: a request with NO identity at all is the same generic 400", async () => {
+    // The DTO refine already rejects this shape at the boundary; the service
+    // guard covers direct callers so the branch can never NPE into a 500.
+    const idp = new FakeIdpClient();
+    const audit = new InMemoryAuthAuditLog();
+    const { mirror } = recordingMirror({});
+    const service = buildVerifyService(idp, audit, mirror);
+
+    const err = await service
+      .verify({ code: FAKE_VALID_CODE })
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).getStatus()).toBe(400);
+  });
+});

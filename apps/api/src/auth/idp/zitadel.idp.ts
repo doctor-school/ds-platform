@@ -86,6 +86,16 @@ export interface ZitadelConfig {
    * Plumbed from `IDP_ORG_ID`.
    */
   orgId?: string | undefined;
+  /**
+   * #869: the portal origin the registration verification email's CTA deep-links
+   * to (e.g. `https://app.doctor.school`). When set, the email-verification send
+   * hops carry a Zitadel `urlTemplate` pointing at the portal's own `/verify`
+   * screen (`<origin>/verify?code={{.Code}}&userId={{.UserID}}`); when absent,
+   * Zitadel renders its DEFAULT link into its hosted login-v2 UI — a dead end
+   * for the portal registrant. Plumbed from `MAILER_PORTAL_BASE_URL` (the same
+   * portal-origin source the BFF mailer channel uses) in `IdpModule`.
+   */
+  portalBaseUrl?: string | undefined;
   /** Injected for tests; defaults to the global `fetch`. */
   fetchImpl?: FetchLike | undefined;
 }
@@ -439,20 +449,42 @@ export class ZitadelIdpClient implements IdpClient {
     }
   }
 
+  /**
+   * #869: the `SendEmailVerificationCode` body for the email-verification send
+   * hops. `sendCode` routes the code through the configured SMTP notifier (→
+   * Mailpit on the dev-stand) — never `returnCode` (the secret must not ride the
+   * HTTP response). With a configured {@link ZitadelConfig.portalBaseUrl} the
+   * oneof additionally carries `urlTemplate`, so the email's CTA deep-links to
+   * the portal's OWN `/verify` screen instead of Zitadel's hosted login-v2 page
+   * (the owner-reported dead end, #869). Zitadel's supported placeholders are
+   * `{{.Code}}` / `{{.UserID}}` / `{{.OrgID}}` (proto `zitadel/user/v2/email.proto`)
+   * — there is NO login-name/email placeholder, so the deep-link identity is the
+   * `userId` and `/v1/auth/verify` accepts it alongside the email identity.
+   * Email-only by design: the SMS/phone hops keep the bare `{ sendCode: {} }`.
+   */
+  private emailSendCodeBody(): string {
+    const base = this.config.portalBaseUrl?.replace(/\/+$/, "");
+    return JSON.stringify({
+      sendCode: base
+        ? {
+            urlTemplate: `${base}/verify?code={{.Code}}&userId={{.UserID}}`,
+          }
+        : {},
+    });
+  }
+
   async requestEmailVerification(sub: string): Promise<void> {
     // Live wire-shape delta (#148, vs Zitadel v4.15): the verification-code
     // **resend** is `POST /v2/users/{id}/email/resend` — the merged code's
     // `/email/_send_code` (the gRPC-transcoded custom-verb spelling assumed by
     // #86/#122) 404s against the live instance (proven on the dev-stand). The
-    // request body is the Zitadel `SendEmailVerificationCode` oneof: `sendCode`
-    // routes the code through the configured SMTP notifier (→ Mailpit on the
-    // dev-stand), whereas `returnCode` echoes it in the HTTP response. We send
-    // `{ sendCode: {} }` so the code is delivered by email (EARS-3, design §4),
+    // request body is the Zitadel `SendEmailVerificationCode` oneof (#869:
+    // `sendCode` + the portal `urlTemplate` — see {@link emailSendCodeBody}),
     // matching the production notifier path — never returning the secret inline.
     const res = await this.fetchImpl(this.url(`/v2/users/${sub}/email/resend`), {
       method: "POST",
       headers: this.headers(),
-      body: JSON.stringify({ sendCode: {} }),
+      body: this.emailSendCodeBody(),
     });
     // Surface a failed send instead of silently looking like success
     // (consistent with createUser); the caller decides the user-facing message.
@@ -869,15 +901,17 @@ export class ZitadelIdpClient implements IdpClient {
       // re-sending would be an existence/state oracle, so it is a no-op.
       if (!user || user.emailVerified) return false;
       // Reuse the same native send the EARS-1/3 cascade uses — the verification-
-      // code resend hop (`POST /v2/users/{id}/email/resend`, #148). A failed send
-      // means no code was delivered, so no ledger row is owed: report `false`
-      // rather than throw (the caller's response stays identical either way).
+      // code resend hop (`POST /v2/users/{id}/email/resend`, #148) with the same
+      // portal-deep-link `urlTemplate` body (#869 — a re-sent email must not
+      // dead-end on Zitadel's hosted UI either). A failed send means no code was
+      // delivered, so no ledger row is owed: report `false` rather than throw
+      // (the caller's response stays identical either way).
       const res = await this.fetchImpl(
         this.url(`/v2/users/${user.userId}/email/resend`),
         {
           method: "POST",
           headers: this.headers(),
-          body: JSON.stringify({ sendCode: {} }),
+          body: this.emailSendCodeBody(),
         },
       );
       return res.ok;

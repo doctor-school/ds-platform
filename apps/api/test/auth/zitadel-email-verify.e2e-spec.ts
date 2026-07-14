@@ -34,6 +34,15 @@ const MAILPIT_BASE = (
 ).replace(/\/$/, "");
 
 /**
+ * #869: the portal origin the email CTA must deep-link to. Read from the same
+ * env the IdpModule wires into the adapter (never a hardcoded host — recipe-
+ * specific); the localhost default mirrors `DEFAULT_PORTAL_BASE_URL`.
+ */
+const PORTAL_BASE = (
+  process.env.MAILER_PORTAL_BASE_URL ?? "http://localhost:3001"
+).replace(/\/+$/, "");
+
+/**
  * Mints a password that satisfies the `@ds/schemas` creation baseline
  * (`NewPassword`: ≥8 + upper + lower + digit + symbol) — which since #147 mirrors
  * the live Zitadel default complexity policy, so the same fixture clears both the
@@ -57,6 +66,17 @@ function extractCode(msg: { Text?: string; HTML?: string }): string | null {
 }
 
 /**
+ * #869: extract the CTA deep-link from the rendered verification mail. Zitadel
+ * renders the configured `urlTemplate` into the button/link href (HTML) and the
+ * plain-text body; the HTML entity-escapes `&` as `&amp;`, so unescape before
+ * asserting on the query params.
+ */
+function extractVerifyLink(msg: { Text?: string; HTML?: string }): string | null {
+  const haystack = `${msg.Text ?? ""}\n${(msg.HTML ?? "").replace(/&amp;/g, "&")}`;
+  return haystack.match(/https?:\/\/[^\s"'<>]+\/verify\?[^\s"'<>]+/)?.[0] ?? null;
+}
+
+/**
  * Poll Mailpit for the verification mail to `email` delivered AFTER `afterIso`
  * and pull the code out of it. Zitadel's "Verify email" template carries the
  * code both as `(Code XXXXXX)` and in the `verify?code=XXXXXX` UI link; we match
@@ -66,10 +86,10 @@ function extractCode(msg: { Text?: string; HTML?: string }): string | null {
  * so we must skip the create-email and only accept the resend mail (otherwise we
  * would read a stale, already-superseded code and `verifyEmail` would 4xx).
  */
-async function fetchVerificationCode(
+async function fetchVerificationMail(
   email: string,
   afterIso: string,
-): Promise<string | null> {
+): Promise<{ Text?: string; HTML?: string } | null> {
   const after = Date.parse(afterIso);
   for (let attempt = 0; attempt < 30; attempt++) {
     const res = await fetch(
@@ -86,16 +106,22 @@ async function fetchVerificationCode(
       if (hit?.ID) {
         const msgRes = await fetch(`${MAILPIT_BASE}/api/v1/message/${hit.ID}`);
         if (msgRes.ok) {
-          const code = extractCode(
-            (await msgRes.json()) as { Text?: string; HTML?: string },
-          );
-          if (code) return code;
+          const msg = (await msgRes.json()) as { Text?: string; HTML?: string };
+          if (extractCode(msg)) return msg;
         }
       }
     }
     await sleep(500);
   }
   return null;
+}
+
+async function fetchVerificationCode(
+  email: string,
+  afterIso: string,
+): Promise<string | null> {
+  const msg = await fetchVerificationMail(email, afterIso);
+  return msg ? extractCode(msg) : null;
 }
 
 describe.skipIf(!LIVE_IDP)("Zitadel email verification (integration)", () => {
@@ -114,6 +140,9 @@ describe.skipIf(!LIVE_IDP)("Zitadel email verification (integration)", () => {
     client = new ZitadelIdpClient({
       baseUrl: process.env.IDP_ISSUER!,
       serviceToken: process.env.IDP_SERVICE_TOKEN!,
+      // #869: the email CTA deep-links to the portal /verify screen — the same
+      // portal-origin wiring IdpModule gives the production adapter.
+      portalBaseUrl: PORTAL_BASE,
     });
   });
 
@@ -193,5 +222,41 @@ describe.skipIf(!LIVE_IDP)("Zitadel email verification (integration)", () => {
     expect(verified).toBe(true);
     // Async SMTP delivery + the create/resend settle + retry run past vitest's 5s
     // default; this is a live cross-service round-trip, not a unit test.
+  }, 30_000);
+
+  it("EARS-3: the rendered email's CTA deep-links to the portal /verify screen — not Zitadel's hosted UI (#869)", async () => {
+    const email = newEmail();
+    const created = await client.createUser({
+      email,
+      password: livePassword(),
+    });
+    expect(created.sub).toBeTruthy();
+
+    // Same create-side code-gen settle as the round-trip test above.
+    await sleep(3000);
+
+    const sentAt = new Date().toISOString();
+    await client.requestEmailVerification(created.sub);
+
+    const mail = await fetchVerificationMail(email, sentAt);
+    expect(mail, "verification mail should reach Mailpit").toBeTruthy();
+
+    // The owner-reported #869 dead end: the CTA pointed at Zitadel's hosted
+    // login-v2 page (`<IDP_ISSUER>/ui/v2/login/verify?...`). It must now point
+    // at the PORTAL origin's own /verify screen, carrying the code and the
+    // userId identity the deep-linked screen submits with.
+    const link = extractVerifyLink(mail!);
+    expect(link, "the mail should carry a /verify deep-link").toBeTruthy();
+    const url = new URL(link!);
+    const portal = new URL(PORTAL_BASE);
+    expect(url.host, "CTA host must be the portal origin").toBe(portal.host);
+    expect(url.pathname).toBe("/verify");
+    expect(url.searchParams.get("userId")).toBe(created.sub);
+    const code = url.searchParams.get("code");
+    expect(code).toBeTruthy();
+
+    // And the deep-linked pair actually verifies — the link is live, not
+    // decorative: the same { userId, code } the portal screen auto-submits.
+    expect(await client.verifyEmail(created.sub, code!)).toBe(true);
   }, 30_000);
 });

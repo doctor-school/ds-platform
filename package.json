@@ -77,6 +77,7 @@
     "dev:db:drop": "node tools/dev/run.mjs db-drop",
     "dev:smoke": "node tools/dev/smoke.mjs",
     "deploy:prod": "node tools/deploy/prod.mjs",
+    "deploy:release-notes": "node tools/deploy/release-notes.mjs",
     "deploy:smoke": "node tools/deploy/smoke-prod.mjs",
     "task:worktree": "node tools/dev/task-worktree.mjs",
     "worktree:teardown": "node tools/dev/worktree-teardown.mjs",

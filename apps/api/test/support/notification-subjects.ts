@@ -5,13 +5,14 @@
  * SoT: Zitadel's `ru` message-text templates. #177 locked the dev-stand IdP to
  * Russian (instance default language `ru` + allowed-languages restricted to
  * `[ru]`), so every notification email now renders with its Russian subject.
- * `infra/dev-stand/idp/provision.sh` deliberately does NOT customize these
- * subjects (it only brands message *text* / the `verifysmsotp` copy, step 8/8.bis)
- * — they come straight from Zitadel's bundled `ru` i18n templates. The values
- * below are the exact rendered subjects observed live in Mailpit on the
- * provisioned dev-stand (`GET {MAILPIT}/api/v1/messages`):
+ * The `verifyemail` subject is BRANDED by `infra/dev-stand/idp/provision.sh`
+ * step 8.ter (#869 — the code-only verification email leads its subject with
+ * the dynamic `{{.Code}}`, e.g. `GX5AVU — код подтверждения Doctor.School`),
+ * so the constant below is the STABLE SUBSTRING after the code and callers
+ * match by `includes`, never equality. The `verifyemailotp` subject stays the
+ * bundled `ru` default, observed live in Mailpit on the provisioned dev-stand.
  *
- *   - registration verify-email (`verifyemail`)  → "Подтверждение email"
+ *   - registration verify-email (`verifyemail`)  → "<code> — код подтверждения Doctor.School"
  *   - login email-OTP           (`verifyemailotp`) → "Проверка OTP"
  *
  * Keep these in one place: a future locale change (or a re-brand of the subjects
@@ -21,8 +22,11 @@
  * silently masking the real EARS-6 signal (#305).
  */
 export const NOTIFICATION_SUBJECTS = {
-  /** Registration / email-verification mail (`verifyemail` template, `ru`). */
-  verifyEmail: "Подтверждение email",
+  /**
+   * Registration / email-verification mail (`verifyemail` template, branded
+   * `ru`, #869). Stable substring — the rendered subject leads with the code.
+   */
+  verifyEmail: "код подтверждения Doctor.School",
   /** Login email-OTP mail (`verifyemailotp` template, `ru`). */
   verifyEmailOtp: "Проверка OTP",
 } as const;

@@ -1,14 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ZitadelIdpClient } from "../../src/auth/idp/zitadel.idp.js";
+import { NOTIFICATION_SUBJECTS } from "../support/notification-subjects.js";
 
 /**
  * EARS-3 real-adapter integration spec (design §4 — the email-verification
  * resend + verify round-trip): `requestEmailVerification` → `verifyEmail`
- * against a **running** Zitadel v4, with the delivered code fetched from the
+ * against a **running** Zitadel v4, with the delivered mail fetched from the
  * dev-stand Mailpit catch-all.
  *
  * This pins the live wire shape #148 fixed: the send is
- * `POST /v2/users/{id}/email/resend` `{ sendCode: {} }` (the merged
+ * `POST /v2/users/{id}/email/resend` `{ sendCode: {…} }` (the merged
  * `/email/_send_code` 404s live) and the verify is
  * `POST /v2/users/{id}/email/verify` (the merged `/email/_verify` also 404s
  * live — corrected in the same change so this round-trip is provable). The
@@ -16,11 +17,25 @@ import { ZitadelIdpClient } from "../../src/auth/idp/zitadel.idp.js";
  * exactly like the production notifier path, so we assert delivery there rather
  * than echoing the secret inline.
  *
+ * #869 (owner Stage-A verdict): the delivered mail is the CODE-ONLY branded RU
+ * artifact provisioned by `infra/dev-stand/idp/provision.sh` step 8.ter — the
+ * subject leads with the code (`GX5AVU — код подтверждения Doctor.School`,
+ * < 50 chars), the body shows the code as two grouped triads with an explicit
+ * 1-hour expiry line and an ignore-if-not-you line, and it carries **no link to
+ * Zitadel's hosted login-v2 UI** (`…/ui/v2/…` — the original #869 dead end, and
+ * scanner bait: mail.ru's `checklink` AV prefetch GETs every URL in a delivered
+ * mail). The ONLY permitted href is the BARE portal `/verify` navigation aid —
+ * no query, no `{{.Code}}`/`{{.UserID}}` params, nothing consumed on GET. This
+ * spec asserts the rendered artifact facts explicitly, then proves the manual
+ * journey: the code a human would read from the mail round-trips through
+ * `verifyEmail`.
+ *
  * Gated on the live-IdP env (`IDP_ISSUER` + `IDP_SERVICE_TOKEN`), mirroring the
  * #145 `zitadel-create-user` pattern — it SKIPS in the shared CI job (which sets
  * only `DATABASE_URL`; `IDP_ISSUER` is not in turbo `passThroughEnv`) and runs
  * only against a provisioned dev-stand whose Zitadel SMTP provider points at
- * Mailpit (see `infra/dev-stand/idp/provision.sh` step 6).
+ * Mailpit AND whose `verifyemail` message text carries the step-8.ter branding
+ * (re-run `infra/dev-stand/idp/provision.sh` after pulling this change).
  *
  * Per the e2e convention this spec deletes its own users by email on teardown
  * (FakeIdpClient's deterministic fake-sub collides on `users.zitadel_sub`
@@ -32,6 +47,15 @@ const LIVE_IDP = !!process.env.IDP_ISSUER && !!process.env.IDP_SERVICE_TOKEN;
 const MAILPIT_BASE = (
   process.env.MAILPIT_URL ?? "http://truenas.local:8025"
 ).replace(/\/$/, "");
+
+/**
+ * The portal origin the bare `/verify` navigation URL points at — the same
+ * `MAILER_PORTAL_BASE_URL` source `IdpModule` plumbs into the adapter (#869),
+ * defaulting to the api's own `DEFAULT_PORTAL_BASE_URL` recipe default.
+ */
+const PORTAL_BASE = (
+  process.env.MAILER_PORTAL_BASE_URL ?? "http://localhost:3001"
+).replace(/\/+$/, "");
 
 /**
  * Mints a password that satisfies the `@ds/schemas` creation baseline
@@ -46,30 +70,29 @@ function livePassword(): string {
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Extract the 6-char verification code from a Mailpit message's body. */
-function extractCode(msg: { Text?: string; HTML?: string }): string | null {
-  const haystack = `${msg.Text ?? ""}\n${msg.HTML ?? ""}`;
-  return (
-    haystack.match(/\bCode\s+([A-Z0-9]{4,12})\b/)?.[1] ??
-    haystack.match(/[?&]code=([A-Z0-9]{4,12})\b/)?.[1] ??
-    null
-  );
+/** The delivered-mail slice the #869 artifact assertions need. */
+interface VerificationMail {
+  Subject: string;
+  Text: string;
+  HTML: string;
 }
 
 /**
  * Poll Mailpit for the verification mail to `email` delivered AFTER `afterIso`
- * and pull the code out of it. Zitadel's "Verify email" template carries the
- * code both as `(Code XXXXXX)` and in the `verify?code=XXXXXX` UI link; we match
- * either. Polled (not a fixed sleep) because SMTP delivery is async after the
- * 2xx send. The `afterIso` filter is essential: `createUser` ALSO fires an
- * initial verification email, and the `resend` invalidates that earlier code —
- * so we must skip the create-email and only accept the resend mail (otherwise we
- * would read a stale, already-superseded code and `verifyEmail` would 4xx).
+ * and return the FULL message (subject + both bodies) — the #869 assertions
+ * target the rendered artifact, not just the extracted code. Selected by the
+ * stable branded-subject tail (`NOTIFICATION_SUBJECTS.verifyEmail` — the subject
+ * LEADS with the dynamic code, so equality can never match). Polled (not a fixed
+ * sleep) because SMTP delivery is async after the 2xx send. The `afterIso`
+ * filter is essential: `createUser` ALSO fires an initial verification email,
+ * and the `resend` invalidates that earlier code — so we must skip the
+ * create-email and only accept the resend mail (otherwise we would read a stale,
+ * already-superseded code and `verifyEmail` would 4xx).
  */
-async function fetchVerificationCode(
+async function fetchVerificationMail(
   email: string,
   afterIso: string,
-): Promise<string | null> {
+): Promise<VerificationMail | null> {
   const after = Date.parse(afterIso);
   for (let attempt = 0; attempt < 30; attempt++) {
     const res = await fetch(
@@ -77,19 +100,24 @@ async function fetchVerificationCode(
     );
     if (res.ok) {
       const data = (await res.json()) as {
-        messages?: Array<{ ID?: string; Created?: string }>;
+        messages?: Array<{ ID?: string; Created?: string; Subject?: string }>;
       };
       // Messages come newest-first; take the first one created after the resend.
       const hit = (data.messages ?? []).find(
-        (m) => m.Created && Date.parse(m.Created) >= after,
+        (m) =>
+          m.Created &&
+          Date.parse(m.Created) >= after &&
+          (m.Subject ?? "").includes(NOTIFICATION_SUBJECTS.verifyEmail),
       );
       if (hit?.ID) {
         const msgRes = await fetch(`${MAILPIT_BASE}/api/v1/message/${hit.ID}`);
         if (msgRes.ok) {
-          const code = extractCode(
-            (await msgRes.json()) as { Text?: string; HTML?: string },
-          );
-          if (code) return code;
+          const msg = (await msgRes.json()) as Partial<VerificationMail>;
+          return {
+            Subject: msg.Subject ?? "",
+            Text: msg.Text ?? "",
+            HTML: msg.HTML ?? "",
+          };
         }
       }
     }
@@ -114,6 +142,9 @@ describe.skipIf(!LIVE_IDP)("Zitadel email verification (integration)", () => {
     client = new ZitadelIdpClient({
       baseUrl: process.env.IDP_ISSUER!,
       serviceToken: process.env.IDP_SERVICE_TOKEN!,
+      // #869: with a portal origin configured the send carries the BARE /verify
+      // urlTemplate — exactly what IdpModule wires in the running BFF.
+      portalBaseUrl: PORTAL_BASE,
     });
   });
 
@@ -151,7 +182,7 @@ describe.skipIf(!LIVE_IDP)("Zitadel email verification (integration)", () => {
     }
   });
 
-  it("EARS-3: resend → Mailpit → verify round-trips against real Zitadel (#148)", async () => {
+  it("003 EARS-3: the delivered mail is the code-only branded RU artifact, and its code verifies (#148/#869)", async () => {
     const email = newEmail();
     const created = await client.createUser({
       email,
@@ -180,18 +211,50 @@ describe.skipIf(!LIVE_IDP)("Zitadel email verification (integration)", () => {
         client.requestEmailVerification(created.sub),
       ).resolves.toBeUndefined();
 
-      const code = await fetchVerificationCode(email, sentAt);
+      const mail = await fetchVerificationMail(email, sentAt);
       expect(
-        code,
-        "verification code should be delivered to Mailpit",
+        mail,
+        "verification mail should be delivered to Mailpit",
       ).toBeTruthy();
 
-      // Verify the delivered code — also proves the corrected `/email/verify` path.
-      verified = await client.verifyEmail(created.sub, code!);
+      // ── #869 rendered-artifact facts (owner Stage-A verdict + Issue AC) ────
+      // Subject: leads with the 6-char code, branded tail, < 50 chars.
+      expect(mail!.Subject).toMatch(
+        /^[A-Z0-9]{6} — код подтверждения Doctor\.School$/,
+      );
+      expect(mail!.Subject.length).toBeLessThan(50);
+      const code = mail!.Subject.slice(0, 6);
+
+      // Body: the same code, grouped into two triads for reading (`GX5 AVU`).
+      const grouped = `${code.slice(0, 3)} ${code.slice(3)}`;
+      expect(mail!.HTML).toContain(`<strong>${grouped}</strong>`);
+      expect(mail!.Text).toContain(grouped);
+      // Explicit expiry line (the VERIFY_EMAIL_CODE generator lifetime, 3600s).
+      expect(mail!.Text).toContain("Код действует 1 час");
+      // Explicit "if you didn't register, ignore this email" line.
+      expect(mail!.Text).toContain("проигнорируйте это письмо");
+
+      // NO link into Zitadel's hosted login-v2 UI — the #869 AC invariant that
+      // survives the Stage-A supersession, asserted as an explicit ABSENCE.
+      expect(mail!.HTML).not.toContain("/ui/v2");
+      expect(mail!.Text).not.toContain("/ui/v2");
+      // The only href(s) are the BARE portal /verify navigation aid: no query,
+      // no code, no userId — nothing a mail scanner's GET prefetch can consume.
+      const hrefs = [...mail!.HTML.matchAll(/href="([^"]*)"/g)].map(
+        (m) => m[1],
+      );
+      expect(hrefs.length).toBeGreaterThan(0);
+      for (const href of hrefs) {
+        expect(href).toBe(`${PORTAL_BASE}/verify`);
+      }
+
+      // ── the manual journey: the code a human reads from the mail verifies ──
+      // (also proves the corrected `/email/verify` path, #148)
+      verified = await client.verifyEmail(created.sub, code);
       if (!verified) await sleep(2000);
     }
     expect(verified).toBe(true);
     // Async SMTP delivery + the create/resend settle + retry run past vitest's 5s
     // default; this is a live cross-service round-trip, not a unit test.
-  }, 30_000);
+  }, 45_000);
 });

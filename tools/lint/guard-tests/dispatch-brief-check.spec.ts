@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   checkCoverage,
+  checkSkillRequirement,
   extractAcSection,
   extractPathTokens,
+  formatSkillRow,
   verifyBrief,
 } from "../../gh/dispatch-brief-check.mjs";
 
@@ -110,6 +112,86 @@ describe("dispatch-brief-check checkCoverage()", () => {
   it("marks a path MISSING when the brief never names it", () => {
     const rows = checkCoverage(["tools/gh/a.mjs"], "unrelated brief text");
     expect(rows).toEqual([{ path: "tools/gh/a.mjs", covered: false }]);
+  });
+});
+
+describe("dispatch-brief-check checkSkillRequirement() — governing-skill gate (#857)", () => {
+  // All fixtures below are pure strings fed to a string-matching function and
+  // are never resolved against a filesystem — platform-agnostic by construction.
+  it("passes when the brief names a catalog-skill path", () => {
+    expect(
+      checkSkillRequirement(
+        "kind: hotfix-pr — run apps/docs/content/skills/do-hotfix-pr/SKILL.md end to end",
+      ),
+    ).toEqual({
+      verdict: "skill",
+      skillPath: "apps/docs/content/skills/do-hotfix-pr/SKILL.md",
+    });
+  });
+
+  it("matches a backticked skill path (backtick-normalized like checkCoverage)", () => {
+    expect(
+      checkSkillRequirement("per `apps/docs/content/skills/merge-when-green/SKILL.md`"),
+    ).toEqual({
+      verdict: "skill",
+      skillPath: "apps/docs/content/skills/merge-when-green/SKILL.md",
+    });
+  });
+
+  it("accepts the `kind: engineering-task` escape (case-insensitive, flexible whitespace)", () => {
+    expect(checkSkillRequirement("Kind:  Engineering-Task — CI hardening")).toEqual({
+      verdict: "engineering-task",
+    });
+  });
+
+  it("accepts an AGENTS.md §3.8 reference as the escape", () => {
+    expect(
+      checkSkillRequirement("no governing catalog skill — AGENTS.md §3.8 applies"),
+    ).toEqual({ verdict: "engineering-task" });
+  });
+
+  it("returns missing when the brief has neither a skill path nor the escape", () => {
+    expect(checkSkillRequirement("edit tools/gh/a.mjs and open a PR")).toEqual({
+      verdict: "missing",
+    });
+  });
+
+  it("does not accept a non-SKILL.md file under the catalog dir", () => {
+    expect(
+      checkSkillRequirement("see apps/docs/content/skills/do-hotfix-pr/README.md"),
+    ).toEqual({ verdict: "missing" });
+  });
+
+  it("prefers the skill path when both a path and the escape appear", () => {
+    const res = checkSkillRequirement(
+      "kind: engineering-task, but governed by apps/docs/content/skills/open-ears-issues/SKILL.md",
+    );
+    expect(res.verdict).toBe("skill");
+  });
+});
+
+describe("dispatch-brief-check formatSkillRow()", () => {
+  it("renders `SKILL <path>` for a named catalog skill", () => {
+    expect(
+      formatSkillRow({
+        verdict: "skill",
+        skillPath: "apps/docs/content/skills/do-hotfix-pr/SKILL.md",
+      }),
+    ).toBe("SKILL apps/docs/content/skills/do-hotfix-pr/SKILL.md");
+  });
+
+  it("renders the distinguishable engineering-task PASS row for the escape", () => {
+    expect(formatSkillRow({ verdict: "engineering-task" })).toBe(
+      "SKILL engineering-task (no catalog skill — AGENTS.md §3.8)",
+    );
+  });
+
+  it("renders a MISSING-SKILL row naming BOTH remedies (skill path / escape syntax)", () => {
+    const row = formatSkillRow({ verdict: "missing" });
+    expect(row).toMatch(/^MISSING-SKILL /);
+    expect(row).toContain("apps/docs/content/skills/<name>/SKILL.md");
+    expect(row).toContain("kind: engineering-task");
+    expect(row).toContain("AGENTS.md §3.8");
   });
 });
 

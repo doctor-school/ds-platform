@@ -28,13 +28,24 @@
  *   - `checkCoverage(tokens, briefText)` → PASS/MISSING per surface, where a
  *     surface is covered iff the brief text (backtick/whitespace-normalized)
  *     contains it as a substring.
+ *   - `checkSkillRequirement(briefText)` → the governing-skill gate (#857,
+ *     AGENTS.md §3.3 "the path is the contract"): the brief must name a
+ *     catalog-skill path matching `apps/docs/content/skills/<name>/SKILL.md`.
+ *     Escape (deliberate, AGENTS.md §3.1/§3.8): `engineering-task` is the ONE
+ *     kind with NO catalog skill, so a brief satisfies the gate WITHOUT a
+ *     skill path when it declares that kind — accepted escape syntax is a
+ *     `kind: engineering-task` declaration (case-insensitive, flexible
+ *     whitespace) OR an explicit reference to `AGENTS.md §3.8`.
  *
- * Output: one machine-parseable row per surface — `PASS <path>` /
- * `MISSING <path>` — then a summary line.
+ * Output: one skill row — `SKILL <catalog path>` /
+ * `SKILL engineering-task (no catalog skill — AGENTS.md §3.8)` /
+ * `MISSING-SKILL <remedies>` — then one machine-parseable row per AC surface
+ * (`PASS <path>` / `MISSING <path>`), then a summary line.
  *
  * Exit codes: 0 = all surfaces covered (or the AC block names zero path-like
- * surfaces → nothing to check); 1 = ≥1 MISSING; 2 = usage / input error
- * (missing or non-numeric <N>, unreadable brief, or a `gh` failure).
+ * surfaces → nothing to check) AND the skill gate is satisfied; 1 = ≥1
+ * MISSING or MISSING-SKILL; 2 = usage / input error (missing or non-numeric
+ * <N>, unreadable brief, or a `gh` failure).
  * Auto-editing the brief is OUT of scope — the verdict informs the lead.
  *
  * Pure node, no bash-isms — runs on Windows/PowerShell and POSIX alike. The
@@ -126,6 +137,50 @@ export function checkCoverage(pathTokens, briefText) {
   }));
 }
 
+/** A governing catalog-skill path per AGENTS.md §3.3 — the path is the contract. */
+const SKILL_PATH_RE = /apps\/docs\/content\/skills\/[A-Za-z0-9._-]+\/SKILL\.md/;
+
+/**
+ * The engineering-task escape (AGENTS.md §3.1/§3.8): the only task kind with
+ * no catalog skill. Accepted syntax: a `kind: engineering-task` declaration
+ * (case-insensitive, flexible whitespace) or a reference to `AGENTS.md §3.8`.
+ */
+const ENGINEERING_TASK_ESCAPE_RE = /kind\s*:\s*engineering-task|AGENTS\.md\s*§\s*3\.8/i;
+
+/**
+ * The governing-skill gate (#857): a dispatch brief must name the catalog
+ * skill it runs under (`apps/docs/content/skills/<name>/SKILL.md`), or declare
+ * the engineering-task escape (see ENGINEERING_TASK_ESCAPE_RE). A skill path
+ * takes precedence when both appear. Matching runs on the same
+ * backtick/whitespace-normalized text as `checkCoverage`.
+ * @param {string} briefText
+ * @returns {{verdict: "skill", skillPath: string} | {verdict: "engineering-task"} | {verdict: "missing"}}
+ */
+export function checkSkillRequirement(briefText) {
+  const haystack = normalizeForCoverage(briefText);
+  const m = haystack.match(SKILL_PATH_RE);
+  if (m) return { verdict: "skill", skillPath: m[0] };
+  if (ENGINEERING_TASK_ESCAPE_RE.test(haystack)) return { verdict: "engineering-task" };
+  return { verdict: "missing" };
+}
+
+/**
+ * The machine-parseable skill row for a `checkSkillRequirement` result. The
+ * MISSING-SKILL line names both remedies so a failing lead can self-serve.
+ * @param {ReturnType<typeof checkSkillRequirement>} skill
+ * @returns {string}
+ */
+export function formatSkillRow(skill) {
+  if (skill.verdict === "skill") return `SKILL ${skill.skillPath}`;
+  if (skill.verdict === "engineering-task")
+    return "SKILL engineering-task (no catalog skill — AGENTS.md §3.8)";
+  return (
+    "MISSING-SKILL no governing catalog-skill path in the brief — name " +
+    "apps/docs/content/skills/<name>/SKILL.md (AGENTS.md §3.3), or declare the " +
+    "engineering-task escape: a `kind: engineering-task` line or a reference to AGENTS.md §3.8"
+  );
+}
+
 /** Default runner — real `gh` via spawnSync (Windows-safe: gh is an exe on PATH). */
 export function defaultRunner() {
   const run = (cmd, args) => {
@@ -208,24 +263,31 @@ function main() {
   }
 
   const { rows, missing } = result;
-  if (rows.length === 0) {
-    process.stdout.write(
-      `[dispatch:brief-check] #${issueArg}: no path-like AC surfaces to check — nothing to verify.\n`,
-    );
-    process.exit(0);
-  }
+  const skill = checkSkillRequirement(briefText);
+  const skillOk = skill.verdict !== "missing";
 
+  process.stdout.write(`${formatSkillRow(skill)}\n`);
   for (const r of rows)
     process.stdout.write(`${r.covered ? "PASS" : "MISSING"} ${r.path}\n`);
+
   const pass = rows.length - missing;
+  const acSummary =
+    rows.length === 0
+      ? "no path-like AC surfaces to check"
+      : `${rows.length} path(s): ${pass} PASS, ${missing} MISSING`;
+  const problems = [];
+  if (missing > 0)
+    problems.push("the brief omits AC surface(s); name them before dispatching");
+  if (!skillOk)
+    problems.push(
+      "no governing catalog-skill path — name apps/docs/content/skills/<name>/SKILL.md, or declare `kind: engineering-task` / AGENTS.md §3.8",
+    );
   process.stdout.write(
-    `[dispatch:brief-check] ${rows.length} path(s): ${pass} PASS, ${missing} MISSING — ${
-      missing > 0
-        ? "the brief omits AC surface(s); name them before dispatching."
-        : "OK"
+    `[dispatch:brief-check] #${issueArg}: ${acSummary} — ${
+      problems.length > 0 ? `${problems.join("; ")}.` : "OK"
     }\n`,
   );
-  process.exit(missing > 0 ? 1 : 0);
+  process.exit(missing > 0 || !skillOk ? 1 : 0);
 }
 
 // Run main only when invoked directly, so the pure functions can be imported

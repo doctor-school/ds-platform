@@ -53,11 +53,19 @@ function parseArgs(argv) {
 
 // Default auto-memory project log dir: ~/.claude/projects/<repo-slug>/
 // (same slug convention as instruction-budget-lint.ts).
+// The auto-memory slug of a repo-root path: path separators + drive colon → '-'
+// (NOT the dot — so a worktree root `…\.claude\worktrees\N` slugs to the
+// `…-.claude-worktrees-N` dash-DOT form, which `resolveSessionSegments` must
+// normalize; #800 BLOCKER). Shared so tests derive the same slug production
+// rather than hand-typing an assumed shape.
+export function slugifyRepoRoot(root) {
+  return root.replace(/[\\/:]/g, '-');
+}
+
 function defaultLogDir() {
   const home = process.env.HOME ?? process.env.USERPROFILE;
   if (!home) return null;
-  const slug = REPO_ROOT.replace(/[\\/:]/g, '-');
-  return path.resolve(home, '.claude', 'projects', slug);
+  return path.resolve(home, '.claude', 'projects', slugifyRepoRoot(REPO_ROOT));
 }
 
 // #800 — a session that called EnterWorktree re-slugs its log dir: its segments
@@ -70,11 +78,21 @@ function defaultLogDir() {
 // (REPO_ROOT slugged from inside a worktree) still matches the main dir.
 export function resolveSessionSegments(projectsDir, repoSlug, sessionId) {
   const want = sessionId.endsWith('.jsonl') ? sessionId : `${sessionId}.jsonl`;
-  const baseSlug = repoSlug.replace(/--claude-worktrees-.*$/, '');
+  // Normalize away a worktree re-slug suffix to recover the MAIN slug. The
+  // suffix appears in BOTH shapes: `-.claude-worktrees-N` (dash-dot, what
+  // slugifyRepoRoot emits from a worktree REPO_ROOT — the `.` is not slugged)
+  // and `--claude-worktrees-N` (double-dash, the on-disk Claude project dir).
+  // `-+\.?claude-worktrees-` covers one-or-more dashes + an optional dot (#800).
+  const baseSlug = repoSlug.replace(/-+\.?claude-worktrees-.*$/, '');
   if (!projectsDir || !fs.existsSync(projectsDir)) return [];
+  // Match the main slug dir EXACTLY or a worktree sibling (either suffix shape),
+  // anchored — a loose substring test would over-match a foreign sibling project
+  // whose slug merely contains this repo's slug (#800 review NIT).
+  const esc = baseSlug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const dirRe = new RegExp(`^${esc}(?:-+\\.?claude-worktrees-.*)?$`);
   const segs = [];
   for (const dirent of fs.readdirSync(projectsDir, { withFileTypes: true })) {
-    if (!dirent.isDirectory() || !dirent.name.includes(baseSlug)) continue;
+    if (!dirent.isDirectory() || !dirRe.test(dirent.name)) continue;
     const p = path.join(projectsDir, dirent.name, want);
     if (fs.existsSync(p)) segs.push(p);
   }
@@ -97,6 +115,11 @@ export function readSessionSegments(paths) {
     }
   };
   if (paths.length === 1) return readLines(paths[0]);
+  // Tie-break: `Array.prototype.sort` is stable (V8), so segments sharing a first
+  // timestamp keep their input order — and the input is `resolveSessionSegments`'
+  // already-sorted (deterministic) path list — while each segment's lines are
+  // concatenated in file order. Equal-timestamp merges are therefore stable and
+  // reproducible (#800 review SUGGESTION).
   const segs = paths.map((p) => {
     const lines = readLines(p);
     let firstTs = '';

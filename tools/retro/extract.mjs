@@ -53,11 +53,92 @@ function parseArgs(argv) {
 
 // Default auto-memory project log dir: ~/.claude/projects/<repo-slug>/
 // (same slug convention as instruction-budget-lint.ts).
+// The auto-memory slug of a repo-root path: path separators + drive colon → '-'
+// (NOT the dot — so a worktree root `…\.claude\worktrees\N` slugs to the
+// `…-.claude-worktrees-N` dash-DOT form, which `resolveSessionSegments` must
+// normalize; #800 BLOCKER). Shared so tests derive the same slug production
+// rather than hand-typing an assumed shape.
+export function slugifyRepoRoot(root) {
+  return root.replace(/[\\/:]/g, '-');
+}
+
 function defaultLogDir() {
   const home = process.env.HOME ?? process.env.USERPROFILE;
   if (!home) return null;
-  const slug = REPO_ROOT.replace(/[\\/:]/g, '-');
-  return path.resolve(home, '.claude', 'projects', slug);
+  return path.resolve(home, '.claude', 'projects', slugifyRepoRoot(REPO_ROOT));
+}
+
+// #800 — a session that called EnterWorktree re-slugs its log dir: its segments
+// move from ~/.claude/projects/<slug>/ to <slug>--claude-worktrees-<N>/, so a
+// single-dir `--session` lookup finds NOTHING (and a naive newest-mtime fallback
+// lands on the wrong session). Glob EVERY sibling slug dir under `projectsDir`
+// whose name contains the MAIN repo slug (the main dir PLUS every worktree
+// re-slug) and return the absolute paths of that session's `<id>.jsonl` segments.
+// `repoSlug` is normalized to the main slug first, so passing the worktree slug
+// (REPO_ROOT slugged from inside a worktree) still matches the main dir.
+export function resolveSessionSegments(projectsDir, repoSlug, sessionId) {
+  const want = sessionId.endsWith('.jsonl') ? sessionId : `${sessionId}.jsonl`;
+  // Normalize away a worktree re-slug suffix to recover the MAIN slug. The
+  // suffix appears in BOTH shapes: `-.claude-worktrees-N` (dash-dot, what
+  // slugifyRepoRoot emits from a worktree REPO_ROOT — the `.` is not slugged)
+  // and `--claude-worktrees-N` (double-dash, the on-disk Claude project dir).
+  // `-+\.?claude-worktrees-` covers one-or-more dashes + an optional dot (#800).
+  const baseSlug = repoSlug.replace(/-+\.?claude-worktrees-.*$/, '');
+  if (!projectsDir || !fs.existsSync(projectsDir)) return [];
+  // Match the main slug dir EXACTLY or a worktree sibling (either suffix shape),
+  // anchored — a loose substring test would over-match a foreign sibling project
+  // whose slug merely contains this repo's slug (#800 review NIT).
+  const esc = baseSlug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const dirRe = new RegExp(`^${esc}(?:-+\\.?claude-worktrees-.*)?$`);
+  const segs = [];
+  for (const dirent of fs.readdirSync(projectsDir, { withFileTypes: true })) {
+    if (!dirent.isDirectory() || !dirRe.test(dirent.name)) continue;
+    const p = path.join(projectsDir, dirent.name, want);
+    if (fs.existsSync(p)) segs.push(p);
+  }
+  return segs.sort();
+}
+
+// Read one session's segment files and return their lines merged into a single
+// chronological stream (#800). A session is in exactly one dir at a time (it
+// moves when it EnterWorktree's), so its segments are temporally disjoint —
+// ordering the segments by their first timestamp and concatenating reconstructs
+// the original stream while keeping each segment's internal order intact. The
+// single-segment case returns the file's lines byte-for-byte as before (backward
+// compatible with batch mode and an explicit --log-dir).
+export function readSessionSegments(paths) {
+  const readLines = (p) => {
+    try {
+      return fs.readFileSync(p, 'utf8').split('\n');
+    } catch {
+      return [];
+    }
+  };
+  if (paths.length === 1) return readLines(paths[0]);
+  // Tie-break: `Array.prototype.sort` is stable (V8), so segments sharing a first
+  // timestamp keep their input order — and the input is `resolveSessionSegments`'
+  // already-sorted (deterministic) path list — while each segment's lines are
+  // concatenated in file order. Equal-timestamp merges are therefore stable and
+  // reproducible (#800 review SUGGESTION).
+  const segs = paths.map((p) => {
+    const lines = readLines(p);
+    let firstTs = '';
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const ts = JSON.parse(line).timestamp;
+        if (ts) {
+          firstTs = ts;
+          break;
+        }
+      } catch {
+        /* skip unparseable line while probing for the first timestamp */
+      }
+    }
+    return { firstTs, lines };
+  });
+  segs.sort((a, b) => String(a.firstTs).localeCompare(String(b.firstTs)));
+  return segs.flatMap((s) => s.lines);
 }
 
 const HELP = `tools/retro/extract.mjs — extract human messages + correction corpus from Claude Code session logs
@@ -286,6 +367,28 @@ export function queuedCommandPrompt(e) {
   return typeof att.prompt === 'string' ? att.prompt : null;
 }
 
+// #706 — a genuine owner pushback can arrive as a mid-stream queued_command with
+// NONE of the CORRECTION_RE tokens: the 2026-07-10 session
+// f73a5301-2679-4c1c-bc7f-c1376866ff60 queued «Но агент ещё работает» — a
+// contrastive-opener redirect — and it scored 0. A bare «но»/«but» is far too
+// high-frequency to add to the GLOBAL lexicon (it would flood typed/AUQ corpora),
+// so this companion heuristic is applied ONLY inside the queued_command branch,
+// where interjections are rare and a start-anchored contrastive opener («Но …» /
+// «Однако …» / «But …» / «Actually …») is almost always a redirect. Start-anchored
+// so a mid-sentence «но» never fires; Cyrillic-anchored (`(?![а-яё])`, JS `\b`
+// being ASCII-only) so «Ноутбук»/«Ного»-style words never trip it. The bare
+// contrastive «А …» is deliberately excluded — as an opener it is overwhelmingly
+// benign («А давай …» / «А как …»), so keeping the list tight avoids false flags.
+export const QUEUED_CONTRASTIVE_RE = new RegExp(
+  '^(?:но(?![а-яё])|однако(?![а-яё])|but\\b|actually\\b)',
+  'i',
+);
+
+export function queuedContrastiveRedirect(text) {
+  if (typeof text !== 'string') return false;
+  return QUEUED_CONTRASTIVE_RE.test(text.trimStart());
+}
+
 function textOf(content) {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
@@ -322,44 +425,89 @@ function main() {
     return;
   }
 
-  const LOG_DIR = args.logDir ?? defaultLogDir();
   const OUT_DIR = args.outDir ?? path.join(REPO_ROOT, '.audit-tmp');
 
-  if (!LOG_DIR) {
-    process.stderr.write('[retro] could not derive a log dir (no HOME/USERPROFILE); pass --log-dir.\n');
-    process.exit(1);
-  }
-  if (!fs.existsSync(LOG_DIR)) {
-    process.stderr.write(`[retro] log dir not found: ${LOG_DIR}\n  pass --log-dir <dir>.\n`);
-    process.exit(1);
+  // Build the list of session units to process. Each unit is one session id plus
+  // the absolute paths of ALL its log segments. Batch mode and an explicit
+  // --log-dir stay single-dir (one file → one unit); a default-dir `--session`
+  // run globs every repo slug dir so a session that called EnterWorktree — which
+  // re-slugs its log dir to <slug>--claude-worktrees-<N> — is reassembled from
+  // its segments across the main dir and every worktree sibling (#800).
+  let units; // [{ id, segmentPaths: string[] }]
+  let logDirLabel;
+
+  if (args.session && !args.logDir) {
+    const defaultDir = defaultLogDir();
+    if (!defaultDir) {
+      process.stderr.write('[retro] could not derive a log dir (no HOME/USERPROFILE); pass --log-dir.\n');
+      process.exit(1);
+    }
+    const projectsDir = path.dirname(defaultDir);
+    const repoSlug = path.basename(defaultDir);
+    const segs = resolveSessionSegments(projectsDir, repoSlug, args.session);
+    if (segs.length === 0) {
+      process.stderr.write(
+        `[retro] session log not found under ${projectsDir} for slug *${repoSlug}*: ${args.session}\n  pass --log-dir <dir>.\n`,
+      );
+      process.exit(1);
+    }
+    const id = args.session.endsWith('.jsonl')
+      ? args.session.slice(0, -'.jsonl'.length)
+      : args.session;
+    units = [{ id, segmentPaths: segs }];
+    logDirLabel = projectsDir;
+  } else {
+    const LOG_DIR = args.logDir ?? defaultLogDir();
+    if (!LOG_DIR) {
+      process.stderr.write('[retro] could not derive a log dir (no HOME/USERPROFILE); pass --log-dir.\n');
+      process.exit(1);
+    }
+    if (!fs.existsSync(LOG_DIR)) {
+      process.stderr.write(`[retro] log dir not found: ${LOG_DIR}\n  pass --log-dir <dir>.\n`);
+      process.exit(1);
+    }
+    let files = fs.readdirSync(LOG_DIR).filter((f) => f.endsWith('.jsonl'));
+    if (args.session) {
+      const want = args.session.endsWith('.jsonl') ? args.session : `${args.session}.jsonl`;
+      files = files.filter((f) => f === want);
+      if (files.length === 0) {
+        process.stderr.write(`[retro] session log not found in ${LOG_DIR}: ${want}\n`);
+        process.exit(1);
+      }
+    }
+    units = files.map((f) => ({
+      id: f.replace('.jsonl', ''),
+      segmentPaths: [path.join(LOG_DIR, f)],
+    }));
+    logDirLabel = LOG_DIR;
   }
 
   fs.mkdirSync(path.join(OUT_DIR, 'sessions'), { recursive: true });
 
-  let files = fs.readdirSync(LOG_DIR).filter((f) => f.endsWith('.jsonl'));
-  if (args.session) {
-    const want = args.session.endsWith('.jsonl') ? args.session : `${args.session}.jsonl`;
-    files = files.filter((f) => f === want);
-    if (files.length === 0) {
-      process.stderr.write(`[retro] session log not found in ${LOG_DIR}: ${want}\n`);
-      process.exit(1);
-    }
-  }
-
+  const totalSegments = units.reduce((n, u) => n + u.segmentPaths.length, 0);
   const sessions = [];
 
-  for (const file of files) {
-    const id = file.replace('.jsonl', '');
-    let lines;
-    try {
-      lines = fs.readFileSync(path.join(LOG_DIR, file), 'utf8').split('\n');
-    } catch {
-      continue;
-    }
+  for (const unit of units) {
+    const id = unit.id;
+    // One session's segments merged into a single chronological line stream, so a
+    // session split across a main dir + worktree re-slug is processed as ONE
+    // session, not N partial ones (#800).
+    const lines = readSessionSegments(unit.segmentPaths);
+    const bytes = unit.segmentPaths.reduce((n, p) => {
+      try {
+        return n + fs.statSync(p).size;
+      } catch {
+        return n;
+      }
+    }, 0);
+    const file =
+      unit.segmentPaths.length === 1
+        ? path.basename(unit.segmentPaths[0])
+        : `${id}.jsonl (${unit.segmentPaths.length} segments)`;
     const meta = {
       id,
       file,
-      bytes: fs.statSync(path.join(LOG_DIR, file)).size,
+      bytes,
       firstTs: null,
       lastTs: null,
       entrypoints: new Set(),
@@ -406,7 +554,10 @@ function main() {
             handoff,
             imageOnly: false,
             source: 'queued_command',
-            correction: !handoff && CORRECTION_RE.test(text),
+            // #706 — also flag a start-anchored contrastive-opener redirect that
+            // carries none of the CORRECTION_RE tokens; queued-scoped so the
+            // global lexicon (typed/AUQ paths) stays byte-identical.
+            correction: !handoff && (CORRECTION_RE.test(text) || queuedContrastiveRedirect(text)),
           });
         }
         continue;
@@ -515,9 +666,9 @@ function main() {
     0,
   );
   const summary = {
-    logDir: LOG_DIR,
+    logDir: logDirLabel,
     mode: args.session ? 'single' : 'batch',
-    totalFiles: files.length,
+    totalFiles: totalSegments,
     interactiveSessions: interactive.length,
     sdkSessions: sessions.filter((s) => s.kind === 'sdk').length,
     otherSessions: sessions.filter((s) => s.kind === 'other').length,

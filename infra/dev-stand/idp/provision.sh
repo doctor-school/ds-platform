@@ -464,19 +464,18 @@ fi
 # next-intl's reach and arrived in English/other languages live — this step fixes
 # that Zitadel-side, reproducibly.
 #
-# Zitadel ships built-in Russian translations for MOST of these message types
-# (verified live: init/verifyemail/passwordreset/verifyphone/verifyemailotp all
-# return good `ru` copy with the right {{.Code}}/{{.OTP}} placeholders), so those
-# need NO custom override — we only have to make Zitadel SELECT Russian.
-# `verifysmsotp` is the EXCEPTION (#226): its bundled default is inadequate —
-# it leaks OTP-jargon ("OTP"), the dev domain ({{.Domain}} -> truenas.local), the
-# raw Go-duration {{.Expiry}} (e.g. "5m0s"), and a WebOTP autofill line
-# (`@{{.Domain}} #{{.OTP}}`), and the idp even warns `VerifySMSOTP.Title not found
-# in language "ru"`. We therefore explicitly override `verifysmsotp` (ru + en) with
-# branded Doctor.School copy in step 8.bis below. (If any of the bundled copy ever
-# regresses, converge per-type custom texts via PUT
-# /admin/v1/text/message/{type}/ru — init|verifyemail|verifyphone|passwordreset|
-# verifyemailotp|verifysmsotp.)
+# Zitadel ships built-in Russian translations for these message types (verified
+# live: init/verifyemail/passwordreset/verifyphone/verifyemailotp all return
+# grammatical `ru` copy with the right {{.Code}}/{{.OTP}} placeholders), so this
+# step only makes Zitadel SELECT Russian. The bundled copy itself is then
+# reworked per-type where it is inadequate for a user-facing channel:
+# `verifysmsotp` (#226, step 8.bis — jargon/domain/expiry leaks), `verifyemail`
+# (#869, step 8.ter — code-only branded copy), `verifyemailotp` + the neutral
+# greetings of the dormant types (#878, step 8.quinquies — the computed
+# «<local-part> guest» display name leaked into {{.DisplayName}} greetings).
+# `passwordreset` rework is tracked as #880. (Converge mechanism for all of
+# them: PUT /admin/v1/text/message/{type}/ru — init|verifyemail|verifyphone|
+# passwordreset|verifyemailotp|verifysmsotp|password_change.)
 #
 # TWO levers, because the instance default alone is NOT sufficient (proven live):
 #   (a) Default language → ru. The documented fallback. Necessary, but registrants
@@ -721,6 +720,73 @@ api GET /admin/v1/policies/login | jq -r '.policy |
   "login-policy sweep: allowDomainDiscovery=\(.allowDomainDiscovery // false) — discovery routes to register only when allowRegister is true",
   "login-policy sweep: allowUsernamePassword=\(.allowUsernamePassword // false) — login method for existing users, not an account-creation door"
 ' >&2
+
+# ── 8.quinquies. neutral greetings everywhere a user sees one (#878) ────────────
+# The BFF creates registrants with a REQUIRED placeholder profile (givenName =
+# email local-part, familyName = "guest"); without an explicit displayName
+# Zitadel computes «<local-part> guest» and its bundled templates greet with
+# {{.DisplayName}} — the placeholder leaked user-facing («Привет, a guest!»).
+# Two-sided fix: the BFF now sends displayName = the registration email (#878,
+# apps/api zitadel.idp.ts), AND every user-facing greeting drops the name
+# variable — same neutral «Здравствуйте!» technique proven live by 8.ter/#869.
+# `passwordreset` is deliberately NOT touched here: its full branded rework is
+# Issue #880.
+#
+# (a) verifyemailotp — the LIVE email-OTP login mail (EARS-6). Fully branded,
+# code-only, matching the 8.ter copy style: neutral greeting, enlarged
+# letter-spaced one-token {{.OTP}} (the code variable for OTP types — NOT
+# {{.Code}}), explicit expiry (the instance's OTP_EMAIL secret-generator
+# lifetime is 300s — admin API `secretgenerators`, verified live), and an
+# "if you didn't request this" line. The subject leads with the code
+# (inbox-preview UX, #869 precedent). The e2e specs select this mail by the
+# STABLE subject tail — `NOTIFICATION_SUBJECTS.verifyEmailOtp` in
+# apps/{api,portal} e2e support matches by substring — so a copy change here
+# must keep that tail (or update both constants in the same PR; #878 did).
+# The bundled CTA button cannot be suppressed (an empty buttonText falls
+# through to the bundled default label — proven live on v4.15.0, 8.ter), so
+# its label is demoted to a subordinate navigation aid; the code the user
+# TYPES on the portal /login screen is the primary path.
+RU_LOGIN_OTP_SUBJECT='{{.OTP}} — код для входа в Doctor.School'
+RU_LOGIN_OTP_TITLE='Вход в Doctor.School'
+RU_LOGIN_OTP_PREHEADER='Введите код на странице входа Doctor.School'
+RU_LOGIN_OTP_GREETING='Здравствуйте!'
+RU_LOGIN_OTP_TEXT='Ваш код для входа в Doctor.School:<br><br><span style="font-size:28px;letter-spacing:3px"><strong>{{.OTP}}</strong></span><br><br>Введите его на странице входа, с которой вы запрашивали код. Код действует 5 минут.<br><br>Если вы не запрашивали вход — проигнорируйте это письмо.'
+RU_LOGIN_OTP_BUTTON='Открыть страницу входа'
+EN_LOGIN_OTP_SUBJECT='{{.OTP}} — Doctor.School sign-in code'
+EN_LOGIN_OTP_TITLE='Sign in to Doctor.School'
+EN_LOGIN_OTP_PREHEADER='Enter the code on the Doctor.School sign-in page'
+EN_LOGIN_OTP_GREETING='Hello!'
+EN_LOGIN_OTP_TEXT='Your Doctor.School sign-in code:<br><br><span style="font-size:28px;letter-spacing:3px"><strong>{{.OTP}}</strong></span><br><br>Enter it on the sign-in page you requested the code from. The code is valid for 5 minutes.<br><br>If you did not request a sign-in, please ignore this email.'
+EN_LOGIN_OTP_BUTTON='Open the sign-in page'
+api_idempotent PUT /admin/v1/text/message/verifyemailotp/ru \
+  "$(jq -nc --arg s "$RU_LOGIN_OTP_SUBJECT" --arg ti "$RU_LOGIN_OTP_TITLE" \
+        --arg p "$RU_LOGIN_OTP_PREHEADER" --arg g "$RU_LOGIN_OTP_GREETING" \
+        --arg t "$RU_LOGIN_OTP_TEXT" --arg b "$RU_LOGIN_OTP_BUTTON" \
+        '{subject:$s, title:$ti, preHeader:$p, greeting:$g, text:$t, buttonText:$b}')" >/dev/null \
+  && echo "ensured verifyemailotp/ru code-only branded login-OTP email" >&2
+api_idempotent PUT /admin/v1/text/message/verifyemailotp/en \
+  "$(jq -nc --arg s "$EN_LOGIN_OTP_SUBJECT" --arg ti "$EN_LOGIN_OTP_TITLE" \
+        --arg p "$EN_LOGIN_OTP_PREHEADER" --arg g "$EN_LOGIN_OTP_GREETING" \
+        --arg t "$EN_LOGIN_OTP_TEXT" --arg b "$EN_LOGIN_OTP_BUTTON" \
+        '{subject:$s, title:$ti, preHeader:$p, greeting:$g, text:$t, buttonText:$b}')" >/dev/null \
+  && echo "ensured verifyemailotp/en code-only branded login-OTP email" >&2
+
+# (b) dormant types (verifyphone / password_change / init) — MINIMAL override:
+# only the greeting is neutralized (the bundled ru/en bodies carry no
+# {{.DisplayName}} — verified live via GET /admin/v1/text/default/message/
+# {type}/{lang} on v4.15.0); everything else keeps the bundled default. A PUT
+# with only `greeting` leaves the unset fields falling through to the bundled
+# defaults (the 8.ter empty-field semantics). NOTE the path keys are Zitadel's
+# own inconsistent spelling: `password_change` IS snake_case while
+# `verifyphone`/`init` are not (probed live: `passwordchange` → 404).
+for _mt in verifyphone password_change init; do
+  api_idempotent PUT "/admin/v1/text/message/${_mt}/ru" \
+    '{"greeting":"Здравствуйте!"}' >/dev/null \
+    && echo "ensured ${_mt}/ru neutral greeting" >&2
+  api_idempotent PUT "/admin/v1/text/message/${_mt}/en" \
+    '{"greeting":"Hello!"}' >/dev/null \
+    && echo "ensured ${_mt}/en neutral greeting" >&2
+done
 
 # ── output (machine-parseable; secret only when freshly created) ─────────────
 echo "IDP_PROJECT_ID=${PROJECT_ID}"

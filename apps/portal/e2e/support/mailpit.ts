@@ -17,11 +17,11 @@ const sleep = (ms: number): Promise<void> =>
 /**
  * Extract a 6-ish-char OTP code from a Mailpit message.
  *
- * The branded verify-email (#869, provision.sh step 8.ter) is CODE-ONLY: the
- * code leads the SUBJECT (`GX5AVU — код подтверждения Doctor.School`) and the
- * body renders it as ONE unbroken token — there is no `code=` link to scrape
- * any more. Subject-first, then the legacy body patterns (the login email-OTP
- * mail still renders `Code 12345678`).
+ * The branded verify-email (#869, provision.sh step 8.ter) and login email-OTP
+ * (#878, step 8.quinquies) are CODE-ONLY: the code leads the SUBJECT
+ * (`GX5AVU — код подтверждения Doctor.School` / `47787462 — код для входа в
+ * Doctor.School`) and the body renders it as ONE unbroken token — there is no
+ * `code=` link to scrape any more. Subject-first, then the legacy body patterns.
  */
 function extractCode(msg: {
   Subject?: string;

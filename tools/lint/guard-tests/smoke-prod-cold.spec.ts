@@ -30,6 +30,20 @@ const HEALTHY_LOGIN_BODY = `<!DOCTYPE html><html><head><title>Login</title></hea
 <input type="text" id="loginName" name="loginName" autocomplete="username" />
 <button type="submit">Continue</button></form></body></html>`;
 
+// A trimmed portal /login COLD body (#885): the portal login form is
+// CLIENT-rendered, so the raw server HTML carries NO <input> — only the Next
+// App-Router shell and its RSC flight stream (`self.__next_f`). This is what a
+// HEALTHY cold portal /login looks like; asserting "<input" here (the pre-#885
+// probe) would false-positive on a working page.
+const CLIENT_RENDERED_PORTAL_LOGIN_BODY = `<!DOCTYPE html><html><head><title>Doctor.School</title></head>
+<body><script>self.__next_f=self.__next_f||[];self.__next_f.push([1,"login shell"])</script>
+<script src="/_next/static/chunks/app.js"></script></body></html>`;
+
+// A portal error boundary streamed with status 200 (a server component threw):
+// no form, but the Next production boundary markers ARE present — the #866
+// failure mode a client-rendered probe must still reject.
+const PORTAL_ERROR_BOUNDARY_BODY = `<!DOCTYPE html><html><body><h2>Application error: a server-side exception has occurred while loading app.doctor.school (see the server logs for more information).</h2><p>Digest: 987654321</p></body></html>`;
+
 describe("smoke-prod findColdErrorMarker()", () => {
   it("flags the Next production error boundary (both classic and Next 15 wording)", () => {
     expect(findColdErrorMarker(ERROR_BOUNDARY_BODY)).toBe(
@@ -103,5 +117,94 @@ describe("smoke-prod checkColdPage()", () => {
         { requireMarkup: "<main" },
       ),
     ).not.toThrow();
+  });
+});
+
+describe("smoke-prod checkColdPage() — client-rendered portal /login (#885)", () => {
+  // The portal /login form hydrates client-side, so the probe asserts the
+  // server-streamed app-shell signal instead of the (absent-cold) <input>.
+  const clientRendered = { requireMarkup: "self.__next_f" };
+
+  it("PASSES a healthy cold portal /login whose form hydrates client-side (no <input> in raw HTML)", () => {
+    expect(() =>
+      checkColdPage(
+        {
+          status: 200,
+          body: CLIENT_RENDERED_PORTAL_LOGIN_BODY,
+          url: "https://app.example/login",
+        },
+        clientRendered,
+      ),
+    ).not.toThrow();
+    // Regression pin: the pre-#885 "<input" default WOULD have wrongly rejected
+    // this healthy page — the exact false positive this fix removes.
+    expect(() =>
+      checkColdPage({ status: 200, body: CLIENT_RENDERED_PORTAL_LOGIN_BODY }),
+    ).toThrow(/markup "<input" missing/);
+  });
+
+  it("still REJECTS an error boundary streamed with status 200 (the #866 teeth survive)", () => {
+    expect(() =>
+      checkColdPage(
+        {
+          status: 200,
+          body: PORTAL_ERROR_BOUNDARY_BODY,
+          url: "https://app.example/login",
+        },
+        clientRendered,
+      ),
+    ).toThrow(/error page served WITH status 200/);
+  });
+
+  it("still REJECTS a blank/degraded 200 with no app-shell stream", () => {
+    expect(() =>
+      checkColdPage(
+        { status: 200, body: "<!DOCTYPE html><html><body></body></html>" },
+        clientRendered,
+      ),
+    ).toThrow(/markup "self.__next_f" missing/);
+  });
+
+  it("honours a multi-token requireMarkup (ALL tokens must be present)", () => {
+    expect(() =>
+      checkColdPage(
+        { status: 200, body: CLIENT_RENDERED_PORTAL_LOGIN_BODY },
+        { requireMarkup: ["self.__next_f", "_next/static"] },
+      ),
+    ).not.toThrow();
+    expect(() =>
+      checkColdPage(
+        { status: 200, body: CLIENT_RENDERED_PORTAL_LOGIN_BODY },
+        { requireMarkup: ["self.__next_f", "<input"] },
+      ),
+    ).toThrow(/markup "<input" missing/);
+  });
+
+  it("PASSES when the cookie-less request lands on the expected path", () => {
+    expect(() =>
+      checkColdPage(
+        {
+          status: 200,
+          body: CLIENT_RENDERED_PORTAL_LOGIN_BODY,
+          url: "https://app.example/login",
+        },
+        { ...clientRendered, expectPath: "/login" },
+      ),
+    ).not.toThrow();
+  });
+
+  it("REJECTS a /login that redirected away to another path (route-identity teeth)", () => {
+    // A healthy 200 with valid app-shell markup, but landed on `/` — the exact
+    // redirect-misconfig a render-only check would wave through green.
+    expect(() =>
+      checkColdPage(
+        {
+          status: 200,
+          body: CLIENT_RENDERED_PORTAL_LOGIN_BODY,
+          url: "https://app.example/",
+        },
+        { ...clientRendered, expectPath: "/login" },
+      ),
+    ).toThrow(/redirected off "\/login" to "\/"/);
   });
 });

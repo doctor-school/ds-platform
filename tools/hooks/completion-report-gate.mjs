@@ -72,7 +72,7 @@ export function isDecisionRequest(text) {
  * genuine in-flight language (RU+EN, case-insensitive) and never on a settled
  * completion report — so the gate exempts such turns before the report test. */
 export const INTERIM_STATUS_RE =
-  /⏳|\bcheckpoint\b|чекпоинт|\bprobe\b|\bпроб[аеу]\b|\bWIP\b|в процессе|в работе|жду вердикт|жду CI|жду ревью|ещё не смерж|ещё не заверш|ничего (?:ещё )?не смерж|не финализир|\b0\s*\/\s*\d/i;
+  /⏳|\bcheckpoint\b|чекпоинт|\bprobe\b|\bWIP\b|в процессе|в работе|жду вердикт|жду CI|жду ревью|ещё не смерж|ещё не заверш|ничего (?:ещё )?не смерж|не финализир|\b0\s*\/\s*\d/i;
 
 /** True when the turn reads as an in-flight checkpoint / status rather than a
  * terminal completion report (#855). */

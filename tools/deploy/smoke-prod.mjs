@@ -30,6 +30,11 @@
 //          500'd in #866). Needs the PUBLIC OIDC client id — set
 //          PROD_IDP_CLIENT_ID (api.env IDP_CLIENT_ID; not a secret, it rides
 //          every browser authorize URL); the probe prints SKIP when unset.
+//   register GET https://id.doctor.school/ui/v2/login/register → the hosted
+//          self-registration surface stays CLOSED (#877: allowRegister is
+//          disabled on the default login policy by provision.sh 8.quater) —
+//          non-200 / redirect-away / 200 without a form field all pass; a
+//          200 register FORM fails the smoke.
 //   TLS    api. / app. / admin. / id.doctor.school    → cert valid, not near expiry
 //
 // The prod hostnames ARE the contract here (Caddy vhosts + Beget A-records +
@@ -182,6 +187,44 @@ export function checkColdPage(res, { requireMarkup = "<input", expectPath } = {}
   }
 }
 
+// --- #877: hosted self-registration stays CLOSED (exported for unit tests) --
+//
+// Public self-registration is disabled on the default login policy
+// (infra/dev-stand/idp/provision.sh step 8.quater — same script runs on prod,
+// Apply order step 9); product registration is headless (BFF → Management API)
+// and never uses the hosted register UI. This probe asserts the posture holds
+// on the live IdP: the hosted register surface must never serve a submittable
+// registration form to a cold visitor.
+//
+// Chosen assert (least brittle of the options considered, #877): GET the
+// register route itself and require that NO form field (`<input`) renders —
+// with registration disabled the login-v2 register page renders a disallowed
+// notice without form fields, while a redirect off /register or a non-200
+// also proves the door is shut. Rejected alternatives: asserting page COPY is
+// locale-dependent (the instance is ru-locked) and version-dependent;
+// asserting the loginname page lacks a "register" string false-alarms on RSC
+// flight data that may carry the word regardless of what renders.
+//
+// A DOWN/unreachable IdP is a FAIL, not a PASS: the closed-door verdict needs
+// an observed HTTP response, so network errors propagate to the runner's FAIL
+// path exactly like the other id.-host probes (which independently cover IdP
+// liveness).
+export function checkRegisterClosed(res) {
+  const where = res.url ? ` (${res.url})` : "";
+  if (res.status !== 200)
+    return `${res.status} (register surface not served)`;
+  if (res.url) {
+    const landed = new URL(res.url).pathname;
+    if (!landed.includes("/register"))
+      return `200 · redirected off register to ${JSON.stringify(landed)}`;
+  }
+  if (res.body.includes("<input"))
+    throw new Error(
+      `register page renders a form field WITH status 200${where} — public self-registration appears OPEN (expected disabled, provision.sh 8.quater)`,
+    );
+  return `200 · no registration form rendered (self-registration disabled)`;
+}
+
 // A probe may throw this to report SKIP (visible, but not a failure).
 class SkipProbe extends Error {}
 
@@ -315,6 +358,14 @@ async function probeLoginColdFlow() {
   return `authorize → 302 → 200 login screen after ${res.hops} hop(s) (cookie-less flow init OK)`;
 }
 
+async function probeRegisterClosed() {
+  // #877: cookie-less GET of the hosted register surface; classification is
+  // the exported checkRegisterClosed seam above (unit-tested in
+  // tools/lint/guard-tests/smoke-prod-cold.spec.ts).
+  const res = await httpsGetFollow(`https://${ID_HOST}/ui/v2/login/register`);
+  return checkRegisterClosed(res);
+}
+
 function probeTls(host) {
   return new Promise((resolve, reject) => {
     const socket = tls.connect(
@@ -375,6 +426,7 @@ const PROBES = [
   ["chat ws route", probeChatRoute],
   ["login cold loginname", probeLoginCold],
   ["login cold flow", probeLoginColdFlow],
+  ["register closed", probeRegisterClosed],
   [`TLS ${API_HOST}`, () => probeTls(API_HOST)],
   [`TLS ${PORTAL_HOST}`, () => probeTls(PORTAL_HOST)],
   [`TLS ${ADMIN_HOST}`, () => probeTls(ADMIN_HOST)],

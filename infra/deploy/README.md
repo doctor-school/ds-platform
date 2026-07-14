@@ -355,6 +355,56 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
     (SMS-Aero); `/me/*` behind a session; valid TLS on all three hostnames; a
     pgbackrest basebackup + WAL in S3 with a restore dry-run (RTO ≤ 2 h).
 
+## IdP admin-access model & login-policy posture (#877)
+
+**Who is admin.** Exactly two Zitadel administrator identities exist, both created
+at first-instance init (Apply order step 9, `zitadel.env` FIRSTINSTANCE block):
+
+- **`ds-bootstrap`** (machine user) — the org-owner machine user whose PAT
+  (`/etc/ds-platform/idp-bootstrap-pat.txt`, root:root 0600) drives
+  `provision.sh` and any ops Admin-API call; provision.sh step 5 additionally
+  grants it `IAM_LOGIN_CLIENT`. Its uid-1001/0400 copy
+  (`/etc/ds-platform/idp-login-client.pat`) is the zitadel-login service token
+  (perms are load-bearing, #866 — see Apply order step 9).
+- **`zitadel-admin`** (human) — the console org owner for interactive
+  `/ui/console` administration (break-glass; day-to-day changes go through
+  provision.sh so posture stays committed + re-runnable).
+
+**Operator access to the product admin app is a PROJECT role, not a Zitadel
+manager role.** `platform_admin` is a project role on the OIDC project (seeded
+by provision.sh step 2); the admin surface authorizes on that role in the token
+(spec §6.4). Issue it to a future admin user as a user grant, via the bootstrap
+PAT (idempotent — re-granting an existing grant is rejected as a no-change):
+
+```bash
+# on api-prod; USER_ID from user search, IDP_PROJECT_ID from provision.sh output
+curl -sS -X POST "https://id.doctor.school/management/v1/users/$USER_ID/grants" \
+  -H "Authorization: Bearer $(sudo cat /etc/ds-platform/idp-bootstrap-pat.txt)" \
+  -H 'Content-Type: application/json' \
+  -d "{\"projectId\":\"$IDP_PROJECT_ID\",\"roleKeys\":[\"platform_admin\"]}"
+```
+
+**Product users must NEVER receive Zitadel manager roles** (`IAM_*`, `ORG_*`,
+project-manager memberships): a manager role grants IdP-administration power;
+everything a product operator needs rides the `platform_admin` project role.
+
+**Login-policy posture: public self-registration is DISABLED** — encoded in
+provision.sh step 8.quater (`allowRegister -> false` on the default login
+policy; read-modify-write, idempotent, converges on every provision run) and
+asserted by the prod smoke ("register closed" probe,
+`tools/deploy/smoke-prod.mjs`). The zitadel-login container caches login
+settings in-process — after the FIRST provision run that flips the policy,
+`sudo docker compose restart zitadel-login`, or the register form keeps
+rendering from the cached settings (verified live, #877). Account creation happens ONLY through the api
+BFF (Management API `POST /v2/users/new` with the service PAT), which
+`allowRegister` does not gate. Registration-adjacent doors (sweep verdicts the
+step prints on every run, #877): `allowExternalIdp` is preserved but **no
+external IdP is linked** (idps=0 ⇒ no auto-registration path);
+`passwordlessType` authenticates existing users only (no signup path);
+`allowDomainDiscovery` routes to register only when `allowRegister` is true;
+`allowUsernamePassword` is a login method for existing users, not a creation
+door.
+
 ## Wave-1 apply order (#729 / DSO-134)
 
 The webinars wave-1 increment onto the already-live 003 stand: admin app

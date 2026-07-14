@@ -17,11 +17,13 @@ import { NOTIFICATION_SUBJECTS } from "../support/notification-subjects.js";
  * exactly like the production notifier path, so we assert delivery there rather
  * than echoing the secret inline.
  *
- * #869 (owner Stage-A verdict): the delivered mail is the CODE-ONLY branded RU
- * artifact provisioned by `infra/dev-stand/idp/provision.sh` step 8.ter — the
- * subject leads with the code (`GX5AVU — код подтверждения Doctor.School`,
- * < 50 chars), the body shows the code as two grouped triads with an explicit
- * 1-hour expiry line and an ignore-if-not-you line, and it carries **no link to
+ * #869 (owner Stage-A + Stage-B verdicts): the delivered mail is the CODE-ONLY
+ * branded RU artifact provisioned by `infra/dev-stand/idp/provision.sh` step
+ * 8.ter — the subject leads with the code (`GX5AVU — код подтверждения
+ * Doctor.School`, < 50 chars), the body shows the code as ONE unbroken token
+ * (the Stage-B rework dropped the triad grouping and its «без пробела»
+ * qualifier — they contradicted each other) with an explicit 1-hour expiry
+ * line and an ignore-if-not-you line, and it carries **no link to
  * Zitadel's hosted login-v2 UI** (`…/ui/v2/…` — the original #869 dead end, and
  * scanner bait: mail.ru's `checklink` AV prefetch GETs every URL in a delivered
  * mail). The ONLY permitted href is the BARE portal `/verify` navigation aid —
@@ -225,10 +227,13 @@ describe.skipIf(!LIVE_IDP)("Zitadel email verification (integration)", () => {
       expect(mail!.Subject.length).toBeLessThan(50);
       const code = mail!.Subject.slice(0, 6);
 
-      // Body: the same code, grouped into two triads for reading (`GX5 AVU`).
-      const grouped = `${code.slice(0, 3)} ${code.slice(3)}`;
-      expect(mail!.HTML).toContain(`<strong>${grouped}</strong>`);
-      expect(mail!.Text).toContain(grouped);
+      // Body: the same code as ONE unbroken token (Stage-B verdict — no triad
+      // grouping, so what the user sees is exactly what they type).
+      expect(mail!.HTML).toContain(`<strong>${code}</strong>`);
+      expect(mail!.Text).toContain(code);
+      // The retired «без пробела» qualifier must be gone with the grouping.
+      expect(mail!.Text).not.toContain("без пробела");
+      expect(mail!.HTML).not.toContain("без пробела");
       // Explicit expiry line (the VERIFY_EMAIL_CODE generator lifetime, 3600s).
       expect(mail!.Text).toContain("Код действует 1 час");
       // Explicit "if you didn't register, ignore this email" line.

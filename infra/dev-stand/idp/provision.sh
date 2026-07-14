@@ -599,12 +599,15 @@ api_idempotent PUT /admin/v1/text/message/verifysmsotp/en \
 # `apps/api` ZitadelIdpClient#emailSendCodeBody, #869) and this override demotes
 # the button label to a subordinate navigation aid for the fallback button.
 #
-# Copy checklist (owner research, #869): subject < 50 chars with the code early
-# (rendered ~40 chars); code grouped for reading — {{slice .Code 0 3}}/{{slice
-# .Code 3}} (Go text/template builtin) splits the 6-char code into two triads,
-# verified live on v4.15.0; explicit expiry line (the instance's VERIFY_EMAIL_CODE
-# secret-generator lifetime is 3600s — admin API `secretgenerators`, verified
-# live); an explicit "if you didn't register, ignore this email" line. Markup:
+# Copy checklist (owner research + Stage-B verdict, #869): subject < 50 chars
+# with the code early (rendered ~40 chars); the code renders as ONE unbroken
+# token ({{.Code}} raw) — the Stage-B rework dropped the earlier {{slice}} triad
+# grouping, whose rendered space contradicted the "type it exactly" instruction
+# (owner feedback 2026-07-14, issue #869); readability comes from the enlarged
+# letter-spaced span instead. Explicit expiry line (the instance's
+# VERIFY_EMAIL_CODE secret-generator lifetime is 3600s — admin API
+# `secretgenerators`, verified live); an explicit "if you didn't register,
+# ignore this email" line. Markup:
 # custom `text` is injected UNESCAPED into Zitadel's bundled table-layout/
 # inline-CSS MJML template (mail.ru/Yandex-safe), so <br>/<strong>/inline-style
 # spans render as HTML (verified live; the text/plain part degrades them sanely) —
@@ -619,13 +622,13 @@ RU_VERIFY_EMAIL_SUBJECT='{{.Code}} — код подтверждения Doctor.
 RU_VERIFY_EMAIL_TITLE='Подтверждение email'
 RU_VERIFY_EMAIL_PREHEADER='Введите код на странице подтверждения Doctor.School'
 RU_VERIFY_EMAIL_GREETING='Здравствуйте!'
-RU_VERIFY_EMAIL_TEXT='Ваш код подтверждения email на Doctor.School:<br><br><span style="font-size:28px;letter-spacing:3px"><strong>{{slice .Code 0 3}} {{slice .Code 3}}</strong></span><br><br>Введите его (без пробела) на странице подтверждения, с которой вы регистрировались. Код действует 1 час.<br><br>Если вы не регистрировались на Doctor.School — проигнорируйте это письмо.'
+RU_VERIFY_EMAIL_TEXT='Ваш код подтверждения email на Doctor.School:<br><br><span style="font-size:28px;letter-spacing:3px"><strong>{{.Code}}</strong></span><br><br>Введите его на странице подтверждения, с которой вы регистрировались. Код действует 1 час.<br><br>Если вы не регистрировались на Doctor.School — проигнорируйте это письмо.'
 RU_VERIFY_EMAIL_BUTTON='Открыть страницу подтверждения'
 EN_VERIFY_EMAIL_SUBJECT='{{.Code}} — Doctor.School verification code'
 EN_VERIFY_EMAIL_TITLE='Email verification'
 EN_VERIFY_EMAIL_PREHEADER='Enter the code on the Doctor.School verification page'
 EN_VERIFY_EMAIL_GREETING='Hello!'
-EN_VERIFY_EMAIL_TEXT='Your Doctor.School email verification code:<br><br><span style="font-size:28px;letter-spacing:3px"><strong>{{slice .Code 0 3}} {{slice .Code 3}}</strong></span><br><br>Enter it (without the space) on the verification page you signed up from. The code is valid for 1 hour.<br><br>If you did not sign up for Doctor.School, please ignore this email.'
+EN_VERIFY_EMAIL_TEXT='Your Doctor.School email verification code:<br><br><span style="font-size:28px;letter-spacing:3px"><strong>{{.Code}}</strong></span><br><br>Enter it on the verification page you signed up from. The code is valid for 1 hour.<br><br>If you did not sign up for Doctor.School, please ignore this email.'
 EN_VERIFY_EMAIL_BUTTON='Open the verification page'
 api_idempotent PUT /admin/v1/text/message/verifyemail/ru \
   "$(jq -nc --arg s "$RU_VERIFY_EMAIL_SUBJECT" --arg ti "$RU_VERIFY_EMAIL_TITLE" \

@@ -67,9 +67,9 @@ const sleep = (ms: number): Promise<void> =>
  *
  * The branded verify-email (#869, provision.sh step 8.ter) is CODE-ONLY: the
  * code leads the SUBJECT (`GX5AVU — код подтверждения Doctor.School`) and the
- * body shows it as two grouped triads (`GX5 AVU`) — there is no `code=` link to
- * scrape any more. Subject-first, then the grouped-body form, then the legacy
- * body patterns (the login email-OTP mail still renders `Code 12345678`).
+ * body renders it as ONE unbroken token — there is no `code=` link to scrape
+ * any more. Subject-first, then the legacy body patterns (the login email-OTP
+ * mail still renders `Code 12345678`).
  */
 function extractCode(msg: {
   Subject?: string;
@@ -79,12 +79,11 @@ function extractCode(msg: {
   const fromSubject = (msg.Subject ?? "").match(/^([A-Z0-9]{4,12})\s+—/)?.[1];
   if (fromSubject) return fromSubject;
   const haystack = `${msg.Text ?? ""}\n${msg.HTML ?? ""}`;
-  const grouped = haystack.match(/\b([A-Z0-9]{3}) ([A-Z0-9]{3})\b/);
   return (
     haystack.match(/\bCode\s+([A-Z0-9]{4,12})\b/)?.[1] ??
     haystack.match(/[?&]code=([A-Z0-9]{4,12})\b/)?.[1] ??
     haystack.match(/\b([0-9]{6,8})\b/)?.[1] ??
-    (grouped ? `${grouped[1]}${grouped[2]}` : null)
+    null
   );
 }
 

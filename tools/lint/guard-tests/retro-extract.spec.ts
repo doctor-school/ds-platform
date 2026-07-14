@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +15,9 @@ import {
   isAuqAnswer,
   isHandoff,
   queuedCommandPrompt,
+  queuedContrastiveRedirect,
+  readSessionSegments,
+  resolveSessionSegments,
 } from "../../retro/extract.mjs";
 // SELF_CATCH is the assistant-side self-correction lexicon; #362 made it
 // exportable behind the same entry-point guard so it is unit testable.
@@ -133,6 +136,104 @@ describe("retro extract — queued_command interjection detection (pure)", () =>
     expect(
       queuedCommandPrompt({ type: "user", message: { role: "user", content: "hi" } }),
     ).toBeNull();
+  });
+});
+
+// ── queued_command contrastive-redirect detection (#706) ────────────────────
+// The 2026-07-10 session f73a5301 queued a genuine owner pushback —
+// «Но агент ещё работает» — as a mid-stream interjection carrying NONE of the
+// CORRECTION_RE tokens, so it scored 0. A bare «но»/«but» is far too frequent
+// for the GLOBAL lexicon, so a start-anchored contrastive-opener heuristic is
+// applied ONLY inside the queued_command branch (rare interjections), keeping
+// the typed/AUQ paths byte-identical.
+describe("retro extract — queued_command contrastive-redirect detection (#706)", () => {
+  it("flags a start-anchored contrastive-opener redirect", () => {
+    // the f73a5301 miss
+    expect(queuedContrastiveRedirect("Но агент ещё работает")).toBe(true);
+    // adjacent RU/EN contrastive openers
+    expect(queuedContrastiveRedirect("Однако ты забыл прогнать гарды")).toBe(true);
+    expect(queuedContrastiveRedirect("But you already merged that")).toBe(true);
+    expect(queuedContrastiveRedirect("Actually that's the wrong branch")).toBe(true);
+    // leading whitespace is tolerated (trimStart)
+    expect(queuedContrastiveRedirect("  Но это не то")).toBe(true);
+  });
+
+  it("precision guard: a mid-sentence «но» / non-opener never fires", () => {
+    // «но» only mid-sentence — not a contrastive opener
+    expect(queuedContrastiveRedirect("Всё но потом")).toBe(false);
+    expect(queuedContrastiveRedirect("сделай это, но аккуратно")).toBe(false);
+    // «но» as the start of a longer word must not trip the Cyrillic anchor
+    expect(queuedContrastiveRedirect("Ноутбук перезагрузи")).toBe(false);
+    // the bare «А …» opener is deliberately out of scope (benign next-step)
+    expect(queuedContrastiveRedirect("А давай дальше по плану")).toBe(false);
+  });
+
+  it("does NOT change the global CORRECTION_RE — a typed «Но …» stays unflagged", () => {
+    // the heuristic is queued-scoped; the typed/AUQ lexicon is unchanged, so a
+    // benign typed «Но …» opener with no correction token stays quiet
+    expect(CORRECTION_RE.test("Но ладно, продолжай")).toBe(false);
+  });
+});
+
+// ── worktree-reslug segment resolution (#800) ───────────────────────────────
+// A session that calls EnterWorktree re-slugs its log dir — segments move from
+// ~/.claude/projects/<slug>/ to <slug>--claude-worktrees-<N>/ — so a single-dir
+// `--session` lookup finds nothing. resolveSessionSegments globs EVERY sibling
+// slug dir containing the main slug, and readSessionSegments merges the found
+// segments into one chronological stream (oldest-first) so the split session is
+// processed as ONE session, not N partial ones.
+describe("retro extract — worktree-reslug segment resolution (#800)", () => {
+  it("finds a session's segments across the main + worktree slug dirs and merges oldest-first", () => {
+    const projects = mkdtempSync(join(tmpdir(), "retro-projects-"));
+    const slug = "C--Users-x-repos-ds-platform";
+    const id = "abc-123-def";
+    mkdirSync(join(projects, slug));
+    mkdirSync(join(projects, `${slug}--claude-worktrees-9`));
+    // main-dir segment carries the OLDER message
+    writeFileSync(
+      join(projects, slug, `${id}.jsonl`),
+      JSON.stringify({
+        type: "user",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        message: { role: "user", content: "first, in the main dir" },
+      }) + "\n",
+    );
+    // worktree re-slug segment carries the NEWER message
+    writeFileSync(
+      join(projects, `${slug}--claude-worktrees-9`, `${id}.jsonl`),
+      JSON.stringify({
+        type: "user",
+        timestamp: "2026-01-02T00:00:00.000Z",
+        message: { role: "user", content: "second, after EnterWorktree" },
+      }) + "\n",
+    );
+
+    const segs = resolveSessionSegments(projects, slug, id);
+    expect(segs).toHaveLength(2);
+
+    const parsed = readSessionSegments(segs)
+      .filter((l) => l.trim())
+      .map((l) => JSON.parse(l));
+    expect(parsed.map((m) => m.timestamp)).toEqual([
+      "2026-01-01T00:00:00.000Z",
+      "2026-01-02T00:00:00.000Z",
+    ]);
+  });
+
+  it("normalizes a worktree slug to the main slug so it still matches the main dir", () => {
+    const projects = mkdtempSync(join(tmpdir(), "retro-projects-"));
+    const slug = "C--Users-x-repos-ds-platform";
+    const id = "sess-1";
+    mkdirSync(join(projects, slug));
+    writeFileSync(join(projects, slug, `${id}.jsonl`), "{}\n");
+    // passing the WORKTREE slug (REPO_ROOT slugged from inside a worktree) still
+    // resolves to the main dir segment
+    const segs = resolveSessionSegments(projects, `${slug}--claude-worktrees-706`, id);
+    expect(segs).toHaveLength(1);
+  });
+
+  it("returns [] when the projects dir is absent (no crash)", () => {
+    expect(resolveSessionSegments(join(tmpdir(), "does-not-exist-xyz"), "slug", "id")).toEqual([]);
   });
 });
 

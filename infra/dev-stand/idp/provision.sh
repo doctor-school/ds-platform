@@ -6,7 +6,8 @@
 # refresh_token), redirect URIs for the api and portal, and the project-role
 # claim assertion so `urn:zitadel:iam:org:project:roles` is emitted in the token
 # (003 F2 parses it). It also seeds the `doctor_guest` and `platform_admin`
-# project roles.
+# project roles, and hardens the default login policy — public self-registration
+# on the hosted login UI is disabled (step 8.quater, #877).
 #
 # This replaces console click-paths with a committed, re-runnable script. Every
 # step is idempotent: re-running it converges, it does not duplicate.
@@ -19,7 +20,11 @@
 #   IDP_BASE_URL=http://truenas.local:9080 PAT="$(cat pat.txt)" ./provision.sh
 #   ./provision.sh --base-url http://truenas.local:9080 --pat-file ./idp-pat.txt
 #
-# Requires: bash, curl, jq.
+# Requires: bash, curl, jq. Run it on Linux/macOS (the prod box, CI, a
+# container) — NOT from a Windows-native jq: Windows argv conversion mangles
+# the non-ASCII message texts in steps 8.bis/8.ter (Cyrillic -> `?`, em-dash ->
+# an invalid-UTF-8 byte), silently corrupting the stored copy (proven live,
+# #877 — a Windows run wrote `?`-mangled verifysmsotp/ru until restored).
 #
 # Outputs (stdout, machine-parseable):
 #   IDP_CLIENT_ID=<oidc client id>
@@ -642,6 +647,80 @@ api_idempotent PUT /admin/v1/text/message/verifyemail/en \
         --arg t "$EN_VERIFY_EMAIL_TEXT" --arg b "$EN_VERIFY_EMAIL_BUTTON" \
         '{subject:$s, title:$ti, preHeader:$p, greeting:$g, text:$t, buttonText:$b}')" >/dev/null \
   && echo "ensured verifyemail/en code-only branded verification email" >&2
+
+# ── 8.quater. disable PUBLIC self-registration on the default login policy (#877) ─
+# Product registration is HEADLESS: the api BFF creates users via the Management
+# API (POST /v2/users/new, service-user PAT) and never touches the hosted
+# register UI. Zitadel's default login policy nevertheless ships with
+# `allowRegister: true`, which renders a public "register" affordance on the
+# hosted login (<issuer>/ui/v2/login) — an account-creation door that bypasses
+# the whole product funnel (bot protection, RU copy, doctor_guest role, audit).
+# Converge `allowRegister -> false` on the DEFAULT (instance) login policy.
+# `allowRegister` gates ONLY the hosted register surface; Management-API user
+# creation is unaffected, so BFF registration keeps working (confirmed live on
+# the dev stand, #877). The prod smoke asserts the posture stays closed
+# (tools/deploy/smoke-prod.mjs "register closed").
+#
+# READ-MODIFY-WRITE — never clobber: `PUT /admin/v1/policies/login` is a proto3
+# full-message update, NOT a patch. An OMITTED boolean/duration is not
+# "unchanged", it is false/zero — a partial body would silently reset every
+# other flag (forceMfa off, check-lifetimes zeroed, …). So GET the effective
+# policy first and echo every updatable field back verbatim, flipping ONLY
+# allowRegister. (secondFactors/multiFactors/idps are not part of this update
+# message — they ride their own add/remove endpoints and are untouched here.)
+# Duration fields are copied only when present: Zitadel's protojson omits
+# zero-valued fields, and an omitted duration in the PUT writes the same zero.
+#
+# Idempotency: read-before-write (the step-8 precedent) — allowRegister already
+# false skips the PUT entirely; api_idempotent additionally absorbs the code-9
+# "no changes" precondition if a concurrent converge raced this one.
+#
+# TAKES EFFECT AFTER A zitadel-login RESTART (verified live, #877): the login
+# container caches login settings in-process, so the register form keeps
+# rendering until the cache turns over. After the FIRST run that flips the
+# policy, restart the login container (`pnpm dev:restart idp-login` on the dev
+# stand; `sudo docker compose restart zitadel-login` on prod) before verifying.
+LOGIN_POLICY="$(api GET /admin/v1/policies/login | jq '.policy')"
+if [[ "$(jq -r '.allowRegister // false' <<< "$LOGIN_POLICY")" == "false" ]]; then
+  echo "login policy: public self-registration already disabled" >&2
+else
+  LOGIN_POLICY_UPDATE="$(jq -c '
+    {
+      allowUsernamePassword: (.allowUsernamePassword // false),
+      allowRegister: false,
+      allowExternalIdp: (.allowExternalIdp // false),
+      forceMfa: (.forceMfa // false),
+      forceMfaLocalOnly: (.forceMfaLocalOnly // false),
+      passwordlessType: (.passwordlessType // "PASSWORDLESS_TYPE_NOT_ALLOWED"),
+      hidePasswordReset: (.hidePasswordReset // false),
+      ignoreUnknownUsernames: (.ignoreUnknownUsernames // false),
+      defaultRedirectUri: (.defaultRedirectUri // ""),
+      allowDomainDiscovery: (.allowDomainDiscovery // false),
+      disableLoginWithEmail: (.disableLoginWithEmail // false),
+      disableLoginWithPhone: (.disableLoginWithPhone // false)
+    }
+    + ({
+        passwordCheckLifetime,
+        externalLoginCheckLifetime,
+        mfaInitSkipLifetime,
+        secondFactorCheckLifetime,
+        multiFactorCheckLifetime
+      } | with_entries(select(.value != null)))
+  ' <<< "$LOGIN_POLICY")"
+  api_idempotent PUT /admin/v1/policies/login "$LOGIN_POLICY_UPDATE" >/dev/null \
+    && echo "login policy: disabled public self-registration (allowRegister -> false)" >&2
+fi
+
+# Registration-adjacent door sweep — one verdict line per flag that could open
+# an account-creation path, from the CONVERGED policy (operator visibility;
+# the #877 PR + infra/deploy/README.md carry the reference verdicts).
+api GET /admin/v1/policies/login | jq -r '.policy |
+  "login-policy sweep: allowRegister=\(.allowRegister // false) — hosted register door (closed by 8.quater)",
+  "login-policy sweep: allowExternalIdp=\(.allowExternalIdp // false), idps configured=\((.idps // []) | length) — external-IdP login can auto-create users only via a linked IdP (0 linked = door closed)",
+  "login-policy sweep: passwordlessType=\(.passwordlessType // "PASSWORDLESS_TYPE_NOT_ALLOWED") — passkeys authenticate EXISTING users; no signup path",
+  "login-policy sweep: allowDomainDiscovery=\(.allowDomainDiscovery // false) — discovery routes to register only when allowRegister is true",
+  "login-policy sweep: allowUsernamePassword=\(.allowUsernamePassword // false) — login method for existing users, not an account-creation door"
+' >&2
 
 # ── output (machine-parseable; secret only when freshly created) ─────────────
 echo "IDP_PROJECT_ID=${PROJECT_ID}"

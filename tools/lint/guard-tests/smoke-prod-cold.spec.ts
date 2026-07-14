@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   COLD_ERROR_MARKERS,
   checkColdPage,
+  checkRegisterClosed,
   findColdErrorMarker,
 } from "../../deploy/smoke-prod.mjs";
 
@@ -206,5 +207,50 @@ describe("smoke-prod checkColdPage() — client-rendered portal /login (#885)", 
         { ...clientRendered, expectPath: "/login" },
       ),
     ).toThrow(/redirected off "\/login" to "\/"/);
+  });
+});
+
+describe("smoke-prod checkRegisterClosed() — #877 public self-registration stays closed", () => {
+  // Login-v2 register page with registration DISABLED on the default login
+  // policy: the layout renders a disallowed notice, NO form field.
+  const REGISTER_DISABLED_BODY = `<!DOCTYPE html><html><body><main><div>Регистрация недоступна</div></main></body></html>`;
+  // Registration OPEN: the register form renders its fields — the door the
+  // probe exists to catch if provisioning posture ever regresses.
+  const REGISTER_FORM_BODY = `<!DOCTYPE html><html><body><form><input type="text" name="firstname" /><input type="email" name="email" /><button type="submit">Continue</button></form></body></html>`;
+
+  it("PASSES a 200 register page rendering NO form field (disabled notice)", () => {
+    expect(() =>
+      checkRegisterClosed({
+        status: 200,
+        body: REGISTER_DISABLED_BODY,
+        url: "https://id.example/ui/v2/login/register",
+      }),
+    ).not.toThrow();
+  });
+
+  it("PASSES a non-200 register route (surface not served at all)", () => {
+    expect(() =>
+      checkRegisterClosed({ status: 404, body: "not found" }),
+    ).not.toThrow();
+  });
+
+  it("PASSES a register route that redirected AWAY from register", () => {
+    expect(() =>
+      checkRegisterClosed({
+        status: 200,
+        body: REGISTER_FORM_BODY, // even a form elsewhere is not the register door
+        url: "https://id.example/ui/v2/login/loginname",
+      }),
+    ).not.toThrow();
+  });
+
+  it("REJECTS a 200 register page that renders a submittable form field", () => {
+    expect(() =>
+      checkRegisterClosed({
+        status: 200,
+        body: REGISTER_FORM_BODY,
+        url: "https://id.example/ui/v2/login/register",
+      }),
+    ).toThrow(/self-registration appears OPEN/);
   });
 });

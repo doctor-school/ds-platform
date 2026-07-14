@@ -20,7 +20,10 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** Marker whose absence trips the gate — the «📈 % от запланированного»
- * section of skill `report-task-outcome` opens with it. */
+ * section of skill `report-task-outcome` opens with it. The presence check is a
+ * plain `.includes(REPORT_MARKER)` substring test, so markdown emphasis /
+ * heading wrappers around the marker (`**📈 …**`, `## 📈 …`) are tolerated
+ * inherently — the 📈 codepoint is present regardless of the wrapper (#893). */
 export const REPORT_MARKER = "📈";
 
 /** Completion verbs (RU past-participle stems + EN "merged"). A completion
@@ -62,6 +65,21 @@ export function isDecisionRequest(text) {
   return stripped.endsWith("?");
 }
 
+/** Interim-status recognizer (#855): a mid-wave checkpoint / in-flight status
+ * turn can carry a SUB-STEP completion verb + a ref (e.g. «Checkpoint: #828
+ * смержен в ветку, жду CI») and thus trip `isCompletionReport`, even though it
+ * is NOT a terminal task-completion report. This marker set fires ONLY on
+ * genuine in-flight language (RU+EN, case-insensitive) and never on a settled
+ * completion report — so the gate exempts such turns before the report test. */
+export const INTERIM_STATUS_RE =
+  /⏳|\bcheckpoint\b|чекпоинт|\bprobe\b|\bпроб[аеу]\b|\bWIP\b|в процессе|в работе|жду вердикт|жду CI|жду ревью|ещё не смерж|ещё не заверш|ничего (?:ещё )?не смерж|не финализир|\b0\s*\/\s*\d/i;
+
+/** True when the turn reads as an in-flight checkpoint / status rather than a
+ * terminal completion report (#855). */
+export function isInterimStatus(text) {
+  return INTERIM_STATUS_RE.test(String(text || ""));
+}
+
 /**
  * The text of the LAST assistant message in a session JSONL transcript.
  * Claude Code may write one JSONL entry per content block, all sharing the
@@ -86,9 +104,7 @@ export function extractLastAssistantText(jsonl) {
   if (entries.length === 0) return null;
   const last = entries[entries.length - 1];
   const lastId = last.message.id;
-  const turn = lastId
-    ? entries.filter((e) => e.message.id === lastId)
-    : [last];
+  const turn = lastId ? entries.filter((e) => e.message.id === lastId) : [last];
   const parts = [];
   for (const entry of turn) {
     const content = entry.message.content;
@@ -121,13 +137,15 @@ export function blockMessage() {
 /**
  * Pure decision seam (unit-tested without a real FS): block only when this is
  * not already a post-block continuation, the last assistant message reads as a
- * completion report (not a decision-request/approval-ask — #839), and the
- * «📈» marker is absent from it.
+ * completion report — not a decision-request/approval-ask (#839) and not an
+ * in-flight checkpoint / interim status (#855) — and the «📈» marker is absent
+ * from it.
  */
 export function decideBlock({ stopHookActive, lastAssistantText }) {
   if (stopHookActive) return { block: false };
   if (!lastAssistantText) return { block: false };
   if (isDecisionRequest(lastAssistantText)) return { block: false };
+  if (isInterimStatus(lastAssistantText)) return { block: false };
   if (!isCompletionReport(lastAssistantText)) return { block: false };
   if (lastAssistantText.includes(REPORT_MARKER)) return { block: false };
   return { block: true };

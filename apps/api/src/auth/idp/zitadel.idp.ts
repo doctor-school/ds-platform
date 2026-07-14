@@ -935,9 +935,40 @@ export class ZitadelIdpClient implements IdpClient {
     }
   }
 
+  /**
+   * #880: the `PasswordResetRequest` body for the EARS-11 forgot-password send.
+   * The reset email is CODE-ONLY, the same #869 contract as the verification
+   * email: with a configured {@link ZitadelConfig.portalBaseUrl} the request
+   * carries the `sendLink` oneof (`SendPasswordResetLink { notification_type,
+   * url_template }`) with a BARE `<origin>/reset` urlTemplate — deliberately
+   * WITHOUT the `{{.UserID}}`/`{{.OrgID}}`/`{{.Code}}` placeholders the proto
+   * supports — replacing Zitadel's default CTA (its hosted set-password page on
+   * the identity host, a surface portal users must never see) with a subordinate
+   * navigation aid that consumes nothing on GET (mail.ru `checklink` prefetch
+   * safety). The code the user TYPES on the portal `/reset` screen rides the
+   * message text ({{.Code}}, provision.sh step 8.sexies), never the URL.
+   * `returnCode` is NOT used: the secret must ride the configured notifier,
+   * never the HTTP response. Without a portal origin the body stays `{}`
+   * (Zitadel's default send), matching {@link emailSendCodeBody}'s fallback.
+   */
+  private passwordResetBody(): string {
+    const base = this.config.portalBaseUrl?.replace(/\/+$/, "");
+    return JSON.stringify(
+      base
+        ? {
+            sendLink: {
+              notificationType: "NOTIFICATION_TYPE_Email",
+              urlTemplate: `${base}/reset`,
+            },
+          }
+        : {},
+    );
+  }
+
   async requestPasswordReset(identifier: string): Promise<void> {
     // Zitadel User v2: POST /v2/users/{userId}/password_reset triggers the
-    // forgot-password code (Zitadel sends it via the configured notifier). Every
+    // forgot-password code (Zitadel sends it via the configured notifier, with
+    // the #880 code-only sendLink body — see {@link passwordResetBody}). Every
     // step is best-effort and swallowed: an unknown identifier, or any provider
     // error, must produce the IDENTICAL outcome as success so the BFF response is
     // not an existence oracle (EARS-11/16). We therefore never throw here.
@@ -946,7 +977,7 @@ export class ZitadelIdpClient implements IdpClient {
     await this.fetchImpl(this.url(`/v2/users/${userId}/password_reset`), {
       method: "POST",
       headers: this.headers(),
-      body: JSON.stringify({}),
+      body: this.passwordResetBody(),
     }).catch(() => undefined);
   }
 

@@ -579,6 +579,67 @@ api_idempotent PUT /admin/v1/text/message/verifysmsotp/en \
   "$(jq -nc --arg t "$EN_SMS_OTP_TEXT" '{text:$t}')" >/dev/null \
   && echo "ensured verifysmsotp/en branded SMS OTP text" >&2
 
+# ── 8.ter. brand the registration verification email — CODE-ONLY (verifyemail ru+en, #869) ─
+# The bundled verifyemail default renders a CTA button whose URL is Zitadel's
+# hosted login-v2 UI — a dead end for portal registrants (#869) — and ANY
+# GET-consumed link in this mail is scanner bait: mail.ru's `checklink` AV
+# prefetch GETs every URL in a delivered mail, so a code-consuming link is burned
+# before the human ever clicks (the owner's Stage-A verdict on #869 rejected the
+# deep-link CTA for exactly this). The verification email is therefore CODE-ONLY:
+# branded RU copy + the {{.Code}} the registrant TYPES on the portal /verify
+# screen (where the #175 auto-login replay signs them in). Nothing in the mail is
+# consumed on GET.
+#
+# BUTTONLESS: NO — verified live on v4.15.0. Overriding `buttonText` to the empty
+# string does NOT suppress the CTA: an empty custom field falls through to the
+# bundled default label («Подтвердить email»), and the button row + its URL render
+# unconditionally. The URL itself is not a message-text field at all — it comes
+# from the SEND request, so the BFF sets `SendEmailVerificationCode.urlTemplate`
+# to the BARE portal `/verify` (no code/userId params — nothing consumed on GET;
+# `apps/api` ZitadelIdpClient#emailSendCodeBody, #869) and this override demotes
+# the button label to a subordinate navigation aid for the fallback button.
+#
+# Copy checklist (owner research, #869): subject < 50 chars with the code early
+# (rendered ~40 chars); code grouped for reading — {{slice .Code 0 3}}/{{slice
+# .Code 3}} (Go text/template builtin) splits the 6-char code into two triads,
+# verified live on v4.15.0; explicit expiry line (the instance's VERIFY_EMAIL_CODE
+# secret-generator lifetime is 3600s — admin API `secretgenerators`, verified
+# live); an explicit "if you didn't register, ignore this email" line. Markup:
+# custom `text` is injected UNESCAPED into Zitadel's bundled table-layout/
+# inline-CSS MJML template (mail.ru/Yandex-safe), so <br>/<strong>/inline-style
+# spans render as HTML (verified live; the text/plain part degrades them sanely) —
+# literal newlines do NOT survive (the div collapses whitespace), so paragraph
+# breaks MUST be <br>.
+#
+# The subject deliberately leads with the code (inbox-preview UX). The e2e specs
+# select this mail by the STABLE subject tail — `NOTIFICATION_SUBJECTS.verifyEmail`
+# in apps/{api,portal} e2e support matches by substring — so a copy change here
+# must keep that tail (or update both constants in the same PR).
+RU_VERIFY_EMAIL_SUBJECT='{{.Code}} — код подтверждения Doctor.School'
+RU_VERIFY_EMAIL_TITLE='Подтверждение email'
+RU_VERIFY_EMAIL_PREHEADER='Введите код на странице подтверждения Doctor.School'
+RU_VERIFY_EMAIL_GREETING='Здравствуйте!'
+RU_VERIFY_EMAIL_TEXT='Ваш код подтверждения email на Doctor.School:<br><br><span style="font-size:28px;letter-spacing:3px"><strong>{{slice .Code 0 3}} {{slice .Code 3}}</strong></span><br><br>Введите его (без пробела) на странице подтверждения, с которой вы регистрировались. Код действует 1 час.<br><br>Если вы не регистрировались на Doctor.School — проигнорируйте это письмо.'
+RU_VERIFY_EMAIL_BUTTON='Открыть страницу подтверждения'
+EN_VERIFY_EMAIL_SUBJECT='{{.Code}} — Doctor.School verification code'
+EN_VERIFY_EMAIL_TITLE='Email verification'
+EN_VERIFY_EMAIL_PREHEADER='Enter the code on the Doctor.School verification page'
+EN_VERIFY_EMAIL_GREETING='Hello!'
+EN_VERIFY_EMAIL_TEXT='Your Doctor.School email verification code:<br><br><span style="font-size:28px;letter-spacing:3px"><strong>{{slice .Code 0 3}} {{slice .Code 3}}</strong></span><br><br>Enter it (without the space) on the verification page you signed up from. The code is valid for 1 hour.<br><br>If you did not sign up for Doctor.School, please ignore this email.'
+EN_VERIFY_EMAIL_BUTTON='Open the verification page'
+api_idempotent PUT /admin/v1/text/message/verifyemail/ru \
+  "$(jq -nc --arg s "$RU_VERIFY_EMAIL_SUBJECT" --arg ti "$RU_VERIFY_EMAIL_TITLE" \
+        --arg p "$RU_VERIFY_EMAIL_PREHEADER" --arg g "$RU_VERIFY_EMAIL_GREETING" \
+        --arg t "$RU_VERIFY_EMAIL_TEXT" --arg b "$RU_VERIFY_EMAIL_BUTTON" \
+        '{subject:$s, title:$ti, preHeader:$p, greeting:$g, text:$t, buttonText:$b}')" >/dev/null \
+  && echo "ensured verifyemail/ru code-only branded verification email" >&2
+api_idempotent PUT /admin/v1/text/message/verifyemail/en \
+  "$(jq -nc --arg s "$EN_VERIFY_EMAIL_SUBJECT" --arg ti "$EN_VERIFY_EMAIL_TITLE" \
+        --arg p "$EN_VERIFY_EMAIL_PREHEADER" --arg g "$EN_VERIFY_EMAIL_GREETING" \
+        --arg t "$EN_VERIFY_EMAIL_TEXT" --arg b "$EN_VERIFY_EMAIL_BUTTON" \
+        '{subject:$s, title:$ti, preHeader:$p, greeting:$g, text:$t, buttonText:$b}')" >/dev/null \
+  && echo "ensured verifyemail/en code-only branded verification email" >&2
+
 # ── output (machine-parseable; secret only when freshly created) ─────────────
 echo "IDP_PROJECT_ID=${PROJECT_ID}"
 echo "IDP_CLIENT_ID=${CLIENT_ID}"

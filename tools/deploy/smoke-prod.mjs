@@ -11,7 +11,9 @@
 //   portal GET https://app.doctor.school/             → follows redirects; final
 //          page < 500 AND no Next error-boundary markup (#866)
 //          GET https://app.doctor.school/login        → COLD (cookie-less) 200 +
-//          real form markup, no error boundary (#866)
+//          Next app-shell RSC stream, no error boundary (#866/#885: the portal
+//          login form is CLIENT-rendered, so assert the server-streamed shell —
+//          not <input>, which only exists post-hydration)
 //   admin  GET https://admin.doctor.school/           → < 500 (Next renders; #729)
 //   chat   GET https://api.doctor.school/connection/websocket → < 500 (Caddy →
 //          centrifugo route alive; a non-upgrade GET draws Centrifugo's 400,
@@ -142,6 +144,15 @@ export function findColdErrorMarker(body) {
 
 // Throws unless `res` is a real, successfully rendered cold page: exact 200,
 // no error-boundary marker, and (when given) the expected page markup present.
+//
+// `requireMarkup` is a single token OR a list of tokens that must ALL be present
+// in the body. A server-rendered surface (the Zitadel-hosted login) asserts the
+// literal form field "<input"; a CLIENT-rendered Next surface (the portal /login,
+// #885) asserts a server-streamed app-shell signal instead — its <input> fields
+// are drawn only after hydration, so requiring "<input" false-positives on a
+// perfectly healthy cold page. The error-boundary markers above keep the #866
+// teeth either way: a blank/degraded/proxy-error body carries none of the
+// required markup and still fails.
 export function checkColdPage(res, { requireMarkup = "<input" } = {}) {
   const where = res.url ? ` (${res.url})` : "";
   if (res.status !== 200)
@@ -151,10 +162,13 @@ export function checkColdPage(res, { requireMarkup = "<input" } = {}) {
     throw new Error(
       `error page served WITH status 200${where} — body contains ${JSON.stringify(marker)}`,
     );
-  if (requireMarkup && !res.body.includes(requireMarkup))
-    throw new Error(
-      `200${where} but expected markup ${JSON.stringify(requireMarkup)} missing (${res.body.length} bytes) — blank/degraded render`,
-    );
+  const needed = Array.isArray(requireMarkup) ? requireMarkup : [requireMarkup];
+  for (const token of needed) {
+    if (token && !res.body.includes(token))
+      throw new Error(
+        `200${where} but expected markup ${JSON.stringify(token)} missing (${res.body.length} bytes) — blank/degraded render`,
+      );
+  }
 }
 
 // A probe may throw this to report SKIP (visible, but not a failure).
@@ -222,10 +236,17 @@ async function probePortal() {
 
 async function probePortalLoginCold() {
   // The portal's own cold login entry (#866): cookie-less GET /login must be
-  // a REAL login form — exact 200, form markup present, no error boundary.
+  // a REAL render — exact 200, no error boundary. UNLIKE the Zitadel-hosted
+  // login (server-rendered, <input> in the raw HTML), the portal /login form is
+  // CLIENT-rendered: Next.js streams the App-Router shell and the fields hydrate
+  // client-side, so the raw cold HTML carries no <input> (#885 — asserting it
+  // false-positived on a healthy page). Assert the server-present signal that
+  // IS in the cold body: the RSC flight stream (`self.__next_f`), proof the
+  // portal app server-rendered a real page. A blank/degraded/proxy-error render
+  // carries no __next_f (and an error boundary trips the markers) — #866 holds.
   const res = await httpsGetFollow(`https://${PORTAL_HOST}/login`);
-  checkColdPage(res);
-  return `200 · login form markup · no error boundary (cookie-less)`;
+  checkColdPage(res, { requireMarkup: "self.__next_f" });
+  return `200 · Next app-shell RSC stream · no error boundary (cookie-less, client-rendered)`;
 }
 
 async function probeLoginCold() {

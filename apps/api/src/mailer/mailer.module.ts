@@ -19,8 +19,12 @@ import {
 /** Mirrors the audit ledger's fail-closed / VITEST-fallback pepper rule (#141). */
 const TEST_FALLBACK_PEPPER = "test-only-insecure-audit-identifier-pepper";
 
-/** Default portal origin for the notice links when `MAILER_PORTAL_BASE_URL` is unset. */
-const DEFAULT_PORTAL_BASE_URL = "http://localhost:3001";
+/**
+ * Default portal origin when `MAILER_PORTAL_BASE_URL` is unset — the notice
+ * links here AND the Zitadel verification email's bare `/verify` navigation
+ * URL (`IdpModule`, #869) share this single portal-origin source.
+ */
+export const DEFAULT_PORTAL_BASE_URL = "http://localhost:3001";
 
 /**
  * Resolve the throttle HMAC pepper. Reuses {@link AUDIT_IDENTIFIER_PEPPER} so the

@@ -14,8 +14,22 @@ const MAILPIT_BASE = (
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Extract a 6-ish-char OTP code from a Mailpit message body. */
-function extractCode(msg: { Text?: string; HTML?: string }): string | null {
+/**
+ * Extract a 6-ish-char OTP code from a Mailpit message.
+ *
+ * The branded verify-email (#869, provision.sh step 8.ter) is CODE-ONLY: the
+ * code leads the SUBJECT (`GX5AVU — код подтверждения Doctor.School`) and the
+ * body renders it as ONE unbroken token — there is no `code=` link to scrape
+ * any more. Subject-first, then the legacy body patterns (the login email-OTP
+ * mail still renders `Code 12345678`).
+ */
+function extractCode(msg: {
+  Subject?: string;
+  Text?: string;
+  HTML?: string;
+}): string | null {
+  const fromSubject = (msg.Subject ?? "").match(/^([A-Z0-9]{4,12})\s+—/)?.[1];
+  if (fromSubject) return fromSubject;
   const haystack = `${msg.Text ?? ""}\n${msg.HTML ?? ""}`;
   return (
     haystack.match(/\bCode\s+([A-Z0-9]{4,12})\b/)?.[1] ??
@@ -61,13 +75,20 @@ export async function fetchOtpCode(
         (m) =>
           m.Created &&
           Date.parse(m.Created) >= after &&
-          (!subject || m.Subject === subject),
+          // Substring, not equality: the branded verify-email subject leads
+          // with the dynamic code (#869), so callers pass the stable tail
+          // (`NOTIFICATION_SUBJECTS`) and we match it anywhere in the subject.
+          (!subject || (m.Subject ?? "").includes(subject)),
       );
       if (hit?.ID) {
         const msgRes = await fetch(`${MAILPIT_BASE}/api/v1/message/${hit.ID}`);
         if (msgRes.ok) {
           const code = extractCode(
-            (await msgRes.json()) as { Text?: string; HTML?: string },
+            (await msgRes.json()) as {
+              Subject?: string;
+              Text?: string;
+              HTML?: string;
+            },
           );
           if (code) return code;
         }

@@ -7,7 +7,10 @@
  * reads the CURRENT session transcript (path arrives on stdin), takes the last
  * assistant message's usage block, and computes the live context size as
  * input_tokens + cache_read_input_tokens + cache_creation_input_tokens.
- * At or above THRESHOLD it (a) shows the owner a systemMessage and (b) injects
+ * Two tiers (#862): in the [WARN_THRESHOLD, WRAP_THRESHOLD) band it emits a
+ * pre-threshold warning — finish the current unit and plan the wrap now, do
+ * not start units whose verification tail won't fit. At or above
+ * WRAP_THRESHOLD it (a) shows the owner a systemMessage and (b) injects
  * an additionalContext directive telling the model to stop taking new work and
  * propose /wrap. It never blocks the prompt — the owner may consciously push
  * past the budget (e.g. to finish an in-flight merge before wrapping).
@@ -17,7 +20,8 @@
  */
 import { readFileSync } from "node:fs";
 
-const THRESHOLD = 120_000;
+const WARN_THRESHOLD = 110_000;
+const WRAP_THRESHOLD = 120_000;
 
 try {
   const stdin = readFileSync(0, "utf8");
@@ -45,14 +49,25 @@ try {
     }
   }
 
-  if (context >= THRESHOLD) {
+  if (context >= WRAP_THRESHOLD) {
     const k = Math.round(context / 1000);
     process.stdout.write(
       JSON.stringify({
-        systemMessage: `⚠ Контекст сессии ≈ ${k}K токенов (порог ${THRESHOLD / 1000}K) — каждый следующий ход дорожает кэш-ридами. Пора /wrap.`,
+        systemMessage: `⚠ Контекст сессии ≈ ${k}K токенов (порог ${WRAP_THRESHOLD / 1000}K) — каждый следующий ход дорожает кэш-ридами. Пора /wrap.`,
         hookSpecificOutput: {
           hookEventName: "UserPromptSubmit",
-          additionalContext: `<context-budget-guard>Session context is ~${k}K tokens — over the ${THRESHOLD / 1000}K wrap threshold (owner policy: wrap instead of multiplying cache reads). Do NOT start new units of work. The bounded closeout of a PR already opened this session IS in-flight — finish it per AGENTS.md §6 PR-lifecycle (Mode-a review dispatch → CI confirm → merge → board Done → teardown), including the review-subagent dispatch. Otherwise finish only the immediately in-flight step (an unanswered owner question), then propose /wrap in your reply. If nothing is in flight, propose /wrap now.</context-budget-guard>`,
+          additionalContext: `<context-budget-guard>Session context is ~${k}K tokens — over the ${WRAP_THRESHOLD / 1000}K wrap threshold (owner policy: wrap instead of multiplying cache reads). Do NOT start new units of work. The bounded closeout of a PR already opened this session IS in-flight — finish it per AGENTS.md §6 PR-lifecycle (Mode-a review dispatch → CI confirm → merge → board Done → teardown), including the review-subagent dispatch. Otherwise finish only the immediately in-flight step (an unanswered owner question), then propose /wrap in your reply. If nothing is in flight, propose /wrap now.</context-budget-guard>`,
+        },
+      }),
+    );
+  } else if (context >= WARN_THRESHOLD) {
+    const k = Math.round(context / 1000);
+    process.stdout.write(
+      JSON.stringify({
+        systemMessage: `⚠ Контекст сессии ≈ ${k}K токенов — приближается порог /wrap (${WRAP_THRESHOLD / 1000}K). Завершайте текущий юнит и планируйте /wrap СЕЙЧАС; новые юниты, чей верификационный хвост не влезет до порога, не начинать.`,
+        hookSpecificOutput: {
+          hookEventName: "UserPromptSubmit",
+          additionalContext: `<context-budget-guard>Session context is ~${k}K tokens — approaching the ${WRAP_THRESHOLD / 1000}K wrap threshold (pre-threshold warn tier at ${WARN_THRESHOLD / 1000}K). Finish the current unit of work and plan the wrap NOW. Do NOT start new units whose verification tail (review dispatch, CI wait, merge, teardown) will not fit before the ${WRAP_THRESHOLD / 1000}K line; when the current unit closes, propose /wrap.</context-budget-guard>`,
         },
       }),
     );

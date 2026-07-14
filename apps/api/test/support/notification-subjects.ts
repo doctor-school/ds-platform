@@ -8,12 +8,13 @@
  * The `verifyemail` subject is BRANDED by `infra/dev-stand/idp/provision.sh`
  * step 8.ter (#869 — the code-only verification email leads its subject with
  * the dynamic `{{.Code}}`, e.g. `GX5AVU — код подтверждения Doctor.School`),
- * so the constant below is the STABLE SUBSTRING after the code and callers
- * match by `includes`, never equality. The `verifyemailotp` subject stays the
- * bundled `ru` default, observed live in Mailpit on the provisioned dev-stand.
+ * and the `verifyemailotp` subject is branded the same way by step 8.quinquies
+ * (#878 — leads with the dynamic `{{.OTP}}`), so the constants below are the
+ * STABLE SUBSTRING after the code and callers match by `includes`, never
+ * equality.
  *
  *   - registration verify-email (`verifyemail`)  → "<code> — код подтверждения Doctor.School"
- *   - login email-OTP           (`verifyemailotp`) → "Проверка OTP"
+ *   - login email-OTP           (`verifyemailotp`) → "<code> — код для входа в Doctor.School"
  *
  * Keep these in one place: a future locale change (or a re-brand of the subjects
  * in provision.sh) updates exactly one constant instead of N hardcoded literals
@@ -27,6 +28,9 @@ export const NOTIFICATION_SUBJECTS = {
    * `ru`, #869). Stable substring — the rendered subject leads with the code.
    */
   verifyEmail: "код подтверждения Doctor.School",
-  /** Login email-OTP mail (`verifyemailotp` template, `ru`). */
-  verifyEmailOtp: "Проверка OTP",
+  /**
+   * Login email-OTP mail (`verifyemailotp` template, branded `ru`, #878).
+   * Stable substring — the rendered subject leads with the code.
+   */
+  verifyEmailOtp: "код для входа в Doctor.School",
 } as const;

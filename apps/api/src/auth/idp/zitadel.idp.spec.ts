@@ -601,9 +601,49 @@ describe("ZitadelIdpClient createUser → CreateUser /v2/users/new (#203)", () =
       organizationId: "org-1",
       username: "user@ds.test",
       human: {
-        profile: { givenName: "user", familyName: "guest" },
+        profile: {
+          givenName: "user",
+          familyName: "guest",
+          displayName: "user@ds.test",
+        },
         password: { password: "Aa1!aaaa" },
         email: { email: "user@ds.test", returnCode: {} },
+      },
+    });
+  });
+
+  it("003 EARS-2 (#878): sends an EXPLICIT displayName = the registration identifier — Zitadel must never compute a «<local-part> guest» placeholder that its notification templates greet with", async () => {
+    // #878: with no explicit displayName Zitadel computes `givenName familyName`
+    // (e.g. "a guest") and renders it via {{.DisplayName}} in bundled email
+    // greetings — the placeholder leaked user-facing. The identifier the user
+    // registered with is the only truthful display value we hold at creation.
+    const emailCase = createFetch({ status: 201, body: { id: "u-1" } });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl: emailCase.fetchImpl });
+    await client.createUser({ email: "www.alisa99@mail.ru", password: "Aa1!aaaa" });
+    const emailCreate = emailCase.calls.find((c) => c.url.endsWith("/v2/users/new"));
+    expect(JSON.parse(emailCreate!.body ?? "{}")).toMatchObject({
+      human: {
+        profile: {
+          givenName: "www.alisa99",
+          familyName: "guest",
+          displayName: "www.alisa99@mail.ru",
+        },
+      },
+    });
+
+    // Phone-only creation (dormant path) falls back to the phone identifier —
+    // never a computed "doctor guest".
+    const phoneCase = createFetch({ status: 201, body: { id: "u-2" } });
+    const phoneClient = new ZitadelIdpClient({ ...CONFIG, fetchImpl: phoneCase.fetchImpl });
+    await phoneClient.createUser({ phone: "+79001234567", password: "Aa1!aaaa" });
+    const phoneCreate = phoneCase.calls.find((c) => c.url.endsWith("/v2/users/new"));
+    expect(JSON.parse(phoneCreate!.body ?? "{}")).toMatchObject({
+      human: {
+        profile: {
+          givenName: "doctor",
+          familyName: "guest",
+          displayName: "+79001234567",
+        },
       },
     });
   });
@@ -848,6 +888,52 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
     expect(JSON.parse(create!.body ?? "{}")).toEqual({
       checks: { user: { userId: "otp-user-1" } },
       challenges: { otpEmail: {} },
+    });
+  });
+
+  it("003 EARS-6 (#878): with a portal origin configured the otpEmail challenge carries a BARE /login urlTemplate — no code/session params, no hosted-UI dead end", async () => {
+    // Same #869 scanner-safety contract as the verify-email hop: Zitadel's
+    // DEFAULT otpEmail send renders a hosted-login-v2 button URL with the OTP
+    // code + sessionId embedded in the query (observed live on v4.15) — a
+    // GET-consumable link a mail scanner burns and a dead end for portal
+    // sessions. The bare portal `/login` replaces it; the mail stays CODE-ONLY.
+    const { fetchImpl, calls } = otpFetch({ userId: "otp-user-1" });
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      portalBaseUrl: "http://portal.test:3001/",
+      fetchImpl,
+    });
+    await client.requestEmailOtp("doc@ds.test");
+    const create = calls.find(
+      (c) => c.url.endsWith("/v2/sessions") && c.method === "POST",
+    );
+    expect(JSON.parse(create!.body ?? "{}")).toEqual({
+      checks: { user: { userId: "otp-user-1" } },
+      challenges: {
+        otpEmail: {
+          sendCode: { urlTemplate: "http://portal.test:3001/login" },
+        },
+      },
+    });
+    const body = create!.body ?? "";
+    expect(body).not.toContain("{{.Code}}");
+    expect(body).not.toContain("{{.OTP}}");
+  });
+
+  it("003 EARS-7 (#878): the otpSms challenge stays a bare {} even with a portal origin configured — the SMS hop has no urlTemplate", async () => {
+    const { fetchImpl, calls } = otpFetch({ userId: "otp-user-1" });
+    const client = new ZitadelIdpClient({
+      ...BASE_CONFIG,
+      portalBaseUrl: "http://portal.test:3001",
+      fetchImpl,
+    });
+    await client.requestSmsOtp("+15551230000");
+    const create = calls.find(
+      (c) => c.url.endsWith("/v2/sessions") && c.method === "POST",
+    );
+    expect(JSON.parse(create!.body ?? "{}")).toEqual({
+      checks: { user: { userId: "otp-user-1" } },
+      challenges: { otpSms: {} },
     });
   });
 

@@ -297,7 +297,7 @@ Divergences: a wrong/expired code → the same generic error, no oracle (EARS-16
 
 1. **`/login` (screen).** One identifier box (email or phone) + the method choice: password (EARS-5) or a one-time code (EARS-6/7).
 2. **Password path.** identifier + password → EARS-8 `__Host-ds_session` cookie → `/account`. No email round-trip.
-3. **Email-OTP path.** The user asks for a code; the inbox receives Zitadel's `verifyemailotp` mail (subject «Проверка OTP», an **8-digit** code — a deliberately different shape from the 6-char registration code, so the two mails are never confusable); the user types it on the focus screen, which auto-submits at the 8th digit (#175) → signed in. SMS-OTP mirrors this over the phone channel behind the toll-fraud budget (EARS-14).
+3. **Email-OTP path.** The user asks for a code; the inbox receives Zitadel's `verifyemailotp` mail (branded code-only, GH #878: subject `{{.OTP}} — код для входа в Doctor.School`, neutral greeting «Здравствуйте!», an **8-digit** code — a deliberately different shape from the 6-char registration code, so the two mails are never confusable; SSOT `infra/dev-stand/idp/provision.sh` step 8.quinquies); the user types it on the focus screen, which auto-submits at the 8th digit (#175) → signed in. SMS-OTP mirrors this over the phone channel behind the toll-fraud budget (EARS-14).
 
 The login mails carry secrets **sent because the user asked, at sign-in time** — the enumeration-safety and abuse-rate contracts (EARS-13/16/17) hold on every request path.
 

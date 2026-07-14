@@ -312,17 +312,29 @@ export class ZitadelIdpClient implements IdpClient {
     //     in the response as `emailCode` instead — proven live), preserving the
     //     #153 single-delivered-code invariant below.
     //
-    // The `profile` placeholder (#145) is unchanged: self-service registration
-    // (EARS-1) collects NO name — the `users` mirror has no name column (design
-    // §5) — so we send a minimal placeholder the domain never sees: `givenName` =
-    // the email local-part (or `"doctor"`) and a fixed `familyName` = `"guest"`
-    // (the `doctor_guest` role, ADR-0001 §1). A pure adapter detail, never read
-    // back, mirrored, or surfaced.
+    // The `profile` placeholder (#145): self-service registration (EARS-1/2)
+    // collects NO name, but CreateUser REQUIRES non-empty givenName/familyName
+    // (proto min_len 1) — so we send a minimal placeholder: `givenName` = the
+    // email local-part (or `"doctor"`) and a fixed `familyName` = `"guest"`
+    // (the `doctor_guest` role, ADR-0001 §1). The placeholder is never read
+    // back or mirrored, BUT it is NOT invisible: without an explicit
+    // `displayName` Zitadel computes `"givenName familyName"` (e.g. "a guest")
+    // and renders it via `{{.DisplayName}}` in its bundled notification-email
+    // greetings and in the console (#878). We therefore set `displayName`
+    // EXPLICITLY to the identifier the user registered with — the only
+    // truthful display value we hold at creation. The product-side display
+    // name stays a separate, JIT-collected mirror value (006 EARS-14) and is
+    // never pushed to Zitadel.
     const givenName = input.email
       ? (input.email.split("@")[0] ?? "doctor")
       : "doctor";
+    const displayName = input.email ?? input.phone;
     const human: Record<string, unknown> = {
-      profile: { givenName, familyName: "guest" },
+      profile: {
+        givenName,
+        familyName: "guest",
+        ...(displayName ? { displayName } : {}),
+      },
       password: { password: input.password },
     };
     // Live wire-shape (#153, carried onto CreateUser): a bare `email: { email }`
@@ -1049,18 +1061,33 @@ export class ZitadelIdpClient implements IdpClient {
       // The `otpEmail`/`otpSms` challenge requires the matching factor to be
       // registered on the user first (#153 live delta) — register it (idempotent).
       await this.ensureOtpFactor(userId, challenge);
-      // Create-with-challenge. Asserted-by-unit-test / awaiting-live-confirmation:
-      // `POST /v2/sessions` body `{ checks: { user: { userId } }, challenges: {
-      // otpEmail: {} } }` (SMS: `{ otpSms: {} }`) — Zitadel arms the challenge and
-      // dispatches the code via its notifier; the response carries `sessionId` +
-      // `sessionToken` (the not-yet-checked session, same response shape as the
-      // password-check create, #145).
+      // Create-with-challenge: `POST /v2/sessions` body `{ checks: { user: {
+      // userId } }, challenges: { otpEmail: … } }` (SMS: `{ otpSms: {} }`) —
+      // Zitadel arms the challenge and dispatches the code via its notifier;
+      // the response carries `sessionId` + `sessionToken` (the not-yet-checked
+      // session, same response shape as the password-check create, #145).
+      //
+      // #878, the same scanner-safety contract as {@link emailSendCodeBody}
+      // (#869): the DEFAULT otpEmail send renders a hosted-login-v2 button URL
+      // with the OTP code + sessionId embedded in the query (observed live on
+      // v4.15: `/ui/v2/login/otp/email?code=…&sessionId=…&userId=…`) — a
+      // GET-consumable link a mail scanner (mail.ru `checklink`) prefetches,
+      // and a dead end for portal sessions anyway. With a configured
+      // {@link ZitadelConfig.portalBaseUrl} the challenge carries a BARE
+      // `sendCode.urlTemplate` = `<origin>/login` (no placeholders — nothing
+      // consumed on GET); the login-OTP email stays CODE-ONLY. The otpSms
+      // challenge has no urlTemplate — it stays `{}`.
+      const base = this.config.portalBaseUrl?.replace(/\/+$/, "");
+      const challengeBody =
+        challenge === "otpEmail" && base
+          ? { sendCode: { urlTemplate: `${base}/login` } }
+          : {};
       const res = await this.fetchImpl(this.url("/v2/sessions"), {
         method: "POST",
         headers: this.headers(),
         body: JSON.stringify({
           checks: { user: { userId } },
-          challenges: { [challenge]: {} },
+          challenges: { [challenge]: challengeBody },
         }),
       });
       if (!res.ok) return;

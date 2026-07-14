@@ -204,7 +204,7 @@ Trigger to split: first engineer hired. At that point CODEOWNERS is split per `a
 ### 2.8 CI topology
 
 - **GitHub-hosted `ubuntu-latest` runner only** in Phase 0. Free 2000 min/month for private repo (Team plan +5000) covers ~30 min/day at 1–2 PR/day.
-- **Pipeline `.github/workflows/ci.yml`** — full drift detection stack per ADR-0006 §7 + AI-specific guards per ADR-0007 §2.6. Jobs run as parallel GitHub Actions jobs where possible; a meta-job `ci` depends on all required jobs and sets a single status check.
+- **Pipeline `.github/workflows/ci.yml`** — full drift detection stack per ADR-0006 §7 + AI-specific guards per ADR-0007 §2.6 (the PR-body-parsing guard family runs from the companion `.github/workflows/pr-body-guards.yml`, re-triggered on PR body edits — #651). Jobs run as parallel GitHub Actions jobs where possible; a meta-job `ci` depends on all required jobs and sets a single status check.
 
 | Job                     | What it does                                                                    | Source        | Severity           |
 | ----------------------- | ------------------------------------------------------------------------------- | ------------- | ------------------ |

@@ -1,0 +1,134 @@
+# PR-body-parsing guard family (Issue #651) — spec-link, registry-research,
+# spec-status-fresh, prior-decisions (ADR-0007 §2.6). These four guards
+# evaluate the PR body/metadata, so they live in a DEDICATED workflow that
+# also triggers on the `edited` activity type: a post-create body edit re-runs
+# exactly these checks and never the full test/build matrix in ci.yml (whose
+# `pull_request` trigger keeps the default opened/synchronize/reopened set).
+# The in-place alternative (adding `edited` to ci.yml and fencing every heavy
+# job) was rejected: the `ci` aggregate treats skipped needs as red (#449), so
+# an edited-event run would poison the meta-job.
+#
+# Reliable body on the ORIGINAL event (#651 recurrence, PR #685): each guard
+# step passes the event payload's body via `PR_BODY` — the payload is always
+# current for its triggering event, while a fresh `gh pr view` REST read right
+# after PR creation has returned a stale/absent body with no edit at all. The
+# override seam lives in tools/lint/lib/gh.ts (narrow: PR-kind + PR_NUMBER
+# match + `body` requested); `pnpm pr:preflight` never sets PR_BODY, so local
+# preflight behavior is unchanged.
+#
+# No-op fence: a title-only edit does not change guard inputs — every job
+# skips `edited` runs whose payload lacks `changes.body`. A `skipped`
+# conclusion is tolerated as green by the merge gate (tools/gh/merge-gate.mjs).
+#
+# `gh pr view` wiring (Issue #10 root cause 1): every job carries
+# `permissions: { contents: read, pull-requests: read }` and the invoking step
+# carries `GH_TOKEN`/`PR_NUMBER` (enforced by the workflow-auth guard).
+name: PR body guards
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
+jobs:
+  # BLOCK. Not in the ci.yml `ci` aggregate needs-list (cross-workflow `needs`
+  # is impossible) — the merge gate reads head-SHA-pinned check-runs directly
+  # (tools/gh/merge-gate.mjs), so this check still gates the merge.
+  spec-link:
+    if: github.event.action != 'edited' || github.event.changes.body != null
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsx tools/lint/spec-link-lint.ts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+
+  # registry-research: a PR touching a user-facing UI surface must carry the
+  # `build-ui-from-design-system` adoption artifact in its body (ADR-0013 /
+  # AGENTS.md §6). WARN per the ADR-0007 §2.6 new-guard posture — promote to
+  # BLOCK once stable.
+  registry-research:
+    if: github.event.action != 'edited' || github.event.changes.body != null
+    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:registry-research
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+
+  # spec-status-fresh: a feature:NNN-<slug> PR whose bound spec is still
+  # `status: Draft` (design §5.2, `In dev` minimum). Implemented as a REAL
+  # WARN v1 in #438 — PR-event-gated, exempts the authoring PR that edits the
+  # requirements file, EXITS NON-ZERO on a Draft-below-floor finding.
+  # Promotion clock (ADR-0007 §2.6, 4 clean weeks) starts at merge —
+  # 2026-07-02. Kept WARN (`continue-on-error`) until the sweep flips it; do
+  # not remove it here.
+  spec-status-fresh:
+    if: github.event.action != 'edited' || github.event.changes.body != null
+    continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsx tools/lint/spec-status-lint.ts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+
+  # prior-decisions: a PR that adds/edits a feature-spec requirements file must
+  # cite ≥1 ADR in a `## Prior decisions` section (design §5.2). Implemented as
+  # a REAL WARN v1 in #438 — PR-event-gated, diff-scoped to touched
+  # requirements files, EXITS NON-ZERO on findings. Promotion clock (ADR-0007
+  # §2.6, 4 clean weeks) starts at merge — 2026-07-02. Kept WARN
+  # (`continue-on-error`) until the sweep flips it; do not remove it here.
+  prior-decisions:
+    if: github.event.action != 'edited' || github.event.changes.body != null
+    continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsx tools/lint/prior-decisions-lint.ts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}

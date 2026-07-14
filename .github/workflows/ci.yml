@@ -341,28 +341,12 @@ jobs:
       - run: pnpm exec tsx tools/lint/glossary-roundtrip-lint.ts
 
   # ─── AI-specific guards from ADR-0007 §2.6 ───────────────────────────
-  spec-link:
-    needs: setup
-    runs-on: ubuntu-latest
-    # `tools/lint/spec-link-lint.ts` calls `gh pr view <N>` to read PR
-    # metadata. The default GITHUB_TOKEN scope under restrictive workflow
-    # permissions ("Read repository contents permission only") lacks
-    # `pull-requests: read`, which made `gh pr view` exit non-zero and
-    # caused the script to fail before its label-skip short-circuit.
-    # See Issue #10 root cause 1.
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
-        with: { node-version-file: .nvmrc, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsx tools/lint/spec-link-lint.ts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+  # The PR-body-parsing guard family (spec-link BLOCK, registry-research,
+  # spec-status-fresh, prior-decisions) lives in `pr-body-guards.yml` (#651):
+  # a dedicated workflow that also triggers on the PR `edited` event, so a
+  # body edit re-runs the guards without re-running this matrix. spec-link is
+  # therefore NOT in the `ci` aggregate needs-list — the merge gate reads its
+  # head-SHA-pinned check-run directly (tools/gh/merge-gate.mjs).
 
   # ─── Endpoint authorization completeness gate (BLOCK) ────────────────
   # Spec: 2026-05-18-ds-platform-endpoint-authorization-matrix-design-en.md §6.
@@ -388,29 +372,11 @@ jobs:
       - run: pnpm lint:endpoint-authz
 
   # ─── Enforcement gates for already-written rules (#251, epic #247) ────
-  # registry-research: a PR touching a user-facing UI surface must carry the
-  # `build-ui-from-design-system` adoption artifact in its body (ADR-0013 /
-  # AGENTS.md §6). no-stub: user-facing source must not ship a "set this env
-  # var" dev placeholder or an untracked TODO/FIXME stub (AGENTS.md §6). Both
-  # land as WARN per the ADR-0007 §2.6 new-guard posture — promote to BLOCK
-  # once stable. Excluded from the `ci` meta-job needs-list while WARN.
-  registry-research:
-    needs: setup
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
-        with: { node-version-file: .nvmrc, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:registry-research
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+  # registry-research (PR-body-parsing) moved to `pr-body-guards.yml` (#651).
+  # no-stub: user-facing source must not ship a "set this env var" dev
+  # placeholder or an untracked TODO/FIXME stub (AGENTS.md §6). WARN per the
+  # ADR-0007 §2.6 new-guard posture — promote to BLOCK once stable. Excluded
+  # from the `ci` meta-job needs-list while WARN.
 
   # ─── Prod-surface readiness gate (BLOCK) ─────────────────────────────
   # Issue #771 (wave-1 prod-smoke retro). Deliberate exception to the Phase-0
@@ -729,57 +695,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
 
-  # spec-status-fresh: a feature:NNN-<slug> PR whose bound spec is still
-  # `status: Draft` (design §5.2, `In dev` minimum). Was an exit-0 stub;
-  # implemented as a REAL WARN v1 in #438 — PR-event-gated (exits 0 outside a PR;
-  # also run by `pnpm pr:preflight`), exempts the authoring PR that edits the
-  # requirements file, EXITS NON-ZERO on a Draft-below-floor finding. Promotion
-  # clock (ADR-0007 §2.6, 4 clean weeks) starts at merge — 2026-07-02. Kept WARN
-  # (`continue-on-error`) until the sweep flips it; do not remove it here.
-  spec-status-fresh:
-    needs: setup
-    continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
-    runs-on: ubuntu-latest
-    # `gh pr view` wiring — see the tdd-signal note (Issue #10 root cause 1).
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
-        with: { node-version-file: .nvmrc, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsx tools/lint/spec-status-lint.ts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-
-  # prior-decisions: a PR that adds/edits a feature-spec requirements file must
-  # cite ≥1 ADR in a `## Prior decisions` section (design §5.2). Was an exit-0
-  # stub; implemented as a REAL WARN v1 in #438 — PR-event-gated (exits 0 outside a
-  # PR; also run by `pnpm pr:preflight`), diff-scoped to touched requirements
-  # files, EXITS NON-ZERO on findings. Promotion clock (ADR-0007 §2.6, 4 clean
-  # weeks) starts at merge — 2026-07-02. Kept WARN (`continue-on-error`) until the
-  # sweep flips it; do not remove it here.
-  prior-decisions:
-    needs: setup
-    continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
-    runs-on: ubuntu-latest
-    # `gh pr view` wiring — see the tdd-signal note (Issue #10 root cause 1).
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
-        with: { node-version-file: .nvmrc, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsx tools/lint/prior-decisions-lint.ts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+  # spec-status-fresh + prior-decisions (PR-body-parsing guards) moved to
+  # `pr-body-guards.yml` (#651) — both keep their WARN posture and promotion
+  # clocks there (ADR-0007 §2.6, started at merge 2026-07-02).
 
   # product-note: a user-facing PR (kind label `feature`/`bug`) must carry a real
   # `Product note (RU)` section in its body — the source of truth the merge-time
@@ -858,7 +776,6 @@ jobs:
         markdown-links,
         events-drift,
         glossary-roundtrip,
-        spec-link,
         endpoint-authz,
         prod-surface,
         tokens-fresh,

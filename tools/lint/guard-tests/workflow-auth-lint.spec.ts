@@ -44,4 +44,25 @@ describe("workflow-auth", () => {
     expect(stderr).toContain("missing `GH_TOKEN` env");
     expect(stderr).toContain("missing `PR_NUMBER` env");
   });
+
+  it("green (#651): workflow-level permissions inherit; a bare-gh step needs no PR_NUMBER → exit 0", () => {
+    // Real-tree shape of dependabot-auto-merge.yml: the job declares no
+    // permissions of its own (inherits the workflow-level write grant, a
+    // superset of read), and its bare `gh pr merge "$PR_URL"` step carries
+    // GH_TOKEN but not PR_NUMBER (only ./lib/gh guard scripts read PR_NUMBER).
+    const { code, stdout } = runGuard(GUARD, dir("green-inherited-perms"));
+    expect(code).toBe(0);
+    expect(stdout).toContain("PASS");
+    expect(stdout).toContain("all 3 gh-gated job(s)");
+  });
+
+  it("red (#651): a gh-gated job in a SECOND workflow file (pr-body-guards.yml) is scanned too → exit 1", () => {
+    // ci.yml in this fixture is fully compliant; the gap lives only in
+    // pr-body-guards.yml. Pre-#651 the guard hardcoded ci.yml and would have
+    // passed vacuously — the moved guard family would escape enforcement.
+    const { code, stderr } = runGuard(GUARD, dir("red-second-workflow"));
+    expect(code).toBe(1);
+    expect(stderr).toContain("pr-body-guards.yml");
+    expect(stderr).toContain("missing `permissions.pull-requests: read`");
+  });
 });

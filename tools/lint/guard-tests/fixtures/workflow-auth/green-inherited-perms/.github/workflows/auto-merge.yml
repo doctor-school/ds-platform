@@ -1,0 +1,20 @@
+name: Auto merge
+on: pull_request
+
+# WORKFLOW-level permissions — inherited by every job that declares none of
+# its own (GitHub semantics). `write` is a superset of `read`.
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # Bare `gh` CLI step (not a ./lib/gh guard): needs GH_TOKEN, but identifies
+  # its PR itself (PR_URL) — PR_NUMBER is only required for the derived
+  # ./lib/gh-consumer guard scripts, which read process.env.PR_NUMBER.
+  auto-merge:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

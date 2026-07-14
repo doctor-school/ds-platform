@@ -204,7 +204,7 @@ Trigger на split: первый наём инженера. Тогда CODEOWNER
 ### 2.8 CI topology
 
 - **GitHub-hosted `ubuntu-latest` runner only** в Phase 0. Free 2000 min/мес для private repo (Team plan +5000) покрывает ~30 min/день при 1–2 PR/день.
-- **Pipeline `.github/workflows/ci.yml`** — full drift detection stack per ADR-0006 §7 + AI-specific guards per ADR-0007 §2.6. Jobs выполняются в параллельных GitHub Actions jobs где возможно; meta-job `ci` зависит от всех required и выставляет единый status check.
+- **Pipeline `.github/workflows/ci.yml`** — full drift detection stack per ADR-0006 §7 + AI-specific guards per ADR-0007 §2.6 (семейство body-parsing guard'ов запускается из соседнего `.github/workflows/pr-body-guards.yml`, перезапуск при правке тела PR — #651). Jobs выполняются в параллельных GitHub Actions jobs где возможно; meta-job `ci` зависит от всех required и выставляет единый status check.
 
 | Job                     | Что делает                                                                      | Source        | Severity           |
 | ----------------------- | ------------------------------------------------------------------------------- | ------------- | ------------------ |

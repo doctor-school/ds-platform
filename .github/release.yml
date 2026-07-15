@@ -1,0 +1,24 @@
+# GitHub auto-generated release-notes configuration (Issue #943, W3/L1 of #927).
+# Consumed by `gh release create --generate-notes` (the L1 tag-release job in
+# release.yml). Categorises merged PRs by the repo's kind labels; the catch-all
+# `*` category collects anything unlabelled. Schema:
+# https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
+changelog:
+  categories:
+    - title: Features
+      labels:
+        - feature
+    - title: Fixes
+      labels:
+        - bug
+    - title: Maintenance
+      labels:
+        - chore
+        - refactor
+        - tooling
+    - title: Docs
+      labels:
+        - docs
+    - title: Other
+      labels:
+        - "*"

@@ -13,6 +13,8 @@ Full design: [`local-dev-environment-setup-design`](../../apps/docs/content/spec
 
 Service endpoints (`DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT`, `CENTRIFUGO_URL`, `CERBOS_URL`, `IDP_ISSUER`, `SMTP_HOST`…) are **recipe-specific** and live in the developer's `~/.ds-platform/.env.local`. Agents read them from there (or from the running process env) — they MUST NOT hardcode a host or port in code, specs, or instruction files. The `HOST` differs per recipe (`truenas.local`, `localhost`, a cloud VM…); a hardcoded endpoint silently breaks every other recipe.
 
+**Stage-B handback URLs follow the same rule, sharpened.** Every service URL handed to the owner is resolved from `.env.local` / `dev:status` and **curl-probed by the lead before handoff** — the owner is never the first to open it. Only **api/portal are `localhost`**; docker-stand services (Mailpit/Zitadel/Postgres/…) sit on the recipe **HOST**, never assumed `localhost` (a `localhost:8025` Mailpit link on a `truenas.local` recipe made the owner the first verifier, 2026-07-15). Procedure: `build-ui-from-design-system` → Stage B.
+
 ## DX commands
 
 The stack is driven by `pnpm dev:*` (env-driven launcher `tools/dev/run.mjs`, DSP-156): it reads `.env.local`, picks the transport, and runs `docker compose` against the stand. Full cheat sheet (`dev:up` / `down` / `status` / `logs` / `restart` / `psql` / `snapshot` / `rollback` / `reset-db` / `config`) with per-command behavior: [`infra/dev-stand/README.md` → DX commands](../../infra/dev-stand/README.md#dx-commands).

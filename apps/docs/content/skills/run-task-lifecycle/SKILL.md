@@ -84,6 +84,8 @@ Run all four, in order, as part of the **same** merge step — not a separate hu
 3. **Re-sweep branches/PRs** — `gh pr list` + `git ls-remote --heads origin`; bot branches (`changeset-release/main`, `dependabot/*`, `codeql/*`) can appear post-merge (repo-conventions → _Post-merge inventory re-sweep_).
 4. **Groom next** — pick the next unblocked board item (resume → rework → fresh → unblock ordering, board-design §5), or report the queue is empty. A merged task that leaves the next one un-surfaced is an incomplete lifecycle. **Ops-gate at slice/epic close:** if this merge closes a slice/epic, the closing summary MUST carry a one-line live-prod ops posture — `monitoring | alerting | backup-alerts | CD: PRESENT|ABSENT` — and while any item is ABSENT, the groomed "next" is draining that gap, not a product feature (AGENTS.md §3.5, memory `feedback_clear_debt_before_features`).
 
+**Groom/triage deliverable — output contract.** When the groom is a **backlog-triage deliverable presented to the owner** (not just silently picking the next item), it opens with a **product-language synthesis** — current stage · what is burning to release and why · what defers · remaining tech-debt · open forks/contradictions — **then** a grouped full panorama of the backlog, **then** wave-chunking (≤3 PR-cycles per wave). Never lead with a thin wave plan (owner: «где сам триаж?»), and never dump a raw issue registry (owner: «список я вижу сам в GitHub») — the synthesis is the value the tracker cannot show itself (memory `feedback_groom_session_no_impl_until_signoff`).
+
 ## Output
 
 - Issue `#N` CLOSED, with every field complete (kind, milestone, native links, board Status = Done).

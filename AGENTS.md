@@ -22,9 +22,9 @@ This file is the slim core. The full always-on set auto-loads at session start: 
 
 ## 1. What is DS Platform
 
-DS Platform is the medical-education platform for Doctor.School (B2B pharma sponsor → B2D doctor audience). Greenfield monorepo in **Phase 0** — architectural ADRs (0001–0008) accepted, engineering scaffolding in progress. Pre-pilot target: **2026 Q3**.
+DS Platform is the medical-education platform for Doctor.School (B2B pharma sponsor → B2D doctor audience). Architectural ADRs (0001–0008) are accepted and a **working version is shipped and operated in production, live with users** — there is no "pre-pilot" phase still ahead.
 
-**Production is not empty.** A live production deployment runs on Timeweb (ru-3) at the `doctor.school` domains — `app.doctor.school` (portal: the feature-003 auth vertical — new registration + passwordless email/SMS-OTP login), `api.`/`id.` alongside; stood up via DSO-100. Deployed scope = **003 auth only** (webinars/admin/CMS/mobile are NOT deployed). "Phase 0 / pre-pilot" is overall maturity — it does **not** mean "no production". **Never tell the owner "there is no production"**; establish deploy topology from `infra/deploy/` + the owner, never inferred from these docs. Detail: memory `reference_prod_deploy_reality`.
+**Production is live with users.** A deployment runs on Timeweb (ru-3) at the `doctor.school` domains — `app.doctor.school`, `api.`, `id.`. The operated product spans the **webinar room, admin, event (мероприятия) listing, cabinet, and the 003 auth vertical** (registration + OTP login). **Never tell the owner "there is no production".** Exact deployed scope is **not** inferable from these docs (that drift is this bug) — read it from **release notes + `infra/deploy/` + the owner**; a deterministic scope-of-record is tracked as #927. Detail: memory `reference_prod_deploy_reality`.
 
 Stack at a glance (full reference in `apps/docs/content/adr/`): **Backend** NestJS + Zod + REST + openapi-typescript SDK (ADR-0002); **Data** Postgres 17 + Drizzle + pgvector (ADR-0003); **Frontend** Next.js 15 + Refine — 4 apps: promo / portal / admin / cms-Payload-v3 (ADR-0004); **Mobile** React Native + Expo + WatermelonDB (ADR-0005); **Docs** Fumadocs + Keystatic + glossary.yaml (ADR-0006). Long-form context: `README.md`.
 
@@ -129,7 +129,7 @@ CI lint guards (ADR-0007 §2.6) surface as PR Checks for the reviewer and author
 - **Project skill catalog.** Only `apps/docs/content/skills/`. Vendor-specific auto-discovery is not used to dispatch project work. The path is the contract.
 - **Discipline gates.** `run-iteration-end-checklist` and `request-mode-a-review` produce artifacts the lead cannot bypass. Without their outputs, merge is forbidden (ADR-0007 §2.4).
 - **Decision-debt.** Any silent deviation from a documented convention MUST surface via `surface-decision-debt` before the iteration summary (or, for an engineering-task, before the result comment).
-- **Amendment vs inline rewrite.** In pre-pilot (paper-architecture, no production code) there are NO amendment blocks in ADR / spec / design docs — an amendment is justified only when the original decision is running in production. Everywhere else: inline rewrite, the body reading as if the current decision were always the decision. The history of paper-architecture evolution lives in `git log`, not the document body. **(This rule applies to these instruction files too: replace a section, don't append an amendment — the anti-bloat budget depends on it.)**
+- **Amendment vs inline rewrite.** A decision **not yet running in production** (still paper-architecture) gets NO amendment block in ADR / spec / design docs — an amendment is justified only once that decision is live in production. Everywhere else: inline rewrite, the body reading as if the current decision were always the decision. The history of paper-architecture evolution lives in `git log`, not the document body. **(This rule applies to these instruction files too: replace a section, don't append an amendment — the anti-bloat budget depends on it.)**
 
 ---
 

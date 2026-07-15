@@ -11,6 +11,14 @@ import { initialsFromDisplayName } from "@/lib/display-name";
  * self-profile (`GET /v1/me/profile`, feature 003) once on mount and derives the
  * minimal `{ authenticated, initials }` the header branch needs.
  *
+ * Source note (design §3 reconciliation): the design names `GET /v1/auth/session`
+ * as the AuthState source, but that endpoint returns only `{ sub, roles, mfa }` —
+ * it carries NO display name, so it cannot yield the EARS-5 avatar initials. The
+ * self-profile read is the single shipped surface that returns BOTH the
+ * authenticated signal (200 vs 401) AND the display name the initials derive from
+ * (mirroring `my-display-name.ts`, whose own doc names deriving the header-avatar
+ * initials as its purpose). No new endpoint is introduced either way.
+ *
  * Resolution:
  *   • `loading` — the read is in flight; the header reserves the affordance box
  *     (no layout shift, no first-paint flash of the wrong branch).

@@ -22,7 +22,7 @@ This file is the slim core. The full always-on set auto-loads at session start: 
 
 ## 1. What is DS Platform
 
-<!-- prod-reality-reconciled: 2026-07-15 — machine-parseable stamp of when §1's deploy-scope pointer was last reconciled against a release. `pnpm bootstrap` (tools/context-freshness.ts, #927) compares this to the latest release/changeset head and flags §1 as STALE if it predates the head. Bump this date whenever §1's scope claim is re-verified against `## Project reality` / `gh release list`. -->
+<!-- prod-reality-reconciled: 2026-07-15 (#927) -->
 
 DS Platform is the medical-education platform for Doctor.School (B2B pharma sponsor → B2D doctor audience). Architectural ADRs (0001–0008) are accepted and a **working version is shipped and operated in production, live with users**.
 

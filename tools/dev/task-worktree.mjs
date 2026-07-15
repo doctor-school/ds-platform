@@ -14,22 +14,33 @@
 // `pnpm worktree:teardown` (#335). The SessionStart detector in
 // `tools/agent-bootstrap.ts` surfaces WHEN to reach for this command.
 //
+// Two worktree shapes in ONE command:
+//   • ISSUE worktree  — `.claude/worktrees/<N>` on `<prefix>/<N>-<slug>`
+//     (the default; slug/prefix derived from `gh issue view <N>`).
+//   • SPEC worktree   — `.claude/worktrees/spec-NNN` on `feat/spec-NNN-<slug>`
+//     (author-ears-spec's spec branches; mirrors the teardown helper's
+//     first-class `spec-NNN` vocabulary in `worktree-teardown.mjs`).
+//
 // Usage:
 //   node tools/dev/task-worktree.mjs <N> [slug] [prefix]
-//   pnpm task:worktree <N>                # alias — derive slug/prefix from gh
-//   pnpm task:worktree 359 my-slug feat   # explicit slug + prefix
+//   pnpm task:worktree <N>                     # issue — derive slug/prefix from gh
+//   pnpm task:worktree 359 my-slug feat        # issue — explicit slug + prefix
+//   pnpm task:worktree --spec 008 portal-shell # spec  — derive path + feat/spec-008-portal-shell
+//   pnpm task:worktree spec-008 --branch feat/spec-008-portal-shell  # spec — explicit branch
 //
 // What it does, in order:
 //   1. resolve the main repo root from `git rev-parse --git-common-dir` (so the
 //      worktree always lands under the PRIMARY tree's `.claude/worktrees/`, even
 //      when invoked from inside another worktree),
-//   2. derive slug + prefix from args, else from `gh issue view <N>` (title →
-//      slug, kind label → branch prefix),
+//   2. ISSUE mode: derive slug + prefix from args, else from `gh issue view <N>`
+//      (title → slug, kind label → branch prefix). SPEC mode: derive the
+//      `.claude/worktrees/spec-NNN` path + `feat/spec-NNN-<slug>` branch (or use
+//      an explicit `--branch`),
 //   3. refuse early with a clear message if the worktree path or branch exists,
 //   4. `git fetch origin <default-branch>` then
-//      `git worktree add -b <prefix>/<N>-<slug> .claude/worktrees/<N> origin/<default>`
-//      (short numeric path → dodge Windows long-path on deep node_modules,
-//      memory `reference_windows_worktree_teardown_longpath`),
+//      `git worktree add -b <branch> <path> origin/<default>`
+//      (short numeric / spec-NNN path → dodge Windows long-path on deep
+//      node_modules, memory `reference_windows_worktree_teardown_longpath`),
 //   5. print the next steps (EnterWorktree + `pnpm install`).
 //
 // Exit codes: 0 = worktree ready; 1 = pre-flight refusal (exists / git error);
@@ -107,6 +118,40 @@ export function worktreeRelPath(n) {
   return `.claude/worktrees/${n}`;
 }
 
+// ── spec-worktree derivation (author-ears-spec branches) ────────────────────
+
+/**
+ * True when a positional argument is a spec token (`spec-008`, `spec-8`) rather
+ * than a bare Issue number. A BARE numeric first positional (`787`) is always
+ * the Issue path — backward-compatible — so only the literal `spec-` prefix
+ * routes into spec mode from a positional.
+ */
+export function isSpecToken(arg) {
+  return typeof arg === "string" && /^spec-\d+$/i.test(arg);
+}
+
+/**
+ * Canonical 3-digit spec number from `spec-008` / `008` / `8` (feature specs are
+ * `NNN`, three digits — repo-conventions §Branches). Returns null when the input
+ * is not a spec identifier, so the caller can fail loud on a typo.
+ */
+export function parseSpecId(raw) {
+  if (typeof raw !== "string") return null;
+  const m = raw.match(/^(?:spec-)?(\d+)$/i);
+  if (!m) return null;
+  return m[1].padStart(3, "0");
+}
+
+/** The spec worktree path: `.claude/worktrees/spec-NNN` (mirrors teardown). */
+export function specWorktreeRelPath(nnn) {
+  return `.claude/worktrees/spec-${nnn}`;
+}
+
+/** `feat/spec-NNN-<slug>` — the author-ears-spec branch shape. */
+export function specBranchName(nnn, slug) {
+  return `feat/spec-${nnn}-${slug}`;
+}
+
 // ── impure CLI (skipped on import) ──────────────────────────────────────────
 
 function out(msg) {
@@ -182,39 +227,13 @@ function fetchIssue(n) {
   }
 }
 
-function main() {
-  const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
-  const n = args[0];
-  if (!n || !/^\d+$/.test(n)) {
-    die("Usage: node tools/dev/task-worktree.mjs <issue-number> [slug] [prefix]");
-  }
-  let slug = args[1];
-  let prefix = args[2];
-
-  // Derive any missing slug/prefix from the issue. Args win over gh.
-  if (!slug || !prefix) {
-    const issue = fetchIssue(n);
-    if (!issue) {
-      if (!slug) {
-        die(
-          `could not resolve issue #${n} via gh — pass an explicit slug: pnpm task:worktree ${n} <slug> [prefix]`,
-          1,
-        );
-      }
-      // slug given but prefix missing and gh unavailable → safe default.
-      prefix = prefix || "chore";
-    } else {
-      slug = slug || slugifyTitle(issue.title);
-      prefix = prefix || branchPrefixFromLabels(issue.labels);
-    }
-  }
-  if (!slug) die(`derived an empty slug for #${n} — pass one explicitly.`, 1);
-
-  const root = mainRepoRoot();
-  const branch = branchName(prefix, n, slug);
-  const relPath = worktreeRelPath(n);
-  const absPath = join(root, ".claude", "worktrees", String(n));
-
+/**
+ * Shared worktree-creation tail for both modes: refuse on collisions, fetch the
+ * default branch, `git worktree add`, print next steps. `relPath` is the
+ * repo-relative display path; `absPath` its absolute form under the primary
+ * tree; `branch` the branch to create.
+ */
+function createWorktree(root, relPath, absPath, branch) {
   // Pre-flight: refuse on collisions with a clear remedy (idempotent intent).
   if (existsSync(absPath)) {
     die(
@@ -253,6 +272,113 @@ function main() {
   out(`  2. pnpm install              # if the task touches code`);
   out(`  3. … do the work, open the PR, then: pnpm worktree:teardown ${relPath}`);
   process.exit(0);
+}
+
+/**
+ * SPEC mode: `.claude/worktrees/spec-NNN` on `feat/spec-NNN-<slug>`.
+ * `nnn` is the canonical 3-digit spec number; `slug` derives the branch when no
+ * `--branch` override is supplied.
+ */
+function runSpec(nnn, slug, branchOverride) {
+  let branch;
+  if (branchOverride) {
+    branch = branchOverride;
+  } else {
+    if (!slug) {
+      die(
+        `spec worktree needs a slug to derive the branch: pnpm task:worktree --spec ${nnn} <slug> (or pass --branch <name>).`,
+        1,
+      );
+    }
+    const s = slugifyTitle(slug);
+    if (!s) die(`derived an empty slug for spec-${nnn} — pass a real slug.`, 1);
+    branch = specBranchName(nnn, s);
+  }
+
+  const root = mainRepoRoot();
+  const relPath = specWorktreeRelPath(nnn);
+  const absPath = join(root, ".claude", "worktrees", `spec-${nnn}`);
+  createWorktree(root, relPath, absPath, branch);
+}
+
+/** ISSUE mode: `.claude/worktrees/<N>` on `<prefix>/<N>-<slug>` (default). */
+function runIssue(n, slugArg, prefixArg) {
+  if (!n || !/^\d+$/.test(n)) {
+    die("Usage: node tools/dev/task-worktree.mjs <issue-number> [slug] [prefix]");
+  }
+  let slug = slugArg;
+  let prefix = prefixArg;
+
+  // Derive any missing slug/prefix from the issue. Args win over gh.
+  if (!slug || !prefix) {
+    const issue = fetchIssue(n);
+    if (!issue) {
+      if (!slug) {
+        die(
+          `could not resolve issue #${n} via gh — pass an explicit slug: pnpm task:worktree ${n} <slug> [prefix]`,
+          1,
+        );
+      }
+      // slug given but prefix missing and gh unavailable → safe default.
+      prefix = prefix || "chore";
+    } else {
+      slug = slug || slugifyTitle(issue.title);
+      prefix = prefix || branchPrefixFromLabels(issue.labels);
+    }
+  }
+  if (!slug) die(`derived an empty slug for #${n} — pass one explicitly.`, 1);
+
+  const root = mainRepoRoot();
+  const branch = branchName(prefix, n, slug);
+  const relPath = worktreeRelPath(n);
+  const absPath = join(root, ".claude", "worktrees", String(n));
+  createWorktree(root, relPath, absPath, branch);
+}
+
+function main() {
+  // Flag-aware parse: `--branch <name>`, `--spec <NNN>`, plus positionals.
+  const rawArgs = process.argv.slice(2);
+  const positional = [];
+  let branchOverride = null;
+  let specFlag = null;
+  let specMode = false;
+  for (let i = 0; i < rawArgs.length; i += 1) {
+    const a = rawArgs[i];
+    if (a === "--branch") branchOverride = rawArgs[(i += 1)];
+    else if (a === "--spec") {
+      specMode = true;
+      specFlag = rawArgs[(i += 1)];
+    } else if (a.startsWith("--")) {
+      die(`unknown flag '${a}'`);
+    } else {
+      positional.push(a);
+    }
+  }
+
+  // Spec mode is entered by `--spec <NNN>` or a literal `spec-NNN` first
+  // positional; a bare numeric first positional stays the Issue path.
+  if (specMode || isSpecToken(positional[0])) {
+    // `--spec 008 <slug>` → NNN from the flag, slug the first positional.
+    // `spec-008 [slug]`   → NNN from the positional, slug the second positional.
+    let nnn;
+    let slug;
+    if (specMode) {
+      nnn = parseSpecId(specFlag);
+      if (!nnn) {
+        die(
+          `--spec expects a spec number (e.g. pnpm task:worktree --spec 008 <slug>), got '${specFlag ?? ""}'.`,
+        );
+      }
+      slug = positional[0];
+    } else {
+      nnn = parseSpecId(positional[0]);
+      slug = positional[1];
+    }
+    runSpec(nnn, slug, branchOverride);
+    return;
+  }
+
+  runIssue(positional[0], positional[1], positional[2]);
 }
 
 // Run only as the entry point — guarding this keeps the pure derivation helpers

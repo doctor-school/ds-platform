@@ -103,6 +103,92 @@ function log(msg) {
   process.stdout.write(`[release-notes] ${msg}\n`);
 }
 
+/**
+ * Compose the aggregated release-notes digest text for a `prevSha..newSha` range —
+ * the ONE source of truth reused by both the Mattermost post (this script's
+ * `main`) and the GitHub Deployment record (`deployment-record.mjs`, #942/#847):
+ * derive the range's merged PR numbers → `gh pr view` each → keep the product-kind
+ * PRs with a REAL note → `buildDigest` (or `buildTechnicalReleaseLine` when zero).
+ *
+ * Returns `{ text, productCount }`, or `null` on the legitimate green-skip case
+ * (a bad/expired anchor whose `git log <range>` fails — never break a deploy). The
+ * caller owns the earlier green skips (no anchor / redeploy) and the webhook check;
+ * `footer` MUST be non-null here (the caller validates DELIVERY_ENV first). Callers
+ * that pass a range with a potentially-unvalidated env get a loud throw.
+ *
+ * @param {object}      args
+ * @param {string}      args.prevSha  previously-deployed anchor (valid hex, != new).
+ * @param {string}      args.newSha   newly-deployed SHA.
+ * @param {string|null} args.footer   the mandatory DEV/PROD environment footer.
+ * @param {string}     [args.cwd]     working dir for git/gh (defaults to cwd).
+ * @returns {Promise<{ text: string, productCount: number } | null>}
+ */
+export async function composeDigest({
+  prevSha,
+  newSha,
+  footer,
+  cwd = process.cwd(),
+}) {
+  if (footer === null || footer === undefined) {
+    throw new Error(
+      `DELIVERY_ENV must be 'dev' or 'prod' to mark the environment; got ${JSON.stringify(
+        process.env.DELIVERY_ENV ?? null,
+      )}. Refusing to compose an unmarked release note.`,
+    );
+  }
+
+  // Commit subjects of prevSha..newSha. A non-zero exit means prevSha is not in
+  // the local history (a bad/expired anchor) — warn and skip (green), never break.
+  const logRes = spawnSync(
+    "git",
+    ["log", "--format=%s", `${prevSha}..${newSha}`],
+    {
+      encoding: "utf8",
+      cwd,
+    },
+  );
+  if (logRes.status !== 0) {
+    log(
+      `⚠ \`git log ${prevSha.slice(0, SHORT)}..${newSha.slice(0, SHORT)}\` failed ` +
+        `(anchor not in local history?) — skipping (green): ${(logRes.stderr || "").trim()}`,
+    );
+    return null;
+  }
+  const subjects = (logRes.stdout || "").split(/\r?\n/).filter(Boolean);
+  const prNums = extractPrNumbers(subjects);
+
+  // Fetch each PR; keep only product-kind PRs (feature|bug) with a REAL note.
+  const notes = [];
+  for (const n of prNums) {
+    const r = spawnSync(
+      "gh",
+      ["pr", "view", String(n), "--json", "number,title,url,body,labels"],
+      { encoding: "utf8", cwd },
+    );
+    // Non-zero: the number is an issue ref (not a PR) or a 404 — skip it.
+    if (r.status !== 0) continue;
+    let pr;
+    try {
+      pr = JSON.parse(r.stdout || "");
+    } catch {
+      continue;
+    }
+    const labelNames = Array.isArray(pr.labels)
+      ? pr.labels.map((l) => (l && typeof l === "object" ? l.name : l))
+      : [];
+    if (!labelsAreProductKind(labelNames)) continue;
+    const note = extractNote(pr.body ?? "");
+    if (!noteIsReal(note)) continue;
+    notes.push({ note, title: pr.title ?? "", url: pr.url ?? "" });
+  }
+
+  const payload =
+    notes.length === 0
+      ? buildTechnicalReleaseLine({ newSha, footer })
+      : buildDigest({ notes, newSha, footer });
+  return { text: payload.text, productCount: notes.length };
+}
+
 /** Parse `--flag value` / `--flag` from argv. */
 function parseArgs(argv) {
   const get = (flag) => {
@@ -149,69 +235,24 @@ async function main() {
 
   // Redeploy of the same SHA — nothing entered the range. Skip green.
   if (prevSha === newSha) {
-    log("prev == new (redeploy of same SHA) — nothing entered, skipping (green).");
+    log(
+      "prev == new (redeploy of same SHA) — nothing entered, skipping (green).",
+    );
     return;
   }
 
   // The environment footer is mandatory for any message that WILL be composed —
   // an unmarked release post is impossible. Validated AFTER the cheap green skips
-  // but BEFORE any git/gh/network work, so an unknown DELIVERY_ENV fails loudly
-  // and deterministically offline (the deploy passes DELIVERY_ENV=prod).
+  // but BEFORE any git/gh/network work (composeDigest throws on a null footer
+  // before touching git), so an unknown DELIVERY_ENV fails loudly and
+  // deterministically offline (the deploy passes DELIVERY_ENV=prod).
   const footer = envFooter(process.env.DELIVERY_ENV);
-  if (footer === null) {
-    throw new Error(
-      `DELIVERY_ENV must be 'dev' or 'prod' to mark the environment; got ${JSON.stringify(
-        process.env.DELIVERY_ENV ?? null,
-      )}. Refusing to post an unmarked release note.`,
-    );
-  }
 
-  // Commit subjects of prevSha..newSha. A non-zero exit means prevSha is not in
-  // the local history (a bad/expired anchor) — warn and skip, never break.
-  const logRes = spawnSync(
-    "git",
-    ["log", "--format=%s", `${prevSha}..${newSha}`],
-    { encoding: "utf8" },
-  );
-  if (logRes.status !== 0) {
-    log(
-      `⚠ \`git log ${prevSha.slice(0, SHORT)}..${newSha.slice(0, SHORT)}\` failed ` +
-        `(anchor not in local history?) — skipping (green): ${(logRes.stderr || "").trim()}`,
-    );
-    return;
-  }
-  const subjects = (logRes.stdout || "").split(/\r?\n/).filter(Boolean);
-  const prNums = extractPrNumbers(subjects);
-
-  // Fetch each PR; keep only product-kind PRs (feature|bug) with a REAL note.
-  const notes = [];
-  for (const n of prNums) {
-    const r = spawnSync(
-      "gh",
-      ["pr", "view", String(n), "--json", "number,title,url,body,labels"],
-      { encoding: "utf8" },
-    );
-    // Non-zero: the number is an issue ref (not a PR) or a 404 — skip it.
-    if (r.status !== 0) continue;
-    let pr;
-    try {
-      pr = JSON.parse(r.stdout || "");
-    } catch {
-      continue;
-    }
-    const labelNames = Array.isArray(pr.labels)
-      ? pr.labels.map((l) => (l && typeof l === "object" ? l.name : l))
-      : [];
-    if (!labelsAreProductKind(labelNames)) continue;
-    const note = extractNote(pr.body ?? "");
-    if (!noteIsReal(note)) continue;
-    notes.push({ note, title: pr.title ?? "", url: pr.url ?? "" });
-  }
-
-  const payload =
-    notes.length === 0
-      ? buildTechnicalReleaseLine({ newSha, footer })
-      : buildDigest({ notes, newSha, footer });
+  // Compose the digest via the ONE shared seam (also used by the Deployment record
+  // in deployment-record.mjs, #942). Null → a legitimate green skip already logged.
+  const digest = await composeDigest({ prevSha, newSha, footer });
+  if (!digest) return;
+  const payload = { text: digest.text };
 
   if (dryRun) {
     process.stdout.write(`${payload.text}\n`);
@@ -230,7 +271,7 @@ async function main() {
     );
   }
   log(
-    `delivered the aggregated release note to Mattermost (${res.status}; ${notes.length} product PR(s)).`,
+    `delivered the aggregated release note to Mattermost (${res.status}; ${digest.productCount} product PR(s)).`,
   );
 }
 

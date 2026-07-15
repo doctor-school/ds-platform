@@ -21,6 +21,8 @@ This is the procedure behind the **`/wrap`** slash command ([`.claude/commands/w
 
 Enumerate live dispatched agents — impl subagents, reviewers, background monitors. **Wait for every one to return — in all cases** — and run its bounded closeout (stand-ops/main-tree audit, Mode-a dispatch, tracker stop-state) **before** dispatching the stage-1 retro: a session error may be surfaced precisely by an in-flight agent's result, so a retro launched earlier analyzes an incomplete session and its findings miss the tail (owner directive 2026-07-10, #707). Recording the agent id + worktree/branch-DB/ports + relaunch recipe in the Issue stop-state and the handoff is the **fallback only** for a genuinely unreapable agent (harness-killed, no return possible) — never an alternative to waiting.
 
+**DoD-vs-title gate.** Do NOT dispatch the retro / propose a wrap or handoff whose "remaining"/"next" list contains the SESSION'S OWN task-title verb (publish / release / deploy / ship) while no release tag or GitHub Deployment exists for THIS session — the prerequisite fix is not the deliverable (2026-07-15: #968's machinery fix was mislabeled "the cycle ran"; the actual publish+deploy was still undone). The enforced backstop is the completion-hook check tracked in the retro B+E tooling Issue.
+
 ### 1. Retro — independent, single-session (dispatch)
 
 Dispatch [`run-session-retro`](../run-session-retro/SKILL.md) **in single-session mode** as an _independent_ Opus agent, so the analysis is never self-review (the constraint the skill enforces). The agent returns the findings array in the #248 schema; consume it as the input to stage 2.

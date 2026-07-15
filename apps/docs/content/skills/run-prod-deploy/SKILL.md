@@ -50,6 +50,10 @@ Separately, a **`Version Packages` PR merge** cuts a `release-YYYY.MM.DD-n` git 
 
 The aggregated Russian product-language digest (#868) — ONE note listing the `## Product note (RU)` of every product-kind PR in the `<prev-sha>..<new-sha>` range — is **no longer posted by `deploy:prod`**. It fires from CI: `.github/workflows/release-digest.yml` triggers on `deployment_status: success` for `environment: production` (the very Deployment §2 records), resolves the prev/new SHA range from the Deployment event + `gh api`, and posts via `tools/ci/post-release-digest.mjs` → `release-notes.mjs` using `secrets.MATTERMOST_WEBHOOK_URL` (which already lives in CI). Non-fatal: a post failure WARNs, never fails the workflow. No `.env.local` webhook to configure on the operator box (the #950 crutch is retired). For an offline render check, run `node tools/deploy/release-notes.mjs --prev-sha <sha|none> --new-sha <sha> --dry-run` (with `DELIVERY_ENV=prod`).
 
+### 2b. Verify the digest CONTENT, not the HTTP 200 (retro 2026-07-15)
+
+After the release digest fires, confirm it is non-empty before any release-cut or "done" claim: grep the `release-digest` workflow run-log for the delivered product-PR count (`delivered … (N product PR(s))`) — a release-cut / "cycle done" claim is FORBIDDEN until N>0 **or** an intentional zero is explicitly acknowledged to the owner. Read the rendered digest BODY; a `success`/HTTP-200 is send-status, not the surface. **Any change to the notes/digest machinery** additionally requires a golden-output dry-run (`node tools/deploy/release-notes.mjs --dry-run --prev-sha <prev> --new-sha <new>`) against the ACTUAL next `prev..new` delta, eyeballed, before merge — a unit test of the range function is not sufficient (#968 shipped an empty-digest bug a dry-run would have caught).
+
 ### 3. Health verify
 
 ```bash

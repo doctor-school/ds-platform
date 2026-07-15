@@ -21,6 +21,7 @@
     "issue:create": "node tools/gh/create-issue.mjs",
     "merge:gate": "node tools/gh/merge-gate.mjs",
     "lint:asset-format": "tsx tools/lint/asset-format-lint.ts",
+    "lint:axe-exclude": "tsx tools/lint/axe-exclude-lint.ts",
     "lint:endpoint-authz": "tsx --tsconfig apps/api/tsconfig.json tools/lint/endpoint-authz-lint.ts",
     "lint:events": "tsx tools/lint/events-lint.ts",
     "lint:form-error": "tsx tools/lint/form-error-lint.ts",

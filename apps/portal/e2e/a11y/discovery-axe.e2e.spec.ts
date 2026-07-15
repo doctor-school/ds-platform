@@ -53,6 +53,7 @@ async function scan(page: Page, theme: (typeof THEMES)[number]) {
   const results = await new AxeBuilder({ page })
     .withTags(WCAG_TAGS)
     // 004's dark poster header + footer band — see the scope note above.
+    // axe-exclude-ok: #924 band swallows interactive toggle — leaf-scope tracked
     .exclude(".bg-header")
     .analyze();
   const summary = results.violations.map((v) => ({

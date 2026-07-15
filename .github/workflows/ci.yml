@@ -272,6 +272,25 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/route-target-lint.ts
 
+  # axe-exclude: every `AxeBuilder.exclude(...)` in an e2e a11y spec
+  # (apps/*/e2e/**/*axe*.e2e.spec.ts) must be leaf-scoped (a `#id`/`[attr]`
+  # selector) or carry a `// axe-exclude-ok: #<issue> <reason>` marker. Guards the
+  # #713 class of defect — `.exclude(".bg-header")` excluded a whole container
+  # band, hiding the interactive theme-toggle glyph (#702) from the contrast scan.
+  # WARN v1 (ADR-0007 §2.6; new guard lands WARN, promote to BLOCK once stable) →
+  # `continue-on-error: true`, and NOT in the `ci` needs-list.
+  axe-exclude:
+    needs: setup
+    continue-on-error: true # WARN v1 (promote to BLOCK once stable) — ADR-0007 §2.6
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsx tools/lint/axe-exclude-lint.ts
+
   # ─── Glossary validation from ADR-0006 §6 ────────────────────────────
   # glossary-mdx — ADR-0006 §6.4 MDX glossary-lint (a `[[term-id]]` directive in
   # docs prose must resolve to a glossary term). REAL guard as of #448 (was a

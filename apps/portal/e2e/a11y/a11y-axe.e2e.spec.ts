@@ -1,9 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import {
-  LIVE_STAND,
-  submitRegisterAndVerify,
-} from "../support/doctor-session";
+import { LIVE_STAND, submitRegisterAndVerify } from "../support/doctor-session";
 
 /**
  * 005 EARS-13 (contrast slice) — axe-core WCAG 2 A/AA scan of the touched portal
@@ -57,6 +54,7 @@ async function scan(page: Page, theme: (typeof THEMES)[number]) {
   const results = await new AxeBuilder({ page })
     .withTags(WCAG_TAGS)
     // 004's dark poster header + footer band — see the scope note above.
+    // axe-exclude-ok: #924 band swallows interactive toggle — leaf-scope tracked
     .exclude(".bg-header")
     .analyze();
   const summary = results.violations.map((v) => ({
@@ -71,7 +69,10 @@ async function scan(page: Page, theme: (typeof THEMES)[number]) {
 test.describe.configure({ mode: "serial" });
 
 test.describe("005 EARS-13 axe-core a11y scan of the portal webinar surfaces", () => {
-  test.skip(!LIVE_STAND, "dev-stand env absent (E2E_PORTAL_URL / IDP_ISSUER / MAILPIT_URL) — manual gate");
+  test.skip(
+    !LIVE_STAND,
+    "dev-stand env absent (E2E_PORTAL_URL / IDP_ISSUER / MAILPIT_URL) — manual gate",
+  );
 
   test("the guest published event page passes WCAG 2 A/AA (both themes)", async ({
     page,
@@ -88,16 +89,23 @@ test.describe("005 EARS-13 axe-core a11y scan of the portal webinar surfaces", (
     // Provision a doctor and register them for the seeded event by riding the
     // guest-through-auth returnTo path, so the scanned pages carry the REGISTERED
     // state (the «вы записаны» confirmation on `bg-card`, the registered card).
-    await page.goto(`/register?returnTo=${encodeURIComponent(`/webinars/${SEED}`)}`, {
-      waitUntil: "domcontentloaded",
-    });
+    await page.goto(
+      `/register?returnTo=${encodeURIComponent(`/webinars/${SEED}`)}`,
+      {
+        waitUntil: "domcontentloaded",
+      },
+    );
     await submitRegisterAndVerify(page);
     await page.waitForURL(new RegExp(`/webinars/${SEED}(?:$|[?#])`));
-    await expect(page.getByText("Вы записаны", { exact: false }).first()).toBeVisible();
+    await expect(
+      page.getByText("Вы записаны", { exact: false }).first(),
+    ).toBeVisible();
     for (const theme of THEMES) await scan(page, theme);
 
     await page.goto("/account/events", { waitUntil: "domcontentloaded" });
-    await expect(page.locator(`a[href="/webinars/${SEED}"]`).first()).toBeVisible();
+    await expect(
+      page.locator(`a[href="/webinars/${SEED}"]`).first(),
+    ).toBeVisible();
     for (const theme of THEMES) await scan(page, theme);
   });
 

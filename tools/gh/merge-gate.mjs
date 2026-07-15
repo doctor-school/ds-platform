@@ -53,10 +53,80 @@ const TAG = "[merge:gate]";
 // ── pure seams (unit-tested in guard-tests/merge-gate.spec.ts) ──────────────
 
 /**
+ * Parse an ISO timestamp to epoch-ms; a missing/blank/invalid value sorts
+ * OLDEST (`-Infinity`) so a run with no timestamp never wins its name group.
+ * @param {string|null|undefined} v
+ * @returns {number}
+ */
+function runTimeMs(v) {
+  if (!v) return -Infinity;
+  const t = Date.parse(v);
+  return Number.isNaN(t) ? -Infinity : t;
+}
+
+/**
+ * True when run `a` (at array index `ai`) is NEWER than run `b` (at index
+ * `bi`) for its name group. Ordering:
+ *   1. running-ness — a non-`completed` (in_progress/queued) run outranks a
+ *      completed same-name predecessor. A PR-body edit re-triggers a body
+ *      guard on the SAME head SHA; the fresh in-flight run must WIN so the
+ *      board still reads `pending`, never a premature green off the stale
+ *      completed run (#960 review).
+ *   2. `started_at` desc — of two runs in the same running-state, the one that
+ *      started later is newer (the re-run).
+ *   3. `completed_at` desc — tie-break for two completed runs that share a
+ *      start time (the #955 superseded-cancelled→success case).
+ *   4. numeric `id` desc, else later array position wins.
+ * Missing timestamps sort oldest (`-Infinity`).
+ */
+function runIsNewer(a, ai, b, bi) {
+  const aRunning = a?.status !== "completed";
+  const bRunning = b?.status !== "completed";
+  if (aRunning !== bRunning) return aRunning;
+  const as = runTimeMs(a?.started_at);
+  const bs = runTimeMs(b?.started_at);
+  if (as !== bs) return as > bs;
+  const ac = runTimeMs(a?.completed_at);
+  const bc = runTimeMs(b?.completed_at);
+  if (ac !== bc) return ac > bc;
+  const aid = typeof a?.id === "number" ? a.id : null;
+  const bid = typeof b?.id === "number" ? b.id : null;
+  if (aid !== null && bid !== null && aid !== bid) return aid > bid;
+  return ai > bi;
+}
+
+/**
+ * Dedupe a check-runs array to the NEWEST run per distinct `name`. GitHub keeps
+ * BOTH a superseded `cancelled` run and its `success` re-run on the same head
+ * SHA forever (a PR-body edit re-triggers the body guards via a concurrency
+ * group that cancels the in-flight run; a `success` run replaces it ~40s
+ * later). Counting the stale `cancelled` run as blocking made `merge:gate`
+ * report a permanent RED on a genuinely-green PR (#955). Grouping to the latest
+ * run per name before classification drops the superseded runs; a `cancelled`
+ * run that IS the newest for its name still surfaces (genuinely aborted).
+ *
+ * @param {{name?: string, status?: string, conclusion?: string|null, started_at?: string|null, completed_at?: string|null, id?: number}[]|null|undefined} runs
+ * @returns {{name?: string, status?: string, conclusion?: string|null}[]}
+ */
+export function latestRunsByName(runs) {
+  if (!Array.isArray(runs)) return [];
+  const latest = new Map(); // name -> {run, idx}
+  runs.forEach((run, idx) => {
+    const name = run?.name ?? "<unnamed>";
+    const prev = latest.get(name);
+    if (!prev || runIsNewer(run, idx, prev.run, prev.idx)) {
+      latest.set(name, { run, idx });
+    }
+  });
+  return [...latest.values()].map((e) => e.run);
+}
+
+/**
  * Classify the check-runs board for one commit SHA. Reads ONLY the structured
  * `status` / `conclusion` fields (GitHub check-runs API) — run NAMES never
  * influence the verdict (a job named `submit-pending` must not read as
- * pending; retro 29f490ed F1).
+ * pending; retro 29f490ed F1). Superseded runs are dropped first via
+ * `latestRunsByName` (#955), so only the newest run per name is classified.
  *
  * States:
  *   - `empty`   — zero registered runs. NEVER green: a fresh-push race where
@@ -78,7 +148,9 @@ export function classifyCheckRuns(runs) {
   if (!Array.isArray(runs) || runs.length === 0) {
     return { state: "empty", red: [], pending: [] };
   }
-  const red = runs
+  // Drop superseded runs so only the newest run per name is classified (#955).
+  const latest = latestRunsByName(runs);
+  const red = latest
     .filter(
       (r) =>
         r.status === "completed" &&
@@ -86,7 +158,7 @@ export function classifyCheckRuns(runs) {
         r.conclusion !== "skipped",
     )
     .map((r) => r.name ?? "<unnamed>");
-  const pending = runs
+  const pending = latest
     .filter((r) => r.status !== "completed")
     .map((r) => r.name ?? "<unnamed>");
   if (red.length > 0) return { state: "red", red, pending };

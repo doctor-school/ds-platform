@@ -8,6 +8,7 @@ import {
   cwdGuardMessage,
   findBranchWorktree,
   isWorktreeCwd,
+  latestRunsByName,
   worktreeNumber,
 } from "../../gh/merge-gate.mjs";
 
@@ -97,6 +98,203 @@ describe("merge-gate classifyCheckRuns() (#836)", () => {
       { name: "glossary", status: "completed", conclusion: "skipped" },
     ];
     expect(classifyCheckRuns(runs).state).toBe("green");
+  });
+
+  it("EARS-955: is green when superseded cancelled runs have a newer same-name success (RED→GREEN)", () => {
+    // GitHub keeps BOTH runs on the head SHA: a PR-body edit's concurrency group
+    // cancels the in-flight body guard, a success run replaces it ~40s later.
+    // The stale `cancelled` must not read as blocking (permanent false RED).
+    const bodyGuards = ["spec-link", "prior-decisions", "registry-research", "spec-status-fresh"];
+    const runs = bodyGuards.flatMap((name) => [
+      {
+        name,
+        status: "completed",
+        conclusion: "cancelled",
+        started_at: "2026-07-15T10:00:00Z",
+        completed_at: "2026-07-15T10:00:15Z",
+      },
+      {
+        name,
+        status: "completed",
+        conclusion: "success",
+        started_at: "2026-07-15T10:00:30Z",
+        completed_at: "2026-07-15T10:00:50Z",
+      },
+    ]);
+    const verdict = classifyCheckRuns(runs);
+    expect(verdict.state).toBe("green");
+    expect(verdict.red).toEqual([]);
+  });
+
+  it("EARS-955.4: an in-flight re-run outranks its completed predecessor → pending, not a premature green", () => {
+    // A PR-body edit re-triggers a body guard on the SAME head SHA; the fresh
+    // in_progress run must win the name group so the board still reads pending
+    // (head-pinning cannot catch an unchanged SHA) (#960 review).
+    const runs = [
+      {
+        name: "spec-link",
+        status: "completed",
+        conclusion: "success",
+        started_at: "2026-07-15T10:00:00Z",
+        completed_at: "2026-07-15T10:00:15Z",
+      },
+      {
+        name: "spec-link",
+        status: "in_progress",
+        conclusion: null,
+        started_at: "2026-07-15T10:00:30Z",
+        completed_at: null,
+      },
+    ];
+    const verdict = classifyCheckRuns(runs);
+    expect(verdict.state).toBe("pending");
+    expect(verdict.pending).toEqual(["spec-link"]);
+  });
+
+  it("EARS-955.1: a cancelled run that IS the newest for its name is still red", () => {
+    const runs = [
+      {
+        name: "spec-link",
+        status: "completed",
+        conclusion: "success",
+        completed_at: "2026-07-15T10:00:15Z",
+      },
+      {
+        name: "spec-link",
+        status: "completed",
+        conclusion: "cancelled",
+        completed_at: "2026-07-15T10:00:50Z",
+      },
+    ];
+    const verdict = classifyCheckRuns(runs);
+    expect(verdict.state).toBe("red");
+    expect(verdict.red).toEqual(["spec-link"]);
+  });
+
+  it("EARS-955.2: a failure run that IS the newest for its name is still red", () => {
+    const runs = [
+      {
+        name: "ci / test",
+        status: "completed",
+        conclusion: "success",
+        completed_at: "2026-07-15T10:00:15Z",
+      },
+      {
+        name: "ci / test",
+        status: "completed",
+        conclusion: "failure",
+        completed_at: "2026-07-15T10:00:50Z",
+      },
+    ];
+    expect(classifyCheckRuns(runs).state).toBe("red");
+  });
+
+  it("EARS-955.3: mixed board — one name superseded→success, another genuinely failing → red naming only the failure", () => {
+    const runs = [
+      {
+        name: "spec-link",
+        status: "completed",
+        conclusion: "cancelled",
+        completed_at: "2026-07-15T10:00:15Z",
+      },
+      {
+        name: "spec-link",
+        status: "completed",
+        conclusion: "success",
+        completed_at: "2026-07-15T10:00:50Z",
+      },
+      {
+        name: "ci / e2e",
+        status: "completed",
+        conclusion: "failure",
+        completed_at: "2026-07-15T10:01:00Z",
+      },
+    ];
+    const verdict = classifyCheckRuns(runs);
+    expect(verdict.state).toBe("red");
+    expect(verdict.red).toEqual(["ci / e2e"]);
+  });
+});
+
+describe("merge-gate latestRunsByName() (#955)", () => {
+  it("keeps one run per distinct name", () => {
+    const runs = [
+      { name: "a", status: "completed", conclusion: "success" },
+      { name: "b", status: "completed", conclusion: "success" },
+    ];
+    expect(latestRunsByName(runs)).toHaveLength(2);
+  });
+
+  it("keeps the newest run per name by completed_at (superseded dropped)", () => {
+    const runs = [
+      {
+        name: "spec-link",
+        conclusion: "cancelled",
+        completed_at: "2026-07-15T10:00:15Z",
+      },
+      {
+        name: "spec-link",
+        conclusion: "success",
+        completed_at: "2026-07-15T10:00:50Z",
+      },
+    ];
+    const latest = latestRunsByName(runs);
+    expect(latest).toHaveLength(1);
+    expect(latest[0].conclusion).toBe("success");
+  });
+
+  it("tie-breaks equal completed_at by started_at", () => {
+    const runs = [
+      {
+        name: "x",
+        conclusion: "cancelled",
+        started_at: "2026-07-15T10:00:00Z",
+        completed_at: "2026-07-15T10:00:50Z",
+      },
+      {
+        name: "x",
+        conclusion: "success",
+        started_at: "2026-07-15T10:00:30Z",
+        completed_at: "2026-07-15T10:00:50Z",
+      },
+    ];
+    expect(latestRunsByName(runs)[0].conclusion).toBe("success");
+  });
+
+  it("final tie-break: higher numeric id wins", () => {
+    const runs = [
+      { name: "x", conclusion: "cancelled", id: 1 },
+      { name: "x", conclusion: "success", id: 2 },
+    ];
+    expect(latestRunsByName(runs)[0].conclusion).toBe("success");
+  });
+
+  it("a run missing timestamps sorts oldest (a timestamped run wins its name)", () => {
+    const runs = [
+      { name: "x", conclusion: "success", completed_at: "2026-07-15T10:00:50Z" },
+      { name: "x", conclusion: "cancelled" },
+    ];
+    expect(latestRunsByName(runs)[0].conclusion).toBe("success");
+  });
+
+  it("ranks a non-completed run newest over its completed predecessor", () => {
+    const runs = [
+      {
+        name: "x",
+        status: "completed",
+        conclusion: "success",
+        completed_at: "2026-07-15T10:00:15Z",
+      },
+      { name: "x", status: "in_progress", conclusion: null },
+    ];
+    const latest = latestRunsByName(runs);
+    expect(latest).toHaveLength(1);
+    expect(latest[0].status).toBe("in_progress");
+  });
+
+  it("returns [] for non-array input", () => {
+    expect(latestRunsByName(null)).toEqual([]);
+    expect(latestRunsByName(undefined)).toEqual([]);
   });
 });
 

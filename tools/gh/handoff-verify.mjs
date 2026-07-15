@@ -38,6 +38,14 @@
  * no quotable owner turn → STALE (the claim launders an agent idea as an
  * owner decision — the exact #779 failure).
  *
+ * Task-kind-vs-surface domain (#778, non-blocking Phase-0 WARN): when the
+ * handoff declares an IMPLEMENTATION / feature-iteration task-kind and names a
+ * `feature:*`-labelled, user-facing-surface Issue whose owning feature-spec
+ * has no `NNN-product.md` PRD (ADR-0014), it emits a WARN row + stderr hint
+ * (route via do-product-discovery first) WITHOUT bumping `stale` — the exit
+ * code stays 0 (promotable to BLOCK per ADR-0007 §2.6). Both the gh access and
+ * the spec-dir lookup are injectable.
+ *
  * Output: one machine-parseable row per (ref, claim):
  *   PASS|STALE|INFO <ref> claimed=<claim|-> actual=<state>
  * then a summary line. Unknown/deleted ref (gh 404, unresolvable sha/branch)
@@ -52,8 +60,9 @@
  * through an injectable runner so tests never shell out.
  */
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const MAX_BUFFER = 16 * 1024 * 1024;
 const BRANCH_PREFIXES = ["feat", "fix", "chore", "refactor", "docs", "tooling"];
@@ -283,6 +292,120 @@ export function verifyApprovalClaims(claims, runner) {
   return { rows, stale: rows.filter((r) => r.verdict === "STALE").length, hints };
 }
 
+// ---------------------------------------------------------------------------
+// Task-kind-vs-surface domain (#778): a non-blocking Phase-0 WARN that fires
+// when a handoff declares an IMPLEMENTATION / feature-iteration task-kind AND
+// routes a `feature:*`-labelled, user-facing-surface Issue straight to code
+// while its owning feature-spec carries no `NNN-product.md` PRD (ADR-0014 /
+// SDD hard rule). Root cause it guards: #768/#776 was dispatched straight to
+// code for user-facing product IA, bypassing do-product-discovery. WARN is
+// non-blocking — it emits a row + a stderr hint but never bumps `stale`, so
+// the exit code stays 0 (promotable to BLOCK per ADR-0007 §2.6).
+
+/** Feature-kind label predicate (spec-link-lint `isFeatureLabel` shape). */
+function isFeatureLabel(name) {
+  return /^feature/i.test(String(name));
+}
+
+/** Default spec-dir reader — real `fs.readdirSync` of the feature-spec dir. */
+const SPECS_FEATURES_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "apps",
+  "docs",
+  "content",
+  "specs",
+  "features",
+);
+function defaultReadSpecDir(slug) {
+  try {
+    return readdirSync(path.join(SPECS_FEATURES_ROOT, slug));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Extract the task-kind-vs-surface inputs from a handoff. Trigger gate: the
+ * handoff must declare an implementation-class kind (IMPLEMENTATION /
+ * feature-iteration) — a declared task-kind, e.g. the #768/#776 handoff said
+ * "IMPLEMENTATION / orchestrate". Absent → null (skip the whole check). Present
+ * → the distinct issue-ref numbers named in the handoff (same numRe the ref
+ * pipeline uses).
+ * @param {string} text
+ * @returns {{issues: number[]} | null}
+ */
+export function extractTaskKindSurface(text) {
+  const s = String(text);
+  if (!/\b(?:IMPLEMENTATION|feature-iteration)\b/i.test(s)) return null;
+  const issues = new Set();
+  for (const m of s.matchAll(numRe())) issues.add(Number(m[2]));
+  return { issues: [...issues] };
+}
+
+/**
+ * Verify each named Issue: a `feature:*`-labelled, user-facing Issue whose
+ * owning feature-spec has no `NNN-product.md` PRD → WARN (non-blocking) row +
+ * stderr hint. PRD present → PASS. Non-feature-labelled / backend-only / no
+ * owning spec / gh-404 → skipped silently. Both the gh access (`runner.gh`)
+ * and the spec-dir lookup (`readSpecDir`) are injectable so tests never shell
+ * out or touch the real FS.
+ * @param {{issues: number[]} | null} input
+ * @param {{runner: {gh: Function}, readSpecDir?: (slug: string) => string[]}} deps
+ * @returns {{rows: {verdict: string, ref: string, claim: string, actual: string}[], hints: string[], warn: number}}
+ */
+export function verifyTaskKindSurface(input, { runner, readSpecDir } = {}) {
+  const rows = [];
+  const hints = [];
+  if (!input) return { rows, hints, warn: 0 };
+  const read = readSpecDir ?? defaultReadSpecDir;
+  for (const n of input.issues) {
+    const res = runner.gh(["issue", "view", String(n), "--json", "labels,body"]);
+    if (res.status !== 0) continue; // not an issue / 404 → skip
+    let payload;
+    try {
+      payload = JSON.parse(res.stdout);
+    } catch {
+      continue;
+    }
+    const labels = Array.isArray(payload.labels)
+      ? payload.labels.map((l) => String(l?.name ?? ""))
+      : [];
+    if (!labels.some(isFeatureLabel)) continue; // non-feature-labelled → skip
+
+    const body = String(payload.body ?? "");
+    // User-facing signal: a page/component path token under an app's app|src.
+    if (!/apps\/[^/\s]+\/(?:app|src)\//.test(body)) continue; // backend-only → silent
+
+    // Owning spec: first specs/features/<slug>/ path token in the body.
+    const specM = body.match(/specs\/features\/(\d{3}-[a-z0-9-]+)\//);
+    if (!specM) continue; // no owning spec named → nothing to assert
+    const slug = specM[1];
+    const nnn = slug.slice(0, 3);
+    const hasPrd = read(slug).includes(`${nnn}-product.md`);
+    if (hasPrd) {
+      rows.push({
+        verdict: "PASS",
+        ref: `#${n}`,
+        claim: "user-facing",
+        actual: `prd-present:${slug}`,
+      });
+    } else {
+      rows.push({
+        verdict: "WARN",
+        ref: `#${n}`,
+        claim: "user-facing",
+        actual: `no-prd:${slug}`,
+      });
+      hints.push(
+        `[handoff-verify] user-facing surface (#${n}) routed straight-to-code but feature-spec ${slug} has no ${nnn}-product.md PRD — route via do-product-discovery / re-derive AGENTS.md §3.1 before dispatch (SDD hard rule, ADR-0014).`,
+      );
+    }
+  }
+  return { rows, hints, warn: rows.filter((r) => r.verdict === "WARN").length };
+}
+
 /** Default runner — real `gh` / `git` via spawnSync (Windows-safe: both are exes on PATH). */
 export function defaultRunner() {
   const run = (cmd, args) => {
@@ -427,17 +550,22 @@ function main() {
 
   const stateResult = verifyRefs(refs, runner);
   const approvalResult = verifyApprovalClaims(extractApprovalClaims(text), runner);
-  const rows = [...stateResult.rows, ...approvalResult.rows];
+  const taskKindResult = verifyTaskKindSurface(extractTaskKindSurface(text), { runner });
+  const rows = [...stateResult.rows, ...approvalResult.rows, ...taskKindResult.rows];
+  // WARN rows (task-kind-vs-surface) are non-blocking: they never feed `stale`,
+  // so the exit code stays 0 on a WARN-only run (Phase-0 WARN, ADR-0007 §2.6).
   const stale = stateResult.stale + approvalResult.stale;
+  const warn = taskKindResult.warn;
   for (const r of rows)
     process.stdout.write(
       `${r.verdict} ${r.ref} claimed=${r.claim ?? "-"} actual=${r.actual}\n`,
     );
-  for (const hint of approvalResult.hints) process.stderr.write(`${hint}\n`);
+  for (const hint of [...approvalResult.hints, ...taskKindResult.hints])
+    process.stderr.write(`${hint}\n`);
   const pass = rows.filter((r) => r.verdict === "PASS").length;
   const info = rows.filter((r) => r.verdict === "INFO").length;
   process.stdout.write(
-    `[handoff-verify] ${rows.length} row(s): ${pass} PASS, ${stale} STALE, ${info} INFO — ${
+    `[handoff-verify] ${rows.length} row(s): ${pass} PASS, ${stale} STALE, ${info} INFO, ${warn} WARN — ${
       stale > 0 ? "STALE premises found, fix the handoff before emitting/consuming it." : "OK"
     }\n`,
   );

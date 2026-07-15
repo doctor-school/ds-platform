@@ -4,11 +4,13 @@ import {
   dedupeRefs,
   extractApprovalClaims,
   extractRefs,
+  extractTaskKindSurface,
   parseClaim,
   resolveProvenance,
   verdictFor,
   verifyApprovalClaims,
   verifyRefs,
+  verifyTaskKindSurface,
 } from "../../gh/handoff-verify.mjs";
 
 /**
@@ -27,6 +29,7 @@ function fakeRunner(opts: {
   knownShas?: string[];
   branches?: Record<string, string>; // branch -> head sha
   provenance?: Record<number, { body: string; comments: { body: string }[] }>;
+  issueMeta?: Record<number, { labels: { name: string }[]; body: string }>;
 }) {
   const calls: string[][] = [];
   return {
@@ -34,6 +37,11 @@ function fakeRunner(opts: {
     gh(args: string[]) {
       calls.push(["gh", ...args]);
       const [kind, , n] = args; // "issue"|"pr", "view", "<n>"
+      if (args.includes("labels,body")) {
+        const meta = (opts.issueMeta ?? {})[Number(n)];
+        if (!meta) return { status: 1, stdout: "", stderr: "GraphQL: not found (404)" };
+        return { status: 0, stdout: JSON.stringify(meta), stderr: "" };
+      }
       if (args.includes("body,comments")) {
         const prov = (opts.provenance ?? {})[Number(n)];
         if (!prov) return { status: 1, stdout: "", stderr: "GraphQL: not found (404)" };
@@ -374,5 +382,107 @@ describe("handoff-verify approval provenance with an injected runner", () => {
     );
     expect(rows[0]).toMatchObject({ verdict: "STALE", actual: "not-found" });
     expect(stale).toBe(1);
+  });
+});
+
+describe("handoff-verify extractTaskKindSurface()", () => {
+  it("returns null when no implementation-class kind is declared (skip gate)", () => {
+    expect(extractTaskKindSurface("Groom session: triage #768 before dispatch")).toBeNull();
+  });
+
+  it("fires on an IMPLEMENTATION declaration and collects issue refs", () => {
+    expect(extractTaskKindSurface("Session: IMPLEMENTATION / orchestrate #768 and #770")).toEqual({
+      issues: [768, 770],
+    });
+  });
+
+  it("fires on a feature-iteration declaration", () => {
+    expect(extractTaskKindSurface("kind: feature-iteration — build #900")).toEqual({
+      issues: [900],
+    });
+  });
+});
+
+describe("handoff-verify verifyTaskKindSurface() with injected runner + readSpecDir (#778)", () => {
+  const FEATURE = [{ name: "feature" }];
+  // #768/#776 shape: user-facing portal auth surface owned by spec 003.
+  const uiBody =
+    "Remediate apps/portal/app/(auth)/register per specs/features/003-user-authentication/003-requirements-en.md";
+
+  it("FIRE: impl-kind + feature issue + user-facing + spec has no NNN-product.md → one WARN, non-blocking exit 0 (AC1)", () => {
+    const runner = fakeRunner({ issueMeta: { 768: { labels: FEATURE, body: uiBody } } });
+    const input = extractTaskKindSurface("Session: IMPLEMENTATION / orchestrate #768");
+    const readSpecDir = (slug: string) => {
+      expect(slug).toBe("003-user-authentication");
+      return ["003-design.md", "003-requirements-en.md", "003-requirements-ru.md", "003-scenarios.feature"];
+    };
+    const result = verifyTaskKindSurface(input, { runner, readSpecDir });
+    expect(result.rows).toEqual([
+      { verdict: "WARN", ref: "#768", claim: "user-facing", actual: "no-prd:003-user-authentication" },
+    ]);
+    expect(result.warn).toBe(1);
+    expect(result.hints).toHaveLength(1);
+    expect(result.hints[0]).toContain("003-product.md");
+    expect(result.hints[0]).toContain("do-product-discovery");
+    // Non-blocking: the pipeline exposes only `warn`, never a `stale`
+    // contribution — main() computes exit = stale > 0 ? 1 : 0, so a WARN-only
+    // run exits 0.
+    expect(result).not.toHaveProperty("stale");
+  });
+
+  it("PASS when the owning spec DOES carry a <NNN>-product.md PRD (AC2)", () => {
+    const runner = fakeRunner({ issueMeta: { 768: { labels: FEATURE, body: uiBody } } });
+    const readSpecDir = () => ["003-design.md", "003-requirements-en.md", "003-product.md"];
+    const result = verifyTaskKindSurface(extractTaskKindSurface("IMPLEMENTATION #768"), {
+      runner,
+      readSpecDir,
+    });
+    expect(result.rows).toEqual([
+      { verdict: "PASS", ref: "#768", claim: "user-facing", actual: "prd-present:003-user-authentication" },
+    ]);
+    expect(result.warn).toBe(0);
+    expect(result.hints).toHaveLength(0);
+  });
+
+  it("PASS/skip a backend-only issue (no apps/*/(app|src) path token in body)", () => {
+    const runner = fakeRunner({
+      issueMeta: {
+        800: { labels: FEATURE, body: "Backend handler in packages/api per specs/features/003-user-authentication/003-design.md" },
+      },
+    });
+    const result = verifyTaskKindSurface(extractTaskKindSurface("IMPLEMENTATION #800"), {
+      runner,
+      readSpecDir: () => [],
+    });
+    expect(result.rows).toEqual([]);
+    expect(result.warn).toBe(0);
+  });
+
+  it("SKIP the whole check when the handoff declares no implementation-class kind", () => {
+    const result = verifyTaskKindSurface(
+      extractTaskKindSurface("Groom / triage #768 — no dispatch yet"),
+      { runner: fakeRunner({ issueMeta: { 768: { labels: FEATURE, body: uiBody } } }), readSpecDir: () => [] },
+    );
+    expect(result.rows).toEqual([]);
+    expect(result.warn).toBe(0);
+  });
+
+  it("SKIP a non-feature-labelled issue (no WARN even when user-facing)", () => {
+    const runner = fakeRunner({ issueMeta: { 768: { labels: [{ name: "tooling" }], body: uiBody } } });
+    const result = verifyTaskKindSurface(extractTaskKindSurface("IMPLEMENTATION #768"), {
+      runner,
+      readSpecDir: () => ["003-design.md"],
+    });
+    expect(result.rows).toEqual([]);
+    expect(result.warn).toBe(0);
+  });
+
+  it("SKIP silently when the named issue 404s (not an open issue)", () => {
+    const result = verifyTaskKindSurface(extractTaskKindSurface("IMPLEMENTATION #999"), {
+      runner: fakeRunner({}),
+      readSpecDir: () => [],
+    });
+    expect(result.rows).toEqual([]);
+    expect(result.warn).toBe(0);
   });
 });

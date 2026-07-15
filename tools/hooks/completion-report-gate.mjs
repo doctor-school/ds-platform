@@ -109,6 +109,93 @@ export function isProposalOrInFlight(text) {
   return PROPOSAL_INFLIGHT_RE.test(String(text || ""));
 }
 
+/** DoD-vs-title enforcement (#984, retro b9d9314e finding B). A wrap/handoff/
+ * "done" completion report whose REMAINING / next-steps list still carries the
+ * session's own release-class action (release / deploy / publish / ship + RU
+ * релиз/деплой/публик/шип/выкат) is punting the very step the task titled it to
+ * do — a DoD-vs-title mismatch. The signal is read PURELY from the report TEXT
+ * (no gh / network / spawn — this is a fail-open Stop hook that must stay fast,
+ * consistent with #824's pure-transcript-seam architecture): the refusal fires
+ * UNLESS the report's own text evidences a release/deploy artifact. */
+
+/** Markers that open a REMAINING / next-steps region (RU+EN). */
+export const REMAINING_MARKER_RE =
+  /остал\w*|остаётся|остаток|не\s+сделан\w*|предстоит|надо\s+ещ[её]|нужно\s+ещ[её]|\bTODO\b|\bremaining\b|\bnext step/i;
+
+/** Release-class action verbs/stems (RU+EN). RU roots stay broad enough to
+ * cover the verb forms too — «деплой»(noun)/«деплоить»/«задеплоить» all share
+ * the «депло» stem; «релиз»/«релизить»/«зарелизить» share «релиз». */
+export const RELEASE_VERB_RE =
+  /\bpublish\w*|\breleas\w*|\bdeploy\w*|\bship\w*|(?:за)?депло\w*|(?:за)?релиз\w*|(?:о)?публик\w*|выкат\w*|шип\w*/i;
+
+/** A `release-YYYY.MM.DD[-n]` tag pattern — direct release-artifact evidence. */
+export const RELEASE_TAG_RE = /release-\d{4}\.\d{2}\.\d{2}(?:-\d+)?/i;
+
+/** Past-participle deploy evidence — «задеплоен…» / "deployed" / "deployment". */
+export const DEPLOYED_EVIDENCE_RE = /задеплоен\w*|\bdeployed\b|\bdeployment\b/i;
+
+const DEPLOY_WORD_RE = /\bdeploy\w*|(?:за)?депло\w*/i;
+const SHA_RE = /\b[0-9a-f]{7,40}\b/i;
+
+/**
+ * True when the report's own text evidences a release/deploy artifact for this
+ * session: a `release-YYYY.MM.DD` tag, a «задеплоен»/"deployed"/Deployment
+ * mention, or a deploy word alongside a commit-sha token. Presence anywhere in
+ * the report exempts the DoD refusal (the release actually happened).
+ * @param {string} text
+ */
+export function hasReleaseArtifactEvidence(text) {
+  const t = String(text || "");
+  if (RELEASE_TAG_RE.test(t)) return true;
+  if (DEPLOYED_EVIDENCE_RE.test(t)) return true;
+  if (DEPLOY_WORD_RE.test(t) && SHA_RE.test(t)) return true;
+  return false;
+}
+
+/**
+ * True when a release-class verb appears inside a REMAINING / next-steps region
+ * — either on a marker line itself («Осталось: задеплоить в прод») or on a
+ * bullet / numbered / indented continuation line under a marker heading
+ * («## Осталось\n- задеплоить …»). A release verb elsewhere (a done-statement,
+ * a description of the deliverable) does NOT count — the finding is specifically
+ * the verb being PUNTED into "remaining".
+ * @param {string} text
+ */
+export function hasDeferredReleaseVerb(text) {
+  const lines = String(text || "").split(/\r?\n/);
+  let inRemaining = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (REMAINING_MARKER_RE.test(line)) {
+      if (RELEASE_VERB_RE.test(line)) return true;
+      inRemaining = true;
+      continue;
+    }
+    if (!inRemaining) continue;
+    if (trimmed === "") {
+      inRemaining = false;
+      continue;
+    }
+    const isContinuation =
+      /^[-*•]/.test(trimmed) || /^\d+[.)]/.test(trimmed) || /^\s/.test(line);
+    if (isContinuation) {
+      if (RELEASE_VERB_RE.test(line)) return true;
+      continue;
+    }
+    inRemaining = false; // a non-blank, non-bullet line ends the remaining block
+  }
+  return false;
+}
+
+/**
+ * Combined DoD-vs-title predicate (#984): a completion report punts its own
+ * release-class step into "remaining" AND shows no release/deploy artifact.
+ * @param {string} text
+ */
+export function refusesDeferredRelease(text) {
+  return hasDeferredReleaseVerb(text) && !hasReleaseArtifactEvidence(text);
+}
+
 /**
  * The text of the LAST assistant message in a session JSONL transcript.
  * Claude Code may write one JSONL entry per content block, all sharing the
@@ -163,12 +250,31 @@ export function blockMessage() {
   );
 }
 
+/** DoD-vs-title refusal message (#984): distinct from the missing-📈 message —
+ * a completion report punting its own titled release/deploy step. */
+export function deferredReleaseMessage() {
+  return (
+    "⛔ completion-report gate (#984, DoD-vs-title): the final message reads as a " +
+    "completion/wrap report, yet its REMAINING / next-steps list still carries the " +
+    "session's own release-class action (release / deploy / publish / ship / релиз / " +
+    "деплой / публикация / выкат) while the report shows NO release/deploy artifact " +
+    "(no `release-YYYY.MM.DD` tag, no Deployment + sha, no «задеплоен»/«deployed»). " +
+    "Either FINISH the release/deploy and cite the artifact in the report, or move it " +
+    "out of «remaining» as a genuinely separate, tracked follow-up with recorded " +
+    "evidence — a session must not report done while punting its own titled release " +
+    "step. Canon: skill report-task-outcome; run-prod-deploy."
+  );
+}
+
 /**
  * Pure decision seam (unit-tested without a real FS): block only when this is
  * not already a post-block continuation, the last assistant message reads as a
  * completion report — not a decision-request/approval-ask (#839), not an
  * in-flight checkpoint / interim status (#855), and not a proposal / work-still-
- * in-flight turn (#962) — and the «📈» marker is absent from it.
+ * in-flight turn (#962). Two escalations then apply: the DoD-vs-title refusal
+ * (#984 — a report punting its own titled release/deploy step with no artifact
+ * evidence, blocked EVEN WITH the «📈» marker present), then the original #824
+ * missing-«📈» block.
  */
 export function decideBlock({ stopHookActive, lastAssistantText }) {
   if (stopHookActive) return { block: false };
@@ -177,6 +283,9 @@ export function decideBlock({ stopHookActive, lastAssistantText }) {
   if (isInterimStatus(lastAssistantText)) return { block: false };
   if (isProposalOrInFlight(lastAssistantText)) return { block: false };
   if (!isCompletionReport(lastAssistantText)) return { block: false };
+  // #984 DoD-vs-title: refuse a report that punts its own release/deploy step
+  // with no artifact evidence — this fires even when «📈» IS present.
+  if (refusesDeferredRelease(lastAssistantText)) return { block: true };
   if (lastAssistantText.includes(REPORT_MARKER)) return { block: false };
   return { block: true };
 }
@@ -194,7 +303,10 @@ function main() {
       lastAssistantText,
     });
     if (decision.block) {
-      process.stderr.write(blockMessage());
+      const msg = refusesDeferredRelease(lastAssistantText)
+        ? deferredReleaseMessage()
+        : blockMessage();
+      process.stderr.write(msg);
       process.exit(2);
     }
     process.exit(0);

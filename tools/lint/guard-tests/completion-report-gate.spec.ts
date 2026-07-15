@@ -10,11 +10,15 @@ import { afterAll, describe, expect, it } from "vitest";
 import {
   REPORT_MARKER,
   decideBlock,
+  deferredReleaseMessage,
   extractLastAssistantText,
+  hasDeferredReleaseVerb,
+  hasReleaseArtifactEvidence,
   isCompletionReport,
   isDecisionRequest,
   isInterimStatus,
   isProposalOrInFlight,
+  refusesDeferredRelease,
 } from "../../hooks/completion-report-gate.mjs";
 
 /**
@@ -143,7 +147,48 @@ const GENUINE_REPORT_PAST_DISPATCH =
   "Диспатчил ревьюера Mode-a по каждому — все APPROVE.\n\n" +
   "🖼 Проверить глазами: `gh pr list --state merged`.";
 
+// #984 / retro b9d9314e finding B — DoD-vs-title enforcement. A completion
+// report that HAS the «📈» marker (so the #824 path passes) yet punts its own
+// release/deploy step into the REMAINING list with NO release-artifact evidence
+// must be refused. The counter-fixture carries a `release-…` tag → exempt.
+const DOD_DEFER_NO_EVIDENCE =
+  "Готово: PR #984 смержен (squash), Issue #984 закрыта, CI зелёный.\n" +
+  "Ветка удалена, board Status = Done.\n\n" +
+  "📈 % от запланированного: 90%.\n\n" +
+  "Осталось: задеплоить релиз в прод — сделаю следующим шагом.";
+const DOD_DEFER_WITH_EVIDENCE =
+  "Готово: PR #984 смержен, Issue #984 закрыта, CI зелёный.\n" +
+  "release-2026.07.15-1 вырезан, задеплоен sha abc1234 в прод.\n\n" +
+  "📈 % от запланированного: 100%.\n\n" +
+  "Осталось: задеплоить hotfix позже — отдельная задача.";
+// A report that mentions "deploy" only in a DONE-statement (not a remaining
+// list) with «📈» present must NOT be refused by the DoD check.
+const DEPLOY_DONE_NOT_DEFERRED =
+  "Готово: PR #984 смержен, Issue #984 закрыта.\n" +
+  "Deployed to prod, release cut.\n\n" +
+  "📈 % от запланированного: 100% — весь скоуп.";
+
 describe("completion-report-gate hook (spawned end-to-end)", () => {
+  it("BLOCKS (exit 2) a report deferring release/deploy in remaining with no artifact evidence (#984)", () => {
+    const r = runHook(stopPayload(transcriptWith(DOD_DEFER_NO_EVIDENCE)));
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("DoD-vs-title");
+    expect(r.stderr).toContain("report-task-outcome");
+  });
+
+  it("allows (exit 0) the same report once it evidences a release tag / deployed sha (#984)", () => {
+    const r = runHook(stopPayload(transcriptWith(DOD_DEFER_WITH_EVIDENCE)));
+    expect(r.status).toBe(0);
+    expect(r.stderr).toBe("");
+  });
+
+  it("does not DoD-block a report that merely narrates a completed deploy with «📈» (#984 scoping)", () => {
+    const r = runHook(stopPayload(transcriptWith(DEPLOY_DONE_NOT_DEFERRED)));
+    expect(r.status).toBe(0);
+    expect(r.stderr).toBe("");
+  });
+
+
   it("blocks (exit 2) a completion report missing «📈», naming report-task-outcome", () => {
     const r = runHook(stopPayload(transcriptWith(COMPLETION_NO_MARKER)));
     expect(r.status).toBe(2);
@@ -435,6 +480,122 @@ describe("isProposalOrInFlight() (#962)", () => {
       true,
     );
     expect(isProposalOrInFlight("Диспатчирую субагента по #900.")).toBe(true);
+  });
+});
+
+describe("hasDeferredReleaseVerb() (#984)", () => {
+  it("matches a release verb punted onto a remaining-marker line (RU + EN)", () => {
+    expect(hasDeferredReleaseVerb("Осталось: задеплоить в прод.")).toBe(true);
+    expect(hasDeferredReleaseVerb("Осталось зарелизить пакет.")).toBe(true);
+    expect(hasDeferredReleaseVerb("Remaining: deploy to prod.")).toBe(true);
+    expect(hasDeferredReleaseVerb("TODO: publish the release.")).toBe(true);
+    expect(hasDeferredReleaseVerb("Next steps: ship the build.")).toBe(true);
+  });
+
+  it("matches a release verb on a bullet under a remaining heading", () => {
+    expect(
+      hasDeferredReleaseVerb("## Осталось\n- прогнать тесты\n- задеплоить в прод"),
+    ).toBe(true);
+    expect(
+      hasDeferredReleaseVerb("Remaining:\n1. write docs\n2. deploy to prod"),
+    ).toBe(true);
+  });
+
+  it("does NOT match a release verb outside a remaining region (a done-statement / description)", () => {
+    expect(hasDeferredReleaseVerb("Deployed to prod, release cut.")).toBe(false);
+    expect(hasDeferredReleaseVerb("Этот PR добавляет deploy-скрипт.")).toBe(
+      false,
+    );
+    expect(hasDeferredReleaseVerb(COMPLETION_NO_MARKER)).toBe(false);
+    expect(hasDeferredReleaseVerb(COMPLETION_WITH_MARKER)).toBe(false);
+  });
+
+  it("does NOT match a remaining list without any release verb", () => {
+    expect(hasDeferredReleaseVerb("Осталось: дренаж debt-бэклога.")).toBe(false);
+    expect(hasDeferredReleaseVerb(GENUINE_REPORT_NO_MARKER)).toBe(false);
+  });
+});
+
+describe("hasReleaseArtifactEvidence() (#984)", () => {
+  it("recognises a release-YYYY.MM.DD tag", () => {
+    expect(hasReleaseArtifactEvidence("release-2026.07.15-1 вырезан.")).toBe(
+      true,
+    );
+    expect(hasReleaseArtifactEvidence("cut release-2026.12.01")).toBe(true);
+  });
+
+  it("recognises a deployed / Deployment mention", () => {
+    expect(hasReleaseArtifactEvidence("задеплоен в прод.")).toBe(true);
+    expect(hasReleaseArtifactEvidence("Deployed to production.")).toBe(true);
+    expect(
+      hasReleaseArtifactEvidence("GitHub Deployment recorded (production)."),
+    ).toBe(true);
+  });
+
+  it("recognises a deploy word alongside a commit sha", () => {
+    expect(hasReleaseArtifactEvidence("deploy of abc1234 succeeded.")).toBe(
+      true,
+    );
+  });
+
+  it("is false when there is no artifact evidence", () => {
+    expect(hasReleaseArtifactEvidence("Осталось задеплоить позже.")).toBe(false);
+    expect(hasReleaseArtifactEvidence(COMPLETION_NO_MARKER)).toBe(false);
+  });
+});
+
+describe("refusesDeferredRelease() + decideBlock DoD-vs-title (#984)", () => {
+  it("refuses a deferred-release report with no evidence, EVEN WITH «📈» present", () => {
+    expect(DOD_DEFER_NO_EVIDENCE).toContain(REPORT_MARKER);
+    expect(refusesDeferredRelease(DOD_DEFER_NO_EVIDENCE)).toBe(true);
+    expect(
+      decideBlock({
+        stopHookActive: false,
+        lastAssistantText: DOD_DEFER_NO_EVIDENCE,
+      }),
+    ).toEqual({ block: true });
+  });
+
+  it("does not refuse once release-artifact evidence is present", () => {
+    expect(refusesDeferredRelease(DOD_DEFER_WITH_EVIDENCE)).toBe(false);
+    expect(
+      decideBlock({
+        stopHookActive: false,
+        lastAssistantText: DOD_DEFER_WITH_EVIDENCE,
+      }).block,
+    ).toBe(false);
+  });
+
+  it("does not refuse a completed-deploy narration scoped outside remaining", () => {
+    expect(refusesDeferredRelease(DEPLOY_DONE_NOT_DEFERRED)).toBe(false);
+  });
+
+  it("regression: exempt turns (decision-request / interim / proposal / negated) never DoD-block", () => {
+    for (const text of [
+      LIVE_FP_STAGE2,
+      INTERIM_CHECKPOINT_SUBSTEP,
+      INFLIGHT_WAVE_STATUS,
+      WRAP_PROPOSAL,
+    ]) {
+      expect(
+        decideBlock({ stopHookActive: false, lastAssistantText: text }).block,
+      ).toBe(false);
+    }
+  });
+
+  it("regression: a normal «📈» report with no deferred release verb still passes", () => {
+    expect(refusesDeferredRelease(COMPLETION_WITH_MARKER)).toBe(false);
+    expect(
+      decideBlock({
+        stopHookActive: false,
+        lastAssistantText: COMPLETION_WITH_MARKER,
+      }).block,
+    ).toBe(false);
+  });
+
+  it("deferredReleaseMessage names the DoD-vs-title refusal + report-task-outcome", () => {
+    expect(deferredReleaseMessage()).toContain("DoD-vs-title");
+    expect(deferredReleaseMessage()).toContain("report-task-outcome");
   });
 });
 

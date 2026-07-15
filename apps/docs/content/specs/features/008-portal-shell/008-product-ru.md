@@ -3,7 +3,7 @@ title: "Фича 008 — Оболочка портала и discovery-фасад
 description: "Продуктовые требования к постоянному хедеру app-shell портала (логотип, навигация, переключатель темы, иконка-аватар→профиль) и публичному discovery-фасаду на `/`. Эпик «Информационная архитектура портала»; источник EARS-триплета 008 (ADR-0014). Ретайрит заглушку-каркас `/`."
 slug: portal-surface-ia-008-portal-shell-product-ru
 epic: ../../product/portal-surface-ia/brief-ru.md
-status: Draft
+status: In dev
 surface: user-facing
 lang: ru
 ---

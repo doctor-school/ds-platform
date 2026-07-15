@@ -9,47 +9,88 @@ name: Release digest → Mattermost
 #
 # Mirrors product-note-mattermost.yml (the per-PR delivery): the secret is injected
 # via `env:` (never interpolated into a shell `run:`), and the resolver skips green
-# when the webhook is unset. The prev/new SHA range is resolved from the Deployment
-# event + `gh api` by tools/ci/post-release-digest.mjs, which delegates the actual
-# render+POST to tools/deploy/release-notes.mjs — the ONE digest seam (#847).
+# when the webhook is unset. The prev/new SHA range is resolved by
+# tools/ci/post-release-digest.mjs, which anchors prev-sha on the previous RELEASE
+# TAG (#975) and delegates the render+POST to tools/deploy/release-notes.mjs — the
+# ONE digest seam (#847).
+#
+# `workflow_dispatch` re-fires the digest by hand (e.g. to backfill a release whose
+# automatic post was missed). With no `sha` input it targets the current prod
+# deployed SHA (the newest `production` Deployment), else HEAD.
 
 on:
   deployment_status:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: >-
+          Deployed SHA to build the release digest for. Empty → the current prod
+          deployed SHA (newest production Deployment), else HEAD.
+        required: false
+        type: string
 
-# `gh api …/deployments` (read) + the checked-out tree for `git log <prev>..<new>`.
+# `gh api …/deployments` (read) + the checked-out tree for `git tag --merged` /
+# `git log <prev>..<new>`; `pull-requests: read` for release-notes.mjs' per-range
+# `gh pr view <N>` (the Issue-#10 auth pattern).
 permissions:
   contents: read
   deployments: read
+  pull-requests: read
 
 jobs:
   digest:
     # Only a successful PRODUCTION deploy posts a digest — a pending/failure status
     # or a non-prod environment is a no-op (post-release-digest.mjs re-checks in JS).
+    # A manual workflow_dispatch always runs (it synthesises success/production).
     if: >-
-      github.event.deployment_status.state == 'success' &&
-      github.event.deployment.environment == 'production'
+      github.event_name == 'workflow_dispatch' ||
+      ( github.event.deployment_status.state == 'success' &&
+        github.event.deployment.environment == 'production' )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          # release-notes.mjs runs `git log <prevSha>..<newSha>` over the range, so
-          # the full history must be present (a shallow clone fails the range).
+          # release-notes.mjs runs `git log <prevSha>..<newSha>` over the range and
+          # post-release-digest.mjs runs `git tag --merged` / `git rev-list`, so the
+          # full history + tags must be present (a shallow clone fails the range).
           fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
+      # workflow_dispatch has no Deployment event: resolve the target SHA (input →
+      # current prod Deployment → HEAD) into $GITHUB_ENV, never interpolated into a
+      # run: shell body — the same injection-safe posture the post step uses.
+      - name: Resolve target SHA (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          if [ -n "$INPUT_SHA" ]; then
+            sha="$INPUT_SHA"
+          else
+            sha="$(gh api repos/{owner}/{repo}/deployments -f environment=production -F per_page=1 --jq '.[0].sha' 2>/dev/null || true)"
+            if [ -z "$sha" ] || [ "$sha" = "null" ]; then
+              sha="$(git rev-parse HEAD)"
+            fi
+          fi
+          echo "DISPATCH_SHA=$sha" >> "$GITHUB_ENV"
       - name: Post the aggregated release digest to Mattermost
         env:
           MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_WEBHOOK_URL }}
           # The deploy shipped to prod — the digest carries the PROD footer (#657).
           DELIVERY_ENV: prod
-          # gh (deployments read + `gh pr view` per range PR) resolves the repo from
-          # GH_REPO and authenticates with GH_TOKEN.
+          # gh (`gh pr view` per range PR) resolves the repo from GH_REPO and
+          # authenticates with GH_TOKEN.
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           # Deployment event fields, passed through env: (never interpolated into
-          # run:) to keep the injection-safe posture the per-PR delivery uses.
-          STATE: ${{ github.event.deployment_status.state }}
-          ENVIRONMENT: ${{ github.event.deployment.environment }}
-          NEW_SHA: ${{ github.event.deployment.sha }}
+          # run:) to keep the injection-safe posture the per-PR delivery uses. A
+          # workflow_dispatch run has no deployment_status/deployment payload, so the
+          # guard fields fall back to the synthesised success/production and the SHA
+          # to the DISPATCH_SHA resolved above.
+          STATE: ${{ github.event.deployment_status.state || 'success' }}
+          ENVIRONMENT: ${{ github.event.deployment.environment || 'production' }}
+          NEW_SHA: ${{ github.event.deployment.sha || env.DISPATCH_SHA }}
         run: node tools/ci/post-release-digest.mjs

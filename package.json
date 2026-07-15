@@ -42,6 +42,7 @@
     "lint:prod-surface": "tsx tools/lint/prod-surface-lint.ts",
     "lint:product-note": "tsx tools/lint/product-note-lint.ts",
     "lint:registry-research": "tsx tools/lint/registry-research-lint.ts",
+    "lint:route-targets": "tsx tools/lint/route-target-lint.ts",
     "lint:showcase-coverage": "tsx tools/lint/showcase-coverage-lint.ts",
     "lint:showcase-snippet": "tsx tools/lint/showcase-snippet-lint.ts",
     "lint:spec-status": "tsx tools/lint/spec-status-lint.ts",

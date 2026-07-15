@@ -21,13 +21,19 @@
 // - no live parallel session anymore → the freshness re-check against the
 //   flag's session-log mtimes short-circuits (a stale flag never warns).
 
-import { readFileSync, statSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** Flag file the bootstrap writes — MUST match `PARALLEL_FLAG_REL` in
  * `tools/agent-bootstrap.ts` (asserted equal by the guard-tests spec). */
 export const FLAG_REL = ".claude/parallel-sessions.flag.json";
+
+/** Per-session guard-state directory (#854). Holds one `<session_id>.json` per
+ * session with `{noticeShown, mainTreeWriteSeen}`. Gitignored (machine state,
+ * not repo content) — the read guard and the write guard both read/write it to
+ * implement the read-only orchestration carve-out. */
+export const GUARD_STATE_DIR_REL = ".claude/main-tree-guard-state";
 
 /** A listed session counts as live only if its log was touched this recently —
  * same window as the bootstrap's own detector (`SESSION_WINDOW_MS`). */
@@ -72,6 +78,80 @@ export function warnMessage(liveCount) {
     `further repo-source Read/Grep/Glob (AGENTS.md §6 — analysis reads included, #418). ` +
     `Warn-level only: board/triage reads may continue.`
   );
+}
+
+/** The single softened notice (#854) shown to a read-only orchestration lead in
+ * place of a warning-per-read: it makes the carve-out explicit and states that
+ * the full guard resumes on the first main-tree WRITE. */
+export function softenedNoticeMessage(liveCount) {
+  return (
+    `ℹ main-tree read guard (#823/#854): ${liveCount} parallel session(s) live; you are ` +
+    `reading SHARED main-tree source. Read-only orchestration carve-out — this is the ONE ` +
+    `notice; further main-tree reads stay silent. The FULL warning resumes on your first ` +
+    `main-tree WRITE. If you will EDIT main-tree files, isolate now: ` +
+    `\`pnpm task:worktree <N>\` → \`EnterWorktree path:.claude/worktrees/<N>\` (AGENTS.md §6, #418).`
+  );
+}
+
+/** Resolve the per-session guard-state file path. `session_id` is sanitized to
+ * a safe filename segment; a missing id degrades to a shared `unknown` file
+ * (fail-open — never throws). */
+export function stateFilePath(projectDir, sessionId) {
+  const safe = String(sessionId || "unknown").replace(/[^A-Za-z0-9._-]/g, "_");
+  return resolve(projectDir, GUARD_STATE_DIR_REL, `${safe}.json`);
+}
+
+/** Read `{noticeShown, mainTreeWriteSeen}` for a session. Missing/corrupt file →
+ * both-false (fail-open). `readFile` is injectable for unit tests. */
+export function readState(path, readFile = (p) => readFileSync(p, "utf8")) {
+  try {
+    const s = JSON.parse(readFile(path)) || {};
+    return {
+      noticeShown: s.noticeShown === true,
+      mainTreeWriteSeen: s.mainTreeWriteSeen === true,
+    };
+  } catch {
+    return { noticeShown: false, mainTreeWriteSeen: false };
+  }
+}
+
+/** Persist guard state (best-effort). Any FS error is swallowed — a state-write
+ * failure must NEVER block or crash a tool call. FS ops are injectable for tests. */
+export function writeState(path, state, deps = {}) {
+  const mkdir = deps.mkdir || ((d) => mkdirSync(d, { recursive: true }));
+  const writeFile = deps.writeFile || ((p, c) => writeFileSync(p, c));
+  try {
+    mkdir(dirname(path));
+    writeFile(path, JSON.stringify(state));
+  } catch {
+    // fail-open: state persistence is best-effort.
+  }
+}
+
+/**
+ * Layer the #854 read-only carve-out over the pure `decideWarn()` verdict.
+ * Given the warn decision and the per-session `{noticeShown, mainTreeWriteSeen}`
+ * state, decide what the read guard emits:
+ * - warn conditions don't hold → `{ action: "silent" }`.
+ * - a main-tree write has been seen this session → `{ action: "warn" }` (FULL,
+ *   as #823, unchanged).
+ * - else, notice not yet shown → `{ action: "notice", setNoticeShown: true }`.
+ * - else → `{ action: "silent" }`.
+ */
+export function decideReadAction({ warnDecision, state }) {
+  if (!warnDecision || !warnDecision.warn) return { action: "silent" };
+  const s = state || {};
+  if (s.mainTreeWriteSeen) {
+    return { action: "warn", liveCount: warnDecision.liveCount };
+  }
+  if (!s.noticeShown) {
+    return {
+      action: "notice",
+      liveCount: warnDecision.liveCount,
+      setNoticeShown: true,
+    };
+  }
+  return { action: "silent" };
 }
 
 /**
@@ -145,8 +225,17 @@ function main() {
       },
       nowMs: Date.now(),
     });
-    if (decision.warn) {
-      const msg = warnMessage(decision.liveCount);
+    // #854 carve-out: consult per-session state to decide full warning vs. the
+    // one-time softened notice vs. silence. Fail-open — a state error yields the
+    // default (both-false) state, i.e. the pre-#854 first-hit warning behavior.
+    const statePath = stateFilePath(projectDir, payload.session_id || "");
+    const state = readState(statePath);
+    const action = decideReadAction({ warnDecision: decision, state });
+    if (action.action === "warn" || action.action === "notice") {
+      const msg =
+        action.action === "warn"
+          ? warnMessage(action.liveCount)
+          : softenedNoticeMessage(action.liveCount);
       process.stdout.write(
         JSON.stringify({
           systemMessage: msg,
@@ -157,6 +246,9 @@ function main() {
           },
         }),
       );
+      if (action.setNoticeShown) {
+        writeState(statePath, { ...state, noticeShown: true });
+      }
     }
     process.exit(0);
   } catch {

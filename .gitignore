@@ -53,6 +53,10 @@ test-results/
 # the main-tree-read-guard PreToolUse hook (#823) — machine state, not repo content
 .claude/parallel-sessions.flag.json
 
+# Per-session main-tree guard state (#854): {noticeShown, mainTreeWriteSeen} keyed
+# by session_id, read/written by the read + write PreToolUse hooks — machine state
+.claude/main-tree-guard-state/
+
 # Brand book raw staging — the ~142 MB presentation PDF plus raw logo sources
 # (.ai / large exports). Track via Git LFS if any of it must be versioned. The
 # durable artifact is the extracted brand->token map (see

@@ -2,9 +2,17 @@
 // tools/deploy/release-notes.mjs — deterministic aggregated PROD release note to
 // the Mattermost incoming webhook (Issue #868).
 //
-// On a successful `deploy:prod`, this posts ONE Russian, product-language digest
-// listing the "Product note (RU)" sections of every product-kind (feature|bug) PR
-// merged between the previously-deployed prod SHA and the newly-deployed SHA. It
+// This posts ONE Russian, product-language digest listing the "Product note (RU)"
+// sections of every product-kind (feature|bug) PR merged between the
+// previously-deployed prod SHA and the newly-deployed SHA. The digest is a DEPLOY
+// event, so it is fired from CI by `.github/workflows/release-digest.yml` on
+// `deployment_status: success` for the `production` environment (#968) — where
+// `secrets.MATTERMOST_WEBHOOK_URL` already lives — via the thin resolver
+// `tools/ci/post-release-digest.mjs` (which resolves the prev/new SHA range from
+// the Deployment event + `gh api` and spawns this script). `deploy:prod` itself
+// no longer posts the digest; it only RECORDS the GitHub Deployment (#942) whose
+// `success` status is exactly the event that triggers the CI post. The webhook is
+// `process.env`-only (CI secret); `--dry-run` renders offline with no webhook. It
 // reuses the per-PR delivery's pure seams (Issue #654/#657/#847) so the guard, the
 // per-PR note, and this digest read the SAME source of truth:
 //   - extractNote / noteIsReal  — the `## Product note (RU)` section extraction.
@@ -37,7 +45,6 @@ import {
   labelsAreProductKind,
   noteIsReal,
 } from "../ci/post-product-note.mjs";
-import { loadEnvLocal, resolveWebhookUrl } from "./env-local.mjs";
 
 const SHORT = 12;
 
@@ -215,19 +222,10 @@ async function main() {
     );
   }
 
-  // On the LOCAL deploy path (ADR-0012 — SSH deploy, no CI) GitHub Actions
-  // `secrets.MATTERMOST_WEBHOOK_URL` does not exist and nothing sources
-  // `~/.ds-platform/.env.local`, so the webhook is unset and the digest has never
-  // fired locally (#950). Backfill it from the operator's `.env.local` (the same
-  // source the dev stand reads). An env var already set (CI) always WINS via
-  // resolveWebhookUrl; a still-missing var keeps the green-skip below unchanged.
-  // Assign only a real string — `process.env.X = undefined` would coerce to the
-  // string "undefined" and defeat the skip-check.
-  if (!process.env.MATTERMOST_WEBHOOK_URL) {
-    const resolved = resolveWebhookUrl(process.env, loadEnvLocal());
-    if (resolved) process.env.MATTERMOST_WEBHOOK_URL = resolved;
-  }
-
+  // The webhook is `process.env`-only. This script fires from CI
+  // (`release-digest.yml` on `deployment_status: success`), where
+  // `secrets.MATTERMOST_WEBHOOK_URL` is injected into the step env (#968) — no
+  // `.env.local` crutch (#950, retired). A `--dry-run` needs no webhook at all.
   // No webhook (and not composing a dry-run) → clean green skip, same posture as
   // the per-PR delivery: the channel isn't provisioned yet, nothing to post.
   if (!dryRun && !process.env.MATTERMOST_WEBHOOK_URL) {

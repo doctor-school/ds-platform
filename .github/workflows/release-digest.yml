@@ -1,0 +1,55 @@
+name: Release digest → Mattermost
+
+# Fire the aggregated PROD release digest (Issue #868) from CI on a successful
+# production Deployment (Issue #968). `deploy:prod` ships from the operator's box
+# (ADR-0012 — SSH deploy, no CI), so `secrets.MATTERMOST_WEBHOOK_URL` never existed
+# on that path and the digest had NEVER fired (the #950 `.env.local` fallback was a
+# crutch, now retired). But `deploy:prod` records a GitHub Deployment + `success`
+# status (#942/#954), which fires this workflow — where the secret already lives.
+#
+# Mirrors product-note-mattermost.yml (the per-PR delivery): the secret is injected
+# via `env:` (never interpolated into a shell `run:`), and the resolver skips green
+# when the webhook is unset. The prev/new SHA range is resolved from the Deployment
+# event + `gh api` by tools/ci/post-release-digest.mjs, which delegates the actual
+# render+POST to tools/deploy/release-notes.mjs — the ONE digest seam (#847).
+
+on:
+  deployment_status:
+
+# `gh api …/deployments` (read) + the checked-out tree for `git log <prev>..<new>`.
+permissions:
+  contents: read
+  deployments: read
+
+jobs:
+  digest:
+    # Only a successful PRODUCTION deploy posts a digest — a pending/failure status
+    # or a non-prod environment is a no-op (post-release-digest.mjs re-checks in JS).
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment.environment == 'production'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # release-notes.mjs runs `git log <prevSha>..<newSha>` over the range, so
+          # the full history must be present (a shallow clone fails the range).
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+      - name: Post the aggregated release digest to Mattermost
+        env:
+          MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_WEBHOOK_URL }}
+          # The deploy shipped to prod — the digest carries the PROD footer (#657).
+          DELIVERY_ENV: prod
+          # gh (deployments read + `gh pr view` per range PR) resolves the repo from
+          # GH_REPO and authenticates with GH_TOKEN.
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          # Deployment event fields, passed through env: (never interpolated into
+          # run:) to keep the injection-safe posture the per-PR delivery uses.
+          STATE: ${{ github.event.deployment_status.state }}
+          ENVIRONMENT: ${{ github.event.deployment.environment }}
+          NEW_SHA: ${{ github.event.deployment.sha }}
+        run: node tools/ci/post-release-digest.mjs

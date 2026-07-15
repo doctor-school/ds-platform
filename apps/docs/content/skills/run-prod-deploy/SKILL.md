@@ -43,9 +43,12 @@ The pipeline is fail-closed and stops at the first red step, printing a rollback
 After the deploy has already succeeded, the pipeline records — and by contract a `gh`/webhook failure here only WARNs, the deploy exit code stays 0:
 
 - **GitHub Deployment** (#942) — a `Deployment(production, sha)` + `success` status carrying the release-notes digest and the health URL as `log_url`. Read by `## Project reality` (below).
-- **Mattermost digest** (#868) — ONE aggregated Russian product-language note listing the `## Product note (RU)` of every product-kind PR in the `<prev-sha>..<new-sha>` range. On the local operator path the webhook is sourced from `~/.ds-platform/.env.local` (`MATTERMOST_WEBHOOK_URL`, #950) — set it there once (see the commented key in `infra/dev-stand/.env.example`); a value already in the process env wins; unset → log + skip green.
 
 Separately, a **`Version Packages` PR merge** cuts a `release-YYYY.MM.DD-n` git tag + GitHub Release with auto-generated notes (#944) — that is the release-train event, independent of a deploy.
+
+### 2a. Mattermost release digest — fired from CI, not from `deploy:prod` (#968)
+
+The aggregated Russian product-language digest (#868) — ONE note listing the `## Product note (RU)` of every product-kind PR in the `<prev-sha>..<new-sha>` range — is **no longer posted by `deploy:prod`**. It fires from CI: `.github/workflows/release-digest.yml` triggers on `deployment_status: success` for `environment: production` (the very Deployment §2 records), resolves the prev/new SHA range from the Deployment event + `gh api`, and posts via `tools/ci/post-release-digest.mjs` → `release-notes.mjs` using `secrets.MATTERMOST_WEBHOOK_URL` (which already lives in CI). Non-fatal: a post failure WARNs, never fails the workflow. No `.env.local` webhook to configure on the operator box (the #950 crutch is retired). For an offline render check, run `node tools/deploy/release-notes.mjs --prev-sha <sha|none> --new-sha <sha> --dry-run` (with `DELIVERY_ENV=prod`).
 
 ### 3. Health verify
 

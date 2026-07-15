@@ -254,6 +254,24 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/module-readme-lint.ts
 
+  # route-targets: every internal navigation target in apps/portal + apps/admin
+  # (a `<Link href>`, `router.push/replace`, or `redirect` string/template) must
+  # resolve to an existing app-router route (page.tsx/route.ts). Guards the #673
+  # class of defect — a `/webinars/<slug>/room` link shipped before its route
+  # existed. WARN v1 (ADR-0007 §2.6; new guard lands WARN, promote to BLOCK once
+  # stable) → `continue-on-error: true`, and NOT in the `ci` needs-list.
+  route-targets:
+    needs: setup
+    continue-on-error: true # WARN v1 (promote to BLOCK once stable) — ADR-0007 §2.6
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsx tools/lint/route-target-lint.ts
+
   # ─── Glossary validation from ADR-0006 §6 ────────────────────────────
   # glossary-mdx — ADR-0006 §6.4 MDX glossary-lint (a `[[term-id]]` directive in
   # docs prose must resolve to a glossary term). REAL guard as of #448 (was a

@@ -27,4 +27,17 @@ describe("route-target-lint", () => {
     expect(stderr).toContain("/webinars/${slug}/room");
     expect(stderr).toContain("FAIL");
   });
+
+  it("green: an unresolvable target with a `// route-target-ok: <reason>` suppression → exit 0", () => {
+    const { code, stdout } = runGuard(GUARD, dir("green-suppressed"));
+    expect(code).toBe(0);
+    expect(stdout).toContain("PASS");
+  });
+
+  it("red: a bare `// route-target-ok:` with no reason does NOT suppress → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-empty-reason"));
+    expect(code).toBe(1);
+    expect(stderr).toContain("join-button.tsx");
+    expect(stderr).toContain("FAIL");
+  });
 });

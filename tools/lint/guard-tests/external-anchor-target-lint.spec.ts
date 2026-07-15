@@ -36,4 +36,10 @@ describe("external-anchor-target-lint", () => {
     const { code } = runGuard(GUARD, dir("green-suppressed"));
     expect(code).toBe(0);
   });
+
+  it("red: a bare `// external-anchor-ok:` with no reason does NOT suppress → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-empty-reason"));
+    expect(code).toBe(1);
+    expect(stderr).toContain("external-anchor");
+  });
 });

@@ -89,7 +89,7 @@ const IGNORE = [
   "**/__tests__/**",
 ];
 
-const SUPPRESS_RE = /\bexternal-anchor-ok\s*:/i;
+const SUPPRESS_RE = /\bexternal-anchor-ok\s*:\s*\S/i;
 /** A trailing identifier ending in `Url`/`Uri` marks a URL-typed prop/field. */
 const URL_PROP_RE = /(?:url|uri)$/i;
 /** Schemes that do NOT open a web browsing context (exempt from target/rel). */

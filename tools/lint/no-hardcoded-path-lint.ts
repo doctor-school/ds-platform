@@ -78,7 +78,7 @@ const DRIVE_ROOT_RE = /(?<![A-Za-z0-9])[A-Za-z]:[\\/]{1,2}[A-Za-z0-9._]/;
 // machine-specific home directory. Requires a non-empty user segment.
 const UNIX_HOME_RE = /\/(?:home|Users)\/[^/\s"'`\\]+/;
 
-const SUPPRESS_RE = /\bno-hardcoded-path-ok\s*:/i;
+const SUPPRESS_RE = /\bno-hardcoded-path-ok\s*:\s*\S/i;
 
 interface Finding {
   file: string;

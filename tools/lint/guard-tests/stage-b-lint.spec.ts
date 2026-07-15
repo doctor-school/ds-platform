@@ -48,6 +48,24 @@ describe("stage-b-lint", () => {
     expect(code).toBe(0);
   });
 
+  it("green (#699): portal render + lead-certification token (em-dash `— lead-certified`) → exit 0", () => {
+    const { code } = runGuard(
+      GUARD,
+      caseDir("stage-b", "green-body-lead-certified"),
+      { env: prEnv("211", "green-body-lead-certified") },
+    );
+    expect(code).toBe(0);
+  });
+
+  it("green (#699): admin render + lead-certification token (ASCII hyphen `- lead-certified`) → exit 0", () => {
+    const { code } = runGuard(
+      GUARD,
+      caseDir("stage-b", "green-body-lead-certified-ascii"),
+      { env: prEnv("212", "green-body-lead-certified-ascii") },
+    );
+    expect(code).toBe(0);
+  });
+
   it("green: portal render, no body marker but a linked-Issue comment carries GO → exit 0", () => {
     const { code } = runGuard(GUARD, caseDir("stage-b", "green-comment-go"), {
       env: prEnv("202", "green-comment-go"),

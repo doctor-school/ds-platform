@@ -1,0 +1,6 @@
+{
+  "number": 212,
+  "body": "## Summary\nReturn a 403 status code on the guarded route (behavioral-only; no new/changed visual surface).\n\nStage-B: N/A (no visual surface) - lead-certified.\n",
+  "labels": [],
+  "files": [{ "path": "apps/admin/src/app/reports/page.tsx" }]
+}

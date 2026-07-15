@@ -16,7 +16,10 @@
  * body OR a comment on a linked (`Closes #N`) Issue MUST carry an explicit
  * Stage-B marker in one of the two sanctioned shapes (AGENTS.md §6):
  *   - `Stage-B: GO`  (optionally with owner / date), OR
- *   - `Stage-B: batched at #<gate>`  (the batched-Stage-B carve-out).
+ *   - `Stage-B: batched at #<gate>`  (the batched-Stage-B carve-out), OR
+ *   - `Stage-B: N/A (no visual surface) — lead-certified`  (the lead self-
+ *     certification for a behavioral-only user-facing change that ships NO
+ *     new/changed visual surface — AGENTS.md §6; distinct from an owner GO).
  * A missing marker, or a placeholder value (`TBD`, `pending`, …), fails.
  *
  * User-facing surface detection (deterministic, by touched path — the Mode-a
@@ -91,9 +94,14 @@ const FEATURE_AREA_RE = /^feature:(\d{3}-[a-z0-9][a-z0-9-]*)$/i;
 // Accepts leading blockquote / list / whitespace decoration, and `Stage-B` /
 // `StageB` casing.
 const MARKER_RE = /^[ \t>*_-]*stage-?b\s*:\s*(.+?)\s*$/gim;
-// A marker VALUE is evidence only in the two sanctioned shapes.
+// A marker VALUE is evidence only in the three sanctioned shapes.
 const GO_RE = /^go\b/i; // `GO`, `GO — owner 2026-07-09`, …
 const BATCHED_RE = /^batched\s+at\s+#\d+/i; // `batched at #700`
+// Lead self-certification (distinct from an owner GO, AGENTS.md §6): a
+// behavioral-only user-facing PR with NO new/changed visual surface. Canonical
+// value `N/A (no visual surface) — lead-certified`; the hyphen before
+// `lead-certified` may be an ASCII `-` or an em-dash `—` (en-dash tolerated).
+const LEAD_CERTIFIED_RE = /^n\/a\b[\s\S]*[-–—]\s*lead-certified\b/i;
 
 interface GhLabel {
   name: string;
@@ -185,7 +193,11 @@ function extractMarkerValues(text: string): string[] {
 }
 
 function isEvidence(value: string): boolean {
-  return GO_RE.test(value) || BATCHED_RE.test(value);
+  return (
+    GO_RE.test(value) ||
+    BATCHED_RE.test(value) ||
+    LEAD_CERTIFIED_RE.test(value)
+  );
 }
 
 /**
@@ -296,7 +308,9 @@ async function main(): Promise<void> {
         `"${markerValues[0].slice(0, 60)}". Record the product-owner live verdict as one of:\n` +
         `    Stage-B: GO — <owner, date>\n` +
         `  or, under a batched-gate epic (AGENTS.md §6 carve-out):\n` +
-        `    Stage-B: batched at #<gate>`,
+        `    Stage-B: batched at #<gate>\n` +
+        `  or, for a behavioral-only change with NO new/changed visual surface (AGENTS.md §6):\n` +
+        `    Stage-B: N/A (no visual surface) — lead-certified`,
     );
   }
   fail(
@@ -305,7 +319,9 @@ async function main(): Promise<void> {
       `an unanswered Stage-B question BLOCKS the merge. Add to the PR body (or a linked-Issue comment):\n` +
       `    Stage-B: GO — <owner, date>\n` +
       `  or, under a batched-gate epic (AGENTS.md §6 carve-out):\n` +
-      `    Stage-B: batched at #<gate>`,
+      `    Stage-B: batched at #<gate>\n` +
+      `  or, for a behavioral-only change with NO new/changed visual surface (AGENTS.md §6):\n` +
+      `    Stage-B: N/A (no visual surface) — lead-certified`,
   );
 }
 

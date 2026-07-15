@@ -1,5 +1,11 @@
 # @ds/portal
 
+## 0.13.2
+
+### Patch Changes
+
+- [#921](https://github.com/doctor-school/ds-platform/pull/921) [`b9d81e6`](https://github.com/doctor-school/ds-platform/commit/b9d81e60ee711e37f5940743db54c75eb09174e9) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Fix the verification email's CTA dead-end ([#904](https://github.com/doctor-school/ds-platform/issues/904)): the button now points at `/verify#email=<address>` — the identifier rides the URL fragment (never sent to the server, so the [#869](https://github.com/doctor-school/ds-platform/issues/869) mail-scanner-prefetch invariant holds), so a cold email-button open seeds the account and the code submits. The portal `/verify` screen now seeds the email from the fragment (query `?email=` kept as a same-tab/backward-compat fallback) and a validation-blocked submit (e.g. no identifier) surfaces a visible localized error instead of a silent no-op.
+
 ## 0.13.1
 
 ### Patch Changes

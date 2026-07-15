@@ -39,6 +39,7 @@
     "lint:migration-index": "tsx tools/lint/migration-index-lint.ts",
     "lint:module-readme": "tsx tools/lint/module-readme-lint.ts",
     "lint:no-stub": "tsx tools/lint/no-stub-lint.ts",
+    "lint:no-hardcoded-path": "tsx tools/lint/no-hardcoded-path-lint.ts",
     "lint:primitives-first": "tsx tools/lint/primitives-first-lint.ts",
     "lint:prior-decisions": "tsx tools/lint/prior-decisions-lint.ts",
     "lint:prod-surface": "tsx tools/lint/prod-surface-lint.ts",

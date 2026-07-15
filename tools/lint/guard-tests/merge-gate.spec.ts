@@ -126,6 +126,31 @@ describe("merge-gate classifyCheckRuns() (#836)", () => {
     expect(verdict.red).toEqual([]);
   });
 
+  it("EARS-955.4: an in-flight re-run outranks its completed predecessor → pending, not a premature green", () => {
+    // A PR-body edit re-triggers a body guard on the SAME head SHA; the fresh
+    // in_progress run must win the name group so the board still reads pending
+    // (head-pinning cannot catch an unchanged SHA) (#960 review).
+    const runs = [
+      {
+        name: "spec-link",
+        status: "completed",
+        conclusion: "success",
+        started_at: "2026-07-15T10:00:00Z",
+        completed_at: "2026-07-15T10:00:15Z",
+      },
+      {
+        name: "spec-link",
+        status: "in_progress",
+        conclusion: null,
+        started_at: "2026-07-15T10:00:30Z",
+        completed_at: null,
+      },
+    ];
+    const verdict = classifyCheckRuns(runs);
+    expect(verdict.state).toBe("pending");
+    expect(verdict.pending).toEqual(["spec-link"]);
+  });
+
   it("EARS-955.1: a cancelled run that IS the newest for its name is still red", () => {
     const runs = [
       {
@@ -250,6 +275,21 @@ describe("merge-gate latestRunsByName() (#955)", () => {
       { name: "x", conclusion: "cancelled" },
     ];
     expect(latestRunsByName(runs)[0].conclusion).toBe("success");
+  });
+
+  it("ranks a non-completed run newest over its completed predecessor", () => {
+    const runs = [
+      {
+        name: "x",
+        status: "completed",
+        conclusion: "success",
+        completed_at: "2026-07-15T10:00:15Z",
+      },
+      { name: "x", status: "in_progress", conclusion: null },
+    ];
+    const latest = latestRunsByName(runs);
+    expect(latest).toHaveLength(1);
+    expect(latest[0].status).toBe("in_progress");
   });
 
   it("returns [] for non-array input", () => {

@@ -265,6 +265,58 @@ describe("backlog-triage parseProseBlockers()", () => {
     expect(b[0]!.issues).toEqual([512]);
     expect(b[0]!.ears).toBeUndefined();
   });
+
+  // ── #919 the canonical empty-Dependencies placeholder is NO blocker ─────────
+  // `**Blocked by:** — · **Blocks:** —` (em-dash) is the template's "nothing
+  // here" marker. It must yield ZERO blockers (item takeable); the `· **Blocks:**
+  // —` tail must never be swallowed into the Blocked-by clause and parsed as a
+  // bogus subsystem name (#896/#897/#898/#902/#904/#905 falsely reported blocked).
+  it("inline '**Blocked by:** — · **Blocks:** —' (em-dash) yields NO blocker (#919 shape)", () => {
+    const body =
+      "## Dependencies\n\n**Blocked by:** — · **Blocks:** —\n";
+    expect(parseProseBlockers(body)).toEqual([]);
+  });
+
+  it("the en-dash placeholder '**Blocked by:** – · **Blocks:** –' yields NO blocker (#919)", () => {
+    const body = "## Dependencies\n\n**Blocked by:** – · **Blocks:** –\n";
+    expect(parseProseBlockers(body)).toEqual([]);
+  });
+
+  it("the hyphen placeholder '**Blocked by:** - · **Blocks:** -' yields NO blocker (#919)", () => {
+    const body = "## Dependencies\n\n**Blocked by:** - · **Blocks:** -\n";
+    expect(parseProseBlockers(body)).toEqual([]);
+  });
+
+  it("an 'n/a' placeholder yields NO blocker (#919)", () => {
+    const body = "## Dependencies\n\n**Blocked by:** n/a · **Blocks:** n/a\n";
+    expect(parseProseBlockers(body)).toEqual([]);
+  });
+
+  it("a section bullet that is a bare em-dash placeholder → zero blockers (#919)", () => {
+    const body = "## Blocked by\n\n- —\n\n## Notes\n\n- something.\n";
+    expect(parseProseBlockers(body)).toEqual([]);
+  });
+
+  // NEGATIVE LOCK (#919 Mode-a): a REAL dash-bearing blocker in the SAME combined
+  // `· **Blocks:** —` line MUST still parse — this is the regression fence that a
+  // loosened (substring) no-blocker anchor would break while the 5 positives pass.
+  it("inline '**Blocked by:** #872 — needs ESP · **Blocks:** —' still parses the #872 blocker (#919 negative lock)", () => {
+    const body =
+      "## Dependencies\n\n**Blocked by:** #872 — needs ESP · **Blocks:** —\n";
+    const b = parseProseBlockers(body);
+    expect(b).toHaveLength(1);
+    expect(b[0]!.issues).toEqual([872]);
+  });
+
+  // NIT (#919 Mode-a): the `**Blocks:**` split boundary requires the `**`
+  // emphasis, so a blocker clause whose prose contains the bare word "blocks"
+  // is NOT truncated and its #ref survives.
+  it("a blocker clause containing the bare word 'blocks' is not truncated (#919 split-boundary NIT)", () => {
+    const body = "## Dependencies\n\n**Blocked by:** the content-blocks refactor #873.\n";
+    const b = parseProseBlockers(body);
+    expect(b).toHaveLength(1);
+    expect(b[0]!.issues).toEqual([873]);
+  });
 });
 
 describe("backlog-triage findSiblingByEars()", () => {

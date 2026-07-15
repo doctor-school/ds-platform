@@ -122,4 +122,20 @@ describe("merge-when-green mergeWhenGreen() barrier (#928)", () => {
     expect(gateArgs).toEqual(["--timeout", "60"]);
     expect(state.code).toBe(1);
   });
+
+  it("signal-killed gh merge (status:null) NEVER reports success — exits non-zero (#978)", () => {
+    const { state, exit } = makeExit();
+    expect(() =>
+      mergeWhenGreen(321, [], {
+        gate: () => ({ status: 0 }) as never, // GREEN gate
+        // spawnSync sets status:null + signal:<sig> when the child is killed.
+        merge: () => ({ status: null, signal: "SIGTERM" }) as never,
+        exit,
+        log: () => {},
+        err: () => {},
+      }),
+    ).toThrow(/^exit:/);
+    // A signal-kill must not collapse to exit 0 (false success).
+    expect(state.code).not.toBe(0);
+  });
 });

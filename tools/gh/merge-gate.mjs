@@ -222,6 +222,35 @@ export function findBranchWorktree(porcelain, branch) {
 }
 
 /**
+ * Assert a resolved `gh pr view` payload describes an OPEN pull request.
+ *
+ * `gh pr view <arg>` resolves a head SHA for a CLOSED or MERGED PR too, so
+ * without this check the gate would poll that PR's stale check-runs and read
+ * them as a fresh board — a silent semi-no-op at the merge decision point. An
+ * ISSUE number instead makes `gh pr view` exit non-zero (caught upstream by the
+ * `res.status !== 0` `die`), but the generic error does not say "this is not an
+ * open PR". A DRAFT PR is still `OPEN` and therefore allowed. Only `state ===
+ * "OPEN"` passes; anything else (`CLOSED`, `MERGED`, missing) is rejected with
+ * an actionable message that names the arg (#963).
+ *
+ * @param {{state?: string, headRefOid?: string}} view
+ * @param {string|number} arg  the CLI arg, echoed into the actionable message
+ * @returns {{ok: boolean, message: string}}
+ */
+export function assertOpenPr(view, arg) {
+  const state = view?.state;
+  if (state === "OPEN") return { ok: true, message: "" };
+  return {
+    ok: false,
+    message:
+      `argument '${arg}' does not resolve to an OPEN pull request ` +
+      `(state: ${state ?? "<unknown>"}). Pass the PR number of an OPEN PR, not an ` +
+      `issue number — a closed/merged PR is also rejected because its check-runs ` +
+      `are stale and gating them would be a silent no-op.`,
+  };
+}
+
+/**
  * Actionable refusal message when the PR branch is checked out in a registered
  * worktree: `--delete-branch` cannot delete a branch a worktree holds — tear
  * the worktree down first.
@@ -262,24 +291,32 @@ function gh(args) {
   return res;
 }
 
-/** Resolve the PR's head SHA + branch name. */
+/** Resolve the PR's head SHA + branch name; refuses a non-open-PR arg (#963). */
 function resolveHead(prNumber) {
   const res = gh([
     "pr",
     "view",
     String(prNumber),
     "--json",
-    "headRefOid,headRefName",
+    "headRefOid,headRefName,state",
   ]);
   if (res.status !== 0)
-    die(`gh pr view ${prNumber} failed: ${(res.stderr ?? "").trim()}`);
+    die(
+      `gh pr view ${prNumber} failed — is '${prNumber}' the number of an OPEN PR? ` +
+        `(an issue number or unknown PR makes gh exit non-zero): ${(res.stderr ?? "").trim()}`,
+    );
+  let parsed;
   try {
-    const { headRefOid, headRefName } = JSON.parse(res.stdout);
-    if (!headRefOid) die(`PR #${prNumber}: could not resolve head SHA`);
-    return { sha: headRefOid, branch: headRefName };
+    parsed = JSON.parse(res.stdout);
   } catch {
     die(`could not parse gh JSON output for: gh pr view ${prNumber}`);
+    return; // unreachable — die() calls process.exit; satisfies control-flow analysis.
   }
+  const { headRefOid, headRefName, state } = parsed;
+  const open = assertOpenPr({ state, headRefOid }, prNumber);
+  if (!open.ok) die(open.message);
+  if (!headRefOid) die(`PR #${prNumber}: could not resolve head SHA`);
+  return { sha: headRefOid, branch: headRefName };
 }
 
 /**

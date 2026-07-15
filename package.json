@@ -22,6 +22,7 @@
     "issue:create": "node tools/gh/create-issue.mjs",
     "merge:gate": "node tools/gh/merge-gate.mjs",
     "merge:when-green": "node tools/gh/merge-when-green.mjs",
+    "run:wait": "node tools/gh/run-wait.mjs",
     "lint:asset-format": "tsx tools/lint/asset-format-lint.ts",
     "lint:axe-exclude": "tsx tools/lint/axe-exclude-lint.ts",
     "lint:endpoint-authz": "tsx --tsconfig apps/api/tsconfig.json tools/lint/endpoint-authz-lint.ts",

@@ -61,6 +61,11 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/tools/hooks/completion-report-gate.mjs\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/hooks/surface-decision-debt-gate.mjs\"",
+            "timeout": 10
           }
         ]
       }

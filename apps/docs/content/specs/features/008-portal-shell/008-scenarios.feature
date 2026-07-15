@@ -1,7 +1,7 @@
 # 008 — Portal shell & discovery front-door scenarios
 # Gherkin for the persistent app-shell header + the public discovery front-door at /.
 # Happy path (doctor login -> / -> nav -> profile) + branches (guest sees «Войти» and
-# the same /; «Школы» inert; mobile ≡ nav collapse).
+# the same /; mobile ≡ nav collapse). «Школы» is not in the v1 nav (EARS-10 Retired, owner 2026-07-15).
 # Translated to Playwright via playwright-bdd — this is a user-facing spec, so an
 # end-to-end browser run is a REQUIRED deliverable owned in this feature's WBS
 # (see 008-requirements-en.md → Verification, the `all` row: apps/portal/e2e/shell/journey.spec.ts),
@@ -21,7 +21,7 @@ Feature: Persistent portal app-shell header and public discovery front-door
     Given a registered doctor who is not yet signed in
     When the doctor completes login via the feature-003 auth flow
     Then the doctor lands on "/" showing the discovery listing of upcoming broadcasts
-    And the persistent header shows the logo, the top-nav [Эфиры · Школы · Мои события], a theme toggle, and an avatar icon with the doctor's initials
+    And the persistent header shows the logo, the top-nav [Эфиры · Мои события], a theme toggle, and an avatar icon with the doctor's initials
     When the doctor activates «Мои события» in the top-nav
     Then the portal navigates to "/account/events"
     When the doctor activates the avatar icon
@@ -67,22 +67,13 @@ Feature: Persistent portal app-shell header and public discovery front-door
     And the preference is persisted in localStorage under "ds-theme"
     And the preference survives a page reload and navigation
 
-  @EARS-10 @branch
-  Scenario: «Школы» is a designed but inert nav target
-    Given the header top-nav includes a «Школы» item per the canvas
-    When a user activates «Школы»
-    Then the portal does not navigate away
-    And no error is shown
-    And «Школы» is presented as not-yet-available, never as a dead link to a broken route
-
-  @EARS-11 @EARS-2 @EARS-10 @branch
+  @EARS-11 @EARS-2 @branch
   Scenario: On mobile the nav collapses into a ≡ dropdown
     Given a user on a viewport at or below the mobile breakpoint (≤900px)
     When the user opens the header navigation
     Then the top-nav is collapsed into a ≡ dropdown
-    And the dropdown carries the same items [Эфиры · Школы · Мои события]
+    And the dropdown carries the same items [Эфиры · Мои события]
     And selecting «Мои события» navigates to "/account/events"
-    And selecting «Школы» stays inert
 
   @EARS-12 @stage-b
   Scenario: The rendered shell matches the vendored canvas across breakpoints and themes

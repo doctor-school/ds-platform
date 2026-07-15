@@ -1,11 +1,11 @@
 ---
 title: "008 — Portal shell & discovery front-door"
-description: "Requirements: the persistent portal app-shell header (logo→/, top-nav [Эфиры · Школы · Мои события], theme toggle, avatar-icon→profile for a logged-in doctor / «Войти» for a guest) and `/` as the canonical public discovery front-door and post-login landing; retires the `/` «Каркас приложения» scaffold. Portal surface IA epic (ADR-0014)."
+description: "Requirements: the persistent portal app-shell header (logo→/, top-nav [Эфиры · Мои события], theme toggle, avatar-icon→profile for a logged-in doctor / «Войти» for a guest) and `/` as the canonical public discovery front-door and post-login landing; retires the `/` «Каркас приложения» scaffold. Portal surface IA epic (ADR-0014)."
 slug: 008-portal-shell
 status: Draft
 surface: user-facing
 tracker: "https://github.com/doctor-school/ds-platform/milestone/9"
-issues: [788, 789, 790, 791, 792, 793, 794, 795, 796]
+issues: []
 prior_decisions:
   - "ADR-0014 — Two-tier product spec (§2 PRD → EARS `realizes:` traceability; §3 prior-art mining; §4 canvas is source, repo holds the built artifact)"
   - "ADR-0013 — Design system & canvas-derived UI (tokens-only, adopt-before-bespoke, vendor every canvas the surface renders, element-by-element render parity)"
@@ -22,7 +22,7 @@ Authored from the PRD [`008-product.md`](./008-product.md) (ADR-0014). Each EARS
 
 ## Outcomes
 
-- A **persistent app-shell header** is present across every portal route, carrying the **logo** (→ `/`), the top-nav **[Эфиры · Школы · Мои события]**, a **theme toggle**, and — for a logged-in doctor — an **avatar icon showing initials that navigates directly to the profile `/account`** (an icon, **not** a dropdown menu); a guest sees a **«Войти»** button instead. There is **no «Выйти»** in the header (sign-out lives on the profile, feature 009).
+- A **persistent app-shell header** is present across every portal route, carrying the **logo** (→ `/`), the top-nav **[Эфиры · Мои события]**, a **theme toggle**, and — for a logged-in doctor — an **avatar icon showing initials that navigates directly to the profile `/account`** (an icon, **not** a dropdown menu); a guest sees a **«Войти»** button instead. There is **no «Выйти»** in the header (sign-out lives on the profile, feature 009).
 - **`/` is the canonical public discovery front-door** — the upcoming-broadcasts listing (reusing the feature-004 listing surface, vendored `webinars-listing.dc.html`), rendered **identically** to a guest and a logged-in doctor. Discovery never branches on auth state; only the header's account affordance does. There is **no separate dashboard**.
 - **Post-login landing is `/`.** The auth flow (feature 003) returns the doctor to the discovery front-door, never to a scaffold.
 - The header's navigation resolves only to **shipped** surfaces: «Эфиры» → `/` (this discovery front-door), «Мои события» → `/account/events` (feature 005), the avatar icon → `/account` (feature 009, the profile).
@@ -33,22 +33,22 @@ Authored from the PRD [`008-product.md`](./008-product.md) (ADR-0014). Each EARS
 
 **In:**
 
-- The **persistent app-shell header** mounted on every portal route: logo (→ `/`), top-nav **[Эфиры · Школы · Мои события]**, theme toggle, and the auth-state account affordance (avatar-icon→`/account` for a logged-in doctor / **«Войти»** for a guest).
+- The **persistent app-shell header** mounted on every portal route: logo (→ `/`), top-nav **[Эфиры · Мои события]**, theme toggle, and the auth-state account affordance (avatar-icon→`/account` for a logged-in doctor / **«Войти»** for a guest).
 - **Nav route resolution** to the shipped surfaces (logo & «Эфиры» → `/`; «Мои события» → `/account/events`, feature 005; avatar icon → `/account`, feature 009).
 - **Theme toggle** (light/dark, persisted — the vendored canvas keys `localStorage['ds-theme']`).
 - **Auth-state branch** in the header: logged-in → avatar icon (initials, not a dropdown, no «Выйти»); guest → «Войти». The header truthfully reflects the session state read from `GET /v1/auth/session` (feature 003).
 - **Post-login landing = `/`** — the feature-003 auth flow returns the authenticated doctor to the discovery front-door.
 - **`/` as the public discovery listing**, reusing the feature-004 listing surface (vendored `webinars-listing.dc.html`), rendered identically for guest and doctor.
 - **Retiring the `/` scaffold** — the «Каркас приложения» placeholder card is removed and no longer reachable.
-- **Mobile collapse** — the top-nav collapses into a `≡` dropdown carrying the same [Эфиры · Школы · Мои события].
+- **Mobile collapse** — the top-nav collapses into a `≡` dropdown carrying the same [Эфиры · Мои события].
 - **RU-primary header copy** sourced from the message catalog (no hardcoded user-facing strings), consistent with feature-003 EARS-21.
 
 **Explicitly out** (each a documented deferral, not a silent stub):
 
-- **«Школы» destination surface.** «Школы» is a designed nav item with **no feature and no canvas yet**. This feature renders it as a **visibly-inert / non-navigating** nav target (EARS-10) — the nav item exists in the header per the canvas, but it resolves to no surface. Its actual destination is a **tracked future surface**, deferred to a later epic; this feature does not build it. (PRD → Out of scope.)
+- **«Школы».** «Школы» is **not rendered in the v1 nav** (owner decision 2026-07-15). It has no feature and no canvas destination yet; rather than shipping a visibly-inert nav item, the nav omits it entirely until its own feature exists. «Школы» re-enters the nav via that feature's own discovery, not as a placeholder here. (PRD → Out of scope.)
 - **Discovery listing internals** (cards, ordering, lifecycle signalling, empty/error states of the listing itself) — owned by **feature 004**; `/` reuses that surface, it does not re-specify it.
 - **«Мои события» content and the webinar room** — features **005 / 006**. This feature only wires the nav target.
-- **Profile content and sign-out** — feature **009**. The avatar icon only navigates to `/account`; the profile screen (and the sign-out affordance that lives there) is 009's deliverable. The `/account` session-claims debug dump is retired by 009, not here.
+- **Profile content and sign-out** — the profile at `/account` is **already shipped** (feature 009 superseded by [#770](https://github.com/doctor-school/ds-platform/issues/770); `/account` is a real doctor profile, not a debug dump). The avatar icon only navigates there; this feature does not build the profile screen.
 - **Search, facets, notifications, a richer LK home** — future iterations (epic brief).
 
 ## Constraints
@@ -96,12 +96,12 @@ This is a **UI-composition / IA feature**, not a new backend aggregate. It intro
 
 ## EARS requirements
 
-> **Numbering convention:** flat (`EARS-1`, `EARS-2`, …) per ADR-0006 §4. Each clause carries a `realizes: US-N` PRD backlink (ADR-0014 §2). EARS-1…11 are the functional handlers (each a candidate child Issue); EARS-12…13 are cross-cutting ubiquitous requirements enforced across the surface.
+> **Numbering convention:** flat (`EARS-1`, `EARS-2`, …) per ADR-0006 §4. Each clause carries a `realizes: US-N` PRD backlink (ADR-0014 §2). EARS-1…9 + EARS-11 are the functional handlers (each a candidate child Issue); EARS-10 is _Retired_ (see below); EARS-12…13 are cross-cutting ubiquitous requirements enforced across the surface.
 
 **Persistent app-shell header**
 
-- **EARS-1** (realizes **US-1**): On every portal route, the system shall render a persistent app-shell header carrying the logo (a link to `/`), the top-nav **[Эфиры · Школы · Мои события]**, and a theme toggle — so the header is present from any page, not only by direct link. The header is composed from the vendored canvas via `@ds/design-system` (Constraints).
-- **EARS-2** (realizes **US-1**): When a user activates a header navigation target, the system shall resolve it to its **shipped** surface: the logo and «Эфиры» → `/` (the discovery front-door), «Мои события» → `/account/events` (feature 005). «Школы» is the deferred exception (EARS-10).
+- **EARS-1** (realizes **US-1**): On every portal route, the system shall render a persistent app-shell header carrying the logo (a link to `/`), the top-nav **[Эфиры · Мои события]**, and a theme toggle — so the header is present from any page, not only by direct link. The header is composed from the vendored canvas via `@ds/design-system` (Constraints).
+- **EARS-2** (realizes **US-1**): When a user activates a header navigation target, the system shall resolve it to its **shipped** surface: the logo and «Эфиры» → `/` (the discovery front-door), «Мои события» → `/account/events` (feature 005). Every nav target resolves to a shipped surface — there is no deferred or inert target.
 - **EARS-3** (realizes **US-1**): When a user activates the theme toggle, the system shall switch the portal between light and dark and persist the preference (the vendored canvas keys `localStorage['ds-theme']`), so the choice survives navigation and reload.
 
 **Auth-state account affordance**
@@ -118,20 +118,20 @@ This is a **UI-composition / IA feature**, not a new backend aggregate. It intro
 
 **Deferred nav target & mobile**
 
-- **EARS-10** (realizes **US-1**): The system shall render the **«Школы»** nav item as a **visibly-inert / non-navigating** target — present in the header per the canvas, but resolving to no surface (its destination is out of scope, a tracked future surface; see Scope → Out). Activating «Школы» shall not navigate away or error; it shall be presented as not-yet-available, never as a dead link to a broken route.
-- **EARS-11** (realizes **US-1**): While the viewport is at the mobile breakpoint (the canvas `≤900px`), the system shall collapse the top-nav into a `≡` dropdown carrying the same **[Эфиры · Школы · Мои события]**, preserving every nav target's resolution (EARS-2, EARS-10).
+- **EARS-10** — _Retired._ «Школы» removed from the nav (owner 2026-07-15); no inert target is rendered. The v1 nav is [Эфиры · Мои события] and every target resolves to a shipped surface (EARS-2). Id kept to preserve flat numbering (repo pattern, cf. US-6); no handler is authored. «Школы» re-enters via its own feature's discovery when it exists (Scope → Out).
+- **EARS-11** (realizes **US-1**): While the viewport is at the mobile breakpoint (the canvas `≤900px`), the system shall collapse the top-nav into a `≡` dropdown carrying the same **[Эфиры · Мои события]**, preserving every nav target's resolution (EARS-2).
 
 **Cross-cutting (ubiquitous)**
 
 - **EARS-12** (realizes **US-1**): The system shall build the persistent header and `/` from the vendored «Doctor.School визуальный язык» canvas via `@ds/design-system` tokens (ADR-0013) — no bespoke element without the registry-research gate, no arbitrary Tailwind values — and the rendered result shall match the canvas element-by-element across **both breakpoints × both themes** (the Stage-B render-parity check).
-- **EARS-13** (realizes **US-1**): The header shall carry **no hardcoded user-facing strings** — the nav labels («Эфиры», «Школы», «Мои события»), the «Войти» button, and the theme-toggle / avatar accessible labels are sourced from the RU-primary message catalog (consistent with feature-003 EARS-21), so a future locale is additive without re-touching the shell components.
+- **EARS-13** (realizes **US-1**): The header shall carry **no hardcoded user-facing strings** — the nav labels («Эфиры», «Мои события»), the «Войти» button, and the theme-toggle / avatar accessible labels are sourced from the RU-primary message catalog (consistent with feature-003 EARS-21), so a future locale is additive without re-touching the shell components.
 
 ## Invariants
 
 - The app-shell header is present on **every** portal route (EARS-1) — a route without it is a defect.
 - `/` renders **one** surface regardless of auth state (EARS-8); the only auth-dependent header element is the account affordance (EARS-4 / EARS-5). No per-auth `/` content variant exists.
 - The header contains **no sign-out affordance and no dropdown menu** (EARS-5) — the account affordance is an icon-link to `/account` only.
-- Every header navigation target resolves to a **shipped** surface (EARS-2), with the single, explicitly-deferred exception of «Школы» (EARS-10).
+- Every header navigation target resolves to a **shipped** surface (EARS-2) — no inert or deferred nav target exists.
 - The `/` «Каркас приложения» scaffold is **unreachable** after this feature (EARS-9).
 - This feature mints no session and writes no new persisted state; it reads the feature-003 session as its only auth input (Constraints).
 
@@ -147,8 +147,7 @@ This is a **UI-composition / IA feature**, not a new backend aggregate. It intro
 | 7    | Playwright                                       | `apps/portal/e2e/shell/post-login-landing.spec.ts`    | Completing feature-003 login lands on `/` (discovery), not a scaffold.                                                                                                                                                                                                                                                                                                                                        |
 | 8    | Playwright                                       | `apps/portal/e2e/shell/discovery-parity.spec.ts`      | `/` renders the feature-004 listing identically for guest and doctor; content does not branch on auth.                                                                                                                                                                                                                                                                                                        |
 | 9    | Playwright                                       | `apps/portal/e2e/shell/scaffold-retired.spec.ts`      | The «Каркас приложения» placeholder is not reachable; `/` serves the listing.                                                                                                                                                                                                                                                                                                                                 |
-| 10   | Playwright                                       | `apps/portal/e2e/shell/schools-inert.spec.ts`         | «Школы» is present but inert — activating it does not navigate away or error; presented as not-yet-available.                                                                                                                                                                                                                                                                                                 |
-| 11   | Playwright (mobile viewport)                     | `apps/portal/e2e/shell/mobile-nav.spec.ts`            | At `≤900px` the nav collapses into a `≡` dropdown carrying [Эфиры · Школы · Мои события]; targets still resolve.                                                                                                                                                                                                                                                                                              |
+| 11   | Playwright (mobile viewport)                     | `apps/portal/e2e/shell/mobile-nav.spec.ts`            | At `≤900px` the nav collapses into a `≡` dropdown carrying [Эфиры · Мои события]; targets still resolve.                                                                                                                                                                                                                                                                                              |
 | 12   | Manual Stage-B render check                      | (Stage-B live-verify, epic gate)                      | Element-by-element parity with the vendored canvas across both breakpoints × both themes (ADR-0013); tokens-only, no arbitrary Tailwind (lint-gated).                                                                                                                                                                                                                                                         |
 | 13   | ESLint + unit                                    | `apps/portal` (no-raw-string gate) + catalog snapshot | Header copy sourced from the RU catalog; no hardcoded user-facing strings (feature-003 EARS-21 precedent).                                                                                                                                                                                                                                                                                                    |
 | all  | **Playwright (browser E2E, end-to-end journey)** | `apps/portal/e2e/shell/journey.spec.ts`               | **Required user-facing deliverable.** Doctor logs in (feature 003) → lands on `/` → uses the nav (→ `/account/events`) → the avatar icon (→ `/account`); a guest sees «Войти» and the **same** `/`. Maps to [`008-scenarios.feature`](./008-scenarios.feature) via `playwright-bdd`. This is a live-gated E2E owned in this feature's WBS (F-22: a `user-facing` slice owns its browser E2E, not a footnote). |
@@ -158,4 +157,4 @@ This is a **UI-composition / IA feature**, not a new backend aggregate. It intro
 - **Depends on shipped surfaces.** `/` reuses the **feature-004** listing surface (vendored `webinars-listing.dc.html`); «Мои события» → **feature 005** (`/account/events`); the avatar icon → **feature 009** (`/account`). Features 004/005 are shipped (epic 004–007); the avatar target resolves to the **feature-009** profile, authored in the same portal-surface-IA epic — the two features are co-sequenced (008 wires the header entry, 009 builds the profile it points to). If 009's `/account` profile is not yet on `main` when 008 ships, the avatar still resolves to `/account` (the route exists — 009 retires only the debug dump there), so 008 has no hard blocker on 009.
 - **Design source (canvas) is vendored.** The header + `/` canvases (`webinars-listing.dc.html`, `my-events.dc.html`, `webinar-page.dc.html`) are already under `design-source/` (ADR-0013). No DesignSync pull is a prerequisite for authoring; Stage-B render-parity (EARS-12) verifies against them.
 - **Stage-B live-verify.** As a `user-facing` surface, the branded render is re-confirmed by the product owner on the running stand before merge (or under the epic's batched Stage-B gate, if one is designated). The stand stays up until that verdict.
-- **«Школы» destination (decision-debt seam).** EARS-10 ships «Школы» inert; its real surface is a tracked future epic. The lead opens/keeps a tracking Issue so the inert nav item is an accountable deferral, not a silent stub (F-22 / AGENTS.md §6).
+- **«Школы» is not a seam.** The v1 nav omits «Школы» entirely (EARS-10 _Retired_) — there is no inert placeholder and therefore no decision-debt seam to track. «Школы» becomes a nav target only when its own feature is specced and built, via that feature's discovery.

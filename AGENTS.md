@@ -37,7 +37,7 @@ Stack at a glance (full reference in `apps/docs/content/adr/`): **Backend** Nest
 - **Monorepo:** pnpm 10 + Turborepo. Apps `apps/<name>/`, shared `packages/<name>/`, tooling `tools/`.
 - **Branches:** trunk-based, `<prefix>/<N>-<slug>`, squash-merge. Prefixes `feat|fix|chore|refactor|docs|tooling`. Delete branch on merge/close; re-sweep `gh pr list` after merging CI/dep/security PRs.
 - **Commits:** Conventional Commits; PR title = squash title.
-- **Versioning:** changesets; user-facing PR → `pnpm changeset`; when unsure minor-vs-major, pick **major**.
+- **Versioning & release train:** changesets (user-facing PR → `pnpm changeset`; unsure → **major**). A `Version Packages` merge cuts a `release-*` tag + GitHub Release; prod ships manually via `pnpm deploy:prod` (records a GitHub Deployment) — detail `repo-conventions.md` + `/deploy` skill.
 - **PR template required:** kind label + `Closes #N` + author marker **in the body** (`author:*` is not a `gh --label`).
 - **Issues:** native sub-issue + blocked-by/blocking links are mandatory, not prose. On merge, set board **Status = Done** by hand.
 - **ADRs** in `apps/docs/content/adr/`; **feature specs** (triplet) in `apps/docs/content/specs/features/NNN-<slug>/`. One spec → many Issues; code PRs start only after the spec is on `main`.
@@ -76,7 +76,7 @@ In the first user-facing reply, state: kind, active artifact (Issue #N / spec pa
 
 ### 3.5 Bootstrap
 
-Run `pnpm bootstrap` (alias `tsx tools/agent-bootstrap.ts`) for git/Issue/PR/spec state. Claude Code does this via SessionStart hook (`.claude/settings.json`) automatically. Its `ready/working/awaiting` rollup is a **derived view, not ground truth** — read the actual open board (`gh issue list --state open` + Projects v2) and triage every item by readiness; never frame an open backlog as "nothing to do" from a `ready: none` rollup or a handoff "queue clear". **After a slice ships, drain the matured debt/ops backlog before the next product feature** (memory `feedback_clear_debt_before_features`).
+Run `pnpm bootstrap` (alias `tsx tools/agent-bootstrap.ts`) for git/Issue/PR/spec state. Claude Code does this via SessionStart hook (`.claude/settings.json`) automatically. Its `ready/working/awaiting` rollup is a **derived view, not ground truth** — read the actual open board (`gh issue list` + Projects v2) and triage every item by readiness; never frame an open backlog as "nothing to do" from a `ready: none` rollup. **After a slice ships, drain the matured debt/ops backlog before the next product feature** (memory `feedback_clear_debt_before_features`).
 
 ### 3.6 Permission-mode disclosure
 
@@ -98,7 +98,7 @@ If the active task is a Plane work-item (DSP-XXX / DSO-XXX), the first action af
 
 ## 4. Review modes & merge gate
 
-Per ADR-0007 §2.10. **Mode (a)** — same-session subagent dispatch via `request-mode-a-review` (lead finishes → dispatches reviewer subagent → structured APPROVE / REQUEST_CHANGES verdict). **Mode (b)** — parallel Codex CLI session. **Mode (c)** — pure human review. LLM credentials live in the human's terminal, not CI; **no automated reviewer-bot**.
+Per ADR-0007 §2.10. **Mode (a)** — same-session subagent dispatch via `request-mode-a-review` (→ structured APPROVE / REQUEST_CHANGES verdict). **Mode (b)** — parallel Codex CLI session. **Mode (c)** — pure human review. LLM credentials live in the human's terminal, not CI; **no automated reviewer-bot**.
 
 **Merge gate.** A positive Mode (a) or (b) verdict **+ green CI** is sufficient to merge via `gh pr merge <N> --squash --delete-branch`; human-merge is **not** required (Mode (c) stays human). **CI is a manual gate in Phase 0 — confirm `gh pr checks` green by hand before merging** (`--auto` is dropped on Free — memory `feedback_phase0_merge_gate_manual`). Procedure: skills `request-mode-a-review` + `merge-when-green`.
 
@@ -106,7 +106,7 @@ Per ADR-0007 §2.10. **Mode (a)** — same-session subagent dispatch via `reques
 
 ## 5. Lint guards
 
-CI lint guards (ADR-0007 §2.6) surface as PR Checks for the reviewer and author-agent. Authoritative list + per-guard severity: `.github/workflows/ci.yml` + `pr-body-guards.yml` (PR-body-parsing family — re-runs on body edits, #651); WARN→BLOCK promotion criterion + sweep cadence: **ADR-0007 §2.6**. `spec-link` / `endpoint-authz` / `playwright-axe` / `prod-surface` are BLOCK; the rest of the §2.6 guard family is WARN in Phase 0 (baseline drift/glossary jobs are separate hard-red checks).
+CI lint guards (ADR-0007 §2.6) surface as PR Checks. Authoritative list + severity: `.github/workflows/ci.yml` + `pr-body-guards.yml` (re-runs on body edits, #651); WARN→BLOCK criterion + sweep cadence: **ADR-0007 §2.6**. `spec-link` / `endpoint-authz` / `playwright-axe` / `prod-surface` are BLOCK; the rest are WARN in Phase 0 (baseline drift/glossary are separate hard-red checks).
 
 ---
 

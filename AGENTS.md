@@ -22,6 +22,8 @@ This file is the slim core. The full always-on set auto-loads at session start: 
 
 ## 1. What is DS Platform
 
+<!-- prod-reality-reconciled: 2026-07-15 (#927) -->
+
 DS Platform is the medical-education platform for Doctor.School (B2B pharma sponsor → B2D doctor audience). Architectural ADRs (0001–0008) are accepted and a **working version is shipped and operated in production, live with users**.
 
 **Production is live with users.** A deployment runs on Timeweb (ru-3) at the `doctor.school` domains — `app.doctor.school`, `api.`, `id.`. **Never tell the owner "there is no production".** The authoritative deployed scope is the derived **`## Project reality`** bootstrap section (`pnpm bootstrap`) + **GitHub Releases/Deployments** — never inferred from these docs (that drift was the #927 bug; static prose describing a moving target rots between owner corrections). Detail: memory `reference_prod_deploy_reality`, `feedback_no_dynamic_release_state_in_prose`.

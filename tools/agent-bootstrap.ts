@@ -33,6 +33,11 @@ import {
   renderProjectReality,
   type ProjectRealityProbe,
 } from "./project-reality";
+import {
+  evaluateContextStaleness,
+  probeContextFreshness,
+  renderContextFreshness,
+} from "./context-freshness";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -754,6 +759,33 @@ async function main(): Promise<void> {
   const reality = evaluateProjectReality(realityProbe);
   for (const line of renderProjectReality(reality, releaseFromProbe(realityProbe))) {
     out.push(line);
+  }
+  // Release-notes reconciliation (#927 core) — the CHANGELOG-head fallback (when
+  // no GitHub Release is cut yet) + the deterministic AGENTS.md §1 staleness
+  // flag: if §1's deploy-scope pointer was last reconciled BEFORE the latest
+  // release/changeset head, a session must re-sync scope BEFORE its first
+  // grooming/triage output (the #927 incident: §1 ran three releases stale).
+  // Never throws; a defensive catch keeps SessionStart exit-0.
+  const freshProbe = await probeContextFreshness(
+    REPO_ROOT,
+    releaseFromProbe(realityProbe),
+  ).catch((e) => {
+    note("context-freshness probe", e);
+    return null;
+  });
+  if (freshProbe) {
+    if (freshProbe.section1Error)
+      warnings.push({ source: "AGENTS.md §1 marker", message: freshProbe.section1Error });
+    if (freshProbe.headError)
+      warnings.push({ source: "changeset-head fallback", message: freshProbe.headError });
+    const staleness = evaluateContextStaleness({
+      section1Date: freshProbe.section1Date,
+      headDate: freshProbe.headDate,
+      headTag: freshProbe.headTag,
+    });
+    for (const line of renderContextFreshness(freshProbe, staleness)) {
+      out.push(line);
+    }
   }
   out.push("");
 

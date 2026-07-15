@@ -294,9 +294,12 @@ export function parseProseBlockers(body: string): ProseBlocker[] {
     const m = line.match(/^\s*(?:[-*]\s+)?(?:\*\*)?blocked\s+by\b[:\s*]*(.*)$/i);
     if (m) {
       // A combined `**Blocked by:** … · **Blocks:** …` Dependencies line carries
-      // the Blocks half after a `·` separator (or a `**Blocks:**` marker) — cut
-      // it off so the Blocks value is never parsed as a Blocked-by blocker (#919).
-      const rest = (m[1] ?? "").split(/\s*·\s*|\s*(?:\*\*)?blocks\b/i)[0] ?? "";
+      // the Blocks half after a `·` separator (or the emphasised `**Blocks:**`
+      // marker) — cut it off so the Blocks value is never parsed as a Blocked-by
+      // blocker (#919). The marker alternative REQUIRES the `**` emphasis so a
+      // legitimate blocker clause whose prose contains the bare word "blocks"
+      // (e.g. `the content-blocks refactor #873`) is never truncated.
+      const rest = (m[1] ?? "").split(/\s*·\s*|\s*\*\*\s*blocks\b/i)[0] ?? "";
       if (isNoBlockerText(rest)) continue; // explicit no-blocker
       // Clause runs to the first sentence terminator followed by space/EOL.
       const clause = rest.split(/(?<=[.])\s|(?<=[.])$/u)[0] ?? rest;

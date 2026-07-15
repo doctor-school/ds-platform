@@ -31,6 +31,18 @@ const SHORT = 12;
 // GitHub caps a Deployment/deployment_status `description` at 140 chars.
 const GH_DESCRIPTION_MAX = 140;
 
+/** Strip 4-byte Unicode (astral-plane code points > U+FFFF — emoji, etc.) from a
+ *  string. GitHub's `deployment_status.description` / `deployment.description`
+ *  columns are legacy 3-byte `utf8` and reject 4-byte chars with a 422 (the digest
+ *  first line `## 🚀 Релиз на PROD` tripped this — Issue #949). BMP chars (incl.
+ *  Cyrillic) survive; only surrogate-pair code points are dropped. Applied to the
+ *  descriptions only — `payload.notes` (a JSON blob column) keeps the emoji. */
+function stripAstral(value) {
+  return [...String(value ?? "")]
+    .filter((c) => c.codePointAt(0) <= 0xffff)
+    .join("");
+}
+
 /** Truncate to `max` chars, appending a single-char ellipsis when it overflows so
  *  the result is always ≤ `max`. */
 function truncate(value, max) {
@@ -83,7 +95,7 @@ export function buildDeploymentPayload({
       auto_merge: false,
       required_contexts: [],
       description: truncate(
-        `release ${tagLabel} @ ${shortSha}`,
+        stripAstral(`release ${tagLabel} @ ${shortSha}`),
         GH_DESCRIPTION_MAX,
       ),
       payload: {
@@ -96,7 +108,7 @@ export function buildDeploymentPayload({
       state: "success",
       log_url: healthUrl,
       environment: "production",
-      description: truncate(statusSummary, GH_DESCRIPTION_MAX),
+      description: truncate(stripAstral(statusSummary), GH_DESCRIPTION_MAX),
     },
   };
 }
@@ -110,7 +122,14 @@ function ghApiPost(path, body, cwd) {
     cwd,
   });
   if (r.status !== 0) {
-    const detail = (r.stderr || r.stdout || "").trim().split(/\r?\n/)[0] ?? "";
+    // `gh api` writes the JSON error body (which names the offending field, e.g.
+    // "description doesn't accept 4-byte Unicode") to STDOUT, and a short summary
+    // ("Validation Failed (HTTP 422)") to STDERR. Surface BOTH so a future
+    // validation failure is self-diagnosing (#949 — the stdout body was dropped,
+    // hiding the field). Bounded to keep the non-fatal warning one line.
+    const stderr1 = (r.stderr || "").trim().split(/\r?\n/)[0] ?? "";
+    const stdoutBody = (r.stdout || "").trim().replace(/\s+/g, " ");
+    const detail = [stderr1, stdoutBody].filter(Boolean).join(" | ").slice(0, 300);
     return { ok: false, error: `gh api ${path} exited ${r.status}: ${detail}` };
   }
   try {

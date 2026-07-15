@@ -108,3 +108,57 @@ describe("deployment-record — buildDeploymentPayload (pure)", () => {
     );
   });
 });
+
+// #949 — GitHub's Deployment(-status) `description` column is a legacy 3-byte
+// `utf8` type that rejects 4-byte Unicode (astral-plane code points, i.e. emoji)
+// with a 422. The release-notes digest first line is `## 🚀 Релиз на PROD`; the 🚀
+// (U+1F680) is a 4-byte char, so the status POST failed. Both `description` fields
+// must be sanitized; `payload.notes` (a JSON blob column) must keep the emoji.
+const hasAstral = (s: string) =>
+  [...s].some((c) => (c.codePointAt(0) ?? 0) > 0xffff);
+
+describe("deployment-record — 4-byte Unicode stripped from descriptions (#949)", () => {
+  const DIGEST =
+    "## 🚀 Релиз на PROD\nПервая фича для врачей 🎉.\nВторая строка.";
+
+  it("status.description carries no 4-byte code point (the real 422 input)", () => {
+    const { status } = buildDeploymentPayload({
+      sha: SHA,
+      releaseTag: "release-x",
+      notesText: DIGEST,
+      healthUrl: HEALTH,
+      nowIso: NOW,
+    });
+    expect(
+      [...status.description].every((c) => (c.codePointAt(0) ?? 0) <= 0xffff),
+    ).toBe(true);
+    expect(hasAstral(status.description)).toBe(false);
+    // Cyrillic (BMP) survives — only astral chars are dropped.
+    expect(status.description).toContain("Релиз на PROD");
+    expect(status.description.length).toBeLessThanOrEqual(140);
+  });
+
+  it("deployment.description carries no 4-byte code point (defense — ASCII by construction)", () => {
+    const { deployment } = buildDeploymentPayload({
+      sha: SHA,
+      releaseTag: "release-x",
+      notesText: DIGEST,
+      healthUrl: HEALTH,
+      nowIso: NOW,
+    });
+    expect(hasAstral(deployment.description)).toBe(false);
+    expect(deployment.description.length).toBeLessThanOrEqual(140);
+  });
+
+  it("payload.notes keeps the emoji verbatim (astral survives in the JSON blob)", () => {
+    const { deployment } = buildDeploymentPayload({
+      sha: SHA,
+      releaseTag: "release-x",
+      notesText: DIGEST,
+      healthUrl: HEALTH,
+      nowIso: NOW,
+    });
+    expect(deployment.payload.notes).toBe(DIGEST);
+    expect(hasAstral(deployment.payload.notes)).toBe(true);
+  });
+});

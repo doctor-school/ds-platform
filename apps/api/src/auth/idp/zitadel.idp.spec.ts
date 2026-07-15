@@ -387,42 +387,49 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
     expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({ sendCode: {} });
   });
 
-  it("003 EARS-3: with a portal origin configured the email send carries a BARE /verify urlTemplate — no code/userId params (#869)", async () => {
-    // #869 owner Stage-A verdict: the verification email is CODE-ONLY. Zitadel's
-    // default CTA URL is its hosted login-v2 UI — a dead end for the portal
-    // registrant — so the send overrides it with the portal's own /verify screen.
-    // The template is deliberately BARE: no {{.Code}}/{{.UserID}} placeholders and
-    // no query at all, because ANY GET-consumed (or even user-identifying) link in
-    // a mail is scanner bait — mail.ru's `checklink` AV prefetch GETs every URL in
-    // a delivered message before the human ever clicks. A bare /verify load
-    // consumes nothing; the user types the code by hand (EARS-24 manual entry).
+  it("003 EARS-3: with a portal origin configured the email send carries a /verify#email= FRAGMENT urlTemplate — identifier in the fragment, no query param (#904)", async () => {
+    // #869 owner Stage-A verdict: the verification email is CODE-ONLY, and its CTA
+    // must consume nothing on GET — mail.ru's `checklink` AV prefetch GETs every URL
+    // in a delivered message before the human ever clicks. #904 owner Stage-A verdict:
+    // the identifier now rides the URL FRAGMENT (`/verify#email=<addr>`), which browsers
+    // NEVER send to the server, so the cold email-button open can seed the account and
+    // the submit works — while the prefetch-safety invariant is preserved (a fragment is
+    // not a query param, consumes nothing on GET). The invariant: NO query (`?`/`&`) AND
+    // the `#email=` fragment carries the identifier.
     const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
     const client = new ZitadelIdpClient({
       ...SEND_CONFIG,
       portalBaseUrl: "http://portal.test:3001",
       fetchImpl,
     });
-    await client.requestEmailVerification("user-1");
+    await client.requestEmailVerification("user-1", "doc+a@example.com");
     const body = JSON.parse(calls[0]?.body ?? "{}") as {
       sendCode?: { urlTemplate?: string };
     };
     expect(body).toEqual({
-      sendCode: { urlTemplate: "http://portal.test:3001/verify" },
+      sendCode: {
+        urlTemplate:
+          "http://portal.test:3001/verify#email=doc%2Ba%40example.com",
+      },
     });
-    // Belt-and-braces: the scanner-safety invariant, asserted explicitly.
-    expect(body.sendCode?.urlTemplate).not.toMatch(/[?&{]/);
+    // The identifier rides the FRAGMENT, never a query param: no `?`/`&` anywhere.
+    expect(body.sendCode?.urlTemplate).not.toMatch(/[?&]/);
+    // …and the `#email=` fragment identifier is present.
+    expect(body.sendCode?.urlTemplate).toContain("#email=");
   });
 
-  it("003 EARS-3: the urlTemplate strips a trailing slash off the configured portal origin (#869)", async () => {
+  it("003 EARS-3: the urlTemplate strips a trailing slash off the configured portal origin before the fragment (#904)", async () => {
     const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
     const client = new ZitadelIdpClient({
       ...SEND_CONFIG,
       portalBaseUrl: "http://portal.test:3001/",
       fetchImpl,
     });
-    await client.requestEmailVerification("user-1");
+    await client.requestEmailVerification("user-1", "doc@example.com");
     expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({
-      sendCode: { urlTemplate: "http://portal.test:3001/verify" },
+      sendCode: {
+        urlTemplate: "http://portal.test:3001/verify#email=doc%40example.com",
+      },
     });
   });
 
@@ -437,10 +444,12 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
     expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({ sendCode: {} });
   });
 
-  it("003 EARS-25: resendEmailVerification carries the same bare /verify urlTemplate on the re-send hop (#869)", async () => {
+  it("003 EARS-25: resendEmailVerification carries the same /verify#email= FRAGMENT urlTemplate on the re-send hop (#904)", async () => {
     // The EARS-25 resend re-issues the SAME registration email as the initial
-    // EARS-3 send, so it must be code-only-safe too — otherwise only the first
-    // email is fixed and every re-sent one still links Zitadel's hosted UI.
+    // EARS-3 send, so it must be scanner-safe AND carry the identifier in the
+    // fragment too — otherwise only the first email seeds the cold /verify open and
+    // every re-sent one still dead-ends on a bare /verify. The resend already knows
+    // the identifier (it is the resolution key), so it bakes it into the fragment.
     const calls: ScriptedCall[] = [];
     const fetchImpl: FetchLike = (url, init) => {
       calls.push({
@@ -479,8 +488,16 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
     const resend = calls.find((c) => c.url.endsWith("/email/resend"));
     expect(resend, "the resend hop was reached").toBeTruthy();
     expect(JSON.parse(resend!.body ?? "{}")).toEqual({
-      sendCode: { urlTemplate: "http://portal.test:3001/verify" },
+      sendCode: {
+        urlTemplate: "http://portal.test:3001/verify#email=user%40ds.test",
+      },
     });
+    // Fragment-only: the re-sent link carries no query param either.
+    const body = JSON.parse(resend!.body ?? "{}") as {
+      sendCode?: { urlTemplate?: string };
+    };
+    expect(body.sendCode?.urlTemplate).not.toMatch(/[?&]/);
+    expect(body.sendCode?.urlTemplate).toContain("#email=");
   });
 
   it("EARS-3: requestEmailVerification throws fail-closed on a non-2xx send", async () => {

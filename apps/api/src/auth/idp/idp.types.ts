@@ -201,8 +201,13 @@ export type IdpRefreshResult =
 export interface IdpClient {
   /** Create a user; a duplicate identifier returns `alreadyExisted: true`, not a throw. */
   createUser(input: CreateUserInput): Promise<CreatedUser>;
-  /** Trigger a Zitadel `otp_email` verification code (EARS-1). */
-  requestEmailVerification(sub: string): Promise<void>;
+  /**
+   * Trigger a Zitadel `otp_email` verification code (EARS-1). `email` (#904) is
+   * baked into the verification link's `/verify#email=<addr>` fragment so a cold
+   * email-button open seeds the account; omit it and the link falls back to a bare
+   * `/verify`.
+   */
+  requestEmailVerification(sub: string, email?: string): Promise<void>;
   /**
    * EARS-25: re-issue the registration `otp_email` verification code for an
    * `identifier` (the email), **enumeration-safely**. Unlike

@@ -470,7 +470,8 @@ export class ZitadelIdpClient implements IdpClient {
    * hops. `sendCode` routes the code through the configured SMTP notifier (→
    * Mailpit on the dev-stand) — never `returnCode` (the secret must not ride
    * the HTTP response). With a configured {@link ZitadelConfig.portalBaseUrl}
-   * the oneof additionally carries a BARE `urlTemplate` — `<origin>/verify`,
+   * the oneof additionally carries a `urlTemplate` — `<origin>/verify#email=<addr>`
+   * (#904: the identifier rides the fragment, never a query param),
    * deliberately WITHOUT the `{{.Code}}`/`{{.UserID}}` placeholders Zitadel
    * supports — replacing the default hosted-login-v2 link (the #869 dead end)
    * with a subordinate navigation aid that consumes nothing on GET: the
@@ -478,14 +479,22 @@ export class ZitadelIdpClient implements IdpClient {
    * scanners like mail.ru `checklink` prefetch every link, burning anything a
    * GET consumes). Email-only by design: the SMS/phone hops keep `{ sendCode: {} }`.
    */
-  private emailSendCodeBody(): string {
+  private emailSendCodeBody(email?: string): string {
     const base = this.config.portalBaseUrl?.replace(/\/+$/, "");
-    return JSON.stringify({
-      sendCode: base ? { urlTemplate: `${base}/verify` } : {},
-    });
+    if (!base) return JSON.stringify({ sendCode: {} });
+    // #904: the identifier rides the URL FRAGMENT — browsers never transmit it to
+    // the server, so a cold email-button open of /verify seeds the account email
+    // (submit works) while the #869 prefetch-safety invariant holds (a fragment is
+    // not a query param; mail.ru `checklink` prefetches the URL sans fragment). No
+    // email → bare /verify fallback (the cold open surfaces a visible identify-your-
+    // account error rather than a silent no-op).
+    const urlTemplate = email
+      ? `${base}/verify#email=${encodeURIComponent(email)}`
+      : `${base}/verify`;
+    return JSON.stringify({ sendCode: { urlTemplate } });
   }
 
-  async requestEmailVerification(sub: string): Promise<void> {
+  async requestEmailVerification(sub: string, email?: string): Promise<void> {
     // Live wire-shape delta (#148, vs Zitadel v4.15): the verification-code
     // **resend** is `POST /v2/users/{id}/email/resend` — the merged code's
     // `/email/_send_code` (the gRPC-transcoded custom-verb spelling assumed by
@@ -496,7 +505,9 @@ export class ZitadelIdpClient implements IdpClient {
     const res = await this.fetchImpl(this.url(`/v2/users/${sub}/email/resend`), {
       method: "POST",
       headers: this.headers(),
-      body: this.emailSendCodeBody(),
+      // #904: bake the registrant's email into the /verify#email= fragment so the
+      // cold email-button open seeds the account. Absent (legacy caller) → bare.
+      body: this.emailSendCodeBody(email),
     });
     // Surface a failed send instead of silently looking like success
     // (consistent with createUser); the caller decides the user-facing message.
@@ -923,7 +934,9 @@ export class ZitadelIdpClient implements IdpClient {
         {
           method: "POST",
           headers: this.headers(),
-          body: this.emailSendCodeBody(),
+          // #904: the resend knows the identifier (its resolution key) — bake it
+          // into the /verify#email= fragment so re-sent links seed the cold open too.
+          body: this.emailSendCodeBody(identifier),
         },
       );
       return res.ok;

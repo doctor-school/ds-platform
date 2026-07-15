@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   branchName,
   branchPrefixFromLabels,
+  isSpecToken,
+  parseSpecId,
   slugifyTitle,
+  specBranchName,
+  specWorktreeRelPath,
   worktreeRelPath,
 } from "../../dev/task-worktree.mjs";
 
@@ -78,5 +82,43 @@ describe("task-worktree branchName() / worktreeRelPath()", () => {
 
   it("uses the short numeric worktree path (Windows long-path dodge)", () => {
     expect(worktreeRelPath(359)).toBe(".claude/worktrees/359");
+  });
+});
+
+describe("task-worktree spec-form derivation (#787)", () => {
+  it("routes only a literal spec-NNN positional into spec mode, never a bare number", () => {
+    // A bare Issue number stays the backward-compatible Issue path.
+    expect(isSpecToken("787")).toBe(false);
+    expect(isSpecToken("spec-008")).toBe(true);
+    expect(isSpecToken("spec-8")).toBe(true);
+    expect(isSpecToken("SPEC-008")).toBe(true);
+    expect(isSpecToken("spec-foo")).toBe(false);
+    expect(isSpecToken(undefined)).toBe(false);
+  });
+
+  it("normalizes a spec id to the canonical 3-digit NNN", () => {
+    expect(parseSpecId("008")).toBe("008");
+    expect(parseSpecId("8")).toBe("008");
+    expect(parseSpecId("spec-008")).toBe("008");
+    expect(parseSpecId("spec-8")).toBe("008");
+    expect(parseSpecId("012")).toBe("012");
+    expect(parseSpecId("1234")).toBe("1234");
+  });
+
+  it("returns null for a non-spec identifier so the caller fails loud", () => {
+    expect(parseSpecId("portal-shell")).toBeNull();
+    expect(parseSpecId("spec-")).toBeNull();
+    expect(parseSpecId("")).toBeNull();
+    expect(parseSpecId(undefined)).toBeNull();
+  });
+
+  it("derives the .claude/worktrees/spec-NNN path (mirrors teardown vocabulary)", () => {
+    expect(specWorktreeRelPath("008")).toBe(".claude/worktrees/spec-008");
+  });
+
+  it("derives the feat/spec-NNN-<slug> branch shape", () => {
+    expect(specBranchName("008", "portal-shell")).toBe(
+      "feat/spec-008-portal-shell",
+    );
   });
 });

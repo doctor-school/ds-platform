@@ -30,6 +30,17 @@ The repo auto-memory lives at `~/.claude/projects/<project>/memory/`. Only the f
 
 **Orchestration is the default execution mode** — canon **AGENTS.md §6** (deliverable edits are dispatched to subagents; the default is not gated on an «оркеструй» directive, which only escalates to the full `orchestrating-coding-agents` skill / confirms scope). Detail: memory `feedback_orchestrate_by_default_feature_completion`.
 
+## Propose Workflow (multi-agent) mode when the shape is known
+
+`Workflow` (deterministic scripted fan-out — pipeline/parallel/adversarial-verify, up to 16 concurrent agents) is **user-opt-in**: never auto-run it — **propose** it with a rough scale/token estimate and await go. Offer it, over plain one-at-a-time orchestration, when a task's shape is **knowable upfront** and matches:
+
+- **Batch audit/sweep** over many same-shape items (retro corpus, subsystem/instruction sweeps) — we already fan these out by hand.
+- **Large impl/review wave** (≈4+ independent, non-overlapping-touch-set Issues or ready PRs).
+- **find → verify pipeline** — many findings each needing independent/adversarial verification.
+- **N-approach bake-off** — competing designs scored by a judge panel.
+
+Stay on plain orchestration when each step depends on **judging the prior return**, or the discipline contour (worktree/Mode-a/merge/board) must run inline — Workflow subagents don't carry it. Detail + per-trigger evidence: memory `feedback_propose_workflow_when_shape_known`.
+
 ## Blocked-on-owner handback
 
 Работа заблокирована ТОЛЬКО действием владельца → последняя видимая строка хода: `⏸ ЖДУ ВАС: <одно действие>; после него продолжу автономно`; поллер/wakeup — после неё, не вместо. Каждый вынесенный владельцу вопрос — самодостаточная plain-language строка (что / почему / что изменит ответ), без жаргонных отсылок к отчёту (memory `feedback_explicit_handback_when_owner_blocked`).

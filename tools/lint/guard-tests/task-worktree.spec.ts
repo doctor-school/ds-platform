@@ -4,6 +4,7 @@ import {
   branchName,
   branchPrefixFromLabels,
   isSpecToken,
+  nextStepsLines,
   parseSpecId,
   slugifyTitle,
   specBranchName,
@@ -82,6 +83,28 @@ describe("task-worktree branchName() / worktreeRelPath()", () => {
 
   it("uses the short numeric worktree path (Windows long-path dodge)", () => {
     expect(worktreeRelPath(359)).toBe(".claude/worktrees/359");
+  });
+});
+
+describe("task-worktree nextStepsLines() (#941)", () => {
+  const lines = nextStepsLines(".claude/worktrees/941");
+  const text = lines.join("\n");
+
+  it("names the worktree path in the EnterWorktree + teardown steps", () => {
+    expect(text).toContain("EnterWorktree path:.claude/worktrees/941");
+    expect(text).toContain("pnpm worktree:teardown .claude/worktrees/941");
+  });
+
+  it("warns UNCONDITIONALLY that the first commit fails without pnpm install (#941)", () => {
+    // A fresh worktree has no node_modules → the pre-commit hook (lint-staged)
+    // is missing → the FIRST COMMIT fails. The warning must be unconditional
+    // (not the old "# if the task touches code" hint that was easy to skim past)
+    // and name the first-commit failure explicitly.
+    expect(text).toContain("BEFORE YOUR FIRST COMMIT");
+    expect(text).toMatch(/pre-commit hook \(lint-staged\)/);
+    expect(text).toMatch(/FIRST\s+COMMIT[^]*WILL FAIL/);
+    // The install step is no longer conditionally hedged.
+    expect(text).not.toContain("# if the task touches code");
   });
 });
 

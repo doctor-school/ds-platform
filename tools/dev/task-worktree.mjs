@@ -152,6 +152,32 @@ export function specBranchName(nnn, slug) {
   return `feat/spec-${nnn}-${slug}`;
 }
 
+/**
+ * The post-create "next steps" block for a fresh worktree (`relPath` = its
+ * repo-relative path). Returned as a line array so the CLI can prefix each with
+ * the `[task:worktree]` tag and the guard-test harness can assert on the copy
+ * without firing the git+gh subprocesses in `main()`.
+ *
+ * A fresh worktree has NO `node_modules`, so simple-git-hooks' pre-commit hook
+ * (`lint-staged`) is absent — the FIRST commit (and any test run) fails until
+ * `pnpm install` runs. That is a predictable failed-commit round-trip (#941), so
+ * the install requirement is an UNCONDITIONAL, visually prominent warning here
+ * rather than a skimmable "# if the task touches code" hint.
+ */
+export function nextStepsLines(relPath) {
+  return [
+    "next steps:",
+    `  1. EnterWorktree path:${relPath}`,
+    `  2. pnpm install              # REQUIRED before your first commit (see warning below)`,
+    `  3. … do the work, open the PR, then: pnpm worktree:teardown ${relPath}`,
+    "",
+    "⚠  RUN `pnpm install` IN THE WORKTREE BEFORE YOUR FIRST COMMIT.",
+    "⚠  A fresh worktree has no node_modules, so the pre-commit hook (lint-staged)",
+    "⚠  is not installed yet — your FIRST COMMIT (and any test run) WILL FAIL until",
+    "⚠  you run `pnpm install`.",
+  ];
+}
+
 // ── impure CLI (skipped on import) ──────────────────────────────────────────
 
 function out(msg) {
@@ -267,10 +293,7 @@ function createWorktree(root, relPath, absPath, branch) {
   }
 
   out(`created worktree '${relPath}' on branch '${branch}' (off origin/${base}).`);
-  out("next steps:");
-  out(`  1. EnterWorktree path:${relPath}`);
-  out(`  2. pnpm install              # if the task touches code`);
-  out(`  3. … do the work, open the PR, then: pnpm worktree:teardown ${relPath}`);
+  for (const line of nextStepsLines(relPath)) out(line);
   process.exit(0);
 }
 

@@ -32,3 +32,25 @@ jobs:
           publish: pnpm run release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # L1 of #927 (Issue #943): cut a repo-level git tag + GitHub Release when the
+  # Version-Packages merge lands on main. Trigger is the head-commit subject
+  # (not changesets-action `published`, which is inert on this private repo —
+  # spec §D2). Self-contained and non-fatal: a failure here must never block the
+  # `release` maintenance job above (spec §5).
+  tag-release:
+    if: startsWith(github.event.head_commit.message, 'Version Packages')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Fetch tags
+        run: git fetch --tags --force
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+      - name: Cut release tag + GitHub Release
+        run: node tools/release/cut-release.mjs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

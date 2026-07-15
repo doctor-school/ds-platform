@@ -12,10 +12,11 @@ README covers only how to run the tools.
 
 ## Scripts
 
-| Script            | Produces (in `<out-dir>`)                                              |
-| ----------------- | ---------------------------------------------------------------------- |
-| `extract.mjs`     | `sessions/<id>.json`, `index.json`, `summary.json`, `corrections.json` |
-| `transcripts.mjs` | `transcripts/<id>.md`, `self-catches.json`                             |
+| Script                   | Produces (in `<out-dir>`)                                                                 |
+| ------------------------ | ----------------------------------------------------------------------------------------- |
+| `extract.mjs`            | `sessions/<id>.json`, `index.json`, `summary.json`, `corrections.json`                    |
+| `transcripts.mjs`        | `transcripts/<id>.md`, `self-catches.json`                                                |
+| `orchestration-mine.mjs` | `orchestration-metrics.json`, `orchestration-episodes.json`, `orchestration-summary.json` |
 
 `extract.mjs` isolates interactive sessions (excludes `promptSource: sdk`
 runs), pulls the real human input, and flags correction / pushback messages.
@@ -31,7 +32,18 @@ reads the `index.json` it wrote and builds a
 compact per-session transcript (user text + assistant text + tool-call trace,
 dropping bulky `tool_result` payloads) plus an assistant self-correction list.
 
-Run `extract.mjs` **first** — `transcripts.mjs` depends on its `index.json`.
+`orchestration-mine.mjs` (#916) is the orchestration-metrics miner: it consumes
+the `index.json` `extract.mjs` wrote and, over the **whole** interactive corpus,
+derives per-session orchestration metrics — `Agent`/`Task` **dispatches**, lead
+inline `Edit`/`Write` **mutations**, the deliverable-only **inline:dispatch
+ratio**, **context-at-wrap** tokens, and **PRs touched** — auto-classifies every
+inline-decision episode into one of five documented causes, and detects
+**parallel overlap** from session timestamps. It is FULL-CORPUS only (no
+`--session` mode) and refuses a single-session `index.json` so a corpus-wide
+number is never computed off a partial run. See _Orchestration mining_ below.
+
+Run `extract.mjs` **first** — `transcripts.mjs` and `orchestration-mine.mjs`
+both depend on its `index.json`.
 
 ## Usage
 
@@ -39,6 +51,9 @@ Run `extract.mjs` **first** — `transcripts.mjs` depends on its `index.json`.
 # Batch mode — the whole auto-memory log corpus (the historical-audit case):
 node tools/retro/extract.mjs
 node tools/retro/transcripts.mjs
+
+# Orchestration metrics — full corpus (after a BATCH extract.mjs run):
+node tools/retro/orchestration-mine.mjs
 
 # Single-session mode — one log id (the /wrap case):
 node tools/retro/extract.mjs     --session <session-id>
@@ -59,8 +74,48 @@ node tools/retro/extract.mjs --help
   which is gitignored. (The Phase-A audit scratch lives there and is left
   untouched by these graduated tools.)
 - `--session <id>` — single-session mode: process only that one log id. Omit
-  for batch mode over the whole corpus.
+  for batch mode over the whole corpus. (`orchestration-mine.mjs` has **no**
+  `--session` mode — it is full-corpus only.)
 - `--help`, `-h` — usage.
+
+## Orchestration mining
+
+`orchestration-mine.mjs` (#916) widens the #700 first-pass orchestration retro
+(which sampled only 50 of ~361 sessions, hand-recovered 3 inline episodes, and
+verified parallel overlap for 4 sessions) into a defensible, reproducible
+measurement over the whole corpus.
+
+**Per-session metrics** (`orchestration-metrics.json`, one row per interactive
+lead session):
+
+- `dispatches` — `Agent`/`Task` tool-calls (subagent hand-offs).
+- `inline` — all lead-context `Edit`/`Write`/`MultiEdit`/`NotebookEdit` calls.
+- `deliverableInline` — the subset that edit a **repo source** file. A brief
+  written to the scratchpad or a memory file (both **outside** the repo) is
+  orchestration bookkeeping, not a dispatchable deliverable — ~79% of raw inline
+  mutations in the corpus are exactly these, so counting them all (as #700 did)
+  inflates the inline:dispatch signal. The deliverable subset is the honest one.
+- `ratio` — `deliverableInline ÷ dispatches` (null when zero dispatches).
+- `contextAtWrap` — the last assistant message's `input + cache_read +
+cache_creation` tokens (proxy for context size at wrap).
+- `prs` — PR numbers touched, mined from adjacent `gh pr <verb> <N>` calls and
+  `/pull/<N>` URLs (bare `#N` is skipped — it collides with Issue numbers).
+- `parallelOverlap` — ids of sessions whose `[firstTs,lastTs]` interval
+  intersects this one's (timestamp-based, replacing #700's same-message
+  heuristic).
+
+**Inline-decision episodes** (`orchestration-episodes.json`): the reasoning text
+immediately preceding each inline `Edit`/`Write` **run** (consecutive edits
+separated only by tool-results collapse into one episode), bucketed into exactly
+five causes, most-specific first: `sanctioned-carve-out` (a scratch/memory/tmp
+target, or a reasoning citation of an allowed inline path) → `dispatch-abandoned`
+(a dispatch was attempted and failed / overloaded / timed out) →
+`brief-cost-aversion` (inline because a brief "isn't worth it") →
+`retrieved-but-rationalized` (the dispatch rule is named, then argued away) →
+`rule-not-retrieved` (the residual default: a deliverable edited inline with no
+trace of the rule). The lexicons are bilingual (RU+EN), precision-tuned, and
+exported behind the entry-point guard, unit-covered in
+`tools/lint/guard-tests/retro-orchestration-mine.spec.ts`.
 
 ## Sample output
 
@@ -68,6 +123,14 @@ node tools/retro/extract.mjs --help
 dataset from the Phase-A audit (2026-05-20 → 2026-06-18, 65 interactive
 sessions). It is the **reference for the finding schema** (documented in the
 SKILL.md) and a regression fixture — its records validate against that schema.
+
+[`samples/orchestration-sample.json`](./samples/orchestration-sample.json) is a
+**trimmed** regression fixture for `orchestration-mine.mjs` — the full-corpus
+`orchestration-summary.json` plus a representative slice of metric rows and
+classified episodes (quotes truncated to 120 chars, overlap lists to 3 ids). It
+is a representative slice, **not** the full corpus dump: raw transcript content
+stays out of the repo (CLAUDE.md #534). Regenerate the underlying artifacts with
+a batch `extract.mjs` run followed by `orchestration-mine.mjs`.
 
 ## Notes
 

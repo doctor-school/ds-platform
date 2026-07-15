@@ -1,0 +1,173 @@
+{
+  "_note": "Trimmed regression fixture for tools/retro/orchestration-mine.mjs (#916). Representative slice only — NOT the full corpus dump. Quotes truncated to 120 chars, overlap lists to 3 ids, episodes capped 2/class. Regenerate with the miner over the full corpus.",
+  "summary": {
+    "generatedFrom": "<out-dir>/index.json",
+    "interactiveSessionsMined": 104,
+    "totalDispatches": 244,
+    "totalInlineMutations": 518,
+    "totalDeliverableInlineMutations": 129,
+    "nonDeliverableInlineMutations": 389,
+    "corpusInlineDispatchRatio": 0.53,
+    "corpusRawInlineDispatchRatio": 2.12,
+    "sessionsWithAnyDispatch": 66,
+    "sessionsInlineWithZeroDispatch": 9,
+    "inlineEpisodes": 391,
+    "episodeClassHistogram": {
+      "sanctioned-carve-out": 310,
+      "dispatch-abandoned": 0,
+      "brief-cost-aversion": 0,
+      "retrieved-but-rationalized": 0,
+      "rule-not-retrieved": 81
+    },
+    "sessionsWithParallelOverlap": 64,
+    "contextAtWrap": {
+      "sessionsWithUsage": 104,
+      "maxTokens": 539633,
+      "medianTokens": 202605
+    }
+  },
+  "sampleMetricRows": [
+    {
+      "id": "e0ad3d53-5044-4dfc-8b75-4d7fd9e20b5c",
+      "firstTs": "2026-07-11T23:07:46.037Z",
+      "lastTs": "2026-07-12T01:21:36.903Z",
+      "branches": ["main"],
+      "dispatches": 7,
+      "inline": 0,
+      "deliverableInline": 0,
+      "ratio": 0,
+      "contextAtWrap": 142366,
+      "prs": [748, 749, 750],
+      "episodeCount": 0,
+      "parallelOverlap": [
+        "46721d60-efe0-42e6-b8d7-e535559f9924",
+        "53dec768-71d0-4ffc-9e37-3efd40ba54b4",
+        "76b74354-ada6-45a5-8ad8-3cb51b7c4a92"
+      ]
+    },
+    {
+      "id": "9be29f14-70de-4ca4-9770-1bf8cd00a9fa",
+      "firstTs": "2026-07-12T03:11:58.718Z",
+      "lastTs": "2026-07-12T04:40:50.593Z",
+      "branches": [
+        "main",
+        "docs/741-top-level-readme-coverage-6-9",
+        "docs/wrap-handoff-verify-verbatim"
+      ],
+      "dispatches": 6,
+      "inline": 3,
+      "deliverableInline": 1,
+      "ratio": 0.17,
+      "contextAtWrap": 165557,
+      "prs": [760, 761, 762, 763],
+      "episodeCount": 3,
+      "parallelOverlap": [
+        "1b3491b4-8fe2-4a16-a032-f2604effd99e",
+        "2a264fa0-1eba-4e2f-9fcd-04887dace43b",
+        "53dec768-71d0-4ffc-9e37-3efd40ba54b4"
+      ]
+    },
+    {
+      "id": "1b3491b4-8fe2-4a16-a032-f2604effd99e",
+      "firstTs": "2026-07-12T04:31:16.560Z",
+      "lastTs": "2026-07-12T05:34:42.334Z",
+      "branches": [
+        "main",
+        "feat/702-portal-wide-theming-system-dark-mode",
+        "docs/702-006-system-default",
+        "docs/wrap-702-merge-step"
+      ],
+      "dispatches": 4,
+      "inline": 45,
+      "deliverableInline": 36,
+      "ratio": 9,
+      "contextAtWrap": 357712,
+      "prs": [747, 752, 764, 773],
+      "episodeCount": 22,
+      "parallelOverlap": [
+        "2a264fa0-1eba-4e2f-9fcd-04887dace43b",
+        "53dec768-71d0-4ffc-9e37-3efd40ba54b4",
+        "9be29f14-70de-4ca4-9770-1bf8cd00a9fa"
+      ]
+    },
+    {
+      "id": "b82e7aa9-0fe7-4272-92fb-f2fec2efc1f2",
+      "firstTs": "2026-07-12T11:07:43.058Z",
+      "lastTs": "2026-07-12T12:52:05.771Z",
+      "branches": ["HEAD", "tooling/scope-inflation-guardrails", "main"],
+      "dispatches": 1,
+      "inline": 23,
+      "deliverableInline": 7,
+      "ratio": 7,
+      "contextAtWrap": 256737,
+      "prs": [805],
+      "episodeCount": 16,
+      "parallelOverlap": [
+        "61e9c0f1-3c26-4d72-a2a1-7c3556f64aef",
+        "6d992ad9-26e3-42b8-b0d3-18af53d94502"
+      ]
+    },
+    {
+      "id": "c80a8146-4230-40e2-80bc-253c4b58e133",
+      "firstTs": "2026-07-14T10:31:57.318Z",
+      "lastTs": "2026-07-14T12:54:49.260Z",
+      "branches": ["main", "docs/wrap-c80a8146-stage-b-decision-echo"],
+      "dispatches": 10,
+      "inline": 16,
+      "deliverableInline": 2,
+      "ratio": 0.2,
+      "contextAtWrap": 285473,
+      "prs": [879, 887, 890, 891, 894, 895, 900],
+      "episodeCount": 12,
+      "parallelOverlap": [
+        "1cfbe9fa-a6ab-421f-828e-6299bc75d905",
+        "377eb074-7664-42d1-9414-a127aa780f3f",
+        "f763a0b8-fbcf-4ff1-baed-689703a2a303"
+      ]
+    }
+  ],
+  "sampleEpisodes": [
+    {
+      "id": "8f17d310",
+      "cls": "rule-not-retrieved",
+      "deliverable": true,
+      "file": "…/primitives/link.tsx",
+      "quote": "Фикс Link: `text-primary`→`text-primary-action` (blue.700, AA-доступный), `active:text-primary/80`→`active:text-primary-"
+    },
+    {
+      "id": "8f17d310",
+      "cls": "sanctioned-carve-out",
+      "deliverable": false,
+      "file": "…/issues/i3-worktree.md",
+      "quote": "Готово — стенд снова поднят на `main` (реально отгруженное состояние). Проверь живьём, это твой апрув, который я пропуст"
+    },
+    {
+      "id": "ec810dc4",
+      "cls": "rule-not-retrieved",
+      "deliverable": true,
+      "file": "…/merge-when-green/SKILL.md",
+      "quote": "Теперь ссылка в скилле `merge-when-green` — заменю ручной poll-цикл в шаге 1 на канонический helper (inline-rewrite, без"
+    },
+    {
+      "id": "3a25abd3",
+      "cls": "sanctioned-carve-out",
+      "deliverable": false,
+      "file": "…/memory/reference_cdp_forced_pseudo_state_isolation.md",
+      "quote": "Path без `/memory/`. Дополняю CDP-memory (трап #3 про статический литерал Tailwind):"
+    },
+    {
+      "id": "809d5fc9",
+      "cls": "sanctioned-carve-out",
+      "deliverable": true,
+      "file": "…/report-task-outcome/SKILL.md",
+      "quote": "Память обновлена, worktree создан. Нахожу секцию «Проверить глазами» в скилле и вношу carve-out."
+    },
+    {
+      "id": "1e4d515d",
+      "cls": "sanctioned-carve-out",
+      "deliverable": true,
+      "file": "…/hooks/context-budget.mjs",
+      "quote": "Применяю (stage 3). Сначала — памяти (вне репо), параллельно ищу файл хука."
+    }
+  ]
+}

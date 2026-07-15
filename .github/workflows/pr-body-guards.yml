@@ -162,3 +162,31 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BODY: ${{ github.event.pull_request.body }}
           LINT_DIFF_BASE: origin/main
+
+  # epic-autoclose: a child PR whose body writes `Closes #<epic>` would
+  # auto-close a parent/epic issue on merge even while it still has OPEN
+  # sub-issues (real incident: #927 auto-closed with open children — Issue #964).
+  # This guard reads the native sub-issue graph at PR time and WARNs, telling the
+  # author to link the specific child sub-issue instead of the epic. WARN v1 per
+  # the ADR-0007 §2.6 new-guard posture — promote to BLOCK by removing
+  # `continue-on-error` here AND flipping SEVERITY in the guard source. Needs
+  # `issues: read` for the sub_issues API.
+  epic-autoclose:
+    if: github.event.action != 'edited' || github.event.changes.body != null
+    continue-on-error: true # WARN v1 (promote to BLOCK once stable — ADR-0007 §2.6)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsx tools/lint/epic-autoclose-lint.ts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}

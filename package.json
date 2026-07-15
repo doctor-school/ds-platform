@@ -26,6 +26,7 @@
     "lint:asset-format": "tsx tools/lint/asset-format-lint.ts",
     "lint:axe-exclude": "tsx tools/lint/axe-exclude-lint.ts",
     "lint:endpoint-authz": "tsx --tsconfig apps/api/tsconfig.json tools/lint/endpoint-authz-lint.ts",
+    "lint:epic-autoclose": "tsx tools/lint/epic-autoclose-lint.ts",
     "lint:events": "tsx tools/lint/events-lint.ts",
     "lint:external-anchor": "tsx tools/lint/external-anchor-target-lint.ts",
     "lint:form-error": "tsx tools/lint/form-error-lint.ts",

@@ -25,6 +25,7 @@
     "lint:axe-exclude": "tsx tools/lint/axe-exclude-lint.ts",
     "lint:endpoint-authz": "tsx --tsconfig apps/api/tsconfig.json tools/lint/endpoint-authz-lint.ts",
     "lint:events": "tsx tools/lint/events-lint.ts",
+    "lint:external-anchor": "tsx tools/lint/external-anchor-target-lint.ts",
     "lint:form-error": "tsx tools/lint/form-error-lint.ts",
     "lint:frontmatter-yaml": "tsx tools/lint/frontmatter-yaml-lint.ts",
     "lint:glossary-ids": "eslint --config eslint.glossary-ids.config.mjs .",

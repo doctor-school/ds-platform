@@ -14,12 +14,12 @@ A guard can only be driven deterministically if its inputs are injectable. The
 guards expose four seams, each inert in production (the env var is unset, so the
 guard resolves real paths / spawns real `gh` exactly as before):
 
-| Seam env var          | Replaces                                   | Used by                                                                                                                                                                                                                         |
-| --------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `LINT_FIXTURE_ROOT`   | the repo root the guard scans (FS)         | interaction-states, form-error, form-rhythm, ears-naming, ears-test, no-stub, no-hardcoded-path, asset-format, spec-link, instruction-budget, events-drift, glossary-mdx, glossary-roundtrip, frontmatter-yaml, migration-index |
-| `LINT_GH_FIXTURE_DIR` | `gh pr/issue view` (canned JSON)           | registry-research, spec-link                                                                                                                                                                                                    |
-| `LINT_MEMORY_FILE`    | the derived `~/.claude/.../MEMORY.md` path | instruction-budget                                                                                                                                                                                                              |
-| _(args)_              | CLI flags (`runGuard(..., { extraArgs })`) | —                                                                                                                                                                                                                               |
+| Seam env var          | Replaces                                   | Used by                                                                                                                                                                                                                                          |
+| --------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `LINT_FIXTURE_ROOT`   | the repo root the guard scans (FS)         | interaction-states, form-error, form-rhythm, ears-naming, ears-test, no-stub, no-hardcoded-path, asset-format, spec-link, instruction-budget, events-drift, glossary-mdx, glossary-roundtrip, frontmatter-yaml, migration-index, external-anchor |
+| `LINT_GH_FIXTURE_DIR` | `gh pr/issue view` (canned JSON)           | registry-research, spec-link                                                                                                                                                                                                                     |
+| `LINT_MEMORY_FILE`    | the derived `~/.claude/.../MEMORY.md` path | instruction-budget                                                                                                                                                                                                                               |
+| _(args)_              | CLI flags (`runGuard(..., { extraArgs })`) | —                                                                                                                                                                                                                                                |
 
 `LINT_FIXTURE_ROOT` is set to the case dir automatically by `runGuard`; the rest
 are passed per case via `runGuard(guard, caseDir, { env })`.
@@ -45,7 +45,8 @@ Covered here (FS / gh / memory seams): `interaction-states`, `form-error`,
 `form-rhythm`, `ears-naming`, `ears-test`, `no-stub`, `no-hardcoded-path`,
 `asset-format`, `registry-research`, `spec-link`, `instruction-budget`,
 `module-readme`, `tdd-signal`, `spec-status`, `prior-decisions`, `events-drift`,
-`glossary-mdx`, `glossary-roundtrip`, `frontmatter-yaml`, `migration-index`.
+`glossary-mdx`, `glossary-roundtrip`, `frontmatter-yaml`, `migration-index`,
+`external-anchor`.
 
 `no-hardcoded-path` (#936) is an FS-scan guard over committed `tools/**/*.{mjs,ts}`
 runtime code for machine-specific absolute path literals (drive-letter `C:/…`,
@@ -56,6 +57,24 @@ stripped before matching, and the guard-tests harness + `*.spec.ts` are out of
 scope (they carry fake paths as test data). Ships a red case (a hardcoded
 repo-root literal → exit 1) and two green cases (a git-derived root, a pure
 non-path string literal).
+
+`external-anchor` (#867) is an FS-scan guard over user-facing surfaces
+(`apps/portal`, `apps/admin`, `packages/design-system/src`; tests/stories
+excluded) enforcing that every EXTERNAL-DOCUMENT `<a>` carries `target="_blank"`
+AND a `rel` containing `noreferrer`/`noopener` — the #864/#865 surface-parity
+drift (the program-PDF affordance shipped without them on the public page while
+the admin surface had them). External = a literal `http(s)://…` (or other
+`scheme://`) href OR an expression whose trailing identifier ends in `Url`/`Uri`
+(`href={programPdfUrl}`). EXEMPT: relative/root/hash literals, a Next `<Link>`,
+a non-`*Url` route prop (`href={href}` — not guessed), and the non-browsing
+schemes `mailto:`/`tel:`/`sms:`. A string/comment-aware pre-pass means a `<a>`
+inside a string literal or a comment is never treated as a tag, and an
+`href="https://…"` is not truncated at the `//`. **False-positive policy:** a
+deliberate same-tab external anchor carries `// external-anchor-ok: <reason>`
+(reason required) on a spanned line. Ships a red case (the pre-#865 `*Url` anchor
+with neither attribute → exit 1) and three green cases (compliant multi-line +
+literal-external anchors; in-app `<a>`/`<Link>`/relative/`mailto:` + a
+string-literal anchor; a suppressed same-tab anchor).
 
 `migration-index` (#799) is an FS-scan guard against the parallel-branch Drizzle
 migration-index collision (two branches generate the same next `NNNN`; on merge

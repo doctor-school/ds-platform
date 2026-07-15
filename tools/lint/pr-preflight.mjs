@@ -111,6 +111,7 @@ export const STATIC_GUARDS = [
   { name: "no-stub", file: "no-stub-lint.ts" },
   { name: "no-hardcoded-path", file: "no-hardcoded-path-lint.ts" },
   { name: "route-targets", file: "route-target-lint.ts" },
+  { name: "external-anchor", file: "external-anchor-target-lint.ts" },
   { name: "axe-exclude", file: "axe-exclude-lint.ts" },
   { name: "prod-surface", file: "prod-surface-lint.ts" },
   { name: "showcase-coverage", file: "showcase-coverage-lint.ts" },

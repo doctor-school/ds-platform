@@ -80,6 +80,35 @@ export function isInterimStatus(text) {
   return INTERIM_STATUS_RE.test(String(text || ""));
 }
 
+/** Proposal / work-in-flight recognizer (#962). The #855 interim-status set is
+ * an explicit-marker whitelist (⏳/checkpoint/WIP/…); it missed two live false
+ * fires (session 21b928cf ×2) where the turn used natural status prose without
+ * those markers yet still carried sub-step completion verbs + refs and thus
+ * tripped `isCompletionReport`:
+ *   1. a mid-flight WAVE STATUS — a merged-bullet list of already-landed
+ *      sub-steps FOLLOWED by starting the next dispatch / an in-flight subagent
+ *      («приступаю к…», «субагент ещё работает», «жду возврата»);
+ *   2. a /wrap PROPOSAL — proposing to START the wrap loop with a merged-bullet
+ *      summary («предлагаю запустить /wrap», «приступаю к стадии»).
+ * Both frame work as still in motion / a next action being PROPOSED, not the
+ * task being closed. This set keys ONLY on first-person proposal / in-flight
+ * FRAMING verbs (RU+EN, case-insensitive) — never on the bare words
+ * «дальше»/"next", so a genuine terminal report's «что дальше» handoff section
+ * does NOT match and the gate keeps firing on it (the #962 regression guard).
+ * Only PRESENT/GERUND in-flight forms are matched — the PAST-tense completed
+ * forms ("dispatched" / «диспатчил») are deliberately EXCLUDED, because a
+ * genuine terminal report's tech appendix legitimately narrates completed
+ * sub-steps ("dispatched 3 subagents, all merged") and must still fire. */
+export const PROPOSAL_INFLIGHT_RE =
+  /предлага[ею]|\bpropos(?:e|es|ing)\b|приступа[ею]|собира[ею](?:сь|шься)|\babout to\b|\bproceeding\b|диспатчир(?:ую|уешь)|\bdispatching\b|субагент\w*\s+(?:ещё\s+)?(?:работает|в\s+работе|бежит|running)|\bsubagent[s]?\s+(?:still\s+)?(?:running|working)\b|в\s+пол[её]те|жду\s+возврат\w*|запуска[ею]\s+\/?wrap/i;
+
+/** True when the turn PROPOSES a next action or reports work still in flight
+ * rather than closing the task (#962) — a merged-bullet summary is still not a
+ * terminal completion report when the frame is "starting the next thing". */
+export function isProposalOrInFlight(text) {
+  return PROPOSAL_INFLIGHT_RE.test(String(text || ""));
+}
+
 /**
  * The text of the LAST assistant message in a session JSONL transcript.
  * Claude Code may write one JSONL entry per content block, all sharing the
@@ -137,15 +166,16 @@ export function blockMessage() {
 /**
  * Pure decision seam (unit-tested without a real FS): block only when this is
  * not already a post-block continuation, the last assistant message reads as a
- * completion report — not a decision-request/approval-ask (#839) and not an
- * in-flight checkpoint / interim status (#855) — and the «📈» marker is absent
- * from it.
+ * completion report — not a decision-request/approval-ask (#839), not an
+ * in-flight checkpoint / interim status (#855), and not a proposal / work-still-
+ * in-flight turn (#962) — and the «📈» marker is absent from it.
  */
 export function decideBlock({ stopHookActive, lastAssistantText }) {
   if (stopHookActive) return { block: false };
   if (!lastAssistantText) return { block: false };
   if (isDecisionRequest(lastAssistantText)) return { block: false };
   if (isInterimStatus(lastAssistantText)) return { block: false };
+  if (isProposalOrInFlight(lastAssistantText)) return { block: false };
   if (!isCompletionReport(lastAssistantText)) return { block: false };
   if (lastAssistantText.includes(REPORT_MARKER)) return { block: false };
   return { block: true };

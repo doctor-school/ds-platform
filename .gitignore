@@ -57,6 +57,10 @@ test-results/
 # by session_id, read/written by the read + write PreToolUse hooks — machine state
 .claude/main-tree-guard-state/
 
+# Per-session dispatch-guard streak state (#913): {streak} keyed by session_id,
+# read/written by the dispatch-guard PreToolUse hook — machine state, not repo content
+.claude/dispatch-guard-state/
+
 # Brand book raw staging — the ~142 MB presentation PDF plus raw logo sources
 # (.ai / large exports). Track via Git LFS if any of it must be versioned. The
 # durable artifact is the extracted brand->token map (see

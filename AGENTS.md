@@ -22,9 +22,9 @@ This file is the slim core. The full always-on set auto-loads at session start: 
 
 ## 1. What is DS Platform
 
-DS Platform is the medical-education platform for Doctor.School (B2B pharma sponsor → B2D doctor audience). Architectural ADRs (0001–0008) are accepted and a **working version is shipped and operated in production, live with users** — there is no "pre-pilot" phase still ahead.
+DS Platform is the medical-education platform for Doctor.School (B2B pharma sponsor → B2D doctor audience). Architectural ADRs (0001–0008) are accepted and a **working version is shipped and operated in production, live with users**.
 
-**Production is live with users.** A deployment runs on Timeweb (ru-3) at the `doctor.school` domains — `app.doctor.school`, `api.`, `id.`. The operated product spans the **webinar room, admin, event (мероприятия) listing, cabinet, and the 003 auth vertical** (registration + OTP login). **Never tell the owner "there is no production".** Exact deployed scope is **not** inferable from these docs (that drift is this bug) — read it from **release notes + `infra/deploy/` + the owner**; a deterministic scope-of-record is tracked as #927. Detail: memory `reference_prod_deploy_reality`.
+**Production is live with users.** A deployment runs on Timeweb (ru-3) at the `doctor.school` domains — `app.doctor.school`, `api.`, `id.`. **Never tell the owner "there is no production".** The authoritative deployed scope is the derived **`## Project reality`** bootstrap section (`pnpm bootstrap`) + **GitHub Releases/Deployments** — never inferred from these docs (that drift was the #927 bug; static prose describing a moving target rots between owner corrections). Detail: memory `reference_prod_deploy_reality`, `feedback_no_dynamic_release_state_in_prose`.
 
 Stack at a glance (full reference in `apps/docs/content/adr/`): **Backend** NestJS + Zod + REST + openapi-typescript SDK (ADR-0002); **Data** Postgres 17 + Drizzle + pgvector (ADR-0003); **Frontend** Next.js 15 + Refine — 4 apps: promo / portal / admin / cms-Payload-v3 (ADR-0004); **Mobile** React Native + Expo + WatermelonDB (ADR-0005); **Docs** Fumadocs + Keystatic + glossary.yaml (ADR-0006). Long-form context: `README.md`.
 

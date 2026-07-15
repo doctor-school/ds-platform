@@ -26,6 +26,13 @@ import {
   probeMainSync,
 } from "./main-sync";
 import { claimLabel, probeClaim } from "./backlog-triage";
+import {
+  evaluateProjectReality,
+  probeProjectReality,
+  releaseFromProbe,
+  renderProjectReality,
+  type ProjectRealityProbe,
+} from "./project-reality";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -638,20 +645,54 @@ function ts(): string {
 }
 
 async function main(): Promise<void> {
-  const [git, working, awaiting, ready, prs, openCount, conc, syncProbe] =
-    await Promise.all([
-      gitState(),
-      ghIssues(["--assignee", "@me", "--label", "agent-working"]),
-      ghIssues(["--assignee", "@me", "--label", "awaiting-review"]),
-      ghUnassignedIssues(["--label", "agent-ready", "--limit", "20"]).then(
-        (rs) => rs.slice(0, 5),
-      ),
-      ghPRs(),
-      ghOpenIssueCount(),
-      concurrency(),
-      probeMainSync(REPO_ROOT),
-    ]);
+  const [
+    git,
+    working,
+    awaiting,
+    ready,
+    prs,
+    openCount,
+    conc,
+    syncProbe,
+    realityProbe,
+  ] = await Promise.all([
+    gitState(),
+    ghIssues(["--assignee", "@me", "--label", "agent-working"]),
+    ghIssues(["--assignee", "@me", "--label", "awaiting-review"]),
+    ghUnassignedIssues(["--label", "agent-ready", "--limit", "20"]).then((rs) =>
+      rs.slice(0, 5),
+    ),
+    ghPRs(),
+    ghOpenIssueCount(),
+    concurrency(),
+    probeMainSync(REPO_ROOT),
+    // #927 W1 — derive prod reality (GitHub Deployment ⋈ /v1/health + Release).
+    // The probe never throws; a defensive catch keeps SessionStart exit-0 even
+    // on an unexpected fault, degrading to a "reality-source unavailable" banner.
+    probeProjectReality(REPO_ROOT).catch((e): ProjectRealityProbe => {
+      note("project-reality probe", e);
+      return {
+        deploymentSha: null,
+        deploymentState: null,
+        deploymentFound: false,
+        healthSha: null,
+        releaseTag: null,
+        releasePublishedAt: null,
+        mergedNotDeployed: null,
+      };
+    }),
+  ]);
   const sync = evaluateMainSync(syncProbe);
+  // Surface any partial-source failures as warnings (the section itself still
+  // renders — it degrades per-source rather than blanking).
+  for (const [source, message] of [
+    ["prod GitHub Deployment", realityProbe.deploymentError],
+    ["prod /v1/health", realityProbe.healthError],
+    ["latest GitHub Release", realityProbe.releaseError],
+    ["merged-not-deployed delta", realityProbe.mergedNotDeployedError],
+  ] as const) {
+    if (message) warnings.push({ source, message });
+  }
   await syncParallelFlag(conc);
   // Parallel-session claim signal (#811) — same check as `pnpm backlog:triage`.
   const claims = await claimSignals(ready);
@@ -702,6 +743,17 @@ async function main(): Promise<void> {
     for (const c of git.recent) out.push(`  - ${c}`);
   } else {
     out.push("- Recent commits: (none)");
+  }
+  out.push("");
+
+  // Project reality (#927 W1) — the production model DERIVED from GitHub
+  // Releases/Deployments + /v1/health, never hand-authored prose (D4/L3). Placed
+  // right after Git: it is the "where is this repo actually deployed" anchor a
+  // session reads before reasoning about scope. Never throws (probe + pure
+  // classifier + formatters); degrades per-source to a printable banner.
+  const reality = evaluateProjectReality(realityProbe);
+  for (const line of renderProjectReality(reality, releaseFromProbe(realityProbe))) {
+    out.push(line);
   }
   out.push("");
 

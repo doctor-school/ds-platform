@@ -7,11 +7,11 @@ the operational SSOT; this directory is the executable form of its steady-state
 steps. **First-time provisioning** (Terraform, DNS, secrets, Zitadel first-boot
 bootstrap) stays manual; these scripts are the **per-redeploy** path.
 
-| File                | `pnpm` alias           | Role                                                                     |
-| ------------------- | ---------------------- | ------------------------------------------------------------------------ |
-| `prod.mjs`          | `deploy:prod`          | Full deploy pipeline + `--rollback <sha>` (app-only revert).             |
-| `smoke-prod.mjs`    | `deploy:smoke`         | Live prod HTTP + TLS smoke; also called by `prod.mjs` post-`up -d`.      |
-| `release-notes.mjs` | `deploy:release-notes` | Aggregated PROD release note to Mattermost; called by `prod.mjs` (#868). |
+| File                | `pnpm` alias           | Role                                                                                                                                            |
+| ------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prod.mjs`          | `deploy:prod`          | Full deploy pipeline + `--rollback <sha>` (app-only revert).                                                                                    |
+| `smoke-prod.mjs`    | `deploy:smoke`         | Live prod HTTP + TLS smoke; also called by `prod.mjs` post-`up -d`.                                                                             |
+| `release-notes.mjs` | `deploy:release-notes` | Aggregated PROD release note to Mattermost (#868); render+POST seam fired from CI on `deployment_status: success` (`release-digest.yml`, #968). |
 
 ## `pnpm deploy:prod`
 
@@ -51,14 +51,19 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
 8. **Smoke (DSO-128)** — `smoke-prod.mjs --expect-sha <sha>`; the health probe
    requires `version` to be **present and equal** to the deployed SHA (an absent
    version is a FAIL — it means the expected build is not what's live).
-9. **Release note (#868)** — after a successful deploy, post ONE aggregated
-   Russian product-language note to Mattermost (see below). **Non-fatal**: it runs
-   only once the deploy has already succeeded, so a webhook/`gh` failure prints a
-   warning and the deploy exit code stays 0.
+9. **GitHub Deployment record (#942)** — after a successful deploy, record a
+   `Deployment(production, sha)` + `success` status, persisting the release-notes
+   digest into the Deployment payload. **Non-fatal**: it runs only once the deploy
+   has already succeeded, so a `gh` failure prints a warning and the deploy exit
+   code stays 0. The **Mattermost digest itself is no longer posted here** — the
+   `success` status fires the `release-digest.yml` CI workflow, which posts it (see
+   below, #968).
 
-The **previous prod SHA** the release-note ranges from is read from the running
-`ds-api-prod-api-1` container's image tag (`ds-api:<sha>`) **before** the build/up
-swap — the deploy record is the running image itself, no separate state file.
+The **previous prod SHA** the Deployment-record digest ranges from is read from the
+running `ds-api-prod-api-1` container's image tag (`ds-api:<sha>`) **before** the
+build/up swap — the deploy record is the running image itself, no separate state
+file. (The CI digest resolves its own prev-sha from the prior production
+Deployment via `gh api`.)
 
 The **deployed SHA is queryable over HTTP**: `GET /v1/health` → `{"version":…}`
 (from the api's `DEPLOY_SHA` env). `--rollback` `up -d`s an already-present prior
@@ -77,17 +82,27 @@ vhosts and are env-overridable (`PROD_API_HOST` / `PROD_PORTAL_HOST` /
 SSH host aliases (`ds-api-prod`, `ds-data-prod` via ProxyJump) resolve from
 `~/.ssh/config`; overridable via `DS_API_PROD_SSH` / `DS_DATA_PROD_SSH`.
 
-## `pnpm deploy:release-notes` (#868)
+## Release digest → Mattermost (`release-notes.mjs`, #868 / #968)
 
 ```bash
 node tools/deploy/release-notes.mjs --prev-sha <sha|none> --new-sha <sha> [--dry-run]
 ```
 
-On a successful `deploy:prod`, posts ONE aggregated **Russian, product-language**
-release note to the **same** `MATTERMOST_WEBHOOK_URL` the per-PR notes use
-(`tools/ci/post-product-note.mjs`, #654) — reusing its `extractNote` /
-`noteIsReal` / `labelsAreProductKind` / `envFooter` seams so the guard, the per-PR
-note, and this digest read one source of truth.
+Posts ONE aggregated **Russian, product-language** release note to the **same**
+`MATTERMOST_WEBHOOK_URL` the per-PR notes use (`tools/ci/post-product-note.mjs`,
+#654) — reusing its `extractNote` / `noteIsReal` / `labelsAreProductKind` /
+`envFooter` seams so the guard, the per-PR note, and this digest read one source of
+truth.
+
+**Fired from CI, not from `deploy:prod` (#968).** The digest is a DEPLOY event, and
+`deploy:prod` ships off-CI (ADR-0012) where `secrets.MATTERMOST_WEBHOOK_URL` does
+not exist — so it never fired locally (the #950 `.env.local` fallback was a crutch,
+now retired). Instead, `.github/workflows/release-digest.yml` triggers on
+`deployment_status: success` for `environment: production` (the very Deployment the
+deploy records, #942); `tools/ci/post-release-digest.mjs` resolves the
+`<prev-sha>..<new-sha>` range from the Deployment event + `gh api …/deployments`
+and spawns this script with the CI secret in env. `--dry-run` renders offline for a
+local sanity check (no webhook needed).
 
 The message lists the `## Product note (RU)` section of every **product-kind**
 (`feature` | `bug`) PR merged in the `<prev-sha>..<new-sha>` range, carrying the
@@ -97,14 +112,10 @@ commit subjects → the **LAST** `(#N)` per subject (the squash-merge number) �
 `gh pr view`. Notes are embedded **verbatim** via `JSON.stringify({ text })` — no
 shell, no interpolation — so a `$(...)`/backtick in a note cannot execute.
 
-- **`MATTERMOST_WEBHOOK_URL`** — a local `deploy:prod` / `deploy:release-notes`
-  runs on the operator's box (ADR-0012 — SSH deploy, no CI), where the GitHub
-  Actions `secrets.*` do not exist. So the webhook is sourced from the operator's
-  `~/.ds-platform/.env.local` (`tools/deploy/env-local.mjs`, #950) — set it there
-  ONCE (see the commented key in `infra/dev-stand/.env.example`) and every local
-  deploy digest resolves it. A value already set in the process env (CI) always
-  wins. Still unset (neither source) → log + **skip green** (exit 0), same posture
-  as the per-PR delivery.
+- **`MATTERMOST_WEBHOOK_URL`** — `process.env`-only, injected by the
+  `release-digest.yml` workflow step from `secrets.MATTERMOST_WEBHOOK_URL` (#968).
+  There is no `.env.local` fallback (the #950 crutch is retired). Unset → log +
+  **skip green** (exit 0), same posture as the per-PR delivery.
 - **`DELIVERY_ENV`** unknown/unset → **fail loud** (exit 1); the deploy passes
   `DELIVERY_ENV=prod`. For a standalone `--dry-run`, pass `DELIVERY_ENV=prod`.
 - **`--dry-run`** — compose and print the `{ text }` to stdout; never POST, no
@@ -119,11 +130,11 @@ A successful deploy leaves a durable, queryable trail. Every record step is
 **non-fatal by contract** — it runs only once the deploy has already succeeded,
 so a `gh`/webhook hiccup prints a warning and the deploy exit code stays 0.
 
-| Record                | When                               | Source / how                                                                                                                                               |
-| --------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **GitHub Deployment** | end of `deploy:prod` (#942)        | `deployment-record.mjs` posts a `Deployment(production, sha)` + `success` status carrying the release-notes digest; `log_url` = `/v1/health`.              |
-| **Git tag + Release** | `Version Packages` PR merge (#944) | Merging the changesets release PR cuts `release-YYYY.MM.DD-n` + a GitHub Release with auto-generated notes. Independent of a deploy.                       |
-| **Mattermost digest** | end of `deploy:prod` (#868)        | `release-notes.mjs` posts ONE aggregated RU note for the `<prev>..<new>` range. Webhook from `~/.ds-platform/.env.local` (`MATTERMOST_WEBHOOK_URL`, #950). |
+| Record                | When                                        | Source / how                                                                                                                                                                                                                                                         |
+| --------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **GitHub Deployment** | end of `deploy:prod` (#942)                 | `deployment-record.mjs` posts a `Deployment(production, sha)` + `success` status carrying the release-notes digest; `log_url` = `/v1/health`.                                                                                                                        |
+| **Git tag + Release** | `Version Packages` PR merge (#944)          | Merging the changesets release PR cuts `release-YYYY.MM.DD-n` + a GitHub Release with auto-generated notes. Independent of a deploy.                                                                                                                                 |
+| **Mattermost digest** | CI `deployment_status: success` (#868/#968) | `release-digest.yml` fires on the production Deployment's `success` status; `tools/ci/post-release-digest.mjs` resolves the `<prev>..<new>` range from the event + `gh api` and posts via `release-notes.mjs`. Webhook = `secrets.MATTERMOST_WEBHOOK_URL` (CI only). |
 
 **`## Project reality` reads these at SessionStart.** The bootstrap (#939)
 derives the latest release (from Releases/tags), the currently deployed SHA (the

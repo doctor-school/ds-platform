@@ -482,9 +482,6 @@ echo "retained ds-api tags:"; sudo docker images ds-api --format '  {{.Tag}} ({{
   step("DSO-128: prod smoke (--expect-sha)");
   await runSmoke(sha);
 
-  step("Post the aggregated release note to Mattermost (#868)");
-  await postReleaseNotes(prevSha, sha);
-
   step("Record the deploy as a GitHub Deployment (#927/#942)");
   await recordDeployment(prevSha, sha);
 
@@ -498,8 +495,10 @@ echo "retained ds-api tags:"; sudo docker images ds-api --format '  {{.Tag}} ({{
 // Record a successful deploy as a GitHub Deployment(production, sha) + success
 // status, persisting the release-notes digest into the Deployment payload (#942,
 // spec §D3). NON-FATAL by contract: the deploy has already succeeded here, so any
-// gh/compose failure only WARNS — the deploy exit code stays 0. The Mattermost
-// post (postReleaseNotes) and this record share the ONE composeDigest seam (#847).
+// gh/compose failure only WARNS — the deploy exit code stays 0. This record uses
+// the ONE composeDigest seam (#847) to persist the notes; the Mattermost chat POST
+// is now fired from CI (`release-digest.yml`) off this Deployment's `success`
+// status — `deploy:prod` no longer posts the digest itself (#968).
 async function recordDeployment(prevSha, sha) {
   try {
     // Release tag shipped, if any (null until the first Release exists — expected).
@@ -561,39 +560,6 @@ async function recordDeployment(prevSha, sha) {
       `  ⚠ deployment-record step failed (deploy already succeeded): ${e.message}`,
     );
   }
-}
-
-// Post the aggregated PROD release note (#868). NON-FATAL by contract: the deploy
-// has already succeeded here, so a webhook/gh failure only warns and the deploy
-// exit code stays 0 — a release-notes hiccup must never turn a good deploy red.
-function postReleaseNotes(prevSha, sha) {
-  return new Promise((resolve) => {
-    const child = spawn(
-      process.execPath,
-      [
-        join(import.meta.dirname, "release-notes.mjs"),
-        "--prev-sha",
-        prevSha || "none",
-        "--new-sha",
-        sha,
-      ],
-      { stdio: "inherit", env: { ...process.env, DELIVERY_ENV: "prod" } },
-    );
-    child.on("error", (e) => {
-      console.log(
-        `  ⚠ release-notes digest failed to post (deploy already succeeded): ${e.message}`,
-      );
-      resolve();
-    });
-    child.on("close", (code) => {
-      if (code === 0) ok("release note posted (or cleanly skipped)");
-      else
-        console.log(
-          `  ⚠ release-notes digest failed to post (deploy already succeeded): exit ${code}`,
-        );
-      resolve();
-    });
-  });
 }
 
 function runSmoke(sha) {

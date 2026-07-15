@@ -7,7 +7,7 @@ mode: inline
 
 # do-feature-iteration
 
-**Kind:** orchestration · **Mode:** inline (the lead agent executes this procedure itself; it dispatches subagents only at the sub-steps explicitly marked dispatch).
+**Kind:** orchestration · **Mode:** inline for the _orchestration_ procedure — the lead runs the gate/review/merge steps itself, dispatching only sub-steps marked dispatch. The **implementation** (steps 3-5, RED/GREEN/REFACTOR) is bound by AGENTS.md §6's inline carve-out: the lead types it inline only within the sanctioned **≤2-consecutive-mutation** cap; a handler whose implementation exceeds that is **dispatched** as an IMPL brief, never typed inline under an open-ended "inline mode" reading.
 
 > **Cannot proceed without** — the artifacts produced by `run-iteration-end-checklist` (PASS verdict), `request-mode-a-review` (APPROVE verdict), and `surface-decision-debt` (list, may be `[]`). The lead agent does not advance past these gates without the artifact in hand. ADR-0007 §2.4 codifies this as the verdict-gated iteration cycle (G11 findings F-14 review-forgotten and F-15 decorative-checklist).
 

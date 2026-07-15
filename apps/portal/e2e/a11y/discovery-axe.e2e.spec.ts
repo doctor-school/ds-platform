@@ -14,11 +14,15 @@ import AxeBuilder from "@axe-core/playwright";
  * read surfaces need no session — so this scan has NO Mailpit / Zitadel dependency
  * and runs whenever a live portal is present, gated only on `E2E_PORTAL_URL`.
  *
- * SCOPE — the 004 neo-brutalist dark poster header + footer band (`.bg-header`) are
- * EXCLUDED: their reduced-opacity kickers/chips are the approved 004 canvas surface,
- * whose standing axe contrast findings are tracked 004 canvas debt (see the #559 PR
- * decision-debt), not a regression this slice introduces. The scan targets exactly
- * the composed body regions (the status card `bg-card`, the day-grouped card list).
+ * SCOPE — only the 004 neo-brutalist poster band's REDUCED-OPACITY decorative
+ * kickers/chips (tagged `data-testid="poster-decor"`) are EXCLUDED (#924, leaf-
+ * scoped — never the whole `.bg-header` band, which would swallow arbitrary
+ * downstream content incl. any interactive control): they are the approved 004
+ * canvas surface whose standing axe contrast findings are tracked 004 canvas debt
+ * (see the #559 PR decision-debt), not a regression this slice introduces. The
+ * poster band's full-strength content (headings, full-contrast chips, the footer
+ * CTA) stays IN scope, as do the composed body regions (the status card `bg-card`,
+ * the day-grouped card list).
  *
  * BOTH THEMES (006 EARS-13, #702): the portal now ships a runtime theme — the
  * webinar-room-header toggle flips `.dark` on `<html>` portal-wide and the choice
@@ -52,9 +56,12 @@ async function scan(page: Page, theme: (typeof THEMES)[number]) {
   await page.waitForTimeout(400);
   const results = await new AxeBuilder({ page })
     .withTags(WCAG_TAGS)
-    // 004's dark poster header + footer band — see the scope note above.
-    // axe-exclude-ok: #924 band swallows interactive toggle — leaf-scope tracked
-    .exclude(".bg-header")
+    // 004's reduced-opacity decorative poster kickers/chips only (`data-testid=
+    // "poster-decor"`) — their standing contrast findings are tracked 004 canvas
+    // debt. Leaf-scoped (#924), NOT a `.bg-header` band exclude, so the rest of the
+    // poster band (titles, full-strength chips, the footer CTA, and any interactive
+    // header control) stays IN the a11y scan.
+    .exclude('[data-testid="poster-decor"]')
     .analyze();
   const summary = results.violations.map((v) => ({
     id: v.id,

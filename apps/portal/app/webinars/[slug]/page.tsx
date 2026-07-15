@@ -181,12 +181,18 @@ export default async function WebinarEventPage({
       ) : null}
       <header className="bg-header text-header-foreground">
         <Container className="pt-10 pb-28 layout:pt-16 layout:pb-36">
-          <p className="text-2xs font-extrabold uppercase tracking-micro opacity-80">
+          <p
+            className="text-2xs font-extrabold uppercase tracking-micro opacity-80"
+            data-testid="poster-decor"
+          >
             {t("breadcrumb")}
           </p>
           <div className="mt-6 flex items-start justify-between gap-8">
             <div className="max-w-3xl">
-              <p className="text-caption font-extrabold uppercase tracking-micro opacity-90">
+              <p
+                className="text-caption font-extrabold uppercase tracking-micro opacity-90"
+                data-testid="poster-decor"
+              >
                 {event.school}
               </p>
               <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-balance layout:text-5xl">
@@ -333,7 +339,9 @@ export default async function WebinarEventPage({
           <Container className="flex flex-wrap items-center justify-between gap-8 py-12 layout:py-14">
             <p className="text-2xl font-extrabold tracking-tight text-balance layout:text-3xl">
               {t(`footer.${status}.title`)}{" "}
-              <span className="opacity-80">{t(`footer.${status}.sub`)}</span>
+              <span className="opacity-80" data-testid="poster-decor">
+                {t(`footer.${status}.sub`)}
+              </span>
             </p>
             <Button asChild size="lg">
               <Link href={cta.href}>{t(`footer.${status}.cta`)}</Link>

@@ -14,6 +14,7 @@ import {
   isCompletionReport,
   isDecisionRequest,
   isInterimStatus,
+  isProposalOrInFlight,
 } from "../../hooks/completion-report-gate.mjs";
 
 /**
@@ -98,6 +99,39 @@ const INTERIM_CHECKPOINT_ALIVE =
 const INTERIM_CHECKPOINT_SUBSTEP =
   "Checkpoint: #828 смержен в ветку, жду CI. Пока ничего не финализировано.";
 
+// #962 / session 21b928cf: two live false fires that carry sub-step completion
+// verbs + refs (so they trip isCompletionReport) yet use natural status prose
+// WITHOUT any #855 interim marker (⏳/checkpoint/WIP/жду CI/…) — the gap #855
+// left open. Both frame work as still in motion / a next action proposed, not
+// the task closed.
+//
+// Shape 1 — mid-flight WAVE STATUS: a merged-bullet list of landed sub-steps
+// followed by starting the next dispatch / an in-flight subagent.
+const INFLIGHT_WAVE_STATUS =
+  "Волна триажа в движении:\n" +
+  "- #960 → merged (squash), ветка удалена.\n" +
+  "- #955 → closed как дубль.\n" +
+  "- #958 → merged.\n\n" +
+  "Приступаю к следующему диспатчу. Субагент ещё работает — жду возврата, " +
+  "продолжу автономно после.";
+// Shape 2 — /wrap PROPOSAL: a merged-bullet summary + proposing to START wrap.
+const WRAP_PROPOSAL =
+  "Сессия к завершению — вся волна смержена:\n" +
+  "- #960 смержен, #955 смержен, #958 смержен.\n\n" +
+  "Предлагаю запустить /wrap-цикл: независимое ретро → propose → apply → " +
+  "hygiene. Приступаю к стадии 1.";
+// Regression guard — a GENUINE terminal report (product-first summary + refs +
+// «смержен» + «🖼 Проверить глазами», with a «что дальше» handoff section) that
+// is MISSING «📈». This MUST still fire: the #962 recognizer keys on proposal /
+// in-flight FRAMING verbs, never on the bare «дальше»/"next" of a handoff tail.
+const GENUINE_REPORT_NO_MARKER =
+  "Готово: реализована precision-фикс completion-report-гейта.\n" +
+  "- PR #965 смержен (squash), Issue #962 закрыта, CI зелёный.\n" +
+  "- Ветка удалена, board Status = Done.\n\n" +
+  "🖼 Проверить глазами: `pnpm --filter @ds/lint-guard-tests test` — " +
+  "новые фикстуры зелёные.\n\n" +
+  "Что дальше: следующая волна — дренаж debt-бэклога.";
+
 describe("completion-report-gate hook (spawned end-to-end)", () => {
   it("blocks (exit 2) a completion report missing «📈», naming report-task-outcome", () => {
     const r = runHook(stopPayload(transcriptWith(COMPLETION_NO_MARKER)));
@@ -176,6 +210,24 @@ describe("completion-report-gate hook (spawned end-to-end)", () => {
     const r = runHook(stopPayload(transcriptWith(INTERIM_CHECKPOINT_SUBSTEP)));
     expect(r.status).toBe(0);
     expect(r.stderr).toBe("");
+  });
+
+  it("allows the mid-flight wave-status false fire (#962: merged bullets + next-dispatch/in-flight prose)", () => {
+    const r = runHook(stopPayload(transcriptWith(INFLIGHT_WAVE_STATUS)));
+    expect(r.status).toBe(0);
+    expect(r.stderr).toBe("");
+  });
+
+  it("allows the /wrap-proposal false fire (#962: merged bullets + «предлагаю запустить /wrap»)", () => {
+    const r = runHook(stopPayload(transcriptWith(WRAP_PROPOSAL)));
+    expect(r.status).toBe(0);
+    expect(r.stderr).toBe("");
+  });
+
+  it("STILL blocks a genuine terminal report missing «📈» with a «что дальше» tail (#962 regression guard)", () => {
+    const r = runHook(stopPayload(transcriptWith(GENUINE_REPORT_NO_MARKER)));
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("report-task-outcome");
   });
 
   it("allows a completion report whose «📈» heading is BOLDED (#893)", () => {
@@ -324,6 +376,37 @@ describe("isInterimStatus() (#855)", () => {
   });
 });
 
+describe("isProposalOrInFlight() (#962)", () => {
+  it("matches the two live false-fire shapes", () => {
+    expect(isProposalOrInFlight(INFLIGHT_WAVE_STATUS)).toBe(true);
+    expect(isProposalOrInFlight(WRAP_PROPOSAL)).toBe(true);
+  });
+
+  it("matches proposal / in-flight framing verbs (RU+EN)", () => {
+    expect(isProposalOrInFlight("Предлагаю открыть follow-up.")).toBe(true);
+    expect(isProposalOrInFlight("Proposing to split #900 into two.")).toBe(
+      true,
+    );
+    expect(isProposalOrInFlight("Приступаю к следующей волне.")).toBe(true);
+    expect(isProposalOrInFlight("About to dispatch the reviewer.")).toBe(true);
+    expect(isProposalOrInFlight("Субагент ещё работает — жду возврата.")).toBe(
+      true,
+    );
+    expect(isProposalOrInFlight("Subagent still running on #900.")).toBe(true);
+  });
+
+  it("is FALSE for a genuine terminal report incl. its «что дальше»/next tail", () => {
+    expect(isProposalOrInFlight(GENUINE_REPORT_NO_MARKER)).toBe(false);
+    expect(isProposalOrInFlight(COMPLETION_NO_MARKER)).toBe(false);
+    expect(isProposalOrInFlight(COMPLETION_WITH_MARKER)).toBe(false);
+    // the bare handoff words must NOT trip it (only framing verbs do)
+    expect(isProposalOrInFlight("Что дальше: следующая волна.")).toBe(false);
+    expect(isProposalOrInFlight("Next steps: drain the debt backlog.")).toBe(
+      false,
+    );
+  });
+});
+
 describe("extractLastAssistantText()", () => {
   it("returns only the LAST assistant turn (earlier completion text ignored)", () => {
     const jsonl = [
@@ -447,6 +530,36 @@ describe("decideBlock()", () => {
     // COMPLETION_NO_MARKER must NOT read as interim, so the gate keeps firing.
     expect(isInterimStatus(COMPLETION_NO_MARKER)).toBe(false);
     expect(decideBlock(completion)).toEqual({ block: true });
+  });
+
+  it("never blocks the mid-flight wave-status false fire (#962)", () => {
+    expect(
+      decideBlock({
+        stopHookActive: false,
+        lastAssistantText: INFLIGHT_WAVE_STATUS,
+      }).block,
+    ).toBe(false);
+    // it WOULD have tripped the report heuristic without the recognizer
+    expect(isCompletionReport(INFLIGHT_WAVE_STATUS)).toBe(true);
+  });
+
+  it("never blocks the /wrap-proposal false fire (#962)", () => {
+    expect(
+      decideBlock({ stopHookActive: false, lastAssistantText: WRAP_PROPOSAL })
+        .block,
+    ).toBe(false);
+    expect(isCompletionReport(WRAP_PROPOSAL)).toBe(true);
+  });
+
+  it("STILL blocks a genuine terminal report missing «📈» (#962 regression guard)", () => {
+    expect(GENUINE_REPORT_NO_MARKER).not.toContain(REPORT_MARKER);
+    expect(isProposalOrInFlight(GENUINE_REPORT_NO_MARKER)).toBe(false);
+    expect(
+      decideBlock({
+        stopHookActive: false,
+        lastAssistantText: GENUINE_REPORT_NO_MARKER,
+      }),
+    ).toEqual({ block: true });
   });
 
   it("passes a report whose 📈 section is wrapped in bold / heading markup (#893)", () => {

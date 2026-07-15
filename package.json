@@ -50,6 +50,7 @@
     "lint:route-targets": "tsx tools/lint/route-target-lint.ts",
     "lint:showcase-coverage": "tsx tools/lint/showcase-coverage-lint.ts",
     "lint:showcase-snippet": "tsx tools/lint/showcase-snippet-lint.ts",
+    "lint:spec-deletion": "tsx tools/lint/spec-deletion-lint.ts",
     "lint:spec-status": "tsx tools/lint/spec-status-lint.ts",
     "lint:stage-b": "tsx tools/lint/stage-b-lint.ts",
     "lint:submit-pending": "tsx tools/lint/submit-pending-lint.ts",

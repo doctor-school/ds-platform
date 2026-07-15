@@ -1,0 +1,2 @@
+D	apps/docs/content/specs/features/003-otp/003-scenarios.feature
+M	apps/docs/content/adr/0007-ai-stack-design-en.md

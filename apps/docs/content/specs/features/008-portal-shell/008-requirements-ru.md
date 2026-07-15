@@ -5,7 +5,7 @@ slug: 008-portal-shell-ru
 status: Draft
 surface: user-facing
 tracker: "https://github.com/doctor-school/ds-platform/milestone/9"
-issues: []
+issues: [982, 983]
 prior_decisions:
   - "ADR-0014 — Двухуровневая продуктовая спека (§2 PRD → EARS трассировка `realizes:`; §3 mining прошлого арта; §4 канвас — источник, репозиторий держит собранный артефакт)"
   - "ADR-0013 — Дизайн-система и canvas-derived UI (только токены, adopt-before-bespoke, вендорить каждый канвас, который рендерит поверхность, поэлементный паритет рендера)"

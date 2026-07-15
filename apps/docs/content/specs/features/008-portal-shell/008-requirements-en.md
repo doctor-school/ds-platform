@@ -5,7 +5,7 @@ slug: 008-portal-shell
 status: Draft
 surface: user-facing
 tracker: "https://github.com/doctor-school/ds-platform/milestone/9"
-issues: []
+issues: [982, 983]
 prior_decisions:
   - "ADR-0014 — Two-tier product spec (§2 PRD → EARS `realizes:` traceability; §3 prior-art mining; §4 canvas is source, repo holds the built artifact)"
   - "ADR-0013 — Design system & canvas-derived UI (tokens-only, adopt-before-bespoke, vendor every canvas the surface renders, element-by-element render parity)"

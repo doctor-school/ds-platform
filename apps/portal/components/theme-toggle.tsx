@@ -2,25 +2,26 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { cn } from "@ds/design-system/lib/utils";
-import { persistTheme } from "../../../../lib/theme";
+import { persistTheme } from "@/lib/theme";
 
 /**
- * 006 EARS-12 — the room-header theme toggle, the portal's ONLY visible theme
- * control until the #510 unified-portal-chrome rollout (owner Stage-A decision,
- * design §10). Activating it flips the portal between light and dark by toggling
- * the `.dark` class on `<html>` and persists the now-EXPLICIT choice under
- * `ds-theme` — from then on the choice wins over the dark default on every load
- * (the layout's inline FOUC guard re-applies it before first paint).
+ * The portal's canvas 44×44 theme icon-button, shared by the persistent app-shell
+ * header (008 EARS-3) and the webinar-room header (006 EARS-12) — relocated here
+ * from the room folder in #982 so both chrome surfaces mount the identical control
+ * (DRY). Activating it flips the portal between light and dark by toggling the
+ * `.dark` class on `<html>` and persists the now-EXPLICIT choice under `ds-theme`
+ * — from then on the choice wins over the dark default on every load (the layout's
+ * inline FOUC guard re-applies it before first paint).
  *
- * The control is the canvas **44×44 icon-button** (`webinar-room.dc.html` line
- * 25, ADR-0013 canvas-wins; owner Stage-B decision 2026-07-12 — never the DS
- * form `switch.tsx`, which stays the FORM switch primitive): a `<button>` with a
- * transparent background, a 2px `header-hairline` border (the on-header muted
- * hairline, hover raising it to full-strength `header-foreground`), and the
- * full-strength header-foreground glyph — ☾ in light / ☀ in dark (the canvas
- * `themeIcon`). `aria-pressed` reflects the dark state; the accessible name is
- * injected from the message catalog by the parent (EARS-10 — no hardcoded
- * user-facing string here); focus-visible uses the DS focus ring.
+ * The control is the canvas 44×44 icon-button (`webinar-room.dc.html` line 25 /
+ * the app-shell header canvases, ADR-0013 canvas-wins; owner Stage-B decision
+ * 2026-07-12 — never the DS form `switch.tsx`, which stays the FORM switch
+ * primitive): a `<button>` with a transparent background, a 2px `header-hairline`
+ * border (the on-header muted hairline, hover raising it to full-strength
+ * `header-foreground`), and the full-strength header-foreground glyph — ☾ in
+ * light / ☀ in dark (the canvas `themeIcon`). `aria-pressed` reflects the dark
+ * state; the accessible name is injected from the message catalog by the parent
+ * (no hardcoded user-facing string here); focus-visible uses the DS focus ring.
  *
  * The `<html>` CLASS is the theme's single source of truth (`lib/theme.ts`), so
  * the pressed state is subscribed to the class itself via `useSyncExternalStore`

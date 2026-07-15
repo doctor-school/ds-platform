@@ -5,6 +5,7 @@ import { Inter } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import { ThemeWatcher } from "../components/theme-watcher";
+import { AppShellHeader } from "../components/app-shell-header";
 import { THEME_INIT_SCRIPT } from "../lib/theme";
 
 export const metadata: Metadata = {
@@ -40,8 +41,9 @@ const inter = Inter({
  * can paint), so the resolved theme (`ds-theme` explicit choice → system
  * `prefers-color-scheme`) is on `<html>` before first paint — the page never
  * flashes the wrong theme. {@link ThemeWatcher} keeps an open page following the
- * system scheme LIVE while no explicit choice is stored. The only visible toggle
- * is the webinar-room header's (#510 tracks wider placement);
+ * system scheme LIVE while no explicit choice is stored. The theme toggle now
+ * lives in the persistent app-shell header (008 EARS-3) and the webinar-room
+ * header, both mounting the shared `ThemeToggle`;
  * `suppressHydrationWarning` on `<html>` (already present for the font var)
  * also covers the guard-applied `.dark` class the server cannot know.
  */
@@ -79,6 +81,12 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <ThemeWatcher />
         <NextIntlClientProvider locale={locale} messages={messages}>
+          {/* 008 EARS-1 — the persistent app-shell header, mounted ONCE here so it
+              is present on every portal route by construction (it hides itself on
+              the auth + room surfaces, which own their chrome). It sits ABOVE
+              {children}; each page's own blue poster masthead stacks directly
+              below it into one continuous blue band. */}
+          <AppShellHeader />
           {children}
         </NextIntlClientProvider>
       </body>

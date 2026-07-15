@@ -112,6 +112,15 @@
     "eventsHelper": "Эфиры, записи и сертификаты",
     "signOut": "Выйти из аккаунта"
   },
+  "shell": {
+    "logoAlt": "Doctor.School",
+    "navBroadcasts": "Эфиры",
+    "navMyEvents": "Мои события",
+    "login": "Войти",
+    "themeToggle": "Переключить тему",
+    "profile": "Мой профиль",
+    "menu": "Меню"
+  },
   "webinar": {
     "breadcrumb": "Эфиры",
     "startsAt": "{time} МСК · {date}",

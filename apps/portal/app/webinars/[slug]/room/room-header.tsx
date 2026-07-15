@@ -4,7 +4,7 @@ import { Badge } from "@ds/design-system/badge";
 import { Link as DsLink } from "@ds/design-system/link";
 import { initialsFromDisplayName } from "../../../../lib/display-name";
 import { LiveDuration, PresenceCount } from "./room-presence";
-import { ThemeToggle } from "./theme-toggle";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 /**
  * 006 EARS-2 / EARS-5 / EARS-11 / EARS-12 — the room's top app-header bar,

@@ -117,6 +117,13 @@ trace of the rule). The lexicons are bilingual (RU+EN), precision-tuned, and
 exported behind the entry-point guard, unit-covered in
 `tools/lint/guard-tests/retro-orchestration-mine.spec.ts`.
 
+**Corpus health** (`orchestration-summary.json` → `corpusHealth`, echoed as a
+run-output line): `{ totalLogFiles, mined, skippedCorrupt }` — the miner scans
+every `*.jsonl` in the log dir and counts the **NUL-corrupt / unparseable** files
+(non-empty on disk yet zero parseable JSONL records — an FS-corruption incident)
+it skips, so the mined `N` is always reported against the true denominator rather
+than reading as "N of a healthy corpus" when a chunk of it is destroyed.
+
 ## Sample output
 
 [`samples/findings-all.json`](./samples/findings-all.json) is the 84-finding

@@ -5,10 +5,12 @@ import { describe, expect, it } from "vitest";
 // check, the same idiom as extract.mjs (#360).
 import {
   classifyInlineEpisode,
+  computeCorpusHealth,
   computeOverlaps,
   contextFromUsage,
   EPISODE_CLASSES,
   extractPrRefs,
+  isCorruptLogContent,
   isDeliverableEditPath,
   sessionMetricsFromLines,
 } from "../../retro/orchestration-mine.mjs";
@@ -292,6 +294,71 @@ describe("orchestration-mine — computeOverlaps (pure)", () => {
     expect(o.get("a")).toEqual(["b", "c"]);
     expect(o.get("b")).toEqual(["a", "c"]);
     expect(o.get("c")).toEqual(["a", "b"]);
+  });
+});
+
+// ── corpus health: NUL-corrupt / unparseable log detection (pure) ───────────
+// A NUL-corrupted / unparseable log file (an FS-corruption incident, memory
+// reference_nul_corruption_incident_20260711) is non-empty on disk yet yields
+// zero parseable JSONL records — the miner would drop it silently, making the
+// mined N read as "of a healthy corpus". These must be COUNTED, not hidden, and
+// distinguished from a legitimately empty / short session (#916 follow-up).
+describe("orchestration-mine — isCorruptLogContent (pure)", () => {
+  const valid = JSON.stringify({
+    type: "assistant",
+    timestamp: "2026-01-01T00:00:00Z",
+    message: { role: "assistant", content: [{ type: "text", text: "hi" }] },
+  });
+
+  it("flags a NUL-byte file (non-empty, zero parseable records) as corrupt", () => {
+    expect(isCorruptLogContent("\u0000\u0000\u0000\u0000")).toBe(true);
+  });
+
+  it("flags an all-garbage (non-JSON) file as corrupt", () => {
+    expect(isCorruptLogContent("not json at all\nstill not json")).toBe(true);
+  });
+
+  it("does NOT flag a legitimately empty / whitespace-only log", () => {
+    expect(isCorruptLogContent("")).toBe(false);
+    expect(isCorruptLogContent("   \n  \n")).toBe(false);
+  });
+
+  it("does NOT flag a valid session, even a short one with a single record", () => {
+    expect(isCorruptLogContent(valid)).toBe(false);
+    // a partially-corrupt file with at least one parseable record is still mined
+    expect(isCorruptLogContent(`${valid}\n\u0000\u0000`)).toBe(false);
+  });
+
+  it("returns false for a non-string input", () => {
+    expect(isCorruptLogContent(null as unknown as string)).toBe(false);
+  });
+});
+
+// ── corpus-health rollup (pure) ─────────────────────────────────────────────
+describe("orchestration-mine — computeCorpusHealth (pure)", () => {
+  const valid = JSON.stringify({ type: "assistant" });
+
+  it("counts corrupt logs and populates the corpusHealth summary field", () => {
+    const health = computeCorpusHealth(
+      [
+        { content: valid }, // mined
+        { content: "\u0000\u0000\u0000" }, // NUL-corrupt
+        { content: "garbage\nlines" }, // unparseable
+        { content: "   \n" }, // legitimately empty — NOT corrupt
+      ],
+      1,
+    );
+    expect(health.totalLogFiles).toBe(4);
+    expect(health.mined).toBe(1);
+    expect(health.skippedCorrupt).toBe(2); // the two garbage files only
+  });
+
+  it("reports zero skipped on a healthy corpus", () => {
+    const health = computeCorpusHealth(
+      [{ content: valid }, { content: valid }],
+      2,
+    );
+    expect(health).toEqual({ totalLogFiles: 2, mined: 2, skippedCorrupt: 0 });
   });
 });
 

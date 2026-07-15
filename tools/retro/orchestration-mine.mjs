@@ -463,6 +463,48 @@ export function sessionMetricsFromLines(lines) {
   };
 }
 
+// ── corpus health: surface silently-skipped corrupt logs ────────────────────
+// A NUL-corrupted / unparseable log file (an FS-corruption incident — memory
+// reference_nul_corruption_incident_20260711) is non-empty on disk yet yields
+// ZERO parseable JSONL records, so `sessionMetricsFromLines` returns all-zeros
+// for it and it contributes nothing to the mined corpus. Left unreported, "N
+// sessions mined" reads as "of a healthy corpus" when a chunk of it is
+// destroyed — a silent cap. We count these explicitly and report the mined N
+// against the true log-file denominator.
+//
+// A file is corrupt iff it is NON-EMPTY (has non-whitespace content) yet has NO
+// parseable JSONL record. This deliberately does NOT flag a legitimately empty /
+// whitespace-only log (0 records because there is nothing there) nor a short but
+// valid session (≥1 parseable record) — only a file whose bytes are all garbage.
+export function isCorruptLogContent(content) {
+  if (typeof content !== "string" || !content.trim()) return false;
+  for (const line of content.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      JSON.parse(line);
+      return false; // at least one parseable record → mined, not corrupt
+    } catch {
+      /* keep scanning for a parseable record */
+    }
+  }
+  return true; // non-empty but zero parseable records → NUL-corrupt / unparseable
+}
+
+// Pure corpus-health rollup over a list of { content } log-file records plus the
+// mined-session count. Kept pure (no fs) so the corrupt-file counter is
+// unit-testable without shelling out to the real corpus (#916 follow-up).
+export function computeCorpusHealth(logFiles, minedCount) {
+  let skippedCorrupt = 0;
+  for (const f of logFiles) {
+    if (isCorruptLogContent(f && f.content)) skippedCorrupt++;
+  }
+  return {
+    totalLogFiles: logFiles.length,
+    mined: minedCount,
+    skippedCorrupt,
+  };
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -532,6 +574,22 @@ function main() {
   const overlaps = computeOverlaps(metrics);
   for (const row of metrics) row.parallelOverlap = overlaps.get(row.id) ?? [];
 
+  // Corpus health — scan every *.jsonl in the log dir and count the NUL-corrupt /
+  // unparseable files the miner would otherwise drop silently. mined = interactive
+  // sessions actually turned into metric rows; the rest of the denominator is
+  // legit non-interactive (sdk/other) logs plus these corrupt ones (#916 f-up).
+  const logFiles = fs
+    .readdirSync(LOG_DIR)
+    .filter((f) => f.endsWith(".jsonl"))
+    .map((f) => {
+      try {
+        return { content: fs.readFileSync(path.join(LOG_DIR, f), "utf8") };
+      } catch {
+        return { content: "" };
+      }
+    });
+  const corpusHealth = computeCorpusHealth(logFiles, metrics.length);
+
   // detach episodes into their own artifact; keep metrics rows compact
   const episodes = [];
   for (const row of metrics) {
@@ -580,6 +638,7 @@ function main() {
 
   const summary = {
     generatedFrom: indexPath,
+    corpusHealth,
     interactiveSessionsMined: metrics.length,
     totalDispatches,
     totalInlineMutations: totalInline,
@@ -607,6 +666,11 @@ function main() {
     JSON.stringify(summary, null, 2),
   );
 
+  process.stdout.write(
+    `[retro] corpus health: skipped ${corpusHealth.skippedCorrupt} NUL-corrupt / ` +
+      `unparseable of ${corpusHealth.totalLogFiles} total log files; ` +
+      `mined ${corpusHealth.mined} interactive sessions.\n`,
+  );
   process.stdout.write(JSON.stringify(summary, null, 2) + "\n");
 }
 

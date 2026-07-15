@@ -100,7 +100,22 @@ function VerifyCard() {
   const t = useTranslations("verify");
   const te = useTranslations("errors");
   const params = useSearchParams();
-  const email = params.get("email") ?? undefined;
+  const queryEmail = params.get("email") ?? undefined;
+  // #904: the branded verification email's CTA points at `/verify#email=<addr>` —
+  // the identifier rides the URL FRAGMENT, which browsers never send to the server
+  // (so the #869 scanner-prefetch invariant holds). On a cold email-button open there
+  // is no `?email=` query, so seed the account from the fragment. The hash is not
+  // available at SSR (it never leaves the browser), so read it on mount client-side.
+  // The `?email=` query stays the same-tab primary + a backward-compat fallback.
+  const [fragmentEmail, setFragmentEmail] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (queryEmail) return; // same-tab query wins; no need to consult the fragment.
+    const hash = window.location.hash; // e.g. "#email=doc%40example.com"
+    if (!hash.startsWith("#")) return;
+    const seeded = new URLSearchParams(hash.slice(1)).get("email");
+    if (seeded) setFragmentEmail(seeded);
+  }, [queryEmail]);
+  const email = queryEmail ?? fragmentEmail;
   // 005 EARS-2: the carried registration-intent riding the guest-through-auth
   // round-trip. Consumed ONLY through the `parseReturnTarget` guard (inside
   // `completeReturnTarget` / `withReturnTarget`), so a hostile value can neither
@@ -131,9 +146,21 @@ function VerifyCard() {
   const form = useForm<VerifyRequest>({
     resolver: useLocalizedResolver(VerifyRequestSchema),
     // Seed the email from the query (registration is email-only, #202); the field
-    // is not user-editable here — they only type the code.
-    defaultValues: { email, code: "" },
+    // is not user-editable here — they only type the code. On a cold email-button
+    // open the email arrives from the fragment after mount (#904), so it is also
+    // seeded reactively below once resolved.
+    defaultValues: { email: queryEmail, code: "" },
   });
+
+  // #904: the fragment-seeded email resolves after mount (the hash is client-only),
+  // so push it into the hidden `email` field once known — otherwise the cold open
+  // submits with an empty identifier and the code never reaches the api. Keyed on
+  // the resolved value; `form` is a stable useForm handle.
+  useEffect(() => {
+    if (email) form.setValue("email", email);
+    // Keyed only on the resolved email — `form` is a stable useForm handle.
+
+  }, [email]);
 
   // Privacy-masked destination (#227): the screen confirms WHERE the code went
   // without re-printing the full address (`a•••@p•••.com`); reuses the same
@@ -227,10 +254,27 @@ function VerifyCard() {
     }
   }
 
+  // #904: a submit blocked by validation on the NON-RENDERED `email` field must
+  // never be a silent no-op (the exact dead-end the owner hit on a cold bare
+  // `/verify`: no `?email=` and no `#email=` → the hidden field fails Zod →
+  // `handleSubmit` never calls `onSubmit` and nothing is shown). Surface a visible,
+  // localized error via the existing `error` slot / <FormError> so the user knows
+  // the link was incomplete and can act (open the email link, or re-register). This
+  // ships independently of the fragment fix (correctness + a11y).
+  const onInvalid = useCallback(() => {
+    if (!email) {
+      setError(te("verifyMissingIdentifier"));
+      return;
+    }
+    // A blocked submit with an identifier present means the code itself is
+    // invalid/empty — surface a generic prompt rather than staying silent.
+    setError(te("verifyFailed"));
+  }, [email, te]);
+
   // Auto-submit when the fixed-length OTP completes. Guard against a double
   // network call if `onComplete` and a manual button click race, or if
   // `onComplete` re-fires: skip while a submit is already in flight.
-  const submit = form.handleSubmit(onSubmit);
+  const submit = form.handleSubmit(onSubmit, onInvalid);
   const onComplete = useCallback(() => {
     if (form.formState.isSubmitting) return;
     void submit();

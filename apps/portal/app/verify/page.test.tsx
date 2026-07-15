@@ -85,8 +85,15 @@ beforeEach(() => {
   registerForEvent.mockClear();
   heldRegistration = null;
   searchParams = new URLSearchParams({ email: EMAIL });
+  // Reset the URL (incl. any fragment) via replaceState — assigning
+  // `window.location.hash` directly schedules a jsdom fragment-navigation timer
+  // that outlives the test and trips the #434 orphan-timer guard.
+  window.history.replaceState(null, "", "/");
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.history.replaceState(null, "", "/");
+});
 
 /**
  * Wait past the #675 <AuthShell> session-guard (real timers): the guard renders
@@ -317,5 +324,68 @@ describe("005 EARS-2 guest-through-auth completion on /verify", () => {
       "href",
       "/login?returnTo=%2Fwebinars%2Fahilles-042",
     );
+  });
+});
+
+/**
+ * 003 EARS-24 — the COLD email-button path (#904). The branded verification email's
+ * CTA points at `/verify#email=<addr>`: the identifier rides the URL FRAGMENT (never
+ * sent to the server → the #869 scanner-prefetch invariant holds), so on a cold open
+ * with NO `?email=` query the screen seeds the account from the fragment and the
+ * submit works. Previously a cold bare `/verify` left the hidden `email` field empty →
+ * Zod-blocked → `handleSubmit` never called `onSubmit` → the submit was a SILENT
+ * no-op (the exact dead end the owner hit on live prod, 2026-07-14).
+ */
+describe("003 EARS-24 cold email-button /verify#email= path (#904)", () => {
+  it("seeds the email from the URL fragment when there is no ?email= query, and the code reaches the api", async () => {
+    // Cold open: no query identifier, the email rides the fragment (URL-encoded).
+    searchParams = new URLSearchParams();
+    window.history.replaceState(null, "", "/verify#email=doc%40example.com");
+    const user = userEvent.setup();
+    await renderVerify();
+
+    const codeInput = screen.getByRole("textbox");
+    await user.click(codeInput);
+    await user.keyboard(VERIFY_CODE);
+
+    // The fragment-seeded email is submitted with the code — no more silent no-op.
+    await waitFor(() => expect(verify).toHaveBeenCalledTimes(1));
+    expect(verify).toHaveBeenCalledWith(
+      expect.objectContaining({ email: EMAIL, code: VERIFY_CODE }),
+    );
+  });
+
+  it("routes a cold verify (no held password) to /login", async () => {
+    searchParams = new URLSearchParams();
+    window.history.replaceState(null, "", "/verify#email=doc%40example.com");
+    heldRegistration = null; // cold open — no held credential in this fresh tab.
+    const user = userEvent.setup();
+    await renderVerify();
+
+    const codeInput = screen.getByRole("textbox");
+    await user.click(codeInput);
+    await user.keyboard(VERIFY_CODE);
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/login"));
+    expect(login).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a VISIBLE error (never a silent no-op) when a submit is blocked with no identifier", async () => {
+    // Truly bare /verify: no query, no fragment → the hidden email field is empty →
+    // the submit is Zod-blocked. It MUST show a visible, localized error instead of
+    // silently doing nothing (a11y + correctness). i18n is passthrough here, so the
+    // catalog KEY is what renders.
+    searchParams = new URLSearchParams();
+    window.history.replaceState(null, "", "/verify");
+    const user = userEvent.setup();
+    await renderVerify();
+
+    await user.click(screen.getByTestId("verify-submit"));
+
+    await waitFor(() =>
+      expect(screen.getByText("verifyMissingIdentifier")).toBeInTheDocument(),
+    );
+    // The blocked submit reached NO network — it is surfaced, not fired.
+    expect(verify).not.toHaveBeenCalled();
   });
 });

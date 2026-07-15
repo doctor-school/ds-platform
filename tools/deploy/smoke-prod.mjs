@@ -303,6 +303,22 @@ async function probePortalLoginCold() {
   return `200 · Next app-shell RSC stream · no error boundary (cookie-less, client-rendered)`;
 }
 
+async function probeVerifyCold() {
+  // #904: the branded verification email's CTA lands a COLD (cookie-less, new-tab)
+  // visitor on `/verify#email=<addr>`. The `#email=` fragment never reaches the
+  // server (browsers never transmit it — that is the #869 scanner-prefetch invariant
+  // that made the fragment the chosen carrier), so the server only ever sees a bare
+  // GET /verify — probe exactly that. Assert a REAL render: exact 200, the Next
+  // App-Router RSC shell present (client-rendered like /login, #885), no error
+  // boundary. This catches a regression where the cold email-button destination
+  // 500s or degrades — the dead end the owner hit on live prod (2026-07-14), where
+  // the bare /verify rendered but the submit silently no-op'd; the reachability of a
+  // real, non-error cold render is the server-observable half of that fix.
+  const res = await httpsGetFollow(`https://${PORTAL_HOST}/verify`);
+  checkColdPage(res, { requireMarkup: "self.__next_f", expectPath: "/verify" });
+  return `200 · Next app-shell RSC stream · no error boundary (cookie-less bare /verify — the #904 email-button destination)`;
+}
+
 async function probeLoginCold() {
   // Probe the actual login ENTRY screen, not the bare base path: the api-prod
   // Caddyfile routes `/ui/v2/login/*` (sub-paths) to the login container, so a
@@ -422,6 +438,7 @@ const PROBES = [
   ["api /v1/ready", probeApiReady],
   ["portal /", probePortal],
   ["portal /login cold", probePortalLoginCold],
+  ["portal /verify cold", probeVerifyCold],
   ["admin /", probeAdmin],
   ["chat ws route", probeChatRoute],
   ["login cold loginname", probeLoginCold],

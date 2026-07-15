@@ -130,7 +130,7 @@ export class FakeIdpClient implements IdpClient {
     return Promise.resolve({ sub, alreadyExisted: false });
   }
 
-  requestEmailVerification(_sub: string): Promise<void> {
+  requestEmailVerification(_sub: string, _email?: string): Promise<void> {
     return Promise.resolve();
   }
 

@@ -60,7 +60,8 @@ Run the lifecycle tail from [`run-task-lifecycle`](../run-task-lifecycle/SKILL.m
 2. **Set board statuses** — `node tools/gh/set-board-status.mjs <N> "Done"` (alias `pnpm board:status`) for anything merged this session; `Closes #N` does not move the Projects v2 column.
 3. **Re-sweep branches/PRs** — `gh pr list` + `git ls-remote --heads origin`; bot branches (`changeset-release/main`, `dependabot/*`, `codeql/*`) can appear post-merge. Also prune **local** dispatch-agent cruft: `git worktree prune`, then delete merged orphan `worktree-agent-*` refs — confirm each is an ancestor of `main` first (`git merge-base --is-ancestor <ref> main`) then `git branch -d`. These accumulate across sessions when subagent-dispatch teardown (memory `feedback_subagent_dispatch_teardown`) is missed; sweeping them here keeps the repo from carrying a growing pile of dangling refs.
 4. **Check for stack / dependency updates** — look for open Dependabot PRs, an open `changeset-release/main` "Version Packages" PR, and stale pins. If something needs attention and has no tracking Issue, **file one with every field complete** (kind label, milestone, native `blocked_by`/`blocks` links, board Status) per `run-task-lifecycle` §1 — then decide whether to take it next.
-5. **Groom next** — surface the next unblocked board item (resume → rework → fresh → unblock ordering), or report the queue empty.
+5. **Deploy checkpoint** — if the session merged product PRs, check the **merged-not-deployed** delta in `## Project reality` (`pnpm bootstrap`). A non-empty delta means live prod is behind `main`: either run `/deploy` (skill `run-prod-deploy`) now, or record the pending-deploy delta explicitly in the stage-5 handoff so the next session ships it. Never let merged product work silently sit undeployed.
+6. **Groom next** — surface the next unblocked board item (resume → rework → fresh → unblock ordering), or report the queue empty.
 
 ### 5. Handoff
 

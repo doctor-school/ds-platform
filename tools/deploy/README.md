@@ -112,3 +112,27 @@ shell, no interpolation — so a `$(...)`/backtick in a note cannot execute.
 - First deploy (`--prev-sha none`) / redeploy (`prev == new`) / a bad anchor
   (`git log` non-zero) → log + **skip green** — never a fabricated all-history
   range, never a broken deploy.
+
+## Release record cycle
+
+A successful deploy leaves a durable, queryable trail. Every record step is
+**non-fatal by contract** — it runs only once the deploy has already succeeded,
+so a `gh`/webhook hiccup prints a warning and the deploy exit code stays 0.
+
+| Record                | When                               | Source / how                                                                                                                                               |
+| --------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **GitHub Deployment** | end of `deploy:prod` (#942)        | `deployment-record.mjs` posts a `Deployment(production, sha)` + `success` status carrying the release-notes digest; `log_url` = `/v1/health`.              |
+| **Git tag + Release** | `Version Packages` PR merge (#944) | Merging the changesets release PR cuts `release-YYYY.MM.DD-n` + a GitHub Release with auto-generated notes. Independent of a deploy.                       |
+| **Mattermost digest** | end of `deploy:prod` (#868)        | `release-notes.mjs` posts ONE aggregated RU note for the `<prev>..<new>` range. Webhook from `~/.ds-platform/.env.local` (`MATTERMOST_WEBHOOK_URL`, #950). |
+
+**`## Project reality` reads these at SessionStart.** The bootstrap (#939)
+derives the latest release (from Releases/tags), the currently deployed SHA (the
+latest production **Deployment** ⋈ the live `/v1/health` `version`), and the
+**merged-not-deployed** delta (product PRs merged into `main` but not yet
+present in the deployed SHA). A non-empty delta is the cue to `pnpm deploy:prod`
+(runbook: skill `run-prod-deploy` / `/deploy`).
+
+**Exit-code hygiene.** `deploy:prod` (and any deploy/merge/migrate command) runs
+as its **own statement** — never `pnpm deploy:prod | tee log`: a pipe returns the
+pipe's exit code (`tee`'s 0) and masks a non-zero deploy failure. Redirect with
+`> log 2>&1` and check `$?` if a transcript is needed.

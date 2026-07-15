@@ -131,6 +131,17 @@ const GENUINE_REPORT_NO_MARKER =
   "🖼 Проверить глазами: `pnpm --filter @ds/lint-guard-tests test` — " +
   "новые фикстуры зелёные.\n\n" +
   "Что дальше: следующая волна — дренаж debt-бэклога.";
+// Regression guard #2 (#966 Mode-a) — a GENUINE terminal report whose tech
+// appendix narrates COMPLETED sub-steps in the PAST tense ("dispatched N
+// subagents" / «диспатчил»), MISSING «📈». Past-tense completed narration must
+// NOT be read as in-flight framing, so this MUST still fire — it locks the
+// false-negative (a real report silently exempted) closed.
+const GENUINE_REPORT_PAST_DISPATCH =
+  "Готово: волна из трёх PR закрыта.\n" +
+  "- #970 merged, #971 merged, #972 merged; ветки удалены, board = Done.\n\n" +
+  "Tech appendix: dispatched 3 subagents in parallel, all merged on green CI. " +
+  "Диспатчил ревьюера Mode-a по каждому — все APPROVE.\n\n" +
+  "🖼 Проверить глазами: `gh pr list --state merged`.";
 
 describe("completion-report-gate hook (spawned end-to-end)", () => {
   it("blocks (exit 2) a completion report missing «📈», naming report-task-outcome", () => {
@@ -226,6 +237,12 @@ describe("completion-report-gate hook (spawned end-to-end)", () => {
 
   it("STILL blocks a genuine terminal report missing «📈» with a «что дальше» tail (#962 regression guard)", () => {
     const r = runHook(stopPayload(transcriptWith(GENUINE_REPORT_NO_MARKER)));
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("report-task-outcome");
+  });
+
+  it("STILL blocks a genuine report whose appendix narrates PAST-tense «dispatched»/«диспатчил» (#966 false-negative guard)", () => {
+    const r = runHook(stopPayload(transcriptWith(GENUINE_REPORT_PAST_DISPATCH)));
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("report-task-outcome");
   });
@@ -405,6 +422,20 @@ describe("isProposalOrInFlight() (#962)", () => {
       false,
     );
   });
+
+  it("is FALSE for PAST-tense completed narration — «dispatched»/«диспатчил» (#966)", () => {
+    // completed sub-steps a real report's appendix uses — NOT in-flight framing
+    expect(isProposalOrInFlight(GENUINE_REPORT_PAST_DISPATCH)).toBe(false);
+    expect(isProposalOrInFlight("dispatched 3 subagents, all merged.")).toBe(
+      false,
+    );
+    expect(isProposalOrInFlight("Диспатчил ревьюера — APPROVE.")).toBe(false);
+    // …but present/gerund in-flight forms still DO trip it
+    expect(isProposalOrInFlight("now dispatching the reviewer for #900")).toBe(
+      true,
+    );
+    expect(isProposalOrInFlight("Диспатчирую субагента по #900.")).toBe(true);
+  });
 });
 
 describe("extractLastAssistantText()", () => {
@@ -558,6 +589,18 @@ describe("decideBlock()", () => {
       decideBlock({
         stopHookActive: false,
         lastAssistantText: GENUINE_REPORT_NO_MARKER,
+      }),
+    ).toEqual({ block: true });
+  });
+
+  it("STILL blocks a genuine report with PAST-tense «dispatched»/«диспатчил» appendix (#966 false-negative guard)", () => {
+    expect(GENUINE_REPORT_PAST_DISPATCH).not.toContain(REPORT_MARKER);
+    expect(isProposalOrInFlight(GENUINE_REPORT_PAST_DISPATCH)).toBe(false);
+    expect(isCompletionReport(GENUINE_REPORT_PAST_DISPATCH)).toBe(true);
+    expect(
+      decideBlock({
+        stopHookActive: false,
+        lastAssistantText: GENUINE_REPORT_PAST_DISPATCH,
       }),
     ).toEqual({ block: true });
   });

@@ -94,9 +94,13 @@ export function isInterimStatus(text) {
  * task being closed. This set keys ONLY on first-person proposal / in-flight
  * FRAMING verbs (RU+EN, case-insensitive) — never on the bare words
  * «дальше»/"next", so a genuine terminal report's «что дальше» handoff section
- * does NOT match and the gate keeps firing on it (the #962 regression guard). */
+ * does NOT match and the gate keeps firing on it (the #962 regression guard).
+ * Only PRESENT/GERUND in-flight forms are matched — the PAST-tense completed
+ * forms ("dispatched" / «диспатчил») are deliberately EXCLUDED, because a
+ * genuine terminal report's tech appendix legitimately narrates completed
+ * sub-steps ("dispatched 3 subagents, all merged") and must still fire. */
 export const PROPOSAL_INFLIGHT_RE =
-  /предлага[ею]|\bpropos(?:e|es|ing)\b|приступа[ею]|собира[ею](?:сь|шься)|\babout to\b|\bproceeding\b|диспатчир(?:ую|уешь)|диспатчил|\bdispatch(?:ing|ed)\b|субагент\w*\s+(?:ещё\s+)?(?:работает|в\s+работе|бежит|running)|\bsubagent[s]?\s+(?:still\s+)?(?:running|working)\b|в\s+пол[её]те|жду\s+возврат\w*|запуска[ею]\s+\/?wrap/i;
+  /предлага[ею]|\bpropos(?:e|es|ing)\b|приступа[ею]|собира[ею](?:сь|шься)|\babout to\b|\bproceeding\b|диспатчир(?:ую|уешь)|\bdispatching\b|субагент\w*\s+(?:ещё\s+)?(?:работает|в\s+работе|бежит|running)|\bsubagent[s]?\s+(?:still\s+)?(?:running|working)\b|в\s+пол[её]те|жду\s+возврат\w*|запуска[ею]\s+\/?wrap/i;
 
 /** True when the turn PROPOSES a next action or reports work still in flight
  * rather than closing the task (#962) — a merged-bullet summary is still not a

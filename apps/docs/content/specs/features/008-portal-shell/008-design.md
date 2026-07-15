@@ -112,7 +112,7 @@ At the canvas mobile breakpoint (`≤900px`) the top-nav collapses into a `≡` 
 ## 6. What this feature does NOT own (seams & boundaries)
 
 - **Discovery listing internals** — cards, ordering, lifecycle signalling, the listing's own empty/error states — are **feature 004**. `/` reuses that surface; this feature specifies only that `/` _is_ that surface, rendered identically for both auth states.
-- **The profile at `/account`** and the **sign-out** affordance — **feature 009**. The avatar icon only navigates there; 009 retires the `/account` session-claims debug dump.
+- **The profile at `/account`** and the **sign-out** affordance — the **shipped `/account` profile** (#770, superseding feature 009; the session-claims debug dump is already retired there). The avatar icon only navigates there; this shell neither builds nor modifies the profile.
 - **«Мои события» content and the room** — features **005 / 006**. This feature only wires the `/account/events` nav target.
 - **«Школы»** — **not in the v1 nav** (EARS-10 _Retired_). No inert placeholder ships and there is no seam to track; «Школы» enters the nav only via its own future feature.
 - **No new backend primitive** — the session is read-only input; this feature adds no endpoint and mints no session.

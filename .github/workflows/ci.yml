@@ -448,6 +448,26 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:no-stub
 
+  # no-hardcoded-path: committed tooling (`tools/**/*.{mjs,ts}`) must not bake a
+  # machine-specific absolute path literal (drive-letter `C:/…` / home
+  # `/home/<user>/…` / `/Users/<user>/…` / repo-root) into runtime code — a
+  # hardcoded value standing in for config (AGENTS.md §6; dev-stand "never
+  # hardcode a host/port/path"). Derive the root via `git rev-parse
+  # --show-toplevel`. #936 (PR #933 renderBrief() leak). WARN per the ADR-0007
+  # §2.6 new-guard posture — promote to BLOCK once stable. Excluded from the `ci`
+  # meta-job needs-list while WARN.
+  no-hardcoded-path:
+    needs: setup
+    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:no-hardcoded-path
+
   # migration-index: Drizzle migration-index collision guard (#799). Parallel
   # branches independently generate the same next migration index off a stale
   # base; on merge one branch's _journal.json entry / snapshot drops the sibling

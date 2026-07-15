@@ -14,12 +14,12 @@ A guard can only be driven deterministically if its inputs are injectable. The
 guards expose four seams, each inert in production (the env var is unset, so the
 guard resolves real paths / spawns real `gh` exactly as before):
 
-| Seam env var          | Replaces                                   | Used by                                                                                                                                                                                                      |
-| --------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `LINT_FIXTURE_ROOT`   | the repo root the guard scans (FS)         | interaction-states, form-error, form-rhythm, ears-naming, ears-test, no-stub, asset-format, spec-link, instruction-budget, events-drift, glossary-mdx, glossary-roundtrip, frontmatter-yaml, migration-index |
-| `LINT_GH_FIXTURE_DIR` | `gh pr/issue view` (canned JSON)           | registry-research, spec-link                                                                                                                                                                                 |
-| `LINT_MEMORY_FILE`    | the derived `~/.claude/.../MEMORY.md` path | instruction-budget                                                                                                                                                                                           |
-| _(args)_              | CLI flags (`runGuard(..., { extraArgs })`) | —                                                                                                                                                                                                            |
+| Seam env var          | Replaces                                   | Used by                                                                                                                                                                                                                         |
+| --------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LINT_FIXTURE_ROOT`   | the repo root the guard scans (FS)         | interaction-states, form-error, form-rhythm, ears-naming, ears-test, no-stub, no-hardcoded-path, asset-format, spec-link, instruction-budget, events-drift, glossary-mdx, glossary-roundtrip, frontmatter-yaml, migration-index |
+| `LINT_GH_FIXTURE_DIR` | `gh pr/issue view` (canned JSON)           | registry-research, spec-link                                                                                                                                                                                                    |
+| `LINT_MEMORY_FILE`    | the derived `~/.claude/.../MEMORY.md` path | instruction-budget                                                                                                                                                                                                              |
+| _(args)_              | CLI flags (`runGuard(..., { extraArgs })`) | —                                                                                                                                                                                                                               |
 
 `LINT_FIXTURE_ROOT` is set to the case dir automatically by `runGuard`; the rest
 are passed per case via `runGuard(guard, caseDir, { env })`.
@@ -42,10 +42,20 @@ valid) so the asserted message maps to one branch.
 ## Coverage
 
 Covered here (FS / gh / memory seams): `interaction-states`, `form-error`,
-`form-rhythm`, `ears-naming`, `ears-test`, `no-stub`, `asset-format`,
-`registry-research`, `spec-link`, `instruction-budget`, `module-readme`,
-`tdd-signal`, `spec-status`, `prior-decisions`, `events-drift`, `glossary-mdx`,
-`glossary-roundtrip`, `frontmatter-yaml`, `migration-index`.
+`form-rhythm`, `ears-naming`, `ears-test`, `no-stub`, `no-hardcoded-path`,
+`asset-format`, `registry-research`, `spec-link`, `instruction-budget`,
+`module-readme`, `tdd-signal`, `spec-status`, `prior-decisions`, `events-drift`,
+`glossary-mdx`, `glossary-roundtrip`, `frontmatter-yaml`, `migration-index`.
+
+`no-hardcoded-path` (#936) is an FS-scan guard over committed `tools/**/*.{mjs,ts}`
+runtime code for machine-specific absolute path literals (drive-letter `C:/…`,
+home `/home/<user>/…` · `/Users/<user>/…`, the repo-root literal) — the PR #933
+`renderBrief()` leak class. The sanctioned pattern is deriving the root via
+`git rev-parse --show-toplevel` (no literal, so it never matches); comments are
+stripped before matching, and the guard-tests harness + `*.spec.ts` are out of
+scope (they carry fake paths as test data). Ships a red case (a hardcoded
+repo-root literal → exit 1) and two green cases (a git-derived root, a pure
+non-path string literal).
 
 `migration-index` (#799) is an FS-scan guard against the parallel-branch Drizzle
 migration-index collision (two branches generate the same next `NNNN`; on merge

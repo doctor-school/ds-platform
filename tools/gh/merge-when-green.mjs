@@ -121,7 +121,11 @@ export function mergeWhenGreen(pr, extraArgs = [], io = {}) {
     err(`failed to spawn gh pr merge: ${mergeRes.error.message}`);
     return exit(3);
   }
-  return exit(mergeRes.status ?? 0);
+  // Propagate gh's own exit code UNCHANGED (0 success / non-zero merge failure).
+  // A non-numeric status means the merge was killed by a signal (spawnSync sets
+  // status:null, signal:<sig>) — that must NEVER report success, so it exits
+  // non-zero. Mirrors the gate branch above.
+  return exit(typeof mergeRes.status === "number" ? mergeRes.status : 1);
 }
 
 function main() {

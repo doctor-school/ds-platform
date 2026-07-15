@@ -167,6 +167,16 @@ const DEPLOY_DONE_NOT_DEFERRED =
   "Готово: PR #984 смержен, Issue #984 закрыта.\n" +
   "Deployed to prod, release cut.\n\n" +
   "📈 % от запланированного: 100% — весь скоуп.";
+// #991 BLOCKER regression: a report that punts «задеплоить X» in remaining AND
+// carries a real hex sha (merge sha / retro id) but NO completed release/deploy
+// evidence. The OLD `DEPLOY_WORD_RE && SHA_RE` clause would auto-exempt this
+// (the deploy-stem matched the punt, the hex satisfied SHA_RE) → silent no-op.
+// It MUST still BLOCK now.
+const DOD_DEFER_WITH_HEX_NO_EVIDENCE =
+  "Готово: PR #984 смержен (447c3c5), Issue #984 закрыта, CI зелёный.\n" +
+  "Ретро b9d9314e закрыт, board Status = Done.\n\n" +
+  "📈 % от запланированного: 90%.\n\n" +
+  "Осталось: задеплоить релиз 447c3c5 в прод — следующим шагом.";
 
 describe("completion-report-gate hook (spawned end-to-end)", () => {
   it("BLOCKS (exit 2) a report deferring release/deploy in remaining with no artifact evidence (#984)", () => {
@@ -186,6 +196,14 @@ describe("completion-report-gate hook (spawned end-to-end)", () => {
     const r = runHook(stopPayload(transcriptWith(DEPLOY_DONE_NOT_DEFERRED)));
     expect(r.status).toBe(0);
     expect(r.stderr).toBe("");
+  });
+
+  it("STILL blocks a deploy-punt report carrying a stray hex sha but no completed evidence (#991 BLOCKER)", () => {
+    const r = runHook(
+      stopPayload(transcriptWith(DOD_DEFER_WITH_HEX_NO_EVIDENCE)),
+    );
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("DoD-vs-title");
   });
 
 
@@ -514,6 +532,21 @@ describe("hasDeferredReleaseVerb() (#984)", () => {
     expect(hasDeferredReleaseVerb("Осталось: дренаж debt-бэклога.")).toBe(false);
     expect(hasDeferredReleaseVerb(GENUINE_REPORT_NO_MARKER)).toBe(false);
   });
+
+  it("does NOT trip on an innocuous word merely CONTAINING a stem mid-token (#991 NIT 2, boundary idiom)", () => {
+    // «республик» contains «публик»; "membership" contains "ship"; the leading
+    // (^|[^а-яёa-z]) boundary means a mid-word occurrence never matches — the
+    // OLD boundaryless RU stems tripped «республик».
+    expect(
+      hasDeferredReleaseVerb("Осталось:\n- обновить справочник республик и городов"),
+    ).toBe(false);
+    expect(
+      hasDeferredReleaseVerb("Remaining:\n- refactor the membership flow"),
+    ).toBe(false);
+    // …but a genuine release verb at a word start still trips it
+    expect(hasDeferredReleaseVerb("Осталось: опубликовать релиз.")).toBe(true);
+    expect(hasDeferredReleaseVerb("Remaining: ship the build.")).toBe(true);
+  });
 });
 
 describe("hasReleaseArtifactEvidence() (#984)", () => {
@@ -532,10 +565,30 @@ describe("hasReleaseArtifactEvidence() (#984)", () => {
     ).toBe(true);
   });
 
-  it("recognises a deploy word alongside a commit sha", () => {
-    expect(hasReleaseArtifactEvidence("deploy of abc1234 succeeded.")).toBe(
+  it("recognises a completed past-tense «задеплоил(и)» form", () => {
+    expect(hasReleaseArtifactEvidence("задеплоил в прод, всё зелёное.")).toBe(
       true,
     );
+    expect(hasReleaseArtifactEvidence("задеплоили релиз на api-prod.")).toBe(
+      true,
+    );
+  });
+
+  it("does NOT treat a bare deploy-stem + a hex sha as evidence (#991 BLOCKER — no infinitive collision)", () => {
+    // The old `DEPLOY_WORD_RE && SHA_RE` clause matched the punted infinitive
+    // «задеплоить»/"deploy X" plus any stray hex token → auto-exempt. Gone.
+    expect(hasReleaseArtifactEvidence("deploy of abc1234 succeeded.")).toBe(
+      false,
+    );
+    expect(
+      hasReleaseArtifactEvidence("Осталось задеплоить 447c3c5 в прод."),
+    ).toBe(false);
+  });
+
+  it("does NOT match the infinitive / imperative punt forms", () => {
+    expect(hasReleaseArtifactEvidence("задеплоить позже")).toBe(false);
+    expect(hasReleaseArtifactEvidence("deploy to prod later")).toBe(false);
+    expect(hasReleaseArtifactEvidence("ship it next")).toBe(false);
   });
 
   it("is false when there is no artifact evidence", () => {
@@ -568,6 +621,20 @@ describe("refusesDeferredRelease() + decideBlock DoD-vs-title (#984)", () => {
 
   it("does not refuse a completed-deploy narration scoped outside remaining", () => {
     expect(refusesDeferredRelease(DEPLOY_DONE_NOT_DEFERRED)).toBe(false);
+  });
+
+  it("still refuses a deploy-punt report with a stray hex sha but no completed evidence (#991 BLOCKER)", () => {
+    expect(DOD_DEFER_WITH_HEX_NO_EVIDENCE).toContain(REPORT_MARKER);
+    expect(hasReleaseArtifactEvidence(DOD_DEFER_WITH_HEX_NO_EVIDENCE)).toBe(
+      false,
+    );
+    expect(refusesDeferredRelease(DOD_DEFER_WITH_HEX_NO_EVIDENCE)).toBe(true);
+    expect(
+      decideBlock({
+        stopHookActive: false,
+        lastAssistantText: DOD_DEFER_WITH_HEX_NO_EVIDENCE,
+      }),
+    ).toEqual({ block: true });
   });
 
   it("regression: exempt turns (decision-request / interim / proposal / negated) never DoD-block", () => {

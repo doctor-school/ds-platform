@@ -122,33 +122,45 @@ export function isProposalOrInFlight(text) {
 export const REMAINING_MARKER_RE =
   /остал\w*|остаётся|остаток|не\s+сделан\w*|предстоит|надо\s+ещ[её]|нужно\s+ещ[её]|\bTODO\b|\bremaining\b|\bnext step/i;
 
-/** Release-class action verbs/stems (RU+EN). RU roots stay broad enough to
- * cover the verb forms too — «деплой»(noun)/«деплоить»/«задеплоить» all share
+/** Release-class action verbs/stems (RU+EN), each anchored on a LEADING word
+ * boundary. JS `\b` is ASCII-only and does not fire around Cyrillic, so the RU
+ * stems (`депло`/`релиз`/`публик`/`шип`/`выкат`) use the file's own
+ * `(^|[^а-яёa-z])` boundary idiom (cf. NEGATED_COMPLETION_RE) — this stops a
+ * mid-word Cyrillic hit like «рес·публик·и» (republic) or an EN mid-word hit
+ * like "member·ship" from tripping the gate (#991 review NIT 2). RU roots stay
+ * broad enough to cover the verb forms — «деплой»/«деплоить»/«задеплоить» share
  * the «депло» stem; «релиз»/«релизить»/«зарелизить» share «релиз». */
 export const RELEASE_VERB_RE =
-  /\bpublish\w*|\breleas\w*|\bdeploy\w*|\bship\w*|(?:за)?депло\w*|(?:за)?релиз\w*|(?:о)?публик\w*|выкат\w*|шип\w*/i;
+  /(?:^|[^а-яёa-z])(?:publish\w*|releas\w*|deploy\w*|ship\w*|(?:за)?депло\w*|(?:за)?релиз\w*|(?:о)?публик\w*|выкат\w*|шип\w*)/i;
 
 /** A `release-YYYY.MM.DD[-n]` tag pattern — direct release-artifact evidence. */
 export const RELEASE_TAG_RE = /release-\d{4}\.\d{2}\.\d{2}(?:-\d+)?/i;
 
-/** Past-participle deploy evidence — «задеплоен…» / "deployed" / "deployment". */
-export const DEPLOYED_EVIDENCE_RE = /задеплоен\w*|\bdeployed\b|\bdeployment\b/i;
-
-const DEPLOY_WORD_RE = /\bdeploy\w*|(?:за)?депло\w*/i;
-const SHA_RE = /\b[0-9a-f]{7,40}\b/i;
+/** COMPLETED-state deploy evidence — the PAST-PARTICIPLE / past-tense forms
+ * «задеплоен(а/о/ный)…» / «задеплоил(и)…» / "deployed" / "deployment". These
+ * are deliberately kept DISJOINT from the infinitive/imperative punt forms
+ * («задеплоить» / «deploy X» / «ship»): «задеплоен…» and «задеплоил…» never
+ * match «задеплоить» (the 8th char diverges е/л vs и), so evidence cannot be
+ * satisfied by the very deferred verb that triggered the block (#991 BLOCKER —
+ * the old `DEPLOY_WORD_RE && SHA_RE` clause self-defeated: its deploy-stem
+ * matched the punted «задеплоить», so any stray 7+ hex token silently exempted
+ * the finding-B case). */
+export const DEPLOYED_EVIDENCE_RE =
+  /задеплоен\w*|задеплоил\w*|\bdeployed\b|\bdeployment\b/i;
 
 /**
- * True when the report's own text evidences a release/deploy artifact for this
- * session: a `release-YYYY.MM.DD` tag, a «задеплоен»/"deployed"/Deployment
- * mention, or a deploy word alongside a commit-sha token. Presence anywhere in
- * the report exempts the DoD refusal (the release actually happened).
+ * True when the report's own text evidences a COMPLETED release/deploy artifact
+ * for this session: a `release-YYYY.MM.DD` tag, or a completed-form deploy
+ * mention («задеплоен»/«задеплоил»/"deployed"/Deployment). Signals that collide
+ * with the deferred/infinitive verb (a bare deploy-stem + a sha) are NOT used —
+ * they would auto-exempt the exact punt this gate must catch. Presence anywhere
+ * in the report exempts the DoD refusal (the release actually happened).
  * @param {string} text
  */
 export function hasReleaseArtifactEvidence(text) {
   const t = String(text || "");
   if (RELEASE_TAG_RE.test(t)) return true;
   if (DEPLOYED_EVIDENCE_RE.test(t)) return true;
-  if (DEPLOY_WORD_RE.test(t) && SHA_RE.test(t)) return true;
   return false;
 }
 

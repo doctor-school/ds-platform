@@ -438,7 +438,7 @@ jobs:
 
   no-stub:
     needs: setup
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -515,7 +515,7 @@ jobs:
   # #350). Static source scan — no PR/gh context needed. WARN per ADR-0007 §2.6.
   showcase-coverage:
     needs: setup
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -534,7 +534,7 @@ jobs:
   # PR/gh context needed. WARN per ADR-0007 §2.6.
   showcase-snippet:
     needs: setup
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -550,7 +550,7 @@ jobs:
   # file scan — no PR/gh context needed. WARN per ADR-0007 §2.6.
   asset-format:
     needs: setup
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -566,7 +566,7 @@ jobs:
   # #269). Static source scan — no PR/gh context needed. WARN per ADR-0007 §2.6.
   interaction-states:
     needs: setup
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -605,7 +605,7 @@ jobs:
   # context needed. WARN per ADR-0007 §2.6.
   aa-contrast:
     needs: setup
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -623,7 +623,7 @@ jobs:
   # no PR/gh context needed. WARN per ADR-0007 §2.6.
   form-error:
     needs: setup
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -643,7 +643,7 @@ jobs:
   # PR/gh context. WARN per ADR-0007 §2.6.
   form-rhythm:
     needs: setup
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -663,7 +663,7 @@ jobs:
   # surfaces — no PR/gh context. WARN per ADR-0007 §2.6.
   submit-pending:
     needs: setup
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -702,7 +702,7 @@ jobs:
   # alone. Static title scan. WARN per ADR-0007 §2.6.
   ears-naming:
     needs: setup
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
+    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

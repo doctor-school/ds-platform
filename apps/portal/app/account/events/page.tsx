@@ -72,13 +72,21 @@ export default async function MyEventsPage() {
               <h1 className="text-3xl font-extrabold tracking-tight text-balance layout:text-5xl">
                 {t("title")}
               </h1>
-              <p className="mt-4 text-caption font-semibold opacity-90">
+              <p
+                className="mt-4 text-caption font-semibold opacity-90"
+                data-testid="poster-decor"
+              >
                 {t("subtitle", { count })}
               </p>
             </div>
             {/* Timezone block (EARS-11): «мои события» presents every instant in
-                Europe/Moscow (МСК), never the viewer's local timezone. */}
-            <div className="hidden shrink-0 text-right text-2xs font-extrabold uppercase tracking-micro leading-loose opacity-80 layout:block">
+                Europe/Moscow (МСК), never the viewer's local timezone. The whole
+                block renders at `opacity-80` (the inner `opacity-100` cannot lift
+                a parent opacity group), so it is decorative-poster contrast debt. */}
+            <div
+              className="hidden shrink-0 text-right text-2xs font-extrabold uppercase tracking-micro leading-loose opacity-80 layout:block"
+              data-testid="poster-decor"
+            >
               {t("tzEyebrow")}
               <br />
               <span className="opacity-100">{t("tzValue")}</span>

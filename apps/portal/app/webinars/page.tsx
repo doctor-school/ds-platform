@@ -97,13 +97,19 @@ export default async function WebinarsListingPage() {
     <main className="min-h-screen bg-background text-foreground">
       <header className="bg-header text-header-foreground">
         <Container className="py-10 layout:py-16">
-          <p className="text-2xs font-extrabold uppercase tracking-micro opacity-80">
+          <p
+            className="text-2xs font-extrabold uppercase tracking-micro opacity-80"
+            data-testid="poster-decor"
+          >
             {t("breadcrumb")}
           </p>
           <h1 className="mt-6 text-3xl font-extrabold tracking-tight text-balance layout:text-5xl">
             {t("title")}
           </h1>
-          <p className="mt-4 text-caption font-semibold opacity-90">
+          <p
+            className="mt-4 text-caption font-semibold opacity-90"
+            data-testid="poster-decor"
+          >
             {t("subtitle")}
           </p>
         </Container>

@@ -262,7 +262,10 @@ export default function AccountPage() {
           <h1 className="text-3xl font-extrabold tracking-tight text-balance layout:text-5xl">
             {t("title")}
           </h1>
-          <p className="mt-4 text-caption font-semibold opacity-90">
+          <p
+            className="mt-4 text-caption font-semibold opacity-90"
+            data-testid="poster-decor"
+          >
             {t("subtitle")}
           </p>
         </Container>

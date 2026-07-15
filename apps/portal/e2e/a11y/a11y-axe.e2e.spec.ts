@@ -13,12 +13,14 @@ import { LIVE_STAND, submitRegisterAndVerify } from "../support/doctor-session";
  * The settled token fact it guards: text on `bg-card` uses the card-safe AA token
  * `text-primary-action` (blue.700), never `text-primary` (#270 precedent).
  *
- * SCOPE — the 004-owned dark poster header + footer band (`.bg-header`) are
- * EXCLUDED from the scan: they are feature 004's approved neo-brutalist surface
- * (reduced-opacity `text-header-foreground` kickers / chips), NOT 005's registered
- * -state additions, and their standing axe contrast findings are 004 debt tracked
- * separately (see the #574 PR decision-debt), not a 005 regression. The scan
- * therefore targets exactly the 005-composed regions: the status card (`bg-card`,
+ * SCOPE — only the 004-owned dark poster band's REDUCED-OPACITY decorative
+ * kickers/chips (tagged `data-testid="poster-decor"`) are EXCLUDED (#924, leaf-
+ * scoped — never the whole `.bg-header` band, which would swallow arbitrary
+ * downstream content incl. any interactive control): those are feature 004's
+ * approved neo-brutalist surface whose standing axe contrast findings are 004 debt
+ * tracked separately (see the #574 PR decision-debt), not a 005 regression. The
+ * poster band's full-strength content (headings, full-contrast chips, the footer
+ * CTA) stays IN scope, as do the 005-composed regions: the status card (`bg-card`,
  * the «вы записаны» confirmation + join signposting — no room link until the 006
  * room surface ships, #584) and the «мои события» card list.
  *
@@ -53,9 +55,12 @@ async function scan(page: Page, theme: (typeof THEMES)[number]) {
   await page.waitForTimeout(400);
   const results = await new AxeBuilder({ page })
     .withTags(WCAG_TAGS)
-    // 004's dark poster header + footer band — see the scope note above.
-    // axe-exclude-ok: #924 band swallows interactive toggle — leaf-scope tracked
-    .exclude(".bg-header")
+    // 004's reduced-opacity decorative poster kickers/chips only (`data-testid=
+    // "poster-decor"`) — their standing contrast findings are 004 canvas debt
+    // tracked separately. Leaf-scoped (#924), NOT a `.bg-header` band exclude, so
+    // the rest of the poster band (titles, full-strength chips, the footer CTA,
+    // and any interactive header control) stays IN the a11y scan.
+    .exclude('[data-testid="poster-decor"]')
     .analyze();
   const summary = results.violations.map((v) => ({
     id: v.id,
@@ -112,8 +117,8 @@ test.describe("005 EARS-13 axe-core a11y scan of the portal webinar surfaces", (
   // 003 EARS-28 (#770) — the /account profile surface (canvas «Разделы»): the
   // EARS-27 identity rows, the verified badge (`text-success` on `bg-background`),
   // the inline display-name edit affordance, and the destructive sign-out row
-  // must all pass WCAG 2 A/AA in both themes. The blue poster header rides the
-  // same `.bg-header` scope note as above (004-owned band, excluded).
+  // must all pass WCAG 2 A/AA in both themes. The blue poster header is IN scope;
+  // only its reduced-opacity `poster-decor` leaves ride the scope note above.
   test("the /account profile surface passes WCAG 2 A/AA (both themes)", async ({
     page,
   }) => {

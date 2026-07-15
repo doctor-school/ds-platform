@@ -97,7 +97,13 @@ commit subjects → the **LAST** `(#N)` per subject (the squash-merge number) �
 `gh pr view`. Notes are embedded **verbatim** via `JSON.stringify({ text })` — no
 shell, no interpolation — so a `$(...)`/backtick in a note cannot execute.
 
-- **`MATTERMOST_WEBHOOK_URL`** unset → log + **skip green** (exit 0), same posture
+- **`MATTERMOST_WEBHOOK_URL`** — a local `deploy:prod` / `deploy:release-notes`
+  runs on the operator's box (ADR-0012 — SSH deploy, no CI), where the GitHub
+  Actions `secrets.*` do not exist. So the webhook is sourced from the operator's
+  `~/.ds-platform/.env.local` (`tools/deploy/env-local.mjs`, #950) — set it there
+  ONCE (see the commented key in `infra/dev-stand/.env.example`) and every local
+  deploy digest resolves it. A value already set in the process env (CI) always
+  wins. Still unset (neither source) → log + **skip green** (exit 0), same posture
   as the per-PR delivery.
 - **`DELIVERY_ENV`** unknown/unset → **fail loud** (exit 1); the deploy passes
   `DELIVERY_ENV=prod`. For a standalone `--dry-run`, pass `DELIVERY_ENV=prod`.

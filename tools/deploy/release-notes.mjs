@@ -37,6 +37,7 @@ import {
   labelsAreProductKind,
   noteIsReal,
 } from "../ci/post-product-note.mjs";
+import { loadEnvLocal, resolveWebhookUrl } from "./env-local.mjs";
 
 const SHORT = 12;
 
@@ -212,6 +213,19 @@ async function main() {
     throw new Error(
       `--new-sha must be a git SHA (7–40 hex chars); got ${JSON.stringify(newSha ?? null)}.`,
     );
+  }
+
+  // On the LOCAL deploy path (ADR-0012 — SSH deploy, no CI) GitHub Actions
+  // `secrets.MATTERMOST_WEBHOOK_URL` does not exist and nothing sources
+  // `~/.ds-platform/.env.local`, so the webhook is unset and the digest has never
+  // fired locally (#950). Backfill it from the operator's `.env.local` (the same
+  // source the dev stand reads). An env var already set (CI) always WINS via
+  // resolveWebhookUrl; a still-missing var keeps the green-skip below unchanged.
+  // Assign only a real string — `process.env.X = undefined` would coerce to the
+  // string "undefined" and defeat the skip-check.
+  if (!process.env.MATTERMOST_WEBHOOK_URL) {
+    const resolved = resolveWebhookUrl(process.env, loadEnvLocal());
+    if (resolved) process.env.MATTERMOST_WEBHOOK_URL = resolved;
   }
 
   // No webhook (and not composing a dry-run) → clean green skip, same posture as

@@ -78,7 +78,7 @@ const ENV_PLACEHOLDER_RE =
 // attribute, and the user-facing-placeholder shape is covered by check (1).
 const STUB_MARKER_RE = /\b(TODO|FIXME|XXX|HACK|STUB)\b/;
 const ISSUE_REF_RE = /#\d{1,6}\b/;
-const SUPPRESS_RE = /\bno-stub-ok\s*:/i;
+const SUPPRESS_RE = /\bno-stub-ok\s*:\s*\S/i;
 
 interface Finding {
   file: string;

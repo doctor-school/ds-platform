@@ -28,4 +28,15 @@ describe("no-hardcoded-path-lint", () => {
     const { code } = runGuard(GUARD, dir("green-plain-string"));
     expect(code).toBe(0);
   });
+
+  it("green: a `// no-hardcoded-path-ok: <reason>` suppression → exit 0", () => {
+    const { code } = runGuard(GUARD, dir("green-suppressed"));
+    expect(code).toBe(0);
+  });
+
+  it("red: a bare `// no-hardcoded-path-ok:` with no reason does NOT suppress → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-empty-reason"));
+    expect(code).toBe(1);
+    expect(stderr).toContain("hardcoded-abs-path");
+  });
 });

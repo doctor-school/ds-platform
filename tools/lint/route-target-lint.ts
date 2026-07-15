@@ -83,7 +83,7 @@ const ROUTE_FILE_GLOB = "**/{page,route}.{ts,tsx,js,jsx}";
 // segment containing it is treated as dynamic (matches a `[seg]` route folder).
 const INTERP = "__INTERP__";
 
-const SUPPRESS_RE = /\broute-target-ok\s*:/i;
+const SUPPRESS_RE = /\broute-target-ok\s*:\s*\S/i;
 
 // href="…" / href='…' / href={"…"} / href={'…'} / href={`…`} / href=`…`
 const HREF_RE = /\bhref=(?:\{\s*)?(["'`])((?:\\.|(?!\1)[^\\])*)\1/g;

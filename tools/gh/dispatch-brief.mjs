@@ -145,7 +145,7 @@ export function defaultRunner() {
  * Best-effort gather of the Issue + git state used to seed the brief. Never
  * throws: a `gh`/`git` failure yields `null`/`[]` fields the renderer degrades on.
  * @param {{issueNumber: string|number, runner: {gh: Function, git: Function}, worktreeExists?: boolean}} args
- * @returns {{title: string|null, body: string, labels: string[], seededFiles: string[], worktreeChanged: string[], branch: string|null}}
+ * @returns {{title: string|null, body: string, labels: string[], seededFiles: string[], worktreeChanged: string[], repoRoot: string|null}}
  */
 export function gatherState({ issueNumber, runner, worktreeExists }) {
   let title = null;
@@ -189,7 +189,14 @@ export function gatherState({ issueNumber, runner, worktreeExists }) {
     }
   }
 
-  return { title, body, labels, seededFiles, worktreeChanged, branch: null };
+  // Derive the real repo root so the renderer never bakes a machine-specific
+  // absolute path. `git rev-parse` prints forward-slash `C:/Users/...` on
+  // Windows too; on failure degrade to null and the renderer emits a placeholder.
+  let repoRoot = null;
+  const rootRes = runner.git(["rev-parse", "--show-toplevel"]);
+  if (rootRes.status === 0) repoRoot = rootRes.stdout.trim() || null;
+
+  return { title, body, labels, seededFiles, worktreeChanged, repoRoot };
 }
 
 /** Render a markdown bullet list, or a single `<fill …>` placeholder when empty. */
@@ -201,7 +208,7 @@ function bulletsOrPlaceholder(items, placeholder) {
 /**
  * Render the ready-to-edit dispatch brief. Pure — all state is passed in, so the
  * unit test drives it with fixtures.
- * @param {{issueNumber: string|number, title: string|null, labels?: string[], seededFiles?: string[], worktreeChanged?: string[]}} args
+ * @param {{issueNumber: string|number, title: string|null, labels?: string[], seededFiles?: string[], worktreeChanged?: string[], repoRoot?: string|null}} args
  * @returns {string}
  */
 export function renderBrief({
@@ -210,6 +217,7 @@ export function renderBrief({
   labels = [],
   seededFiles = [],
   worktreeChanged = [],
+  repoRoot = null,
 }) {
   const n = String(issueNumber);
   const displayTitle = title || `<fill: Issue #${n} title>`;
@@ -217,6 +225,10 @@ export function renderBrief({
   const slug = title ? slugify(title) : "<fill-slug>";
   const branch = `${prefix}/${n}-${slug}`;
   const wt = `.claude/worktrees/${n}`;
+  // Real repo root when known; else a `<fill …>`-style placeholder — never a
+  // machine-specific literal (AGENTS.md §6 / dev-stand.md forbid hardcoded paths).
+  const root = repoRoot || "<repo-root>";
+  const wtAbs = `${root}/${wt}`;
 
   // Prefer the worktree diff (concrete changed files); fall back to Issue path-tokens.
   const scopeSource =
@@ -231,8 +243,8 @@ export function renderBrief({
 kind: <fill: feature-iteration | hotfix-pr | adr-revision | engineering-task | …>. Governing skill: <fill \`apps/docs/content/skills/<name>/SKILL.md\`, or declare \`kind: engineering-task\` (AGENTS.md §3.8) if none>.
 
 ## Worktree isolation (MANDATORY — read first)
-You CANNOT \`EnterWorktree\` (cwd is pinned to the repo root; the tool refuses to switch). Operate EXCLUSIVELY via absolute paths under \`C:/Users/sidor/repos/ds-platform/${wt}\`.
-- FIRST action: \`cd C:/Users/sidor/repos/ds-platform/${wt}\`, run \`git rev-parse --show-toplevel\`, confirm it is the worktree root BEFORE any edit. \`pnpm install\` in the worktree before any test.
+You CANNOT \`EnterWorktree\` (cwd is pinned to the repo root; the tool refuses to switch). Operate EXCLUSIVELY via absolute paths under \`${wtAbs}\`.
+- FIRST action: \`cd ${wtAbs}\`, run \`git rev-parse --show-toplevel\`, confirm it is the worktree root BEFORE any edit. \`pnpm install\` in the worktree before any test.
 - Every edited path is absolute under \`${wt}\`. Never touch the shared main tree.
 - Branch: \`${branch}\`.
 
@@ -291,6 +303,7 @@ function main() {
       labels: state.labels,
       seededFiles: state.seededFiles,
       worktreeChanged: state.worktreeChanged,
+      repoRoot: state.repoRoot,
     }),
   );
   process.exit(0);

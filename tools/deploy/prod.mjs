@@ -33,6 +33,14 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { envFooter } from "../ci/post-product-note.mjs";
+import { createDeploymentRecord } from "./deployment-record.mjs";
+import { composeDigest } from "./release-notes.mjs";
+
+// Prod health endpoint — the status record's `log_url` and the verify-over-HTTP
+// pointer (#942/#927). Kept in one place so the record and the printed hint agree.
+const PROD_HEALTH_URL = "https://api.doctor.school/v1/health";
+
 // --- config (env-overridable; SSH aliases live in ~/.ssh/config) ----------
 
 const API_PROD = process.env.DS_API_PROD_SSH || "ds-api-prod";
@@ -129,7 +137,9 @@ function preflight() {
 
   // 3. green CI for this exact SHA
   if (process.argv.includes("--skip-ci-check")) {
-    console.log("  ⚠ --skip-ci-check: SKIPPING the green-CI gate (escape hatch)");
+    console.log(
+      "  ⚠ --skip-ci-check: SKIPPING the green-CI gate (escape hatch)",
+    );
   } else {
     assertGreenCi(originMain);
   }
@@ -186,8 +196,7 @@ function assertGreenCi(sha) {
   }
   if (pending.length)
     die(`CI still running for ${sha.slice(0, 12)}: ${pending.join(", ")}`);
-  if (bad.length)
-    die(`CI is RED for ${sha.slice(0, 12)}: ${bad.join(", ")}`);
+  if (bad.length) die(`CI is RED for ${sha.slice(0, 12)}: ${bad.join(", ")}`);
   ok(`CI green — ${latest.size} check(s) passed for ${sha.slice(0, 12)}`);
 }
 
@@ -476,13 +485,82 @@ echo "retained ds-api tags:"; sudo docker images ds-api --format '  {{.Tag}} ({{
   step("Post the aggregated release note to Mattermost (#868)");
   await postReleaseNotes(prevSha, sha);
 
+  step("Record the deploy as a GitHub Deployment (#927/#942)");
+  await recordDeployment(prevSha, sha);
+
   console.log(
     `\n✓ DEPLOY OK — origin/main @ ${sha.slice(0, 12)} live on prod` +
       ` (${((Date.now() - t0All) / 1000).toFixed(1)}s total).`,
   );
-  console.log(
-    `  Verify over HTTP:  curl -s https://api.doctor.school/v1/health | jq .version`,
-  );
+  console.log(`  Verify over HTTP:  curl -s ${PROD_HEALTH_URL} | jq .version`);
+}
+
+// Record a successful deploy as a GitHub Deployment(production, sha) + success
+// status, persisting the release-notes digest into the Deployment payload (#942,
+// spec §D3). NON-FATAL by contract: the deploy has already succeeded here, so any
+// gh/compose failure only WARNS — the deploy exit code stays 0. The Mattermost
+// post (postReleaseNotes) and this record share the ONE composeDigest seam (#847).
+async function recordDeployment(prevSha, sha) {
+  try {
+    // Release tag shipped, if any (null until the first Release exists — expected).
+    let releaseTag = null;
+    try {
+      const raw = localCap("gh", [
+        "release",
+        "list",
+        "--limit",
+        "1",
+        "--json",
+        "tagName",
+      ]);
+      const arr = JSON.parse(raw || "[]");
+      releaseTag =
+        Array.isArray(arr) && arr[0] && arr[0].tagName ? arr[0].tagName : null;
+    } catch (e) {
+      console.log(
+        `  ⚠ could not resolve the latest release tag (recording untagged): ${e.message}`,
+      );
+    }
+
+    // Release-notes digest text — the SAME seam the Mattermost post uses (#847).
+    // Only computable with a real range; a first deploy / same-SHA redeploy has
+    // no range and records empty notes (spec: notesText may be null/"").
+    let notesText = "";
+    if (prevSha && prevSha !== sha) {
+      try {
+        const digest = await composeDigest({
+          prevSha,
+          newSha: sha,
+          footer: envFooter("prod"),
+          cwd: process.cwd(),
+        });
+        if (digest) notesText = digest.text;
+      } catch (e) {
+        console.log(
+          `  ⚠ could not compose release notes for the Deployment record (deploy already succeeded): ${e.message}`,
+        );
+      }
+    }
+
+    const res = createDeploymentRecord({
+      sha,
+      releaseTag,
+      notesText,
+      healthUrl: PROD_HEALTH_URL,
+      cwd: process.cwd(),
+    });
+    if (res.ok) {
+      ok(`GitHub Deployment recorded (#${res.deploymentId})`);
+    } else {
+      console.log(
+        `  ⚠ could not record the GitHub Deployment (deploy already succeeded): ${res.error}`,
+      );
+    }
+  } catch (e) {
+    console.log(
+      `  ⚠ deployment-record step failed (deploy already succeeded): ${e.message}`,
+    );
+  }
 }
 
 // Post the aggregated PROD release note (#868). NON-FATAL by contract: the deploy

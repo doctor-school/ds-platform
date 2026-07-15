@@ -21,6 +21,7 @@ const SCRIPT = resolve(HERE, "..", "..", "ci", "post-release-digest.mjs");
 const SHA_NEW = "a".repeat(40);
 const SHA_PREV = "b".repeat(40);
 const SHA_OLDER = "c".repeat(40);
+const SHA_ROOT = "d".repeat(40);
 
 // ── shouldPost (pure guard) ─────────────────────────────────────────────────
 describe("post-release-digest — shouldPost (pure)", () => {
@@ -55,43 +56,80 @@ describe("post-release-digest — shouldPost (pure)", () => {
   });
 });
 
-// ── resolvePrevSha (pure) ───────────────────────────────────────────────────
+// ── resolvePrevSha (pure — release-tag anchored, #975) ───────────────────────
 describe("post-release-digest — resolvePrevSha (pure)", () => {
-  it("newest-first list: index 0 is the current deploy → returns the next SHA", () => {
-    const deployments = [
-      { sha: SHA_NEW },
-      { sha: SHA_PREV },
-      { sha: SHA_OLDER },
+  it("(b) steady-state: a prior release tag exists → prev = that tag's commit", () => {
+    const candidateTags = [{ tag: "release-2026.07.14-1", sha: SHA_PREV }];
+    expect(resolvePrevSha(candidateTags, SHA_NEW, SHA_ROOT)).toBe(SHA_PREV);
+  });
+
+  it("(a) baseline: no prior release tag → prev = the repo-root first commit", () => {
+    expect(resolvePrevSha([], SHA_NEW, SHA_ROOT)).toBe(SHA_ROOT);
+  });
+
+  it("(a) baseline: no prior tag AND no repo root (git unavailable) → null (`none` range)", () => {
+    expect(resolvePrevSha([], SHA_NEW, null)).toBeNull();
+  });
+
+  it("(c) a tag AT new-sha is excluded (strict ancestor), falling to the prior tag", () => {
+    const candidateTags = [
+      { tag: "release-2026.07.15-1", sha: SHA_NEW }, // tag at the deployed sha
+      { tag: "release-2026.07.14-1", sha: SHA_PREV },
     ];
-    expect(resolvePrevSha(deployments, SHA_NEW)).toBe(SHA_PREV);
+    expect(resolvePrevSha(candidateTags, SHA_NEW, SHA_ROOT)).toBe(SHA_PREV);
   });
 
-  it("first deploy (only the current entry) → null", () => {
-    expect(resolvePrevSha([{ sha: SHA_NEW }], SHA_NEW)).toBeNull();
+  it("(c) only a tag AT new-sha → excluded, falls back to the repo root", () => {
+    const candidateTags = [{ tag: "release-2026.07.15-1", sha: SHA_NEW }];
+    expect(resolvePrevSha(candidateTags, SHA_NEW, SHA_ROOT)).toBe(SHA_ROOT);
   });
 
-  it("empty list (no Deployment recorded yet) → null", () => {
-    expect(resolvePrevSha([], SHA_NEW)).toBeNull();
+  it("orders by date, latest wins (list order irrelevant)", () => {
+    const candidateTags = [
+      { tag: "release-2026.07.10-1", sha: SHA_OLDER },
+      { tag: "release-2026.07.14-2", sha: SHA_PREV },
+      { tag: "release-2026.06.30-9", sha: SHA_ROOT },
+    ];
+    expect(resolvePrevSha(candidateTags, SHA_NEW, "z".repeat(40))).toBe(
+      SHA_PREV,
+    );
   });
 
-  it("a duplicated head entry (same-SHA redeploy recorded twice) → the true prior SHA", () => {
-    const deployments = [{ sha: SHA_NEW }, { sha: SHA_NEW }, { sha: SHA_PREV }];
-    expect(resolvePrevSha(deployments, SHA_NEW)).toBe(SHA_PREV);
+  it("same-date tags: the highest ordinal wins", () => {
+    const candidateTags = [
+      { tag: "release-2026.07.14-1", sha: SHA_OLDER },
+      { tag: "release-2026.07.14-3", sha: SHA_PREV },
+      { tag: "release-2026.07.14-2", sha: SHA_ROOT },
+    ];
+    expect(resolvePrevSha(candidateTags, SHA_NEW, null)).toBe(SHA_PREV);
   });
 
-  it("skips malformed entries (no/empty sha) and finds the first real prior SHA", () => {
-    const deployments = [
-      { sha: SHA_NEW },
-      {},
-      { sha: "" },
+  it("skips malformed / non-release tags and picks the newest valid one", () => {
+    const candidateTags = [
+      { tag: "release-2026.07.14-1", sha: SHA_PREV },
+      { tag: "v1.2.3", sha: SHA_OLDER }, // not a release-* tag
+      {}, // no tag/sha
+      { tag: "release-2026.07.20-1", sha: "" }, // empty sha
       null,
-      { sha: SHA_PREV },
     ];
-    expect(resolvePrevSha(deployments as never, SHA_NEW)).toBe(SHA_PREV);
+    expect(resolvePrevSha(candidateTags as never, SHA_NEW, SHA_ROOT)).toBe(
+      SHA_PREV,
+    );
   });
 
-  it("non-array input → null", () => {
-    expect(resolvePrevSha(undefined as never, SHA_NEW)).toBeNull();
+  it("(d) workflow_dispatch default sha: trigger-agnostic — given the dispatch-resolved new-sha, ranges from the prior tag", () => {
+    // The workflow resolves NEW_SHA (input → current prod Deployment → HEAD); the
+    // resolver is identical regardless of the trigger that produced new-sha.
+    const dispatchNewSha = "e".repeat(40);
+    const candidateTags = [{ tag: "release-2026.07.14-1", sha: SHA_PREV }];
+    expect(resolvePrevSha(candidateTags, dispatchNewSha, SHA_ROOT)).toBe(
+      SHA_PREV,
+    );
+  });
+
+  it("non-array input → the repo-root baseline (or null)", () => {
+    expect(resolvePrevSha(undefined as never, SHA_NEW, SHA_ROOT)).toBe(SHA_ROOT);
+    expect(resolvePrevSha(undefined as never, SHA_NEW, null)).toBeNull();
   });
 });
 
@@ -106,7 +144,7 @@ describe("post-release-digest — buildReleaseNotesArgs (pure)", () => {
     ]);
   });
 
-  it("a null prev (first deploy) → the literal `none` (release-notes.mjs green-skips it)", () => {
+  it("a null prev (no resolvable baseline) → the literal `none` (release-notes.mjs green-skips it)", () => {
     expect(buildReleaseNotesArgs(null, SHA_NEW)).toEqual([
       "--prev-sha",
       "none",

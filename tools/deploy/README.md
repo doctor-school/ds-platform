@@ -62,8 +62,8 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
 The **previous prod SHA** the Deployment-record digest ranges from is read from the
 running `ds-api-prod-api-1` container's image tag (`ds-api:<sha>`) **before** the
 build/up swap — the deploy record is the running image itself, no separate state
-file. (The CI digest resolves its own prev-sha from the prior production
-Deployment via `gh api`.)
+file. (The CI digest resolves its own prev-sha from the previous `release-*` tag —
+see "Release digest → Mattermost" below, #975.)
 
 The **deployed SHA is queryable over HTTP**: `GET /v1/health` → `{"version":…}`
 (from the api's `DEPLOY_SHA` env). `--rollback` `up -d`s an already-present prior
@@ -100,9 +100,22 @@ not exist — so it never fired locally (the #950 `.env.local` fallback was a cr
 now retired). Instead, `.github/workflows/release-digest.yml` triggers on
 `deployment_status: success` for `environment: production` (the very Deployment the
 deploy records, #942); `tools/ci/post-release-digest.mjs` resolves the
-`<prev-sha>..<new-sha>` range from the Deployment event + `gh api …/deployments`
-and spawns this script with the CI secret in env. `--dry-run` renders offline for a
-local sanity check (no webhook needed).
+`<prev-sha>..<new-sha>` range and spawns this script with the CI secret in env. The
+workflow also carries a manual **`workflow_dispatch`** trigger (optional `sha`
+input; empty → the current prod deployed SHA, else HEAD) to re-fire a missed
+digest. `--dry-run` renders offline for a local sanity check (no webhook needed).
+
+**prev-sha is anchored on the previous RELEASE TAG (#975).** `post-release-digest.mjs`
+resolves `prev-sha` to the commit of the latest `release-*` tag that is a **strict
+ancestor** of `new-sha` (a tag AT `new-sha` is excluded), ordered by the tag's
+`release-YYYY.MM.DD-<n>` date + same-day ordinal (`git tag --list 'release-*'
+--merged <new-sha>`). With **no prior release tag**, the baseline is the repo-root
+first commit (`git rev-list --max-parents=0`) so the range is the full history —
+matching the GitHub Release's `--generate-notes`. This is the fix for the inaugural
+empty digest: anchoring on the previous _Deployment_ instead made the first
+release's range tooling-only (the prior deploy already carried all the product
+work), so the digest wrongly said "no user-facing changes" while the Release notes
+listed the full history. The digest a release announces must describe that release.
 
 The message lists the `## Product note (RU)` section of every **product-kind**
 (`feature` | `bug`) PR merged in the `<prev-sha>..<new-sha>` range, carrying the
@@ -130,11 +143,11 @@ A successful deploy leaves a durable, queryable trail. Every record step is
 **non-fatal by contract** — it runs only once the deploy has already succeeded,
 so a `gh`/webhook hiccup prints a warning and the deploy exit code stays 0.
 
-| Record                | When                                        | Source / how                                                                                                                                                                                                                                                         |
-| --------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **GitHub Deployment** | end of `deploy:prod` (#942)                 | `deployment-record.mjs` posts a `Deployment(production, sha)` + `success` status carrying the release-notes digest; `log_url` = `/v1/health`.                                                                                                                        |
-| **Git tag + Release** | `Version Packages` PR merge (#944)          | Merging the changesets release PR cuts `release-YYYY.MM.DD-n` + a GitHub Release with auto-generated notes. Independent of a deploy.                                                                                                                                 |
-| **Mattermost digest** | CI `deployment_status: success` (#868/#968) | `release-digest.yml` fires on the production Deployment's `success` status; `tools/ci/post-release-digest.mjs` resolves the `<prev>..<new>` range from the event + `gh api` and posts via `release-notes.mjs`. Webhook = `secrets.MATTERMOST_WEBHOOK_URL` (CI only). |
+| Record                | When                                        | Source / how                                                                                                                                                                                                                                                                                                                  |
+| --------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **GitHub Deployment** | end of `deploy:prod` (#942)                 | `deployment-record.mjs` posts a `Deployment(production, sha)` + `success` status carrying the release-notes digest; `log_url` = `/v1/health`.                                                                                                                                                                                 |
+| **Git tag + Release** | `Version Packages` PR merge (#944)          | Merging the changesets release PR cuts `release-YYYY.MM.DD-n` + a GitHub Release with auto-generated notes. Independent of a deploy.                                                                                                                                                                                          |
+| **Mattermost digest** | CI `deployment_status: success` (#868/#968) | `release-digest.yml` fires on the production Deployment's `success` status (or a manual `workflow_dispatch`); `tools/ci/post-release-digest.mjs` anchors `<prev>` on the previous `release-*` tag (repo-root baseline if none, #975) and posts via `release-notes.mjs`. Webhook = `secrets.MATTERMOST_WEBHOOK_URL` (CI only). |
 
 **`## Project reality` reads these at SessionStart.** The bootstrap (#939)
 derives the latest release (from Releases/tags), the currently deployed SHA (the

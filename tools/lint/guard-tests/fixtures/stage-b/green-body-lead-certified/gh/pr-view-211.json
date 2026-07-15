@@ -1,0 +1,6 @@
+{
+  "number": 211,
+  "body": "## Summary\nRedirect an unauthenticated /room visit to /login (behavioral-only; no new/changed visual surface).\n\nStage-B: N/A (no visual surface) — lead-certified.\n",
+  "labels": [],
+  "files": [{ "path": "apps/portal/src/app/room/page.tsx" }]
+}

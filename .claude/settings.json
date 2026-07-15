@@ -31,6 +31,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Agent|Task|Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/hooks/dispatch-guard.mjs\"",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "Stop": [

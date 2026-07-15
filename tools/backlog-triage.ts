@@ -255,12 +255,23 @@ export function parseProseBlockers(body: string): ProseBlocker[] {
     /^\s{0,3}#{1,6}\s+blocked\s+by\b/i.test(l);
   const isBullet = (l: string) => /^\s*[-*]\s+/.test(l);
   // A placeholder bullet/clause that explicitly declares NO blocker, e.g.
-  // `- None currently.` / `Nothing yet.` — its content (after any list marker
-  // and emphasis) begins with "none"/"nothing". Must be skipped in BOTH the
-  // section-bullet loop and the inline branch, else it parses to a bogus
-  // `{subsystem: "None"}` and falsely reports the Issue blocked.
-  const isNoBlockerText = (t: string) =>
-    /^\s*(?:[-*]\s+)?(?:\*\*)?\s*(nothing|none)\b/i.test(t);
+  // `- None currently.` / `Nothing yet.` / the template's canonical empty marker
+  // `**Blocked by:** — · **Blocks:** —` (em/en-dash / hyphen / `n/a` / `tbd`).
+  // Must be skipped in BOTH the section-bullet loop and the inline branch, else
+  // it parses to a bogus `{subsystem: "—"}` and falsely reports the Issue blocked
+  // (#919 — six takeable Issues mis-reported). We normalise off any list marker
+  // and surrounding emphasis before matching.
+  const isNoBlockerText = (t: string) => {
+    const stripped = t
+      .replace(/^\s*(?:[-*]\s+)?/, "") // list marker
+      .replace(/^\s*\*\*\s*/, "") // opening emphasis
+      .replace(/\s*\*\*\s*$/, "") // closing emphasis
+      .trim();
+    return (
+      /^(?:nothing|none)\b/i.test(stripped) ||
+      /^(?:n\/a|tbd|[—–-])$/i.test(stripped)
+    );
+  };
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
@@ -282,7 +293,10 @@ export function parseProseBlockers(body: string): ProseBlocker[] {
     if (isHeading(line)) continue;
     const m = line.match(/^\s*(?:[-*]\s+)?(?:\*\*)?blocked\s+by\b[:\s*]*(.*)$/i);
     if (m) {
-      const rest = m[1] ?? "";
+      // A combined `**Blocked by:** … · **Blocks:** …` Dependencies line carries
+      // the Blocks half after a `·` separator (or a `**Blocks:**` marker) — cut
+      // it off so the Blocks value is never parsed as a Blocked-by blocker (#919).
+      const rest = (m[1] ?? "").split(/\s*·\s*|\s*(?:\*\*)?blocks\b/i)[0] ?? "";
       if (isNoBlockerText(rest)) continue; // explicit no-blocker
       // Clause runs to the first sentence terminator followed by space/EOL.
       const clause = rest.split(/(?<=[.])\s|(?<=[.])$/u)[0] ?? rest;

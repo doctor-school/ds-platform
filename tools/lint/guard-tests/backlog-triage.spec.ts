@@ -265,6 +265,37 @@ describe("backlog-triage parseProseBlockers()", () => {
     expect(b[0]!.issues).toEqual([512]);
     expect(b[0]!.ears).toBeUndefined();
   });
+
+  // ── #919 the canonical empty-Dependencies placeholder is NO blocker ─────────
+  // `**Blocked by:** — · **Blocks:** —` (em-dash) is the template's "nothing
+  // here" marker. It must yield ZERO blockers (item takeable); the `· **Blocks:**
+  // —` tail must never be swallowed into the Blocked-by clause and parsed as a
+  // bogus subsystem name (#896/#897/#898/#902/#904/#905 falsely reported blocked).
+  it("inline '**Blocked by:** — · **Blocks:** —' (em-dash) yields NO blocker (#919 shape)", () => {
+    const body =
+      "## Dependencies\n\n**Blocked by:** — · **Blocks:** —\n";
+    expect(parseProseBlockers(body)).toEqual([]);
+  });
+
+  it("the en-dash placeholder '**Blocked by:** – · **Blocks:** –' yields NO blocker (#919)", () => {
+    const body = "## Dependencies\n\n**Blocked by:** – · **Blocks:** –\n";
+    expect(parseProseBlockers(body)).toEqual([]);
+  });
+
+  it("the hyphen placeholder '**Blocked by:** - · **Blocks:** -' yields NO blocker (#919)", () => {
+    const body = "## Dependencies\n\n**Blocked by:** - · **Blocks:** -\n";
+    expect(parseProseBlockers(body)).toEqual([]);
+  });
+
+  it("an 'n/a' placeholder yields NO blocker (#919)", () => {
+    const body = "## Dependencies\n\n**Blocked by:** n/a · **Blocks:** n/a\n";
+    expect(parseProseBlockers(body)).toEqual([]);
+  });
+
+  it("a section bullet that is a bare em-dash placeholder → zero blockers (#919)", () => {
+    const body = "## Blocked by\n\n- —\n\n## Notes\n\n- something.\n";
+    expect(parseProseBlockers(body)).toEqual([]);
+  });
 });
 
 describe("backlog-triage findSiblingByEars()", () => {

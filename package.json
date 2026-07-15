@@ -15,6 +15,7 @@
     "backlog:triage": "tsx tools/backlog-triage.ts",
     "board:status": "node tools/gh/set-board-status.mjs",
     "ci:wait": "node tools/gh/wait-ci-green.mjs",
+    "dispatch:brief": "node tools/gh/dispatch-brief.mjs",
     "dispatch:brief-check": "node tools/gh/dispatch-brief-check.mjs",
     "dispatch:probe": "node tools/gh/dispatch-probe.mjs",
     "handoff:verify": "node tools/gh/handoff-verify.mjs",

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  assertOpenPr,
   branchWorktreeMessage,
   classifyCheckRuns,
   cwdGuardMessage,
@@ -295,6 +296,49 @@ describe("merge-gate latestRunsByName() (#955)", () => {
   it("returns [] for non-array input", () => {
     expect(latestRunsByName(null)).toEqual([]);
     expect(latestRunsByName(undefined)).toEqual([]);
+  });
+});
+
+describe("merge-gate assertOpenPr() (#963)", () => {
+  it("accepts an OPEN PR with a head SHA", () => {
+    const verdict = assertOpenPr(
+      { state: "OPEN", headRefOid: "abc123" },
+      "456",
+    );
+    expect(verdict.ok).toBe(true);
+  });
+
+  it("accepts an OPEN draft PR (a draft is still OPEN)", () => {
+    // A draft PR resolves state OPEN; the gate does not read the draft flag.
+    expect(assertOpenPr({ state: "OPEN", headRefOid: "abc123" }, "456").ok).toBe(
+      true,
+    );
+  });
+
+  it("rejects a CLOSED PR (its check-runs are stale — silent no-op)", () => {
+    const verdict = assertOpenPr(
+      { state: "CLOSED", headRefOid: "deadbeef" },
+      "456",
+    );
+    expect(verdict.ok).toBe(false);
+    expect(verdict.message).toContain("456");
+    expect(verdict.message.toLowerCase()).toContain("open");
+  });
+
+  it("rejects a MERGED PR", () => {
+    const verdict = assertOpenPr(
+      { state: "MERGED", headRefOid: "deadbeef" },
+      "456",
+    );
+    expect(verdict.ok).toBe(false);
+    expect(verdict.message).toContain("456");
+  });
+
+  it("rejects a missing state (issue number / unresolved) and names the arg + issue-vs-PR guidance", () => {
+    const verdict = assertOpenPr({}, "963");
+    expect(verdict.ok).toBe(false);
+    expect(verdict.message).toContain("963");
+    expect(verdict.message.toLowerCase()).toContain("issue number");
   });
 });
 

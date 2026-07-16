@@ -245,10 +245,10 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
   absent), and `listUpcoming()` (004 EARS-7: reads the `published`/`live` events
   at or after `now − AIR_WINDOW_MS`, nearest air date first, and projects the
   thin `UpcomingBroadcastCard` allow-list — name-only speakers, no
-  operator/commercial field), `listMonth()` (004 EARS-15: the month-range read —
+  operator/commercial field), `listMonthBroadcasts()` (004 EARS-15: the month-range read —
   `published`/`live`/`ended` events inside the МСК month window from
   `mskMonthRange`, past events of the month included, projected to the
-  `MonthBroadcastEntry` allow-list) and `monthlyCounts()` (004 EARS-16: the
+  `MonthBroadcastEntry` allow-list) and `monthlyEventCounts()` (004 EARS-16: the
   per-month counts over publish-visible events for the picker year, zero-months
   filled to exactly 12 `MonthlyEventCount` rows). Projects rows to the `@ds/schemas` read models,
   including `validTransitions` from the shared closed transition map.
@@ -273,8 +273,8 @@ stream-config **form** (stock Refine) + its browser E2E are the integration slic
   a single transaction — behind the named transition commands, EARS-4),
   `findByIdOrSlug()` (resolves the public read by stable slug or id), and
   `listUpcoming()` (the `published`/`live`-at-or-after-cutoff read ordered nearest
-  first, with speaker rows batched in one query — no N+1), `listMonth()` (the
-  publish-visible read inside a `[start, end)` МСК month window, `starts_at ASC`)
+  first, with speaker rows batched in one query — no N+1), `listMonthBroadcasts()`
+  (the publish-visible read inside a `[start, end)` МСК month window, `starts_at ASC`)
   and `monthlyCounts()` (the МСК-month-grouped count of publish-visible events
   inside a year window) over the `events` / `event_speakers` tables.
 

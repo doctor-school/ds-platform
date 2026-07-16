@@ -41,6 +41,17 @@ The repo auto-memory lives at `~/.claude/projects/<project>/memory/`. Only the f
 
 Stay on plain orchestration when each step depends on **judging the prior return**, or the discipline contour (worktree/Mode-a/merge/board) must run inline — Workflow subagents don't carry it. Detail + per-trigger evidence: memory `feedback_propose_workflow_when_shape_known`.
 
+## Session plan (первый ответ сессии — canon AGENTS.md §3.2)
+
+The first user-facing reply OPENS with the owner-facing **«План сессии»** block (RU, ≤6 lines, plain language — no jargon references to prior sessions the owner didn't see):
+
+> **План сессии**
+> **Тип:** продуктовая | техническая | процессная
+> **Что делаем:** 1–3 нумерованных пункта — деливераблы сессии, не механика
+> **Зачем:** одна строка — что это даёт / разблокирует
+
+Then the §3.2 entry point (kind / artifact / skill). In a handoff-resumed session the plan states **verified** reality (after `pnpm handoff:verify`), never the handoff's own claims. Restate the block once when the owner re-directs the session or scope changes materially. Purpose: the owner reads it to catch course drift **before** work starts (memory `feedback_session_opens_with_plan`).
+
 ## Blocked-on-owner handback
 
 Работа заблокирована ТОЛЬКО действием владельца → последняя видимая строка хода: `⏸ ЖДУ ВАС: <одно действие>; после него продолжу автономно`; поллер/wakeup — после неё, не вместо. Каждый вынесенный владельцу вопрос — самодостаточная plain-language строка (что / почему / что изменит ответ), без жаргонных отсылок к отчёту (memory `feedback_explicit_handback_when_owner_blocked`).

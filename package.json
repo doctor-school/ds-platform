@@ -92,6 +92,7 @@
     "deploy:smoke": "node tools/deploy/smoke-prod.mjs",
     "task:worktree": "node tools/dev/task-worktree.mjs",
     "worktree:teardown": "node tools/dev/worktree-teardown.mjs",
+    "pr:land": "node tools/gh/pr-land.mjs",
     "pr:preflight": "node tools/lint/pr-preflight.mjs"
   },
   "devDependencies": {

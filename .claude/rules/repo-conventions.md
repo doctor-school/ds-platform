@@ -12,7 +12,7 @@ pnpm 10 workspaces + Turborepo 2.x. Root scripts `pnpm <script>`; per-package `p
 
 Trunk-based; short-lived branches off `main`, squash-merge back. Naming `<prefix>/<N>-<slug>` (`N` = Issue #, or `<TRACKER-ID>` for Plane-driven work, e.g. `chore/dsp-193-repo-hygiene`). Prefixes: `feat/`, `fix/`, `chore/`, `refactor/` (no behavior change), `docs/`, `tooling/`. Dependabot branches — leave as-is.
 
-Stale branches: auto-deleted on merge via `--delete-branch`; PRs closed without merge → `gh pr close <N> --delete-branch` in the same step — no branch outlives its PR (Dependabot: closing the PR is enough). Post-merge re-sweep: after merging a PR touching `.changeset/`, `.github/workflows/*`, dependency manifests, or security configs, re-run `gh pr list` + `git ls-remote --heads origin` before declaring the session done — bot branches (`changeset-release/main`, `dependabot/*`, `codeql/*`) can appear post-merge.
+Stale branches: auto-deleted on merge via `--delete-branch`; PRs closed without merge → `gh pr close <N> --delete-branch` in the same step — no branch outlives its PR (Dependabot: closing the PR is enough). Closeout tail — `pnpm pr:land <N>` is the preferred single entry point: merge gate → squash-merge → board Done → `worktree:teardown` iff `.claude/worktrees/<N>` exists → re-sweep `gh pr list` + `git ls-remote --heads origin` (bot branches can appear post-merge); forwards `--mode-a-exempt`, aborts on the first non-zero stage (skill `merge-when-green` Step 2).
 
 ## Commits, versioning, PRs
 

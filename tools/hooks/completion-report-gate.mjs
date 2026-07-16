@@ -72,12 +72,32 @@ export function isDecisionRequest(text) {
  * genuine in-flight language (RU+EN, case-insensitive) and never on a settled
  * completion report — so the gate exempts such turns before the report test. */
 export const INTERIM_STATUS_RE =
-  /⏳|\bcheckpoint\b|чекпоинт|\bprobe\b|\bWIP\b|в процессе|в работе|жду вердикт|жду CI|жду ревью|ещё не смерж|ещё не заверш|ничего (?:ещё )?не смерж|не финализир|\b0\s*\/\s*\d/i;
+  /⏳|\bcheckpoint\b|чекпоинт|\bprobe\b|\bWIP\b|в процессе|в работе|жду вердикт|жду CI|жду ревью|ещё не смерж|ещё не заверш|ничего (?:ещё )?не смерж|не финализир|не\s+завершающ|промежуточн[а-яё]*\s+статус|\b0\s*\/\s*\d/i;
+
+/** Opening-anchored interim markers (#990): «интерим»/"interim" and
+ * "in flight"/"in-flight" are common words a GENUINE completion report may
+ * legitimately use mid-body («…the interim fix shipped…»), so unlike the
+ * unambiguous full-text set above they count as an explicit interim signal
+ * ONLY inside the message OPENING slice (first ~INTERIM_OPENING_SLICE chars) —
+ * the Issue-#990 marker semantics are an explicit signal at the opening, and
+ * anchoring keeps a mid-body mention from silently exempting a real report.
+ * The leading `(^|[^а-яa-zё])` stands in for a word boundary — JS `\b` is
+ * ASCII-only and does not fire around Cyrillic letters (cf.
+ * NEGATED_COMPLETION_RE). */
+export const INTERIM_OPENING_RE =
+  /(^|[^а-яa-zё])(?:интерим|interim\b|in[\s-]flight\b)/i;
+
+/** Size of the opening slice the #990 opening-anchored markers apply to. */
+export const INTERIM_OPENING_SLICE = 200;
 
 /** True when the turn reads as an in-flight checkpoint / status rather than a
- * terminal completion report (#855). */
+ * terminal completion report (#855): an unambiguous full-text interim marker
+ * anywhere, or an opening-anchored #990 marker in the first
+ * INTERIM_OPENING_SLICE chars. */
 export function isInterimStatus(text) {
-  return INTERIM_STATUS_RE.test(String(text || ""));
+  const t = String(text || "");
+  if (INTERIM_STATUS_RE.test(t)) return true;
+  return INTERIM_OPENING_RE.test(t.slice(0, INTERIM_OPENING_SLICE));
 }
 
 /** Proposal / work-in-flight recognizer (#962). The #855 interim-status set is

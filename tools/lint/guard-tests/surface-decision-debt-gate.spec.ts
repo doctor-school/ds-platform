@@ -100,6 +100,31 @@ const PROPOSAL_INFLIGHT =
   "Предлагаю запустить /wrap-цикл. Приступаю к стадии 1.";
 const NON_COMPLETION = "PR #833 открыт, жду вердикта Mode (a); CI ещё бежит.";
 
+// #990: explicit interim-marker OPENINGS (shared recognizer, imported from
+// completion-report-gate.mjs) — verbs + refs present, но турн объявляет себя
+// промежуточным at the opening. None may fire this gate either.
+const INTERIM_990_MARKER_TABLE =
+  "⏳ Промежуточный статус — не завершающий отчёт, работа в полёте.\n\n" +
+  "| Субагент | Состояние |\n| --- | --- |\n" +
+  "| #987 | смержен |\n| #988 | на ревью |\n| #990 | в очереди |";
+const INTERIM_990_VARIANTS = [
+  "Промежуточный статус: PR #987 смержен, остальные в очереди.",
+  "Интерим: половина волны смержена (#955), вторая половина в очереди.",
+  "Interim: PR #987 merged, second half of the wave still queued.",
+  "In flight: #987 merged, the rest of the wave queued behind it.",
+];
+// #990 regression guard: a GENUINE terminal report (no opening marker, no
+// debt line) that merely MENTIONS "interim" mid-body — past the 200-char
+// opening slice — must STILL fire.
+const GENUINE_REPORT_MIDBODY_INTERIM =
+  "Готово: PR #990 смержен (squash), Issue #990 закрыта, CI зелёный.\n" +
+  "Ветка удалена, board Status = Done, все гейты пройдены вручную, Mode-a " +
+  "APPROVE получен на текущем head SHA.\n" +
+  "Волна закрыта полностью, дополнительных изменений не потребовалось, " +
+  "статус финальный, ничего не отложено.\n\n" +
+  "Tech appendix: the interim fix shipped in the same PR; % от " +
+  "запланированного — весь скоуп, но маркер-эмодзи отсутствует.";
+
 describe("surface-decision-debt-gate hook (spawned end-to-end)", () => {
   it("blocks (exit 2) a completion report missing a surface-decision-debt line, naming the gate + AGENTS.md §3.8", () => {
     const r = runHook(stopPayload(transcriptWith(COMPLETION_NO_DEBT)));
@@ -142,6 +167,28 @@ describe("surface-decision-debt-gate hook (spawned end-to-end)", () => {
     const r = runHook(stopPayload(transcriptWith(NON_COMPLETION)));
     expect(r.status).toBe(0);
     expect(r.stderr).toBe("");
+  });
+
+  it("does not fire on the #990 interim-marker opening + subagent-state table", () => {
+    const r = runHook(stopPayload(transcriptWith(INTERIM_990_MARKER_TABLE)));
+    expect(r.status).toBe(0);
+    expect(r.stderr).toBe("");
+  });
+
+  it("does not fire on any #990 marker-phrase opening variant", () => {
+    for (const text of INTERIM_990_VARIANTS) {
+      const r = runHook(stopPayload(transcriptWith(text)));
+      expect(r.status, text).toBe(0);
+      expect(r.stderr, text).toBe("");
+    }
+  });
+
+  it("STILL fires on a genuine report mentioning 'interim' mid-body only (#990 opening-anchor guard)", () => {
+    const r = runHook(
+      stopPayload(transcriptWith(GENUINE_REPORT_MIDBODY_INTERIM)),
+    );
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("surface-decision-debt");
   });
 
   it("never blocks when stop_hook_active is true (loop guard)", () => {

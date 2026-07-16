@@ -1,14 +1,24 @@
 # `mailer` — BFF transactional-email channel
 
-The BFF's **own** transactional-email channel (003 EARS-23, [003 design][design]
-§4) — deliberately separate from Zitadel's identity-credential emails (the
-verification / OTP / reset codes that carry a secret). This module owns
-**product / security notices** that must never carry a secret; the account-exists
-notice (a sign-in / password-reset prompt for a registration attempt on an
-already-registered address) is the first consumer, with lockout / welcome mails
-as future ones. It shares the `email-delivery-real` Unleash flag with the
+The BFF's **own** transactional-email channel (003 EARS-23/29, [003 design][design]
+§4, §13.3/§13.4, §14). Two mail classes ride it:
+
+- **Product / security notices** that must never carry a secret — the
+  account-exists notice (a sign-in / password-reset prompt for a registration
+  attempt on an already-registered address) is the first consumer, with
+  lockout / welcome mails as future ones.
+- **One-time-code credential emails** (EARS-29, #910/#1045): the email-verify
+  and password-reset codes are obtained from Zitadel via `returnCode` (Zitadel
+  generates/stores/expires/verifies the code but **sends nothing**) and
+  delivered as the branded, Russian, code-only, **fully link-free**
+  §13.3/§13.4 artifacts (`code-emails.ts` is the copy SSOT). EARS-30 governs
+  the transit: the code lives in memory for the in-flight send only — never
+  logged, never persisted, and provider errors are scrubbed before surfacing.
+
+The still-Zitadel-sent types (login email-OTP, SMS) keep their IdP templates.
+The module shares the `email-delivery-real` Unleash flag with the
 [`delivery-reconcile`](../delivery-reconcile/README.md) module, so one flag flip
-moves both this notice and Zitadel's channel between Mailpit-intercept and the
+moves both this channel and Zitadel's between Mailpit-intercept and the
 real relay with no restart.
 
 ## What's here
@@ -17,6 +27,7 @@ real relay with no restart.
 | ---------------------------------------------- | ----------------------------- |
 | Module wiring (mailer + throttle bindings)     | `mailer.module.ts`            |
 | Port + shared send-time validation             | `mailer.types.ts`             |
+| §13.3/§13.4 code-only artifact templates       | `code-emails.ts`              |
 | Production nodemailer adapter (dual-transport) | `smtp-mailer.ts`              |
 | In-memory test double                          | `mailer.fake.ts`              |
 | Per-address anti-flood throttle                | `register-notice-throttle.ts` |
@@ -29,12 +40,19 @@ real relay with no restart.
   else the in-memory fake — the single place each backend is chosen (mirroring
   `SessionModule`). Both are `exports` so `AuthService` consumes them.
 - **`Mailer`** + **`MAILER`** (`mailer.types.ts`) — the port
-  (`sendAccountExistsNotice(email)`, carrying no code/token/PD) and its `Symbol`
-  DI token.
-- **`assertSendableEmail(email)`** (`mailer.types.ts`) — the shared create-time
-  validation every `Mailer` implementation runs, so the fake is **no more
-  permissive** than the real adapter (a parity test proves both reject the same
-  invalid input).
+  (`sendAccountExistsNotice(email)` carrying no secret;
+  `sendVerificationCodeEmail(email, code)` / `sendPasswordResetCodeEmail(email,
+code)` carrying exactly one) and its `Symbol` DI token. `IdpModule` injects it
+  into the IdP adapters for the EARS-29 `returnCode` → mailer hand-off.
+- **`assertSendableEmail(email)`** / **`assertSendableCode(code)`**
+  (`mailer.types.ts`) — the shared create-time validation every `Mailer`
+  implementation runs, so the fake is **no more permissive** than the real
+  adapter (a parity test proves both reject the same invalid input; the code
+  guard's error never echoes the value).
+- **`verificationCodeEmail(code)`** / **`passwordResetCodeEmail(code)`** +
+  **`CODE_EMAIL_SUBJECT_TAILS`** (`code-emails.ts`) — the §13.3/§13.4 artifact
+  composers (code-led subject, one unbroken enlarged token, expiry line, zero
+  `<a>`/URLs) and the stable subject tails the e2e harnesses select by.
 - **`SmtpMailer`** + **`SmtpMailerConfig`** / **`SmtpTransportConfig`** /
   **`SmtpTransport`** / **`TransportFactory`** / **`SmtpTransportFactoryOptions`** /
   **`WarnFn`** (`smtp-mailer.ts`) — the production adapter over `nodemailer`. It
@@ -45,9 +63,11 @@ real relay with no restart.
   selected transport's host unset ⇒ a logged no-op (infra-gated, so the dev-stand /
   CI still boots and the EARS-23 path stays exercised).
 - **`FakeMailer`** (`mailer.fake.ts`) — the in-memory unit-test double; records
-  every accepted send (`accountExistsNotices`) and runs the same
-  `assertSendableEmail` guard so it is indistinguishable from the real adapter in
-  both behaviour and error shape.
+  every accepted send (`accountExistsNotices`, `verificationCodeEmails`,
+  `passwordResetCodeEmails`; `failNextCodeSends(err)` models a transport
+  outage) and runs the same `assertSendableEmail` / `assertSendableCode` guards
+  so it is indistinguishable from the real adapter in both behaviour and error
+  shape.
 - **`RegisterNoticeThrottle`** + **`REGISTER_NOTICE_THROTTLE`** /
   **`REGISTER_NOTICE_TTL_SECONDS`** / **`noticeThrottleKey`** /
   **`RedisRegisterNoticeThrottle`** / **`InMemoryRegisterNoticeThrottle`** /

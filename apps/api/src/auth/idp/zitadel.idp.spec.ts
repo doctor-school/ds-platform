@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FetchLike } from "./zitadel.idp.js";
 import { ZitadelIdpClient } from "./zitadel.idp.js";
+import { FakeMailer } from "../../mailer/mailer.fake.js";
 import { InMemoryOtpChallengeStore } from "./otp-challenge-store.fake.js";
 import {
   IdpInvalidArgumentError,
@@ -378,81 +379,85 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
     serviceToken: "svc-token",
   };
 
-  it("EARS-3: requestEmailVerification POSTs /email/resend with the sendCode oneof", async () => {
-    const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
-    const client = new ZitadelIdpClient({ ...SEND_CONFIG, fetchImpl });
-    await client.requestEmailVerification("user-1");
+  /** recordingFetch variant whose 2xx answers carry a returnCode payload. */
+  function returnCodeFetch(json: unknown): {
+    fetchImpl: FetchLike;
+    calls: ScriptedCall[];
+  } {
+    const calls: ScriptedCall[] = [];
+    const fetchImpl: FetchLike = (url, init) => {
+      calls.push({
+        url,
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
+      });
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(json),
+      });
+    };
+    return { fetchImpl, calls };
+  }
+
+  it("003 EARS-29: requestEmailVerification POSTs /email/resend with the returnCode oneof — Zitadel sends nothing, even with a portal origin configured", async () => {
+    // #910 owner verdict (supersedes the #869/#904 urlTemplate hop): the
+    // verification email is BFF-composed and fully link-free, so the send hop
+    // requests the code back (`returnCode`) instead of a Zitadel-side send.
+    const { fetchImpl, calls } = returnCodeFetch({
+      verificationCode: "GX5AVU",
+    });
+    const mailer = new FakeMailer();
+    const client = new ZitadelIdpClient({
+      ...SEND_CONFIG,
+      portalBaseUrl: "http://portal.test:3001",
+      mailer,
+      fetchImpl,
+    });
+    await client.requestEmailVerification("user-1", "doc+a@example.com");
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url).toBe(
       "http://idp.test:9080/v2/users/user-1/email/resend",
     );
     expect(calls[0]?.method).toBe("POST");
-    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({ sendCode: {} });
+    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({ returnCode: {} });
   });
 
-  it("003 EARS-3: with a portal origin configured the email send carries a /verify#email= FRAGMENT urlTemplate — identifier in the fragment, no query param (#904)", async () => {
-    // #869 owner Stage-A verdict: the verification email is CODE-ONLY, and its CTA
-    // must consume nothing on GET — mail.ru's `checklink` AV prefetch GETs every URL
-    // in a delivered message before the human ever clicks. #904 owner Stage-A verdict:
-    // the identifier now rides the URL FRAGMENT (`/verify#email=<addr>`), which browsers
-    // NEVER send to the server, so the cold email-button open can seed the account and
-    // the submit works — while the prefetch-safety invariant is preserved (a fragment is
-    // not a query param, consumes nothing on GET). The invariant: NO query (`?`/`&`) AND
-    // the `#email=` fragment carries the identifier.
-    const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
-    const client = new ZitadelIdpClient({
-      ...SEND_CONFIG,
-      portalBaseUrl: "http://portal.test:3001",
-      fetchImpl,
-    });
-    await client.requestEmailVerification("user-1", "doc+a@example.com");
-    const body = JSON.parse(calls[0]?.body ?? "{}") as {
-      sendCode?: { urlTemplate?: string };
-    };
-    expect(body).toEqual({
-      sendCode: {
-        urlTemplate:
-          "http://portal.test:3001/verify#email=doc%2Ba%40example.com",
-      },
-    });
-    // The identifier rides the FRAGMENT, never a query param: no `?`/`&` anywhere.
-    expect(body.sendCode?.urlTemplate).not.toMatch(/[?&]/);
-    // …and the `#email=` fragment identifier is present.
-    expect(body.sendCode?.urlTemplate).toContain("#email=");
-  });
-
-  it("003 EARS-3: the urlTemplate strips a trailing slash off the configured portal origin before the fragment (#904)", async () => {
-    const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
-    const client = new ZitadelIdpClient({
-      ...SEND_CONFIG,
-      portalBaseUrl: "http://portal.test:3001/",
-      fetchImpl,
-    });
+  it("003 EARS-29: the returned code is handed to the BFF mailer as ONE §13.3 verification email to the registrant", async () => {
+    const { fetchImpl } = returnCodeFetch({ verificationCode: "GX5AVU" });
+    const mailer = new FakeMailer();
+    const client = new ZitadelIdpClient({ ...SEND_CONFIG, mailer, fetchImpl });
     await client.requestEmailVerification("user-1", "doc@example.com");
-    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({
-      sendCode: {
-        urlTemplate: "http://portal.test:3001/verify#email=doc%40example.com",
-      },
-    });
+    expect(mailer.verificationCodeEmails).toEqual([
+      { to: "doc@example.com", code: "GX5AVU" },
+    ]);
+    expect(mailer.passwordResetCodeEmails).toEqual([]);
   });
 
-  it("003 EARS-3: requestPhoneVerification stays a bare sendCode even with a portal origin configured (#869 — the SMS hop is untouched)", async () => {
+  it("003 EARS-29: a 2xx that carries NO code fails closed — nothing is sent, the caller sees the failure", async () => {
+    const { fetchImpl } = returnCodeFetch({});
+    const mailer = new FakeMailer();
+    const client = new ZitadelIdpClient({ ...SEND_CONFIG, mailer, fetchImpl });
+    await expect(
+      client.requestEmailVerification("user-1", "doc@example.com"),
+    ).rejects.toThrow(/no verification code/);
+    expect(mailer.verificationCodeEmails).toEqual([]);
+  });
+
+  it("003 EARS-3: requestPhoneVerification stays a bare sendCode — the SMS hop remains Zitadel-sent (out of the #910 increment)", async () => {
     const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
     const client = new ZitadelIdpClient({
       ...SEND_CONFIG,
       portalBaseUrl: "http://portal.test:3001",
+      mailer: new FakeMailer(),
       fetchImpl,
     });
     await client.requestPhoneVerification("user-1");
     expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({ sendCode: {} });
   });
 
-  it("003 EARS-25: resendEmailVerification carries the same /verify#email= FRAGMENT urlTemplate on the re-send hop (#904)", async () => {
-    // The EARS-25 resend re-issues the SAME registration email as the initial
-    // EARS-3 send, so it must be scanner-safe AND carry the identifier in the
-    // fragment too — otherwise only the first email seeds the cold /verify open and
-    // every re-sent one still dead-ends on a bare /verify. The resend already knows
-    // the identifier (it is the resolution key), so it bakes it into the fragment.
+  it("003 EARS-25: resendEmailVerification requests returnCode and hands the fresh code to the mailer, resolving true", async () => {
     const calls: ScriptedCall[] = [];
     const fetchImpl: FetchLike = (url, init) => {
       calls.push({
@@ -469,7 +474,12 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
           json: () =>
             Promise.resolve({
               result: [
-                { userId: "user-9", human: { email: { isVerified: false } } },
+                {
+                  userId: "user-9",
+                  human: {
+                    email: { email: "user@ds.test", isVerified: false },
+                  },
+                },
               ],
             }),
         });
@@ -477,38 +487,105 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
       return Promise.resolve({
         ok: true,
         status: 200,
-        json: () => Promise.resolve({}),
+        json: () => Promise.resolve({ verificationCode: "RC7Q2M" }),
       });
     };
-    const client = new ZitadelIdpClient({
-      ...SEND_CONFIG,
-      portalBaseUrl: "http://portal.test:3001",
-      fetchImpl,
-    });
+    const mailer = new FakeMailer();
+    const client = new ZitadelIdpClient({ ...SEND_CONFIG, mailer, fetchImpl });
     await expect(client.resendEmailVerification("user@ds.test")).resolves.toBe(
       true,
     );
     const resend = calls.find((c) => c.url.endsWith("/email/resend"));
     expect(resend, "the resend hop was reached").toBeTruthy();
-    expect(JSON.parse(resend!.body ?? "{}")).toEqual({
-      sendCode: {
-        urlTemplate: "http://portal.test:3001/verify#email=user%40ds.test",
-      },
-    });
-    // Fragment-only: the re-sent link carries no query param either.
-    const body = JSON.parse(resend!.body ?? "{}") as {
-      sendCode?: { urlTemplate?: string };
+    expect(JSON.parse(resend!.body ?? "{}")).toEqual({ returnCode: {} });
+    expect(mailer.verificationCodeEmails).toEqual([
+      { to: "user@ds.test", code: "RC7Q2M" },
+    ]);
+  });
+
+  it("003 EARS-25/16: an unknown or already-verified identifier obtains NO code and sends nothing (no-op, false)", async () => {
+    const mailer = new FakeMailer();
+    const buildFetch = (result: unknown[]): FetchLike => {
+      return (url, init) => {
+        if (url.endsWith("/v2/users")) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ result }),
+          });
+        }
+        throw new Error(`unexpected hop: ${init.method} ${url}`);
+      };
     };
-    expect(body.sendCode?.urlTemplate).not.toMatch(/[?&]/);
-    expect(body.sendCode?.urlTemplate).toContain("#email=");
+    // Unknown identifier: empty search result.
+    const unknown = new ZitadelIdpClient({
+      ...SEND_CONFIG,
+      mailer,
+      fetchImpl: buildFetch([]),
+    });
+    await expect(unknown.resendEmailVerification("ghost@ds.test")).resolves.toBe(
+      false,
+    );
+    // Already-verified registrant: resolves, but no resend hop is reached.
+    const verified = new ZitadelIdpClient({
+      ...SEND_CONFIG,
+      mailer,
+      fetchImpl: buildFetch([
+        {
+          userId: "user-9",
+          human: { email: { email: "user@ds.test", isVerified: true } },
+        },
+      ]),
+    });
+    await expect(verified.resendEmailVerification("user@ds.test")).resolves.toBe(
+      false,
+    );
+    expect(mailer.verificationCodeEmails).toEqual([]);
+  });
+
+  it("003 EARS-30/16: a mailer failure on the resend path is swallowed — false, never a throw, and the code never leaks", async () => {
+    const fetchImpl: FetchLike = (url) => {
+      if (url.endsWith("/v2/users")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              result: [
+                {
+                  userId: "user-9",
+                  human: {
+                    email: { email: "user@ds.test", isVerified: false },
+                  },
+                },
+              ],
+            }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ verificationCode: "RC7Q2M" }),
+      });
+    };
+    const mailer = new FakeMailer();
+    mailer.failNextCodeSends(new Error("smtp down"));
+    const client = new ZitadelIdpClient({ ...SEND_CONFIG, mailer, fetchImpl });
+    await expect(client.resendEmailVerification("user@ds.test")).resolves.toBe(
+      false,
+    );
   });
 
   it("EARS-3: requestEmailVerification throws fail-closed on a non-2xx send", async () => {
     const { fetchImpl } = recordingFetch({ ok: false, status: 404 });
-    const client = new ZitadelIdpClient({ ...SEND_CONFIG, fetchImpl });
-    await expect(client.requestEmailVerification("user-1")).rejects.toThrow(
-      /email send_code failed: HTTP 404/,
-    );
+    const client = new ZitadelIdpClient({
+      ...SEND_CONFIG,
+      mailer: new FakeMailer(),
+      fetchImpl,
+    });
+    await expect(
+      client.requestEmailVerification("user-1", "doc@example.com"),
+    ).rejects.toThrow(/email send_code failed: HTTP 404/);
   });
 
   it("EARS-3: requestPhoneVerification POSTs /phone/resend with the sendCode oneof", async () => {
@@ -551,20 +628,16 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
 });
 
 /**
- * #880 — the password-reset send (EARS-11) is CODE-ONLY, like the #869
- * verification email and the #878 login-OTP email. Zitadel's default
- * `password_reset` send (an empty body) renders a CTA whose URL is the IdP's
- * hosted set-password page on the identity host — a surface the product's
- * users must never see (the portal `/reset` screen owns the journey). The
- * send therefore carries the `PasswordResetRequest` oneof
- * `sendLink.urlTemplate` (proto: `SendPasswordResetLink { notification_type,
- * url_template }` — placeholders UserID/OrgID/Code are supported and
- * DELIBERATELY unused) pointing at the BARE portal `/reset`: no query, no
- * placeholders, nothing consumed on GET (mail.ru `checklink` scanner safety,
- * the #869 contract). `returnCode` is NOT used — the secret must ride the
- * configured notifier, never the HTTP response.
+ * #910/#1045 — the password-reset send (EARS-11/29) rides `returnCode`, the
+ * same contract as the verification email: Zitadel generates/stores/expires/
+ * verifies the code but SENDS NOTHING; the BFF receives the code and delivers
+ * the §13.4 branded, Russian, code-only, fully link-free artifact through its
+ * own mailer. The former `sendLink.urlTemplate` hop (#880) is retired — a
+ * Zitadel-rendered reset mail no longer exists for this product. Enumeration
+ * safety is unchanged: every path resolves void (EARS-11/16), and the
+ * transiting code is scrubbed from every egress (EARS-30).
  */
-describe("003 EARS-11 password-reset send wire shape (#880)", () => {
+describe("003 EARS-11/29 password-reset send wire shape (#910)", () => {
   const SEND_CONFIG = {
     baseUrl: "http://idp.test:9080",
     serviceToken: "svc-token",
@@ -572,10 +645,16 @@ describe("003 EARS-11 password-reset send wire shape (#880)", () => {
 
   /**
    * A routing fetch double: answers the identifier-resolution hop
-   * (`POST /v2/users`) with one known user and records every call, so the
-   * follow-on `/password_reset` hop's body can be asserted.
+   * (`POST /v2/users`) with one known user (email attached) and answers the
+   * `/password_reset` hop with a returnCode payload; records every call.
    */
-  function resetFetch(): { fetchImpl: FetchLike; calls: ScriptedCall[] } {
+  function resetFetch(
+    opts: {
+      result?: unknown[];
+      resetJson?: unknown;
+      resetOk?: boolean;
+    } = {},
+  ): { fetchImpl: FetchLike; calls: ScriptedCall[] } {
     const calls: ScriptedCall[] = [];
     const fetchImpl: FetchLike = (url, init) => {
       calls.push({
@@ -588,23 +667,36 @@ describe("003 EARS-11 password-reset send wire shape (#880)", () => {
         return Promise.resolve({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ result: [{ userId: "user-11" }] }),
+          json: () =>
+            Promise.resolve({
+              result: opts.result ?? [
+                {
+                  userId: "user-11",
+                  human: {
+                    email: { email: "user@ds.test", isVerified: true },
+                  },
+                },
+              ],
+            }),
         });
       }
       return Promise.resolve({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve({}),
+        ok: opts.resetOk ?? true,
+        status: opts.resetOk === false ? 500 : 200,
+        json: () =>
+          Promise.resolve(opts.resetJson ?? { verificationCode: "PW9K3T" }),
       });
     };
     return { fetchImpl, calls };
   }
 
-  it("EARS-11: with a portal origin configured the reset send carries a BARE /reset sendLink urlTemplate — no code/userId params", async () => {
+  it("003 EARS-29: the reset send POSTs /password_reset with the returnCode oneof — no sendLink, even with a portal origin configured", async () => {
     const { fetchImpl, calls } = resetFetch();
+    const mailer = new FakeMailer();
     const client = new ZitadelIdpClient({
       ...SEND_CONFIG,
       portalBaseUrl: "http://portal.test:3001",
+      mailer,
       fetchImpl,
     });
     await client.requestPasswordReset("user@ds.test");
@@ -614,42 +706,65 @@ describe("003 EARS-11 password-reset send wire shape (#880)", () => {
       "http://idp.test:9080/v2/users/user-11/password_reset",
     );
     expect(reset?.method).toBe("POST");
-    const body = JSON.parse(reset?.body ?? "{}") as {
-      sendLink?: { notificationType?: string; urlTemplate?: string };
-    };
-    expect(body).toEqual({
-      sendLink: {
-        notificationType: "NOTIFICATION_TYPE_Email",
-        urlTemplate: "http://portal.test:3001/reset",
-      },
-    });
-    // Belt-and-braces: the scanner-safety invariant, asserted explicitly.
-    expect(body.sendLink?.urlTemplate).not.toMatch(/[?&{]/);
+    expect(JSON.parse(reset?.body ?? "{}")).toEqual({ returnCode: {} });
   });
 
-  it("EARS-11: the urlTemplate strips a trailing slash off the configured portal origin", async () => {
-    const { fetchImpl, calls } = resetFetch();
-    const client = new ZitadelIdpClient({
+  it("003 EARS-29: the returned reset code is handed to the mailer as ONE §13.4 email to the user's IdP email", async () => {
+    const { fetchImpl } = resetFetch();
+    const mailer = new FakeMailer();
+    const client = new ZitadelIdpClient({ ...SEND_CONFIG, mailer, fetchImpl });
+    await client.requestPasswordReset("user@ds.test");
+    expect(mailer.passwordResetCodeEmails).toEqual([
+      { to: "user@ds.test", code: "PW9K3T" },
+    ]);
+    expect(mailer.verificationCodeEmails).toEqual([]);
+  });
+
+  it("003 EARS-11/16: an unknown identifier obtains no code and sends nothing — still resolves void", async () => {
+    const { fetchImpl, calls } = resetFetch({ result: [] });
+    const mailer = new FakeMailer();
+    const client = new ZitadelIdpClient({ ...SEND_CONFIG, mailer, fetchImpl });
+    await expect(
+      client.requestPasswordReset("ghost@ds.test"),
+    ).resolves.toBeUndefined();
+    expect(calls.find((c) => c.url.endsWith("/password_reset"))).toBeFalsy();
+    expect(mailer.passwordResetCodeEmails).toEqual([]);
+  });
+
+  it("003 EARS-11/16: a provider failure on the reset hop is swallowed — void, nothing sent", async () => {
+    const { fetchImpl } = resetFetch({ resetOk: false });
+    const mailer = new FakeMailer();
+    const client = new ZitadelIdpClient({ ...SEND_CONFIG, mailer, fetchImpl });
+    await expect(
+      client.requestPasswordReset("user@ds.test"),
+    ).resolves.toBeUndefined();
+    expect(mailer.passwordResetCodeEmails).toEqual([]);
+  });
+
+  it("003 EARS-30/16: a 2xx with no code, or a mailer failure, is swallowed — void, no throw, no leak", async () => {
+    // No code in the response → nothing to send, still void.
+    const noCode = resetFetch({ resetJson: {} });
+    const mailer = new FakeMailer();
+    const clientNoCode = new ZitadelIdpClient({
       ...SEND_CONFIG,
-      portalBaseUrl: "http://portal.test:3001/",
-      fetchImpl,
+      mailer,
+      fetchImpl: noCode.fetchImpl,
     });
-    await client.requestPasswordReset("user@ds.test");
-    const reset = calls.find((c) => c.url.endsWith("/password_reset"));
-    expect(JSON.parse(reset?.body ?? "{}")).toEqual({
-      sendLink: {
-        notificationType: "NOTIFICATION_TYPE_Email",
-        urlTemplate: "http://portal.test:3001/reset",
-      },
+    await expect(
+      clientNoCode.requestPasswordReset("user@ds.test"),
+    ).resolves.toBeUndefined();
+    expect(mailer.passwordResetCodeEmails).toEqual([]);
+    // Mailer failure → swallowed (the caller's ack is not a health oracle).
+    const failing = new FakeMailer();
+    failing.failNextCodeSends(new Error("smtp down"));
+    const clientFailingMailer = new ZitadelIdpClient({
+      ...SEND_CONFIG,
+      mailer: failing,
+      fetchImpl: resetFetch().fetchImpl,
     });
-  });
-
-  it("EARS-11: without a portal origin the send keeps the empty default body", async () => {
-    const { fetchImpl, calls } = resetFetch();
-    const client = new ZitadelIdpClient({ ...SEND_CONFIG, fetchImpl });
-    await client.requestPasswordReset("user@ds.test");
-    const reset = calls.find((c) => c.url.endsWith("/password_reset"));
-    expect(JSON.parse(reset?.body ?? "{}")).toEqual({});
+    await expect(
+      clientFailingMailer.requestPasswordReset("user@ds.test"),
+    ).resolves.toBeUndefined();
   });
 });
 

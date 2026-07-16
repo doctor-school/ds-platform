@@ -1,36 +1,37 @@
 /**
- * Localized Zitadel notification-email subjects — the single place the portal
+ * Localized notification-email subjects — the single place the portal
  * real-Zitadel browser E2E selects a delivered Mailpit message by subject.
  *
- * SoT: Zitadel's `ru` message-text templates. #177 locked the dev-stand IdP to
- * Russian (instance default language `ru` + allowed-languages restricted to
- * `[ru]`), so every notification email now renders with its Russian subject.
- * The `verifyemail` subject is BRANDED by `infra/dev-stand/idp/provision.sh`
- * step 8.ter (#869 — the code-only verification email leads its subject with
- * the dynamic `{{.Code}}`, e.g. `GX5AVU — код подтверждения Doctor.School`),
- * and the `verifyemailotp` subject is branded the same way by step 8.quinquies
- * (#878 — leads with the dynamic `{{.OTP}}`), so the constants below are the
- * STABLE SUBSTRING after the code and callers match by `includes`, never
- * equality.
+ * Two senders, one catalog (003 design §13):
  *
- *   - registration verify-email (`verifyemail`)  → "<code> — код подтверждения Doctor.School"
- *   - login email-OTP           (`verifyemailotp`) → "<code> — код для входа в Doctor.School"
+ * - **BFF mailer** (#910/#1045, EARS-29): the registration verify-email and the
+ *   password-reset mails are composed by `apps/api/src/mailer/code-emails.ts`
+ *   (`CODE_EMAIL_SUBJECT_TAILS` is the SSOT these constants mirror) — Zitadel
+ *   sends nothing for those types (`returnCode`).
+ * - **Zitadel `ru` message-text templates**: the login email-OTP
+ *   (`verifyemailotp`, branded by `infra/dev-stand/idp/provision.sh` step
+ *   8.quinquies, #878) stays IdP-sent. #177 locked the dev-stand IdP to
+ *   Russian, so it renders with its Russian subject.
  *
- * Keep these in one place: a future locale change (or a re-brand of the subjects
- * in provision.sh) updates exactly one constant instead of N hardcoded literals.
- * The English literals these replaced (`"Verify email"` / `"Verify OTP"`, from
- * #173/#131) were stale post-#177 and matched nothing live (#305). Mirrors the
- * api-side `apps/api/test/support/notification-subjects.ts`.
+ * Every branded subject LEADS with the dynamic code (`GX5AVU — код
+ * подтверждения Doctor.School`), so the constants below are the STABLE
+ * SUBSTRING after the code and callers match by `includes`, never equality.
+ * Mirrors the api-side `apps/api/test/support/notification-subjects.ts`.
  */
 export const NOTIFICATION_SUBJECTS = {
   /**
-   * Registration / email-verification mail (`verifyemail` template, branded
-   * `ru`, #869). Stable substring — the rendered subject leads with the code.
+   * Registration / email-verification mail (BFF `code-emails.ts`, §13.3,
+   * EARS-1/3/25). Stable substring — the rendered subject leads with the code.
    */
   verifyEmail: "код подтверждения Doctor.School",
   /**
-   * Login email-OTP mail (`verifyemailotp` template, branded `ru`, #878).
-   * Stable substring — the rendered subject leads with the code.
+   * Password-reset mail (BFF `code-emails.ts`, §13.4, EARS-11). Stable
+   * substring — the rendered subject leads with the code.
+   */
+  passwordReset: "код сброса пароля Doctor.School",
+  /**
+   * Login email-OTP mail (`verifyemailotp` template, branded `ru`, #878 —
+   * still Zitadel-sent). Stable substring — the subject leads with the code.
    */
   verifyEmailOtp: "код для входа в Doctor.School",
 } as const;

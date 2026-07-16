@@ -322,6 +322,10 @@ describe("AuthService.register — account-exists notice (#207, EARS-23)", () =>
     const exploding: Mailer = {
       sendAccountExistsNotice: () =>
         Promise.reject(new Error("smtp down")),
+      sendVerificationCodeEmail: () =>
+        Promise.reject(new Error("smtp down")),
+      sendPasswordResetCodeEmail: () =>
+        Promise.reject(new Error("smtp down")),
     };
     const service = buildRegisterService({
       idp,

@@ -1,43 +1,35 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ZitadelIdpClient } from "../../src/auth/idp/zitadel.idp.js";
+import { SmtpMailer } from "../../src/mailer/smtp-mailer.js";
 import { NOTIFICATION_SUBJECTS } from "../support/notification-subjects.js";
 
 /**
- * EARS-3 real-adapter integration spec (design §4 — the email-verification
- * resend + verify round-trip): `requestEmailVerification` → `verifyEmail`
+ * EARS-3/29 real-adapter integration spec (design §4/§14 — the email-verification
+ * send + verify round-trip): `requestEmailVerification` → `verifyEmail`
  * against a **running** Zitadel v4, with the delivered mail fetched from the
  * dev-stand Mailpit catch-all.
  *
- * This pins the live wire shape #148 fixed: the send is
- * `POST /v2/users/{id}/email/resend` `{ sendCode: {…} }` (the merged
- * `/email/_send_code` 404s live) and the verify is
- * `POST /v2/users/{id}/email/verify` (the merged `/email/_verify` also 404s
- * live — corrected in the same change so this round-trip is provable). The
- * `sendCode` oneof routes the code through Zitadel's SMTP notifier → Mailpit,
- * exactly like the production notifier path, so we assert delivery there rather
- * than echoing the secret inline.
- *
- * #869 (owner Stage-A + Stage-B verdicts): the delivered mail is the CODE-ONLY
- * branded RU artifact provisioned by `infra/dev-stand/idp/provision.sh` step
- * 8.ter — the subject leads with the code (`GX5AVU — код подтверждения
- * Doctor.School`, < 50 chars), the body shows the code as ONE unbroken token
- * (the Stage-B rework dropped the triad grouping and its «без пробела»
- * qualifier — they contradicted each other) with an explicit 1-hour expiry
- * line and an ignore-if-not-you line, and it carries **no link to
- * Zitadel's hosted login-v2 UI** (`…/ui/v2/…` — the original #869 dead end, and
- * scanner bait: mail.ru's `checklink` AV prefetch GETs every URL in a delivered
- * mail). The ONLY permitted href is the BARE portal `/verify` navigation aid —
- * no query, no `{{.Code}}`/`{{.UserID}}` params, nothing consumed on GET. This
- * spec asserts the rendered artifact facts explicitly, then proves the manual
- * journey: the code a human would read from the mail round-trips through
- * `verifyEmail`.
+ * #910/#1045 (EARS-29, supersedes the #869/#904 Zitadel-side send): the send is
+ * `POST /v2/users/{id}/email/resend` with the **`returnCode`** oneof — Zitadel
+ * generates/stores/expires/verifies the code but SENDS NOTHING; the adapter
+ * hands the returned code to the BFF mailer, which composes the §13.3 branded,
+ * Russian, code-only, **fully link-free** artifact and dispatches it over SMTP
+ * (→ Mailpit here). The verify stays `POST /v2/users/{id}/email/verify`
+ * (Zitadel-native, #148). The subject leads with the code (`GX5AVU — код
+ * подтверждения Doctor.School`, < 50 chars), the body shows the code as ONE
+ * unbroken token with an explicit 1-hour expiry line and an ignore-if-not-you
+ * line, and the mail carries **zero links of any kind** — no hosted-login-v2
+ * URL, no portal navigation aid, nothing a mail scanner's GET prefetch
+ * (mail.ru `checklink`) can consume, by construction. This spec asserts the
+ * rendered artifact facts explicitly, then proves the manual journey: the code
+ * a human would read from the mail round-trips through `verifyEmail`.
  *
  * Gated on the live-IdP env (`IDP_ISSUER` + `IDP_SERVICE_TOKEN`), mirroring the
  * #145 `zitadel-create-user` pattern — it SKIPS in the shared CI job (which sets
  * only `DATABASE_URL`; `IDP_ISSUER` is not in turbo `passThroughEnv`) and runs
- * only against a provisioned dev-stand whose Zitadel SMTP provider points at
- * Mailpit AND whose `verifyemail` message text carries the step-8.ter branding
- * (re-run `infra/dev-stand/idp/provision.sh` after pulling this change).
+ * only against a dev-stand whose Mailpit SMTP endpoint is reachable via
+ * `MAILER_SMTP_HOST`/`MAILER_SMTP_PORT` (the BFF mailer is the sender now — the
+ * Zitadel `verifyemail` message-text override is retired, #1045).
  *
  * Per the e2e convention this spec deletes its own users by email on teardown
  * (FakeIdpClient's deterministic fake-sub collides on `users.zitadel_sub`
@@ -141,12 +133,31 @@ describe.skipIf(!LIVE_IDP)("Zitadel email verification (integration)", () => {
   };
 
   beforeAll(() => {
+    // #910/#1045 (EARS-29): the adapter hands the returnCode-obtained code to
+    // the BFF mailer — wire a REAL SmtpMailer at the dev-stand Mailpit
+    // intercept (the same `MAILER_SMTP_*` source IdpModule reads), so the
+    // delivered artifact this spec asserts is the production composition path.
+    const mailpitHost =
+      process.env.MAILER_SMTP_HOST ?? new URL(MAILPIT_BASE).hostname;
+    const mailpitPort = Number.parseInt(
+      process.env.MAILER_SMTP_PORT ?? "1025",
+      10,
+    );
+    const mailer = new SmtpMailer({
+      intercept: {
+        host: mailpitHost,
+        port: Number.isFinite(mailpitPort) ? mailpitPort : 1025,
+        from: process.env.MAILER_SMTP_FROM ?? "noreply@doctor.school",
+      },
+      real: undefined,
+      isEnabled: () => false,
+      portalBaseUrl: PORTAL_BASE,
+    });
     client = new ZitadelIdpClient({
       baseUrl: process.env.IDP_ISSUER!,
       serviceToken: process.env.IDP_SERVICE_TOKEN!,
-      // #869: with a portal origin configured the send carries the BARE /verify
-      // urlTemplate — exactly what IdpModule wires in the running BFF.
       portalBaseUrl: PORTAL_BASE,
+      mailer,
     });
   });
 
@@ -209,8 +220,10 @@ describe.skipIf(!LIVE_IDP)("Zitadel email verification (integration)", () => {
     for (let attempt = 0; attempt < 3 && !verified; attempt++) {
       const sentAt = new Date().toISOString();
       // The #148 fix: this hop 404'd before (wrong path `/email/_send_code`).
+      // #910: the registrant's email rides the call — the BFF mailer needs the
+      // delivery destination (exactly what the EARS-1 cascade passes).
       await expect(
-        client.requestEmailVerification(created.sub),
+        client.requestEmailVerification(created.sub, email),
       ).resolves.toBeUndefined();
 
       const mail = await fetchVerificationMail(email, sentAt);
@@ -239,19 +252,14 @@ describe.skipIf(!LIVE_IDP)("Zitadel email verification (integration)", () => {
       // Explicit "if you didn't register, ignore this email" line.
       expect(mail!.Text).toContain("проигнорируйте это письмо");
 
-      // NO link into Zitadel's hosted login-v2 UI — the #869 AC invariant that
-      // survives the Stage-A supersession, asserted as an explicit ABSENCE.
+      // #910: the mail is FULLY LINK-FREE — zero `<a>` elements and zero URLs
+      // (stronger than the former bare-link contract): nothing a mail
+      // scanner's GET prefetch can consume, by construction. The hosted
+      // login-v2 dead end (#869) is asserted gone a fortiori.
+      expect(mail!.HTML.toLowerCase()).not.toMatch(/<a[\s>]/);
+      expect(mail!.HTML).not.toMatch(/https?:\/\//);
+      expect(mail!.Text).not.toMatch(/https?:\/\//);
       expect(mail!.HTML).not.toContain("/ui/v2");
-      expect(mail!.Text).not.toContain("/ui/v2");
-      // The only href(s) are the BARE portal /verify navigation aid: no query,
-      // no code, no userId — nothing a mail scanner's GET prefetch can consume.
-      const hrefs = [...mail!.HTML.matchAll(/href="([^"]*)"/g)].map(
-        (m) => m[1],
-      );
-      expect(hrefs.length).toBeGreaterThan(0);
-      for (const href of hrefs) {
-        expect(href).toBe(`${PORTAL_BASE}/verify`);
-      }
 
       // ── the manual journey: the code a human reads from the mail verifies ──
       // (also proves the corrected `/email/verify` path, #148)

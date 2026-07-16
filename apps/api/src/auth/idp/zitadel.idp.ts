@@ -1,3 +1,4 @@
+import type { Mailer } from "../../mailer/mailer.types.js";
 import {
   IdpInvalidArgumentError,
   IdpPasswordPolicyError,
@@ -89,19 +90,28 @@ export interface ZitadelConfig {
    */
   orgId?: string | undefined;
   /**
-   * #869: the portal origin (e.g. `https://app.doctor.school`). When set, the
-   * email-verification send hops carry a Zitadel `urlTemplate` pointing at the
-   * portal's own `/verify` screen as a BARE URL — `<origin>/verify`, no
-   * `{{.Code}}`/`{{.UserID}}` placeholders and no query — because the
-   * verification email is CODE-ONLY by design (owner Stage-A verdict, #869):
-   * any GET-consumed or user-identifying link in a mail is scanner bait
-   * (mail.ru's `checklink` AV prefetch GETs every URL in a delivered message),
-   * so the mail carries only the code the registrant types by hand. When
-   * absent, Zitadel renders its DEFAULT link into its hosted login-v2 UI — a
-   * dead end for the portal registrant. Plumbed from `MAILER_PORTAL_BASE_URL`
-   * (the same portal-origin source the BFF mailer channel uses) in `IdpModule`.
+   * #878: the portal origin (e.g. `https://app.doctor.school`), consumed ONLY
+   * by the still-Zitadel-sent login email-OTP challenge (EARS-6), whose
+   * `sendCode.urlTemplate` is the BARE `<origin>/login` (no placeholders —
+   * nothing a mail scanner's GET prefetch can consume). The email-verify and
+   * password-reset sends no longer use it: they ride `returnCode` and the BFF
+   * mailer delivers a fully LINK-FREE artifact (#910, EARS-29). Plumbed from
+   * `MAILER_PORTAL_BASE_URL` (the same portal-origin source the BFF mailer
+   * channel uses) in `IdpModule`.
    */
   portalBaseUrl?: string | undefined;
+  /**
+   * #910/#1045 (EARS-29): the BFF mailer the verify/reset send hops hand the
+   * Zitadel-returned one-time code to — the hop obtains the code via
+   * `returnCode` (Zitadel sends nothing) and this port dispatches the
+   * §13.3/§13.4 branded, Russian, code-only, link-free artifact. Bound to the
+   * shared {@link MAILER} provider by `IdpModule`; optional only for legacy
+   * direct construction — a send hop that obtains a code with no mailer to
+   * deliver it FAILS (the registrant would otherwise silently never receive
+   * a code). EARS-30 holds across the hand-off: the code lives in a local
+   * variable for the in-flight send only and is never logged or persisted.
+   */
+  mailer?: Mailer | undefined;
   /** Injected for tests; defaults to the global `fetch`. */
   fetchImpl?: FetchLike | undefined;
 }
@@ -465,50 +475,48 @@ export class ZitadelIdpClient implements IdpClient {
   }
 
   /**
-   * #869: the `SendEmailVerificationCode` body for the email-verification send
-   * hops. `sendCode` routes the code through the configured SMTP notifier (→
-   * Mailpit on the dev-stand) — never `returnCode` (the secret must not ride
-   * the HTTP response). With a configured {@link ZitadelConfig.portalBaseUrl}
-   * the oneof additionally carries a `urlTemplate` — `<origin>/verify#email=<addr>`
-   * (#904: the identifier rides the fragment, never a query param),
-   * deliberately WITHOUT the `{{.Code}}`/`{{.UserID}}` placeholders Zitadel
-   * supports — replacing the default hosted-login-v2 link (the #869 dead end)
-   * with a subordinate navigation aid that consumes nothing on GET: the
-   * verification email is CODE-ONLY (owner Stage-A verdict, #869 — mail
-   * scanners like mail.ru `checklink` prefetch every link, burning anything a
-   * GET consumes). Email-only by design: the SMS/phone hops keep `{ sendCode: {} }`.
+   * #910/#1045 (EARS-29): the mailer the verify/reset hops deliver through, or
+   * a loud failure — a hop that already obtained a code but has nowhere to
+   * deliver it must surface, never silently drop the registrant's only code.
+   * The thrown message carries config context only, never the code (EARS-30).
    */
-  private emailSendCodeBody(email?: string): string {
-    const base = this.config.portalBaseUrl?.replace(/\/+$/, "");
-    if (!base) return JSON.stringify({ sendCode: {} });
-    // #904: the identifier rides the URL FRAGMENT — browsers never transmit it to
-    // the server, so a cold email-button open of /verify seeds the account email
-    // (submit works) while the #869 prefetch-safety invariant holds (a fragment is
-    // not a query param; mail.ru `checklink` prefetches the URL sans fragment). No
-    // email → bare /verify fallback (the cold open surfaces a visible identify-your-
-    // account error rather than a silent no-op).
-    const urlTemplate = email
-      ? `${base}/verify#email=${encodeURIComponent(email)}`
-      : `${base}/verify`;
-    return JSON.stringify({ sendCode: { urlTemplate } });
+  private requireMailer(): Mailer {
+    if (!this.config.mailer) {
+      throw new Error(
+        "zitadel adapter has no BFF mailer bound — cannot deliver the one-time code (EARS-29; IdpModule wires MAILER)",
+      );
+    }
+    return this.config.mailer;
+  }
+
+  /**
+   * #910/#1045 (EARS-29): read the `returnCode`-echoed one-time code off a
+   * 2xx send-hop response. `verificationCode` is the documented
+   * `SendEmailCode`/`PasswordReset` response field; `emailCode` is kept as a
+   * defensive alias (the CreateUser response proven live echoes the create-time
+   * code under that name, #203). The parsed object is consumed here and never
+   * logged or re-serialized (EARS-30).
+   */
+  private static extractReturnedCode(data: unknown): string | undefined {
+    const d = data as { verificationCode?: string; emailCode?: string };
+    return d.verificationCode ?? d.emailCode;
   }
 
   async requestEmailVerification(sub: string, email?: string): Promise<void> {
     // Live wire-shape delta (#148, vs Zitadel v4.15): the verification-code
     // **resend** is `POST /v2/users/{id}/email/resend` — the merged code's
-    // `/email/_send_code` (the gRPC-transcoded custom-verb spelling assumed by
-    // #86/#122) 404s against the live instance (proven on the dev-stand). The
-    // request body is the Zitadel `SendEmailVerificationCode` oneof (#869:
-    // `sendCode` + the bare portal `urlTemplate` — see {@link emailSendCodeBody}),
-    // matching the production notifier path — never returning the secret inline.
+    // `/email/_send_code` 404s against the live instance. The request body is
+    // the Zitadel `SendEmailVerificationCode` oneof `returnCode` (#910,
+    // EARS-29): Zitadel generates/stores/expires/attempt-counts the code but
+    // SENDS NOTHING — it returns the code, and the BFF mailer dispatches the
+    // §13.3 branded, Russian, code-only, fully link-free artifact. The former
+    // `sendCode.urlTemplate` hop (#869/#904) is retired with the switch.
     const res = await this.fetchImpl(
       this.url(`/v2/users/${sub}/email/resend`),
       {
         method: "POST",
         headers: this.headers(),
-        // #904: bake the registrant's email into the /verify#email= fragment so the
-        // cold email-button open seeds the account. Absent (legacy caller) → bare.
-        body: this.emailSendCodeBody(email),
+        body: JSON.stringify({ returnCode: {} }),
       },
     );
     // Surface a failed send instead of silently looking like success
@@ -516,6 +524,25 @@ export class ZitadelIdpClient implements IdpClient {
     if (!res.ok) {
       throw new Error(`zitadel email send_code failed: HTTP ${res.status}`);
     }
+    // EARS-30: the code lives in this local for the in-flight send only —
+    // never logged, never persisted, never re-serialized.
+    const code = ZitadelIdpClient.extractReturnedCode(await res.json());
+    if (!code) {
+      // A 2xx with no code means no email can be delivered — fail closed and
+      // loudly (a silent success would leave the registrant code-less forever).
+      throw new Error(
+        "zitadel email send_code returned no verification code (returnCode oneof)",
+      );
+    }
+    // The EARS-1/3 cascade always passes the registrant's email; a legacy
+    // caller without one falls back to the IdP's stored address for the sub.
+    const to = email ?? (await this.getUser(sub))?.email;
+    if (!to) {
+      throw new Error(
+        "zitadel email send_code: no destination email for sub — cannot deliver the verification code",
+      );
+    }
+    await this.requireMailer().sendVerificationCodeEmail(to, code);
   }
 
   async requestPhoneVerification(sub: string): Promise<void> {
@@ -885,16 +912,23 @@ export class ZitadelIdpClient implements IdpClient {
 
   /**
    * Resolve an identifier (email or phone) to a Zitadel user's `{ userId,
-   * emailVerified }`, or `null` if no user matches. Like {@link resolveUserId} but
-   * also surfaces the email-verified flag the User v2 search carries
-   * (`human.email.isVerified`, the same field {@link listUsers} reads), needed by
-   * {@link resendEmailVerification} to skip an already-verified registrant.
-   * Fails closed — any non-2xx or empty result is `null` — so the resend stays
+   * emailVerified, email }`, or `null` if no user matches. Like
+   * {@link resolveUserId} but also surfaces the email-verified flag and the
+   * stored email address the User v2 search carries (`human.email`, the same
+   * fields {@link listUsers} reads): the verified flag lets
+   * {@link resendEmailVerification} skip an already-verified registrant, and
+   * the address is the delivery destination the `returnCode` hops need
+   * (EARS-29 — a phone-keyed reset still emails the user's stored address).
+   * Fails closed — any non-2xx or empty result is `null` — so the callers stay
    * enumeration-safe (an unknown identifier looks like a hiccup).
    */
   private async resolveUserVerification(
     identifier: string,
-  ): Promise<{ userId: string; emailVerified: boolean } | null> {
+  ): Promise<{
+    userId: string;
+    emailVerified: boolean;
+    email: string | undefined;
+  } | null> {
     const query = identifier.startsWith("+")
       ? { phoneQuery: { number: identifier } }
       : { emailQuery: { emailAddress: identifier } };
@@ -907,7 +941,7 @@ export class ZitadelIdpClient implements IdpClient {
     const data = (await res.json()) as {
       result?: Array<{
         userId?: string;
-        human?: { email?: { isVerified?: boolean } };
+        human?: { email?: { email?: string; isVerified?: boolean } };
       }>;
     };
     const hit = data.result?.[0];
@@ -915,6 +949,7 @@ export class ZitadelIdpClient implements IdpClient {
     return {
       userId: hit.userId,
       emailVerified: hit.human?.email?.isVerified ?? false,
+      email: hit.human?.email?.email,
     };
   }
 
@@ -932,75 +967,71 @@ export class ZitadelIdpClient implements IdpClient {
       // already-verified registrant has no pending verification to re-issue, and
       // re-sending would be an existence/state oracle, so it is a no-op.
       if (!user || user.emailVerified) return false;
-      // Reuse the same native send the EARS-1/3 cascade uses — the verification-
-      // code resend hop (`POST /v2/users/{id}/email/resend`, #148) with the same
-      // code-only body (#869 — a re-sent email must be scanner-safe too, see
-      // {@link emailSendCodeBody}). A failed send means no code was delivered,
-      // so no ledger row is owed: report `false` rather than throw (the caller's
-      // response stays identical either way).
+      // The same `returnCode` hop the EARS-1/3 cascade uses (#910, EARS-29):
+      // Zitadel re-issues + returns the fresh code (invalidating the previous
+      // one) and sends nothing; the BFF mailer delivers the same §13.3
+      // artifact. A failed hop, a code-less 2xx, or a failed mailer dispatch
+      // all mean no code was delivered, so no ledger row is owed: report
+      // `false` rather than throw (the caller's response stays identical).
       const res = await this.fetchImpl(
         this.url(`/v2/users/${user.userId}/email/resend`),
         {
           method: "POST",
           headers: this.headers(),
-          // #904: the resend knows the identifier (its resolution key) — bake it
-          // into the /verify#email= fragment so re-sent links seed the cold open too.
-          body: this.emailSendCodeBody(identifier),
+          body: JSON.stringify({ returnCode: {} }),
         },
       );
-      return res.ok;
+      if (!res.ok) return false;
+      // EARS-30: in-memory for the in-flight send only; never logged/persisted.
+      const code = ZitadelIdpClient.extractReturnedCode(await res.json());
+      if (!code) return false;
+      const to = user.email ?? identifier;
+      await this.requireMailer().sendVerificationCodeEmail(to, code);
+      return true;
     } catch {
-      // A thrown fetch (network hiccup) is indistinguishable from success to the
-      // caller — swallow it, exactly like `requestPasswordReset`'s `.catch`, and
-      // report no send so no ledger row is written.
+      // A thrown fetch or mailer failure (network hiccup, SMTP outage) is
+      // indistinguishable from success to the caller — swallow it, exactly like
+      // `requestPasswordReset`'s catch, and report no send so no ledger row is
+      // written. The swallow also guarantees the code cannot leak via an error.
       return false;
     }
   }
 
-  /**
-   * #880: the `PasswordResetRequest` body for the EARS-11 forgot-password send.
-   * The reset email is CODE-ONLY, the same #869 contract as the verification
-   * email: with a configured {@link ZitadelConfig.portalBaseUrl} the request
-   * carries the `sendLink` oneof (`SendPasswordResetLink { notification_type,
-   * url_template }`) with a BARE `<origin>/reset` urlTemplate — deliberately
-   * WITHOUT the `{{.UserID}}`/`{{.OrgID}}`/`{{.Code}}` placeholders the proto
-   * supports — replacing Zitadel's default CTA (its hosted set-password page on
-   * the identity host, a surface portal users must never see) with a subordinate
-   * navigation aid that consumes nothing on GET (mail.ru `checklink` prefetch
-   * safety). The code the user TYPES on the portal `/reset` screen rides the
-   * message text ({{.Code}}, provision.sh step 8.sexies), never the URL.
-   * `returnCode` is NOT used: the secret must ride the configured notifier,
-   * never the HTTP response. Without a portal origin the body stays `{}`
-   * (Zitadel's default send), matching {@link emailSendCodeBody}'s fallback.
-   */
-  private passwordResetBody(): string {
-    const base = this.config.portalBaseUrl?.replace(/\/+$/, "");
-    return JSON.stringify(
-      base
-        ? {
-            sendLink: {
-              notificationType: "NOTIFICATION_TYPE_Email",
-              urlTemplate: `${base}/reset`,
-            },
-          }
-        : {},
-    );
-  }
-
   async requestPasswordReset(identifier: string): Promise<void> {
-    // Zitadel User v2: POST /v2/users/{userId}/password_reset triggers the
-    // forgot-password code (Zitadel sends it via the configured notifier, with
-    // the #880 code-only sendLink body — see {@link passwordResetBody}). Every
-    // step is best-effort and swallowed: an unknown identifier, or any provider
-    // error, must produce the IDENTICAL outcome as success so the BFF response is
-    // not an existence oracle (EARS-11/16). We therefore never throw here.
-    const userId = await this.resolveUserId(identifier);
-    if (!userId) return;
-    await this.fetchImpl(this.url(`/v2/users/${userId}/password_reset`), {
-      method: "POST",
-      headers: this.headers(),
-      body: this.passwordResetBody(),
-    }).catch(() => undefined);
+    // Zitadel User v2: POST /v2/users/{userId}/password_reset with the
+    // `PasswordResetRequest` oneof `returnCode` (#910, EARS-11/29): Zitadel
+    // generates/stores/expires/verifies the reset code but SENDS NOTHING — the
+    // BFF mailer delivers the §13.4 branded, Russian, code-only, fully
+    // link-free artifact to the user's stored email. The former
+    // `sendLink.urlTemplate` hop (#880) is retired: a Zitadel-rendered reset
+    // mail no longer exists for this product. Every step is best-effort and
+    // swallowed: an unknown identifier, a provider error, a code-less 2xx, or
+    // a mailer failure must produce the IDENTICAL outcome as success so the
+    // BFF response is not an existence oracle (EARS-11/16) — and the swallow
+    // guarantees the transiting code cannot leak via a thrown error (EARS-30).
+    try {
+      const user = await this.resolveUserVerification(identifier);
+      if (!user) return;
+      const res = await this.fetchImpl(
+        this.url(`/v2/users/${user.userId}/password_reset`),
+        {
+          method: "POST",
+          headers: this.headers(),
+          body: JSON.stringify({ returnCode: {} }),
+        },
+      );
+      if (!res.ok) return;
+      // EARS-30: in-memory for the in-flight send only; never logged/persisted.
+      const code = ZitadelIdpClient.extractReturnedCode(await res.json());
+      if (!code) return;
+      // Delivery goes to the user's STORED address (a phone-keyed reset still
+      // emails the account email); fall back to an email-shaped identifier.
+      const to = user.email ?? (identifier.includes("@") ? identifier : null);
+      if (!to) return;
+      await this.requireMailer().sendPasswordResetCodeEmail(to, code);
+    } catch {
+      // Swallowed by design — see the contract note above.
+    }
   }
 
   async completePasswordReset(
@@ -1121,8 +1152,8 @@ export class ZitadelIdpClient implements IdpClient {
       // the response carries `sessionId` + `sessionToken` (the not-yet-checked
       // session, same response shape as the password-check create, #145).
       //
-      // #878, the same scanner-safety contract as {@link emailSendCodeBody}
-      // (#869): the DEFAULT otpEmail send renders a hosted-login-v2 button URL
+      // #878, the same scanner-safety contract as the (now BFF-sent, #910)
+      // verification email (#869): the DEFAULT otpEmail send renders a hosted-login-v2 button URL
       // with the OTP code + sessionId embedded in the query (observed live on
       // v4.15: `/ui/v2/login/otp/email?code=…&sessionId=…&userId=…`) — a
       // GET-consumable link a mail scanner (mail.ru `checklink`) prefetches,

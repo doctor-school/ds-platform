@@ -1,3 +1,4 @@
+import type { Mailer } from "../../mailer/mailer.types.js";
 import {
   IdpInvalidArgumentError,
   type CreatedUser,
@@ -47,6 +48,17 @@ interface FakeRecord {
  * a live IdP. The real {@link ZitadelIdpClient} is bound when credentials exist.
  */
 export class FakeIdpClient implements IdpClient {
+  /**
+   * #910/#1045 (EARS-29): the BFF mailer the verify/reset send hops deliver
+   * the (fake, {@link FAKE_VALID_CODE}) one-time code through — mirroring the
+   * real adapter's `returnCode` → mailer hand-off so the e2e matrix proves
+   * "exactly one BFF-composed code email per trigger" without a live Zitadel.
+   * Optional for legacy direct construction (specs that assert only on domain
+   * state): without a mailer the code paths behave as before (codes are armed
+   * in-memory; nothing is "delivered").
+   */
+  constructor(private readonly mailer?: Mailer) {}
+
   private readonly byEmail = new Map<string, FakeRecord>();
   private readonly byPhone = new Map<string, FakeRecord>();
   private readonly bySub = new Map<string, FakeRecord>();
@@ -130,11 +142,18 @@ export class FakeIdpClient implements IdpClient {
     return Promise.resolve({ sub, alreadyExisted: false });
   }
 
-  requestEmailVerification(_sub: string, _email?: string): Promise<void> {
-    return Promise.resolve();
+  async requestEmailVerification(sub: string, email?: string): Promise<void> {
+    // EARS-29 parity with the real adapter: the hop "obtains" the code
+    // (returnCode) and hands it to the BFF mailer, which composes the §13.3
+    // artifact. The fake's code authority is FAKE_VALID_CODE (what verifyEmail
+    // accepts). A mailer failure propagates, like the real adapter's.
+    const to = email ?? this.bySub.get(sub)?.email;
+    if (this.mailer && to) {
+      await this.mailer.sendVerificationCodeEmail(to, FAKE_VALID_CODE);
+    }
   }
 
-  resendEmailVerification(identifier: string): Promise<boolean> {
+  async resendEmailVerification(identifier: string): Promise<boolean> {
     // EARS-25 fake/real parity (no more permissive than the real adapter): a
     // code is re-issued ONLY for an existing, UNVERIFIED registrant. The real
     // Zitadel adapter resolves the identifier and skips an already-verified one
@@ -145,8 +164,19 @@ export class FakeIdpClient implements IdpClient {
     // stays enumeration-safe (EARS-16); the boolean drives only the server-side
     // `otp.sent` ledger decision, never the response.
     const record = this.findByIdentifier(identifier);
-    if (!record || record.emailVerified) return Promise.resolve(false);
-    return Promise.resolve(true);
+    if (!record || record.emailVerified) return false;
+    // EARS-29: the re-issued code rides the BFF mailer (same §13.3 artifact as
+    // the initial send). A mailer failure = no code delivered = `false`, the
+    // real adapter's exact swallow (EARS-30: nothing thrown, nothing leaked).
+    if (this.mailer) {
+      const to = record.email ?? identifier;
+      try {
+        await this.mailer.sendVerificationCodeEmail(to, FAKE_VALID_CODE);
+      } catch {
+        return false;
+      }
+    }
+    return true;
   }
 
   requestPhoneVerification(_sub: string): Promise<void> {
@@ -400,15 +430,29 @@ export class FakeIdpClient implements IdpClient {
     this.byPhone.set(phone, record);
   }
 
-  requestPasswordReset(identifier: string): Promise<void> {
+  async requestPasswordReset(identifier: string): Promise<void> {
     const record =
       this.byEmail.get(identifier.toLowerCase()) ??
       this.byPhone.get(identifier);
     // A code is issued only for an existing identifier, but the resolution is
     // identical either way — an unknown identifier is a silent no-op, never a
     // throw, so the caller's response stays enumeration-safe (EARS-11/16).
-    if (record) this.resetCodes.set(record.sub, FAKE_VALID_CODE);
-    return Promise.resolve();
+    if (!record) return;
+    this.resetCodes.set(record.sub, FAKE_VALID_CODE);
+    // EARS-29: the code rides the BFF mailer as the §13.4 artifact, to the
+    // user's STORED email (a phone-keyed reset still emails the account email).
+    // A mailer failure is swallowed — the real adapter's exact contract
+    // (EARS-30/16: void either way, nothing thrown, nothing leaked).
+    if (this.mailer && record.email) {
+      try {
+        await this.mailer.sendPasswordResetCodeEmail(
+          record.email,
+          FAKE_VALID_CODE,
+        );
+      } catch {
+        // swallowed by design (enumeration-safe void)
+      }
+    }
   }
 
   completePasswordReset(

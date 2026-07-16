@@ -1,6 +1,14 @@
 import { Logger } from "@nestjs/common";
 import { createTransport } from "nodemailer";
-import { assertSendableEmail, type Mailer } from "./mailer.types.js";
+import {
+  passwordResetCodeEmail,
+  verificationCodeEmail,
+} from "./code-emails.js";
+import {
+  assertSendableCode,
+  assertSendableEmail,
+  type Mailer,
+} from "./mailer.types.js";
 
 /** One SMTP transport's resolved config — host unset ⇒ that transport is a no-op. */
 export interface SmtpTransportConfig {
@@ -148,7 +156,54 @@ export class SmtpMailer implements Mailer {
     // Reject exactly what FakeMailer rejects (contract parity) — before any
     // transport decision, so no path is more permissive than the real adapter.
     assertSendableEmail(email);
+    await this.dispatch(
+      email,
+      accountExistsMessage(this.config.portalBaseUrl),
+      "account-exists notice",
+    );
+  }
 
+  async sendVerificationCodeEmail(email: string, code: string): Promise<void> {
+    // Parity guards first (fake and real reject identically), before any
+    // transport decision — and before the secret touches a message object.
+    assertSendableEmail(email);
+    assertSendableCode(code);
+    await this.dispatch(
+      email,
+      verificationCodeEmail(code),
+      "verification-code email",
+      code,
+    );
+  }
+
+  async sendPasswordResetCodeEmail(
+    email: string,
+    code: string,
+  ): Promise<void> {
+    assertSendableEmail(email);
+    assertSendableCode(code);
+    await this.dispatch(
+      email,
+      passwordResetCodeEmail(code),
+      "password-reset-code email",
+      code,
+    );
+  }
+
+  /**
+   * Shared per-send transport selection + dispatch (#209 flag gate). When
+   * `secret` is present (the EARS-29 code sends) every surfaced transport
+   * error is SANITIZED first (EARS-30): a provider rejection may echo the
+   * outbound message — subject and body both carry the code — so the raw error
+   * text never leaves this method; occurrences of the secret are redacted and
+   * a fresh Error (fresh stack, no provider payload object) is thrown.
+   */
+  private async dispatch(
+    to: string,
+    message: { subject: string; text: string; html: string },
+    context: string,
+    secret?: string,
+  ): Promise<void> {
     // Live flag read on EVERY send (mirror bot-protection.module.ts:42): a mid-
     // session flip takes effect with no restart; Unleash-unreachable already
     // resolved to the EMAIL_DELIVERY_MODE env default by the time we are called.
@@ -166,8 +221,8 @@ export class SmtpMailer implements Mailer {
         // "never activate the wrong provider").
         this.warn(
           "email-delivery-real is ON but the real SMTP relay is unconfigured " +
-            "(IDP_SMTP_REAL_* unset) — falling back to the Mailpit intercept " +
-            "transport for the account-exists notice. Set IDP_SMTP_REAL_* to " +
+            `(IDP_SMTP_REAL_* unset) — falling back to the Mailpit intercept ` +
+            `transport for the ${context}. Set IDP_SMTP_REAL_* to ` +
             "deliver via the real relay.",
         );
       }
@@ -176,26 +231,49 @@ export class SmtpMailer implements Mailer {
     }
 
     if (!transport) {
-      // Selected transport's host unset ⇒ the existing logged no-op.
+      // Selected transport's host unset ⇒ the existing logged no-op. The warn
+      // names the context only — never the recipient or a secret (EARS-30).
       this.warn(
         `${
           wantReal ? "IDP_SMTP_REAL_HOST" : "MAILER_SMTP_HOST"
-        } is unset — skipping the account-exists notice send (logged no-op).`,
+        } is unset — skipping the ${context} send (logged no-op).`,
       );
       return;
     }
 
-    const { subject, text, html } = accountExistsMessage(
-      this.config.portalBaseUrl,
-    );
-    await transport.sendMail({
-      from: from ?? "noreply@doctor.school",
-      to: email,
-      subject,
-      text,
-      html,
-    });
+    try {
+      await transport.sendMail({
+        from: from ?? "noreply@doctor.school",
+        to,
+        subject: message.subject,
+        text: message.text,
+        html: message.html,
+      });
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err);
+      // Deliberately NO `cause` on the secret-carrying sends (EARS-30): the
+      // original error object may embed the outbound message (and thus the
+      // code) in properties the redaction cannot reach; the account-exists
+      // notice carries no secret, so it keeps the causal chain.
+      if (secret) {
+        // eslint-disable-next-line preserve-caught-error -- EARS-30: attaching the caught error as `cause` would carry the un-redacted provider payload (which can embed the one-time code) into logs/reporters; the scrubbed message is the whole permitted egress.
+        throw new Error(
+          `Mailer: ${context} send failed: ${redactSecret(raw, secret)}`,
+        );
+      }
+      throw new Error(`Mailer: ${context} send failed: ${raw}`, {
+        cause: err,
+      });
+    }
   }
+}
+
+/**
+ * EARS-30: remove every occurrence of the transiting one-time code from a
+ * provider error before it can reach a log line, a trace, or an error report.
+ */
+function redactSecret(message: string, secret: string): string {
+  return message.split(secret).join("[redacted]");
 }
 
 /** Build a transport from one channel's config; `null` when the host is unset. */

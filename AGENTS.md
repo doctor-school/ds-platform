@@ -37,7 +37,7 @@ Stack at a glance (full reference in `apps/docs/content/adr/`): **Backend** Nest
 - **Monorepo:** pnpm 10 + Turborepo. Apps `apps/<name>/`, shared `packages/<name>/`, tooling `tools/`.
 - **Branches:** trunk-based, `<prefix>/<N>-<slug>`, squash-merge. Prefixes `feat|fix|chore|refactor|docs|tooling`. Delete branch on merge/close; re-sweep `gh pr list` after merging CI/dep/security PRs.
 - **Commits:** Conventional Commits; PR title = squash title.
-- **Versioning & release train:** changesets (user-facing PR → `pnpm changeset`; unsure → **major**). A `Version Packages` merge cuts a `release-*` tag + GitHub Release; prod ships manually via `pnpm deploy:prod` (records a GitHub Deployment) — detail `repo-conventions.md` + `/deploy` skill.
+- **Versioning & release train:** changesets (user-facing PR → `pnpm changeset`; unsure → **major**). A `Version Packages` merge cuts a `release-*` tag + GitHub Release; **the agent** ships prod via `pnpm deploy:prod` (D+B trigger policy; no human "operator") — detail `repo-conventions.md` + `/deploy` skill + spec §10.
 - **PR template required:** kind label + `Closes #N` + author marker **in the body** (`author:*` is not a `gh --label`).
 - **Issues:** native sub-issue + blocked-by/blocking links are mandatory, not prose. On merge, set board **Status = Done** by hand.
 - **ADRs** in `apps/docs/content/adr/`; **feature specs** (triplet) in `apps/docs/content/specs/features/NNN-<slug>/`. One spec → many Issues; code PRs start only after the spec is on `main`.

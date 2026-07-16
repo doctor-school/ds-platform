@@ -1,11 +1,13 @@
 # `tools/deploy/` — prod deploy tooling (DSO-126/127/128/129)
 
 Idempotent, one-command production deploy for the always-on Timeweb environment
-(api-prod public + data-prod private). Formalises the manual on-box runbook in
+(api-prod public + data-prod private). Formalises the on-box runbook in
 [`infra/deploy/README.md`](../../infra/deploy/README.md) §5–§10 — that README is
 the operational SSOT; this directory is the executable form of its steady-state
-steps. **First-time provisioning** (Terraform, DNS, secrets, Zitadel first-boot
-bootstrap) stays manual; these scripts are the **per-redeploy** path.
+steps. The **per-redeploy** path (`deploy:prod`) is **agent-run** (off-CI SSH,
+ADR-0012), driven by the D+B trigger policy (release-cycle spec §10);
+**first-time provisioning** (Terraform, DNS, secrets, Zitadel first-boot
+bootstrap) is a one-time human setup, out of the steady-state loop.
 
 | File                | `pnpm` alias           | Role                                                                                                                                            |
 | ------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |

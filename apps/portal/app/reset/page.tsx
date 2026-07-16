@@ -118,7 +118,9 @@ export default function ResetPage() {
         icon={<KeyRound className="text-primary" aria-hidden />}
         // Canvas: the title tracks the stage — «Сброс пароля» on the request step,
         // «Новый пароль» once the code + new-password step is showing.
-        title={stage === "request" ? t("title") : t("titleComplete")}
+        // #1033: rendered as the document's single h1 (a11y landmark) — a bare h1
+        // inherits the CardTitle styling via Tailwind preflight, pixel-identical.
+        title={<h1>{stage === "request" ? t("title") : t("titleComplete")}</h1>}
         description={
           stage === "request"
             ? t("descriptionRequest")

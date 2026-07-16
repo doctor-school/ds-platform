@@ -70,14 +70,20 @@ const DayAgenda = React.forwardRef<
                 <span
                   className={cn(
                     "text-[16px] font-extrabold tabular-nums tracking-[-0.02em]",
-                    row.live ? "text-live" : "text-info",
+                    // AA on `bg-card` (#270): blue.500 (`info`) fails contrast, so
+                    // non-live time takes blue.700 (`primary-action`). For the red
+                    // LIVE time use `destructive-text` (the red TEXT token, which
+                    // flips to the AA-safe lighter red in dark) — NOT `live`, which
+                    // is the surface red meant to pair with white, and fails as text
+                    // on the dark card.
+                    row.live ? "text-destructive-text" : "text-primary-action",
                   )}
                 >
                   {row.time}
                 </span>
               </span>
               <span className="min-w-0">
-                <span className="mb-1 block text-eyebrow font-extrabold uppercase tracking-micro text-info">
+                <span className="mb-1 block text-eyebrow font-extrabold uppercase tracking-micro text-primary-action">
                   {row.school}
                 </span>
                 <span className="block text-[14.5px] font-bold leading-[1.3] tracking-[-0.01em] text-foreground">

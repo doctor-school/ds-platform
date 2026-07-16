@@ -78,13 +78,10 @@ const MonthDotGrid = React.forwardRef<
     {...props}
   >
     <div className="grid grid-cols-7 border-b-2 border-border">
-      {weekdays.map((name, i) => (
+      {weekdays.map((name) => (
         <span
           key={name}
-          className={cn(
-            "py-2 text-center text-2xs font-extrabold uppercase tracking-[0.06em]",
-            i >= 5 ? "text-muted-2" : "text-faint",
-          )}
+          className="py-2 text-center text-2xs font-extrabold uppercase tracking-[0.06em] text-muted-foreground"
         >
           {name}
         </span>
@@ -118,9 +115,9 @@ const MonthDotGrid = React.forwardRef<
                   selected
                     ? "text-primary-foreground"
                     : cell.today
-                      ? "text-info"
+                      ? "text-primary-action"
                       : !cell.inMonth
-                        ? "text-muted-2"
+                        ? "text-muted-foreground"
                         : "text-foreground",
                 )}
               >

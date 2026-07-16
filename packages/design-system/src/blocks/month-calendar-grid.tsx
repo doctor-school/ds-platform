@@ -79,19 +79,17 @@ const MonthCalendarGrid = React.forwardRef<
   <div ref={ref} className={className} {...props}>
     <div className="mt-7 overflow-x-auto border-2 border-border bg-card shadow-lg">
       <div className="min-w-[840px]">
-        {/* Weekday header — Sat/Sun (cols 6-7) read one tier fainter. */}
-        <div
-          className="grid grid-cols-7 border-b-2 border-border"
-          role="row"
-        >
-          {weekdays.map((name, i) => (
+        {/* Weekday header. Display-only calendar → NO ARIA grid roles: an
+            incomplete grid/row/gridcell chain fails `aria-required-parent`, and
+            the semantics add nothing over the visible layout (the pills are
+            links, the dates are text). Weekday ink is the AA-safe quiet tier
+            (`text-muted-foreground`, #270) — the fainter `muted-2`/`faint`
+            neutral-400/500 fails contrast on `bg-card`. */}
+        <div className="grid grid-cols-7 border-b-2 border-border">
+          {weekdays.map((name) => (
             <span
               key={name}
-              role="columnheader"
-              className={cn(
-                "p-3 text-eyebrow font-extrabold uppercase tracking-micro",
-                i >= 5 ? "text-muted-2" : "text-faint",
-              )}
+              className="p-3 text-eyebrow font-extrabold uppercase tracking-micro text-muted-foreground"
             >
               {name}
             </span>
@@ -101,13 +99,11 @@ const MonthCalendarGrid = React.forwardRef<
         {weeks.map((week, wi) => (
           <div
             key={wi}
-            role="row"
             className="grid grid-cols-7 border-b border-hairline last:border-b-0"
           >
             {week.map((cell, ci) => (
               <div
                 key={ci}
-                role="gridcell"
                 className={cn(
                   "min-h-[118px] border-r border-hairline p-2.5 last:border-r-0",
                   cell.muted && "bg-section",
@@ -121,7 +117,7 @@ const MonthCalendarGrid = React.forwardRef<
                     cell.today
                       ? "bg-primary-action px-2 py-0.5 text-primary-foreground"
                       : cell.mutedDate
-                        ? "text-muted-2"
+                        ? "text-muted-foreground"
                         : "text-foreground",
                   )}
                 >
@@ -153,7 +149,7 @@ const MonthCalendarGrid = React.forwardRef<
                   ))}
 
                   {cell.note ? (
-                    <span className="mt-1.5 block text-eyebrow font-semibold text-muted-2">
+                    <span className="mt-1.5 block text-eyebrow font-semibold text-muted-foreground">
                       {cell.note}
                     </span>
                   ) : null}

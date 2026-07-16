@@ -721,8 +721,8 @@ jobs:
   # focus-visible ring) + an axe-core a11y/contrast scan of every showcase route
   # (/, /tokens, /primitives, /blocks, /candidates). Because the showcase renders
   # every primitive/block in every state in one place, this is a STRICT SUPERSET
-  # of the prior auth-only checks (which it replaces — the portal CI tier was
-  # retired in the same change; the portal keeps only its LIVE dev-stand tier).
+  # of the prior auth-only checks at the PRIMITIVE level (page-level portal
+  # coverage lives in the sibling `playwright-axe-portal` job below, #400).
   # BACKEND-FREE — the showcase is a pure viewer with no BFF, so no api / Zitadel
   # / Mailpit / Postgres. BLOCKING per ADR-0007 §2.6 (promoted from WARN once
   # stable, #285), so this gate is wired into the `ci` meta-job needs-list. The
@@ -741,6 +741,31 @@ jobs:
       - run: pnpm exec turbo run build --filter=@ds/showcase
       - run: pnpm --filter @ds/showcase exec playwright install --with-deps chromium
       - run: pnpm --filter @ds/showcase test:e2e:ci
+
+  # playwright-axe-portal: the PAGE-LEVEL twin of `playwright-axe` (#400 — the
+  # #351 showcase retarget retired the portal CI tier; this re-adds a THIN
+  # product-surface scan). The showcase gate covers the DS primitives; this job
+  # scans the COMPOSED portal auth pages (/login /register /reset) for what only
+  # a real page can violate: landmark structure, heading hierarchy (exactly-one
+  # h1), plus the full WCAG 2 A/AA axe rule set. BACKEND-FREE — the auth pages
+  # render their forms client-side and the spec never submits, so no api /
+  # Zitadel / Mailpit / Postgres and no special build env (same cold-build path
+  # as the `build` job). BLOCKING alongside `playwright-axe` (restores coverage
+  # that was BLOCK before #351), so it is wired into the `ci` needs-list.
+  playwright-axe-portal:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # Build the portal (and its workspace deps) so `next start` serves a real
+      # production build — the same path the `build` job exercises, no special env.
+      - run: pnpm exec turbo run build --filter=@ds/portal
+      - run: pnpm --filter @ds/portal exec playwright install --with-deps chromium
+      - run: pnpm --filter @ds/portal test:e2e:ci
 
   # tdd-signal: a PR that changes production source under apps/*/src with no test
   # in the diff AND no pre-existing test in the changed module (design §5.2,
@@ -856,6 +881,7 @@ jobs:
         prod-surface,
         tokens-fresh,
         playwright-axe,
+        playwright-axe-portal,
       ]
     if: always()
     runs-on: ubuntu-latest

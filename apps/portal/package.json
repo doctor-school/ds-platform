@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "bddgen && playwright test",
+    "test:e2e:ci": "playwright test --config=playwright.ci.config.ts",
     "test:axe": "playwright test --config=playwright.axe.config.ts"
   },
   "dependencies": {

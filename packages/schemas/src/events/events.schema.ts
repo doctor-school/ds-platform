@@ -383,7 +383,9 @@ export type PublicEventState = z.infer<typeof PublicEventStateSchema>;
  * posture, not a `state === 'draft'` denylist that a new state would slip past).
  */
 export function isPubliclyReachable(state: EventLifecycleState): boolean {
-  return (PUBLIC_EVENT_STATES as readonly EventLifecycleState[]).includes(state);
+  return (PUBLIC_EVENT_STATES as readonly EventLifecycleState[]).includes(
+    state,
+  );
 }
 
 /**
@@ -494,3 +496,135 @@ export type UpcomingBroadcastCard = z.infer<typeof UpcomingBroadcastCardSchema>;
 /** The listing endpoint returns a bare array (an empty result is a valid `[]`, EARS-11). */
 export const UpcomingBroadcastListSchema = z.array(UpcomingBroadcastCardSchema);
 export type UpcomingBroadcastList = z.infer<typeof UpcomingBroadcastListSchema>;
+
+// ── 004 wave-2 — month-calendar read side (MonthBroadcastEntry / MonthlyEventCount) ──
+// The publish-safe projections the month view + its 12-month picker read (004
+// requirements EARS-15/EARS-16, design §3/§4). Consumed read-only over the 007
+// write model, same allow-list discipline as the wave-1 public projections.
+
+/**
+ * The lifecycle states an event may carry on the month grid (004 design §3,
+ * EARS-15). The closed publish-VISIBLE subset `published`/`live`/`ended` — the
+ * month view INCLUDES the month's already-past `ended` events (rendered as muted
+ * aggregate notes), which is why `ended` is present here where the upcoming
+ * card's {@link UPCOMING_BROADCAST_STATES} drops it. `draft` and `archived` are
+ * deliberately absent: they have NO month projection (structurally, not by a
+ * denylist), so a new non-visible state can never leak onto the grid.
+ */
+export const MONTH_BROADCAST_STATES = ["published", "live", "ended"] as const;
+export const MonthBroadcastStateSchema = z.enum(MONTH_BROADCAST_STATES);
+export type MonthBroadcastState = z.infer<typeof MonthBroadcastStateSchema>;
+
+/**
+ * `MonthBroadcastEntry` — the month-grid projection returned by
+ * `GET /v1/public/events?month=YYYY-MM` (004 design §3, EARS-15). A THIN
+ * allow-list like {@link UpcomingBroadcastCardSchema}: exactly
+ * `id, slug, title, school, startsAt, state` — NO description, partners, program
+ * PDF, duration, speakers, or any operator/commercial field or registrant PII
+ * (the structural half of EARS-10). Like the sibling projections it is an
+ * allow-list, not a redactor: a new internal column stays invisible on the entry
+ * until explicitly added here.
+ *
+ * `startsAt` is the canonical UTC instant (ISO-8601); every surface renders it in
+ * `Europe/Moscow` labeled МСК (EARS-12). Entries are returned ordered nearest
+ * air date first (`starts_at ASC`); an empty month is a valid `200 []`.
+ */
+export const MonthBroadcastEntrySchema = z.object({
+  id: z.uuid(),
+  slug: z.string(),
+  title: z.string(),
+  school: z.string(),
+  startsAt: z.iso.datetime({ offset: true }),
+  state: MonthBroadcastStateSchema,
+});
+export type MonthBroadcastEntry = z.infer<typeof MonthBroadcastEntrySchema>;
+
+/** The month read returns a bare array (an empty month is a valid `[]`, EARS-15). */
+export const MonthBroadcastListSchema = z.array(MonthBroadcastEntrySchema);
+export type MonthBroadcastList = z.infer<typeof MonthBroadcastListSchema>;
+
+/**
+ * `MonthlyEventCount` — one row of the month-picker projection returned by
+ * `GET /v1/public/events/month-counts?year=YYYY` (004 design §3, EARS-16).
+ * `month` is the 1-based calendar month (1..12); `count` is the number of
+ * publish-visible (`published`/`live`/`ended`) events whose start instant (МСК)
+ * falls in that month. Months with no events carry `count: 0` — the response is
+ * always exactly 12 rows ({@link MonthlyEventCountsSchema}), so the picker never
+ * has to fill gaps.
+ */
+export const MonthlyEventCountSchema = z.object({
+  month: z.number().int().min(1).max(12),
+  count: z.number().int().nonnegative(),
+});
+export type MonthlyEventCount = z.infer<typeof MonthlyEventCountSchema>;
+
+/** The counts endpoint returns exactly the 12 months of the requested year (EARS-16). */
+export const MonthlyEventCountsSchema = z
+  .array(MonthlyEventCountSchema)
+  .length(12);
+export type MonthlyEventCounts = z.infer<typeof MonthlyEventCountsSchema>;
+
+/**
+ * The `month` query-param shape for the month read (`YYYY-MM`, months `01`..`12`).
+ * A malformed value is a 400 at the controller before any read runs. NO baked
+ * `message` (repo rule #200) — the boundary rejects structurally.
+ */
+export const MONTH_PARAM = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** The `year` query-param shape for the counts read (`YYYY`). NO baked `message` (#200). */
+export const YEAR_PARAM = /^\d{4}$/;
+
+/**
+ * The half-open UTC instant range `[start, end)` covering one МСК calendar month
+ * — the single SSOT the month read filters on (`start <= starts_at < end`).
+ * `start` is the first instant of the month at МСК midnight
+ * (`YYYY-MM-01T00:00:00+03:00`); `end` is the first instant of the NEXT month at
+ * МСК midnight (December rolls to next-year January). Moscow is permanently
+ * UTC+3 ({@link MSK_UTC_OFFSET}), so no tz-db lookup is needed. Pure; throws a
+ * `RangeError` on a malformed month (callers validate with {@link MONTH_PARAM}
+ * first).
+ */
+export function mskMonthRange(month: string): { start: Date; end: Date } {
+  if (!MONTH_PARAM.test(month)) {
+    throw new RangeError(`not a YYYY-MM month: ${month}`);
+  }
+  const year = Number(month.slice(0, 4));
+  const m = Number(month.slice(5, 7));
+  const nextYear = m === 12 ? year + 1 : year;
+  const nextMonth = m === 12 ? 1 : m + 1;
+  const start = new Date(`${month}-01T00:00:00${MSK_UTC_OFFSET}`);
+  const end = new Date(
+    `${pad4(nextYear)}-${pad2(nextMonth)}-01T00:00:00${MSK_UTC_OFFSET}`,
+  );
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    throw new RangeError(`invalid МСК month: ${month}`);
+  }
+  return { start, end };
+}
+
+/**
+ * The half-open UTC instant range `[start, end)` covering one МСК calendar year
+ * — the range the per-month counts aggregate over. `start` = МСК midnight of
+ * `YYYY-01-01`; `end` = МСК midnight of the next year's `01-01`. Pure; throws a
+ * `RangeError` on a malformed year (callers validate with {@link YEAR_PARAM}).
+ */
+export function mskYearRange(year: string): { start: Date; end: Date } {
+  if (!YEAR_PARAM.test(year)) {
+    throw new RangeError(`not a YYYY year: ${year}`);
+  }
+  const start = new Date(`${year}-01-01T00:00:00${MSK_UTC_OFFSET}`);
+  const end = new Date(
+    `${pad4(Number(year) + 1)}-01-01T00:00:00${MSK_UTC_OFFSET}`,
+  );
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    throw new RangeError(`invalid МСК year: ${year}`);
+  }
+  return { start, end };
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+function pad4(n: number): string {
+  return String(n).padStart(4, "0");
+}

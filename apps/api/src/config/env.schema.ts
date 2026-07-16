@@ -153,6 +153,15 @@ export const ApiEnvSchema = z.looseObject({
   IDP_SMTP_REAL_PASSWORD: z.string().optional(),
   IDP_SMTP_REAL_SENDER_ADDRESS: z.string().optional(),
 
+  // Resend failover channel of the BFF mailer transport chain (003 design
+  // §14.3, EARS-31, #1046): mail.ru primary → Resend failover, one switch per
+  // send. Optional: unset ⇒ no failover channel (the chain is mail.ru only).
+  // Failover-only by recorded 152-ФЗ decision (§14.6) — these mails carry only
+  // the recipient address + a short-lived one-time code. The From address
+  // reuses IDP_SMTP_REAL_SENDER_ADDRESS (resend._domainkey DKIM is live in the
+  // doctor.school zone).
+  RESEND_API_KEY: z.string().optional(),
+
   // Error monitoring (self-hosted GlitchTip — DSO-125). Sentry SaaS is rejected
   // by 152-ФЗ (ADR-0004 §15 / ADR-0005 §10), so events go to an RF-zone GlitchTip
   // reached over the private VPC (`SENTRY_DSN` host = data-prod's VPC IP). The SDK

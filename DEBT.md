@@ -16,4 +16,4 @@
 
 ## Ledger
 
-- [ ] 2026-07-16 retro session 1c4b7478 / PR #1011 — AGENTS.md at 25,596/25,600 B (4 B headroom); the next always-on edit forces ad-hoc squeezing of canonical rules (promote-when: an AGENTS.md edit does not fit the budget, or a drainage wave picks it up — remedy: add a `<256 B remaining` WARN tier to `tools/lint/instruction-budget-lint.ts` + relocate §6 detail to `.claude/rules/`/skills)
+- [x] 2026-07-16 retro session 1c4b7478 / PR #1011 — AGENTS.md at 25,596/25,600 B (4 B headroom); the next always-on edit forces ad-hoc squeezing of canonical rules (promote-when: an AGENTS.md edit does not fit the budget, or a drainage wave picks it up — remedy: add a `<256 B remaining` WARN tier to `tools/lint/instruction-budget-lint.ts` + relocate §6 detail to `.claude/rules/`/skills) (→ #1042 — WARN tier shipped; relocation half satisfied by #1030)

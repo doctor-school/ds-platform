@@ -12,6 +12,8 @@ import {
   type IdpUser,
   type PasswordLoginResult,
 } from "./idp.types.js";
+import { InMemoryOtpChallengeStore } from "./otp-challenge-store.fake.js";
+import type { OtpChallengeStore } from "./otp-challenge-store.types.js";
 
 /** Subset of `fetch` the adapter needs — narrowed so it can be faked in tests. */
 export type FetchLike = (
@@ -188,34 +190,27 @@ export class ZitadelIdpClient implements IdpClient {
   private readonly fetchImpl: FetchLike;
 
   /**
-   * Live OTP-login challenges captured between the two SEPARATE HTTP requests the
-   * OTP-login flow spans, keyed by the lowercased `identifier`. The
-   * {@link IdpClient} port passes ONLY `identifier` to both
-   * `requestEmailOtp`/`requestSmsOtp` (request #1 — arms the challenge, returns
-   * `void` for enumeration-safety) and the matching `loginWith*Otp` (request #2 —
-   * verifies the code) — no Zitadel session handle crosses the port between them —
-   * so this adapter must carry the server-side session (`sessionId` + the
-   * still-unchecked `sessionToken`) between the two calls itself. We stash it here
-   * on the request hop and consume it (single-use, deleted on the verify hop) on
-   * the same singleton adapter.
-   *
-   * NB: #143 folded the former `sessionTokens` map into the explicit
-   * {@link IdpSession.sessionToken} handle (the checked-session token now rides
-   * the port handle from `passwordLogin`/`loginWith*Otp` straight into
-   * {@link exchangeSessionForTokens}, no adapter cache). This challenge map is
-   * DIFFERENT and deliberately stays: unlike `sessionTokens` — which was a
-   * within-one-request hand-off between two methods called back-to-back — this is
-   * a genuine cross-REQUEST bridge (`request*Otp` → `loginWith*Otp` are two
-   * distinct HTTP requests), and `request*Otp` returns `void` for
-   * enumeration-safety (EARS-6/7/16), so there is no handle to thread through the
-   * port without leaking an existence oracle. Folding it out is tracked separately
-   * as **#410** (a shared BFF challenge store for scale-out) — until then it
-   * remains here, honestly, as the one remaining cross-request adapter state.
+   * Shared store for the live OTP-login challenges captured between the two
+   * SEPARATE HTTP requests the OTP-login flow spans, keyed by the lowercased
+   * `identifier` (#410). The {@link IdpClient} port passes ONLY `identifier` to
+   * both `requestEmailOtp`/`requestSmsOtp` (request #1 — arms the challenge,
+   * returns `void` for enumeration-safety) and the matching `loginWith*Otp`
+   * (request #2 — verifies the code) — no Zitadel session handle crosses the
+   * port between them (#143 threads the CHECKED-session token on the
+   * {@link IdpSession} handle, but that is a within-one-request hand-off; a
+   * cross-request handle would leak an existence oracle, EARS-6/7/16) — so the
+   * BFF carries the server-side session (`sessionId` + the still-unchecked
+   * `sessionToken`) between the two calls itself. Unlike the pre-#410 instance
+   * `Map`, the store is instance-agnostic: bound by {@link IdpModule} to Redis
+   * when `REDIS_URL` is configured (scale-out — request #1 and #2 may land on
+   * different api instances), else the in-memory fake (the single-instance
+   * dev/CI default, behaviorally identical to the old Map). Semantics are
+   * unchanged: armed on the request hop, consumed single-use on a SUCCESSFUL
+   * verify only — Zitadel alone owns code expiry, attempt limits, and lockout
+   * (EARS-15); the Redis TTL is a garbage-collection bound, never the expiry
+   * authority.
    */
-  private readonly otpChallenges = new Map<
-    string,
-    { sessionId: string; sessionToken: string; sub: string }
-  >();
+  private readonly otpChallengeStore: OtpChallengeStore;
 
   /**
    * #203: the resolved org id the resource API (`CreateUser` /
@@ -226,8 +221,16 @@ export class ZitadelIdpClient implements IdpClient {
    */
   private orgIdPromise: Promise<string> | undefined;
 
-  constructor(private readonly config: ZitadelConfig) {
+  constructor(
+    private readonly config: ZitadelConfig,
+    otpChallengeStore?: OtpChallengeStore,
+  ) {
     this.fetchImpl = config.fetchImpl ?? (globalThis.fetch as FetchLike);
+    // Default to a private in-memory store — the exact pre-#410 instance-Map
+    // behavior — so direct construction (unit specs) needs no wiring; the
+    // module binding always passes the shared store explicitly.
+    this.otpChallengeStore =
+      otpChallengeStore ?? new InMemoryOtpChallengeStore();
   }
 
   /**
@@ -263,9 +266,7 @@ export class ZitadelIdpClient implements IdpClient {
         const data = (await res.json()) as { org?: { id?: string } };
         const id = data.org?.id;
         if (!id) {
-          throw new IdpUnavailableError(
-            "zitadel orgs/me returned no org id",
-          );
+          throw new IdpUnavailableError("zitadel orgs/me returned no org id");
         }
         return id;
       })().catch((err: unknown) => {
@@ -349,10 +350,8 @@ export class ZitadelIdpClient implements IdpClient {
     // delivered code. Confirmed live on CreateUser: `returnCode: {}` ⇒ the
     // response carries `emailCode` and Mailpit receives no auto-send. Same
     // directive on the phone object for the symmetric phone case.
-    if (input.email)
-      human["email"] = { email: input.email, returnCode: {} };
-    if (input.phone)
-      human["phone"] = { phone: input.phone, returnCode: {} };
+    if (input.email) human["email"] = { email: input.email, returnCode: {} };
+    if (input.phone) human["phone"] = { phone: input.phone, returnCode: {} };
 
     let orgId: string;
     try {
@@ -502,13 +501,16 @@ export class ZitadelIdpClient implements IdpClient {
     // request body is the Zitadel `SendEmailVerificationCode` oneof (#869:
     // `sendCode` + the bare portal `urlTemplate` — see {@link emailSendCodeBody}),
     // matching the production notifier path — never returning the secret inline.
-    const res = await this.fetchImpl(this.url(`/v2/users/${sub}/email/resend`), {
-      method: "POST",
-      headers: this.headers(),
-      // #904: bake the registrant's email into the /verify#email= fragment so the
-      // cold email-button open seeds the account. Absent (legacy caller) → bare.
-      body: this.emailSendCodeBody(email),
-    });
+    const res = await this.fetchImpl(
+      this.url(`/v2/users/${sub}/email/resend`),
+      {
+        method: "POST",
+        headers: this.headers(),
+        // #904: bake the registrant's email into the /verify#email= fragment so the
+        // cold email-button open seeds the account. Absent (legacy caller) → bare.
+        body: this.emailSendCodeBody(email),
+      },
+    );
     // Surface a failed send instead of silently looking like success
     // (consistent with createUser); the caller decides the user-facing message.
     if (!res.ok) {
@@ -523,11 +525,14 @@ export class ZitadelIdpClient implements IdpClient {
     // code through the configured SMS notifier. Path-aligned by parity with the
     // email fix; the dev-stand has no SMS provider, so this hop is not live-
     // verified here (no Mailpit equivalent for SMS) — flagged on #148.
-    const res = await this.fetchImpl(this.url(`/v2/users/${sub}/phone/resend`), {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify({ sendCode: {} }),
-    });
+    const res = await this.fetchImpl(
+      this.url(`/v2/users/${sub}/phone/resend`),
+      {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({ sendCode: {} }),
+      },
+    );
     if (!res.ok) {
       throw new Error(`zitadel phone send_code failed: HTTP ${res.status}`);
     }
@@ -540,11 +545,14 @@ export class ZitadelIdpClient implements IdpClient {
     // the send, but the verify path is corrected in the same change because the
     // round-trip the live test asserts (send → fetch code from Mailpit → verify)
     // is otherwise unprovable; the identical custom-verb→REST-verb rename applies.
-    const res = await this.fetchImpl(this.url(`/v2/users/${sub}/email/verify`), {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify({ verificationCode: code }),
-    });
+    const res = await this.fetchImpl(
+      this.url(`/v2/users/${sub}/email/verify`),
+      {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({ verificationCode: code }),
+      },
+    );
     return res.ok;
   }
 
@@ -552,11 +560,14 @@ export class ZitadelIdpClient implements IdpClient {
     // #148 wire-shape delta on the phone verify hop, by parity with email:
     // `POST /v2/users/{id}/phone/verify` (the old `/phone/_verify` is the same
     // 404 bug class). Not live-verified (no SMS provider on the dev-stand).
-    const res = await this.fetchImpl(this.url(`/v2/users/${sub}/phone/verify`), {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify({ verificationCode: code }),
-    });
+    const res = await this.fetchImpl(
+      this.url(`/v2/users/${sub}/phone/verify`),
+      {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({ verificationCode: code }),
+      },
+    );
     return res.ok;
   }
 
@@ -783,9 +794,7 @@ export class ZitadelIdpClient implements IdpClient {
       body: tokenBody.toString(),
     });
     if (!tokenRes.ok) {
-      throw new Error(
-        `zitadel token endpoint failed: HTTP ${tokenRes.status}`,
-      );
+      throw new Error(`zitadel token endpoint failed: HTTP ${tokenRes.status}`);
     }
     const data = (await tokenRes.json()) as OidcTokenResponse;
     if (!data.access_token || !data.refresh_token) {
@@ -1052,9 +1061,10 @@ export class ZitadelIdpClient implements IdpClient {
   // then update the same session with the submitted code, then exchange the
   // checked session for tokens (the shared `exchangeSessionForTokens` hop). The
   // challenge is bound to a server-side session carried between the request and
-  // verify calls (two distinct HTTP requests) via the `otpChallenges` cache — the
-  // one remaining cross-request adapter state after #143 folded `sessionTokens`
-  // into the port handle; its own fold-out is tracked as #410.
+  // verify calls (two distinct HTTP requests) via the shared
+  // `otpChallengeStore` (#410 — Redis-backed under scale-out) after #143 folded
+  // `sessionTokens` into the port handle; the adapter itself keeps no
+  // cross-request state.
   //
   // Wire-shape risk note (same class as #122 → corrected by #145/#148 live): the
   // exact Session-v2 field names/paths below are PINNED DETERMINISTICALLY BY THE
@@ -1140,7 +1150,10 @@ export class ZitadelIdpClient implements IdpClient {
         sessionToken?: string;
       };
       if (!data.sessionId || !data.sessionToken) return;
-      this.otpChallenges.set(identifier.toLowerCase(), {
+      // A store write failure (e.g. Redis blip) falls into the enclosing catch
+      // below — still void, enumeration-safe (a store outage must not become a
+      // health oracle either).
+      await this.otpChallengeStore.set(identifier.toLowerCase(), {
         sessionId: data.sessionId,
         sessionToken: data.sessionToken,
         sub: userId,
@@ -1164,7 +1177,7 @@ export class ZitadelIdpClient implements IdpClient {
     check: "otpEmail" | "otpSms",
   ): Promise<IdpSession | null> {
     const key = identifier.toLowerCase();
-    const challenge = this.otpChallenges.get(key);
+    const challenge = await this.otpChallengeStore.get(key);
     // No prior `request*Otp` for this identifier (or an unknown identifier, which
     // armed nothing) → null, indistinguishable from a wrong code (EARS-16).
     if (!challenge) return null;
@@ -1176,14 +1189,17 @@ export class ZitadelIdpClient implements IdpClient {
     // code never verified. A non-2xx (wrong/expired code) resolves to null
     // (EARS-16); a 2xx returns a FRESH `sessionToken` proving the session passed
     // its OTP check.
-    const res = await this.fetchImpl(this.url(`/v2/sessions/${challenge.sessionId}`), {
-      method: "PATCH",
-      headers: this.headers(),
-      body: JSON.stringify({
-        sessionToken: challenge.sessionToken,
-        checks: { [check]: { code } },
-      }),
-    });
+    const res = await this.fetchImpl(
+      this.url(`/v2/sessions/${challenge.sessionId}`),
+      {
+        method: "PATCH",
+        headers: this.headers(),
+        body: JSON.stringify({
+          sessionToken: challenge.sessionToken,
+          checks: { [check]: { code } },
+        }),
+      },
+    );
     // Drop the challenge ONLY on a successful verify (single-use, mirroring the
     // fake's `loginWith*Otp`). On a failure we KEEP the cached challenge so the
     // user can retry the SAME already-delivered code against the SAME Zitadel
@@ -1194,7 +1210,7 @@ export class ZitadelIdpClient implements IdpClient {
     // send and the EARS-14 toll-fraud budget on every mistake; keeping the
     // challenge lets the retry reuse the already-sent code for free.
     if (!res.ok) return null;
-    this.otpChallenges.delete(key);
+    await this.otpChallengeStore.delete(key);
     const data = (await res.json()) as { sessionToken?: string };
     // Thread the CHECKED-session token through the returned {@link IdpSession}
     // handle (#143) so the downstream `exchangeSessionForTokens(session)` reads it
@@ -1293,9 +1309,7 @@ export class ZitadelIdpClient implements IdpClient {
     // Idempotency: an already-existing assignment is the converged state, not a
     // failure — Zitadel signals it with 409 (ALREADY_EXISTS). Resolve.
     if (res.ok || res.status === 409) return;
-    throw new Error(
-      `zitadel grant project role failed: HTTP ${res.status}`,
-    );
+    throw new Error(`zitadel grant project role failed: HTTP ${res.status}`);
   }
 
   /**

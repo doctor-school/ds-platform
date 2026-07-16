@@ -383,7 +383,9 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
     const client = new ZitadelIdpClient({ ...SEND_CONFIG, fetchImpl });
     await client.requestEmailVerification("user-1");
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.url).toBe("http://idp.test:9080/v2/users/user-1/email/resend");
+    expect(calls[0]?.url).toBe(
+      "http://idp.test:9080/v2/users/user-1/email/resend",
+    );
     expect(calls[0]?.method).toBe("POST");
     expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({ sendCode: {} });
   });
@@ -513,7 +515,9 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
     const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
     const client = new ZitadelIdpClient({ ...SEND_CONFIG, fetchImpl });
     await client.requestPhoneVerification("user-1");
-    expect(calls[0]?.url).toBe("http://idp.test:9080/v2/users/user-1/phone/resend");
+    expect(calls[0]?.url).toBe(
+      "http://idp.test:9080/v2/users/user-1/phone/resend",
+    );
     expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({ sendCode: {} });
   });
 
@@ -522,7 +526,9 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
     const client = new ZitadelIdpClient({ ...SEND_CONFIG, fetchImpl });
     const ok = await client.verifyEmail("user-1", "ABC123");
     expect(ok).toBe(true);
-    expect(calls[0]?.url).toBe("http://idp.test:9080/v2/users/user-1/email/verify");
+    expect(calls[0]?.url).toBe(
+      "http://idp.test:9080/v2/users/user-1/email/verify",
+    );
     expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({
       verificationCode: "ABC123",
     });
@@ -538,7 +544,9 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
     const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
     const client = new ZitadelIdpClient({ ...SEND_CONFIG, fetchImpl });
     await client.verifyPhone("user-1", "ABC123");
-    expect(calls[0]?.url).toBe("http://idp.test:9080/v2/users/user-1/phone/verify");
+    expect(calls[0]?.url).toBe(
+      "http://idp.test:9080/v2/users/user-1/phone/verify",
+    );
   });
 });
 
@@ -602,7 +610,9 @@ describe("003 EARS-11 password-reset send wire shape (#880)", () => {
     await client.requestPasswordReset("user@ds.test");
     const reset = calls.find((c) => c.url.endsWith("/password_reset"));
     expect(reset, "the password_reset hop was reached").toBeTruthy();
-    expect(reset?.url).toBe("http://idp.test:9080/v2/users/user-11/password_reset");
+    expect(reset?.url).toBe(
+      "http://idp.test:9080/v2/users/user-11/password_reset",
+    );
     expect(reset?.method).toBe("POST");
     const body = JSON.parse(reset?.body ?? "{}") as {
       sendLink?: { notificationType?: string; urlTemplate?: string };
@@ -676,7 +686,12 @@ describe("ZitadelIdpClient createUser → CreateUser /v2/users/new (#203)", () =
   } {
     const calls: ScriptedCall[] = [];
     const fetchImpl: FetchLike = (url, init) => {
-      calls.push({ url, method: init.method, headers: init.headers, body: init.body });
+      calls.push({
+        url,
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
+      });
       // Org resolution hop (only hit when `orgId` is not configured).
       if (url.endsWith("/management/v1/orgs/me")) {
         return Promise.resolve({
@@ -706,7 +721,11 @@ describe("ZitadelIdpClient createUser → CreateUser /v2/users/new (#203)", () =
   it("POSTs /v2/users/new with the organizationId + nested human{profile,email{returnCode},password} body and reads the response `id`", async () => {
     const { fetchImpl, calls } = createFetch({
       status: 201,
-      body: { id: "u-99", creationDate: "2026-06-12T00:00:00Z", emailCode: "ABC123" },
+      body: {
+        id: "u-99",
+        creationDate: "2026-06-12T00:00:00Z",
+        emailCode: "ABC123",
+      },
     });
     const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
     await expect(client.createUser(INPUT)).resolves.toEqual({
@@ -714,7 +733,10 @@ describe("ZitadelIdpClient createUser → CreateUser /v2/users/new (#203)", () =
       alreadyExisted: false,
     });
     const create = calls.find((c) => c.url.endsWith("/v2/users/new"));
-    expect(create, "create hit /v2/users/new (not /v2/users/human)").toBeTruthy();
+    expect(
+      create,
+      "create hit /v2/users/new (not /v2/users/human)",
+    ).toBeTruthy();
     expect(create!.method).toBe("POST");
     expect(JSON.parse(create!.body ?? "{}")).toEqual({
       organizationId: "org-1",
@@ -737,9 +759,17 @@ describe("ZitadelIdpClient createUser → CreateUser /v2/users/new (#203)", () =
     // greetings — the placeholder leaked user-facing. The identifier the user
     // registered with is the only truthful display value we hold at creation.
     const emailCase = createFetch({ status: 201, body: { id: "u-1" } });
-    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl: emailCase.fetchImpl });
-    await client.createUser({ email: "www.alisa99@mail.ru", password: "Aa1!aaaa" });
-    const emailCreate = emailCase.calls.find((c) => c.url.endsWith("/v2/users/new"));
+    const client = new ZitadelIdpClient({
+      ...CONFIG,
+      fetchImpl: emailCase.fetchImpl,
+    });
+    await client.createUser({
+      email: "www.alisa99@mail.ru",
+      password: "Aa1!aaaa",
+    });
+    const emailCreate = emailCase.calls.find((c) =>
+      c.url.endsWith("/v2/users/new"),
+    );
     expect(JSON.parse(emailCreate!.body ?? "{}")).toMatchObject({
       human: {
         profile: {
@@ -753,9 +783,17 @@ describe("ZitadelIdpClient createUser → CreateUser /v2/users/new (#203)", () =
     // Phone-only creation (dormant path) falls back to the phone identifier —
     // never a computed "doctor guest".
     const phoneCase = createFetch({ status: 201, body: { id: "u-2" } });
-    const phoneClient = new ZitadelIdpClient({ ...CONFIG, fetchImpl: phoneCase.fetchImpl });
-    await phoneClient.createUser({ phone: "+79001234567", password: "Aa1!aaaa" });
-    const phoneCreate = phoneCase.calls.find((c) => c.url.endsWith("/v2/users/new"));
+    const phoneClient = new ZitadelIdpClient({
+      ...CONFIG,
+      fetchImpl: phoneCase.fetchImpl,
+    });
+    await phoneClient.createUser({
+      phone: "+79001234567",
+      password: "Aa1!aaaa",
+    });
+    const phoneCreate = phoneCase.calls.find((c) =>
+      c.url.endsWith("/v2/users/new"),
+    );
     expect(JSON.parse(phoneCreate!.body ?? "{}")).toMatchObject({
       human: {
         profile: {
@@ -768,7 +806,10 @@ describe("ZitadelIdpClient createUser → CreateUser /v2/users/new (#203)", () =
   });
 
   it("resolves the org id from /management/v1/orgs/me when IDP_ORG_ID is not configured (#203)", async () => {
-    const { fetchImpl, calls } = createFetch({ status: 201, body: { id: "u-1" } });
+    const { fetchImpl, calls } = createFetch({
+      status: 201,
+      body: { id: "u-1" },
+    });
     const client = new ZitadelIdpClient({
       baseUrl: "http://idp.test:9080",
       serviceToken: "svc-token",
@@ -908,14 +949,16 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
         return Promise.resolve({
           ok: true,
           status: 200,
-          json: () =>
-            Promise.resolve({ result: uid ? [{ userId: uid }] : [] }),
+          json: () => Promise.resolve({ result: uid ? [{ userId: uid }] : [] }),
         });
       }
       // OTP factor registration — POST /v2/users/{id}/otp_email|otp_sms (#153).
       // The challenge presupposes the factor; we register it (idempotent) before
       // the create hop. A 201 here = freshly registered.
-      if (/\/v2\/users\/[^/]+\/otp_(email|sms)$/.test(url) && init.method === "POST") {
+      if (
+        /\/v2\/users\/[^/]+\/otp_(email|sms)$/.test(url) &&
+        init.method === "POST"
+      ) {
         return Promise.resolve({
           ok: true,
           status: 201,
@@ -991,12 +1034,16 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
     const { fetchImpl, calls } = otpFetch({ userId: "otp-user-1" });
     const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
 
-    await expect(client.requestEmailOtp("Doc@ds.test")).resolves.toBeUndefined();
+    await expect(
+      client.requestEmailOtp("Doc@ds.test"),
+    ).resolves.toBeUndefined();
 
     // #153 live delta: the email OTP factor is registered before the challenge
     // (else Zitadel rejects the challenge with COMMAND-JKLJ3 "OTP isn't ready").
     const factor = calls.find(
-      (c) => /\/v2\/users\/otp-user-1\/otp_email$/.test(c.url) && c.method === "POST",
+      (c) =>
+        /\/v2\/users\/otp-user-1\/otp_email$/.test(c.url) &&
+        c.method === "POST",
     );
     expect(factor, "the otp_email factor was registered first").toBeTruthy();
 
@@ -1061,7 +1108,8 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
     const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
     await client.requestSmsOtp("+15551230000");
     const factor = calls.find(
-      (c) => /\/v2\/users\/otp-user-1\/otp_sms$/.test(c.url) && c.method === "POST",
+      (c) =>
+        /\/v2\/users\/otp-user-1\/otp_sms$/.test(c.url) && c.method === "POST",
     );
     expect(factor, "the otp_sms factor was registered first").toBeTruthy();
     const create = calls.find(
@@ -1088,13 +1136,18 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
     // identifier so the acknowledgement is not a health/existence oracle.
     const { fetchImpl } = otpFetch({ userId: "otp-user-1", createStatus: 500 });
     const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
-    await expect(client.requestEmailOtp("doc@ds.test")).resolves.toBeUndefined();
+    await expect(
+      client.requestEmailOtp("doc@ds.test"),
+    ).resolves.toBeUndefined();
   });
 
   it("EARS-6/16: a thrown fetch on the request hop still resolves void", async () => {
-    const fetchImpl: FetchLike = () => Promise.reject(new Error("network down"));
+    const fetchImpl: FetchLike = () =>
+      Promise.reject(new Error("network down"));
     const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
-    await expect(client.requestEmailOtp("doc@ds.test")).resolves.toBeUndefined();
+    await expect(
+      client.requestEmailOtp("doc@ds.test"),
+    ).resolves.toBeUndefined();
   });
 
   it("EARS-6: loginWithEmailOtp verifies the code, threads the checked-session token on the handle, then exchange yields tokens", async () => {
@@ -1256,7 +1309,9 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
     const { fetchImpl } = otpFetch({ userId: null });
     const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
     await client.requestEmailOtp("nobody@ds.test"); // arms nothing
-    expect(await client.loginWithEmailOtp("nobody@ds.test", "123456")).toBeNull();
+    expect(
+      await client.loginWithEmailOtp("nobody@ds.test", "123456"),
+    ).toBeNull();
   });
 
   it("#410: a challenge armed on instance A is verified on instance B through the SHARED store (scale-out proof)", async () => {
@@ -1294,7 +1349,9 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
       checks: { otpEmail: { code: "123456" } },
     });
     // Consumed on success in the SHARED store: a replay on instance A misses too.
-    expect(await instanceA.loginWithEmailOtp("doc@ds.test", "123456")).toBeNull();
+    expect(
+      await instanceA.loginWithEmailOtp("doc@ds.test", "123456"),
+    ).toBeNull();
   });
 
   it("#410/EARS-16: a store miss and a Zitadel-rejected code are the SAME generic null — no oracle distinguishing them", async () => {
@@ -1346,7 +1403,11 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
  */
 describe("ZitadelIdpClient grantProjectRole → v2 CreateAuthorization (#157/#203)", () => {
   /** A fetch double answering the orgs/me hop + the CreateAuthorization hop. */
-  function grantFetch(result: { ok: boolean; status: number; body?: unknown }): {
+  function grantFetch(result: {
+    ok: boolean;
+    status: number;
+    body?: unknown;
+  }): {
     fetchImpl: FetchLike;
     calls: ScriptedCall[];
   } {
@@ -1407,7 +1468,11 @@ describe("ZitadelIdpClient grantProjectRole → v2 CreateAuthorization (#157/#20
   });
 
   it("resolves the org from orgs/me when IDP_ORG_ID is not configured", async () => {
-    const { fetchImpl, calls } = grantFetch({ ok: true, status: 200, body: { id: "a" } });
+    const { fetchImpl, calls } = grantFetch({
+      ok: true,
+      status: 200,
+      body: { id: "a" },
+    });
     const client = new ZitadelIdpClient({
       baseUrl: "http://idp.test:9080",
       serviceToken: "svc-token",
@@ -1417,7 +1482,9 @@ describe("ZitadelIdpClient grantProjectRole → v2 CreateAuthorization (#157/#20
     await expect(
       client.grantProjectRole("user-1", "doctor_guest"),
     ).resolves.toBeUndefined();
-    expect(calls.some((c) => c.url.endsWith("/management/v1/orgs/me"))).toBe(true);
+    expect(calls.some((c) => c.url.endsWith("/management/v1/orgs/me"))).toBe(
+      true,
+    );
     const grant = calls.find((c) => c.url === AUTHZ_URL);
     expect(JSON.parse(grant!.body ?? "{}")).toMatchObject({
       organizationId: "org-resolved",
@@ -1428,7 +1495,10 @@ describe("ZitadelIdpClient grantProjectRole → v2 CreateAuthorization (#157/#20
     const { fetchImpl } = grantFetch({
       ok: false,
       status: 409,
-      body: { code: "already_exists", message: "Допуск пользователя уже существует (V3-DKcYh)" },
+      body: {
+        code: "already_exists",
+        message: "Допуск пользователя уже существует (V3-DKcYh)",
+      },
     });
     const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
     await expect(

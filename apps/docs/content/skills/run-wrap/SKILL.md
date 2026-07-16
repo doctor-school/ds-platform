@@ -43,6 +43,8 @@ Brief the agent with: the resolved `--session <id>`, the `run-session-retro` SKI
 
 From the findings, draft **concrete** instruction/memory edits — the exact file + the exact change, not a vague intention. Favor what the finding's `remedy_kind` indicates: a `prose-not-enforced` root cause wants a deterministic `skill` / `command` / `hook` / `lint-gate`, not more prose; `cross-session-loss` wants a memory topic file + index line; `missing-rule` may warrant an instruction line. Map each edit back to the finding it closes.
 
+**Issue-shaped proposals route through the significance threshold FIRST (AGENTS.md §6).** A finding whose remedy is a new tracker Issue (a `tooling`/`command`/`lint-gate` follow-up the wrap itself won't implement) is classified against the §6 threshold **before** it reaches the proposal list: below threshold (blocks no product deliverable, not user-visible/prod-risk, not release-gating) → propose a **`DEBT.md` line** (landed by the stage-3 wrap PR), never an Issue; above threshold → the Issue proposal **names which criterion it meets** and carries `source:retro`. A wrap that proposes an Issue without a named criterion is the exact inflation pattern the threshold exists to stop (owner-reported, 2026-07-16).
+
 Present the full edit set to the user and **stop for approval**. This gate is mandatory (#252 design note) — nothing in stage 3 lands without an explicit go-ahead. If the user trims or rejects items, carry only the approved subset forward.
 
 ### 3. Apply + compact — never just append (budget-enforced)

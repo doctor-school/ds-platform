@@ -48,7 +48,7 @@ Execute the steps in order. Each `→` is a hard gate: the next step does not be
 - PR merged into `main`, branch deleted.
 - Issue `#N` closed (auto-close via `Closes #N`).
 - Iteration summary comment URL recorded in the PR description.
-- Any decision-debt items opened as follow-up Issues with `decision-debt` label.
+- Any decision-debt items routed per the AGENTS.md §6 significance threshold — above-threshold as follow-up Issues (`decision-debt` + one `source:*` label), below-threshold as `DEBT.md` lines.
 
 ## Failure mode
 

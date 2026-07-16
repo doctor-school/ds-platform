@@ -4,6 +4,8 @@ about: Comprehensive structure for any Issue — preferred default unless bug/fe
 labels: []
 ---
 
+**Source:** <!-- exactly one of: source:owner | source:spec | source:retro | source:agent — set the same value as the Issue's `source:*` label -->
+
 ## Context
 
 <!-- Why now. What problem this solves. Links: parent spec

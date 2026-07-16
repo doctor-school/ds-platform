@@ -25,7 +25,7 @@ import {
   primaryWorktreePath,
   probeMainSync,
 } from "./main-sync";
-import { claimLabel, probeClaim } from "./backlog-triage";
+import { claimLabel, issueStream, probeClaim } from "./backlog-triage";
 import {
   classifyDeployRange,
   evaluateProjectReality,
@@ -848,23 +848,41 @@ async function main(): Promise<void> {
         : "(none)",
     );
   } else {
-    for (const i of working) {
-      out.push(
-        `- working  #${i.number} ${i.title} — milestone: ${i.milestone?.title ?? "(none)"}`,
-      );
-    }
-    for (const i of awaiting) {
-      out.push(`- awaiting #${i.number} ${i.title} — review-response needed`);
-    }
-    for (const i of ready) {
+    // Stream split (#1009): product stream FIRST, each with its own count —
+    // presentation grouping from kind labels (issueStream is the single
+    // implementation, shared with `pnpm backlog:triage`); readiness/bucket
+    // logic is untouched. No kind label → process, marked.
+    const streamOf = (i: GhIssue) =>
+      issueStream((i.labels ?? []).map((l) => l.name));
+    const lineFor = (i: GhIssue, bucket: "working" | "awaiting" | "ready") => {
+      const mark = streamOf(i).noKindLabel ? " (no kind label)" : "";
+      if (bucket === "working")
+        return `- working  #${i.number} ${i.title}${mark} — milestone: ${i.milestone?.title ?? "(none)"}`;
+      if (bucket === "awaiting")
+        return `- awaiting #${i.number} ${i.title}${mark} — review-response needed`;
       // A claimed ready item is IN-FLIGHT-ELSEWHERE (#811), not takeable — the
       // age is surfaced (an abandoned claim is the human's call).
       const claim = claims.get(i.number);
+      return `- ready    #${i.number} ${i.title}${mark} — milestone: ${i.milestone?.title ?? "(none)"}${
+        claim ? ` — ⚠ ${claim}` : ""
+      }`;
+    };
+    const buckets: Array<["working" | "awaiting" | "ready", GhIssue[]]> = [
+      ["working", working],
+      ["awaiting", awaiting],
+      ["ready", ready],
+    ];
+    for (const stream of ["product", "process"] as const) {
+      const lines: string[] = [];
+      for (const [bucket, items] of buckets) {
+        for (const i of items) {
+          if (streamOf(i).stream === stream) lines.push(lineFor(i, bucket));
+        }
+      }
       out.push(
-        `- ready    #${i.number} ${i.title} — milestone: ${i.milestone?.title ?? "(none)"}${
-          claim ? ` — ⚠ ${claim}` : ""
-        }`,
+        `### ${stream === "product" ? "Product" : "Process"} stream (${lines.length})`,
       );
+      out.push(...(lines.length > 0 ? lines : ["(none)"]));
     }
   }
   out.push("");

@@ -116,6 +116,34 @@ export interface IssueInput {
 
 export type Readiness = "takeable" | "blocked";
 
+// ── stream split (#1009) — presentation grouping, not a readiness change ────
+
+/** Backlog stream: product (owner-facing backlog) vs process (agent/tooling). */
+export type Stream = "product" | "process";
+
+const PRODUCT_KIND_LABELS = new Set(["feature", "bug"]);
+const PROCESS_KIND_LABELS = new Set(["tooling", "chore", "docs", "refactor"]);
+
+/**
+ * Classify an Issue into the product vs process stream from its kind labels
+ * (#1009): product = `feature`/`bug` kind label or any `feature:NNN-*` label;
+ * process = `tooling`/`chore`/`docs`/`refactor`. An Issue with NO kind label
+ * falls into process with `noKindLabel: true` so the report can mark it —
+ * no new label is introduced, this reuses the existing kind-label taxonomy.
+ */
+export function issueStream(labels: string[]): {
+  stream: Stream;
+  noKindLabel: boolean;
+} {
+  if (
+    labels.some((l) => PRODUCT_KIND_LABELS.has(l) || l.startsWith("feature:"))
+  ) {
+    return { stream: "product", noKindLabel: false };
+  }
+  const hasProcess = labels.some((l) => PROCESS_KIND_LABELS.has(l));
+  return { stream: "process", noKindLabel: !hasProcess };
+}
+
 export interface BlockReason {
   kind: "open-issue" | "absent-subsystem";
   number?: number;
@@ -135,6 +163,10 @@ export interface Triage {
    */
   notes: string[];
   isDecisionDebt: boolean;
+  /** Stream split (#1009): product vs process, derived from kind labels. */
+  stream: Stream;
+  /** True when the Issue carries NO kind label (marked in the report). */
+  noKindLabel: boolean;
   /**
    * Parallel-session claim signal (#811), attached by `main()` for TAKEABLE
    * items only. When set, the report row prints
@@ -392,6 +424,7 @@ export function classify(issue: IssueInput, deps: DepRef[]): Triage {
     }
   }
 
+  const { stream, noKindLabel } = issueStream(issue.labels);
   return {
     number: issue.number,
     title: issue.title,
@@ -399,6 +432,8 @@ export function classify(issue: IssueInput, deps: DepRef[]): Triage {
     reasons,
     notes,
     isDecisionDebt: issue.labels.includes("decision-debt"),
+    stream,
+    noKindLabel,
   };
 }
 
@@ -930,17 +965,27 @@ export function formatReport(triaged: Triage[]): string {
   );
   out.push("");
 
+  // Stream split (#1009): product stream FIRST, each with its own count —
+  // presentation grouping only, readiness stays graph-computed.
+  const byStream = (items: Triage[], stream: Stream) =>
+    items.filter((t) => t.stream === stream);
+  const kindTag = (t: Triage) => (t.noKindLabel ? " (no kind label)" : "");
+
   out.push(`## Takeable (${takeable.length})`);
   out.push(
     "Rank takeable by value + readiness ONLY — owner Stage-B is a handback, not a deprioritizer (F-22; memory feedback_own_lead_decisions).",
   );
-  if (takeable.length === 0) out.push("(none)");
-  for (const t of takeable) {
-    const tag = t.isDecisionDebt
-      ? " [decision-debt — deferred decision, deps all closed]"
-      : "";
-    out.push(`- #${t.number}${tag} ${truncateTitle(t.title, 80)}`);
-    for (const n of t.notes) out.push(`    ↳ (${n})`);
+  for (const stream of ["product", "process"] as const) {
+    const items = byStream(takeable, stream);
+    out.push(`### ${stream === "product" ? "Product" : "Process"} (${items.length})`);
+    if (items.length === 0) out.push("(none)");
+    for (const t of items) {
+      const tag = t.isDecisionDebt
+        ? " [decision-debt — deferred decision, deps all closed]"
+        : "";
+      out.push(`- #${t.number}${tag} ${truncateTitle(t.title, 80)}${kindTag(t)}`);
+      for (const n of t.notes) out.push(`    ↳ (${n})`);
+    }
   }
   out.push("");
 
@@ -961,11 +1006,15 @@ export function formatReport(triaged: Triage[]): string {
   }
 
   out.push(`## Blocked (${blocked.length})`);
-  if (blocked.length === 0) out.push("(none)");
-  for (const t of blocked) {
-    const tag = t.isDecisionDebt ? " [decision-debt]" : "";
-    out.push(`- #${t.number}${tag} ${truncateTitle(t.title, 80)}`);
-    for (const r of t.reasons) out.push(`    ↳ ${r.text}`);
+  for (const stream of ["product", "process"] as const) {
+    const items = byStream(blocked, stream);
+    out.push(`### ${stream === "product" ? "Product" : "Process"} (${items.length})`);
+    if (items.length === 0) out.push("(none)");
+    for (const t of items) {
+      const tag = t.isDecisionDebt ? " [decision-debt]" : "";
+      out.push(`- #${t.number}${tag} ${truncateTitle(t.title, 80)}${kindTag(t)}`);
+      for (const r of t.reasons) out.push(`    ↳ ${r.text}`);
+    }
   }
   out.push("");
 

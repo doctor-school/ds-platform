@@ -16,4 +16,6 @@
 
 ## Ledger
 
+- [ ] 2026-07-16 Issue #701 / open-ears-issues — child #1049 groups EARS-15..16 in one `kind:ears-handler` (same events read-module + `packages/schemas/` touch set, not parallelizable; open-ears-issues 3b deviation from 1:1) (promote-when: the grouped child stalls and the EARS need separate owners)
+- [ ] 2026-07-16 Issue #701 / open-ears-issues — child #1051 groups EARS-17..18 in one `kind:ears-handler` (both are interaction controls over the same listing/month-view component touch set; open-ears-issues 3b deviation from 1:1) (promote-when: the grouped child stalls and the EARS need separate owners)
 - [x] 2026-07-16 retro session 1c4b7478 / PR #1011 — AGENTS.md at 25,596/25,600 B (4 B headroom); the next always-on edit forces ad-hoc squeezing of canonical rules (promote-when: an AGENTS.md edit does not fit the budget, or a drainage wave picks it up — remedy: add a `<256 B remaining` WARN tier to `tools/lint/instruction-budget-lint.ts` + relocate §6 detail to `.claude/rules/`/skills) (→ #1042 — WARN tier shipped; relocation half satisfied by #1030)

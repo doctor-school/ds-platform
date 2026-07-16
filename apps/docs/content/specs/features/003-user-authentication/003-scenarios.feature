@@ -248,3 +248,41 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When the user edits the display name inline and confirms
     Then the new value is persisted via the existing PUT /v1/me/display-name
     And the rendered display name and avatar initials reflect the new value
+
+  @EARS-29 @happy
+  Scenario: The verification code email is composed and sent by the BFF mailer, code-only
+    Given a visitor completes a registration that triggers an email verification code
+    When Zitadel returns the one-time code to the BFF via returnCode
+    Then Zitadel itself sends no email
+    And the BFF mailer sends exactly one branded code-only email with the code leading the subject and shown in the body
+    And the email contains no link or button of any kind
+
+  @EARS-29 @happy
+  Scenario: The password-reset code email is BFF-sent and link-free
+    Given a user requests a password reset for an existing identifier
+    When Zitadel returns the reset code to the BFF via returnCode
+    Then Zitadel itself sends no email
+    And the BFF mailer sends the branded code-only reset email with no link or button
+    And the user completes the reset by typing the code on the /reset screen
+
+  @EARS-31 @EARS-32 @happy
+  Scenario: A mail.ru ratelimit fails over to Resend within the same send
+    Given the mail.ru relay rejects a send with "451 Ratelimit exceeded"
+    When the BFF mailer dispatches a verification or reset email
+    Then the send switches channel to Resend without retrying mail.ru
+    And the send is counted as delivered only when the provider accepts with a 2xx
+    And a failover metric and log carrying the provider response code are emitted
+
+  @EARS-31 @EARS-16 @failure
+  Scenario: Both transport channels failing never leaks into the API response
+    Given both the mail.ru relay and Resend reject the send
+    When a visitor's registration triggers the verification email
+    Then the send fails closed and is logged with both provider response codes
+    And the API response stays enumeration-safe and unchanged
+    And the visitor can recover via the /verify resend affordance
+
+  @EARS-30 @failure
+  Scenario: The one-time code never reaches the logs
+    Given a verification or reset send with any outcome including success, failover, and total failure
+    When the BFF logs, audits, or reports on the send
+    Then no log line, trace, error report, or audit_ledger row contains the one-time code

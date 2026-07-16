@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FetchLike } from "./zitadel.idp.js";
 import { ZitadelIdpClient } from "./zitadel.idp.js";
+import { InMemoryOtpChallengeStore } from "./otp-challenge-store.fake.js";
 import {
   IdpInvalidArgumentError,
   IdpPasswordPolicyError,
@@ -1256,6 +1257,71 @@ describe("ZitadelIdpClient passwordless OTP login wire shape (#153)", () => {
     const client = new ZitadelIdpClient({ ...BASE_CONFIG, fetchImpl });
     await client.requestEmailOtp("nobody@ds.test"); // arms nothing
     expect(await client.loginWithEmailOtp("nobody@ds.test", "123456")).toBeNull();
+  });
+
+  it("#410: a challenge armed on instance A is verified on instance B through the SHARED store (scale-out proof)", async () => {
+    // The Issue's core AC: request #1 and request #2 are two distinct HTTP
+    // requests with no instance affinity — with the challenge in a shared
+    // store, the verify hop must succeed on a DIFFERENT ZitadelIdpClient
+    // instance than the one that armed it.
+    const { fetchImpl, calls } = otpFetch({
+      userId: "otp-user-1",
+      verifiedToken: "checked-token-b",
+    });
+    const sharedStore = new InMemoryOtpChallengeStore();
+    const instanceA = new ZitadelIdpClient(
+      { ...BASE_CONFIG, fetchImpl },
+      sharedStore,
+    );
+    const instanceB = new ZitadelIdpClient(
+      { ...BASE_CONFIG, fetchImpl },
+      sharedStore,
+    );
+
+    await instanceA.requestEmailOtp("Doc@ds.test");
+    // Instance B never saw the request hop — only the shared store bridges it.
+    const session = await instanceB.loginWithEmailOtp("doc@ds.test", "123456");
+    expect(session).toEqual({
+      zitadelSessionId: "otp-sess-1",
+      sub: "otp-user-1",
+      sessionToken: "checked-token-b",
+    });
+    // B verified against the exact Zitadel session A armed (same session id,
+    // presenting A's unchecked token).
+    const verify = calls.find((c) => /\/v2\/sessions\/otp-sess-1$/.test(c.url));
+    expect(JSON.parse(verify!.body ?? "{}")).toEqual({
+      sessionToken: "unchecked-token",
+      checks: { otpEmail: { code: "123456" } },
+    });
+    // Consumed on success in the SHARED store: a replay on instance A misses too.
+    expect(await instanceA.loginWithEmailOtp("doc@ds.test", "123456")).toBeNull();
+  });
+
+  it("#410/EARS-16: a store miss and a Zitadel-rejected code are the SAME generic null — no oracle distinguishing them", async () => {
+    const { fetchImpl } = otpFetch({ userId: "otp-user-1", verifyStatus: 403 });
+    // Store miss: nothing armed in this (empty) shared store.
+    const missClient = new ZitadelIdpClient(
+      { ...BASE_CONFIG, fetchImpl },
+      new InMemoryOtpChallengeStore(),
+    );
+    const missResult = await missClient.loginWithEmailOtp(
+      "doc@ds.test",
+      "123456",
+    );
+    // Zitadel reject: challenge armed, verify hop 403s (wrong/expired code).
+    const rejectClient = new ZitadelIdpClient(
+      { ...BASE_CONFIG, fetchImpl },
+      new InMemoryOtpChallengeStore(),
+    );
+    await rejectClient.requestEmailOtp("doc@ds.test");
+    const rejectResult = await rejectClient.loginWithEmailOtp(
+      "doc@ds.test",
+      "123456",
+    );
+    // Both fall through to the identical generic failure value.
+    expect(missResult).toBeNull();
+    expect(rejectResult).toBeNull();
+    expect(missResult).toStrictEqual(rejectResult);
   });
 });
 

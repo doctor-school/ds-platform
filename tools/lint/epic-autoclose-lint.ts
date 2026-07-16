@@ -65,6 +65,52 @@ export const SEVERITY: "WARN" | "BLOCK" = "WARN";
 const CLOSING_REF_RE =
   /\b(?:close[sd]?|fix(?:es|ed)?|resolve[sd]?)[:\s]+#(\d+)/gi;
 
+/**
+ * Strip Markdown fenced code blocks (```…``` / ~~~…~~~) from a body, line by
+ * line, blanking the fence lines and everything between them. GitHub's
+ * closing-keyword automation ignores keywords inside code, so a `Closes #N`
+ * sitting in a fenced block is not a directive and must NOT count. Pure.
+ */
+function stripFencedBlocks(body: string): string {
+  const lines = body.split("\n");
+  const out: string[] = [];
+  let fenceChar: string | null = null;
+  for (const line of lines) {
+    const m = line.match(/^\s*([`~]{3,})/);
+    if (fenceChar === null) {
+      if (m) {
+        fenceChar = m[1][0];
+        out.push(""); // opening fence line → blank
+      } else {
+        out.push(line);
+      }
+    } else {
+      if (m && m[1][0] === fenceChar) fenceChar = null; // closing fence
+      out.push(""); // fenced content (and the closing fence line) → blank
+    }
+  }
+  return out.join("\n");
+}
+
+/**
+ * Strip Markdown inline code spans (`` `…` ``, `` ``…`` ``) from a body: a run of
+ * N backticks opens a span that the next run of N backticks closes. Mirrors
+ * GitHub, which never auto-closes a keyword inside a code span (the #986
+ * incident: this PR's own Summary quotes `` `Closes #927` ``). Pure.
+ */
+function stripInlineCode(body: string): string {
+  return body.replace(/(`+)[\s\S]*?\1/g, " ");
+}
+
+/**
+ * Remove code — fenced blocks then inline spans — before the closing-keyword
+ * regex runs, so a keyword that lives inside code is not read as a directive
+ * (mirrors GitHub's own parser). Pure, deterministic, no network.
+ */
+function stripCode(body: string): string {
+  return stripInlineCode(stripFencedBlocks(body));
+}
+
 /** A resolved sub-issue-graph view for a single issue number. */
 export interface EpicGraph {
   /**
@@ -99,13 +145,16 @@ export interface Verdict {
 
 /**
  * Parse the deduped `#N` targets of GitHub closing keywords from a PR body, in
- * first-seen order. Pure.
+ * first-seen order. A keyword inside a fenced code block or an inline code span
+ * is stripped first and does NOT count — mirroring GitHub, which never
+ * auto-closes a keyword that sits in code (#986). Pure.
  */
 export function parseClosingRefs(body: string): number[] {
   if (!body) return [];
+  const scanned = stripCode(body);
   const seen = new Set<number>();
   const out: number[] = [];
-  for (const m of body.matchAll(CLOSING_REF_RE)) {
+  for (const m of scanned.matchAll(CLOSING_REF_RE)) {
     const n = Number(m[1]);
     if (!Number.isNaN(n) && !seen.has(n)) {
       seen.add(n);

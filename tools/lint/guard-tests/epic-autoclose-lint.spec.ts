@@ -47,6 +47,40 @@ describe("epic-autoclose-lint — pure seam", () => {
     expect(parseClosingRefs("See #927 for context")).toEqual([]);
   });
 
+  it("ignores a closing keyword inside an inline code span (#986)", () => {
+    // The #986 incident: this PR's own Summary quotes `Closes #927` as an
+    // example; GitHub never auto-closes a keyword in a code span, so neither
+    // do we. A real `Closes #964` outside code still counts.
+    const body = "The incident example `Closes #927`.\n\nCloses #964";
+    expect(parseClosingRefs(body)).toEqual([964]);
+  });
+
+  it("ignores a closing keyword inside a fenced code block", () => {
+    const body = "```\nCloses #999\n```\n\nCloses #964";
+    expect(parseClosingRefs(body)).toEqual([964]);
+  });
+
+  it("still parses a normal `Closes #N` that is not in code (regression)", () => {
+    expect(parseClosingRefs("Closes #964")).toEqual([964]);
+  });
+
+  it("WARNs on a real epic ref but ignores a backticked one in the same body", () => {
+    const { body, lookup } = loadCase("code-span");
+    const v = evaluateEpicAutoclose(body, lookup);
+    // #927 is only mentioned inside `…` → excluded; #964 is a leaf → clean.
+    expect(v.closingRefs).toEqual([964]);
+    expect(v.ok).toBe(true);
+    expect(v.offenders).toEqual([]);
+  });
+
+  it("excludes a closing keyword sitting inside a fenced block", () => {
+    const { body, lookup } = loadCase("fenced-block");
+    const v = evaluateEpicAutoclose(body, lookup);
+    expect(v.closingRefs).toEqual([964]);
+    expect(v.ok).toBe(true);
+    expect(v.offenders).toEqual([]);
+  });
+
   it("WARNs: `Closes #<epic>` where the epic has open sub-issues, naming children", () => {
     const { body, lookup } = loadCase("epic-open-children");
     const v = evaluateEpicAutoclose(body, lookup);

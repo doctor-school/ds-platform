@@ -5,7 +5,10 @@ import {
   buildMonthGrid,
   currentMskMonth,
   formatMonthTitle,
+  isMonthPast,
+  monthShortLabels,
   mskDateParts,
+  shiftMonth,
   weekdayShortLabels,
 } from "./month-grid";
 
@@ -125,6 +128,65 @@ describe("buildMonthGrid — July 2026 (canvas reference)", () => {
     const other = buildMonthGrid({ month: "2026-09", now: NOW, entries: [] });
     expect(other.todayDom).toBeNull();
     expect(other.weeks.flat().every((c) => !c.isToday)).toBe(true);
+  });
+});
+
+describe("shiftMonth (EARS-17 — month paging, year-boundary safe)", () => {
+  it("EARS-17: steps to the next month within a year", () => {
+    expect(shiftMonth("2026-07", 1)).toBe("2026-08");
+  });
+
+  it("EARS-17: steps to the previous month within a year", () => {
+    expect(shiftMonth("2026-07", -1)).toBe("2026-06");
+  });
+
+  it("EARS-17: rolls forward across the December→January year boundary", () => {
+    expect(shiftMonth("2026-12", 1)).toBe("2027-01");
+  });
+
+  it("EARS-17: rolls back across the January→December year boundary", () => {
+    expect(shiftMonth("2026-01", -1)).toBe("2025-12");
+  });
+
+  it("EARS-17: steps a whole year (±12) preserving the month number", () => {
+    expect(shiftMonth("2026-07", 12)).toBe("2027-07");
+    expect(shiftMonth("2026-07", -12)).toBe("2025-07");
+  });
+
+  it("EARS-17: always emits a zero-padded MONTH_PARAM-shaped value", () => {
+    expect(shiftMonth("2026-09", 1)).toBe("2026-10");
+    expect(shiftMonth("2026-10", -1)).toBe("2026-09");
+    expect(shiftMonth("2026-02", -2)).toBe("2025-12");
+  });
+});
+
+describe("isMonthPast (EARS-16 — picker muting, МСК)", () => {
+  it("EARS-16: a month strictly before the current МСК month is past", () => {
+    expect(isMonthPast("2026-06", NOW)).toBe(true);
+    expect(isMonthPast("2025-12", NOW)).toBe(true);
+  });
+
+  it("EARS-16: the current МСК month is not past", () => {
+    expect(isMonthPast("2026-07", NOW)).toBe(false);
+  });
+
+  it("EARS-16: a future month is not past", () => {
+    expect(isMonthPast("2026-08", NOW)).toBe(false);
+    expect(isMonthPast("2027-01", NOW)).toBe(false);
+  });
+});
+
+describe("monthShortLabels (EARS-16 — МСК date parts, capitalised)", () => {
+  it("EARS-16: yields twelve capitalised short МСК month names (Intl parts, not a hand abbreviation)", () => {
+    const labels = monthShortLabels();
+    expect(labels).toHaveLength(12);
+    expect(labels[0]).toBe("Янв");
+    expect(labels[6]).toBe("Июль");
+    expect(labels[11]).toBe("Дек");
+    // Every label is capitalised with no trailing period.
+    for (const label of labels) {
+      expect(label).toMatch(/^[А-Я][а-я]*$/);
+    }
   });
 });
 

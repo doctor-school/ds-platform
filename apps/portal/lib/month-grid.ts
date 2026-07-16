@@ -46,6 +46,32 @@ function daysInMonth(year: number, month: number): number {
 }
 
 /**
+ * Step a `YYYY-MM` month by `deltaMonths`, rolling across year boundaries
+ * (EARS-17 — the ‹ › month pager + the picker's year ‹ › steps, which are just
+ * `±12`). Pure integer arithmetic on the (year·12 + monthIndex) ordinal — no
+ * `Date`, no tz fold — so the result is always a valid, zero-padded
+ * `MONTH_PARAM`-shaped value and the page never emits a malformed API param.
+ */
+export function shiftMonth(month: string, deltaMonths: number): string {
+  const year = Number(month.slice(0, 4));
+  const monthIndex = Number(month.slice(5, 7)); // 1..12
+  const ordinal = year * 12 + (monthIndex - 1) + deltaMonths;
+  const nextYear = Math.floor(ordinal / 12);
+  const nextMonth = (ordinal % 12) + 1; // ordinal is non-negative for any real year
+  return `${String(nextYear).padStart(4, "0")}-${String(nextMonth).padStart(2, "0")}`;
+}
+
+/**
+ * Whether `month` (`YYYY-MM`) is strictly before the current МСК month — the
+ * picker mutes an already-past month («прошёл», EARS-16). A lexicographic
+ * `YYYY-MM` string compare is exact (fixed width, zero-padded), so no `Date`
+ * math is needed; `now` is injected for testability.
+ */
+export function isMonthPast(month: string, now: Date = new Date()): boolean {
+  return month < currentMskMonth(now);
+}
+
+/**
  * The Monday-first weekday index (0=Mon … 6=Sun) of a МСК calendar date. Anchored
  * at 12:00 UTC so the +3 МСК fold never crosses a day boundary — the calendar
  * date is stable regardless of the runtime timezone (EARS-12).
@@ -220,6 +246,24 @@ export function weekdayShortLabels(): string[] {
       "",
     ),
   );
+}
+
+/**
+ * The twelve short month names («Янв»…«Дек») for the 12-month picker (EARS-16),
+ * Intl-derived МСК date PARTS (the `msk.ts` EARS-12 precedent — not hardcoded
+ * RU), capitalised and with the `ru-RU` trailing period stripped to match the
+ * canvas token. Anchored at day 15 12:00 UTC so the fold never crosses a month.
+ */
+const MSK_MONTH_SHORT = new Intl.DateTimeFormat("ru-RU", {
+  timeZone: MSK_TIME_ZONE,
+  month: "short",
+});
+export function monthShortLabels(): string[] {
+  return Array.from({ length: 12 }, (_, i) => {
+    const label = MSK_MONTH_SHORT.format(new Date(Date.UTC(2024, i, 15, 12)))
+      .replace(/\.$/, "");
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  });
 }
 
 /**

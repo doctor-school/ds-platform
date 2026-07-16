@@ -54,16 +54,22 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       // The month heading (МСК, capitalised — «<Месяц> <год>»).
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
-      // The state legend — the three labelled swatches (colour is never the only cue).
-      await expect(page.getByText("В эфире")).toBeVisible();
-      await expect(page.getByText("Запланирован")).toBeVisible();
-      await expect(page.getByText("Прошёл / пусто")).toBeVisible();
+      // The state legend — the three labelled swatches (colour is never the only
+      // cue). Scoped to the legend container: the «В эфире» label also appears as
+      // the sr-only text on every live pill, so a page-wide match is ambiguous
+      // when the month carries live events.
+      const legend = grid.getByTestId("grid-legend");
+      await expect(legend.getByText("В эфире")).toBeVisible();
+      await expect(legend.getByText("Запланирован")).toBeVisible();
+      await expect(legend.getByText("Прошёл / пусто")).toBeVisible();
 
-      // The «Неделя / Месяц» switcher — a real link back to the week listing + the active pane.
+      // The «Неделя / Месяц» switcher — a real link back to the week listing + the
+      // active pane. The «Неделя» link carries the displayed month so the week↔month
+      // round-trip is loss-free (EARS-18, #1051) — `/webinars?month=YYYY-MM`.
       const switcher = page.getByTestId("view-switcher");
       await expect(switcher.getByRole("link", { name: "Неделя" })).toHaveAttribute(
         "href",
-        "/webinars",
+        /^\/webinars\?month=\d{4}-\d{2}$/,
       );
       await expect(switcher.getByText("Месяц")).toHaveAttribute(
         "aria-current",

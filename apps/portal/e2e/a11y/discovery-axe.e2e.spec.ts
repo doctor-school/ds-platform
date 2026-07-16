@@ -89,11 +89,14 @@ test.describe("004 EARS-13 axe-core a11y scan of the public webinar surfaces", (
     for (const theme of THEMES) await scan(page, theme);
   });
 
-  // 004 EARS-19 (#1050) — the month-calendar pane (`?view=month`) is a BLOCK-guard
-  // (`playwright-axe`) surface too: the desktop grid AND the mobile dot-grid +
-  // agenda are scanned at BOTH breakpoints × both themes. The live signal is
-  // carried in text (a screen-reader label on the red pill, the «LIVE» agenda
-  // badge, the per-day `aria-label`), never colour alone.
+  // 004 EARS-19 (#1050) + EARS-16/17/18 (#1051) — the month-calendar pane
+  // (`?view=month`) is a BLOCK-guard (`playwright-axe`) surface too: the desktop
+  // grid AND the mobile dot-grid + agenda are scanned at BOTH breakpoints × both
+  // themes, with the 12-month picker popover OPENED so the picker + the toolbar
+  // switcher/pager are in scope (the popover content is otherwise `display:none`
+  // and unscanned). The live signal is carried in text (a screen-reader label on
+  // the red pill, the «LIVE» agenda badge, the per-day `aria-label`), never colour
+  // alone; the picker's month cells + year stepper carry accessible names.
   for (const [label, viewport] of [
     ["desktop grid", { width: 1280, height: 900 }],
     ["mobile dot-grid + agenda", { width: 390, height: 844 }],
@@ -105,6 +108,10 @@ test.describe("004 EARS-13 axe-core a11y scan of the public webinar surfaces", (
       await context.clearCookies();
       await page.setViewportSize(viewport);
       await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
+      // Open the 12-month picker so its popover (year stepper + month cells) is
+      // in the a11y tree for the scan.
+      await page.getByTestId("month-toolbar").locator("summary").click();
+      await expect(page.locator('[aria-current="true"]').first()).toBeVisible();
       for (const theme of THEMES) await scan(page, theme);
     });
   }

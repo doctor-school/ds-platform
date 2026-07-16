@@ -132,3 +132,33 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BODY: ${{ github.event.pull_request.body }}
+
+  # spec-deletion: a PR must not `git rm` a feature-spec / ADR file — specs and
+  # ADRs are retired by a `status: Superseded`/`Retired` frontmatter transition,
+  # never file removal (AGENTS.md §6 / ADR-0006 §7; the #971 incident: a complete
+  # two-tier spec layer deleted inside an unrelated feature PR). DIFF-based, so it
+  # checks out full history (`fetch-depth: 0`) and diffs `origin/main...HEAD` for
+  # `--name-status --find-renames` — a rename is not a deletion and passes. It
+  # also runs on a body `edited` event so a newly-added `spec-deletion:` escape
+  # marker re-clears the check. WARN v1 (ADR-0007 §2.6 new-guard posture); TO
+  # PROMOTE TO BLOCK drop the `continue-on-error` line below.
+  spec-deletion:
+    if: github.event.action != 'edited' || github.event.changes.body != null
+    continue-on-error: true # WARN v1 (promote to BLOCK: remove this line)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsx tools/lint/spec-deletion-lint.ts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          LINT_DIFF_BASE: origin/main

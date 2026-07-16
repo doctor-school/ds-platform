@@ -1,0 +1,1 @@
+R100	apps/docs/content/specs/features/003-otp/003-requirements.md	apps/docs/content/specs/features/003-otp/003-requirements-en.md

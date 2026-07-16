@@ -147,6 +147,38 @@ const GENUINE_REPORT_PAST_DISPATCH =
   "Диспатчил ревьюера Mode-a по каждому — все APPROVE.\n\n" +
   "🖼 Проверить глазами: `gh pr list --state merged`.";
 
+// #990: explicit interim-marker OPENINGS. Each carries completion verbs
+// («смержен»/merged) + refs — so isCompletionReport trips — but declares itself
+// an interim / non-final status at the message opening. None may fire.
+// Shape (a): the Issue's canonical marker line + a subagent-state table.
+const INTERIM_990_MARKER_TABLE =
+  "⏳ Промежуточный статус — не завершающий отчёт, работа в полёте.\n\n" +
+  "| Субагент | Состояние |\n| --- | --- |\n" +
+  "| #987 | смержен |\n| #988 | на ревью |\n| #990 | в очереди |";
+// Shape (b): variants opening with each NEW phrase alone (no pre-#990 markers).
+const INTERIM_990_NE_ZAVERSH =
+  "Не завершающий отчёт: #987 смержен, #988 на ревью, продолжение следует.";
+const INTERIM_990_PROMEZH =
+  "Промежуточный статус: PR #987 смержен, остальные в очереди.";
+const INTERIM_990_INTERIM_RU =
+  "Интерим: половина волны смержена (#955), вторая половина в очереди.";
+const INTERIM_990_INTERIM_EN =
+  "Interim: PR #987 merged, second half of the wave still queued.";
+const INTERIM_990_IN_FLIGHT =
+  "In flight: #987 merged, the rest of the wave queued behind it.";
+// Shape (c) regression guard: a GENUINE terminal report with NO opening marker
+// that merely MENTIONS "interim" mid-body — PAST the 200-char opening slice —
+// and lacks the «📈» emoji. The opening-anchored #990 markers must NOT exempt
+// it: it must STILL fire.
+const GENUINE_REPORT_MIDBODY_INTERIM =
+  "Готово: PR #990 смержен (squash), Issue #990 закрыта, CI зелёный.\n" +
+  "Ветка удалена, board Status = Done, все гейты пройдены вручную, Mode-a " +
+  "APPROVE получен на текущем head SHA.\n" +
+  "Волна закрыта полностью, дополнительных изменений не потребовалось, " +
+  "статус финальный, ничего не отложено.\n\n" +
+  "Tech appendix: the interim fix shipped in the same PR; % от " +
+  "запланированного — весь скоуп, но маркер-эмодзи отсутствует.";
+
 // #984 / retro b9d9314e finding B — DoD-vs-title enforcement. A completion
 // report that HAS the «📈» marker (so the #824 path passes) yet punts its own
 // release/deploy step into the REMAINING list with NO release-artifact evidence
@@ -310,6 +342,34 @@ describe("completion-report-gate hook (spawned end-to-end)", () => {
     expect(r.stderr).toContain("report-task-outcome");
   });
 
+  it("allows the #990 interim-marker opening + subagent-state table", () => {
+    const r = runHook(stopPayload(transcriptWith(INTERIM_990_MARKER_TABLE)));
+    expect(r.status).toBe(0);
+    expect(r.stderr).toBe("");
+  });
+
+  it("allows each #990 marker-phrase opening variant despite verbs + refs", () => {
+    for (const text of [
+      INTERIM_990_NE_ZAVERSH,
+      INTERIM_990_PROMEZH,
+      INTERIM_990_INTERIM_RU,
+      INTERIM_990_INTERIM_EN,
+      INTERIM_990_IN_FLIGHT,
+    ]) {
+      const r = runHook(stopPayload(transcriptWith(text)));
+      expect(r.status, text).toBe(0);
+      expect(r.stderr, text).toBe("");
+    }
+  });
+
+  it("STILL blocks a genuine report mentioning 'interim' mid-body only (#990 opening-anchor guard)", () => {
+    const r = runHook(
+      stopPayload(transcriptWith(GENUINE_REPORT_MIDBODY_INTERIM)),
+    );
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("report-task-outcome");
+  });
+
   it("allows a completion report whose «📈» heading is BOLDED (#893)", () => {
     const r = runHook(
       stopPayload(
@@ -453,6 +513,30 @@ describe("isInterimStatus() (#855)", () => {
   it("is FALSE for a settled completion report (no-regression)", () => {
     expect(isInterimStatus(COMPLETION_NO_MARKER)).toBe(false);
     expect(isInterimStatus(COMPLETION_WITH_MARKER)).toBe(false);
+  });
+
+  it("matches the #990 explicit interim-marker phrases", () => {
+    expect(isInterimStatus(INTERIM_990_MARKER_TABLE)).toBe(true);
+    expect(isInterimStatus(INTERIM_990_NE_ZAVERSH)).toBe(true);
+    expect(isInterimStatus(INTERIM_990_PROMEZH)).toBe(true);
+    expect(isInterimStatus(INTERIM_990_INTERIM_RU)).toBe(true);
+    expect(isInterimStatus(INTERIM_990_INTERIM_EN)).toBe(true);
+    expect(isInterimStatus(INTERIM_990_IN_FLIGHT)).toBe(true);
+  });
+
+  it("#990 broad words are OPENING-anchored: a mid-body 'interim' mention does not exempt", () => {
+    expect(isInterimStatus(GENUINE_REPORT_MIDBODY_INTERIM)).toBe(false);
+    // …and the mention really does sit past the opening slice
+    expect(GENUINE_REPORT_MIDBODY_INTERIM.slice(0, 200)).not.toMatch(
+      /interim/i,
+    );
+    // an OPENING occurrence of the same word DOES count
+    expect(isInterimStatus("interim — вторая половина #955 в очереди")).toBe(
+      true,
+    );
+    // mid-word hits never count (boundary idiom): "interims" ok ("interim" + \w
+    // boundary), but "printerimage"-style embeddings must not match
+    expect(isInterimStatus("Reprinterim #955 merged.")).toBe(false);
   });
 });
 

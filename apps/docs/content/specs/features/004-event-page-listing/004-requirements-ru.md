@@ -6,7 +6,24 @@ status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
 parent_issue: https://github.com/doctor-school/ds-platform/issues/471
-issues: [549, 550, 551, 552, 553, 554, 555, 556, 557, 558, 559]
+issues:
+  [
+    549,
+    550,
+    551,
+    552,
+    553,
+    554,
+    555,
+    556,
+    557,
+    558,
+    559,
+    1049,
+    1050,
+    1051,
+    1052,
+  ]
 prior_decisions:
   - ADR-0014 — Жизненный цикл продуктового дизайна (§2 трасса PRD → EARS `realizes:`; §3/§4 канвас — источник, репозиторий держит собранный артефакт)
   - ADR-0002 — Backend Core Stack (§3 nestjs-zod + URI-версионирование `/v1/...` + Vitest; SSOT в `packages/schemas/`)

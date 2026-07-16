@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -14,6 +15,11 @@ import {
   buildTechnicalReleaseLine,
   extractPrNumbers,
 } from "../../deploy/release-notes.mjs";
+// The digest extracts each PR's note through the SAME extractNote seam as the
+// per-PR delivery (imported by release-notes.mjs from ../ci/post-product-note.mjs),
+// so the #1040 service-marker sanitizer is inherited by construction — asserted
+// below on that exact module plus a source-level import check.
+import { extractNote } from "../../ci/post-product-note.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = resolve(HERE, "..", "..", "deploy", "release-notes.mjs");
@@ -113,6 +119,35 @@ describe("release-notes — buildTechnicalReleaseLine (pure)", () => {
     expect(text).toContain(HEX_B.slice(0, 12));
     const lines = text.split("\n");
     expect(lines[lines.length - 1]).toBe(PROD_FOOTER);
+  });
+});
+
+// ── digest inherits the service-marker sanitizer (Issue #1040) ──────────────
+describe("release-notes — digest note extraction inherits the sanitizer (#1040)", () => {
+  it("release-notes.mjs takes extractNote from post-product-note.mjs (single shared seam, no local copy)", () => {
+    const src = readFileSync(SCRIPT, "utf8");
+    // The import that makes the sanitizer flow into the digest path…
+    expect(src).toMatch(
+      /import\s*\{[^}]*\bextractNote\b[^}]*\}\s*from\s*["']\.\.\/ci\/post-product-note\.mjs["']/,
+    );
+    // …and no shadowing local definition that could bypass it.
+    expect(src).not.toMatch(/function\s+extractNote\b/);
+  });
+
+  it("a PR body whose note is followed by the service tail yields the clean note in the digest path", () => {
+    const body = [
+      "## Product note (RU)",
+      "",
+      "Врачам теперь виден заголовок страницы подтверждения.",
+      "",
+      "Stage-B: N/A (no visual surface) — lead-certified",
+      "author:claude",
+      "🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+      "https://claude.ai/code/session_012VuiZx3iXhdvJmVPy7bRkK",
+    ].join("\n");
+    expect(extractNote(body)).toBe(
+      "Врачам теперь виден заголовок страницы подтверждения.",
+    );
   });
 });
 

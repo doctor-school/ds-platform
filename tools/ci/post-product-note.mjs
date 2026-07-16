@@ -42,6 +42,37 @@ const HTML_COMMENT_RE = /<!--[\s\S]*?-->/g;
 const NONE_RE = /^none[.!]?$/i;
 const PLACEHOLDER_RE = /^(n\/?a|tbd|todo|xxx|\.\.\.|<.*>|_+|-+)$/i;
 
+// Service-marker lines that must never reach a delivered product note (Issue
+// #1040): when the note is the LAST section of the PR body, the section capture
+// runs to end-of-body and swallows the PR's process tail (Stage-B record,
+// author marker, Claude Code attribution, the claude.ai session link Mattermost
+// unfurls into a preview card). Whole matching LINES are removed — real RU note
+// text is preserved verbatim, so prose that merely mentions "Claude"
+// mid-sentence is untouched. Anchored patterns allow a leading `>` quote,
+// `*`/`-` bullet, and whitespace.
+const SERVICE_LINE_RES = [
+  /^[ \t>*-]*author:\s*(claude|codex|human)\s*$/i, // PR author marker
+  /^[ \t>*-]*stage-b\s*:/i, // Stage-B gate record
+  /^[ \t>*-]*registry-research\s*:/i, // registry-research verdict
+  /claude\.ai\/code/i, // session link (anywhere in the line)
+  /generated with.*claude\s+code/i, // 🤖 attribution line (markdown link or plain)
+  /^[ \t>*-]*co-authored-by\s*:/i, // commit co-author trailer
+  /^[ \t>*-]*claude-session\s*:/i, // commit session trailer
+];
+
+/**
+ * Remove whole service-marker lines (Issue #1040) and collapse the blank-line
+ * runs they leave behind. Non-matching lines pass through verbatim.
+ */
+export function stripServiceMarkers(text) {
+  if (!text) return "";
+  return text
+    .split(/\r?\n/)
+    .filter((line) => !SERVICE_LINE_RES.some((re) => re.test(line)))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
 /** The `## Product note (RU)` section body, or null when there is no such heading. */
 function sectionBody(body) {
   const h = body.match(HEADING_RE);
@@ -51,13 +82,21 @@ function sectionBody(body) {
   return next === -1 ? rest : rest.slice(0, next);
 }
 
-/** The Product note text with HTML comments stripped, or "" when absent/empty. */
+/** The Product note text with HTML comments and service-marker lines stripped
+ *  (Issue #1040 — the sanitizer runs INSIDE the extraction so both delivery
+ *  paths, the per-PR post and the aggregated PROD digest, inherit it), or ""
+ *  when absent/empty. A note that is ONLY service lines sanitizes to "" and
+ *  flows through the callers' existing `noteIsReal` green-skip. */
 export function extractNote(body) {
   if (!body) return "";
   const section = sectionBody(body);
-  if (section !== null) return section.replace(HTML_COMMENT_RE, "").trim();
+  if (section !== null)
+    return stripServiceMarkers(section.replace(HTML_COMMENT_RE, "")).trim();
   const marker = body.match(MARKER_RE);
-  if (marker) return (marker[1] ?? "").replace(HTML_COMMENT_RE, "").trim();
+  if (marker)
+    return stripServiceMarkers(
+      (marker[1] ?? "").replace(HTML_COMMENT_RE, ""),
+    ).trim();
   return "";
 }
 

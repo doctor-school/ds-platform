@@ -13,7 +13,9 @@ import {
   envFooter,
   extractNote,
   labelsAreProductKind,
+  noteIsReal,
   parseLabels,
+  stripServiceMarkers,
 } from "../../ci/post-product-note.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -116,6 +118,85 @@ describe("post-product-note — extractNote stop boundary (pure)", () => {
       "## Product note (RU)\n\nЗаметка на русском.\nВторая строка заметки.\n\n";
     expect(extractNote(body)).toBe(
       "Заметка на русском.\nВторая строка заметки.",
+    );
+  });
+});
+
+// ── service-marker sanitizer (Issue #1040) ──────────────────────────────────
+describe("post-product-note — service-marker sanitizer (pure)", () => {
+  it("strips the trailing service tail when the note is the LAST section (PR #1035 leak shape)", () => {
+    // The exact shape that leaked into Mattermost: the note is the last section
+    // of the PR body, so the section capture ran to END OF BODY and swallowed
+    // the service tail (Stage-B record, author marker, Claude Code attribution,
+    // the claude.ai session link that Mattermost unfurls into a preview card).
+    const body = [
+      "## Summary",
+      "",
+      "English summary of the change.",
+      "",
+      "## Product note (RU)",
+      "",
+      "Мы починили заголовок страницы подтверждения.",
+      "",
+      "Stage-B: N/A (no visual surface) — lead-certified",
+      "",
+      "author:claude",
+      "",
+      "🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+      "",
+      "https://claude.ai/code/session_012VuiZx3iXhdvJmVPy7bRkK",
+    ].join("\n");
+    expect(extractNote(body)).toBe(
+      "Мы починили заголовок страницы подтверждения.",
+    );
+  });
+
+  it("strips Co-Authored-By / Claude-Session trailers and registry-research verdicts, incl. quoted/bulleted forms", () => {
+    const body = [
+      "## Product note (RU)",
+      "",
+      "Заметка для владельца продукта.",
+      "",
+      "> Stage-B: GO",
+      "- author:codex",
+      "registry-research: adopted shadcn Button",
+      "Co-Authored-By: Claude Opus <noreply@anthropic.com>",
+      "Claude-Session: https://claude.ai/code/session_abc",
+    ].join("\n");
+    expect(extractNote(body)).toBe("Заметка для владельца продукта.");
+  });
+
+  it("a note consisting ONLY of service lines sanitizes to empty → noteIsReal false (green-skip)", () => {
+    const body = [
+      "## Product note (RU)",
+      "",
+      "author:claude",
+      "",
+      "🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+    ].join("\n");
+    const note = extractNote(body);
+    expect(note).toBe("");
+    expect(noteIsReal(note)).toBe(false);
+  });
+
+  it("RU prose merely mentioning Claude mid-sentence is preserved verbatim", () => {
+    const body = [
+      "## Product note (RU)",
+      "",
+      "Мы добавили ассистента на базе Claude в личный кабинет врача.",
+      "Слово Claude в середине предложения — не служебный маркер.",
+    ].join("\n");
+    expect(extractNote(body)).toBe(
+      "Мы добавили ассистента на базе Claude в личный кабинет врача.\n" +
+        "Слово Claude в середине предложения — не служебный маркер.",
+    );
+  });
+
+  it("stripServiceMarkers: collapses the blank-line runs left by removed lines", () => {
+    const text =
+      "Первый абзац заметки.\n\nauthor:claude\n\nStage-B: GO\n\nВторой абзац.";
+    expect(stripServiceMarkers(text)).toBe(
+      "Первый абзац заметки.\n\nВторой абзац.",
     );
   });
 });

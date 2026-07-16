@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   PROJECT_REALITY_HEADING,
+  classifyDeployRange,
   evaluateProjectReality,
   reconcileMessage,
   releaseFromProbe,
@@ -30,6 +31,7 @@ const probe = (over: Partial<ProjectRealityProbe> = {}): ProjectRealityProbe => 
   releaseTag: null,
   releasePublishedAt: null,
   mergedNotDeployed: null,
+  changedPaths: null,
   ...over,
 });
 
@@ -238,6 +240,130 @@ describe("project-reality renderProjectReality()", () => {
     ).join("\n");
     expect(text).toContain("/v1/health");
     expect(text).not.toMatch(/\\/); // no backslashes leak into the section
+  });
+});
+
+describe("project-reality classifyDeployRange() — D+B change-class (spec §10.3)", () => {
+  it("app/UI-only touch-set → standing-auth", () => {
+    const v = classifyDeployRange([
+      "apps/portal/src/app/webinars/page.tsx",
+      "apps/admin/src/events/list.tsx",
+      "apps/docs/content/specs/tech/x.md",
+    ]);
+    expect(v.class).toBe("standing-auth");
+    expect(v.reasons.join(" ")).toMatch(/no migration/);
+  });
+
+  it("docs/tooling-only touch-set (incl. root-level .md) → standing-auth", () => {
+    const v = classifyDeployRange([
+      "README.md",
+      "tools/agent-bootstrap.ts",
+      ".claude/rules/dev-stand.md",
+      ".changeset/nice-words.md",
+    ]);
+    expect(v.class).toBe("standing-auth");
+  });
+
+  it("migration in range (apps/api/drizzle/*.sql) → escalate, naming the migration", () => {
+    const v = classifyDeployRange([
+      "apps/portal/src/page.tsx",
+      "apps/api/drizzle/0042_add_column.sql",
+    ]);
+    expect(v.class).toBe("escalate");
+    expect(v.reasons.join(" ")).toMatch(/migration in range/);
+  });
+
+  it("backend touch (apps/api/) → escalate", () => {
+    const v = classifyDeployRange(["apps/api/src/events/events.service.ts"]);
+    expect(v.class).toBe("escalate");
+    expect(v.reasons.join(" ")).toMatch(/apps\/api\//);
+  });
+
+  it("DB schema / infra / workflows / deploy tooling → escalate", () => {
+    for (const p of [
+      "packages/db/src/schema/events.ts",
+      "infra/deploy/compose/api-prod/compose.yml",
+      ".github/workflows/ci.yml",
+      "tools/deploy/prod.mjs",
+    ]) {
+      expect(classifyDeployRange([p]).class).toBe("escalate");
+    }
+  });
+
+  it("tools/deploy/ escalates even though tools/ is standing-auth (escalate wins)", () => {
+    const v = classifyDeployRange(["tools/deploy/live-broadcast-check.mjs"]);
+    expect(v.class).toBe("escalate");
+    expect(v.reasons.join(" ")).toMatch(/deploy tooling/);
+  });
+
+  it("a path outside both lists (e.g. packages/schemas) → default-escalate", () => {
+    const v = classifyDeployRange(["packages/schemas/src/events/events.schema.ts"]);
+    expect(v.class).toBe("escalate");
+    expect(v.reasons.join(" ")).toMatch(/outside the standing-auth touch-set/);
+  });
+
+  it("uncomputable (null) touch-set → default-escalate", () => {
+    const v = classifyDeployRange(null);
+    expect(v.class).toBe("escalate");
+    expect(v.reasons.join(" ")).toMatch(/uncomputable/);
+  });
+
+  it("empty touch-set → default-escalate", () => {
+    expect(classifyDeployRange([]).class).toBe("escalate");
+    expect(classifyDeployRange(["  ", ""]).class).toBe("escalate");
+  });
+
+  it("normalises backslash separators (platform-agnostic)", () => {
+    const v = classifyDeployRange(["apps\\api\\drizzle\\0042_x.sql"]);
+    expect(v.class).toBe("escalate");
+    expect(v.reasons.join(" ")).toMatch(/migration in range/);
+  });
+});
+
+describe("project-reality D-trigger verdict rendering (spec §10.2)", () => {
+  const rel: ReleaseInfo = { tag: null, publishedAt: null };
+  const status = (n: number) =>
+    evaluateProjectReality(
+      probe({ deploymentSha: "b9d81e6", healthSha: "b9d81e6", mergedNotDeployed: n }),
+    );
+
+  it("standing-auth verdict → autonomous-ship wording with the checklist pointer", () => {
+    const text = renderProjectReality(
+      status(2),
+      rel,
+      classifyDeployRange(["apps/portal/src/page.tsx"]),
+    ).join("\n");
+    expect(text).toContain("D-trigger (spec §10.2): class standing-auth");
+    expect(text).toContain("§10.4 release-readiness checklist");
+    expect(text).toContain("pnpm deploy:prod");
+    expect(text).not.toContain("ready to ship");
+  });
+
+  it("escalate verdict → owner one-liner wording with the reason", () => {
+    const text = renderProjectReality(
+      status(2),
+      rel,
+      classifyDeployRange(["apps/api/drizzle/0042_x.sql"]),
+    ).join("\n");
+    expect(text).toContain("class escalate (migration in range");
+    expect(text).toContain('ready to ship X — go?');
+  });
+
+  it("no verdict passed (classifier unavailable) → degrades to the escalate wording, never throws", () => {
+    const text = renderProjectReality(status(1), rel).join("\n");
+    expect(text).toContain("class escalate");
+    expect(text).toContain("default-escalate");
+    expect(text).toContain('ready to ship X — go?');
+  });
+
+  it("zero delta stays the level line — no D-trigger verdict", () => {
+    const text = renderProjectReality(
+      status(0),
+      rel,
+      classifyDeployRange(["apps/portal/src/page.tsx"]),
+    ).join("\n");
+    expect(text).toContain("prod is level");
+    expect(text).not.toContain("D-trigger");
   });
 });
 

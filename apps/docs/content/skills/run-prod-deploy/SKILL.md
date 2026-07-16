@@ -15,6 +15,20 @@ Production deploy is an **agent-run, off-CI command** — there is no CI deploy 
 
 Typing **`/deploy`** ([`.claude/commands/deploy.md`](../../../../../.claude/commands/deploy.md)) means: read this skill and execute it.
 
+## Release-readiness checklist (spec §10.4) — run BEFORE deciding to ship
+
+The D-decision gate, over the **whole deploy range** (`deployedSha..origin/main`) — a single failing item holds the deploy. The change-class (standing-auth vs escalate) is judged per **spec §10.3** (the taxonomy lives there — default-escalate on any uncertainty); the bootstrap delta line pre-computes a derivable-signal class verdict, which is the **starting point**, not the judgment (Stage-B, PII-flow, and breaking-API calls are yours to make here).
+
+1. **Range enumerated** — `git log --oneline <deployedSha>..origin/main` (`deployedSha` from bootstrap `## Project reality`, or `curl -s https://api.doctor.school/v1/health | jq -r .version`); the triggering releasable unit is among the listed PRs.
+2. **All Stage-B GO** — every `user-facing` PR in the range records `Stage-B: GO` / `Stage-B: batched at #<gate>` / `Stage-B: N/A (no visual surface) — lead-certified` (`gh pr view <N> --json body,comments`). A missing verdict = **stop** (forces escalate/hold).
+3. **CI green at the deploy SHA** — `gh api repos/{owner}/{repo}/commits/$(git rev-parse origin/main)/check-runs` all green (the deploy pre-flight re-asserts this; the checklist confirms it before the D-decision).
+4. **Migrations expand/contract** — `git diff --name-only <deployedSha>..origin/main -- apps/api/drizzle` ; inspect every listed `.sql`: expand-only (new nullable column / table / index) keeps an app rollback DB-safe; any contracting/destructive/backfill migration flips the class to **escalate** (spec §10.3).
+5. **Rollback ready** — the app-only `--rollback <sha>` path is available (target images retained — last 3 per repo) and the DB is untouched by an app rollback (guaranteed by item 4).
+6. **Clean deploy environment** — clean working tree + `git pull --ff-only origin main` (the pre-flight enforces this; verify it _before_ deciding to ship).
+7. **No live broadcast (эфир gate)** — `pnpm deploy:check-live`: `CLEAR` (exit 0) proceeds; `LIVE:` or `UNKNOWN` (exit 1, fail-closed) **holds regardless of change-class** — wait for the эфир to end or bind to the maintenance window (02:00–06:00 MSK). The deploy pre-flight runs the same probe as a hard gate; an urgent mid-broadcast ship is by definition **escalate**: owner's explicit go + `--allow-live-broadcast`.
+
+**Standing-auth** class + 1–7 green → ship autonomously. **Escalate** class — or any эфир hold — → the one-line **"ready to ship X — go?"** first, then proceed on the owner's go.
+
 ## Input
 
 - Intent to deploy the current `origin/main`, **or** a rollback target SHA.
@@ -27,6 +41,7 @@ Typing **`/deploy`** ([`.claude/commands/deploy.md`](../../../../../.claude/comm
 1. **Clean working tree** — the pipeline hard-fails on a dirty tree (it ships committed `main` only).
 2. **Fast-forward local `main`** — `git pull --ff-only origin main` first, so your checkout's record/digest code matches the SHA being shipped. A divergent `HEAD` is a loud WARNING (deploy still ships `origin/main`), a dirty tree is a hard fail.
 3. **Green CI for that SHA** — the pipeline queries the latest check-run per name via `gh api …/commits/<sha>/check-runs` and refuses on red/pending. Escape hatch `--skip-ci-check` logs a loud warning.
+4. **No live broadcast** — the pipeline runs the read-only эфир probe (`pnpm deploy:check-live`, `GET /v1/public/events`) and refuses while a broadcast is `live` **or** the probe fails (fail-closed `UNKNOWN`). Escape hatch `--allow-live-broadcast` (owner-approved urgent ship only — checklist item 7) logs a loud warning. The `--rollback` path skips this gate (an emergency rollback must never wait out an эфир).
 
 ## Procedure
 
@@ -75,7 +90,7 @@ The target images must still be on the box (retention keeps the last 3). Rollbac
 
 ## After a deploy — the merged-not-deployed nudge
 
-`## Project reality` (bootstrap `pnpm bootstrap`, #939) derives the latest release, the deployed SHA (GitHub Deployment ⋈ `/v1/health`), and the **merged-not-deployed delta** at SessionStart. When that delta is non-empty (product PRs merged but not shipped), it is the **D-trigger detection signal** (spec §10.2): run the release-readiness checklist over the range and, if a releasable unit is ready, ship it (autonomously for standing-auth classes, else escalate "ready to ship X — go?") — or record the pending-deploy delta in the session handoff.
+`## Project reality` (bootstrap `pnpm bootstrap`, #939) derives the latest release, the deployed SHA (GitHub Deployment ⋈ `/v1/health`), and the **merged-not-deployed delta** at SessionStart. A non-empty delta renders the explicit **D-trigger verdict** (spec §10.2/§10.3): the line carries `class standing-auth (…)` or `class escalate (…)` derived from the range's touch-set (`classifyDeployRange` in `tools/project-reality.ts` — migration / backend / infra / workflow / deploy-tooling touches escalate; uncomputable defaults to escalate). Treat it as the detection signal: run the §10.4 checklist (above) over the range and, if a releasable unit is ready, ship it (autonomously for standing-auth, else escalate "ready to ship X — go?") — or record the pending-deploy delta in the session handoff.
 
 ## Output
 

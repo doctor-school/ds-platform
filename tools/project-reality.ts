@@ -66,6 +66,103 @@ export interface ProjectRealityProbe {
   mergedNotDeployed: number | null;
   /** First line of the error when the delta was uncomputable. */
   mergedNotDeployedError?: string;
+
+  /** Changed file paths across `<deployedSha>..origin/main` (`git diff
+   *  --name-only`) — the derivable input for the spec §10.3 change-class
+   *  judgment. `null` when uncomputable (classifier default-escalates). */
+  changedPaths: string[] | null;
+  /** First line of the error when the changed-paths diff failed. */
+  changedPathsError?: string;
+}
+
+// ── D+B deploy-trigger change-class classifier (spec §10.3, #996 T2) ─────────
+
+/** The two §10.3 classes: `standing-auth` ships autonomously; `escalate`
+ *  surfaces a one-line "ready to ship X — go?" and waits for the owner. */
+export type DeployChangeClass = "standing-auth" | "escalate";
+
+/** The classifier's verdict over the whole deploy range (§10.2 — the unit of a
+ *  deploy is the entire `deployedSha..origin/main` delta, never one PR). */
+export interface DeployClassVerdict {
+  class: DeployChangeClass;
+  reasons: string[];
+}
+
+/** Escalate signals derivable from a touch-set alone (spec §10.3 rows 4/6/7 —
+ *  migrations, backend/API, DB schema, infra, CI workflows, deploy tooling).
+ *  Checked FIRST: an escalate prefix wins over any allowlist overlap. */
+const ESCALATE_PREFIXES: ReadonlyArray<readonly [string, string]> = [
+  ["apps/api/drizzle/", "migration in range (apps/api/drizzle/)"],
+  ["apps/api/", "backend runtime touched (apps/api/)"],
+  ["packages/db/", "DB schema touched (packages/db/)"],
+  ["infra/", "infra touched (infra/)"],
+  [".github/workflows/", "CI workflows touched (.github/workflows/)"],
+  ["tools/deploy/", "deploy tooling touched (tools/deploy/)"],
+];
+
+/** Standing-auth touch-set (spec §10.3 rows 1/3): the four apps behind the
+ *  app-only `--rollback` path, plus docs/tooling surfaces with no runtime prod
+ *  effect. Anything matching NEITHER list default-escalates (§10.2). */
+const STANDING_AUTH_PREFIXES: readonly string[] = [
+  "apps/portal/",
+  "apps/admin/",
+  "apps/promo/",
+  "apps/cms/",
+  "apps/docs/",
+  "tools/",
+  ".claude/",
+  ".changeset/",
+];
+
+/**
+ * Classify a deploy range's touch-set into standing-auth vs escalate (spec
+ * §10.3). PURE — no I/O; input is `git diff --name-only <deployedSha>..origin/main`
+ * (gathered by the probe). Derivable signals only — Stage-B verdicts, PII-flow
+ * and breaking-API judgment stay with the session running the §10.4 checklist,
+ * so a `standing-auth` verdict here is a NECESSARY, not sufficient, signal.
+ * DEFAULT-ESCALATE on any uncertainty: a `null`/empty/unrecognised touch-set
+ * escalates (§10.2 decision rule).
+ */
+export function classifyDeployRange(
+  changedPaths: string[] | null,
+): DeployClassVerdict {
+  if (!Array.isArray(changedPaths)) {
+    return {
+      class: "escalate",
+      reasons: ["touch-set uncomputable — default-escalate (spec §10.3)"],
+    };
+  }
+  const paths = changedPaths
+    .map((p) => p.replace(/\\/g, "/").trim())
+    .filter(Boolean);
+  if (paths.length === 0) {
+    return {
+      class: "escalate",
+      reasons: ["empty touch-set — default-escalate (spec §10.3)"],
+    };
+  }
+  const reasons = new Set<string>();
+  for (const p of paths) {
+    const esc = ESCALATE_PREFIXES.find(([prefix]) => p.startsWith(prefix));
+    if (esc) {
+      reasons.add(esc[1]);
+      continue;
+    }
+    const allowed =
+      STANDING_AUTH_PREFIXES.some((prefix) => p.startsWith(prefix)) ||
+      // Root-level docs (README.md, AGENTS.md, …) — no runtime prod surface.
+      (!p.includes("/") && p.endsWith(".md"));
+    if (!allowed) {
+      reasons.add(`outside the standing-auth touch-set: ${p} (spec §10.3)`);
+    }
+  }
+  if (reasons.size > 0) {
+    return { class: "escalate", reasons: [...reasons] };
+  }
+  return {
+    class: "standing-auth",
+    reasons: ["app/UI/docs/tooling-only touch-set, no migration"],
+  };
 }
 
 /**
@@ -224,8 +321,14 @@ function deployedLine(status: ProjectRealityStatus): string {
 }
 
 /** The merged-but-not-deployed delta line, or `null` when there is no deployed
- *  basis to diff against (all-unreachable). */
-function deltaLine(status: ProjectRealityStatus): string | null {
+ *  basis to diff against (all-unreachable). A non-zero delta renders the
+ *  explicit D-trigger verdict (spec §10.2 — a detection signal, not a passive
+ *  cue): the §10.3 change-class + the §10.4 checklist as the next action. A
+ *  missing verdict degrades to the escalate wording (default-escalate). */
+function deltaLine(
+  status: ProjectRealityStatus,
+  deployClass?: DeployClassVerdict | null,
+): string | null {
   if (status.kind === "unreachable") return null;
   const n = status.mergedNotDeployed;
   if (n == null) {
@@ -234,19 +337,31 @@ function deltaLine(status: ProjectRealityStatus): string | null {
   if (n === 0) {
     return "- Merged since deploy: none — prod is level with `origin/main` product PRs.";
   }
-  return `- Merged since deploy: ${n} product PR(s) NOT yet on prod — run \`pnpm deploy:prod\` to ship.`;
+  const verdict: DeployClassVerdict = deployClass ?? {
+    class: "escalate",
+    reasons: ["change-class unavailable — default-escalate (spec §10.3)"],
+  };
+  const why = verdict.reasons.slice(0, 3).join("; ");
+  const head = `- Merged since deploy: ${n} product PR(s) NOT yet on prod — D-trigger (spec §10.2): class ${verdict.class} (${why})`;
+  if (verdict.class === "standing-auth") {
+    return `${head} → run the §10.4 release-readiness checklist (skill run-prod-deploy), then ship via \`pnpm deploy:prod\`.`;
+  }
+  return `${head} → run the §10.4 release-readiness checklist, then ask the owner: "ready to ship X — go?" before \`pnpm deploy:prod\`.`;
 }
 
 /**
  * Render the full `## Project reality` section as an array of markdown lines: a
  * loud reconcile banner (on mismatch/unreachable) FIRST, then the heading, the
  * latest-release line, the deployed-sha line (with the health-match indicator),
- * the merged-not-deployed delta + `pnpm deploy:prod` nudge, and the cumulative
- * `gh release list` scope pointer. Pure — no I/O.
+ * the merged-not-deployed delta with its explicit D-trigger verdict (spec
+ * §10.2/§10.3 — pass `deployClass` from `classifyDeployRange`; omitted/null
+ * degrades to the escalate wording), and the cumulative `gh release list`
+ * scope pointer. Pure — no I/O.
  */
 export function renderProjectReality(
   status: ProjectRealityStatus,
   release: ReleaseInfo,
+  deployClass?: DeployClassVerdict | null,
 ): string[] {
   const out: string[] = [];
   const banner = reconcileMessage(status);
@@ -254,7 +369,7 @@ export function renderProjectReality(
   out.push(PROJECT_REALITY_HEADING);
   out.push(releaseLine(release));
   out.push(deployedLine(status));
-  const delta = deltaLine(status);
+  const delta = deltaLine(status, deployClass);
   if (delta) out.push(delta);
   out.push(
     "- Full shipped scope: see `gh release list` (cumulative), not this line.",
@@ -312,6 +427,7 @@ export async function probeProjectReality(
     releaseTag: null,
     releasePublishedAt: null,
     mergedNotDeployed: null,
+    changedPaths: null,
   };
 
   // 1. Latest `production` GitHub Deployment (recorded intent) + its latest state.
@@ -426,6 +542,20 @@ export async function probeProjectReality(
       probe.mergedNotDeployed = count;
     } catch (e) {
       probe.mergedNotDeployedError = firstLine(e);
+    }
+
+    // 5. Changed file paths across the same range — the derivable touch-set the
+    //    §10.3 change-class classifier (`classifyDeployRange`) judges. A failure
+    //    leaves `changedPaths` null → the classifier default-escalates.
+    try {
+      const { stdout } = await execa(
+        "git",
+        ["diff", "--name-only", `${basis}..origin/main`],
+        { cwd, timeout: 15000 },
+      );
+      probe.changedPaths = stdout.split(/\r?\n/).filter(Boolean);
+    } catch (e) {
+      probe.changedPathsError = firstLine(e);
     }
   }
 

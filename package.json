@@ -85,6 +85,7 @@
     "dev:db:branch": "node tools/dev/run.mjs db-branch",
     "dev:db:drop": "node tools/dev/run.mjs db-drop",
     "dev:smoke": "node tools/dev/smoke.mjs",
+    "deploy:check-live": "node tools/deploy/live-broadcast-check.mjs",
     "deploy:prod": "node tools/deploy/prod.mjs",
     "deploy:release-notes": "node tools/deploy/release-notes.mjs",
     "deploy:smoke": "node tools/deploy/smoke-prod.mjs",

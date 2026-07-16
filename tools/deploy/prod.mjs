@@ -35,8 +35,8 @@ import { spawn, spawnSync } from "node:child_process";
 import { createReadStream, createWriteStream } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { envFooter } from "../ci/post-product-note.mjs";
 import { cutDeployRelease } from "../release/cut-release.mjs";
@@ -45,7 +45,7 @@ import { composeDigest } from "./release-notes.mjs";
 
 // Prod health endpoint — the status record's `log_url` and the verify-over-HTTP
 // pointer (#942/#927). Kept in one place so the record and the printed hint agree.
-const PROD_HEALTH_URL = "https://api.doctor.school/v1/health";
+export const PROD_HEALTH_URL = "https://api.doctor.school/v1/health";
 
 // --- config (env-overridable; SSH aliases live in ~/.ssh/config) ----------
 
@@ -242,6 +242,77 @@ function assertGreenCi(sha) {
 
 // --- ssh helpers ----------------------------------------------------------
 
+// Keepalive on EVERY ssh channel (#905). Without these flags a half-open TCP
+// connection (NAT table flush, Wi-Fi/VPN flap, box-side reset the client never
+// saw) hangs the deploy silently forever — the local process just waits on a
+// socket nobody will ever write to. With them the client probes the server
+// every 15s and gives up after 4 missed probes (~60s): the channel dies LOUDLY
+// (non-zero ssh exit → the existing die() path) instead of hanging half-open.
+export function sshBaseArgs(host) {
+  return [
+    "-o",
+    "ServerAliveInterval=15",
+    "-o",
+    "ServerAliveCountMax=4",
+    host,
+  ];
+}
+
+// Per-step no-output budgets for the sshScript inactivity watchdog (#905).
+// Build-class steps (docker compose build of three images) legitimately go
+// minutes between log lines; everything else (compose up, pgbackrest, caddy
+// reload, retention) prints within seconds when healthy.
+export const STALL_BUDGET_BUILD_MS = 5 * 60 * 1000;
+export const STALL_BUDGET_DEFAULT_MS = 2 * 60 * 1000;
+
+// The loud STALLED line. A tripped watchdog proves only that the LOCAL channel
+// went quiet — the remote docker/pgbackrest work may have completed (or still
+// be running), so the message routes the operator to the box-reality probe
+// before any re-run / rollback decision.
+export function formatStallMessage(label, budgetMs, host) {
+  const mins = budgetMs / 60000;
+  const n = Number.isInteger(mins) ? String(mins) : mins.toFixed(1);
+  return (
+    `STALLED: ${label} — no output for ${n}m; remote work MAY have completed.\n` +
+    `  Verify by hand: pnpm deploy:probe\n` +
+    `  (or: curl -fsS ${PROD_HEALTH_URL} ; ssh ${host} docker ps)`
+  );
+}
+
+// Inactivity watchdog: arms on creation, `touch()` on every data chunk resets
+// the timer, `stop()` disarms for good (close/error paths). Fires `onStall`
+// with the formatted STALLED message at most once. Pure timer logic — unit
+// tested on fake timers (tools/lint/guard-tests/deploy-stall.spec.ts).
+export function createStallWatchdog({ label, budgetMs, host, onStall }) {
+  let timer = null;
+  let done = false;
+  const arm = () => {
+    timer = setTimeout(() => {
+      done = true;
+      timer = null;
+      onStall(formatStallMessage(label, budgetMs, host));
+    }, budgetMs);
+  };
+  const disarm = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+  arm();
+  return {
+    touch() {
+      if (done) return;
+      disarm();
+      arm();
+    },
+    stop() {
+      done = true;
+      disarm();
+    },
+  };
+}
+
 // Run a bash script on a box, fed over stdin (no shell-quoting hell). Streams
 // the box's stdout/stderr live. Rejects on non-zero exit.
 //
@@ -258,27 +329,61 @@ function assertGreenCi(sha) {
 const REMOTE_BASH =
   'script=$(cat); exec bash --norc -euo pipefail -c "$script"';
 
-function sshScript(host, script, { label } = {}) {
+// Inactivity watchdog (#905): stdout/stderr are PIPED (not inherited) so the
+// parent observes every remote byte — chunks are forwarded verbatim to the
+// local streams (same live-streaming UX as before) and each one resets the
+// per-step no-output timer. A step whose channel goes quiet past its budget is
+// killed and the deploy exits non-zero with the loud STALLED message — it
+// never hangs silently again. Callers pass `stallBudgetMs` per step
+// (build-class → STALL_BUDGET_BUILD_MS, default → STALL_BUDGET_DEFAULT_MS).
+function sshScript(host, script, { label, stallBudgetMs } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn("ssh", [host, REMOTE_BASH], {
-      stdio: ["pipe", "inherit", "inherit"],
+    const child = spawn("ssh", [...sshBaseArgs(host), REMOTE_BASH], {
+      stdio: ["pipe", "pipe", "pipe"],
     });
-    child.on("error", reject);
-    child.on("close", (code) =>
-      code === 0
-        ? resolve()
-        : reject(new Error(`${label || "ssh"} on ${host} exited ${code}`)),
-    );
+    let stalled = false;
+    const watchdog = createStallWatchdog({
+      label: label || "ssh",
+      budgetMs: stallBudgetMs ?? STALL_BUDGET_DEFAULT_MS,
+      host,
+      onStall: (msg) => {
+        stalled = true;
+        console.error(`\n✗ ${msg}`);
+        child.kill();
+        reject(new Error(msg));
+      },
+    });
+    child.stdout.on("data", (d) => {
+      watchdog.touch();
+      process.stdout.write(d);
+    });
+    child.stderr.on("data", (d) => {
+      watchdog.touch();
+      process.stderr.write(d);
+    });
+    child.on("error", (e) => {
+      watchdog.stop();
+      reject(e);
+    });
+    child.on("close", (code) => {
+      watchdog.stop();
+      if (stalled) return; // already rejected with the STALLED message
+      if (code === 0) resolve();
+      else reject(new Error(`${label || "ssh"} on ${host} exited ${code}`));
+    });
     child.stdin.write(script);
     child.stdin.end();
   });
 }
 
 // Capture a box's stdout (small commands: image inspect, pgbackrest info).
-// Same stdin-drain contract as sshScript (see REMOTE_BASH).
+// Same stdin-drain contract as sshScript (see REMOTE_BASH). Keepalive flags
+// only, no inactivity watchdog: verifyRunningSha's on-box poll is legitimately
+// silent for up to ~4 min (it prints once, at the end) — a dead channel is
+// caught by ServerAlive (~60s), a quiet-but-alive one is normal here.
 function sshCapture(host, script) {
   return new Promise((resolve, reject) => {
-    const child = spawn("ssh", [host, REMOTE_BASH], {
+    const child = spawn("ssh", [...sshBaseArgs(host), REMOTE_BASH], {
       stdio: ["pipe", "pipe", "inherit"],
     });
     let out = "";
@@ -356,7 +461,10 @@ async function shipTree(sha, host) {
     await new Promise((resolve, reject) => {
       const child = spawn(
         "ssh",
-        [host, `rm -rf ${REMOTE_TREE} && mkdir -p ~ && tar xzf - -C ~`],
+        [
+          ...sshBaseArgs(host),
+          `rm -rf ${REMOTE_TREE} && mkdir -p ~ && tar xzf - -C ~`,
+        ],
         { stdio: ["pipe", "inherit", "inherit"] },
       );
       child.on("error", reject);
@@ -414,7 +522,7 @@ async function deploy() {
 printf 'VPC_IP=%s\\n' '${VPC_IP}' > .env
 sudo ${NO_ATTEST} docker compose up -d --build
 `,
-    { label: "data-prod up" },
+    { label: "data-prod up", stallBudgetMs: STALL_BUDGET_BUILD_MS },
   );
   ok("postgres + redis + pgbackrest up", t);
 
@@ -467,7 +575,7 @@ sudo ${NO_ATTEST} docker compose build
 echo '── up -d ──'
 sudo docker compose up -d
 `,
-    { label: "api-prod deploy" },
+    { label: "api-prod deploy", stallBudgetMs: STALL_BUDGET_BUILD_MS },
   );
   ok("migrate + build + up -d", t);
 
@@ -716,6 +824,18 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  die(err.stack || err.message);
-});
+// Run main only when invoked directly (same guard as tools/gh/dispatch-probe.mjs),
+// so the pure watchdog/ssh-args helpers can be imported in unit tests without
+// firing the deploy pipeline. `pathToFileURL` yields canonical `file:///C:/…` on
+// Windows too.
+const invokedPath = process.argv[1] ? resolve(process.argv[1]) : "";
+const selfPath = resolve(fileURLToPath(import.meta.url));
+if (
+  invokedPath &&
+  invokedPath === selfPath &&
+  import.meta.url === pathToFileURL(invokedPath).href
+) {
+  main().catch((err) => {
+    die(err.stack || err.message);
+  });
+}

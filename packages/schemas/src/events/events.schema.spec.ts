@@ -6,12 +6,19 @@ import {
   EVENT_LIFECYCLE_STATES,
   isPubliclyReachable,
   LIFECYCLE_TRANSITIONS,
+  MONTH_BROADCAST_STATES,
+  MONTH_PARAM,
+  MonthBroadcastEntrySchema,
+  MonthlyEventCountsSchema,
   mskLocalToInstant,
+  mskMonthRange,
+  mskYearRange,
   PUBLIC_EVENT_STATES,
   STREAM_PROVIDERS,
   TransitionEventRequestSchema,
   UpdateEventRequestSchema,
   validTransitions,
+  YEAR_PARAM,
 } from "./events.schema.js";
 
 // 007 EARS-1 pure contract logic — the МСК→instant fold, the closed transition
@@ -195,7 +202,10 @@ describe("007 events schema", () => {
     it("EARS-3: accepts each provider from the closed enum + a realistic provider-scoped id", () => {
       for (const provider of STREAM_PROVIDERS) {
         const embedRef = VALID_EMBED_REFS[provider];
-        const parsed = ConfigureStreamRequestSchema.parse({ provider, embedRef });
+        const parsed = ConfigureStreamRequestSchema.parse({
+          provider,
+          embedRef,
+        });
         expect(parsed.provider).toBe(provider);
         expect(parsed.embedRef).toBe(embedRef);
       }
@@ -240,9 +250,10 @@ describe("007 events schema", () => {
           provider,
           embedRef: "ччсапп",
         });
-        expect(result.success, `garbage id must be refused for ${provider}`).toBe(
-          false,
-        );
+        expect(
+          result.success,
+          `garbage id must be refused for ${provider}`,
+        ).toBe(false);
         const issue = result.success ? undefined : result.error.issues[0];
         expect(issue?.code).toBe("custom");
         expect(issue?.path).toEqual(["embedRef"]);
@@ -292,8 +303,10 @@ describe("007 events schema", () => {
         "rutube://embed/xyz",
       ]) {
         expect(
-          ConfigureStreamRequestSchema.safeParse({ provider: "rutube", embedRef: url })
-            .success,
+          ConfigureStreamRequestSchema.safeParse({
+            provider: "rutube",
+            embedRef: url,
+          }).success,
           `URL-shaped embedRef must be rejected: ${url}`,
         ).toBe(false);
       }
@@ -350,6 +363,153 @@ describe("007 events schema", () => {
       expect(
         "state" in UpdateEventRequestSchema.parse({ state: "draft" }),
       ).toBe(false);
+    });
+  });
+});
+
+// 004 wave-2 month-calendar contract logic — the МСК month/year instant ranges,
+// the query-param shapes, and the publish-safe month projections (requirements
+// EARS-15/EARS-16, design §3/§4). Framework-free unit coverage complementing the
+// month API e2e.
+describe("004 month-calendar schema (EARS-15/EARS-16)", () => {
+  describe("MONTH_BROADCAST_STATES (EARS-15 — publish-visible incl. past ended)", () => {
+    it("is exactly published/live/ended — draft and archived have no month projection", () => {
+      expect([...MONTH_BROADCAST_STATES]).toEqual([
+        "published",
+        "live",
+        "ended",
+      ]);
+      expect(MONTH_BROADCAST_STATES).not.toContain("draft");
+      expect(MONTH_BROADCAST_STATES).not.toContain("archived");
+    });
+  });
+
+  describe("MONTH_PARAM / YEAR_PARAM (EARS-15/16 — boundary shapes, no baked message)", () => {
+    it("accepts YYYY-MM with months 01..12 and rejects malformed / out-of-range", () => {
+      for (const ok of ["2031-01", "2031-07", "2031-12"]) {
+        expect(MONTH_PARAM.test(ok)).toBe(true);
+      }
+      for (const bad of [
+        "2031-00",
+        "2031-13",
+        "2031-7",
+        "31-07",
+        "2031/07",
+        "",
+      ]) {
+        expect(MONTH_PARAM.test(bad)).toBe(false);
+      }
+    });
+
+    it("accepts a 4-digit year and rejects anything else", () => {
+      expect(YEAR_PARAM.test("2031")).toBe(true);
+      for (const bad of ["31", "20311", "2031-01", "abcd", ""]) {
+        expect(YEAR_PARAM.test(bad)).toBe(false);
+      }
+    });
+  });
+
+  describe("mskMonthRange (EARS-15 — half-open МСК month range)", () => {
+    it("folds YYYY-MM into МСК-midnight [start, next-month-start)", () => {
+      const { start, end } = mskMonthRange("2031-07");
+      // 2031-07-01T00:00:00+03:00 = 2031-06-30T21:00Z
+      expect(start.toISOString()).toBe("2031-06-30T21:00:00.000Z");
+      expect(end.toISOString()).toBe("2031-07-31T21:00:00.000Z");
+    });
+
+    it("rolls December to the next calendar year", () => {
+      const { start, end } = mskMonthRange("2031-12");
+      expect(start.toISOString()).toBe("2031-11-30T21:00:00.000Z");
+      expect(end.toISOString()).toBe("2031-12-31T21:00:00.000Z");
+    });
+
+    it("classifies a UTC instant near the МСК boundary into the right month", () => {
+      // 2031-07-31T21:30:00Z = 2031-08-01T00:30 МСК → belongs to AUGUST, not July.
+      const boundary = new Date("2031-07-31T21:30:00.000Z");
+      const july = mskMonthRange("2031-07");
+      const august = mskMonthRange("2031-08");
+      const inRange = (r: { start: Date; end: Date }) =>
+        boundary >= r.start && boundary < r.end;
+      expect(inRange(july)).toBe(false);
+      expect(inRange(august)).toBe(true);
+    });
+
+    it("throws RangeError on a malformed month", () => {
+      expect(() => mskMonthRange("2031-13")).toThrow(RangeError);
+      expect(() => mskMonthRange("nope")).toThrow(RangeError);
+    });
+  });
+
+  describe("mskYearRange (EARS-16 — half-open МСК year range)", () => {
+    it("folds YYYY into МСК-midnight [Jan-1, next-Jan-1)", () => {
+      const { start, end } = mskYearRange("2031");
+      expect(start.toISOString()).toBe("2030-12-31T21:00:00.000Z");
+      expect(end.toISOString()).toBe("2031-12-31T21:00:00.000Z");
+    });
+
+    it("throws RangeError on a malformed year", () => {
+      expect(() => mskYearRange("31")).toThrow(RangeError);
+    });
+  });
+
+  describe("MonthBroadcastEntrySchema (EARS-15 — thin publish-safe allow-list)", () => {
+    const valid = {
+      id: "11111111-1111-4111-8111-111111111111",
+      slug: "achilles-2031-07",
+      title: "Пластика ахиллова сухожилия",
+      school: "Школа травматологии",
+      startsAt: "2031-07-10T09:00:00.000Z",
+      state: "ended" as const,
+    };
+
+    it("accepts a well-formed entry with a publish-visible state", () => {
+      expect(MonthBroadcastEntrySchema.parse(valid)).toEqual(valid);
+    });
+
+    it("rejects draft/archived — they have no month projection", () => {
+      expect(
+        MonthBroadcastEntrySchema.safeParse({ ...valid, state: "draft" })
+          .success,
+      ).toBe(false);
+      expect(
+        MonthBroadcastEntrySchema.safeParse({ ...valid, state: "archived" })
+          .success,
+      ).toBe(false);
+    });
+
+    it("strips any extra internal field — the allow-list is closed", () => {
+      const parsed = MonthBroadcastEntrySchema.parse({
+        ...valid,
+        partnerRef: "sponsor:acme",
+        description: "leak",
+        speakers: [{ name: "x" }],
+      }) as Record<string, unknown>;
+      expect(Object.keys(parsed).sort()).toEqual(
+        ["id", "school", "slug", "startsAt", "state", "title"].sort(),
+      );
+    });
+  });
+
+  describe("MonthlyEventCountsSchema (EARS-16 — exactly 12 rows)", () => {
+    const twelve = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      count: 0,
+    }));
+
+    it("accepts exactly 12 rows and rejects a short list", () => {
+      expect(MonthlyEventCountsSchema.parse(twelve)).toHaveLength(12);
+      expect(
+        MonthlyEventCountsSchema.safeParse(twelve.slice(0, 11)).success,
+      ).toBe(false);
+    });
+
+    it("rejects a negative count or an out-of-range month", () => {
+      const bad = twelve.map((r) => ({ ...r }));
+      bad[0] = { month: 1, count: -1 };
+      expect(MonthlyEventCountsSchema.safeParse(bad).success).toBe(false);
+      const badMonth = twelve.map((r) => ({ ...r }));
+      badMonth[0] = { month: 13, count: 0 };
+      expect(MonthlyEventCountsSchema.safeParse(badMonth).success).toBe(false);
     });
   });
 });

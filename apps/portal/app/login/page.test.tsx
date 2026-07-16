@@ -159,7 +159,7 @@ describe("005 EARS-2 guest-through-auth completion on /login", () => {
     });
   });
 
-  it("EARS-2: without a carried event context, password-login success lands on «Мои события» (/account/events) and registers nothing", async () => {
+  it("008 EARS-7: without a carried event context, password-login success lands on the discovery front-door (`/`) and registers nothing", async () => {
     const user = userEvent.setup();
     await renderLogin();
 
@@ -170,12 +170,12 @@ describe("005 EARS-2 guest-through-auth completion on /login", () => {
     await waitFor(() => expect(login).toHaveBeenCalledTimes(1));
     resolveLogin?.();
 
-    // #769 facade re-point — the default post-login landing is «Мои события».
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/account/events"));
+    // 008 EARS-7 — the default post-login landing is the discovery front-door `/`.
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
     expect(registerForEvent).not.toHaveBeenCalled();
   });
 
-  it("EARS-2: a cross-origin returnTo is rejected — login success lands on «Мои события» (/account/events), nothing registers", async () => {
+  it("EARS-2: a cross-origin returnTo is rejected — login success lands on the discovery front-door (`/`, 008 EARS-7), nothing registers", async () => {
     searchParams = new URLSearchParams({ returnTo: "//evil.example" });
     const user = userEvent.setup();
     await renderLogin();
@@ -187,7 +187,7 @@ describe("005 EARS-2 guest-through-auth completion on /login", () => {
     await waitFor(() => expect(login).toHaveBeenCalledTimes(1));
     resolveLogin?.();
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/account/events"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
     expect(registerForEvent).not.toHaveBeenCalled();
   });
 

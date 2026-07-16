@@ -40,10 +40,11 @@ describe("005 EARS-2 guest-through-auth completion (registration resume)", () =>
     expect(landing).toBe("/webinars/ahilles-042");
   });
 
-  it("EARS-2: with no carried event context, the system shall land on the default «Мои события» and register nothing", async () => {
-    // #769 facade re-point — the default post-login landing is «Мои события»
-    // (`/account/events`, already product-grade), not the 003-era session dump.
-    await expect(completeReturnTarget(null)).resolves.toBe("/account/events");
+  it("008 EARS-7: with no carried event context, the system shall land on the discovery front-door `/` (post-login landing) and register nothing", async () => {
+    // 008 EARS-7 (design §4) — the post-login default landing is the discovery
+    // front-door `/` (the reused feature-004 listing), never a scaffold or a
+    // dead dashboard. Supersedes the #769 `/account/events` default.
+    await expect(completeReturnTarget(null)).resolves.toBe("/");
     expect(registerForEvent).not.toHaveBeenCalled();
   });
 
@@ -55,7 +56,9 @@ describe("005 EARS-2 guest-through-auth completion (registration resume)", () =>
       "/account", // same-origin but not an event return target
       "/webinars/../account",
     ]) {
-      await expect(completeReturnTarget(evil)).resolves.toBe("/account/events");
+      // Dropped by the guard → falls back to the safe default front-door (`/`),
+      // never the attacker's target (008 EARS-7 default landing).
+      await expect(completeReturnTarget(evil)).resolves.toBe("/");
     }
     expect(registerForEvent).not.toHaveBeenCalled();
   });

@@ -2,7 +2,7 @@
 title: "008 — Portal shell & discovery front-door (Design)"
 description: "Design: the persistent app-shell layout composition; nav route resolution to shipped surfaces (Эфиры→/, Мои события→/account/events f005, avatar→/account f009); the auth-state header branch (avatar-icon vs «Войти»); the post-login-landing sequence returning the doctor to /. Built from the vendored «Doctor.School визуальный язык» canvas (design-source/) per ADR-0013; retires the / scaffold."
 slug: 008-portal-shell
-status: Draft
+status: In dev
 tracker: "https://github.com/doctor-school/ds-platform/milestone/9"
 lang: en
 ---

@@ -3,7 +3,7 @@ title: "Feature 008 — Portal shell & discovery front-door (PRD)"
 description: "Product requirements for the persistent portal app-shell header (logo, nav, theme toggle, avatar-icon→profile) and the public discovery front-door at `/`. Portal surface IA epic; source of the 008 EARS triplet (ADR-0014). Retires the `/` scaffold placeholder."
 slug: portal-surface-ia-008-portal-shell-product
 epic: ../../product/portal-surface-ia/brief.md
-status: Draft
+status: In dev
 surface: user-facing
 lang: en
 ---

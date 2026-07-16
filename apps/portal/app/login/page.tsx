@@ -179,7 +179,7 @@ function PasswordLogin({ returnTo }: { returnTo: string | null }) {
       // The BFF set the `__Host-` cookie; the session shell reads it server-side.
       // 005 EARS-2: with a carried event context the session now exists, so the
       // registration completes and the doctor lands back on that event page;
-      // without one this is the shipped `/account` landing.
+      // without one this is the 008 EARS-7 discovery front-door (`/`) landing.
       router.push(await completeReturnTarget(returnTo));
     } catch (err) {
       // EARS-16: the login OUTCOME (wrong credential / unknown account) stays the
@@ -501,7 +501,7 @@ function OtpVerifyForm({
     try {
       await authClient.loginWithOtp({ ...values, identifier, channel });
       // 005 EARS-2: complete the carried registration (if any) now the session
-      // exists, landing on the event page — else the shipped `/account` landing.
+      // exists, landing on the event page — else the 008 EARS-7 front-door (`/`).
       router.push(await completeReturnTarget(returnTo));
     } catch (err) {
       onError(authErrorMessage(err, te, te("otpVerifyFailed")));

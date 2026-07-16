@@ -9,7 +9,12 @@ import {
   type EventAdminListItem,
   type EventLifecycleState,
   isPubliclyReachable,
+  type MonthBroadcastEntry,
+  type MonthBroadcastState,
+  type MonthlyEventCount,
   mskLocalToInstant,
+  mskMonthRange,
+  mskYearRange,
   type PublicEventPage,
   type PublicEventState,
   type UpcomingBroadcastCard,
@@ -586,6 +591,52 @@ export class EventsService {
     const cutoff = new Date(now.getTime() - AIR_WINDOW_MS);
     const rows = await this.repo.listUpcoming(cutoff);
     return rows.map((r) => this.toUpcomingCard(r));
+  }
+
+  /**
+   * 004 EARS-15 — the month-range read. Returns the thin
+   * {@link MonthBroadcastEntry} projection for every publish-visible
+   * (`published`/`live`/`ended`) event whose start instant falls in the requested
+   * МСК month, ordered nearest air date first — the month's already-past `ended`
+   * events INCLUDED by design (§3). The МСК month boundaries are the single SSOT
+   * {@link mskMonthRange} half-open `[start, end)` range; the caller (controller)
+   * has already validated the `YYYY-MM` shape (a malformed month is a 400 before
+   * this runs). An empty month is a valid `[]`.
+   */
+  async listMonthBroadcasts(month: string): Promise<MonthBroadcastEntry[]> {
+    const { start, end } = mskMonthRange(month);
+    const rows = await this.repo.listMonthBroadcasts(start, end);
+    return rows.map((e) => this.toMonthEntry(e));
+  }
+
+  /**
+   * 004 EARS-16 — the month-picker counts. Returns exactly 12 rows
+   * `{ month, count }` for the requested year, counting only publish-visible
+   * (`published`/`live`/`ended`) events grouped by МСК calendar month. The repo
+   * returns only the months that have events; the zero months are filled here so
+   * the picker always receives a dense 12-row response. The caller (controller)
+   * has already validated the `YYYY` shape (a malformed year is a 400).
+   */
+  async monthlyEventCounts(year: string): Promise<MonthlyEventCount[]> {
+    const { start, end } = mskYearRange(year);
+    const counts = await this.repo.monthlyCounts(start, end);
+    return Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      count: counts.get(i + 1) ?? 0,
+    }));
+  }
+
+  private toMonthEntry(e: Event): MonthBroadcastEntry {
+    return {
+      id: e.id,
+      slug: e.slug,
+      title: e.title,
+      school: e.school,
+      startsAt: e.startsAt.toISOString(),
+      // The repo filters to published/live/ended, so the residual is the month
+      // entry subset (draft/archived have no month projection — EARS-15).
+      state: e.state as MonthBroadcastState,
+    };
   }
 
   private toUpcomingCard(a: EventWithSpeakers): UpcomingBroadcastCard {

@@ -11,8 +11,9 @@
 | GET /v1/me/display-name                | authenticated | doctor_guest                 | fast-path  | —            | false   | none        | EARS-16                         |
 | GET /v1/me/events                      | authenticated | doctor_guest                 | fast-path  | —            | false   | none        | EARS-6, EARS-7, EARS-10         |
 | GET /v1/me/profile                     | authenticated | doctor_guest                 | fast-path  | —            | false   | none        | EARS-27                         |
-| GET /v1/public/events                  | public        | —                            | none       | —            | false   | none        | EARS-7, EARS-10                 |
+| GET /v1/public/events                  | public        | —                            | none       | —            | false   | none        | EARS-7, EARS-10, EARS-15        |
 | GET /v1/public/events/:idOrSlug        | public        | —                            | none       | —            | false   | none        | EARS-1, EARS-5, EARS-10         |
+| GET /v1/public/events/month-counts     | public        | —                            | none       | —            | false   | none        | EARS-16, EARS-10                |
 | GET /v1/ready                          | public        | —                            | none       | —            | false   | none        | EARS-1, EARS-2                  |
 | PATCH /v1/admin/events/:id             | authenticated | platform_admin               | fast-path  | —            | false   | low-stakes  | EARS-2, EARS-8                  |
 | POST /v1/admin/events                  | authenticated | platform_admin               | fast-path  | —            | false   | low-stakes  | EARS-1, EARS-8                  |

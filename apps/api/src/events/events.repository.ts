@@ -4,10 +4,11 @@ import type { DrizzleHandle, Event, NewEvent, NewEventSpeaker } from "@ds/db";
 import { auditLedger, eventSpeakers, events, streamConfig } from "@ds/db";
 import {
   type ConfigureStreamRequest,
+  MONTH_BROADCAST_STATES,
   type StreamConfig,
   UPCOMING_BROADCAST_STATES,
 } from "@ds/schemas";
-import { and, asc, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
 
 /**
@@ -220,6 +221,58 @@ export class EventsRepository {
       // The upcoming-listing card (004) does not read the stream config.
       streamConfig: null,
     }));
+  }
+
+  /**
+   * 004 EARS-15 — the month-range read. Every publish-visible event
+   * (`published`/`live`/`ended`, the {@link MONTH_BROADCAST_STATES} SSOT) whose
+   * `starts_at` falls in the half-open UTC range `[start, end)` — the МСК month
+   * boundaries computed by the caller ({@link import("@ds/schemas").mskMonthRange})
+   * — ordered NEAREST air date first (`starts_at ASC`). The month's already-past
+   * `ended` events are INCLUDED by design (§3); `draft`/`archived` drop by STATE,
+   * never by time. The month-grid entry carries no speaker/commercial field, so
+   * this returns the bare event rows (the service projects the thin allow-list).
+   * An empty month is a valid empty list.
+   */
+  async listMonthBroadcasts(start: Date, end: Date): Promise<Event[]> {
+    return this.db
+      .select()
+      .from(events)
+      .where(
+        and(
+          inArray(events.state, [...MONTH_BROADCAST_STATES]),
+          gte(events.startsAt, start),
+          lt(events.startsAt, end),
+        ),
+      )
+      .orderBy(asc(events.startsAt));
+  }
+
+  /**
+   * 004 EARS-16 — per-month counts of publish-visible events across one МСК year.
+   * Groups by the 1-based МСК calendar month — `starts_at` (a `timestamptz`) is
+   * folded to Moscow wall-clock with `AT TIME ZONE 'Europe/Moscow'` (a fixed +3,
+   * DST-free), so the grouping month matches the month read's МСК boundaries —
+   * counting only `published`/`live`/`ended` events in the half-open year range
+   * `[start, end)`. Returns a `month → count` map for the months that HAVE events
+   * only; the service fills the zero months so the response is always 12 rows.
+   */
+  async monthlyCounts(start: Date, end: Date): Promise<Map<number, number>> {
+    const monthExpr = sql<number>`extract(month from (${events.startsAt} at time zone 'Europe/Moscow'))::int`;
+    const rows = await this.db
+      .select({ month: monthExpr, count: sql<number>`count(*)::int` })
+      .from(events)
+      .where(
+        and(
+          inArray(events.state, [...MONTH_BROADCAST_STATES]),
+          gte(events.startsAt, start),
+          lt(events.startsAt, end),
+        ),
+      )
+      .groupBy(monthExpr);
+    const byMonth = new Map<number, number>();
+    for (const r of rows) byMonth.set(Number(r.month), Number(r.count));
+    return byMonth;
   }
 
   /**

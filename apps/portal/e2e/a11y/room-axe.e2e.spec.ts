@@ -105,10 +105,16 @@ test.describe("006 EARS-11 axe-core a11y scan of the portal room route", () => {
     ).toBeVisible();
 
     await page.goto(`/webinars/${SLUG}/room`, { waitUntil: "domcontentloaded" });
-    // The gate admits → the room url holds (no redirect) and the full room
-    // composition renders: context + chat aside + the rutube provider frame
+    // The gate admits → the room url holds (no redirect). Since 006 EARS-14
+    // (#803) a fresh doctor carries NO display name, so the server page renders
+    // the just-in-time «Имя и фамилия» prompt INSTEAD of the room — complete it
+    // the way `room-display-name.spec.ts` does, then the refreshed server page
+    // composes the full room: context + chat aside + the rutube provider frame
     // (seed-005-live is the rutube-provider room).
     await page.waitForURL(new RegExp(`/webinars/${SLUG}/room$`));
+    await expect(page.getByTestId("display-name-prompt")).toBeVisible();
+    await page.getByTestId("display-name-input").fill("Тест Врачов");
+    await page.getByTestId("display-name-submit").click();
     await expect(page.getByTestId("room-context").first()).toBeVisible();
     await expect(page.getByTestId("room-chat").first()).toBeVisible();
     await expect(page.getByTestId("room-player-rutube")).toBeVisible();

@@ -18,6 +18,7 @@ import { BotProtectionField } from "@/components/bot-protection";
 import { OtpField } from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
+import { refreshHeaderAuth } from "@/lib/header-auth";
 import { takePendingRegistration } from "@/lib/pending-registration";
 import { withReturnTarget } from "@/lib/registration-handoff";
 import { completeReturnTarget } from "@/lib/registration-resume";
@@ -237,6 +238,9 @@ function VerifyCard() {
         // now exists, so the SAME RegisterForEvent (EARS-1) fires for that event
         // and the doctor lands back on its page registered; without one this is
         // the shipped `/account` landing.
+        // #1004: soft landing → signal the persistent header to re-read the
+        // profile so the avatar appears without a hard reload.
+        refreshHeaderAuth();
         router.replace(await completeReturnTarget(returnTo));
         return;
       }

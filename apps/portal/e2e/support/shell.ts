@@ -66,8 +66,9 @@ export function mainWebinarHrefs(page: Page): Promise<string[]> {
  * `PUT /v1/me/display-name` command (006 EARS-14; no new endpoint), so the header
  * avatar renders GENUINE initials (EARS-5) rather than the no-name fallback glyph.
  * Fired from the page's own origin so the `__Host-ds_session` cookie + fingerprint
- * ride the request (ADR-0001 §6). A hard reload afterwards makes `useHeaderAuth`
- * re-read the profile (it fetches once per hard load).
+ * ride the request (ADR-0001 §6). `useHeaderAuth` reads once on mount and again on
+ * the `refreshHeaderAuth()` signal from the auth flows (#1004) — a raw fetch fires
+ * no signal, so a hard reload afterwards makes the header re-read the profile.
  */
 export async function setMyDisplayName(page: Page, name: string): Promise<void> {
   const status = await page.evaluate(async (displayName) => {

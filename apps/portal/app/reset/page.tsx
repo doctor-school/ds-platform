@@ -17,6 +17,7 @@ import { BotProtectionField } from "@/components/bot-protection";
 import { IdentifierField, OtpField, PasswordField } from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
+import { refreshHeaderAuth } from "@/lib/header-auth";
 import {
   ResetCompleteFormSchema,
   ResetIdentifierFormSchema,
@@ -286,6 +287,9 @@ function ResetCompleteForm({
       await authClient.completePasswordReset({ ...values, identifier });
       // #221: the reset response auto-logged us in (the BFF set the __Host- session
       // cookie), so go straight to the authenticated area instead of /login.
+      // #1004: soft landing → signal the persistent header to re-read the
+      // profile so the avatar appears without a hard reload.
+      refreshHeaderAuth();
       router.push("/account");
     } catch (err) {
       setError(authErrorMessage(err, te, te("resetCompleteFailed")));

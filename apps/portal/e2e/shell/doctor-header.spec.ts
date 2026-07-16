@@ -11,7 +11,7 @@ import { shellHeader, setMyDisplayName } from "../support/shell";
  * LIVE_STAND tier: provisions a fresh 003 doctor and gives them a real saved
  * display name via the shipped `PUT /v1/me/display-name` (006 EARS-14, no new
  * endpoint) so the avatar renders GENUINE initials — a fresh account with no name
- * would render only the neutral fallback glyph. A hard load of `/` then lets
+ * would render only the neutral fallback silhouette icon. A hard load of `/` then lets
  * `useHeaderAuth` read the now-named profile. `test.skip`s on a bare CI run.
  */
 

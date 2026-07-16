@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 
 /**
@@ -29,6 +29,7 @@ vi.mock("@/lib/profile-client", () => ({
 }));
 
 import { AppShellHeader } from "./app-shell-header";
+import { refreshHeaderAuth } from "@/lib/header-auth";
 
 const CATALOG = {
   shell: {
@@ -132,12 +133,110 @@ describe("008 EARS-1…13 — persistent app-shell header", () => {
     expect(mobileAvatar).toHaveAttribute("href", "/account");
   });
 
-  it("EARS-5: a doctor with no saved display name still gets the avatar affordance (neutral fallback glyph → /account)", async () => {
+  it("EARS-5: a doctor with no saved display name still gets the avatar affordance (neutral silhouette icon → /account)", async () => {
     getMyProfile.mockResolvedValue({ ...DOCTOR, displayName: null });
     renderHeader();
     const avatar = await screen.findByTestId("shell-avatar");
     expect(avatar).toHaveAttribute("href", "/account");
     expect(avatar).toHaveAccessibleName("Мой профиль");
+    // #997: the fallback is a neutral user-silhouette ICON (an aria-hidden svg
+    // inside the same icon-link), not a text glyph.
+    expect(avatar.querySelector("svg")).not.toBeNull();
+    expect(avatar).not.toHaveTextContent("•");
+  });
+
+  it("EARS-5: the header re-reads the profile on refreshHeaderAuth() — immediate post-login avatar, no hard reload", async () => {
+    // #1004: mounted while a guest (the header is live on /login too) …
+    getMyProfile.mockResolvedValue(null);
+    renderHeader();
+    await screen.findByTestId("shell-login");
+    // … then the auth flow completes login and fires the signal — the SAME
+    // mounted header (no remount, no hard reload) must swap to the avatar.
+    getMyProfile.mockResolvedValue(DOCTOR);
+    act(() => refreshHeaderAuth());
+    const avatar = await screen.findByTestId("shell-avatar");
+    expect(avatar).toHaveTextContent("ВК");
+    expect(screen.queryByTestId("shell-login")).toBeNull();
+    expect(getMyProfile).toHaveBeenCalledTimes(2);
+  });
+
+  it("EARS-5: the header re-reads the profile on refreshHeaderAuth() after logout — immediate guest affordance, no hard reload", async () => {
+    // #1004 mirror: mounted while a doctor …
+    getMyProfile.mockResolvedValue(DOCTOR);
+    renderHeader();
+    await screen.findByTestId("shell-avatar");
+    // … then the logout flow revokes the session and fires the signal — the
+    // SAME mounted header must flip back to «Войти» without a hard reload.
+    getMyProfile.mockResolvedValue(null);
+    act(() => refreshHeaderAuth());
+    const login = await screen.findByTestId("shell-login");
+    expect(login).toHaveTextContent("Войти");
+    expect(screen.queryByTestId("shell-avatar")).toBeNull();
+    expect(getMyProfile).toHaveBeenCalledTimes(2);
+  });
+
+  it("EARS-2/5: on-blue press states stay readable — the DS base press colour (blue.700 = the header band) is re-anchored per surface (#1007 Stage-B)", async () => {
+    getMyProfile.mockResolvedValue(DOCTOR);
+    renderHeader();
+    const avatar = await screen.findByTestId("shell-avatar");
+    // Desktop nav links sit ON the blue band: the primitive's
+    // `active:text-primary-action/80` is blue.700 = the band itself (a press
+    // painted the label invisible for the whole click-through) — they press
+    // to full-strength `header-foreground` + a PER-BRANCH element-opacity
+    // step (#270; owner rule Stage-B round 2: press = one visible step down
+    // from the tier it transitions from). pathname is "/" here, so «Эфиры»
+    // is the route-active branch (rest 100 → press 80) and «Мои события» the
+    // inactive one (rest 80 → press 60).
+    const broadcasts = screen.getByTestId("shell-nav-broadcasts");
+    expect(broadcasts.className).toContain("active:text-header-foreground");
+    expect(broadcasts.className).toContain("active:opacity-80");
+    expect(broadcasts.className).not.toContain("active:text-primary-action/80");
+    const myEvents = screen.getByTestId("shell-nav-my-events");
+    expect(myEvents.className).toContain("active:text-header-foreground");
+    expect(myEvents.className).toContain("opacity-80"); // resting tier
+    expect(myEvents.className).toContain("active:opacity-60");
+    expect(myEvents.className).not.toContain("active:text-primary-action/80");
+    // White chips (avatar, desktop + mobile): rest → hover sinks 1px with
+    // shadow-btn-hover → press sinks 2px and drops the shadow (the DS Button
+    // press language), ink pinned to full-strength `header` (the base press
+    // tint goes near-white on the white chip in dark theme).
+    for (const el of [avatar, screen.getByTestId("shell-mobile-avatar")]) {
+      expect(el.className).toContain("hover:translate-x-px");
+      expect(el.className).toContain("hover:shadow-btn-hover");
+      expect(el.className).toContain("active:translate-x-0.5");
+      expect(el.className).toContain("active:shadow-none");
+      expect(el.className).toContain("active:text-header");
+      expect(el.className).not.toContain("active:text-primary-action/80");
+    }
+    // The mobile dropdown nav links sit on the card surface, where the DS
+    // base press colour is readable in both themes — it must stay.
+    for (const id of ["shell-mobile-broadcasts", "shell-mobile-my-events"]) {
+      expect(screen.getByTestId(id).className).toContain(
+        "active:text-primary-action/80",
+      );
+    }
+  });
+
+  it("EARS-4: guest «Войти» chips keep readable press colours on their own surface (#1007 Stage-B)", async () => {
+    getMyProfile.mockResolvedValue(null);
+    renderHeader();
+    // Desktop chip: white chip on the blue band — press = the DS Button
+    // language one step past its 1px hover (sink 2px, drop the shadow), ink
+    // pinned to full-strength `header`.
+    const login = await screen.findByTestId("shell-login");
+    expect(login.className).toContain("hover:translate-x-px");
+    expect(login.className).toContain("active:translate-x-0.5");
+    expect(login.className).toContain("active:shadow-none");
+    expect(login.className).toContain("active:text-header");
+    expect(login.className).not.toContain("active:text-primary-action/80");
+    // Mobile dropdown chip: blue chip on the card — rest 100 → hover 90 →
+    // press 80, one visible element-opacity step per state (#270); ink pinned
+    // to its white foreground, never the base blue.700 (= its own background).
+    const mobileLogin = screen.getByTestId("shell-mobile-login");
+    expect(mobileLogin.className).toContain("hover:opacity-90");
+    expect(mobileLogin.className).toContain("active:text-header-foreground");
+    expect(mobileLogin.className).toContain("active:opacity-80");
+    expect(mobileLogin.className).not.toContain("active:text-primary-action/80");
   });
 
   it("EARS-11: the mobile `≡` dropdown carries the same [Эфиры · Мои события] targets", async () => {

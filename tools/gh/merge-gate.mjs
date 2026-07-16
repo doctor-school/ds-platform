@@ -509,7 +509,9 @@ async function main() {
     if (verdict.state === "no-verdict") {
       die(
         `RED — PR #${prNumber} head ${sha.slice(0, 12)}: no Mode (a) review verdict found ` +
-          `(no PR review opens '## Mode (a) Review' with a VERDICT: line). ${redispatch}`,
+          `(no PR review opens '## Mode (a) Review' with a VERDICT: line). Common pitfall: a verdict posted via ` +
+          `'gh pr comment' is an ISSUE comment, invisible to the reviews API — the reviewer must post via ` +
+          `'gh pr review ${prNumber} --comment --body-file <file>'. ${redispatch}`,
         1,
       );
     }

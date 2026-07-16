@@ -8,6 +8,7 @@ import {
   hasNoStaticFlag,
   hasPreMergeFlag,
   hasStaticFlag,
+  mergeGateForwardArgs,
   parsePrNumber,
   resolvePlan,
   summarize,
@@ -176,6 +177,53 @@ describe("pr-preflight parsePrNumber()", () => {
     expect(parsePrNumber([])).toBeNull();
     expect(parsePrNumber(["abc"])).toBeNull();
     expect(parsePrNumber(["#406"])).toBeNull();
+  });
+
+  it("skips the --mode-a-exempt reason value — it is a flag value, not a positional (#992)", () => {
+    expect(
+      parsePrNumber(["--mode-a-exempt", "pure docs", "1014", "--pre-merge"]),
+    ).toBe("1014");
+    expect(
+      parsePrNumber(["1014", "--pre-merge", "--mode-a-exempt", "pure docs"]),
+    ).toBe("1014");
+    // a numeric-looking reason must not be mistaken for the PR number
+    expect(parsePrNumber(["--mode-a-exempt", "836"])).toBeNull();
+  });
+});
+
+describe("pr-preflight mergeGateForwardArgs() (#992)", () => {
+  it("forwards nothing when the flag is absent", () => {
+    expect(mergeGateForwardArgs(["1014", "--pre-merge"], true)).toEqual({
+      forward: [],
+      error: null,
+    });
+  });
+
+  it("forwards --mode-a-exempt with its trimmed reason to the merge-gate spawn in --pre-merge mode", () => {
+    const { forward, error } = mergeGateForwardArgs(
+      ["1014", "--pre-merge", "--mode-a-exempt", " pure docs — §3.8 "],
+      true,
+    );
+    expect(error).toBeNull();
+    expect(forward).toEqual(["--mode-a-exempt", "pure docs — §3.8"]);
+  });
+
+  it("errors loudly (never a silent no-op) when the flag is passed outside --pre-merge", () => {
+    const { forward, error } = mergeGateForwardArgs(
+      ["1014", "--mode-a-exempt", "pure docs"],
+      false,
+    );
+    expect(forward).toEqual([]);
+    expect(error).toContain("--pre-merge");
+  });
+
+  it("propagates the gate's own empty/invalid-reason error (single grammar)", () => {
+    const { forward, error } = mergeGateForwardArgs(
+      ["1014", "--pre-merge", "--mode-a-exempt"],
+      true,
+    );
+    expect(forward).toEqual([]);
+    expect(error).toContain("--mode-a-exempt");
   });
 });
 

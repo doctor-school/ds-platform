@@ -243,7 +243,23 @@
       "title": "Нет предстоящих эфиров",
       "body": "Сейчас нет запланированных эфиров. Загляните позже — расписание обновляется регулярно."
     },
-    "registered": "Вы записаны"
+    "registered": "Вы записаны",
+    "month": {
+      "subtitle": "{count, plural, one {# эфир} few {# эфира} many {# эфиров} other {# эфира}} · {schools, plural, one {# школа} few {# школы} many {# школ} other {# школы}} · время — МСК",
+      "viewWeek": "Неделя",
+      "viewMonth": "Месяц",
+      "today": "сегодня",
+      "todaySuffix": " · сегодня",
+      "liveBadge": "LIVE",
+      "pastNote": "{count, plural, one {# эфир · прошёл} few {# эфира · прошли} many {# эфиров · прошли} other {# эфира · прошли}}",
+      "legendLive": "В эфире",
+      "legendPlanned": "Запланирован",
+      "legendPast": "Прошёл / пусто",
+      "agendaEmptyFuture": "В этот день эфиров нет",
+      "agendaEmptyPast": "Эфиры этого дня уже прошли",
+      "dayEventsLabel": "{count, plural, one {# эфир} few {# эфира} many {# эфиров} other {# эфира}}",
+      "dayLiveLabel": "идёт эфир"
+    }
   },
   "myEvents": {
     "title": "Мои события",

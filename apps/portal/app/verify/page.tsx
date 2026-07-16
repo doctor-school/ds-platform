@@ -287,7 +287,11 @@ function VerifyCard() {
   return (
     <AuthCard
       icon={<MailCheck className="text-primary" aria-hidden />}
-      title={t("title")}
+      // #1035: the page title is the document's single h1 (a11y landmark) —
+      // same root cause + fix as #1033/#1034 on /login /register /reset. Bare
+      // h1 — Tailwind preflight makes it inherit the CardTitle styling, so the
+      // render is pixel-identical.
+      title={<h1>{t("title")}</h1>}
       description={t.rich("description", {
         identifier: identifierLabel,
         strong: (chunks) => <strong>{chunks}</strong>,

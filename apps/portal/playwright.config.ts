@@ -63,9 +63,11 @@ export default defineConfig({
       name: "e2e",
       testDir: "./e2e",
       testMatch: /\.spec\.ts$/,
-      // The a11y/axe scan is a separate, heavier manual gate (`test:axe` →
-      // `playwright.axe.config.ts`); keep it out of the default `test:e2e` pass.
-      testIgnore: /a11y\//,
+      // The a11y/axe scans are separate gates: the dev-stand-gated manual pass
+      // (`test:axe` → `playwright.axe.config.ts`, under `e2e/a11y/`) and the
+      // hermetic CI page-level scan (`test:e2e:ci` → `playwright.ci.config.ts`,
+      // `a11y-axe.e2e.spec.ts`, #400). Keep both out of the default `test:e2e`.
+      testIgnore: [/a11y\//, /a11y-axe\.e2e\.spec\.ts/],
       use: { ...devices["Desktop Chrome"] },
     },
     {

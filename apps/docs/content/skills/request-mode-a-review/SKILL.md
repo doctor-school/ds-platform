@@ -77,6 +77,8 @@ VERDICT: <APPROVE | REQUEST_CHANGES>
 
 The `VERDICT:` line is mandatory. `APPROVE` is allowed only when there are zero `[BLOCKER]` findings.
 
+> **Head pinning (#992):** the `gh pr review` you post must run against the **CURRENT** PR head — GitHub records the head SHA as the review's native `commit_id`, and `pnpm merge:gate <N>` pins the verdict to it (an APPROVE whose `commit_id` is not the current head reads as STALE and blocks the merge). After any rework push, a fresh review — with a fresh `VERDICT:` line — is required; the old verdict does not carry over.
+
 **Return contract — final message to the lead (context economy, #534).** After posting the PR comment, your reply to the lead is ONLY: the `VERDICT:` line, the `[BLOCKER]` findings one line each, and the PR-comment URL — ≤20 lines total. Do not restate the full report in the reply: it already lives in the PR comment, and everything in the reply sits in the lead's context until session end.
 
 ### Failure mode

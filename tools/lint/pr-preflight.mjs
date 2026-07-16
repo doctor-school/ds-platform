@@ -43,6 +43,8 @@ import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { parseModeAExempt } from "../gh/merge-gate.mjs";
+
 // ── pure seams (unit-tested in guard-tests) ─────────────────────────────────
 
 /**
@@ -131,10 +133,13 @@ export const STATIC_GUARDS = [
 /**
  * Read the PR number from raw argv (`process.argv.slice(2)`): the first
  * positional (non-`--flag`) arg, if it is all digits. Returns the string number
- * or null when missing / non-numeric.
+ * or null when missing / non-numeric. The value following `--mode-a-exempt` is
+ * that flag's reason string, not a positional — skipped (#992/#1014).
  */
 export function parsePrNumber(argv) {
-  const positional = argv.filter((a) => !a.startsWith("--"));
+  const positional = argv.filter(
+    (a, i) => !a.startsWith("--") && argv[i - 1] !== "--mode-a-exempt",
+  );
   const n = positional[0];
   if (!n || !/^\d+$/.test(n)) return null;
   return n;
@@ -189,6 +194,34 @@ export function resolvePlan(argv) {
   const runMergeGate = preMerge && runPrGated;
   const usageError = !runPrGated && !staticFlag;
   return { prNumber, runPrGated, runStatic, runMergeGate, usageError };
+}
+
+/**
+ * Resolve the extra argv forwarded to the merge-gate spawn (#992 review on
+ * PR #1014). The merge gate's Mode-a verdict check has an explicit escape flag
+ * (`--mode-a-exempt "<reason>"`, for the AGENTS.md §3.8 no-Mode-a classes) —
+ * without forwarding, the canonical `pr:preflight <N> --pre-merge` path would
+ * RED-block those sanctioned classes with no exemption route. Delegates the
+ * reason parse to the gate's own `parseModeAExempt` seam (single grammar), and
+ * accepts the flag ONLY when the merge gate actually runs — passing it in a
+ * create-time / static invocation is a loud usage error, never a silent no-op.
+ *
+ * @param {string[]} argv `process.argv.slice(2)`
+ * @param {boolean} runMergeGate from `resolvePlan(argv)`
+ * @returns {{forward: string[], error: string|null}} `forward` = args appended to the merge-gate spawn
+ */
+export function mergeGateForwardArgs(argv, runMergeGate) {
+  const parsed = parseModeAExempt(argv);
+  if (parsed.error) return { forward: [], error: parsed.error };
+  if (!parsed.exempt) return { forward: [], error: null };
+  if (!runMergeGate) {
+    return {
+      forward: [],
+      error:
+        "--mode-a-exempt is a merge-time escape forwarded to the merge gate — pass it with `pnpm pr:preflight <N> --pre-merge`; it has no meaning in the create-time or static preflight.",
+    };
+  }
+  return { forward: ["--mode-a-exempt", parsed.reason], error: null };
 }
 
 /**
@@ -255,10 +288,16 @@ function main() {
         "  pnpm pr:preflight <N>              PR-event-gated guards vs live PR #N + static family (default)\n" +
         "  pnpm pr:preflight <N> --no-static  PR-event-gated guards only (skip the static family)\n" +
         "  pnpm pr:preflight <N> --pre-merge  add the pre-merge gates: stage-b + the deterministic CI merge gate (#836; run right before `gh pr merge`)\n" +
+        '  pnpm pr:preflight <N> --pre-merge --mode-a-exempt "<reason>"  forward the Mode-a exemption to the merge gate (#992; AGENTS.md §3.8 no-Mode-a classes only)\n' +
         "  pnpm pr:preflight --static         static tree-scan guards only (pre-push, no PR number)\n" +
         "  pnpm pr:preflight --static <N>     both families in one sweep (same as `<N>`)",
     );
   }
+
+  // Mode-a exemption passthrough (#992 review): validated up front so a
+  // misplaced flag dies as a usage error before any guard spawns.
+  const gateForward = mergeGateForwardArgs(argv, runMergeGate);
+  if (gateForward.error) die(gateForward.error);
 
   const root = repoRoot();
   const results = [];
@@ -283,12 +322,14 @@ function main() {
     for (const g of MERGE_GUARDS) results.push(runGuard(g, root, prEnv));
 
     // Deterministic CI merge gate (#836): checks-registered + terminal-success
-    // for the exact head SHA, plus the worktree-cwd guard. Runs last — it may
+    // for the exact head SHA, the worktree-cwd guard, and the head-pinned
+    // Mode-a verdict (#992 — `gateForward` carries the validated
+    // `--mode-a-exempt "<reason>"` escape when passed). Runs last — it may
     // poll while CI finishes, so the cheap guards fail fast first.
     out(`── ${MERGE_GATE.name} ──`);
     const res = spawnSync(
       "node",
-      [resolve(root, ...MERGE_GATE.script), prNumber],
+      [resolve(root, ...MERGE_GATE.script), prNumber, ...gateForward.forward],
       {
         cwd: root,
         env: process.env,

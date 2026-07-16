@@ -2,21 +2,32 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import {
   MonthCalendarGrid,
+  MonthPicker,
   type DotGridCell,
   type MonthGridCell,
+  type MonthPickerCell,
 } from "@ds/design-system/blocks";
 import { Container } from "@ds/design-system/container";
 import { Link as DsLink } from "@ds/design-system/link";
-import { fetchMonthBroadcasts } from "@/lib/public-events";
+import { fetchMonthBroadcasts, fetchMonthlyCounts } from "@/lib/public-events";
 import {
   buildMonthGrid,
   currentMskMonth,
   entryTime,
   formatAgendaDayTitle,
   formatMonthTitle,
+  isMonthPast,
+  monthShortLabels,
+  shiftMonth,
   weekdayShortLabels,
 } from "@/lib/month-grid";
 import { MonthCalendarMobile, type AgendaDay } from "./month-calendar-mobile";
+import { ViewSwitcher } from "./view-switcher";
+
+/** The month-view URL for a `YYYY-MM` month (the ‹ › pager + picker link target). */
+function monthViewHref(month: string): string {
+  return `/webinars?view=month&month=${month}`;
+}
 
 /**
  * 004 EARS-19 — the «Месяц» pane of `/webinars` (`?view=month`, design §5.4). A
@@ -28,24 +39,57 @@ import { MonthCalendarMobile, type AgendaDay } from "./month-calendar-mobile";
  * agenda (≤900px), the responsive split handled by the `layout:` breakpoint
  * (the token match for the canvas ≤900px fold) with NO client media query.
  *
- * The switcher renders the canvas «Неделя / Месяц» toggle as real links
- * («Неделя» → the week listing, «Месяц» the active pane) — never a dead CTA. The
- * ‹ › month paging, the 12-month picker interaction, and their EARS-17/18 tests
- * are the sibling slice #1051; only the toggle LOOK is in scope here.
+ * The toolbar composes the canvas month controls (EARS-16/17/18, #1051): the ‹ ›
+ * month pager + «Сегодня» reset + the 12-month `MonthPicker` disclosure (year ‹ ›
+ * stepper + per-month counts) + the «Неделя / Месяц» switcher — all real
+ * query-param links (server-component navigation, no client state, no mutation).
+ * The switcher's «Неделя» link carries the displayed month so the week↔month
+ * round-trip is loss-free.
+ *
+ * The displayed month is `month` (`YYYY-MM`, already validated by the page against
+ * `MONTH_PARAM`); absent → the current МСК month. buildMonthGrid folds today/past
+ * relative to МСК now, so a past/future month renders with no today marker.
  *
  * Copy: date/month/weekday PARTS are Intl-formatted МСК (the `msk.ts` EARS-12
  * precedent), every fixed LABEL comes from the typed catalog (`webinars.month`,
  * EARS-13) — no hardcoded RU in this component.
  */
-export async function MonthCalendarView() {
+export async function MonthCalendarView({ month }: { month?: string }) {
   const t = await getTranslations("webinars.month");
 
-  const month = currentMskMonth();
-  const entries = await fetchMonthBroadcasts(month);
-  const grid = buildMonthGrid({ month, entries });
+  const displayedMonth = month ?? currentMskMonth();
+  const year = displayedMonth.slice(0, 4);
+  const monthNum = Number(displayedMonth.slice(5, 7));
+  const [entries, counts] = await Promise.all([
+    fetchMonthBroadcasts(displayedMonth),
+    fetchMonthlyCounts(year),
+  ]);
+  const grid = buildMonthGrid({ month: displayedMonth, entries });
 
   const weekdays = weekdayShortLabels();
-  const monthTitle = formatMonthTitle(month);
+  const monthTitle = formatMonthTitle(displayedMonth);
+
+  // ── 12-month picker model (EARS-16): the displayed year's months + counts. ──
+  const monthNames = monthShortLabels();
+  const countByMonth = new Map(counts.map((c) => [c.month, c.count]));
+  const pickerMonths: MonthPickerCell[] = monthNames.map((label, i) => {
+    const m = i + 1;
+    const monthStr = `${year}-${String(m).padStart(2, "0")}`;
+    const current = m === monthNum;
+    const past = isMonthPast(monthStr);
+    return {
+      label,
+      note: past
+        ? t("pickerPast")
+        : t("pickerCount", { count: countByMonth.get(m) ?? 0 }),
+      current,
+      muted: past,
+      href: current ? undefined : monthViewHref(monthStr),
+    };
+  });
+
+  const prevMonth = shiftMonth(displayedMonth, -1);
+  const nextMonth = shiftMonth(displayedMonth, 1);
   const schools = new Set(entries.map((e) => e.school)).size;
   const liveLabel = t("legendLive");
   const liveBadge = t("liveBadge");
@@ -161,26 +205,56 @@ export async function MonthCalendarView() {
       </header>
 
       <Container className="py-10 layout:py-14">
-        {/* «Неделя / Месяц» switcher — real links, never a dead CTA (#1051 owns
-            the ‹ › paging + 12-month picker interactions). */}
+        {/* Month toolbar (EARS-16/17/18): picker + ‹ › pager + «Сегодня» +
+            «Неделя / Месяц» switcher — all query-param links, no client state. */}
         <div
-          className="mb-8 flex justify-end"
-          data-testid="view-switcher"
+          className="mb-8 flex flex-wrap items-stretch gap-3"
+          data-testid="month-toolbar"
         >
-          <div className="inline-grid grid-cols-2 border-2 border-border bg-card shadow-sm">
-            <DsLink
-              asChild
-              className="inline-flex items-center px-4.5 py-2.5 text-caption font-bold text-tint-foreground"
-            >
-              <Link href="/webinars">{t("viewWeek")}</Link>
-            </DsLink>
-            <span
-              aria-current="page"
-              className="inline-flex items-center border-l-2 border-border bg-primary-action px-4.5 py-2.5 text-caption font-extrabold text-primary-foreground"
-            >
-              {t("viewMonth")}
-            </span>
-          </div>
+          <MonthPicker
+            triggerLabel={monthTitle}
+            pickerLabel={t("pickerLabel")}
+            year={year}
+            prevYearHref={monthViewHref(shiftMonth(displayedMonth, -12))}
+            nextYearHref={monthViewHref(shiftMonth(displayedMonth, 12))}
+            prevYearLabel={t("prevYear")}
+            nextYearLabel={t("nextYear")}
+            months={pickerMonths}
+          />
+
+          <DsLink
+            asChild
+            className="inline-flex items-center border-2 border-border bg-card px-4 text-base font-extrabold text-foreground shadow-sm"
+          >
+            <Link href={monthViewHref(prevMonth)} aria-label={t("prevMonth")}>
+              <span aria-hidden="true">‹</span>
+            </Link>
+          </DsLink>
+          <DsLink
+            asChild
+            className="inline-flex items-center border-2 border-border bg-card px-4 text-base font-extrabold text-foreground shadow-sm"
+          >
+            <Link href={monthViewHref(nextMonth)} aria-label={t("nextMonth")}>
+              <span aria-hidden="true">›</span>
+            </Link>
+          </DsLink>
+
+          <DsLink
+            asChild
+            className="inline-flex items-center border-2 border-border bg-card px-5 text-caption font-bold text-tint-foreground shadow-sm"
+          >
+            <Link href="/webinars?view=month">{t("todayButton")}</Link>
+          </DsLink>
+
+          <span className="flex-1" />
+
+          <ViewSwitcher
+            active="month"
+            weekHref={`/webinars?month=${displayedMonth}`}
+            monthHref={monthViewHref(displayedMonth)}
+            weekLabel={t("viewWeek")}
+            monthLabel={t("viewMonth")}
+          />
         </div>
 
         {/* Desktop pane (≥901px). */}

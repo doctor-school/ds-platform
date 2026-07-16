@@ -9,10 +9,12 @@ import {
   DayAgenda,
   MonthCalendarGrid,
   MonthDotGrid,
+  MonthPicker,
   OtpFocusScreen,
   maskDestination,
   type DotGridCell,
   type MonthGridCell,
+  type MonthPickerCell,
 } from "@ds/design-system/blocks";
 import { Button } from "@ds/design-system/button";
 import { Link } from "@ds/design-system/link";
@@ -749,6 +751,55 @@ function DayAgendaSection() {
   );
 }
 
+/** A neutral 12-month picker sample exercising every cell variant. */
+const PICKER_MONTHS: MonthPickerCell[] = [
+  { label: "Янв", note: "прошёл", href: "#", muted: true },
+  { label: "Февр", note: "прошёл", href: "#", muted: true },
+  { label: "Март", note: "прошёл", href: "#", muted: true },
+  { label: "Апр", note: "прошёл", href: "#", muted: true },
+  { label: "Май", note: "прошёл", href: "#", muted: true },
+  { label: "Июнь", note: "прошёл", href: "#", muted: true },
+  { label: "Июль", note: "142 эфира", current: true },
+  { label: "Авг", note: "118 эфиров", href: "#" },
+  { label: "Сент", note: "156 эфиров", href: "#" },
+  { label: "Окт", note: "149 эфиров", href: "#" },
+  { label: "Нояб", note: "131 эфир", href: "#" },
+  { label: "Дек", note: "87 эфиров", href: "#" },
+];
+
+function MonthPickerSection() {
+  return (
+    <BlockSection
+      title="MonthPicker"
+      exportsLine="MonthPicker — props: triggerLabel · year · prev/nextYearHref · months (MonthPickerCell[]) · defaultOpen (native <details> disclosure)"
+    >
+      <p className="text-sm text-muted-foreground">
+        The month view&apos;s chooser: a native <code className="font-mono text-xs">&lt;details&gt;</code>{" "}
+        disclosure with a year ‹ › stepper and a 3-column grid of the year&apos;s twelve months, each
+        with its event count. A past month is muted («прошёл»), the displayed month is filled, every
+        other is a link. Display-only — counts, labels, and hrefs are app-supplied; navigation is
+        plain query-param links, no client state. Shown <code className="font-mono text-xs">defaultOpen</code>{" "}
+        so the popover is catalogued (and a11y-scanned) in place.
+      </p>
+      <SubRow label="Preview">
+        <div className="rounded-lg border border-border bg-muted p-8 pb-64">
+          <MonthPicker
+            triggerLabel="Июль 2026"
+            pickerLabel="Выбрать месяц"
+            year="2026"
+            prevYearHref="#"
+            nextYearHref="#"
+            prevYearLabel="Предыдущий год"
+            nextYearLabel="Следующий год"
+            months={PICKER_MONTHS}
+            defaultOpen
+          />
+        </div>
+      </SubRow>
+    </BlockSection>
+  );
+}
+
 export function BlocksView() {
   return (
     <div className="flex flex-col gap-2">
@@ -758,6 +809,7 @@ export function BlocksView() {
       <MonthCalendarGridSection />
       <MonthDotGridSection />
       <DayAgendaSection />
+      <MonthPickerSection />
     </div>
   );
 }

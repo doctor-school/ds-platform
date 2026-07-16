@@ -12,6 +12,7 @@ import {
   formatMskWeekdayShort,
   mskDayKey,
 } from "@/lib/msk";
+import { ViewSwitcher } from "./view-switcher";
 
 /**
  * 004 EARS-7 / 008 EARS-8 — the public upcoming-broadcasts listing, the shared
@@ -88,7 +89,17 @@ async function fetchRegisteredSlugs(): Promise<ReadonlySet<string>> {
   }
 }
 
-export default async function DiscoveryListing() {
+/**
+ * `monthViewHref` — when the `/webinars` route renders this pane it passes the
+ * month-view target (carrying any active month) so the «Неделя / Месяц» switcher
+ * renders (EARS-18); the `/` front-door renders the listing with NO switcher
+ * (omitted). The «Неделя» side is the active pane here.
+ */
+export default async function DiscoveryListing({
+  monthViewHref,
+}: {
+  monthViewHref?: string;
+} = {}) {
   const t = await getTranslations("webinars");
   const [cards, registeredSlugs] = await Promise.all([
     fetchUpcomingBroadcasts(),
@@ -119,6 +130,18 @@ export default async function DiscoveryListing() {
       </header>
 
       <Container className="py-10 layout:py-14">
+        {monthViewHref ? (
+          <div className="mb-8 flex justify-end">
+            <ViewSwitcher
+              active="week"
+              weekHref="/webinars"
+              monthHref={monthViewHref}
+              weekLabel={t("month.viewWeek")}
+              monthLabel={t("month.viewMonth")}
+            />
+          </div>
+        ) : null}
+
         {groups.length === 0 ? (
           <div className="border-2 border-dashed border-border px-6 py-14 text-center layout:py-20">
             <p className="text-lg font-extrabold tracking-tight">

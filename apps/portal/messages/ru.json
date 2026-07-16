@@ -258,7 +258,15 @@
       "agendaEmptyFuture": "В этот день эфиров нет",
       "agendaEmptyPast": "Эфиры этого дня уже прошли",
       "dayEventsLabel": "{count, plural, one {# эфир} few {# эфира} many {# эфиров} other {# эфира}}",
-      "dayLiveLabel": "идёт эфир"
+      "dayLiveLabel": "идёт эфир",
+      "pickerLabel": "Выбрать месяц",
+      "pickerCount": "{count, plural, one {# эфир} few {# эфира} many {# эфиров} other {# эфира}}",
+      "pickerPast": "прошёл",
+      "prevMonth": "Предыдущий месяц",
+      "nextMonth": "Следующий месяц",
+      "prevYear": "Предыдущий год",
+      "nextYear": "Следующий год",
+      "todayButton": "Сегодня"
     }
   },
   "myEvents": {

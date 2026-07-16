@@ -163,7 +163,10 @@ const MonthCalendarGrid = React.forwardRef<
 
     {/* State legend — the live swatch is redundant with its «В эфире» label
         (WCAG 1.4.1: colour is not the only cue — each swatch is paired with text). */}
-    <div className="mt-6 flex flex-wrap items-center gap-5 text-xs font-bold text-muted-foreground">
+    <div
+      data-testid="grid-legend"
+      className="mt-6 flex flex-wrap items-center gap-5 text-xs font-bold text-muted-foreground"
+    >
       <span className="inline-flex items-center gap-2">
         <LegendSwatch className="bg-live" />
         {legend.live}

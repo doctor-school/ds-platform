@@ -102,6 +102,10 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "MonthCalendarGrid", section: "blocks" },
   { id: "MonthDotGrid", section: "blocks" },
   { id: "DayAgenda", section: "blocks" },
+
+  // ── 12-month picker (004 EARS-16/17, #1051) — the webinars-month.dc.html
+  //    month chooser (year ‹ › stepper + 12-month count grid).
+  { id: "MonthPicker", section: "blocks" },
 ];
 
 /**

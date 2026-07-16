@@ -542,7 +542,18 @@ export class ZitadelIdpClient implements IdpClient {
         "zitadel email send_code: no destination email for sub — cannot deliver the verification code",
       );
     }
-    await this.requireMailer().sendVerificationCodeEmail(to, code);
+    try {
+      await this.requireMailer().sendVerificationCodeEmail(to, code);
+    } catch {
+      // EARS-31 fail-closed tail (#1046): a mailer relay failure (both
+      // channels down) is already logged + metric'd + GlitchTip'd with the
+      // provider response codes by the transport layer (EARS-32) — swallow it
+      // here so the registration cascade's enumeration-safe response stays
+      // unchanged (EARS-16: a mailer outage is never an oracle and never a
+      // 500). User recovery is the EARS-25 resend; the swallow also
+      // guarantees the transiting code cannot leak via a thrown error
+      // (EARS-30).
+    }
   }
 
   async requestPhoneVerification(sub: string): Promise<void> {

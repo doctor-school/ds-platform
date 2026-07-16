@@ -9,6 +9,17 @@ import {
   assertSendableEmail,
   type Mailer,
 } from "./mailer.types.js";
+import {
+  ChannelRejection,
+  type OutboundEmail,
+  type RelayChannel,
+} from "./relay-channel.js";
+import {
+  DefaultRelayObservability,
+  type RelayAttempt,
+  type RelayObservability,
+} from "./relay-observability.js";
+import { ResendChannel, type ResendChannelConfig } from "./resend-transport.js";
 
 /** One SMTP transport's resolved config — host unset ⇒ that transport is a no-op. */
 export interface SmtpTransportConfig {
@@ -60,6 +71,15 @@ export interface SmtpMailerConfig {
   intercept: SmtpTransportConfig;
   /** The real relay transport (`IDP_SMTP_REAL_*`) — `undefined` when creds absent. */
   real?: SmtpTransportConfig | undefined;
+  /**
+   * The Resend failover channel (`RESEND_API_KEY`, design §14.3, EARS-31) —
+   * `undefined` when the key is absent (the chain is then mail.ru only).
+   * Failover-only: it sits BEHIND the mail.ru primary and never carries
+   * steady-state volume (the §14.5 warm-up plan; 152-ФЗ posture §14.6).
+   */
+  resend?: ResendChannelConfig | undefined;
+  /** Failover/relay-failure sinks (EARS-32); defaults to the real log+metric+GlitchTip triple. */
+  observability?: RelayObservability | undefined;
   /**
    * Live `email-delivery-real` read (mirror `bot-protection.module.ts:42`): true ⇒
    * select the real transport, false ⇒ intercept. Read on EVERY send so a mid-
@@ -141,15 +161,22 @@ const nodemailerFactory: TransportFactory = (opts) =>
  */
 export class SmtpMailer implements Mailer {
   private readonly logger = new Logger(SmtpMailer.name);
-  private readonly intercept: SmtpTransport | null;
-  private readonly real: SmtpTransport | null;
+  private readonly intercept: RelayChannel | null;
+  private readonly real: RelayChannel | null;
+  private readonly resend: RelayChannel | null;
+  private readonly observability: RelayObservability;
   private readonly warn: WarnFn;
 
   constructor(private readonly config: SmtpMailerConfig) {
     const factory = config.transportFactory ?? nodemailerFactory;
     this.warn = config.warn ?? ((m) => this.logger.warn(m));
-    this.intercept = buildTransport(config.intercept, factory);
-    this.real = config.real ? buildTransport(config.real, factory) : null;
+    this.intercept = buildSmtpChannel("mailpit", config.intercept, factory);
+    this.real = config.real
+      ? buildSmtpChannel("mail.ru", config.real, factory)
+      : null;
+    this.resend = config.resend ? new ResendChannel(config.resend) : null;
+    this.observability =
+      config.observability ?? new DefaultRelayObservability();
   }
 
   async sendAccountExistsNotice(email: string): Promise<void> {
@@ -191,12 +218,27 @@ export class SmtpMailer implements Mailer {
   }
 
   /**
-   * Shared per-send transport selection + dispatch (#209 flag gate). When
-   * `secret` is present (the EARS-29 code sends) every surfaced transport
-   * error is SANITIZED first (EARS-30): a provider rejection may echo the
-   * outbound message — subject and body both carry the code — so the raw error
-   * text never leaves this method; occurrences of the secret are redacted and
-   * a fresh Error (fresh stack, no provider payload object) is thrown.
+   * Shared per-send channel-chain selection + dispatch (#209 flag gate +
+   * EARS-31 failover, design §14.3).
+   *
+   * Chain semantics (EARS-31): on the real path the chain is
+   * **mail.ru primary → Resend failover** — a rate-limit/availability
+   * rejection on the active channel (mail.ru `451`, Resend `429`, any
+   * 4xx/5xx/connection failure, or a resolved non-2xx acceptance) triggers ONE
+   * switch to the next channel within the same send; each channel is attempted
+   * at most once (no same-channel retry); a send counts as delivered ONLY on a
+   * provider 2xx. All channels failing ⇒ **fail-closed**: the failure is
+   * reported with every provider response code (EARS-32) and a sanitized error
+   * is thrown — the enumeration-safe API surface above stays unchanged
+   * (EARS-16: callers fire-and-forget/log, never 500 the client).
+   *
+   * The intercept (sink) path never fails over to a real provider — a
+   * flag-OFF send must land in Mailpit or fail, never leak (#209).
+   *
+   * EARS-30: when `secret` is present (the EARS-29 code sends) every provider
+   * detail is redacted BEFORE it reaches the observability sinks, and the
+   * thrown error carries provider=code pairs only — never raw provider text
+   * (which may echo the outbound message), never the caught error as `cause`.
    */
   private async dispatch(
     to: string,
@@ -209,63 +251,156 @@ export class SmtpMailer implements Mailer {
     // resolved to the EMAIL_DELIVERY_MODE env default by the time we are called.
     const wantReal = this.config.isEnabled();
 
-    let transport: SmtpTransport | null;
-    let from: string | undefined;
-    if (wantReal && this.real) {
-      transport = this.real;
-      from = this.config.real?.from;
+    const chain: RelayChannel[] = [];
+    if (wantReal && (this.real || this.resend)) {
+      // Real path: mail.ru primary first, Resend strictly as failover (§14.3;
+      // primary-first is also the §14.5 warm-up mechanism — never pre-split
+      // volume away from mail.ru).
+      if (this.real) chain.push(this.real);
+      if (this.resend) chain.push(this.resend);
     } else {
-      if (wantReal && !this.real) {
-        // Fail-soft: flag ON but the real relay is unconfigured. Never throw,
+      if (wantReal) {
+        // Fail-soft: flag ON but no real channel is configured. Never throw,
         // never silently drop — use intercept and warn (mirror the reconcile's
         // "never activate the wrong provider").
         this.warn(
-          "email-delivery-real is ON but the real SMTP relay is unconfigured " +
-            `(IDP_SMTP_REAL_* unset) — falling back to the Mailpit intercept ` +
-            `transport for the ${context}. Set IDP_SMTP_REAL_* to ` +
-            "deliver via the real relay.",
+          "email-delivery-real is ON but no real channel is configured " +
+            `(IDP_SMTP_REAL_* and RESEND_API_KEY unset) — falling back to the ` +
+            `Mailpit intercept transport for the ${context}. Set ` +
+            "IDP_SMTP_REAL_* to deliver via the real relay.",
         );
       }
-      transport = this.intercept;
-      from = this.config.intercept.from;
+      if (!this.intercept) {
+        // Selected transport's host unset ⇒ the existing logged no-op. The warn
+        // names the context only — never the recipient or a secret (EARS-30).
+        this.warn(
+          `${
+            wantReal ? "IDP_SMTP_REAL_HOST" : "MAILER_SMTP_HOST"
+          } is unset — skipping the ${context} send (logged no-op).`,
+        );
+        return;
+      }
+      chain.push(this.intercept);
     }
 
-    if (!transport) {
-      // Selected transport's host unset ⇒ the existing logged no-op. The warn
-      // names the context only — never the recipient or a secret (EARS-30).
-      this.warn(
-        `${
-          wantReal ? "IDP_SMTP_REAL_HOST" : "MAILER_SMTP_HOST"
-        } is unset — skipping the ${context} send (logged no-op).`,
-      );
-      return;
+    const outbound: OutboundEmail = {
+      to,
+      subject: message.subject,
+      text: message.text,
+      html: message.html,
+    };
+    const attempts: RelayAttempt[] = [];
+    for (let i = 0; i < chain.length; i += 1) {
+      const channel = chain[i]!;
+      try {
+        await channel.send(outbound);
+        return; // Delivered — a channel resolves only on a provider 2xx.
+      } catch (err) {
+        const code =
+          err instanceof ChannelRejection ? err.code : "unexpected-failure";
+        const raw = err instanceof Error ? err.message : String(err);
+        // EARS-30: redact BEFORE the detail can reach any sink or error.
+        const detail = secret ? redactSecret(raw, secret) : raw;
+        attempts.push({ provider: channel.provider, code, detail });
+        const next = chain[i + 1];
+        if (next) {
+          // EARS-32: every failover is reported (log + counter + GlitchTip).
+          this.observability.failover({
+            context,
+            from: channel.provider,
+            code,
+            to: next.provider,
+            detail,
+          });
+        }
+      }
     }
 
+    // Fail-closed (EARS-31): every channel rejected. Report with ALL provider
+    // response codes (EARS-32), then throw a sanitized error — provider=code
+    // pairs only, no raw provider text, no `cause` (EARS-30: the caught error
+    // object may embed the outbound message in properties redaction cannot
+    // reach).
+    this.observability.relayFailure({ context, attempts });
+    throw new Error(
+      `Mailer: ${context} send failed on all channels: ${attempts
+        .map((a) => `${a.provider}=${a.code}`)
+        .join(", ")}`,
+    );
+  }
+}
+
+/**
+ * One SMTP provider attempt as a {@link RelayChannel} (EARS-31): resolves only
+ * on a 2xx acceptance. nodemailer's SMTP transport resolves only when the
+ * server accepted the envelope, so a parseable non-2xx `response` or a
+ * non-empty `rejected` list on a *resolved* send is still counted as a
+ * rejection (2xx-only success, belt and braces); a thrown provider error maps
+ * its `responseCode` (SMTP code) or errno `code` into the rejection.
+ */
+class SmtpChannel implements RelayChannel {
+  constructor(
+    readonly provider: string,
+    private readonly transport: SmtpTransport,
+    private readonly from: string | undefined,
+  ) {}
+
+  async send(message: OutboundEmail): Promise<void> {
+    let info: unknown;
     try {
-      await transport.sendMail({
-        from: from ?? "noreply@doctor.school",
-        to,
+      info = await this.transport.sendMail({
+        from: this.from ?? "noreply@doctor.school",
+        to: message.to,
         subject: message.subject,
         text: message.text,
         html: message.html,
       });
     } catch (err) {
-      const raw = err instanceof Error ? err.message : String(err);
-      // Deliberately NO `cause` on the secret-carrying sends (EARS-30): the
-      // original error object may embed the outbound message (and thus the
-      // code) in properties the redaction cannot reach; the account-exists
-      // notice carries no secret, so it keeps the causal chain.
-      if (secret) {
-        // eslint-disable-next-line preserve-caught-error -- EARS-30: attaching the caught error as `cause` would carry the un-redacted provider payload (which can embed the one-time code) into logs/reporters; the scrubbed message is the whole permitted egress.
-        throw new Error(
-          `Mailer: ${context} send failed: ${redactSecret(raw, secret)}`,
-        );
-      }
-      throw new Error(`Mailer: ${context} send failed: ${raw}`, {
-        cause: err,
-      });
+      throw new ChannelRejection(
+        smtpErrorCode(err),
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+    const code = smtpAcceptanceCode(info);
+    if (code && !code.startsWith("2")) {
+      throw new ChannelRejection(code, `SMTP response ${code}`);
+    }
+    const rejected = (info as { rejected?: unknown } | null | undefined)
+      ?.rejected;
+    if (Array.isArray(rejected) && rejected.length > 0) {
+      throw new ChannelRejection(
+        code ?? "rejected",
+        "SMTP relay rejected the recipient",
+      );
     }
   }
+}
+
+/**
+ * Provider code of a thrown SMTP error: nodemailer sets `responseCode` (the
+ * SMTP status, e.g. `451`) on protocol rejections and an errno string on
+ * `code` (`ECONNREFUSED`, `ETIMEDOUT`, …) for connection failures — both are
+ * bounded, metric-safe values (EARS-32 labels).
+ */
+function smtpErrorCode(err: unknown): string {
+  const e = err as { responseCode?: unknown; code?: unknown };
+  if (typeof e?.responseCode === "number") return String(e.responseCode);
+  if (typeof e?.code === "string" && e.code) return e.code;
+  return "connection-failure";
+}
+
+/**
+ * SMTP status of a RESOLVED send, parsed from the leading digits of
+ * `info.response` (e.g. `250 2.0.0 OK …` → `250`). `undefined` when the shape
+ * carries no response string — nodemailer resolves only on server acceptance,
+ * so an unparseable resolution counts as accepted.
+ */
+function smtpAcceptanceCode(info: unknown): string | undefined {
+  const response = (info as { response?: unknown } | null | undefined)
+    ?.response;
+  if (typeof response !== "string") return undefined;
+  const match = /^(\d{3})/.exec(response.trim());
+  return match ? match[1] : undefined;
 }
 
 /**
@@ -276,18 +411,20 @@ function redactSecret(message: string, secret: string): string {
   return message.split(secret).join("[redacted]");
 }
 
-/** Build a transport from one channel's config; `null` when the host is unset. */
-function buildTransport(
+/** Build an SMTP channel from one transport's config; `null` when the host is unset. */
+function buildSmtpChannel(
+  provider: string,
   cfg: SmtpTransportConfig,
   factory: TransportFactory,
-): SmtpTransport | null {
+): RelayChannel | null {
   if (!cfg.host) return null;
   const port = cfg.port ?? 1025;
-  return factory({
+  const transport = factory({
     host: cfg.host,
     port,
     // Mailpit on dev is plaintext on 1025; secure only on the conventional 465.
     secure: port === 465,
     auth: cfg.user && cfg.password ? { user: cfg.user, pass: cfg.password } : undefined,
   });
+  return new SmtpChannel(provider, transport, cfg.from);
 }

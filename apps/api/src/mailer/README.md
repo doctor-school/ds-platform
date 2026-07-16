@@ -21,16 +21,37 @@ The module shares the `email-delivery-real` Unleash flag with the
 moves both this channel and Zitadel's between Mailpit-intercept and the
 real relay with no restart.
 
+## Failover chain (003 EARS-31/32, design §14.3, #1046)
+
+On the real path the send rides a **mail.ru primary → Resend failover** chain:
+a rate-limit/availability rejection on the active channel (mail.ru `451`,
+Resend `429`, any 4xx/5xx/connection failure, or a resolved non-2xx SMTP
+acceptance) triggers ONE switch to the other channel within the same send —
+never a same-channel retry — and a send counts as delivered **only on a
+provider 2xx**. Both channels failing = fail-closed: the send throws a
+sanitized error (provider=code pairs only), and the enumeration-safe API
+surface above stays unchanged (EARS-16 — callers swallow/log, never 500).
+The Mailpit intercept path (flag OFF, #209) never fails over to a real
+provider. Every failover and relay failure emits the EARS-32 triple —
+structured log + `bff_mailer_relay_events_total{event,provider,code}`
+Prometheus counter + GlitchTip event (`relay-observability.ts`) — so degraded
+channel state is visible, never silent. Resend is failover-only by recorded
+152-ФЗ decision (design §14.6); creds: `RESEND_API_KEY`
+(`infra/deploy/api.env.example`).
+
 ## What's here
 
-| Concern                                        | File                          |
-| ---------------------------------------------- | ----------------------------- |
-| Module wiring (mailer + throttle bindings)     | `mailer.module.ts`            |
-| Port + shared send-time validation             | `mailer.types.ts`             |
-| §13.3/§13.4 code-only artifact templates       | `code-emails.ts`              |
-| Production nodemailer adapter (dual-transport) | `smtp-mailer.ts`              |
-| In-memory test double                          | `mailer.fake.ts`              |
-| Per-address anti-flood throttle                | `register-notice-throttle.ts` |
+| Concern                                            | File                          |
+| -------------------------------------------------- | ----------------------------- |
+| Module wiring (mailer + throttle bindings)         | `mailer.module.ts`            |
+| Port + shared send-time validation                 | `mailer.types.ts`             |
+| §13.3/§13.4 code-only artifact templates           | `code-emails.ts`              |
+| Production nodemailer adapter (chain + transports) | `smtp-mailer.ts`              |
+| Per-provider relay-channel contract                | `relay-channel.ts`            |
+| Resend failover channel (HTTPS adapter)            | `resend-transport.ts`         |
+| Failover/relay-failure observability (EARS-32)     | `relay-observability.ts`      |
+| In-memory test double                              | `mailer.fake.ts`              |
+| Per-address anti-flood throttle                    | `register-notice-throttle.ts` |
 
 ## Exported symbols
 

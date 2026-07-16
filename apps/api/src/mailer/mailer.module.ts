@@ -97,6 +97,15 @@ function resolveRealTransport(env: ApiEnv): SmtpTransportConfig | undefined {
             from: env.MAILER_SMTP_FROM,
           },
           real: resolveRealTransport(env),
+          // Resend failover channel (003 design §14.3, EARS-31): configured ⇔
+          // RESEND_API_KEY is set; sits strictly BEHIND the mail.ru primary in
+          // the per-send chain. From reuses the DKIM-aligned sender address.
+          resend: env.RESEND_API_KEY
+            ? {
+                apiKey: env.RESEND_API_KEY,
+                from: env.IDP_SMTP_REAL_SENDER_ADDRESS,
+              }
+            : undefined,
           // Live read on every send: Unleash overrides when reachable; the
           // EMAIL_DELIVERY_MODE env default ("real") is the boot default AND the
           // Unleash-unreachable fallback (same contract as DeliveryReconcileService).

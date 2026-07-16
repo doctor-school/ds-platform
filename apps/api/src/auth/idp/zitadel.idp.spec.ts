@@ -445,6 +445,33 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
     expect(mailer.verificationCodeEmails).toEqual([]);
   });
 
+  it("003 EARS-31: a mailer relay failure (both channels down) is swallowed — the registration cascade's enumeration-safe response stays unchanged, never a 500", async () => {
+    // #1046: with the failover chain in place, a both-channels-down send throws
+    // fail-closed from the transport layer (already logged + metric'd +
+    // GlitchTip'd with both provider codes, EARS-32). The cascade hop must NOT
+    // surface it: recovery is the EARS-25 resend, and a thrown mailer outage
+    // would 500 the register endpoint (EARS-16 forbids that).
+    const { fetchImpl } = returnCodeFetch({ verificationCode: "GX5AVU" });
+    const failingMailer = {
+      sendAccountExistsNotice: () => Promise.resolve(),
+      sendVerificationCodeEmail: () =>
+        Promise.reject(
+          new Error(
+            "Mailer: verification-code email send failed on all channels: mail.ru=451, resend=429",
+          ),
+        ),
+      sendPasswordResetCodeEmail: () => Promise.resolve(),
+    };
+    const client = new ZitadelIdpClient({
+      ...SEND_CONFIG,
+      mailer: failingMailer,
+      fetchImpl,
+    });
+    await expect(
+      client.requestEmailVerification("user-1", "doc@example.com"),
+    ).resolves.toBeUndefined();
+  });
+
   it("003 EARS-3: requestPhoneVerification stays a bare sendCode — the SMS hop remains Zitadel-sent (out of the #910 increment)", async () => {
     const { fetchImpl, calls } = recordingFetch({ ok: true, status: 200 });
     const client = new ZitadelIdpClient({

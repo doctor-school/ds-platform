@@ -1,7 +1,11 @@
 import { Global, Logger, Module } from "@nestjs/common";
 import { Redis } from "ioredis";
 import { loadEnv } from "../../config/env.schema.js";
-import { DEFAULT_PORTAL_BASE_URL } from "../../mailer/mailer.module.js";
+import {
+  DEFAULT_PORTAL_BASE_URL,
+  MailerModule,
+} from "../../mailer/mailer.module.js";
+import { MAILER, type Mailer } from "../../mailer/mailer.types.js";
 import { FakeIdpClient } from "./idp.fake.js";
 import { IDP_CLIENT, type IdpClient } from "./idp.types.js";
 import { InMemoryOtpChallengeStore } from "./otp-challenge-store.fake.js";
@@ -24,6 +28,10 @@ import { ZitadelIdpClient } from "./zitadel.idp.js";
  */
 @Global()
 @Module({
+  // #910/#1045 (EARS-29): the verify/reset send hops obtain the one-time code
+  // via `returnCode` and deliver it through the shared BFF {@link MAILER} — the
+  // adapter needs the mailer port, so the module imports the mailer module.
+  imports: [MailerModule],
   providers: [
     {
       // #410: the cross-request OTP-challenge bridge (request*Otp →
@@ -51,7 +59,10 @@ import { ZitadelIdpClient } from "./zitadel.idp.js";
     },
     {
       provide: IDP_CLIENT,
-      useFactory: (otpChallengeStore: OtpChallengeStore): IdpClient => {
+      useFactory: (
+        otpChallengeStore: OtpChallengeStore,
+        mailer: Mailer,
+      ): IdpClient => {
         const env = loadEnv();
         if (env.IDP_ISSUER && env.IDP_SERVICE_TOKEN) {
           return new ZitadelIdpClient(
@@ -73,12 +84,16 @@ import { ZitadelIdpClient } from "./zitadel.idp.js";
               // require in the request body. Absent ⇒ the adapter resolves it once
               // from the service account's own org and caches it.
               orgId: env.IDP_ORG_ID,
-              // #869: the portal origin whose bare `/verify` URL replaces Zitadel's
-              // default hosted-login link in the code-only verification email. The
-              // SAME portal-origin source the mailer channel uses — never a
+              // #878: the portal origin whose bare `/login` URL rides the
+              // still-Zitadel-sent login email-OTP challenge. The SAME
+              // portal-origin source the mailer channel uses — never a
               // hardcoded host (recipe-specific).
               portalBaseUrl:
                 env.MAILER_PORTAL_BASE_URL ?? DEFAULT_PORTAL_BASE_URL,
+              // #910/#1045 (EARS-29): the BFF mailer the verify/reset hops hand
+              // the Zitadel-returned code to — the §13.3/§13.4 code-only
+              // artifacts ride the shared MAILER binding.
+              mailer,
             },
             // #410: the shared cross-request OTP-challenge store — Redis-backed
             // under scale-out, so the login hop finds the challenge whichever
@@ -86,9 +101,11 @@ import { ZitadelIdpClient } from "./zitadel.idp.js";
             otpChallengeStore,
           );
         }
-        return new FakeIdpClient();
+        // The fake mirrors the same returnCode → mailer hand-off (EARS-29), so
+        // the no-IdP dev-stand still delivers real code emails via the mailer.
+        return new FakeIdpClient(mailer);
       },
-      inject: [OTP_CHALLENGE_STORE],
+      inject: [OTP_CHALLENGE_STORE, MAILER],
     },
   ],
   exports: [IDP_CLIENT],

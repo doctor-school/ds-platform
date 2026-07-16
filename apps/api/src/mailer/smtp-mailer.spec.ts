@@ -141,3 +141,147 @@ describe("SmtpMailer dual-transport flag gate (#209)", () => {
     expect(warn).toHaveBeenCalled();
   });
 });
+
+// 003 EARS-29/30 (#910/#1045): the verify/reset one-time codes ride returnCode
+// off Zitadel and the BFF mailer dispatches the §13.3/§13.4 code-only artifacts
+// through the SAME dual flag-gated transport as the account-exists notice. The
+// transiting code is a SECRET: it must never leak into a log line, a thrown
+// error, or a provider-response echo (EARS-30 — testable across every outcome).
+describe("SmtpMailer code-only credential emails (003 EARS-29/30)", () => {
+  const CODE = "GX5AVU";
+
+  /** A factory whose transport records full messages and can be made to fail. */
+  function messageFactory(fail?: (msg: { to: string }) => Error): {
+    factory: TransportFactory;
+    messages: Array<{
+      host: string;
+      from: string;
+      to: string;
+      subject: string;
+      text: string;
+      html: string;
+    }>;
+  } {
+    const messages: Array<{
+      host: string;
+      from: string;
+      to: string;
+      subject: string;
+      text: string;
+      html: string;
+    }> = [];
+    const factory: TransportFactory = (opts) => ({
+      sendMail: (msg) => {
+        if (fail) return Promise.reject(fail(msg));
+        messages.push({ host: opts.host, ...msg });
+        return Promise.resolve();
+      },
+    });
+    return { factory, messages };
+  }
+
+  function buildCodeMailer(opts: {
+    factory: TransportFactory;
+    warn?: (m: string) => void;
+  }): SmtpMailer {
+    return new SmtpMailer({
+      intercept: interceptCfg,
+      real: undefined,
+      isEnabled: () => false,
+      portalBaseUrl: "http://localhost:3001",
+      warn: opts.warn,
+      transportFactory: opts.factory,
+    });
+  }
+
+  it("EARS-29: sendVerificationCodeEmail dispatches the §13.3 artifact — code-led subject, unbroken token, zero links", async () => {
+    const { factory, messages } = messageFactory();
+    const mailer = buildCodeMailer({ factory });
+    await mailer.sendVerificationCodeEmail(VALID_EMAIL, CODE);
+    expect(messages).toHaveLength(1);
+    const m = messages[0]!;
+    expect(m.to).toBe(VALID_EMAIL);
+    expect(m.subject).toBe(`${CODE} — код подтверждения Doctor.School`);
+    expect(m.html).toContain(`<strong>${CODE}</strong>`);
+    expect(m.html.toLowerCase()).not.toMatch(/<a[\s>]/);
+    expect(m.html).not.toMatch(/https?:\/\//);
+  });
+
+  it("EARS-29: sendPasswordResetCodeEmail dispatches the §13.4 artifact — code-led subject, unbroken token, zero links", async () => {
+    const { factory, messages } = messageFactory();
+    const mailer = buildCodeMailer({ factory });
+    await mailer.sendPasswordResetCodeEmail(VALID_EMAIL, CODE);
+    expect(messages).toHaveLength(1);
+    const m = messages[0]!;
+    expect(m.subject).toBe(`${CODE} — код сброса пароля Doctor.School`);
+    expect(m.html).toContain(`<strong>${CODE}</strong>`);
+    expect(m.html.toLowerCase()).not.toMatch(/<a[\s>]/);
+    expect(m.html).not.toMatch(/https?:\/\//);
+  });
+
+  it("EARS-29: rejects an invalid recipient and an empty/blank code before any transport decision", async () => {
+    const { factory, messages } = messageFactory();
+    const mailer = buildCodeMailer({ factory });
+    await expect(
+      mailer.sendVerificationCodeEmail("no-at-sign", CODE),
+    ).rejects.toThrow();
+    await expect(
+      mailer.sendVerificationCodeEmail(VALID_EMAIL, ""),
+    ).rejects.toThrow();
+    await expect(
+      mailer.sendPasswordResetCodeEmail(VALID_EMAIL, "  "),
+    ).rejects.toThrow();
+    expect(messages).toHaveLength(0);
+  });
+
+  it("EARS-30: a provider rejection that echoes the outbound message is SANITIZED — the thrown error and warn sink never contain the code", async () => {
+    // Model the worst-case provider echo: the transport error message quotes the
+    // whole outbound payload (subject + body), i.e. the code appears in it.
+    const warn = vi.fn();
+    const { factory } = messageFactory(
+      () => new Error(`550 rejected message: subject "${CODE} — код" body ${CODE}`),
+    );
+    const mailer = buildCodeMailer({ factory, warn });
+    let thrown: unknown;
+    try {
+      await mailer.sendVerificationCodeEmail(VALID_EMAIL, CODE);
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).not.toContain(CODE);
+    expect((thrown as Error).stack ?? "").not.toContain(CODE);
+    for (const call of warn.mock.calls) {
+      expect(String(call[0])).not.toContain(CODE);
+    }
+  });
+
+  it("EARS-30: the reset-code error path is scrubbed identically (total-failure outcome)", async () => {
+    const { factory } = messageFactory(() => new Error(`boom ${CODE} boom`));
+    const mailer = buildCodeMailer({ factory });
+    await expect(
+      mailer.sendPasswordResetCodeEmail(VALID_EMAIL, CODE),
+    ).rejects.toThrow();
+    await mailer.sendPasswordResetCodeEmail(VALID_EMAIL, CODE).catch((e) => {
+      expect((e as Error).message).not.toContain(CODE);
+    });
+  });
+
+  it("EARS-30: the host-unset logged no-op warn carries no code either", async () => {
+    const warn = vi.fn();
+    const rec = recordingFactory();
+    const mailer = new SmtpMailer({
+      intercept: { host: undefined, from: "noreply@doctor.school" },
+      real: undefined,
+      isEnabled: () => false,
+      portalBaseUrl: "http://localhost:3001",
+      warn,
+      transportFactory: rec.factory,
+    });
+    await mailer.sendVerificationCodeEmail(VALID_EMAIL, CODE);
+    expect(warn).toHaveBeenCalled();
+    for (const call of warn.mock.calls) {
+      expect(String(call[0])).not.toContain(CODE);
+    }
+  });
+});

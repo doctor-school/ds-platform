@@ -22,7 +22,7 @@
 #
 # Requires: bash, curl, jq. Run it on Linux/macOS (the prod box, CI, a
 # container) — NOT from a Windows-native jq: Windows argv conversion mangles
-# the non-ASCII message texts in steps 8.bis/8.ter (Cyrillic -> `?`, em-dash ->
+# the non-ASCII message texts in steps 8.bis/8.quinquies (Cyrillic -> `?`, em-dash ->
 # an invalid-UTF-8 byte), silently corrupting the stored copy (proven live,
 # #877 — a Windows run wrote `?`-mangled verifysmsotp/ru until restored).
 #
@@ -544,15 +544,19 @@ fi
 # grammatical `ru` copy with the right {{.Code}}/{{.OTP}} placeholders), so this
 # step only makes Zitadel SELECT Russian. The bundled copy itself is then
 # reworked per-type where it is inadequate for a user-facing channel:
-# `verifysmsotp` (#226, step 8.bis — jargon/domain/expiry leaks), `verifyemail`
-# (#869, step 8.ter — code-only branded copy), `verifyemailotp` + the neutral
-# greetings of the dormant types (#878, step 8.quinquies — the computed
-# «<local-part> guest» display name leaked into {{.DisplayName}} greetings),
-# `passwordreset` (#880, step 8.sexies — code-only branded copy; the bundled
-# default's CTA landed on the IdP's hosted set-password page). (Converge
-# mechanism for all of them: PUT /admin/v1/text/message/{type}/ru —
-# init|verifyemail|verifyphone|passwordreset|verifyemailotp|verifysmsotp|
-# password_change.)
+# `verifysmsotp` (#226, step 8.bis — jargon/domain/expiry leaks), `verifyemailotp`
+# + the neutral greetings of the dormant types (#878, step 8.quinquies — the
+# computed «<local-part> guest» display name leaked into {{.DisplayName}}
+# greetings). (Converge mechanism for all of them:
+# PUT /admin/v1/text/message/{type}/ru —
+# init|verifyphone|verifyemailotp|verifysmsotp|password_change.)
+#
+# `verifyemail` and `passwordreset` carry NO live override (#910/#1045,
+# EARS-29): those sends ride the `returnCode` oneof — Zitadel generates and
+# verifies the code but sends NOTHING; the BFF mailer composes and dispatches
+# the branded, Russian, code-only, link-free artifacts
+# (apps/api/src/mailer/code-emails.ts is the copy SSOT). The former overrides
+# (steps 8.ter/#869 and 8.sexies/#880) are retired with that switch.
 #
 # TWO levers, because the instance default alone is NOT sufficient (proven live):
 #   (a) Default language → ru. The documented fallback. Necessary, but registrants
@@ -660,70 +664,6 @@ api_idempotent PUT /admin/v1/text/message/verifysmsotp/en \
   "$(jq -nc --arg t "$EN_SMS_OTP_TEXT" '{text:$t}')" >/dev/null \
   && echo "ensured verifysmsotp/en branded SMS OTP text" >&2
 
-# ── 8.ter. brand the registration verification email — CODE-ONLY (verifyemail ru+en, #869) ─
-# The bundled verifyemail default renders a CTA button whose URL is Zitadel's
-# hosted login-v2 UI — a dead end for portal registrants (#869) — and ANY
-# GET-consumed link in this mail is scanner bait: mail.ru's `checklink` AV
-# prefetch GETs every URL in a delivered mail, so a code-consuming link is burned
-# before the human ever clicks (the owner's Stage-A verdict on #869 rejected the
-# deep-link CTA for exactly this). The verification email is therefore CODE-ONLY:
-# branded RU copy + the {{.Code}} the registrant TYPES on the portal /verify
-# screen (where the #175 auto-login replay signs them in). Nothing in the mail is
-# consumed on GET.
-#
-# BUTTONLESS: NO — verified live on v4.15.0. Overriding `buttonText` to the empty
-# string does NOT suppress the CTA: an empty custom field falls through to the
-# bundled default label («Подтвердить email»), and the button row + its URL render
-# unconditionally. The URL itself is not a message-text field at all — it comes
-# from the SEND request, so the BFF sets `SendEmailVerificationCode.urlTemplate`
-# to the BARE portal `/verify` (no code/userId params — nothing consumed on GET;
-# `apps/api` ZitadelIdpClient#emailSendCodeBody, #869) and this override demotes
-# the button label to a subordinate navigation aid for the fallback button.
-#
-# Copy checklist (owner research + Stage-B verdict, #869): subject < 50 chars
-# with the code early (rendered ~40 chars); the code renders as ONE unbroken
-# token ({{.Code}} raw) — the Stage-B rework dropped the earlier {{slice}} triad
-# grouping, whose rendered space contradicted the "type it exactly" instruction
-# (owner feedback 2026-07-14, issue #869); readability comes from the enlarged
-# letter-spaced span instead. Explicit expiry line (the instance's
-# VERIFY_EMAIL_CODE secret-generator lifetime is 3600s — admin API
-# `secretgenerators`, verified live); an explicit "if you didn't register,
-# ignore this email" line. Markup:
-# custom `text` is injected UNESCAPED into Zitadel's bundled table-layout/
-# inline-CSS MJML template (mail.ru/Yandex-safe), so <br>/<strong>/inline-style
-# spans render as HTML (verified live; the text/plain part degrades them sanely) —
-# literal newlines do NOT survive (the div collapses whitespace), so paragraph
-# breaks MUST be <br>.
-#
-# The subject deliberately leads with the code (inbox-preview UX). The e2e specs
-# select this mail by the STABLE subject tail — `NOTIFICATION_SUBJECTS.verifyEmail`
-# in apps/{api,portal} e2e support matches by substring — so a copy change here
-# must keep that tail (or update both constants in the same PR).
-RU_VERIFY_EMAIL_SUBJECT='{{.Code}} — код подтверждения Doctor.School'
-RU_VERIFY_EMAIL_TITLE='Подтверждение email'
-RU_VERIFY_EMAIL_PREHEADER='Введите код на странице подтверждения Doctor.School'
-RU_VERIFY_EMAIL_GREETING='Здравствуйте!'
-RU_VERIFY_EMAIL_TEXT='Ваш код подтверждения email на Doctor.School:<br><br><span style="font-size:28px;letter-spacing:3px"><strong>{{.Code}}</strong></span><br><br>Введите его на странице подтверждения, с которой вы регистрировались. Код действует 1 час.<br><br>Если вы не регистрировались на Doctor.School — проигнорируйте это письмо.'
-RU_VERIFY_EMAIL_BUTTON='Открыть страницу подтверждения'
-EN_VERIFY_EMAIL_SUBJECT='{{.Code}} — Doctor.School verification code'
-EN_VERIFY_EMAIL_TITLE='Email verification'
-EN_VERIFY_EMAIL_PREHEADER='Enter the code on the Doctor.School verification page'
-EN_VERIFY_EMAIL_GREETING='Hello!'
-EN_VERIFY_EMAIL_TEXT='Your Doctor.School email verification code:<br><br><span style="font-size:28px;letter-spacing:3px"><strong>{{.Code}}</strong></span><br><br>Enter it on the verification page you signed up from. The code is valid for 1 hour.<br><br>If you did not sign up for Doctor.School, please ignore this email.'
-EN_VERIFY_EMAIL_BUTTON='Open the verification page'
-api_idempotent PUT /admin/v1/text/message/verifyemail/ru \
-  "$(jq -nc --arg s "$RU_VERIFY_EMAIL_SUBJECT" --arg ti "$RU_VERIFY_EMAIL_TITLE" \
-        --arg p "$RU_VERIFY_EMAIL_PREHEADER" --arg g "$RU_VERIFY_EMAIL_GREETING" \
-        --arg t "$RU_VERIFY_EMAIL_TEXT" --arg b "$RU_VERIFY_EMAIL_BUTTON" \
-        '{subject:$s, title:$ti, preHeader:$p, greeting:$g, text:$t, buttonText:$b}')" >/dev/null \
-  && echo "ensured verifyemail/ru code-only branded verification email" >&2
-api_idempotent PUT /admin/v1/text/message/verifyemail/en \
-  "$(jq -nc --arg s "$EN_VERIFY_EMAIL_SUBJECT" --arg ti "$EN_VERIFY_EMAIL_TITLE" \
-        --arg p "$EN_VERIFY_EMAIL_PREHEADER" --arg g "$EN_VERIFY_EMAIL_GREETING" \
-        --arg t "$EN_VERIFY_EMAIL_TEXT" --arg b "$EN_VERIFY_EMAIL_BUTTON" \
-        '{subject:$s, title:$ti, preHeader:$p, greeting:$g, text:$t, buttonText:$b}')" >/dev/null \
-  && echo "ensured verifyemail/en code-only branded verification email" >&2
-
 # ── 8.quater. disable PUBLIC self-registration on the default login policy (#877) ─
 # Product registration is HEADLESS: the api BFF creates users via the Management
 # API (POST /v2/users/new, service-user PAT) and never touches the hosted
@@ -805,12 +745,12 @@ api GET /admin/v1/policies/login | jq -r '.policy |
 # {{.DisplayName}} — the placeholder leaked user-facing («Привет, a guest!»).
 # Two-sided fix: the BFF now sends displayName = the registration email (#878,
 # apps/api zitadel.idp.ts), AND every user-facing greeting drops the name
-# variable — same neutral «Здравствуйте!» technique proven live by 8.ter/#869.
-# `passwordreset` is deliberately NOT touched here: its full branded rework
-# lives in step 8.sexies (#880).
+# variable — the neutral «Здравствуйте!» technique proven live on #869.
+# `verifyemail`/`passwordreset` are NOT touched here: those types are
+# BFF-sent (returnCode, #910/#1045) and carry no live override at all.
 #
 # (a) verifyemailotp — the LIVE email-OTP login mail (EARS-6). Fully branded,
-# code-only, matching the 8.ter copy style: neutral greeting, enlarged
+# code-only, matching the #869 copy style: neutral greeting, enlarged
 # letter-spaced one-token {{.OTP}} (the code variable for OTP types — NOT
 # {{.Code}}), explicit expiry (the instance's OTP_EMAIL secret-generator
 # lifetime is 300s — admin API `secretgenerators`, verified live), and an
@@ -820,7 +760,7 @@ api GET /admin/v1/policies/login | jq -r '.policy |
 # apps/{api,portal} e2e support matches by substring — so a copy change here
 # must keep that tail (or update both constants in the same PR; #878 did).
 # The bundled CTA button cannot be suppressed (an empty buttonText falls
-# through to the bundled default label — proven live on v4.15.0, 8.ter), so
+# through to the bundled default label — proven live on v4.15.0, #869), so
 # its label is demoted to a subordinate navigation aid; the code the user
 # TYPES on the portal /login screen is the primary path.
 RU_LOGIN_OTP_SUBJECT='{{.OTP}} — код для входа в Doctor.School'
@@ -853,7 +793,7 @@ api_idempotent PUT /admin/v1/text/message/verifyemailotp/en \
 # {{.DisplayName}} — verified live via GET /admin/v1/text/default/message/
 # {type}/{lang} on v4.15.0); everything else keeps the bundled default. A PUT
 # with only `greeting` leaves the unset fields falling through to the bundled
-# defaults (the 8.ter empty-field semantics). NOTE the path keys are Zitadel's
+# defaults (the #869-proven empty-field semantics). NOTE the path keys are Zitadel's
 # own inconsistent spelling: `password_change` IS snake_case while
 # `verifyphone`/`init` are not (probed live: `passwordchange` → 404).
 for _mt in verifyphone password_change init; do
@@ -864,59 +804,6 @@ for _mt in verifyphone password_change init; do
     '{"greeting":"Hello!"}' >/dev/null \
     && echo "ensured ${_mt}/en neutral greeting" >&2
 done
-
-# ── 8.sexies. brand the password-reset email — CODE-ONLY (passwordreset ru+en, #880) ─
-# The bundled passwordreset default renders a CTA button whose URL is Zitadel's
-# hosted set-password page on the identity host — a surface the product's users
-# must never see (the portal /reset screen owns the whole journey), and the
-# same scanner hazard as 8.ter: mail.ru's `checklink` AV prefetch GETs every
-# URL in a delivered mail. The reset email is therefore CODE-ONLY (the #869
-# owner Stage-A contract, re-confirmed for the button-as-subordinate-aid
-# pattern on #878): branded RU copy + the {{.Code}} the user TYPES on the
-# portal /reset screen. Nothing in the mail is consumed on GET.
-#
-# The button cannot be suppressed (empty buttonText falls through to the
-# bundled default label — proven live on v4.15.0, 8.ter), so the BFF send sets
-# `PasswordResetRequest.sendLink.urlTemplate` to the BARE portal `/reset` (no
-# {{.Code}}/{{.UserID}}/{{.OrgID}} placeholders, no query — `apps/api`
-# ZitadelIdpClient#passwordResetBody, #880) and this override demotes the
-# button label to a subordinate navigation aid.
-#
-# Copy checklist (the #869/#879 binding rules): subject < 50 chars LEADING
-# with the code (rendered ~40); the code as ONE unbroken enlarged
-# letter-spaced token ({{.Code}} raw — never grouped/split, and no copy line
-# contradicting the rendered format); explicit expiry line — the instance's
-# PASSWORD_RESET_CODE secret-generator lifetime is 3600s (admin API
-# `secretgenerators/_search`, read live 2026-07-14; code shape [A-Z0-9]{6},
-# same generator family as VERIFY_EMAIL_CODE); an explicit "if you didn't
-# request this" line. Markup: custom `text` is injected UNESCAPED into
-# Zitadel's bundled table-layout/inline-CSS MJML template (mail.ru/Yandex-
-# safe), so <br>/<strong>/inline-style spans render as HTML; literal newlines
-# do NOT survive — paragraph breaks MUST be <br>.
-RU_PWRESET_SUBJECT='{{.Code}} — код сброса пароля Doctor.School'
-RU_PWRESET_TITLE='Сброс пароля'
-RU_PWRESET_PREHEADER='Введите код на странице сброса пароля Doctor.School'
-RU_PWRESET_GREETING='Здравствуйте!'
-RU_PWRESET_TEXT='Ваш код для сброса пароля на Doctor.School:<br><br><span style="font-size:28px;letter-spacing:3px"><strong>{{.Code}}</strong></span><br><br>Введите его на странице сброса пароля, с которой вы запрашивали код. Код действует 1 час.<br><br>Если вы не запрашивали сброс пароля — проигнорируйте это письмо.'
-RU_PWRESET_BUTTON='Открыть страницу сброса'
-EN_PWRESET_SUBJECT='{{.Code}} — Doctor.School password reset code'
-EN_PWRESET_TITLE='Password reset'
-EN_PWRESET_PREHEADER='Enter the code on the Doctor.School password reset page'
-EN_PWRESET_GREETING='Hello!'
-EN_PWRESET_TEXT='Your Doctor.School password reset code:<br><br><span style="font-size:28px;letter-spacing:3px"><strong>{{.Code}}</strong></span><br><br>Enter it on the password reset page you requested the code from. The code is valid for 1 hour.<br><br>If you did not request a password reset, please ignore this email.'
-EN_PWRESET_BUTTON='Open the password reset page'
-api_idempotent PUT /admin/v1/text/message/passwordreset/ru \
-  "$(jq -nc --arg s "$RU_PWRESET_SUBJECT" --arg ti "$RU_PWRESET_TITLE" \
-        --arg p "$RU_PWRESET_PREHEADER" --arg g "$RU_PWRESET_GREETING" \
-        --arg t "$RU_PWRESET_TEXT" --arg b "$RU_PWRESET_BUTTON" \
-        '{subject:$s, title:$ti, preHeader:$p, greeting:$g, text:$t, buttonText:$b}')" >/dev/null \
-  && echo "ensured passwordreset/ru code-only branded reset email" >&2
-api_idempotent PUT /admin/v1/text/message/passwordreset/en \
-  "$(jq -nc --arg s "$EN_PWRESET_SUBJECT" --arg ti "$EN_PWRESET_TITLE" \
-        --arg p "$EN_PWRESET_PREHEADER" --arg g "$EN_PWRESET_GREETING" \
-        --arg t "$EN_PWRESET_TEXT" --arg b "$EN_PWRESET_BUTTON" \
-        '{subject:$s, title:$ti, preHeader:$p, greeting:$g, text:$t, buttonText:$b}')" >/dev/null \
-  && echo "ensured passwordreset/en code-only branded reset email" >&2
 
 # ── output (machine-parseable; secret only when freshly created) ─────────────
 echo "IDP_PROJECT_ID=${PROJECT_ID}"

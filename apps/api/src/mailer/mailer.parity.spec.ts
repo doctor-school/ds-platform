@@ -54,3 +54,75 @@ describe("EARS-23: FakeMailer ↔ SmtpMailer contract parity", () => {
     expect(fake.accountExistsNotices).toEqual([VALID_EMAIL]);
   });
 });
+
+// 003 EARS-29 (#1045): the code-only credential emails share the same parity
+// contract — the fake rejects exactly what the real adapter rejects (invalid
+// recipient, empty/blank/whitespace code), so a regression that leaned on the
+// fake accepting a bad input fails here, not only live.
+describe("003 EARS-29: code-email FakeMailer ↔ SmtpMailer contract parity", () => {
+  const INVALID_CODES = ["", "   ", "GX5 AVU", "GX5\nAVU"];
+  const CODE = "GX5AVU";
+
+  it("EARS-29: when the recipient is invalid, both adapters shall reject the code sends", async () => {
+    const fake = new FakeMailer();
+    const smtp = buildSmtp();
+    for (const bad of INVALID_EMAILS) {
+      await expect(fake.sendVerificationCodeEmail(bad, CODE)).rejects.toThrow();
+      await expect(smtp.sendVerificationCodeEmail(bad, CODE)).rejects.toThrow();
+      await expect(
+        fake.sendPasswordResetCodeEmail(bad, CODE),
+      ).rejects.toThrow();
+      await expect(
+        smtp.sendPasswordResetCodeEmail(bad, CODE),
+      ).rejects.toThrow();
+    }
+  });
+
+  it("EARS-29: when the code is empty/blank/broken, both adapters shall reject — and the rejection never echoes the code", async () => {
+    const fake = new FakeMailer();
+    const smtp = buildSmtp();
+    for (const bad of INVALID_CODES) {
+      for (const adapter of [fake, smtp]) {
+        for (const send of [
+          () => adapter.sendVerificationCodeEmail(VALID_EMAIL, bad),
+          () => adapter.sendPasswordResetCodeEmail(VALID_EMAIL, bad),
+        ]) {
+          let thrown: unknown;
+          try {
+            await send();
+          } catch (err) {
+            thrown = err;
+          }
+          expect(thrown).toBeInstanceOf(Error);
+          if (bad.trim()) {
+            expect((thrown as Error).message).not.toContain(bad.trim());
+          }
+        }
+      }
+    }
+  });
+
+  it("EARS-29: when input is valid, both adapters shall accept; the fake records the send", async () => {
+    const fake = new FakeMailer();
+    const smtp = buildSmtp();
+    await expect(
+      fake.sendVerificationCodeEmail(VALID_EMAIL, CODE),
+    ).resolves.toBeUndefined();
+    await expect(
+      fake.sendPasswordResetCodeEmail(VALID_EMAIL, CODE),
+    ).resolves.toBeUndefined();
+    // Unconfigured SmtpMailer resolves (logged no-op) for valid input.
+    await expect(
+      smtp.sendVerificationCodeEmail(VALID_EMAIL, CODE),
+    ).resolves.toBeUndefined();
+    await expect(
+      smtp.sendPasswordResetCodeEmail(VALID_EMAIL, CODE),
+    ).resolves.toBeUndefined();
+    expect(fake.verificationCodeEmails).toEqual([
+      { to: VALID_EMAIL, code: CODE },
+    ]);
+    expect(fake.passwordResetCodeEmails).toEqual([
+      { to: VALID_EMAIL, code: CODE },
+    ]);
+  });
+});

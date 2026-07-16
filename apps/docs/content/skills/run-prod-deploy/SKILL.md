@@ -55,6 +55,14 @@ Run it as **its own statement** — never `pnpm deploy:prod | tee log` or any pi
 
 The pipeline is fail-closed and stops at the first red step, printing a rollback pointer: pre-flight → ship (`git archive` over SSH, no registry) → data-prod `up -d --build` → **pgbackrest pre-migrate `incr` checkpoint** → api-prod `migrate → build → up -d` (images SHA-tagged `ds-api:<sha>` / `ds-portal:<sha>` / `ds-admin:<sha>`) → `caddy reload` → **truthful-success verify** (polls on-box until the running containers carry exactly `ds-*:<sha>` and are healthy — otherwise FAILED, never "OK") → image retention (last 3 tags/repo) → prod smoke (`--expect-sha`).
 
+**A deploy can never hang silently (#905).** Every ssh channel carries keepalive flags (dead half-open connection → loud non-zero exit in ~60s), and each streamed remote step runs under a per-step no-output watchdog (5 min build-class, 2 min elsewhere; flowing output resets it). A tripped watchdog kills the step and exits non-zero with `STALLED: <step> — no output for <N>m; remote work MAY have completed.` That is a **channel** verdict, not a box verdict — before re-running or rolling back, check box reality with one command:
+
+```bash
+pnpm deploy:probe   # ONE line: <LIVE|DEGRADED|UNREACHABLE> health=<sha> api/portal/admin images+status
+```
+
+(hand fallback: `curl -fsS https://api.doctor.school/v1/health ; ssh ds-api-prod docker ps`). If the probe shows the new SHA live and healthy, the remote work completed — a plain re-run of `pnpm deploy:prod` is a safe idempotent no-op; if it shows the old SHA, re-run; if the box is unreachable, fix connectivity first — never fire blind state-changes at it.
+
 ### 2. Record cycle (all NON-FATAL to the deploy)
 
 After the deploy has already succeeded, the pipeline records — and by contract a `gh`/webhook failure here only WARNs, the deploy exit code stays 0:

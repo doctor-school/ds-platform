@@ -15,6 +15,7 @@ bootstrap) is a one-time human setup, out of the steady-state loop.
 | `smoke-prod.mjs`           | `deploy:smoke`         | Live prod HTTP + TLS smoke; also called by `prod.mjs` post-`up -d`.                                                                                                |
 | `release-notes.mjs`        | `deploy:release-notes` | Aggregated PROD release note to Mattermost (#868); render+POST seam fired from CI on `deployment_status: success` (`release-digest.yml`, #968).                    |
 | `live-broadcast-check.mjs` | `deploy:check-live`    | Read-only live-эфир probe (`GET /v1/public/events`, spec §10.4 item 7): `CLEAR` exit 0 / `LIVE`+`UNKNOWN` exit 1 (fail-closed); also a `prod.mjs` pre-flight hold. |
+| `deploy-probe.mjs`         | `deploy:probe`         | One-line box-reality probe (#905): health SHA + running api/portal/admin images/status over ssh; the STALLED watchdog message routes here.                         |
 
 ## `pnpm deploy:prod`
 
@@ -64,6 +65,30 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    code stays 0. The **Mattermost digest itself is no longer posted here** — the
    `success` status fires the `release-digest.yml` CI workflow, which posts it (see
    below, #968).
+
+**Stall detector (#905).** Every ssh channel carries keepalive flags
+(`ServerAliveInterval=15` / `ServerAliveCountMax=4`), so a half-open TCP
+connection (NAT flush, VPN flap) dies loudly in ~60s instead of hanging the
+deploy forever. On top of that, every streamed remote step (`sshScript`) runs
+under a per-step **no-output watchdog**: **5 min** for build-class steps
+(data-prod `up -d --build`, api-prod `migrate → build → up`), **2 min** for
+everything else. Output flowing resets the timer — a normal long build is
+untouched. A step whose channel goes quiet past its budget is killed and the
+deploy exits non-zero with a loud
+`STALLED: <step> — no output for <N>m; remote work MAY have completed.` line.
+A stall proves only the LOCAL channel went silent — the remote docker work may
+have finished — so before any re-run or rollback, check box reality:
+
+```bash
+pnpm deploy:probe   # → LIVE health=<sha> api=ds-api:<sha>(Up_…_(healthy)) portal=… admin=…
+```
+
+One machine-parseable line: `LIVE` (health endpoint + ssh both answered),
+`DEGRADED` (one answered; the dead source prints `health=UNREACHABLE` /
+`containers=UNREACHABLE`), `UNREACHABLE` (neither). Bounded timeouts (10s
+fetch, 30s ssh) — the probe itself can never hang; exit 0 for every verdict
+(the exit code reflects whether the probe ran, not box health). Hand fallback:
+`curl -fsS https://api.doctor.school/v1/health ; ssh ds-api-prod docker ps`.
 
 The **previous prod SHA** the Deployment-record digest ranges from is read from the
 running `ds-api-prod-api-1` container's image tag (`ds-api:<sha>`) **before** the
@@ -165,4 +190,6 @@ present in the deployed SHA). A non-empty delta is the cue to `pnpm deploy:prod`
 **Exit-code hygiene.** `deploy:prod` (and any deploy/merge/migrate command) runs
 as its **own statement** — never `pnpm deploy:prod | tee log`: a pipe returns the
 pipe's exit code (`tee`'s 0) and masks a non-zero deploy failure. Redirect with
-`> log 2>&1` and check `$?` if a transcript is needed.
+`> log 2>&1` and check `$?` if a transcript is needed. A watchdog `STALLED` exit
+is non-zero like any other failure — but it means "channel went quiet", not
+"remote work failed": run `pnpm deploy:probe` before deciding re-run vs rollback.

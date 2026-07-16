@@ -96,6 +96,12 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "AuthCard", section: "blocks" },
   { id: "AuthLayout", section: "blocks" },
   { id: "OtpFocusScreen", section: "blocks" },
+
+  // ── Month-calendar blocks (004 EARS-19, #1050) — the webinars-month.dc.html
+  //    display-only month grid (desktop), dot-grid + selected-day agenda (mobile).
+  { id: "MonthCalendarGrid", section: "blocks" },
+  { id: "MonthDotGrid", section: "blocks" },
+  { id: "DayAgenda", section: "blocks" },
 ];
 
 /**

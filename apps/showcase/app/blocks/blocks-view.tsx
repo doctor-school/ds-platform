@@ -1,13 +1,18 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { useForm, type FieldValues } from "react-hook-form";
 
 import {
   AuthCard,
   AuthLayout,
+  DayAgenda,
+  MonthCalendarGrid,
+  MonthDotGrid,
   OtpFocusScreen,
   maskDestination,
+  type DotGridCell,
+  type MonthGridCell,
 } from "@ds/design-system/blocks";
 import { Button } from "@ds/design-system/button";
 import { Link } from "@ds/design-system/link";
@@ -565,12 +570,194 @@ function OtpFocusScreenSection() {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Month-calendar blocks (004 EARS-19)                                 */
+/* ------------------------------------------------------------------ */
+
+const WEEKDAYS = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"] as const;
+
+/** A neutral two-week desktop-grid sample exercising every cell variant. */
+const GRID_WEEKS: MonthGridCell[][] = [
+  [
+    { dateLabel: "30", muted: true, mutedDate: true },
+    { dateLabel: "1", note: "2 эфира · прошли" },
+    { dateLabel: "2", note: "1 эфир · прошёл" },
+    { dateLabel: "3" },
+    {
+      dateLabel: "4",
+      pills: [{ href: "#", time: "18:00", title: "Разбор клинического случая" }],
+    },
+    { dateLabel: "5", muted: true, mutedDate: true },
+    { dateLabel: "6", muted: true, mutedDate: true },
+  ],
+  [
+    {
+      dateLabel: "7 · сегодня",
+      today: true,
+      pills: [
+        { href: "#", time: "19:00", title: "Прямой эфир", live: true },
+        { href: "#", time: "20:30", title: "Новое в терапии" },
+      ],
+    },
+    { dateLabel: "8", pills: [{ href: "#", time: "18:00", title: "Кардиология" }] },
+    { dateLabel: "9" },
+    { dateLabel: "10" },
+    { dateLabel: "11", pills: [{ href: "#", time: "19:30", title: "Педиатрия" }] },
+    { dateLabel: "12", muted: true, mutedDate: true },
+    { dateLabel: "13", muted: true, mutedDate: true },
+  ],
+];
+
+const GRID_LEGEND = {
+  live: "В эфире",
+  planned: "Запланирован",
+  past: "Прошёл / пусто",
+};
+
+function MonthCalendarGridSection() {
+  return (
+    <BlockSection
+      title="MonthCalendarGrid"
+      exportsLine="MonthCalendarGrid — props: weekdays · weeks (MonthGridCell[][]) · liveLabel · legend (display-only desktop month grid)"
+    >
+      <p className="text-sm text-muted-foreground">
+        The desktop pane of the webinars month view. Display-only: each day renders event
+        pills (linking to the event page), a red live pill, or a muted past-day note; today is
+        outlined; a state legend sits below. All data, copy, and hrefs are app-supplied.
+      </p>
+      <SubRow label="Preview">
+        <div className="rounded-lg border border-border bg-muted p-8">
+          <MonthCalendarGrid
+            weekdays={WEEKDAYS}
+            weeks={GRID_WEEKS}
+            liveLabel="В эфире"
+            legend={GRID_LEGEND}
+          />
+        </div>
+      </SubRow>
+    </BlockSection>
+  );
+}
+
+/** A neutral two-week dot-grid sample; the section owns the selected-day state. */
+const DOT_WEEKS: DotGridCell[][] = [
+  [
+    { day: 30, inMonth: false, dots: [], ariaLabel: "30" },
+    { day: 1, inMonth: true, dots: ["past", "past"], ariaLabel: "1 — 2 эфира прошли" },
+    { day: 2, inMonth: true, dots: ["past"], ariaLabel: "2 — 1 эфир прошёл" },
+    { day: 3, inMonth: true, dots: [], ariaLabel: "3 — нет эфиров" },
+    { day: 4, inMonth: true, dots: ["event"], ariaLabel: "4 — 1 эфир" },
+    { day: 5, inMonth: true, dots: [], ariaLabel: "5 — нет эфиров" },
+    { day: 6, inMonth: true, dots: [], ariaLabel: "6 — нет эфиров" },
+  ],
+  [
+    {
+      day: 7,
+      inMonth: true,
+      today: true,
+      dots: ["live", "event"],
+      ariaLabel: "7 июля, 2 эфира, идёт эфир",
+    },
+    { day: 8, inMonth: true, dots: ["event"], ariaLabel: "8 — 1 эфир" },
+    { day: 9, inMonth: true, dots: [], ariaLabel: "9 — нет эфиров" },
+    { day: 10, inMonth: true, dots: [], ariaLabel: "10 — нет эфиров" },
+    { day: 11, inMonth: true, dots: ["event"], ariaLabel: "11 — 1 эфир" },
+    { day: 12, inMonth: true, dots: [], ariaLabel: "12 — нет эфиров" },
+    { day: 13, inMonth: true, dots: [], ariaLabel: "13 — нет эфиров" },
+  ],
+];
+
+function MonthDotGridSection() {
+  const [selected, setSelected] = useState<number | null>(7);
+  return (
+    <BlockSection
+      title="MonthDotGrid"
+      exportsLine="MonthDotGrid — props: weekdays · weeks (DotGridCell[][]) · selectedDay · onSelectDay (controlled mobile calendar)"
+    >
+      <p className="text-sm text-muted-foreground">
+        The mobile pane calendar: each day shows up to three status dots (red = airing, accent =
+        planned, muted = past). A controlled unit — the app owns the selected day and pairs it
+        with <code className="font-mono text-xs">DayAgenda</code>. Each day carries an{" "}
+        <code className="font-mono text-xs">aria-label</code> so the live signal is never
+        colour-only.
+      </p>
+      <SubRow label="Preview">
+        <div className="rounded-lg border border-border bg-muted p-8">
+          <div className="mx-auto max-w-sm">
+            <MonthDotGrid
+              weekdays={WEEKDAYS}
+              weeks={DOT_WEEKS}
+              selectedDay={selected}
+              onSelectDay={setSelected}
+            />
+          </div>
+        </div>
+      </SubRow>
+    </BlockSection>
+  );
+}
+
+function DayAgendaSection() {
+  return (
+    <BlockSection
+      title="DayAgenda"
+      exportsLine="DayAgenda — props: title · rows (DayAgendaRow[]) · emptyText (selected-day event list)"
+    >
+      <p className="text-sm text-muted-foreground">
+        The selected day&apos;s event list below the dot-grid: each row links to the event page; a
+        live row takes the red badge + border; an empty day shows the app-chosen note.
+      </p>
+      <SubRow label="State matrix — populated vs empty">
+        <div className="grid grid-cols-1 gap-x-10 gap-y-6 lg:grid-cols-2">
+          <StateCase label="populated" note="rows with one live row">
+            <div className="rounded-lg border border-border bg-muted p-8">
+              <DayAgenda
+                title="7 июля, вторник · сегодня"
+                emptyText="В этот день эфиров нет"
+                rows={[
+                  {
+                    href: "#",
+                    time: "19:00",
+                    school: "Школа кардиологии",
+                    title: "Прямой эфир: разбор случаев",
+                    live: true,
+                    liveLabel: "LIVE",
+                  },
+                  {
+                    href: "#",
+                    time: "20:30",
+                    school: "Школа терапии",
+                    title: "Новое в терапии 2026",
+                    liveLabel: "LIVE",
+                  },
+                ]}
+              />
+            </div>
+          </StateCase>
+          <StateCase label="empty" note="no rows — empty note">
+            <div className="rounded-lg border border-border bg-muted p-8">
+              <DayAgenda
+                title="9 июля, четверг"
+                rows={[]}
+                emptyText="В этот день эфиров нет"
+              />
+            </div>
+          </StateCase>
+        </div>
+      </SubRow>
+    </BlockSection>
+  );
+}
+
 export function BlocksView() {
   return (
     <div className="flex flex-col gap-2">
       <AuthCardSection />
       <AuthLayoutSection />
       <OtpFocusScreenSection />
+      <MonthCalendarGridSection />
+      <MonthDotGridSection />
+      <DayAgendaSection />
     </div>
   );
 }

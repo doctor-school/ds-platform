@@ -9,3 +9,15 @@ export { AuthCard } from "./auth-card";
 export { OtpFocusScreen } from "./otp-focus-screen";
 export { useResendCountdown } from "./use-resend-countdown";
 export { maskDestination } from "./mask-destination";
+
+// 004 EARS-19 — month-calendar presentation blocks (webinars-month.dc.html).
+export { MonthCalendarGrid } from "./month-calendar-grid";
+export type {
+  MonthCalendarGridProps,
+  MonthGridCell,
+  MonthGridPill,
+} from "./month-calendar-grid";
+export { MonthDotGrid } from "./month-dot-grid";
+export type { MonthDotGridProps, DotGridCell, DotKind } from "./month-dot-grid";
+export { DayAgenda } from "./day-agenda";
+export type { DayAgendaProps, DayAgendaRow } from "./day-agenda";

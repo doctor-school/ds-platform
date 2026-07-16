@@ -89,6 +89,26 @@ test.describe("004 EARS-13 axe-core a11y scan of the public webinar surfaces", (
     for (const theme of THEMES) await scan(page, theme);
   });
 
+  // 004 EARS-19 (#1050) — the month-calendar pane (`?view=month`) is a BLOCK-guard
+  // (`playwright-axe`) surface too: the desktop grid AND the mobile dot-grid +
+  // agenda are scanned at BOTH breakpoints × both themes. The live signal is
+  // carried in text (a screen-reader label on the red pill, the «LIVE» agenda
+  // badge, the per-day `aria-label`), never colour alone.
+  for (const [label, viewport] of [
+    ["desktop grid", { width: 1280, height: 900 }],
+    ["mobile dot-grid + agenda", { width: 390, height: 844 }],
+  ] as const) {
+    test(`the guest month view (${label}) passes WCAG 2 A/AA (both themes)`, async ({
+      page,
+      context,
+    }) => {
+      await context.clearCookies();
+      await page.setViewportSize(viewport);
+      await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
+      for (const theme of THEMES) await scan(page, theme);
+    });
+  }
+
   for (const [state, slug] of Object.entries(SEED)) {
     test(`the guest ${state} event page passes WCAG 2 A/AA (both themes)`, async ({
       page,

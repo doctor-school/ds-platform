@@ -1,5 +1,6 @@
 # 004 — Public event page & upcoming-broadcasts listing scenarios
-# Gherkin for the read side of the Webinars epic wave 1 (public event page + minimal listing).
+# Gherkin for the read side of the Webinars epic (public event page + listing: week view,
+# month-calendar view, and the «Неделя / Месяц» switcher — wave-2 slice #701).
 # Happy paths + failure branches. Translated to Playwright via playwright-bdd — this is a
 # user-facing spec, so the browser run is a required deliverable (owned + tracked by the 004
 # portal-integration + E2E child Issue, open-ears-issues step 3a), not a bare footnote.
@@ -124,6 +125,53 @@ Feature: Public webinar discovery — a doctor reads an event page and scans upc
     When a visitor opens the upcoming-broadcasts listing
     Then a clear "no upcoming broadcasts" empty-state is rendered
     And the surface is neither blank nor broken
+
+  # --- Month view & «Неделя / Месяц» switcher (US-7, US-8, US-9) ---
+
+  @EARS-18 @happy
+  Scenario: The doctor switches the listing between week and month views and back
+    Given the upcoming-broadcasts listing in its default «Неделя» view
+    When the visitor activates «Месяц» and then «Неделя»
+    Then the month calendar renders for the current month
+    And the round-trip returns the same day-grouped week list with nothing lost
+    And both views are publicly readable without authentication
+
+  @EARS-15 @EARS-19 @happy
+  Scenario: The month view shows the whole month at a glance with the live event in red
+    Given a month with upcoming published events, one live event, and already-past events
+    When a visitor opens the month view for that month
+    Then upcoming events render as pills on the 7-column grid (dots on the mobile grid)
+    And the live event renders as a red "live now" pill derived from the single state machine
+    And the month's past events render as muted notes without a participation affordance
+    And today is visibly marked and a legend explains the states
+
+  @EARS-15 @failure
+  Scenario: Draft and archived events never appear in the month view
+    Given a month containing draft and archived events alongside published ones
+    When a visitor reads the month projection
+    Then only published, live, and ended events of that month are returned
+    And no draft or archived event appears in the grid or in the per-month counts
+
+  @EARS-15 @EARS-19 @edge
+  Scenario: A month with only past events renders muted notes, not pills
+    Given a month all of whose events have already ended
+    When a visitor opens the month view for that month
+    Then its days render muted past-event notes
+    And no pill offers a participation affordance
+
+  @EARS-19 @edge
+  Scenario: An empty month renders a readable calendar, not a broken surface
+    Given a month with no events at all
+    When a visitor opens the month view for that month
+    Then the calendar grid renders with no pills and no notes
+    And the selected-day agenda on mobile shows the "no broadcasts this day" note
+
+  @EARS-16 @EARS-17 @happy
+  Scenario: The doctor navigates months by paging and by the picker with counts
+    Given the month view for the current month
+    When the visitor pages › to the next month and then picks another month in the month picker
+    Then the grid and the month heading re-render for each selected month without leaving the month view
+    And the picker shows a per-month event count for the displayed year with past months muted
 
   # --- Cross-cutting (US-1, US-2) ---
 

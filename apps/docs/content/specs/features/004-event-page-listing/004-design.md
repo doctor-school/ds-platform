@@ -1,6 +1,6 @@
 ---
 title: "004 — Public event page & upcoming-broadcasts listing (Design)"
-description: "Design: read-side of the webinar aggregate — publish-safe PublicEventPage / UpcomingBroadcastCard projections over the single EventLifecycleState machine; two public (unauthenticated) query endpoints; server-rendered portal event page + day-grouped nearest-first listing built to the vendored neo-brutalist canvases; lifecycle-state render swap; archived-link notice (owner variant a); МСК canonical-instant presentation; seams to 005 (registration), 006 (room), 007 (authoring)."
+description: "Design: read-side of the webinar aggregate — publish-safe PublicEventPage / UpcomingBroadcastCard / MonthBroadcastEntry / MonthlyEventCount projections over the single EventLifecycleState machine; public (unauthenticated) query endpoints incl. the month-range read + per-month counts; server-rendered portal event page + listing with the «Неделя / Месяц» switcher (day-grouped week list + month calendar) built to the vendored neo-brutalist canvases; lifecycle-state render swap; archived-link notice (owner variant a); МСК canonical-instant presentation; seams to 005 (registration), 006 (room), 007 (authoring)."
 slug: 004-event-page-listing
 status: Draft
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
@@ -22,12 +22,16 @@ flowchart LR
   subgraph apps_api[apps/api — public read endpoints]
     Q1[GET /v1/public/events/:idOrSlug]
     Q2[GET /v1/public/events?upcoming]
+    Q3[GET /v1/public/events?month=YYYY-MM]
+    Q4[GET /v1/public/events/month-counts?year=YYYY]
     PROJ[Publish-safe projector]
     POL[Visibility policy]
   end
   PG[(Postgres — event read model)]
 
   LP -->|no auth| Q2 --> POL --> PROJ --> PG
+  LP -->|"no auth — «Месяц» pane"| Q3 --> POL
+  LP -->|no auth — month picker| Q4 --> PROJ
   EP -->|no auth| Q1 --> POL --> PROJ --> PG
   EP -. "«Участвовать» → registration (005) via auth (003)" .-> REG[feature 005]
   EP -. "live-state CTA → room (006)" .-> ROOM[feature 006]
@@ -107,13 +111,15 @@ erDiagram
 
 - **`PublicEventPage`** (returned by `GET /v1/public/events/:idOrSlug`) — `id, slug, title, school, startsAt, durationMin, description, speakers[]{name, credentials}, programPdfUrl?, specialties[], partners[]{label}, state`. **Excludes** every operator/commercial field and all registrant PII — the projector is an allow-list, not a redactor (a new column is invisible to the public API until explicitly added to the projection). This is the structural guard behind EARS-10 and the recon §6 lesson (the `getEmailsForOrder` roster never touches a public surface).
 - **`UpcomingBroadcastCard`** (returned by `GET /v1/public/events?upcoming`) — `id, slug, title, school, startsAt, specialties[], speakers[]{name}, state∈{published,live}`. A thinner projection (no description, no partners, no PDF) — only the card choose-set.
+- **`MonthBroadcastEntry`** (returned by `GET /v1/public/events?month=YYYY-MM`, indicative shape) — `id, slug, title, school, startsAt, state∈{published,live,ended}`. The month view's projection: every publish-visible event whose start instant (МСК month boundaries) falls in the requested month, **including the month's already-past (`ended`) events** — the portal renders future/today entries as pills and past days as muted aggregate notes (EARS-15/EARS-19). Same allow-list discipline as `PublicEventPage`; `draft`/`archived` have no month projection.
+- **`MonthlyEventCount`** (returned by `GET /v1/public/events/month-counts?year=YYYY`, indicative shape) — 12 rows `{month, count}` counting only publish-visible events; feeds the month picker's per-month notes (EARS-16). Both month endpoints are public, cacheable, and carry the §4 short `Cache-Control` like the wave-1 reads.
 - **`programPdfUrl?`** is optional: the canvas always shows a program block, but a real event may lack a PDF; the projection omits the field (never emits a broken/null link) and the page renders the program section without the download affordance when absent (EARS-2).
 
 DTOs are Zod schemas in `packages/schemas/` (ADR-0002 SSOT), consumed by both the API and the portal via the generated SDK.
 
 ## 4. Public query endpoints
 
-Two endpoints, both classified **public** in the endpoint-authz matrix (ADR-0001 §2) — the first unauthenticated classified endpoints in the webinar domain.
+Four endpoints (the page read, the upcoming listing, the month-range read, and the per-month counts), all classified **public** in the endpoint-authz matrix (ADR-0001 §2) — the first unauthenticated classified endpoints in the webinar domain.
 
 ```mermaid
 sequenceDiagram
@@ -135,6 +141,8 @@ sequenceDiagram
 
 - **`GET /v1/public/events/:idOrSlug`** → `PublicEventPage`. Resolves by slug (the sponsor-distributed stable link) or id. `draft`/unknown → 404; `archived` → 200 with `state: archived` (the portal renders the notice); otherwise → 200 full projection. **No auth, no cookie required**; the response is identical whether or not a session cookie is present (EARS-1).
 - **`GET /v1/public/events?upcoming`** → `UpcomingBroadcastCard[]`, filtered `state ∈ {published, live} AND starts_at ≥ now() − airWindow` (a live event that started recently still lists), ordered `starts_at ASC`. Empty result is a valid `200 []` (the portal renders the empty-state, EARS-11).
+- **`GET /v1/public/events?month=YYYY-MM`** (indicative) → `MonthBroadcastEntry[]`, filtered `state ∈ {published, live, ended} AND starts_at within the requested month` (МСК month boundaries) — past events of the month included by design (EARS-15), ordered `starts_at ASC`. An empty month is a valid `200 []` (the grid renders with no pills/notes).
+- **`GET /v1/public/events/month-counts?year=YYYY`** (indicative) → `MonthlyEventCount[12]` for the picker (EARS-16).
 - **Caching.** Both are public and cacheable; responses carry a short `Cache-Control` max-age so the SSR render and any CDN edge cache stay fresh against a lifecycle transition (a `live`↔`ended` flip must surface within the max-age — this backs the "never stale" half of EARS-9). No per-user variation ⇒ safe shared cache.
 
 ## 5. Portal routes (server-rendered, canvas-faithful)
@@ -151,13 +159,20 @@ Two Next.js 15 routes in `apps/portal`, server-rendered, built from `@ds/design-
 ### 5.2 Listing — `/webinars` (`webinars-listing.dc.html`, minimal wave-1 cut)
 
 - Blue poster header + a **day-grouped** card list (the §09 rhythm: desktop day header = label + 2px ink rule, margins 48/24, card list `gap:28px`; mobile day header = full-bleed section band `margin:0 -16px`, cards bleed `gap:0`), each card the `webinar-card.dc.html` unit.
-- **Wave-1 cut (owner PRD scope).** The vendored listing canvas also carries a specialty filter, week-paging, a «Неделя / Месяц» switch, and a month view (`webinars-month.dc.html`). Wave 1 ships **only** the day-grouped nearest-first list — those controls are wave 2 and are **not built** in 004 (named out-of-scope, requirements Scope). The card unit and the §09 rhythm are in scope; the navigation chrome around them is not.
+- **Scope cut (owner PRD scope).** The vendored listing canvas also carries a specialty filter, week-paging, and free-text search — those are later wave-2 slices and are **not built** in 004 (named out-of-scope, requirements Scope). What 004 does build around the week list is the «Неделя / Месяц» view switcher and the month-calendar view (§5.4). The card unit and the §09 rhythm are in scope; the filter/search chrome is not.
 - **Empty state** (EARS-11): the canvas dashed-border empty block ("no upcoming broadcasts") when the projection is `[]`.
 - Cards link to `/webinars/:slug` (EARS-8).
 
 ### 5.3 Cross-surface consistency (EARS-9)
 
-Both routes read `state` from the same projection sourced from the same `EventLifecycleState` column — there is no second source of truth to drift. A live event's card and page both derive "live now" from `state === 'live'`; the short cache max-age (§4) bounds how long a just-transitioned event can look stale.
+Both routes read `state` from the same projection sourced from the same `EventLifecycleState` column — there is no second source of truth to drift. A live event's card and page both derive "live now" from `state === 'live'`; the short cache max-age (§4) bounds how long a just-transitioned event can look stale. The month view's red live pill (§5.4) reads the same column — three surfaces, one state.
+
+### 5.4 Month view — the «Месяц» pane of `/webinars` (`webinars-month.dc.html`, wave-2 slice #701)
+
+- **Switcher.** The listing route carries the «Неделя / Месяц» switcher (EARS-18): «Неделя» renders §5.2's day-grouped list (default), «Месяц» renders the month calendar; both panes public, switching loss-free (view selection is presentation state, e.g. a query param — no auth, no mutation).
+- **Data.** The pane reads `MonthBroadcastEntry[]` for the shown month plus `MonthlyEventCount[]` for the picker year (§3/§4). Month paging ‹ › and picker selection just re-query the month — pure reads (EARS-17).
+- **Rendering (EARS-19).** Desktop: 7-column grid, event pills (`time · title`), red live pill from `state === 'live'`, muted aggregate notes on past days, today outline, state legend. Mobile (≤900): dot-grid calendar (event dots, red live dot, muted past dot) + selected-day agenda below with a past-/empty-day note. Both breakpoints × both themes.
+- **Build approach (epic-brief verdict).** Adopt the **shadcn event-calendar blocks** (brief adopt-vs-build table); final block pick at delivery via the `build-ui-from-design-system` gate; adopted blocks are re-skinned to the vendored canvas geometry with `@ds/design-system` tokens. Stage A is satisfied by the owner-approved canvas; Stage B live verify applies at delivery.
 
 ## 6. Timezone presentation (МСК)
 
@@ -181,6 +196,6 @@ Each seam is a **tracked** dependency, not a silent stub (AGENTS.md §6 F-22; wi
 
 ## 9. Test strategy
 
-- **API read side (Vitest e2e + unit, `apps/api`):** the projection (EARS-1, EARS-2, EARS-10), visibility policy (EARS-5, EARS-6, EARS-7), and ordering — against dev-stand Postgres, `skipIf(!DATABASE_URL)`.
-- **Portal browser E2E (Playwright, `apps/portal`):** the required user-journey deliverable (requirements Verification, `all` row) — direct-link read, listing→card→page navigation, the four lifecycle renders, empty-state, МСК-no-drift, and canvas fidelity at both breakpoints × both themes. Owned + tracked by the 004 portal-integration + E2E child Issue (`open-ears-issues` step 3a), never a bare footnote.
+- **API read side (Vitest e2e + unit, `apps/api`):** the projection (EARS-1, EARS-2, EARS-10), visibility policy (EARS-5, EARS-6, EARS-7), ordering, and the month reads — month-range incl. past events + per-month counts (EARS-15, EARS-16) — against dev-stand Postgres, `skipIf(!DATABASE_URL)`.
+- **Portal browser E2E (Playwright, `apps/portal`):** the required user-journey deliverable (requirements Verification, `all` row) — direct-link read, listing→card→page navigation, the four lifecycle renders, the «Неделя / Месяц» round-trip + month paging/picker (EARS-17, EARS-18), empty-state, МСК-no-drift, canvas fidelity at both breakpoints × both themes, and the axe accessibility scan of the month view + switcher (`playwright-axe` BLOCK guard). Owned + tracked by the 004 portal-integration + E2E child Issue (`open-ears-issues` step 3a), never a bare footnote.
 - **Fidelity (EARS-14):** eyes-on full-page screenshots, both breakpoints × both themes, verified element-by-element against the vendored canvases before Stage-B (AGENTS.md §6 canvas-derived-UI rule); token-lint green (no arbitrary Tailwind).

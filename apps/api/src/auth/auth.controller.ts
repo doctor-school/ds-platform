@@ -228,16 +228,18 @@ export class AuthController {
   }
 
   /**
-   * EARS-8 read side: the authenticated principal (`sub, roles[], mfa`). Protected
-   * — `doctor_guest` is the v1 authenticated baseline (design §7.2); the subject
-   * is populated by `SessionAuthHook` from the `__Host-` cookie and the `AuthzGuard`
-   * guarantees its presence before this handler runs. The access/refresh tokens
-   * stay server-side and are never echoed here.
+   * EARS-8 read side: the authenticated principal (`sub, roles[], mfa`). This is a
+   * session-self operation — its semantic requirement is "any authenticated
+   * principal", not "a doctor" — so it admits either baseline role (`doctor_guest`
+   * OR `platform_admin`, #1038): a principal provisioned `platform_admin`-only must
+   * be able to read its own session. The subject is populated by `SessionAuthHook`
+   * from the `__Host-` cookie and the `AuthzGuard` guarantees its presence before
+   * this handler runs. The access/refresh tokens stay server-side, never echoed.
    */
   @Get("session")
   @Authz({
     access: "authenticated",
-    roles: ["doctor_guest"],
+    roles: ["doctor_guest", "platform_admin"],
     check: "fast-path",
     audit: "low-stakes",
     tests: ["EARS-8"],
@@ -256,13 +258,15 @@ export class AuthController {
    * the session revoked, so the now-dead cookie is cleared and the request is
    * denied. `audit: low-stakes` — rotation is routine and high-frequency
    * (canonical `auth.token.rotated`, ADR-0001 §7.3), not an introspection-tier
-   * event.
+   * event. A session-self operation — admits either baseline role (`doctor_guest`
+   * OR `platform_admin`, #1038): a principal must be able to rotate its own
+   * session regardless of which baseline role it was provisioned.
    */
   @Post("refresh")
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["doctor_guest"],
+    roles: ["doctor_guest", "platform_admin"],
     check: "fast-path",
     audit: "low-stakes",
     tests: ["EARS-9"],
@@ -283,8 +287,11 @@ export class AuthController {
   }
 
   /**
-   * EARS-10: log out. Authenticated (`doctor_guest` baseline, ADR-0001 §7.2) — you
-   * must hold a live session to revoke it. Deletes the server-side session
+   * EARS-10: log out. A session-self operation — you must hold a live session to
+   * revoke it, and any authenticated principal may revoke its own, so it admits
+   * either baseline role (`doctor_guest` OR `platform_admin`, #1038): a
+   * `platform_admin`-only principal must be able to log out (else its client
+   * cannot even clear a failed session). Deletes the server-side session
    * (invalidating its refresh chain), clears the `__Host-` cookie, and records
    * `SessionRevoked` (canonical `auth.session.terminated`, reason `logout`).
    * `audit: high-stakes` — an explicit session-lifecycle command, like login.
@@ -293,7 +300,7 @@ export class AuthController {
   @HttpCode(200)
   @Authz({
     access: "authenticated",
-    roles: ["doctor_guest"],
+    roles: ["doctor_guest", "platform_admin"],
     check: "fast-path",
     audit: "high-stakes",
     tests: ["EARS-10"],

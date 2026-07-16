@@ -289,6 +289,18 @@ export class FakeIdpClient implements IdpClient {
     return Promise.resolve();
   }
 
+  /**
+   * Test accessor: revoke `roleKey` from `sub` (idempotent — revoking an
+   * ungranted role is a no-op, mirroring Zitadel's NOT_FOUND swallow). Models a
+   * principal that holds a role WITHOUT the auto-granted `doctor_guest` baseline
+   * (e.g. an operator provisioned `platform_admin`-only), so the authz classifier
+   * for the session-self surface can be exercised against a single-role grant.
+   */
+  revokeProjectRole(sub: string, roleKey: string): Promise<void> {
+    this.grants.get(sub)?.delete(roleKey);
+    return Promise.resolve();
+  }
+
   /** Test accessor: the project roles granted to `sub` (empty if none). */
   grantedRoles(sub: string): string[] {
     return [...(this.grants.get(sub) ?? [])];

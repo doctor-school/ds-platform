@@ -34,6 +34,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { envFooter } from "../ci/post-product-note.mjs";
+import { cutDeployRelease } from "../release/cut-release.mjs";
 import { createDeploymentRecord } from "./deployment-record.mjs";
 import { composeDigest } from "./release-notes.mjs";
 
@@ -482,6 +483,9 @@ echo "retained ds-api tags:"; sudo docker images ds-api --format '  {{.Tag}} ({{
   step("DSO-128: prod smoke (--expect-sha)");
   await runSmoke(sha);
 
+  step("Cut the release at the deployed SHA (#996/§10.5 — Option A)");
+  cutReleaseAtDeployedSha(sha);
+
   step("Record the deploy as a GitHub Deployment (#927/#942)");
   await recordDeployment(prevSha, sha);
 
@@ -490,6 +494,26 @@ echo "retained ds-api tags:"; sudo docker images ds-api --format '  {{.Tag}} ({{
       ` (${((Date.now() - t0All) / 1000).toFixed(1)}s total).`,
   );
   console.log(`  Verify over HTTP:  curl -s ${PROD_HEALTH_URL} | jq .version`);
+}
+
+// Cut the repo-level release at the DEPLOYED SHA (#996/§10.5, Option A). The
+// agent-run deploy is the release initiator: this runs BEFORE recordDeployment so
+// the Deployment record (which reads `gh release list --limit 1`) references the
+// freshly-cut tag. NON-FATAL by contract — the deploy has already succeeded, and
+// `cutDeployRelease` never throws (it logs + returns { cut:false } on any failure
+// or an empty range). A redeploy of an already-released SHA cuts nothing.
+function cutReleaseAtDeployedSha(sha) {
+  try {
+    const res = cutDeployRelease({ targetSha: sha, cwd: process.cwd() });
+    if (res.cut) ok(`release ${res.tag} cut at ${sha.slice(0, 12)}`);
+    else console.log(`  ↷ no release cut (${res.reason})`);
+  } catch (e) {
+    // Defensive: the seam is contractually non-throwing, but never let a release
+    // cut fail a deploy that already succeeded.
+    console.log(
+      `  ⚠ release cut errored (deploy already succeeded): ${e?.message ?? String(e)}`,
+    );
+  }
 }
 
 // Record a successful deploy as a GitHub Deployment(production, sha) + success

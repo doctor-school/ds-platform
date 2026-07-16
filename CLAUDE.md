@@ -36,7 +36,7 @@ The repo auto-memory lives at `~/.claude/projects/<project>/memory/`. Only the f
 
 - **Batch audit/sweep** over many same-shape items (retro corpus, subsystem/instruction sweeps) — we already fan these out by hand.
 - **Large impl/review wave** (≈4+ independent, non-overlapping-touch-set Issues or ready PRs).
-- **find → verify pipeline** — many findings each needing independent/adversarial verification.
+- **find → verify pipeline** — many findings each needing independent/adversarial verification. The lead CLOSES every such run by diffing the synthesis row-set against the seed ledgers/inputs it handed the workflow — verifiers check rows that exist, nothing checks completeness (a 15-agent run still dropped a seeded deploy event — #995).
 - **N-approach bake-off** — competing designs scored by a judge panel.
 
 Stay on plain orchestration when each step depends on **judging the prior return**, or the discipline contour (worktree/Mode-a/merge/board) must run inline — Workflow subagents don't carry it. Detail + per-trigger evidence: memory `feedback_propose_workflow_when_shape_known`.

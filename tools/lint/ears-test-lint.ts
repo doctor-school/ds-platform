@@ -146,6 +146,26 @@ const BUILTIN_DEFERRALS: Record<string, Deferral> = {
     reason:
       'registration verify is email-only; the future secondary-phone verify path is unbuilt (needs live Zitadel)',
   },
+  '003:EARS-29': {
+    issue: 1045,
+    reason:
+      'spec-first increment (#910): returnCode + own-mailer code-only email path is unbuilt; tests ship with the impl slice',
+  },
+  '003:EARS-30': {
+    issue: 1045,
+    reason:
+      'spec-first increment (#910): OTP egress/log-scrub invariant is testable only once the returnCode path exists',
+  },
+  '003:EARS-31': {
+    issue: 1046,
+    reason:
+      'spec-first increment (#910): mail.ru→Resend failover chain is unbuilt; tests ship with the impl slice',
+  },
+  '003:EARS-32': {
+    issue: 1046,
+    reason:
+      'spec-first increment (#910): relay-failure observability is unbuilt; tests ship with the impl slice',
+  },
 };
 
 function loadDeferrals(): Record<string, Deferral> {

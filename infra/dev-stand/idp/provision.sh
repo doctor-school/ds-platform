@@ -26,6 +26,16 @@
 # an invalid-UTF-8 byte), silently corrupting the stored copy (proven live,
 # #877 — a Windows run wrote `?`-mangled verifysmsotp/ru until restored).
 #
+# Regression note (#897): an empty Caddy vhost on the IdP origin answers EVERY
+# path 200-with-an-empty-body, which made each api_idempotent step report
+# «ensured» while doing nothing (PR #894). Step 0 below therefore requires a
+# Zitadel-shaped instance identity from the Admin API before the first mutation.
+# Regression note (#902): EMAIL_DELIVERY_MODE=real with IDP_SMTP_REAL_* absent
+# used to WARN and activate Mailpit as the boot default — on prod this silently
+# deactivated the real mail.ru relay (2026-07-14 incident; root cause was a
+# non-root `source` of the 0600 root:root /etc/ds-platform/api.env yielding an
+# empty env). Real mode with absent creds is now a hard abort (pre-flight below).
+#
 # Outputs (stdout, machine-parseable):
 #   IDP_CLIENT_ID=<oidc client id>
 #   IDP_CLIENT_SECRET=<oidc client secret>   # printed ONCE on creation only
@@ -76,6 +86,43 @@ BASE_URL="${BASE_URL%/}"
 for bin in curl jq; do
   command -v "$bin" >/dev/null || { echo "missing dependency: $bin" >&2; exit 3; }
 done
+
+# ── pre-flight: delivery-mode ↔ creds coherence (#902, fail-closed) ──────────
+# Validated BEFORE any provisioning step so a misconfigured real mode aborts
+# with zero partial state. `real` email with absent creds is never downgraded
+# to Mailpit — that fallback silently deactivated the real mail.ru relay on
+# prod (2026-07-14 incident; see the regression note in the header).
+case "$EMAIL_DELIVERY_MODE" in
+  mailpit|real) ;;
+  *) echo "ERROR: EMAIL_DELIVERY_MODE='${EMAIL_DELIVERY_MODE}' is not one of: mailpit | real" >&2; exit 4 ;;
+esac
+case "$SMS_DELIVERY_MODE" in
+  sink|real) ;;
+  *) echo "ERROR: SMS_DELIVERY_MODE='${SMS_DELIVERY_MODE}' is not one of: sink | real" >&2; exit 4 ;;
+esac
+if [[ "$EMAIL_DELIVERY_MODE" == "real" ]]; then
+  _missing=()
+  [[ -z "${IDP_SMTP_REAL_HOST:-}" ]] && _missing+=(IDP_SMTP_REAL_HOST)
+  [[ -z "${IDP_SMTP_REAL_USER:-}" ]] && _missing+=(IDP_SMTP_REAL_USER)
+  [[ -z "${IDP_SMTP_REAL_PASSWORD:-}" ]] && _missing+=(IDP_SMTP_REAL_PASSWORD)
+  [[ -z "${IDP_SMTP_REAL_SENDER_ADDRESS:-}" ]] && _missing+=(IDP_SMTP_REAL_SENDER_ADDRESS)
+  if (( ${#_missing[@]} > 0 )); then
+    echo "ERROR: EMAIL_DELIVERY_MODE=real but real SMTP creds are absent: ${_missing[*]}" >&2
+    echo "  Refusing to provision (fail-closed, #902): activating a fallback provider here" >&2
+    echo "  silently breaks real email delivery (2026-07-14 prod incident). Likely cause on" >&2
+    echo "  prod: api.env sourced without root — /etc/ds-platform/api.env is root:root 0600," >&2
+    echo "  so a non-root source fails (Permission denied) and yields a silently EMPTY env." >&2
+    echo "  Source it as root:" >&2
+    echo "    sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; ./provision.sh'" >&2
+    if [[ -e /etc/ds-platform/api.env && ! -r /etc/ds-platform/api.env ]]; then
+      echo "  (detected: /etc/ds-platform/api.env exists but is NOT readable by this user)" >&2
+    fi
+    exit 4
+  fi
+fi
+# SMS carries no creds env here (the sms-aero-adapter holds the SMS-Aero creds
+# and does the egress), so the SMS_DELIVERY_MODE=real fail-closed gate lives at
+# the step-7 activation: an empty provider id hard-aborts, never sink-falls-back.
 
 # ── http helper ──────────────────────────────────────────────────────────────
 # api <METHOD> <PATH> [json-body]  ->  prints response body, fails on non-2xx
@@ -156,6 +203,24 @@ api_activate() {
 }
 
 echo "Provisioning Zitadel OIDC at ${BASE_URL}" >&2
+
+# ── 0. instance-identity pre-flight (#897) ───────────────────────────────────
+# An empty vhost on the IdP origin (e.g. a Caddy catch-all with no zitadel
+# upstream) answers EVERY path 200-with-an-empty-body, which makes each
+# api_idempotent step below report «ensured» while doing nothing (PR #894).
+# Require a Zitadel-shaped identity from the Admin API BEFORE the first
+# mutation: a real Zitadel returns {"instance":{"id":...}} here; an empty or
+# non-JSON body aborts. (api() already aborts on non-2xx with its own message.)
+INSTANCE_ID="$(api GET /admin/v1/instances/me | jq -r '.instance.id // empty' 2>/dev/null || true)"
+if [[ -z "$INSTANCE_ID" ]]; then
+  echo "ERROR: ${BASE_URL}/admin/v1/instances/me returned no Zitadel instance identity" >&2
+  echo "  (empty or non-JSON body). If the HTTP status was 200, the vhost answered 200" >&2
+  echo "  with an empty body — wrong host? Point BASE_URL at the real Zitadel origin," >&2
+  echo "  not an empty/catch-all vhost (#897; PR #894 incident: every step reported" >&2
+  echo "  «ensured» against a no-op vhost)." >&2
+  exit 6
+fi
+echo "instance identity OK (instance ${INSTANCE_ID})" >&2
 
 # ── 1. ensure project ────────────────────────────────────────────────────────
 # Search by name; create if absent. The project-role assertion flag makes
@@ -377,17 +442,20 @@ else
 fi
 
 # Activate the boot-time default (EMAIL_DELIVERY_MODE) so a stand has a working
-# active SMTP provider even before the api reconcile runs. If `real` is requested
-# but its provider was skipped (no creds), fall back to Mailpit with a loud note —
-# a `real` boot default with no creds must not leave delivery unconfigured.
-if [[ "$EMAIL_DELIVERY_MODE" == "real" && -n "$SMTP_REAL_ID" ]]; then
+# active SMTP provider even before the api reconcile runs. FAIL-CLOSED (#902):
+# `real` with no real provider id is a hard abort — never fall back to Mailpit
+# (that fallback silently deactivated the real mail.ru relay on prod,
+# 2026-07-14). The pre-flight already rejects real-mode-without-creds, so an
+# empty id here means the ensure step itself failed.
+if [[ "$EMAIL_DELIVERY_MODE" == "real" ]]; then
+  if [[ -z "$SMTP_REAL_ID" || "$SMTP_REAL_ID" == "null" ]]; then
+    echo "ERROR: EMAIL_DELIVERY_MODE=real but the real SMTP provider has no id —" >&2
+    echo "       refusing to activate a fallback provider (fail-closed, #902)." >&2
+    exit 5
+  fi
   api_activate POST "/admin/v1/smtp/${SMTP_REAL_ID}/_activate" '{}' >/dev/null
   echo "activated SMTP provider ${SMTP_REAL_ID} (real transactional sender) [boot default]" >&2
 else
-  if [[ "$EMAIL_DELIVERY_MODE" == "real" ]]; then
-    echo "WARN: EMAIL_DELIVERY_MODE=real but no real SMTP provider (creds absent) —" >&2
-    echo "      activating Mailpit instead. Set IDP_SMTP_REAL_* or use mailpit." >&2
-  fi
   api_activate POST "/admin/v1/smtp/${SMTP_MAILPIT_ID}/_activate" '{}' >/dev/null
   echo "activated SMTP provider ${SMTP_MAILPIT_ID} (dev-stand mailpit) [boot default]" >&2
 fi
@@ -444,8 +512,15 @@ SMS_AERO_ID="$(ensure_sms_provider "real sms-aero-adapter" \
   "${IDP_SMS_AERO_ENDPOINT:-http://sms-aero-adapter:8091/}")"
 
 # Activate the boot-time default (SMS_DELIVERY_MODE) so a stand has a working
-# active SMS provider even before the api reconcile runs.
-if [[ "$SMS_DELIVERY_MODE" == "real" && -n "$SMS_AERO_ID" && "$SMS_AERO_ID" != "null" ]]; then
+# active SMS provider even before the api reconcile runs. FAIL-CLOSED (#902):
+# `real` with no sms-aero provider id is a hard abort — never fall back to the
+# sink (the SMS analogue of the 2026-07-14 email incident).
+if [[ "$SMS_DELIVERY_MODE" == "real" ]]; then
+  if [[ -z "$SMS_AERO_ID" || "$SMS_AERO_ID" == "null" ]]; then
+    echo "ERROR: SMS_DELIVERY_MODE=real but the sms-aero provider has no id —" >&2
+    echo "       refusing to activate the sink as a fallback (fail-closed, #902)." >&2
+    exit 5
+  fi
   api_activate POST "/admin/v1/sms/${SMS_AERO_ID}/_activate" '{}' >/dev/null
   echo "activated HTTP SMS provider ${SMS_AERO_ID} (real sms-aero-adapter) [boot default]" >&2
 elif [[ -n "$SMS_SINK_ID" && "$SMS_SINK_ID" != "null" ]]; then

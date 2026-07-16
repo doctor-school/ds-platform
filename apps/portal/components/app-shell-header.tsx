@@ -54,10 +54,15 @@ import { useHeaderAuth } from "@/lib/header-auth";
  * shared {@link ThemeToggle}). The primitive's press colour
  * (`active:text-primary-action/80`) is likewise re-anchored per surface: on the
  * blue band `primary-action` (blue.700) IS the band colour, so a press painted
- * the label invisible for the whole click-through (#1007 Stage-B) — on-blue
- * links press to full-strength `header-foreground` + an element `active:opacity-80`
- * dim (#270: element opacity, never a foreground-colour opacity), white chips
- * keep their surface ink (`header/80`, AA on the white chip in both themes). registry-research (build-ui-from-design-system):
+ * the label invisible for the whole click-through (#1007 Stage-B round 1).
+ * Owner design rule (Stage-B 2026-07-16, round 2): EVERY interactive state is
+ * one VISIBLE step down from the state it transitions from (rest → hover →
+ * press), per occurrence. On-blue links press via an element-opacity step
+ * below their own resting tier (#270: element opacity, never a
+ * foreground-colour opacity); white chips follow the DS Button neo-brutalist
+ * press (`button.tsx` base: sink deeper than hover + drop the shadow) with the
+ * ink pinned to full-strength `header` (kills the primitive's press tint,
+ * which goes near-white on the white chip in dark theme). registry-research (build-ui-from-design-system):
  * shadcn navigation-menu, Origin UI, Intent/Jolly, Kibo — none ship the branded
  * neo-brutalist inverted app bar; bespoke composition (see PR).
  */
@@ -83,15 +88,19 @@ const LOGIN_HREF = "/login";
  *  set a name. */
 const avatarFallbackIcon = <UserRound aria-hidden="true" className="size-5" />;
 
-/** «Войти» chip — white-on-blue neo-brutalist button (canvas), token-only; states
- *  owned by the DS `Link` primitive it overrides. */
+/** «Войти» chip — white-on-blue neo-brutalist button (canvas), token-only.
+ *  Chain: rest (shadow-btn) → hover (sink 1px, shadow-btn-hover) → press (sink
+ *  2px, shadow-none — the DS Button press language scaled to the chip's 1px
+ *  hover; ink pinned to full `header`). */
 const LOGIN_CHIP =
-  "inline-flex flex-none items-center justify-center bg-header-foreground px-6 py-3 text-sm font-bold text-header shadow-btn hover:no-underline hover:translate-x-px hover:translate-y-px hover:shadow-btn-hover active:text-header/80";
+  "inline-flex flex-none items-center justify-center bg-header-foreground px-6 py-3 text-sm font-bold text-header shadow-btn hover:no-underline hover:translate-x-px hover:translate-y-px hover:shadow-btn-hover active:translate-x-0.5 active:translate-y-0.5 active:shadow-none active:text-header";
 
 /** Initials avatar icon — white-on-blue chip, an icon-LINK to `/account`
- *  (EARS-5/6: not a dropdown, no «Выйти»). */
+ *  (EARS-5/6: not a dropdown, no «Выйти»). Same chip chain as «Войти»: rest →
+ *  hover sinks 1px with shadow-btn-hover → press sinks 2px and drops the
+ *  shadow (Stage-B round 2: the chip previously had NO visible hover delta). */
 const AVATAR_CHIP =
-  "inline-flex size-10 flex-none items-center justify-center bg-header-foreground text-sm font-extrabold text-header shadow-btn hover:no-underline active:text-header/80";
+  "inline-flex size-10 flex-none items-center justify-center bg-header-foreground text-sm font-extrabold text-header shadow-btn hover:no-underline hover:translate-x-px hover:translate-y-px hover:shadow-btn-hover active:translate-x-0.5 active:translate-y-0.5 active:shadow-none active:text-header";
 
 export function AppShellHeader() {
   const t = useTranslations("shell");
@@ -199,9 +208,13 @@ export function AppShellHeader() {
               {t("navMyEvents")}
             </MobileNavLink>
             {auth.status === "guest" ? (
+              /* Blue chip on the card: rest 100 → hover 90 → press 80 — one
+                 visible element-opacity step per state (owner rule, Stage-B
+                 round 2); ink pinned to header-foreground (round 1: the base
+                 press tint = the chip's own bg). */
               <DsLink
                 asChild
-                className="mt-1.5 bg-header px-4 py-3 text-center text-sm font-extrabold text-header-foreground hover:no-underline active:text-header-foreground active:opacity-80"
+                className="mt-1.5 bg-header px-4 py-3 text-center text-sm font-extrabold text-header-foreground hover:no-underline hover:opacity-90 active:text-header-foreground active:opacity-80"
               >
                 <Link href={LOGIN_HREF} data-testid="shell-mobile-login">
                   {t("login")}
@@ -220,8 +233,11 @@ export function AppShellHeader() {
  *  opacity, #270). States are owned by the composed DS `Link` primitive, except
  *  the press colour: the base `active:text-primary-action/80` is blue.700 = the
  *  `header` band itself, so pressing painted the label invisible for the whole
- *  click-through (#1007 Stage-B) — re-anchored to full-strength
- *  `header-foreground` + an element `active:opacity-80` dim (#270). */
+ *  click-through (#1007 Stage-B round 1) — re-anchored to full-strength
+ *  `header-foreground` + a PER-BRANCH element-opacity step (#270): press = one
+ *  visible step down from the tier it transitions from (owner rule, Stage-B
+ *  round 2) — the inactive branch rests at 80 so presses to 60; the
+ *  route-active branch rests at 100 so presses to 80. */
 function NavLink({
   href,
   active,
@@ -237,8 +253,10 @@ function NavLink({
     <DsLink
       asChild
       className={cn(
-        "font-bold text-header-foreground active:text-header-foreground active:opacity-80",
-        active ? "underline decoration-2" : "no-underline opacity-80",
+        "font-bold text-header-foreground active:text-header-foreground",
+        active
+          ? "underline decoration-2 active:opacity-80"
+          : "no-underline opacity-80 active:opacity-60",
       )}
     >
       <Link

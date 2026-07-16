@@ -181,20 +181,31 @@ describe("008 EARS-1…13 — persistent app-shell header", () => {
     const avatar = await screen.findByTestId("shell-avatar");
     // Desktop nav links sit ON the blue band: the primitive's
     // `active:text-primary-action/80` is blue.700 = the band itself (a press
-    // painted the label invisible for the whole click-through) — they must
-    // press to full-strength `header-foreground` + an element opacity dim
-    // (#270), and tailwind-merge must have dropped the base press colour.
-    for (const id of ["shell-nav-broadcasts", "shell-nav-my-events"]) {
-      const link = screen.getByTestId(id);
-      expect(link.className).toContain("active:text-header-foreground");
-      expect(link.className).toContain("active:opacity-80");
-      expect(link.className).not.toContain("active:text-primary-action/80");
-    }
-    // White chips (avatar, desktop + mobile) keep their surface ink under
-    // press (`header/80` — theme-invariant, unlike `primary-action` which
-    // goes near-white in dark theme on the white chip).
+    // painted the label invisible for the whole click-through) — they press
+    // to full-strength `header-foreground` + a PER-BRANCH element-opacity
+    // step (#270; owner rule Stage-B round 2: press = one visible step down
+    // from the tier it transitions from). pathname is "/" here, so «Эфиры»
+    // is the route-active branch (rest 100 → press 80) and «Мои события» the
+    // inactive one (rest 80 → press 60).
+    const broadcasts = screen.getByTestId("shell-nav-broadcasts");
+    expect(broadcasts.className).toContain("active:text-header-foreground");
+    expect(broadcasts.className).toContain("active:opacity-80");
+    expect(broadcasts.className).not.toContain("active:text-primary-action/80");
+    const myEvents = screen.getByTestId("shell-nav-my-events");
+    expect(myEvents.className).toContain("active:text-header-foreground");
+    expect(myEvents.className).toContain("opacity-80"); // resting tier
+    expect(myEvents.className).toContain("active:opacity-60");
+    expect(myEvents.className).not.toContain("active:text-primary-action/80");
+    // White chips (avatar, desktop + mobile): rest → hover sinks 1px with
+    // shadow-btn-hover → press sinks 2px and drops the shadow (the DS Button
+    // press language), ink pinned to full-strength `header` (the base press
+    // tint goes near-white on the white chip in dark theme).
     for (const el of [avatar, screen.getByTestId("shell-mobile-avatar")]) {
-      expect(el.className).toContain("active:text-header/80");
+      expect(el.className).toContain("hover:translate-x-px");
+      expect(el.className).toContain("hover:shadow-btn-hover");
+      expect(el.className).toContain("active:translate-x-0.5");
+      expect(el.className).toContain("active:shadow-none");
+      expect(el.className).toContain("active:text-header");
       expect(el.className).not.toContain("active:text-primary-action/80");
     }
     // The mobile dropdown nav links sit on the card surface, where the DS
@@ -209,14 +220,20 @@ describe("008 EARS-1…13 — persistent app-shell header", () => {
   it("EARS-4: guest «Войти» chips keep readable press colours on their own surface (#1007 Stage-B)", async () => {
     getMyProfile.mockResolvedValue(null);
     renderHeader();
-    // Desktop chip: white chip on the blue band — presses to its surface ink.
+    // Desktop chip: white chip on the blue band — press = the DS Button
+    // language one step past its 1px hover (sink 2px, drop the shadow), ink
+    // pinned to full-strength `header`.
     const login = await screen.findByTestId("shell-login");
-    expect(login.className).toContain("active:text-header/80");
+    expect(login.className).toContain("hover:translate-x-px");
+    expect(login.className).toContain("active:translate-x-0.5");
+    expect(login.className).toContain("active:shadow-none");
+    expect(login.className).toContain("active:text-header");
     expect(login.className).not.toContain("active:text-primary-action/80");
-    // Mobile dropdown chip: blue chip on the card — presses to its white
-    // foreground (element-opacity dim, #270), never the base blue.700 (= its
-    // own background).
+    // Mobile dropdown chip: blue chip on the card — rest 100 → hover 90 →
+    // press 80, one visible element-opacity step per state (#270); ink pinned
+    // to its white foreground, never the base blue.700 (= its own background).
     const mobileLogin = screen.getByTestId("shell-mobile-login");
+    expect(mobileLogin.className).toContain("hover:opacity-90");
     expect(mobileLogin.className).toContain("active:text-header-foreground");
     expect(mobileLogin.className).toContain("active:opacity-80");
     expect(mobileLogin.className).not.toContain("active:text-primary-action/80");

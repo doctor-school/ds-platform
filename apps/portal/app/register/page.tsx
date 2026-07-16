@@ -132,7 +132,10 @@ function RegisterCard() {
   return (
     <AuthCard
         icon={<UserPlus className="text-primary" aria-hidden />}
-        title={t("title")}
+        // #1033: the page title is the document's single h1 (a11y landmark).
+        // Bare h1 — Tailwind preflight makes it inherit the CardTitle styling,
+        // so the render is pixel-identical.
+        title={<h1>{t("title")}</h1>}
         description={t("description")}
         footer={
           <DsLink asChild>

@@ -21,3 +21,7 @@ export { MonthDotGrid } from "./month-dot-grid";
 export type { MonthDotGridProps, DotGridCell, DotKind } from "./month-dot-grid";
 export { DayAgenda } from "./day-agenda";
 export type { DayAgendaProps, DayAgendaRow } from "./day-agenda";
+
+// 004 EARS-16/17 — the 12-month picker (webinars-month.dc.html), #1051.
+export { MonthPicker } from "./month-picker";
+export type { MonthPickerProps, MonthPickerCell } from "./month-picker";

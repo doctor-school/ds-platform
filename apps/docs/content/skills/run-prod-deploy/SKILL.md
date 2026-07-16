@@ -44,9 +44,10 @@ The pipeline is fail-closed and stops at the first red step, printing a rollback
 
 After the deploy has already succeeded, the pipeline records — and by contract a `gh`/webhook failure here only WARNs, the deploy exit code stays 0:
 
+- **Release cut** (#996/§10.5, Option A) — **the agent-run deploy is the release initiator.** Before the Deployment record, the pipeline cuts `release-YYYY.MM.DD-n` at the **deployed SHA** (`--generate-notes` diffed since the previous `release-*`), so the Release == what shipped and the Deployment record then references the fresh tag. Cutting is **skipped green** on a redeploy of an already-released SHA (the non-empty-range guard: cut only if the deployed SHA is a strict descendant of the latest `release-*` tag). Seam: `tools/release/cut-release.mjs` → `cutDeployRelease`.
 - **GitHub Deployment** (#942) — a `Deployment(production, sha)` + `success` status carrying the release-notes digest and the health URL as `log_url`. Read by `## Project reality` (below).
 
-Separately, a **`Version Packages` PR merge** cuts a `release-YYYY.MM.DD-n` git tag + GitHub Release with auto-generated notes (#944) — that is the release-train event, independent of a deploy.
+The **`Version Packages` PR merge** no longer cuts a repo-level release — it maintains per-package `version` + `CHANGELOG.md` only (§D1, the changelog SSOT). The repo-level release cut is the deploy step above; the former `release.yml` `tag-release` trigger is retired (§10.5).
 
 ### 2a. Mattermost release digest — fired from CI, not from `deploy:prod` (#968)
 

@@ -13,18 +13,18 @@
  * It reads the CURRENT session transcript (path arrives on stdin), takes the
  * last assistant message's usage block, and computes the live context size as
  * input_tokens + cache_read_input_tokens + cache_creation_input_tokens.
- * Thresholds are window-relative (the current session model family is a
- * 1M-token-class window, not the 200K window the old fixed 110K/120K
- * thresholds were calibrated for). Below the first tier: silent, no output.
+ * Thresholds are owner-calibrated to the ~150K cache-read cost cliff for the
+ * session model (owner research; the operator statusline visualizes the 150K
+ * limit) — do not change without an explicit owner directive. Below the first
+ * tier: silent, no output.
  *
  * Fail-safe: any parse/IO error exits 0 with no output — a broken budget probe
  * must never break prompting.
  */
 import { readFileSync } from "node:fs";
 
-const MODEL_WINDOW = 1_000_000; // Fable/Opus 1M-class window — update when the session model family changes
-const ADVISORY_1 = 0.4 * MODEL_WINDOW;
-const ADVISORY_2 = 0.6 * MODEL_WINDOW;
+const WARN_THRESHOLD = 110_000;
+const WRAP_THRESHOLD = 120_000;
 
 try {
   const stdin = readFileSync(0, "utf8");
@@ -52,18 +52,18 @@ try {
     }
   }
 
-  if (context >= ADVISORY_2) {
+  if (context >= WRAP_THRESHOLD) {
     const k = Math.round(context / 1000);
     process.stdout.write(
       JSON.stringify({
-        systemMessage: `⚠ Контекст сессии ≈ ${k}K из 1M (60%+) — сессия тяжёлая; /wrap на вашем усмотрении.`,
+        systemMessage: `⚠ Контекст сессии ≈ ${k}K токенов (порог 120K) — каждый следующий ход дорожает кэш-ридами. Пора /wrap.`,
       }),
     );
-  } else if (context >= ADVISORY_1) {
+  } else if (context >= WARN_THRESHOLD) {
     const k = Math.round(context / 1000);
     process.stdout.write(
       JSON.stringify({
-        systemMessage: `ℹ Контекст сессии ≈ ${k}K из 1M (40%+) — имейте в виду; решение о /wrap за вами.`,
+        systemMessage: `⚠ Контекст сессии ≈ ${k}K токенов — приближается порог /wrap (120K). Решение за вами.`,
       }),
     );
   }

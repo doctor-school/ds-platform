@@ -24,7 +24,7 @@ This file is the slim core. The full always-on set auto-loads at session start: 
 
 <!-- prod-reality-reconciled: 2026-07-15 (#927) -->
 
-DS Platform is the medical-education platform for Doctor.School (B2B pharma sponsor → B2D doctor audience). Architectural ADRs (0001–0008) are accepted and a **working version is shipped and operated in production, live with users**.
+DS Platform is the medical-education platform for Doctor.School (B2B pharma sponsor → B2D doctor audience). Architectural ADRs (0001–0008) are accepted.
 
 **Production is live with users.** A deployment runs on Timeweb (ru-3) at the `doctor.school` domains — `app.doctor.school`, `api.`, `id.`. **Never tell the owner "there is no production".** The authoritative deployed scope is the derived **`## Project reality`** bootstrap section (`pnpm bootstrap`) + **GitHub Releases/Deployments** — never inferred from these docs (that drift was the #927 bug; static prose describing a moving target rots between owner corrections). Detail: memory `reference_prod_deploy_reality`, `feedback_no_dynamic_release_state_in_prose`.
 
@@ -46,7 +46,7 @@ Stack at a glance (full reference in `apps/docs/content/adr/`): **Backend** Nest
 
 ## 3. Work protocol
 
-Every agent session, regardless of vendor, follows this three-step entry — **identify task kind → cite entry point → load skill**.
+Every agent session, regardless of vendor, follows this three-step entry — **identify task kind → open with the session plan → load skill**.
 
 ### 3.1 Identify task kind
 
@@ -62,9 +62,9 @@ Every agent session, regardless of vendor, follows this three-step entry — **i
 
 Not in the table? **Dependency bump** → `engineering-task`; first run the two checks in `.claude/rules/repo-conventions.md` → _Dependency bumps_. **Opening Issues from an already-merged spec** → skill `open-ears-issues`. A **user-facing product epic/feature with no PRD** enters at `product-discovery`, which hands off to `spec-authoring` then `feature-iteration` (ADR-0014). Anything still unmapped → default to `engineering-task` (§3.8), state the assumption, and proceed; stop and ask Tech Lead only if that genuinely doesn't fit.
 
-### 3.2 Cite the entry point
+### 3.2 Open with the session plan
 
-In the first user-facing reply, state: kind, active artifact (Issue #N / spec path / ADR section), skill being dispatched.
+The first reply opens with the owner-facing **«План сессии»** block (RU, ≤6 lines; format: CLAUDE.md → Session plan), then: kind, active artifact (Issue #N / spec path / ADR section), skill dispatched.
 
 ### 3.3 Load the skill
 
@@ -128,7 +128,7 @@ CI lint guards (ADR-0007 §2.6) surface as PR Checks. Authoritative list + sever
 - **Roles, not names** in any spec / ADR / design doc.
 - **Direct push to `main` is forbidden.** Single merge command (Phase 0): `gh pr merge <N> --squash --delete-branch`.
 - **Worktree-per-session when parallel.** Sessions run concurrently here. If any other session may touch the repo, isolate in a git worktree as the **first** action of a code/doc task — **including the analysis reads that inform the design, not only the edits** (#418): `pnpm task:worktree <N>` → `EnterWorktree path:.claude/worktrees/<N>` → `pnpm install` before the first commit. The bootstrap enforces this (#823): a PreToolUse hook warns on main-tree source reads until a worktree is entered. **Never `git checkout -b` in the shared main tree** — a parallel session switches HEAD and sweeps your uncommitted edits into its PR (#345→#355). **Carve-out — orchestration-lead, read-only (#854):** a lead that dispatches ALL deliverable edits to worktree'd subagents and makes **zero** main-tree writes may stay read-only in main for recon (nothing to sweep); the read-guard softens reads and re-arms the full warning on the **first** main-tree WRITE — isolate BEFORE it. Merge/teardown: skill `merge-when-green`; detail + the #418 stale-read caveat: memory `feedback_worktree_per_session_when_parallel`.
-- **Project skill catalog.** Only `apps/docs/content/skills/`. Vendor-specific auto-discovery is not used to dispatch project work. The path is the contract.
+- **Project skill catalog.** Only `apps/docs/content/skills/` (§3.3 — the path is the contract).
 - **Discipline gates.** `run-iteration-end-checklist` and `request-mode-a-review` produce artifacts the lead cannot bypass. Without their outputs, merge is forbidden (ADR-0007 §2.4).
 - **Decision-debt.** Any silent deviation from a documented convention MUST surface via `surface-decision-debt` before the iteration summary (or, for an engineering-task, before the result comment).
 - **Amendment vs inline rewrite.** A decision **not yet running in production** (still paper-architecture) gets NO amendment block in ADR / spec / design docs — an amendment is justified only once that decision is live in production. Everywhere else: inline rewrite, the body reading as if the current decision were always the decision. The history of paper-architecture evolution lives in `git log`, not the document body. **(This rule applies to these instruction files too: replace a section, don't append an amendment — the anti-bloat budget depends on it.)**

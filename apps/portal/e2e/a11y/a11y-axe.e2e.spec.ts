@@ -1,6 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { LIVE_STAND, submitRegisterAndVerify } from "../support/doctor-session";
+import {
+  LIVE_STAND,
+  submitRegisterAndVerify,
+  waitForAuthenticatedLanding,
+} from "../support/doctor-session";
 
 /**
  * 005 EARS-13 (contrast slice) — axe-core WCAG 2 A/AA scan of the touched portal
@@ -122,11 +126,13 @@ test.describe("005 EARS-13 axe-core a11y scan of the portal webinar surfaces", (
   test("the /account profile surface passes WCAG 2 A/AA (both themes)", async ({
     page,
   }) => {
-    // Provision a fresh doctor (post-login lands on «Мои события», #807), then
-    // open the profile surface directly.
+    // Provision a fresh doctor. Since 008 EARS-7 (#994) the post-auth resume with
+    // no event `returnTo` lands on the discovery front-door `/` — wait for the
+    // authenticated landing (front-door or profile), then open the profile
+    // surface explicitly.
     await page.goto("/register", { waitUntil: "domcontentloaded" });
     await submitRegisterAndVerify(page);
-    await page.waitForURL(/\/account/);
+    await waitForAuthenticatedLanding(page);
     await page.goto("/account", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("profile-email")).toBeVisible();
     for (const theme of THEMES) await scan(page, theme);

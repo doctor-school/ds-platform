@@ -1,6 +1,6 @@
 ---
 title: "run-prod-deploy"
-description: "Procedural skill (inline): ship origin/main to the always-on Timeweb prod environment via the single manual command `pnpm deploy:prod`, with the record cycle (GitHub Deployment + release tag + Mattermost digest) it triggers, health verify, and app-only rollback."
+description: "Procedural skill (inline): the agent ships origin/main to the always-on Timeweb prod environment via `pnpm deploy:prod`, with the record cycle (GitHub Deployment + release tag + Mattermost digest) it triggers, health verify, and app-only rollback. When to ship = the D+B trigger policy (release-cycle spec §10)."
 name: run-prod-deploy
 mode: inline
 ---
@@ -9,7 +9,9 @@ mode: inline
 
 **Kind:** procedural · **Mode:** inline.
 
-Production deploy is a **manual, operator-box command** — there is no CI deploy (ADR-0012: SSH deploy from the operator's machine, not GitHub Actions). One command reproducibly rolls `origin/main` onto prod (api-prod public + data-prod private). This skill is the runbook; the executable form is `tools/deploy/prod.mjs`, and the operational SSOT for first-time provisioning stays [`infra/deploy/README.md`](../../../../../infra/deploy/README.md) §5–§10.
+Production deploy is an **agent-run, off-CI command** — there is no CI deploy (ADR-0012: SSH deploy from the agent's deploy environment, not GitHub Actions). One command reproducibly rolls `origin/main` onto prod (api-prod public + data-prod private). This skill is the runbook; the executable form is `tools/deploy/prod.mjs`, and the operational SSOT for first-time provisioning stays [`infra/deploy/README.md`](../../../../../infra/deploy/README.md) §5–§10.
+
+**When to run this (the D+B trigger policy — release-cycle spec §10).** The agent ships when a **releasable unit** (a vertical slice / feature-spec iteration / milestone) reaches Done, is Stage-B GO, and passes the release-readiness checklist (spec §10.4) over the whole `deployedSha..origin/main` range. For **standing-auth** change-classes (spec §10.3 — app/UI-only or additive expand-only-migration waves) the agent ships **autonomously**; for **escalate** classes (any contracting/destructive migration, auth/payment/PII flows, breaking API, infra/data-prod, or an un-certified range) it first surfaces a one-line **"ready to ship X — go?"** and waits. Default to **escalate** when the class is uncertain. The bootstrap `## Project reality` merged-not-deployed delta is the detection signal, not a passive cue. There is **no human "operator"** — the agent drives; the owner is the circuit-breaker.
 
 Typing **`/deploy`** ([`.claude/commands/deploy.md`](../../../../../.claude/commands/deploy.md)) means: read this skill and execute it.
 
@@ -48,7 +50,7 @@ Separately, a **`Version Packages` PR merge** cuts a `release-YYYY.MM.DD-n` git 
 
 ### 2a. Mattermost release digest — fired from CI, not from `deploy:prod` (#968)
 
-The aggregated Russian product-language digest (#868) — ONE note listing the `## Product note (RU)` of every product-kind PR in the `<prev-sha>..<new-sha>` range — is **no longer posted by `deploy:prod`**. It fires from CI: `.github/workflows/release-digest.yml` triggers on `deployment_status: success` for `environment: production` (the very Deployment §2 records), resolves the prev/new SHA range from the Deployment event + `gh api`, and posts via `tools/ci/post-release-digest.mjs` → `release-notes.mjs` using `secrets.MATTERMOST_WEBHOOK_URL` (which already lives in CI). Non-fatal: a post failure WARNs, never fails the workflow. No `.env.local` webhook to configure on the operator box (the #950 crutch is retired). For an offline render check, run `node tools/deploy/release-notes.mjs --prev-sha <sha|none> --new-sha <sha> --dry-run` (with `DELIVERY_ENV=prod`).
+The aggregated Russian product-language digest (#868) — ONE note listing the `## Product note (RU)` of every product-kind PR in the `<prev-sha>..<new-sha>` range — is **no longer posted by `deploy:prod`**. It fires from CI: `.github/workflows/release-digest.yml` triggers on `deployment_status: success` for `environment: production` (the very Deployment §2 records), resolves the prev/new SHA range from the Deployment event + `gh api`, and posts via `tools/ci/post-release-digest.mjs` → `release-notes.mjs` using `secrets.MATTERMOST_WEBHOOK_URL` (which already lives in CI). Non-fatal: a post failure WARNs, never fails the workflow. No `.env.local` webhook to configure in the agent's environment (the #950 crutch is retired). For an offline render check, run `node tools/deploy/release-notes.mjs --prev-sha <sha|none> --new-sha <sha> --dry-run` (with `DELIVERY_ENV=prod`).
 
 ### 2b. Verify the digest CONTENT, not the HTTP 200 (retro 2026-07-15)
 
@@ -72,7 +74,7 @@ The target images must still be on the box (retention keeps the last 3). Rollbac
 
 ## After a deploy — the merged-not-deployed nudge
 
-`## Project reality` (bootstrap `pnpm bootstrap`, #939) derives the latest release, the deployed SHA (GitHub Deployment ⋈ `/v1/health`), and the **merged-not-deployed delta** at SessionStart. When that delta is non-empty (product PRs merged but not shipped), it is the signal to run `/deploy` — or to record the pending-deploy delta in the session handoff.
+`## Project reality` (bootstrap `pnpm bootstrap`, #939) derives the latest release, the deployed SHA (GitHub Deployment ⋈ `/v1/health`), and the **merged-not-deployed delta** at SessionStart. When that delta is non-empty (product PRs merged but not shipped), it is the **D-trigger detection signal** (spec §10.2): run the release-readiness checklist over the range and, if a releasable unit is ready, ship it (autonomously for standing-auth classes, else escalate "ready to ship X — go?") — or record the pending-deploy delta in the session handoff.
 
 ## Output
 
@@ -91,4 +93,4 @@ The target images must still be on the box (retention keeps the last 3). Rollbac
 - [../merge-when-green/SKILL.md](../merge-when-green/SKILL.md) — land the PR before it can be deployed.
 - [../run-wrap/SKILL.md](../run-wrap/SKILL.md) — stage 4 checks the merged-not-deployed delta at session end.
 
-Detail: `tools/deploy/README.md` (record cycle + `deploy:smoke` / `deploy:release-notes`); ADR-0012 (manual SSH deploy); `infra/deploy/README.md` §5–§10 (operational SSOT).
+Detail: `tools/deploy/README.md` (record cycle + `deploy:smoke` / `deploy:release-notes`); ADR-0012 (off-CI SSH deploy topology); release-cycle spec §10 (D+B trigger policy); `infra/deploy/README.md` §5–§10 (operational SSOT).

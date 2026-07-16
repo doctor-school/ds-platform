@@ -3,12 +3,17 @@ import { describe, expect, it } from "vitest";
 import {
   dedupeRefs,
   extractApprovalClaims,
+  extractCompletenessClaims,
+  extractOwnerDirectiveClaims,
   extractRefs,
   extractTaskKindSurface,
+  hasOwnerQuoteEvidence,
   parseClaim,
   resolveProvenance,
   verdictFor,
   verifyApprovalClaims,
+  verifyCompletenessClaims,
+  verifyOwnerDirectiveClaims,
   verifyRefs,
   verifyTaskKindSurface,
 } from "../../gh/handoff-verify.mjs";
@@ -484,5 +489,171 @@ describe("handoff-verify verifyTaskKindSurface() with injected runner + readSpec
     });
     expect(result.rows).toEqual([]);
     expect(result.warn).toBe(0);
+  });
+});
+
+describe("handoff-verify extractCompletenessClaims() (#989 Detector A)", () => {
+  it("extracts the conservative EN completeness phrases", () => {
+    expect(
+      extractCompletenessClaims(
+        "tooling cluster fully drained\nbacklog is empty now\nall merged\nnothing left to review\ncluster complete",
+      ).map((c) => c.phrase),
+    ).toEqual([
+      "cluster fully drained",
+      "backlog is empty",
+      "all merged",
+      "nothing left",
+      "cluster complete",
+    ]);
+  });
+
+  it("extracts RU phrases incl. ё-normalization and safe inflections", () => {
+    expect(
+      extractCompletenessClaims(
+        "всё вычищено\nхвост пуст\nкластер полностью закрыт",
+      ).map((c) => c.phrase),
+    ).toEqual(["все вычищен", "хвост пуст", "полностью закрыт"]);
+    expect(extractCompletenessClaims("все вычищены")).toHaveLength(1);
+    expect(extractCompletenessClaims("тема полностью закрыта")).toHaveLength(1);
+  });
+
+  it("one claim per line (first pattern wins), deduped by phrase across lines", () => {
+    const claims = extractCompletenessClaims(
+      "backlog empty, nothing left\nbacklog empty again",
+    );
+    expect(claims).toEqual([
+      expect.objectContaining({ phrase: "backlog empty", lineNo: 1 }),
+    ]);
+  });
+
+  it("a clean handoff produces NO claims (AC — no new WARNs)", () => {
+    expect(
+      extractCompletenessClaims(
+        "Resume #944: PR #1012 merged, branch tooling/944-x deleted.\nNext: dispatch Mode-a on #1013, then merge when green.\nAll three PRs listed above are named individually.",
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("handoff-verify verifyCompletenessClaims() (#989 Detector A)", () => {
+  it("WARN row per claim + backlog:triage hint, non-blocking (no stale)", () => {
+    const result = verifyCompletenessClaims(
+      extractCompletenessClaims("the tooling cluster fully drained"),
+    );
+    expect(result.rows).toEqual([
+      { verdict: "WARN", ref: "L1", claim: "set-complete", actual: "not-ref-checkable" },
+    ]);
+    expect(result.warn).toBe(1);
+    expect(result.hints[0]).toContain("'cluster fully drained'");
+    expect(result.hints[0]).toContain("pnpm backlog:triage");
+    expect(result).not.toHaveProperty("stale");
+  });
+
+  it("empty input → no rows, warn 0", () => {
+    expect(verifyCompletenessClaims([])).toEqual({ rows: [], hints: [], warn: 0 });
+  });
+});
+
+describe("handoff-verify extractOwnerDirectiveClaims() (#989 Detector B)", () => {
+  it("fires on the session-1c4b7478 opener (live failing fixture)", () => {
+    const claims = extractOwnerDirectiveClaims(
+      "Owner-directed (2026-07-16): prune the matured tooling cluster. Prune first, implement second.",
+    );
+    expect(claims).toEqual([
+      expect.objectContaining({ phrase: "Owner-directed", lineNo: 1 }),
+    ]);
+  });
+
+  it("fires on RU framings (по указанию владельца / одобрено владельцем)", () => {
+    expect(
+      extractOwnerDirectiveClaims("Действуем по указанию владельца."),
+    ).toHaveLength(1);
+    expect(
+      extractOwnerDirectiveClaims("Решение одобрено владельцем ранее."),
+    ).toHaveLength(1);
+  });
+
+  it("does NOT fire on issue-ref-tied approval claims (#806's domain — no double-fire)", () => {
+    expect(extractOwnerDirectiveClaims("epic #778 is owner-approved, build it")).toEqual([]);
+    expect(extractOwnerDirectiveClaims("эпик #806 согласован владельцем")).toEqual([]);
+  });
+
+  it("DOES fire on free-text owner-approved with no issue ref on the line", () => {
+    expect(
+      extractOwnerDirectiveClaims("the plan is owner-approved, proceed"),
+    ).toEqual([expect.objectContaining({ phrase: "owner-approved" })]);
+  });
+
+  it("does not fire on plain owner mentions or Mode-a verdicts", () => {
+    expect(extractOwnerDirectiveClaims("hand back to the owner for Stage-B")).toEqual([]);
+    expect(extractOwnerDirectiveClaims("Mode-a APPROVE recorded")).toEqual([]);
+  });
+});
+
+describe("handoff-verify hasOwnerQuoteEvidence() (#989 Detector B)", () => {
+  it("guillemet «…» span anywhere → true", () => {
+    expect(
+      hasOwnerQuoteEvidence("plan\nOwner quote (2026-07-16): «Одобряю, оркеструй волны…»\nnext"),
+    ).toBe(true);
+  });
+
+  it("attribution line (Owner quote / цитата) with a straight or curly quote → true", () => {
+    expect(hasOwnerQuoteEvidence('Owner quote: "go ahead with wave 2"')).toBe(true);
+    expect(hasOwnerQuoteEvidence("цитата владельца: “делаем”")).toBe(true);
+  });
+
+  it("no quoted span → false; unattributed straight quotes are NOT evidence", () => {
+    expect(hasOwnerQuoteEvidence("Owner-directed: prune first")).toBe(false);
+    expect(hasOwnerQuoteEvidence('run "pnpm test" then merge')).toBe(false);
+  });
+});
+
+describe("handoff-verify verifyOwnerDirectiveClaims() (#989 Detector B)", () => {
+  const opener =
+    "Owner-directed (2026-07-16): prune the matured tooling cluster. Prune first, implement second.";
+
+  it("live fixture: unquoted Owner-directed opener MUST WARN, non-blocking", () => {
+    const result = verifyOwnerDirectiveClaims(
+      extractOwnerDirectiveClaims(opener),
+      hasOwnerQuoteEvidence(opener),
+    );
+    expect(result.rows).toEqual([
+      { verdict: "WARN", ref: "L1", claim: "owner-directive", actual: "no-owner-quote" },
+    ]);
+    expect(result.warn).toBe(1);
+    expect(result.hints[0]).toContain("'Owner-directed'");
+    expect(result.hints[0]).toContain("UNCONFIRMED");
+    expect(result).not.toHaveProperty("stale");
+  });
+
+  it("positive fixture: directive + verbatim owner quote → PASS, no WARN", () => {
+    const text = `${opener}\nOwner quote (2026-07-16): «Одобряю, оркеструй волны…»`;
+    const result = verifyOwnerDirectiveClaims(
+      extractOwnerDirectiveClaims(text),
+      hasOwnerQuoteEvidence(text),
+    );
+    expect(result.rows).toEqual([
+      { verdict: "PASS", ref: "L1", claim: "owner-directive", actual: "owner-quote-present" },
+    ]);
+    expect(result.warn).toBe(0);
+    expect(result.hints).toEqual([]);
+  });
+
+  it("quote-only handoff (no directive framing) → no rows at all", () => {
+    const text = "Owner quote (2026-07-16): «Одобряю, оркеструй волны…»";
+    const result = verifyOwnerDirectiveClaims(
+      extractOwnerDirectiveClaims(text),
+      hasOwnerQuoteEvidence(text),
+    );
+    expect(result).toEqual({ rows: [], hints: [], warn: 0 });
+  });
+
+  it("clean handoff with no directive phrases → no new WARNs (AC)", () => {
+    const text = "Resume #944: PR #1012 merged. Next: Mode-a on #1013.";
+    const result = verifyOwnerDirectiveClaims(
+      extractOwnerDirectiveClaims(text),
+      hasOwnerQuoteEvidence(text),
+    );
+    expect(result).toEqual({ rows: [], hints: [], warn: 0 });
   });
 });

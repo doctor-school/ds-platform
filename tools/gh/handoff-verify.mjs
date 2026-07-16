@@ -46,6 +46,19 @@
  * code stays 0 (promotable to BLOCK per ADR-0007 §2.6). Both the gh access and
  * the spec-dir lookup are injectable.
  *
+ * Qualitative-text domains (#989, non-blocking Phase-0 WARNs, pure text scans
+ * — no gh/git): (A) COMPLETENESS CLAIMS — a phrase asserting a set is
+ * complete/empty/drained («fully drained», «backlog empty», «всё вычищено»,
+ * …) is not ref-checkable, so each distinct phrase yields a WARN row + a
+ * stderr hint to re-derive the set (`pnpm backlog:triage` / REST issue-list)
+ * before acting on it. (B) UNQUOTED OWNER-DIRECTIVE FRAMING — free text
+ * claiming owner direction («Owner-directed», «по указанию владельца», …)
+ * while the handoff carries NO verbatim owner quote (heuristic: a «…»
+ * guillemet span anywhere, or an attribution line — `Owner quote` / `цитата`
+ * — carrying a quoted "…"/“…” span) yields a WARN row naming the unquoted
+ * claim; issue-ref-tied approval claims are the #806 domain above and are
+ * skipped here (no double-fire). Neither detector ever bumps `stale`.
+ *
  * Output: one machine-parseable row per (ref, claim):
  *   PASS|STALE|INFO <ref> claimed=<claim|-> actual=<state>
  * then a summary line. Unknown/deleted ref (gh 404, unresolvable sha/branch)
@@ -75,6 +88,21 @@ const numRe = () =>
 /** Owner token on a line (EN/RU), ignoring the CODEOWNERS false-positive. */
 function hasOwnerToken(line) {
   return /владел|owner/i.test(String(line).replace(/CODEOWNERS/gi, ""));
+}
+
+/**
+ * TIGHT approval-claim predicate shared by the #806 (issue-ref-tied) and #989
+ * (free-text) domains: `owner-approved`/`owner approved`, or an owner token
+ * (владел/owner, not CODEOWNERS) plus an approval stem on the same line.
+ * Deliberately does NOT fire on `Mode-a APPROVE` / plain `approved` lines
+ * without an owner token — review verdicts are not owner decisions.
+ */
+function isApprovalClaimLine(line) {
+  return (
+    /owner[-\s]approved/i.test(line) ||
+    (hasOwnerToken(line) &&
+      /согласован|одобр|утвержд|подтвердил|выбрал|approved?/i.test(line))
+  );
 }
 
 /**
@@ -217,11 +245,7 @@ export function extractApprovalClaims(text) {
   const seen = new Set();
   const lines = String(text).split(/\r?\n/);
   lines.forEach((line, i) => {
-    const isApproval =
-      /owner[-\s]approved/i.test(line) ||
-      (hasOwnerToken(line) &&
-        /согласован|одобр|утвержд|подтвердил|выбрал|approved?/i.test(line));
-    if (!isApproval) return;
+    if (!isApprovalClaimLine(line)) return;
     for (const m of line.matchAll(numRe())) {
       const issue = Number(m[2]);
       if (seen.has(issue)) continue;
@@ -406,6 +430,177 @@ export function verifyTaskKindSurface(input, { runner, readSpecDir } = {}) {
   return { rows, hints, warn: rows.filter((r) => r.verdict === "WARN").length };
 }
 
+// ---------------------------------------------------------------------------
+// Qualitative-completeness domain (#989, Detector A — non-blocking WARN, pure
+// text scan). A handoff phrase asserting a SET is complete/empty/drained
+// («fully drained», «backlog empty», «всё вычищено», …) cannot be verified
+// against any extractable ref — the consumer must re-derive the set (`pnpm
+// backlog:triage` / a REST issue-list) instead of trusting the prose. The
+// phrase list is deliberately CONSERVATIVE (false positives are the named
+// risk); one claim per line (first matching pattern), deduped by phrase text
+// across the handoff.
+
+/** Matched against the lowercased, ё→е-normalized line. Order: specific first. */
+const COMPLETENESS_PATTERNS = [
+  /\bcluster\s+(?:fully\s+)?drained\b/,
+  /\bfully\s+drained\b/,
+  /\bbacklog\s+(?:is\s+)?empty\b/,
+  /\ball\s+(?:cleared|done|drained|merged)\b/,
+  /\bnothing\s+(?:left|open|remaining)\b/,
+  /\bcluster\s+complete\b/,
+  // NB: JS \b / \w are ASCII-only — Cyrillic stems are matched bare; bare
+  // stems also cover the safe inflections (вычищено/вычищены, закрыт(а/о/ы)).
+  /все\s+вычищен/,
+  /хвост\s+пуст/,
+  /полностью\s+закрыт/,
+];
+
+/**
+ * Extract qualitative completeness claims (Detector A, #989).
+ * @param {string} text
+ * @returns {{phrase: string, line: string, lineNo: number}[]}
+ */
+export function extractCompletenessClaims(text) {
+  const claims = [];
+  const seen = new Set();
+  String(text)
+    .split(/\r?\n/)
+    .forEach((line, i) => {
+      const l = line.toLowerCase().replace(/ё/g, "е");
+      for (const re of COMPLETENESS_PATTERNS) {
+        const m = l.match(re);
+        if (!m) continue;
+        const phrase = m[0].replace(/\s+/g, " ");
+        if (!seen.has(phrase)) {
+          seen.add(phrase);
+          claims.push({ phrase, line, lineNo: i + 1 });
+        }
+        break; // one claim per line — first matching pattern wins
+      }
+    });
+  return claims;
+}
+
+/**
+ * WARN rows for completeness claims — pure, no runner, never bumps `stale`.
+ * @param {ReturnType<typeof extractCompletenessClaims>} claims
+ * @returns {{rows: {verdict: string, ref: string, claim: string, actual: string}[], hints: string[], warn: number}}
+ */
+export function verifyCompletenessClaims(claims) {
+  const rows = [];
+  const hints = [];
+  for (const c of claims) {
+    rows.push({
+      verdict: "WARN",
+      ref: `L${c.lineNo}`,
+      claim: "set-complete",
+      actual: "not-ref-checkable",
+    });
+    hints.push(
+      `[handoff-verify] completeness claim '${c.phrase}' is not ref-checkable — run \`pnpm backlog:triage\` or a REST issue-list before acting on it.`,
+    );
+  }
+  return { rows, hints, warn: rows.length };
+}
+
+// ---------------------------------------------------------------------------
+// Unquoted owner-directive domain (#989, Detector B — non-blocking WARN, pure
+// text scan). Free text claiming owner direction («Owner-directed»,
+// «Owner-approved», «по указанию владельца», «одобрено владельцем») is
+// UNCONFIRMED agent framing unless the handoff carries a verbatim owner
+// quote. Issue-ref-tied approval claims are #806's domain (verified against
+// issue provenance) and are skipped here — no double-fire. Precedent: session
+// 1c4b7478 opened «Owner-directed (2026-07-16): … Prune first, implement
+// second» — every ref PASSed while the framing itself was agent-authored.
+
+/** Matched against the ё→е-normalized line (case-insensitive). */
+const OWNER_DIRECTIVE_PATTERNS = [
+  /owner[-\s]directed/i,
+  /owner[-\s]approved/i,
+  /по\s+указанию\s+владельца/i,
+  /одобрен[оаы]?\s+владельцем/i,
+];
+
+/**
+ * Extract free-text owner-directive claims (Detector B, #989). One claim per
+ * line (first matching pattern); lines #806 already verifies (approval claim
+ * + issue ref on the same line) are excluded.
+ * @param {string} text
+ * @returns {{phrase: string, line: string, lineNo: number}[]}
+ */
+export function extractOwnerDirectiveClaims(text) {
+  const claims = [];
+  String(text)
+    .split(/\r?\n/)
+    .forEach((line, i) => {
+      // #806 verifies issue-ref-tied approval claims against provenance —
+      // skip those lines entirely so the same claim never fires twice.
+      if (isApprovalClaimLine(line) && [...line.matchAll(numRe())].length > 0)
+        return;
+      const norm = line.replace(/ё/g, "е").replace(/Ё/g, "Е");
+      for (const re of OWNER_DIRECTIVE_PATTERNS) {
+        const m = norm.match(re);
+        if (m) {
+          claims.push({ phrase: m[0], line, lineNo: i + 1 });
+          return; // one claim per line
+        }
+      }
+    });
+  return claims;
+}
+
+/**
+ * Verbatim-owner-quote evidence heuristic (#989, documented + deliberately
+ * simple): TRUE when the handoff carries a «…» guillemet span ANYWHERE (the
+ * house style for owner quotes), or an attribution line (`Owner quote` /
+ * `цитата`) carrying a "…" / “…” quoted span.
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function hasOwnerQuoteEvidence(text) {
+  const s = String(text);
+  if (/«[^«»]+»/.test(s)) return true;
+  for (const line of s.split(/\r?\n/)) {
+    if (/owner\s+quote|цитат/i.test(line) && /"[^"]+"|“[^“”]+”/.test(line))
+      return true;
+  }
+  return false;
+}
+
+/**
+ * Verify owner-directive claims against quote evidence — pure, never bumps
+ * `stale`. Quote present → PASS row (visible, silent to stderr); absent →
+ * WARN row + stderr hint naming the unquoted claim.
+ * @param {ReturnType<typeof extractOwnerDirectiveClaims>} claims
+ * @param {boolean} quoteEvidence result of hasOwnerQuoteEvidence(text)
+ * @returns {{rows: {verdict: string, ref: string, claim: string, actual: string}[], hints: string[], warn: number}}
+ */
+export function verifyOwnerDirectiveClaims(claims, quoteEvidence) {
+  const rows = [];
+  const hints = [];
+  for (const c of claims) {
+    if (quoteEvidence) {
+      rows.push({
+        verdict: "PASS",
+        ref: `L${c.lineNo}`,
+        claim: "owner-directive",
+        actual: "owner-quote-present",
+      });
+    } else {
+      rows.push({
+        verdict: "WARN",
+        ref: `L${c.lineNo}`,
+        claim: "owner-directive",
+        actual: "no-owner-quote",
+      });
+      hints.push(
+        `[handoff-verify] '${c.phrase}' (line ${c.lineNo}) claims owner direction but the handoff carries no verbatim owner quote («…» / attributed "…") — treat it as UNCONFIRMED agent framing and reconcile with the owner before executing (#989).`,
+      );
+    }
+  }
+  return { rows, hints, warn: rows.filter((r) => r.verdict === "WARN").length };
+}
+
 /** Default runner — real `gh` / `git` via spawnSync (Windows-safe: both are exes on PATH). */
 export function defaultRunner() {
   const run = (cmd, args) => {
@@ -533,34 +728,61 @@ function main() {
   }
 
   const refs = extractRefs(text);
-  if (refs.length === 0) {
+  // #989 detectors are pure text scans — they run even on a ref-less handoff
+  // (a «backlog empty» handoff with zero refs is exactly the dangerous case).
+  const completenessResult = verifyCompletenessClaims(
+    extractCompletenessClaims(text),
+  );
+  const directiveResult = verifyOwnerDirectiveClaims(
+    extractOwnerDirectiveClaims(text),
+    hasOwnerQuoteEvidence(text),
+  );
+  const textOnlyRows = [...completenessResult.rows, ...directiveResult.rows];
+
+  if (refs.length === 0 && textOnlyRows.length === 0) {
     process.stdout.write(
       "[handoff-verify] no extractable refs (#N / PR N / sha / branch) found — nothing to verify.\n",
     );
     process.exit(0);
   }
 
-  const runner = defaultRunner();
-  // Ancestry checks need a fresh origin/main; tolerate offline (warn + local).
-  const fetch = runner.git(["fetch", "origin", "main", "--quiet"]);
-  if (fetch.status !== 0)
-    process.stderr.write(
-      "[handoff-verify] WARN: git fetch origin main failed — ancestry checked against the LOCAL origin/main.\n",
-    );
+  let stateResult = { rows: [], stale: 0 };
+  let approvalResult = { rows: [], stale: 0, hints: [] };
+  let taskKindResult = { rows: [], hints: [], warn: 0 };
+  if (refs.length > 0) {
+    const runner = defaultRunner();
+    // Ancestry checks need a fresh origin/main; tolerate offline (warn + local).
+    const fetch = runner.git(["fetch", "origin", "main", "--quiet"]);
+    if (fetch.status !== 0)
+      process.stderr.write(
+        "[handoff-verify] WARN: git fetch origin main failed — ancestry checked against the LOCAL origin/main.\n",
+      );
 
-  const stateResult = verifyRefs(refs, runner);
-  const approvalResult = verifyApprovalClaims(extractApprovalClaims(text), runner);
-  const taskKindResult = verifyTaskKindSurface(extractTaskKindSurface(text), { runner });
-  const rows = [...stateResult.rows, ...approvalResult.rows, ...taskKindResult.rows];
-  // WARN rows (task-kind-vs-surface) are non-blocking: they never feed `stale`,
-  // so the exit code stays 0 on a WARN-only run (Phase-0 WARN, ADR-0007 §2.6).
+    stateResult = verifyRefs(refs, runner);
+    approvalResult = verifyApprovalClaims(extractApprovalClaims(text), runner);
+    taskKindResult = verifyTaskKindSurface(extractTaskKindSurface(text), { runner });
+  }
+  const rows = [
+    ...stateResult.rows,
+    ...approvalResult.rows,
+    ...taskKindResult.rows,
+    ...textOnlyRows,
+  ];
+  // WARN rows (task-kind-vs-surface #778, completeness + owner-directive #989)
+  // are non-blocking: they never feed `stale`, so the exit code stays 0 on a
+  // WARN-only run (Phase-0 WARN, ADR-0007 §2.6).
   const stale = stateResult.stale + approvalResult.stale;
-  const warn = taskKindResult.warn;
+  const warn = taskKindResult.warn + completenessResult.warn + directiveResult.warn;
   for (const r of rows)
     process.stdout.write(
       `${r.verdict} ${r.ref} claimed=${r.claim ?? "-"} actual=${r.actual}\n`,
     );
-  for (const hint of [...approvalResult.hints, ...taskKindResult.hints])
+  for (const hint of [
+    ...approvalResult.hints,
+    ...taskKindResult.hints,
+    ...completenessResult.hints,
+    ...directiveResult.hints,
+  ])
     process.stderr.write(`${hint}\n`);
   const pass = rows.filter((r) => r.verdict === "PASS").length;
   const info = rows.filter((r) => r.verdict === "INFO").length;

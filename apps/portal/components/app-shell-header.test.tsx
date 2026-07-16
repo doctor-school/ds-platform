@@ -175,6 +175,53 @@ describe("008 EARS-1…13 — persistent app-shell header", () => {
     expect(getMyProfile).toHaveBeenCalledTimes(2);
   });
 
+  it("EARS-2/5: on-blue press states stay readable — the DS base press colour (blue.700 = the header band) is re-anchored per surface (#1007 Stage-B)", async () => {
+    getMyProfile.mockResolvedValue(DOCTOR);
+    renderHeader();
+    const avatar = await screen.findByTestId("shell-avatar");
+    // Desktop nav links sit ON the blue band: the primitive's
+    // `active:text-primary-action/80` is blue.700 = the band itself (a press
+    // painted the label invisible for the whole click-through) — they must
+    // press to full-strength `header-foreground` + an element opacity dim
+    // (#270), and tailwind-merge must have dropped the base press colour.
+    for (const id of ["shell-nav-broadcasts", "shell-nav-my-events"]) {
+      const link = screen.getByTestId(id);
+      expect(link.className).toContain("active:text-header-foreground");
+      expect(link.className).toContain("active:opacity-80");
+      expect(link.className).not.toContain("active:text-primary-action/80");
+    }
+    // White chips (avatar, desktop + mobile) keep their surface ink under
+    // press (`header/80` — theme-invariant, unlike `primary-action` which
+    // goes near-white in dark theme on the white chip).
+    for (const el of [avatar, screen.getByTestId("shell-mobile-avatar")]) {
+      expect(el.className).toContain("active:text-header/80");
+      expect(el.className).not.toContain("active:text-primary-action/80");
+    }
+    // The mobile dropdown nav links sit on the card surface, where the DS
+    // base press colour is readable in both themes — it must stay.
+    for (const id of ["shell-mobile-broadcasts", "shell-mobile-my-events"]) {
+      expect(screen.getByTestId(id).className).toContain(
+        "active:text-primary-action/80",
+      );
+    }
+  });
+
+  it("EARS-4: guest «Войти» chips keep readable press colours on their own surface (#1007 Stage-B)", async () => {
+    getMyProfile.mockResolvedValue(null);
+    renderHeader();
+    // Desktop chip: white chip on the blue band — presses to its surface ink.
+    const login = await screen.findByTestId("shell-login");
+    expect(login.className).toContain("active:text-header/80");
+    expect(login.className).not.toContain("active:text-primary-action/80");
+    // Mobile dropdown chip: blue chip on the card — presses to its white
+    // foreground (element-opacity dim, #270), never the base blue.700 (= its
+    // own background).
+    const mobileLogin = screen.getByTestId("shell-mobile-login");
+    expect(mobileLogin.className).toContain("active:text-header-foreground");
+    expect(mobileLogin.className).toContain("active:opacity-80");
+    expect(mobileLogin.className).not.toContain("active:text-primary-action/80");
+  });
+
   it("EARS-11: the mobile `≡` dropdown carries the same [Эфиры · Мои события] targets", async () => {
     renderHeader();
     const menu = await screen.findByTestId("shell-mobile-menu");

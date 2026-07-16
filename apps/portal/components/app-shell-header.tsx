@@ -51,7 +51,13 @@ import { useHeaderAuth } from "@/lib/header-auth";
  * white-on-blue chips (Войти / avatar) override its brand-blue default off the
  * `header-*` palette + `shadow-btn` — no DS Button/Avatar variant targets an
  * inverted-on-blue control (they assume a light page bg; same precedent as the
- * shared {@link ThemeToggle}). registry-research (build-ui-from-design-system):
+ * shared {@link ThemeToggle}). The primitive's press colour
+ * (`active:text-primary-action/80`) is likewise re-anchored per surface: on the
+ * blue band `primary-action` (blue.700) IS the band colour, so a press painted
+ * the label invisible for the whole click-through (#1007 Stage-B) — on-blue
+ * links press to full-strength `header-foreground` + an element `active:opacity-80`
+ * dim (#270: element opacity, never a foreground-colour opacity), white chips
+ * keep their surface ink (`header/80`, AA on the white chip in both themes). registry-research (build-ui-from-design-system):
  * shadcn navigation-menu, Origin UI, Intent/Jolly, Kibo — none ship the branded
  * neo-brutalist inverted app bar; bespoke composition (see PR).
  */
@@ -80,12 +86,12 @@ const avatarFallbackIcon = <UserRound aria-hidden="true" className="size-5" />;
 /** «Войти» chip — white-on-blue neo-brutalist button (canvas), token-only; states
  *  owned by the DS `Link` primitive it overrides. */
 const LOGIN_CHIP =
-  "inline-flex flex-none items-center justify-center bg-header-foreground px-6 py-3 text-sm font-bold text-header shadow-btn hover:no-underline hover:translate-x-px hover:translate-y-px hover:shadow-btn-hover";
+  "inline-flex flex-none items-center justify-center bg-header-foreground px-6 py-3 text-sm font-bold text-header shadow-btn hover:no-underline hover:translate-x-px hover:translate-y-px hover:shadow-btn-hover active:text-header/80";
 
 /** Initials avatar icon — white-on-blue chip, an icon-LINK to `/account`
  *  (EARS-5/6: not a dropdown, no «Выйти»). */
 const AVATAR_CHIP =
-  "inline-flex size-10 flex-none items-center justify-center bg-header-foreground text-sm font-extrabold text-header shadow-btn hover:no-underline";
+  "inline-flex size-10 flex-none items-center justify-center bg-header-foreground text-sm font-extrabold text-header shadow-btn hover:no-underline active:text-header/80";
 
 export function AppShellHeader() {
   const t = useTranslations("shell");
@@ -111,7 +117,8 @@ export function AppShellHeader() {
     <header className="flex items-center justify-between gap-4 bg-header px-4 py-4 text-header-foreground layout:px-12">
       {/* Logo → the discovery front-door (EARS-2). The clean white vector sits
           directly on the blue bar — no chip, no colour inversion (ADR-0013 §8;
-          the same asset the AuthShell panel uses). */}
+          the same asset the AuthShell panel uses). No press-colour override
+          needed: the link paints only an <img>, text colour is a no-op (#1007). */}
       <DsLink asChild className="flex flex-none hover:no-underline">
         <Link href={DISCOVERY_HREF} data-testid="shell-logo">
           <Image
@@ -194,7 +201,7 @@ export function AppShellHeader() {
             {auth.status === "guest" ? (
               <DsLink
                 asChild
-                className="mt-1.5 bg-header px-4 py-3 text-center text-sm font-extrabold text-header-foreground hover:no-underline"
+                className="mt-1.5 bg-header px-4 py-3 text-center text-sm font-extrabold text-header-foreground hover:no-underline active:text-header-foreground active:opacity-80"
               >
                 <Link href={LOGIN_HREF} data-testid="shell-mobile-login">
                   {t("login")}
@@ -210,7 +217,11 @@ export function AppShellHeader() {
 
 /** Desktop nav link — canvas active treatment (resting underline, full-strength)
  *  vs the muted inactive tier (element opacity, AA-safe — never a text-colour
- *  opacity, #270). States are owned by the composed DS `Link` primitive. */
+ *  opacity, #270). States are owned by the composed DS `Link` primitive, except
+ *  the press colour: the base `active:text-primary-action/80` is blue.700 = the
+ *  `header` band itself, so pressing painted the label invisible for the whole
+ *  click-through (#1007 Stage-B) — re-anchored to full-strength
+ *  `header-foreground` + an element `active:opacity-80` dim (#270). */
 function NavLink({
   href,
   active,
@@ -226,7 +237,7 @@ function NavLink({
     <DsLink
       asChild
       className={cn(
-        "font-bold text-header-foreground",
+        "font-bold text-header-foreground active:text-header-foreground active:opacity-80",
         active ? "underline decoration-2" : "no-underline opacity-80",
       )}
     >
@@ -242,7 +253,10 @@ function NavLink({
 }
 
 /** Mobile dropdown nav link — on the card surface, active reads as brand-blue
- *  heavy text (canvas dropdown), inactive as ink with a muted hover wash. */
+ *  heavy text (canvas dropdown), inactive as ink with a muted hover wash. The DS
+ *  base press colour (`active:text-primary-action/80`) stays: on the card
+ *  surface it is readable in both themes — only the on-blue compositions above
+ *  needed re-anchoring (#1007 Stage-B). */
 function MobileNavLink({
   href,
   active,

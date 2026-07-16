@@ -29,14 +29,14 @@ mode: inline
 
    Closing G11 findings F-8 and F-19: do **not** silently substitute a generic label like `enhancement` when the project-specific label is missing. Either the label set is created up front, or `surface-decision-debt` is invoked to record the substitution as a follow-up.
 
-2. **Open the parent Issue** (if not already open) under the product-theme milestone (AGENTS.md §2 — e.g. `Auth foundations v1`, not a per-spec name) and link to `NNN-requirements.md`. The spec folder is bound to the work by the `feature:NNN-<slug>` label, not the milestone.
+2. **Open the parent Issue** (if not already open) under the product-theme milestone (AGENTS.md §2 — e.g. `Auth foundations v1`, not a per-spec name) and link to `NNN-requirements.md`. The spec folder is bound to the work by the `feature:NNN-<slug>` label, not the milestone. **Every Issue this skill opens — parent and children — carries the provenance label `source:spec`** (opened from a merged feature spec; the `source:*` taxonomy is `source:owner` | `source:spec` | `source:retro` | `source:agent`, one per Issue).
 3. **For each EARS-N**, open a child Issue:
 
    ```bash
    gh issue create \
      --title "[NNN] EARS-N: <description>" \
      --milestone "<product-theme milestone>" \
-     --label "feature:NNN-<slug>,kind:ears-handler,agent-ready" \
+     --label "feature:NNN-<slug>,kind:ears-handler,agent-ready,source:spec" \
      --body "Spec: apps/docs/content/specs/features/NNN-<slug>/. Parent: #<parent-issue>."
    ```
 

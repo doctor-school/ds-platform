@@ -18,8 +18,9 @@
  * (board ids). Sibling helpers: set-board-status.mjs, wait-ci-green.mjs.
  *
  * Usage (thin passthrough — everything after the control flags is forwarded to
- * `gh issue create` verbatim; do not reimplement its flags):
- *   node tools/gh/create-issue.mjs --title "<t>" --body-file <f> [--label <l> …] [gh flags…]
+ * `gh issue create` verbatim; do not reimplement its flags). Exactly ONE
+ * `source:*` provenance label is required (#1009) — see SOURCE_LABELS:
+ *   node tools/gh/create-issue.mjs --title "<t>" --body-file <f> --label source:agent [--label <l> …] [gh flags…]
  *   node tools/gh/create-issue.mjs --no-todo  --title "<t>" --body-file <f>   # add to board, leave Status unset
  *   pnpm issue:create --title "<t>" --body-file <f> --label tooling           # alias
  *
@@ -119,6 +120,61 @@ export function hasRepoOverride(args) {
   );
 }
 
+/** The provenance-label taxonomy (#1009) — every new Issue carries exactly one. */
+export const SOURCE_LABELS = [
+  "source:owner",
+  "source:spec",
+  "source:retro",
+  "source:agent",
+];
+
+/**
+ * Collect every `source:*` label value out of the gh passthrough (#1009).
+ * Handles the forms gh accepts: `--label v`, `--label=v`, `-l v`, and
+ * comma-separated lists (`--label a,b`).
+ * @param {string[]} args
+ * @returns {string[]}
+ */
+export function collectSourceLabels(args) {
+  const values = [];
+  const list = args ?? [];
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i];
+    let raw;
+    if (a === "--label" || a === "-l") raw = list[i + 1];
+    else if (a.startsWith("--label=")) raw = a.slice("--label=".length);
+    else continue;
+    if (!raw) continue;
+    for (const v of raw.split(",")) {
+      const label = v.trim();
+      if (label.startsWith("source:")) values.push(label);
+    }
+  }
+  return values;
+}
+
+/**
+ * Validate the provenance-label requirement (#1009): exactly ONE `source:*`
+ * label, drawn from the known taxonomy. Returns null when valid, else the
+ * error message to die with.
+ * @param {string[]} args  the gh passthrough
+ * @returns {string|null}
+ */
+export function sourceLabelError(args) {
+  const taxonomy = SOURCE_LABELS.join(" | ");
+  const found = collectSourceLabels(args);
+  if (found.length === 0)
+    return (
+      `every new Issue needs exactly ONE provenance label — pass ` +
+      `--label <source>, one of: ${taxonomy}.`
+    );
+  if (found.length > 1)
+    return `exactly ONE source:* label is allowed, got: ${found.join(", ")} (taxonomy: ${taxonomy}).`;
+  if (!SOURCE_LABELS.includes(found[0]))
+    return `unknown source label "${found[0]}" — must be one of: ${taxonomy}.`;
+  return null;
+}
+
 /**
  * Extract the created Issue's URL from `gh issue create` stdout — gh prints the
  * canonical `https://github.com/<owner>/<repo>/issues/<N>` URL on its own line.
@@ -191,10 +247,11 @@ function main() {
   const argv = process.argv.slice(2);
   if (argv.length === 0 || argv.includes("--help") || argv.includes("-h")) {
     process.stderr.write(
-      "Usage: node tools/gh/create-issue.mjs [--no-todo] --title \"<t>\" --body-file <f> [--label <l> …]\n" +
+      "Usage: node tools/gh/create-issue.mjs [--no-todo] --title \"<t>\" --body-file <f> --label <source:*> [--label <l> …]\n" +
         "  Thin wrapper over `gh issue create` (flags forwarded verbatim) that also adds the\n" +
         "  new Issue to Projects v2 board #1 (doctor-school), sets Status=Todo, and confirms\n" +
-        "  the item via a GraphQL node read. --no-todo adds to the board without setting Status.\n",
+        "  the item via a GraphQL node read. --no-todo adds to the board without setting Status.\n" +
+        `  Exactly ONE provenance label is required (#1009): ${SOURCE_LABELS.join(" | ")}.\n`,
     );
     process.exit(1);
   }
@@ -209,6 +266,11 @@ function main() {
       `--repo/-R is not allowed: this helper is hard-pinned to ${REPO} because the ` +
         `Projects v2 board is repo-specific. Remove it from the arguments.`,
     );
+
+  // Provenance gate (#1009): refuse creation unless exactly one source:* label
+  // is passed — BEFORE any gh call, so no Issue is created on a violation.
+  const sourceError = sourceLabelError(passthrough);
+  if (sourceError) die(sourceError);
 
   // 1. Create the Issue — thin passthrough. Pin --repo AFTER the passthrough so
   //    the returned URL is guaranteed to belong to the board's repo (gh honors

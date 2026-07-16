@@ -9,11 +9,12 @@ ADR-0012), driven by the D+B trigger policy (release-cycle spec §10);
 **first-time provisioning** (Terraform, DNS, secrets, Zitadel first-boot
 bootstrap) is a one-time human setup, out of the steady-state loop.
 
-| File                | `pnpm` alias           | Role                                                                                                                                            |
-| ------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `prod.mjs`          | `deploy:prod`          | Full deploy pipeline + `--rollback <sha>` (app-only revert).                                                                                    |
-| `smoke-prod.mjs`    | `deploy:smoke`         | Live prod HTTP + TLS smoke; also called by `prod.mjs` post-`up -d`.                                                                             |
-| `release-notes.mjs` | `deploy:release-notes` | Aggregated PROD release note to Mattermost (#868); render+POST seam fired from CI on `deployment_status: success` (`release-digest.yml`, #968). |
+| File                       | `pnpm` alias           | Role                                                                                                                                                               |
+| -------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `prod.mjs`                 | `deploy:prod`          | Full deploy pipeline + `--rollback <sha>` (app-only revert).                                                                                                       |
+| `smoke-prod.mjs`           | `deploy:smoke`         | Live prod HTTP + TLS smoke; also called by `prod.mjs` post-`up -d`.                                                                                                |
+| `release-notes.mjs`        | `deploy:release-notes` | Aggregated PROD release note to Mattermost (#868); render+POST seam fired from CI on `deployment_status: success` (`release-digest.yml`, #968).                    |
+| `live-broadcast-check.mjs` | `deploy:check-live`    | Read-only live-эфир probe (`GET /v1/public/events`, spec §10.4 item 7): `CLEAR` exit 0 / `LIVE`+`UNKNOWN` exit 1 (fail-closed); also a `prod.mjs` pre-flight hold. |
 
 ## `pnpm deploy:prod`
 
@@ -21,13 +22,16 @@ bootstrap) is a one-time human setup, out of the steady-state loop.
 pnpm deploy:prod                    # deploy origin/main (default)
 pnpm deploy:prod --rollback <sha>   # app-only rollback to a prior SHA-tagged image
 pnpm deploy:prod --skip-ci-check    # escape hatch (loud warning)
+pnpm deploy:prod --allow-live-broadcast  # эфир-hold escape hatch (owner-approved urgent ship only)
 ```
 
 Pipeline, fail-closed, stops at the first red step and prints a rollback pointer:
 
 1. **Pre-flight (DSO-126)** — clean working tree · `HEAD == origin/main` · **green
    CI** for that SHA (latest check-run per name via
-   `gh api …/commits/<sha>/check-runs`). Refuses otherwise. Fixes the deployed
+   `gh api …/commits/<sha>/check-runs`) · **no live broadcast**
+   (`live-broadcast-check.mjs`, fail-closed — #1000, spec §10.4 item 7; the
+   `--rollback` path skips this hold). Refuses otherwise. Fixes the deployed
    commit to `origin/main`'s SHA.
 2. **Ship** — `git archive <sha>` streamed over SSH to both boxes (no registry,
    no deploy key). Streams are piped in-process → Windows-safe.

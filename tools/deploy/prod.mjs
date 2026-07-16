@@ -11,9 +11,13 @@
 //     pnpm deploy:prod                 deploy origin/main (default)
 //     pnpm deploy:prod --rollback <sha>   app-only rollback to a prior SHA tag
 //     pnpm deploy:prod --skip-ci-check    (escape hatch; logs a loud warning)
+//     pnpm deploy:prod --allow-live-broadcast   (escape hatch for the live-эфир
+//                                          hold — owner-approved urgent ship ONLY,
+//                                          release-cycle spec §10.4 item 7)
 //
 // Pipeline (deploy):
 //   pre-flight  clean tree · HEAD==origin/main · green CI for the SHA (gh)
+//               · no live broadcast (tools/deploy/live-broadcast-check.mjs)
 //   ship        git archive <sha> → api-prod + data-prod over ssh (no registry)
 //   data-prod   up -d --build (idempotent; attestations off → no-op ≠ recreate, #486)
 //   checkpoint  pgbackrest pre-migrate incr backup  (DSO-129 — BEFORE migrate)
@@ -32,6 +36,7 @@ import { createReadStream, createWriteStream } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { envFooter } from "../ci/post-product-note.mjs";
 import { cutDeployRelease } from "../release/cut-release.mjs";
@@ -108,7 +113,9 @@ function localCap(cmd, args) {
 }
 
 function preflight() {
-  step("Pre-flight: clean tree · HEAD==origin/main · green CI");
+  step(
+    "Pre-flight: clean tree · HEAD==origin/main · green CI · no live broadcast",
+  );
 
   // 1. clean working tree
   const dirty = localCap("git", ["status", "--porcelain"]);
@@ -144,7 +151,39 @@ function preflight() {
   } else {
     assertGreenCi(originMain);
   }
+
+  // 4. эфир gate (release-cycle spec §10.4 item 7): the <60s container
+  //    recreation blips a live webinar room, so a live broadcast — or an
+  //    UNKNOWN probe (fail-closed) — holds the deploy regardless of
+  //    change-class. Escape hatch mirrors --skip-ci-check and is for the
+  //    owner-approved urgent-ship path ONLY (mid-эфир ship = escalate).
+  if (process.argv.includes("--allow-live-broadcast")) {
+    console.log(
+      "  ⚠ --allow-live-broadcast: SKIPPING the live-broadcast hold (owner-approved urgent ship — viewers may blip)",
+    );
+  } else {
+    assertNoLiveBroadcast();
+  }
   return originMain;
+}
+
+// Read-only probe of the public upcoming-broadcasts listing (exit 0 = CLEAR,
+// exit 1 = LIVE or UNKNOWN — both hold; see tools/deploy/live-broadcast-check.mjs).
+function assertNoLiveBroadcast() {
+  const script = fileURLToPath(
+    new URL("./live-broadcast-check.mjs", import.meta.url),
+  );
+  const r = spawnSync(process.execPath, [script], { encoding: "utf8" });
+  const line = `${r.stdout || ""}${r.stderr || ""}`.trim() || "(no output)";
+  if (r.status !== 0) {
+    die(
+      `live-broadcast gate (spec §10.4 item 7): ${line}\n` +
+        `  A deploy must not run over a live эфир — hold until it ends, or bind to\n` +
+        `  the maintenance window (02:00–06:00 MSK). An urgent mid-broadcast ship is\n` +
+        `  ESCALATE: owner's explicit go + \`--allow-live-broadcast\`.`,
+    );
+  }
+  ok(`no live broadcast — ${line}`);
 }
 
 // The most reliable green-CI signal for a merged main SHA is its check-runs:

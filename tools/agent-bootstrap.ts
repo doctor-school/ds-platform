@@ -27,6 +27,7 @@ import {
 } from "./main-sync";
 import { claimLabel, probeClaim } from "./backlog-triage";
 import {
+  classifyDeployRange,
   evaluateProjectReality,
   probeProjectReality,
   releaseFromProbe,
@@ -684,6 +685,7 @@ async function main(): Promise<void> {
         releaseTag: null,
         releasePublishedAt: null,
         mergedNotDeployed: null,
+        changedPaths: null,
       };
     }),
   ]);
@@ -695,6 +697,7 @@ async function main(): Promise<void> {
     ["prod /v1/health", realityProbe.healthError],
     ["latest GitHub Release", realityProbe.releaseError],
     ["merged-not-deployed delta", realityProbe.mergedNotDeployedError],
+    ["deploy change-class touch-set", realityProbe.changedPathsError],
   ] as const) {
     if (message) warnings.push({ source, message });
   }
@@ -757,7 +760,23 @@ async function main(): Promise<void> {
   // session reads before reasoning about scope. Never throws (probe + pure
   // classifier + formatters); degrades per-source to a printable banner.
   const reality = evaluateProjectReality(realityProbe);
-  for (const line of renderProjectReality(reality, releaseFromProbe(realityProbe))) {
+  // D-trigger change-class (spec §10.3, #996 T2): classify the range's derivable
+  // touch-set so a non-zero delta renders "standing-auth | escalate", not a
+  // passive cue. Pure + total, but a defensive catch keeps SessionStart exit-0;
+  // a null verdict degrades to the escalate wording inside the renderer.
+  const deployClass = (() => {
+    try {
+      return classifyDeployRange(realityProbe.changedPaths);
+    } catch (e) {
+      note("deploy change-class classifier", e);
+      return null;
+    }
+  })();
+  for (const line of renderProjectReality(
+    reality,
+    releaseFromProbe(realityProbe),
+    deployClass,
+  )) {
     out.push(line);
   }
   // Release-notes reconciliation (#927 core) — the CHANGELOG-head fallback (when

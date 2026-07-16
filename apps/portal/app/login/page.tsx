@@ -32,6 +32,7 @@ import {
 } from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
+import { refreshHeaderAuth } from "@/lib/header-auth";
 import {
   LoginIdentifierFormSchema,
   otpIdentifierFormSchema,
@@ -180,6 +181,9 @@ function PasswordLogin({ returnTo }: { returnTo: string | null }) {
       // 005 EARS-2: with a carried event context the session now exists, so the
       // registration completes and the doctor lands back on that event page;
       // without one this is the 008 EARS-7 discovery front-door (`/`) landing.
+      // #1004: signal the persistent header to re-read the profile so the avatar
+      // appears on this SOFT landing, without a hard reload.
+      refreshHeaderAuth();
       router.push(await completeReturnTarget(returnTo));
     } catch (err) {
       // EARS-16: the login OUTCOME (wrong credential / unknown account) stays the
@@ -502,6 +506,8 @@ function OtpVerifyForm({
       await authClient.loginWithOtp({ ...values, identifier, channel });
       // 005 EARS-2: complete the carried registration (if any) now the session
       // exists, landing on the event page — else the 008 EARS-7 front-door (`/`).
+      // #1004: soft landing → signal the header's auth re-read (see above).
+      refreshHeaderAuth();
       router.push(await completeReturnTarget(returnTo));
     } catch (err) {
       onError(authErrorMessage(err, te, te("otpVerifyFailed")));

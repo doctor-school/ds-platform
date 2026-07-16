@@ -57,13 +57,11 @@ Then("the doctor lands on the discovery front-door at {string}", async ({ page }
 Then(
   "the persistent header shows the logo, the top-nav, a theme toggle, and the doctor's avatar icon",
   async ({ page }) => {
-    // `useHeaderAuth` reads the session once per HARD load (its documented
-    // contract, `lib/header-auth.ts`) — the login lands via a soft `router.push`,
-    // so the header reflects the now-authenticated doctor from the next hard load
-    // (its steady state on every subsequent page view). EARS-7 (the `/` discovery
-    // landing) is already asserted pre-reload; this asserts EARS-5's avatar on the
-    // steady-state header. (Pin coverage: doctor-header.spec.ts.)
-    await page.reload({ waitUntil: "domcontentloaded" });
+    // #1004: the login flow fires `refreshHeaderAuth()` before its soft
+    // `router.push`, so the persistent header re-reads the session and shows the
+    // avatar on THIS soft post-login landing — no hard reload. EARS-7 (the `/`
+    // discovery landing) is already asserted; the avatar assertion below
+    // auto-waits for the signaled re-read to resolve.
     const header = shellHeader(page);
     await expect(header.getByTestId("shell-logo")).toBeVisible();
     await expect(page.getByTestId("shell-nav-broadcasts")).toBeVisible();

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 
 /**
@@ -29,6 +29,7 @@ vi.mock("@/lib/profile-client", () => ({
 }));
 
 import { AppShellHeader } from "./app-shell-header";
+import { refreshHeaderAuth } from "@/lib/header-auth";
 
 const CATALOG = {
   shell: {
@@ -132,12 +133,31 @@ describe("008 EARS-1…13 — persistent app-shell header", () => {
     expect(mobileAvatar).toHaveAttribute("href", "/account");
   });
 
-  it("EARS-5: a doctor with no saved display name still gets the avatar affordance (neutral fallback glyph → /account)", async () => {
+  it("EARS-5: a doctor with no saved display name still gets the avatar affordance (neutral silhouette icon → /account)", async () => {
     getMyProfile.mockResolvedValue({ ...DOCTOR, displayName: null });
     renderHeader();
     const avatar = await screen.findByTestId("shell-avatar");
     expect(avatar).toHaveAttribute("href", "/account");
     expect(avatar).toHaveAccessibleName("Мой профиль");
+    // #997: the fallback is a neutral user-silhouette ICON (an aria-hidden svg
+    // inside the same icon-link), not a text glyph.
+    expect(avatar.querySelector("svg")).not.toBeNull();
+    expect(avatar).not.toHaveTextContent("•");
+  });
+
+  it("EARS-5: the header re-reads the profile on refreshHeaderAuth() — immediate post-login avatar, no hard reload", async () => {
+    // #1004: mounted while a guest (the header is live on /login too) …
+    getMyProfile.mockResolvedValue(null);
+    renderHeader();
+    await screen.findByTestId("shell-login");
+    // … then the auth flow completes login and fires the signal — the SAME
+    // mounted header (no remount, no hard reload) must swap to the avatar.
+    getMyProfile.mockResolvedValue(DOCTOR);
+    act(() => refreshHeaderAuth());
+    const avatar = await screen.findByTestId("shell-avatar");
+    expect(avatar).toHaveTextContent("ВК");
+    expect(screen.queryByTestId("shell-login")).toBeNull();
+    expect(getMyProfile).toHaveBeenCalledTimes(2);
   });
 
   it("EARS-11: the mobile `≡` dropdown carries the same [Эфиры · Мои события] targets", async () => {

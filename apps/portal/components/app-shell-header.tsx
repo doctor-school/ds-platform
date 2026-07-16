@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { UserRound } from "lucide-react";
 import { cn } from "@ds/design-system/lib/utils";
 import { Link as DsLink } from "@ds/design-system/link";
 
@@ -17,7 +18,9 @@ import { useHeaderAuth } from "@/lib/header-auth";
  * `profile.dc.html`, ADR-0013 canvas-wins). Mounted ONCE in the root layout so
  * the bar is present on every portal route by construction (EARS-1) and does not
  * remount across client navigations (the auth read in {@link useHeaderAuth} runs
- * once per hard load).
+ * once on mount and re-runs on the `refreshHeaderAuth()` signal the auth flows
+ * fire after a successful login — the avatar appears on the soft post-login
+ * landing without a hard reload, #1004).
  *
  * Composition (canvas): a full-width `header`-token blue bar — the page's own blue
  * poster masthead stacks directly below it, forming one continuous blue band.
@@ -68,9 +71,11 @@ const MY_EVENTS_HREF = "/account/events";
 const LOGIN_HREF = "/login";
 
 /** A doctor with no saved display name still gets the avatar affordance — a
- *  neutral fallback glyph stands in for the initials (the icon still navigates to
- *  `/account`, where they can set a name). */
-const AVATAR_FALLBACK_GLYPH = "•";
+ *  neutral user-silhouette icon (lucide `UserRound`, aria-hidden; the accessible
+ *  name stays the catalog `profile` label on the link) stands in for the
+ *  initials (#997). The icon-link still navigates to `/account`, where they can
+ *  set a name. */
+const avatarFallbackIcon = <UserRound aria-hidden="true" className="size-5" />;
 
 /** «Войти» chip — white-on-blue neo-brutalist button (canvas), token-only; states
  *  owned by the DS `Link` primitive it overrides. */
@@ -97,7 +102,7 @@ export function AppShellHeader() {
       <Link href={PROFILE_HREF} aria-label={t("profile")} data-testid={testId}>
         {auth.status === "doctor" && auth.initials
           ? auth.initials
-          : AVATAR_FALLBACK_GLYPH}
+          : avatarFallbackIcon}
       </Link>
     </DsLink>
   );

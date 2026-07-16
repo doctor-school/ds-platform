@@ -31,38 +31,67 @@ import { initialsFromDisplayName } from "@/lib/display-name";
  * throw the whole shell over a flaky profile read — the worst case is a guest
  * affordance the doctor can still use to reach the login/profile path. The header
  * lives in the root layout, which does not remount across client navigations, so
- * this fetches once per hard load.
+ * the read runs once on mount and again whenever {@link refreshHeaderAuth} is
+ * signaled — the auth flows fire it right after a successful login so the avatar
+ * appears immediately on the soft post-login landing, no hard reload (#1004).
  */
 export type HeaderAuth =
   | { status: "loading" }
   | { status: "guest" }
   | { status: "doctor"; initials: string | null };
 
+/** Mounted {@link useHeaderAuth} subscribers awaiting a re-read signal. */
+const listeners = new Set<() => void>();
+
+/**
+ * #1004 — signal every mounted {@link useHeaderAuth} to re-read the profile.
+ * Called by the auth flows immediately after a successful login (login ×2 /
+ * verify auto-login / reset auto-login), right before the soft navigation, so
+ * the persistent header (already mounted on the auth surface) swaps «Войти» →
+ * avatar without a hard reload. A no-op when no header is mounted.
+ */
+export function refreshHeaderAuth(): void {
+  for (const listener of listeners) listener();
+}
+
 export function useHeaderAuth(): HeaderAuth {
   const [state, setState] = useState<HeaderAuth>({ status: "loading" });
 
   useEffect(() => {
     let active = true;
-    void (async () => {
-      try {
-        const profile = await getMyProfile();
-        if (!active) return;
-        if (profile === null) {
-          setState({ status: "guest" });
-          return;
+    let latest = 0;
+
+    const read = () => {
+      // On a signaled re-read KEEP the current state (no reset to `loading` —
+      // no affordance flash); swap when the read resolves. `latest` makes the
+      // most recently STARTED read win — a slow stale response never
+      // overwrites a fresher one, and `active` bars setState after unmount.
+      const seq = ++latest;
+      void (async () => {
+        try {
+          const profile = await getMyProfile();
+          if (!active || seq !== latest) return;
+          if (profile === null) {
+            setState({ status: "guest" });
+            return;
+          }
+          const initials = profile.displayName
+            ? initialsFromDisplayName(profile.displayName)
+            : null;
+          setState({ status: "doctor", initials });
+        } catch {
+          // Non-401 transient/server error — never take the shell down over it;
+          // degrade to the guest affordance (still a usable way in).
+          if (active && seq === latest) setState({ status: "guest" });
         }
-        const initials = profile.displayName
-          ? initialsFromDisplayName(profile.displayName)
-          : null;
-        setState({ status: "doctor", initials });
-      } catch {
-        // Non-401 transient/server error — never take the shell down over it;
-        // degrade to the guest affordance (still a usable way in).
-        if (active) setState({ status: "guest" });
-      }
-    })();
+      })();
+    };
+
+    read();
+    listeners.add(read);
     return () => {
       active = false;
+      listeners.delete(read);
     };
   }, []);
 

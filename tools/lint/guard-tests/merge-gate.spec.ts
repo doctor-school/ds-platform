@@ -6,10 +6,12 @@ import {
   assertOpenPr,
   branchWorktreeMessage,
   classifyCheckRuns,
+  classifyModeAVerdict,
   cwdGuardMessage,
   findBranchWorktree,
   isWorktreeCwd,
   latestRunsByName,
+  parseModeAExempt,
   worktreeNumber,
 } from "../../gh/merge-gate.mjs";
 
@@ -426,6 +428,138 @@ describe("merge-gate findBranchWorktree() (#836)", () => {
     // `main` is a substring of the 836 branch slug's path line — only the exact
     // `branch refs/heads/<branch>` record may match.
     expect(findBranchWorktree(porcelain, "836")).toBeNull();
+  });
+});
+
+describe("merge-gate classifyModeAVerdict() (#992)", () => {
+  const HEAD = "aaaa000000000000000000000000000000000000";
+  const OLD = "bbbb000000000000000000000000000000000000";
+  const modeABody = (verdict: string) =>
+    `## Mode (a) Review — PR #992\n\n**Author:** claude\n\n### Findings\n\n- [NIT] example\n\n### Verdict\n\nVERDICT: ${verdict}\n`;
+
+  it("is no-verdict when no review matches the Mode-a artifact shape", () => {
+    expect(classifyModeAVerdict([], HEAD).state).toBe("no-verdict");
+    expect(classifyModeAVerdict(undefined, HEAD).state).toBe("no-verdict");
+    expect(classifyModeAVerdict(null, HEAD).state).toBe("no-verdict");
+  });
+
+  it("ignores non-Mode-a reviews (plain comments, approvals without the header/verdict line)", () => {
+    const reviews = [
+      { body: "LGTM!", state: "APPROVED", commit_id: HEAD },
+      {
+        body: "VERDICT: APPROVE", // verdict line without the Mode-a header
+        commit_id: HEAD,
+        submitted_at: "2026-07-16T10:00:00Z",
+      },
+      {
+        body: "## Mode (a) Review — PR #992\nno structured verdict line here",
+        commit_id: HEAD,
+        submitted_at: "2026-07-16T10:01:00Z",
+      },
+    ];
+    expect(classifyModeAVerdict(reviews, HEAD).state).toBe("no-verdict");
+  });
+
+  it("is request-changes when the latest Mode-a verdict is REQUEST_CHANGES (even after an older APPROVE)", () => {
+    const reviews = [
+      {
+        body: modeABody("APPROVE"),
+        commit_id: HEAD,
+        submitted_at: "2026-07-16T10:00:00Z",
+      },
+      {
+        body: modeABody("REQUEST_CHANGES"),
+        commit_id: HEAD,
+        submitted_at: "2026-07-16T11:00:00Z",
+      },
+    ];
+    expect(classifyModeAVerdict(reviews, HEAD).state).toBe("request-changes");
+  });
+
+  it("is stale-approve when the latest APPROVE's commit_id is not the current head (rework invalidates)", () => {
+    const reviews = [
+      {
+        body: modeABody("APPROVE"),
+        commit_id: OLD,
+        submitted_at: "2026-07-16T10:00:00Z",
+      },
+    ];
+    const verdict = classifyModeAVerdict(reviews, HEAD);
+    expect(verdict.state).toBe("stale-approve");
+    expect(verdict.commitId).toBe(OLD);
+  });
+
+  it("is fresh-approve only for an APPROVE whose commit_id equals the head SHA", () => {
+    const reviews = [
+      {
+        body: modeABody("APPROVE"),
+        commit_id: HEAD,
+        submitted_at: "2026-07-16T10:00:00Z",
+      },
+    ];
+    expect(classifyModeAVerdict(reviews, HEAD).state).toBe("fresh-approve");
+  });
+
+  it("a fresh re-review APPROVE supersedes an earlier REQUEST_CHANGES (latest by submitted_at wins)", () => {
+    const reviews = [
+      {
+        body: modeABody("REQUEST_CHANGES"),
+        commit_id: OLD,
+        submitted_at: "2026-07-16T10:00:00Z",
+      },
+      {
+        body: modeABody("APPROVE"),
+        commit_id: HEAD,
+        submitted_at: "2026-07-16T11:00:00Z",
+      },
+    ];
+    expect(classifyModeAVerdict(reviews, HEAD).state).toBe("fresh-approve");
+  });
+
+  it("a Mode-a review missing submitted_at sorts oldest; later array position breaks ties", () => {
+    const reviews = [
+      { body: modeABody("REQUEST_CHANGES"), commit_id: HEAD },
+      {
+        body: modeABody("APPROVE"),
+        commit_id: HEAD,
+        submitted_at: "2026-07-16T10:00:00Z",
+      },
+    ];
+    expect(classifyModeAVerdict(reviews, HEAD).state).toBe("fresh-approve");
+    // Equal (both missing) timestamps: the later review in the array wins.
+    const untimed = [
+      { body: modeABody("REQUEST_CHANGES"), commit_id: HEAD },
+      { body: modeABody("APPROVE"), commit_id: HEAD },
+    ];
+    expect(classifyModeAVerdict(untimed, HEAD).state).toBe("fresh-approve");
+  });
+});
+
+describe("merge-gate parseModeAExempt() (#992)", () => {
+  it("is not exempt when the flag is absent", () => {
+    expect(parseModeAExempt(["992"])).toEqual({ exempt: false, reason: null });
+  });
+
+  it("is exempt with the trimmed reason when the flag carries a non-empty reason", () => {
+    const parsed = parseModeAExempt([
+      "992",
+      "--mode-a-exempt",
+      " pure docs — AGENTS.md §3.8 fast path ",
+    ]);
+    expect(parsed.exempt).toBe(true);
+    expect(parsed.reason).toBe("pure docs — AGENTS.md §3.8 fast path");
+  });
+
+  it("errors (not silently exempt) on a missing, empty, or flag-shaped reason", () => {
+    for (const args of [
+      ["992", "--mode-a-exempt"],
+      ["992", "--mode-a-exempt", "   "],
+      ["992", "--mode-a-exempt", "--timeout"],
+    ]) {
+      const parsed = parseModeAExempt(args);
+      expect(parsed.exempt).toBe(false);
+      expect(parsed.error).toContain("--mode-a-exempt");
+    }
   });
 });
 

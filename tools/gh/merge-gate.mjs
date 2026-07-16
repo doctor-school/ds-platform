@@ -26,17 +26,26 @@
  *      from substring-matching check NAMES.
  *   4. Head pinning — after a green board the head SHA is re-resolved; a head
  *      that moved mid-poll (force-push, new commit) is RED, not green.
+ *   5. Mode-a verdict gate (#992) — requires a head-SHA-pinned Mode (a)
+ *      APPROVE: the latest PR review whose body opens `## Mode (a) Review` and
+ *      carries a `VERDICT:` line must be APPROVE, and its native `commit_id`
+ *      (the head the reviewer submitted against) must equal the CURRENT head
+ *      SHA — a rework invalidates the verdict. Sanctioned no-Mode-a classes
+ *      (AGENTS.md §3.8: pure docs / test-only / generated-regen; the Version
+ *      Packages bot PR) skip the check ONLY via an explicit, loudly-printed
+ *      `--mode-a-exempt "<reason>"` — no silent auto-detection.
  *
  * Bounded FOREGROUND poll with a mandatory terminal GREEN/RED/TIMEOUT line
  * (CLAUDE.md → checkpoint rule for CI waits; retro 85170286).
  *
  * Usage:
- *   node tools/gh/merge-gate.mjs <pr#> [--timeout <sec>] [--interval <sec>] [--reg-timeout <sec>]
+ *   node tools/gh/merge-gate.mjs <pr#> [--timeout <sec>] [--interval <sec>] [--reg-timeout <sec>] [--mode-a-exempt "<reason>"]
  *   pnpm merge:gate <pr#>                                # alias
  *
  * Exit codes: 0 = GREEN (ok to merge); 1 = RED (failed/cancelled run, zero
- * registered runs, or head moved); 2 = TIMEOUT (still pending at deadline);
- * 3 = usage / gh-spawn error; 4 = worktree guard refusal.
+ * registered runs, head moved, or missing/stale/negative Mode-a verdict);
+ * 2 = TIMEOUT (still pending at deadline); 3 = usage / gh-spawn error;
+ * 4 = worktree guard refusal.
  *
  * Canon: AGENTS.md §4, skill `merge-when-green` Step 1, memory
  * `feedback_phase0_merge_gate_manual`. Issue #836.
@@ -269,6 +278,91 @@ export function branchWorktreeMessage(branch, wtPath) {
   );
 }
 
+/** A PR review counts as a Mode-a artifact only when its body opens with the
+ * canonical header (skill `request-mode-a-review` → Output format)… */
+const MODE_A_HEADER_RE = /^## Mode \(a\) Review/m;
+/** …AND carries the mandatory structured verdict line. */
+const MODE_A_VERDICT_RE = /^VERDICT:\s*(APPROVE|REQUEST_CHANGES)\b/m;
+
+/**
+ * Classify the Mode-a verdict state for one PR head SHA (#992).
+ *
+ * Input is the raw `GET /repos/{owner}/{repo}/pulls/{n}/reviews` array. Only
+ * reviews whose body matches BOTH the `## Mode (a) Review` header and the
+ * `VERDICT: <APPROVE|REQUEST_CHANGES>` line count — plain comments, human
+ * drive-bys, and bot reviews are ignored. Of those, the LATEST by
+ * `submitted_at` wins (a re-review supersedes its predecessor; missing
+ * timestamps sort oldest, later array position breaks ties — GitHub returns
+ * reviews in submission order).
+ *
+ * The deterministic head pin is the review's native `commit_id` — the head SHA
+ * GitHub recorded when the reviewer ran `gh pr review` — so no verdict-format
+ * change is needed: an APPROVE submitted against a superseded head is
+ * `stale-approve`, never a pass (a rework invalidates the verdict).
+ *
+ * States (only `fresh-approve` passes the gate):
+ *   - `no-verdict`      — no review matches the Mode-a artifact shape.
+ *   - `request-changes` — the latest Mode-a verdict is REQUEST_CHANGES.
+ *   - `stale-approve`   — latest is APPROVE but `commit_id !== headSha`.
+ *   - `fresh-approve`   — APPROVE with `commit_id === headSha`.
+ *
+ * @param {{body?: string, commit_id?: string, submitted_at?: string|null}[]|null|undefined} reviews
+ * @param {string} headSha
+ * @returns {{state: "no-verdict"|"request-changes"|"stale-approve"|"fresh-approve", verdict: string|null, commitId: string|null, submittedAt: string|null}}
+ */
+export function classifyModeAVerdict(reviews, headSha) {
+  const modeA = (Array.isArray(reviews) ? reviews : []).flatMap((r) => {
+    const body = typeof r?.body === "string" ? r.body : "";
+    if (!MODE_A_HEADER_RE.test(body)) return [];
+    const m = MODE_A_VERDICT_RE.exec(body);
+    if (!m) return [];
+    return [
+      {
+        verdict: m[1],
+        commitId: r?.commit_id ?? null,
+        submittedAt: r?.submitted_at ?? null,
+      },
+    ];
+  });
+  if (modeA.length === 0) {
+    return { state: "no-verdict", verdict: null, commitId: null, submittedAt: null };
+  }
+  // Latest Mode-a review wins; `>=` lets a later array position break ties.
+  let latest = modeA[0];
+  for (const cur of modeA.slice(1)) {
+    if (runTimeMs(cur.submittedAt) >= runTimeMs(latest.submittedAt)) latest = cur;
+  }
+  if (latest.verdict === "REQUEST_CHANGES")
+    return { state: "request-changes", ...latest };
+  if (latest.commitId !== headSha) return { state: "stale-approve", ...latest };
+  return { state: "fresh-approve", ...latest };
+}
+
+/**
+ * Parse the explicit `--mode-a-exempt "<reason>"` escape flag (#992). The
+ * sanctioned no-Mode-a merge classes (AGENTS.md §3.8: pure docs / test-only /
+ * generated-regen; the Version Packages bot PR) skip the verdict gate ONLY via
+ * this flag — a non-empty reason is mandatory (auditable, mirrors how
+ * `--no-verify` demands a logged reason) and there is NO silent auto-detection.
+ *
+ * @param {string[]} args  raw CLI args
+ * @returns {{exempt: boolean, reason: string|null, error?: string}}
+ */
+export function parseModeAExempt(args) {
+  const i = (Array.isArray(args) ? args : []).indexOf("--mode-a-exempt");
+  if (i === -1) return { exempt: false, reason: null };
+  const raw = args[i + 1];
+  if (typeof raw !== "string" || raw.trim() === "" || raw.startsWith("--")) {
+    return {
+      exempt: false,
+      reason: null,
+      error:
+        '--mode-a-exempt requires a non-empty reason, e.g. --mode-a-exempt "pure docs — AGENTS.md §3.8 fast path"',
+    };
+  }
+  return { exempt: true, reason: raw.trim() };
+}
+
 // ── impure CLI (skipped on import) ──────────────────────────────────────────
 
 function die(msg, code = 3) {
@@ -338,13 +432,34 @@ function fetchCheckRuns(sha) {
   }
 }
 
+/**
+ * Fetch the PR's reviews (native `commit_id` = the head SHA each review was
+ * submitted against — the pin `classifyModeAVerdict` consumes).
+ */
+function fetchReviews(prNumber) {
+  const res = gh([
+    "api",
+    `repos/{owner}/{repo}/pulls/${prNumber}/reviews?per_page=100`,
+  ]);
+  if (res.status !== 0)
+    die(
+      `gh api reviews for PR #${prNumber} failed: ${(res.stderr ?? "").trim()}`,
+    );
+  try {
+    const parsed = JSON.parse(res.stdout);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    die(`could not parse gh api reviews JSON for PR #${prNumber}`);
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const rawPr = args[0];
   const prNumber = Number(rawPr);
   if (!rawPr || !Number.isInteger(prNumber) || prNumber <= 0) {
     process.stderr.write(
-      "Usage: node tools/gh/merge-gate.mjs <pr#> [--timeout <sec>] [--interval <sec>] [--reg-timeout <sec>]\n",
+      'Usage: node tools/gh/merge-gate.mjs <pr#> [--timeout <sec>] [--interval <sec>] [--reg-timeout <sec>] [--mode-a-exempt "<reason>"]\n',
     );
     process.exit(3);
   }
@@ -358,6 +473,8 @@ async function main() {
   const timeoutSec = getOpt("--timeout", DEFAULT_TIMEOUT_SEC);
   const intervalSec = getOpt("--interval", DEFAULT_INTERVAL_SEC);
   const regTimeoutSec = getOpt("--reg-timeout", DEFAULT_REG_TIMEOUT_SEC);
+  const modeAExempt = parseModeAExempt(args);
+  if (modeAExempt.error) die(modeAExempt.error);
 
   // 1. Worktree-cwd guard (retro 29f490ed F2).
   const cwd = process.cwd();
@@ -375,6 +492,44 @@ async function main() {
   if (!wt.error && wt.status === 0) {
     const held = findBranchWorktree(wt.stdout, branch);
     if (held) die(branchWorktreeMessage(branch, held), 4);
+  }
+
+  // 2b. Mode-a verdict gate (#992) — fail fast BEFORE the CI poll: a merge
+  // needs a Mode-a APPROVE pinned (via the review's native commit_id) to THIS
+  // head SHA. If the head moves mid-poll, step 4's head pin goes RED anyway,
+  // so a verdict fresh here stays fresh for any green this run can emit.
+  const redispatch = `Dispatch (or re-dispatch) request-mode-a-review against the CURRENT head, or — ONLY for a sanctioned no-Mode-a class (AGENTS.md §3.8: pure docs / test-only / generated-regen; the Version Packages bot PR) — re-run with --mode-a-exempt "<reason>". Do NOT merge.`;
+  if (modeAExempt.exempt) {
+    process.stdout.write(
+      `${TAG} MODE-A EXEMPT — verdict gate SKIPPED for PR #${prNumber}: ${modeAExempt.reason} ` +
+        `(sanctioned classes only — AGENTS.md §3.8; this line is the audit record).\n`,
+    );
+  } else {
+    const verdict = classifyModeAVerdict(fetchReviews(prNumber), sha);
+    if (verdict.state === "no-verdict") {
+      die(
+        `RED — PR #${prNumber} head ${sha.slice(0, 12)}: no Mode (a) review verdict found ` +
+          `(no PR review opens '## Mode (a) Review' with a VERDICT: line). ${redispatch}`,
+        1,
+      );
+    }
+    if (verdict.state === "request-changes") {
+      die(
+        `RED — PR #${prNumber} head ${sha.slice(0, 12)}: latest Mode (a) verdict is REQUEST_CHANGES ` +
+          `(submitted ${verdict.submittedAt ?? "<unknown>"}). Address the findings, then re-dispatch. Do NOT merge.`,
+        1,
+      );
+    }
+    if (verdict.state === "stale-approve") {
+      die(
+        `RED — PR #${prNumber} head ${sha.slice(0, 12)}: latest Mode (a) APPROVE is STALE — reviewed at ` +
+          `${(verdict.commitId ?? "<unknown>").slice(0, 12)}, but the head has since moved (a rework invalidates the verdict). ${redispatch}`,
+        1,
+      );
+    }
+    process.stdout.write(
+      `${TAG} Mode-a verdict OK — PR #${prNumber}: APPROVE pinned at head ${sha.slice(0, 12)} (submitted ${verdict.submittedAt ?? "<unknown>"}).\n`,
+    );
   }
 
   // 3. Bounded foreground poll against the pinned SHA.

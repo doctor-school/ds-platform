@@ -160,6 +160,21 @@ describe("008 EARS-1…13 — persistent app-shell header", () => {
     expect(getMyProfile).toHaveBeenCalledTimes(2);
   });
 
+  it("EARS-5: the header re-reads the profile on refreshHeaderAuth() after logout — immediate guest affordance, no hard reload", async () => {
+    // #1004 mirror: mounted while a doctor …
+    getMyProfile.mockResolvedValue(DOCTOR);
+    renderHeader();
+    await screen.findByTestId("shell-avatar");
+    // … then the logout flow revokes the session and fires the signal — the
+    // SAME mounted header must flip back to «Войти» without a hard reload.
+    getMyProfile.mockResolvedValue(null);
+    act(() => refreshHeaderAuth());
+    const login = await screen.findByTestId("shell-login");
+    expect(login).toHaveTextContent("Войти");
+    expect(screen.queryByTestId("shell-avatar")).toBeNull();
+    expect(getMyProfile).toHaveBeenCalledTimes(2);
+  });
+
   it("EARS-11: the mobile `≡` dropdown carries the same [Эфиры · Мои события] targets", async () => {
     renderHeader();
     const menu = await screen.findByTestId("shell-mobile-menu");

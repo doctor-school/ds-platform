@@ -9,6 +9,7 @@ import type { MyProfile } from "@ds/schemas";
 
 import { authClient, AuthError } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
+import { refreshHeaderAuth } from "@/lib/header-auth";
 import { getMyProfile } from "@/lib/profile-client";
 import {
   setDisplayName,
@@ -180,6 +181,10 @@ export default function AccountPage() {
       await authClient.logout();
     } finally {
       // Whether or not the revoke round-trip succeeded, the user intends to leave.
+      // #1004: signal the persistent header to re-read the auth state so the
+      // avatar flips back to the guest affordance on this soft navigation —
+      // mirroring the login-side call sites.
+      refreshHeaderAuth();
       router.replace("/login");
     }
   }

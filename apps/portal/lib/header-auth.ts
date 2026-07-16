@@ -45,10 +45,10 @@ const listeners = new Set<() => void>();
 
 /**
  * #1004 — signal every mounted {@link useHeaderAuth} to re-read the profile.
- * Called by the auth flows immediately after a successful login (login ×2 /
- * verify auto-login / reset auto-login), right before the soft navigation, so
- * the persistent header (already mounted on the auth surface) swaps «Войти» →
- * avatar without a hard reload. A no-op when no header is mounted.
+ * Called by the auth flows immediately after the auth state changes (login ×2 /
+ * verify auto-login / reset auto-login / account logout), right before their
+ * soft navigation, so the persistent header swaps «Войти» ↔ avatar without a
+ * hard reload. A no-op when no header is mounted.
  */
 export function refreshHeaderAuth(): void {
   for (const listener of listeners) listener();

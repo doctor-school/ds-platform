@@ -335,16 +335,20 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
      prod redirect URI, and activates mail.ru + SMS-Aero as the boot providers:
 
      ```bash
+     # api.env is root:root 0600 — source it AS ROOT (sudo bash -c): a non-root `.`
+     # fails (Permission denied) and silently yields an EMPTY env; provision.sh now
+     # rejects real mode with absent creds fail-closed (#902 — the 2026-07-14 incident
+     # silently activated Mailpit on prod instead of the real mail.ru relay).
      # Sourcing runs api.env through bash: values with spaces MUST be double-quoted
      # (e.g. SMSAERO_SIGN="SMS Aero"), or the var truncates at the first space and
      # the remainder errors as `command not found`.
-     set -a; . /etc/ds-platform/api.env; set +a
      cd ~/ds-platform/infra/dev-stand/idp
-     IDP_BASE_URL=https://id.doctor.school \
+     sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; \
+       IDP_BASE_URL=https://id.doctor.school \
        IDP_REDIRECT_URIS=https://api.doctor.school/auth/callback \
        IDP_POST_LOGOUT_URIS=https://app.doctor.school \
        EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real \
-       ./provision.sh --pat-file /etc/ds-platform/idp-bootstrap-pat.txt
+       ./provision.sh --pat-file /etc/ds-platform/idp-bootstrap-pat.txt'
      # copy the emitted IDP_CLIENT_ID / IDP_CLIENT_SECRET / IDP_PROJECT_ID into api.env,
      # then: docker compose up -d api   (restart to pick up the OIDC creds)
      ```
@@ -500,11 +504,16 @@ events/rooms migrations like any other).
    SMTP/SMS providers (Apply order step 9):
 
    ```bash
-   set -a; . /etc/ds-platform/api.env; set +a
+   # Same root-sourced invocation as Apply order step 9 (api.env is root:root 0600;
+   # a non-root source silently yields an empty env — #902), and the real delivery
+   # modes MUST be passed: this converge script also activates the boot SMTP/SMS
+   # providers, and the defaults (mailpit/sink) would deactivate the real ones.
    cd ~/ds-platform/infra/dev-stand/idp
-   IDP_BASE_URL=https://id.doctor.school \
+   sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; \
+     IDP_BASE_URL=https://id.doctor.school \
      IDP_SEED_ROLE=platform_admin \
-     ./provision.sh --pat-file /etc/ds-platform/idp-bootstrap-pat.txt
+     EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real \
+     ./provision.sh --pat-file /etc/ds-platform/idp-bootstrap-pat.txt'
    # then grant the role to the operator's user (Zitadel console or the script's
    # grant path) — an account WITHOUT platform_admin must be rejected by the
    # admin surface (in-service role-based authz, spec §2.3).

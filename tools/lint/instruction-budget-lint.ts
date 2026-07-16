@@ -21,6 +21,8 @@
  *   - lines:  <= 200   (Anthropic CLAUDE.md target + MEMORY.md load cutoff)
  *   - bytes:  <= 25 KB  (MEMORY.md load cutoff; applied to all three for headroom)
  *   CLAUDE.md additionally carries a softer high-signal WARN target of 120 lines.
+ *   An always-on file within budget but with < 256 B of byte-headroom left WARNs
+ *   (#1042) — the next edit would force ad-hoc squeezing; compact proactively.
  *
  * Skills (`apps/docs/content/skills/<name>/SKILL.md`, #416) are read-on-demand, not
  * always-on — they never enter the session-start window, so the concern is
@@ -52,6 +54,7 @@ const TAG = "[instruction-budget]";
 const MAX_LINES = 200;
 const MAX_BYTES = 25 * 1024; // 25 KB, matching the MEMORY.md auto-load cutoff
 const CLAUDE_SOFT_LINES = 120; // high-signal target (WARN only)
+const HEADROOM_WARN_BYTES = 256; // always-on byte-headroom WARN tier (#1042)
 
 interface Target {
   label: string;
@@ -165,6 +168,17 @@ for (const t of targets) {
   }
   if (!overLines && t.softLines && lineCount > t.softLines) {
     lines.push(`${TAG} WARN        ${t.label}: ${lineCount} lines > soft target ${t.softLines} — consider trimming (not a failure).`);
+  }
+  // Headroom WARN tier (#1042): an always-on file (never lazy rules, never
+  // read-on-demand skills) that is WITHIN budget but has < 256 B left before the
+  // byte ceiling gets a WARN — the next edit would force ad-hoc squeezing of
+  // canonical rules. Exit code stays 0.
+  const headroom = MAX_BYTES - bytes;
+  if (!over && !t.offTotal && !t.label.includes("(lazy)") && headroom < HEADROOM_WARN_BYTES) {
+    lines.push(
+      `${TAG} WARN        ${t.label}: low byte-headroom — ${bytes} B used, ${headroom} B remaining ` +
+        `(< ${HEADROOM_WARN_BYTES} B before the ${(MAX_BYTES / 1024).toFixed(0)} KB ceiling) — compact before the next always-on edit (not a failure).`,
+    );
   }
 }
 

@@ -14,10 +14,18 @@ import { test, expect, type Page } from "@playwright/test";
  * exactly-one-`h1` assertion per route is the composed-page check the Issue
  * names — axe's `page-has-heading-one` only asserts "at least one".
  *
- * Backend-free: the auth pages render their forms client-side, so each route is
- * scanned on landing with no api / Zitadel / Mailpit. Single theme (light) —
- * composed pages are not the token catalogue; theme-matrix contrast lives in
- * the showcase gate.
+ * Backend-free — but NOT probe-free: /login and /register mount inside
+ * `useRedirectIfAuthenticated`, whose `authClient.session()` read
+ * (`GET /v1/auth/session`) never resolves to "anonymous" when the BFF upstream
+ * is dead (the fetch rejects → the guard stays pending → `<AuthShell>` renders
+ * NOTHING). An unmocked hermetic run therefore scans an EMPTY BODY and axe is
+ * trivially clean (#1034 discovery). So each scan mocks the session probe with
+ * a deterministic 401 ("anonymous"), waits for the page's real form, and
+ * asserts rendered content (exactly-one non-empty h1) BEFORE running axe — an
+ * empty-shell scan fails loudly instead of passing clean.
+ *
+ * Single theme (light) — composed pages are not the token catalogue;
+ * theme-matrix contrast lives in the showcase gate.
  *
  * If axe reports a REAL violation, the fix is the surface, NOT a weakened scan —
  * this spec does not allowlist or exclude any rule. A failure here is a true
@@ -26,19 +34,33 @@ import { test, expect, type Page } from "@playwright/test";
 
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 
-async function scan(page: Page, path: string): Promise<void> {
-  await page.goto(path);
-  // Wait for the primary interactive region so the form has rendered before the
-  // scan (axe reads the live DOM; a half-rendered page would under-report).
-  await page.locator("form, main").first().waitFor({ state: "visible" });
+/** The `useRedirectIfAuthenticated` session probe (`authClient.session()`). */
+const SESSION_PROBE = "**/v1/auth/session";
 
-  // Composed-page shell check: exactly one h1 per route (axe's
+async function scan(page: Page, path: string): Promise<void> {
+  // Deterministic anonymous principal: fulfill the session probe with the 401
+  // the real BFF returns for a cookie-less visitor, so the auth shell renders
+  // without any backend (`authClient.session()` maps 401 → null → "anonymous").
+  await page.route(SESSION_PROBE, (route) =>
+    route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "unauthorized" }),
+    }),
+  );
+  await page.goto(path);
+  // Wait for the page's real form so the surface has rendered before the scan
+  // (axe reads the live DOM; the pending-guard empty shell has no form at all,
+  // and a half-rendered page would under-report).
+  await page.locator("form").first().waitFor({ state: "visible" });
+
+  // Composed-page shell check: exactly one NON-EMPTY h1 per route (axe's
   // `page-has-heading-one` only guarantees ≥1, and is a best-practice-tagged
-  // rule the WCAG tag set below does not run). SOFT so a shell failure still
-  // lets the axe scan below report its verdict in the same run.
-  await expect
-    .soft(page.locator("h1"), `h1 count on ${path}`)
-    .toHaveCount(1);
+  // rule the WCAG tag set below does not run). Also the loud empty-shell
+  // sentinel: a body with no rendered content cannot pass this.
+  const h1 = page.locator("h1");
+  await expect(h1, `h1 count on ${path}`).toHaveCount(1);
+  await expect(h1, `h1 text on ${path}`).not.toHaveText(/^\s*$/);
 
   const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
 

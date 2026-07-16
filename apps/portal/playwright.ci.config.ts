@@ -10,9 +10,10 @@ import { defineConfig, devices } from "@playwright/test";
  * topology). THIS config is the one CI runs (`playwright-axe-portal` job): it
  * owns a `webServer` that boots the already-built portal with `next start`, and
  * `testMatch` pins it to the single thin page-level a11y spec that needs NO
- * backend — the auth pages render their forms client-side and only hit the BFF
- * on submit, which the spec never does (it runs an axe scan + page-shell
- * assertions on landing). So this tier is hermetic: build the portal,
+ * backend — the auth pages render their forms client-side, and the spec mocks
+ * the one mount-time BFF read (the `/v1/auth/session` guard probe, which never
+ * settles on a dead upstream — #1034) via `page.route`, then runs an axe scan
+ * + page-shell assertions on landing. So this tier is hermetic: build the portal,
  * `next start`, drive the browser, assert. No Postgres / Zitadel / Mailpit, no
  * env gate. The showcase `playwright-axe` gate covers the DS primitives; this
  * tier covers the COMPOSED product pages (page shell, landmark structure,
@@ -32,8 +33,10 @@ const READY_URL = `${BASE}/login`;
 export default defineConfig({
   testDir: "./e2e",
   // ONLY the thin page-level axe spec runs in CI — the live-Zitadel journeys and
-  // the dev-stand-gated `e2e/a11y/` suite (`test:axe`) stay out.
-  testMatch: ["a11y-axe.e2e.spec.ts"],
+  // the dev-stand-gated `e2e/a11y/` suite (`test:axe`) stay out. Anchored regex,
+  // not a bare-basename glob: `e2e/a11y/a11y-axe.e2e.spec.ts` (the dev-stand
+  // tier) shares the basename and a glob would drag its env-skipped tests in.
+  testMatch: /[\\/]e2e[\\/]a11y-axe\.e2e\.spec\.ts$/,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

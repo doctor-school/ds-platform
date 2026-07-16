@@ -31,6 +31,13 @@ export interface JourneyWorld {
   pageB?: Page;
   /** 006 EARS-3 — the exact text doctor A posted, read back by doctor B's assertion. */
   chatMessage?: string;
+  /**
+   * 008 shell journey — the provisioned doctor's KNOWN credentials, minted by the
+   * "registered doctor who is not yet signed in" Given so the later deliberate
+   * `/login` step drives the real post-login landing (EARS-7).
+   */
+  email?: string;
+  password?: string;
 }
 
 // playwright-bdd's bddgen detects the custom test instance by the

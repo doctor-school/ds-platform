@@ -11,6 +11,8 @@ import {
   collectCopy,
   evaluateAskUserQuestion,
   jargonHitsIn,
+  restoreScopeHit,
+  surfaceClaimHit,
 } from "../../hooks/askuserquestion-calibration-guard.mjs";
 
 /**
@@ -56,6 +58,104 @@ const CLEAN_PRODUCT_INPUT = {
   ],
 };
 
+// (#976 fixture, real incident) A restore/remediation-SCOPE question framed as
+// an owner menu — after erroneously deleting a section, the lead asks the owner
+// «what scope do we restore?». Restoring a mistake is a LEAD call (minimal-diff,
+// faithful, full restore), not an owner scope pick → the gate WARNs.
+const RESTORE_SCOPE_INPUT = {
+  questions: [
+    {
+      question:
+        "Ошибочно удалил секцию из ADR — что восстанавливаем: только удалённый текст или весь файл целиком?",
+      header: "Объём восстановления",
+      options: [
+        { label: "Только удалённый текст", description: "Точечно вернуть секцию" },
+        { label: "Весь файл", description: "Откатить файл целиком" },
+      ],
+    },
+  ],
+};
+
+// (#976 fixture, EN framing) The same shape in English — a restore-scope menu.
+const RESTORE_SCOPE_EN_INPUT = {
+  questions: [
+    {
+      question: "To what scope should we restore the reverted config?",
+      header: "Restore scope",
+      options: [
+        { label: "Only the removed key", description: "Restore just that entry" },
+        { label: "The whole file", description: "Restore the entire file" },
+      ],
+    },
+  ],
+};
+
+// (#976 fixture, real incident) A question whose OPTION asserts an UNVERIFIED
+// factual claim about a live surface («сегодняшний /account — это сырой
+// debug-дамп»). Such a state claim must be verified against source first → WARN.
+const SURFACE_CLAIM_INPUT = {
+  questions: [
+    {
+      question: "Как поступить со страницей аккаунта?",
+      header: "Страница /account",
+      options: [
+        {
+          label: "Переписать",
+          description: "Сегодняшний /account — это сырой debug-дамп, переделать начисто",
+        },
+        { label: "Оставить", description: "Ничего не менять" },
+      ],
+    },
+  ],
+};
+
+// (#976 fixture, EN framing) An option asserts an endpoint returns a given shape.
+const SURFACE_CLAIM_EN_INPUT = {
+  questions: [
+    {
+      question: "How to handle the health check?",
+      header: "Health",
+      options: [
+        { label: "Trust it", description: "The /v1/health endpoint returns a stale 200" },
+        { label: "Probe", description: "Re-check first" },
+      ],
+    },
+  ],
+};
+
+// (#976 regression) A legit PRODUCT question that merely CONTAINS a restore word
+// (password-recovery flow naming) but is NOT a restore-scope decision — the
+// restore verb and any scope word live in DIFFERENT copy strings, so the gate
+// must NOT WARN restore-scope on it.
+const PRODUCT_RESTORE_WORD_INPUT = {
+  questions: [
+    {
+      question: "Как назвать флоу восстановления доступа?",
+      header: "Название флоу",
+      options: [
+        { label: "Только e-mail", description: "Короткий вариант" },
+        { label: "E-mail и SMS", description: "Полный вариант" },
+      ],
+    },
+  ],
+};
+
+// (#976 regression) A legit PRODUCT-scope question that names a surface noun
+// (страница / page) but asserts NO state claim — a "which page to route to"
+// product pick. Surface noun WITHOUT a state predicate must NOT WARN.
+const PRODUCT_SURFACE_NOUN_INPUT = {
+  questions: [
+    {
+      question: "На какую страницу вести пользователя после входа?",
+      header: "Пункт назначения",
+      options: [
+        { label: "Дашборд", description: "Сразу к сводке" },
+        { label: "Профиль", description: "Сначала настройки профиля" },
+      ],
+    },
+  ],
+};
+
 // An option-copy set that leaks internal jargon into owner-facing text.
 const JARGON_INPUT = {
   questions: [
@@ -93,6 +193,29 @@ describe("askuserquestion-calibration-guard hook (spawned end-to-end)", () => {
     expect(out.hookSpecificOutput.permissionDecision).toBe("allow");
   });
 
+  it("appends a restore-scope WARN on a restore/remediation-scope owner menu (RU)", () => {
+    const r = runHook(preToolUsePayload(RESTORE_SCOPE_INPUT));
+    expect(r.status).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.systemMessage).toContain("restore/remediation-scope (#976)");
+    expect(out.hookSpecificOutput.permissionDecision).toBe("allow");
+  });
+
+  it("appends a live-surface-claim WARN when an option asserts an unverified state claim (RU /account)", () => {
+    const r = runHook(preToolUsePayload(SURFACE_CLAIM_INPUT));
+    expect(r.status).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.systemMessage).toContain("live-surface claim (#976)");
+    expect(out.hookSpecificOutput.permissionDecision).toBe("allow");
+  });
+
+  it("does NOT warn restore/surface on a clean product question (no regression)", () => {
+    const r = runHook(preToolUsePayload(CLEAN_PRODUCT_INPUT));
+    expect(r.status).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.systemMessage).toBe(calibrationMessage());
+  });
+
   it("never blocks — always exits 0, even on malformed / empty tool_input", () => {
     expect(runHook(preToolUsePayload({})).status).toBe(0);
     expect(runHook(preToolUsePayload({ questions: "oops" })).status).toBe(0);
@@ -128,6 +251,103 @@ describe("evaluateAskUserQuestion() (pure seam)", () => {
     expect(evaluateAskUserQuestion(undefined).systemMessage).toBe(
       calibrationMessage(),
     );
+  });
+
+  it("flags a restore-scope owner menu (RU + EN) and appends the WARN", () => {
+    for (const input of [RESTORE_SCOPE_INPUT, RESTORE_SCOPE_EN_INPUT]) {
+      const { systemMessage, restoreScope } = evaluateAskUserQuestion(input);
+      expect(restoreScope).toBe(true);
+      expect(systemMessage).toContain("restore/remediation-scope (#976)");
+    }
+  });
+
+  it("flags an unverified live-surface claim (RU + EN) and appends the WARN", () => {
+    for (const input of [SURFACE_CLAIM_INPUT, SURFACE_CLAIM_EN_INPUT]) {
+      const { systemMessage, surfaceClaim } = evaluateAskUserQuestion(input);
+      expect(surfaceClaim).toBe(true);
+      expect(systemMessage).toContain("live-surface claim (#976)");
+    }
+  });
+
+  it("does NOT flag legit product questions (restore-word / surface-noun regression)", () => {
+    for (const input of [
+      CLEAN_PRODUCT_INPUT,
+      PRODUCT_RESTORE_WORD_INPUT,
+      PRODUCT_SURFACE_NOUN_INPUT,
+    ]) {
+      const { systemMessage, restoreScope, surfaceClaim } =
+        evaluateAskUserQuestion(input);
+      expect(restoreScope).toBe(false);
+      expect(surfaceClaim).toBe(false);
+      expect(systemMessage).toBe(calibrationMessage());
+    }
+  });
+});
+
+describe("restoreScopeHit() (#976 — restore/remediation-scope framing)", () => {
+  it("fires when a restore verb and a scope cue share the copy (RU + EN)", () => {
+    expect(
+      restoreScopeHit([
+        "что восстанавливаем: только удалённый текст или весь файл?",
+      ]),
+    ).toBe(true);
+    expect(restoreScopeHit(["To what scope should we restore the config?"])).toBe(
+      true,
+    );
+    expect(restoreScopeHit(["Откатить файл целиком или частично?"])).toBe(true);
+  });
+
+  it("does NOT fire when restore verb and scope cue are in DIFFERENT strings", () => {
+    // password-recovery flow naming — restore word in Q, scope word in an option
+    expect(
+      restoreScopeHit(["Как назвать флоу восстановления доступа?", "Только e-mail"]),
+    ).toBe(false);
+  });
+
+  it("does NOT fire on a scope word alone or a restore word alone", () => {
+    expect(restoreScopeHit(["Только синий или весь градиент?"])).toBe(false);
+    expect(restoreScopeHit(["Как назвать восстановление пароля?"])).toBe(false);
+  });
+
+  it("does NOT false-positive on 'верный/верно' (correct), only real restore verbs", () => {
+    expect(restoreScopeHit(["Какой вариант верный — весь список или только топ?"])).toBe(
+      false,
+    );
+  });
+
+  it("returns false for empty / malformed input without throwing", () => {
+    expect(restoreScopeHit([])).toBe(false);
+    expect(restoreScopeHit(null)).toBe(false);
+    expect(restoreScopeHit(undefined)).toBe(false);
+  });
+});
+
+describe("surfaceClaimHit() (#976 — unverified live-surface state claim)", () => {
+  it("fires on a path/endpoint/surface + asserted-state predicate (RU + EN)", () => {
+    expect(
+      surfaceClaimHit(["Сегодняшний /account — это сырой debug-дамп"]),
+    ).toBe(true);
+    expect(surfaceClaimHit(["The /v1/health endpoint returns a stale 200"])).toBe(
+      true,
+    );
+    expect(surfaceClaimHit(["the /foo page is a stub"])).toBe(true);
+    expect(surfaceClaimHit(["страница профиля содержит заглушку"])).toBe(true);
+  });
+
+  it("does NOT fire on a surface noun WITHOUT a state predicate (product routing pick)", () => {
+    expect(
+      surfaceClaimHit(["На какую страницу вести после входа?", "Дашборд", "Профиль"]),
+    ).toBe(false);
+  });
+
+  it("does NOT fire on a state predicate WITHOUT a surface reference", () => {
+    expect(surfaceClaimHit(["Синий — это спокойнее, а корал ярче"])).toBe(false);
+  });
+
+  it("returns false for empty / malformed input without throwing", () => {
+    expect(surfaceClaimHit([])).toBe(false);
+    expect(surfaceClaimHit(null)).toBe(false);
+    expect(surfaceClaimHit(undefined)).toBe(false);
   });
 });
 

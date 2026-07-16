@@ -105,18 +105,104 @@ export function jargonHitsIn(text, tokens = JARGON_TOKENS) {
 }
 
 /**
+ * (#976 detector a) A restore / remediation / undo / revert / re-instate verb
+ * matched in owner-facing copy. RU stems (восстанов/восстанав, откат, вернуть,
+ * вернём, верни) are matched carefully so the correctness adjective «верный /
+ * верно» does NOT hit; «отмена» (product cancellation) is deliberately excluded.
+ */
+const RESTORE_VERB_RE =
+  /(восстан[ао]в|откат|вернуть|верн[её]м|верни(?:те)?|remediat|\brestore|\brestoring\b|\bundo\b|\brevert|re-?instat|reinstat|rollback|roll\s+back)/i;
+
+/**
+ * (#976 detector a) A scope / extent cue — the signal that a restore verb is
+ * about the SCOPE of restoring a mistake (a lead call), not a product feature
+ * that merely mentions "restore" (e.g. a password-recovery flow).
+ */
+// NB: JS `\b` is ASCII-only (Cyrillic is not `\w`), so RU cues carry no `\b` —
+// only the ASCII (EN) cues do.
+const RESTORE_SCOPE_CUE_RE =
+  /(\bscope\b|объ[её]м|сколько|только|весь|всё|целиком|полност|частичн|how\s+much|\bentire\b|\bwhole\b|\bpartial|\bextent\b|\bonly\b|\bfull(?:y)?\b)/i;
+
+/**
+ * (#976 detector b) A reference to a live surface: a slash-route (`/account`),
+ * a source filename (`foo.tsx`), or a surface noun (страница / page / endpoint /
+ * route / маршрут / экран / screen).
+ */
+const SURFACE_REF_RE =
+  /(?:(?:^|[\s("'«`>[])\/[a-zа-я][\w/-]*)|(?:\b[\w-]+\.(?:tsx?|jsx?|mjs|cjs|css|scss|json|ya?ml|md|vue|py|go|rs|sql|html?)\b)|(?:страниц|\bpage\b|endpoint|\broute\b|маршрут|экран|\bscreen\b|роут)/i;
+
+/**
+ * (#976 detector b) An asserted-state predicate binding a subject to a claimed
+ * state (is / это / = / returns / renders / содержит / является), or a
+ * loaded state-noun (dump / дамп / stub / заглушк / сырой). Kept tight so a
+ * product "which page to route to" pick (no assertion) does not match.
+ */
+// RU verb forms carry no `\b` (ASCII-only in JS). `это` is deliberately NOT a
+// predicate here — it is indistinguishable from the demonstrative «этой/этот»
+// and would false-positive; the loaded state-nouns (сырой / дамп / заглушк)
+// carry the real "asserted state" signal instead.
+const STATE_PREDICATE_RE =
+  /(\bis\b|\bare\b|\bwas\b|\bwere\b|является|представляет\s+собой|\breturns?\b|\brenders?\b|содержит|\bstub\b|заглушк|\bdump\b|дамп|сыр(?:ой|ая|ое|ые))/i;
+
+/**
+ * (#976 detector a) True when any single owner-facing copy string frames a
+ * restore/remediation SCOPE decision — a restore verb AND a scope cue in the
+ * SAME string. Same-string pairing keeps it conservative: a product question
+ * that merely contains "восстановление" (in the question) with an unrelated
+ * "только" (in an option) does NOT fire. Never throws.
+ */
+export function restoreScopeHit(copies) {
+  try {
+    const list = Array.isArray(copies) ? copies : [];
+    return list.some(
+      (c) =>
+        typeof c === "string" &&
+        RESTORE_VERB_RE.test(c) &&
+        RESTORE_SCOPE_CUE_RE.test(c),
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * (#976 detector b) True when any single owner-facing copy string asserts an
+ * unverified factual claim about a live surface — a surface reference AND an
+ * asserted-state predicate in the SAME string. Per-string pairing avoids
+ * false-pairing a surface noun in one option with a predicate in another.
+ * Never throws.
+ */
+export function surfaceClaimHit(copies) {
+  try {
+    const list = Array.isArray(copies) ? copies : [];
+    return list.some(
+      (c) =>
+        typeof c === "string" &&
+        SURFACE_REF_RE.test(c) &&
+        STATE_PREDICATE_RE.test(c),
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Pure decision seam (unit-tested without a real FS / process): given the
  * parsed AskUserQuestion `tool_input`, return the calibration `systemMessage`
  * (always present for a well-formed call — even an empty/malformed input still
  * gets the reminder) and the sorted, de-duplicated list of jargon hits found in
  * the owner-facing copy. When jargon is present, a WARN line naming the tokens
- * is appended to the message. NEVER throws.
+ * is appended. Two further #976 advisories append when the copy frames a
+ * restore/remediation-scope decision (a lead call) or asserts an unverified
+ * live-surface state claim (verify against source first). NEVER throws.
  */
 export function evaluateAskUserQuestion(toolInput, tokens = JARGON_TOKENS) {
   let message = calibrationMessage();
   const hitSet = new Set();
+  let copies = [];
   try {
-    for (const copy of collectCopy(toolInput)) {
+    copies = collectCopy(toolInput);
+    for (const copy of copies) {
       for (const hit of jargonHitsIn(copy, tokens)) hitSet.add(hit);
     }
   } catch {
@@ -129,7 +215,22 @@ export function evaluateAskUserQuestion(toolInput, tokens = JARGON_TOKENS) {
       `internal jargon — ${jargonHits.join(", ")}. Spell it out: owner-facing ` +
       `copy must read, not decode.`;
   }
-  return { systemMessage: message, jargonHits };
+  const restoreScope = restoreScopeHit(copies);
+  if (restoreScope) {
+    message +=
+      `\n⚠ restore/remediation-scope (#976): this frames the SCOPE of restoring ` +
+      `an erroneously deleted/broken artifact as an owner menu. Restoring a ` +
+      `mistake is the LEAD's call — do a minimal-diff, faithful, FULL restore ` +
+      `and resolve it inline; don't ask the owner to pick a restore scope.`;
+  }
+  const surfaceClaim = surfaceClaimHit(copies);
+  if (surfaceClaim) {
+    message +=
+      `\n⚠ live-surface claim (#976): an option/question asserts an unverified ` +
+      `state claim about a live surface (a route / page / endpoint). Verify it ` +
+      `against SOURCE first — a wrong premise makes the whole question invalid.`;
+  }
+  return { systemMessage: message, jargonHits, restoreScope, surfaceClaim };
 }
 
 function main() {

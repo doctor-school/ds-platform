@@ -88,6 +88,43 @@ describe("toLedgerRow identifier masking (#141 explicit threading)", () => {
     expect(row.metadata).toEqual({ identifier_hash: SENTINEL });
     expect(JSON.stringify(row)).not.toContain(rawEmail);
   });
+
+  // #1112: the reason-coded auth-failure rows (a rejected verify / reset-complete
+  // recorded nowhere on our side was the incident driver). Identifier-keyed and
+  // masked exactly like LoginFailed — the attempt count is derived at read time by
+  // grouping these rows on `identifier_hash`, so the row carries no subject and no
+  // one-time code (003 EARS-30).
+  it("masks the identifier for VerifyFailed → auth.account.verify_failed (reason, no subject, no raw PD)", () => {
+    const mask = spyMask();
+    const event: AuthAuditEvent = {
+      type: "VerifyFailed",
+      identifier: rawEmail,
+      reason: "no-account",
+    };
+    const row = toLedgerRow(event, mask);
+    expect(row.eventType).toBe("auth.account.verify_failed");
+    expect(row.subjectId).toBeNull();
+    expect(row.reason).toBe("no-account");
+    expect(mask).toHaveBeenCalledWith(rawEmail);
+    expect(row.metadata).toEqual({ identifier_hash: SENTINEL });
+    expect(JSON.stringify(row)).not.toContain(rawEmail);
+  });
+
+  it("masks the identifier for PasswordResetFailed → auth.password.reset_failed (reason, no subject, no raw PD)", () => {
+    const mask = spyMask();
+    const event: AuthAuditEvent = {
+      type: "PasswordResetFailed",
+      identifier: rawEmail,
+      reason: "invalid",
+    };
+    const row = toLedgerRow(event, mask);
+    expect(row.eventType).toBe("auth.password.reset_failed");
+    expect(row.subjectId).toBeNull();
+    expect(row.reason).toBe("invalid");
+    expect(mask).toHaveBeenCalledWith(rawEmail);
+    expect(row.metadata).toEqual({ identifier_hash: SENTINEL });
+    expect(JSON.stringify(row)).not.toContain(rawEmail);
+  });
 });
 
 describe("DrizzleAuthAuditLog fail-closed pepper (#141)", () => {

@@ -194,6 +194,66 @@ gate touches no other call site:
   `auth.lockout.triggered`. The counter, lock, and notification email are native.
 - **Audit ledger** (EARS-18) — see the `AuthAuditLog` port above.
 
+## Auth failure observability + incident runbook (#1112)
+
+A **rejected** verify / password-reset-complete used to be recorded NOWHERE on our
+side: `auth.service.ts` audited success only, and Zitadel's `*.check.failed`
+eventstore rows carry a null payload — so diagnosing "the code was rejected / the
+account never verified" needed raw SSH `psql`. Two failure branches now append a
+reason-coded, PD-safe observability row through the same `AuthAuditLog` port used
+for success (no ad-hoc `Logger` lines — the ledger is queryable and already
+PD-masked):
+
+| Command                 | Failure event         | Wire id (`toLedgerRow`)      | Reason(s)               |
+| ----------------------- | --------------------- | ---------------------------- | ----------------------- |
+| `verify` (EARS-3)       | `VerifyFailed`        | `auth.account.verify_failed` | `no-account`, `invalid` |
+| `completePasswordReset` | `PasswordResetFailed` | `auth.password.reset_failed` | `invalid`               |
+
+Each row is **identifier-keyed** (`subject_id` NULL; the raw identifier is masked
+to an `identifier_hash` by the writer, exactly like `LoginFailed` — never raw PD)
+and carries **no one-time code** (003 EARS-30). The client outcome is unchanged: the
+same generic 400 for every failure (EARS-16), and the failure write is a single
+awaited INSERT mirroring the success path — no extra network hop, so the EARS-16
+timing envelope (floored by `TimingEqualizationInterceptor`) is intact.
+
+**Port limitation (deliberate, not a stub).** The IdP port returns only a boolean
+(`verifyEmail → bool`) / a session-or-null (`completePasswordReset`), so the granular
+Zitadel reason (wrong / expired / superseded) is **not observable** at the BFF and
+collapses to `invalid`; `no-account` is the one distinction the BFF itself owns (no
+mirror row on the verify path). The `AuthFailureReason` union is intentionally narrow
+(`invalid | no-account`) — widen it only when a port method starts exposing the finer
+distinction, never speculatively (AGENTS.md §6).
+
+**Attempt counter — derived at read time, not stored.** Counting failures per
+identifier is a read-side aggregation over these rows (grouping on `identifier_hash`),
+so nothing rides the row and the failure path stays a single INSERT (no new infra, no
+Redis counter, no extra write-path hop — the EARS-16 constraint). Query our own
+`audit_ledger` FIRST in any incident:
+
+```sql
+-- reason-coded failures + per-identifier attempt counts in the window
+SELECT metadata->>'identifier_hash' AS id_hash,
+       event_type, reason, count(*) AS attempts, max(created_at) AS last_at
+  FROM audit_ledger
+ WHERE event_type IN ('auth.account.verify_failed','auth.password.reset_failed')
+   AND created_at >= now() - interval '24 hours'
+ GROUP BY 1, 2, 3
+ ORDER BY attempts DESC;
+```
+
+**Zitadel-side view (`tools/ops/auth-events.mjs`).** For the lower-level identity
+events the ledger cannot enrich (the null-payload `*.check.failed`, code add/sent,
+native lockout), a **read-only** ops script replaces the ad-hoc SSH SQL. The DSN is
+read from `--dsn` / `$AUTH_EVENTS_DSN` (the **Zitadel** database, a separate DB from
+`DATABASE_URL`) and is never hardcoded; every query runs in a `READ ONLY`
+transaction. See `node tools/ops/auth-events.mjs --help`.
+
+> **TODO (AC #3 — Loki confirm):** verify these `audit_ledger` failure rows ship to
+> Loki alongside the app logs so an operator can alert on `auth.account.verify_failed`
+> spikes without DB access. Wiring + confirmation are owned by the log-shipping
+> pipeline in the [engineering-readiness spec](../../../docs/content/specs/tech/2026-05-12-engineering-readiness-design-en.md)
+> (Loki/Promtail); tracked separately from this observability change.
+
 ## Reconciliation sweep schedule + depth (built — #119, #753)
 
 - **Periodic reconcile schedule** — `ReconcileScheduler` registers a config-driven

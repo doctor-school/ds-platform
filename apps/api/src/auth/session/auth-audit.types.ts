@@ -26,6 +26,18 @@ export type LoginFailureReason =
   | "captcha_failed";
 
 /**
+ * Why a verify / password-reset-complete failed (#1112 auth-failure observability).
+ * The BFF delegates both to a **boolean** IdP port (`verifyEmail` → bool,
+ * `completePasswordReset` → session|null), so the granular Zitadel reason
+ * (wrong / expired / superseded) is not observable here and collapses to
+ * `invalid`; `no-account` is the one distinction the BFF itself owns (no mirror
+ * row on the verify path). Audit-only; never surfaced to the client (EARS-16), and
+ * the row NEVER carries the one-time code (003 EARS-30). Widen only if a port
+ * method starts exposing the finer distinction — never speculatively.
+ */
+export type AuthFailureReason = "invalid" | "no-account";
+
+/**
  * The auth-event taxonomy (EARS-18). The `type` is the internal (spec/EARS)
  * name; its canonical `auth.<class>.<event>` wire id — owned by
  * identity-auth-rbac-design §7.3 / ADR-0001 §7.3 — is assigned in exactly one
@@ -48,6 +60,16 @@ export type AuthAuditEvent =
   // lives only here (EARS-16).
   | { type: "LoginSucceeded"; sub: string; method: LoginMethod }
   | { type: "LoginFailed"; identifier: string; reason: LoginFailureReason }
+  // #1112 auth-failure observability: a REJECTED verify / reset-complete (the
+  // incident driver — recorded nowhere on our side, diagnosis needed raw SSH SQL
+  // against Zitadel's null-payload `verification.failed`). Identifier-keyed and
+  // masked exactly like `LoginFailed` (the writer masks it to an
+  // `identifier_hash`); the attempt count is derived at read time by grouping
+  // failure rows on that hash, so no counter rides the row and the failure path
+  // stays a single INSERT (no extra hop — the EARS-16 timing envelope is intact).
+  // Never carries the one-time code (003 EARS-30).
+  | { type: "VerifyFailed"; identifier: string; reason: AuthFailureReason }
+  | { type: "PasswordResetFailed"; identifier: string; reason: AuthFailureReason }
   // EARS-6/7 OTP send (email or SMS). Identifier masked.
   | { type: "OtpSent"; identifier: string; channel: AuthChannel }
   // EARS-9 rotation happy path (F4 deferred this to F6's terminal audit).
@@ -89,6 +111,8 @@ export const AUTH_AUDIT_EVENT_TYPES = [
   "Registered",
   "LoginSucceeded",
   "LoginFailed",
+  "VerifyFailed",
+  "PasswordResetFailed",
   "OtpSent",
   "RefreshRotated",
   "RefreshReuseDetected",

@@ -77,6 +77,32 @@ export function toLedgerRow(
         reason: event.reason,
         metadata: { identifier_hash: mask(event.identifier) },
       };
+    case "VerifyFailed":
+      // #1112: a rejected email verification. Canonical class `auth.account`
+      // (the account-lifecycle namespace, mirroring `auth.account.verified`);
+      // `verify_failed` is the rejected-activation outcome. Identifier-keyed and
+      // masked like `LoginFailed` (no subject — the attempt-counting join key is
+      // the `identifier_hash`); the `reason` collapses to what the boolean IdP
+      // port exposes. No raw PD, no one-time code (003 EARS-30).
+      return {
+        eventType: "auth.account.verify_failed",
+        subjectId: null,
+        sid: null,
+        reason: event.reason,
+        metadata: { identifier_hash: mask(event.identifier) },
+      };
+    case "PasswordResetFailed":
+      // #1112: a rejected reset-complete. Canonical class `auth.password`
+      // (mirroring `auth.password.reset_requested` / `.changed`); `reset_failed`
+      // is the rejected-completion outcome. Same identifier-keyed masked shape as
+      // `VerifyFailed` — no subject, no raw PD, no one-time code (003 EARS-30).
+      return {
+        eventType: "auth.password.reset_failed",
+        subjectId: null,
+        sid: null,
+        reason: event.reason,
+        metadata: { identifier_hash: mask(event.identifier) },
+      };
     case "OtpSent":
       return {
         eventType: "auth.otp.sent",

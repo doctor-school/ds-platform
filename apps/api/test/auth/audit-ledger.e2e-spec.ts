@@ -160,8 +160,22 @@ describe.skipIf(!process.env.DATABASE_URL)("Auth audit ledger (e2e)", () => {
     const verified = ledger.filter(
       (r) => r.event_type === "auth.account.verified",
     );
-    // A failed verify changes no state and completes no command — no row owed.
+    // A failed verify changes no state — no `verified` (activation) row owed.
     expect(verified).toHaveLength(0);
+
+    // #1112: but the rejected verify IS now recorded as a masked, reason-coded
+    // observability row (the incident driver was that it was recorded nowhere).
+    // It is identifier-keyed (subject_id null), so scope by reason within this run.
+    const failed = (
+      await rowsFor("event_type = $1", "auth.account.verify_failed")
+    ).filter((r) => r.reason === "invalid");
+    expect(failed.length).toBeGreaterThanOrEqual(1);
+    const row = failed.at(-1)!;
+    expect(row.subject_id).toBeNull();
+    expect(row.metadata).toHaveProperty("identifier_hash");
+    // 003 EARS-30 + PD masking: neither the raw email nor the entered code appears.
+    expect(JSON.stringify(row)).not.toContain(email);
+    expect(JSON.stringify(row)).not.toContain("000000");
   });
 
   it("EARS-18: when a login succeeds, the system shall append auth.login.success with the method", async () => {

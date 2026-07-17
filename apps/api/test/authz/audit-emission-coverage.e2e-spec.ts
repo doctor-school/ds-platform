@@ -99,15 +99,21 @@ const HIGH_STAKES_AUDIT_COVERAGE: Record<string, Coverage> = {
       "audit-ledger.e2e: EARS-18 reset request appends auth.password.reset_requested",
   },
   "POST /v1/auth/password/reset/complete": {
-    emits: ["PasswordResetCompleted"],
+    // Success emits PasswordResetCompleted (+ a session-created LoginSucceeded);
+    // #1112 adds PasswordResetFailed on a rejected reset-complete (masked,
+    // reason-coded observability — no state change, the LoginFailed precedent).
+    emits: ["PasswordResetCompleted", "PasswordResetFailed"],
     coveredBy:
-      "password-reset.e2e (EARS-12); completion records auth.password.changed (reset)",
+      "password-reset.e2e (EARS-12); completion records auth.password.changed (reset); auth.service.spec #1112 covers the auth.password.reset_failed row",
   },
   "POST /v1/auth/verify": {
-    // #164: EARS-3/4 verify now emits its terminal row at the command site.
-    emits: ["IdentifierVerified"],
+    // #164: EARS-3/4 verify emits its terminal row at the command site.
+    // #1112: a REJECTED verify (no mirror row → no-account, or a bad code →
+    // invalid) now emits a masked, reason-coded auth.account.verify_failed
+    // observability row — the state-changing success path is unchanged.
+    emits: ["IdentifierVerified", "VerifyFailed"],
     coveredBy:
-      "audit-ledger.e2e: EARS-18 email verification appends one auth.account.verified row",
+      "audit-ledger.e2e: EARS-18 email verification appends one auth.account.verified row; auth.service.spec #1112 covers the auth.account.verify_failed row",
   },
   "POST /v1/auth/verify/resend": {
     // #319 (EARS-25): a resend re-issues the otp_email code ONLY for an existing,

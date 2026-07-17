@@ -343,7 +343,20 @@ export class AuthService {
       code.trim().toUpperCase(),
       newPassword,
     );
-    if (!session) throw new BadRequestException(GENERIC_FAILURE);
+    if (!session) {
+      // #1112: record the rejected reset-complete (reason `invalid` — the
+      // boolean-null port collapses a bad/expired code and an unknown identifier
+      // into one, so no finer reason is observable). The client still gets the
+      // identical generic 400 (EARS-16); the code never reaches the row (003
+      // EARS-30). Awaited like the success-path records below — no timing skew
+      // beyond what the EARS-16 envelope already floors.
+      await this.audit.record({
+        type: "PasswordResetFailed",
+        identifier,
+        reason: "invalid",
+      });
+      throw new BadRequestException(GENERIC_FAILURE);
+    }
     // Global force-logout of every PRIOR session (+ the PasswordResetCompleted
     // audit) BEFORE minting the new one, so the credential change leaves no stale
     // session behind and the fresh session is the only survivor.
@@ -545,7 +558,22 @@ export class AuthService {
    */
   async verify(req: VerifyRequest): Promise<VerifyResponse> {
     const row = await this.mirror.findByEmail(req.email);
-    if (!row) throw new BadRequestException(GENERIC_FAILURE);
+    if (!row) {
+      // #1112: record the rejected verify (reason `no-account`) so a failed
+      // verify is observable on our side — the incident driver was that it was
+      // recorded NOWHERE (Zitadel's `verification.failed` carries a null payload;
+      // diagnosis needed raw SSH SQL). The client still gets the identical generic
+      // 400 (no existence oracle, EARS-16). The identifier is masked to an
+      // `identifier_hash` by the writer and the entered code is never touched
+      // (003 EARS-30). Awaited exactly like the success-path record below, so the
+      // failure path adds no timing skew the EARS-16 envelope does not already floor.
+      await this.audit.record({
+        type: "VerifyFailed",
+        identifier: req.email,
+        reason: "no-account",
+      });
+      throw new BadRequestException(GENERIC_FAILURE);
+    }
 
     // #1109: Zitadel emits an UPPERCASE alphanumeric code and compares it
     // case-sensitively with no trim — normalize the human-entered code (trim +
@@ -556,17 +584,27 @@ export class AuthService {
       row.zitadelSub,
       req.code.trim().toUpperCase(),
     );
-    if (!ok) throw new BadRequestException(GENERIC_FAILURE);
+    if (!ok) {
+      // #1112: record the rejected code (reason `invalid` — the boolean IdP port
+      // collapses wrong / expired / superseded into one). Same generic 400 to the
+      // client (EARS-16); the code itself never reaches the row (003 EARS-30).
+      await this.audit.record({
+        type: "VerifyFailed",
+        identifier: req.email,
+        reason: "invalid",
+      });
+      throw new BadRequestException(GENERIC_FAILURE);
+    }
 
     await this.mirror.markEmailVerified(row.zitadelSub);
 
     // EARS-18: one terminal `auth.account.verified` row for this state-changing
     // command (the mirror flag just flipped — the account is activated). Keyed
-    // by the opaque subject; the writer carries no raw PD. A FAILED verify (no
-    // mirror row, or a bad/expired code) changes no state and completes no
-    // command, so it emits nothing — consistent with the generic-failure /
-    // EARS-16 enumeration-safe path above and EARS-18's "per state-changing
-    // command" invariant.
+    // by the opaque subject; the writer carries no raw PD. A FAILED verify changes
+    // no state, so it emits no `verified` row — but it DOES emit an identifier-keyed
+    // `auth.account.verify_failed` observability row above (#1112, the exact
+    // `LoginFailed` precedent: a non-state-changing failure still gets a masked,
+    // reason-coded security row — the two event types never collide).
     await this.audit.record({
       type: "IdentifierVerified",
       sub: row.zitadelSub,

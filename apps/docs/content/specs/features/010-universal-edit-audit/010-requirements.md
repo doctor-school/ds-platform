@@ -5,6 +5,7 @@ slug: 010-universal-edit-audit
 status: Draft
 surface: backend-only
 tracker: https://github.com/doctor-school/ds-platform/issues/1084
+issues: [1086, 1087, 1088, 1089]
 prior_decisions:
   - "ADR-0003 — Data Layer (§2.7/§6 append-only audit_ledger — as-built: monthly RANGE partitions via pg_partman, composite PK (id, created_at), UPDATE/DELETE prohibited by DB trigger, corrections are compensating records; design §7 extensions list carries pgaudit only as 'under consideration if audit requirements cannot be met at the app level' — 010 meets them at the DB-trigger level, so pgaudit stays rejected)"
   - "ADR-0001 §7.3 — canonical event taxonomy (identity-auth-rbac-design §7.3 owns the two-level <class>.<event> wire-id scheme; 010 extends it with the data.<table>.<insert|update|delete> namespace for domain-data mutations)"

@@ -1,0 +1,3 @@
+# Synthetic-user manifest written by `pnpm loadtest:provision` — run artifact,
+# never committed (holds live synthetic-account emails/passwords).
+.synthetic-users.json

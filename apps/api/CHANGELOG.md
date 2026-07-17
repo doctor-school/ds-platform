@@ -1,5 +1,11 @@
 # @ds/api
 
+## 0.19.2
+
+### Patch Changes
+
+- [#1113](https://github.com/doctor-school/ds-platform/pull/1113) [`c717a70`](https://github.com/doctor-school/ds-platform/commit/c717a70e3c587ffbec36239bc030d64dc724f765) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - fix: registration / password-reset verification code is now case-insensitive end-to-end. The `OtpField` slotted variant uppercases each keystroke, and the auth BFF trims + uppercases the code before the Zitadel verify / reset hop, so a doctor who types the UPPERCASE code lowercased (or whose keyboard/paste pads it) still verifies. No consumer-visible API change.
+
 ## 0.19.1
 
 ### Patch Changes

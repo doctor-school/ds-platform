@@ -1,5 +1,22 @@
 # @ds/portal
 
+## 0.14.2
+
+### Patch Changes
+
+- [#1114](https://github.com/doctor-school/ds-platform/pull/1114) [`2a93282`](https://github.com/doctor-school/ds-platform/commit/2a93282821814ce2d0b08f6cdf96e9f21df76739) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - fix(portal): the logged-in «Участвовать» one-tap CTA now registers via a real
+  `<form>` + server action, so it works before hydration — on a weak network where
+  the JS bundle is slow or fails to load, the button is no longer dead. The hydrated
+  path keeps today's in-place one-tap (client POST + `router.refresh()`, no
+  navigation); both arms are server-side idempotent (005 EARS-1/EARS-3).
+
+- [#1116](https://github.com/doctor-school/ds-platform/pull/1116) [`62892f6`](https://github.com/doctor-school/ds-platform/commit/62892f683c34885bb02b760480f4fb68b0283c7e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - fix: the alphanumeric registration / password-reset verification code no longer traps mobile users on a digits-only keyboard ([#1110](https://github.com/doctor-school/ds-platform/issues/1110)). `OtpField` (and `OtpFocusScreen`, which forwards it) gain a **required** `charset: "alphanumeric" | "numeric"` prop: the slotted variant now requests `inputMode="text"` + `autoCapitalize="characters"` for alphanumeric codes so a phone shows the full keyboard, and `inputMode="numeric"` for the digit login OTP. `/verify` and `/reset` pass `charset="alphanumeric"`; `/login` passes `charset="numeric"`.
+
+  BREAKING (`@ds/design-system`): `charset` is a required prop on `OtpField` and `OtpFocusScreen` — every slotted call site must declare its code's character set (no silent default, so no surface can inherit the wrong mobile keypad).
+
+- Updated dependencies [[`62892f6`](https://github.com/doctor-school/ds-platform/commit/62892f683c34885bb02b760480f4fb68b0283c7e), [`c717a70`](https://github.com/doctor-school/ds-platform/commit/c717a70e3c587ffbec36239bc030d64dc724f765)]:
+  - @ds/design-system@3.0.0
+
 ## 0.14.1
 
 ### Patch Changes

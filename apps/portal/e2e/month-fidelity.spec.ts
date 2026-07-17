@@ -262,7 +262,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       expect(overflows).toEqual([]);
 
       // One continuous blue band — the app-shell header and the hero share the
-      // canvas headerBg (#1080 rework #3): light #2D84F2, dark #114D9E — no
+      // same navy fill (owner verdict #4, #1085): #114D9E in BOTH themes — no
       // colour seam between the chrome bar and the poster band.
       const [shellBg, heroBg] = await page.evaluate(() => {
         const shell = document.querySelector("header")!;
@@ -273,21 +273,19 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
         ];
       });
       expect(shellBg).toBe(heroBg);
-      expect(shellBg).toBe(
-        theme === "light" ? "rgb(45, 132, 242)" : "rgb(17, 77, 158)",
-      );
+      expect(shellBg).toBe("rgb(17, 77, 158)");
 
-      // Header AA (owner pick, #1083 Mode-a): on the blue.500 light band the
-      // nav runs at the WCAG large-text tier — computed size ≥ 18.67px at
-      // weight ≥ 700 (white on #2D84F2 = 3.69:1 clears only the large/bold
-      // ≥3:1 carve-out) — and the white chips carry the canvas navy ink
-      // #114D9E in BOTH themes (8.14:1 on white).
+      // Header AA (owner verdict #4, #1085): the light band is now navy
+      // blue.700 (#114D9E, white 8.14:1 full AA), so the desktop nav reverted
+      // to its pre-#1083 size — computed 14px at weight ≥ 700 (the large-text
+      // `text-xl` route of #1083 was rejected) — and the white chips carry the
+      // canvas navy ink #114D9E in BOTH themes (8.14:1 on white).
       const navLink = page.getByTestId("shell-nav-broadcasts");
       const navStyle = await navLink.evaluate((el) => {
         const cs = getComputedStyle(el);
         return { size: parseFloat(cs.fontSize), weight: Number(cs.fontWeight) };
       });
-      expect(navStyle.size).toBeGreaterThanOrEqual(18.67);
+      expect(navStyle.size).toBe(14);
       expect(navStyle.weight).toBeGreaterThanOrEqual(700);
       const loginChip = page.getByTestId("shell-login");
       await expect(loginChip).toBeVisible(); // guest run (cookies cleared)

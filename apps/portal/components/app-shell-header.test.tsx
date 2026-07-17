@@ -250,16 +250,21 @@ describe("008 EARS-1…13 — persistent app-shell header", () => {
     expect(mobileLogin.className).not.toContain("active:text-primary-action/80");
   });
 
-  it("EARS-2: header AA on the blue.500 band — nav at the WCAG large-text tier, chips on the canvas navy ink (#1083 Mode-a rework)", async () => {
+  it("EARS-2: header AA on the navy blue.700 band — nav reverted to 14px/700, chips on the canvas navy ink (owner verdict #4, #1085)", async () => {
     renderHeader();
-    // Owner pick (Mode-a on #1083): the light `header` band is blue.500
-    // (white = 3.69:1), so the desktop nav runs at the WCAG large-text tier —
-    // `text-xl` (20px ≥ 18.67px) at weight ≥700 clears the ≥3:1 carve-out.
-    // The underline-active treatment is untouched.
+    // Owner verdict #4 (#1052 → #1085): the light `header` band is now navy
+    // blue.700 (#114D9E, white = 8.14:1 full AA), so the desktop nav returns to
+    // its pre-#1083 treatment — `font-bold` (700) inheriting the nav
+    // container's `text-sm` (14px); the large-text-tier `text-xl` route was
+    // rejected («огромные пункты меню»). The underline-active treatment is
+    // untouched.
+    const nav = screen.getByTestId("shell-nav-desktop");
+    expect(nav).toHaveClass("text-sm");
     const broadcasts = await screen.findByTestId("shell-nav-broadcasts");
     const myEvents = screen.getByTestId("shell-nav-my-events");
     for (const el of [broadcasts, myEvents]) {
-      expect(el).toHaveClass("text-xl", "font-bold");
+      expect(el).toHaveClass("font-bold");
+      expect(el).not.toHaveClass("text-xl");
     }
     // The mobile `≡` summary chip shares the canvas navy chip ink.
     const summary = screen

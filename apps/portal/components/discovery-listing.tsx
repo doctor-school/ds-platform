@@ -2,7 +2,6 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import type { UpcomingBroadcastCard } from "@ds/schemas";
-import { Container } from "@ds/design-system/container";
 import { DayBand } from "@ds/design-system/day-band";
 import { Link as DsLink } from "@ds/design-system/link";
 import { WebinarCard } from "@ds/design-system/webinar-card";
@@ -93,16 +92,17 @@ async function fetchRegisteredSlugs(): Promise<ReadonlySet<string>> {
 }
 
 /**
- * `monthViewHref` — when the `/webinars` route renders this pane it passes the
- * month-view target (carrying any active month) so the «Неделя / Месяц» switcher
- * renders (EARS-18); the `/` front-door renders the listing with NO switcher
- * (omitted). The «Неделя» side is the active pane here.
+ * `monthViewHref` — the month-view target (carrying any active month) that the
+ * «Неделя / Месяц» switcher points at (EARS-18). BOTH front-doors that render
+ * this pane — `/` and `/webinars` — pass it (owner verdict #7 on #1052 unified
+ * the two on the same shared `CalendarShell`); the «Неделя» side is the active
+ * pane here, so the switcher always renders.
  */
 export default async function DiscoveryListing({
   monthViewHref,
 }: {
-  monthViewHref?: string;
-} = {}) {
+  monthViewHref: string;
+}) {
   const t = await getTranslations("webinars");
   const [cards, registeredSlugs] = await Promise.all([
     fetchUpcomingBroadcasts(),
@@ -166,108 +166,72 @@ export default async function DiscoveryListing({
       </div>
     );
 
-  // The `/webinars` «Неделя» pane shares the STATIC `CalendarShell` with the
-  // «Месяц» pane (004 owner verdict #3 on #1052): one navy hero + one 1240px
-  // content column, with the «Неделя / Месяц» switcher pulled up onto the band at
-  // the same position both panes use — switching views never jumps the shell.
-  if (monthViewHref) {
-    const toolbar = (
-      <>
-        <div
-          className="flex flex-wrap items-stretch gap-2.5 layout:gap-3"
-          data-testid="week-toolbar"
-        >
-          <span className="hidden flex-1 layout:block" />
-          <div className="hidden layout:block">
-            <ViewSwitcher
-              active="week"
-              weekHref="/webinars"
-              monthHref={monthViewHref}
-              weekLabel={t("month.viewWeek")}
-              monthLabel={t("month.viewMonth")}
-            />
-          </div>
-        </div>
-
-        {/* Mobile view-switch text row — mirrors the month pane: the active
-            «Неделя» label left, the «Месяц →» link right. */}
-        <div className="mt-3 flex items-center justify-between layout:hidden">
-          <span
-            aria-current="page"
-            className="text-caption font-extrabold text-tint-foreground"
-          >
-            {t("month.viewWeek")}
-          </span>
-          <DsLink
-            asChild
-            variant="inline"
-            className="text-caption font-bold text-tint-foreground"
-          >
-            <Link href={monthViewHref}>
-              {t("month.viewMonth")}
-              <span aria-hidden="true"> →</span>
-            </Link>
-          </DsLink>
-        </div>
-      </>
-    );
-
-    return (
-      <CalendarShell
-        title={t("title")}
-        subtitle={t("subtitle")}
-        taglineTop={t("taglineTop")}
-        taglineBottom={t("taglineBottom")}
-        toolbar={toolbar}
+  // The «Неделя» pane shares the STATIC `CalendarShell` with the «Месяц» pane
+  // (004 owner verdict #3 on #1052): one navy hero + one 1240px content column,
+  // with the «Неделя / Месяц» switcher pulled up onto the band at the same
+  // position both panes use — switching views never jumps the shell. Both `/`
+  // and `/webinars` render this identical pane (owner verdict #7 on #1052).
+  const toolbar = (
+    <>
+      <div
+        className="flex flex-wrap items-stretch gap-2.5 layout:gap-3"
+        data-testid="week-toolbar"
       >
-        {/* Desktop top clearance for the week pane (004 owner verdict #6 on
-            #1052, regression from #1098): the shared `CalendarShell` pulls the
-            content column up 60px onto the navy hero (`layout:-mt-15`). The month
-            pane fills that pull with its tall controls toolbar; the week toolbar
-            is only a right-aligned switcher, so without this the first day-group
-            heading («17 ИЮЛЯ, ПЯТНИЦА») — bare text, no card — rode up onto the
-            navy band. This clears the list body BELOW the band while leaving the
-            shell geometry (hero/column/switcher) byte-identical (static-shell
-            pin). Mobile keeps the shell's positive `mt-6`, so no overlap there. */}
-        <div className="layout:mt-14" data-testid="week-listbody">
-          {listBody}
+        <span className="hidden flex-1 layout:block" />
+        <div className="hidden layout:block">
+          <ViewSwitcher
+            active="week"
+            weekHref="/webinars"
+            monthHref={monthViewHref}
+            weekLabel={t("month.viewWeek")}
+            monthLabel={t("month.viewMonth")}
+          />
         </div>
-      </CalendarShell>
-    );
-  }
+      </div>
 
-  // The `/` front-door: the standalone hero at the default content column (no
-  // switcher, no shared calendar shell) — unchanged.
+      {/* Mobile view-switch text row — mirrors the month pane: the active
+          «Неделя» label left, the «Месяц →» link right. */}
+      <div className="mt-3 flex items-center justify-between layout:hidden">
+        <span
+          aria-current="page"
+          className="text-caption font-extrabold text-tint-foreground"
+        >
+          {t("month.viewWeek")}
+        </span>
+        <DsLink
+          asChild
+          variant="inline"
+          className="text-caption font-bold text-tint-foreground"
+        >
+          <Link href={monthViewHref}>
+            {t("month.viewMonth")}
+            <span aria-hidden="true"> →</span>
+          </Link>
+        </DsLink>
+      </div>
+    </>
+  );
+
   return (
-    <main className="min-h-screen bg-background text-foreground">
-      {/* Poster hero — `webinars-listing.dc.html` lines 42–49: the `hero` band
-          (blue.500 light / blue.700 dark), NO kicker, h1 + subtitle left, the
-          uppercase tagline bottom-right. */}
-      <header className="bg-hero text-hero-foreground">
-        <Container className="flex flex-wrap items-end justify-between gap-8 py-10 layout:py-12">
-          <div>
-            <h1 className="text-3xl leading-none font-extrabold tracking-tight text-balance layout:text-4xl">
-              {t("title")}
-            </h1>
-            <p
-              className="mt-4 text-body-compact font-semibold text-hero-muted"
-              data-testid="poster-decor"
-            >
-              {t("subtitle")}
-            </p>
-          </div>
-          <div
-            className="pb-1.5 text-xs leading-loose font-extrabold uppercase tracking-micro text-hero-muted"
-            data-testid="poster-decor"
-          >
-            {t("taglineTop")}
-            <br />
-            <span className="text-hero-foreground">{t("taglineBottom")}</span>
-          </div>
-        </Container>
-      </header>
-
-      <Container className="py-10 layout:py-14">{listBody}</Container>
-    </main>
+    <CalendarShell
+      title={t("title")}
+      subtitle={t("subtitle")}
+      taglineTop={t("taglineTop")}
+      taglineBottom={t("taglineBottom")}
+      toolbar={toolbar}
+    >
+      {/* Desktop top clearance for the week pane (004 owner verdict #6 on
+          #1052, regression from #1098): the shared `CalendarShell` pulls the
+          content column up 60px onto the navy hero (`layout:-mt-15`). The month
+          pane fills that pull with its tall controls toolbar; the week toolbar
+          is only a right-aligned switcher, so without this the first day-group
+          heading («17 ИЮЛЯ, ПЯТНИЦА») — bare text, no card — rode up onto the
+          navy band. This clears the list body BELOW the band while leaving the
+          shell geometry (hero/column/switcher) byte-identical (static-shell
+          pin). Mobile keeps the shell's positive `mt-6`, so no overlap there. */}
+      <div className="layout:mt-14" data-testid="week-listbody">
+        {listBody}
+      </div>
+    </CalendarShell>
   );
 }

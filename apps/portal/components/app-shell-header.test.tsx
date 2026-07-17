@@ -60,7 +60,9 @@ const DOCTOR = {
 };
 
 beforeEach(() => {
-  pathname = "/";
+  // The discovery route is `/webinars` (owner verdict #7 follow-up) — the
+  // default "on the listing" pathname, so «Эфиры» reads route-active.
+  pathname = "/webinars";
   document.documentElement.classList.remove("dark");
   getMyProfile.mockReset().mockResolvedValue(null); // default: guest
 });
@@ -69,9 +71,9 @@ afterEach(cleanup);
 describe("008 EARS-1…13 — persistent app-shell header", () => {
   it("EARS-1: renders the logo (link to /), the nav [Эфиры · Мои события], and the theme toggle", async () => {
     renderHeader();
-    // Logo → /
+    // Logo → the canonical discovery route /webinars
     const logo = await screen.findByTestId("shell-logo");
-    expect(logo).toHaveAttribute("href", "/");
+    expect(logo).toHaveAttribute("href", "/webinars");
     expect(within(logo).getByAltText("Doctor.School")).toBeInTheDocument();
     // Nav labels (desktop tree)
     const nav = screen.getByTestId("shell-nav-desktop");
@@ -92,13 +94,16 @@ describe("008 EARS-1…13 — persistent app-shell header", () => {
     renderHeader();
     expect(await screen.findByTestId("shell-nav-broadcasts")).toHaveAttribute(
       "href",
-      "/",
+      "/webinars",
     );
     expect(screen.getByTestId("shell-nav-my-events")).toHaveAttribute(
       "href",
       "/account/events",
     );
-    expect(screen.getByTestId("shell-logo")).toHaveAttribute("href", "/");
+    expect(screen.getByTestId("shell-logo")).toHaveAttribute(
+      "href",
+      "/webinars",
+    );
     // «Школы» — retired, never rendered in either nav tree.
     expect(screen.queryByText("Школы")).toBeNull();
     await waitFor(() => expect(getMyProfile).toHaveBeenCalled());
@@ -184,9 +189,9 @@ describe("008 EARS-1…13 — persistent app-shell header", () => {
     // painted the label invisible for the whole click-through) — they press
     // to full-strength `header-foreground` + a PER-BRANCH element-opacity
     // step (#270; owner rule Stage-B round 2: press = one visible step down
-    // from the tier it transitions from). pathname is "/" here, so «Эфиры»
-    // is the route-active branch (rest 100 → press 80) and «Мои события» the
-    // inactive one (rest 80 → press 60).
+    // from the tier it transitions from). pathname is "/webinars" here, so
+    // «Эфиры» is the route-active branch (rest 100 → press 80) and «Мои
+    // события» the inactive one (rest 80 → press 60).
     const broadcasts = screen.getByTestId("shell-nav-broadcasts");
     expect(broadcasts.className).toContain("active:text-header-foreground");
     expect(broadcasts.className).toContain("active:opacity-80");
@@ -281,7 +286,7 @@ describe("008 EARS-1…13 — persistent app-shell header", () => {
     const broadcasts = within(menu).getByTestId("shell-mobile-broadcasts");
     const myEvents = within(menu).getByTestId("shell-mobile-my-events");
     expect(broadcasts).toHaveTextContent("Эфиры");
-    expect(broadcasts).toHaveAttribute("href", "/");
+    expect(broadcasts).toHaveAttribute("href", "/webinars");
     expect(myEvents).toHaveTextContent("Мои события");
     expect(myEvents).toHaveAttribute("href", "/account/events");
     await waitFor(() => expect(getMyProfile).toHaveBeenCalled());
@@ -304,6 +309,25 @@ describe("008 EARS-1…13 — persistent app-shell header", () => {
     );
   });
 
+  it("EARS-2: «Эфиры» is route-active on the canonical /webinars listing (and its ?view=month pane, same pathname) but not on an event page", async () => {
+    // usePathname() drops the query, so `/webinars` and `/webinars?view=month`
+    // share the pathname `/webinars` — «Эфиры» highlights on both.
+    pathname = "/webinars";
+    renderHeader();
+    const active = await screen.findByTestId("shell-nav-broadcasts");
+    expect(active).toHaveAttribute("aria-current", "page");
+    expect(active).toHaveClass("underline");
+    cleanup();
+
+    // An event detail page (`/webinars/:slug`) is NOT the listing — «Эфиры»
+    // reads inactive there.
+    pathname = "/webinars/some-event";
+    renderHeader();
+    const inactive = await screen.findByTestId("shell-nav-broadcasts");
+    expect(inactive).not.toHaveAttribute("aria-current", "page");
+    expect(inactive).not.toHaveClass("underline");
+  });
+
   describe("route visibility", () => {
     for (const route of [
       "/login",
@@ -320,7 +344,13 @@ describe("008 EARS-1…13 — persistent app-shell header", () => {
       });
     }
 
-    for (const route of ["/", "/account", "/account/events", "/webinars/abc"]) {
+    for (const route of [
+      "/",
+      "/webinars",
+      "/account",
+      "/account/events",
+      "/webinars/abc",
+    ]) {
       it(`renders the header on ${route}`, async () => {
         pathname = route;
         renderHeader();

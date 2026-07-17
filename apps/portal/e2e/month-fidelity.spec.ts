@@ -483,6 +483,39 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       );
     });
 
+    test(`owner verdict #7: / permanent-redirects to the canonical /webinars, and nav «Эфиры» from an event page lands there (${theme})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1440, height: 1000 });
+
+      // `/` permanent-redirects to the single canonical listing route: the
+      // browser lands on `/webinars` with the week listing + «Неделя / Месяц»
+      // switchers (no second, switcher-less front-door hero remains).
+      await page.goto("/", { waitUntil: "domcontentloaded" });
+      await applyTheme(page, theme);
+      await expect(page).toHaveURL(/\/webinars$/);
+      await expect(page.getByTestId("week-toolbar")).toBeVisible();
+      await expect(
+        page.getByTestId("view-switcher").getByText("Месяц"),
+      ).toBeVisible();
+
+      // From an event detail page the nav «Эфиры» link points straight at
+      // `/webinars` (no `/` hop) and navigates back to the canonical listing.
+      const eventHref = await page
+        .getByTestId("week-listbody")
+        .locator("a[href^='/webinars/']")
+        .first()
+        .getAttribute("href");
+      expect(eventHref).toBeTruthy();
+      await page.goto(eventHref!, { waitUntil: "domcontentloaded" });
+      await applyTheme(page, theme);
+      const broadcastsNav = page.getByTestId("shell-nav-broadcasts");
+      await expect(broadcastsNav).toHaveAttribute("href", "/webinars");
+      await broadcastsNav.click();
+      await page.waitForURL("**/webinars");
+      await expect(page.getByTestId("week-toolbar")).toBeVisible();
+    });
+
     test(`owner verdict #4: the picker year ‹ › pages in place — popover stays open, counters swap, no navigation (${theme})`, async ({
       page,
     }) => {

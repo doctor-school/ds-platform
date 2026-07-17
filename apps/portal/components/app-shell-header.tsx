@@ -24,9 +24,9 @@ import { useHeaderAuth } from "@/lib/header-auth";
  *
  * Composition (canvas): a full-width `header`-token blue bar — the page's own blue
  * poster masthead stacks directly below it, forming one continuous blue band.
- *   • LEFT: the white wordmark logo, a link to `/` (EARS-2).
+ *   • LEFT: the white wordmark logo, a link to `/webinars` (EARS-2).
  *   • DESKTOP (≥ the `layout` breakpoint, the canvas ≤900px split): the top-nav
- *     [Эфиры → `/` · Мои события → `/account/events`] with the canvas active
+ *     [Эфиры → `/webinars` · Мои события → `/account/events`] with the canvas active
  *     underline (EARS-2), the theme toggle (EARS-3), then the auth-state account
  *     affordance — «Войти» → `/login` for a guest (EARS-4) / the initials avatar
  *     icon → `/account` for a doctor (EARS-5/6, an icon, never a dropdown, no
@@ -78,8 +78,12 @@ const ROOM_ROUTE = /^\/webinars\/[^/]+\/room$/;
 
 /** The `/account` profile (feature 009) — the avatar affordance's one destination. */
 const PROFILE_HREF = "/account";
-/** The discovery front-door (EARS-2) — logo & «Эфиры». */
-const DISCOVERY_HREF = "/";
+/** The discovery front-door (EARS-2) — logo & «Эфиры». Points straight at the
+ *  canonical `/webinars` listing (owner verdict #7 follow-up, 2026-07-17): `/`
+ *  permanent-redirects there, so targeting it directly avoids a redirect hop.
+ *  `usePathname()` drops the query, so `isActive` highlights «Эфиры» on both
+ *  `/webinars` and `/webinars?view=month` (the same pathname). */
+const DISCOVERY_HREF = "/webinars";
 /** «Мои события» (feature 005, EARS-2). */
 const MY_EVENTS_HREF = "/account/events";
 /** The login surface (EARS-4). */

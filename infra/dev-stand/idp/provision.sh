@@ -788,15 +788,14 @@ api_idempotent PUT /admin/v1/text/message/verifyemailotp/en \
         '{subject:$s, title:$ti, preHeader:$p, greeting:$g, text:$t, buttonText:$b}')" >/dev/null \
   && echo "ensured verifyemailotp/en code-only branded login-OTP email" >&2
 
-# (b) dormant types (verifyphone / password_change / init) — MINIMAL override:
-# only the greeting is neutralized (the bundled ru/en bodies carry no
-# {{.DisplayName}} — verified live via GET /admin/v1/text/default/message/
-# {type}/{lang} on v4.15.0); everything else keeps the bundled default. A PUT
-# with only `greeting` leaves the unset fields falling through to the bundled
-# defaults (the #869-proven empty-field semantics). NOTE the path keys are Zitadel's
-# own inconsistent spelling: `password_change` IS snake_case while
-# `verifyphone`/`init` are not (probed live: `passwordchange` → 404).
-for _mt in verifyphone password_change init; do
+# (b) dormant types (verifyphone / init) — MINIMAL override: only the greeting
+# is neutralized (the bundled ru/en bodies carry no {{.DisplayName}} — verified
+# live via GET /admin/v1/text/default/message/{type}/{lang} on v4.15.0);
+# everything else keeps the bundled default. A PUT with only `greeting` leaves
+# the unset fields falling through to the bundled defaults (the #869-proven
+# empty-field semantics). (`password_change` is NOT in this loop — its whole
+# notice is suppressed at the notification-policy level in (c) below.)
+for _mt in verifyphone init; do
   api_idempotent PUT "/admin/v1/text/message/${_mt}/ru" \
     '{"greeting":"Здравствуйте!"}' >/dev/null \
     && echo "ensured ${_mt}/ru neutral greeting" >&2
@@ -804,6 +803,27 @@ for _mt in verifyphone password_change init; do
     '{"greeting":"Hello!"}' >/dev/null \
     && echo "ensured ${_mt}/en neutral greeting" >&2
 done
+
+# (c) password-change notice — SUPPRESS at the notification-policy level, not via
+# message text. Zitadel's bundled `password_change` NOTICE email (sent after
+# every completed reset/change) renders a CTA button whose href is the hosted
+# console: {{.URL}} -> <issuer>/ui/console?login_hint=<email>. That URL is NOT a
+# message-text field, and the button itself cannot be dropped (an empty
+# buttonText falls through to the bundled default label — proven live on
+# v4.15.0, #869), so the no-IdP-link invariant (003 §8.1) is UNREACHABLE through
+# the message-text override alone (#896). The notice is redundant besides: the
+# user-facing password-reset confirmation is owned by the BFF mailer channel
+# (#894), never the IdP surface. So disable the IdP notice entirely via the
+# notification policy's `passwordChange` flag (the policy's only field).
+# READ-BEFORE-WRITE for idempotency (the step-8/login-policy precedent): already
+# false skips the PUT; api_idempotent absorbs a raced code-9 "no changes".
+NOTIFICATION_POLICY="$(api GET /admin/v1/policies/notification | jq '.policy')"
+if [[ "$(jq -r '.passwordChange // false' <<< "$NOTIFICATION_POLICY")" == "false" ]]; then
+  echo "notification policy: password-change notice already disabled" >&2
+else
+  api_idempotent PUT /admin/v1/policies/notification '{"passwordChange":false}' >/dev/null \
+    && echo "notification policy: disabled password-change notice (passwordChange -> false)" >&2
+fi
 
 # ── output (machine-parseable; secret only when freshly created) ─────────────
 echo "IDP_PROJECT_ID=${PROJECT_ID}"

@@ -792,20 +792,63 @@ function SuccessFieldDemo() {
 }
 
 /**
- * Field states (#529, source §07 «Формы и валидация») — the three states deferred
- * from #512: a required-marked label (destructive `*`), a filled input (`hairline` →
- * ink `border` once it holds a value), and a success field (green `success` border +
- * `success-tint` fill + `✓` confirmation). Rendered in BOTH themes — `success` /
- * `border` / `success-tint` are theme-flipping semantic tokens, so a single-theme
- * render proves only half the contract.
+ * The error field demo (#529, source §07 `Error` cell) — an invalid field: a
+ * required-marked label (`Email *`), the `FormControl`-driven `aria-invalid`
+ * destructive border + `destructive-tint` fill on the `Input`, and the `FormMessage`
+ * error tone `⚠ Неверный формат e-mail` (canvas wording). The error tone already
+ * ships (`FORM_ERROR_TONE`, #512) — this is section composition, no primitive change.
+ */
+function ErrorFieldDemo() {
+  const form = useForm<FieldValues>({
+    defaultValues: { invalid: "anna@clinic" },
+    mode: "onTouched",
+  });
+  // Seed the error once on mount so the destructive border + inline message render
+  // exactly as on a live validation failure.
+  useEffect(() => {
+    form.setError("invalid", {
+      type: "manual",
+      message: "Неверный формат e-mail",
+    });
+  }, [form]);
+  return (
+    <Form {...form}>
+      <form className="w-full" onSubmit={(e) => e.preventDefault()}>
+        <FormField
+          name="invalid"
+          control={form.control}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel required>Email</FormLabel>
+              <FormControl>
+                <Input {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </form>
+    </Form>
+  );
+}
+
+/**
+ * Field states (#529, source §07 «Формы и валидация») — the four states staged
+ * alongside each other in the canvas that were deferred from #512: a required-marked
+ * label (destructive `*`), a filled input (`hairline` → ink `border` once it holds a
+ * value), an error field (destructive border + `destructive-tint` fill + `⚠` message),
+ * and a success field (green `success` border + `success-tint` fill + `✓`
+ * confirmation). Rendered in BOTH themes — `success` / `border` / `success-tint` /
+ * `destructive` are theme-flipping semantic tokens, so a single-theme render proves
+ * only half the contract.
  */
 function FieldStatesSection() {
   return (
     <PrimitiveSection
       title="Field states (source §07)"
-      exportsLine="Label required · Input filled → ink border · FormMessage success"
+      exportsLine="Label required · Input filled → ink border · FormMessage error / success"
     >
-      <SubRow label="Required label · Filled input · Success — light + dark">
+      <SubRow label="Required label · Filled input · Error · Success — light + dark">
         <ThemePair
           render={(theme) => (
             // `text-foreground` establishes the panel's theme-flipped ink baseline so
@@ -830,6 +873,9 @@ function FieldStatesSection() {
                   className="w-full"
                   placeholder="you@example.com"
                 />
+              </Cell>
+              <Cell label="error (invalid)">
+                <ErrorFieldDemo />
               </Cell>
               <Cell label="success (verified)">
                 <SuccessFieldDemo />

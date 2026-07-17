@@ -95,19 +95,13 @@ export async function MonthCalendarView({ month }: { month?: string }) {
   const liveLabel = t("legendLive");
   const liveBadge = t("liveBadge");
 
-  // ── Legend accent link (canvas line 155): the nearest FUTURE month of the
-  // displayed year that carries events, from the already-fetched counts. ──
-  const nextIdx = monthNames.findIndex(
-    (_, i) => i + 1 > monthNum && (countByMonth.get(i + 1) ?? 0) > 0,
-  );
-  const nextEventMonth =
-    nextIdx >= 0 ? `${year}-${String(nextIdx + 1).padStart(2, "0")}` : undefined;
-  const nextMonthLink = nextEventMonth
-    ? {
-        href: monthViewHref(nextEventMonth),
-        label: t("nextMonthLink", { month: formatMonthTitle(nextEventMonth) }),
-      }
-    : undefined;
+  // ── Legend accent link (canvas line 155): always the NEXT month
+  // (displayed + 1, year boundary via shiftMonth) — always-on regardless of
+  // event data (owner rule on #1052 verdict #2). ──
+  const nextMonthLink = {
+    href: monthViewHref(nextMonth),
+    label: t("nextMonthLink", { month: formatMonthTitle(nextMonth) }),
+  };
 
   // ── Desktop grid model: pills for today/future, muted notes for past days. ──
   const desktopWeeks: MonthGridCell[][] = grid.weeks.map((week) =>
@@ -135,7 +129,10 @@ export async function MonthCalendarView({ month }: { month?: string }) {
       return {
         dateLabel: cell.isToday ? `${cell.day}${t("todaySuffix")}` : String(cell.day),
         today: cell.isToday,
-        muted: cell.isWeekend || empty,
+        // Owner rule (#1052 verdict #2): the muted BACKGROUND marks weekends
+        // (and out-of-month filler above) ONLY — an empty weekday keeps the
+        // card surface. The date INK keeps the canvas rule (past/weekend/empty).
+        muted: cell.isWeekend,
         mutedDate: !cell.isToday && (cell.isWeekend || empty),
         pills: hasEvents
           ? visible.map((e) => ({

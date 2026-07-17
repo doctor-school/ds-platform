@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 /**
  * 004 EARS-19 — the month-calendar view fidelity pin (`/webinars?view=month`,
@@ -25,6 +25,87 @@ async function applyTheme(page: Page, theme: (typeof THEMES)[number]) {
     theme === "dark",
   );
   await page.waitForTimeout(250);
+}
+
+/** The current МСК `{ year, month }` (the page's displayed-month default). */
+function mskNowYm(): { year: number; month: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Moscow",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+  return {
+    year: Number(parts.find((p) => p.type === "year")!.value),
+    month: Number(parts.find((p) => p.type === "month")!.value),
+  };
+}
+
+/** `{year, month}` shifted by `delta` months (year boundary handled). */
+function shiftYm(ym: { year: number; month: number }, delta: number) {
+  const ordinal = ym.year * 12 + (ym.month - 1) + delta;
+  return { year: Math.floor(ordinal / 12), month: (ordinal % 12) + 1 };
+}
+
+/**
+ * The capitalised «Месяц год» title the portal composes (`formatMonthTitle`)
+ * — Intl `ru-RU` long month + year, the « г.» era marker stripped.
+ */
+function ruMonthTitle(ym: { year: number; month: number }): string {
+  const label = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Europe/Moscow",
+    month: "long",
+    year: "numeric",
+  })
+    .format(new Date(Date.UTC(ym.year, ym.month - 1, 15, 12)))
+    .replace(/\s*г\.?$/, "");
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+/**
+ * Shading-rule sweep (owner rule, #1052 verdict #2): a cell carries the muted
+ * calendar bg ⇔ it is a weekend column (сб/вс — indices 5/6) OR out-of-month
+ * filler; every other cell — an EMPTY WEEKDAY included — stays transparent,
+ * i.e. reads the card surface behind it. Out-of-month filler is derived from
+ * the date labels: cells before the first «1» are the previous month's tail,
+ * cells from the second «1» on are the next month's head.
+ */
+async function collectShadingViolations(grid: Locator): Promise<string[]> {
+  return grid.evaluate((root) => {
+    const rows = [
+      ...root.querySelectorAll(".grid.grid-cols-7.border-b.border-hairline"),
+    ];
+    const cells = rows.flatMap((row) => [...row.children] as HTMLElement[]);
+    const labels = cells.map((c) =>
+      parseInt(c.querySelector("span")?.textContent ?? "", 10),
+    );
+    const firstDay1 = labels.indexOf(1);
+    let secondDay1 = -1;
+    for (let i = firstDay1 + 1; i < labels.length; i++) {
+      if (labels[i] === 1) {
+        secondDay1 = i;
+        break;
+      }
+    }
+    const bad: string[] = [];
+    if (cells.length < 28 || firstDay1 === -1) {
+      bad.push(`malformed grid: ${cells.length} cells, firstDay1=${firstDay1}`);
+      return bad;
+    }
+    const TRANSPARENT = "rgba(0, 0, 0, 0)";
+    cells.forEach((cell, i) => {
+      const inMonth = i >= firstDay1 && (secondDay1 === -1 || i < secondDay1);
+      const weekend = i % 7 >= 5;
+      const expectMuted = weekend || !inMonth;
+      const bg = getComputedStyle(cell).backgroundColor;
+      const actualMuted = bg !== TRANSPARENT;
+      if (actualMuted !== expectMuted) {
+        bad.push(
+          `cell ${i} (label ${labels[i]}, col ${i % 7}, inMonth=${inMonth}): bg=${bg}`,
+        );
+      }
+    });
+    return bad;
+  });
 }
 
 test.describe("004 EARS-19 month-calendar view fidelity", () => {
@@ -103,6 +184,32 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
         "11px",
       );
 
+      // Pill title clamp — canvas `clamp2` (#1052 verdict #2): the pill's
+      // inner text span computes `-webkit-line-clamp: 2` + `overflow: hidden`.
+      const pillSpan = pill.locator("span.line-clamp-2");
+      expect(
+        await pillSpan.evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return { clamp: cs.webkitLineClamp, overflow: cs.overflow };
+        }),
+      ).toEqual({ clamp: "2", overflow: "hidden" });
+
+      // …and no pill text span renders taller than two lines (2 × line-height
+      // + 1px tolerance) — the clamp actually bites, not just declares.
+      const tallSpans = await grid.evaluate((root) => {
+        const bad: string[] = [];
+        for (const s of root.querySelectorAll(
+          "a[href^='/webinars/'] span.line-clamp-2",
+        )) {
+          const lh = parseFloat(getComputedStyle(s).lineHeight);
+          if (s.getBoundingClientRect().height > 2 * lh + 1) {
+            bad.push(s.textContent ?? "");
+          }
+        }
+        return bad;
+      });
+      expect(tallSpans).toEqual([]);
+
       // Cell scale — canvas line 233: min-height 118px.
       expect(
         await pill.evaluate(
@@ -152,30 +259,17 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       await expect(hero.getByText(/^месяц$/i)).toHaveCount(0);
       await expect(hero.getByText("Врачи учат врачей")).toBeVisible();
 
-      // Legend row — canvas line 155: the bottom-right accent link to the
-      // nearest future month with events. Seed-deterministic: read the same
-      // per-month counts the page composes from (the portal proxies `/v1/*`)
-      // — the link renders iff a LATER month of the displayed МСК year carries
-      // events, and is absent otherwise.
-      const mskNow = new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Europe/Moscow",
-        year: "numeric",
-        month: "2-digit",
-      }).formatToParts(new Date());
-      const mskYear = mskNow.find((p) => p.type === "year")!.value;
-      const mskMonth = Number(mskNow.find((p) => p.type === "month")!.value);
-      const counts = (await (
-        await page.request.get(`/v1/public/events/month-counts?year=${mskYear}`)
-      ).json()) as { month: number; count: number }[];
-      const hasFutureMonth = counts.some(
-        (c) => c.month > mskMonth && c.count > 0,
-      );
+      // Legend row — canvas line 155 + owner rule (#1052 verdict #2): the
+      // bottom-right accent link is ALWAYS the displayed month + 1, rendered
+      // regardless of event data.
+      const nextYm = shiftYm(mskNowYm(), 1);
       const nextMonthLink = page.getByTestId("next-month-link");
-      if (hasFutureMonth) {
-        await expect(nextMonthLink).toBeVisible();
-      } else {
-        await expect(nextMonthLink).toHaveCount(0);
-      }
+      await expect(nextMonthLink).toBeVisible();
+      await expect(nextMonthLink).toHaveText(`${ruMonthTitle(nextYm)} →`);
+      await expect(nextMonthLink).toHaveAttribute(
+        "href",
+        `/webinars?view=month&month=${nextYm.year}-${String(nextYm.month).padStart(2, "0")}`,
+      );
 
       // Pill cap (scope item 10, canvas update 2026-07-17): a desktop cell
       // renders at most 3 event pills, live-first; a 4+-events day appends the
@@ -201,6 +295,45 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
         return bad;
       });
       expect(capViolations).toEqual([]);
+    });
+
+    test(`EARS-19: shading rule + always-on next-month link on an empty far-future month (${theme})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(DESKTOP);
+
+      // Current (seeded) month — muted bg ⇔ weekend/out-of-month ONLY; an
+      // empty WEEKDAY cell reads the card surface (transparent cell bg).
+      await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
+      await applyTheme(page, theme);
+      const grid = page.getByTestId("month-grid-desktop");
+      await expect(grid).toBeVisible();
+      expect(await collectShadingViolations(grid)).toEqual([]);
+
+      // A far-future month with ZERO events (next МСК year, November): the
+      // grid still renders, every weekday is empty and unshaded, and the
+      // next-month link still renders as displayed + 1 («Декабрь <year+1> →»,
+      // the always-on owner rule) — the old counts-conditional rendering
+      // would have dropped it here.
+      const farYear = mskNowYm().year + 1;
+      await page.goto(`/webinars?view=month&month=${farYear}-11`, {
+        waitUntil: "domcontentloaded",
+      });
+      await applyTheme(page, theme);
+      const farGrid = page.getByTestId("month-grid-desktop");
+      await expect(farGrid).toBeVisible();
+      await expect(farGrid.locator("a[href^='/webinars/']")).toHaveCount(0);
+      expect(await collectShadingViolations(farGrid)).toEqual([]);
+
+      const farLink = page.getByTestId("next-month-link");
+      await expect(farLink).toBeVisible();
+      await expect(farLink).toHaveText(
+        `${ruMonthTitle({ year: farYear, month: 12 })} →`,
+      );
+      await expect(farLink).toHaveAttribute(
+        "href",
+        `/webinars?view=month&month=${farYear}-12`,
+      );
     });
 
     test(`EARS-19: mobile dot-grid + agenda render and day selection works (${theme})`, async ({

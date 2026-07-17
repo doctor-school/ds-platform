@@ -14,6 +14,10 @@
       "$value": "{color.neutral.150}",
       "$description": "A faintly-tinted block surface used to band a section apart from the flat page, without a card border."
     },
+    "calendar-muted": {
+      "$value": "{color.neutral.50}",
+      "$description": "The month-calendar's muted day-cell surface (weekend / out-of-month cells + the legend «Прошёл / пусто» swatch) — canvas-exact (webinars-month.dc.html), deliberately fainter than `section` so the shaded cells whisper next to the card frame. Dedicated to the calendar: `section` keeps banding the week-listing day band."
+    },
     "card": {
       "$value": "{color.white}",
       "$description": "A raised surface (card, popover, panel) sitting on `background`, framed by the hard `border`. Pair with `card-foreground`."

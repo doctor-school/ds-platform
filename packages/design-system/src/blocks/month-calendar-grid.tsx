@@ -8,8 +8,8 @@ import { Link } from "../primitives/link";
  * `design-source/webinars-month.dc.html`). A DISPLAY-ONLY 7-column month grid:
  * each in-month day renders its events as pills (`time · title`, linking to the
  * event page), a red live pill for an airing event, or a muted aggregate note on
- * an already-past day; today is outlined; weekends/empty days take the faint
- * surface. A state legend sits below the grid.
+ * an already-past day; today is outlined; weekend and neighbour-month cells
+ * take the faint calendar surface. A state legend sits below the grid.
  *
  * A PRESENTATION unit only — all data (the МСК day bucketing, the today/past
  * flags), copy (the pill/day labels, legend + live labels), and routing (the pill
@@ -38,7 +38,11 @@ export interface MonthGridCell {
   dateLabel: string;
   /** Today's cell — outlined, with the date on a filled chip. */
   today?: boolean;
-  /** A weekend / empty / neighbour-month cell — the faint surface + muted date ink. */
+  /**
+   * A weekend or neighbour-month cell — the faint calendar surface (owner rule
+   * on #1052 verdict #2: the muted BACKGROUND marks weekends and out-of-month
+   * filler ONLY; an empty weekday keeps the card surface).
+   */
   muted?: boolean;
   /** The date ink reads muted (past / weekend / empty / neighbour day). */
   mutedDate?: boolean;
@@ -64,9 +68,9 @@ export interface MonthCalendarGridProps {
   /** The three legend labels — airing / planned / past-or-empty. */
   legend: { live: string; planned: string; past: string };
   /**
-   * The bottom-right accent link to the nearest FUTURE month with events
-   * (canvas line 155, «Декабрь 2026 →») — omitted when no later month of the
-   * displayed year carries events.
+   * The bottom-right accent link to the NEXT month (displayed month + 1,
+   * canvas line 155, «Декабрь 2026 →») — always-on regardless of event data
+   * (owner rule on #1052 verdict #2).
    */
   nextMonthLink?: { href: string; label: string };
 }
@@ -124,7 +128,7 @@ const MonthCalendarGrid = React.forwardRef<
                 key={ci}
                 className={cn(
                   "min-h-[118px] border-r border-hairline p-2.5 last:border-r-0",
-                  cell.muted && "bg-section",
+                  cell.muted && "bg-calendar-muted",
                   cell.today &&
                     "relative outline outline-[3px] -outline-offset-[3px] outline-primary-action",
                 )}
@@ -158,13 +162,19 @@ const MonthCalendarGrid = React.forwardRef<
                           : "bg-tint font-bold text-tint-foreground",
                       )}
                     >
-                      {pill.live ? (
-                        <>
-                          <LiveDot />
-                          <span className="sr-only">{liveLabel}</span>
-                        </>
-                      ) : null}
-                      {pill.time} · {pill.title}
+                      {/* Canvas `clamp2`: the pill's whole inline run clamps at
+                          two lines inside an inner span (the `<a>` keeps its
+                          padding/bg); the live dot + sr-only label stay IN the
+                          run so wrapped text flows around the glyph. */}
+                      <span className="line-clamp-2 break-words">
+                        {pill.live ? (
+                          <>
+                            <LiveDot />
+                            <span className="sr-only">{liveLabel}</span>
+                          </>
+                        ) : null}
+                        {pill.time} · {pill.title}
+                      </span>
                     </a>
                   ))}
 
@@ -207,7 +217,7 @@ const MonthCalendarGrid = React.forwardRef<
           {legend.planned}
         </span>
         <span className="inline-flex items-center gap-2">
-          <LegendSwatch className="border border-hairline bg-section" />
+          <LegendSwatch className="border border-hairline bg-calendar-muted" />
           {legend.past}
         </span>
       </div>

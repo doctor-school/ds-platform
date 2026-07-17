@@ -16,7 +16,7 @@ All conventions in [`AGENTS.md`](./AGENTS.md) apply (imported above); this file 
 
 ## Auto-memory (load-on-demand by design)
 
-`~/.claude/projects/<project>/memory/`: only the first 200 lines / 25 KB of `MEMORY.md` load at start; topic files load on demand. `MEMORY.md` is an index, not a store — one bullet per topic. A memory that becomes a hard convention is promoted into `AGENTS.md` / a skill / a rules file, leaving the bullet as a pointer (never duplicate full text).
+`~/.claude/projects/<project>/memory/`: only the first 200 lines / 25 KB of `MEMORY.md` load at start; topic files load on demand. `MEMORY.md` is an index, not a store — one bullet per topic. A memory that becomes a hard convention is promoted into `AGENTS.md` / a skill / a rules file, leaving the bullet as a pointer (never duplicate full text). Memory prose (topic files + index) is ENGLISH; RU only where the Russian string is itself the artifact (verbatim owner quotes, UI copy).
 
 ## Tool priority
 

@@ -72,6 +72,17 @@ export function isMonthPast(month: string, now: Date = new Date()): boolean {
 }
 
 /**
+ * Whether `month` (`YYYY-MM`) is strictly AFTER the current МСК month — the month
+ * view offers a «← <prev month>» return link only from a future month (004 owner
+ * verdict #5 on #1052: from the current or a past month the back link is withheld
+ * so the surface never motivates backward browsing). Same exact lexicographic
+ * `YYYY-MM` compare as `isMonthPast`; `now` injected for testability.
+ */
+export function isMonthFuture(month: string, now: Date = new Date()): boolean {
+  return month > currentMskMonth(now);
+}
+
+/**
  * The Monday-first weekday index (0=Mon … 6=Sun) of a МСК calendar date. Anchored
  * at 12:00 UTC so the +3 МСК fold never crosses a day boundary — the calendar
  * date is stable regardless of the runtime timezone (EARS-12).

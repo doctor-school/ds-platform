@@ -6,6 +6,7 @@ import {
   capDayEntries,
   currentMskMonth,
   formatMonthTitle,
+  isMonthFuture,
   isMonthPast,
   monthShortLabels,
   mskDateParts,
@@ -174,6 +175,22 @@ describe("isMonthPast (EARS-16 — picker muting, МСК)", () => {
   it("EARS-16: a future month is not past", () => {
     expect(isMonthPast("2026-08", NOW)).toBe(false);
     expect(isMonthPast("2027-01", NOW)).toBe(false);
+  });
+});
+
+describe("isMonthFuture (owner verdict #5 — return-from-future back link)", () => {
+  it("a month strictly after the current МСК month is future", () => {
+    expect(isMonthFuture("2026-08", NOW)).toBe(true);
+    expect(isMonthFuture("2027-01", NOW)).toBe(true);
+  });
+
+  it("the current МСК month is NOT future (no back link)", () => {
+    expect(isMonthFuture("2026-07", NOW)).toBe(false);
+  });
+
+  it("a past month is NOT future (no back link)", () => {
+    expect(isMonthFuture("2026-06", NOW)).toBe(false);
+    expect(isMonthFuture("2025-12", NOW)).toBe(false);
   });
 });
 

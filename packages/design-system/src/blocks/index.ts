@@ -24,4 +24,8 @@ export type { DayAgendaProps, DayAgendaRow } from "./day-agenda";
 
 // 004 EARS-16/17 — the 12-month picker (webinars-month.dc.html), #1051.
 export { MonthPicker } from "./month-picker";
-export type { MonthPickerProps, MonthPickerCell } from "./month-picker";
+export type {
+  MonthPickerProps,
+  MonthPickerCell,
+  MonthPickerYear,
+} from "./month-picker";

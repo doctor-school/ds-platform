@@ -6,8 +6,9 @@ import {
   type DotGridCell,
   type MonthGridCell,
   type MonthPickerCell,
+  type MonthPickerYear,
 } from "@ds/design-system/blocks";
-import { Container } from "@ds/design-system/container";
+import { Button } from "@ds/design-system/button";
 import { Link as DsLink } from "@ds/design-system/link";
 import { fetchMonthBroadcasts, fetchMonthlyCounts } from "@/lib/public-events";
 import {
@@ -17,11 +18,13 @@ import {
   entryTime,
   formatAgendaDayTitle,
   formatMonthTitle,
+  isMonthFuture,
   isMonthPast,
   monthShortLabels,
   shiftMonth,
   weekdayShortLabels,
 } from "@/lib/month-grid";
+import { CalendarShell } from "./calendar-shell";
 import { MonthCalendarMobile, type AgendaDay } from "./month-calendar-mobile";
 import { ViewSwitcher } from "./view-switcher";
 
@@ -29,6 +32,17 @@ import { ViewSwitcher } from "./view-switcher";
 function monthViewHref(month: string): string {
   return `/webinars?view=month&month=${month}`;
 }
+
+/**
+ * The picker's in-place year-paging window (004 owner verdict #4 on #1052): the
+ * displayed year ± 1 (three years). The picker pages these client-side with NO
+ * navigation — the popover stays open, the counters swap; a step PAST the window
+ * edge server-navigates a whole year (`prev/nextYearHref`), re-centring the window.
+ * The bound is deliberate: real scheduling lives within ~a year of now, so three
+ * pre-fetched years cover every instant-swap case while capping the render to
+ * three count reads instead of an unbounded fan-out.
+ */
+const PICKER_YEAR_RADIUS = 1;
 
 /**
  * 004 EARS-19 — the «Месяц» pane of `/webinars` (`?view=month`, design §5.4). A
@@ -40,12 +54,17 @@ function monthViewHref(month: string): string {
  * agenda (≤900px), the responsive split handled by the `layout:` breakpoint
  * (the token match for the canvas ≤900px fold) with NO client media query.
  *
+ * The pane renders through the shared `CalendarShell` (004 owner verdict #3): the
+ * «Неделя» and «Месяц» panes share one navy hero + one 1240px content column, so
+ * a «Неделя ⇄ Месяц» round-trip never jumps the header band or the column edges.
+ *
  * The toolbar composes the canvas month controls (EARS-16/17/18, #1051): the ‹ ›
  * month pager + «Сегодня» reset + the 12-month `MonthPicker` disclosure (year ‹ ›
- * stepper + per-month counts) + the «Неделя / Месяц» switcher — all real
- * query-param links (server-component navigation, no client state, no mutation).
- * The switcher's «Неделя» link carries the displayed month so the week↔month
- * round-trip is loss-free.
+ * stepper + per-month counts) + the «Неделя / Месяц» switcher. The pager/«Сегодня»
+ * adopt the DS `Button` `outline` states (hover / active-press / focus-visible) so
+ * the toolbar reads as white bordered controls on the navy hero (owner verdicts
+ * #1/#2), never hand-assembled anchors. The picker's year paging is the one piece
+ * of client state; every other control is a real query-param link.
  *
  * The displayed month is `month` (`YYYY-MM`, already validated by the page against
  * `MONTH_PARAM`); absent → the current МСК month. buildMonthGrid folds today/past
@@ -61,32 +80,51 @@ export async function MonthCalendarView({ month }: { month?: string }) {
   const displayedMonth = month ?? currentMskMonth();
   const year = displayedMonth.slice(0, 4);
   const monthNum = Number(displayedMonth.slice(5, 7));
-  const [entries, counts] = await Promise.all([
+
+  // ── The picker's year window: displayed year ± PICKER_YEAR_RADIUS. ──
+  const yearNum = Number(year);
+  const windowYears = Array.from(
+    { length: PICKER_YEAR_RADIUS * 2 + 1 },
+    (_, i) => String(yearNum - PICKER_YEAR_RADIUS + i),
+  );
+
+  const [entries, countsByYear] = await Promise.all([
     fetchMonthBroadcasts(displayedMonth),
-    fetchMonthlyCounts(year),
+    // One count read per window year; a bad/empty far year degrades to zeros
+    // rather than taking the pane down (the displayed year is always real).
+    Promise.all(
+      windowYears.map(
+        async (y) => [y, await fetchMonthlyCounts(y).catch(() => [])] as const,
+      ),
+    ),
   ]);
+
   const grid = buildMonthGrid({ month: displayedMonth, entries });
 
   const weekdays = weekdayShortLabels();
   const monthTitle = formatMonthTitle(displayedMonth);
 
-  // ── 12-month picker model (EARS-16): the displayed year's months + counts. ──
+  // ── 12-month picker model (EARS-16): every window year's months + counts.
+  //    Only the displayed year's displayed month is the filled «you are here». ──
   const monthNames = monthShortLabels();
-  const countByMonth = new Map(counts.map((c) => [c.month, c.count]));
-  const pickerMonths: MonthPickerCell[] = monthNames.map((label, i) => {
-    const m = i + 1;
-    const monthStr = `${year}-${String(m).padStart(2, "0")}`;
-    const current = m === monthNum;
-    const past = isMonthPast(monthStr);
-    return {
-      label,
-      note: past
-        ? t("pickerPast")
-        : t("pickerCount", { count: countByMonth.get(m) ?? 0 }),
-      current,
-      muted: past,
-      href: current ? undefined : monthViewHref(monthStr),
-    };
+  const pickerYears: MonthPickerYear[] = countsByYear.map(([y, counts]) => {
+    const countByMonth = new Map(counts.map((c) => [c.month, c.count]));
+    const months: MonthPickerCell[] = monthNames.map((label, i) => {
+      const m = i + 1;
+      const monthStr = `${y}-${String(m).padStart(2, "0")}`;
+      const current = y === year && m === monthNum;
+      const past = isMonthPast(monthStr);
+      return {
+        label,
+        note: past
+          ? t("pickerPast")
+          : t("pickerCount", { count: countByMonth.get(m) ?? 0 }),
+        current,
+        muted: past,
+        href: current ? undefined : monthViewHref(monthStr),
+      };
+    });
+    return { year: y, months };
   });
 
   const prevMonth = shiftMonth(displayedMonth, -1);
@@ -102,6 +140,16 @@ export async function MonthCalendarView({ month }: { month?: string }) {
     href: monthViewHref(nextMonth),
     label: t("nextMonthLink", { month: formatMonthTitle(nextMonth) }),
   };
+
+  // ── Return-from-future link (owner verdict #5): the «← <prev month>» back link
+  // renders ONLY when the displayed month is strictly in the future; the current
+  // or a past month withholds it (never motivate backward browsing). ──
+  const prevMonthLink = isMonthFuture(displayedMonth)
+    ? {
+        href: monthViewHref(prevMonth),
+        label: t("prevMonthLink", { month: formatMonthTitle(prevMonth) }),
+      }
+    : undefined;
 
   // ── Desktop grid model: pills for today/future, muted notes for past days. ──
   const desktopWeeks: MonthGridCell[][] = grid.weeks.map((week) =>
@@ -208,145 +256,116 @@ export async function MonthCalendarView({ month }: { month?: string }) {
 
   const tw = await getTranslations("webinars");
 
-  return (
-    <main className="min-h-screen bg-background text-foreground">
-      {/* Poster hero — canvas lines 32–40: the `hero` band (blue.500 light /
-          blue.700 dark), NO kicker, h1 + subtitle left, the uppercase tagline
-          bottom-right; deep bottom padding so the pulled-up toolbar sits ON the
-          band (line 289: mainTop −60px desktop). */}
-      <header className="bg-hero text-hero-foreground">
-        <Container
-          variant="calendar"
-          className="flex flex-wrap items-end justify-between gap-8 pt-8 pb-10 layout:pt-10 layout:pb-25"
-        >
-          <div>
-            <h1 className="text-3xl leading-none font-extrabold tracking-tight text-balance layout:text-4xl">
-              {monthTitle}
-            </h1>
-            <p
-              className="mt-4 text-body-compact font-semibold text-hero-muted"
-              data-testid="poster-decor"
-            >
-              {t("subtitle", { count: entries.length, schools })}
-            </p>
-          </div>
-          <div
-            className="pb-1.5 text-xs leading-loose font-extrabold uppercase tracking-micro text-hero-muted"
-            data-testid="poster-decor"
-          >
-            {tw("taglineTop")}
-            <br />
-            <span className="text-hero-foreground">{tw("taglineBottom")}</span>
-          </div>
-        </Container>
-      </header>
-
-      <Container
-        variant="calendar"
-        className="relative z-10 mt-6 pb-16 layout:-mt-15 layout:pb-24"
+  // ── Toolbar (EARS-16/17/18): picker + ‹ › pager + «Сегодня» + switcher. The
+  // picker holds the year-paging client state; the pager/«Сегодня» are Button
+  // `outline` query-param links; the switcher sits at the same right-aligned
+  // position both panes share. Mobile: the picker stretches, «Сегодня»/switcher
+  // yield to the «← Неделя» / «Месяц» text row below. ──
+  const toolbar = (
+    <>
+      <div
+        className="flex flex-wrap items-stretch gap-2.5 layout:gap-3"
+        data-testid="month-toolbar"
       >
-        {/* Month toolbar (EARS-16/17/18): picker + ‹ › pager + «Сегодня» +
-            «Неделя / Месяц» switcher — all query-param links, no client state.
-            Mobile (canvas lines 47–61): the picker stretches, «Сегодня» and the
-            boxed switcher yield to the «← Неделя» / «Месяц» text row below. */}
-        <div
-          className="flex flex-wrap items-stretch gap-2.5 layout:gap-3"
-          data-testid="month-toolbar"
+        <MonthPicker
+          className="min-w-0 flex-1 layout:flex-none"
+          triggerLabel={monthTitle}
+          pickerLabel={t("pickerLabel")}
+          initialYear={year}
+          years={pickerYears}
+          prevYearHref={monthViewHref(shiftMonth(displayedMonth, -12))}
+          nextYearHref={monthViewHref(shiftMonth(displayedMonth, 12))}
+          prevYearLabel={t("prevYear")}
+          nextYearLabel={t("nextYear")}
+        />
+
+        <Button asChild variant="outline" className="px-4 text-base font-extrabold">
+          <Link href={monthViewHref(prevMonth)} aria-label={t("prevMonth")}>
+            <span aria-hidden="true">‹</span>
+          </Link>
+        </Button>
+        <Button asChild variant="outline" className="px-4 text-base font-extrabold">
+          <Link href={monthViewHref(nextMonth)} aria-label={t("nextMonth")}>
+            <span aria-hidden="true">›</span>
+          </Link>
+        </Button>
+
+        <Button
+          asChild
+          variant="outline"
+          className="hidden px-5 text-caption text-tint-foreground layout:inline-flex"
         >
-          <MonthPicker
-            className="min-w-0 flex-1 layout:flex-none"
-            triggerLabel={monthTitle}
-            pickerLabel={t("pickerLabel")}
-            year={year}
-            prevYearHref={monthViewHref(shiftMonth(displayedMonth, -12))}
-            nextYearHref={monthViewHref(shiftMonth(displayedMonth, 12))}
-            prevYearLabel={t("prevYear")}
-            nextYearLabel={t("nextYear")}
-            months={pickerMonths}
+          <Link href="/webinars?view=month">{t("todayButton")}</Link>
+        </Button>
+
+        <span className="hidden flex-1 layout:block" />
+
+        <div className="hidden layout:block">
+          <ViewSwitcher
+            active="month"
+            weekHref={`/webinars?month=${displayedMonth}`}
+            monthHref={monthViewHref(displayedMonth)}
+            weekLabel={t("viewWeek")}
+            monthLabel={t("viewMonth")}
           />
-
-          <DsLink
-            asChild
-            className="inline-flex items-center border-2 border-border bg-card px-4 text-base font-extrabold text-foreground shadow-sm"
-          >
-            <Link href={monthViewHref(prevMonth)} aria-label={t("prevMonth")}>
-              <span aria-hidden="true">‹</span>
-            </Link>
-          </DsLink>
-          <DsLink
-            asChild
-            className="inline-flex items-center border-2 border-border bg-card px-4 text-base font-extrabold text-foreground shadow-sm"
-          >
-            <Link href={monthViewHref(nextMonth)} aria-label={t("nextMonth")}>
-              <span aria-hidden="true">›</span>
-            </Link>
-          </DsLink>
-
-          <DsLink
-            asChild
-            className="hidden items-center border-2 border-border bg-card px-5 text-caption font-bold text-tint-foreground shadow-sm layout:inline-flex"
-          >
-            <Link href="/webinars?view=month">{t("todayButton")}</Link>
-          </DsLink>
-
-          <span className="hidden flex-1 layout:block" />
-
-          <div className="hidden layout:block">
-            <ViewSwitcher
-              active="month"
-              weekHref={`/webinars?month=${displayedMonth}`}
-              monthHref={monthViewHref(displayedMonth)}
-              weekLabel={t("viewWeek")}
-              monthLabel={t("viewMonth")}
-            />
-          </div>
         </div>
+      </div>
 
-        {/* Mobile view-switch text row — canvas lines 58–61: «← Неделя» link
-            left, the active «Месяц» label right. */}
-        <div className="mt-3 flex items-center justify-between layout:hidden">
-          <DsLink
-            asChild
-            variant="inline"
-            className="text-caption font-bold text-tint-foreground"
-          >
-            <Link href={`/webinars?month=${displayedMonth}`}>
-              <span aria-hidden="true">← </span>
-              {t("viewWeek")}
-            </Link>
-          </DsLink>
-          <span
-            aria-current="page"
-            className="text-caption font-extrabold text-tint-foreground"
-          >
-            {t("viewMonth")}
-          </span>
-        </div>
+      {/* Mobile view-switch text row — canvas lines 58–61: «← Неделя» link left,
+          the active «Месяц» label right. */}
+      <div className="mt-3 flex items-center justify-between layout:hidden">
+        <DsLink
+          asChild
+          variant="inline"
+          className="text-caption font-bold text-tint-foreground"
+        >
+          <Link href={`/webinars?month=${displayedMonth}`}>
+            <span aria-hidden="true">← </span>
+            {t("viewWeek")}
+          </Link>
+        </DsLink>
+        <span
+          aria-current="page"
+          className="text-caption font-extrabold text-tint-foreground"
+        >
+          {t("viewMonth")}
+        </span>
+      </div>
+    </>
+  );
 
-        {/* Desktop pane (≥901px). */}
-        <MonthCalendarGrid
-          className="hidden layout:block"
-          data-testid="month-grid-desktop"
-          weekdays={weekdays}
-          weeks={desktopWeeks}
-          liveLabel={liveLabel}
-          legend={{
-            live: t("legendLive"),
-            planned: t("legendPlanned"),
-            past: t("legendPast"),
-          }}
-          nextMonthLink={nextMonthLink}
-        />
+  return (
+    <CalendarShell
+      title={monthTitle}
+      subtitle={t("subtitle", { count: entries.length, schools })}
+      taglineTop={tw("taglineTop")}
+      taglineBottom={tw("taglineBottom")}
+      toolbar={toolbar}
+    >
+      {/* Desktop pane (≥901px). */}
+      <MonthCalendarGrid
+        className="hidden layout:block"
+        data-testid="month-grid-desktop"
+        weekdays={weekdays}
+        weeks={desktopWeeks}
+        liveLabel={liveLabel}
+        legend={{
+          live: t("legendLive"),
+          planned: t("legendPlanned"),
+          past: t("legendPast"),
+        }}
+        nextMonthLink={nextMonthLink}
+        prevMonthLink={prevMonthLink}
+      />
 
-        {/* Mobile pane (≤900px). */}
-        <MonthCalendarMobile
-          className="layout:hidden"
-          weekdays={weekdays}
-          weeks={dotWeeks}
-          days={agendaDays}
-          defaultDay={defaultDay}
-        />
-      </Container>
-    </main>
+      {/* Mobile pane (≤900px). */}
+      <MonthCalendarMobile
+        className="layout:hidden"
+        weekdays={weekdays}
+        weeks={dotWeeks}
+        days={agendaDays}
+        defaultDay={defaultDay}
+      />
+    </CalendarShell>
   );
 }

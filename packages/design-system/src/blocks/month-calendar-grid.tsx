@@ -73,6 +73,13 @@ export interface MonthCalendarGridProps {
    * (owner rule on #1052 verdict #2).
    */
   nextMonthLink?: { href: string; label: string };
+  /**
+   * The return-from-future accent link to the PREVIOUS month («← Июнь 2026»),
+   * rendered just left of the next-month link. The app supplies it ONLY when the
+   * displayed month is strictly in the future (004 owner verdict #5 on #1052: the
+   * current or a past month withholds it so backward browsing is never motivated).
+   */
+  prevMonthLink?: { href: string; label: string };
 }
 
 /**
@@ -97,7 +104,20 @@ function LegendSwatch({ className }: { className?: string }) {
 const MonthCalendarGrid = React.forwardRef<
   HTMLDivElement,
   MonthCalendarGridProps & React.HTMLAttributes<HTMLDivElement>
->(({ weekdays, weeks, liveLabel, legend, nextMonthLink, className, ...props }, ref) => (
+>(
+  (
+    {
+      weekdays,
+      weeks,
+      liveLabel,
+      legend,
+      nextMonthLink,
+      prevMonthLink,
+      className,
+      ...props
+    },
+    ref,
+  ) => (
   <div ref={ref} className={className} {...props}>
     <div className="mt-7 overflow-x-auto border-2 border-border bg-card shadow-lg">
       <div className="min-w-[840px]">
@@ -227,19 +247,36 @@ const MonthCalendarGrid = React.forwardRef<
           {legend.past}
         </span>
       </div>
-      {nextMonthLink ? (
-        <Link
-          variant="inline"
-          href={nextMonthLink.href}
-          data-testid="next-month-link"
-          className="text-caption font-bold"
-        >
-          {nextMonthLink.label}
-        </Link>
+      {prevMonthLink || nextMonthLink ? (
+        <div className="flex flex-wrap items-center gap-5">
+          {/* Return-from-future link (owner verdict #5) — left of the always-on
+              next-month link, present only on a strictly-future month. */}
+          {prevMonthLink ? (
+            <Link
+              variant="inline"
+              href={prevMonthLink.href}
+              data-testid="prev-month-link"
+              className="text-caption font-bold"
+            >
+              {prevMonthLink.label}
+            </Link>
+          ) : null}
+          {nextMonthLink ? (
+            <Link
+              variant="inline"
+              href={nextMonthLink.href}
+              data-testid="next-month-link"
+              className="text-caption font-bold"
+            >
+              {nextMonthLink.label}
+            </Link>
+          ) : null}
+        </div>
       ) : null}
     </div>
   </div>
-));
+  ),
+);
 MonthCalendarGrid.displayName = "MonthCalendarGrid";
 
 export { MonthCalendarGrid };

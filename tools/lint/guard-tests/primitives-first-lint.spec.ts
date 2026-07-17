@@ -53,43 +53,49 @@ describe("primitives-first-lint", () => {
     expect(code).toBe(0);
   });
 
-  it("#1103 red: an interactive DS primitive used as a bespoke-look shell (px-4 text-base) → exit 1", () => {
+  // #1103 WARN classes (SHELL + summary/details/role=button): severity lives in
+  // the exit code — findings are PRINTED but the guard EXITS 0 (Phase 0,
+  // non-blocking, check-run stays green). Only the #828 raw-state class exits 1.
+  it("#1103 WARN: an interactive DS primitive used as a bespoke-look shell (px-4 text-base) → printed, exit 0", () => {
     const { code, stderr } = runGuard(GUARD, dir("red-shell-primitive"));
-    expect(code).toBe(1);
+    expect(code).toBe(0);
     expect(stderr).toContain("used as a bespoke-look shell");
+    expect(stderr).toContain("WARN");
   });
 
-  it("#1103 red: a lone type-size override on a DS primitive (text-sm) is a shell — proves ≥1 strong, not ≥2 → exit 1", () => {
+  it("#1103 WARN: a lone type-size override on a DS primitive (text-sm) is a shell — proves ≥1 strong, not ≥2 → printed, exit 0", () => {
     const { code, stderr } = runGuard(GUARD, dir("red-shell-textsize"));
-    expect(code).toBe(1);
+    expect(code).toBe(0);
     expect(stderr).toContain("used as a bespoke-look shell");
   });
 
-  it("#1103 green: DS primitives with positional-only + font-weight/colour tweaks (no strong identity) → exit 0", () => {
-    const { code } = runGuard(GUARD, dir("green-shell-positional"));
+  it("#1103 green: DS primitives with positional-only + font-weight/colour tweaks (no strong identity) → exit 0, no finding", () => {
+    const { code, stderr } = runGuard(GUARD, dir("green-shell-positional"));
     expect(code).toBe(0);
+    expect(stderr).not.toContain("used as a bespoke-look shell");
   });
 
-  it("#1103 green: a reasoned `primitives-first-ok` marker suppresses a SHELL finding → exit 0", () => {
-    const { code } = runGuard(GUARD, dir("green-shell-marker"));
+  it("#1103 green: a reasoned `primitives-first-ok` marker suppresses a SHELL finding → exit 0, no finding", () => {
+    const { code, stderr } = runGuard(GUARD, dir("green-shell-marker"));
     expect(code).toBe(0);
+    expect(stderr).not.toContain("used as a bespoke-look shell");
   });
 
-  it("#1103 red: a `primitives-first-ok` marker WITHOUT a reason does not suppress a SHELL finding → exit 1", () => {
+  it("#1103 WARN: a `primitives-first-ok` marker WITHOUT a reason does not suppress a SHELL finding → printed, exit 0", () => {
     const { code, stderr } = runGuard(GUARD, dir("red-shell-marker-no-reason"));
-    expect(code).toBe(1);
+    expect(code).toBe(0);
     expect(stderr).toContain("used as a bespoke-look shell");
   });
 
-  it("#1103 red: a `<summary>` disclosure trigger with a hand-assembled state stack → exit 1", () => {
+  it("#1103 WARN: a `<summary>` disclosure trigger with a hand-assembled state stack → printed, exit 0", () => {
     const { code, stderr } = runGuard(GUARD, dir("red-summary-details"));
-    expect(code).toBe(1);
+    expect(code).toBe(0);
     expect(stderr).toContain("raw `<summary>` carries a bespoke interaction-state stack");
   });
 
-  it("#1103 red: a `role=\"button\"` host with a hand-assembled state stack → exit 1", () => {
+  it("#1103 WARN: a `role=\"button\"` host with a hand-assembled state stack → printed, exit 0", () => {
     const { code, stderr } = runGuard(GUARD, dir("red-role-button"));
-    expect(code).toBe(1);
+    expect(code).toBe(0);
     expect(stderr).toContain('`role="button"` host carries a bespoke interaction-state stack');
   });
 

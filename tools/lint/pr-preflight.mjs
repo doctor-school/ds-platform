@@ -73,12 +73,11 @@ export const GUARDS = [
  * block (fumadocs compile), so this guard is the LOCAL pre-push mirror of that
  * existing gate — its `name` labels the local run, not a CI job.
  *
- * `warn: true` mirrors a WARN-posture guard whose CI job carries
- * `continue-on-error: true` (ADR-0007 §2.6): its findings are printed and
- * reported as WARN, but a non-zero exit does NOT flip the preflight verdict —
- * exactly as CI does not red the build on it. Standing WARN findings (e.g.
- * `primitives-first`'s #1103 shell inventory) therefore stay visible without
- * blocking `gh pr create`. Drop the flag when the guard promotes to BLOCK.
+ * A WARN-posture guard (ADR-0007 §2.6) carries its own severity in its EXIT CODE
+ * — it prints findings and exits 0 while in WARN, exiting non-zero only for its
+ * BLOCK class (e.g. `primitives-first`, #1108 rework). So this harness needs no
+ * WARN tier: exit 0 → PASS, exit non-zero → FAIL, uniformly. A guard that must
+ * hard-block wires that into its own exit code, never into `continue-on-error`.
  */
 /**
  * The PRE-MERGE gate family — guards whose evidence exists only at MERGE time,
@@ -128,7 +127,7 @@ export const STATIC_GUARDS = [
   { name: "showcase-snippet", file: "showcase-snippet-lint.ts" },
   { name: "asset-format", file: "asset-format-lint.ts" },
   { name: "interaction-states", file: "interaction-states-lint.ts" },
-  { name: "primitives-first", file: "primitives-first-lint.ts", warn: true },
+  { name: "primitives-first", file: "primitives-first-lint.ts" },
   { name: "aa-contrast", file: "aa-contrast-lint.ts" },
   { name: "form-error", file: "form-error-lint.ts" },
   { name: "form-rhythm", file: "form-rhythm-lint.ts" },
@@ -234,20 +233,19 @@ export function mergeGateForwardArgs(argv, runMergeGate) {
 
 /**
  * Fold per-guard results into an overall verdict + printable report lines.
- * A `warn: true` guard (a WARN-posture guard whose CI job is
- * `continue-on-error`, ADR-0007 §2.6) that exits non-zero is reported as WARN
- * and does NOT flip `ok` — mirroring CI, which does not red the build on it.
- * @param {{name: string, status: number, warn?: boolean}[]} results
- * @returns {{ok: boolean, lines: string[], warned: number}} `ok` iff every
- *   non-WARN guard exited 0.
+ * A guard carries WARN posture in its OWN exit code (prints findings, exits 0
+ * while in WARN — ADR-0007 §2.6), so the harness is a uniform PASS/FAIL fold:
+ * exit 0 → PASS, non-zero → FAIL. No WARN tier here — that would mask a guard's
+ * BLOCK exit (the #1108 rework moved severity into the tool exit code).
+ * @param {{name: string, status: number}[]} results
+ * @returns {{ok: boolean, lines: string[]}} `ok` iff every guard exited 0.
  */
 export function summarize(results) {
-  const label = (r) =>
-    r.status === 0 ? "PASS" : r.warn ? "WARN" : "FAIL";
-  const lines = results.map((r) => `  ${label(r)}  ${r.name}`);
-  const ok = results.every((r) => r.status === 0 || r.warn === true);
-  const warned = results.filter((r) => r.status !== 0 && r.warn === true).length;
-  return { ok, lines, warned };
+  const lines = results.map(
+    (r) => `  ${r.status === 0 ? "PASS" : "FAIL"}  ${r.name}`,
+  );
+  const ok = results.every((r) => r.status === 0);
+  return { ok, lines };
 }
 
 // ── impure CLI (skipped on import) ──────────────────────────────────────────
@@ -287,7 +285,7 @@ function runGuard(guard, root, extraEnv) {
       shell: process.platform === "win32",
     },
   );
-  return { name: guard.name, status: res.status ?? -1, warn: guard.warn === true };
+  return { name: guard.name, status: res.status ?? -1 };
 }
 
 function main() {
@@ -354,7 +352,7 @@ function main() {
     results.push({ name: MERGE_GATE.name, status: res.status ?? -1 });
   }
 
-  const { ok, lines, warned } = summarize(results);
+  const { ok, lines } = summarize(results);
   out("summary:");
   for (const line of lines) process.stdout.write(`${line}\n`);
 
@@ -371,11 +369,7 @@ function main() {
       1,
     );
   }
-  out(
-    `all ${results.length} guard(s) passed${
-      warned > 0 ? ` (${warned} WARN — non-blocking, findings above)` : ""
-    } — clear to proceed.`,
-  );
+  out(`all ${results.length} guard(s) passed — clear to proceed.`);
   process.exit(0);
 }
 

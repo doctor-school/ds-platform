@@ -89,14 +89,27 @@
  * interaction-states checks layer-1 globals + the primitives' OWN contract, not
  * consumer call sites; THIS guard governs the call sites (states + identity).
  *
- * Severity: WARN in Phase 0 (ADR-0007 §2.6 new-guard posture) — the CI job uses
- * `continue-on-error`; the guard exits 1 on findings so the count stays visible.
- * WARN→BLOCK criterion: flip to BLOCK once the app-code finding count reaches 0
- * (every ledger shell remediated to a DS variant or a recorded exception) and
- * holds at 0 for one sweep cadence (ADR-0007 §2.6) — after which a new bespoke
- * shell is a hard regression, not drift.
+ * ── Severity / exit code — WARN lives in the EXIT CODE, not CI config ────────
+ * The exit code, NOT a job-level `continue-on-error`, carries WARN semantics —
+ * a `continue-on-error` job keeps the WORKFLOW green but its CHECK-RUN still
+ * concludes FAILURE, which `merge:gate` treats as blocking, so a standing-WARN
+ * finding would red every future PR's merge gate (#1108 rework). Therefore:
+ *   - BLOCK findings → printed + EXIT 1. These are the original #828 raw-state
+ *     class: a bespoke state stack on a raw `<a>`/`<button>`/`<input>`/
+ *     `<textarea>`/`<select>` or a `next/link` alias. Currently ZERO in-repo
+ *     (all such call sites carry a recorded `primitives-first-ok:` marker), so
+ *     the check-run is green today; a NEW one is a hard regression.
+ *   - WARN findings → printed + EXIT 0 (Phase 0, ADR-0007 §2.6). The #1103
+ *     additions: `<summary>`/`<details>`/`role="button"` raw-state hosts and the
+ *     SHELL class. Visible on every run, non-blocking, check-run stays green.
+ * A run with BOTH exits 1 (the block dominates). WARN→BLOCK promotion for the
+ * #1103 classes: once the app-code WARN count reaches 0 and holds for one sweep
+ * cadence (ADR-0007 §2.6), move those tags/SHELL into the block set — a new
+ * bespoke shell is then a hard regression, not drift. The CI job runs WITHOUT
+ * `continue-on-error`: the tool's own exit code is the single severity source.
  *
- * Run: `pnpm lint:primitives-first`. Violations: stderr + exit 1. Clean: exit 0.
+ * Run: `pnpm lint:primitives-first`. BLOCK: stderr + exit 1. WARN-only: stderr +
+ * exit 0. Clean: exit 0.
  */
 import { readFileSync } from "node:fs";
 import { resolve, dirname, relative } from "node:path";
@@ -134,9 +147,13 @@ const APP_IGNORE = [
 ];
 
 // Raw interactive DOM tags whose interaction states belong to a DS primitive.
-// `summary` / `details` (#1103): the pre-#1101 disclosure-picker trigger was a
-// clickable `<summary>` with a hand-assembled state stack, invisible to #828.
-const RAW_INTERACTIVE_TAGS = ["a", "button", "input", "textarea", "select", "summary", "details"];
+// The #828 originals (`BLOCK_RAW_TAGS`) exit 1 on a finding; the #1103 additions
+// (`summary`/`details` — the pre-#1101 disclosure-picker trigger) are WARN (exit
+// 0) until they promote to BLOCK. `role="button"` hosts (WARN) are handled
+// separately (keyed off the attribute, any tag name).
+const BLOCK_RAW_TAGS = ["a", "button", "input", "textarea", "select"];
+const WARN_RAW_TAGS = ["summary", "details"];
+const RAW_INTERACTIVE_TAGS = [...BLOCK_RAW_TAGS, ...WARN_RAW_TAGS];
 
 // Bespoke interaction-state utilities. Matches the base prefixes and their
 // `group-*` / `peer-*` variants (a bespoke group-hover is still a bespoke
@@ -212,6 +229,8 @@ interface Violation {
   file: string;
   line: number;
   message: string;
+  /** `block` → exit 1 (original #828 raw-state class); `warn` → exit 0 (#1103). */
+  severity: "block" | "warn";
 }
 
 function info(msg: string): void {
@@ -382,9 +401,14 @@ function scanFile(file: string, violations: Violation[]): void {
     flaggedStarts.add(start);
 
     const isNextLink = !RAW_INTERACTIVE_TAGS.includes(tagName);
+    // #828 originals (raw DOM tags + next/link aliases) BLOCK; the #1103
+    // `summary`/`details` additions are WARN until promotion.
+    const severity: "block" | "warn" =
+      isNextLink || BLOCK_RAW_TAGS.includes(tagName) ? "block" : "warn";
     violations.push({
       file,
       line,
+      severity,
       message: isNextLink
         ? `raw \`next/link\` \`<${tagName}>\` carries a bespoke interaction-state stack (\`hover:\`/\`active:\`/\`focus-visible:\`) — compose the \`@ds/design-system\` \`Link\` primitive (\`<DsLink asChild><${tagName} href=…/></DsLink>\`) so the primitive owns the states (AGENTS.md §6 adopt-before-bespoke; #818/#828). ${RECORDED_EXCEPTION}`
         : `raw \`<${tagName}>\` carries a bespoke interaction-state stack (\`hover:\`/\`active:\`/\`focus-visible:\`) — interactive states come from a \`@ds/design-system\` primitive (\`Link\`/\`Button\`/\`Input\`/…), never hand-assembled from token utilities (AGENTS.md §6 adopt-before-bespoke; #818/#828). ${RECORDED_EXCEPTION}`,
@@ -406,6 +430,7 @@ function scanFile(file: string, violations: Violation[]): void {
     violations.push({
       file,
       line,
+      severity: "warn", // #1103 addition
       message: `\`role="button"\` host carries a bespoke interaction-state stack (\`hover:\`/\`active:\`/\`focus-visible:\`) — a button's states come from the \`@ds/design-system\` \`Button\` primitive, never hand-assembled on a role-hacked element (AGENTS.md §6; #828/#1103). ${RECORDED_EXCEPTION}`,
     });
   }
@@ -436,6 +461,7 @@ function scanFile(file: string, violations: Violation[]): void {
       violations.push({
         file,
         line,
+        severity: "warn", // #1103 SHELL class
         message: `DS primitive \`<${m[1]}>\` used as a bespoke-look shell: its call-site \`className\` carries ${strong} strong visual-identity override(s) (border/bg/padding/size/shadow/rounded/text-size) that rebuild the identity the primitive owns — use the primitive's variant/size props (or add a DS variant), not per-call-site look overrides (AGENTS.md §6 adopt-before-bespoke; #1103). ${RECORDED_EXCEPTION}`,
       });
     }
@@ -452,21 +478,45 @@ function main(): void {
   const violations: Violation[] = [];
   for (const file of files) scanFile(file, violations);
 
+  violations.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+  const blocking = violations.filter((v) => v.severity === "block");
+  const warnings = violations.filter((v) => v.severity === "warn");
+
   if (violations.length > 0) {
-    violations.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
-    process.stderr.write(`${TAG} ${violations.length} primitives-first violation(s):\n`);
+    const kind = blocking.length > 0 ? "violation" : "WARN finding";
+    process.stderr.write(
+      `${TAG} ${violations.length} primitives-first ${kind}(s) ` +
+        `(${blocking.length} BLOCK, ${warnings.length} WARN):\n`,
+    );
     for (const v of violations) {
       const rel = relative(REPO_ROOT, resolve(REPO_ROOT, v.file)).replace(/\\/g, "/");
-      process.stderr.write(`${TAG}   ${rel}:${v.line}: ${v.message}\n`);
+      process.stderr.write(
+        `${TAG}   ${v.severity.toUpperCase()} ${rel}:${v.line}: ${v.message}\n`,
+      );
     }
     process.stderr.write(
       `${TAG} Interactive elements own their hover/active/focus states AND their visual identity ` +
         `via @ds/design-system primitives (AGENTS.md §6, ADR-0013 §7) — a bespoke state stack (#818) ` +
         `or a call-site look rebuild (#1103) both re-implement the contract per surface and drift.\n`,
     );
-    process.exit(1);
   }
 
+  // WARN severity lives in the exit code: BLOCK (original #828 raw-state class)
+  // fails the check-run; the #1103 WARN classes stay visible but exit 0 so the
+  // check-run is green and never blocks `merge:gate` (#1108 rework).
+  if (blocking.length > 0) {
+    process.stderr.write(
+      `${TAG} ${blocking.length} BLOCK finding(s) — failing (exit 1).\n`,
+    );
+    process.exit(1);
+  }
+  if (warnings.length > 0) {
+    info(
+      `${warnings.length} WARN finding(s) above — Phase 0 non-blocking (exit 0). ` +
+        `Promote the #1103 classes to BLOCK once the count holds at 0 (ADR-0007 §2.6).`,
+    );
+    process.exit(0);
+  }
   info(
     `OK — ${files.length} app UI file(s): no bespoke state stack on a raw interactive element, ` +
       `no interactive DS primitive used as a bespoke-look shell.`,

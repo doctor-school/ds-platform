@@ -99,6 +99,73 @@ describe("FormMessage inline (no reserved line, no reflow over-spacing)", () => 
   });
 });
 
+/**
+ * Success tone (#529, source §07 «Формы и валидация» — the `Success` cell renders a
+ * green `✓ Адрес подтверждён` confirmation under the field). `FormMessage` gains a
+ * `success` prop: when set with confirmation copy and NO error, it renders the green
+ * weight-700 tone with a leading `✓`, announced politely as a `status`. An error
+ * always wins (error > success > helper — they never coexist).
+ */
+function SuccessHarness({
+  message,
+  error,
+}: {
+  message?: string;
+  error?: string;
+}) {
+  const form = useForm<{ name: string }>({ defaultValues: { name: "" } });
+  React.useEffect(() => {
+    if (error) form.setError("name", { message: error });
+  }, [error, form]);
+  return (
+    <Form {...form}>
+      <FormField
+        control={form.control}
+        name="name"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Email</FormLabel>
+            <FormControl>
+              <Input {...field} />
+            </FormControl>
+            <FormMessage data-testid="message" success>
+              {message}
+            </FormMessage>
+          </FormItem>
+        )}
+      />
+    </Form>
+  );
+}
+
+describe("FormMessage success tone (#529, source §07 — ✓ + green confirmation)", () => {
+  it("#529: renders confirmation copy as green weight-700 with a leading ✓, announced as status", () => {
+    render(<SuccessHarness message="Адрес подтверждён" />);
+    const msg = screen.getByTestId("message");
+    expect(msg).toHaveTextContent("Адрес подтверждён");
+    // Source §07 success: 12px weight-700 in the AA-safe success TEXT colour
+    // (`success-text`, the green mirror of `destructive-text`), NOT the fill.
+    expect(msg).toHaveClass("text-xs", "font-bold", "text-success-text");
+    expect(msg.textContent ?? "").toContain("✓");
+    expect(msg).toHaveAttribute("role", "status");
+  });
+
+  it("#529: an error still wins over success (they never coexist)", () => {
+    render(<SuccessHarness message="Адрес подтверждён" error="Required" />);
+    const msg = screen.getByTestId("message");
+    expect(msg).toHaveTextContent("Required");
+    expect(msg.textContent).not.toContain("Адрес подтверждён");
+    expect(msg).toHaveClass("text-destructive-text");
+    expect(msg.textContent ?? "").toContain("⚠");
+    expect(msg).toHaveAttribute("role", "alert");
+  });
+
+  it("#529: success with no confirmation copy renders nothing (no empty green line)", () => {
+    render(<SuccessHarness />);
+    expect(screen.queryByTestId("message")).not.toBeInTheDocument();
+  });
+});
+
 describe("FormLabel stays neutral on error (K-3 — no red label)", () => {
   it("does not turn the label destructive when the field is invalid", () => {
     render(<Harness error="Required" />);

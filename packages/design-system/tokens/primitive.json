@@ -18,7 +18,8 @@
     },
 
     "green": {
-      "$description": "Functional success green. 500 (#009959) is the brand-pinned light fill; 400 (#4ADE80) is the brighter dark-theme fill (dark ink 9.24:1).",
+      "$description": "Functional success green. 500 (#009959) is the brand-pinned light fill; 400 (#4ADE80) is the brighter dark-theme fill (dark ink 9.24:1); 700 (#047857) is the darker success as FOREGROUND TEXT on the light card (white 5.49:1) — 500 as text is only 3.68:1 (see success-text, the green mirror of destructive-text).",
+      "700": { "$value": "#047857" },
       "500": { "$value": "#009959" },
       "400": { "$value": "#4ADE80" }
     },

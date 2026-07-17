@@ -162,6 +162,14 @@ const FORM_MESSAGE_TEXT = "text-xs";
 // dark card), which keeps the message legible in both themes.
 const FORM_ERROR_TONE = "font-bold text-destructive-text";
 const FORM_HELPER_TONE = "text-muted-foreground";
+// Success tone (#529, source §07 «Формы и валидация» — the `Success` cell): the
+// confirmation reads 12px **weight 700** in the success role with a leading `✓`, the
+// mirror of the error tone. It uses `success-text`, NOT the `success` FILL: green.500
+// as TEXT is only 3.68:1 on the white card (the a11y-contrast rule #237), so the
+// message rides the darker `success-text` (light green.700 5.49:1 / dark green.400) —
+// exactly the split `destructive-text` makes for the error message. The green border +
+// ✓-on-tint on the input still carry the brand `success` green.
+const FORM_SUCCESS_TONE = "font-bold text-success-text";
 
 /** The `⚠` glyph that leads a neo-brutalist inline/summary error (source §07),
  * decorative — the message text carries the meaning, so it is `aria-hidden`. */
@@ -169,6 +177,16 @@ function ErrorGlyph() {
   return (
     <span aria-hidden className="flex-none">
       ⚠
+    </span>
+  );
+}
+
+/** The `✓` glyph that leads a success confirmation (source §07), decorative — the
+ * confirmation text carries the meaning, so it is `aria-hidden`. */
+function SuccessGlyph() {
+  return (
+    <span aria-hidden className="flex-none">
+      ✓
     </span>
   );
 }
@@ -209,12 +227,23 @@ function ErrorGlyph() {
  */
 const FormMessage = React.forwardRef<
   HTMLParagraphElement,
-  React.ComponentProps<"p">
->(({ className, children, ...props }, ref) => {
+  React.ComponentProps<"p"> & {
+    /**
+     * Renders the confirmation copy (`children`) in the source §07 success tone —
+     * green weight-700 with a leading `✓`, announced politely (#529). An error
+     * always wins (error > success > helper — they never coexist), and success
+     * needs confirmation copy: `success` with no `children` renders nothing.
+     */
+    success?: boolean;
+  }
+>(({ className, children, success, ...props }, ref) => {
   const { error, formDescriptionId, formMessageId } = useFormField();
   const errorText = error ? String(error?.message ?? "") : "";
   const hasError = errorText.length > 0;
-  const hasBody = hasError || (children != null && children !== false);
+  const hasChildren = children != null && children !== false;
+  // Success only when confirmation copy is present and the field is not erroring.
+  const showSuccess = !hasError && !!success && hasChildren;
+  const hasBody = hasError || hasChildren;
 
   // Inline (1A): a resting field with no message reserves no space at all.
   if (!hasBody) return null;
@@ -223,24 +252,34 @@ const FormMessage = React.forwardRef<
     <p
       ref={ref}
       // Owns the message id when erroring (so `aria-describedby` resolves it) and
-      // the description id when showing the helper.
+      // the description id when showing the helper / success confirmation.
       id={hasError ? formMessageId : formDescriptionId}
       className={cn(
         FORM_MESSAGE_TEXT,
-        hasError ? FORM_ERROR_TONE : FORM_HELPER_TONE,
-        // The error leads with the `⚠` glyph, so it lays out as an inline flex row.
-        hasError && "flex items-center gap-1.5",
+        hasError
+          ? FORM_ERROR_TONE
+          : showSuccess
+            ? FORM_SUCCESS_TONE
+            : FORM_HELPER_TONE,
+        // Error / success lead with a glyph, so they lay out as an inline flex row.
+        (hasError || showSuccess) && "flex items-center gap-1.5",
         className,
       )}
-      role={hasError ? "alert" : undefined}
+      role={hasError ? "alert" : showSuccess ? "status" : undefined}
       {...props}
     >
       {/* Helper (children) shows by default; the error swaps into its place with
-          the leading `⚠` — the two never coexist. */}
+          the leading `⚠`, or the success confirmation leads with `✓` — the three
+          never coexist (error > success > helper). */}
       {hasError ? (
         <>
           <ErrorGlyph />
           {errorText}
+        </>
+      ) : showSuccess ? (
+        <>
+          <SuccessGlyph />
+          {children}
         </>
       ) : (
         children

@@ -63,8 +63,10 @@ import { useHeaderAuth } from "@/lib/header-auth";
  * press (`button.tsx` base: sink deeper than hover + drop the shadow) with the
  * ink pinned to full-strength `header-chip-foreground` — the canvas navy
  * #114D9E in BOTH themes (kills the primitive's press tint, which goes
- * near-white on the white chip in dark theme; #1083 Mode-a: the light `header`
- * itself is blue.500 and would fail normal-text AA as chip ink). registry-research (build-ui-from-design-system):
+ * near-white on the white chip in dark theme; a distinct token from `header`,
+ * which is the band-BACKGROUND role — itself navy blue.700 in both themes since
+ * owner verdict #4, #1085 — and from `primary-action`, which lifts to a light
+ * blue in dark). registry-research (build-ui-from-design-system):
  * shadcn navigation-menu, Origin UI, Intent/Jolly, Kibo — none ship the branded
  * neo-brutalist inverted app bar; bespoke composition (see PR).
  */
@@ -94,9 +96,9 @@ const avatarFallbackIcon = <UserRound aria-hidden="true" className="size-5" />;
  *  Chain: rest (shadow-btn) → hover (sink 1px, shadow-btn-hover) → press (sink
  *  2px, shadow-none — the DS Button press language scaled to the chip's 1px
  *  hover). Ink = `header-chip-foreground` (the canvas navy #114D9E in BOTH
- *  themes, 8.14:1 on white — never `header`, which is blue.500 in light and
- *  fails normal-text AA on the white chip; #1083 Mode-a), pinned full-strength
- *  on press. */
+ *  themes, 8.14:1 on white — a distinct token from `header` (the band bg role)
+ *  and `primary-action` (which lifts to a light blue in dark and would fail on
+ *  the white chip)), pinned full-strength on press. */
 const LOGIN_CHIP =
   "inline-flex flex-none items-center justify-center bg-header-foreground px-6 py-3 text-sm font-bold text-header-chip-foreground shadow-btn hover:no-underline hover:translate-x-px hover:translate-y-px hover:shadow-btn-hover active:translate-x-0.5 active:translate-y-0.5 active:shadow-none active:text-header-chip-foreground";
 
@@ -236,10 +238,14 @@ export function AppShellHeader() {
 
 /** Desktop nav link — canvas active treatment (resting underline, full-strength)
  *  vs the muted inactive tier (element opacity, AA-safe — never a text-colour
- *  opacity, #270). Sized at the WCAG large-text tier (`text-xl` = 20px ≥
- *  18.67px at weight 700 — owner pick, #1083 Mode-a): white on the light
- *  blue.500 `header` band is 3.69:1, which clears AA only via the large/bold
- *  ≥3:1 carve-out. States are owned by the composed DS `Link` primitive, except
+ *  opacity, #270). Sized at the pre-#1083 `font-bold` (700) inheriting the nav
+ *  container's `text-sm` (14px) — owner verdict #4 (#1052 → #1085) put the light
+ *  `header` band on navy blue.700 (#114D9E, white 8.14:1 full AA), so the nav no
+ *  longer needs the WCAG large-text carve-out and returns to its original size
+ *  (the `text-xl` large-text route of #1083 was rejected, «огромные пункты
+ *  меню»); on navy the inactive `opacity-80` tier composites to ≥6:1, the
+ *  historical AA-clean state. States are owned by the composed DS `Link`
+ *  primitive, except
  *  the press colour: the base `active:text-primary-action/80` is blue.700 = the
  *  `header` band itself, so pressing painted the label invisible for the whole
  *  click-through (#1007 Stage-B round 1) — re-anchored to full-strength
@@ -262,7 +268,7 @@ function NavLink({
     <DsLink
       asChild
       className={cn(
-        "text-xl font-bold text-header-foreground active:text-header-foreground",
+        "font-bold text-header-foreground active:text-header-foreground",
         active
           ? "underline decoration-2 active:opacity-80"
           : "no-underline opacity-80 active:opacity-60",

@@ -491,6 +491,7 @@ function OtpFocusDemo({
             field={field}
             length={8}
             variant="slotted"
+            charset="numeric"
             title="Verify it's you"
             sentToLabel={`Code sent to ${maskDestination("doctor@example.com")}`}
             codeLabel="Verification code"

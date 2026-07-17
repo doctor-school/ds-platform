@@ -58,6 +58,7 @@ export function OtpField<T extends FieldValues>({
   length,
   label,
   variant,
+  charset,
   placeholder,
   onComplete,
 }: {
@@ -68,6 +69,19 @@ export function OtpField<T extends FieldValues>({
   label: string;
   /** `slotted` (verify/reset) or `plain` (login). */
   variant: "slotted" | "plain";
+  /**
+   * Character set of the code — drives the MOBILE KEYBOARD the slotted variant
+   * requests (#1110). REQUIRED so no surface can silently inherit the wrong keypad:
+   *   • `"alphanumeric"` (reg `/verify` + `/reset`, e.g. `PVDC3R`) → `inputMode="text"`
+   *     + `autoCapitalize="characters"` — a phone shows the FULL keyboard so the
+   *     letters are reachable, with uppercase key hints matching the UPPERCASE code.
+   *   • `"numeric"` (login OTP, digits) → `inputMode="numeric"` — the digits-only keypad.
+   * WHY required, not defaulted: input-otp's `OTPInput` defaults `inputMode="numeric"`,
+   * so an omitted charset would silently pop the digit keypad on an alphanumeric code —
+   * exactly the prod bug #1110. Ignored by the `plain` variant (it is digit-only and
+   * sets its own `inputMode="numeric"`).
+   */
+  charset: "alphanumeric" | "numeric";
   /** Placeholder for the plain variant (e.g. login `12345678`). */
   placeholder?: string | undefined;
   /**
@@ -86,6 +100,15 @@ export function OtpField<T extends FieldValues>({
             {...field}
             maxLength={length}
             autoComplete="one-time-code"
+            // #1110: the mobile keyboard the slotted widget requests. input-otp's
+            // OTPInput defaults inputMode="numeric" (digits-only keypad); an
+            // alphanumeric code (PVDC3R) then has its letters unreachable on a phone.
+            // charset="alphanumeric" ⇒ text keyboard + uppercase key hints (matching
+            // the UPPERCASE code we normalize to below); "numeric" pins the digit keypad.
+            inputMode={charset === "alphanumeric" ? "text" : "numeric"}
+            {...(charset === "alphanumeric"
+              ? { autoCapitalize: "characters" as const }
+              : {})}
             value={field.value ?? ""}
             // #1109: the reg / reset code Zitadel emits is UPPERCASE alphanumeric and
             // its compare is case-sensitive — uppercase every keystroke so a doctor

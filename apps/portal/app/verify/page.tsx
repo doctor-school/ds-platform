@@ -314,6 +314,7 @@ function VerifyCard() {
                     field={field}
                     length={VERIFY_OTP_LENGTH}
                     variant="slotted"
+                    charset="alphanumeric"
                     label={t("codeLabel")}
                     onComplete={onComplete}
                   />

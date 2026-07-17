@@ -316,6 +316,7 @@ function ResetCompleteForm({
               field={field}
               length={RESET_OTP_LENGTH}
               variant="slotted"
+              charset="alphanumeric"
               label={t("codeLabel")}
             />
           )}

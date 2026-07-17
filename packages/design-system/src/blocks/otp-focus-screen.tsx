@@ -50,6 +50,7 @@ export function OtpFocusScreen<T extends FieldValues>({
   field,
   length,
   variant = "slotted",
+  charset,
   placeholder,
   title,
   sentToLabel,
@@ -76,6 +77,13 @@ export function OtpFocusScreen<T extends FieldValues>({
   length: number;
   /** OTP presentation — defaults to the unified slotted look (#211). */
   variant?: "slotted" | "plain";
+  /**
+   * Character set of the code — drives the mobile keyboard the code box requests,
+   * forwarded to `<OtpField charset>` (#1110). REQUIRED: `"numeric"` for the digit
+   * login OTP, `"alphanumeric"` for a letter-bearing code. Never defaulted, so no
+   * surface silently inherits the wrong keypad.
+   */
+  charset: "alphanumeric" | "numeric";
   /** Placeholder for the plain variant. */
   placeholder?: string;
 
@@ -153,6 +161,7 @@ export function OtpFocusScreen<T extends FieldValues>({
           field={field}
           length={length}
           variant={variant}
+          charset={charset}
           label={codeLabel}
           placeholder={placeholder}
           onComplete={onComplete}

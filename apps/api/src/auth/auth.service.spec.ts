@@ -669,6 +669,135 @@ describe("AuthService.requestLoginOtp — SMS synthetic-send suppression (003 EA
   });
 });
 
+// #1112 (auth failure observability): a FAILED verify / reset-complete now appends
+// a reason-coded, PD-safe failure row to the audit ledger — the incident driver was
+// that a rejected verify/login code was recorded NOWHERE on our side (diagnosis
+// needed raw SSH SQL against Zitadel's null-payload `verification.failed`). The
+// client-visible outcome is unchanged (same generic 400, same body, EARS-16), and
+// the recorded payload NEVER carries the plaintext one-time code (003 EARS-30).
+// Reasons collapse to what the boolean IdP port exposes: `no-account` (no mirror
+// row) and `invalid` (the port returned false/null — wrong/expired/superseded are
+// indistinguishable from a boolean). Exercised at the service altitude over the fake
+// IdP + in-memory audit + a mirror stub (no DB, no HTTP).
+describe("AuthService — reason-coded auth-failure observability (#1112)", () => {
+  function buildFailObsService(
+    idp: IdpClient,
+    mirror: unknown,
+    audit: InMemoryAuthAuditLog,
+    sessions: unknown = {} as never,
+  ): AuthService {
+    return new AuthService(
+      idp,
+      explodingDb as never, // verify/reset touch no DB directly
+      undefined,
+      audit,
+      new FakeMailer(),
+      new InMemoryRegisterNoticeThrottle("test-pepper"),
+      SyntheticSuppression.disabled(),
+      mirror as never,
+      sessions as never,
+      {} as never, // smsBudget — unused
+    );
+  }
+
+  it("#1112: a verify with NO mirror row records one VerifyFailed(no-account) and still returns the generic 400", async () => {
+    const idp = new FakeIdpClient();
+    const audit = new InMemoryAuthAuditLog();
+    const mirror = { findByEmail: () => Promise.resolve(null) };
+    const service = buildFailObsService(idp as unknown as IdpClient, mirror, audit);
+
+    const err = await service
+      .verify({ email: "ghost@ds.test", code: FAKE_VALID_CODE })
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).getStatus()).toBe(400);
+    expect(audit.events).toEqual([
+      { type: "VerifyFailed", identifier: "ghost@ds.test", reason: "no-account" },
+    ]);
+  });
+
+  it("#1112: a verify with a WRONG code records one VerifyFailed(invalid) — and NEVER the plaintext code (EARS-30)", async () => {
+    const idp = new FakeIdpClient();
+    const audit = new InMemoryAuthAuditLog();
+    // A mirror row exists (so the failure is the code, not the account), but the
+    // sub is unknown to the fake IdP so verifyEmail returns false.
+    const mirror = {
+      findByEmail: () => Promise.resolve({ zitadelSub: "sub-unknown" }),
+      markEmailVerified: () => Promise.resolve(),
+    };
+    const service = buildFailObsService(idp as unknown as IdpClient, mirror, audit);
+    const code = "ZZZZZZ";
+
+    const err = await service
+      .verify({ email: "u@ds.test", code })
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect(audit.events).toEqual([
+      { type: "VerifyFailed", identifier: "u@ds.test", reason: "invalid" },
+    ]);
+    // 003 EARS-30: the recorded payload never carries the one-time code.
+    expect(JSON.stringify(audit.events)).not.toContain(code);
+  });
+
+  it("#1112: a SUCCESSFUL verify records the terminal IdentifierVerified row and NO failure row", async () => {
+    const idp = new FakeIdpClient();
+    const created = await idp.createUser({
+      email: "ok@ds.test",
+      password: "Aa1!sufficiently-long",
+    });
+    const audit = new InMemoryAuthAuditLog();
+    const mirror = {
+      findByEmail: () => Promise.resolve({ zitadelSub: created.sub }),
+      markEmailVerified: () => Promise.resolve(),
+    };
+    const service = buildFailObsService(idp as unknown as IdpClient, mirror, audit);
+
+    await service.verify({ email: "ok@ds.test", code: FAKE_VALID_CODE });
+
+    expect(audit.events).toEqual([
+      { type: "IdentifierVerified", sub: created.sub, channel: "email" },
+    ]);
+  });
+
+  it("#1112: a completePasswordReset with a bad/expired code records one PasswordResetFailed(invalid) — never the code (EARS-30) — and returns the generic 400", async () => {
+    const idp = new FakeIdpClient();
+    await idp.createUser({
+      email: "reset@ds.test",
+      password: "Aa1!old-sufficiently-long",
+    });
+    const store = new InMemorySessionStore();
+    const audit = new InMemoryAuthAuditLog();
+    const sessions = new SessionService(idp, store, audit);
+    const service = buildFailObsService(
+      idp as unknown as IdpClient,
+      {} as never, // mirror — unused on the reset path
+      audit,
+      sessions,
+    );
+    const code = "BADCODE9";
+
+    const err = await service
+      .completePasswordReset(
+        "reset@ds.test",
+        code,
+        "Aa1!new-sufficiently-long",
+        "fp",
+      )
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).getStatus()).toBe(400);
+    // Only the failure row — the throw precedes any revoke/mint, so no
+    // PasswordResetCompleted / LoginSucceeded row leaks (EARS-16 unchanged).
+    expect(audit.events).toEqual([
+      { type: "PasswordResetFailed", identifier: "reset@ds.test", reason: "invalid" },
+    ]);
+    expect(JSON.stringify(audit.events)).not.toContain(code);
+  });
+});
+
 // #1109 (EARS-3): the registration email-verify code Zitadel emits is UPPERCASE
 // alphanumeric, and Zitadel's compare is case-sensitive with no trim. A doctor who
 // types the code lowercased — or whose keyboard/paste pads it with whitespace —

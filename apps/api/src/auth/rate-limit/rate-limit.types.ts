@@ -58,3 +58,67 @@ export const RATE_LIMIT_CLOCK = Symbol("RATE_LIMIT_CLOCK");
 
 /** Nest metadata key the `@RateLimited` decorator writes and the guard reads. */
 export const RATE_LIMITED_KEY = "ds:rate-limited";
+
+/**
+ * Env var name per ceiling for the ops / load-test-window overrides (#1076,
+ * prep for the #873 phase-2 auth-burst window). The DI token's doc comment has
+ * always said "env-overridable in the module"; these names make that true
+ * without changing the EARS-13 defaults or semantics. Each is optional and
+ * independent: unset ⇒ that ceiling's default; a valid positive integer ⇒
+ * overrides ONLY that field.
+ */
+export const RATE_LIMIT_ENV_VARS = {
+  perUserPer15Min: "RATE_LIMIT_PER_USER_15MIN",
+  perIpPer15Min: "RATE_LIMIT_PER_IP_15MIN",
+  perAsnPerHour: "RATE_LIMIT_PER_ASN_1H",
+} as const satisfies Record<keyof RateLimitThresholds, string>;
+
+/** The three raw env values the {@link resolveRateLimitThresholds} factory reads. */
+export type RateLimitEnv = {
+  [K in (typeof RATE_LIMIT_ENV_VARS)[keyof typeof RATE_LIMIT_ENV_VARS]]?:
+    | string
+    | undefined;
+};
+
+/** A rejected override: which env var, and the raw value that failed validation. */
+export interface RateLimitOverrideRejection {
+  envVar: string;
+  rawValue: string;
+}
+
+/**
+ * Resolve the effective EARS-13 thresholds by overlaying only the env vars that
+ * hold a valid **positive integer** onto {@link DEFAULT_RATE_LIMIT_THRESHOLDS}
+ * (#1076). The contract is deliberately fail-SAFE, not fail-closed:
+ *
+ * - unset / empty / whitespace ⇒ that ceiling keeps its default (no rejection);
+ * - a valid positive integer ⇒ overrides ONLY that field;
+ * - malformed / ≤0 / non-integer ⇒ the default for that field, reported via
+ *   `onReject` (the module logs one loud warn naming the var + value).
+ *
+ * A fat-fingered load-test-window var can therefore only ever tighten or keep a
+ * ceiling — never open an unlimited or disabled limiter, and never crash api
+ * boot (which a coerced positive-int schema field would do on a typo). When all
+ * three are unset the result is byte-identical to the defaults — a fresh object,
+ * so the caller can never mutate the shared default.
+ */
+export function resolveRateLimitThresholds(
+  env: RateLimitEnv,
+  onReject: (rejection: RateLimitOverrideRejection) => void = () => {},
+): RateLimitThresholds {
+  const resolved: RateLimitThresholds = { ...DEFAULT_RATE_LIMIT_THRESHOLDS };
+  for (const field of Object.keys(
+    RATE_LIMIT_ENV_VARS,
+  ) as (keyof RateLimitThresholds)[]) {
+    const envVar = RATE_LIMIT_ENV_VARS[field];
+    const rawValue = env[envVar];
+    if (rawValue === undefined || rawValue.trim() === "") continue; // unset ⇒ default
+    const parsed = Number(rawValue);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      onReject({ envVar, rawValue }); // malformed / ≤0 / non-integer ⇒ default
+      continue;
+    }
+    resolved[field] = parsed;
+  }
+  return resolved;
+}

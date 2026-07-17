@@ -140,6 +140,23 @@ export const ApiEnvSchema = z.looseObject({
   LOADTEST_SYNTHETIC_DOMAIN: z.string().default("@loadtest.invalid"),
   LOADTEST_SYNTHETIC_MSISDN_PREFIX: z.string().default("+999"),
 
+  // EARS-13 auth rate-limit ceilings (ADR-0001 §7) — ops / load-test-window
+  // overrides (#1076, prep for the #873 phase-2 auth-burst window). UNSET ⇒ the
+  // byte-identical EARS-13 defaults: per-user 10 / 15 min, per-IP 20 / 15 min,
+  // per-ASN 100 / h. Set a var to a positive integer to override ONLY that one
+  // ceiling. Kept as raw optional strings here (NOT `z.coerce.number()`) BY
+  // DESIGN: the RateLimitModule factory (`resolveRateLimitThresholds`) validates
+  // them fail-SAFE — a malformed / ≤0 / non-integer value is ignored with a loud
+  // warn and the default is used for that field, so a fat-fingered window var can
+  // never open an unlimited/disabled limiter nor crash api boot. A coerced
+  // positive-int schema field would instead fail the WHOLE boot on a single typo
+  // — the wrong failure mode for a transient knob flipped under a live window.
+  // Revert = unset the var + restart the api (tools/loadtest/README.md → window
+  // recipe); the revert is mandatory, part of the abort/closeout checklist.
+  RATE_LIMIT_PER_USER_15MIN: z.string().optional(),
+  RATE_LIMIT_PER_IP_15MIN: z.string().optional(),
+  RATE_LIMIT_PER_ASN_1H: z.string().optional(),
+
   // BFF transactional-email channel (003 EARS-23, design §4) — the account-exists
   // notice on duplicate registration, DISTINCT from Zitadel's identity-credential
   // emails (verification / OTP / reset codes). Config-gated: with no

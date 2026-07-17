@@ -14,7 +14,10 @@ import { createDrizzle } from "@ds/db"; // connection factory
 import * as schema from "@ds/db/schema"; // Drizzle table definitions (SSOT)
 ```
 
-- `.` — the `createDrizzle` factory (and re-exports).
+- `.` — the `createDrizzle` factory (and re-exports), plus the edit-audit registries
+  `AUDIT_PD_COLUMNS` / `AUDIT_CAPTURE_ALLOWLIST` (`src/audit.ts`) — the TS mirrors of the
+  SQL-side lists baked into the spec-010 `audit_pd_columns()` / trigger-attach migration;
+  parity between the two is pinned by an e2e test (`apps/api/test/db/universal-edit-audit.e2e-spec.ts`).
 - `./schema` — the table/column definitions consumed by migrations and the API.
 
 `drizzle.config.ts` is the migration config `@ds/api`'s `drizzle:generate` /

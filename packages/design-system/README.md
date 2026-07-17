@@ -230,11 +230,13 @@ responsive gutter + breakpoint so surfaces never re-derive layout by eye:
 import { Container } from "@ds/design-system/container";
 
 <Container>{/* content — capped 1104px, centred, clamp gutter */}</Container>
-<Container variant="calendar">{/* wider calendar surfaces — 1240px */}</Container>
+<Container variant="calendar">{/* wider calendar surfaces — 1240px content */}</Container>
 ```
 
 - **`content`** (default) caps at **1104px** (`max-w-content`); **`calendar`** caps
-  at **1240px** (`max-w-calendar`) — the `--container-*` tokens.
+  at **1336px border-box = 1240px of content** inside the 48px desktop-max gutter
+  (`max-w-calendar` — the canvas content-box `main{max-width:1240px}` translated
+  to Tailwind's border-box, #1080) — the `--container-*` tokens.
 - **≥ 901px** (the `layout:` breakpoint, `--breakpoint-layout`) — the cap engages,
   the column centres (`mx-auto`), the gutter is `clamp(16px, 4vw, 48px)`
   (`px-gutter`), and the offset shadows sit clear of the viewport edge.

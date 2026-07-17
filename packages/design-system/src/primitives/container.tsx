@@ -12,12 +12,14 @@ import { cn } from "../lib/utils";
  *     (`px-4`). The fixed gutter is what lets a day-band plate or a card bleed to
  *     the viewport edge (`-mx-gutter` / `-mx-4`) cleanly near the breakpoint.
  *   • **Desktop (≥ 901px, the `layout:` variant)** — the column caps to its
- *     max-width (`content` 1104px / `calendar` 1240px), centres (`mx-auto`), and
- *     the gutter widens to the `clamp(16px, 4vw, 48px)` recipe (`layout:px-gutter`);
- *     the offset shadows then sit clear of the viewport edge.
+ *     max-width (`content` 1104px / `calendar` 1336px border-box = 1240px of
+ *     CONTENT inside the 48px desktop-max gutter, the canvas content-box
+ *     `main{max-width:1240px}` translated to border-box, #1080), centres
+ *     (`mx-auto`), and the gutter widens to the `clamp(16px, 4vw, 48px)` recipe
+ *     (`layout:px-gutter`); the offset shadows then sit clear of the viewport edge.
  *
  * Two `variant`s: `content` (default — article / list / form / detail surfaces,
- * 1104px) and `calendar` (the wider calendar surfaces, 1240px). Token-only — the
+ * 1104px) and `calendar` (the wider calendar surfaces, 1240px content). Token-only — the
  * widths, gutter and breakpoint all resolve to the generated §09 tokens
  * (`--container-*`, `--spacing-gutter`, `--breakpoint-layout`). Square, radius-0.
  */

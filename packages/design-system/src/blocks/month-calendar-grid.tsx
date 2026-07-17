@@ -157,8 +157,14 @@ const MonthCalendarGrid = React.forwardRef<
                       href={pill.href}
                       className={cn(
                         "mt-1.5 block px-2 py-1.5 text-eyebrow leading-[1.35] break-words no-underline outline-none focus-visible:shadow-focus",
+                        // Both pill kinds share the 700 text tier (owner
+                        // verdict #3 on #1052 → #1080): the red fill is the
+                        // live signal, the copy weighs like a planned pill.
+                        // The 800 tier stays reserved for the micro uppercase
+                        // LIVE badges (Badge `live`, webinar-card ribbon,
+                        // day-agenda chip).
                         pill.live
-                          ? "bg-live font-extrabold text-live-foreground"
+                          ? "bg-live font-bold text-live-foreground"
                           : "bg-tint font-bold text-tint-foreground",
                       )}
                     >

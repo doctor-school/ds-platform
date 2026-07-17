@@ -227,9 +227,9 @@
 
   "container": {
     "$type": "dimension",
-    "$description": "§09 «Раскладка и ритм» content-column max-widths. `content` (1104px = 69rem) caps article / list / form / detail surfaces; `calendar` (1240px = 77.5rem) caps the wider calendar surfaces. The Container primitive centres the column (margin:0 auto) and applies the responsive gutter; below the `layout` breakpoint the cap is dropped (edge-to-edge). Surface as Tailwind `max-w-content` / `max-w-calendar` via the `--container-*` @theme namespace.",
+    "$description": "§09 «Раскладка и ритм» content-column max-widths. `content` (1104px = 69rem) caps article / list / form / detail surfaces; `calendar` (1336px = 83.5rem BORDER-BOX = 1240px of content + 2 × 48px desktop-max gutter) yields the canvas-exact 1240px GRID content on the wider calendar surfaces — the canvas caps `main` at 1240px content-box with the gutter outside (`webinars-month.dc.html` line 44), while Tailwind preflight is border-box, so the token carries the gutter (#1080). The Container primitive centres the column (margin:0 auto) and applies the responsive gutter; below the `layout` breakpoint the cap is dropped (edge-to-edge). Surface as Tailwind `max-w-content` / `max-w-calendar` via the `--container-*` @theme namespace.",
     "content": { "$value": "69rem" },
-    "calendar": { "$value": "77.5rem" }
+    "calendar": { "$value": "83.5rem" }
   },
 
   "radius": {

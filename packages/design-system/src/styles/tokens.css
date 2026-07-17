@@ -63,7 +63,7 @@
   --color-tint-foreground: #114d9e;
   --color-info: #2d84f2;
   --color-chip-border: #aed4fb;
-  --color-header: #114d9e;
+  --color-header: #2d84f2;
   --color-header-foreground: #ffffff;
   --color-header-hairline: rgba(255, 255, 255, 0.5);
   --color-hero: #2d84f2;
@@ -150,7 +150,7 @@
   --space-inline: 0.5rem;
   --space-day-band: 0rem;
   --container-content: 69rem;
-  --container-calendar: 77.5rem;
+  --container-calendar: 83.5rem;
   --radius-base: 0rem;
   --radius-control: 0rem;
   --border-width-0: 0px;
@@ -291,7 +291,7 @@
   --color-tint-foreground: #114d9e;
   --color-info: #2d84f2;
   --color-chip-border: #aed4fb;
-  --color-header: #114d9e;
+  --color-header: #2d84f2;
   --color-header-foreground: #ffffff;
   --color-header-hairline: rgba(255, 255, 255, 0.5);
   --color-hero: #2d84f2;

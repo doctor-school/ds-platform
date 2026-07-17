@@ -166,7 +166,7 @@ const CLASSIFIERS: {
     id: "container",
     title: "Layout · container",
     description:
-      "§09 content-column max-widths — `content` (1104px) and `calendar` (1240px). Surface as `max-w-content` / `max-w-calendar`; the Container primitive centres + gutters the column and drops the cap below the `layout` breakpoint (edge-to-edge).",
+      "§09 content-column max-widths — `content` (1104px) and `calendar` (1336px border-box = 1240px of content inside the 48px desktop-max gutter, #1080). Surface as `max-w-content` / `max-w-calendar`; the Container primitive centres + gutters the column and drops the cap below the `layout` breakpoint (edge-to-edge).",
     kind: "value",
     match: (n) => n.startsWith("--container-"),
     label: (n) => n.slice("--container-".length),

@@ -1,0 +1,5 @@
+---
+"@ds/design-system": patch
+---
+
+Month view Stage-B rework #3 (#1080, owner verdict #3 at #1052): the `container.calendar` token becomes a border-box 1336px cap (83.5rem = 1240px of content + 2 × 48px desktop-max gutter) so `Container variant="calendar"` yields the canvas-exact 1240px grid column — the canvas caps `main` at 1240px content-box with the gutter outside, Tailwind preflight is border-box (the week listing + hero inner bands sharing the variant widen identically); the light `header` token flips from blue.700 to the canvas headerBg blue.500 `#2D84F2` (dark stays blue.700 `#114D9E`), so the app chrome and the hero poster read as one continuous blue band (white-on-blue.500 large/bold precedent recorded at #1072); the month-grid live pill's text run drops from 800 to 700 (`font-bold`) — the same tier as a planned pill; the micro uppercase LIVE badges (Badge `live`, the webinar-card ribbon, the day-agenda chip) keep 800.

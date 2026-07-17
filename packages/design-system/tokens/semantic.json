@@ -107,8 +107,8 @@
       "$description": "Resting border of an unselected filter chip — the pale brand-blue outline (blue.200 light → blue.300 @ 45% dark) that reads as a quiet, tappable outline before selection. Source `chipBorder`."
     },
     "header": {
-      "$value": "{color.blue.700}",
-      "$description": "Brand chrome band (top nav / app header) — the accessible brand blue.700. Pair with `header-foreground`; white on blue.700 is 8.14:1, clearing WCAG-AA for normal-weight body text as well as large/bold brand or logo (deepened from blue.500 for #713 — blue.500's 3.69:1 white met only the large/bold ≥3:1 carve-out). Same value in both theme sets — the header band does not change with the theme (006 design §10)."
+      "$value": "{color.blue.500}",
+      "$description": "Brand chrome band (top nav / app header) — the canvas headerBg: brand blue.500 light, blue.700 in the dark set (every vendored canvas renders `d ? '#114D9E' : '#2D84F2'`; owner Stage-B verdict #3 at #1052 → #1080). Pair with `header-foreground` (white): the same white-on-blue.500 pairing as the `hero` band it must read as one continuous blue with — the 3.69:1 large/bold ≥3:1 carve-out precedent recorded at #1072 (gate #1052); header copy stays bold. Theme-aware like `hero`."
     },
     "header-foreground": {
       "$value": "{color.white}",
@@ -116,11 +116,11 @@
     },
     "header-hairline": {
       "$value": "rgba(255, 255, 255, 0.5)",
-      "$description": "On-header muted border — the half-strength (white @ 50%) hairline of the header's icon-button family (the canvas `rgba(255,255,255,.5)`); hover raises to full-strength `header-foreground`. Same value in both theme sets — the header band does not change with the theme (006 design §10)."
+      "$description": "On-header muted border — the half-strength (white @ 50%) hairline of the header's icon-button family (the canvas `rgba(255,255,255,.5)`); hover raises to full-strength `header-foreground`. Same value in both theme sets — white @ 50% reads on both the light (blue.500) and dark (blue.700) header fills."
     },
     "hero": {
       "$value": "{color.blue.500}",
-      "$description": "Discovery-hero poster band (the `/webinars` week + month listing heroes) — the canvas `headerBg`: brand blue.500 light → blue.700 dark (`webinars-listing.dc.html` / `webinars-month.dc.html` line 291). Distinct from `header` (the top-nav chrome, pinned at the #713 AA-deepened blue.700 in both themes): the hero carries only LARGE/BOLD display text in `hero-foreground` (white on blue.500 = 3.69:1, inside the WCAG large-text ≥3:1 carve-out) plus `hero-muted` poster-decor small print that is leaf-excluded from the axe gate (#924)."
+      "$description": "Discovery-hero poster band (the `/webinars` week + month listing heroes) — the canvas `headerBg`: brand blue.500 light → blue.700 dark (`webinars-listing.dc.html` / `webinars-month.dc.html` line 291). The `header` chrome band shares the same theme pair (#1080) so nav + hero read as one continuous blue; the hero carries only LARGE/BOLD display text in `hero-foreground` (white on blue.500 = 3.69:1, inside the WCAG large-text ≥3:1 carve-out) plus `hero-muted` poster-decor small print that is leaf-excluded from the axe gate (#924)."
     },
     "hero-foreground": {
       "$value": "{color.white}",

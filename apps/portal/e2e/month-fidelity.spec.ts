@@ -511,6 +511,94 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       expect(page.url()).toBe(urlBefore);
     });
 
+    test(`owner verdict #6: the four month-toolbar controls (picker ‹ › «Сегодня») render one equal height (${theme})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
+      await applyTheme(page, theme);
+
+      const toolbar = page.getByTestId("month-toolbar");
+      await expect(toolbar).toBeVisible();
+
+      // The picker trigger (`<summary>`) + the three outline `Button` anchors
+      // (‹, ›, «Сегодня» — each carries the `outline` variant's `border-2`) must
+      // share ONE rendered height. The trigger regressed SHORTER because its
+      // `<details>` wrapper stretched under the toolbar's `items-stretch` while
+      // the summary sat at its own content height (owner verdict #6 on #1052).
+      const heights = await toolbar.evaluate((root) => {
+        // The picker trigger (`<summary>`) + the three outline Button anchors that
+        // are DIRECT children of the toolbar row — `:scope > a.border-2` excludes
+        // the picker popover's own month-cell anchors (also `border-2`, nested
+        // inside the `<details>`).
+        const els = [
+          root.querySelector("summary"),
+          ...root.querySelectorAll(":scope > a.border-2"),
+        ].filter(Boolean) as HTMLElement[];
+        return els.map(
+          (el) => Math.round(el.getBoundingClientRect().height * 100) / 100,
+        );
+      });
+      expect(heights.length).toBe(4);
+      expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(1);
+    });
+
+    test(`owner verdict #6: the picker year ‹ › pages in place ≥3 steps EACH direction across the former ±1 edge — popover open, no navigation (${theme})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
+      await applyTheme(page, theme);
+
+      const picker = page.getByTestId("month-toolbar").locator("details");
+      await picker.locator("summary").click();
+      await expect(picker).toHaveJSProperty("open", true);
+
+      const yearLabel = page.getByTestId("month-picker-year");
+      const startYear = Number((await yearLabel.textContent())?.trim());
+      const urlBefore = page.url();
+
+      // Three consecutive in-place forward steps — the popover stays open, the
+      // year advances each time, and NOTHING navigates. The former ±1 window edge
+      // (startYear + 1) is now crossed in place, not via a full-page reload.
+      for (let i = 1; i <= 3; i++) {
+        await picker.getByRole("button", { name: "Следующий год" }).click();
+        await expect(picker).toHaveJSProperty("open", true);
+        await expect(yearLabel).toHaveText(String(startYear + i));
+        expect(page.url()).toBe(urlBefore);
+      }
+
+      // …and three in-place steps back land on the start year again.
+      for (let i = 2; i >= 0; i--) {
+        await picker.getByRole("button", { name: "Предыдущий год" }).click();
+        await expect(picker).toHaveJSProperty("open", true);
+        await expect(yearLabel).toHaveText(String(startYear + i));
+        expect(page.url()).toBe(urlBefore);
+      }
+      await expect(yearLabel).toHaveText(String(startYear));
+    });
+
+    test(`owner verdict #6: the «Неделя» pane list body clears the navy hero — no day-heading overlap (${theme})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto("/webinars", { waitUntil: "domcontentloaded" });
+      await applyTheme(page, theme);
+
+      await expect(page.getByTestId("week-toolbar")).toBeVisible();
+      const heroBox = await page.locator("main header").boundingBox();
+      const listBox = await page.getByTestId("week-listbody").boundingBox();
+      expect(heroBox).not.toBeNull();
+      expect(listBox).not.toBeNull();
+
+      // The week list body (its first day-group heading — bare text, no card)
+      // starts at or below the hero band's bottom edge; it no longer rides up
+      // onto the navy (regression from #1098's shared-shell unification).
+      expect(listBox!.y).toBeGreaterThanOrEqual(
+        heroBox!.y + heroBox!.height - 0.5,
+      );
+    });
+
     test(`owner verdict #5: the «← prev month» return link is absent on the current month, present on a future month, and navigates back (${theme})`, async ({
       page,
     }) => {

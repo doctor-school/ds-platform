@@ -34,15 +34,18 @@ function monthViewHref(month: string): string {
 }
 
 /**
- * The picker's in-place year-paging window (004 owner verdict #4 on #1052): the
- * displayed year ± 1 (three years). The picker pages these client-side with NO
+ * The picker's in-place year-paging window (004 owner verdicts #4/#6 on #1052):
+ * the displayed year ± 3 (seven years). The picker pages these client-side with NO
  * navigation — the popover stays open, the counters swap; a step PAST the window
- * edge server-navigates a whole year (`prev/nextYearHref`), re-centring the window.
- * The bound is deliberate: real scheduling lives within ~a year of now, so three
- * pre-fetched years cover every instant-swap case while capping the render to
- * three count reads instead of an unbounded fan-out.
+ * edge server-navigates (`prev/nextYearHref`), re-centring the window on the year
+ * just beyond the edge. Radius 3 guarantees ≥3 consecutive in-place steps in EITHER
+ * direction before an edge is ever reached (verdict #6: the ±1 window died after a
+ * single step — the second click hit the edge link and reloaded). The bound stays
+ * deliberate: real scheduling lives within ~a year of now, so the far window years
+ * read empty counts cheaply while the render caps at seven parallel count reads
+ * instead of an unbounded fan-out.
  */
-const PICKER_YEAR_RADIUS = 1;
+const PICKER_YEAR_RADIUS = 3;
 
 /**
  * 004 EARS-19 — the «Месяц» pane of `/webinars` (`?view=month`, design §5.4). A
@@ -273,8 +276,17 @@ export async function MonthCalendarView({ month }: { month?: string }) {
           pickerLabel={t("pickerLabel")}
           initialYear={year}
           years={pickerYears}
-          prevYearHref={monthViewHref(shiftMonth(displayedMonth, -12))}
-          nextYearHref={monthViewHref(shiftMonth(displayedMonth, 12))}
+          // Edge fallback: a step past the window edge re-centres on the year
+          // just BEYOND the current edge (±(radius+1) years), so the click always
+          // advances — never a re-centre on the year already displayed, which the
+          // old ±12-month (±1 year) shift produced as a visual no-op at the far
+          // edge (004 owner verdict #6 on #1052, Mode-a #1101 [SUGGESTION]).
+          prevYearHref={monthViewHref(
+            shiftMonth(displayedMonth, -12 * (PICKER_YEAR_RADIUS + 1)),
+          )}
+          nextYearHref={monthViewHref(
+            shiftMonth(displayedMonth, 12 * (PICKER_YEAR_RADIUS + 1)),
+          )}
           prevYearLabel={t("prevYear")}
           nextYearLabel={t("nextYear")}
         />

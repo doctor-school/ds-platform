@@ -45,20 +45,41 @@ const YEARS: readonly MonthPickerYear[] = [
   },
 ];
 
+/**
+ * A wide seven-year window (2023‥2029) centred on 2026 — the shape the app hands
+ * in after 004 owner verdict #6 (radius 3): ≥3 consecutive in-place steps in EITHER
+ * direction stay client `<button>`s before an edge `<a>` is ever reached.
+ */
+const WIDE_YEARS: readonly MonthPickerYear[] = Array.from({ length: 7 }, (_, i) => {
+  const year = String(2023 + i);
+  return {
+    year,
+    months: Array.from({ length: 12 }, (_, m) => ({
+      label: `M${m + 1}`,
+      note: `${year}-m${m + 1}`,
+      href: "#",
+    })),
+  };
+});
+
+function pickerProps(
+  props?: Partial<React.ComponentProps<typeof MonthPicker>>,
+): React.ComponentProps<typeof MonthPicker> {
+  return {
+    triggerLabel: "Июль 2026",
+    pickerLabel: "Выбрать месяц",
+    initialYear: "2026",
+    years: YEARS,
+    prevYearHref: "/webinars?view=month&month=2025-07",
+    nextYearHref: "/webinars?view=month&month=2027-07",
+    prevYearLabel: "Предыдущий год",
+    nextYearLabel: "Следующий год",
+    ...props,
+  };
+}
+
 function renderPicker(props?: Partial<React.ComponentProps<typeof MonthPicker>>) {
-  return render(
-    <MonthPicker
-      triggerLabel="Июль 2026"
-      pickerLabel="Выбрать месяц"
-      initialYear="2026"
-      years={YEARS}
-      prevYearHref="/webinars?view=month&month=2025-07"
-      nextYearHref="/webinars?view=month&month=2027-07"
-      prevYearLabel="Предыдущий год"
-      nextYearLabel="Следующий год"
-      {...props}
-    />,
-  );
+  return render(<MonthPicker {...pickerProps(props)} />);
 }
 
 describe("<MonthPicker>", () => {
@@ -109,5 +130,57 @@ describe("<MonthPicker>", () => {
     const next = container.querySelector('[aria-label="Следующий год"]')!;
     expect(next.tagName).toBe("A");
     expect(next).toHaveAttribute("href", "/webinars?view=month&month=2027-07");
+  });
+
+  it("owner verdict #6: ≥3 consecutive in-place year steps EACH direction stay client buttons across the former ±1 edge", () => {
+    const { container } = renderPicker({
+      years: WIDE_YEARS,
+      initialYear: "2026",
+    });
+    const yearLabel = () =>
+      container.querySelector('[data-testid="month-picker-year"]')!.textContent;
+    const nextCtl = () => container.querySelector('[aria-label="Следующий год"]')!;
+    const prevCtl = () => container.querySelector('[aria-label="Предыдущий год"]')!;
+    expect(yearLabel()).toBe("2026");
+
+    // Three steps forward — each is an in-place <button> (no navigation), and
+    // the year advances. The former ±1 window edge (2027) is crossed in place.
+    for (let i = 1; i <= 3; i++) {
+      expect(nextCtl().tagName).toBe("BUTTON");
+      fireEvent.click(nextCtl());
+      expect(yearLabel()).toBe(String(2026 + i));
+    }
+    // Only now, at the wide-window edge (2029), does › become the server-nav <a>.
+    expect(nextCtl().tagName).toBe("A");
+
+    // …and three steps back, all in-place buttons, land on the start year again.
+    for (let i = 2; i >= 0; i--) {
+      expect(prevCtl().tagName).toBe("BUTTON");
+      fireEvent.click(prevCtl());
+      expect(yearLabel()).toBe(String(2026 + i));
+    }
+    expect(yearLabel()).toBe("2026");
+  });
+
+  it("owner verdict #6: resyncs the displayed year when initialYear changes (sibling soft-nav), never left stale", () => {
+    const { container, rerender } = renderPicker();
+    const yearLabel = () =>
+      container.querySelector('[data-testid="month-picker-year"]')!.textContent;
+    expect(yearLabel()).toBe("2026");
+
+    // A sibling soft-navigation re-renders the picker with a new displayed year
+    // while the popover may still be open — the mount-seeded state must follow,
+    // not show the stale mount year (Mode-a #1101 [SUGGESTION]).
+    rerender(
+      <MonthPicker
+        {...pickerProps({
+          triggerLabel: "Июль 2027",
+          initialYear: "2027",
+          prevYearHref: "/webinars?view=month&month=2026-07",
+          nextYearHref: "/webinars?view=month&month=2028-07",
+        })}
+      />,
+    );
+    expect(yearLabel()).toBe("2027");
   });
 });

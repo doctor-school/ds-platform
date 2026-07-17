@@ -18,8 +18,9 @@ import { buttonVariants } from "../primitives/button";
  * popover stays open, the month cells + counters swap for the stepped year, and NO
  * navigation fires. The window is bounded (the app hands in a fixed span of years,
  * each with its 12 precomputed cells); stepping PAST the window edge falls back to
- * a real server-navigation link (`prev/nextYearHref`, a whole-year ±12-month shift)
- * so reach stays unbounded while every in-window step is instant and loss-free.
+ * a real server-navigation link (`prev/nextYearHref`) that re-centres the window on
+ * the year just beyond the current edge (never a re-centre on the year already in
+ * view) so reach stays unbounded while every in-window step is instant and loss-free.
  *
  * The trigger + steppers adopt the `Button` primitive's `outline` state machinery
  * (hover / active-press / focus-visible), so on the navy hero the trigger reads as
@@ -171,6 +172,13 @@ const MonthPicker = React.forwardRef<
     ref,
   ) => {
     const [year, setYear] = React.useState(initialYear);
+    // Resync the client year to the server-provided `initialYear` whenever it
+    // changes — a sibling soft-navigation re-renders this component with a new
+    // displayed year while the popover may still be open; without this the
+    // mount-seeded state would show a stale year (004 owner verdict #6 on #1052).
+    React.useEffect(() => {
+      setYear(initialYear);
+    }, [initialYear]);
     const idx = years.findIndex((y) => y.year === year);
     // Fall back to the initial year if state drifts out of the window (defensive).
     const activeIdx = idx >= 0 ? idx : years.findIndex((y) => y.year === initialYear);
@@ -182,7 +190,12 @@ const MonthPicker = React.forwardRef<
       <details
         ref={ref}
         open={defaultOpen}
-        className={cn("relative", className)}
+        // `flex flex-col` so the `<summary>` trigger can fill the height the
+        // toolbar's `items-stretch` row hands the `<details>` wrapper — without
+        // it the summary sat at its own shorter content height inside a stretched
+        // box and rendered SHORTER than the sibling ‹ › / «Сегодня» controls
+        // (004 owner verdict #6 on #1052).
+        className={cn("relative flex flex-col", className)}
         {...props}
       >
         <summary
@@ -190,10 +203,12 @@ const MonthPicker = React.forwardRef<
           className={cn(
             buttonVariants({ variant: "outline" }),
             // The trigger keeps its own layout: full-width in the toolbar cell,
-            // the month label pushed left of the disclosure caret, native marker
-            // hidden. It reads as a WHITE bordered control on the navy hero
-            // (owner verdicts #1/#2) — the `outline` surface + border.
-            "w-full cursor-pointer justify-between gap-3 text-caption font-extrabold [&::-webkit-details-marker]:hidden",
+            // `h-full` so it fills the stretched wrapper (matching the neighbour
+            // controls' rendered height), the month label pushed left of the
+            // disclosure caret, native marker hidden. It reads as a WHITE bordered
+            // control on the navy hero (owner verdicts #1/#2) — the `outline`
+            // surface + border.
+            "h-full w-full cursor-pointer justify-between gap-3 text-caption font-extrabold [&::-webkit-details-marker]:hidden",
           )}
         >
           {triggerLabel}

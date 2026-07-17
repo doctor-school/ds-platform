@@ -220,7 +220,18 @@ export default async function DiscoveryListing({
         taglineBottom={t("taglineBottom")}
         toolbar={toolbar}
       >
-        {listBody}
+        {/* Desktop top clearance for the week pane (004 owner verdict #6 on
+            #1052, regression from #1098): the shared `CalendarShell` pulls the
+            content column up 60px onto the navy hero (`layout:-mt-15`). The month
+            pane fills that pull with its tall controls toolbar; the week toolbar
+            is only a right-aligned switcher, so without this the first day-group
+            heading («17 ИЮЛЯ, ПЯТНИЦА») — bare text, no card — rode up onto the
+            navy band. This clears the list body BELOW the band while leaving the
+            shell geometry (hero/column/switcher) byte-identical (static-shell
+            pin). Mobile keeps the shell's positive `mt-6`, so no overlap there. */}
+        <div className="layout:mt-14" data-testid="week-listbody">
+          {listBody}
+        </div>
       </CalendarShell>
     );
   }

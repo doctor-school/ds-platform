@@ -1,7 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
-import type { DrizzleHandle, Event, NewEvent, NewEventSpeaker } from "@ds/db";
-import { auditLedger, eventSpeakers, events, streamConfig } from "@ds/db";
+import type {
+  AuditSource,
+  DrizzleHandle,
+  Event,
+  NewEvent,
+  NewEventSpeaker,
+} from "@ds/db";
+import {
+  auditLedger,
+  eventSpeakers,
+  events,
+  streamConfig,
+  withAuditContext,
+} from "@ds/db";
 import {
   type ConfigureStreamRequest,
   MONTH_BROADCAST_STATES,
@@ -22,6 +34,13 @@ export interface TransitionAudit {
   eventType: string;
   subjectId: string | null;
   from: Event["state"];
+  /**
+   * 010 EARS-3/EARS-5 — the audit-context source for the generic capture
+   * trigger's `data.events.update` row. An admin-app lifecycle transition is
+   * `admin-ui`; the wrapper propagates it as the per-transaction `app.source`
+   * GUC so the authenticated mutation is attributed, never `db-direct`.
+   */
+  source: AuditSource;
 }
 
 /** Canonical UUID v-agnostic shape — used to decide whether `:idOrSlug` can match the uuid `id` column. */
@@ -322,53 +341,62 @@ export class EventsRepository {
     state: Event["state"],
     audit: TransitionAudit,
   ): Promise<EventWithSpeakers | null> {
-    return this.db.transaction(async (tx) => {
-      const [row] = await tx
-        .update(events)
-        .set({
-          state,
-          updatedAt: new Date(),
-          // Stamp the actual go-live instant exactly on the `published → live`
-          // transition (007 `OpenRoom`), and only if it is still unset —
-          // `coalesce` makes the write idempotent so a re-run never overwrites the
-          // original go-live moment. `live` is unreachable a second time under the
-          // closed lifecycle map, so this is set-once in practice; the guard is
-          // defence in depth. Every other transition leaves `live_at` untouched.
-          ...(state === "live"
-            ? { liveAt: sql`coalesce(${events.liveAt}, now())` }
-            : {}),
-        })
-        .where(eq(events.id, id))
-        .returning();
-      if (!row) return null;
-      await tx.insert(auditLedger).values({
-        eventId: randomUUID(),
-        eventType: audit.eventType,
-        subjectId: audit.subjectId,
-        // No PD — only the aggregate id + the from/to states (ADR-0003 §6).
-        metadata: { aggregateId: id, from: audit.from, to: state },
-      });
-      const speakerRows = await tx
-        .select()
-        .from(eventSpeakers)
-        .where(eq(eventSpeakers.eventId, id))
-        .orderBy(asc(eventSpeakers.position));
-      const [streamRow] = await tx
-        .select()
-        .from(streamConfig)
-        .where(eq(streamConfig.eventId, id));
-      return {
-        event: row,
-        speakers: speakerRows.map((s) => ({
-          name: s.name,
-          regalia: s.regalia,
-          position: s.position,
-        })),
-        streamConfig: streamRow
-          ? { provider: streamRow.provider, embedRef: streamRow.embedRef }
-          : null,
-      };
-    });
+    // 010 EARS-3/EARS-5 — run the state write inside the audit-context wrapper
+    // so the generic capture trigger attributes the resulting
+    // `data.events.update` row to the acting admin (`subject_id` = sub) with a
+    // concrete `source`, never `db-direct`. The terminal ADR-0003 §6 lifecycle
+    // row (below) is a separate, pre-existing obligation written in the SAME tx.
+    return withAuditContext(
+      this.db,
+      { actorSub: audit.subjectId, source: audit.source },
+      async (tx) => {
+        const [row] = await tx
+          .update(events)
+          .set({
+            state,
+            updatedAt: new Date(),
+            // Stamp the actual go-live instant exactly on the `published → live`
+            // transition (007 `OpenRoom`), and only if it is still unset —
+            // `coalesce` makes the write idempotent so a re-run never overwrites the
+            // original go-live moment. `live` is unreachable a second time under the
+            // closed lifecycle map, so this is set-once in practice; the guard is
+            // defence in depth. Every other transition leaves `live_at` untouched.
+            ...(state === "live"
+              ? { liveAt: sql`coalesce(${events.liveAt}, now())` }
+              : {}),
+          })
+          .where(eq(events.id, id))
+          .returning();
+        if (!row) return null;
+        await tx.insert(auditLedger).values({
+          eventId: randomUUID(),
+          eventType: audit.eventType,
+          subjectId: audit.subjectId,
+          // No PD — only the aggregate id + the from/to states (ADR-0003 §6).
+          metadata: { aggregateId: id, from: audit.from, to: state },
+        });
+        const speakerRows = await tx
+          .select()
+          .from(eventSpeakers)
+          .where(eq(eventSpeakers.eventId, id))
+          .orderBy(asc(eventSpeakers.position));
+        const [streamRow] = await tx
+          .select()
+          .from(streamConfig)
+          .where(eq(streamConfig.eventId, id));
+        return {
+          event: row,
+          speakers: speakerRows.map((s) => ({
+            name: s.name,
+            regalia: s.regalia,
+            position: s.position,
+          })),
+          streamConfig: streamRow
+            ? { provider: streamRow.provider, embedRef: streamRow.embedRef }
+            : null,
+        };
+      },
+    );
   }
 
   async findById(id: string): Promise<EventWithSpeakers | null> {

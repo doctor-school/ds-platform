@@ -555,6 +555,10 @@ export class EventsService {
       eventType: auditType,
       subjectId: actorSub,
       from,
+      // 010 EARS-3 — a lifecycle transition is a `platform_admin` admin-app
+      // action; the capture trigger attributes its `data.events.update` row to
+      // this door via the per-transaction GUC set by `withAuditContext`.
+      source: "admin-ui",
     });
     // The row existed a moment ago; a concurrent delete is the only null path.
     return updated ? this.toDetail(updated) : null;

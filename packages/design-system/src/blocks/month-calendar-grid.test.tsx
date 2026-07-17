@@ -183,4 +183,47 @@ describe("<MonthCalendarGrid>", () => {
     expect(link).toHaveAttribute("href", "/webinars?view=month&month=2026-08");
     expect(link).toHaveTextContent("Август 2026 →");
   });
+
+  it("owner verdict #5: renders the return-from-future prev-month link when supplied", () => {
+    render(
+      <MonthCalendarGrid
+        weekdays={WEEKDAYS}
+        liveLabel="В эфире"
+        legend={LEGEND}
+        weeks={[week([{ dateLabel: "1" }])]}
+        prevMonthLink={{
+          href: "/webinars?view=month&month=2026-07",
+          label: "← Июль 2026",
+        }}
+        nextMonthLink={{
+          href: "/webinars?view=month&month=2026-09",
+          label: "Сентябрь 2026 →",
+        }}
+      />,
+    );
+    const prev = screen.getByTestId("prev-month-link");
+    expect(prev).toHaveAttribute("href", "/webinars?view=month&month=2026-07");
+    expect(prev).toHaveTextContent("← Июль 2026");
+    // The next link is unchanged and still present alongside it.
+    expect(screen.getByTestId("next-month-link")).toHaveTextContent(
+      "Сентябрь 2026 →",
+    );
+  });
+
+  it("owner verdict #5: omits the prev-month link when not supplied (current/past month)", () => {
+    render(
+      <MonthCalendarGrid
+        weekdays={WEEKDAYS}
+        liveLabel="В эфире"
+        legend={LEGEND}
+        weeks={[week([{ dateLabel: "1" }])]}
+        nextMonthLink={{
+          href: "/webinars?view=month&month=2026-08",
+          label: "Август 2026 →",
+        }}
+      />,
+    );
+    expect(screen.queryByTestId("prev-month-link")).toBeNull();
+    expect(screen.getByTestId("next-month-link")).toBeInTheDocument();
+  });
 });

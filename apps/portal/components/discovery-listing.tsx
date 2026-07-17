@@ -1,8 +1,10 @@
+import Link from "next/link";
 import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import type { UpcomingBroadcastCard } from "@ds/schemas";
 import { Container } from "@ds/design-system/container";
 import { DayBand } from "@ds/design-system/day-band";
+import { Link as DsLink } from "@ds/design-system/link";
 import { WebinarCard } from "@ds/design-system/webinar-card";
 import { fetchUpcomingBroadcasts } from "@/lib/public-events";
 import { fetchMyEvents } from "@/lib/my-events";
@@ -12,6 +14,7 @@ import {
   formatMskWeekdayShort,
   mskDayKey,
 } from "@/lib/msk";
+import { CalendarShell } from "./calendar-shell";
 import { ViewSwitcher } from "./view-switcher";
 
 /**
@@ -107,12 +110,128 @@ export default async function DiscoveryListing({
   ]);
   const groups = groupByDay(cards);
 
+  // The day-grouped list body — identical for the `/` front-door and the
+  // `/webinars` «Неделя» pane; only the surrounding shell/hero differs.
+  const listBody =
+    groups.length === 0 ? (
+      <div className="border-2 border-dashed border-border px-6 py-14 text-center layout:py-20">
+        <p className="text-lg font-extrabold tracking-tight">{t("empty.title")}</p>
+        <p className="mx-auto mt-2 max-w-md text-caption leading-relaxed text-muted-foreground">
+          {t("empty.body")}
+        </p>
+      </div>
+    ) : (
+      <div className="flex flex-col gap-8 layout:gap-12">
+        {groups.map((group) => (
+          // `id="day-YYYY-MM-DD"` — the month grid's «+N ещё» overflow link
+          // targets this day's group (#1065 item 10, owner decision:
+          // `/webinars?month=…#day-YYYY-MM-DD`, anchors only).
+          <section key={group.key} id={`day-${group.key}`}>
+            {/* Mobile: full-bleed day band; desktop: label + 2px ink rule. */}
+            <DayBand className="-mx-4 layout:hidden">{group.label}</DayBand>
+            <div className="hidden layout:mb-6 layout:flex layout:items-baseline layout:gap-4">
+              <span className="text-caption font-extrabold uppercase tracking-micro whitespace-nowrap">
+                {group.label}
+              </span>
+              <span className="flex-1 border-t-2 border-foreground" />
+            </div>
+
+            <div className="-mx-4 flex flex-col layout:mx-0 layout:gap-7">
+              {group.cards.map((card) => {
+                const parts = formatMskParts(card.startsAt);
+                return (
+                  <WebinarCard
+                    key={card.id}
+                    href={`/webinars/${card.slug}`}
+                    time={parts.time}
+                    tzLabel={t("cardTz")}
+                    dateLabel={t("cardDate", {
+                      date: parts.date,
+                      weekday: formatMskWeekdayShort(card.startsAt),
+                    })}
+                    school={card.school}
+                    title={card.title}
+                    specialties={card.specialties}
+                    speakers={card.speakers}
+                    live={card.state === "live"}
+                    liveLabel={t("live")}
+                    registered={registeredSlugs.has(card.slug)}
+                    registeredLabel={t("registered")}
+                  />
+                );
+              })}
+            </div>
+          </section>
+        ))}
+      </div>
+    );
+
+  // The `/webinars` «Неделя» pane shares the STATIC `CalendarShell` with the
+  // «Месяц» pane (004 owner verdict #3 on #1052): one navy hero + one 1240px
+  // content column, with the «Неделя / Месяц» switcher pulled up onto the band at
+  // the same position both panes use — switching views never jumps the shell.
+  if (monthViewHref) {
+    const toolbar = (
+      <>
+        <div
+          className="flex flex-wrap items-stretch gap-2.5 layout:gap-3"
+          data-testid="week-toolbar"
+        >
+          <span className="hidden flex-1 layout:block" />
+          <div className="hidden layout:block">
+            <ViewSwitcher
+              active="week"
+              weekHref="/webinars"
+              monthHref={monthViewHref}
+              weekLabel={t("month.viewWeek")}
+              monthLabel={t("month.viewMonth")}
+            />
+          </div>
+        </div>
+
+        {/* Mobile view-switch text row — mirrors the month pane: the active
+            «Неделя» label left, the «Месяц →» link right. */}
+        <div className="mt-3 flex items-center justify-between layout:hidden">
+          <span
+            aria-current="page"
+            className="text-caption font-extrabold text-tint-foreground"
+          >
+            {t("month.viewWeek")}
+          </span>
+          <DsLink
+            asChild
+            variant="inline"
+            className="text-caption font-bold text-tint-foreground"
+          >
+            <Link href={monthViewHref}>
+              {t("month.viewMonth")}
+              <span aria-hidden="true"> →</span>
+            </Link>
+          </DsLink>
+        </div>
+      </>
+    );
+
+    return (
+      <CalendarShell
+        title={t("title")}
+        subtitle={t("subtitle")}
+        taglineTop={t("taglineTop")}
+        taglineBottom={t("taglineBottom")}
+        toolbar={toolbar}
+      >
+        {listBody}
+      </CalendarShell>
+    );
+  }
+
+  // The `/` front-door: the standalone hero at the default content column (no
+  // switcher, no shared calendar shell) — unchanged.
   return (
     <main className="min-h-screen bg-background text-foreground">
-      {/* Poster hero — `webinars-listing.dc.html` lines 42–49 (#1065 item 6:
-          the hero is shared with the month view): the `hero` band (blue.500
-          light / blue.700 dark), NO kicker, h1 + subtitle left, the uppercase
-          tagline bottom-right. */}
+      {/* Poster hero — `webinars-listing.dc.html` lines 42–49: the `hero` band
+          (blue.500 light / blue.700 dark), NO kicker, h1 + subtitle left, the
+          uppercase tagline bottom-right. */}
       <header className="bg-hero text-hero-foreground">
         <Container className="flex flex-wrap items-end justify-between gap-8 py-10 layout:py-12">
           <div>
@@ -137,74 +256,7 @@ export default async function DiscoveryListing({
         </Container>
       </header>
 
-      <Container className="py-10 layout:py-14">
-        {monthViewHref ? (
-          <div className="mb-8 flex justify-end">
-            <ViewSwitcher
-              active="week"
-              weekHref="/webinars"
-              monthHref={monthViewHref}
-              weekLabel={t("month.viewWeek")}
-              monthLabel={t("month.viewMonth")}
-            />
-          </div>
-        ) : null}
-
-        {groups.length === 0 ? (
-          <div className="border-2 border-dashed border-border px-6 py-14 text-center layout:py-20">
-            <p className="text-lg font-extrabold tracking-tight">
-              {t("empty.title")}
-            </p>
-            <p className="mx-auto mt-2 max-w-md text-caption leading-relaxed text-muted-foreground">
-              {t("empty.body")}
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-8 layout:gap-12">
-            {groups.map((group) => (
-              // `id="day-YYYY-MM-DD"` — the month grid's «+N ещё» overflow link
-              // targets this day's group (#1065 item 10, owner decision:
-              // `/webinars?month=…#day-YYYY-MM-DD`, anchors only).
-              <section key={group.key} id={`day-${group.key}`}>
-                {/* Mobile: full-bleed day band; desktop: label + 2px ink rule. */}
-                <DayBand className="-mx-4 layout:hidden">{group.label}</DayBand>
-                <div className="hidden layout:mb-6 layout:flex layout:items-baseline layout:gap-4">
-                  <span className="text-caption font-extrabold uppercase tracking-micro whitespace-nowrap">
-                    {group.label}
-                  </span>
-                  <span className="flex-1 border-t-2 border-foreground" />
-                </div>
-
-                <div className="-mx-4 flex flex-col layout:mx-0 layout:gap-7">
-                  {group.cards.map((card) => {
-                    const parts = formatMskParts(card.startsAt);
-                    return (
-                      <WebinarCard
-                        key={card.id}
-                        href={`/webinars/${card.slug}`}
-                        time={parts.time}
-                        tzLabel={t("cardTz")}
-                        dateLabel={t("cardDate", {
-                          date: parts.date,
-                          weekday: formatMskWeekdayShort(card.startsAt),
-                        })}
-                        school={card.school}
-                        title={card.title}
-                        specialties={card.specialties}
-                        speakers={card.speakers}
-                        live={card.state === "live"}
-                        liveLabel={t("live")}
-                        registered={registeredSlugs.has(card.slug)}
-                        registeredLabel={t("registered")}
-                      />
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
-          </div>
-        )}
-      </Container>
+      <Container className="py-10 layout:py-14">{listBody}</Container>
     </main>
   );
 }

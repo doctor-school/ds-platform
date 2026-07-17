@@ -771,27 +771,31 @@ function MonthPickerSection() {
   return (
     <BlockSection
       title="MonthPicker"
-      exportsLine="MonthPicker — props: triggerLabel · year · prev/nextYearHref · months (MonthPickerCell[]) · defaultOpen (native <details> disclosure)"
+      exportsLine="MonthPicker — props: triggerLabel · initialYear · years (MonthPickerYear[]) · prev/nextYearHref (edge fallback) · defaultOpen (native <details> disclosure)"
     >
       <p className="text-sm text-muted-foreground">
         The month view&apos;s chooser: a native <code className="font-mono text-xs">&lt;details&gt;</code>{" "}
         disclosure with a year ‹ › stepper and a 3-column grid of the year&apos;s twelve months, each
         with its event count. A past month is muted («прошёл»), the displayed month is filled, every
-        other is a link. Display-only — counts, labels, and hrefs are app-supplied; navigation is
-        plain query-param links, no client state. Shown <code className="font-mono text-xs">defaultOpen</code>{" "}
-        so the popover is catalogued (and a11y-scanned) in place.
+        other is a link. The year ‹ › stepper pages IN PLACE across the app-provided{" "}
+        <code className="font-mono text-xs">years</code> window (no navigation, popover stays open,
+        counters swap); a step past the window edge follows{" "}
+        <code className="font-mono text-xs">prev/nextYearHref</code>. The trigger + steppers adopt the{" "}
+        <code className="font-mono text-xs">Button</code> outline states. Shown{" "}
+        <code className="font-mono text-xs">defaultOpen</code> so the popover is catalogued (and
+        a11y-scanned) in place.
       </p>
       <SubRow label="Preview">
         <div className="rounded-lg border border-border bg-muted p-8 pb-64">
           <MonthPicker
             triggerLabel="Июль 2026"
             pickerLabel="Выбрать месяц"
-            year="2026"
+            initialYear="2026"
+            years={[{ year: "2026", months: PICKER_MONTHS }]}
             prevYearHref="#"
             nextYearHref="#"
             prevYearLabel="Предыдущий год"
             nextYearLabel="Следующий год"
-            months={PICKER_MONTHS}
             defaultOpen
           />
         </div>

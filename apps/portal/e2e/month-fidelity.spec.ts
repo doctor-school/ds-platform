@@ -241,6 +241,19 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       expect(toolbarBox).not.toBeNull();
       expect(toolbarBox!.y).toBeLessThan(heroBox!.y + heroBox!.height - 1);
 
+      // Trigger contrast (owner verdict #1, #1052): «Июль 2026 ▾» reads as a WHITE
+      // bordered control on the navy hero — the Button `outline` surface (2px
+      // border, an opaque non-blue fill), never the old filled-blue `<summary>`
+      // (`bg-primary-action` = the hero blue #114D9E) that blended into the band.
+      const trigger = toolbar.locator("summary");
+      const triggerStyle = await trigger.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return { bg: cs.backgroundColor, borderWidth: cs.borderTopWidth };
+      });
+      expect(triggerStyle.borderWidth).toBe("2px");
+      expect(triggerStyle.bg).not.toBe("rgb(17, 77, 158)");
+      expect(triggerStyle.bg).not.toBe("rgba(0, 0, 0, 0)");
+
       // No pill leaks past its own cell box (the recorded #1052 overflow defect
       // at 4 events/day) — every pill's border box stays inside its cell.
       const overflows = await grid.evaluate((root) => {
@@ -414,6 +427,123 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       await target.click();
       await expect(target).toHaveAttribute("aria-pressed", "true");
       expect(page.url()).toBe(urlBefore); // client-side presentation state only
+    });
+
+    test(`owner verdict #3: static shell — hero band + content column stay pixel-identical across a Неделя⇄Месяц round-trip (${theme})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1440, height: 1000 });
+
+      // The «Месяц» pane's shell.
+      await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
+      await applyTheme(page, theme);
+      await expect(page.getByTestId("month-toolbar")).toBeVisible();
+      const monthHero = await page.locator("main header").boundingBox();
+      const monthColumn = await page
+        .getByTestId("month-toolbar")
+        .evaluate((el) => {
+          const r = el.parentElement!.getBoundingClientRect();
+          return { left: r.left, right: r.right, width: r.width };
+        });
+      const monthSwitcher = await page
+        .getByTestId("view-switcher")
+        .boundingBox();
+
+      // The «Неделя» pane's shell — same CalendarShell, only the content swaps.
+      await page.goto("/webinars", { waitUntil: "domcontentloaded" });
+      await applyTheme(page, theme);
+      await expect(page.getByTestId("week-toolbar")).toBeVisible();
+      const weekHero = await page.locator("main header").boundingBox();
+      const weekColumn = await page
+        .getByTestId("week-toolbar")
+        .evaluate((el) => {
+          const r = el.parentElement!.getBoundingClientRect();
+          return { left: r.left, right: r.right, width: r.width };
+        });
+      const weekSwitcher = await page.getByTestId("view-switcher").boundingBox();
+
+      expect(monthHero).not.toBeNull();
+      expect(weekHero).not.toBeNull();
+      // The navy hero band: same position + width, same height (single-line copy).
+      expect(weekHero!.x).toBeCloseTo(monthHero!.x, 0);
+      expect(weekHero!.y).toBeCloseTo(monthHero!.y, 0);
+      expect(weekHero!.width).toBeCloseTo(monthHero!.width, 0);
+      expect(Math.abs(weekHero!.height - monthHero!.height)).toBeLessThanOrEqual(2);
+      // The content column edges never jump (the 1104⇄1240 defect, owner item 3).
+      expect(weekColumn.left).toBeCloseTo(monthColumn.left, 0);
+      expect(weekColumn.right).toBeCloseTo(monthColumn.right, 0);
+      expect(Math.abs(weekColumn.width - monthColumn.width)).toBeLessThanOrEqual(0.5);
+      // The «Неделя / Месяц» switcher sits at the same top-right position in both.
+      expect(monthSwitcher).not.toBeNull();
+      expect(weekSwitcher).not.toBeNull();
+      expect(weekSwitcher!.y).toBeCloseTo(monthSwitcher!.y, 0);
+      expect(weekSwitcher!.x + weekSwitcher!.width).toBeCloseTo(
+        monthSwitcher!.x + monthSwitcher!.width,
+        0,
+      );
+    });
+
+    test(`owner verdict #4: the picker year ‹ › pages in place — popover stays open, counters swap, no navigation (${theme})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
+      await applyTheme(page, theme);
+
+      const picker = page.getByTestId("month-toolbar").locator("details");
+      // Open the disclosure (native <details> — no client state for open/close).
+      await picker.locator("summary").click();
+      await expect(picker).toHaveJSProperty("open", true);
+
+      const yearLabel = page.getByTestId("month-picker-year");
+      const startYear = (await yearLabel.textContent())?.trim();
+      const urlBefore = page.url();
+
+      // Step a whole year forward — the current month sits mid-window, so the ›
+      // step is an in-place client button (never the edge navigation link).
+      await picker.getByRole("button", { name: "Следующий год" }).click();
+
+      // The popover stayed open, the year + counters swapped, NOTHING navigated.
+      await expect(picker).toHaveJSProperty("open", true);
+      const endYear = (await yearLabel.textContent())?.trim();
+      expect(endYear).not.toBe(startYear);
+      expect(Number(endYear)).toBe(Number(startYear) + 1);
+      expect(page.url()).toBe(urlBefore);
+    });
+
+    test(`owner verdict #5: the «← prev month» return link is absent on the current month, present on a future month, and navigates back (${theme})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(DESKTOP);
+
+      // Current month — the back link is withheld (never motivate going back).
+      await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
+      await applyTheme(page, theme);
+      await expect(page.getByTestId("month-grid-desktop")).toBeVisible();
+      await expect(page.getByTestId("prev-month-link")).toHaveCount(0);
+      await expect(page.getByTestId("next-month-link")).toBeVisible();
+
+      // A future month — the «← <current month>» return link renders on the left,
+      // alongside the always-on next-month link, and points back to the prior month.
+      const now = mskNowYm();
+      const next = shiftYm(now, 1);
+      const nextParam = `${next.year}-${String(next.month).padStart(2, "0")}`;
+      const backParam = `${now.year}-${String(now.month).padStart(2, "0")}`;
+      await page.goto(`/webinars?view=month&month=${nextParam}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await applyTheme(page, theme);
+      const back = page.getByTestId("prev-month-link");
+      await expect(back).toBeVisible();
+      await expect(back).toHaveText(`← ${ruMonthTitle(now)}`);
+      await expect(back).toHaveAttribute(
+        "href",
+        `/webinars?view=month&month=${backParam}`,
+      );
+
+      await back.click();
+      await page.waitForURL(`**/webinars?view=month&month=${backParam}`);
+      await expect(page.getByTestId("month-grid-desktop")).toBeVisible();
     });
   }
 });

@@ -1,15 +1,16 @@
 import Link from "next/link";
-import { Link as DsLink } from "@ds/design-system/link";
+import { Button } from "@ds/design-system/button";
 
 /**
  * 004 EARS-18 — the «Неделя / Месяц» view switcher shared by both discovery panes
  * (`webinars-listing.dc.html` / `webinars-month.dc.html`). The active side is a
  * non-interactive `aria-current` label on the filled `primary-action`; the other
- * side is a real link (never a dead CTA) built from the DS `Link` primitive (so it
- * carries hover / focus-visible states). Round-trip is loss-free: the month→week
- * link carries the displayed month so «Месяц» restores it (the caller composes the
- * hrefs with the carried `month` query param). No client state — pure query-param
- * navigation, unauthenticated-safe.
+ * side is a real link (never a dead CTA) that adopts the DS `Button` primitive's
+ * `ghost` states (hover tint-fill / active / focus-visible ring) — the segmented
+ * toggle affordance, never a hand-assembled one-off (004 owner verdict #2 on
+ * #1052). Round-trip is loss-free: the month→week link carries the displayed month
+ * so «Месяц» restores it (the caller composes the hrefs with the carried `month`
+ * query param). No client state — pure query-param navigation, unauthenticated-safe.
  */
 export interface ViewSwitcherProps {
   active: "week" | "month";
@@ -39,12 +40,13 @@ export function ViewSwitcher({
           {weekLabel}
         </span>
       ) : (
-        <DsLink
+        <Button
           asChild
-          className="inline-flex items-center justify-center px-4.5 py-2.5 text-caption font-bold text-tint-foreground"
+          variant="ghost"
+          className="justify-center px-4.5 py-2.5 text-caption text-tint-foreground"
         >
           <Link href={weekHref}>{weekLabel}</Link>
-        </DsLink>
+        </Button>
       )}
 
       {active === "month" ? (
@@ -55,12 +57,13 @@ export function ViewSwitcher({
           {monthLabel}
         </span>
       ) : (
-        <DsLink
+        <Button
           asChild
-          className="inline-flex items-center justify-center border-l-2 border-border px-4.5 py-2.5 text-caption font-bold text-tint-foreground"
+          variant="ghost"
+          className="justify-center border-l-2 border-border px-4.5 py-2.5 text-caption text-tint-foreground"
         >
           <Link href={monthHref}>{monthLabel}</Link>
-        </DsLink>
+        </Button>
       )}
     </div>
   );

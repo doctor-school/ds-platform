@@ -266,6 +266,7 @@
       "pickerPast": "прошёл",
       "moreLink": "+{count} ещё",
       "nextMonthLink": "{month} →",
+      "prevMonthLink": "← {month}",
       "prevMonth": "Предыдущий месяц",
       "nextMonth": "Следующий месяц",
       "prevYear": "Предыдущий год",

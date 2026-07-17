@@ -1,22 +1,33 @@
+"use client";
+
 import * as React from "react";
 
 import { cn } from "../lib/utils";
+import { buttonVariants } from "../primitives/button";
 
 /**
  * Neo-brutalist 12-month picker — the month view's month chooser (004 EARS-16/17,
  * source `design-source/webinars-month.dc.html`). A native `<details>` disclosure:
- * the `<summary>` shows the displayed month («Июль 2026 ▼»); the popover carries a
- * year ‹ › stepper and a 3-column grid of the year's twelve months, each with its
- * event count («142 эфира») — an already-past month is muted («прошёл»), the
- * displayed month is filled, every other month is a link to that month's view.
+ * the `<summary>` trigger shows the displayed month («Июль 2026 ▼»); the popover
+ * carries a year ‹ › stepper and a 3-column grid of the year's twelve months, each
+ * with its event count («142 эфира») — an already-past month is muted («прошёл»),
+ * the displayed month is filled, every other month is a link to that month's view.
  *
- * A DISPLAY-ONLY unit — all data (the counts, the past/current flags), copy (the
- * month names, the count/«прошёл» notes, the accessible labels), and routing (the
- * per-month + year-step hrefs) are computed by the app and passed in. No client
- * state: the disclosure is native HTML, the navigation is plain `<a>` links
- * (server-component query-param paging, no mutation). Geometry lives HERE in the
- * SoT (the popover width, the cell paddings) off the app-forbidden arbitrary-value
- * scale; colour + type flow through tokens → light/dark flip automatically.
+ * IN-PLACE year paging (004 owner verdict #4 on #1052): the year ‹ › stepper pages
+ * the mini-calendar CLIENT-SIDE across a server-provided window of years — the
+ * popover stays open, the month cells + counters swap for the stepped year, and NO
+ * navigation fires. The window is bounded (the app hands in a fixed span of years,
+ * each with its 12 precomputed cells); stepping PAST the window edge falls back to
+ * a real server-navigation link (`prev/nextYearHref`, a whole-year ±12-month shift)
+ * so reach stays unbounded while every in-window step is instant and loss-free.
+ *
+ * The trigger + steppers adopt the `Button` primitive's `outline` state machinery
+ * (hover / active-press / focus-visible), so on the navy hero the trigger reads as
+ * a white bordered control consistent with the ‹ › month pager (004 owner verdicts
+ * #1/#2 on #1052) — never a low-contrast filled-blue summary. Geometry that is not
+ * the primitive's (the popover width, the cell paddings) lives HERE in the SoT off
+ * the app-forbidden arbitrary-value scale; colour + type flow through tokens →
+ * light/dark flip automatically.
  */
 
 /** One month cell of the picker grid. */
@@ -33,21 +44,36 @@ export interface MonthPickerCell {
   muted?: boolean;
 }
 
+/** One year of the provided paging window — its label and its twelve month cells. */
+export interface MonthPickerYear {
+  /** The year, «2026». */
+  year: string;
+  /** Exactly twelve month cells, January→December, precomputed for THIS year. */
+  months: readonly MonthPickerCell[];
+}
+
 export interface MonthPickerProps {
   /** The `<summary>` trigger text — the displayed month, «Июль 2026». */
   triggerLabel: string;
   /** The picker region's accessible name («Выбрать месяц»). */
   pickerLabel: string;
-  /** The displayed year, «2026». */
-  year: string;
-  /** The year ‹ › step targets (prev/next year of the displayed month). */
+  /**
+   * The server-provided year window (ascending) the ‹ › stepper pages across
+   * without navigation. Must contain `initialYear`.
+   */
+  years: readonly MonthPickerYear[];
+  /** The initially displayed year, «2026» — the window entry the picker opens on. */
+  initialYear: string;
+  /**
+   * Edge-fallback server-navigation targets: followed only when the ‹ › step
+   * would leave the provided window (a whole-year ±12-month shift that re-renders
+   * the pane with a re-centred window).
+   */
   prevYearHref: string;
   nextYearHref: string;
   /** Accessible names for the year ‹ › steps (the glyphs are decorative). */
   prevYearLabel: string;
   nextYearLabel: string;
-  /** Exactly twelve month cells, January→December. */
-  months: readonly MonthPickerCell[];
   /** Render the disclosure open (the showcase / axe scan — otherwise closed by default). */
   defaultOpen?: boolean;
 }
@@ -90,6 +116,40 @@ function MonthCell({ cell }: { cell: MonthPickerCell }) {
   );
 }
 
+/**
+ * The year ‹ › step control — a real `<button>` while the step stays inside the
+ * provided window (client state, popover stays open), or an `<a>` at the window
+ * edge (server navigation re-centres the window). Both adopt the `outline` button
+ * states (hover / active-press / focus-visible).
+ */
+function YearStep({
+  glyph,
+  label,
+  atEdge,
+  edgeHref,
+  onStep,
+}: {
+  glyph: string;
+  label: string;
+  atEdge: boolean;
+  edgeHref: string;
+  onStep: () => void;
+}) {
+  const className = buttonVariants({ variant: "outline", size: "sm" });
+  if (atEdge) {
+    return (
+      <a href={edgeHref} aria-label={label} className={className}>
+        <span aria-hidden="true">{glyph}</span>
+      </a>
+    );
+  }
+  return (
+    <button type="button" aria-label={label} className={className} onClick={onStep}>
+      <span aria-hidden="true">{glyph}</span>
+    </button>
+  );
+}
+
 const MonthPicker = React.forwardRef<
   HTMLDetailsElement,
   MonthPickerProps & Omit<React.HTMLAttributes<HTMLDetailsElement>, "children">
@@ -98,64 +158,85 @@ const MonthPicker = React.forwardRef<
     {
       triggerLabel,
       pickerLabel,
-      year,
+      years,
+      initialYear,
       prevYearHref,
       nextYearHref,
       prevYearLabel,
       nextYearLabel,
-      months,
       defaultOpen,
       className,
       ...props
     },
     ref,
-  ) => (
-    <details
-      ref={ref}
-      open={defaultOpen}
-      className={cn("relative", className)}
-      {...props}
-    >
-      <summary
-        aria-label={pickerLabel}
-        className="flex list-none cursor-pointer items-center justify-between gap-3 border-2 border-primary-action bg-primary-action px-5 py-3.5 text-caption font-extrabold text-primary-foreground shadow-sm outline-none focus-visible:shadow-focus [&::-webkit-details-marker]:hidden"
+  ) => {
+    const [year, setYear] = React.useState(initialYear);
+    const idx = years.findIndex((y) => y.year === year);
+    // Fall back to the initial year if state drifts out of the window (defensive).
+    const activeIdx = idx >= 0 ? idx : years.findIndex((y) => y.year === initialYear);
+    const active = years[activeIdx] ?? years[0];
+    const atStart = activeIdx <= 0;
+    const atEnd = activeIdx >= years.length - 1;
+
+    return (
+      <details
+        ref={ref}
+        open={defaultOpen}
+        className={cn("relative", className)}
+        {...props}
       >
-        {triggerLabel}
-        <span aria-hidden="true" className="text-eyebrow">
-          ▼
-        </span>
-      </summary>
-
-      <div className="absolute left-0 top-[calc(100%+0.75rem)] z-20 w-[min(320px,84vw)] border-2 border-border bg-card p-5 shadow-lg layout:w-[340px]">
-        {/* Year ‹ › stepper — steps the displayed month a whole year (±12). */}
-        <div className="mb-3.5 flex items-center justify-between">
-          <a
-            href={prevYearHref}
-            aria-label={prevYearLabel}
-            className="px-2 text-caption font-extrabold text-foreground outline-none transition-colors hover:text-primary-action focus-visible:shadow-focus"
-          >
-            <span aria-hidden="true">‹</span>
-          </a>
-          <span className="text-caption font-extrabold tracking-wide text-foreground">
-            {year}
+        <summary
+          aria-label={pickerLabel}
+          className={cn(
+            buttonVariants({ variant: "outline" }),
+            // The trigger keeps its own layout: full-width in the toolbar cell,
+            // the month label pushed left of the disclosure caret, native marker
+            // hidden. It reads as a WHITE bordered control on the navy hero
+            // (owner verdicts #1/#2) — the `outline` surface + border.
+            "w-full cursor-pointer justify-between gap-3 text-caption font-extrabold [&::-webkit-details-marker]:hidden",
+          )}
+        >
+          {triggerLabel}
+          <span aria-hidden="true" className="text-eyebrow">
+            ▼
           </span>
-          <a
-            href={nextYearHref}
-            aria-label={nextYearLabel}
-            className="px-2 text-caption font-extrabold text-foreground outline-none transition-colors hover:text-primary-action focus-visible:shadow-focus"
-          >
-            <span aria-hidden="true">›</span>
-          </a>
-        </div>
+        </summary>
 
-        <div className="grid grid-cols-3 gap-2">
-          {months.map((cell, i) => (
-            <MonthCell key={i} cell={cell} />
-          ))}
+        <div className="absolute left-0 top-[calc(100%+0.75rem)] z-20 w-[min(320px,84vw)] border-2 border-border bg-card p-5 shadow-lg layout:w-[340px]">
+          {/* Year ‹ › stepper — pages the picker a whole year IN PLACE across the
+              provided window; at the edge it server-navigates (±12 months). */}
+          <div className="mb-3.5 flex items-center justify-between">
+            <YearStep
+              glyph="‹"
+              label={prevYearLabel}
+              atEdge={atStart}
+              edgeHref={prevYearHref}
+              onStep={() => setYear(years[activeIdx - 1]!.year)}
+            />
+            <span
+              data-testid="month-picker-year"
+              className="text-caption font-extrabold tracking-wide text-foreground"
+            >
+              {active?.year}
+            </span>
+            <YearStep
+              glyph="›"
+              label={nextYearLabel}
+              atEdge={atEnd}
+              edgeHref={nextYearHref}
+              onStep={() => setYear(years[activeIdx + 1]!.year)}
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            {(active?.months ?? []).map((cell, i) => (
+              <MonthCell key={i} cell={cell} />
+            ))}
+          </div>
         </div>
-      </div>
-    </details>
-  ),
+      </details>
+    );
+  },
 );
 MonthPicker.displayName = "MonthPicker";
 

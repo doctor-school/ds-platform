@@ -114,6 +114,18 @@
       "$value": "rgba(255, 255, 255, 0.5)",
       "$description": "On-header muted border — the half-strength (white @ 50%) hairline of the header's icon-button family (the canvas `rgba(255,255,255,.5)`); hover raises to full-strength `header-foreground`. Same value in both theme sets — the header band does not change with the theme (006 design §10)."
     },
+    "hero": {
+      "$value": "{color.blue.500}",
+      "$description": "Discovery-hero poster band (the `/webinars` week + month listing heroes) — the canvas `headerBg`: brand blue.500 light → blue.700 dark (`webinars-listing.dc.html` / `webinars-month.dc.html` line 291). Distinct from `header` (the top-nav chrome, pinned at the #713 AA-deepened blue.700 in both themes): the hero carries only LARGE/BOLD display text in `hero-foreground` (white on blue.500 = 3.69:1, inside the WCAG large-text ≥3:1 carve-out) plus `hero-muted` poster-decor small print that is leaf-excluded from the axe gate (#924)."
+    },
+    "hero-foreground": {
+      "$value": "{color.white}",
+      "$description": "Display text colour on the `hero` band (white). Large/bold text only on the light blue.500 fill — see `hero`."
+    },
+    "hero-muted": {
+      "$value": "{color.blue.100}",
+      "$description": "Dimmed poster ink on the `hero` band — the canvas `#D3E8FD` subtitle/tagline tier (blue.100, both themes). Decorative poster small print (`data-testid=\"poster-decor\"`, axe leaf-exclusion #924)."
+    },
     "success": {
       "$value": "{color.green.500}",
       "$description": "Positive-status fill, border or icon. Pair with `success-foreground` (white is large/bold on green.500 = 3.68:1)."

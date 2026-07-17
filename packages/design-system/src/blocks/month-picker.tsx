@@ -118,7 +118,7 @@ const MonthPicker = React.forwardRef<
     >
       <summary
         aria-label={pickerLabel}
-        className="flex list-none cursor-pointer items-center gap-3 border-2 border-primary-action bg-primary-action px-5 py-3.5 text-caption font-extrabold text-primary-foreground shadow-sm outline-none focus-visible:shadow-focus [&::-webkit-details-marker]:hidden"
+        className="flex list-none cursor-pointer items-center justify-between gap-3 border-2 border-primary-action bg-primary-action px-5 py-3.5 text-caption font-extrabold text-primary-foreground shadow-sm outline-none focus-visible:shadow-focus [&::-webkit-details-marker]:hidden"
       >
         {triggerLabel}
         <span aria-hidden="true" className="text-eyebrow">

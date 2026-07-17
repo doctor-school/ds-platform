@@ -85,6 +85,124 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       ).toBeVisible();
     });
 
+    test(`EARS-19: canvas scale invariants — 11px pills, 118px cells, 1240px container, toolbar on hero (${theme})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto("/webinars?view=month", { waitUntil: "domcontentloaded" });
+      await applyTheme(page, theme);
+
+      const grid = page.getByTestId("month-grid-desktop");
+      await expect(grid).toBeVisible();
+
+      // Pill scale — canvas line 234: computed font-size 11px (the #1052 gate
+      // defect was the composed page falling back to base 16px).
+      const pill = grid.locator("a[href^='/webinars/']").first();
+      await expect(pill).toBeVisible();
+      expect(await pill.evaluate((el) => getComputedStyle(el).fontSize)).toBe(
+        "11px",
+      );
+
+      // Cell scale — canvas line 233: min-height 118px.
+      expect(
+        await pill.evaluate(
+          (el) => getComputedStyle(el.parentElement!.parentElement!).minHeight,
+        ),
+      ).toBe("118px");
+
+      // Page column — canvas line 33: hero + main cap at max-width 1240px.
+      const toolbar = page.getByTestId("month-toolbar");
+      expect(
+        await toolbar.evaluate(
+          (el) => getComputedStyle(el.parentElement!).maxWidth,
+        ),
+      ).toBe("1240px");
+
+      // Toolbar sits ON the hero band — canvas line 42 / 289: `main` pulls up
+      // by 60px on desktop, so the toolbar's top edge overlaps the hero.
+      const heroBox = await page.locator("main header").boundingBox();
+      const toolbarBox = await toolbar.boundingBox();
+      expect(heroBox).not.toBeNull();
+      expect(toolbarBox).not.toBeNull();
+      expect(toolbarBox!.y).toBeLessThan(heroBox!.y + heroBox!.height - 1);
+
+      // No pill leaks past its own cell box (the recorded #1052 overflow defect
+      // at 4 events/day) — every pill's border box stays inside its cell.
+      const overflows = await grid.evaluate((root) => {
+        const bad: string[] = [];
+        for (const a of root.querySelectorAll("a[href^='/webinars/']")) {
+          const cell = a.parentElement!.parentElement!;
+          const cr = cell.getBoundingClientRect();
+          const ar = a.getBoundingClientRect();
+          if (
+            ar.right > cr.right + 1 ||
+            ar.left < cr.left - 1 ||
+            ar.bottom > cr.bottom + 1
+          ) {
+            bad.push(a.textContent ?? "");
+          }
+        }
+        return bad;
+      });
+      expect(overflows).toEqual([]);
+
+      // Hero parity — canvas lines 35–38: no «МЕСЯЦ» kicker above the h1, the
+      // right-side uppercase tagline present.
+      const hero = page.locator("main header");
+      await expect(hero.getByText(/^месяц$/i)).toHaveCount(0);
+      await expect(hero.getByText("Врачи учат врачей")).toBeVisible();
+
+      // Legend row — canvas line 155: the bottom-right accent link to the
+      // nearest future month with events. Seed-deterministic: read the same
+      // per-month counts the page composes from (the portal proxies `/v1/*`)
+      // — the link renders iff a LATER month of the displayed МСК year carries
+      // events, and is absent otherwise.
+      const mskNow = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Europe/Moscow",
+        year: "numeric",
+        month: "2-digit",
+      }).formatToParts(new Date());
+      const mskYear = mskNow.find((p) => p.type === "year")!.value;
+      const mskMonth = Number(mskNow.find((p) => p.type === "month")!.value);
+      const counts = (await (
+        await page.request.get(`/v1/public/events/month-counts?year=${mskYear}`)
+      ).json()) as { month: number; count: number }[];
+      const hasFutureMonth = counts.some(
+        (c) => c.month > mskMonth && c.count > 0,
+      );
+      const nextMonthLink = page.getByTestId("next-month-link");
+      if (hasFutureMonth) {
+        await expect(nextMonthLink).toBeVisible();
+      } else {
+        await expect(nextMonthLink).toHaveCount(0);
+      }
+
+      // Pill cap (scope item 10, canvas update 2026-07-17): a desktop cell
+      // renders at most 3 event pills, live-first; a 4+-events day appends the
+      // «+N ещё» overflow link instead (the seed carries such a day).
+      const moreLink = grid.getByText(/^\+\d+ ещё$/).first();
+      await expect(moreLink).toBeVisible();
+      const capViolations = await grid.evaluate((root) => {
+        const bad: string[] = [];
+        const cells = new Set<Element>();
+        for (const a of root.querySelectorAll("a[href^='/webinars/']")) {
+          cells.add(a.parentElement!.parentElement!);
+        }
+        for (const cell of cells) {
+          const pills = cell.querySelectorAll("a[href^='/webinars/']").length;
+          const more = [...cell.querySelectorAll("a")].some((a) =>
+            /^\+\d+ ещё$/.test(a.textContent ?? ""),
+          );
+          if (pills > 3) bad.push(`cell with ${pills} pills`);
+          if (more && pills !== 3) {
+            bad.push(`overflow cell with ${pills} pills`);
+          }
+        }
+        return bad;
+      });
+      expect(capViolations).toEqual([]);
+    });
+
     test(`EARS-19: mobile dot-grid + agenda render and day selection works (${theme})`, async ({
       page,
     }) => {

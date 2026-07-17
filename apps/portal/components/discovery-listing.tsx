@@ -109,23 +109,31 @@ export default async function DiscoveryListing({
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <header className="bg-header text-header-foreground">
-        <Container className="py-10 layout:py-16">
-          <p
-            className="text-2xs font-extrabold uppercase tracking-micro opacity-80"
+      {/* Poster hero — `webinars-listing.dc.html` lines 42–49 (#1065 item 6:
+          the hero is shared with the month view): the `hero` band (blue.500
+          light / blue.700 dark), NO kicker, h1 + subtitle left, the uppercase
+          tagline bottom-right. */}
+      <header className="bg-hero text-hero-foreground">
+        <Container className="flex flex-wrap items-end justify-between gap-8 py-10 layout:py-12">
+          <div>
+            <h1 className="text-3xl leading-none font-extrabold tracking-tight text-balance layout:text-4xl">
+              {t("title")}
+            </h1>
+            <p
+              className="mt-4 text-body-compact font-semibold text-hero-muted"
+              data-testid="poster-decor"
+            >
+              {t("subtitle")}
+            </p>
+          </div>
+          <div
+            className="pb-1.5 text-xs leading-loose font-extrabold uppercase tracking-micro text-hero-muted"
             data-testid="poster-decor"
           >
-            {t("breadcrumb")}
-          </p>
-          <h1 className="mt-6 text-3xl font-extrabold tracking-tight text-balance layout:text-5xl">
-            {t("title")}
-          </h1>
-          <p
-            className="mt-4 text-caption font-semibold opacity-90"
-            data-testid="poster-decor"
-          >
-            {t("subtitle")}
-          </p>
+            {t("taglineTop")}
+            <br />
+            <span className="text-hero-foreground">{t("taglineBottom")}</span>
+          </div>
         </Container>
       </header>
 
@@ -154,7 +162,10 @@ export default async function DiscoveryListing({
         ) : (
           <div className="flex flex-col gap-8 layout:gap-12">
             {groups.map((group) => (
-              <section key={group.key}>
+              // `id="day-YYYY-MM-DD"` — the month grid's «+N ещё» overflow link
+              // targets this day's group (#1065 item 10, owner decision:
+              // `/webinars?month=…#day-YYYY-MM-DD`, anchors only).
+              <section key={group.key} id={`day-${group.key}`}>
                 {/* Mobile: full-bleed day band; desktop: label + 2px ink rule. */}
                 <DayBand className="-mx-4 layout:hidden">{group.label}</DayBand>
                 <div className="hidden layout:mb-6 layout:flex layout:items-baseline layout:gap-4">

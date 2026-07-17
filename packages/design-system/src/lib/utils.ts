@@ -3,8 +3,9 @@ import { extendTailwindMerge } from "tailwind-merge";
 
 /**
  * Our design tokens add font-size utilities that tailwind-merge does not ship in
- * its default config: `text-2xs`, `text-caption`, `text-body-compact` (the custom
- * `--text-*` theme keys generated from `tokens/*.json`). tailwind-merge classifies
+ * its default config: `text-2xs`, `text-eyebrow`, `text-caption`,
+ * `text-body-compact`, `text-title-lg` (the custom `--text-*` theme keys
+ * generated from `tokens/*.json`). tailwind-merge classifies
  * an unknown `text-*` class into the **text-COLOUR** group by default — so a
  * naïve `twMerge` treats `text-caption` as a colour and, in a `cn(...)` where a
  * colour and a size co-occur (e.g. a `sm` button = `text-primary-foreground` +
@@ -16,12 +17,18 @@ import { extendTailwindMerge } from "tailwind-merge";
  * treat them as sizes, not colours, so a size + a colour are different groups and
  * BOTH survive. This fixes the whole class of size×colour collisions across every
  * primitive, not just the one button. The default sizes (`xs`/`sm`/`base`/`lg`/…)
- * are already recognised; only the tokens-added names are registered here.
+ * are already recognised; only the tokens-added names are registered here. The
+ * list is the COMPLETE set of custom `--text-*` theme keys in `tokens.css` — an
+ * unregistered size is silently eaten by the next colour in the same `cn()`
+ * (`text-eyebrow` + `text-tint-foreground` stripped the 11px scale off every
+ * composed month-grid pill, the #1052 → #1065 rework defect).
  */
 const twMerge = extendTailwindMerge({
   extend: {
     classGroups: {
-      "font-size": [{ text: ["2xs", "caption", "body-compact"] }],
+      "font-size": [
+        { text: ["2xs", "eyebrow", "caption", "body-compact", "title-lg"] },
+      ],
     },
   },
 });

@@ -507,6 +507,27 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:migration-index
 
+  # audit-coverage: universal edit-audit coverage guard (010 EARS-8, #1089).
+  # Spec 010 audits every domain-table mutation via one generic PL/pgSQL trigger
+  # attached per table by migration; the owner-confirmed requirement is that a
+  # NEW domain table cannot silently ship WITHOUT that trigger. This guard
+  # asserts every `pgTable` in packages/db/src/schema is EITHER covered by an
+  # `audit_row_change()` trigger in apps/api/drizzle/*.sql OR carries a
+  # rationale-bearing AUDIT_CAPTURE_ALLOWLIST entry (packages/db/src/audit.ts) —
+  # red on any table in neither set. Static source scan — no PR/gh context.
+  # Excluded from the `ci` meta-job needs-list while WARN.
+  audit-coverage:
+    needs: setup
+    continue-on-error: true # WARN v1 — promote to BLOCK per ADR-0007 §2.6 promotion policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:audit-coverage
+
   # showcase-coverage: the design-system living showcase (apps/showcase) is the
   # rendered viewer of @ds/design-system — it must stay *living*. This guard
   # asserts every package COMPONENT export has a catalogued entry in the showcase

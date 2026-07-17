@@ -29,6 +29,7 @@
     "hero": { "$value": "{color.blue.700}" },
     "success": { "$value": "{color.green.400}" },
     "success-foreground": { "$value": "{color.neutral.950}" },
+    "success-text": { "$value": "{color.green.400}" },
     "success-tint": { "$value": "#0e2a1c" },
     "warning": { "$value": "{color.amber.400}" },
     "warning-tint": { "$value": "#332612" },

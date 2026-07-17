@@ -760,6 +760,89 @@ function FormPrimitivesSection() {
 }
 
 /**
+ * The success field demo (#529, source §07 `Success` cell) — a verified field: the
+ * `FormControl` wires the label + ids, the `Input` carries the green `data-success`
+ * border + `success-tint` fill, and the `FormMessage success` renders the `✓ Адрес
+ * подтверждён` confirmation. A real RHF context so it mounts exactly as on a form.
+ */
+function SuccessFieldDemo() {
+  const form = useForm<FieldValues>({
+    defaultValues: { verified: "anna@nmic.ru" },
+    mode: "onTouched",
+  });
+  return (
+    <Form {...form}>
+      <form className="w-full" onSubmit={(e) => e.preventDefault()}>
+        <FormField
+          name="verified"
+          control={form.control}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Email</FormLabel>
+              <FormControl>
+                <Input data-success="true" {...field} />
+              </FormControl>
+              <FormMessage success>Адрес подтверждён</FormMessage>
+            </FormItem>
+          )}
+        />
+      </form>
+    </Form>
+  );
+}
+
+/**
+ * Field states (#529, source §07 «Формы и валидация») — the three states deferred
+ * from #512: a required-marked label (destructive `*`), a filled input (`hairline` →
+ * ink `border` once it holds a value), and a success field (green `success` border +
+ * `success-tint` fill + `✓` confirmation). Rendered in BOTH themes — `success` /
+ * `border` / `success-tint` are theme-flipping semantic tokens, so a single-theme
+ * render proves only half the contract.
+ */
+function FieldStatesSection() {
+  return (
+    <PrimitiveSection
+      title="Field states (source §07)"
+      exportsLine="Label required · Input filled → ink border · FormMessage success"
+    >
+      <SubRow label="Required label · Filled input · Success — light + dark">
+        <ThemePair
+          render={(theme) => (
+            // `text-foreground` establishes the panel's theme-flipped ink baseline so
+            // the raw <Label>s inside consume the forced `.light`/`.dark` foreground
+            // token (a bare label would otherwise inherit the page-theme ink literal).
+            <div className="flex w-full flex-col gap-6 text-foreground">
+              <Cell label="required label + filled input (ink border)">
+                <div className="flex w-full flex-col gap-2.5">
+                  <Label htmlFor={`fs-req-${theme}`} required>
+                    Email
+                  </Label>
+                  <Input
+                    id={`fs-req-${theme}`}
+                    className="w-full"
+                    defaultValue="anna@nmic.ru"
+                  />
+                </div>
+              </Cell>
+              <Cell label="empty input (hairline border)">
+                <Input
+                  aria-label={`Empty sample (${theme})`}
+                  className="w-full"
+                  placeholder="you@example.com"
+                />
+              </Cell>
+              <Cell label="success (verified)">
+                <SuccessFieldDemo />
+              </Cell>
+            </div>
+          )}
+        />
+      </SubRow>
+    </PrimitiveSection>
+  );
+}
+
+/**
  * The new-language primitives (#513, source §05–§08) each carry theme-flipping
  * SEMANTIC tokens, so a single-theme render proves only half the contract. Every
  * §513 section renders its states TWICE — a light panel and a dark panel side by
@@ -1469,6 +1552,7 @@ export function PrimitivesView() {
       <OtpSection />
       <FormPrimitivesSection />
       <FieldsSection />
+      <FieldStatesSection />
       <FilterChipSection />
       <BadgeSection />
       <AvatarSection />

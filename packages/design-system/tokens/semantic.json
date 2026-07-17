@@ -138,6 +138,10 @@
       "$value": "{color.white}",
       "$description": "Text and icon colour on a `success` fill."
     },
+    "success-text": {
+      "$value": "{color.green.700}",
+      "$description": "Success as FOREGROUND TEXT on a neutral surface — the inline field success confirmation (`FormMessage success`, source §07 `✓ <msg>`). The green mirror of `destructive-text` (#529): the `success` FILL (green.500 #009959) as TEXT is only 3.68:1 on the white card, so the confirmation message rides its own darker green (light green.700 #047857, 5.49:1) while the border + ✓-on-tint keep the brand green.500. Dark lifts to the brighter green.400 (same as the `success` fill) for AA on the near-black card. Pair on `background` / `card`, never as a fill foreground."
+    },
     "success-tint": {
       "$value": "#e6f6ee",
       "$description": "Pale-green success surface behind a success callout/alert — the source's success tint. Carries normal `foreground` ink; the `success` border + ✓ icon carry the semantic. Theme-aware: pale-green light → deep-green dark."

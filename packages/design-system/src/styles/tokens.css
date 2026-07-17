@@ -13,6 +13,7 @@
   --color-blue-800: #0d3a77;
   --color-green-400: #4ade80;
   --color-green-500: #009959;
+  --color-green-700: #047857;
   --color-orange-500: #df5726;
   --color-amber-400: #f5b740;
   --color-amber-500: #b5791a;
@@ -71,6 +72,7 @@
   --color-hero-muted: #d3e8fd;
   --color-success: #009959;
   --color-success-foreground: #ffffff;
+  --color-success-text: #047857;
   --color-success-tint: #e6f6ee;
   --color-warning: #b5791a;
   --color-warning-foreground: oklch(0.16 0.02 250);
@@ -246,6 +248,7 @@
   --color-hero-muted: #d3e8fd;
   --color-success: #4ade80;
   --color-success-foreground: oklch(0.16 0.02 250);
+  --color-success-text: #4ade80;
   --color-success-tint: #0e2a1c;
   --color-warning: #f5b740;
   --color-warning-foreground: oklch(0.16 0.02 250);
@@ -299,6 +302,7 @@
   --color-hero-muted: #d3e8fd;
   --color-success: #009959;
   --color-success-foreground: #ffffff;
+  --color-success-text: #047857;
   --color-success-tint: #e6f6ee;
   --color-warning: #b5791a;
   --color-warning-foreground: oklch(0.16 0.02 250);
@@ -352,6 +356,7 @@
   --color-hero-muted: var(--color-hero-muted);
   --color-success: var(--color-success);
   --color-success-foreground: var(--color-success-foreground);
+  --color-success-text: var(--color-success-text);
   --color-success-tint: var(--color-success-tint);
   --color-warning: var(--color-warning);
   --color-warning-foreground: var(--color-warning-foreground);

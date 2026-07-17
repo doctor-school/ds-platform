@@ -277,6 +277,27 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
         theme === "light" ? "rgb(45, 132, 242)" : "rgb(17, 77, 158)",
       );
 
+      // Header AA (owner pick, #1083 Mode-a): on the blue.500 light band the
+      // nav runs at the WCAG large-text tier — computed size ≥ 18.67px at
+      // weight ≥ 700 (white on #2D84F2 = 3.69:1 clears only the large/bold
+      // ≥3:1 carve-out) — and the white chips carry the canvas navy ink
+      // #114D9E in BOTH themes (8.14:1 on white).
+      const navLink = page.getByTestId("shell-nav-broadcasts");
+      const navStyle = await navLink.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return { size: parseFloat(cs.fontSize), weight: Number(cs.fontWeight) };
+      });
+      expect(navStyle.size).toBeGreaterThanOrEqual(18.67);
+      expect(navStyle.weight).toBeGreaterThanOrEqual(700);
+      const loginChip = page.getByTestId("shell-login");
+      await expect(loginChip).toBeVisible(); // guest run (cookies cleared)
+      const chipStyle = await loginChip.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return { color: cs.color, bg: cs.backgroundColor };
+      });
+      expect(chipStyle.color).toBe("rgb(17, 77, 158)");
+      expect(chipStyle.bg).toBe("rgb(255, 255, 255)");
+
       // Live-pill weight — canvas evLive (owner verdict #3 at #1052, #1080):
       // the red pill's `time · title` run computes weight 700 like a planned
       // pill (the seed carries a live event today).

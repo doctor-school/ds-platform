@@ -61,8 +61,10 @@ import { useHeaderAuth } from "@/lib/header-auth";
  * below their own resting tier (#270: element opacity, never a
  * foreground-colour opacity); white chips follow the DS Button neo-brutalist
  * press (`button.tsx` base: sink deeper than hover + drop the shadow) with the
- * ink pinned to full-strength `header` (kills the primitive's press tint,
- * which goes near-white on the white chip in dark theme). registry-research (build-ui-from-design-system):
+ * ink pinned to full-strength `header-chip-foreground` — the canvas navy
+ * #114D9E in BOTH themes (kills the primitive's press tint, which goes
+ * near-white on the white chip in dark theme; #1083 Mode-a: the light `header`
+ * itself is blue.500 and would fail normal-text AA as chip ink). registry-research (build-ui-from-design-system):
  * shadcn navigation-menu, Origin UI, Intent/Jolly, Kibo — none ship the branded
  * neo-brutalist inverted app bar; bespoke composition (see PR).
  */
@@ -91,16 +93,20 @@ const avatarFallbackIcon = <UserRound aria-hidden="true" className="size-5" />;
 /** «Войти» chip — white-on-blue neo-brutalist button (canvas), token-only.
  *  Chain: rest (shadow-btn) → hover (sink 1px, shadow-btn-hover) → press (sink
  *  2px, shadow-none — the DS Button press language scaled to the chip's 1px
- *  hover; ink pinned to full `header`). */
+ *  hover). Ink = `header-chip-foreground` (the canvas navy #114D9E in BOTH
+ *  themes, 8.14:1 on white — never `header`, which is blue.500 in light and
+ *  fails normal-text AA on the white chip; #1083 Mode-a), pinned full-strength
+ *  on press. */
 const LOGIN_CHIP =
-  "inline-flex flex-none items-center justify-center bg-header-foreground px-6 py-3 text-sm font-bold text-header shadow-btn hover:no-underline hover:translate-x-px hover:translate-y-px hover:shadow-btn-hover active:translate-x-0.5 active:translate-y-0.5 active:shadow-none active:text-header";
+  "inline-flex flex-none items-center justify-center bg-header-foreground px-6 py-3 text-sm font-bold text-header-chip-foreground shadow-btn hover:no-underline hover:translate-x-px hover:translate-y-px hover:shadow-btn-hover active:translate-x-0.5 active:translate-y-0.5 active:shadow-none active:text-header-chip-foreground";
 
 /** Initials avatar icon — white-on-blue chip, an icon-LINK to `/account`
- *  (EARS-5/6: not a dropdown, no «Выйти»). Same chip chain as «Войти»: rest →
- *  hover sinks 1px with shadow-btn-hover → press sinks 2px and drops the
- *  shadow (Stage-B round 2: the chip previously had NO visible hover delta). */
+ *  (EARS-5/6: not a dropdown, no «Выйти»). Same chip chain + navy ink as
+ *  «Войти»: rest → hover sinks 1px with shadow-btn-hover → press sinks 2px and
+ *  drops the shadow (Stage-B round 2: the chip previously had NO visible hover
+ *  delta). */
 const AVATAR_CHIP =
-  "inline-flex size-10 flex-none items-center justify-center bg-header-foreground text-sm font-extrabold text-header shadow-btn hover:no-underline hover:translate-x-px hover:translate-y-px hover:shadow-btn-hover active:translate-x-0.5 active:translate-y-0.5 active:shadow-none active:text-header";
+  "inline-flex size-10 flex-none items-center justify-center bg-header-foreground text-sm font-extrabold text-header-chip-foreground shadow-btn hover:no-underline hover:translate-x-px hover:translate-y-px hover:shadow-btn-hover active:translate-x-0.5 active:translate-y-0.5 active:shadow-none active:text-header-chip-foreground";
 
 export function AppShellHeader() {
   const t = useTranslations("shell");
@@ -188,7 +194,7 @@ export function AppShellHeader() {
               primitive); its own focus ring uses the DS `shadow-focus` token. */}
           <summary
             aria-label={t("menu")}
-            className="inline-flex size-11 flex-none cursor-pointer list-none items-center justify-center bg-header-foreground text-xl font-extrabold text-header shadow-btn focus-visible:outline-none focus-visible:shadow-focus [&::-webkit-details-marker]:hidden"
+            className="inline-flex size-11 flex-none cursor-pointer list-none items-center justify-center bg-header-foreground text-xl font-extrabold text-header-chip-foreground shadow-btn focus-visible:outline-none focus-visible:shadow-focus [&::-webkit-details-marker]:hidden"
           >
             <span aria-hidden="true">≡</span>
           </summary>
@@ -230,7 +236,10 @@ export function AppShellHeader() {
 
 /** Desktop nav link — canvas active treatment (resting underline, full-strength)
  *  vs the muted inactive tier (element opacity, AA-safe — never a text-colour
- *  opacity, #270). States are owned by the composed DS `Link` primitive, except
+ *  opacity, #270). Sized at the WCAG large-text tier (`text-xl` = 20px ≥
+ *  18.67px at weight 700 — owner pick, #1083 Mode-a): white on the light
+ *  blue.500 `header` band is 3.69:1, which clears AA only via the large/bold
+ *  ≥3:1 carve-out. States are owned by the composed DS `Link` primitive, except
  *  the press colour: the base `active:text-primary-action/80` is blue.700 = the
  *  `header` band itself, so pressing painted the label invisible for the whole
  *  click-through (#1007 Stage-B round 1) — re-anchored to full-strength
@@ -253,7 +262,7 @@ function NavLink({
     <DsLink
       asChild
       className={cn(
-        "font-bold text-header-foreground active:text-header-foreground",
+        "text-xl font-bold text-header-foreground active:text-header-foreground",
         active
           ? "underline decoration-2 active:opacity-80"
           : "no-underline opacity-80 active:opacity-60",

@@ -65,6 +65,7 @@
   --color-chip-border: #aed4fb;
   --color-header: #2d84f2;
   --color-header-foreground: #ffffff;
+  --color-header-chip-foreground: #114d9e;
   --color-header-hairline: rgba(255, 255, 255, 0.5);
   --color-hero: #2d84f2;
   --color-hero-foreground: #ffffff;
@@ -240,6 +241,7 @@
   --color-chip-border: rgba(107, 177, 247, 0.45);
   --color-header: #114d9e;
   --color-header-foreground: #ffffff;
+  --color-header-chip-foreground: #114d9e;
   --color-header-hairline: rgba(255, 255, 255, 0.5);
   --color-hero: #114d9e;
   --color-hero-foreground: #ffffff;
@@ -293,6 +295,7 @@
   --color-chip-border: #aed4fb;
   --color-header: #2d84f2;
   --color-header-foreground: #ffffff;
+  --color-header-chip-foreground: #114d9e;
   --color-header-hairline: rgba(255, 255, 255, 0.5);
   --color-hero: #2d84f2;
   --color-hero-foreground: #ffffff;
@@ -346,6 +349,7 @@
   --color-chip-border: var(--color-chip-border);
   --color-header: var(--color-header);
   --color-header-foreground: var(--color-header-foreground);
+  --color-header-chip-foreground: var(--color-header-chip-foreground);
   --color-header-hairline: var(--color-header-hairline);
   --color-hero: var(--color-hero);
   --color-hero-foreground: var(--color-hero-foreground);

@@ -114,6 +114,10 @@
       "$value": "{color.white}",
       "$description": "Text, logo and icon colour on the `header` band (white)."
     },
+    "header-chip-foreground": {
+      "$value": "{color.blue.700}",
+      "$description": "Ink on the WHITE on-header chips (Войти / avatar / the mobile ≡) — the deep brand navy, the SAME value in both theme sets (every vendored canvas renders the header chips `color:#114D9E;background:#fff` regardless of theme — e.g. `webinars-month.dc.html` line 27). Deliberately NOT `header` (the light band is blue.500 — 3.69:1 on white fails normal-text AA) and NOT `primary-action` (lifts to a light blue in dark): blue.700 on white is 8.14:1 in both themes (#1083)."
+    },
     "header-hairline": {
       "$value": "rgba(255, 255, 255, 0.5)",
       "$description": "On-header muted border — the half-strength (white @ 50%) hairline of the header's icon-button family (the canvas `rgba(255,255,255,.5)`); hover raises to full-strength `header-foreground`. Same value in both theme sets — white @ 50% reads on both the light (blue.500) and dark (blue.700) header fills."

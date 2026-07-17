@@ -104,7 +104,10 @@ OTP-login `loginWith…` returns a **checked `IdpSession`** — the same shape
 once in `idp/idp.module.ts`:
 
 - **`ZitadelIdpClient`** (`idp/zitadel.idp.ts`) — real User v2 API adapter, bound
-  when `IDP_ISSUER` + `IDP_SERVICE_TOKEN` are set.
+  when `IDP_ISSUER` + `IDP_SERVICE_TOKEN` are set. The live-proven Zitadel wire
+  shapes and behaviour invariants it encodes (`CreateUser` body, role grant,
+  email-requires invariant, `verifysmsotp` limits, delivery-mode verification)
+  are pinned in [`idp/README.md`](./idp/README.md).
 - **`FakeIdpClient`** (`idp/idp.fake.ts`) — in-memory, the default when no
   service token is configured (the dev-stand). Lets the full cascade + login run
   against a real Postgres without a live IdP, which is exactly what the e2e

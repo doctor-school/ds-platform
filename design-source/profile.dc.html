@@ -357,7 +357,7 @@ class Component extends DCLogic {
       toggleTheme: () => this.setState(s => { const dark = !s.dark; try { localStorage.setItem('ds-theme', dark ? 'dark' : 'light'); } catch (e) {} return { dark }; }),
       themeIcon: d ? '☀' : '☾',
       pageBg: d ? 'oklch(.16 .02 250)' : '#fff',
-      headerBg: d ? '#114D9E' : '#2D84F2',
+      headerBg: '#114D9E',
       headerShadow: d ? 'oklch(.16 .02 250)' : '#114D9E',
       surface, ink, border, shadow, accent, btnBg, btnFg, inkMuted, inkFaint, hoverBg, zoneBg,
       posterPadOverlap: m ? 'clamp(28px,6vw,52px) 16px 24px' : 'clamp(36px,6vw,52px) clamp(16px,4vw,48px) 108px',

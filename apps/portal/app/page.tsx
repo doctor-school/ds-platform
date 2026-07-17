@@ -1,19 +1,16 @@
-import DiscoveryListing from "@/components/discovery-listing";
+import { permanentRedirect } from "next/navigation";
 
 /**
- * 008 EARS-7/8/9 — `/` is the canonical public discovery front-door AND the
- * post-login landing: it renders the feature-004 upcoming-broadcasts listing
- * (the shared `DiscoveryListing` component) identically for a guest and a
- * logged-in doctor, never branching on auth (only the persistent app-shell
- * header's account affordance does). This retires the former #769 redirect to
- * `/webinars` and the 003-era «Каркас приложения» scaffold — `/` now serves the
- * listing in place, one level up, rather than forwarding to it.
- *
- * `dynamic` cannot live on the shared component, so it is re-declared here (a
- * lifecycle transition can add/remove a card — a static prerender would go stale).
+ * 004 / 008 EARS-7/8/9 — `/` permanent-redirects to the canonical discovery
+ * route `/webinars` (owner verdict #7 follow-up, 2026-07-17). Two routes serving
+ * the same upcoming-broadcasts listing was the defect itself: nav «Эфиры» + the
+ * logo now point straight at `/webinars` (`app-shell-header` `DISCOVERY_HREF`),
+ * so the calendar shell with its «Неделя / Месяц» switchers is always reached at
+ * ONE canonical URL. Any bookmark or deep-link to `/` lands on that same page;
+ * `/` carries no query params today, so nothing is preserved across the hop.
+ * This retires the former in-place `DiscoveryListing` render on `/` (a second,
+ * switcher-less hero that diverged from `/webinars`).
  */
-export const dynamic = "force-dynamic";
-
 export default function HomePage() {
-  return <DiscoveryListing />;
+  permanentRedirect("/webinars");
 }

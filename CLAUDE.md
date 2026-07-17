@@ -49,14 +49,14 @@ Then the §3.2 entry point (kind / artifact / skill). A handoff-resumed session 
 
 ## PR-review subagent (Mode a)
 
-`feature-dev:code-reviewer` has no Bash/`gh`. Dispatch `ds-reviewer` (`.claude/agents/ds-reviewer.md` — Opus, read-only + `gh`, can `gh pr diff` a branch not in the tree); fallback `general-purpose` (Opus) if project agents are unavailable.
+`feature-dev:code-reviewer` has no Bash/`gh`. Dispatch `ds-reviewer` (`.claude/agents/ds-reviewer.md` — Opus, read-only + `gh`, can `gh pr diff` a branch not in the tree); fallback `general-purpose` `model: opus` if project agents are unavailable.
 
 ## Subagent context economy
 
 A subagent's final message lands in the lead's context and is re-read until session end — that, not dispatch count, burns the limit.
 
 1. Return contract in every brief: final message = verdict / diff summary / artifact paths, ≤30 lines; heavy content → file or PR comment, never the reply. Scaffold IMPL briefs with `pnpm dispatch:brief <issue-N>` (skeleton seeded from the Issue + worktree diff).
-2. Model routing: mechanical fan-out (find/enumerate/collect) → `ds-explorer` (Sonnet, read-only); judgment (Mode-a review, architecture) → Opus (`ds-reviewer` / `general-purpose`).
+2. Model routing: mechanical fan-out (find/enumerate/collect) → `ds-explorer` (Sonnet, read-only); judgment (Mode-a review, architecture, implementation, spec work) → Opus: `ds-reviewer`, or `general-purpose` with EXPLICIT `model: opus` on every dispatch. Inheriting the session model is forbidden — a Fable-led session silently spawns Fable subagents; Fable is never a subagent model.
 3. Browser payloads are dispatched — interactive Playwright runs inside a subagent, not the lead (`.claude/rules/dev-stand.md`).
 4. Lead-only tools are never delegated — a tool absent from the subagent environment (DesignSync, …) the lead runs itself BEFORE dispatch; the subagent gets only the mechanical follow-on. A dispatch that dead-ends on a lead-only tool is a guaranteed block.
 5. Briefs in English; RU only where the RU string is itself the artifact. User-facing replies stay RU.

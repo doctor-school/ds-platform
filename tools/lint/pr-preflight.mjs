@@ -72,6 +72,12 @@ export const GUARDS = [
  * `docs-build` job already fails hard-red in CI on a malformed frontmatter YAML
  * block (fumadocs compile), so this guard is the LOCAL pre-push mirror of that
  * existing gate — its `name` labels the local run, not a CI job.
+ *
+ * A WARN-posture guard (ADR-0007 §2.6) carries its own severity in its EXIT CODE
+ * — it prints findings and exits 0 while in WARN, exiting non-zero only for its
+ * BLOCK class (e.g. `primitives-first`, #1108 rework). So this harness needs no
+ * WARN tier: exit 0 → PASS, exit non-zero → FAIL, uniformly. A guard that must
+ * hard-block wires that into its own exit code, never into `continue-on-error`.
  */
 /**
  * The PRE-MERGE gate family — guards whose evidence exists only at MERGE time,
@@ -227,6 +233,10 @@ export function mergeGateForwardArgs(argv, runMergeGate) {
 
 /**
  * Fold per-guard results into an overall verdict + printable report lines.
+ * A guard carries WARN posture in its OWN exit code (prints findings, exits 0
+ * while in WARN — ADR-0007 §2.6), so the harness is a uniform PASS/FAIL fold:
+ * exit 0 → PASS, non-zero → FAIL. No WARN tier here — that would mask a guard's
+ * BLOCK exit (the #1108 rework moved severity into the tool exit code).
  * @param {{name: string, status: number}[]} results
  * @returns {{ok: boolean, lines: string[]}} `ok` iff every guard exited 0.
  */

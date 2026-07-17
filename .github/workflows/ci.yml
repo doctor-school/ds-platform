@@ -599,15 +599,18 @@ jobs:
 
   # primitives-first: a bespoke hover:/active:/focus-visible: utility stack on a
   # RAW interactive element (<a>/<button>/<input>/… or the file's next/link
-  # default import under ANY alias) in product-app UI source must compose the
-  # @ds/design-system primitive that owns the interaction contract instead
-  # (AGENTS.md §6 adopt-before-bespoke; the #818 aliased-NextLink gap that
-  # interaction-states scope (c) missed — #828). Reasoned per-occurrence opt-out:
-  # `primitives-first-ok: <reason>`. Static source scan — no PR/gh context
-  # needed. WARN per ADR-0007 §2.6.
+  # default import under ANY alias), plus (#1103) summary/details/role=button
+  # raw hosts and DS-primitive SHELLs whose className rebuilds the look, in
+  # product-app UI source must compose the @ds/design-system primitive that owns
+  # the interaction contract + identity instead (AGENTS.md §6 adopt-before-
+  # bespoke; #818/#828/#1103). Reasoned per-occurrence opt-out:
+  # `primitives-first-ok: <reason>`. Static source scan — no PR/gh context needed.
+  # WARN semantics live in the TOOL EXIT CODE, NOT continue-on-error (ADR-0007
+  # §2.6): the #1103 WARN classes print findings + exit 0 (check-run stays green,
+  # so a standing-WARN finding never blocks merge:gate — #1108); only the #828
+  # raw-state BLOCK class (zero in-repo today) exits 1.
   primitives-first:
     needs: setup
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

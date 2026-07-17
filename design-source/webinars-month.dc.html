@@ -213,7 +213,7 @@ class Component extends DCLogic {
     data[18] = { events: [ ev('18:00','Школа эндокринологии','СД 2 типа: старт инсулинотерапии',{ href:'Вебинар.dc.html' }) ] };
     data[19] = { weekend: true }; data[20] = { weekend: true };
     data[21] = { events: [ ev('19:00','Школа неврологии','Мигрень: CGRP-терапия',{ href:'Вебинар.dc.html' }) ] };
-    data[22] = { events: [ ev('18:00','Школа гематологии','ЖДА у беременных',{ href:'Вебинар.dc.html' }), ev('20:00','Школа травматологии','Артроскопия коленного сустава',{ href:'Вебинар.dc.html' }) ] };
+    data[22] = { events: [ ev('18:00','Школа гематологии','ЖДА у беременных',{ href:'Вебинар.dc.html' }), ev('19:00','Школа неврологии','Инсульт: тромболизис',{ href:'Вебинар.dc.html' }), ev('20:00','Школа травматологии','Артроскопия коленного сустава',{ href:'Вебинар.dc.html' }), ev('20:30','Школа кардиологии','Липидснижающая терапия',{ href:'Вебинар.dc.html' }), ev('21:00','Школа педиатрии','Вакцинация недоношенных',{ href:'Вебинар.dc.html' }) ] };
     data[23] = { events: [ ev('19:00','Школа пульмонологии','ХОБЛ: тройная терапия',{ href:'Вебинар.dc.html' }) ] };
     data[24] = { events: [ ev('18:30','Школа дерматологии','Меланома: скрининг и настороженность',{ href:'Вебинар.dc.html' }) ] };
     data[25] = { events: [ ev('17:00','Школа педиатрии','Лихорадка без очага у детей',{ href:'Вебинар.dc.html' }) ] };
@@ -237,7 +237,10 @@ class Component extends DCLogic {
       const info = c.out ? {} : (data[c.d] || {});
       const today = !!info.today, past = !!info.past, weekend = !!info.weekend || c.out;
       const empty = c.out || (!info.events && !past);
-      const events = (info.events || []).map(e => ({ href: e.href, text: (e.live ? '🔴 ' : '') + e.time + ' · ' + e.title, style: e.live ? evLive : evPill }));
+      const all = (info.events || []).slice().sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0));
+      const MAX = 3;
+      const events = all.slice(0, MAX).map(e => ({ href: e.href, text: (e.live ? '🔴 ' : '') + e.time + ' · ' + e.title, style: e.live ? evLive : evPill }));
+      if (all.length > MAX) events.push({ href: 'Эфиры.dc.html', text: '+' + (all.length - MAX) + ' ещё', style: 'display:block;margin-top:6px;padding:4px 8px;font-size:11px;font-weight:800;color:' + accent + ';text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px' });
       return {
         cellStyle: cellBase + (weekend || empty ? ';background:' + mutedCellBg : '') + (today ? ';outline:3px solid ' + btnBg + ';outline-offset:-3px;position:relative' : ''),
         dateStyle: today ? 'font-size:13px;font-weight:800;color:' + btnFg + ';background:' + btnBg + ';padding:2px 8px'

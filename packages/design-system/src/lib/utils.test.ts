@@ -29,7 +29,7 @@ describe("cn() keeps a custom font-size AND a text colour (no group collision)",
     expect(out).not.toMatch(/(?:^|\s)text-sm(?:\s|$)/);
   });
 
-  it.each(["2xs", "caption", "body-compact"])(
+  it.each(["2xs", "caption", "body-compact", "eyebrow", "title-lg"])(
     "keeps text-%s alongside a colour",
     (size) => {
       const out = cn("text-destructive-foreground", `text-${size}`);
@@ -37,6 +37,18 @@ describe("cn() keeps a custom font-size AND a text colour (no group collision)",
       expect(out).toContain(`text-${size}`);
     },
   );
+
+  /**
+   * The #1052/#1065 regression: the month-grid pill composes `text-eyebrow`
+   * (11px) BEFORE its state colour (`text-tint-foreground` / the live pair) —
+   * with `eyebrow` unregistered, tailwind-merge classified it as a COLOUR and
+   * dropped it, so every composed pill fell back to the inherited 16px.
+   */
+  it("keeps text-eyebrow when a colour follows it (month-grid pill order)", () => {
+    const out = cn("text-eyebrow", "text-tint-foreground");
+    expect(out).toContain("text-eyebrow");
+    expect(out).toContain("text-tint-foreground");
+  });
 });
 
 /**

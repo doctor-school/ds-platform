@@ -276,6 +276,24 @@ export function formatAgendaDayTitle(isoDay: string): string {
 }
 
 /** The МСК start time of an entry, e.g. `19:00` (EARS-12). */
+/** The desktop day-cell pill cap (canvas update 2026-07-17, #1065 item 10). */
+export const DAY_PILL_CAP = 3;
+
+/**
+ * Cap a day's entries for the desktop grid: at most `max` pills, LIVE events
+ * sorted first (stable — backend nearest-first order preserved otherwise); the
+ * folded remainder count drives the «+N ещё» overflow link.
+ */
+export function capDayEntries(
+  entries: readonly MonthBroadcastEntry[],
+  max: number = DAY_PILL_CAP,
+): { visible: MonthBroadcastEntry[]; overflow: number } {
+  const sorted = [...entries].sort(
+    (a, b) => Number(b.state === "live") - Number(a.state === "live"),
+  );
+  return { visible: sorted.slice(0, max), overflow: Math.max(0, sorted.length - max) };
+}
+
 export function entryTime(entry: MonthBroadcastEntry): string {
   return formatMskParts(entry.startsAt).time;
 }

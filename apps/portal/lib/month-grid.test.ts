@@ -3,6 +3,7 @@ import type { MonthBroadcastEntry } from "@ds/schemas";
 
 import {
   buildMonthGrid,
+  capDayEntries,
   currentMskMonth,
   formatMonthTitle,
   isMonthPast,
@@ -187,6 +188,51 @@ describe("monthShortLabels (EARS-16 — МСК date parts, capitalised)", () => 
     for (const label of labels) {
       expect(label).toMatch(/^[А-Я][а-я]*$/);
     }
+  });
+});
+
+/**
+ * Scope item 10 (#1065, canvas update 2026-07-17): a desktop cell shows at most
+ * 3 pills, LIVE events sorted first; the rest fold into the «+N ещё» link.
+ */
+describe("EARS-19: capDayEntries — 3-pill cap, live-first", () => {
+  it("EARS-19: passes ≤3 entries through unchanged with zero overflow", () => {
+    const entries = [
+      entry("01", "2026-07-22T15:00:00.000Z"),
+      entry("02", "2026-07-22T17:00:00.000Z"),
+    ];
+    const { visible, overflow } = capDayEntries(entries);
+    expect(visible).toEqual(entries);
+    expect(overflow).toBe(0);
+  });
+
+  it("EARS-19: caps at 3 and reports the folded remainder", () => {
+    const entries = [
+      entry("01", "2026-07-22T15:00:00.000Z"),
+      entry("02", "2026-07-22T16:00:00.000Z"),
+      entry("03", "2026-07-22T17:00:00.000Z"),
+      entry("04", "2026-07-22T18:00:00.000Z"),
+      entry("05", "2026-07-22T19:00:00.000Z"),
+    ];
+    const { visible, overflow } = capDayEntries(entries);
+    expect(visible).toHaveLength(3);
+    expect(overflow).toBe(2);
+  });
+
+  it("EARS-19: sorts a live event into the visible 3, keeping time order otherwise (stable)", () => {
+    const entries = [
+      entry("01", "2026-07-22T15:00:00.000Z"),
+      entry("02", "2026-07-22T16:00:00.000Z"),
+      entry("03", "2026-07-22T17:00:00.000Z"),
+      entry("04", "2026-07-22T18:00:00.000Z", "live"),
+    ];
+    const { visible, overflow } = capDayEntries(entries);
+    expect(visible.map((e) => e.slug)).toEqual([
+      "event-04",
+      "event-01",
+      "event-02",
+    ]);
+    expect(overflow).toBe(1);
   });
 });
 

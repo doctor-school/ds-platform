@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { cn } from "../lib/utils";
+import { Link } from "../primitives/link";
 
 /**
  * Neo-brutalist month-calendar grid — desktop pane (004 EARS-19, source
@@ -41,8 +42,14 @@ export interface MonthGridCell {
   muted?: boolean;
   /** The date ink reads muted (past / weekend / empty / neighbour day). */
   mutedDate?: boolean;
-  /** Event pills for a today/future day. */
+  /** Event pills for a today/future day — the app caps these at 3, live-first. */
   pills?: MonthGridPill[];
+  /**
+   * The «+N ещё» overflow link when the day carries more events than the
+   * 3-pill cap (canvas update 2026-07-17) — targets the week listing anchored
+   * at the day's group.
+   */
+  more?: { href: string; label: string };
   /** The muted aggregate note for an already-past day («2 эфира · прошли»). */
   note?: string;
 }
@@ -56,14 +63,25 @@ export interface MonthCalendarGridProps {
   liveLabel: string;
   /** The three legend labels — airing / planned / past-or-empty. */
   legend: { live: string; planned: string; past: string };
+  /**
+   * The bottom-right accent link to the nearest FUTURE month with events
+   * (canvas line 155, «Декабрь 2026 →») — omitted when no later month of the
+   * displayed year carries events.
+   */
+  nextMonthLink?: { href: string; label: string };
 }
 
-/** The pulsing round live dot (mirrors the webinar-card signal); decorative — the sr-only label carries the meaning. */
+/**
+ * The pulsing round live dot (mirrors the webinar-card signal); decorative — the
+ * sr-only label carries the meaning. INLINE in the pill's single text run
+ * (canvas line 240: the live prefix is an in-text glyph, not a left column), so
+ * multi-line pill text wraps around it instead of centring beside it.
+ */
 function LiveDot() {
   return (
     <span
       aria-hidden="true"
-      className="size-1.5 shrink-0 rounded-full bg-live-foreground animate-live-pulse"
+      className="mr-1.5 inline-block size-1.5 rounded-full bg-live-foreground animate-live-pulse"
     />
   );
 }
@@ -75,7 +93,7 @@ function LegendSwatch({ className }: { className?: string }) {
 const MonthCalendarGrid = React.forwardRef<
   HTMLDivElement,
   MonthCalendarGridProps & React.HTMLAttributes<HTMLDivElement>
->(({ weekdays, weeks, liveLabel, legend, className, ...props }, ref) => (
+>(({ weekdays, weeks, liveLabel, legend, nextMonthLink, className, ...props }, ref) => (
   <div ref={ref} className={className} {...props}>
     <div className="mt-7 overflow-x-auto border-2 border-border bg-card shadow-lg">
       <div className="min-w-[840px]">
@@ -125,12 +143,16 @@ const MonthCalendarGrid = React.forwardRef<
                 </span>
 
                 <div className="mt-0.5">
+                  {/* Canvas lines 234–235: a BLOCK pill whose text is one inline
+                      run `{time} · {title}` — it wraps inside the pill and never
+                      leaks past the cell (the #1052 overflow defect came from
+                      the flex row keeping the text span at content width). */}
                   {(cell.pills ?? []).map((pill, pi) => (
                     <a
                       key={pi}
                       href={pill.href}
                       className={cn(
-                        "mt-1.5 flex items-center gap-1.5 px-2 py-1.5 text-eyebrow leading-[1.35] no-underline outline-none focus-visible:shadow-focus",
+                        "mt-1.5 block px-2 py-1.5 text-eyebrow leading-[1.35] break-words no-underline outline-none focus-visible:shadow-focus",
                         pill.live
                           ? "bg-live font-extrabold text-live-foreground"
                           : "bg-tint font-bold text-tint-foreground",
@@ -142,11 +164,18 @@ const MonthCalendarGrid = React.forwardRef<
                           <span className="sr-only">{liveLabel}</span>
                         </>
                       ) : null}
-                      <span>
-                        {pill.time} · {pill.title}
-                      </span>
+                      {pill.time} · {pill.title}
                     </a>
                   ))}
+
+                  {cell.more ? (
+                    <a
+                      href={cell.more.href}
+                      className="mt-1.5 block px-2 py-1 text-eyebrow font-extrabold text-tint-foreground underline decoration-2 underline-offset-3 outline-none focus-visible:shadow-focus"
+                    >
+                      {cell.more.label}
+                    </a>
+                  ) : null}
 
                   {cell.note ? (
                     <span className="mt-1.5 block text-eyebrow font-semibold text-muted-foreground">
@@ -161,24 +190,37 @@ const MonthCalendarGrid = React.forwardRef<
       </div>
     </div>
 
-    {/* State legend — the live swatch is redundant with its «В эфире» label
-        (WCAG 1.4.1: colour is not the only cue — each swatch is paired with text). */}
-    <div
-      data-testid="grid-legend"
-      className="mt-6 flex flex-wrap items-center gap-5 text-xs font-bold text-muted-foreground"
-    >
-      <span className="inline-flex items-center gap-2">
-        <LegendSwatch className="bg-live" />
-        {legend.live}
-      </span>
-      <span className="inline-flex items-center gap-2">
-        <LegendSwatch className="bg-tint" />
-        {legend.planned}
-      </span>
-      <span className="inline-flex items-center gap-2">
-        <LegendSwatch className="border border-hairline bg-section" />
-        {legend.past}
-      </span>
+    {/* Legend row — canvas lines 149–156: the three labelled swatches left
+        (WCAG 1.4.1: colour is never the only cue), the accent link to the
+        nearest future month with events bottom-right. */}
+    <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+      <div
+        data-testid="grid-legend"
+        className="flex flex-wrap items-center gap-5 text-xs font-bold text-muted-foreground"
+      >
+        <span className="inline-flex items-center gap-2">
+          <LegendSwatch className="bg-live" />
+          {legend.live}
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <LegendSwatch className="bg-tint" />
+          {legend.planned}
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <LegendSwatch className="border border-hairline bg-section" />
+          {legend.past}
+        </span>
+      </div>
+      {nextMonthLink ? (
+        <Link
+          variant="inline"
+          href={nextMonthLink.href}
+          data-testid="next-month-link"
+          className="text-caption font-bold"
+        >
+          {nextMonthLink.label}
+        </Link>
+      ) : null}
     </div>
   </div>
 ));

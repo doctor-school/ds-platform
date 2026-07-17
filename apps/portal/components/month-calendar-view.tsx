@@ -12,6 +12,7 @@ import { Link as DsLink } from "@ds/design-system/link";
 import { fetchMonthBroadcasts, fetchMonthlyCounts } from "@/lib/public-events";
 import {
   buildMonthGrid,
+  capDayEntries,
   currentMskMonth,
   entryTime,
   formatAgendaDayTitle,
@@ -94,6 +95,20 @@ export async function MonthCalendarView({ month }: { month?: string }) {
   const liveLabel = t("legendLive");
   const liveBadge = t("liveBadge");
 
+  // ── Legend accent link (canvas line 155): the nearest FUTURE month of the
+  // displayed year that carries events, from the already-fetched counts. ──
+  const nextIdx = monthNames.findIndex(
+    (_, i) => i + 1 > monthNum && (countByMonth.get(i + 1) ?? 0) > 0,
+  );
+  const nextEventMonth =
+    nextIdx >= 0 ? `${year}-${String(nextIdx + 1).padStart(2, "0")}` : undefined;
+  const nextMonthLink = nextEventMonth
+    ? {
+        href: monthViewHref(nextEventMonth),
+        label: t("nextMonthLink", { month: formatMonthTitle(nextEventMonth) }),
+      }
+    : undefined;
+
   // ── Desktop grid model: pills for today/future, muted notes for past days. ──
   const desktopWeeks: MonthGridCell[][] = grid.weeks.map((week) =>
     week.map((cell): MonthGridCell => {
@@ -112,19 +127,31 @@ export async function MonthCalendarView({ month }: { month?: string }) {
         };
       }
       const empty = !hasEvents;
+      // Scope item 10 (canvas update 2026-07-17): ≤3 pills live-first; the
+      // remainder folds into «+N ещё», anchored at the day's group in the week
+      // listing (owner decision on #1065 — `/webinars?month=…#day-YYYY-MM-DD`,
+      // the loss-free switcher round-trip param preserved).
+      const { visible, overflow } = capDayEntries(cell.entries);
       return {
         dateLabel: cell.isToday ? `${cell.day}${t("todaySuffix")}` : String(cell.day),
         today: cell.isToday,
         muted: cell.isWeekend || empty,
         mutedDate: !cell.isToday && (cell.isWeekend || empty),
         pills: hasEvents
-          ? cell.entries.map((e) => ({
+          ? visible.map((e) => ({
               href: `/webinars/${e.slug}`,
               time: entryTime(e),
               title: e.title,
               live: e.state === "live",
             }))
           : undefined,
+        more:
+          overflow > 0 && cell.isoDay
+            ? {
+                href: `/webinars?month=${displayedMonth}#day-${cell.isoDay}`,
+                label: t("moreLink", { count: overflow }),
+              }
+            : undefined,
       };
     }),
   );
@@ -182,36 +209,55 @@ export async function MonthCalendarView({ month }: { month?: string }) {
 
   const defaultDay = grid.todayDom ?? grid.weeks.flat().find((c) => c.inMonth)?.day ?? 1;
 
+  const tw = await getTranslations("webinars");
+
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <header className="bg-header text-header-foreground">
-        <Container className="py-10 layout:py-16">
-          <p
-            className="text-2xs font-extrabold uppercase tracking-micro opacity-80"
+      {/* Poster hero — canvas lines 32–40: the `hero` band (blue.500 light /
+          blue.700 dark), NO kicker, h1 + subtitle left, the uppercase tagline
+          bottom-right; deep bottom padding so the pulled-up toolbar sits ON the
+          band (line 289: mainTop −60px desktop). */}
+      <header className="bg-hero text-hero-foreground">
+        <Container
+          variant="calendar"
+          className="flex flex-wrap items-end justify-between gap-8 pt-8 pb-10 layout:pt-10 layout:pb-25"
+        >
+          <div>
+            <h1 className="text-3xl leading-none font-extrabold tracking-tight text-balance layout:text-4xl">
+              {monthTitle}
+            </h1>
+            <p
+              className="mt-4 text-body-compact font-semibold text-hero-muted"
+              data-testid="poster-decor"
+            >
+              {t("subtitle", { count: entries.length, schools })}
+            </p>
+          </div>
+          <div
+            className="pb-1.5 text-xs leading-loose font-extrabold uppercase tracking-micro text-hero-muted"
             data-testid="poster-decor"
           >
-            {t("viewMonth")}
-          </p>
-          <h1 className="mt-6 text-3xl font-extrabold tracking-tight text-balance layout:text-5xl">
-            {monthTitle}
-          </h1>
-          <p
-            className="mt-4 text-caption font-semibold opacity-90"
-            data-testid="poster-decor"
-          >
-            {t("subtitle", { count: entries.length, schools })}
-          </p>
+            {tw("taglineTop")}
+            <br />
+            <span className="text-hero-foreground">{tw("taglineBottom")}</span>
+          </div>
         </Container>
       </header>
 
-      <Container className="py-10 layout:py-14">
+      <Container
+        variant="calendar"
+        className="relative z-10 mt-6 pb-16 layout:-mt-15 layout:pb-24"
+      >
         {/* Month toolbar (EARS-16/17/18): picker + ‹ › pager + «Сегодня» +
-            «Неделя / Месяц» switcher — all query-param links, no client state. */}
+            «Неделя / Месяц» switcher — all query-param links, no client state.
+            Mobile (canvas lines 47–61): the picker stretches, «Сегодня» and the
+            boxed switcher yield to the «← Неделя» / «Месяц» text row below. */}
         <div
-          className="mb-8 flex flex-wrap items-stretch gap-3"
+          className="flex flex-wrap items-stretch gap-2.5 layout:gap-3"
           data-testid="month-toolbar"
         >
           <MonthPicker
+            className="min-w-0 flex-1 layout:flex-none"
             triggerLabel={monthTitle}
             pickerLabel={t("pickerLabel")}
             year={year}
@@ -241,20 +287,43 @@ export async function MonthCalendarView({ month }: { month?: string }) {
 
           <DsLink
             asChild
-            className="inline-flex items-center border-2 border-border bg-card px-5 text-caption font-bold text-tint-foreground shadow-sm"
+            className="hidden items-center border-2 border-border bg-card px-5 text-caption font-bold text-tint-foreground shadow-sm layout:inline-flex"
           >
             <Link href="/webinars?view=month">{t("todayButton")}</Link>
           </DsLink>
 
-          <span className="flex-1" />
+          <span className="hidden flex-1 layout:block" />
 
-          <ViewSwitcher
-            active="month"
-            weekHref={`/webinars?month=${displayedMonth}`}
-            monthHref={monthViewHref(displayedMonth)}
-            weekLabel={t("viewWeek")}
-            monthLabel={t("viewMonth")}
-          />
+          <div className="hidden layout:block">
+            <ViewSwitcher
+              active="month"
+              weekHref={`/webinars?month=${displayedMonth}`}
+              monthHref={monthViewHref(displayedMonth)}
+              weekLabel={t("viewWeek")}
+              monthLabel={t("viewMonth")}
+            />
+          </div>
+        </div>
+
+        {/* Mobile view-switch text row — canvas lines 58–61: «← Неделя» link
+            left, the active «Месяц» label right. */}
+        <div className="mt-3 flex items-center justify-between layout:hidden">
+          <DsLink
+            asChild
+            variant="inline"
+            className="text-caption font-bold text-tint-foreground"
+          >
+            <Link href={`/webinars?month=${displayedMonth}`}>
+              <span aria-hidden="true">← </span>
+              {t("viewWeek")}
+            </Link>
+          </DsLink>
+          <span
+            aria-current="page"
+            className="text-caption font-extrabold text-tint-foreground"
+          >
+            {t("viewMonth")}
+          </span>
         </div>
 
         {/* Desktop pane (≥901px). */}
@@ -269,6 +338,7 @@ export async function MonthCalendarView({ month }: { month?: string }) {
             planned: t("legendPlanned"),
             past: t("legendPast"),
           }}
+          nextMonthLink={nextMonthLink}
         />
 
         {/* Mobile pane (≤900px). */}

@@ -2,6 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { and, eq, isNull } from "drizzle-orm";
 import { users, type DrizzleHandle, type User } from "@ds/db";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 
 type Db = DrizzleHandle["db"];
 
@@ -77,7 +78,9 @@ export class UserMirrorService {
    * as `auth.reconcile.divergence`. A brand-new row and a no-op pass both return
    * `[]` — no divergence event.
    */
-  async upsert(input: MirrorUpsert): Promise<{ changedIdentityFields: string[] }> {
+  async upsert(
+    input: MirrorUpsert,
+  ): Promise<{ changedIdentityFields: string[] }> {
     // Read the current row FIRST so we can (a) detect identity divergence and
     // (b) distinguish a brand-new row (no event) from an updated one.
     const [existing] = await this.db
@@ -109,17 +112,22 @@ export class UserMirrorService {
     if (input.phoneVerified !== undefined)
       set["phoneVerified"] = input.phoneVerified;
 
-    await this.db
-      .insert(users)
-      .values({
-        zitadelSub: input.zitadelSub,
-        email: input.email,
-        phone: input.phone,
-        emailVerified: input.emailVerified ?? false,
-        phoneVerified: input.phoneVerified ?? false,
-        role: "doctor_guest",
-      })
-      .onConflictDoUpdate({ target: users.zitadelSub, set });
+    // 010 EARS-3/5 — attribute the mirror upsert to the request context when
+    // present (an authenticated self-heal); a background reconcile/webhook pass
+    // carries none and honestly degrades to db-direct (EARS-4).
+    await withRequestAuditContext(this.db, (tx) =>
+      tx
+        .insert(users)
+        .values({
+          zitadelSub: input.zitadelSub,
+          email: input.email,
+          phone: input.phone,
+          emailVerified: input.emailVerified ?? false,
+          phoneVerified: input.phoneVerified ?? false,
+          role: "doctor_guest",
+        })
+        .onConflictDoUpdate({ target: users.zitadelSub, set }),
+    );
 
     return { changedIdentityFields };
   }
@@ -134,13 +142,17 @@ export class UserMirrorService {
    * deactivated by this call.
    */
   async softDelete(zitadelSub: string): Promise<boolean> {
-    const rows = await this.db
-      .update(users)
-      .set({ deactivatedAt: new Date(), updatedAt: new Date() })
-      .where(
-        and(eq(users.zitadelSub, zitadelSub), isNull(users.deactivatedAt)),
-      )
-      .returning({ id: users.id });
+    // 010 EARS-3/5 — the reconcile sweep runs context-less (db-direct); wrapped
+    // for uniformity so a request-context caller would be attributed.
+    const rows = await withRequestAuditContext(this.db, (tx) =>
+      tx
+        .update(users)
+        .set({ deactivatedAt: new Date(), updatedAt: new Date() })
+        .where(
+          and(eq(users.zitadelSub, zitadelSub), isNull(users.deactivatedAt)),
+        )
+        .returning({ id: users.id }),
+    );
     return rows.length > 0;
   }
 
@@ -191,16 +203,22 @@ export class UserMirrorService {
   }
 
   async markEmailVerified(zitadelSub: string): Promise<void> {
-    await this.db
-      .update(users)
-      .set({ emailVerified: true, updatedAt: new Date() })
-      .where(eq(users.zitadelSub, zitadelSub));
+    // 010 EARS-3/5 — attribute the verified-flag flip to the request context.
+    await withRequestAuditContext(this.db, (tx) =>
+      tx
+        .update(users)
+        .set({ emailVerified: true, updatedAt: new Date() })
+        .where(eq(users.zitadelSub, zitadelSub)),
+    );
   }
 
   async markPhoneVerified(zitadelSub: string): Promise<void> {
-    await this.db
-      .update(users)
-      .set({ phoneVerified: true, updatedAt: new Date() })
-      .where(eq(users.zitadelSub, zitadelSub));
+    // 010 EARS-3/5 — attribute the verified-flag flip to the request context.
+    await withRequestAuditContext(this.db, (tx) =>
+      tx
+        .update(users)
+        .set({ phoneVerified: true, updatedAt: new Date() })
+        .where(eq(users.zitadelSub, zitadelSub)),
+    );
   }
 }

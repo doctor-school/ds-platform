@@ -10,6 +10,7 @@ import {
 } from "@ds/schemas";
 import { and, asc, eq, gte, inArray, or } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 
 type Db = DrizzleHandle["db"];
 
@@ -108,7 +109,9 @@ export class RegistrationRepository {
     eventId: string,
     sub: string,
   ): Promise<RegistrationUpsert> {
-    return this.db.transaction(async (tx) => {
+    // 010 EARS-3/5 — attribute the registrations write to the acting caller
+    // (source portal-api) via the audit-context wrapper.
+    return withRequestAuditContext(this.db, async (tx) => {
       const [inserted] = await tx
         .insert(registrations)
         .values({ userId, eventId })

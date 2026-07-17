@@ -106,7 +106,7 @@
     "phoneEmpty": "не указан",
     "passwordLabel": "Пароль",
     "passwordChange": "Сменить пароль",
-    "passwordHelper": "Отправим ссылку для сброса на email",
+    "passwordHelper": "Отправим код для сброса пароля на email",
     "eventsLabel": "События",
     "eventsTitle": "Мои события",
     "eventsHelper": "Эфиры, записи и сертификаты",

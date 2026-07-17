@@ -25,10 +25,12 @@ afterEach(cleanup);
  */
 function SlottedHarness({
   length,
+  charset = "numeric",
   onValue,
   onComplete,
 }: {
   length: number;
+  charset?: "alphanumeric" | "numeric";
   onValue?: (v: string) => void;
   onComplete?: () => void;
 }) {
@@ -45,6 +47,7 @@ function SlottedHarness({
               field={field as ControllerRenderProps<{ code: string }>}
               length={length}
               variant="slotted"
+              charset={charset}
               label="Code"
               onComplete={onComplete}
             />
@@ -122,6 +125,7 @@ describe("OtpField variant=slotted", () => {
                   field={field as ControllerRenderProps<{ code: string }>}
                   length={6}
                   variant="slotted"
+                  charset="numeric"
                   label="Code"
                 />
               );
@@ -133,6 +137,28 @@ describe("OtpField variant=slotted", () => {
     render(<RefHarness />);
     expect(typeof boundRef?.focus).toBe("function");
     expect(typeof boundRef?.setCustomValidity).toBe("function");
+  });
+
+  it("renders a TEXT keyboard for the ALPHANUMERIC reg/reset code so mobile letters are reachable (#1110)", () => {
+    // Root cause: input-otp's OTPInput defaults inputMode=\"numeric\", so a phone
+    // pops the digits-only keypad and the letters of an alphanumeric code (PVDC3R)
+    // are unreachable. charset=\"alphanumeric\" must override that to a text keyboard
+    // (inputMode=\"text\") and auto-uppercase the key hints (autoCapitalize=\"characters\").
+    render(<SlottedHarness length={6} charset="alphanumeric" />);
+
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveAttribute("inputmode", "text");
+    expect(input).toHaveAttribute("autocapitalize", "characters");
+  });
+
+  it("keeps a NUMERIC keyboard for the digit login OTP (charset=numeric, #1110)", () => {
+    // The login OTP is digits-only — charset=\"numeric\" must pin the numeric keypad
+    // explicitly (never a text keyboard) and never force autoCapitalize.
+    render(<SlottedHarness length={8} charset="numeric" />);
+
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveAttribute("inputmode", "numeric");
+    expect(input).not.toHaveAttribute("autocapitalize", "characters");
   });
 
   it("does not schedule input-otp's window-polling PWM timer (#366, jsdom teardown flake)", () => {

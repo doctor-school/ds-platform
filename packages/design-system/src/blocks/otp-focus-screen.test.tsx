@@ -97,6 +97,7 @@ function Harness({
             field={field as ControllerRenderProps<{ code: string }>}
             length={length}
             variant="slotted"
+            charset="numeric"
             title="Enter code"
             sentToLabel="Code sent to a•••@p•••.com"
             codeLabel="Code"

@@ -537,6 +537,7 @@ function OtpVerifyForm({
             field={field}
             length={LOGIN_OTP_LENGTH}
             variant="slotted"
+            charset="numeric"
             title={t("otpVerifyTitle")}
             sentToLabel={t("otpSentTo", {
               destination: maskDestination(identifier),

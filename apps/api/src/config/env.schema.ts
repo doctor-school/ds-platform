@@ -121,6 +121,25 @@ export const ApiEnvSchema = z.looseObject({
   EMAIL_DELIVERY_MODE: z.enum(["mailpit", "real"]).default("mailpit"),
   SMS_DELIVERY_MODE: z.enum(["sink", "real"]).default("sink"),
 
+  // 003 EARS-33 — synthetic-send suppression seam for the #873 load-test (design
+  // §14.8), a SEPARATE knob from the *_DELIVERY_MODE flags above (which are NOT
+  // touched). Default OFF ⇒ the seam is fully inert: every send — tagged or not —
+  // proceeds exactly as today. When ON, a transactional send whose recipient
+  // carries the reserved synthetic tag (email domain suffix LOADTEST_SYNTHETIC_DOMAIN
+  // / SMS number prefix LOADTEST_SYNTHETIC_MSISDN_PREFIX) is dropped BEFORE the
+  // relay/provider hop and counted on `mailer_synthetic_suppressed_total{channel}`,
+  // while every untagged recipient still sends. Three-state, fail-closed on the
+  // toggle: off → normal always; on+tagged → suppressed; on+untagged → normal — so
+  // a missing/false toggle can never suppress a real user's mail, and a synthetic
+  // auth-burst never reaches the real mail.ru/Resend/SMS-Aero channels or burns the
+  // warmed sender reputation. Parsed fail-closed: only "true"/"1" enables it.
+  LOADTEST_SUPPRESS_SYNTHETIC: z
+    .string()
+    .optional()
+    .transform((v) => v === "true" || v === "1"),
+  LOADTEST_SYNTHETIC_DOMAIN: z.string().default("@loadtest.invalid"),
+  LOADTEST_SYNTHETIC_MSISDN_PREFIX: z.string().default("+999"),
+
   // BFF transactional-email channel (003 EARS-23, design §4) — the account-exists
   // notice on duplicate registration, DISTINCT from Zitadel's identity-credential
   // emails (verification / OTP / reset codes). Config-gated: with no

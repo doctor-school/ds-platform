@@ -1,0 +1,5 @@
+---
+"@ds/api": minor
+---
+
+BFF gains a recipient-scoped, env-gated synthetic-send suppression seam for the #873 load-test (003 EARS-33, design §14.8). With `LOADTEST_SUPPRESS_SYNTHETIC` ON, a transactional email or SMS addressed to a reserved synthetic recipient (email domain suffix `LOADTEST_SYNTHETIC_DOMAIN`, default `@loadtest.invalid`; SMS number prefix `LOADTEST_SYNTHETIC_MSISDN_PREFIX`, default `+999`) is dropped at the single mailer/SMS send point BEFORE the relay/provider hop — after the identical request-shape pipeline the load test must exercise (enumeration-safe wrapper, `register-notice-throttle`, artifact composition / EARS-14 budget) — and counted on `mailer_synthetic_suppressed_total{channel}` with a loud structured log line, so zero real send leaves the box. Three-state matrix, fail-closed on the toggle: OFF (default → the seam is fully inert) sends every recipient normally; ON + tagged → suppressed; ON + untagged → normal. It never touches the global `EMAIL_DELIVERY_MODE` / `SMS_DELIVERY_MODE`. Backend-only (no UI). #1068 blocks #873 phase 2.

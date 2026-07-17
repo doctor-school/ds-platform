@@ -43,6 +43,10 @@ import {
   REGISTER_NOTICE_THROTTLE,
   type RegisterNoticeThrottle,
 } from "../mailer/register-notice-throttle.js";
+import {
+  SYNTHETIC_SUPPRESSION,
+  type SyntheticSuppression,
+} from "../mailer/synthetic-suppression.js";
 import { AUTH_AUDIT, type AuthAuditLog } from "./session/auth-audit.types.js";
 import {
   SessionService,
@@ -128,6 +132,11 @@ export class AuthService {
     @Inject(MAILER) private readonly mailer: Mailer,
     @Inject(REGISTER_NOTICE_THROTTLE)
     private readonly noticeThrottle: RegisterNoticeThrottle,
+    // EARS-33 (design §14.8): the shared synthetic-send suppression seam. An
+    // `@Inject`-token param, so it precedes the type-inferred class deps below
+    // (the tsx/esbuild `design:paramtypes` ordering hazard).
+    @Inject(SYNTHETIC_SUPPRESSION)
+    private readonly synthetic: SyntheticSuppression,
     private readonly mirror: UserMirrorService,
     private readonly sessions: SessionService,
     private readonly smsBudget: SmsBudgetService,
@@ -216,7 +225,16 @@ export class AuthService {
           HttpStatus.TOO_MANY_REQUESTS,
         );
       }
-      await this.idp.requestSmsOtp(req.identifier);
+      // EARS-33 (design §14.8): with the load-test suppression toggle ON, a
+      // synthetic-tagged (reserved test-MSISDN) recipient is dropped BEFORE the
+      // Zitadel/SMS-Aero provider hop — after the identical request-shape pipeline
+      // (EARS-14 budget above) the load test must exercise, so zero synthetic SMS
+      // leaves the box. Toggle OFF (default) or an untagged phone ⇒ normal send.
+      // The audit `OtpSent` row + the enumeration-safe response below are
+      // unchanged (the campaign measures the pipeline minus the relay hop only).
+      if (!this.synthetic.suppress("sms", req.identifier)) {
+        await this.idp.requestSmsOtp(req.identifier);
+      }
     }
     // EARS-18: `auth.otp.sent` (identifier masked). A budget-refused SMS threw
     // above and never reaches here, so a row exists only for an actual send.

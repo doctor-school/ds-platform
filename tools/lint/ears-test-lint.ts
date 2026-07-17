@@ -139,25 +139,12 @@ interface Deferral {
  *   auth post-v1 backlog #220). Prune this entry once the secondary-phone verify
  *   path lands with its own `EARS-4` test.
  *
- * - EARS-33 (003): "synthetic-send suppression seam" — the recipient-scoped,
- *   env-gated seam that drops `@loadtest.invalid`-tagged mailer/SMS sends before
- *   the relay call (for the #873 load-test). Spec-first split: the clause lands in
- *   this docs increment, but the seam + its Vitest unit/e2e (the three-state
- *   toggle matrix) are unbuilt — they ship with the #1068 code PR. Tracked in
- *   #1068 (blocks #873 phase 2). Prune this entry once the #1068 code PR lands the
- *   EARS-33 test.
- *
  */
 const BUILTIN_DEFERRALS: Record<string, Deferral> = {
   '003:EARS-4': {
     issue: 454,
     reason:
       'registration verify is email-only; the future secondary-phone verify path is unbuilt (needs live Zitadel)',
-  },
-  '003:EARS-33': {
-    issue: 1068,
-    reason:
-      'synthetic-send suppression seam unbuilt; the EARS-33 test lands with the #1068 code PR',
   },
 };
 

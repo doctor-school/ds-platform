@@ -1,5 +1,40 @@
 # @ds/design-system
 
+## 2.0.0
+
+### Major Changes
+
+- [#1101](https://github.com/doctor-school/ds-platform/pull/1101) [`6b6b36f`](https://github.com/doctor-school/ds-platform/commit/6b6b36f4267a96bb696a98acdf53024a7037d3cd) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Month view Stage-B rework [#4](https://github.com/doctor-school/ds-platform/issues/4) (004, [#1098](https://github.com/doctor-school/ds-platform/issues/1098)): `MonthPicker` now pages years IN PLACE
+  (owner verdict [#5](https://github.com/doctor-school/ds-platform/issues/5), item 4) — a client `<details>` that steps a server-provided year window
+  without navigation (popover stays open, per-month counters swap), falling back to a
+  server-navigation `<a>` at the window edge; the props move from `year`/`months` to
+  `initialYear`/`years` (`MonthPickerYear[]`, new exported type). The trigger + year
+  ‹ › steppers adopt the `Button` `outline` states so the trigger reads as a white
+  bordered control on the navy hero, not the old filled-blue summary (verdict [#5](https://github.com/doctor-school/ds-platform/issues/5),
+  items 1–2). `MonthCalendarGrid` gains an optional `prevMonthLink` — the «← <prev month>»
+  return link rendered left of the always-on next-month link (verdict [#5](https://github.com/doctor-school/ds-platform/issues/5), item 5).
+
+### Minor Changes
+
+- [#1082](https://github.com/doctor-school/ds-platform/pull/1082) [`6e69dca`](https://github.com/doctor-school/ds-platform/commit/6e69dca014cddd58fe3d3fb3948dfe1b24143540) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add the three deferred source §07 «Формы и валидация» field states ([#529](https://github.com/doctor-school/ds-platform/issues/529), deferred from [#512](https://github.com/doctor-school/ds-platform/issues/512)): (1) a **success** tone on `FormMessage` — a `success` prop renders the `✓ <msg>` confirmation (canvas `✓ Адрес подтверждён`) in a new AA-safe `success-text` token (the green mirror of `destructive-text`: light `green.700` #047857 at 5.49:1, dark `green.400`; the `success` fill stays 3.68:1 as text), with a green `success` border + `success-tint` fill on the input keyed on `data-success`; (2) a **required** prop on `Label` → the destructive `*` marker (`Email *`), `aria-hidden` so the programmatic required semantics stay on the input; (3) a **filled-border** on plain `Input` — a JS has-value signal (mirroring the OTP slot, not `:placeholder-shown`) switches the resting border `hairline` → ink `border` once the field holds a value, safe for controlled and uncontrolled usage. New primitive `green.700` + semantic `success-text` token.
+
+### Patch Changes
+
+- [#1079](https://github.com/doctor-school/ds-platform/pull/1079) [`5b725d7`](https://github.com/doctor-school/ds-platform/commit/5b725d733f653a6d45cc8c2bffaba85764aaad26) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Month-calendar grid Stage-B rework [#2](https://github.com/doctor-school/ds-platform/issues/2) ([#1075](https://github.com/doctor-school/ds-platform/issues/1075), owner verdict [#2](https://github.com/doctor-school/ds-platform/issues/2) at [#1052](https://github.com/doctor-school/ds-platform/issues/1052)): a dedicated `calendar-muted` token (canvas-exact `oklch(0.985 0.002 250)` light / `oklch(0.185 0.02 250)` dark) replaces the shared `section` token on the month-grid day cell and the legend «Прошёл / пусто» swatch (the week-listing day band keeps `section`); every event pill's text run clamps at two lines via an inner `line-clamp-2` span (canvas `clamp2` — live pills included, the «+N ещё» link and past-day notes untouched); the `muted` cell prop and the `nextMonthLink` prop docs now state the owner rules (muted bg = weekend/out-of-month only; the link is always the displayed month + 1).
+
+- [#1083](https://github.com/doctor-school/ds-platform/pull/1083) [`4e09ff2`](https://github.com/doctor-school/ds-platform/commit/4e09ff212b6fb808f4e0c7b70cf72f1b84cc3f8c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Month view Stage-B rework [#3](https://github.com/doctor-school/ds-platform/issues/3) ([#1080](https://github.com/doctor-school/ds-platform/issues/1080), owner verdict [#3](https://github.com/doctor-school/ds-platform/issues/3) at [#1052](https://github.com/doctor-school/ds-platform/issues/1052)): the `container.calendar` token becomes a border-box 1336px cap (83.5rem = 1240px of content + 2 × 48px desktop-max gutter) so `Container variant="calendar"` yields the canvas-exact 1240px grid column — the canvas caps `main` at 1240px content-box with the gutter outside, Tailwind preflight is border-box (the week listing + hero inner bands sharing the variant widen identically); the light `header` token flips from blue.700 to the canvas headerBg blue.500 `#2D84F2` (dark stays blue.700 `#114D9E`), so the app chrome and the hero poster read as one continuous blue band (white-on-blue.500 large/bold precedent recorded at [#1072](https://github.com/doctor-school/ds-platform/issues/1072)); the month-grid live pill's text run drops from 800 to 700 (`font-bold`) — the same tier as a planned pill; the micro uppercase LIVE badges (Badge `live`, the webinar-card ribbon, the day-agenda chip) keep 800. A new `header-chip-foreground` semantic token (blue.700 `#114D9E` in BOTH themes — the canvas navy chip ink `color:#114D9E;background:#fff` every canvas renders regardless of theme) carries the white on-header chips' ink, since the light `header` (blue.500) fails normal-text AA on white (Mode-a on the PR).
+
+- [#1104](https://github.com/doctor-school/ds-platform/pull/1104) [`2ff3a77`](https://github.com/doctor-school/ds-platform/commit/2ff3a77344b9f691603f8f433a57d4a7a3adbaf3) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Month view Stage-B rework [#5](https://github.com/doctor-school/ds-platform/issues/5) (004, [#1102](https://github.com/doctor-school/ds-platform/issues/1102), owner verdict [#6](https://github.com/doctor-school/ds-platform/issues/6)): `MonthPicker` trigger
+  now renders one equal height with the toolbar's neighbour controls — the
+  `<details>` wrapper is a `flex flex-col` and the `<summary>` fills it (`h-full`), so
+  under the toolbar's `items-stretch` row the trigger no longer sits SHORTER than the
+  ‹ › / «Сегодня» buttons. The client year state now resyncs to `initialYear` when it
+  changes (a sibling soft-navigation re-renders the picker while the popover may be
+  open), so it never shows the stale mount-seeded year. No prop-signature change —
+  the app widens the `years` window and re-centres the edge-fallback href.
+
+- [#1094](https://github.com/doctor-school/ds-platform/pull/1094) [`77931ba`](https://github.com/doctor-school/ds-platform/commit/77931bae0b435ae6af9238a9d195c95b8ab5638e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Navy light-theme top ([#1085](https://github.com/doctor-school/ds-platform/issues/1085), owner verdict [#4](https://github.com/doctor-school/ds-platform/issues/4) at [#1052](https://github.com/doctor-school/ds-platform/issues/1052)): the light `header` and `hero` semantic tokens repoint from the canvas bright blue.500 (#2D84F2) to production navy blue.700 (#114D9E), so the light top now equals the dark top and prod — one continuous navy band (dark set unchanged). White on blue.700 = 8.14:1, full normal-text AA in both themes, retiring the [#1083](https://github.com/doctor-school/ds-platform/issues/1083) large-text-nav carve-out route (rejected by the owner). `header-chip-foreground` is value-unchanged; token `$description`s that named the light header/hero as bright blue are rewritten inline. The vendored `design-source/*.dc.html` canvases still render #2D84F2 light — the recorded owner-directed deviation pending the DesignSync follow-up.
+
 ## 1.3.0
 
 ### Minor Changes

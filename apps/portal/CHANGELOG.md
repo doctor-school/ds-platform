@@ -1,5 +1,42 @@
 # @ds/portal
 
+## 0.14.1
+
+### Patch Changes
+
+- [#1081](https://github.com/doctor-school/ds-platform/pull/1081) [`7bc26d2`](https://github.com/doctor-school/ds-platform/commit/7bc26d26c61faa1ba39ce331eebb7e93c9bf8321) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - fix(portal): /verify «Не удалось определить аккаунт» error now says «Зарегистрируйтесь заново, чтобы получить новый код, или войдите в существующий аккаунт» — the old «Откройте ссылку из письма» wording contradicted the code-only verification contract (003-design §13).
+
+- [#1106](https://github.com/doctor-school/ds-platform/pull/1106) [`ed20987`](https://github.com/doctor-school/ds-platform/commit/ed20987d218db527e1b419a6843521fe032c8adf) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Unify the discovery front-door on one canonical route (owner verdict [#7](https://github.com/doctor-school/ds-platform/issues/7) follow-up, [#1105](https://github.com/doctor-school/ds-platform/issues/1105)). `/` now permanent-redirects to `/webinars`, and nav «Эфиры» + the logo point straight at `/webinars` — a single listing route with the «Неделя / Месяц» switchers, retiring the second, switcher-less front-door hero.
+
+- [#1079](https://github.com/doctor-school/ds-platform/pull/1079) [`5b725d7`](https://github.com/doctor-school/ds-platform/commit/5b725d733f653a6d45cc8c2bffaba85764aaad26) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Month view Stage-B rework [#2](https://github.com/doctor-school/ds-platform/issues/2) ([#1075](https://github.com/doctor-school/ds-platform/issues/1075), owner verdict [#2](https://github.com/doctor-school/ds-platform/issues/2) at [#1052](https://github.com/doctor-school/ds-platform/issues/1052)): a day cell's muted background now marks weekends and out-of-month filler ONLY — an empty weekday keeps the card surface (the date ink keeps the canvas past/weekend/empty rule); the legend's bottom-right month link is always-on and always targets the displayed month + 1 (year boundary included), no longer derived from per-month event counts.
+
+- [#1083](https://github.com/doctor-school/ds-platform/pull/1083) [`4e09ff2`](https://github.com/doctor-school/ds-platform/commit/4e09ff212b6fb808f4e0c7b70cf72f1b84cc3f8c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Month view Stage-B rework [#3](https://github.com/doctor-school/ds-platform/issues/3) ([#1080](https://github.com/doctor-school/ds-platform/issues/1080), owner verdict [#3](https://github.com/doctor-school/ds-platform/issues/3) at [#1052](https://github.com/doctor-school/ds-platform/issues/1052)): the calendar surfaces (month grid, week listing, hero inner bands) span the full canvas 1240px content column at desktop, and the app-shell header renders the canvas light-theme blue `#2D84F2` — one continuous band with the hero poster (both via `@ds/design-system` tokens, no component change); the month-fidelity e2e pins the 1240px grid content width, the header/hero colour seam in both themes, and the live pill's 700 text weight. AA on the light blue.500 band (owner pick, Mode-a): the desktop nav links enlarge to the WCAG large-text tier (`text-xl` 20px, weight 700 — the ≥3:1 large/bold carve-out; underline-active treatment unchanged), and the white header chips (Войти / avatar / mobile ≡) switch their ink from `header` to the new `header-chip-foreground` canvas navy `#114D9E` (8.14:1 on white, both themes).
+
+- [#1101](https://github.com/doctor-school/ds-platform/pull/1101) [`6b6b36f`](https://github.com/doctor-school/ds-platform/commit/6b6b36f4267a96bb696a98acdf53024a7037d3cd) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Month view Stage-B rework [#4](https://github.com/doctor-school/ds-platform/issues/4) (004, [#1098](https://github.com/doctor-school/ds-platform/issues/1098)): the «Неделя» and «Месяц» panes of
+  `/webinars` now share one static `CalendarShell` — a single navy hero + 1240px
+  content column — so switching views no longer jumps the header band or column
+  edges (owner verdict [#3](https://github.com/doctor-school/ds-platform/issues/3)). The month toolbar's picker trigger, ‹ › pager and
+  «Сегодня» adopt the DS `Button` `outline` states; the view switcher's inactive
+  segment adopts the `Button` `ghost` states (owner verdicts [#1](https://github.com/doctor-school/ds-platform/issues/1)/[#2](https://github.com/doctor-school/ds-platform/issues/2)). The month picker
+  now pages years in place across a displayed-year ±1 window (owner verdict [#4](https://github.com/doctor-school/ds-platform/issues/4)), and a
+  future month shows a «← <prev month>» return link (owner verdict [#5](https://github.com/doctor-school/ds-platform/issues/5)). The `/`
+  front-door listing is unchanged.
+
+- [#1104](https://github.com/doctor-school/ds-platform/pull/1104) [`2ff3a77`](https://github.com/doctor-school/ds-platform/commit/2ff3a77344b9f691603f8f433a57d4a7a3adbaf3) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Month view Stage-B rework [#5](https://github.com/doctor-school/ds-platform/issues/5) (004, [#1102](https://github.com/doctor-school/ds-platform/issues/1102), owner verdict [#6](https://github.com/doctor-school/ds-platform/issues/6)): three fixes. (1) The
+  month toolbar's four controls (picker trigger, ‹, ›, «Сегодня») now render one equal
+  height. (2) The «Неделя» pane's list body gains desktop top clearance so its first
+  day-group heading no longer rides up onto the navy hero band — a regression from
+  [#1098](https://github.com/doctor-school/ds-platform/issues/1098)'s shared-`CalendarShell` unification; the shell geometry (hero/column/switcher)
+  is unchanged. (3) The picker year ‹ › stepper now pages in place for ≥3 consecutive
+  steps in either direction before any edge (window widened to displayed year ±3), and
+  the edge-fallback navigation re-centres on the year just BEYOND the edge so the step
+  always advances instead of re-centring on the year already displayed.
+
+- [#1094](https://github.com/doctor-school/ds-platform/pull/1094) [`77931ba`](https://github.com/doctor-school/ds-platform/commit/77931bae0b435ae6af9238a9d195c95b8ab5638e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Navy light-theme top ([#1085](https://github.com/doctor-school/ds-platform/issues/1085), owner verdict [#4](https://github.com/doctor-school/ds-platform/issues/4) at [#1052](https://github.com/doctor-school/ds-platform/issues/1052)): the desktop app-shell nav links revert from the [#1083](https://github.com/doctor-school/ds-platform/issues/1083) large-text tier (`text-xl`) to their pre-[#1083](https://github.com/doctor-school/ds-platform/issues/1083) size — `font-bold` (700) inheriting the nav container's `text-sm` (14px). On the now-navy blue.700 header band the inactive `opacity-80` tier composites to ≥6:1 (the historical AA-clean state), so the reds the [#1083](https://github.com/doctor-school/ds-platform/issues/1083) flip introduced on the resting nav tier and the theme-toggle glyph dissolve. No behavioural change beyond size/weight; press-state re-anchoring ([#1007](https://github.com/doctor-school/ds-platform/issues/1007)) untouched.
+
+- Updated dependencies [[`6e69dca`](https://github.com/doctor-school/ds-platform/commit/6e69dca014cddd58fe3d3fb3948dfe1b24143540), [`5b725d7`](https://github.com/doctor-school/ds-platform/commit/5b725d733f653a6d45cc8c2bffaba85764aaad26), [`4e09ff2`](https://github.com/doctor-school/ds-platform/commit/4e09ff212b6fb808f4e0c7b70cf72f1b84cc3f8c), [`6b6b36f`](https://github.com/doctor-school/ds-platform/commit/6b6b36f4267a96bb696a98acdf53024a7037d3cd), [`2ff3a77`](https://github.com/doctor-school/ds-platform/commit/2ff3a77344b9f691603f8f433a57d4a7a3adbaf3), [`77931ba`](https://github.com/doctor-school/ds-platform/commit/77931bae0b435ae6af9238a9d195c95b8ab5638e)]:
+  - @ds/design-system@2.0.0
+
 ## 0.14.0
 
 ### Minor Changes

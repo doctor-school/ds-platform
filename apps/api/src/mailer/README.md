@@ -39,6 +39,27 @@ channel state is visible, never silent. Resend is failover-only by recorded
 152-ФЗ decision (design §14.6); creds: `RESEND_API_KEY`
 (`infra/deploy/api.env.example`).
 
+## Delivery-mode env defaults — and where SMS lives (not here)
+
+The `email-delivery-real` / `sms-delivery-real` Unleash flags each fall back to
+an env knob when Unleash is unreachable (`config/env.schema.ts`):
+`EMAIL_DELIVERY_MODE` (`mailpit` | `real`, default `mailpit`) and
+`SMS_DELIVERY_MODE` (`sink` | `real`, default `sink`) — the same knobs
+`provision.sh` uses to pick the boot-time active Zitadel provider, so the env
+default and the pre-reconcile provider state agree.
+
+**SMS never rides this module.** SMS OTP is sent natively by Zitadel through
+its ACTIVE HTTP SMS provider (repointed by
+[`delivery-reconcile`](../delivery-reconcile/README.md)): intercept =
+`sms-sink`; real = the **SMS-Aero** production sender (smsaero.ru **Gate API
+v2** — `POST https://gate.smsaero.ru/v2/sms/send`, HTTP Basic auth
+`email:api-key`), reached via the dev-stand `sms-aero-adapter` service that
+holds the egress creds. Those creds (`SMSAERO_EMAIL` / `SMSAERO_API_KEY` /
+`SMSAERO_SIGN`) live ONLY in the operator's stand env
+(`infra/dev-stand/.env.example` documents the keys) — never in the repo. Real
+SMS costs money: `real` is opt-in and fail-closed at provision time (#902).
+Detail: `infra/dev-stand/README.md` → delivery flags.
+
 ## What's here
 
 | Concern                                            | File                          |

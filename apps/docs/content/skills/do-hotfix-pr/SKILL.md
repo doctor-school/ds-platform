@@ -13,7 +13,7 @@ mode: inline
 
 ## Input
 
-- GitHub Issue `#N` with `bug` label and a reproducer or failing test attached.
+- GitHub Issue `#N` with `bug` label and a reproducer or failing test attached. The Issue body states **observed facts** (exact failing request, logs, error body); any cause is an explicitly-labelled **UNCONFIRMED hypothesis** until reproduced — never present an unproven root cause as the diagnosis (#949 precedent).
 - Branch name `fix/<N>-<slug>`.
 
 ## Procedure

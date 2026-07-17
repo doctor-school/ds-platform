@@ -27,7 +27,7 @@ An amendment block is justified **only** when the original decision is **running
 
 ## Procedure (inline rewrite — the default path)
 
-1. **Read all four files** (RU + EN narrative + RU + EN design, where applicable). Identify every section the revision touches.
+1. **Read all four files** (RU + EN narrative + RU + EN design, where applicable). Identify every section the revision touches. Note the narrative and its `-design` companion have **independent section numbering** (narrative §10 and design §10 are unrelated sections), and forward-references elsewhere in the repo may cite either scheme. Before renumbering or citing a section, grep BOTH files (EN + RU) for the §-reference and the topic keywords — working from one file alone has produced dangling refs and a false "broken §-ref" debt note (#104).
 2. **Rewrite in EN narrative** — edit the affected sections in place so the document reads as if the current decision were always the decision. Delete or rewrite any prose that referenced the old decision (do not leave "previously …" / "before X we did Y" / "SUPERSEDED by …" callouts in the body — those belong in `git log`, not the document).
 3. **Mirror to RU narrative** — semantically equivalent, not a literal calque. Use the technical terminology already established in the file.
 4. **If a paired design-spec exists, mirror the revision there** (EN + RU). The same inline-rewrite rule applies.

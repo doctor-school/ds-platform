@@ -243,3 +243,10 @@ The endpoint-authz lint gate boots this module under **tsx/esbuild**, which
 mis-emits `design:paramtypes` when a type-inferred constructor parameter
 precedes an `@Inject(...)` one. Keep `@Inject` params first and any
 type-inferred dependency last (see `auth.service.ts` / `auth.controller.ts`).
+
+The failure is **silent**: `pnpm lint:endpoint-authz` exits 1 with no
+stdout/stderr (the gate boots Nest with the logger off), while tsc and Vitest
+tolerate either order — so typecheck and tests stay green and only the gate
+crashes. To see the real `UndefinedDependencyException`, boot
+`scanRealRouteSet()` (`src/authz/authz.gate.ts`) yourself with the Nest logger
+enabled.

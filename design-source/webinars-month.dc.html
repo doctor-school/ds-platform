@@ -136,7 +136,7 @@
                   <span style="{{ cell.dateStyle }}">{{ cell.dateLabel }}</span>
                   <div style="margin-top:2px">
                     <sc-for list="{{ cell.events }}" as="ev" hint-placeholder-count="1">
-                      <a href="{{ ev.href }}" style="{{ ev.style }}">{{ ev.text }}</a>
+                      <a href="{{ ev.href }}" style="{{ ev.style }}"><span style="{{ ev.textStyle }}">{{ ev.text }}</span></a>
                     </sc-for>
                   </div>
                 </div>
@@ -209,7 +209,7 @@ class Component extends DCLogic {
     data[16] = { today: true, events: [
       ev('19:00','Школа травматологии','Пластика ахиллова сухожилия: разбор случаев',{ live:true, href:'Комната эфира.dc.html' }),
       ev('20:30','Школа гастроэнтерологии','СИБР и СРК: что нового в 2026',{ href:'Вебинар.dc.html' }) ] };
-    data[17] = { events: [ ev('18:00','Школа кардиологии','ХСН с сохранной фракцией выброса',{ href:'Вебинар.dc.html' }), ev('19:30','Школа педиатрии','Атопический дерматит у детей',{ href:'Вебинар.dc.html' }) ] };
+    data[17] = { events: [ ev('18:00','Школа кардиологии','Хроническая сердечная недостаточность с сохранной фракцией выброса: диагностика и ведение в амбулаторной практике',{ href:'Вебинар.dc.html' }), ev('19:30','Школа педиатрии','Атопический дерматит у детей раннего возраста: ступенчатая терапия и работа с родителями',{ href:'Вебинар.dc.html' }), ev('21:00','Школа неврологии','Когнитивные нарушения у пожилых: скрининг, дифференциальная диагностика и маршрутизация',{ href:'Вебинар.dc.html' }) ] };
     data[18] = { events: [ ev('18:00','Школа эндокринологии','СД 2 типа: старт инсулинотерапии',{ href:'Вебинар.dc.html' }) ] };
     data[19] = { weekend: true }; data[20] = { weekend: true };
     data[21] = { events: [ ev('19:00','Школа неврологии','Мигрень: CGRP-терапия',{ href:'Вебинар.dc.html' }) ] };
@@ -231,6 +231,7 @@ class Component extends DCLogic {
 
     // ---- Десктоп ----
     const cellBase = 'min-height:118px;padding:10px;border-right:1px solid ' + hairline;
+    const clamp2 = 'display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden';
     const evPill = 'display:block;margin-top:6px;padding:6px 8px;background:' + tint + ';color:' + tintInk + ';font-size:11px;font-weight:700;line-height:1.35;text-decoration:none';
     const evLive = 'display:block;margin-top:6px;padding:6px 8px;background:#C81E1E;color:#fff;font-size:11px;font-weight:800;line-height:1.35;text-decoration:none';
     const desktopCells = flat.map(c => {
@@ -239,14 +240,14 @@ class Component extends DCLogic {
       const empty = c.out || (!info.events && !past);
       const all = (info.events || []).slice().sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0));
       const MAX = 3;
-      const events = all.slice(0, MAX).map(e => ({ href: e.href, text: (e.live ? '🔴 ' : '') + e.time + ' · ' + e.title, style: e.live ? evLive : evPill }));
-      if (all.length > MAX) events.push({ href: 'Эфиры.dc.html', text: '+' + (all.length - MAX) + ' ещё', style: 'display:block;margin-top:6px;padding:4px 8px;font-size:11px;font-weight:800;color:' + accent + ';text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px' });
+      const events = all.slice(0, MAX).map(e => ({ href: e.href, text: (e.live ? '🔴 ' : '') + e.time + ' · ' + e.title, style: e.live ? evLive : evPill, textStyle: clamp2 }));
+      if (all.length > MAX) events.push({ href: 'Эфиры.dc.html', text: '+' + (all.length - MAX) + ' ещё', textStyle: '', style: 'display:block;margin-top:6px;padding:4px 8px;font-size:11px;font-weight:800;color:' + accent + ';text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px' });
       return {
         cellStyle: cellBase + (weekend || empty ? ';background:' + mutedCellBg : '') + (today ? ';outline:3px solid ' + btnBg + ';outline-offset:-3px;position:relative' : ''),
         dateStyle: today ? 'font-size:13px;font-weight:800;color:' + btnFg + ';background:' + btnBg + ';padding:2px 8px'
           : 'font-size:13px;font-weight:800;color:' + (past || weekend || empty ? muteInk : ink),
         dateLabel: today ? (c.d + ' · сегодня') : String(c.d),
-        events: events.length ? events : (past && info.note ? [{ text: info.note, href: '#', style: 'display:block;margin-top:6px;font-size:11px;font-weight:600;color:' + muteInk + ';text-decoration:none;pointer-events:none' }] : [])
+        events: events.length ? events : (past && info.note ? [{ text: info.note, href: '#', textStyle: '', style: 'display:block;margin-top:6px;font-size:11px;font-weight:600;color:' + muteInk + ';text-decoration:none;pointer-events:none' }] : [])
       };
     });
     const weeks = chunk(desktopCells, 7);

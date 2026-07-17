@@ -5,6 +5,7 @@
     "background": { "$value": "{color.neutral.950}" },
     "foreground": { "$value": "{color.white}" },
     "section": { "$value": "{color.neutral.925}" },
+    "calendar-muted": { "$value": "{color.neutral.925}" },
     "card": { "$value": "{color.neutral.900}" },
     "card-foreground": { "$value": "{color.white}" },
     "primary": { "$value": "{color.blue.500}" },

@@ -335,7 +335,7 @@ The reset email is a **specified artifact** like §13.3 — SSOT: the BFF mailer
 
 Invariants: the **code format** is `[A-Z0-9]{6}` (Zitadel `PASSWORD_RESET_CODE`: 6 chars, uppercase + digits — the registration-code shape, distinct from the 8-digit login OTPs; Zitadel still generates and verifies the code, §14); the mail contains **no URL at all**. The send-side half of the contract is the `PasswordResetRequest` oneof `returnCode` (§4/§14).
 
-## 14. Own-mailer code delivery & transport chain (GH #910 / #872, EARS-29–32)
+## 14. Own-mailer code delivery & transport chain (GH #910 / #872 / #1068, EARS-29–33)
 
 ### 14.1 Send-hop mechanics — `returnCode`
 
@@ -373,3 +373,15 @@ Routing through Resend (foreign infra) **as failover** is a deliberate, recorded
 With `returnCode` the one-time code transits the BFF — a surface it never touched before. The scrub clause is **testable**: across every send outcome (success, failover, total failure) no log line, trace, error report, serialized provider response, or `audit_ledger` row contains the code; the code lives in memory only for the in-flight send and persists nowhere. Transport-level errors are sanitized before logging (a provider rejection must not echo the outbound message body into the log).
 
 Notification emails are a **user-facing surface** (AGENTS.md §6). **Stage A is satisfied**: the owner picked the code-only, fully link-free (Notion/Slack-style) artifact on 2026-07-15 (#910). **Stage B is owed by the impl slice**: the rendered §13.3/§13.4 emails live-verified on Mailpit (dev-stand) **and** a cold prod re-drive of registration + reset after the switch, before merge.
+
+### 14.8 Synthetic-send suppression seam (load-test #873, EARS-33)
+
+The #873 load-test campaign drives auth-bursts (register / reset / OTP) that fan out to the mailer and SMS send hops (§14.1–§14.3). Against prod those sends would hit the real mail.ru/Resend relays with synthetic addresses — bouncing, **burning the mail.ru sender-reputation the #910 track just warmed** (§14.5), and consuming the ~100/day working ceiling (§14.4). Flipping the global `EMAIL_DELIVERY_MODE`/`SMS_DELIVERY_MODE` to sink everything is a forbidden workaround (it would also silence real users' mail mid-run). Instead a **recipient-scoped, env-gated suppression seam** sits at the same single send point as the §14.2 flag-gated delivery:
+
+- **Toggle (default off → inert).** `LOADTEST_SUPPRESS_SYNTHETIC` (bool, default `false`) — off means the seam is a no-op branch: every send proceeds exactly as today, zero behaviour change for real users. Documented in the `packages/schemas` env schema alongside the existing `*_DELIVERY_MODE` flags (which are **not** changed).
+- **Synthetic tag = reserved recipient domain.** A send is synthetic iff its recipient address matches the reserved suffix (`LOADTEST_SYNTHETIC_DOMAIN`, default `@loadtest.invalid` — the IANA-reserved `.invalid` TLD, which can never be a real mailbox). The SMS path uses the analogous reserved-recipient match (a reserved test-MSISDN tag) under the same toggle.
+- **Suppression point — before the relay call.** With the toggle on and the recipient tagged, the send is dropped **before** the provider/relay hop (§14.3): the transport is never contacted, so zero real send leaves the box. The drop happens **after** the identical request-shape pipeline (enumeration-safe wrapper, `register-notice-throttle`, artifact composition) the load test must measure — the campaign exercises the real pipeline minus the relay hop only.
+- **Loud observability.** Each suppressed send increments a dedicated `mailer_synthetic_suppressed_total` counter (labelled `channel = email|sms`) and emits a structured log line, so the #873 load report can prove **zero real sends** left the platform. It reuses the §14.2/§14.5 observability surface; unlike EARS-30 there is nothing to scrub — a suppressed send carries only the synthetic address, no one-time code.
+- **Three-state matrix (fail-closed on the toggle).** off → normal send in every case; on + tagged → suppressed + counted; on + untagged → normal send. The toggle is the only switch; a missing/false toggle can never suppress a real user's mail.
+
+This is a **backend-only** seam — no UI trigger anywhere, EARS-33 verified by Vitest unit/e2e alone (F-22) — and a #873 phase-2 prerequisite: the prod auth-burst run must not start until it ships (#1068 blocks #873).

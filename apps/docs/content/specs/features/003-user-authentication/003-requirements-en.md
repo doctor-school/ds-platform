@@ -7,7 +7,26 @@ surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/3
 parent_issue: https://github.com/doctor-school/ds-platform/issues/80
 issues:
-  [81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 131, 207, 709, 770, 1045, 1046, 1047]
+  [
+    81,
+    82,
+    83,
+    84,
+    85,
+    86,
+    87,
+    88,
+    89,
+    90,
+    131,
+    207,
+    709,
+    770,
+    1045,
+    1046,
+    1047,
+    1068,
+  ]
 prior_decisions:
   - ADR-0001 — Identity / Auth / RBAC (IdP = Zitadel; §1 hybrid RBAC, §3 dual identifiers, §4 auth methods, §6 tokens, §7 security baseline, §7.3 audit)
   - ADR-0002 — Backend Core Stack (§3 nestjs-zod + URI versioning + Vitest)
@@ -172,6 +191,7 @@ The auth vertical is the platform's first real aggregate cluster (unlike the que
 - **EARS-30:** While a Zitadel-returned one-time code transits the BFF (EARS-29), the system shall hold it in memory only for the duration of the in-flight send and shall never write it to logs, traces, error reports, provider-response echoes, or `audit_ledger` rows (a testable egress/log scrub over every send outcome — success, failover, and total failure); no persistence of the code exists beyond the send.
 - **EARS-31:** When the BFF mailer dispatches an email and the active transport channel rejects it with a rate-limit or availability response — mail.ru `451 Ratelimit exceeded`, Resend `429`, or any 4xx/5xx/connection failure — the system shall switch to the other channel **within the same send** (mail.ru primary → Resend failover; never re-try the rejected channel, which just re-fails) and shall count the send as delivered **only on a 2xx provider acceptance**. When both channels fail, the send fails closed: it is logged with both provider response codes (EARS-32) and the enumeration-safe API response stays unchanged (EARS-16 — a mailer outage is never an oracle and never a 500); user recovery is the EARS-25 resend / a re-request.
 - **EARS-32:** The system shall surface every mailer failover and relay failure as a structured log and metric carrying the provider and its response code (GlitchTip / Prometheus, engineering-readiness defaults), so a channel degradation — mail.ru saturated with Resend carrying the traffic, or a dead channel — is always visible and never silent.
+- **EARS-33:** When the BFF dispatches a transactional email or SMS and the synthetic-send suppression toggle is on (`LOADTEST_SUPPRESS_SYNTHETIC`, default **off** → the seam is fully inert), the system shall drop — **before** the relay/provider call — any send addressed to a synthetic-tagged recipient (a reserved recipient-domain suffix, default `@loadtest.invalid`, parameterized by `LOADTEST_SYNTHETIC_DOMAIN`; the SMS path uses the analogous reserved-recipient match) and count it on a loud per-suppression metric + log line (the transport is never contacted, so **zero** real send leaves the box), while every send to an **untagged** recipient proceeds unchanged. With the toggle **off**, all sends — tagged or not — proceed normally. The seam sits at the **same single mailer/SMS send point** as EARS-29/31, matched by recipient only and **after** the identical request-shape pipeline the load test must exercise (enumeration-safe wrapper, `register-notice-throttle`, artifact composition — the campaign measures the real pipeline minus the relay hop); it never flips the global `EMAIL_DELIVERY_MODE`/`SMS_DELIVERY_MODE`. The three-state matrix is **fail-closed on the toggle** — off → normal (every case); on + tagged → suppressed + counted; on + untagged → normal — so a missing/false toggle can never suppress a real user's mail. Backend-only (no UI trigger anywhere; verified by Vitest unit/e2e alone). (Load-test #873 phase-2 prerequisite — synthetic auth-burst sends never reach real channels or burn the mail.ru sender-reputation the #910 track warmed; #1068 blocks #873. Design §14.8.)
 
 **Account profile v1 (GH #770)**
 
@@ -220,6 +240,7 @@ The auth vertical is the platform's first real aggregate cluster (unlike the que
 | 30 | Vitest unit | `apps/api/src/mailer/*.spec.ts` + `apps/api/src/auth/audit.spec.ts` | Captured log/audit/error output across every send outcome (success, failover, total failure) never contains the one-time code; the code persists nowhere beyond the in-flight send. #910. |
 | 31 | Vitest unit | `apps/api/src/mailer/*.spec.ts` | Scripted fake transports: mail.ru `451 Ratelimit exceeded` → exactly one channel switch to Resend, no same-channel retry; Resend `429` mirrored; success counted only on 2xx; both-fail → fail-closed error, unchanged enumeration-safe response (EARS-16). #910. |
 | 32 | Vitest unit + live-stand check | `apps/api/src/mailer/*.spec.ts` + GlitchTip/Prometheus on the stand | Every failover / relay failure emits a structured log + metric with the provider response code; a degraded-channel state is visible on the dashboards, never silent. #872. |
+| 33 | Vitest unit + e2e | `apps/api/src/mailer/*.spec.ts` (+ the SMS path) | Three-state matrix over the suppression toggle: on + `@loadtest.invalid` recipient → zero relay/provider calls + exactly one synthetic-suppressed counter/log; on + real-domain recipient → normal send; off + tagged recipient → normal send (fakes no more permissive than real, #202). The suppressed path still runs the identical request-shape pipeline (enumeration-safe wrapper, `register-notice-throttle`) minus the relay hop; default-off proven inert; no `EMAIL_DELIVERY_MODE`/`SMS_DELIVERY_MODE` change; the `packages/schemas` env schema documents the toggle. #1068. |
 
 ## Dependencies & sequencing
 

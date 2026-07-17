@@ -286,3 +286,27 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Given a verification or reset send with any outcome including success, failover, and total failure
     When the BFF logs, audits, or reports on the send
     Then no log line, trace, error report, or audit_ledger row contains the one-time code
+
+  @EARS-33 @happy
+  Scenario: With the suppression toggle on, a synthetic-tagged send is dropped before the relay
+    Given the synthetic-send suppression toggle is on
+    And the reserved synthetic recipient domain is "@loadtest.invalid"
+    When the BFF dispatches a verification, reset, or OTP send to a recipient at the synthetic domain
+    Then the send is dropped before any relay or provider call
+    And no real email or SMS leaves the platform
+    And a synthetic-suppressed counter and log line are emitted for the send
+
+  @EARS-33 @happy
+  Scenario: With the suppression toggle on, an untagged send proceeds normally
+    Given the synthetic-send suppression toggle is on
+    When the BFF dispatches a send to a recipient at a real, non-synthetic domain
+    Then the send proceeds to the transport chain unchanged
+    And no send is suppressed or counted as synthetic
+
+  @EARS-33 @failure
+  Scenario: With the suppression toggle off, the seam is inert for every recipient
+    Given the synthetic-send suppression toggle is off
+    When the BFF dispatches a send to a synthetic-tagged recipient
+    And the BFF dispatches a send to a real-domain recipient
+    Then both sends proceed to the transport chain unchanged
+    And no send is suppressed, regardless of the recipient tag

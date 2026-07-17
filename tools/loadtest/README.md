@@ -85,6 +85,33 @@ Read local-stand values from `~/.ds-platform/.env.local` and map them onto
    (distributed sources, or an owner-approved windowed threshold change — never a
    code flag flip) is a phase-2 decision.
 
+### Rate-limit window recipe (#1076 — env override, not a code flag)
+
+The EARS-13 ceilings are env-overridable per var so an **owner-approved window**
+can raise them for the burst without touching code (ADR-0001 §7). Defaults stay
+byte-identical when unset: per-user 10/15 min, per-IP 20/15 min, per-ASN 100/h.
+
+| Env var (on the api process) | Overrides         | Default |
+| ---------------------------- | ----------------- | ------- |
+| `RATE_LIMIT_PER_USER_15MIN`  | per-user / 15 min | `10`    |
+| `RATE_LIMIT_PER_IP_15MIN`    | per-IP / 15 min   | `20`    |
+| `RATE_LIMIT_PER_ASN_1H`      | per-ASN / hour    | `100`   |
+
+Each must be a **positive integer**; a malformed / ≤0 / non-integer value is
+ignored with a loud api-log warn and the default kept for that ceiling — the
+limiter can never be disabled or set unlimited, and a typo never crashes api boot.
+
+Procedure (only inside a recorded owner window):
+
+1. **Set** the needed var(s) in the api's env (prod `/etc/ds-platform/api.env`;
+   local: the session env of the api process — never edit `~/.ds-platform/.env.local`).
+2. **Restart** the api container/process so the module factory re-reads the env.
+3. **Run** the burst (`loadtest:auth`, `LOADTEST_SUPPRESSION_CONFIRMED=1` + the
+   #1068 suppression seam in place).
+4. **Revert (mandatory).** UNSET the var(s) and **restart** the api again to
+   return to the byte-identical EARS-13 defaults. The revert is part of the
+   Abort / rollback closeout below — a raised ceiling must never outlive the window.
+
 ## Run protocol (phase 2 — owner-windowed prod run)
 
 ### Pre-run checklist
@@ -119,7 +146,10 @@ The load test **mutates no schema and writes no migration** — abort is simply:
 (1) Ctrl-C every generator (kill by port/PID — the harness opens only outbound
 connections, no listeners), (2) `pnpm loadtest:cleanup` (add
 `LOADTEST_CLEANUP_SWEEP=1` for belt-and-braces) to delete synthetic accounts and
-any presence/chat rows they created age out on their own. No data rollback needed.
+any presence/chat rows they created age out on their own, (3) if any
+`RATE_LIMIT_PER_*` window override was set, **unset it and restart the api** to
+restore the byte-identical EARS-13 defaults (#1076 window recipe above). No data
+rollback needed.
 
 ## Observability pre-flight (recon fact 5)
 

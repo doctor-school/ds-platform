@@ -1,0 +1,2 @@
+CREATE TRIGGER widget_a_audit AFTER INSERT OR UPDATE OR DELETE
+  ON "widget_a" FOR EACH ROW EXECUTE FUNCTION audit_row_change();

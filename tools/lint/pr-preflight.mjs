@@ -110,6 +110,7 @@ export const STATIC_GUARDS = [
   { name: "glossary-roundtrip", file: "glossary-roundtrip-lint.ts" },
   { name: "instruction-budget", file: "instruction-budget-lint.ts" },
   { name: "migration-index", file: "migration-index-lint.ts" },
+  { name: "audit-coverage", file: "audit-coverage-lint.ts" },
   { name: "no-stub", file: "no-stub-lint.ts" },
   { name: "no-hardcoded-path", file: "no-hardcoded-path-lint.ts" },
   { name: "route-targets", file: "route-target-lint.ts" },

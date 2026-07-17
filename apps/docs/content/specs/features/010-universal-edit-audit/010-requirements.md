@@ -2,7 +2,7 @@
 title: "010 — Universal edit audit: WHO / WHEN / WHAT / SOURCE for every domain-table mutation"
 description: "Requirements: a universal, DB-layer edit-audit mechanism — one generic PL/pgSQL row-level AFTER trigger attached to every domain table by migration — so that every INSERT/UPDATE/DELETE of domain data leaves an append-only audit_ledger record answering WHO (actor sub), WHEN, WHAT (field-level before→after diff, changed fields only) and SOURCE (human admin vs automated system function vs direct DB access). Actor/source ride per-transaction GUCs set by the API's Drizzle transaction wrapper; a write with no context still lands as source=db-direct — audited, never blocked. Written once, the mechanism covers all current AND future tables with no per-table re-implementation, and a CI coverage guard makes silent opt-out of a new table/write-path impossible. PD-bearing columns are masked in diffs (ADR-0009 §2.4). Backend-only infra: the admin history-viewer UI is an owner-deferred follow-up feature."
 slug: 010-universal-edit-audit
-status: Draft
+status: In dev
 surface: backend-only
 tracker: https://github.com/doctor-school/ds-platform/issues/1084
 issues: [1086, 1087, 1088, 1089]

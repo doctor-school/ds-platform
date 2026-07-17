@@ -20,6 +20,7 @@ import {
   type RelayObservability,
 } from "./relay-observability.js";
 import { ResendChannel, type ResendChannelConfig } from "./resend-transport.js";
+import { type SyntheticSuppression } from "./synthetic-suppression.js";
 
 /** One SMTP transport's resolved config — host unset ⇒ that transport is a no-op. */
 export interface SmtpTransportConfig {
@@ -89,6 +90,12 @@ export interface SmtpMailerConfig {
   isEnabled: () => boolean;
   /** Portal origin the notice links point at (`/login`, `/reset`). */
   portalBaseUrl: string;
+  /**
+   * EARS-33 synthetic-send suppression seam (design §14.8) — optional; absent ⇒
+   * no suppression (every send proceeds). When present it is consulted at the
+   * single send point below, BEFORE any relay contact.
+   */
+  synthetic?: SyntheticSuppression | undefined;
   /** Override the transport builder (the unit specs inject a recording fake). */
   transportFactory?: TransportFactory | undefined;
   /** Override the warn sink (the unit specs assert on it). */
@@ -246,6 +253,16 @@ export class SmtpMailer implements Mailer {
     context: string,
     secret?: string,
   ): Promise<void> {
+    // EARS-33 (design §14.8): the synthetic-send suppression seam sits at this
+    // single send point, BEFORE the transport-selection + relay hop. The public
+    // method already ran the identical request-shape pipeline (parity guards +
+    // artifact composition) the #873 load test must exercise; with the toggle ON
+    // and a `@loadtest.invalid`-tagged recipient the send is dropped here — the
+    // transport is never contacted, so zero real send leaves the box, and the drop
+    // is counted + logged loudly. Toggle OFF (default) or an untagged recipient ⇒
+    // fully inert (falls through to the normal transport chain below).
+    if (this.config.synthetic?.suppress("email", to)) return;
+
     // Live flag read on EVERY send (mirror bot-protection.module.ts:42): a mid-
     // session flip takes effect with no restart; Unleash-unreachable already
     // resolved to the EMAIL_DELIVERY_MODE env default by the time we are called.

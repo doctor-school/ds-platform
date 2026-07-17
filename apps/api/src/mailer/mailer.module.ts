@@ -9,6 +9,10 @@ import {
 import { MAILER, type Mailer } from "./mailer.types.js";
 import { SmtpMailer, type SmtpTransportConfig } from "./smtp-mailer.js";
 import {
+  SYNTHETIC_SUPPRESSION,
+  SyntheticSuppression,
+} from "./synthetic-suppression.js";
+import {
   InMemoryRegisterNoticeThrottle,
   RedisRegisterNoticeThrottle,
   REGISTER_NOTICE_THROTTLE,
@@ -81,14 +85,34 @@ function resolveRealTransport(env: ApiEnv): SmtpTransportConfig | undefined {
 @Module({
   providers: [
     {
+      // EARS-33 (design §14.8): the shared synthetic-send suppression seam, built
+      // once from the boot env and consumed by BOTH the mailer (email) and the
+      // AuthService SMS send point. Default OFF ⇒ inert.
+      provide: SYNTHETIC_SUPPRESSION,
+      useFactory: (): SyntheticSuppression => {
+        const env = loadEnv();
+        return new SyntheticSuppression({
+          enabled: () => env.LOADTEST_SUPPRESS_SYNTHETIC,
+          tags: {
+            domain: env.LOADTEST_SYNTHETIC_DOMAIN,
+            msisdnPrefix: env.LOADTEST_SYNTHETIC_MSISDN_PREFIX,
+          },
+        });
+      },
+    },
+    {
       provide: MAILER,
       // FEATURE_FLAGS is @Global (#185) ⇒ injectable here without re-importing
       // (mirror BotProtectionModule). The factory passes a LIVE `email-delivery-real`
       // read so a flag flip switches the notice transport with no restart (#209).
-      inject: [FEATURE_FLAGS],
-      useFactory: (flags: FeatureFlags): Mailer => {
+      inject: [FEATURE_FLAGS, SYNTHETIC_SUPPRESSION],
+      useFactory: (
+        flags: FeatureFlags,
+        synthetic: SyntheticSuppression,
+      ): Mailer => {
         const env = loadEnv();
         return new SmtpMailer({
+          synthetic,
           intercept: {
             host: env.MAILER_SMTP_HOST,
             port: env.MAILER_SMTP_PORT,
@@ -138,6 +162,6 @@ function resolveRealTransport(env: ApiEnv): SmtpTransportConfig | undefined {
       },
     },
   ],
-  exports: [MAILER, REGISTER_NOTICE_THROTTLE],
+  exports: [MAILER, REGISTER_NOTICE_THROTTLE, SYNTHETIC_SUPPRESSION],
 })
 export class MailerModule {}

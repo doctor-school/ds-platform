@@ -23,6 +23,7 @@ import {
   type RegisterNoticeThrottle,
 } from "../mailer/register-notice-throttle.js";
 import type { Mailer } from "../mailer/mailer.types.js";
+import { SyntheticSuppression } from "../mailer/synthetic-suppression.js";
 
 // AuthService.register error taxonomy (no DB). Registration is email-primary
 // (#202): the creation schema rejects baseline-violating passwords at the DTO
@@ -64,6 +65,7 @@ function buildService(idp: IdpClient): AuthService {
     { record: () => Promise.resolve() } as never,
     new FakeMailer(),
     new InMemoryRegisterNoticeThrottle("test-pepper"),
+    SyntheticSuppression.disabled(),
     {} as never,
     {} as never,
     {} as never,
@@ -161,6 +163,7 @@ describe("FakeIdpClient.createUser — no-email parity with real Zitadel (#202)"
       audit,
       new FakeMailer(),
       new InMemoryRegisterNoticeThrottle("test-pepper"),
+      SyntheticSuppression.disabled(),
       {} as never,
       {} as never,
       {} as never,
@@ -221,6 +224,7 @@ function buildRegisterService(opts: {
     opts.audit,
     opts.mailer,
     opts.throttle,
+    SyntheticSuppression.disabled(),
     {} as never,
     {} as never,
     {} as never,
@@ -376,6 +380,7 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
       audit,
       new FakeMailer(),
       new InMemoryRegisterNoticeThrottle("test-pepper"),
+      SyntheticSuppression.disabled(),
       {} as never, // mirror — unused on the reset path
       sessions,
       {} as never, // smsBudget — unused on the reset path
@@ -495,6 +500,7 @@ describe("AuthService.resendEmailVerification — enumeration-safe (#319, EARS-2
       audit,
       new FakeMailer(),
       new InMemoryRegisterNoticeThrottle("test-pepper"),
+      SyntheticSuppression.disabled(),
       {} as never, // mirror — unused on the resend path
       {} as never, // sessions — unused on the resend path
       {} as never, // smsBudget — unused on the resend path
@@ -573,5 +579,75 @@ describe("FakeIdpClient.resendEmailVerification — parity with real adapter (#3
     const created = await idp.createUser({ email: "v@ds.test", password });
     await idp.verifyEmail(created.sub, FAKE_VALID_CODE);
     await expect(idp.resendEmailVerification("v@ds.test")).resolves.toBe(false);
+  });
+});
+
+// 003 EARS-33 (design §14.8): the SMS-OTP send point honours the synthetic-send
+// suppression seam. With the toggle ON and a reserved test-MSISDN (`+999…`)
+// recipient, the BFF drops the send BEFORE the Zitadel/SMS-Aero provider hop —
+// AFTER the EARS-14 budget (the request-shape pipeline the #873 load test must
+// exercise) — so zero synthetic SMS leaves the box, while the enumeration-safe
+// `otp_sent` ack + the `OtpSent` audit row stay unchanged. Toggle OFF (default) or
+// an untagged real phone ⇒ normal send (the provider IS asked).
+describe("AuthService.requestLoginOtp — SMS synthetic-send suppression (003 EARS-33)", () => {
+  const allowingBudget = { tryConsume: () => true } as never;
+  const okAudit = { record: () => Promise.resolve() } as never;
+
+  function buildOtpService(synthetic: SyntheticSuppression, idp: FakeIdpClient) {
+    return new AuthService(
+      idp as unknown as IdpClient,
+      explodingDb as never, // the otp-request path touches no DB
+      undefined,
+      okAudit,
+      new FakeMailer(),
+      new InMemoryRegisterNoticeThrottle("test-pepper"),
+      synthetic,
+      {} as never, // mirror — unused
+      {} as never, // sessions — unused
+      allowingBudget, // smsBudget — always allows here
+    );
+  }
+
+  const enabled = () =>
+    new SyntheticSuppression({
+      enabled: () => true,
+      tags: { domain: "@loadtest.invalid", msisdnPrefix: "+999" },
+    });
+
+  it("003 EARS-33: ON + reserved test-MSISDN → the provider SMS send is NOT called", async () => {
+    const idp = new FakeIdpClient();
+    const service = buildOtpService(enabled(), idp);
+
+    const res = await service.requestLoginOtp(
+      { identifier: "+9991234567", channel: "sms" },
+      { ip: "203.0.113.7" },
+    );
+
+    expect(res).toEqual({ status: "otp_sent" }); // ack unchanged (EARS-16)
+    expect(idp.smsOtpSendCount()).toBe(0); // zero real send left the box
+  });
+
+  it("003 EARS-33: ON + UNtagged real phone → the provider SMS send proceeds", async () => {
+    const idp = new FakeIdpClient();
+    const service = buildOtpService(enabled(), idp);
+
+    await service.requestLoginOtp(
+      { identifier: "+79991234567", channel: "sms" },
+      { ip: "203.0.113.7" },
+    );
+
+    expect(idp.smsOtpSendCount()).toBe(1);
+  });
+
+  it("003 EARS-33: OFF (inert) + reserved test-MSISDN → the provider SMS send proceeds", async () => {
+    const idp = new FakeIdpClient();
+    const service = buildOtpService(SyntheticSuppression.disabled(), idp);
+
+    await service.requestLoginOtp(
+      { identifier: "+9991234567", channel: "sms" },
+      { ip: "203.0.113.7" },
+    );
+
+    expect(idp.smsOtpSendCount()).toBe(1);
   });
 });

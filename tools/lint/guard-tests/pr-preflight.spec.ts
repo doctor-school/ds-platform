@@ -254,4 +254,25 @@ describe("pr-preflight summarize()", () => {
     expect(lines[1]).toContain("FAIL");
     expect(lines[1]).toContain("spec-link");
   });
+
+  it("a WARN guard's non-zero exit is reported WARN and does NOT flip ok (mirrors CI continue-on-error)", () => {
+    const res = summarize([
+      { name: "spec-link", status: 0 },
+      { name: "primitives-first", status: 1, warn: true },
+    ]);
+    expect(res.ok).toBe(true);
+    expect(res.warned).toBe(1);
+    expect(res.lines[1]).toContain("WARN");
+    expect(res.lines[1]).toContain("primitives-first");
+  });
+
+  it("a non-WARN guard still fails the verdict even alongside a WARN guard", () => {
+    const res = summarize([
+      { name: "primitives-first", status: 1, warn: true },
+      { name: "spec-link", status: 1 },
+    ]);
+    expect(res.ok).toBe(false);
+    expect(res.lines[0]).toContain("WARN");
+    expect(res.lines[1]).toContain("FAIL");
+  });
 });

@@ -166,7 +166,7 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
       ).toBeVisible();
     });
 
-    test(`EARS-19: canvas scale invariants — 11px pills, 118px cells, 1240px container, toolbar on hero (${theme})`, async ({
+    test(`EARS-19: canvas scale invariants — 11px pills, 118px cells, 1240px grid column, header/hero one blue, toolbar on hero (${theme})`, async ({
       page,
     }) => {
       await page.setViewportSize({ width: 1440, height: 1000 });
@@ -217,13 +217,21 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
         ),
       ).toBe("118px");
 
-      // Page column — canvas line 33: hero + main cap at max-width 1240px.
+      // Page column — canvas line 44: `main` caps at 1240px of CONTENT with
+      // the gutter outside (content-box). Tailwind preflight is border-box, so
+      // the Container `calendar` cap is 1336px (1240 + 2 × 48px desktop-max
+      // gutter, #1080 rework #3) and the canvas invariant is the GRID CONTENT
+      // spanning the full 1240px at ≥1336px viewports.
       const toolbar = page.getByTestId("month-toolbar");
       expect(
         await toolbar.evaluate(
           (el) => getComputedStyle(el.parentElement!).maxWidth,
         ),
-      ).toBe("1240px");
+      ).toBe("1336px");
+      const gridWidth = await grid.evaluate(
+        (el) => el.getBoundingClientRect().width,
+      );
+      expect(Math.abs(gridWidth - 1240)).toBeLessThanOrEqual(0.5);
 
       // Toolbar sits ON the hero band — canvas line 42 / 289: `main` pulls up
       // by 60px on desktop, so the toolbar's top edge overlaps the hero.
@@ -252,6 +260,55 @@ test.describe("004 EARS-19 month-calendar view fidelity", () => {
         return bad;
       });
       expect(overflows).toEqual([]);
+
+      // One continuous blue band — the app-shell header and the hero share the
+      // canvas headerBg (#1080 rework #3): light #2D84F2, dark #114D9E — no
+      // colour seam between the chrome bar and the poster band.
+      const [shellBg, heroBg] = await page.evaluate(() => {
+        const shell = document.querySelector("header")!;
+        const heroBand = document.querySelector("main header")!;
+        return [
+          getComputedStyle(shell).backgroundColor,
+          getComputedStyle(heroBand).backgroundColor,
+        ];
+      });
+      expect(shellBg).toBe(heroBg);
+      expect(shellBg).toBe(
+        theme === "light" ? "rgb(45, 132, 242)" : "rgb(17, 77, 158)",
+      );
+
+      // Header AA (owner pick, #1083 Mode-a): on the blue.500 light band the
+      // nav runs at the WCAG large-text tier — computed size ≥ 18.67px at
+      // weight ≥ 700 (white on #2D84F2 = 3.69:1 clears only the large/bold
+      // ≥3:1 carve-out) — and the white chips carry the canvas navy ink
+      // #114D9E in BOTH themes (8.14:1 on white).
+      const navLink = page.getByTestId("shell-nav-broadcasts");
+      const navStyle = await navLink.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return { size: parseFloat(cs.fontSize), weight: Number(cs.fontWeight) };
+      });
+      expect(navStyle.size).toBeGreaterThanOrEqual(18.67);
+      expect(navStyle.weight).toBeGreaterThanOrEqual(700);
+      const loginChip = page.getByTestId("shell-login");
+      await expect(loginChip).toBeVisible(); // guest run (cookies cleared)
+      const chipStyle = await loginChip.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return { color: cs.color, bg: cs.backgroundColor };
+      });
+      expect(chipStyle.color).toBe("rgb(17, 77, 158)");
+      expect(chipStyle.bg).toBe("rgb(255, 255, 255)");
+
+      // Live-pill weight — canvas evLive (owner verdict #3 at #1052, #1080):
+      // the red pill's `time · title` run computes weight 700 like a planned
+      // pill (the seed carries a live event today).
+      const livePill = grid
+        .locator("a[href^='/webinars/']")
+        .filter({ hasText: "В эфире" })
+        .first();
+      await expect(livePill).toBeVisible();
+      expect(
+        await livePill.evaluate((el) => getComputedStyle(el).fontWeight),
+      ).toBe("700");
 
       // Hero parity — canvas lines 35–38: no «МЕСЯЦ» kicker above the h1, the
       // right-side uppercase tagline present.

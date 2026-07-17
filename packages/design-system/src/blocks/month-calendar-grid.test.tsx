@@ -136,6 +136,36 @@ describe("<MonthCalendarGrid>", () => {
     expect(note).not.toHaveClass("line-clamp-2");
   });
 
+  it("EARS-19: a live pill's text run weighs 700 (bold) — same tier as a planned pill, never the 800 badge weight (#1080)", () => {
+    render(
+      <MonthCalendarGrid
+        weekdays={WEEKDAYS}
+        liveLabel="В эфире"
+        legend={LEGEND}
+        weeks={[
+          week([
+            {
+              dateLabel: "8",
+              pills: [
+                { href: "/webinars/x", time: "18:00", title: "Кардиология" },
+                { href: "/webinars/l", time: "19:00", title: "Эфир", live: true },
+              ],
+            },
+          ]),
+        ]}
+      />,
+    );
+    // Owner verdict #3 (#1052 → #1080): the red pill's `time · title` run reads
+    // at weight 700 like its planned sibling — the 800 tier stays reserved for
+    // the micro uppercase LIVE badges (Badge `live`, the webinar-card ribbon,
+    // the day-agenda chip).
+    const live = screen.getByRole("link", { name: /В эфире/ });
+    expect(live).toHaveClass("bg-live", "font-bold");
+    expect(live).not.toHaveClass("font-extrabold");
+    const planned = screen.getByRole("link", { name: /18:00 · Кардиология/ });
+    expect(planned).toHaveClass("bg-tint", "font-bold");
+  });
+
   it("EARS-19: renders the always-on next-month link", () => {
     render(
       <MonthCalendarGrid

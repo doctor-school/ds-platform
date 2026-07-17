@@ -233,7 +233,7 @@ class Component extends DCLogic {
     const cellBase = 'min-height:118px;padding:10px;border-right:1px solid ' + hairline;
     const clamp2 = 'display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden';
     const evPill = 'display:block;margin-top:6px;padding:6px 8px;background:' + tint + ';color:' + tintInk + ';font-size:11px;font-weight:700;line-height:1.35;text-decoration:none';
-    const evLive = 'display:block;margin-top:6px;padding:6px 8px;background:#C81E1E;color:#fff;font-size:11px;font-weight:800;line-height:1.35;text-decoration:none';
+    const evLive = 'display:block;margin-top:6px;padding:6px 8px;background:#C81E1E;color:#fff;font-size:11px;font-weight:700;line-height:1.35;text-decoration:none';
     const desktopCells = flat.map(c => {
       const info = c.out ? {} : (data[c.d] || {});
       const today = !!info.today, past = !!info.past, weekend = !!info.weekend || c.out;

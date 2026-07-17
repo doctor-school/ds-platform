@@ -1276,7 +1276,7 @@ function ContainerSection() {
       <p className="text-sm text-muted-foreground">
         The §09 layout container centres the content column, caps it (
         <code className="font-mono text-xs">content</code> 1104px /{" "}
-        <code className="font-mono text-xs">calendar</code> 1240px) and applies
+        <code className="font-mono text-xs">calendar</code> 1240px content) and applies
         the responsive gutter. Below the{" "}
         <code className="font-mono text-xs">layout</code> breakpoint (≤900px) it
         goes edge-to-edge on a fixed 16px gutter — resize the window, or open

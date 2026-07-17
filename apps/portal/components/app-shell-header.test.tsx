@@ -205,7 +205,13 @@ describe("008 EARS-1…13 — persistent app-shell header", () => {
       expect(el.className).toContain("hover:shadow-btn-hover");
       expect(el.className).toContain("active:translate-x-0.5");
       expect(el.className).toContain("active:shadow-none");
-      expect(el.className).toContain("active:text-header");
+      // Chip ink = the canvas navy (#114D9E in BOTH themes) — never `header`,
+      // which is blue.500 in light and fails normal-text AA on white (#1083).
+      expect(el).toHaveClass(
+        "text-header-chip-foreground",
+        "active:text-header-chip-foreground",
+      );
+      expect(el).not.toHaveClass("text-header", "active:text-header");
       expect(el.className).not.toContain("active:text-primary-action/80");
     }
     // The mobile dropdown nav links sit on the card surface, where the DS
@@ -227,7 +233,12 @@ describe("008 EARS-1…13 — persistent app-shell header", () => {
     expect(login.className).toContain("hover:translate-x-px");
     expect(login.className).toContain("active:translate-x-0.5");
     expect(login.className).toContain("active:shadow-none");
-    expect(login.className).toContain("active:text-header");
+    // Canvas navy chip ink (#114D9E both themes) — not the blue.500 `header`.
+    expect(login).toHaveClass(
+      "text-header-chip-foreground",
+      "active:text-header-chip-foreground",
+    );
+    expect(login).not.toHaveClass("text-header", "active:text-header");
     expect(login.className).not.toContain("active:text-primary-action/80");
     // Mobile dropdown chip: blue chip on the card — rest 100 → hover 90 →
     // press 80, one visible element-opacity step per state (#270); ink pinned
@@ -237,6 +248,25 @@ describe("008 EARS-1…13 — persistent app-shell header", () => {
     expect(mobileLogin.className).toContain("active:text-header-foreground");
     expect(mobileLogin.className).toContain("active:opacity-80");
     expect(mobileLogin.className).not.toContain("active:text-primary-action/80");
+  });
+
+  it("EARS-2: header AA on the blue.500 band — nav at the WCAG large-text tier, chips on the canvas navy ink (#1083 Mode-a rework)", async () => {
+    renderHeader();
+    // Owner pick (Mode-a on #1083): the light `header` band is blue.500
+    // (white = 3.69:1), so the desktop nav runs at the WCAG large-text tier —
+    // `text-xl` (20px ≥ 18.67px) at weight ≥700 clears the ≥3:1 carve-out.
+    // The underline-active treatment is untouched.
+    const broadcasts = await screen.findByTestId("shell-nav-broadcasts");
+    const myEvents = screen.getByTestId("shell-nav-my-events");
+    for (const el of [broadcasts, myEvents]) {
+      expect(el).toHaveClass("text-xl", "font-bold");
+    }
+    // The mobile `≡` summary chip shares the canvas navy chip ink.
+    const summary = screen
+      .getByTestId("shell-mobile-menu")
+      .querySelector("summary")!;
+    expect(summary).toHaveClass("text-header-chip-foreground");
+    expect(summary).not.toHaveClass("text-header");
   });
 
   it("EARS-11: the mobile `≡` dropdown carries the same [Эфиры · Мои события] targets", async () => {

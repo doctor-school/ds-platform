@@ -1,5 +1,20 @@
 # @ds/design-system
 
+## 1.3.0
+
+### Minor Changes
+
+- [#1058](https://github.com/doctor-school/ds-platform/pull/1058) [`036ad36`](https://github.com/doctor-school/ds-platform/commit/036ad361041800f28509077c53c5f2abc4fb0651) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(portal): 004 EARS-19 — month-calendar view at `/webinars?view=month` (desktop 7-column grid, mobile dot-grid + selected-day agenda). Adds the display-only `MonthCalendarGrid`, `MonthDotGrid`, and `DayAgenda` presentation blocks to `@ds/design-system` (token-only, catalogued in the showcase), and wires the portal pane: current-МСК-month projection read, live pill/dot from `EventLifecycleState`, muted past-day notes, today outline, state legend, and the «Неделя / Месяц» switcher ([#1050](https://github.com/doctor-school/ds-platform/issues/1050)).
+
+- [#1060](https://github.com/doctor-school/ds-platform/pull/1060) [`952645b`](https://github.com/doctor-school/ds-platform/commit/952645b4ea780989996d4a1e00a18ec8e0718fde) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(portal): 004 EARS-17/18 — month navigation (‹ › paging + 12-month picker) and the «Неделя / Месяц» view switcher on `/webinars?view=month`. Adds the display-only `MonthPicker` presentation block to `@ds/design-system` (native `<details>` disclosure, year ‹ › stepper, per-month event counts, past months muted «прошёл»; token-only, catalogued in the showcase) and wires the portal month toolbar: server-component query-param paging (validated `month`, absent/malformed → current МСК month), the `MonthlyEventCount` picker feed, a «Сегодня» reset, and the shared `ViewSwitcher` that carries the displayed month so the week↔month round-trip is loss-free ([#1051](https://github.com/doctor-school/ds-platform/issues/1051)).
+
+### Patch Changes
+
+- [#1072](https://github.com/doctor-school/ds-platform/pull/1072) [`3f9cca7`](https://github.com/doctor-school/ds-platform/commit/3f9cca7cead1783cf956f9d6fa6249e9246d52e4) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Month-calendar canvas-parity fixes ([#1065](https://github.com/doctor-school/ds-platform/issues/1065), Stage-B rework at [#1052](https://github.com/doctor-school/ds-platform/issues/1052)): `cn()` registers the missing custom font sizes (`text-eyebrow`, `text-title-lg`) so tailwind-merge no longer strips them as colour conflicts — the [#1052](https://github.com/doctor-school/ds-platform/issues/1052) off-scale defect; the month-grid pill is a single inline text run (block, wraps inside its cell — closes the 4-events/day overflow); a desktop day cell caps at 3 pills with a «+N ещё» overflow link slot; the legend row gains the next-month accent link slot; new `hero`/`hero-foreground`/`hero-muted` tokens (the discovery poster band, blue.500 light / blue.700 dark); the month-picker trigger spreads across a stretched mobile container.
+
+- Updated dependencies [[`0cbe990`](https://github.com/doctor-school/ds-platform/commit/0cbe9904884bcf6d6b2e4801e3f85726be549cc7)]:
+  - @ds/schemas@1.4.0
+
 ## 1.2.1
 
 ### Patch Changes

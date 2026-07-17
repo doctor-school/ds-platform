@@ -1,5 +1,29 @@
 # @ds/portal
 
+## 0.14.0
+
+### Minor Changes
+
+- [#1058](https://github.com/doctor-school/ds-platform/pull/1058) [`036ad36`](https://github.com/doctor-school/ds-platform/commit/036ad361041800f28509077c53c5f2abc4fb0651) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(portal): 004 EARS-19 — month-calendar view at `/webinars?view=month` (desktop 7-column grid, mobile dot-grid + selected-day agenda). Adds the display-only `MonthCalendarGrid`, `MonthDotGrid`, and `DayAgenda` presentation blocks to `@ds/design-system` (token-only, catalogued in the showcase), and wires the portal pane: current-МСК-month projection read, live pill/dot from `EventLifecycleState`, muted past-day notes, today outline, state legend, and the «Неделя / Месяц» switcher ([#1050](https://github.com/doctor-school/ds-platform/issues/1050)).
+
+- [#1060](https://github.com/doctor-school/ds-platform/pull/1060) [`952645b`](https://github.com/doctor-school/ds-platform/commit/952645b4ea780989996d4a1e00a18ec8e0718fde) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(portal): 004 EARS-17/18 — month navigation (‹ › paging + 12-month picker) and the «Неделя / Месяц» view switcher on `/webinars?view=month`. Adds the display-only `MonthPicker` presentation block to `@ds/design-system` (native `<details>` disclosure, year ‹ › stepper, per-month event counts, past months muted «прошёл»; token-only, catalogued in the showcase) and wires the portal month toolbar: server-component query-param paging (validated `month`, absent/malformed → current МСК month), the `MonthlyEventCount` picker feed, a «Сегодня» reset, and the shared `ViewSwitcher` that carries the displayed month so the week↔month round-trip is loss-free ([#1051](https://github.com/doctor-school/ds-platform/issues/1051)).
+
+### Patch Changes
+
+- [#1062](https://github.com/doctor-school/ds-platform/pull/1062) [`a6a5f9b`](https://github.com/doctor-school/ds-platform/commit/a6a5f9bd00d79da0433d50ee5e6dba721154ed33) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - fix(portal): /account «Сменить пароль» helper now says «Отправим код для сброса пароля на email» — the old «ссылку» wording contradicted the code-only reset contract (003-design §13.4).
+
+- [#1007](https://github.com/doctor-school/ds-platform/pull/1007) [`1981366`](https://github.com/doctor-school/ds-platform/commit/198136699afedd5f1718d5e38efcf0e441cf9483) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Portal header: immediate post-login auth affordance (no hard reload) + silhouette avatar fallback for no-display-name doctors
+
+- [#1034](https://github.com/doctor-school/ds-platform/pull/1034) [`acd1f38`](https://github.com/doctor-school/ds-platform/commit/acd1f388bae4b39e02f46d6409ef07bd27b404b8) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The /login, /register and /reset page titles now render as a real `h1` heading (exactly one per page) instead of a plain `div`, so screen readers and assistive tech see the page structure. Purely semantic — the visual rendering is unchanged.
+
+- [#1072](https://github.com/doctor-school/ds-platform/pull/1072) [`3f9cca7`](https://github.com/doctor-school/ds-platform/commit/3f9cca7cead1783cf956f9d6fa6249e9246d52e4) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Month view canvas-parity rework ([#1065](https://github.com/doctor-school/ds-platform/issues/1065), Stage-B verdict at [#1052](https://github.com/doctor-school/ds-platform/issues/1052)): 1240px calendar column, toolbar overlapping the hero band, kicker-free hero on the `hero` token with the canvas tagline (shared with the week listing), 3-pill day cap with the «+N ещё» link into the week listing's new per-day anchors, next-month legend link, and the canvas mobile toolbar arrangement.
+
+- [#1037](https://github.com/doctor-school/ds-platform/pull/1037) [`ce1efe0`](https://github.com/doctor-school/ds-platform/commit/ce1efe039ac0443c926e6a5263c34e8141c375ff) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The /verify page title now renders as a real `h1` heading (exactly one on the page) instead of a plain `div`, matching the /login, /register and /reset fix — screen readers and assistive tech now see the page structure. Purely semantic — the visual rendering is unchanged.
+
+- Updated dependencies [[`036ad36`](https://github.com/doctor-school/ds-platform/commit/036ad361041800f28509077c53c5f2abc4fb0651), [`3f9cca7`](https://github.com/doctor-school/ds-platform/commit/3f9cca7cead1783cf956f9d6fa6249e9246d52e4), [`952645b`](https://github.com/doctor-school/ds-platform/commit/952645b4ea780989996d4a1e00a18ec8e0718fde), [`0cbe990`](https://github.com/doctor-school/ds-platform/commit/0cbe9904884bcf6d6b2e4801e3f85726be549cc7)]:
+  - @ds/design-system@1.3.0
+  - @ds/schemas@1.4.0
+
 ## 0.13.2
 
 ### Patch Changes

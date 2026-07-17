@@ -1,5 +1,11 @@
 # @ds/schemas
 
+## 1.4.0
+
+### Minor Changes
+
+- [#1055](https://github.com/doctor-school/ds-platform/pull/1055) [`0cbe990`](https://github.com/doctor-school/ds-platform/commit/0cbe9904884bcf6d6b2e4801e3f85726be549cc7) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add the public month-calendar read side for the webinar listing (004 EARS-15/EARS-16): `GET /v1/public/events?month=YYYY-MM` returns the month's publish-visible events (`published`/`live`/`ended`, the month's already-past events included) as the thin publish-safe `MonthBroadcastEntry` allow-list, and `GET /v1/public/events/month-counts?year=YYYY` returns exactly 12 per-month event counts for the picker. Both endpoints are public (no auth), cacheable, and group by МСК (fixed UTC+3) month boundaries. Adds the `MonthBroadcastEntry` / `MonthlyEventCount` projections plus the `mskMonthRange` / `mskYearRange` SSOT helpers to `@ds/schemas`.
+
 ## 1.3.0
 
 ### Minor Changes

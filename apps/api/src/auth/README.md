@@ -212,9 +212,16 @@ PD-masked):
 Each row is **identifier-keyed** (`subject_id` NULL; the raw identifier is masked
 to an `identifier_hash` by the writer, exactly like `LoginFailed` — never raw PD)
 and carries **no one-time code** (003 EARS-30). The client outcome is unchanged: the
-same generic 400 for every failure (EARS-16), and the failure write is a single
-awaited INSERT mirroring the success path — no extra network hop, so the EARS-16
-timing envelope (floored by `TimingEqualizationInterceptor`) is intact.
+same generic 400 for every failure (EARS-16). Timing safety here is by **symmetry**,
+NOT the interceptor: `/verify` and `/password/reset/complete` are code-gated routes
+that are **not** under the EARS-16 ≤50 ms floor — they carry no `@TimingEqualized`,
+and 003-requirements-en.md:207 does not list them (unlike register/login/otp/reset).
+So the guarantee is that each failure write is a single awaited INSERT that **mirrors
+the success-path write** (same ledger hop, no extra network I/O), introducing no new
+timing differential between the success and failure paths. Any future heavier
+failure-path write (an extra query, a counter round-trip) would break that symmetry
+and must be re-evaluated — see the read-time attempt-count note below, which
+deliberately keeps the write path to that single INSERT.
 
 **Port limitation (deliberate, not a stub).** The IdP port returns only a boolean
 (`verifyEmail → bool`) / a session-or-null (`completePasswordReset`), so the granular

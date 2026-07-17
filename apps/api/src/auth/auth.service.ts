@@ -348,8 +348,12 @@ export class AuthService {
       // boolean-null port collapses a bad/expired code and an unknown identifier
       // into one, so no finer reason is observable). The client still gets the
       // identical generic 400 (EARS-16); the code never reaches the row (003
-      // EARS-30). Awaited like the success-path records below — no timing skew
-      // beyond what the EARS-16 envelope already floors.
+      // EARS-30). Timing safety is by SYMMETRY: `/password/reset/complete` is a
+      // code-gated route NOT under the EARS-16 ≤50 ms interceptor floor (no
+      // `@TimingEqualized` — 003-requirements-en.md:207 does not list it), so the
+      // guarantee is that this failure write mirrors the awaited success-path ledger
+      // writes below (same single hop, no extra network I/O) — no new differential.
+      // A future heavier failure-path write must re-evaluate that symmetry.
       await this.audit.record({
         type: "PasswordResetFailed",
         identifier,
@@ -565,8 +569,13 @@ export class AuthService {
       // diagnosis needed raw SSH SQL). The client still gets the identical generic
       // 400 (no existence oracle, EARS-16). The identifier is masked to an
       // `identifier_hash` by the writer and the entered code is never touched
-      // (003 EARS-30). Awaited exactly like the success-path record below, so the
-      // failure path adds no timing skew the EARS-16 envelope does not already floor.
+      // (003 EARS-30). Timing safety is by SYMMETRY, not the interceptor: `/verify`
+      // is a code-gated route NOT under the EARS-16 ≤50 ms floor (it carries no
+      // `@TimingEqualized` — 003-requirements-en.md:207 does not list it), so the
+      // guarantee is that this failure write mirrors the success-path write below —
+      // the same single awaited ledger hop, no extra network I/O — introducing no
+      // new timing differential. Any future heavier failure-path write must
+      // re-evaluate that symmetry.
       await this.audit.record({
         type: "VerifyFailed",
         identifier: req.email,
@@ -587,7 +596,10 @@ export class AuthService {
     if (!ok) {
       // #1112: record the rejected code (reason `invalid` — the boolean IdP port
       // collapses wrong / expired / superseded into one). Same generic 400 to the
-      // client (EARS-16); the code itself never reaches the row (003 EARS-30).
+      // client (EARS-16); the code itself never reaches the row (003 EARS-30). Same
+      // symmetry argument as the no-account branch above: `/verify` is not under the
+      // EARS-16 interceptor floor, so the safety is that this write mirrors the
+      // awaited success-path ledger write — no new timing differential.
       await this.audit.record({
         type: "VerifyFailed",
         identifier: req.email,

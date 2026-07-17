@@ -1,5 +1,17 @@
 # @ds/design-system
 
+## 3.0.0
+
+### Major Changes
+
+- [#1116](https://github.com/doctor-school/ds-platform/pull/1116) [`62892f6`](https://github.com/doctor-school/ds-platform/commit/62892f683c34885bb02b760480f4fb68b0283c7e) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - fix: the alphanumeric registration / password-reset verification code no longer traps mobile users on a digits-only keyboard ([#1110](https://github.com/doctor-school/ds-platform/issues/1110)). `OtpField` (and `OtpFocusScreen`, which forwards it) gain a **required** `charset: "alphanumeric" | "numeric"` prop: the slotted variant now requests `inputMode="text"` + `autoCapitalize="characters"` for alphanumeric codes so a phone shows the full keyboard, and `inputMode="numeric"` for the digit login OTP. `/verify` and `/reset` pass `charset="alphanumeric"`; `/login` passes `charset="numeric"`.
+
+  BREAKING (`@ds/design-system`): `charset` is a required prop on `OtpField` and `OtpFocusScreen` — every slotted call site must declare its code's character set (no silent default, so no surface can inherit the wrong mobile keypad).
+
+### Patch Changes
+
+- [#1113](https://github.com/doctor-school/ds-platform/pull/1113) [`c717a70`](https://github.com/doctor-school/ds-platform/commit/c717a70e3c587ffbec36239bc030d64dc724f765) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - fix: registration / password-reset verification code is now case-insensitive end-to-end. The `OtpField` slotted variant uppercases each keystroke, and the auth BFF trims + uppercases the code before the Zitadel verify / reset hop, so a doctor who types the UPPERCASE code lowercased (or whose keyboard/paste pads it) still verifies. No consumer-visible API change.
+
 ## 2.0.0
 
 ### Major Changes

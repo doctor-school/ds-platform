@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   BadRequestException,
   ServiceUnavailableException,
@@ -479,6 +479,23 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
     expect(err).toBeInstanceOf(BadRequestException);
     expect((err as BadRequestException).getStatus()).toBe(400);
   });
+
+  it("EARS-12: normalizes a lowercase, whitespace-padded reset code to trimmed-uppercase before the IdP call (#1109)", async () => {
+    // The Zitadel reset code is UPPERCASE alphanumeric and its `!=` compare is
+    // case-sensitive with no trim (#1109). A doctor who types the code lowercased
+    // — or whose keyboard/autofill pads it — must still succeed: the BFF trims and
+    // uppercases before the IdP hop. The generic-400 outcome here is irrelevant
+    // (the fake's only valid code is FAKE_VALID_CODE); we assert the NORMALIZED
+    // argument the IdP port receives, which the pre-fix pass-through cannot produce.
+    const { service, idp } = await buildResetService();
+    const spy = vi.spyOn(idp, "completePasswordReset");
+
+    await service
+      .completePasswordReset(email, "  pvdc3r  ", newPassword, fingerprint)
+      .catch(() => undefined);
+
+    expect(spy).toHaveBeenCalledWith(email, "PVDC3R", newPassword);
+  });
 });
 
 // EARS-25 (#319): resend the registration email verification code,
@@ -649,5 +666,47 @@ describe("AuthService.requestLoginOtp — SMS synthetic-send suppression (003 EA
     );
 
     expect(idp.smsOtpSendCount()).toBe(1);
+  });
+});
+
+// #1109 (EARS-3): the registration email-verify code Zitadel emits is UPPERCASE
+// alphanumeric, and Zitadel's compare is case-sensitive with no trim. A doctor who
+// types the code lowercased — or whose keyboard/paste pads it with whitespace —
+// was rejected end-to-end. The BFF now normalizes `code.trim().toUpperCase()`
+// before the IdP `verifyEmail` hop, so the same human input succeeds. Uppercasing
+// a digit login OTP is a no-op, so this is safe for the shared field. Exercised at
+// the service altitude over the fake IdP + a minimal mirror stub (no DB, no HTTP).
+describe("AuthService.verify — code normalization (#1109, EARS-3)", () => {
+  function buildVerifyService(idp: IdpClient, mirror: unknown): AuthService {
+    return new AuthService(
+      idp,
+      explodingDb as never, // the verify path touches no DB directly
+      undefined,
+      { record: () => Promise.resolve() } as never,
+      new FakeMailer(),
+      new InMemoryRegisterNoticeThrottle("test-pepper"),
+      SyntheticSuppression.disabled(),
+      mirror as never, // mirror — USED on the verify path
+      {} as never, // sessions — unused
+      {} as never, // smsBudget — unused
+    );
+  }
+
+  it("EARS-3: normalizes a lowercase, whitespace-padded code to trimmed-uppercase before the IdP verify (#1109)", async () => {
+    const idp = new FakeIdpClient();
+    const mirror = {
+      findByEmail: () => Promise.resolve({ zitadelSub: "sub-1" }),
+      markEmailVerified: () => Promise.resolve(),
+    };
+    const spy = vi.spyOn(idp as unknown as IdpClient, "verifyEmail");
+    const service = buildVerifyService(idp as unknown as IdpClient, mirror);
+
+    // Outcome is a generic 400 (the fake's only valid code is FAKE_VALID_CODE);
+    // we assert the NORMALIZED argument the IdP port receives.
+    await service
+      .verify({ email: "u@ds.test", code: "  pvdc3r  " })
+      .catch(() => undefined);
+
+    expect(spy).toHaveBeenCalledWith("sub-1", "PVDC3R");
   });
 });

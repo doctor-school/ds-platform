@@ -68,6 +68,21 @@ describe("OtpField variant=slotted", () => {
     expect(latest).toBe("123456");
   });
 
+  it("uppercases lowercase keystrokes so the RHF value matches the UPPERCASE Zitadel code (#1109)", async () => {
+    // The reg/reset code Zitadel emits is UPPERCASE alphanumeric and its compare is
+    // case-sensitive (#1109). A doctor typing the code in lowercase must still land
+    // an UPPERCASE value in the RHF field — the slotted variant normalizes on change.
+    const user = userEvent.setup();
+    let latest = "";
+    render(<SlottedHarness length={6} onValue={(v) => (latest = v)} />);
+
+    const input = screen.getByRole("textbox");
+    await user.click(input);
+    await user.keyboard("pvdc3r");
+
+    expect(latest).toBe("PVDC3R");
+  });
+
   it("accepts the ALPHANUMERIC Zitadel reset / email-verify code", async () => {
     const user = userEvent.setup();
     let latest = "";

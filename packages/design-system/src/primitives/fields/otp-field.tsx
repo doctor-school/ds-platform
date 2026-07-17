@@ -87,7 +87,12 @@ export function OtpField<T extends FieldValues>({
             maxLength={length}
             autoComplete="one-time-code"
             value={field.value ?? ""}
-            onChange={field.onChange}
+            // #1109: the reg / reset code Zitadel emits is UPPERCASE alphanumeric and
+            // its compare is case-sensitive — uppercase every keystroke so a doctor
+            // typing it lowercased still lands the correct value. A no-op for the
+            // digit login OTP, so it is safe to apply unconditionally on the slotted
+            // variant. input-otp calls onChange with a raw string (not a DOM event).
+            onChange={(v: string) => field.onChange(v.toUpperCase())}
             {...(onComplete ? { onComplete } : {})}
           >
             <InputOTPGroup>

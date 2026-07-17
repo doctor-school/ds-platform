@@ -335,9 +335,12 @@ export class AuthService {
     newPassword: string,
     fingerprint: string,
   ): Promise<{ cookie: string; body: PasswordResetCompleteResponse }> {
+    // #1109: normalize the reset code (trim + uppercase) before the IdP hop —
+    // Zitadel's code is UPPERCASE alphanumeric and its compare is case-sensitive
+    // with no trim, so a lowercased / whitespace-padded entry must still complete.
     const session = await this.idp.completePasswordReset(
       identifier,
-      code,
+      code.trim().toUpperCase(),
       newPassword,
     );
     if (!session) throw new BadRequestException(GENERIC_FAILURE);
@@ -544,7 +547,15 @@ export class AuthService {
     const row = await this.mirror.findByEmail(req.email);
     if (!row) throw new BadRequestException(GENERIC_FAILURE);
 
-    const ok = await this.idp.verifyEmail(row.zitadelSub, req.code);
+    // #1109: Zitadel emits an UPPERCASE alphanumeric code and compares it
+    // case-sensitively with no trim — normalize the human-entered code (trim +
+    // uppercase) before the IdP hop so a lowercased / whitespace-padded entry still
+    // verifies. The client-side OtpField uppercases too; the server is the
+    // authoritative backstop (paste, autofill, non-portal callers).
+    const ok = await this.idp.verifyEmail(
+      row.zitadelSub,
+      req.code.trim().toUpperCase(),
+    );
     if (!ok) throw new BadRequestException(GENERIC_FAILURE);
 
     await this.mirror.markEmailVerified(row.zitadelSub);

@@ -3,6 +3,7 @@ import type { DrizzleHandle } from "@ds/db";
 import { users } from "@ds/db";
 import { eq } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 
 type Db = DrizzleHandle["db"];
 
@@ -76,11 +77,15 @@ export class MeRepository {
    * truthful. `displayName` arrives already trimmed + bounded by the Zod SSOT.
    */
   async setDisplayNameBySub(sub: string, displayName: string): Promise<number> {
-    const updated = await this.db
-      .update(users)
-      .set({ displayName, updatedAt: new Date() })
-      .where(eq(users.zitadelSub, sub))
-      .returning({ id: users.id });
+    // 010 EARS-3/5 — attribute the self-scoped users write to the acting caller
+    // (source portal-api) via the audit-context wrapper.
+    const updated = await withRequestAuditContext(this.db, (tx) =>
+      tx
+        .update(users)
+        .set({ displayName, updatedAt: new Date() })
+        .where(eq(users.zitadelSub, sub))
+        .returning({ id: users.id }),
+    );
     return updated.length;
   }
 }

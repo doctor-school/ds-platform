@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import type { DrizzleHandle, Event, NewEvent, NewEventSpeaker } from "@ds/db";
 import { auditLedger, eventSpeakers, events, streamConfig } from "@ds/db";
+import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import {
   type ConfigureStreamRequest,
   MONTH_BROADCAST_STATES,
@@ -51,7 +52,9 @@ export class EventsRepository {
     event: NewEvent,
     speakers: Omit<NewEventSpeaker, "eventId">[],
   ): Promise<EventWithSpeakers> {
-    return this.db.transaction(async (tx) => {
+    // 010 EARS-3/5 — the capture trigger attributes the resulting data.* rows to
+    // the request's actor/source (admin-ui) via the audit-context wrapper.
+    return withRequestAuditContext(this.db, async (tx) => {
       const [row] = await tx.insert(events).values(event).returning();
       if (!row) throw new Error("event insert returned no row");
       if (speakers.length > 0) {
@@ -100,7 +103,7 @@ export class EventsRepository {
     >,
     speakers?: Omit<NewEventSpeaker, "eventId">[],
   ): Promise<EventWithSpeakers | null> {
-    return this.db.transaction(async (tx) => {
+    return withRequestAuditContext(this.db, async (tx) => {
       const [row] = await tx
         .update(events)
         .set({ ...patch, updatedAt: new Date() })
@@ -151,13 +154,16 @@ export class EventsRepository {
     eventId: string,
     input: ConfigureStreamRequest,
   ): Promise<EventWithSpeakers | null> {
-    await this.db
-      .insert(streamConfig)
-      .values({ eventId, provider: input.provider, embedRef: input.embedRef })
-      .onConflictDoUpdate({
-        target: streamConfig.eventId,
-        set: { provider: input.provider, embedRef: input.embedRef },
-      });
+    // 010 EARS-3/5 — attribute the stream_config write to the acting admin.
+    await withRequestAuditContext(this.db, (tx) =>
+      tx
+        .insert(streamConfig)
+        .values({ eventId, provider: input.provider, embedRef: input.embedRef })
+        .onConflictDoUpdate({
+          target: streamConfig.eventId,
+          set: { provider: input.provider, embedRef: input.embedRef },
+        }),
+    );
     return this.findById(eventId);
   }
 
@@ -285,11 +291,14 @@ export class EventsRepository {
     id: string,
     state: Event["state"],
   ): Promise<EventWithSpeakers | null> {
-    const [row] = await this.db
-      .update(events)
-      .set({ state, updatedAt: new Date() })
-      .where(eq(events.id, id))
-      .returning();
+    // 010 EARS-3/5 — attribute the bare lifecycle-state write to the acting admin.
+    const [row] = await withRequestAuditContext(this.db, (tx) =>
+      tx
+        .update(events)
+        .set({ state, updatedAt: new Date() })
+        .where(eq(events.id, id))
+        .returning(),
+    );
     if (!row) return null;
     const speakerRows = await this.db
       .select()
@@ -322,7 +331,12 @@ export class EventsRepository {
     state: Event["state"],
     audit: TransitionAudit,
   ): Promise<EventWithSpeakers | null> {
-    return this.db.transaction(async (tx) => {
+    // 010 EARS-3/EARS-5 — run the state write inside the audit-context wrapper
+    // so the generic capture trigger attributes the resulting
+    // `data.events.update` row to the acting admin (`subject_id` = sub) with a
+    // concrete `source`, never `db-direct`. The terminal ADR-0003 §6 lifecycle
+    // row (below) is a separate, pre-existing obligation written in the SAME tx.
+    return withRequestAuditContext(this.db, async (tx) => {
       const [row] = await tx
         .update(events)
         .set({

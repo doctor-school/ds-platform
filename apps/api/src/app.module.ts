@@ -16,9 +16,13 @@ import { EventsModule } from "./events/events.module.js";
 import { RegistrationModule } from "./registration/registration.module.js";
 import { RoomModule } from "./room/room.module.js";
 import { MeModule } from "./me/me.module.js";
+import { AuditModule } from "./audit/audit.module.js";
 
 @Module({
   imports: [
+    // 010 EARS-3/EARS-5 — global audit-context interceptor: attributes every
+    // mutating endpoint's capture-trigger rows to the acting principal/source.
+    AuditModule,
     // Global Sentry/GlitchTip exception filter (DSO-125) — first so it wraps
     // every downstream module's errors; inert when SENTRY_DSN is unset.
     ObservabilityModule,

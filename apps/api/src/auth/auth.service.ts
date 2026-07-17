@@ -26,6 +26,7 @@ import type {
 } from "@ds/schemas";
 import type { SessionClaims } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { withRequestAuditContext } from "../audit/audit-context.tx.js";
 import {
   DOCTOR_GUEST_ROLE,
   IDP_CLIENT,
@@ -413,7 +414,11 @@ export class AuthService {
       // records commit atomically, so no PD-bearing row can exist without
       // consent even under a mid-write failure.
       try {
-        await this.db.transaction(async (tx) => {
+        // 010 EARS-3/5 — the registration mirror+consent write runs through the
+        // audit-context wrapper: a POST /register carries a concrete source
+        // (portal-api), not db-direct. It is pre-auth (no authenticated actor
+        // yet), so subject_id is NULL by nature — honest, not fabricated.
+        await withRequestAuditContext(this.db, async (tx) => {
           const [row] = await tx
             .insert(users)
             .values({

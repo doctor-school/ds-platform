@@ -18,6 +18,10 @@ import * as schema from "@ds/db/schema"; // Drizzle table definitions (SSOT)
   `AUDIT_PD_COLUMNS` / `AUDIT_CAPTURE_ALLOWLIST` (`src/audit.ts`) — the TS mirrors of the
   SQL-side lists baked into the spec-010 `audit_pd_columns()` / trigger-attach migration;
   parity between the two is pinned by an e2e test (`apps/api/test/db/universal-edit-audit.e2e-spec.ts`).
+  Also `withAuditContext(db, {actorSub, source}, fn)` (`src/audit-context.ts`, spec-010
+  EARS-3/EARS-5) — the transaction wrapper that sets the per-tx `app.actor_sub` / `app.source`
+  GUCs (`SET LOCAL`) the capture trigger reads to attribute a `data.*` ledger row; a write that
+  skips it degrades to `source = 'db-direct'`, actor NULL (EARS-4).
 - `./schema` — the table/column definitions consumed by migrations and the API.
 
 `drizzle.config.ts` is the migration config `@ds/api`'s `drizzle:generate` /

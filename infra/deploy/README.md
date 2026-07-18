@@ -86,8 +86,10 @@ Note: redis runs AOF with **no `maxmemory` / eviction policy set yet** — fine 
   always means the workstation's egress IP changed (verify: `curl
 https://api.ipify.org`), NOT a downed box — update `admin_ssh_cidr` in
   tfvars, then `terraform plan` (expect exactly one in-place
-  `twc_firewall_rule.api_ssh` update) and `apply`. Happened live 2026-07-12
-  (#729 wave-1 apply).
+  `twc_firewall_rule.api_ssh` update) and `apply`. **Recurring** (the egress IP
+  is dynamic): `184.22.76.93` → `27.130.223.208` (2026-07-12, #729 wave-1 apply)
+  → `27.130.220.41` (2026-07-18, `release-2026.07.18-1` deploy). Runbook
+  failure-mode: `run-prod-deploy` SKILL → Failure modes.
 
 ## Deploy — one command (`pnpm deploy:prod`)
 

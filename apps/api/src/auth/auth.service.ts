@@ -498,7 +498,16 @@ export class AuthService {
       // the /verify#email= fragment — a cold email-button open then seeds the
       // account and the submit works (the fragment never reaches the server, so
       // the #869 scanner-prefetch invariant holds).
-      await this.idp.requestEmailVerification(created.sub, req.email);
+      // #1128: deliver the create-time code echoed by CreateUser
+      // (`created.verificationCode`) instead of generating a second one via a
+      // follow-up `/email/resend` — a single verification code, never invalidated
+      // by a second generation before the registrant reads it. When the create
+      // response carried no code the adapter falls back to the resend hop.
+      await this.idp.requestEmailVerification(
+        created.sub,
+        req.email,
+        created.verificationCode,
+      );
 
       // EARS-18: one terminal `auth.register` row for the created account. The
       // accepted consent versions (EARS-20, not PD) ride in the metadata rather

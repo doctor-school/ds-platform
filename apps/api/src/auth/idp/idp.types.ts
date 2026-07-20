@@ -94,6 +94,19 @@ export interface CreateUserInput {
 export interface CreatedUser {
   sub: string;
   alreadyExisted: boolean;
+  /**
+   * The create-time email verification code Zitadel generates and echoes in the
+   * CreateUser response (`emailCode`) when the request carries the `returnCode`
+   * oneof (#1128). Registration delivers THIS code via the BFF mailer instead of
+   * generating a second one through a follow-up `/email/resend` hop — a single
+   * code, never invalidated by a second generation before the registrant reads
+   * it. Server-side only (never logged or surfaced, EARS-30). Absent on the
+   * `alreadyExisted` path (no account, no code) and on any create response that
+   * does not echo a code — the caller then falls back to the resend hop. The
+   * real adapter reads it off the CreateUser response; the fake returns its
+   * {@link FAKE_VALID_CODE}.
+   */
+  verificationCode?: string | undefined;
 }
 
 /** A Zitadel user as seen by the reconciliation sweep (EARS-19). */
@@ -202,12 +215,24 @@ export interface IdpClient {
   /** Create a user; a duplicate identifier returns `alreadyExisted: true`, not a throw. */
   createUser(input: CreateUserInput): Promise<CreatedUser>;
   /**
-   * Trigger a Zitadel `otp_email` verification code (EARS-1). `email` (#904) is
-   * baked into the verification link's `/verify#email=<addr>` fragment so a cold
-   * email-button open seeds the account; omit it and the link falls back to a bare
-   * `/verify`.
+   * Deliver a Zitadel `otp_email` verification code (EARS-1/29). `email` (#904)
+   * is the destination the BFF mailer sends to; omit it and the adapter falls
+   * back to the IdP's stored address for `sub`.
+   *
+   * `code` (#1128) is the create-time code already obtained from the CreateUser
+   * response ({@link CreatedUser.verificationCode}): when present it is mailed
+   * DIRECTLY, with no `/email/resend` hop — so registration delivers the single
+   * create-time code rather than generating (and mailing) a second one that would
+   * invalidate the first. When `code` is absent the adapter FALLS BACK to the
+   * resend hop, which regenerates a fresh code and delivers it (the implicit
+   * retry seam for a create response that echoed no code). Either way the code
+   * lives only in-flight — never logged, persisted, or re-serialized (EARS-30).
    */
-  requestEmailVerification(sub: string, email?: string): Promise<void>;
+  requestEmailVerification(
+    sub: string,
+    email?: string,
+    code?: string,
+  ): Promise<void>;
   /**
    * EARS-25: re-issue the registration `otp_email` verification code for an
    * `identifier` (the email), **enumeration-safely**. Unlike

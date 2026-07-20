@@ -19,7 +19,8 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
-import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
+import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
+import { FakeMailer } from "../../src/mailer/mailer.fake.js";
 
 // Registration cascade (EARS-1, email-primary per #202), the consent gate
 // (EARS-20), and enumeration resistance (EARS-16). Runs against a real Postgres
@@ -388,3 +389,97 @@ describe.skipIf(!process.env.DATABASE_URL)(
 // phoneVerificationSends counter — the suite (and the fake's counter/accessor) are
 // removed. The SMS toll-fraud budget still gates the SMS-OTP *login* send
 // (login-otp.e2e-spec.ts, EARS-14).
+
+// #1128 single-code registration: the registration cascade delivers the
+// create-time code echoed by CreateUser instead of generating a second one via a
+// follow-up `/email/resend`. Bound to a fake with an inspectable mailer so the
+// end-to-end path proves exactly ONE code email — the create-time code, with no
+// regeneration on the happy path, and a graceful fallback to regeneration when a
+// create response echoes no code.
+describe.skipIf(!process.env.DATABASE_URL)(
+  "Register single-code delivery (e2e, #1128)",
+  () => {
+    let app: NestFastifyApplication;
+    let pool: pg.Pool;
+    let mailer: FakeMailer;
+    let idp: FakeIdpClient;
+    const consent = [{ purpose: "tos", version: "2026-01" }];
+    const runId = Date.now();
+    const emails: string[] = [];
+
+    function freshEmail(tag: string): string {
+      const email = `ears1128-${tag}-${runId}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
+      emails.push(email);
+      return email;
+    }
+
+    beforeAll(async () => {
+      mailer = new FakeMailer();
+      idp = new FakeIdpClient(mailer);
+      const moduleRef: TestingModule = await Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(IDP_CLIENT)
+        .useValue(idp)
+        .overrideProvider(RATE_LIMIT_THRESHOLDS)
+        .useValue(RELAXED_RATE_LIMIT)
+        .compile();
+
+      app = moduleRef.createNestApplication<NestFastifyApplication>(
+        new FastifyAdapter(),
+      );
+      app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
+      await app.init();
+      await app.getHttpAdapter().getInstance().ready();
+      pool = app.get<pg.Pool>(DRIZZLE_POOL);
+    });
+
+    afterEach(async () => {
+      for (const email of emails.splice(0))
+        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+      idp.setCreateReturnsCode(true);
+    });
+
+    afterAll(async () => {
+      await app.close();
+    });
+
+    it("EARS-1 (#1128): registration mails the create-time code exactly once and regenerates NO second code", async () => {
+      const email = freshEmail("happy");
+      const before = mailer.verificationCodeEmails.length;
+      const regenBefore = idp.emailVerificationRegenerations();
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: { email, password: "Aa1!ufficiently-long-pw", consent },
+      });
+      expect(res.statusCode).toBe(200);
+
+      const sent = mailer.verificationCodeEmails.slice(before);
+      expect(sent).toEqual([{ to: email.toLowerCase(), code: FAKE_VALID_CODE }]);
+      // The hinge: no fallback regeneration happened — the single create-time
+      // code was delivered, not a second one.
+      expect(idp.emailVerificationRegenerations()).toBe(regenBefore);
+    });
+
+    it("EARS-1 (#1128): a create response with NO echoed code falls back to the resend regeneration hop and still delivers exactly one code", async () => {
+      idp.setCreateReturnsCode(false);
+      const email = freshEmail("fallback");
+      const before = mailer.verificationCodeEmails.length;
+      const regenBefore = idp.emailVerificationRegenerations();
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: { email, password: "Aa1!ufficiently-long-pw", consent },
+      });
+      expect(res.statusCode).toBe(200);
+
+      const sent = mailer.verificationCodeEmails.slice(before);
+      expect(sent).toEqual([{ to: email.toLowerCase(), code: FAKE_VALID_CODE }]);
+      // Exactly one regeneration for this register (the code-less create fallback).
+      expect(idp.emailVerificationRegenerations()).toBe(regenBefore + 1);
+    });
+  },
+);

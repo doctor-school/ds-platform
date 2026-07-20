@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@keystatic/core": "0.5.51",
+    "@keystatic/core": "0.6.0",
     "@keystatic/next": "5.0.4",
     "next": "16.2.10",
     "react": "19.2.7",

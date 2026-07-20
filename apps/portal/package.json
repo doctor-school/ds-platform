@@ -20,18 +20,18 @@
     "@ds/schemas": "workspace:*",
     "@hookform/resolvers": "^5.2.2",
     "centrifuge": "^5.7.0",
-    "lucide-react": "^1.24.0",
+    "lucide-react": "^1.25.0",
     "next": "16.2.10",
     "next-intl": "^4.13.2",
     "react": "19.2.7",
     "react-dom": "19.2.7",
-    "react-hook-form": "^7.81.0",
+    "react-hook-form": "^7.82.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
     "@playwright/test": "^1.61.1",
-    "@tailwindcss/postcss": "^4.3.2",
+    "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.5.2",
@@ -41,8 +41,8 @@
     "@vitejs/plugin-react": "^6.0.3",
     "jsdom": "^29.1.1",
     "playwright-bdd": "^9.2.0",
-    "postcss": "^8.5.18",
-    "tailwindcss": "^4.3.2",
+    "postcss": "^8.5.20",
+    "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
   }

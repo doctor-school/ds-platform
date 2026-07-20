@@ -5,13 +5,13 @@
   "client": {
     "allowed_origins": ["https://app.doctor.school"]
   },
-  "//channel": "Same `room` namespace contract as the dev-stand (infra/dev-stand/centrifugo/config.json — 006 EARS-3): clients are subscribed server-side via the token's `channels` claim, can NEVER publish (allow_publish_for_client pinned false; every post rides the api's gated PostChatMessage over the HTTP API), and may read bounded history to hydrate mid-webinar joins.",
+  "//channel": "Same `room` namespace contract as the dev-stand (infra/dev-stand/centrifugo/config.json — 006 EARS-3): clients are subscribed server-side via the token's `channels` claim, can NEVER publish (allow_publish_for_client pinned false; every post rides the api's gated PostChatMessage over the HTTP API), and may read bounded history to hydrate mid-webinar joins. Retention (`history_ttl` 14400s = 4h) spans a full webinar + margin so a mid-webinar reload/resubscribe after a quiet stretch still hydrates the conversation, never an empty pane over a live room; `history_size` stays bounded at 100 (#1124).",
   "channel": {
     "namespaces": [
       {
         "name": "room",
         "history_size": 100,
-        "history_ttl": "600s",
+        "history_ttl": "14400s",
         "presence": true,
         "allow_publish_for_client": false,
         "allow_history_for_client": true

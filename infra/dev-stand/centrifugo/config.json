@@ -15,13 +15,13 @@
     "password": "dev",
     "secret": "dev-only-not-a-secret"
   },
-  "//channel": "006 webinar-room chat (EARS-3). The `room` namespace backs the per-event chat channel `room:event:<id>`. Clients are subscribed SERVER-SIDE via the connection token's `channels` claim (the gate-scoped subscribe-only token the api mints), and CANNOT publish — `allow_publish_for_client` is pinned false EXPLICITLY (defense-in-depth on a security-critical namespace, not the implicit default): every post rides the server-side gated PostChatMessage command over the HTTP API. History is bounded and client-readable (`allow_history_for_client`) so a doctor joining mid-webinar hydrates the recent conversation on subscribe; only a client already subscribed to the channel (i.e. holding the gate-scoped token for THIS room) can read it. Retention (`history_ttl` 14400s = 4h) spans a full webinar + margin so a mid-webinar reload or resubscribe after a quiet stretch still hydrates the conversation, never an empty pane over a live room; `history_size` stays bounded at 100 (#1124).",
+  "//channel": "006 webinar-room chat (EARS-3). The `room` namespace backs the per-event chat channel `room:event:<id>`. Clients are subscribed SERVER-SIDE via the connection token's `channels` claim (the gate-scoped subscribe-only token the api mints), and CANNOT publish — `allow_publish_for_client` is pinned false EXPLICITLY (defense-in-depth on a security-critical namespace, not the implicit default): every post rides the server-side gated PostChatMessage command over the HTTP API. History is bounded and client-readable (`allow_history_for_client`) so a doctor joining mid-webinar hydrates the recent conversation on subscribe; only a client already subscribed to the channel (i.e. holding the gate-scoped token for THIS room) can read it. Retention (`history_ttl` 43200s = 12h) spans a full webinar + margin so a mid-webinar reload or resubscribe after a quiet stretch still hydrates the conversation, never an empty pane over a live room; `history_size` stays bounded at 100 (#1124).",
   "channel": {
     "namespaces": [
       {
         "name": "room",
         "history_size": 100,
-        "history_ttl": "14400s",
+        "history_ttl": "43200s",
         "presence": true,
         "allow_publish_for_client": false,
         "allow_history_for_client": true

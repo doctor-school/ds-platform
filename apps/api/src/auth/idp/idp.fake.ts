@@ -99,6 +99,21 @@ export class FakeIdpClient implements IdpClient {
   /** How many times the BFF asked the (native) provider to send an SMS login code — the EARS-14 assertion hinge: a budget-refused send never reaches here. */
   private smsSends = 0;
   private seq = 0;
+  /**
+   * #1128: whether {@link createUser} echoes a create-time verification code
+   * (models Zitadel's `returnCode` echo on CreateUser). Default `true` — the
+   * happy path where registration delivers the create-time code with no second
+   * generation. {@link setCreateReturnsCode}(false) models a code-less create
+   * response, driving the register cascade's fallback resend hop.
+   */
+  private createReturnsCode = true;
+  /**
+   * #1128: how many times {@link requestEmailVerification} had to REGENERATE a
+   * code (called with no pre-obtained code → the fallback resend path). The
+   * single-code happy path never increments this; the code-less-create fallback
+   * increments it once — the assertion hinge for "no second code generation".
+   */
+  private emailCodeRegenerations = 0;
 
   createUser(input: CreateUserInput): Promise<CreatedUser> {
     // #202 fake/real parity (the regression net): real Zitadel hard-rejects a
@@ -139,18 +154,52 @@ export class FakeIdpClient implements IdpClient {
     this.bySub.set(sub, record);
     if (email) this.byEmail.set(email, record);
     if (phone) this.byPhone.set(phone, record);
-    return Promise.resolve({ sub, alreadyExisted: false });
+    // #1128: echo the create-time verification code (fake/real parity — the real
+    // adapter reads it off the CreateUser `emailCode`). Suppressed when
+    // `createReturnsCode` is false, modelling a code-less create response.
+    return Promise.resolve({
+      sub,
+      alreadyExisted: false,
+      verificationCode: this.createReturnsCode ? FAKE_VALID_CODE : undefined,
+    });
   }
 
-  async requestEmailVerification(sub: string, email?: string): Promise<void> {
-    // EARS-29 parity with the real adapter: the hop "obtains" the code
-    // (returnCode) and hands it to the BFF mailer, which composes the §13.3
-    // artifact. The fake's code authority is FAKE_VALID_CODE (what verifyEmail
-    // accepts). A mailer failure propagates, like the real adapter's.
+  async requestEmailVerification(
+    sub: string,
+    email?: string,
+    code?: string,
+  ): Promise<void> {
+    // #1128 fake/real parity: when the caller holds the create-time `code`, mail
+    // it DIRECTLY (no regeneration). When it is absent, the real adapter falls
+    // back to the resend hop that regenerates — the fake models that regeneration
+    // by counting it (the "no second code generation" assertion hinge). The
+    // fake's code authority is FAKE_VALID_CODE (what verifyEmail accepts), so a
+    // regenerated code is FAKE_VALID_CODE too. A mailer failure propagates, like
+    // the real adapter's (EARS-29/30).
+    if (code == null) this.emailCodeRegenerations++;
+    const codeToSend = code ?? FAKE_VALID_CODE;
     const to = email ?? this.bySub.get(sub)?.email;
     if (this.mailer && to) {
-      await this.mailer.sendVerificationCodeEmail(to, FAKE_VALID_CODE);
+      await this.mailer.sendVerificationCodeEmail(to, codeToSend);
     }
+  }
+
+  /**
+   * #1128 test control: make {@link createUser} omit (false) or echo (true) the
+   * create-time verification code, so the register cascade's single-code happy
+   * path and its code-less-create fallback are both exercisable off the fake.
+   */
+  setCreateReturnsCode(returns: boolean): void {
+    this.createReturnsCode = returns;
+  }
+
+  /**
+   * #1128 test accessor: how many times {@link requestEmailVerification} had to
+   * regenerate a code (fell back because no create-time code was supplied). Zero
+   * on the single-code happy path.
+   */
+  emailVerificationRegenerations(): number {
+    return this.emailCodeRegenerations;
   }
 
   async resendEmailVerification(identifier: string): Promise<boolean> {

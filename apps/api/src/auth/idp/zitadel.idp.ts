@@ -436,8 +436,18 @@ export class ZitadelIdpClient implements IdpClient {
     // #203: CreateUser returns the new id as `id` (CreateUserResponse), NOT the
     // `userId` AddHumanUser returned. Proven live: a successful create responds
     // `{ id, creationDate, emailCode }`.
+    // #1128: the `returnCode` oneof on the create body (see `human.email` above)
+    // makes Zitadel ECHO the create-time verification code as `emailCode` in this
+    // response instead of auto-sending it. Capture it so registration delivers
+    // THIS single code (never logged, EARS-30) rather than generating a second
+    // one via a follow-up `/email/resend`. `extractReturnedCode` reads the
+    // documented `verificationCode` field or the CreateUser `emailCode` alias.
     const data = (await res.json()) as { id?: string };
-    return { sub: data.id ?? "", alreadyExisted: false };
+    return {
+      sub: data.id ?? "",
+      alreadyExisted: false,
+      verificationCode: ZitadelIdpClient.extractReturnedCode(data),
+    };
   }
 
   /**
@@ -502,15 +512,19 @@ export class ZitadelIdpClient implements IdpClient {
     return d.verificationCode ?? d.emailCode;
   }
 
-  async requestEmailVerification(sub: string, email?: string): Promise<void> {
-    // Live wire-shape delta (#148, vs Zitadel v4.15): the verification-code
-    // **resend** is `POST /v2/users/{id}/email/resend` — the merged code's
-    // `/email/_send_code` 404s against the live instance. The request body is
-    // the Zitadel `SendEmailVerificationCode` oneof `returnCode` (#910,
-    // EARS-29): Zitadel generates/stores/expires/attempt-counts the code but
-    // SENDS NOTHING — it returns the code, and the BFF mailer dispatches the
-    // §13.3 branded, Russian, code-only, fully link-free artifact. The former
-    // `sendCode.urlTemplate` hop (#869/#904) is retired with the switch.
+  /**
+   * Fallback code source for {@link requestEmailVerification} (#1128): regenerate
+   * a verification code via the resend hop when the caller holds no create-time
+   * code. Live wire-shape delta (#148, vs Zitadel v4.15): the code **resend** is
+   * `POST /v2/users/{id}/email/resend` — the merged code's `/email/_send_code`
+   * 404s against the live instance. The body is the Zitadel
+   * `SendEmailVerificationCode` oneof `returnCode` (#910, EARS-29): Zitadel
+   * generates/stores/expires/attempt-counts the code but SENDS NOTHING — it
+   * RETURNS the code, which the BFF mailer then dispatches. Fails closed + loudly
+   * on a non-2xx or a code-less 2xx (a silent success would leave the registrant
+   * code-less forever). The returned code is never logged (EARS-30).
+   */
+  private async resendEmailCode(sub: string): Promise<string> {
     const res = await this.fetchImpl(
       this.url(`/v2/users/${sub}/email/resend`),
       {
@@ -524,16 +538,27 @@ export class ZitadelIdpClient implements IdpClient {
     if (!res.ok) {
       throw new Error(`zitadel email send_code failed: HTTP ${res.status}`);
     }
-    // EARS-30: the code lives in this local for the in-flight send only —
-    // never logged, never persisted, never re-serialized.
     const code = ZitadelIdpClient.extractReturnedCode(await res.json());
     if (!code) {
-      // A 2xx with no code means no email can be delivered — fail closed and
-      // loudly (a silent success would leave the registrant code-less forever).
       throw new Error(
         "zitadel email send_code returned no verification code (returnCode oneof)",
       );
     }
+    return code;
+  }
+
+  async requestEmailVerification(
+    sub: string,
+    email?: string,
+    code?: string,
+  ): Promise<void> {
+    // #1128 single-code registration: the create-time code echoed by CreateUser
+    // is delivered DIRECTLY — no `/email/resend`, which would generate a SECOND
+    // code and invalidate the create-time one before the registrant reads it.
+    // A code-less create response (the implicit retry seam) FALLS BACK to the
+    // resend hop, which regenerates and returns a fresh code. Either way the
+    // code lives only in this local for the in-flight send (EARS-30).
+    const codeToSend = code ?? (await this.resendEmailCode(sub));
     // The EARS-1/3 cascade always passes the registrant's email; a legacy
     // caller without one falls back to the IdP's stored address for the sub.
     const to = email ?? (await this.getUser(sub))?.email;
@@ -543,7 +568,7 @@ export class ZitadelIdpClient implements IdpClient {
       );
     }
     try {
-      await this.requireMailer().sendVerificationCodeEmail(to, code);
+      await this.requireMailer().sendVerificationCodeEmail(to, codeToSend);
     } catch {
       // EARS-31 fail-closed tail (#1046): a mailer relay failure (both
       // channels down) is already logged + metric'd + GlitchTip'd with the

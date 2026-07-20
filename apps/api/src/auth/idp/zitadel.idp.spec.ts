@@ -445,6 +445,40 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
     expect(mailer.verificationCodeEmails).toEqual([]);
   });
 
+  it("003 EARS-1 (#1128): with a pre-obtained create-time code, requestEmailVerification mails it DIRECTLY — NO /email/resend, no second code generation", async () => {
+    // The single-code registration path: the code echoed by CreateUser is handed
+    // straight to the mailer. The resend hop (which would regenerate a second
+    // code and invalidate the create-time one) is never touched.
+    const { fetchImpl, calls } = returnCodeFetch({ verificationCode: "NEVER" });
+    const mailer = new FakeMailer();
+    const client = new ZitadelIdpClient({ ...SEND_CONFIG, mailer, fetchImpl });
+    await client.requestEmailVerification("user-1", "doc@example.com", "CR8ATE");
+    expect(
+      calls.some((c) => c.url.endsWith("/email/resend")),
+      "no resend hop when a create-time code is supplied",
+    ).toBe(false);
+    expect(mailer.verificationCodeEmails).toEqual([
+      { to: "doc@example.com", code: "CR8ATE" },
+    ]);
+  });
+
+  it("003 EARS-1/29 (#1128): with NO create-time code, requestEmailVerification FALLS BACK to the /email/resend regeneration hop and delivers the fresh code", async () => {
+    // The code-less-create fallback (the implicit retry seam): no code in hand →
+    // regenerate via /email/resend, then mail the returned code.
+    const { fetchImpl, calls } = returnCodeFetch({ verificationCode: "FB5H2K" });
+    const mailer = new FakeMailer();
+    const client = new ZitadelIdpClient({ ...SEND_CONFIG, mailer, fetchImpl });
+    await client.requestEmailVerification("user-1", "doc@example.com");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe(
+      "http://idp.test:9080/v2/users/user-1/email/resend",
+    );
+    expect(JSON.parse(calls[0]?.body ?? "{}")).toEqual({ returnCode: {} });
+    expect(mailer.verificationCodeEmails).toEqual([
+      { to: "doc@example.com", code: "FB5H2K" },
+    ]);
+  });
+
   it("003 EARS-31: a mailer relay failure (both channels down) is swallowed — the registration cascade's enumeration-safe response stays unchanged, never a 500", async () => {
     // #1046: with the failover chain in place, a both-channels-down send throws
     // fail-closed from the transport layer (already logged + metric'd +
@@ -860,7 +894,7 @@ describe("ZitadelIdpClient createUser → CreateUser /v2/users/new (#203)", () =
   };
   const INPUT = { email: "user@ds.test", password: "Aa1!aaaa" };
 
-  it("POSTs /v2/users/new with the organizationId + nested human{profile,email{returnCode},password} body and reads the response `id`", async () => {
+  it("003 EARS-1 (#1128): POSTs /v2/users/new with the returnCode email body and CAPTURES the echoed create-time `emailCode` as verificationCode (single-code registration)", async () => {
     const { fetchImpl, calls } = createFetch({
       status: 201,
       body: {
@@ -870,9 +904,13 @@ describe("ZitadelIdpClient createUser → CreateUser /v2/users/new (#203)", () =
       },
     });
     const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+    // #1128: the create-time code Zitadel echoes (`emailCode`, because the create
+    // body carries the `returnCode` oneof) is captured so registration delivers
+    // it directly — no second `/email/resend` generation.
     await expect(client.createUser(INPUT)).resolves.toEqual({
       sub: "u-99",
       alreadyExisted: false,
+      verificationCode: "ABC123",
     });
     const create = calls.find((c) => c.url.endsWith("/v2/users/new"));
     expect(

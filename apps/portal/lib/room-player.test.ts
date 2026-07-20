@@ -35,6 +35,44 @@ describe("006 EARS-2 resolveEmbed — provider enum → embed frame, never URL-s
     expect(resolveEmbed(undefined)).toEqual({ kind: "unavailable" });
   });
 
+  // #1125 — a well-formed embed that the provider silently refuses (YouTube
+  // geo-blocked in RU, or «Allow embedding» disabled on the broadcast) renders a
+  // black iframe the app cannot detect cross-origin. So alongside the embed `src`
+  // the resolver ALSO yields the provider-correct DIRECT watch URL, surfaced as an
+  // always-present truthful escape hatch beneath the player.
+  it("EARS-2.1: resolves the provider-correct direct watch URL for YouTube", () => {
+    const embed = resolveEmbed({ provider: "youtube", embedRef: "NSVn97_5BXc" });
+    expect(embed).toMatchObject({
+      kind: "youtube",
+      src: "https://www.youtube.com/embed/NSVn97_5BXc",
+      directUrl: "https://www.youtube.com/watch?v=NSVn97_5BXc",
+    });
+  });
+
+  it("EARS-2.1: resolves the provider-correct direct watch URL for Rutube", () => {
+    const embed = resolveEmbed({
+      provider: "rutube",
+      embedRef: "caafe83ff1c6ed38d394635b83ece578",
+    });
+    expect(embed).toMatchObject({
+      kind: "rutube",
+      src: "https://rutube.ru/play/embed/caafe83ff1c6ed38d394635b83ece578",
+      directUrl: "https://rutube.ru/video/caafe83ff1c6ed38d394635b83ece578/",
+    });
+  });
+
+  it("EARS-2.1: the ids are URL-encoded into the direct watch URL", () => {
+    const embed = resolveEmbed({ provider: "youtube", embedRef: "a b/c" });
+    expect(embed).toMatchObject({
+      directUrl: "https://www.youtube.com/watch?v=a%20b%2Fc",
+    });
+  });
+
+  it("EARS-2.1: the unavailable state carries no direct URL (nothing to link to)", () => {
+    expect(resolveEmbed(null)).toEqual({ kind: "unavailable" });
+    expect(resolveEmbed(null)).not.toHaveProperty("directUrl");
+  });
+
   it("EARS-2: the provider is honoured from the enum, not sniffed from a URL-shaped embedRef", () => {
     // embedRef looks like a YouTube URL but the enum says rutube: keying on the
     // enum yields the rutube frame, a sniffing implementation would pick youtube.

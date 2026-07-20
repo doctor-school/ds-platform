@@ -15,7 +15,11 @@ import type { StreamConfig, StreamProvider } from "@ds/schemas";
  * platform origin — the stream identity comes entirely from `embedRef`.
  */
 export type ResolvedEmbed =
-  | { readonly kind: StreamProvider; readonly src: string }
+  | {
+      readonly kind: StreamProvider;
+      readonly src: string;
+      readonly directUrl: string;
+    }
   | { readonly kind: "unavailable" };
 
 /**
@@ -28,6 +32,20 @@ const EMBED_SRC: Record<StreamProvider, (embedRef: string) => string> = {
   youtube: (id) => `https://www.youtube.com/embed/${encodeURIComponent(id)}`,
 };
 
+/**
+ * Provider DIRECT-watch URLs — the provider's own public watch page for the same
+ * stream (#1125). The embed `src` above can render a silent black iframe the app
+ * cannot detect cross-origin: the provider refuses the `/embed/` frame while the
+ * watch page still plays — YouTube geo-blocking in RU, or an «Allow embedding»
+ * broadcast setting left off. So every resolvable embed ALSO carries the direct
+ * watch URL, surfaced as an always-present truthful escape hatch beneath the
+ * player. Fixed per provider, keyed by the enum, never sniffed from `embedRef`.
+ */
+const DIRECT_URL: Record<StreamProvider, (embedRef: string) => string> = {
+  rutube: (id) => `https://rutube.ru/video/${encodeURIComponent(id)}/`,
+  youtube: (id) => `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`,
+};
+
 export function resolveEmbed(
   stream: StreamConfig | null | undefined,
 ): ResolvedEmbed {
@@ -36,6 +54,11 @@ export function resolveEmbed(
   // fails closed too rather than guessing an embed.
   if (!stream) return { kind: "unavailable" };
   const build = EMBED_SRC[stream.provider];
-  if (!build) return { kind: "unavailable" };
-  return { kind: stream.provider, src: build(stream.embedRef) };
+  const buildDirect = DIRECT_URL[stream.provider];
+  if (!build || !buildDirect) return { kind: "unavailable" };
+  return {
+    kind: stream.provider,
+    src: build(stream.embedRef),
+    directUrl: buildDirect(stream.embedRef),
+  };
 }

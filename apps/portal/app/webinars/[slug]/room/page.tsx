@@ -143,6 +143,8 @@ export default async function RoomPage({
             unavailableBody: t("unavailableBody"),
             playerTitle: t("playerTitle"),
             programNow: t("programNow"),
+            directLinkPrompt: t("directLinkPrompt"),
+            directLinkCta: t("directLinkCta"),
           }}
         />
       </RoomPresenceProvider>

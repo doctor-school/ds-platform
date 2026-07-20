@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@ds/design-system/badge";
+import { Link } from "@ds/design-system/link";
 import { WebinarRoomLayout } from "@ds/design-system/webinar-room";
 import { resolveEmbed } from "../../../../lib/room-player";
 import type { RoomConfig } from "@ds/schemas";
@@ -32,6 +33,8 @@ export interface RoomCopy {
   unavailableBody: string;
   playerTitle: string;
   programNow: string;
+  directLinkPrompt: string;
+  directLinkCta: string;
 }
 
 export interface RoomContext {
@@ -43,34 +46,58 @@ export interface RoomContext {
 function PlayerFrame({ config, copy }: { config: RoomConfig; copy: RoomCopy }) {
   const embed = resolveEmbed(config.stream);
   return (
-    <div className="relative aspect-video border-2 border-border bg-neutral-950 shadow-lg">
-      <Badge variant="live" className="absolute left-5 top-5 z-10">
-        {copy.liveBadge}
-      </Badge>
-      {embed.kind === "unavailable" ? (
-        // EARS-2 — truthful "stream unavailable" state: no guessed embed. The gate
-        // still admitted the caller; there is simply no player to instantiate.
-        <div
-          data-testid="room-player-unavailable"
-          className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center"
+    <div>
+      <div className="relative aspect-video border-2 border-border bg-neutral-950 shadow-lg">
+        <Badge variant="live" className="absolute left-5 top-5 z-10">
+          {copy.liveBadge}
+        </Badge>
+        {embed.kind === "unavailable" ? (
+          // EARS-2 — truthful "stream unavailable" state: no guessed embed. The gate
+          // still admitted the caller; there is simply no player to instantiate.
+          <div
+            data-testid="room-player-unavailable"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center"
+          >
+            <p className="text-lg font-extrabold text-primary-foreground">
+              {copy.unavailableTitle}
+            </p>
+            <p className="text-sm text-neutral-300">{copy.unavailableBody}</p>
+          </div>
+        ) : (
+          // EARS-9 — an embed FRAME only: a plain provider iframe, no transcode /
+          // re-host / proxy / DRM / record and no player-level telemetry. `src` is
+          // built by switching on the provider ENUM, never by sniffing the URL.
+          <iframe
+            data-testid={`room-player-${embed.kind}`}
+            src={embed.src}
+            title={copy.playerTitle}
+            allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+            allowFullScreen
+            className="absolute inset-0 h-full w-full"
+          />
+        )}
+      </div>
+      {embed.kind !== "unavailable" && (
+        // #1125 — an ALWAYS-PRESENT truthful direct-watch link beneath the player.
+        // A well-formed embed can still render a silent black iframe the app cannot
+        // detect cross-origin (YouTube geo-blocked in RU, or «Allow embedding» left
+        // off on the broadcast). The direct provider watch page is the honest escape
+        // hatch — shown whenever there IS a stream, not gated on an undetectable
+        // iframe failure. Opens the provider's own page in a new tab.
+        <p
+          data-testid="room-player-direct-link"
+          className="mt-3 text-sm leading-relaxed text-muted-foreground"
         >
-          <p className="text-lg font-extrabold text-primary-foreground">
-            {copy.unavailableTitle}
-          </p>
-          <p className="text-sm text-neutral-300">{copy.unavailableBody}</p>
-        </div>
-      ) : (
-        // EARS-9 — an embed FRAME only: a plain provider iframe, no transcode /
-        // re-host / proxy / DRM / record and no player-level telemetry. `src` is
-        // built by switching on the provider ENUM, never by sniffing the URL.
-        <iframe
-          data-testid={`room-player-${embed.kind}`}
-          src={embed.src}
-          title={copy.playerTitle}
-          allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-          allowFullScreen
-          className="absolute inset-0 h-full w-full"
-        />
+          {copy.directLinkPrompt}{" "}
+          <Link
+            variant="inline"
+            href={embed.directUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {copy.directLinkCta}
+          </Link>
+        </p>
       )}
     </div>
   );

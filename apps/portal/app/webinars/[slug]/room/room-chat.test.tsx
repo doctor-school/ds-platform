@@ -147,3 +147,62 @@ describe("006 EARS-3 chat history bootstrap — loading is distinct from the emp
     expect(screen.queryByText("chatEmpty")).toBeNull();
   });
 });
+
+// 006 EARS-3 — a dead Centrifugo connection must be TRUTHFUL, never silent
+// (#1124). A webinar outruns a single connection token TTL and a long-lived
+// websocket drops and re-handshakes; the pane tracks the connection state and
+// surfaces a reconnecting / disconnected banner rather than leaving an
+// established conversation looking live-but-stale — and it NEVER swaps the
+// established conversation for the «Пока нет сообщений» empty-state.
+describe("006 EARS-3 connection state — a dropped connection is truthful, not silent (#1124)", () => {
+  /** Bring the pane to a hydrated, connected, non-empty conversation. */
+  function establishConversation(): void {
+    let resolveHistory!: (v: { publications: Array<{ data: unknown }> }) => void;
+    sdk.history = () =>
+      new Promise((res) => {
+        resolveHistory = res;
+      });
+    render(<RoomChat slug="evt-1" chat={chat} />);
+    fire("connected", {});
+    fire("subscribed", { channel: chat.channel });
+    act(() => resolveHistory({ publications: [{ data: message }] }));
+  }
+
+  it("EARS-3.1: a dropped connection over an established conversation shows a reconnecting banner — NEVER the empty-state", async () => {
+    establishConversation();
+    await waitFor(() => expect(screen.getByText(message.text)).toBeTruthy());
+    // The websocket drops → the SDK re-enters the connecting state (backoff retry).
+    fire("connecting", {});
+    expect(screen.getByTestId("room-chat-reconnecting")).toBeTruthy();
+    // The conversation stays on screen; the empty-state never renders over it.
+    expect(screen.getByText(message.text)).toBeTruthy();
+    expect(screen.queryByText("chatEmpty")).toBeNull();
+  });
+
+  it("EARS-3.2: a terminal disconnect (gate no longer admits) surfaces a truthful disconnected banner, not a silent stale pane", async () => {
+    establishConversation();
+    await waitFor(() => expect(screen.getByText(message.text)).toBeTruthy());
+    // getToken threw UnauthorizedError → the SDK stops permanently (disconnected).
+    fire("disconnected", { code: 3500, reason: "unauthorized" });
+    expect(screen.getByTestId("room-chat-disconnected")).toBeTruthy();
+    expect(screen.queryByText("chatEmpty")).toBeNull();
+  });
+
+  it("EARS-3.3: a reconnect clears the reconnecting banner", async () => {
+    establishConversation();
+    await waitFor(() => expect(screen.getByText(message.text)).toBeTruthy());
+    fire("connecting", {});
+    expect(screen.getByTestId("room-chat-reconnecting")).toBeTruthy();
+    fire("connected", {});
+    expect(screen.queryByTestId("room-chat-reconnecting")).toBeNull();
+    expect(screen.getByText(message.text)).toBeTruthy();
+  });
+
+  it("EARS-3.4: the reconnecting banner never shows during the FIRST connect — the loading skeleton owns that window", () => {
+    render(<RoomChat slug="evt-1" chat={chat} />);
+    // Initial connect: connecting + not yet hydrated → skeleton, no reconnect banner.
+    fire("connecting", {});
+    expect(screen.getByTestId("room-chat-loading")).toBeTruthy();
+    expect(screen.queryByTestId("room-chat-reconnecting")).toBeNull();
+  });
+});

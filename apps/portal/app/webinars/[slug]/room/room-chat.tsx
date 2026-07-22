@@ -63,6 +63,16 @@ export function RoomChat({
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [failed, setFailed] = useState(false);
+  // Live connection state (#1124). A webinar outruns one connection-token TTL and
+  // a long-lived websocket drops + re-handshakes; a dead connection MUST NOT be
+  // silent (an established conversation looking live-but-stale is the exact
+  // mid-webinar chat-death the room reported). `connecting` after the first
+  // successful connect = a transient drop the SDK is retrying (backoff);
+  // `disconnected` = terminal (the gate no longer admits — getToken threw
+  // UnauthorizedError — so the SDK stopped). Either way the pane says so.
+  const [connection, setConnection] = useState<
+    "connecting" | "connected" | "disconnected"
+  >("connecting");
   const listRef = useRef<HTMLDivElement>(null);
 
   // Subscribe to the live channel. Server-side subscription (the token's `channels`
@@ -122,12 +132,25 @@ export function RoomChat({
           setHydrated(true);
         });
     };
+    // Connection-lifecycle listeners (#1124): the SDK drives these across the
+    // whole session — the initial handshake, a transient drop's backoff retry,
+    // and a terminal stop after a gate refusal — so the pane reflects reality
+    // instead of silently freezing on a stale conversation.
+    const onConnecting = (): void => setConnection("connecting");
+    const onConnected = (): void => setConnection("connected");
+    const onDisconnected = (): void => setConnection("disconnected");
     centrifuge.on("publication", onPublication);
     centrifuge.on("subscribed", onSubscribed);
+    centrifuge.on("connecting", onConnecting);
+    centrifuge.on("connected", onConnected);
+    centrifuge.on("disconnected", onDisconnected);
     centrifuge.connect();
     return () => {
       centrifuge.removeListener("publication", onPublication);
       centrifuge.removeListener("subscribed", onSubscribed);
+      centrifuge.removeListener("connecting", onConnecting);
+      centrifuge.removeListener("connected", onConnected);
+      centrifuge.removeListener("disconnected", onDisconnected);
       centrifuge.disconnect();
     };
   }, [slug, chat.url, chat.token, chat.channel]);
@@ -177,17 +200,45 @@ export function RoomChat({
       <div className="border-b-2 border-border bg-tint px-4 py-3 text-caption leading-relaxed text-tint-foreground">
         {t("moderatorPin")}
       </div>
+      {/* Connection-state banner (#1124): a dropped/terminated live connection is
+          stated truthfully — a transient drop shows «Восстанавливаем связь…»
+          while the SDK retries, a terminal disconnect prompts a reload — so an
+          established conversation is never left silently stale. The empty-state
+          («Пока нет сообщений») is NEVER shown in its place. */}
+      {connection === "disconnected" ? (
+        <div
+          role="status"
+          data-testid="room-chat-disconnected"
+          className="border-b-2 border-border bg-tint px-4 py-2 text-caption text-tint-foreground"
+        >
+          {t("chatDisconnected")}
+        </div>
+      ) : connection === "connecting" && hydrated ? (
+        <div
+          role="status"
+          data-testid="room-chat-reconnecting"
+          className="border-b-2 border-border bg-tint px-4 py-2 text-caption text-tint-foreground"
+        >
+          {t("chatReconnecting")}
+        </div>
+      ) : null}
       <div
         ref={listRef}
         data-testid="room-chat-messages"
         role="log"
         aria-live="polite"
-        aria-busy={messages.length === 0 && !hydrated}
+        aria-busy={
+          messages.length === 0 && !hydrated && connection !== "disconnected"
+        }
         aria-label={t("chatHeading")}
         className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4"
       >
         {messages.length === 0 ? (
-          !hydrated ? (
+          connection === "disconnected" ? (
+            // The disconnected banner above carries the truth — do NOT assert the
+            // room is empty («Пока нет сообщений») when we simply lost the link.
+            null
+          ) : !hydrated ? (
             // History still loading — a distinct loading state, NEVER the
             // empty-state (#843). DS `Skeleton` primitive (decorative,
             // aria-hidden); the sr-only line carries the accessible status.

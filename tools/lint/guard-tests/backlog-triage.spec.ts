@@ -3,11 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   claimLabel,
   classify,
+  classifyPrBoardRows,
   detectClaim,
   evaluateRationale,
   findMegaBlockers,
   findSiblingByEars,
   formatClaimAge,
+  formatPrBoardHygiene,
   formatReport,
   isStartClaimComment,
   isStopStateComment,
@@ -17,6 +19,7 @@ import {
   type ClaimComment,
   type DepRef,
   type IssueInput,
+  type PrBoardRow,
   type SiblingIssue,
   type Triage,
 } from "../../backlog-triage";
@@ -703,5 +706,94 @@ describe("backlog-triage formatReport() — IN-FLIGHT-ELSEWHERE rows (#811)", ()
     expect(report).not.toContain("In flight elsewhere");
     expect(report).not.toContain("in-flight-elsewhere");
     expect(report).toContain("1 takeable, 0 blocked");
+  });
+});
+
+describe("PR board hygiene (#1140)", () => {
+  const row = (
+    number: number,
+    state: string,
+    hasAssignee = true,
+    hasMilestone = true,
+  ): PrBoardRow => ({ number, state, hasAssignee, hasMilestone });
+
+  describe("classifyPrBoardRows()", () => {
+    it("flags MERGED and CLOSED rows as dead (case-insensitive state)", () => {
+      const h = classifyPrBoardRows([
+        row(10, "MERGED"),
+        row(11, "closed"),
+        row(12, "OPEN"),
+      ]);
+      expect(h.dead).toEqual([
+        { number: 10, state: "MERGED" },
+        { number: 11, state: "CLOSED" },
+      ]);
+      expect(h.unfielded).toEqual([]);
+    });
+
+    it("flags OPEN rows missing assignee and/or milestone, naming each", () => {
+      const h = classifyPrBoardRows([
+        row(20, "OPEN", false, true),
+        row(21, "OPEN", true, false),
+        row(22, "OPEN", false, false),
+        row(23, "OPEN", true, true),
+      ]);
+      expect(h.unfielded).toEqual([
+        { number: 20, missing: ["assignee"] },
+        { number: 21, missing: ["milestone"] },
+        { number: 22, missing: ["assignee", "milestone"] },
+      ]);
+      expect(h.dead).toEqual([]);
+    });
+
+    it("a dead row is never also checked for fields (merged PRs need none)", () => {
+      const h = classifyPrBoardRows([row(30, "MERGED", false, false)]);
+      expect(h.dead).toEqual([{ number: 30, state: "MERGED" }]);
+      expect(h.unfielded).toEqual([]);
+    });
+
+    it("sorts both lists ascending by PR number", () => {
+      const h = classifyPrBoardRows([
+        row(9, "CLOSED"),
+        row(3, "MERGED"),
+        row(8, "OPEN", false, true),
+        row(2, "OPEN", true, false),
+      ]);
+      expect(h.dead.map((r) => r.number)).toEqual([3, 9]);
+      expect(h.unfielded.map((r) => r.number)).toEqual([2, 8]);
+    });
+  });
+
+  describe("formatPrBoardHygiene()", () => {
+    it("is SILENT (empty string) when the board is clean", () => {
+      expect(
+        formatPrBoardHygiene(
+          classifyPrBoardRows([row(1, "OPEN", true, true)]),
+        ),
+      ).toBe("");
+      expect(formatPrBoardHygiene({ dead: [], unfielded: [] })).toBe("");
+    });
+
+    it("renders both sub-blocks with a combined count in the heading", () => {
+      const out = formatPrBoardHygiene(
+        classifyPrBoardRows([
+          row(10, "MERGED"),
+          row(20, "OPEN", false, true),
+        ]),
+      );
+      expect(out).toContain("## PR board hygiene (2)");
+      expect(out).toContain("### Dead rows (1)");
+      expect(out).toContain("- PR #10: MERGED (dead row)");
+      expect(out).toContain("### Under-fielded open PRs (1)");
+      expect(out).toContain("- PR #20: missing assignee");
+    });
+
+    it("omits a sub-block that has no rows", () => {
+      const out = formatPrBoardHygiene(
+        classifyPrBoardRows([row(10, "MERGED")]),
+      );
+      expect(out).toContain("### Dead rows (1)");
+      expect(out).not.toContain("Under-fielded");
+    });
   });
 });

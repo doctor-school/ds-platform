@@ -33,18 +33,21 @@
  * Exit codes: 0 = status set (or resolved in --resolve mode); 1 = usage / resolution
  * / mutation error.
  */
-import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-// Generous stdout buffer for spawnSync (#315 hit ENOBUFS at the 1 MB default on
-// full-board payloads). The targeted query is tiny, but keep the headroom — a
-// silent truncation crash costs more than the bytes.
-const GH_MAX_BUFFER = 64 * 1024 * 1024;
+import {
+  OWNER,
+  PROJECT_NUMBER,
+  PROJECT_TITLE,
+  REPO,
+  ghGraphqlResult,
+  pickProjectItem,
+} from "./lib/projects-v2.mjs";
 
-const OWNER = "doctor-school";
-const REPO = "ds-platform";
-const PROJECT_NUMBER = 1;
-const PROJECT_TITLE = "DS Platform";
+// Re-exported so importers (guard-tests) keep resolving the shared item picker
+// from this module's public surface (#1140 moved the plumbing to lib/).
+export { pickProjectItem };
+
 const STATUS_FIELD = "Status";
 export const VALID_STATUS = ["Todo", "In Progress", "Review", "Done"];
 
@@ -81,12 +84,6 @@ export function buildProjectItemsQuery(issueNumber) {
     `project{id number title field(name:"${STATUS_FIELD}"){` +
     `... on ProjectV2SingleSelectField{id name options{id name}}}}}}}}}`
   );
-}
-
-/** Pick the projectItems node belonging to the given project number (the DS Platform board). */
-export function pickProjectItem(nodes, projectNumber) {
-  if (!Array.isArray(nodes)) return null;
-  return nodes.find((n) => n?.project?.number === projectNumber) ?? null;
 }
 
 /** Resolve a status option by exact name; null when absent. */
@@ -147,27 +144,13 @@ function warn(msg) {
   process.stderr.write(`[set-board-status] note: ${msg}\n`);
 }
 
-/** Run `gh api graphql -f query=<q>`; return the parsed `data` object. Dies on error. */
+/** Run `gh api graphql -f query=<q>`; return the parsed `data` object. Dies on
+ * error — wraps the shared non-fatal `ghGraphqlResult` (#1140) with this tool's
+ * fail-fast posture. */
 function ghGraphql(query) {
-  const res = spawnSync("gh", ["api", "graphql", "-f", `query=${query}`], {
-    encoding: "utf8",
-    maxBuffer: GH_MAX_BUFFER,
-  });
-  if (res.error)
-    die(
-      `failed to spawn gh: ${res.error.message} (is the gh CLI installed + on PATH?)`,
-    );
-  if (res.status !== 0)
-    die(`gh api graphql exited ${res.status}: ${res.stderr.trim()}`);
-  let parsed;
-  try {
-    parsed = JSON.parse(res.stdout);
-  } catch {
-    die(`could not parse gh api graphql JSON output`);
-  }
-  if (parsed.errors?.length)
-    die(`GraphQL errors: ${parsed.errors.map((e) => e.message).join("; ")}`);
-  return parsed.data;
+  const res = ghGraphqlResult(query);
+  if (!res.ok) die(res.error);
+  return res.data;
 }
 
 function usage() {

@@ -54,6 +54,10 @@ function makeIo(overrides: Record<string, unknown> = {}) {
       return { status: 0 };
     },
     mergedSha: () => "abcdef1234567890",
+    clearBoardItem: () => {
+      calls.push("board-clear");
+      return { status: "deleted", detail: "PVTI_pr" };
+    },
     boardDone: (issue: number) => {
       calls.push(`board-done:${issue}`);
       return { status: 0 };
@@ -80,10 +84,11 @@ function makeIo(overrides: Record<string, unknown> = {}) {
 }
 
 describe("pr-land pure seams (#1026)", () => {
-  it("STAGES is the canonical five-stage closeout order", () => {
+  it("STAGES is the canonical closeout order (board-clear between merge and board-done, #1140)", () => {
     expect(STAGES).toEqual([
       "gate",
       "merge",
+      "board-clear",
       "board-done",
       "teardown",
       "re-sweep",
@@ -127,6 +132,7 @@ describe("pr-land landPr() stage ordering (#1026)", () => {
       "resolve",
       "gate",
       "merge",
+      "board-clear",
       "board-done:1026",
       "teardown:1026",
       "re-sweep:prs",
@@ -214,7 +220,13 @@ describe("pr-land landPr() abort-on-FAIL (#1026)", () => {
       err: (msg: string) => errors.push(msg),
     });
     expect(() => landPr(55, [], io as never)).toThrow("exit:1");
-    expect(calls).toEqual(["resolve", "gate", "merge", "board-done:1026"]);
+    expect(calls).toEqual([
+      "resolve",
+      "gate",
+      "merge",
+      "board-clear",
+      "board-done:1026",
+    ]);
     expect(state.code).toBe(1);
     expect(errors.join("\n")).toMatch(/stage 'board-done' FAILED/);
   });
@@ -231,6 +243,7 @@ describe("pr-land landPr() abort-on-FAIL (#1026)", () => {
       "resolve",
       "gate",
       "merge",
+      "board-clear",
       "board-done:1026",
       "teardown:1026",
     ]);
@@ -262,6 +275,7 @@ describe("pr-land landPr() skip semantics (#1026)", () => {
       "resolve",
       "gate",
       "merge",
+      "board-clear",
       "board-done:1026",
       "re-sweep:prs",
       "re-sweep:branches",
@@ -285,12 +299,62 @@ describe("pr-land landPr() skip semantics (#1026)", () => {
       "resolve",
       "gate",
       "merge",
+      "board-clear",
       "teardown:77",
       "re-sweep:prs",
       "re-sweep:branches",
     ]);
     expect(state.code).toBe(0);
     expect(logs.join("")).toMatch(/board-done: SKIP/);
+  });
+});
+
+describe("pr-land board-clear stage — NON-FATAL (#1140)", () => {
+  it("deleted: reports OK and the tail runs to exit 0", () => {
+    const logs: string[] = [];
+    const { io, state } = makeIo({
+      clearBoardItem: () => ({ status: "deleted", detail: "PVTI_pr" }),
+      log: (msg: string) => logs.push(msg),
+    });
+    expect(() => landPr(55, [], io as never)).toThrow("exit:0");
+    expect(state.code).toBe(0);
+    expect(logs.join("")).toMatch(/board-clear: OK/);
+  });
+
+  it("absent (PR not on board): reports SKIP, tail still exits 0", () => {
+    const logs: string[] = [];
+    const { io, state } = makeIo({
+      clearBoardItem: () => ({ status: "absent" }),
+      log: (msg: string) => logs.push(msg),
+    });
+    expect(() => landPr(55, [], io as never)).toThrow("exit:0");
+    expect(state.code).toBe(0);
+    expect(logs.join("")).toMatch(/board-clear: SKIP/);
+  });
+
+  it("error: NON-FATAL — reports WARN, does NOT abort, tail still exits 0", () => {
+    const logs: string[] = [];
+    const { io, calls, state } = makeIo({
+      clearBoardItem: () => {
+        calls.push("board-clear");
+        return { status: "error", detail: "gh api graphql exited 1" };
+      },
+      log: (msg: string) => logs.push(msg),
+    });
+    expect(() => landPr(55, [], io as never)).toThrow("exit:0");
+    expect(state.code).toBe(0);
+    // the later stages STILL run — a board-clear failure never aborts the tail
+    expect(calls).toEqual([
+      "resolve",
+      "gate",
+      "merge",
+      "board-clear",
+      "board-done:1026",
+      "teardown:1026",
+      "re-sweep:prs",
+      "re-sweep:branches",
+    ]);
+    expect(logs.join("")).toMatch(/board-clear: WARN \(non-fatal/);
   });
 });
 

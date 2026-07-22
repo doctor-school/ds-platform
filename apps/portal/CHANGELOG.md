@@ -1,5 +1,18 @@
 # @ds/portal
 
+## 0.14.3
+
+### Patch Changes
+
+- [#1132](https://github.com/doctor-school/ds-platform/pull/1132) [`9bd781f`](https://github.com/doctor-school/ds-platform/commit/9bd781ff5ca08e17437f6993b1b1bce250a74159) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - fix(room): the live chat survives a full webinar instead of falling back to the empty-state ~78 min in ([#1124](https://github.com/doctor-school/ds-platform/issues/1124)). A dropped or terminated Centrifugo connection is now truthful — a transient drop shows a reconnecting banner while the SDK retries, a terminal disconnect prompts a reload — and an established conversation is never silently replaced by «Пока нет сообщений». Paired with raising the Centrifugo `room` history retention to span a full webinar + margin (both dev-stand and prod configs), a mid-webinar reload/resubscribe hydrates the recent conversation instead of an empty pane over a live room.
+
+- [#1136](https://github.com/doctor-school/ds-platform/pull/1136) [`3954bef`](https://github.com/doctor-school/ds-platform/commit/3954befff03dace5190d621883325d77e6389c08) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Room live «N врачей в комнате» presence count (006 EARS-5, [#1122](https://github.com/doctor-school/ds-platform/issues/1122)): lock the client
+  ack→header refresh path with a component regression test (increment, decrement, and
+  the inter-beat cadence gap that read as "frozen without a reload"), and stop the
+  heartbeat loop swallowing a failed beat with zero signal — a refused beat, schema
+  drift, or a transport failure now leaves a dev-visible `console.debug` breadcrumb
+  (best-effort loop unchanged: no user-facing error, no retry, last count held).
+
 ## 0.14.2
 
 ### Patch Changes

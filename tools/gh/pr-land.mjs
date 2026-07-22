@@ -18,6 +18,10 @@
  *                   `--mode-a-exempt "<reason>"`) are forwarded verbatim.
  *   2. merge      — `gh pr merge <N> --squash --delete-branch` (the single
  *                   mandatory Phase-0 merge command, AGENTS.md §6).
+ *   2b.board-clear— remove the merged PR's OWN board row (dead PR rows auto-leave
+ *                   the board; `Closes #N` moves the linked Issue, never the PR
+ *                   item). NON-FATAL: a failure is a reported line, not an abort
+ *                   — the merge already landed (#1140).
  *   3. board-done — board Status=Done for each linked `Closes #N` Issue via
  *                   `tools/gh/set-board-status.mjs` (Closes closes the Issue
  *                   but never moves the Projects v2 column). No linked Issue →
@@ -54,6 +58,12 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
+  buildDeleteItemMutation,
+  buildPrProjectItemsQuery,
+  ghGraphqlResult,
+  pickProjectItem,
+} from "./lib/projects-v2.mjs";
+import {
   cwdGuardMessage,
   isWorktreeCwd,
   parseModeAExempt,
@@ -65,8 +75,20 @@ const GH_MAX_BUFFER = 64 * 1024 * 1024; // large payloads overflow the 1 MiB def
 
 // ── pure seams (unit-tested in guard-tests/pr-land.spec.ts) ──────────────────
 
-/** Canonical stage order — the contract the spec asserts (#1026 AC). */
-export const STAGES = ["gate", "merge", "board-done", "teardown", "re-sweep"];
+/**
+ * Canonical stage order — the contract the spec asserts (#1026 AC; `board-clear`
+ * added #1140). `board-clear` is the one NON-FATAL stage: it removes the merged
+ * PR's OWN board row (so dead PR rows auto-leave the board), and any failure is a
+ * reported closeout-tail line, never an abort — the merge has already landed.
+ */
+export const STAGES = [
+  "gate",
+  "merge",
+  "board-clear",
+  "board-done",
+  "teardown",
+  "re-sweep",
+];
 
 /**
  * Candidate Issue/worktree numbers for the tail: the PR's linked `Closes #N`
@@ -102,6 +124,8 @@ export function stageRemedy(stage, pr) {
       return `investigate the gate's terminal RED/TIMEOUT line above; do NOT merge (re-run \`pnpm pr:land ${pr}\` once resolved).`;
     case "merge":
       return `inspect the gh output above, then re-run \`pnpm pr:land ${pr}\` (the gate re-confirms before any retry merges).`;
+    case "board-clear":
+      return `merge landed — the merged PR's board row was NOT removed (non-fatal); delete it by hand from the board if it lingers as a dead row.`;
     case "board-done":
       return `merge landed — finish by hand: \`pnpm board:status <issue> Done\`, then \`pnpm worktree:teardown <N>\` if a worktree remains.`;
     case "teardown":
@@ -192,6 +216,29 @@ function runMergedSha(pr) {
   }
 }
 
+/**
+ * Board-clear stage (#1140): remove the merged PR's OWN board row so dead PR
+ * rows auto-leave the board (an open-PR board row lingers as a stale "in review"
+ * item after merge — `Closes #N` moves the linked ISSUE, never the PR item).
+ * TWO targeted GraphQL calls (per-PR resolve → delete) via the shared plumbing —
+ * no board-wide scan. Returns a structured result; NEVER throws / exits — the
+ * caller treats every non-`deleted` outcome as a non-fatal reported line.
+ * @param {number} pr
+ * @returns {{status:"deleted"|"absent"|"error", detail?:string}}
+ */
+function runClearPrBoardItem(pr) {
+  const resolved = ghGraphqlResult(buildPrProjectItemsQuery(pr));
+  if (!resolved.ok) return { status: "error", detail: resolved.error };
+  const nodes = resolved.data?.repository?.pullRequest?.projectItems?.nodes;
+  const item = pickProjectItem(nodes);
+  if (!item?.id || !item.project?.id) return { status: "absent" };
+  const deleted = ghGraphqlResult(
+    buildDeleteItemMutation(item.project.id, item.id),
+  );
+  if (!deleted.ok) return { status: "error", detail: deleted.error };
+  return { status: "deleted", detail: item.id };
+}
+
 /** Stage 3: board Status=Done via the sanctioned setter, streamed. */
 function runBoardDone(issue) {
   return spawnSync(
@@ -254,6 +301,7 @@ function runListRemoteBranches() {
  * @param {{
  *   gate?: typeof runGate, merge?: typeof runMerge,
  *   resolveContext?: typeof runResolveContext, mergedSha?: typeof runMergedSha,
+ *   clearBoardItem?: typeof runClearPrBoardItem,
  *   boardDone?: typeof runBoardDone, worktreeExists?: typeof defaultWorktreeExists,
  *   teardown?: typeof runTeardown, listOpenPrs?: typeof runListOpenPrs,
  *   listRemoteBranches?: typeof runListRemoteBranches,
@@ -266,6 +314,7 @@ export function landPr(pr, extraArgs = [], io = {}) {
   const merge = io.merge ?? runMerge;
   const resolveContext = io.resolveContext ?? runResolveContext;
   const mergedSha = io.mergedSha ?? runMergedSha;
+  const clearBoardItem = io.clearBoardItem ?? runClearPrBoardItem;
   const boardDone = io.boardDone ?? runBoardDone;
   const worktreeExists = io.worktreeExists ?? defaultWorktreeExists;
   const teardown = io.teardown ?? runTeardown;
@@ -317,6 +366,20 @@ export function landPr(pr, extraArgs = [], io = {}) {
   if (mergeRes.status !== 0) return fail("merge", mergeRes.status);
   const sha = mergedSha(pr);
   report.push(`merge: OK (squash${sha ? `, ${String(sha).slice(0, 12)}` : ""})`);
+
+  // Stage — board-clear: remove the merged PR's OWN board row so dead PR rows
+  // auto-leave. NON-FATAL by contract (#1140 AC): the merge has already landed,
+  // so a resolve/delete failure is a reported line, never an abort. Runs before
+  // board-done (which moves the linked ISSUE, a different board item).
+  const clearRes = clearBoardItem(pr);
+  if (clearRes.status === "deleted")
+    report.push(`board-clear: OK (PR row removed)`);
+  else if (clearRes.status === "absent")
+    report.push("board-clear: SKIP (PR not on the board)");
+  else
+    report.push(
+      `board-clear: WARN (non-fatal — ${clearRes.detail ?? "unknown error"}); ${stageRemedy("board-clear", pr)}`,
+    );
 
   // Stage 3 — board Status=Done for each linked Closes-issue.
   if (issues.length === 0) {

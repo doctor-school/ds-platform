@@ -63,6 +63,10 @@ import { execa } from "execa";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  buildBoardItemsPageQuery,
+  parseBoardItemsPage,
+} from "./gh/lib/projects-v2.mjs";
+import {
   evaluateMainSync,
   mainSyncFixCommand,
   mainSyncMessage,
@@ -200,6 +204,78 @@ export function formatFieldHygiene(
     "Open issues missing a required field (#1137): Type / milestone / assignee / exactly-one kind label / exactly-one `source:*`. `pnpm issue:create` enforces these at creation; pre-gate Issues surface here.",
   ];
   for (const r of bad) out.push(`- #${r.number}: missing ${r.missing.join(", ")}`);
+  return out.join("\n");
+}
+
+// ── PR board hygiene (#1140) — dead + under-fielded PR rows on the board ───────
+
+/**
+ * One PR item on the Projects v2 board, from the single paginated board scan.
+ * `state` is the GraphQL `PullRequest.state` enum (OPEN | CLOSED | MERGED).
+ */
+export interface PrBoardRow {
+  number: number;
+  state: string;
+  hasAssignee: boolean;
+  hasMilestone: boolean;
+}
+
+/** The two PR-board-hygiene findings derived from one board scan (#1140). */
+export interface PrBoardHygiene {
+  /** Board rows whose PR is MERGED or CLOSED — dead rows that should auto-leave. */
+  dead: Array<{ number: number; state: string }>;
+  /** OPEN-PR rows missing an assignee and/or a milestone. */
+  unfielded: Array<{ number: number; missing: string[] }>;
+}
+
+/**
+ * Split PR board rows (#1140) into dead rows (MERGED/CLOSED — `pr:land` deletes
+ * these on merge, but a closed-without-merge PR or a pre-#1140 merge leaves one
+ * behind) and under-fielded OPEN rows (missing assignee and/or milestone — the
+ * PR-side mirror of the Issue Field-contract). Pure: board rows in → findings
+ * out, no I/O.
+ */
+export function classifyPrBoardRows(rows: PrBoardRow[]): PrBoardHygiene {
+  const dead: PrBoardHygiene["dead"] = [];
+  const unfielded: PrBoardHygiene["unfielded"] = [];
+  for (const r of rows) {
+    const state = (r.state ?? "").toUpperCase();
+    if (state === "MERGED" || state === "CLOSED") {
+      dead.push({ number: r.number, state });
+      continue;
+    }
+    if (state !== "OPEN") continue;
+    const missing: string[] = [];
+    if (!r.hasAssignee) missing.push("assignee");
+    if (!r.hasMilestone) missing.push("milestone");
+    if (missing.length > 0) unfielded.push({ number: r.number, missing });
+  }
+  dead.sort((a, b) => a.number - b.number);
+  unfielded.sort((a, b) => a.number - b.number);
+  return { dead, unfielded };
+}
+
+/**
+ * Render the `## PR board hygiene` section (#1140) from the classified findings.
+ * Silent (empty string) when the board carries no dead and no under-fielded PR
+ * row — mirrors `formatFieldHygiene`'s silent-when-clean convention.
+ */
+export function formatPrBoardHygiene(h: PrBoardHygiene): string {
+  const total = h.dead.length + h.unfielded.length;
+  if (total === 0) return "";
+  const out = [
+    `## PR board hygiene (${total})`,
+    "Projects v2 PR rows needing attention (#1140): a MERGED/CLOSED PR row is dead (`pnpm pr:land` removes it on merge; a closed-without-merge PR is the catch-all here); an OPEN-PR row must carry ≥1 assignee AND a milestone.",
+  ];
+  if (h.dead.length > 0) {
+    out.push(`### Dead rows (${h.dead.length}) — remove from the board`);
+    for (const r of h.dead) out.push(`- PR #${r.number}: ${r.state} (dead row)`);
+  }
+  if (h.unfielded.length > 0) {
+    out.push(`### Under-fielded open PRs (${h.unfielded.length})`);
+    for (const r of h.unfielded)
+      out.push(`- PR #${r.number}: missing ${r.missing.join(", ")}`);
+  }
   return out.join("\n");
 }
 
@@ -697,6 +773,59 @@ async function listOpenIssues(): Promise<RawIssue[]> {
   return JSON.parse(stdout) as RawIssue[];
 }
 
+/**
+ * Sweep EVERY Projects v2 PR row via the single sanctioned paginated GraphQL
+ * scan (#1140) — 100 items/page, cursor-paginated to exhaustion (the board is
+ * 650+ items; a sub-limit read is a false negative). NEVER `gh project
+ * item-list` (banned quota sink, #984). Issue-typed items are ignored here (the
+ * `## Field hygiene` section covers them). A query failure throws — the caller
+ * degrades the section to a warning, never crashes the whole run.
+ */
+async function listBoardPrRows(): Promise<PrBoardRow[]> {
+  const rows: PrBoardRow[] = [];
+  let after: string | null = null;
+  // Hard page cap as a runaway guard (≈100 pages = 10k items ≫ any real board).
+  for (let page = 0; page < 100; page++) {
+    const { stdout } = await execa(
+      "gh",
+      ["api", "graphql", "-f", `query=${buildBoardItemsPageQuery(after)}`],
+      { cwd: REPO_ROOT },
+    );
+    const parsed = JSON.parse(stdout) as { data?: unknown; errors?: unknown[] };
+    if (Array.isArray(parsed.errors) && parsed.errors.length > 0)
+      throw new Error(
+        `GraphQL errors: ${parsed.errors
+          .map((e) => (e as { message?: string }).message)
+          .join("; ")}`,
+      );
+    const pageData = parseBoardItemsPage(parsed.data);
+    if (!pageData) break;
+    for (const node of pageData.nodes) {
+      const content = node?.content as
+        | {
+            __typename?: string;
+            number?: number;
+            state?: string;
+            assignees?: { totalCount?: number };
+            milestone?: { title?: string } | null;
+          }
+        | undefined;
+      if (content?.__typename !== "PullRequest") continue;
+      if (typeof content.number !== "number") continue;
+      rows.push({
+        number: content.number,
+        state: content.state ?? "",
+        hasAssignee: (content.assignees?.totalCount ?? 0) > 0,
+        hasMilestone: !!content.milestone?.title,
+      });
+    }
+    if (!pageData.hasNextPage) break;
+    after = pageData.endCursor;
+    if (!after) break;
+  }
+  return rows;
+}
+
 interface NativeDep {
   number: number;
   state: string;
@@ -1191,6 +1320,17 @@ async function main(): Promise<void> {
     })),
   );
   if (hygiene) out.push(hygiene, "");
+
+  // PR board hygiene (#1140): dead + under-fielded PR rows from the single
+  // paginated board scan. A scan failure degrades to a warning, never crashes.
+  try {
+    const prHygiene = formatPrBoardHygiene(
+      classifyPrBoardRows(await listBoardPrRows()),
+    );
+    if (prHygiene) out.push(prHygiene, "");
+  } catch (e) {
+    note("PR board scan", e);
+  }
 
   if (warnings.length > 0) {
     out.push("## Warnings");

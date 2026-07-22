@@ -57,6 +57,7 @@ export const GUARDS = [
   { name: "prior-decisions", file: "prior-decisions-lint.ts" },
   { name: "spec-status-fresh", file: "spec-status-lint.ts" },
   { name: "product-note", file: "product-note-lint.ts" },
+  { name: "assignee-milestone", file: "assignee-milestone-lint.ts" },
 ];
 
 /**

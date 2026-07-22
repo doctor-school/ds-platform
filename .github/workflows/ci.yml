@@ -71,6 +71,7 @@ jobs:
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec turbo run test --filter='!@ds/api'
+      - run: pnpm test:tools
 
   # apps/api e2e (readiness EARS-1, health EARS-1) + unit specs against a real
   # Postgres 17 + pgvector + pg_partman. The Vitest globalSetup runs

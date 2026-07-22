@@ -18,11 +18,15 @@
  * (board ids). Sibling helpers: set-board-status.mjs, wait-ci-green.mjs.
  *
  * Usage (thin passthrough — everything after the control flags is forwarded to
- * `gh issue create` verbatim; do not reimplement its flags). Exactly ONE
- * `source:*` provenance label is required (#1009) — see SOURCE_LABELS:
- *   node tools/gh/create-issue.mjs --title "<t>" --body-file <f> --label source:agent [--label <l> …] [gh flags…]
- *   node tools/gh/create-issue.mjs --no-todo  --title "<t>" --body-file <f>   # add to board, leave Status unset
- *   pnpm issue:create --title "<t>" --body-file <f> --label tooling           # alias
+ * `gh issue create` verbatim; do not reimplement its flags). Fail-closed field
+ * gates run BEFORE any gh call (#1009 + #1137): exactly ONE `source:*`
+ * provenance label (see SOURCE_LABELS), exactly ONE kind label (see
+ * KIND_LABELS), and a milestone. The org Issue Type is auto-derived from the
+ * kind label (bug→Bug, feature→Feature, else Task) and the assignee defaults to
+ * `@me` — both overridable via explicit `--type` / `--assignee`:
+ *   node tools/gh/create-issue.mjs --title "<t>" --body-file <f> --label source:agent --label tooling --milestone "Platform ops & hardening" [--label <l> …] [gh flags…]
+ *   node tools/gh/create-issue.mjs --no-todo  --title "<t>" --body-file <f> …    # add to board, leave Status unset
+ *   pnpm issue:create --title "<t>" --body-file <f> --label source:agent --label tooling -m "Platform ops & hardening"   # alias
  *
  * Control flags (consumed here, NOT forwarded to gh) — put them BEFORE the gh
  * passthrough; a passthrough VALUE equal to a control flag would be consumed too:
@@ -128,14 +132,25 @@ export const SOURCE_LABELS = [
   "source:agent",
 ];
 
+/** The kind-label taxonomy (#1137) — every new Issue carries exactly one. */
+export const KIND_LABELS = [
+  "bug",
+  "feature",
+  "chore",
+  "refactor",
+  "docs",
+  "tooling",
+];
+
 /**
- * Collect every `source:*` label value out of the gh passthrough (#1009).
- * Handles the forms gh accepts: `--label v`, `--label=v`, `-l v`, and
- * comma-separated lists (`--label a,b`).
+ * Collect every `--label` value out of the gh passthrough, across the forms gh
+ * accepts: `--label v`, `--label=v`, `-l v`, and comma-separated lists
+ * (`--label a,b`). Shared by the source- and kind-label gates (#1137) — one
+ * parser, never duplicated.
  * @param {string[]} args
  * @returns {string[]}
  */
-export function collectSourceLabels(args) {
+export function collectLabels(args) {
   const values = [];
   const list = args ?? [];
   for (let i = 0; i < list.length; i++) {
@@ -147,10 +162,30 @@ export function collectSourceLabels(args) {
     if (!raw) continue;
     for (const v of raw.split(",")) {
       const label = v.trim();
-      if (label.startsWith("source:")) values.push(label);
+      if (label) values.push(label);
     }
   }
   return values;
+}
+
+/**
+ * Collect every `source:*` label value out of the gh passthrough (#1009).
+ * @param {string[]} args
+ * @returns {string[]}
+ */
+export function collectSourceLabels(args) {
+  return collectLabels(args).filter((l) => l.startsWith("source:"));
+}
+
+/**
+ * Collect every kind label out of the gh passthrough (#1137) — the values in
+ * KIND_LABELS. Non-kind labels (`source:*`, `feature:NNN-*`, `agent-ready`, …)
+ * are ignored, so an Issue may carry any number of them alongside exactly one kind.
+ * @param {string[]} args
+ * @returns {string[]}
+ */
+export function collectKindLabels(args) {
+  return collectLabels(args).filter((l) => KIND_LABELS.includes(l));
 }
 
 /**
@@ -173,6 +208,110 @@ export function sourceLabelError(args) {
   if (!SOURCE_LABELS.includes(found[0]))
     return `unknown source label "${found[0]}" — must be one of: ${taxonomy}.`;
   return null;
+}
+
+/**
+ * Validate the kind-label requirement (#1137): exactly ONE kind label, drawn
+ * from KIND_LABELS. Extra non-kind labels are fine. Returns null when valid,
+ * else the error message to die with.
+ * @param {string[]} args  the gh passthrough
+ * @returns {string|null}
+ */
+export function kindLabelError(args) {
+  const taxonomy = KIND_LABELS.join(" | ");
+  const found = collectKindLabels(args);
+  if (found.length === 0)
+    return (
+      `every new Issue needs exactly ONE kind label — pass ` +
+      `--label <kind>, one of: ${taxonomy}.`
+    );
+  if (found.length > 1)
+    return `exactly ONE kind label is allowed, got: ${found.join(", ")} (taxonomy: ${taxonomy}).`;
+  return null;
+}
+
+/**
+ * Detect a milestone flag (`--milestone` / `--milestone=` / `-m`) in the gh
+ * passthrough (#1137). Every new Issue is homed under a long-lived
+ * product-theme milestone; «Platform ops & hardening» is the standing fallback.
+ * @param {string[]} args
+ * @returns {boolean}
+ */
+export function hasMilestone(args) {
+  return (args ?? []).some(
+    (a) =>
+      a === "--milestone" || a.startsWith("--milestone=") || a.startsWith("-m"),
+  );
+}
+
+/** The standing fallback milestone for ops/process Issues (#1137). */
+export const FALLBACK_MILESTONE = "Platform ops & hardening";
+
+/**
+ * The milestone-requirement error (#1137). Returns null when a milestone flag
+ * is present, else the message to die with (names the standing fallback).
+ * @param {string[]} args  the gh passthrough
+ * @returns {string|null}
+ */
+export function milestoneError(args) {
+  if (hasMilestone(args)) return null;
+  return (
+    `every new Issue needs a milestone — pass --milestone <name>, the ` +
+    `long-lived product-theme milestone; use «${FALLBACK_MILESTONE}» as the ` +
+    `standing fallback for ops/process work.`
+  );
+}
+
+/**
+ * Derive the org Issue Type from the single kind label (#1137): `bug`→Bug,
+ * `feature`→Feature, everything else→Task.
+ * @param {string} kindLabel
+ * @returns {"Bug"|"Feature"|"Task"}
+ */
+export function deriveType(kindLabel) {
+  if (kindLabel === "bug") return "Bug";
+  if (kindLabel === "feature") return "Feature";
+  return "Task";
+}
+
+/** Is a `--type` flag already present in the passthrough? */
+export function hasTypeFlag(args) {
+  return (args ?? []).some((a) => a === "--type" || a.startsWith("--type="));
+}
+
+/**
+ * Append `--type <derived>` (from the single kind label) when the caller passed
+ * no explicit `--type`. An explicit `--type` is never overridden. Returns a new
+ * argv array (#1137).
+ * @param {string[]} args
+ * @returns {string[]}
+ */
+export function ensureTypeFlag(args) {
+  const list = [...(args ?? [])];
+  if (hasTypeFlag(list)) return list;
+  const kind = collectKindLabels(list)[0];
+  if (!kind) return list; // kindLabelError already gates a missing kind upstream
+  return [...list, "--type", deriveType(kind)];
+}
+
+/** Is an assignee flag (`--assignee` / `--assignee=` / `-a`) already present? */
+export function hasAssignee(args) {
+  return (args ?? []).some(
+    (a) =>
+      a === "--assignee" || a.startsWith("--assignee=") || a.startsWith("-a"),
+  );
+}
+
+/**
+ * Append `--assignee @me` when the caller passed no explicit assignee. Returns a
+ * new argv array (#1137).
+ * @param {string[]} args
+ * @returns {string[]}
+ */
+export function ensureAssigneeFlag(args) {
+  const list = [...(args ?? [])];
+  if (hasAssignee(list)) return list;
+  return [...list, "--assignee", "@me"];
 }
 
 /**
@@ -247,11 +386,13 @@ function main() {
   const argv = process.argv.slice(2);
   if (argv.length === 0 || argv.includes("--help") || argv.includes("-h")) {
     process.stderr.write(
-      "Usage: node tools/gh/create-issue.mjs [--no-todo] --title \"<t>\" --body-file <f> --label <source:*> [--label <l> …]\n" +
+      "Usage: node tools/gh/create-issue.mjs [--no-todo] --title \"<t>\" --body-file <f> --label <source:*> --label <kind> --milestone <name> [--label <l> …]\n" +
         "  Thin wrapper over `gh issue create` (flags forwarded verbatim) that also adds the\n" +
         "  new Issue to Projects v2 board #1 (doctor-school), sets Status=Todo, and confirms\n" +
         "  the item via a GraphQL node read. --no-todo adds to the board without setting Status.\n" +
-        `  Exactly ONE provenance label is required (#1009): ${SOURCE_LABELS.join(" | ")}.\n`,
+        `  Required (fail-closed, BEFORE any gh call): exactly ONE source label (#1009) — ${SOURCE_LABELS.join(" | ")};\n` +
+        `  exactly ONE kind label (#1137) — ${KIND_LABELS.join(" | ")}; and a --milestone (fallback «${FALLBACK_MILESTONE}»).\n` +
+        "  Issue Type is auto-derived from the kind label; assignee defaults to @me (both overridable via --type/--assignee).\n",
     );
     process.exit(1);
   }
@@ -267,17 +408,28 @@ function main() {
         `Projects v2 board is repo-specific. Remove it from the arguments.`,
     );
 
-  // Provenance gate (#1009): refuse creation unless exactly one source:* label
-  // is passed — BEFORE any gh call, so no Issue is created on a violation.
+  // Field gates — all run BEFORE any gh call, so no Issue is created on a
+  // violation (fail-closed, the #1009 provenance-gate precedent):
+  //   • exactly one source:* provenance label (#1009);
+  //   • exactly one kind label + a milestone (#1137).
   const sourceError = sourceLabelError(passthrough);
   if (sourceError) die(sourceError);
+  const kindError = kindLabelError(passthrough);
+  if (kindError) die(kindError);
+  const milestoneErr = milestoneError(passthrough);
+  if (milestoneErr) die(milestoneErr);
+
+  // Auto-derive the org Issue Type from the kind label and default the assignee
+  // to @me when the caller left them off — both overridable via an explicit
+  // --type / --assignee, neither of which is ever clobbered (#1137).
+  const augmented = ensureAssigneeFlag(ensureTypeFlag(passthrough));
 
   // 1. Create the Issue — thin passthrough. Pin --repo AFTER the passthrough so
   //    the returned URL is guaranteed to belong to the board's repo (gh honors
   //    the last --repo; the reject above already blocks a passthrough override,
   //    this is belt-and-suspenders).
   process.stdout.write(`[create-issue] creating Issue…\n`);
-  const createOut = gh(["issue", "create", ...passthrough, "--repo", REPO], {
+  const createOut = gh(["issue", "create", ...augmented, "--repo", REPO], {
     json: false,
   });
   const url = extractIssueUrl(createOut);

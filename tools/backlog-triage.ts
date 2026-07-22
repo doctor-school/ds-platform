@@ -144,6 +144,65 @@ export function issueStream(labels: string[]): {
   return { stream: "process", noKindLabel: !hasProcess };
 }
 
+// ── field hygiene (#1137) — the required-field completeness of an open Issue ──
+
+/** The kind-label taxonomy (#1137) — exactly one per Issue. */
+const ALL_KIND_LABELS = new Set([
+  ...PRODUCT_KIND_LABELS,
+  ...PROCESS_KIND_LABELS,
+]);
+
+/** Plain-data input to `missingFields` — probes pre-resolved by the caller. */
+export interface FieldHygieneInput {
+  number: number;
+  labels: string[];
+  /** An org Issue Type is set. */
+  hasType: boolean;
+  /** A milestone is assigned. */
+  hasMilestone: boolean;
+  /** At least one assignee is set. */
+  hasAssignee: boolean;
+}
+
+/**
+ * The required fields an open Issue is missing (#1137): Type, milestone,
+ * assignee, exactly one kind label, exactly one `source:*` label. Returns the
+ * missing-field names (empty = compliant). `pnpm issue:create` enforces these
+ * at creation; this surfaces pre-gate Issues.
+ */
+export function missingFields(i: FieldHygieneInput): string[] {
+  const missing: string[] = [];
+  if (!i.hasType) missing.push("Type");
+  if (!i.hasMilestone) missing.push("milestone");
+  if (!i.hasAssignee) missing.push("assignee");
+  const kinds = i.labels.filter((l) => ALL_KIND_LABELS.has(l));
+  if (kinds.length !== 1)
+    missing.push(kinds.length === 0 ? "kind-label" : "one-kind-label");
+  const sources = i.labels.filter((l) => l.startsWith("source:"));
+  if (sources.length !== 1)
+    missing.push(sources.length === 0 ? "source-label" : "one-source-label");
+  return missing;
+}
+
+/**
+ * Render the `## Field hygiene` report section (#1137) from per-Issue
+ * missing-field rows. Silent (empty string) when every open Issue is compliant.
+ */
+export function formatFieldHygiene(
+  rows: Array<{ number: number; missing: string[] }>,
+): string {
+  const bad = rows
+    .filter((r) => r.missing.length > 0)
+    .sort((a, b) => a.number - b.number);
+  if (bad.length === 0) return "";
+  const out = [
+    `## Field hygiene (${bad.length})`,
+    "Open issues missing a required field (#1137): Type / milestone / assignee / exactly-one kind label / exactly-one `source:*`. `pnpm issue:create` enforces these at creation; pre-gate Issues surface here.",
+  ];
+  for (const r of bad) out.push(`- #${r.number}: missing ${r.missing.join(", ")}`);
+  return out.join("\n");
+}
+
 export interface BlockReason {
   kind: "open-issue" | "absent-subsystem";
   number?: number;
@@ -615,6 +674,9 @@ interface RawIssue {
   title: string;
   body?: string;
   labels?: Array<{ name: string }>;
+  milestone?: { title?: string } | null;
+  assignees?: Array<{ login: string }>;
+  issueType?: { name?: string } | null;
 }
 
 async function listOpenIssues(): Promise<RawIssue[]> {
@@ -628,7 +690,7 @@ async function listOpenIssues(): Promise<RawIssue[]> {
       "--limit",
       "300",
       "--json",
-      "number,title,body,labels",
+      "number,title,body,labels,milestone,assignees,issueType",
     ],
     { cwd: REPO_ROOT },
   );
@@ -1113,6 +1175,23 @@ async function main(): Promise<void> {
   const out: string[] = [];
   if (staleBanner) out.push(`> ${staleBanner}`, "");
   out.push(formatReport(triaged));
+
+  // Field hygiene (#1137): open Issues missing a required field. Silent when
+  // every open Issue is compliant.
+  const hygiene = formatFieldHygiene(
+    issues.map((raw) => ({
+      number: raw.number,
+      missing: missingFields({
+        number: raw.number,
+        labels: (raw.labels ?? []).map((l) => l.name),
+        hasType: !!raw.issueType?.name,
+        hasMilestone: !!raw.milestone?.title,
+        hasAssignee: (raw.assignees ?? []).length > 0,
+      }),
+    })),
+  );
+  if (hygiene) out.push(hygiene, "");
+
   if (warnings.length > 0) {
     out.push("## Warnings");
     for (const w of warnings) out.push(`- ${w.source}: ${w.message}`);

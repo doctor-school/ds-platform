@@ -5,6 +5,19 @@ import { PresenceHeartbeatAckSchema } from "@ds/schemas";
 import { usePresenceCountSetter } from "./room-presence";
 
 /**
+ * Leave a diagnostic breadcrumb for a swallowed beat. The loop is best-effort by
+ * design (EARS-4: a failed beat never surfaces an error to the doctor and never
+ * clears the last known count), but a beat that fails with ZERO signal makes a
+ * prod-only stall (refused beat / schema drift / transport failure) undiagnosable
+ * — #1122. `console.debug` is the measured hedge: dev-visible when investigating,
+ * filtered by default so a transient blip never spams, and never a user-facing
+ * change or an extra request (no retry — behavior-preserving).
+ */
+function reportBeatFailure(reason: string, error?: unknown): void {
+  console.debug(`[presence-heartbeat] beat not applied: ${reason}`, error ?? "");
+}
+
+/**
  * 006 EARS-4 — the client presence-capture loop. While the room tab is the
  * VISIBLE, active tab it POSTs an authenticated heartbeat every N seconds
  * (`intervalSeconds` = `RoomConfig.heartbeatIntervalSeconds`, the server-config
@@ -59,13 +72,20 @@ export function PresenceHeartbeat({
       })
         .then(async (res) => {
           // Refresh the live presence count from the ack (best-effort — a parse
-          // failure or a refused beat leaves the last known count untouched).
-          if (!res.ok) return;
+          // failure or a refused beat leaves the last known count untouched, but
+          // no longer disappears with zero signal — #1122).
+          if (!res.ok) {
+            reportBeatFailure(`server refused the beat (HTTP ${res.status})`);
+            return;
+          }
           const ack = PresenceHeartbeatAckSchema.safeParse(await res.json());
           if (ack.success) setPresenceCount(ack.data.presenceCount);
+          else reportBeatFailure("ack payload failed the schema contract");
         })
-        .catch(() => {
-          // Presence capture is best-effort — a failed beat never reaches the doctor.
+        .catch((error: unknown) => {
+          // Presence capture is best-effort — a failed beat never reaches the
+          // doctor, but it does leave a dev-visible breadcrumb (#1122).
+          reportBeatFailure("beat request failed (network/transport)", error);
         });
     };
 

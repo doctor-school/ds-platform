@@ -29,18 +29,18 @@ mode: inline
 
    Closing G11 findings F-8 and F-19: do **not** silently substitute a generic label like `enhancement` when the project-specific label is missing. Either the label set is created up front, or `surface-decision-debt` is invoked to record the substitution as a follow-up.
 
-2. **Open the parent Issue** (if not already open) under the product-theme milestone (AGENTS.md §2 — e.g. `Auth foundations v1`, not a per-spec name) and link to `NNN-requirements.md`. The spec folder is bound to the work by the `feature:NNN-<slug>` label, not the milestone. **Every Issue this skill opens — parent and children — carries the provenance label `source:spec`** (opened from a merged feature spec; the `source:*` taxonomy is `source:owner` | `source:spec` | `source:retro` | `source:agent`, one per Issue).
+2. **Open the parent Issue** (if not already open) via `pnpm issue:create` under the product-theme milestone (AGENTS.md §2 — e.g. `Auth foundations v1`, not a per-spec name) and link to `NNN-requirements.md`. Pass the `feature` kind label (→ auto-derived **Type=Feature**) and `--milestone`; the spec folder is bound to the work by the `feature:NNN-<slug>` label, not the milestone. **Every Issue this skill opens — parent and children — carries the provenance label `source:spec`** (opened from a merged feature spec; the `source:*` taxonomy is `source:owner` | `source:spec` | `source:retro` | `source:agent`, one per Issue).
 3. **For each EARS-N**, open a child Issue:
 
    ```bash
-   gh issue create \
+   pnpm issue:create \
      --title "[NNN] EARS-N: <description>" \
      --milestone "<product-theme milestone>" \
-     --label "feature:NNN-<slug>,kind:ears-handler,agent-ready,source:spec" \
+     --label "feature,feature:NNN-<slug>,kind:ears-handler,agent-ready,source:spec" \
      --body "Spec: apps/docs/content/specs/features/NNN-<slug>/. Parent: #<parent-issue>."
    ```
 
-   Always pass `--body` — `gh issue create` without `--body`/`--body-file` opens an editor and hangs in non-interactive contexts. Fill the body's **Dependencies** field (`Blocked by:` / `Blocks:`) with the human-readable graph — prose alone is **not** sufficient; it must be backed by the native links set in step 4.
+   Use **`pnpm issue:create`** (the field-gated wrapper — repo-conventions → _Issue conventions_), **never** raw `gh issue create`: it fails closed unless exactly one kind label + one `source:*` + a `--milestone` are present, then adds the Issue to the board (Status=Todo) and **auto-derives** the org Type from the kind label (the `feature` kind label here → **Type=Feature**) and defaults the assignee to `@me` — so `--type`/`--assignee` are not passed here. The `feature` kind label is **required by the gate** and is additional to `kind:ears-handler` (which classifies the handler, not the org Type). Always pass `--body` (or `--body-file`) — without it the CLI opens an editor and hangs. Fill the body's **Dependencies** field (`Blocked by:` / `Blocks:`) with the human-readable graph — prose alone is **not** sufficient; it must be backed by the native links set in step 4.
 
 3a. **Open integration / vertical-slice Issues — `surface: user-facing` specs only** (closing F-22). The "1 EARS = 1 child Issue" rule of step 3 covers **handlers only**; for a `user-facing` spec it mechanically produces a backend-only Issue set (this is exactly how 003 left the portal forms unowned). Read the spec's `surface:` frontmatter:
 

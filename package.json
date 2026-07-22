@@ -67,6 +67,7 @@
     "dev": "turbo run dev",
     "lint": "eslint . && pnpm lint:oxlint && pnpm lint:stylelint && turbo run lint",
     "test": "turbo run test",
+    "test:tools": "node --test tools/gh/*.test.mjs",
     "typecheck": "turbo run typecheck",
     "changeset": "changeset",
     "version-packages": "changeset version",

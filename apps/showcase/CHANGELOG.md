@@ -1,5 +1,12 @@
 # @ds/showcase
 
+## 0.0.14
+
+### Patch Changes
+
+- Updated dependencies [[`f09fecd`](https://github.com/doctor-school/ds-platform/commit/f09fecd905942d611f80717fdf69c465d4efa244)]:
+  - @ds/design-system@3.1.0
+
 ## 0.0.13
 
 ### Patch Changes

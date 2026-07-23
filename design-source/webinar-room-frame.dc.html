@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}</style></helmet>
+<div style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;background:{{ pageBg }};font-family:Inter,system-ui,sans-serif">
+  <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+    <header style="background:#114D9E;padding:10px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex:none">
+      <div style="display:flex;align-items:center;gap:20px;min-width:0">
+        <img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:22px;display:block;flex:none">
+        <span style="display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:#C81E1E;padding:5px 11px;box-shadow:2px 2px 0 #0D3A77;white-space:nowrap"><span style="width:7px;height:7px;border-radius:50%;background:#fff;animation:livePulse 1.6s ease-in-out infinite"></span>В эфире · 24 мин</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:20px;flex:none">
+        <span style="font-size:12.5px;font-weight:700;color:#AED4FB">214 врачей в комнате</span>
+        <a href="Вебинар.dc.html" style="font-size:12.5px;font-weight:700;color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Выйти из комнаты</a>
+        <span style="width:34px;height:34px;background:#fff;color:#114D9E;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;box-shadow:2px 2px 0 #0D3A77">ВК</span>
+      </div>
+    </header>
+    <div style="flex:1;display:flex;min-height:0">
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;min-height:0">
+        <div style="flex:1;min-height:0;background:oklch(.13 .018 250);position:relative;display:flex;align-items:center;justify-content:center">
+          <sc-if value="{{ playerLive }}" hint-placeholder-val="{{ true }}">
+            <img src="assets/ds-logo-icon.svg" alt="" style="width:120px;opacity:.18">
+            <div style="position:absolute;top:18px;left:18px;display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#fff;background:#C81E1E;padding:6px 12px"><span style="width:7px;height:7px;border-radius:50%;background:#fff;animation:livePulse 1.6s ease-in-out infinite"></span>Live</div>
+            <div style="position:absolute;top:18px;right:18px;font-size:11.5px;font-weight:700;color:#fff;background:rgba(0,0,0,.45);padding:6px 11px">HD · 1080p</div>
+            <div style="position:absolute;left:0;right:0;bottom:0;padding:14px 18px;display:flex;align-items:center;gap:16px;background:linear-gradient(0deg,rgba(0,0,0,.55),transparent)">
+              <span style="font-size:17px;color:#fff;cursor:pointer">⏸</span>
+              <span style="font-size:14px;color:#fff;cursor:pointer">🔊</span>
+              <span style="flex:1;height:4px;background:rgba(255,255,255,.3);position:relative"><span style="position:absolute;left:0;top:0;bottom:0;width:100%;background:#C81E1E"></span></span>
+              <span style="font-size:12px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">LIVE · 24:12</span>
+              <span style="font-size:14px;color:#fff;cursor:pointer">⛶</span>
+            </div>
+          </sc-if>
+          <sc-if value="{{ playerDown }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding:24px">
+              <img src="assets/ds-logo-icon.svg" alt="" style="width:64px;opacity:.14;margin-bottom:6px">
+              <div style="font-size:17px;font-weight:800;color:#fff;letter-spacing:-.01em">Трансляция недоступна</div>
+              <div style="font-size:13px;line-height:1.55;color:rgba(255,255,255,.55);max-width:340px">Мы уже знаем о проблеме и восстанавливаем сигнал. Попробуйте обновить страницу.</div>
+              <button style="font:inherit;margin-top:10px;font-size:13px;font-weight:800;color:#fff;background:transparent;border:2px solid rgba(255,255,255,.5);padding:11px 22px;cursor:pointer" style-hover="border-color:#fff">Обновить страницу</button>
+            </div>
+          </sc-if>
+        </div>
+        <div style="padding:12px 20px;display:flex;align-items:baseline;column-gap:14px;row-gap:4px;flex-wrap:wrap;flex:none;background:{{ surface }}">
+          <span style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};white-space:nowrap">Школа травматологии и ортопедии · Эфир № 042</span>
+          <span style="font-size:15px;font-weight:800;letter-spacing:-.015em;color:{{ ink }}">Пластика ахиллова сухожилия: разбор клинических случаев</span>
+          <span style="font-size:12.5px;color:{{ inkMuted }}"><b style="color:{{ ink }}">Анна Соколова</b> · НМИЦ им. Пирогова&ensp;·&ensp;<b style="color:{{ ink }}">Михаил Верещагин</b> · Сеченовский университет</span>
+        </div>
+      </div>
+      <dc-import name="ЧатКолонка" style="width:{{ colW }};flex:none" theme="{{ themeVal }}" chat-state="{{ chatStateVal }}" collapsed="{{ colClosed }}" on-toggle="{{ toggleCol }}" show-collapse="{{ true }}" hint-size="340px,100%"></dc-import>
+    </div>
+  </sc-if>
+  <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+    <header style="background:#114D9E;padding:9px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex:none">
+      <div style="display:flex;align-items:center;gap:12px;min-width:0">
+        <img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:20px;display:block;flex:none">
+        <span style="display:inline-flex;align-items:center;gap:7px;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:#C81E1E;padding:4px 9px;white-space:nowrap"><span style="width:6px;height:6px;border-radius:50%;background:#fff;animation:livePulse 1.6s ease-in-out infinite"></span>Live</span>
+      </div>
+      <a href="Вебинар.dc.html" title="Выйти" style="width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;font-size:15px;font-weight:800;text-decoration:none;flex:none">✕</a>
+    </header>
+    <div style="aspect-ratio:16/9;background:oklch(.13 .018 250);position:relative;display:flex;align-items:center;justify-content:center;flex:none">
+      <sc-if value="{{ playerLive }}" hint-placeholder-val="{{ true }}">
+        <img src="assets/ds-logo-icon.svg" alt="" style="width:76px;opacity:.18">
+        <div style="position:absolute;left:0;right:0;bottom:0;padding:9px 12px;display:flex;align-items:center;gap:12px;background:linear-gradient(0deg,rgba(0,0,0,.55),transparent)">
+          <span style="font-size:15px;color:#fff;cursor:pointer">⏸</span>
+          <span style="flex:1;height:3px;background:rgba(255,255,255,.3);position:relative"><span style="position:absolute;left:0;top:0;bottom:0;width:100%;background:#C81E1E"></span></span>
+          <span style="font-size:11px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums">24:12</span>
+          <span style="font-size:13px;color:#fff;cursor:pointer">⛶</span>
+        </div>
+      </sc-if>
+      <sc-if value="{{ playerDown }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:7px;text-align:center;padding:16px">
+          <div style="font-size:14.5px;font-weight:800;color:#fff">Трансляция недоступна</div>
+          <div style="font-size:12px;line-height:1.5;color:rgba(255,255,255,.55)">Попробуйте обновить страницу</div>
+          <button style="font:inherit;margin-top:6px;font-size:11.5px;font-weight:800;color:#fff;background:transparent;border:2px solid rgba(255,255,255,.5);padding:8px 15px;cursor:pointer">Обновить</button>
+        </div>
+      </sc-if>
+    </div>
+    <div style="padding:9px 14px;display:flex;align-items:center;gap:10px;flex:none;background:{{ surface }};border-bottom:2px solid {{ hairline }};min-width:0">
+      <span style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ redFg }};white-space:nowrap;flex:none">В эфире · 24 мин</span>
+      <span style="font-size:12.5px;font-weight:700;color:{{ ink }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">Пластика ахиллова сухожилия: разбор случаев</span>
+      <span style="font-size:11px;font-weight:700;color:{{ inkFaint }};white-space:nowrap;flex:none;margin-left:auto">214 в комнате</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:2px solid {{ border }};flex:none">
+      <button onClick="{{ setChat }}" style="{{ tabChatStyle }}">Чат</button>
+      <button onClick="{{ setInfo }}" style="{{ tabInfoStyle }}">О эфире</button>
+    </div>
+    <sc-if value="{{ tabChat }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1;min-height:0;display:flex;flex-direction:column">
+        <dc-import name="ЧатКолонка" style="width:100%;height:100%" theme="{{ themeVal }}" chat-state="{{ chatStateVal }}" mobile="{{ true }}" show-collapse="{{ false }}" hint-size="100%,100%"></dc-import>
+      </div>
+    </sc-if>
+    <sc-if value="{{ tabInfo }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1;min-height:0;overflow-y:auto;padding:18px 16px 26px;background:{{ surface }}">
+        <div style="font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ accent }};margin-bottom:8px">Эфир № 042 · Школа травматологии и ортопедии</div>
+        <h1 style="margin:0;font-size:20px;line-height:1.28;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Пластика ахиллова сухожилия: разбор клинических случаев</h1>
+        <div style="font-size:13px;line-height:1.65;color:{{ inkMuted }};margin-top:10px"><b style="color:{{ ink }}">Анна Соколова</b> — НМИЦ им. Пирогова · <b style="color:{{ ink }}">Михаил Верещагин</b> — Сеченовский университет</div>
+        <button style="font:inherit;margin-top:18px;width:100%;font-size:13px;font-weight:800;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:12px;cursor:pointer;box-shadow:3px 3px 0 {{ shadowSm }}">Материалы эфира</button>
+        <div style="margin-top:22px;font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:6px">Программа</div>
+        <sc-for list="{{ program }}" as="pg" hint-placeholder-count="3">
+          <div style="display:flex;gap:14px;padding:12px 0;border-bottom:1px solid {{ hairline }}">
+            <div style="font-size:14px;font-weight:800;color:{{ pg.numColor }};flex:none;font-variant-numeric:tabular-nums">{{ pg.num }}</div>
+            <div style="font-size:13px;line-height:1.5;color:{{ pg.textColor }}">{{ pg.text }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1440px&quot;,&quot;height&quot;:&quot;840px&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light'|'dark'&quot;},&quot;mobile&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;collapsed&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;tab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;chat&quot;,&quot;info&quot;],&quot;default&quot;:&quot;chat&quot;,&quot;tsType&quot;:&quot;'chat'|'info'&quot;},&quot;chatState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;normal&quot;,&quot;empty&quot;,&quot;loading&quot;,&quot;reconnecting&quot;,&quot;lost&quot;,&quot;senderror&quot;,&quot;unavailable&quot;],&quot;default&quot;:&quot;normal&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;playerState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;live&quot;,&quot;unavailable&quot;],&quot;default&quot;:&quot;live&quot;,&quot;tsType&quot;:&quot;'live'|'unavailable'&quot;}}">
+class Component extends DCLogic {
+  state = { colOv: null, tabOv: null };
+  renderVals() {
+    const d = (this.props.theme ?? 'light') === 'dark';
+    const m = !!this.props.mobile;
+    const collapsed = this.state.colOv ?? (this.props.collapsed ?? false);
+    const tab = this.state.tabOv ?? (this.props.tab ?? 'chat');
+    const cs = this.props.chatState ?? 'normal';
+    const ps = this.props.playerState ?? 'live';
+    const pageBg = d ? 'oklch(.16 .02 250)' : '#fff';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const inkMuted = d ? 'rgba(255,255,255,.6)' : 'oklch(.45 .014 250)';
+    const inkFaint = d ? 'rgba(255,255,255,.45)' : 'oklch(.556 .012 250)';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const hairline = d ? 'rgba(255,255,255,.16)' : 'oklch(.922 .006 250)';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const tintFg = d ? '#AED4FB' : '#114D9E';
+    const tabStyle = (on) => 'font:inherit;padding:12px 6px;text-align:center;font-size:13px;font-weight:' + (on ? 800 : 700) + ';border:0;cursor:pointer;color:' + (on ? btnFg : tintFg) + ';background:' + (on ? btnBg : surface);
+    const progDefs = [
+      { num: '01', text: 'Сейчас: Открытая пластика — когда она всё ещё лучший выбор · до 19:30', now: true },
+      { num: '02', text: 'Малоинвазивная техника: показания и подводные камни · 19:30–20:00' },
+      { num: '03', text: 'Реабилитация и возврат к спорту · 20:00–20:20' }
+    ];
+    return {
+      isDesktop: !m, isMobile: m,
+      themeVal: d ? 'dark' : 'light',
+      chatStateVal: cs,
+      playerLive: ps === 'live', playerDown: ps !== 'live',
+      colClosed: collapsed,
+      colW: collapsed ? '44px' : '340px',
+      toggleCol: () => this.setState({ colOv: !collapsed }),
+      tabChat: tab === 'chat', tabInfo: tab === 'info',
+      setChat: () => this.setState({ tabOv: 'chat' }),
+      setInfo: () => this.setState({ tabOv: 'info' }),
+      tabChatStyle: tabStyle(tab === 'chat') + ';border-right:2px solid ' + border,
+      tabInfoStyle: tabStyle(tab === 'info'),
+      program: progDefs.map(x => ({ num: x.num, text: x.text, numColor: x.now ? accent : inkFaint, textColor: x.now ? ink : inkMuted })),
+      redFg: d ? '#E15555' : '#C81E1E',
+      shadowSm: d ? '#1F69C8' : '#AED4FB',
+      pageBg, surface, ink, inkMuted, inkFaint, accent, border, hairline
+    };
+  }
+}
+</script>
+</body>
+</html>

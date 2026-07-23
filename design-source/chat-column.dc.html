@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes dsSkel{0%,100%{opacity:.4}50%{opacity:1}}@keyframes dsSpin{to{transform:rotate(360deg)}}</style></helmet>
+<div style="height:100%;display:flex;overflow:hidden;font-family:Inter,system-ui,sans-serif;background:{{ surface }};box-sizing:border-box">
+  <sc-if value="{{ isCollapsed }}" hint-placeholder-val="{{ false }}">
+    <div style="width:44px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:14px;border-left:{{ colBorder }};padding:6px 0">
+      <button onClick="{{ toggle }}" title="Развернуть чат" style="font:inherit;width:30px;height:30px;border:2px solid {{ hairline }};background:{{ surface }};color:{{ ink }};cursor:pointer;font-size:13px;font-weight:800;flex:none;display:inline-flex;align-items:center;justify-content:center" style-hover="border-color:{{ accent }};color:{{ accent }}">«</button>
+      <span style="writing-mode:vertical-rl;font-size:10.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:{{ inkFaint }}">Чат эфира</span>
+      <span style="{{ railUnreadStyle }}">{{ railUnread }}</span>
+    </div>
+  </sc-if>
+  <sc-if value="{{ isOpen }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1;min-width:0;height:100%;box-sizing:border-box;display:flex;flex-direction:column;border-left:{{ colBorder }}">
+      <div style="height:42px;box-sizing:border-box;padding:0 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:2px solid {{ hairline }};flex:none">
+        <span style="font-size:10.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ inkFaint }}">Чат эфира <span style="font-weight:700;letter-spacing:0;text-transform:none;color:{{ inkFaint }}">· 214</span></span>
+        <sc-if value="{{ showCollapseBtn }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ toggle }}" title="Свернуть чат" style="font:inherit;width:28px;height:28px;border:2px solid {{ hairline }};background:{{ surface }};color:{{ inkMuted }};cursor:pointer;font-size:12px;font-weight:800;flex:none;display:inline-flex;align-items:center;justify-content:center" style-hover="border-color:{{ accent }};color:{{ accent }}">»</button>
+        </sc-if>
+      </div>
+      <sc-if value="{{ pinnedShown }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:8px 12px;background:{{ tint }};font-size:11.5px;line-height:1.5;color:{{ tintFg }};flex:none"><b>📌 Модератор:</b> снимки случая № 1 — в «Материалах» на странице эфира.</div>
+      </sc-if>
+      <div style="flex:1;min-height:0;position:relative;display:flex;flex-direction:column">
+        <sc-if value="{{ showLedger }}" hint-placeholder-val="{{ true }}">
+          <div ref="{{ ledgerRef }}" onScroll="{{ onScroll }}" style="flex:1;min-height:0;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column-reverse;gap:10px;opacity:{{ ledgerOpacity }}">
+            <sc-for list="{{ chatMsgs }}" as="m" hint-placeholder-count="6">
+              <div style="font-size:13px;line-height:1.5;color:{{ inkBody }};overflow-wrap:break-word">
+                <span style="{{ m.nameStyle }}">{{ m.name }}</span><span style="{{ m.badgeStyle }}">{{ m.badge }}</span> {{ m.text }}
+                <sc-if value="{{ m.err }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:11.5px;font-weight:700;color:{{ red }};margin-top:3px">Не отправлено · <span style="text-decoration:underline;text-underline-offset:3px;cursor:pointer">Повторить</span></div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ showEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:24px;text-align:center">
+            <div style="font-size:14px;font-weight:800;color:{{ ink }}">Пока нет сообщений</div>
+            <div style="font-size:12.5px;line-height:1.55;color:{{ inkFaint }}">Напишите первым — в комнате 214 врачей</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ showLoading }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1;padding:14px;display:flex;flex-direction:column;gap:13px;overflow:hidden">
+            <div style="font-size:11.5px;font-weight:700;color:{{ inkFaint }};margin-bottom:2px">Загружаем историю чата…</div>
+            <sc-for list="{{ skelRows }}" as="sk" hint-placeholder-count="6">
+              <div style="display:flex;gap:8px;align-items:center">
+                <span style="width:{{ sk.w1 }};height:11px;background:{{ hairline }};animation:dsSkel 1.4s ease-in-out infinite;flex:none"></span>
+                <span style="width:{{ sk.w2 }};height:11px;background:{{ hairline }};animation:dsSkel 1.4s ease-in-out infinite"></span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ showLost }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center">
+            <div style="font-size:14px;font-weight:800;color:{{ ink }}">Соединение потеряно</div>
+            <div style="font-size:12.5px;line-height:1.55;color:{{ inkFaint }}">Не удаётся подключиться к чату.</div>
+            <button style="font:inherit;margin-top:8px;font-size:12.5px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:9px 18px;cursor:pointer;box-shadow:2px 2px 0 {{ border }}" style-hover="transform:translate(1px,1px);box-shadow:1px 1px 0 {{ border }}">Обновить страницу</button>
+          </div>
+        </sc-if>
+        <sc-if value="{{ showUnavailable }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:24px;text-align:center">
+            <div style="font-size:14px;font-weight:800;color:{{ ink }}">Чат недоступен</div>
+            <div style="font-size:12.5px;line-height:1.55;color:{{ inkFaint }}">Для этого эфира чат не настроен. Вопросы спикерам — на странице эфира.</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ chipShown }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ jumpNew }}" style="font:inherit;position:absolute;left:50%;transform:translateX(-50%);bottom:12px;font-size:11.5px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:7px 13px;cursor:pointer;white-space:nowrap;box-shadow:2px 2px 0 {{ border }}">Новые сообщения ↓</button>
+        </sc-if>
+      </div>
+      <sc-if value="{{ showReconnect }}" hint-placeholder-val="{{ false }}">
+        <div style="border-top:2px solid {{ hairline }};padding:9px 12px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#DF5726;flex:none"><span style="display:inline-block;animation:dsSpin 1.2s linear infinite">⟳</span>Восстанавливаем связь…</div>
+      </sc-if>
+      <sc-if value="{{ showComposer }}" hint-placeholder-val="{{ true }}">
+        <div style="border-top:2px solid {{ hairline }};padding:10px 12px;display:flex;gap:8px;flex:none">
+          <input placeholder="{{ composerPh }}" disabled="{{ composerDisabled }}" style="flex:1;min-width:0;font:inherit;font-size:13px;padding:10px 11px;border:2px solid {{ hairline }};outline:none;background:{{ surface }};color:{{ ink }};opacity:{{ composerOpacity }};box-sizing:border-box" style-focus="border-color:#6BB1F7">
+          <button disabled="{{ composerDisabled }}" title="Отправить" style="font:inherit;width:40px;border:2px solid {{ btnBg }};background:{{ btnBg }};color:{{ btnFg }};font-size:15px;font-weight:800;cursor:pointer;flex:none;opacity:{{ composerOpacity }}">↑</button>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;340px&quot;,&quot;height&quot;:&quot;560px&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light'|'dark'&quot;},&quot;chatState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;normal&quot;,&quot;empty&quot;,&quot;loading&quot;,&quot;reconnecting&quot;,&quot;lost&quot;,&quot;senderror&quot;,&quot;unavailable&quot;],&quot;default&quot;:&quot;normal&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;collapsed&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;mobile&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;showCollapse&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;onToggle&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;}}">
+class Component extends DCLogic {
+  state = { extra: [], chip: false };
+  componentDidMount() {
+    this.stick = true;
+    if ((this.props.chatState ?? 'normal') === 'normal') {
+      const queue = [
+        { name: 'Ксения Артемьева', text: 'Отличный разбор, очень наглядные схемы доступов!' },
+        { name: 'Руслан Тагиров', text: 'Понял, спасибо! Ждём блок вопросов.' },
+        { name: 'Модератор', mod: true, text: 'Через 10 минут — короткий перерыв, не расходимся.' }
+      ];
+      let i = 0;
+      this.timer = setInterval(() => {
+        if (i >= queue.length) { clearInterval(this.timer); return; }
+        const msg = queue[i++];
+        this.setState(s => ({ extra: [...s.extra, msg], chip: this.stick ? s.chip : true }));
+      }, 7000);
+    }
+  }
+  componentWillUnmount() { if (this.timer) clearInterval(this.timer); }
+  renderVals() {
+    const d = (this.props.theme ?? 'light') === 'dark';
+    const cs = this.props.chatState ?? 'normal';
+    const mob = !!this.props.mobile;
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const inkBody = d ? 'rgba(255,255,255,.85)' : 'oklch(.27 .018 250)';
+    const inkMuted = d ? 'rgba(255,255,255,.6)' : 'oklch(.45 .014 250)';
+    const inkFaint = d ? 'rgba(255,255,255,.45)' : 'oklch(.556 .012 250)';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const hairline = d ? 'rgba(255,255,255,.16)' : 'oklch(.922 .006 250)';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const tint = d ? '#0D3A77' : '#D3E8FD';
+    const tintFg = d ? '#AED4FB' : '#114D9E';
+    const red = d ? '#E15555' : '#C81E1E';
+
+    const base = [
+      { n: 'Елена Прохорова', t: 'Добрый вечер, коллеги! Смотрим всем отделением.' },
+      { n: 'Руслан Тагиров', t: 'По случаю № 1 — какой срок после разрыва считаете верхней границей для открытой пластики?' },
+      { n: 'Анна Соколова', sp: true, t: 'Руслан, отвечу в блоке вопросов — в нашем случае было 8 недель.' },
+      { n: 'Марина Осипова', t: 'Снимки в материалах отличного качества, спасибо!' },
+      { n: 'Дмитрий Ковалёв', t: '+1 к вопросу Руслана. Интересен протокол реабилитации после малоинвазивной техники.' },
+      { n: 'Вы', you: true, t: 'Коллеги, у кого-нибудь был опыт аугментации сухожилием подошвенной мышцы?' },
+      { n: 'Сергей Никитин', t: 'Да, три случая за прошлый год. Держит хорошо, но доступ заметно шире.' },
+      { n: 'Ольга Ветрова', t: 'На каком сроке разрешаете полную осевую нагрузку?' },
+      { n: 'Анна Соколова', sp: true, t: 'Ольга, с 6-й недели в ортезе, к 10-й — без. Покажу протокол на слайде.' },
+      { n: 'Игорь Мельник', t: 'УЗИ-контроль делаете на каждом этапе или только при жалобах?' },
+      { n: 'Наталья Бойко', t: 'Подключилась с середины — запись будет?' },
+      { n: 'Модератор', mod: true, t: 'Запись и материалы придут на почту всем участникам после эфира.' },
+      { n: 'Пётр Савельев', t: 'По шкале ATRS на каком сроке оцениваете результат?' },
+      { n: 'Вы', you: true, t: 'Спасибо, очень ждём протокол реабилитации!' }
+    ];
+    if (cs === 'senderror') base.push({ n: 'Вы', you: true, t: 'Можно ссылку на исследование по срокам нагрузки?', err: true });
+    const extra = this.state.extra.map(x => ({ n: x.name, mod: x.mod, t: x.text }));
+    const badge = (txt) => 'font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;background:' + tint + ';color:' + tintFg + ';padding:1px 5px;margin-left:5px;vertical-align:1px';
+    const chatMsgs = base.concat(extra).reverse().map(x => ({
+      name: x.n,
+      text: x.t,
+      err: !!x.err,
+      badge: x.sp ? 'Спикер' : (x.mod ? 'Мод' : ''),
+      badgeStyle: (x.sp || x.mod) ? badge() : 'display:none',
+      nameStyle: 'font-weight:700;color:' + ((x.sp || x.you) ? accent : ink)
+    }));
+
+    const showLedger = cs === 'normal' || cs === 'senderror' || cs === 'reconnecting';
+    const composerDisabled = cs === 'reconnecting' || cs === 'lost';
+    const unread = this.state.extra.length;
+
+    return {
+      surface, ink, inkBody, inkMuted, inkFaint, accent, border, hairline, btnBg, btnFg, tint, tintFg, red,
+      colBorder: mob ? 'none' : '2px solid ' + border,
+      isCollapsed: !!this.props.collapsed,
+      isOpen: !this.props.collapsed,
+      showCollapseBtn: this.props.showCollapse ?? true,
+      toggle: () => { if (this.props.onToggle) this.props.onToggle(); },
+      railUnread: unread || 3,
+      railUnreadStyle: 'min-width:18px;height:18px;box-sizing:border-box;padding:0 4px;display:inline-flex;align-items:center;justify-content:center;background:' + red + ';color:#fff;font-size:10px;font-weight:800',
+      pinnedShown: showLedger,
+      showLedger,
+      chatMsgs,
+      ledgerOpacity: cs === 'reconnecting' ? .55 : 1,
+      showEmpty: cs === 'empty',
+      showLoading: cs === 'loading',
+      showLost: cs === 'lost',
+      showUnavailable: cs === 'unavailable',
+      showReconnect: cs === 'reconnecting',
+      showComposer: cs !== 'unavailable',
+      composerDisabled,
+      composerOpacity: composerDisabled ? .45 : 1,
+      composerPh: cs === 'lost' ? 'Чат недоступен' : 'Написать в чат…',
+      skelRows: [
+        { w1: '68px', w2: '78%' }, { w1: '84px', w2: '52%' }, { w1: '56px', w2: '88%' },
+        { w1: '92px', w2: '40%' }, { w1: '72px', w2: '66%' }, { w1: '60px', w2: '81%' },
+        { w1: '88px', w2: '58%' }, { w1: '64px', w2: '72%' }
+      ],
+      chipShown: this.state.chip && showLedger,
+      ledgerRef: (el) => { if (el) this.led = el; },
+      onScroll: (e) => {
+        const el = e.currentTarget; this.led = el;
+        const ab = Math.abs(el.scrollTop) < 32;
+        this.stick = ab;
+        if (ab && this.state.chip) this.setState({ chip: false });
+      },
+      jumpNew: () => { if (this.led) this.led.scrollTop = 0; this.stick = true; this.setState({ chip: false }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

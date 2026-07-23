@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { RoomChatCredential, RoomChatMessage } from "@ds/schemas";
 import { RoomChat } from "./room-chat";
 
@@ -204,5 +204,84 @@ describe("006 EARS-3 connection state — a dropped connection is truthful, not 
     fire("connecting", {});
     expect(screen.getByTestId("room-chat-loading")).toBeTruthy();
     expect(screen.queryByTestId("room-chat-reconnecting")).toBeNull();
+  });
+});
+
+// 006 EARS-3 (#1123) — the Twitch-minimal ledger: a single scroll container that
+// pins to the newest message, borderless single-paragraph rows with NO timestamp,
+// and a «Новые сообщения ↓» chip when new messages arrive while the reader is
+// scrolled up (so the page itself never scrolls and reading history is not
+// yanked). While collapsed, arrivals feed the rail unread badge instead.
+describe("006 EARS-3 Twitch-minimal ledger — stick-to-bottom + new-messages chip (#1123)", () => {
+  const message2: RoomChatMessage = {
+    id: "aa11bb22-cc33-44dd-88ee-99ff00112233",
+    authorTag: "C3",
+    text: "Второе сообщение, коллеги.",
+    at: "2026-07-13T10:05:00.000Z",
+  };
+
+  /** Hydrate the pane to one message, connected. */
+  function seedOneMessage(props?: Partial<Parameters<typeof RoomChat>[0]>): void {
+    let resolveHistory!: (v: { publications: Array<{ data: unknown }> }) => void;
+    sdk.history = () =>
+      new Promise((res) => {
+        resolveHistory = res;
+      });
+    render(<RoomChat slug="evt-1" chat={chat} {...props} />);
+    fire("connected", {});
+    fire("subscribed", { channel: chat.channel });
+    act(() => resolveHistory({ publications: [{ data: message }] }));
+  }
+
+  /** jsdom's scrollTop is a no-op — override it so onScroll can read a value. */
+  function setScrollTop(el: HTMLElement, value: number): void {
+    Object.defineProperty(el, "scrollTop", {
+      configurable: true,
+      writable: true,
+      value,
+    });
+  }
+
+  it("EARS-3: a message row is a single borderless paragraph — name inline with the text, no timestamp column", async () => {
+    seedOneMessage();
+    await waitFor(() => expect(screen.getByText(message.text)).toBeTruthy());
+    const row = screen.getByTestId("room-chat-message");
+    // The whole row (name slot + text) is one element; the text lives directly in it.
+    expect(row.textContent).toContain(message.text);
+    // The ledger is the reversed scroll container (newest pinned to the bottom).
+    expect(
+      screen.getByTestId("room-chat-messages").className,
+    ).toContain("flex-col-reverse");
+  });
+
+  it("EARS-3: while stuck to the bottom, a new message does NOT raise the chip", async () => {
+    seedOneMessage();
+    await waitFor(() => expect(screen.getByText(message.text)).toBeTruthy());
+    fire("publication", { channel: chat.channel, data: message2 });
+    await waitFor(() => expect(screen.getByText(message2.text)).toBeTruthy());
+    expect(screen.queryByTestId("room-chat-chip")).toBeNull();
+  });
+
+  it("EARS-3: scrolled up, a new message raises the «Новые сообщения ↓» chip, and jumping clears it", async () => {
+    seedOneMessage();
+    await waitFor(() => expect(screen.getByText(message.text)).toBeTruthy());
+    const ledger = screen.getByTestId("room-chat-messages");
+    // Reader scrolls up (|scrollTop| ≥ 32 in the reversed ledger) → autoscroll pauses.
+    setScrollTop(ledger, -200);
+    fireEvent.scroll(ledger);
+    fire("publication", { channel: chat.channel, data: message2 });
+    await waitFor(() => expect(screen.getByTestId("room-chat-chip")).toBeTruthy());
+    // Jump-to-newest clears the chip.
+    fireEvent.click(screen.getByTestId("room-chat-chip"));
+    expect(screen.queryByTestId("room-chat-chip")).toBeNull();
+  });
+
+  it("EARS-3: while collapsed, a new message feeds the unread callback and never raises the in-ledger chip", async () => {
+    const onIncoming = vi.fn();
+    seedOneMessage({ collapsed: true, onIncomingWhileCollapsed: onIncoming });
+    await waitFor(() => expect(screen.getByText(message.text)).toBeTruthy());
+    fire("publication", { channel: chat.channel, data: message2 });
+    await waitFor(() => expect(onIncoming).toHaveBeenCalled());
+    expect(screen.queryByTestId("room-chat-chip")).toBeNull();
   });
 });

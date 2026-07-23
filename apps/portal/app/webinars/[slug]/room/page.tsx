@@ -98,7 +98,11 @@ export default async function RoomPage({
   const speakers = event.speakers.map((s) => s.name).join(" · ");
 
   return (
-    <main className="flex min-h-screen flex-col bg-background text-foreground">
+    // 006 EARS-11 (#1123) — the Twitch-model room is VIEWPORT-BOUNDED: the shell
+    // fills the viewport height (`h-dvh`) and clips its overflow, so the page never
+    // scrolls; the header is `flex-none` and the room body ({@link RoomView}) flexes
+    // to the remaining height, where only the chat ledger scrolls.
+    <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       {/* 006 EARS-5 — the live room-presence count («N врачей в комнате») is a
           client aggregate shared between the invisible heartbeat loop (which owns
           the beat→ack) and the header (which renders it). The provider seeds it
@@ -138,10 +142,14 @@ export default async function RoomPage({
             onAir: t("onAir"),
             chatTab: t("chatTab"),
             infoTab: t("infoTab"),
+            chatHeading: t("chatHeading"),
+            chatCollapse: t("chatCollapse"),
+            chatExpand: t("chatExpand"),
             chatUnavailable: t("chatUnavailable"),
             unavailableTitle: t("unavailableTitle"),
             unavailableBody: t("unavailableBody"),
             playerTitle: t("playerTitle"),
+            playerRefresh: t("playerRefresh"),
             programNow: t("programNow"),
           }}
         />

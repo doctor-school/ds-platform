@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
+import { Button } from "@ds/design-system/button";
 import { cn } from "@ds/design-system/lib/utils";
 import { persistTheme } from "@/lib/theme";
 
@@ -13,12 +14,14 @@ import { persistTheme } from "@/lib/theme";
  * — from then on the choice wins over the dark default on every load (the layout's
  * inline FOUC guard re-applies it before first paint).
  *
- * The control is the canvas 44×44 icon-button (`webinar-room.dc.html` line 25 /
- * the app-shell header canvases, ADR-0013 canvas-wins; owner Stage-B decision
- * 2026-07-12 — never the DS form `switch.tsx`, which stays the FORM switch
- * primitive): a `<button>` with a transparent background, a 2px `header-hairline`
- * border (the on-header muted hairline, hover raising it to full-strength
- * `header-foreground`), and the full-strength header-foreground glyph — ☾ in
+ * The control is the DS `Button` primitive (`variant="ghost" size="icon"` — the
+ * 44×44 transparent-at-rest icon control, so the themed header palette shows
+ * through and the glyph stays legible on the blue header in both themes; owner
+ * Stage-B decision 2026-07-12 — never the DS form `switch.tsx`, which stays the
+ * FORM switch primitive). The primitive owns the hover / active / focus-visible
+ * states and the visual identity (#1107 re-base off the pre-#828 hand-assembled
+ * `<button>`); only the layout `flex-none` and the `text-header-foreground` glyph
+ * colour are call-site classes. The glyph is ☾ in
  * light / ☀ in dark (the canvas `themeIcon`). `aria-pressed` reflects the dark
  * state; the accessible name is injected from the message catalog by the parent
  * (no hardcoded user-facing string here); focus-visible uses the DS focus ring.
@@ -67,18 +70,14 @@ export function ThemeToggle({
   }, []);
 
   return (
-    /* primitives-first-ok: canvas-pinned header icon toggle (spec §10) — themes off
-       the header-* palette (hover:border-header-foreground), which no DS Button
-       variant carries; pre-#828 surface, DS-adoption candidate for a follow-up. */
-    <button
+    <Button
+      variant="ghost"
+      size="icon"
       type="button"
       aria-pressed={dark}
       aria-label={label}
       onClick={onClick}
-      className={cn(
-        "inline-flex size-11 flex-none items-center justify-center border-2 border-header-hairline bg-transparent text-base text-header-foreground hover:border-header-foreground focus-visible:outline-none focus-visible:shadow-focus",
-        className,
-      )}
+      className={cn("flex-none text-header-foreground", className)}
     >
       {/* The canvas themeIcon glyph — decorative; the button's aria-label carries
           the accessible name (the glyph must not pollute it). U+FE0E (VARIATION
@@ -86,6 +85,6 @@ export function ThemeToggle({
           rasterizes via Segoe UI Emoji as a COLOR emoji that ignores CSS color
           and would never take `text-header-foreground` (spec §10). */}
       <span aria-hidden="true">{dark ? "☀︎" : "☾︎"}</span>
-    </button>
+    </Button>
   );
 }

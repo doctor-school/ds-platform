@@ -412,18 +412,15 @@ export default function AccountPage() {
             title={t("eventsTitle")}
             helper={t("eventsHelper")}
           />
-          {/* primitives-first-ok: canvas-pinned «Разделы» row state (profile.dc.html
-              style-hover → hoverBg = muted) on the composite logout row — the same bg
-              wash as the RowLink rows above, which no DS Button variant renders;
-              pre-#828 surface, DS-adoption candidate for a follow-up. */}
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={onLogout}
-            className="w-full border-t border-border py-4 text-left font-extrabold text-destructive-text transition-colors hover:bg-muted focus-visible:shadow-focus focus-visible:outline-none layout:py-5"
+            className="w-full justify-start text-left font-extrabold text-destructive-text"
             data-testid="logout"
           >
             {t("signOut")}
-          </button>
+          </Button>
         </div>
       </Container>
     </main>

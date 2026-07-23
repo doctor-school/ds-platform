@@ -1,10 +1,9 @@
 import Link from "next/link";
-import { Avatar } from "@ds/design-system/avatar";
 import { Badge } from "@ds/design-system/badge";
 import { Link as DsLink } from "@ds/design-system/link";
 import { initialsFromDisplayName } from "../../../../lib/display-name";
 import { LiveDuration, PresenceCount } from "./room-presence";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { HeaderUserCluster } from "@/components/header-user-cluster";
 
 /**
  * 006 EARS-2 / EARS-5 / EARS-11 / EARS-12 — the room's top app-header bar,
@@ -27,9 +26,13 @@ import { ThemeToggle } from "@/components/theme-toggle";
  * #705 ships the last canvas header element, the **doctor avatar** (EARS-15): its
  * initials are derived from the doctor's REAL saved display name (the JIT
  * room-entry prompt now collects one, 006-design §11 — the page renders this
- * header only on the name-set path, so `displayName` here is always a real name),
- * via the DS {@link Avatar} primitive. Desktop-only per the canvas geometry. It is
- * never fabricated from an email/placeholder — the value #584 refused to fake.
+ * header only on the name-set path, so `displayName` here is always a real name).
+ * Desktop-only per the canvas geometry. It is never fabricated from an
+ * email/placeholder — the value #584 refused to fake. The avatar + theme toggle
+ * are the shared {@link HeaderUserCluster} (#1146, owner directive 2026-07-23):
+ * the SAME two-button unit the app-shell header mounts, so the profile chip's
+ * presentation is one source of truth and the room follows the shell's toggle →
+ * chip order.
  *
  * All copy is injected from the message catalog (EARS-10) — no hardcoded
  * user-facing string lives here; the parent {@link RoomPage} reads the strings via
@@ -120,33 +123,30 @@ export function RoomHeader({
             </span>
           </Link>
         </DsLink>
-        {/* 006 EARS-15 — the doctor's own initials avatar (canvas line 23), seated
-            between the exit link and the theme toggle per the canvas desktop order.
-            Desktop-only (`hidden … layout:inline-flex`, same collapse rule as the
-            presence count). The `bg-card text-card-foreground shadow-md` override
-            makes it the white-chip-on-blue-band look matching the sibling mobile ✕
-            chip (tailwind-merge resolves it against the primitive's default
-            `bg-primary-action`); the initials come ONLY from the real saved name
-            (EARS-15), never fabricated — with no name the page renders the JIT
-            prompt instead, so this never sees a placeholder. */}
-        <Avatar
-          aria-label={copy.avatarLabel}
-          className="hidden size-10 bg-card text-card-foreground shadow-md layout:inline-flex"
-        >
-          {initialsFromDisplayName(displayName)}
-        </Avatar>
-        {/* 006 EARS-12 — the light/dark theme toggle: the canvas 44×44
-            icon-button (canvas line 25, ADR-0013 canvas-wins; owner Stage-B
-            decision 2026-07-12 — never the DS form switch), sitting in the
-            header's icon-button family beside the 44px mobile ✕. Renders on
-            BOTH breakpoints like the canvas control; `order-first` re-seats it
-            before the mobile ✕ (canvas mobile order: toggle → ✕) while desktop
-            keeps it last in the group (canvas desktop order: exit → toggle). It
-            flips `.dark` on <html> and persists the explicit `ds-theme` choice —
-            the portal's only visible theme control until #510. */}
-        <ThemeToggle
-          label={copy.themeToggle}
-          className="order-first layout:order-none"
+        {/* 006 EARS-12 / EARS-15 — the theme toggle + the doctor's own initials
+            profile chip, mounted as the ONE {@link HeaderUserCluster} shared with
+            the app-shell header (owner directive 2026-07-23: the same two-button
+            unit everywhere — toggle LEFT, chip RIGHTMOST, one presentation source
+            of truth). This aligns the room with the shell order (previously the
+            room seated the avatar BEFORE the toggle) and replaces the room's own
+            hand-rolled `bg-card shadow-md` avatar with the shared canvas chip
+            (white-on-blue, navy ink, the dark-safe `shadow-header-chip` cast).
+            The chip is desktop-only (`hidden layout:inline-flex`, same collapse
+            rule as the presence count); the toggle renders on both breakpoints,
+            and `order-first` re-seats the cluster before the mobile ✕ (canvas
+            mobile order: toggle → ✕) while desktop keeps it last (exit → toggle →
+            chip). The initials come ONLY from the real saved name (EARS-15) —
+            with no name the page renders the JIT prompt, so this never sees a
+            placeholder. The theme toggle flips `.dark` on <html> and persists the
+            explicit `ds-theme` choice (owner Stage-B decision 2026-07-12 — never
+            the DS form switch, ADR-0013 canvas-wins). */}
+        <HeaderUserCluster
+          className="order-first gap-5 layout:order-none"
+          themeToggleLabel={copy.themeToggle}
+          profileLabel={copy.avatarLabel}
+          initials={initialsFromDisplayName(displayName)}
+          profileTestId="room-avatar"
+          profileClassName="hidden layout:inline-flex"
         />
       </div>
     </header>

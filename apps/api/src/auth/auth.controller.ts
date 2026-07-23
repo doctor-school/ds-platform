@@ -183,7 +183,7 @@ export class AuthController {
     access: "public",
     check: "none",
     audit: "high-stakes",
-    tests: ["EARS-6", "EARS-7", "EARS-14"],
+    tests: ["EARS-6", "EARS-7", "EARS-14", "EARS-34"],
   })
   requestLoginOtp(
     @Body() dto: OtpRequestDto,
@@ -405,7 +405,7 @@ export class AuthController {
     access: "public",
     check: "none",
     audit: "high-stakes",
-    tests: ["EARS-12"],
+    tests: ["EARS-12", "EARS-35"],
   })
   async completePasswordReset(
     @Body() dto: PasswordResetCompleteRequestDto,

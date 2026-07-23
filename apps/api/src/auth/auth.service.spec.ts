@@ -381,7 +381,9 @@ describe("AuthService.completePasswordReset — auto-login (#221, EARS-12)", () 
       new FakeMailer(),
       new InMemoryRegisterNoticeThrottle("test-pepper"),
       SyntheticSuppression.disabled(),
-      {} as never, // mirror — unused on the reset path
+      // EARS-35 (#1131): a completed reset now marks the email verified, mirroring
+      // the flip onto the users row — so the reset path DOES touch the mirror.
+      { markEmailVerified: () => Promise.resolve() } as never,
       sessions,
       {} as never, // smsBudget — unused on the reset path
     );
@@ -837,5 +839,334 @@ describe("AuthService.verify — code normalization (#1109, EARS-3)", () => {
       .catch(() => undefined);
 
     expect(spy).toHaveBeenCalledWith("sub-1", "PVDC3R");
+  });
+});
+
+// 003 EARS-34 (#1131): a login-by-email-code request for an existing but
+// email-UNVERIFIED account must NOT arm the Zitadel `otp_email` login challenge —
+// Zitadel never sends a login code to an unverified email (the historic silent
+// dead-end). Instead the BFF re-issues the verify-to-sign-in code and dispatches
+// the branded, code-only §13.3 mail out-of-band (the same EARS-25/29 mailer hop),
+// fire-and-forget off the response path. The synchronous ack is byte-identical
+// across {nonexistent, existing-unverified, existing-verified} (EARS-16); the
+// `otp.sent` ledger row is appended only when a code is actually issued (an
+// existing account), never for a nonexistent identifier — so neither the response
+// nor the ledger is an existence/verification oracle. Exercised at the service
+// altitude over the fake IdP + FakeMailer + in-memory audit (no DB, no HTTP).
+describe("AuthService.requestLoginOtp — email unverified out-of-band recovery (003 EARS-34, #1131)", () => {
+  const password = "Aa1!sufficiently-long-pw";
+  const ctx = { ip: "203.0.113.9" };
+
+  function buildEmailOtpService(
+    idp: FakeIdpClient,
+    mailer: Mailer,
+    audit: InMemoryAuthAuditLog,
+  ): AuthService {
+    return new AuthService(
+      idp as unknown as IdpClient,
+      explodingDb as never, // the email otp-request path touches no DB
+      undefined,
+      audit,
+      mailer,
+      new InMemoryRegisterNoticeThrottle("test-pepper"),
+      SyntheticSuppression.disabled(),
+      {} as never, // mirror — unused on this path
+      {} as never, // sessions — unused
+      {} as never, // smsBudget — unused on the email path
+    );
+  }
+
+  it("003 EARS-34: an existing-UNVERIFIED account gets exactly one branded verification email out-of-band and arms NO otp_email challenge", async () => {
+    const mailer = new FakeMailer();
+    const idp = new FakeIdpClient(mailer);
+    const email = "unverified-login@ds.test";
+    await idp.createUser({ email, password }); // unverified (never verifyEmail'd)
+    const audit = new InMemoryAuthAuditLog();
+    const service = buildEmailOtpService(idp, mailer, audit);
+
+    const res = await service.requestLoginOtp(
+      { identifier: email, channel: "email" },
+      ctx,
+    );
+
+    expect(res).toEqual({ status: "otp_sent" });
+    // Exactly one §13.3 verification-code email, out-of-band (EARS-29).
+    expect(mailer.verificationCodeEmails).toEqual([
+      { to: email, code: FAKE_VALID_CODE },
+    ]);
+    // No otp_email login challenge was armed: a follow-up verify with the VALID
+    // code still yields null (nothing to check against).
+    await expect(
+      idp.loginWithEmailOtp(email, FAKE_VALID_CODE),
+    ).resolves.toBeNull();
+    // The otp.sent ledger row stands — a verification code WAS issued.
+    expect(audit.events).toEqual([
+      { type: "OtpSent", identifier: email, channel: "email" },
+    ]);
+  });
+
+  it("003 EARS-34: an existing-VERIFIED account arms the otp_email challenge as usual and gets NO verification email", async () => {
+    const mailer = new FakeMailer();
+    const idp = new FakeIdpClient(mailer);
+    const email = "verified-login@ds.test";
+    const created = await idp.createUser({ email, password });
+    await idp.verifyEmail(created.sub, FAKE_VALID_CODE); // now verified
+    const audit = new InMemoryAuthAuditLog();
+    const service = buildEmailOtpService(idp, mailer, audit);
+
+    const res = await service.requestLoginOtp(
+      { identifier: email, channel: "email" },
+      ctx,
+    );
+
+    expect(res).toEqual({ status: "otp_sent" });
+    // A verified account receives NO verification mail (EARS-6 arm-unchanged).
+    expect(mailer.verificationCodeEmails).toEqual([]);
+    // The otp_email challenge was armed: the valid code now checks out.
+    await expect(
+      idp.loginWithEmailOtp(email, FAKE_VALID_CODE),
+    ).resolves.not.toBeNull();
+    expect(audit.events).toEqual([
+      { type: "OtpSent", identifier: email, channel: "email" },
+    ]);
+  });
+
+  it("003 EARS-34/16: a nonexistent identifier is a silent no-op — no challenge, no mail, no ledger row — with the identical ack", async () => {
+    const mailer = new FakeMailer();
+    const idp = new FakeIdpClient(mailer);
+    const audit = new InMemoryAuthAuditLog();
+    const service = buildEmailOtpService(idp, mailer, audit);
+
+    const res = await service.requestLoginOtp(
+      { identifier: "nobody-login@ds.test", channel: "email" },
+      ctx,
+    );
+
+    // Byte-identical ack to the existing-account paths (no existence oracle).
+    expect(res).toEqual({ status: "otp_sent" });
+    expect(mailer.verificationCodeEmails).toEqual([]);
+    await expect(
+      idp.loginWithEmailOtp("nobody-login@ds.test", FAKE_VALID_CODE),
+    ).resolves.toBeNull();
+    // No code was issued, so no otp.sent row exists: the ledger discloses nothing.
+    expect(audit.events).toEqual([]);
+  });
+
+  it("003 EARS-34/31: a fire-and-forget verification-send failure never alters the ack (still otp_sent, no throw)", async () => {
+    // The out-of-band send is off the response path: a total mailer outage
+    // (EARS-31) must never differentiate the response or turn into a 500.
+    const exploding: Mailer = {
+      sendAccountExistsNotice: () => Promise.reject(new Error("smtp down")),
+      sendVerificationCodeEmail: () => Promise.reject(new Error("smtp down")),
+      sendPasswordResetCodeEmail: () => Promise.reject(new Error("smtp down")),
+    };
+    const idp = new FakeIdpClient(exploding);
+    const email = "unverified-outage@ds.test";
+    await idp.createUser({ email, password }); // unverified
+    const audit = new InMemoryAuthAuditLog();
+    const service = buildEmailOtpService(idp, exploding, audit);
+
+    const res = await service.requestLoginOtp(
+      { identifier: email, channel: "email" },
+      ctx,
+    );
+
+    expect(res).toEqual({ status: "otp_sent" });
+    // The verification code WAS issued (Zitadel returnCode); the delivery failure
+    // is swallowed off the response path, so the otp.sent row still stands.
+    expect(audit.events).toEqual([
+      { type: "OtpSent", identifier: email, channel: "email" },
+    ]);
+  });
+});
+
+// 003 EARS-34 (#1131): the FakeIdpClient.requestEmailLoginCode must be NO MORE
+// PERMISSIVE than the real Zitadel adapter — it routes an existing-unverified
+// account to the out-of-band verification mail ("verification"), a verified one to
+// the armed otp_email challenge ("challenge"), and an unknown identifier to a
+// silent no-op ("none"), exactly the verified/unverified/absent distinction the
+// real adapter draws off the User v2 `human.email.isVerified` search.
+describe("FakeIdpClient.requestEmailLoginCode — parity with real adapter (003 EARS-34, #1131)", () => {
+  const password = "Aa1!sufficiently-long-pw";
+
+  it("resolves 'verification' and dispatches the branded code for an existing UNVERIFIED account", async () => {
+    const mailer = new FakeMailer();
+    const idp = new FakeIdpClient(mailer);
+    await idp.createUser({ email: "u@ds.test", password });
+    await expect(idp.requestEmailLoginCode("u@ds.test")).resolves.toBe(
+      "verification",
+    );
+    expect(mailer.verificationCodeEmails).toEqual([
+      { to: "u@ds.test", code: FAKE_VALID_CODE },
+    ]);
+  });
+
+  it("resolves 'challenge' and arms otp_email for an existing VERIFIED account", async () => {
+    const mailer = new FakeMailer();
+    const idp = new FakeIdpClient(mailer);
+    const created = await idp.createUser({ email: "v@ds.test", password });
+    await idp.verifyEmail(created.sub, FAKE_VALID_CODE);
+    await expect(idp.requestEmailLoginCode("v@ds.test")).resolves.toBe(
+      "challenge",
+    );
+    expect(mailer.verificationCodeEmails).toEqual([]);
+    await expect(
+      idp.loginWithEmailOtp("v@ds.test", FAKE_VALID_CODE),
+    ).resolves.not.toBeNull();
+  });
+
+  it("resolves 'none' (no challenge, no mail) for an unknown identifier", async () => {
+    const mailer = new FakeMailer();
+    const idp = new FakeIdpClient(mailer);
+    await expect(idp.requestEmailLoginCode("nobody@ds.test")).resolves.toBe(
+      "none",
+    );
+    expect(mailer.verificationCodeEmails).toEqual([]);
+  });
+});
+
+// 003 EARS-35 (#1131): a completed password reset (a valid reset code proven with
+// a policy-conforming new password) is itself proof the subject controls the
+// mailbox, so the BFF marks the account's email verified at the IdP + mirror and
+// appends the terminal `auth.account.verified` (channel email) row — closing the
+// stuck-unverified trap through the existing recovery path (EARS-6/EARS-34). No
+// state is mutated before a valid token (OWASP): a bad/expired code flips nothing.
+// The flip is idempotent (an already-verified account → no-op, no duplicate row).
+// Exercised at the service altitude over the fake IdP + real SessionService over
+// fakes + a mirror spy (no DB, no HTTP).
+describe("AuthService.completePasswordReset — proof-of-mailbox email verify (003 EARS-35, #1131)", () => {
+  const email = "stuck-unverified@ds.test";
+  const oldPassword = "Aa1!old-sufficiently-long";
+  const newPassword = "Aa1!new-sufficiently-long";
+  const fingerprint = "fp-reset-device";
+
+  async function buildFlipService(seedVerified: boolean): Promise<{
+    service: AuthService;
+    idp: FakeIdpClient;
+    audit: InMemoryAuthAuditLog;
+    mirrorFlips: string[];
+    sub: string;
+  }> {
+    const idp = new FakeIdpClient();
+    const created = await idp.createUser({ email, password: oldPassword });
+    if (seedVerified) await idp.verifyEmail(created.sub, FAKE_VALID_CODE);
+    const store = new InMemorySessionStore();
+    const audit = new InMemoryAuthAuditLog();
+    const sessions = new SessionService(idp, store, audit);
+    const mirrorFlips: string[] = [];
+    const mirror = {
+      markEmailVerified: (sub: string) => {
+        mirrorFlips.push(sub);
+        return Promise.resolve();
+      },
+    };
+    const service = new AuthService(
+      idp,
+      explodingDb as never, // the reset path touches no DB directly
+      undefined,
+      audit,
+      new FakeMailer(),
+      new InMemoryRegisterNoticeThrottle("test-pepper"),
+      SyntheticSuppression.disabled(),
+      mirror as never,
+      sessions,
+      {} as never, // smsBudget — unused
+    );
+    return { service, idp, audit, mirrorFlips, sub: created.sub };
+  }
+
+  it("003 EARS-35: a completed reset on an UNVERIFIED account flips email_verified at the IdP + mirror and appends one auth.account.verified (channel email) row", async () => {
+    const { service, idp, audit, mirrorFlips, sub } =
+      await buildFlipService(false);
+
+    await service.requestPasswordReset(email);
+    await service.completePasswordReset(
+      email,
+      FAKE_VALID_CODE,
+      newPassword,
+      fingerprint,
+    );
+
+    await expect(idp.getUser(sub)).resolves.toMatchObject({
+      emailVerified: true,
+    });
+    expect(mirrorFlips).toEqual([sub]);
+    expect(audit.events).toContainEqual({
+      type: "IdentifierVerified",
+      sub,
+      channel: "email",
+    });
+  });
+
+  it("003 EARS-35: idempotent — a completed reset on an ALREADY-VERIFIED account performs no flip and appends NO auth.account.verified row", async () => {
+    const { service, audit, mirrorFlips, sub } = await buildFlipService(true);
+
+    await service.requestPasswordReset(email);
+    await service.completePasswordReset(
+      email,
+      FAKE_VALID_CODE,
+      newPassword,
+      fingerprint,
+    );
+
+    // No flip (already verified) and no duplicate verified row.
+    expect(mirrorFlips).toEqual([]);
+    expect(audit.events).not.toContainEqual({
+      type: "IdentifierVerified",
+      sub,
+      channel: "email",
+    });
+  });
+
+  it("003 EARS-35/16: a bad/expired reset code mutates nothing — no verify flip, no verified row (still generic 400)", async () => {
+    const { service, idp, audit, mirrorFlips, sub } =
+      await buildFlipService(false);
+    await service.requestPasswordReset(email);
+
+    const err = await service
+      .completePasswordReset(email, "000000", newPassword, fingerprint)
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(BadRequestException);
+    // No state mutated before a valid token (OWASP).
+    await expect(idp.getUser(sub)).resolves.toMatchObject({
+      emailVerified: false,
+    });
+    expect(mirrorFlips).toEqual([]);
+    expect(audit.events).not.toContainEqual({
+      type: "IdentifierVerified",
+      sub,
+      channel: "email",
+    });
+  });
+});
+
+// 003 EARS-35 (#1131): the FakeIdpClient.markEmailVerified must be NO MORE
+// PERMISSIVE than the real Zitadel adapter — it flips an unverified account
+// (resolves true), is idempotent for an already-verified one (resolves false, no
+// change), and no-ops an unknown sub (resolves false), mirroring the real
+// adapter's SetEmail(isVerified) over the resolved sub.
+describe("FakeIdpClient.markEmailVerified — parity with real adapter (003 EARS-35, #1131)", () => {
+  const password = "Aa1!sufficiently-long-pw";
+
+  it("flips an unverified account and resolves true", async () => {
+    const idp = new FakeIdpClient();
+    const created = await idp.createUser({ email: "m@ds.test", password });
+    await expect(idp.markEmailVerified(created.sub)).resolves.toBe(true);
+    await expect(idp.getUser(created.sub)).resolves.toMatchObject({
+      emailVerified: true,
+    });
+  });
+
+  it("is idempotent — an already-verified account resolves false with no change", async () => {
+    const idp = new FakeIdpClient();
+    const created = await idp.createUser({ email: "m2@ds.test", password });
+    await idp.verifyEmail(created.sub, FAKE_VALID_CODE);
+    await expect(idp.markEmailVerified(created.sub)).resolves.toBe(false);
+  });
+
+  it("resolves false for an unknown sub", async () => {
+    const idp = new FakeIdpClient();
+    await expect(idp.markEmailVerified("no-such-sub")).resolves.toBe(false);
   });
 });

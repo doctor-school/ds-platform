@@ -3,6 +3,7 @@ import {
   IdpInvalidArgumentError,
   type CreatedUser,
   type CreateUserInput,
+  type EmailLoginOutcome,
   type IdpClient,
   type IdpRefreshResult,
   type IdpSession,
@@ -242,6 +243,18 @@ export class FakeIdpClient implements IdpClient {
     return Promise.resolve(true);
   }
 
+  markEmailVerified(sub: string): Promise<boolean> {
+    // EARS-35 fake/real parity: the code-less proof-of-mailbox flip. Idempotent —
+    // resolves `true` ONLY when it actually changed state (unverified → verified),
+    // so the caller emits exactly one terminal `auth.account.verified` row and no
+    // duplicate on a re-run. An unknown sub, or an already-verified one, is a
+    // `false` no-op — mirroring the real adapter's SetEmail(isVerified) skip.
+    const record = this.bySub.get(sub);
+    if (!record || record.emailVerified) return Promise.resolve(false);
+    record.emailVerified = true;
+    return Promise.resolve(true);
+  }
+
   verifyPhone(sub: string, code: string): Promise<boolean> {
     const record = this.bySub.get(sub);
     if (!record || code !== FAKE_VALID_CODE) return Promise.resolve(false);
@@ -412,6 +425,40 @@ export class FakeIdpClient implements IdpClient {
     const record = this.findByIdentifier(identifier);
     if (record) this.emailOtpChallenges.add(record.sub);
     return Promise.resolve();
+  }
+
+  async requestEmailLoginCode(identifier: string): Promise<EmailLoginOutcome> {
+    // EARS-34 fake/real parity (no more permissive than the real adapter): the
+    // real ZitadelIdpClient resolves the identifier + `human.email.isVerified` and
+    // routes VERIFIED → arm otp_email, existing-UNVERIFIED → out-of-band
+    // verification mail, unknown → no-op. The fake mirrors that exact three-way
+    // split off its own `emailVerified` flag so a regression that arms a challenge
+    // for an unverified account (the historic dead-end) fails in unit tests, not
+    // only live. Every path resolves (never throws) so the caller stays
+    // enumeration-safe (EARS-16).
+    const record = this.findByIdentifier(identifier);
+    if (!record) return "none";
+    if (record.emailVerified) {
+      // Existing + verified: arm the otp_email login challenge, exactly as
+      // requestEmailOtp does — the branch EARS-6 leaves unchanged.
+      this.emailOtpChallenges.add(record.sub);
+      return "challenge";
+    }
+    // Existing + unverified: re-issue the verify-to-sign-in code and dispatch the
+    // branded §13.3 mail. The real adapter fires this off the response path; the
+    // fake awaits it (no real latency) so the assertion sees the recorded send —
+    // and swallows a send failure the same way (EARS-31), since the code WAS
+    // issued so the outcome is still "verification" (the ledger row is owed).
+    if (this.mailer) {
+      const to = record.email ?? identifier;
+      try {
+        await this.mailer.sendVerificationCodeEmail(to, FAKE_VALID_CODE);
+      } catch {
+        // Fire-and-forget parity: a delivery failure never changes the outcome —
+        // the code was issued, so the caller still writes the otp.sent row.
+      }
+    }
+    return "verification";
   }
 
   loginWithEmailOtp(

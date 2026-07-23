@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Centrifuge, type PublicationContext } from "centrifuge";
 import { useTranslations } from "next-intl";
-import { Skeleton } from "@ds/design-system";
+import { Button, Skeleton } from "@ds/design-system";
 import {
   ChatMessageTextSchema,
   RoomChatMessageSchema,
@@ -303,17 +303,14 @@ export function RoomChat({
           maxLength={2000}
           className="min-w-0 flex-1 border-2 border-hairline bg-card px-4 py-3 text-sm text-foreground focus-visible:outline-none focus-visible:shadow-focus"
         />
-        {/* primitives-first-ok: canvas-pinned composer send control (room canvas) —
-            square border-2 action box outside the DS Button variants; pre-#828
-            surface, DS-adoption candidate for a follow-up. */}
-        <button
+        <Button
           type="submit"
+          variant="default"
           disabled={!isSendable}
           aria-label={t("composerSend")}
-          className="border-2 border-border bg-primary-action px-4 py-3 text-sm font-extrabold text-primary-foreground shadow-sm hover:bg-primary-hover focus-visible:outline-none focus-visible:shadow-focus disabled:cursor-not-allowed disabled:opacity-60"
         >
           {t("composerSend")}
-        </button>
+        </Button>
       </form>
     </div>
   );

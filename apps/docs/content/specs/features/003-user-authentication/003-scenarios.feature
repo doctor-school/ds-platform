@@ -125,6 +125,36 @@ Feature: Net-new web authentication producing a doctor_guest identity
     Then Zitadel otp_email verifies it
     And a BFF session is established with a __Host- cookie
 
+  @EARS-34 @EARS-16 @happy
+  Scenario: A login-email-code request for an unverified account sends verification out-of-band
+    # An existing but email-unverified account cannot receive a Zitadel otp_email login
+    # code (it never arrives). Instead of the silent dead-end, the BFF sends the
+    # verify-to-sign-in verification code out-of-band by email; the API response is
+    # identical to the verified and nonexistent cases (no existence/verification oracle).
+    Given an existing doctor_guest account whose email is not yet verified
+    When the user requests an email login code for that identifier
+    Then no otp_email login challenge is armed for the unverified account
+    And a branded, code-only verification email is sent out-of-band via the BFF mailer
+    And the response is indistinguishable in status, body, and timing from the verified and nonexistent cases
+    And an otp.sent audit_ledger row is appended only because a verification code was issued
+    And no users or consent row is written
+
+  @EARS-34 @EARS-16 @happy
+  Scenario: A login-email-code request for a verified account arms the challenge unchanged
+    Given a verified doctor_guest user
+    When the user requests an email login code for that identifier
+    Then the Zitadel otp_email login challenge is armed as usual
+    And no verification email is sent
+    And the response is indistinguishable in status, body, and timing from the unverified and nonexistent cases
+
+  @EARS-34 @EARS-16 @failure
+  Scenario: A login-email-code request for a nonexistent identifier is a silent no-op
+    Given an identifier that resolves to no account
+    When a visitor requests an email login code for that identifier
+    Then no otp_email challenge is armed and no email is sent
+    And no audit_ledger, users, or consent row is written
+    And the response is indistinguishable in status, body, and timing from the existing-account cases
+
   @EARS-7 @EARS-14 @happy
   Scenario: Login with an SMS OTP code within the toll-fraud budget
     Given a verified doctor_guest user whose phone is under all SMS thresholds
@@ -178,6 +208,26 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And a fresh authenticated session is established for the subject
     And the __Host- session cookie is set with no token in the response body
     And the portal routes to /account rather than /login
+
+  @EARS-35 @EARS-12 @happy
+  Scenario: A proven password reset marks the email verified and unblocks login-by-code
+    # A returned reset code proves the subject controls the mailbox, so completing the
+    # reset also verifies the email — closing the stuck-unverified state through the
+    # existing recovery path. State changes only after a valid token (OWASP).
+    Given a doctor_guest account whose email was never verified
+    And the user holds a valid reset code delivered to that email
+    When the user completes the reset with the code and a policy-conforming new password
+    Then the account email is marked verified at the IdP and mirrored onto the users row
+    And a terminal auth.account.verified (channel email) row is appended to audit_ledger
+    And a subsequent email login-code request for that identifier arms the otp_email challenge
+
+  @EARS-35 @EARS-16 @failure
+  Scenario: A failed reset mutates nothing, including verification state
+    Given a doctor_guest account whose email was never verified
+    When the user submits a bad or expired reset code
+    Then the response is the generic enumeration-safe outcome
+    And the email verification state is unchanged
+    And no audit_ledger row is written
 
   @EARS-13 @happy
   Scenario: A successful login forgives the per-user rate-limit window

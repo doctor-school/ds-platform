@@ -41,6 +41,25 @@ export class PresenceRepository {
   }
 
   /**
+   * Resolve the authenticated `sub` to the domain `users.id` AND the poster's own
+   * `display_name` (006 EARS-16), in one read — the chat post path needs both to
+   * mint a named message (`authorName` = the display name, or `null` when unset →
+   * the portal falls back to the `authorTag` participant label). `null` when no
+   * mirror row exists (the caller maps that to a refusal, never inventing a row).
+   * Read-only.
+   */
+  async findChatAuthorBySub(
+    sub: string,
+  ): Promise<{ id: string; displayName: string | null } | null> {
+    const [row] = await this.db
+      .select({ id: users.id, displayName: users.displayName })
+      .from(users)
+      .where(eq(users.zitadelSub, sub))
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
    * Append exactly one immutable presence beat for `(userId, eventId)` and return
    * the row's server-stamped canonical instant. INSERT-only — the append-only
    * contract (no update path). `beat_at` defaults to the server clock, so the

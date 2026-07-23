@@ -285,3 +285,73 @@ describe("006 EARS-3 Twitch-minimal ledger — stick-to-bottom + new-messages ch
     expect(screen.queryByTestId("room-chat-chip")).toBeNull();
   });
 });
+
+// 006 EARS-17 (#1121) — a chat row is authored by the poster's own display name,
+// shown to every participant (owner decision 2026-07-23, Option A). The reader's
+// OWN row stays «Вы»; a poster with no name set — and legacy history minted before
+// the `authorName` field existed (the key is simply absent) — falls back to the
+// non-PII «Участник <tag>» participant label. (i18n is mocked to echo keys, so the
+// fallback label renders as "chatParticipant <tag>".)
+describe("006 EARS-17 named chat authorship — the poster's real name authors their messages (#1121)", () => {
+  /** Hydrate the pane with an explicit set of messages, connected. */
+  function seedMessages(
+    msgs: unknown[],
+    props?: Partial<Parameters<typeof RoomChat>[0]>,
+  ): void {
+    let resolveHistory!: (v: { publications: Array<{ data: unknown }> }) => void;
+    sdk.history = () =>
+      new Promise((res) => {
+        resolveHistory = res;
+      });
+    render(<RoomChat slug="evt-1" chat={chat} {...props} />);
+    fire("connected", {});
+    fire("subscribed", { channel: chat.channel });
+    act(() => resolveHistory({ publications: msgs.map((m) => ({ data: m })) }));
+  }
+
+  it("EARS-17: another participant's message renders their display name as the author", async () => {
+    const named = { ...message, authorName: "Мария Кузнецова" };
+    seedMessages([named]);
+    await waitFor(() => expect(screen.getByText(named.text)).toBeTruthy());
+    const row = screen.getByTestId("room-chat-message");
+    expect(row.textContent).toContain("Мария Кузнецова");
+    // The non-PII participant-label fallback is NOT used when a name is present.
+    expect(row.textContent).not.toContain("chatParticipant");
+  });
+
+  it("EARS-17: a null authorName falls back to the «Участник <tag>» participant label", async () => {
+    const nullName = { ...message, authorTag: "B2", authorName: null };
+    seedMessages([nullName]);
+    await waitFor(() => expect(screen.getByText(nullName.text)).toBeTruthy());
+    const row = screen.getByTestId("room-chat-message");
+    expect(row.textContent).toContain("chatParticipant B2");
+  });
+
+  it("EARS-17: a legacy message with the authorName key absent renders the same tag fallback", async () => {
+    // No authorName key at all — the schema is nullish so it still parses and the
+    // render coalesces the missing key to the participant label (no migration).
+    const legacy = {
+      id: "aa11bb22-cc33-44dd-88ee-99ff00112233",
+      authorTag: "C3",
+      text: "Легаси-сообщение без имени.",
+      at: "2026-07-13T10:05:00.000Z",
+    };
+    seedMessages([legacy]);
+    await waitFor(() => expect(screen.getByText(legacy.text)).toBeTruthy());
+    const row = screen.getByTestId("room-chat-message");
+    expect(row.textContent).toContain("chatParticipant C3");
+  });
+
+  it("EARS-17: the reader's OWN message stays «Вы», even with a display name set", async () => {
+    const ownNamed = {
+      ...message,
+      authorTag: chat.selfTag,
+      authorName: "Пётр Чатов",
+    };
+    seedMessages([ownNamed]);
+    await waitFor(() => expect(screen.getByText(ownNamed.text)).toBeTruthy());
+    const row = screen.getByTestId("room-chat-message");
+    expect(row.textContent).toContain("chatYou");
+    expect(row.textContent).not.toContain("Пётр Чатов");
+  });
+});

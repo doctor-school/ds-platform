@@ -23,17 +23,21 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 
-// 006 EARS-14 + EARS-16 — the self-scoped display-name write + owner-only read.
+// 006 EARS-14 + EARS-16 + EARS-17 — the self-scoped display-name write/read and
+// the name's one participant-visible surface: live-chat authorship.
 //
 // The «Имя и фамилия» collected just-in-time at first room entry (never at
 // registration) is the `users`-mirror `display_name` SSOT, written via the authed
 // `PUT /v1/me/display-name` and read back only by its owner's own session
 // (`GET /v1/me/display-name`). EARS-14: reject empty / whitespace-only + an
 // unauthenticated caller; accept a real name and TRIM it onto the caller's own
-// row. EARS-16 (self-only exposure): a caller reads/writes ONLY their own name
-// (`authenticated` / `doctor_guest` / `fast-path`); no endpoint returns another
-// user's name; and the display name NEVER enters a chat payload — chat identity
-// stays the non-PII (SHA-256-derived) author tag.
+// row. EARS-16 (self-only PROFILE exposure): a caller reads/writes ONLY their own
+// name (`authenticated` / `doctor_guest` / `fast-path`); no profile-read endpoint
+// returns another user's name. EARS-17 (named chat authorship, owner decision
+// 2026-07-23, Option A): a chat publish payload carries the poster's OWN
+// `display_name` in `authorName` when set (shown to every participant), and
+// `authorName: null` (tag-only fallback) when unset — never a name fabricated
+// from the email; the stable non-PII `authorTag` still rides every payload.
 //
 // Runs against the dev-stand Postgres + the fake IdP; skips when DATABASE_URL or
 // IDP_ISSUER is absent so the shared CI unit job stays green (requirements
@@ -333,11 +337,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     });
 
     it.skipIf(!CENTRIFUGO_URL)(
-      "EARS-16: a chat publish payload carries the non-PII author tag, NEVER the display name",
+      "EARS-17: a chat publish payload carries the poster's OWN display name in authorName when set",
       async () => {
-        // A registered doctor with a saved display name posts to a live room; the
-        // fanned-out chat payload must carry only the SHA-256-derived author tag,
-        // never the display name — chat identity stays non-PII (EARS-16).
+        // A registered doctor WITH a saved display name posts to a live room; the
+        // fanned-out chat payload carries that name in `authorName`, shown to every
+        // participant as the message author (owner decision 2026-07-23, Option A).
+        // The non-PII `authorTag` still rides the payload as the self-identity key.
         const email = uniqueEmail("doc-dn-chat");
         const displayName = "Пётр Чатов";
         const { id, slug } = await seedEvent("published");
@@ -346,7 +351,6 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await setState(id, "live");
         await putName(cookieHeader(cookie), { displayName });
 
-        // The grant carries the caller's non-PII selfTag (never their name).
         const roomRes = await app.inject({
           method: "GET",
           url: `/v1/events/${slug}/room`,
@@ -355,10 +359,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         const config = RoomConfigSchema.parse(roomRes.json());
         // When the stand's Centrifugo lacks a token HMAC secret the grant carries
         // `chat: null` (the truthful unavailable state) — there is no publish path
-        // to inspect, so the payload assertion cannot run. The load-bearing check
-        // — that the selfTag the grant DOES carry is the non-PII tag, never the
-        // name — still holds whenever a credential is issued.
+        // to inspect, so the payload assertion cannot run.
         if (!config.chat) return;
+        // The selfTag stays the non-PII tag — the name rides the message, not the tag.
         expect(config.chat.selfTag).not.toContain(displayName);
 
         const text = "Здравствуйте, коллеги!";
@@ -373,11 +376,52 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         const history = await centrifugoHistory(roomChannel(id));
         expect(history).toHaveLength(1);
         const payload = history[0].data;
-        // The payload carries a non-empty author tag and the text — and the
-        // display name appears NOWHERE in the serialized payload.
+        // The poster's own display name authors the message.
+        expect(payload.authorName).toBe(displayName);
+        // The stable non-PII author tag still rides every payload.
         expect(typeof payload.authorTag).toBe("string");
         expect((payload.authorTag as string).length).toBeGreaterThan(0);
-        expect(JSON.stringify(payload)).not.toContain(displayName);
+      },
+    );
+
+    it.skipIf(!CENTRIFUGO_URL)(
+      "EARS-17: a poster with NO display name set carries authorName: null (tag-only fallback, never a name fabricated from email)",
+      async () => {
+        // A doctor who never completed the JIT prompt has a null `display_name`;
+        // their chat payload carries `authorName: null` (the portal falls back to
+        // the «Участник <tag>» label) — never a name fabricated from the email
+        // local-part or any roster identity (EARS-8/EARS-15 spirit).
+        const email = uniqueEmail("doc-dn-chat-anon");
+        const { id, slug } = await seedEvent("published");
+        const cookie = await doctorSession(email);
+        await register(slug, cookie);
+        await setState(id, "live");
+        // No putName — the doctor has no display name.
+
+        const roomRes = await app.inject({
+          method: "GET",
+          url: `/v1/events/${slug}/room`,
+          headers: cookieHeader(cookie),
+        });
+        const config = RoomConfigSchema.parse(roomRes.json());
+        if (!config.chat) return;
+
+        const text = "Пока без имени, коллеги.";
+        const post = await app.inject({
+          method: "POST",
+          url: `/v1/events/${slug}/chat`,
+          headers: cookieHeader(cookie),
+          payload: { text },
+        });
+        expect(post.statusCode).toBe(200);
+
+        const history = await centrifugoHistory(roomChannel(id));
+        expect(history).toHaveLength(1);
+        const payload = history[0].data;
+        expect(payload.authorName).toBeNull();
+        // No fabricated name: the email local-part never leaks into the payload.
+        expect(JSON.stringify(payload)).not.toContain(email.split("@")[0]);
+        expect(typeof payload.authorTag).toBe("string");
       },
     );
   },

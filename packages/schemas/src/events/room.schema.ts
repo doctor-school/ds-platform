@@ -137,17 +137,27 @@ export type PostChatMessageRequest = z.infer<
 
 /**
  * `RoomChatMessage` — the shape fanned out over the room channel and echoed to the
- * poster in the command ack (EARS-3; design §4). Server-authoritative and
- * **PII-free**: `authorTag` is a stable, non-reversible tag derived from the
- * doctor's domain id (never their email / phone / roster identity, EARS-8),
- * `id` + `at` are server-minted (a client cannot forge a message id or backdate a
- * post), and `text` is the validated content. The portal renders the author label
- * from its message catalog around `authorTag` (EARS-10) — the server ships the
- * tag, not a user-facing string.
+ * poster in the command ack (EARS-3; design §4). Server-authoritative: `id` + `at`
+ * are server-minted (a client cannot forge a message id or backdate a post) and
+ * `text` is the validated content.
+ *
+ * Author identity carries two server-authoritative fields (EARS-17): `authorName`
+ * is the poster's own display name (`users.display_name`) — the same name the
+ * doctor entered at the JIT room-entry prompt, shown to every participant in the
+ * live chat — and `authorTag` is the stable, non-reversible tag derived from the
+ * doctor's domain id. `authorName` is `null` when the poster has no display name
+ * set, and **absent** on legacy history minted before this field existed — the
+ * field is therefore **nullish** (`null | undefined`) so a stored legacy payload
+ * still parses (Centrifugo `history` re-validates every publication and a required
+ * key would silently drop the legacy message from the hydrated pane); the portal
+ * coalesces both `null` and a missing key to the `authorTag` participant label
+ * (EARS-17). The tag remains the stable self-identity key the poster's client
+ * matches its own `selfTag` against.
  */
 export const RoomChatMessageSchema = z.object({
   id: z.uuid(),
   authorTag: z.string().min(1),
+  authorName: z.string().min(1).nullish(),
   text: z.string().min(1),
   at: z.iso.datetime({ offset: true }),
 });

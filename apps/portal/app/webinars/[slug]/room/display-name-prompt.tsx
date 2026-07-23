@@ -42,8 +42,9 @@ import { useLocalizedResolver } from "@/lib/use-localized-resolver";
  * and identically server-side. On a valid submit the trimmed name is PUT via
  * {@link setDisplayName}; then `router.refresh()` re-runs the server page, which
  * now reads a non-null name and renders the room (the header avatar = its
- * initials). The name is self-only (EARS-16) — the copy says only the doctor sees
- * it, and it never enters chat. All copy resolves through the message catalog.
+ * initials). The name is shown to every participant in the live chat (EARS-16) —
+ * the prompt copy discloses this up front («Ваше имя будут видеть участники чата
+ * эфира»). All copy resolves through the message catalog.
  */
 export function DisplayNamePrompt() {
   const t = useTranslations("room");

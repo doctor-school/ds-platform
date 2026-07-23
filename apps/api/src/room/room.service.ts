@@ -204,11 +204,15 @@ export class RoomService {
     text: string,
   ): Promise<PostChatMessageAck> {
     const event = await this.admit(idOrSlug, sub);
-    const userId = await this.presence.findUserIdBySub(sub);
-    if (!userId) throw new UnknownSubjectError(sub);
+    const author = await this.presence.findChatAuthorBySub(sub);
+    if (!author) throw new UnknownSubjectError(sub);
     const message: RoomChatMessage = {
       id: randomUUID(),
-      authorTag: this.chat.authorTag(userId),
+      authorTag: this.chat.authorTag(author.id),
+      // The poster's own display name (EARS-16), shown to every participant; `null`
+      // when unset → the portal renders the `authorTag` participant label instead.
+      // Never a fabricated name from email/roster identity (EARS-8/EARS-15 spirit).
+      authorName: author.displayName,
       text,
       at: new Date().toISOString(),
     };

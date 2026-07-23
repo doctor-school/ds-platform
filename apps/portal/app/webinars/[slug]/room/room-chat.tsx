@@ -310,9 +310,10 @@ export function RoomChat({
             // Twitch-minimal row anatomy (#1123, `chat-column.dc.html`): a single
             // borderless paragraph — a bold name slot inline with the text, NO
             // timestamp, NO avatar. Own message → «Вы» in the accent colour; others
-            // → the participant label + tag (the real-name + speaker/moderator badge
-            // presume #1121, out of scope — the badge slot stays out, no dead
-            // placeholder). Reversed for the `flex-col-reverse` ledger.
+            // → the poster's own display name (`authorName`, #1121), falling back to
+            // the «Участник <tag>» participant label when the poster has no name set
+            // (or for legacy history minted before the field existed). Reversed for
+            // the `flex-col-reverse` ledger.
             [...messages].reverse().map((message) => {
               const own = message.authorTag === chat.selfTag;
               return (
@@ -329,7 +330,8 @@ export function RoomChat({
                   >
                     {own
                       ? t("chatYou")
-                      : `${t("chatParticipant")} ${message.authorTag}`}
+                      : (message.authorName ??
+                        `${t("chatParticipant")} ${message.authorTag}`)}
                   </span>{" "}
                   {message.text}
                 </div>

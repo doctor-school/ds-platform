@@ -26,7 +26,7 @@ Room composition for the 2026-07-17 webinar: **embed player + live chat + heartb
 - **US-4** — As a **pharma sponsor**, after the webinar I receive per-doctor actual presence minutes (with contacts) for my report — for the first webinar, produced as a manual export from the captured data.
 - **US-5** — As an **unauthenticated or unregistered visitor**, I cannot reach the room content; instead I'm guided to log in / register for the event — enforced by the server, not hidden by the UI.
 - **US-6** — As a **doctor in the room**, I switch the room between light and dark with the toggle in the room header; until I choose, the portal follows my system preference, and once I choose, my choice sticks across reloads and visits.
-- **US-7** — As a **doctor**, before my first webinar room I'm asked **once** for my name («Имя и фамилия»); after that the room header shows an avatar with the initials of my real name. My name is shown only to me, and registration stays as short as it is today.
+- **US-7** — As a **doctor**, before my first webinar room I'm asked **once** for my name («Имя и фамилия»); after that the room header shows an avatar with the initials of my real name, and that same name authors my messages in the live chat — other participants see it (the prompt discloses this up front). Registration stays as short as it is today.
 
 ## Flows
 
@@ -40,9 +40,9 @@ Room composition for the 2026-07-17 webinar: **embed player + live chat + heartb
 **First entry — display name (US-7):**
 
 1. A registered doctor whose display name is not yet set follows the join path to a live room.
-2. Before the room renders, the portal asks **once** for «Имя и фамилия»; an empty or whitespace-only value is rejected with a truthful error.
+2. Before the room renders, the portal asks **once** for «Имя и фамилия»; the prompt copy discloses that the name is shown to other chat participants («Ваше имя будут видеть участники чата эфира»); an empty or whitespace-only value is rejected with a truthful error.
 3. The saved name lands on the doctor's user record via an authenticated endpoint; the room renders with the header avatar showing the initials of the real name.
-4. On every later entry the prompt never reappears.
+4. On every later entry the prompt never reappears; the doctor's posted chat messages are authored by that name — every participant sees it (a doctor with no name set falls back to the non-PII «Участник <tag>» participant label).
 
 **Theme (US-6):**
 
@@ -78,7 +78,7 @@ Room composition for the 2026-07-17 webinar: **embed player + live chat + heartb
 - Recordings archive (wave 2).
 - Director controls for opening/closing the room and stream config (feature 007).
 - Theme toggle placement on portal surfaces other than the webinar-room header — deferred to the unified portal chrome re-skin (#510); the underlying theme mechanism is portal-wide from day one.
-- Collecting the doctor's name at registration (the sign-up funnel stays untouched — owner decision, zero added friction on live prod), and showing a doctor's name to anyone else (chat identity stays the non-PII author tag).
+- Collecting the doctor's name at registration (the sign-up funnel stays untouched — owner decision, zero added friction on live prod). **No longer out:** showing a doctor's name to other chat participants is now in scope (owner decision 2026-07-23, Option A) — the author's name authors their own live-chat messages, with the non-PII participant tag as the fallback when no name is set.
 
 ## Open questions
 

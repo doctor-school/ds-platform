@@ -204,13 +204,14 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
     When it drives its covered surfaces in the light and the dark theme
     Then the dark rendering introduces no new accessibility violations relative to light
 
-  # --- Display name & avatar: JIT collection, self-only exposure (US-7) ---
+  # --- Display name & avatar: JIT collection, named chat authorship (US-7) ---
 
   @EARS-14 @happy
   Scenario: The first room entry asks once for the doctor's name
     Given a gated doctor whose display name is not set
     When the doctor enters a live room for the first time
     Then the portal prompts once for «Имя и фамилия» before rendering the room
+    And the prompt discloses that the name is shown to other chat participants
     When the doctor submits a real name
     Then the trimmed name is saved to the doctor's user record via the authenticated endpoint
     And the room renders
@@ -231,8 +232,24 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
     And the initials are never fabricated from an email address or a placeholder profile
 
   @EARS-16 @failure
-  Scenario: The display name is served only to its owner and never enters chat payloads
+  Scenario: The self-profile display-name read is served only to its owner
     Given two doctors in the same live room, one of them with a saved display name
-    When the other doctor requests that name or reads the room chat
-    Then no endpoint returns another doctor's display name
-    And the chat identity remains the non-PII author tag
+    When the other doctor requests that name through a profile read
+    Then no profile-read endpoint returns another doctor's display name
+    And the Zitadel profile placeholder stays never-read
+
+  @EARS-17 @happy
+  Scenario: A chat message carries the poster's own display name to every participant
+    Given two doctors in the same live room, the poster with a saved display name
+    When the poster sends a chat message
+    Then the fanned-out payload carries the poster's own display name in the authorName field
+    And every participant sees that name as the message author
+    And the name carried is only the poster's own saved name, never fabricated from an email or a placeholder
+
+  @EARS-17 @failure
+  Scenario: A poster with no display name falls back to the non-PII participant tag
+    Given a gated doctor with no display name set posts in a live room
+    When the message fans out to the other participants
+    Then the payload authorName is null
+    And the portal renders the non-PII «Участник <tag>» participant label instead of a fabricated name
+    And a legacy message minted before the authorName field existed renders the same tag fallback

@@ -1501,16 +1501,33 @@ function WebinarStatusCardSection() {
 }
 
 function WebinarRoomSection() {
-  // A static demo of the composition shell — a placeholder player frame (no real
-  // embed iframe in the showcase), the event context, and the chat aside shell.
+  // A static demo of the Twitch-model composition shell (#1123): the player is now
+  // REGION CONTENT (pinned inset-0 inside the dark letterbox the layout owns, not
+  // its own aspect box), a one-line context strip sits under it, the chat column
+  // has a collapsible header + a borderless ledger, and the mobile info tab gets
+  // the full context block. No real embed iframe / Centrifugo here — sensible
+  // showcase-internal RU demo strings.
   const playerFrame = (
-    <div className="relative aspect-video border-2 border-border bg-neutral-950 shadow-lg">
-      <Badge variant="live" className="absolute left-5 top-5">
+    <>
+      <Badge variant="live" className="absolute left-4 top-4 z-10">
         В эфире
       </Badge>
       <div className="absolute inset-0 flex items-center justify-center text-sm text-neutral-300">
         Плеер эфира
       </div>
+    </>
+  );
+  const contextStrip = (
+    <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
+      <span className="text-2xs font-extrabold uppercase tracking-micro text-primary-action whitespace-nowrap">
+        Школа травматологии и ортопедии · Эфир № 042
+      </span>
+      <span className="text-sm font-extrabold tracking-tight text-foreground">
+        Пластика ахиллова сухожилия: разбор случаев
+      </span>
+      <span className="text-caption text-muted-foreground">
+        Анна Соколова · Михаил Верещагин
+      </span>
     </div>
   );
   const context = (
@@ -1528,16 +1545,26 @@ function WebinarRoomSection() {
   );
   const chat = (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b-2 border-border bg-primary-action px-4 py-3 text-center text-sm font-extrabold text-primary-foreground">
-        Чат
-      </div>
-      <div className="border-b-2 border-border bg-tint px-4 py-3 text-caption leading-relaxed text-tint-foreground">
+      <div className="flex-none border-b-2 border-hairline bg-tint px-4 py-2.5 text-caption leading-relaxed text-tint-foreground">
         📌 Модератор: вопросы можно задавать прямо в чате.
       </div>
-      <div className="flex flex-1 items-center justify-center px-4 py-8 text-center text-sm text-muted-foreground">
-        Пока нет сообщений.
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3.5 py-3">
+          <div className="text-sm leading-relaxed text-foreground break-words">
+            <span className="font-bold text-foreground">Участник B2</span> Уже в
+            эфире, коллеги!
+          </div>
+          <div className="text-sm leading-relaxed text-foreground break-words">
+            <span className="font-bold text-foreground">Участник C7</span>{" "}
+            Отличный разбор доступов, спасибо!
+          </div>
+          <div className="text-sm leading-relaxed text-foreground break-words">
+            <span className="font-bold text-primary-action">Вы</span> Ждём блок
+            вопросов по реабилитации.
+          </div>
+        </div>
       </div>
-      <div className="flex gap-3 border-t-2 border-border p-4">
+      <div className="flex flex-none gap-3 border-t-2 border-border p-4">
         <input
           placeholder="Написать в чат…"
           aria-label="Написать в чат"
@@ -1557,26 +1584,33 @@ function WebinarRoomSection() {
   return (
     <PrimitiveSection
       title="Webinar-room"
-      exportsLine="WebinarRoomLayout — the webinar room composition shell (player + chat aside; mobile Чат / О эфире tabs)"
+      exportsLine="WebinarRoomLayout — the viewport-bounded webinar room shell (maximized player + collapsible chat; mobile Чат / О эфире tabs)"
     >
       <p className="text-sm text-muted-foreground">
         The webinar room layout (source{" "}
-        <code className="font-mono text-xs">webinar-room.dc.html</code>, 006
-        EARS-2/EARS-11): desktop a{" "}
-        <code className="font-mono text-xs">1fr 400px</code> grid (player +
-        context left, chat aside right); mobile a full-bleed player + Чат / О
-        эфире tabs. The embed player is instantiated from the explicit provider
-        enum (never URL-sniffed); the chat aside is the composition shell
-        (behaviour is EARS-3).
+        <code className="font-mono text-xs">webinar-room-frame.dc.html</code> +{" "}
+        <code className="font-mono text-xs">chat-column.dc.html</code>, 006
+        EARS-2/EARS-11): a viewport-bounded flex shell — the player region is
+        maximized (no custom chrome), a one-line context strip sits under it, and
+        the chat is a 340px aside that collapses to a 44px rail; mobile a
+        full-bleed player + Чат / О эфире tabs. The chat ledger is Twitch-minimal
+        (borderless rows, stick-to-bottom); behaviour is EARS-3.
       </p>
       <SubRow label="composition">
         <ThemePair
           render={() => (
-            <div className="w-full">
+            // The shell is viewport-bounded (fills its parent's height) — the
+            // showcase gives it a fixed demo height so it renders visibly.
+            <div className="flex w-full" style={{ height: "34rem" }}>
               <WebinarRoomLayout
                 chatTabLabel="Чат"
                 infoTabLabel="О эфире"
+                chatHeading="Чат эфира"
+                chatCount={214}
+                collapseLabel="Свернуть чат"
+                expandLabel="Развернуть чат"
                 player={playerFrame}
+                contextStrip={contextStrip}
                 context={context}
                 chat={chat}
               />

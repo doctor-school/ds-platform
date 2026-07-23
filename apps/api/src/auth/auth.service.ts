@@ -213,36 +213,56 @@ export class AuthService {
     ctx: { ip: string; asn?: string | undefined },
   ): Promise<OtpRequestResponse> {
     if (req.channel === "email") {
-      await this.idp.requestEmailOtp(req.identifier);
-    } else {
-      const allowed = this.smsBudget.tryConsume({
-        phone: req.identifier,
-        ip: ctx.ip,
-        asn: ctx.asn,
-      });
-      if (!allowed) {
-        throw new HttpException(
-          GENERIC_THROTTLED,
-          HttpStatus.TOO_MANY_REQUESTS,
-        );
+      // EARS-34 (#1131): the email login-code request is branch-aware. An existing
+      // but email-UNVERIFIED account cannot receive a Zitadel `otp_email` login
+      // code (by IdP design it is never sent — the historic silent dead-end), so
+      // instead of arming the challenge the port re-issues the verify-to-sign-in
+      // code and dispatches the branded §13.3 mail OUT-OF-BAND (fire-and-forget
+      // off the response path). A VERIFIED account arms `otp_email` unchanged
+      // (EARS-6); a nonexistent identifier is a silent no-op. The three synchronous
+      // acks are byte-identical + timing-equalized (EARS-16, @TimingEqualized), so
+      // neither the response nor the /login UI is an existence/verification oracle;
+      // the account owner's next step (verify, then sign in) travels only in the
+      // mailbox (OWASP side-channel-free recovery).
+      const outcome = await this.idp.requestEmailLoginCode(req.identifier);
+      // EARS-18: append `auth.otp.sent` (identifier masked) ONLY when a code was
+      // actually issued — a login code for the verified branch, a verification
+      // code for the unverified branch. A nonexistent identifier issues nothing,
+      // so no row exists for it: the ledger discloses no existence (EARS-16).
+      if (outcome !== "none") {
+        await this.audit.record({
+          type: "OtpSent",
+          identifier: req.identifier,
+          channel: "email",
+        });
       }
-      // EARS-33 (design §14.8): with the load-test suppression toggle ON, a
-      // synthetic-tagged (reserved test-MSISDN) recipient is dropped BEFORE the
-      // Zitadel/SMS-Aero provider hop — after the identical request-shape pipeline
-      // (EARS-14 budget above) the load test must exercise, so zero synthetic SMS
-      // leaves the box. Toggle OFF (default) or an untagged phone ⇒ normal send.
-      // The audit `OtpSent` row + the enumeration-safe response below are
-      // unchanged (the campaign measures the pipeline minus the relay hop only).
-      if (!this.synthetic.suppress("sms", req.identifier)) {
-        await this.idp.requestSmsOtp(req.identifier);
-      }
+      return { status: "otp_sent" };
+    }
+
+    const allowed = this.smsBudget.tryConsume({
+      phone: req.identifier,
+      ip: ctx.ip,
+      asn: ctx.asn,
+    });
+    if (!allowed) {
+      throw new HttpException(GENERIC_THROTTLED, HttpStatus.TOO_MANY_REQUESTS);
+    }
+    // EARS-33 (design §14.8): with the load-test suppression toggle ON, a
+    // synthetic-tagged (reserved test-MSISDN) recipient is dropped BEFORE the
+    // Zitadel/SMS-Aero provider hop — after the identical request-shape pipeline
+    // (EARS-14 budget above) the load test must exercise, so zero synthetic SMS
+    // leaves the box. Toggle OFF (default) or an untagged phone ⇒ normal send.
+    // The audit `OtpSent` row + the enumeration-safe response below are unchanged
+    // (the campaign measures the pipeline minus the relay hop only).
+    if (!this.synthetic.suppress("sms", req.identifier)) {
+      await this.idp.requestSmsOtp(req.identifier);
     }
     // EARS-18: `auth.otp.sent` (identifier masked). A budget-refused SMS threw
     // above and never reaches here, so a row exists only for an actual send.
     await this.audit.record({
       type: "OtpSent",
       identifier: req.identifier,
-      channel: req.channel,
+      channel: "sms",
     });
     return { status: "otp_sent" };
   }
@@ -375,6 +395,28 @@ export class AuthService {
       sub: session.sub,
       method: "password",
     });
+    // EARS-35 (#1131): a proven reset code was delivered to the account's email
+    // and returned by the caller — that is itself proof-of-mailbox-ownership, so
+    // mark the email verified. This runs ONLY here, after a valid token
+    // (`session` is non-null): no state is mutated before the code+password
+    // succeed (OWASP). It closes the stuck-unverified trap through the existing
+    // recovery path — an owner who never verified at registration is no longer
+    // barred from the verified-only login-code path (EARS-6/EARS-34). The IdP flip
+    // is idempotent and reports whether it actually changed state; the mirror flip
+    // and the terminal `auth.account.verified` (channel email) row are emitted
+    // ONLY on a real change, so an already-verified account is a no-op with no
+    // duplicate row. The flip fails soft (never throws) so a proven reset is never
+    // 500'd by the verification tail — the EARS-19 webhook / EARS-26 self-heal
+    // backstop the mirror if the direct flip missed.
+    const emailFlipped = await this.idp.markEmailVerified(session.sub);
+    if (emailFlipped) {
+      await this.mirror.markEmailVerified(session.sub);
+      await this.audit.record({
+        type: "IdentifierVerified",
+        sub: session.sub,
+        channel: "email",
+      });
+    }
     return { cookie: established.cookie, body: { status: "reset_completed" } };
   }
 

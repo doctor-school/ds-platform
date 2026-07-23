@@ -5,6 +5,7 @@ import {
   IdpUnavailableError,
   type CreatedUser,
   type CreateUserInput,
+  type EmailLoginOutcome,
   type IdpClaims,
   type IdpClient,
   type IdpRefreshResult,
@@ -617,6 +618,45 @@ export class ZitadelIdpClient implements IdpClient {
       },
     );
     return res.ok;
+  }
+
+  async markEmailVerified(sub: string): Promise<boolean> {
+    // EARS-35 (#1131): the code-less proof-of-mailbox flip a completed password
+    // reset earns (the reset code was delivered to that email and the caller
+    // returned it). Read current state first so the flip is idempotent — an
+    // already-verified account (or one with no email) is a `false` no-op, which is
+    // what keeps the caller from emitting a duplicate `auth.account.verified` row.
+    //
+    // Wire shape (PROVEN LIVE against the v4.15 dev-stand, #1131): SetEmail
+    // (`POST /v2/users/{id}/email` with `isVerified:true`) is REJECTED for the
+    // account's current address — Zitadel 400s `COMMAND-Uch5e "Электронная почта
+    // не изменена"` (email not changed), so that oneof only applies to an actual
+    // address change. Instead flip via the two already-#148-proven hops: generate
+    // a fresh code with `returnCode` (Zitadel sends nothing — it returns the code)
+    // and immediately verify it BFF-side (`/email/verify`). The code lives in a
+    // local for the in-flight verify only, never logged or persisted (EARS-30).
+    //
+    // Fails SOFT: any non-2xx / network fault resolves `false` (nothing flipped)
+    // so a proven reset is never 500'd by this tail — the EARS-19 webhook + EARS-26
+    // read-path self-heal backstop the mirror if the direct flip missed.
+    try {
+      const user = await this.getUser(sub);
+      if (!user?.email || user.emailVerified) return false;
+      const res = await this.fetchImpl(
+        this.url(`/v2/users/${sub}/email/resend`),
+        {
+          method: "POST",
+          headers: this.headers(),
+          body: JSON.stringify({ returnCode: {} }),
+        },
+      );
+      if (!res.ok) return false;
+      const code = ZitadelIdpClient.extractReturnedCode(await res.json());
+      if (!code) return false;
+      return await this.verifyEmail(sub, code);
+    } catch {
+      return false;
+    }
   }
 
   async verifyPhone(sub: string, code: string): Promise<boolean> {
@@ -1293,6 +1333,67 @@ export class ZitadelIdpClient implements IdpClient {
 
   async requestEmailOtp(identifier: string): Promise<void> {
     await this.requestOtpChallenge(identifier, "otpEmail");
+  }
+
+  async requestEmailLoginCode(identifier: string): Promise<EmailLoginOutcome> {
+    // EARS-34 (#1131): the email login-code request, branch-aware and
+    // enumeration-safe. Resolve the identifier → `sub` + verification state via
+    // the same `resolveUserVerification` hop `resendEmailVerification` uses; NEVER
+    // throw or branch on existence in a client-visible way (the caller's
+    // ack/timing must not become an oracle, EARS-16). Three server-side branches:
+    //   • unknown identifier / provider hiccup → silent no-op → "none";
+    //   • VERIFIED → arm the `otp_email` login challenge unchanged (EARS-6) →
+    //     "challenge";
+    //   • existing-UNVERIFIED → re-issue the verify-to-sign-in code (the same
+    //     `returnCode` `/email/resend` hop as EARS-25) and dispatch the branded
+    //     §13.3 mail FIRE-AND-FORGET off the response path (EARS-29) → "verification".
+    // Zitadel arms an `otp_email` LOGIN challenge only for a verified email, so
+    // routing the unverified branch to recovery-by-mail (never the challenge) is
+    // what closes the historic silent dead-end without any Zitadel-side change
+    // (option C rejected, #1131).
+    try {
+      const user = await this.resolveUserVerification(identifier);
+      if (!user) return "none";
+      if (user.emailVerified) {
+        await this.requestOtpChallenge(identifier, "otpEmail");
+        return "challenge";
+      }
+      // Existing but unverified: obtain the fresh code via `returnCode` (Zitadel
+      // generates/stores/expires it and SENDS NOTHING) exactly like
+      // `resendEmailVerification`, then hand it to the BFF mailer.
+      const res = await this.fetchImpl(
+        this.url(`/v2/users/${user.userId}/email/resend`),
+        {
+          method: "POST",
+          headers: this.headers(),
+          body: JSON.stringify({ returnCode: {} }),
+        },
+      );
+      // A failed hop or a code-less 2xx means no code was issued → no ledger row
+      // is owed → "none" (still the uniform ack to the caller).
+      if (!res.ok) return "none";
+      // EARS-30: in-memory for the in-flight send only; never logged/persisted.
+      const code = ZitadelIdpClient.extractReturnedCode(await res.json());
+      if (!code) return "none";
+      const to = user.email ?? identifier;
+      // Fire-and-forget OFF the response path (mirroring the EARS-23 notice): SMTP
+      // latency, a failover hop, or a total mailer outage (EARS-31) must never
+      // differentiate the response or turn into a 500. The code WAS issued above,
+      // so the outcome ("verification") — and thus the caller's `otp.sent` ledger
+      // row — is decided independently of the send's success (EARS-16/18/30).
+      void this.requireMailer()
+        .sendVerificationCodeEmail(to, code)
+        .catch(() => {
+          // Swallowed by design — the transport layer already logs + metrics the
+          // provider failure (EARS-32); nothing here alters the response.
+        });
+      return "verification";
+    } catch {
+      // A thrown fetch (network hiccup) is indistinguishable from success to the
+      // caller — swallow it, exactly like `requestOtpChallenge`'s `.catch`, and
+      // report no code issued so no ledger row is written.
+      return "none";
+    }
   }
 
   loginWithEmailOtp(

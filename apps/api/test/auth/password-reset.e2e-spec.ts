@@ -14,6 +14,8 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
+import { FakeMailer } from "../../src/mailer/mailer.fake.js";
+import { MAILER } from "../../src/mailer/mailer.types.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 
 // Password reset over HTTP (EARS-11 initiate, EARS-12 complete) — the controller
@@ -200,3 +202,157 @@ describe.skipIf(!process.env.DATABASE_URL)("Password reset (e2e)", () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+// 003 EARS-35 (#1131): a completed password reset is proof-of-mailbox-ownership —
+// the reset code was delivered to that email (§14) and the caller returned it — so
+// the SAME successful complete marks the account's email verified at the IdP,
+// mirrored onto the users row, and appends the terminal `auth.account.verified`
+// (channel email) audit row. This closes the stuck-unverified trap through the
+// existing recovery path: a subject who never verified at registration can, after
+// the reset, obtain a login code via EARS-6/EARS-34. No state is mutated before a
+// valid token (OWASP): a bad/expired code flips nothing. Runs against a real
+// Postgres with the IdP fake wired to a FakeMailer.
+describe.skipIf(!process.env.DATABASE_URL)(
+  "Password reset — proof-of-mailbox email verify (e2e, 003 EARS-35)",
+  () => {
+    let app: NestFastifyApplication;
+    let pool: pg.Pool;
+    const consent = [{ purpose: "tos", version: "2026-01" }];
+    const password = "Aa1!ufficiently-long-pw";
+    const device = { "user-agent": "Test/1.0", "accept-language": "en-US" };
+    const runId = Date.now();
+    const createdEmails: string[] = [];
+
+    function uniqueEmail(tag: string): string {
+      const email = `ears35-${tag}-${runId}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
+      createdEmails.push(email);
+      return email;
+    }
+
+    async function register(email: string): Promise<void> {
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: { email, password, consent },
+      });
+      expect(res.statusCode).toBe(200);
+    }
+
+    async function resetAndComplete(email: string, code: string): Promise<number> {
+      await app.inject({
+        method: "POST",
+        url: "/v1/auth/password/reset",
+        headers: device,
+        payload: { identifier: email },
+      });
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/password/reset/complete",
+        headers: device,
+        payload: { identifier: email, code, newPassword: "Brand-new-pw-9!" },
+      });
+      return res.statusCode;
+    }
+
+    async function subjectFor(email: string): Promise<string> {
+      const { rows } = await pool.query(
+        "SELECT zitadel_sub FROM users WHERE email = $1",
+        [email],
+      );
+      return rows[0]?.zitadel_sub as string;
+    }
+
+    async function emailVerified(email: string): Promise<boolean> {
+      const { rows } = await pool.query(
+        "SELECT email_verified FROM users WHERE email = $1",
+        [email],
+      );
+      return rows[0]?.email_verified as boolean;
+    }
+
+    beforeAll(async () => {
+      const moduleRef: TestingModule = await Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(IDP_CLIENT)
+        .useValue(new FakeIdpClient(new FakeMailer()))
+        .overrideProvider(MAILER)
+        .useValue(new FakeMailer())
+        .overrideProvider(RATE_LIMIT_THRESHOLDS)
+        .useValue(RELAXED_RATE_LIMIT)
+        .compile();
+
+      app = moduleRef.createNestApplication<NestFastifyApplication>(
+        new FastifyAdapter(),
+      );
+      app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
+      await app.init();
+      await app.getHttpAdapter().getInstance().ready();
+      pool = app.get<pg.Pool>(DRIZZLE_POOL);
+    });
+
+    afterEach(async () => {
+      // `audit_ledger` is append-only (ADR-0003 §2.7 — DELETE is blocked), and the
+      // fake's `sub` is deterministic (`fake-sub-N`), so re-runs against the
+      // persisted branch DB accumulate rows under the same subject. The
+      // auth.account.verified assertion below is therefore scoped by `created_at`
+      // to this test's own window; here we only clean the mutable users rows.
+      for (const email of createdEmails.splice(0))
+        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+    });
+
+    afterAll(async () => {
+      await app.close();
+    });
+
+    it("EARS-35: a completed reset on an unverified account flips email_verified (mirror row), appends auth.account.verified (channel email), and unblocks the login-by-code path", async () => {
+      const email = uniqueEmail("flip");
+      await register(email); // unverified (no /verify)
+      expect(await emailVerified(email)).toBe(false);
+      const sub = await subjectFor(email);
+
+      // Scope the append-only ledger assertion to this test's window (the fake's
+      // sub is deterministic across re-runs; created_at isolates the fresh row).
+      const since = new Date();
+      expect(await resetAndComplete(email, FAKE_VALID_CODE)).toBe(200);
+
+      // The mirror users row is now verified (EARS-19/26 mirror of the IdP flip).
+      expect(await emailVerified(email)).toBe(true);
+
+      // Exactly one terminal auth.account.verified (channel email) row for the flip.
+      const { rows } = await pool.query(
+        "SELECT metadata FROM audit_ledger WHERE subject_id = $1 AND event_type = 'auth.account.verified' AND created_at >= $2",
+        [sub, since],
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.metadata).toMatchObject({ channel: "email" });
+
+      // Unblocked: a subsequent email login-code request now arms the otp_email
+      // challenge (verified branch, EARS-6/34), so the code establishes a session.
+      await app.inject({
+        method: "POST",
+        url: "/v1/auth/login/otp/request",
+        payload: { identifier: email, channel: "email" },
+      });
+      const loginRes = await app.inject({
+        method: "POST",
+        url: "/v1/auth/login/otp",
+        payload: { identifier: email, code: FAKE_VALID_CODE, channel: "email" },
+      });
+      expect(loginRes.statusCode).toBe(200);
+      expect(loginRes.json()).toEqual({ status: "authenticated" });
+    });
+
+    it("EARS-35/16: a failed reset (bad code) mutates nothing — the email verification state is unchanged", async () => {
+      const email = uniqueEmail("failflip");
+      await register(email);
+      expect(await emailVerified(email)).toBe(false);
+
+      // A bad code is the generic 400 (EARS-16) …
+      expect(await resetAndComplete(email, "000000")).toBe(400);
+
+      // … and nothing was mutated: the email is still unverified (OWASP).
+      expect(await emailVerified(email)).toBe(false);
+    });
+  },
+);

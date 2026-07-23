@@ -146,16 +146,6 @@ const BUILTIN_DEFERRALS: Record<string, Deferral> = {
     reason:
       'registration verify is email-only; the future secondary-phone verify path is unbuilt (needs live Zitadel)',
   },
-  '003:EARS-34': {
-    issue: 1131,
-    reason:
-      'spec authored ahead of code (A+B owner decision); EARS-34 tests land with the #1131 implementation PR',
-  },
-  '003:EARS-35': {
-    issue: 1131,
-    reason:
-      'spec authored ahead of code (A+B owner decision); EARS-35 tests land with the #1131 implementation PR',
-  },
 };
 
 function loadDeferrals(): Record<string, Deferral> {

@@ -14,6 +14,8 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
+import { FakeMailer } from "../../src/mailer/mailer.fake.js";
+import { MAILER } from "../../src/mailer/mailer.types.js";
 import {
   DEFAULT_SMS_BUDGET_THRESHOLDS,
   SMS_BUDGET_THRESHOLDS,
@@ -65,6 +67,19 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(res.statusCode).toBe(200);
     }
 
+    // EARS-6/34 precondition: the email-OTP LOGIN challenge is armed only for a
+    // VERIFIED account (an unverified one is routed to out-of-band verification,
+    // EARS-34) — so a login-by-email-code test must verify the registrant first
+    // ("Given a verified doctor_guest user", @EARS-6 scenario).
+    async function verify(email: string): Promise<void> {
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/verify",
+        payload: { email, code: FAKE_VALID_CODE },
+      });
+      expect(res.statusCode).toBe(200);
+    }
+
     beforeAll(async () => {
       idp = new FakeIdpClient();
       const moduleRef: TestingModule = await Test.createTestingModule({
@@ -103,6 +118,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     it("EARS-6: when a user requests an email login code and submits the correct code, the system shall verify it via otp_email and establish a BFF session (__Host- cookie, no token in body)", async () => {
       const email = uniqueEmail("ok");
       await register({ email });
+      await verify(email); // EARS-6 precondition: a verified account
 
       const requested = await app.inject({
         method: "POST",
@@ -127,6 +143,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     it("EARS-6: a wrong email OTP code is a generic 401 with no session cookie (enumeration-resistant, EARS-16)", async () => {
       const email = uniqueEmail("bad");
       await register({ email });
+      await verify(email); // verified, so the challenge IS armed — the wrong code is the failure under test
       await app.inject({
         method: "POST",
         url: "/v1/auth/login/otp/request",
@@ -230,6 +247,185 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(JSON.stringify(res.json())).not.toMatch(/budget|breaker|quota/i);
       // The circuit-breaker tripped BEFORE the provider call: no SMS went out.
       expect(idp.smsOtpSendCount()).toBe(before);
+    });
+  },
+);
+
+// 003 EARS-34 (#1131): the login-by-email-code request for an existing but
+// email-UNVERIFIED account. Zitadel never sends an `otp_email` LOGIN code to an
+// unverified email (the historic silent dead-end), so the BFF routes that branch
+// to recovery delivered PRIVATELY — the branded verify-to-sign-in code out-of-band
+// via the mailer, and NO login challenge. A verified account arms the challenge
+// unchanged (EARS-6); a nonexistent identifier is a silent no-op. The three
+// synchronous responses are byte-identical in status, body, AND timing
+// (@TimingEqualized ≤ 50 ms, EARS-16), so neither the response nor the /login UI
+// is an existence/verification oracle. Runs against a real Postgres with the IdP
+// fake wired to a FakeMailer so "exactly one out-of-band verification email" and
+// "no challenge armed" are both observable over the HTTP surface.
+describe.skipIf(!process.env.DATABASE_URL)(
+  "Login-by-email-code, unverified out-of-band recovery (e2e, 003 EARS-34)",
+  () => {
+    let app: NestFastifyApplication;
+    let pool: pg.Pool;
+    let mailer: FakeMailer;
+    const consent = [{ purpose: "tos", version: "2026-01" }];
+    const password = "Aa1!ufficiently-long-pw";
+    const runId = Date.now();
+    const createdEmails: string[] = [];
+
+    function uniqueEmail(tag: string): string {
+      const email = `ears34-${tag}-${runId}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
+      createdEmails.push(email);
+      return email;
+    }
+
+    async function register(email: string): Promise<void> {
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: { email, password, consent },
+      });
+      expect(res.statusCode).toBe(200);
+    }
+
+    async function verify(email: string): Promise<void> {
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/verify",
+        payload: { email, code: FAKE_VALID_CODE },
+      });
+      expect(res.statusCode).toBe(200);
+    }
+
+    /** POST the login-email-code request; return { status, body, ms }. */
+    async function requestLoginCode(
+      identifier: string,
+    ): Promise<{ status: number; body: unknown; ms: number }> {
+      const t0 = performance.now();
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/auth/login/otp/request",
+        payload: { identifier, channel: "email" },
+      });
+      const ms = performance.now() - t0;
+      return { status: res.statusCode, body: res.json(), ms };
+    }
+
+    beforeAll(async () => {
+      mailer = new FakeMailer();
+      const moduleRef: TestingModule = await Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(IDP_CLIENT)
+        .useValue(new FakeIdpClient(mailer))
+        .overrideProvider(MAILER)
+        .useValue(mailer)
+        .overrideProvider(RATE_LIMIT_THRESHOLDS)
+        .useValue(RELAXED_RATE_LIMIT)
+        .compile();
+
+      app = moduleRef.createNestApplication<NestFastifyApplication>(
+        new FastifyAdapter(),
+      );
+      app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
+      await app.init();
+      await app.getHttpAdapter().getInstance().ready();
+      pool = app.get<pg.Pool>(DRIZZLE_POOL);
+    });
+
+    afterEach(async () => {
+      for (const email of createdEmails.splice(0))
+        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+      mailer.verificationCodeEmails.length = 0;
+      mailer.passwordResetCodeEmails.length = 0;
+      mailer.accountExistsNotices.length = 0;
+    });
+
+    afterAll(async () => {
+      await app.close();
+    });
+
+    it("EARS-34: an email login-code request for an existing-UNVERIFIED account sends exactly one out-of-band verification email and arms NO otp_email challenge", async () => {
+      const email = uniqueEmail("unverified");
+      await register(email); // unverified (no /verify)
+      // Drop the registration cascade's own verification email — assert only what
+      // the login-code request itself dispatches.
+      mailer.verificationCodeEmails.length = 0;
+
+      const { status, body } = await requestLoginCode(email);
+      expect(status).toBe(200);
+      expect(body).toEqual({ status: "otp_sent" });
+
+      // Exactly one branded §13.3 verification-code email, out-of-band (EARS-29).
+      expect(mailer.verificationCodeEmails).toEqual([
+        { to: email, code: FAKE_VALID_CODE },
+      ]);
+
+      // NO otp_email login challenge was armed: submitting the (valid) code to the
+      // login-verify route is the same generic 401 with no session cookie.
+      const verifyRes = await app.inject({
+        method: "POST",
+        url: "/v1/auth/login/otp",
+        payload: { identifier: email, code: FAKE_VALID_CODE, channel: "email" },
+      });
+      expect(verifyRes.statusCode).toBe(401);
+      const raw = verifyRes.headers["set-cookie"];
+      const cookie = Array.isArray(raw) ? raw.join("\n") : ((raw as string) ?? "");
+      expect(cookie).not.toContain(SESSION_COOKIE_NAME);
+    });
+
+    it("EARS-34: an email login-code request for a VERIFIED account arms the otp_email challenge and sends NO verification email", async () => {
+      const email = uniqueEmail("verified");
+      await register(email);
+      await verify(email); // now verified
+      // Drop the registration cascade's own verification email.
+      mailer.verificationCodeEmails.length = 0;
+
+      const { status, body } = await requestLoginCode(email);
+      expect(status).toBe(200);
+      expect(body).toEqual({ status: "otp_sent" });
+
+      // A verified account gets the login challenge, not a verification mail.
+      expect(mailer.verificationCodeEmails).toEqual([]);
+
+      // The otp_email challenge was armed: the valid code now establishes a session.
+      const verifyRes = await app.inject({
+        method: "POST",
+        url: "/v1/auth/login/otp",
+        payload: { identifier: email, code: FAKE_VALID_CODE, channel: "email" },
+      });
+      expect(verifyRes.statusCode).toBe(200);
+      expect(verifyRes.json()).toEqual({ status: "authenticated" });
+    });
+
+    it("EARS-34/16: the response is byte-identical in status, body, AND timing across {nonexistent, existing-unverified, existing-verified}", async () => {
+      const unverified = uniqueEmail("triad-unver");
+      const verified = uniqueEmail("triad-ver");
+      const nonexistent = `ears34-nobody-${runId}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
+      await register(unverified);
+      await register(verified);
+      await verify(verified);
+
+      const none = await requestLoginCode(nonexistent);
+      const unver = await requestLoginCode(unverified);
+      const ver = await requestLoginCode(verified);
+
+      // Identical status + body — the response discloses neither existence nor
+      // verification state (EARS-16).
+      for (const r of [none, unver, ver]) {
+        expect(r.status).toBe(200);
+        expect(r.body).toEqual({ status: "otp_sent" });
+      }
+
+      // Identical timing within the EARS-16 ≤ 50 ms budget: the @TimingEqualized
+      // interceptor floors every branch, so the existing/unknown delta collapses
+      // to jitter. Assert each response engaged the floor (≥ 30 ms, allowing
+      // scheduling jitter below the 40 ms floor) and the spread stays in budget.
+      const spread =
+        Math.max(none.ms, unver.ms, ver.ms) -
+        Math.min(none.ms, unver.ms, ver.ms);
+      expect(spread).toBeLessThanOrEqual(50);
+      for (const r of [none, unver, ver]) expect(r.ms).toBeGreaterThanOrEqual(30);
     });
   },
 );

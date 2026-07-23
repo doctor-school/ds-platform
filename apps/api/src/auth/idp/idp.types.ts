@@ -211,6 +211,21 @@ export type IdpRefreshResult =
   | { reuseDetected: false; tokens: IdpTokens }
   | { reuseDetected: true };
 
+/**
+ * EARS-34 (#1131): the server-side branch an email login-code request resolved to
+ * — a decision the caller reflects into the `otp.sent` ledger (a code was issued
+ * for `challenge`/`verification`, none for `none`) but NEVER into the client
+ * response (the three acks are byte-identical, EARS-16). Not an existence oracle:
+ * the value is consumed only server-side.
+ * - `challenge` — an existing, email-VERIFIED account: the `otp_email` login
+ *   challenge was armed as usual (EARS-6).
+ * - `verification` — an existing but email-UNVERIFIED account: the verify-to-
+ *   sign-in code was issued and the branded §13.3 mail dispatched out-of-band
+ *   (Zitadel never sends a login code to an unverified email), NO login challenge.
+ * - `none` — a nonexistent identifier or any provider hiccup: a silent no-op.
+ */
+export type EmailLoginOutcome = "challenge" | "verification" | "none";
+
 export interface IdpClient {
   /** Create a user; a duplicate identifier returns `alreadyExisted: true`, not a throw. */
   createUser(input: CreateUserInput): Promise<CreatedUser>;
@@ -256,6 +271,21 @@ export interface IdpClient {
   requestPhoneVerification(sub: string): Promise<void>;
   /** Verify an email OTP code via Zitadel `otp_email` (EARS-3); `false` = invalid/expired. */
   verifyEmail(sub: string, code: string): Promise<boolean>;
+  /**
+   * EARS-35 (#1131): mark the account's email **verified** at the IdP WITHOUT a
+   * code — the proof-of-mailbox-ownership flip a completed password reset earns
+   * (the reset code was delivered to that email and the caller returned it, so
+   * mailbox control is already proven). Unlike {@link verifyEmail} (which checks
+   * a user-supplied code), this is the BFF-side management flip over the resolved
+   * `sub` (Zitadel `SetEmail`/verify). **Idempotent:** an already-verified account
+   * (or one with no email) is a no-op. Resolves `true` only when it actually
+   * changed state (unverified → verified), so the caller emits the terminal
+   * `auth.account.verified` row and mirrors the flip ONLY on a real change — no
+   * duplicate row on a re-run. Fails soft: any provider hiccup resolves `false`
+   * (nothing flipped) rather than throwing, so a proven reset never 500s on the
+   * flip tail.
+   */
+  markEmailVerified(sub: string): Promise<boolean>;
   /** Verify an SMS OTP code via Zitadel `otp_sms` (EARS-4); `false` = invalid/expired. */
   verifyPhone(sub: string, code: string): Promise<boolean>;
   /** Enumerate users for the reconciliation sweep (EARS-19). */
@@ -279,6 +309,26 @@ export interface IdpClient {
    * hiccup, so the caller's acknowledgement cannot become an existence oracle.
    */
   requestEmailOtp(identifier: string): Promise<void>;
+  /**
+   * EARS-34 (#1131): request an email LOGIN code enumeration-safely, routing an
+   * existing-but-email-UNVERIFIED account to the out-of-band verify-to-sign-in
+   * mail instead of the `otp_email` login challenge (which Zitadel never sends to
+   * an unverified email — the historic silent dead-end). Resolves the identifier
+   * → `sub` + verification state through the same enumeration-safe wrapper as
+   * {@link requestPasswordReset}/{@link resendEmailVerification}, then:
+   * - VERIFIED → arms the `otp_email` challenge (as {@link requestEmailOtp}) and
+   *   resolves `"challenge"`;
+   * - existing-UNVERIFIED → re-issues the verification code (the EARS-25/29
+   *   `returnCode` hop) and dispatches the branded §13.3 mail **fire-and-forget
+   *   off the response path**, resolving `"verification"`;
+   * - unknown identifier / provider hiccup → a silent no-op resolving `"none"`.
+   * It **never throws or branches** on existence in a client-visible way — the
+   * returned {@link EmailLoginOutcome} is a server-side ledger decision the caller
+   * never reflects into its byte-identical response (EARS-16). Mailer latency or
+   * a total outage (EARS-31) never differentiates the response, because the send
+   * is off the critical path.
+   */
+  requestEmailLoginCode(identifier: string): Promise<EmailLoginOutcome>;
   /**
    * EARS-6: verify an email login OTP and, on success, return the **checked**
    * Zitadel session — the same `IdpSession` shape `passwordLogin` yields, so the

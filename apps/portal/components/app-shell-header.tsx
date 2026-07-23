@@ -4,11 +4,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { UserRound } from "lucide-react";
 import { cn } from "@ds/design-system/lib/utils";
 import { Link as DsLink } from "@ds/design-system/link";
 
 import { ThemeToggle } from "@/components/theme-toggle";
+import {
+  HEADER_CHIP_BASE,
+  HeaderUserCluster,
+} from "@/components/header-user-cluster";
 import { useHeaderAuth } from "@/lib/header-auth";
 
 /**
@@ -49,7 +52,7 @@ import { useHeaderAuth } from "@/lib/header-auth";
  * primitive (`<DsLink asChild>`) so hover / active / focus-visible states come
  * from the primitive, not a bespoke per-call stack (AGENTS.md §6, #818/#828); the
  * white-on-blue chips (Войти / avatar) override its brand-blue default off the
- * `header-*` palette + `shadow-btn` — no DS Button/Avatar variant targets an
+ * `header-*` palette + the dark-safe `shadow-header-chip` cast — no DS Button/Avatar variant targets an
  * inverted-on-blue control (they assume a light page bg; same precedent as the
  * shared {@link ThemeToggle}). The primitive's press colour
  * (`active:text-primary-action/80`) is likewise re-anchored per surface: on the
@@ -89,30 +92,15 @@ const MY_EVENTS_HREF = "/account/events";
 /** The login surface (EARS-4). */
 const LOGIN_HREF = "/login";
 
-/** A doctor with no saved display name still gets the avatar affordance — a
- *  neutral user-silhouette icon (lucide `UserRound`, aria-hidden; the accessible
- *  name stays the catalog `profile` label on the link) stands in for the
- *  initials (#997). The icon-link still navigates to `/account`, where they can
- *  set a name. */
-const avatarFallbackIcon = <UserRound aria-hidden="true" className="size-5" />;
-
-/** «Войти» chip — white-on-blue neo-brutalist button (canvas), token-only.
- *  Chain: rest (shadow-btn) → hover (sink 1px, shadow-btn-hover) → press (sink
- *  2px, shadow-none — the DS Button press language scaled to the chip's 1px
- *  hover). Ink = `header-chip-foreground` (the canvas navy #114D9E in BOTH
- *  themes, 8.14:1 on white — a distinct token from `header` (the band bg role)
- *  and `primary-action` (which lifts to a light blue in dark and would fail on
- *  the white chip)), pinned full-strength on press. */
-const LOGIN_CHIP =
-  "inline-flex flex-none items-center justify-center bg-header-foreground px-6 py-3 text-sm font-bold text-header-chip-foreground shadow-btn hover:no-underline hover:translate-x-px hover:translate-y-px hover:shadow-btn-hover active:translate-x-0.5 active:translate-y-0.5 active:shadow-none active:text-header-chip-foreground";
-
-/** Initials avatar icon — white-on-blue chip, an icon-LINK to `/account`
- *  (EARS-5/6: not a dropdown, no «Выйти»). Same chip chain + navy ink as
- *  «Войти»: rest → hover sinks 1px with shadow-btn-hover → press sinks 2px and
- *  drops the shadow (Stage-B round 2: the chip previously had NO visible hover
- *  delta). */
-const AVATAR_CHIP =
-  "inline-flex size-10 flex-none items-center justify-center bg-header-foreground text-sm font-extrabold text-header-chip-foreground shadow-btn hover:no-underline hover:translate-x-px hover:translate-y-px hover:shadow-btn-hover active:translate-x-0.5 active:translate-y-0.5 active:shadow-none active:text-header-chip-foreground";
+/** «Войти» chip — white-on-blue neo-brutalist button (canvas), token-only, on
+ *  the shared {@link HEADER_CHIP_BASE} so the dark-safe `shadow-header-chip` cast
+ *  is one source of truth with the avatar chip (#1145). Chain: rest → hover (sink
+ *  1px) → press (sink 2px, shadow-none — the DS Button press language scaled to
+ *  the chip's 1px hover). Ink = `header-chip-foreground` (the canvas navy #114D9E
+ *  in BOTH themes, 8.14:1 on white — a distinct token from `header` (the band bg
+ *  role) and `primary-action` (which lifts to a light blue in dark and would fail
+ *  on the white chip)), pinned full-strength on press. */
+const LOGIN_CHIP = cn(HEADER_CHIP_BASE, "px-6 py-3 text-sm font-bold");
 
 export function AppShellHeader() {
   const t = useTranslations("shell");
@@ -123,16 +111,6 @@ export function AppShellHeader() {
   if (AUTH_ROUTES.has(pathname) || ROOM_ROUTE.test(pathname)) return null;
 
   const isActive = (href: string) => pathname === href;
-
-  const avatarLink = (testId: string) => (
-    <DsLink asChild className={AVATAR_CHIP}>
-      <Link href={PROFILE_HREF} aria-label={t("profile")} data-testid={testId}>
-        {auth.status === "doctor" && auth.initials
-          ? auth.initials
-          : avatarFallbackIcon}
-      </Link>
-    </DsLink>
-  );
 
   return (
     <header className="flex items-center justify-between gap-4 bg-header px-4 py-4 text-header-foreground layout:px-12">
@@ -173,34 +151,63 @@ export function AppShellHeader() {
         >
           {t("navMyEvents")}
         </NavLink>
-        <ThemeToggle label={t("themeToggle")} />
-        {/* Account affordance — reserve the box while the session read resolves
-            (no first-paint flash / layout shift), then branch (EARS-4/5). */}
+        {/* Theme toggle + account affordance — reserve the box while the session
+            read resolves (no first-paint flash / layout shift), then branch
+            (EARS-4/5). A logged-in doctor's toggle + profile chip are the shared
+            {@link HeaderUserCluster} (the same two-button unit the room header
+            mounts); a guest/loading state keeps the standalone toggle beside its
+            one control. `gap-7` reproduces the nav's own rhythm inside the
+            cluster so the desktop bar is unchanged. */}
         {auth.status === "loading" ? (
-          <span className="inline-flex size-10 flex-none" aria-hidden />
+          <>
+            <ThemeToggle label={t("themeToggle")} />
+            <span className="inline-flex size-10 flex-none" aria-hidden />
+          </>
         ) : auth.status === "guest" ? (
-          <DsLink asChild className={LOGIN_CHIP}>
-            <Link href={LOGIN_HREF} data-testid="shell-login">
-              {t("login")}
-            </Link>
-          </DsLink>
+          <>
+            <ThemeToggle label={t("themeToggle")} />
+            <DsLink asChild className={LOGIN_CHIP}>
+              <Link href={LOGIN_HREF} data-testid="shell-login">
+                {t("login")}
+              </Link>
+            </DsLink>
+          </>
         ) : (
-          avatarLink("shell-avatar")
+          <HeaderUserCluster
+            className="gap-7"
+            themeToggleLabel={t("themeToggle")}
+            profileLabel={t("profile")}
+            initials={auth.initials}
+            profileHref={PROFILE_HREF}
+            profileTestId="shell-avatar"
+          />
         )}
       </nav>
 
       {/* ── Mobile controls (< layout) ── */}
       <div className="flex items-center gap-3 layout:hidden">
-        <ThemeToggle label={t("themeToggle")} />
         {/* A doctor keeps the single-tap avatar icon beside `≡` (EARS-6 on
-            mobile); a guest's way-in («Войти») lives inside the dropdown. */}
-        {auth.status === "doctor" ? avatarLink("shell-mobile-avatar") : null}
+            mobile) — the same {@link HeaderUserCluster} (toggle + chip) as the
+            desktop bar and the room; a guest/loading state keeps the standalone
+            toggle (their way-in «Войти» lives inside the dropdown). */}
+        {auth.status === "doctor" ? (
+          <HeaderUserCluster
+            className="gap-3"
+            themeToggleLabel={t("themeToggle")}
+            profileLabel={t("profile")}
+            initials={auth.initials}
+            profileHref={PROFILE_HREF}
+            profileTestId="shell-mobile-avatar"
+          />
+        ) : (
+          <ThemeToggle label={t("themeToggle")} />
+        )}
         <details className="relative" data-testid="shell-mobile-menu">
           {/* The native `≡` disclosure — a `<summary>` (not a DS clickable
               primitive); its own focus ring uses the DS `shadow-focus` token. */}
           <summary
             aria-label={t("menu")}
-            className="inline-flex size-11 flex-none cursor-pointer list-none items-center justify-center bg-header-foreground text-xl font-extrabold text-header-chip-foreground shadow-btn focus-visible:outline-none focus-visible:shadow-focus [&::-webkit-details-marker]:hidden"
+            className="inline-flex size-11 flex-none cursor-pointer list-none items-center justify-center bg-header-foreground text-xl font-extrabold text-header-chip-foreground shadow-header-chip focus-visible:outline-none focus-visible:shadow-focus [&::-webkit-details-marker]:hidden"
           >
             <span aria-hidden="true">≡</span>
           </summary>

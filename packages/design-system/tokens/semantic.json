@@ -118,6 +118,10 @@
       "$value": "{color.blue.700}",
       "$description": "Ink on the WHITE on-header chips (Войти / avatar / the mobile ≡) — the deep brand navy, the SAME value in both theme sets (every vendored canvas renders the header chips `color:#114D9E;background:#fff` regardless of theme — e.g. `webinars-month.dc.html` line 27). A distinct role from `header` (the band BACKGROUND, also navy blue.700 in both themes since owner verdict #4 #1085) and from `primary-action` (which lifts to a light blue in dark and would fail on the white chip): blue.700 on white is 8.14:1 in both themes."
     },
+    "header-chip-shadow": {
+      "$value": "{color.neutral.900}",
+      "$description": "Offset-shadow cast tone for the WHITE on-header chips (Войти / avatar / the mobile ≡) — the near-black structural ink (neutral.900), the SAME value in both theme sets, exactly like its sibling `header-chip-foreground`. The white chip sits on the NAVY `header` band (blue.700 in both themes), so its neo-brutalist offset shadow must stay a dark ink cast to read as a shadow. The generic `shadow-btn` casts in `border` (neutral.900 light → WHITE in dark, correct for a filled button on the near-black PAGE) — on the navy header that white-in-dark cast made the chip a white square with a white shadow (#1145). This role pins the cast to neutral.900 regardless of theme so the chip reads identically on the navy band in both themes."
+    },
     "header-hairline": {
       "$value": "rgba(255, 255, 255, 0.5)",
       "$description": "On-header muted border — the half-strength (white @ 50%) hairline of the header's icon-button family (the canvas `rgba(255,255,255,.5)`); hover raises to full-strength `header-foreground`. Same value in both theme sets — white @ 50% reads on the navy blue.700 header fill (both themes since owner verdict #4, #1085)."

@@ -267,6 +267,14 @@
       "$description": "Filled-button focus shadow — the rest 4px ink cast PLUS the 3px keyboard focus ring, composited in one box-shadow so the offset and the ring coexist on focus.",
       "$value": "4px 4px 0 var(--color-border), 0 0 0 3px rgba(107, 177, 247, 0.5)"
     },
+    "header-chip": {
+      "$description": "Rest offset shadow of the WHITE on-header chips (Войти / avatar / mobile ≡) — a 4px hard cast in the theme-INVARIANT `header-chip-shadow` tone (neutral.900 in both themes), NOT `btn` (whose `border` cast flips to WHITE in dark and left the chip a white square with a white shadow on the navy band, #1145). Mirrors `btn` geometry so light stays pixel-identical (light `border` is already neutral.900) while dark gains a crisp dark offset.",
+      "$value": "4px 4px 0 var(--color-header-chip-shadow)"
+    },
+    "header-chip-hover": {
+      "$description": "Hover offset shadow of the WHITE on-header chips — shrinks to 2px as the chip translates (1px,1px) into its own cast, same invariant `header-chip-shadow` tone. The dark-safe sibling of `btn-hover`.",
+      "$value": "2px 2px 0 var(--color-header-chip-shadow)"
+    },
     "ghost": {
       "$description": "Bordered-surface (ghost / secondary) rest offset shadow — 4px hard cast in the SOFT elevation-soft tone (blue.200 → blue.600 dark), the source's 4px offset in the soft shadow tone. Distinct from btn (ink) — the fidelity trap the brief calls out.",
       "$value": "4px 4px 0 var(--color-elevation-soft)"

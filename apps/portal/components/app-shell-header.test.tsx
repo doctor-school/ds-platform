@@ -202,12 +202,16 @@ describe("008 EARS-1…13 — persistent app-shell header", () => {
     expect(myEvents.className).toContain("active:opacity-60");
     expect(myEvents.className).not.toContain("active:text-primary-action/80");
     // White chips (avatar, desktop + mobile): rest → hover sinks 1px with
-    // shadow-btn-hover → press sinks 2px and drops the shadow (the DS Button
-    // press language), ink pinned to full-strength `header` (the base press
-    // tint goes near-white on the white chip in dark theme).
+    // shadow-header-chip-hover → press sinks 2px and drops the shadow (the DS
+    // Button press language). The chips cast the dark-safe `shadow-header-chip`
+    // (theme-invariant near-black offset), NOT `shadow-btn` (whose `border` cast
+    // flips white in dark and left the chip a white square with a white shadow on
+    // the navy band, #1145); ink pinned to full-strength `header-chip-foreground`.
     for (const el of [avatar, screen.getByTestId("shell-mobile-avatar")]) {
       expect(el.className).toContain("hover:translate-x-px");
-      expect(el.className).toContain("hover:shadow-btn-hover");
+      expect(el.className).toContain("hover:shadow-header-chip-hover");
+      expect(el.className).toContain("shadow-header-chip");
+      expect(el.className).not.toContain("shadow-btn");
       expect(el.className).toContain("active:translate-x-0.5");
       expect(el.className).toContain("active:shadow-none");
       // Chip ink = the canvas navy (#114D9E in BOTH themes) — never `header`,

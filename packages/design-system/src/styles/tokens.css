@@ -67,6 +67,7 @@
   --color-header: #114d9e;
   --color-header-foreground: #ffffff;
   --color-header-chip-foreground: #114d9e;
+  --color-header-chip-shadow: oklch(0.21 0.02 250);
   --color-header-hairline: rgba(255, 255, 255, 0.5);
   --color-hero: #114d9e;
   --color-hero-foreground: #ffffff;
@@ -168,6 +169,8 @@
   --shadow-btn: 4px 4px 0 var(--color-border);
   --shadow-btn-hover: 2px 2px 0 var(--color-border);
   --shadow-btn-focus: 4px 4px 0 var(--color-border), 0 0 0 3px rgba(107, 177, 247, 0.5);
+  --shadow-header-chip: 4px 4px 0 var(--color-header-chip-shadow);
+  --shadow-header-chip-hover: 2px 2px 0 var(--color-header-chip-shadow);
   --shadow-ghost: 4px 4px 0 var(--color-elevation-soft);
   --shadow-ghost-hover: 2px 2px 0 var(--color-elevation-soft);
   --shadow-ghost-focus: 4px 4px 0 var(--color-elevation-soft), 0 0 0 3px rgba(107, 177, 247, 0.5);
@@ -244,6 +247,7 @@
   --color-header: #114d9e;
   --color-header-foreground: #ffffff;
   --color-header-chip-foreground: #114d9e;
+  --color-header-chip-shadow: oklch(0.21 0.02 250);
   --color-header-hairline: rgba(255, 255, 255, 0.5);
   --color-hero: #114d9e;
   --color-hero-foreground: #ffffff;
@@ -299,6 +303,7 @@
   --color-header: #114d9e;
   --color-header-foreground: #ffffff;
   --color-header-chip-foreground: #114d9e;
+  --color-header-chip-shadow: oklch(0.21 0.02 250);
   --color-header-hairline: rgba(255, 255, 255, 0.5);
   --color-hero: #114d9e;
   --color-hero-foreground: #ffffff;
@@ -354,6 +359,7 @@
   --color-header: var(--color-header);
   --color-header-foreground: var(--color-header-foreground);
   --color-header-chip-foreground: var(--color-header-chip-foreground);
+  --color-header-chip-shadow: var(--color-header-chip-shadow);
   --color-header-hairline: var(--color-header-hairline);
   --color-hero: var(--color-hero);
   --color-hero-foreground: var(--color-hero-foreground);
@@ -420,6 +426,8 @@
   --shadow-btn: var(--shadow-btn);
   --shadow-btn-hover: var(--shadow-btn-hover);
   --shadow-btn-focus: var(--shadow-btn-focus);
+  --shadow-header-chip: var(--shadow-header-chip);
+  --shadow-header-chip-hover: var(--shadow-header-chip-hover);
   --shadow-ghost: var(--shadow-ghost);
   --shadow-ghost-hover: var(--shadow-ghost-hover);
   --shadow-ghost-focus: var(--shadow-ghost-focus);

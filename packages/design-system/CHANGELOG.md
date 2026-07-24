@@ -1,5 +1,12 @@
 # @ds/design-system
 
+## 4.0.1
+
+### Patch Changes
+
+- Updated dependencies [[`88bc412`](https://github.com/doctor-school/ds-platform/commit/88bc412cb3620e83202979c9026e8505d3a696d1), [`7355ade`](https://github.com/doctor-school/ds-platform/commit/7355adea6c7d76b471deecdee774f339ce049750)]:
+  - @ds/schemas@2.1.0
+
 ## 4.0.0
 
 ### Major Changes

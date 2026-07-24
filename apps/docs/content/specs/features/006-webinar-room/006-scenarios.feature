@@ -108,6 +108,23 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
     Then the presence minutes recompute over the new cadence
     And no spec or code change is required
 
+  @EARS-5 @happy
+  Scenario: The in-room counter reflects another doctor's presence in realtime
+    Given two doctors are live in the same open room
+    And an observer is watching the room without posting a new heartbeat
+    When a second doctor joins or leaves and the distinct-doctor count changes
+    Then the api publishes the recomputed count to the room's realtime channel
+    And the observer's in-room counter reflects the change within about one second
+    And no beat from the observer's own client is required for the update
+
+  @EARS-5 @edge
+  Scenario: The counter degrades to the heartbeat-ack cadence when the realtime channel is down
+    Given the room's realtime channel is unavailable
+    When the distinct-doctor count changes
+    Then the observer's counter falls back to the heartbeat-ack refresh path
+    And the counter updates at the beat cadence rather than instantly
+    And the counter never freezes silently on a stale value
+
   # --- Denied-access routing (US-1, US-5) ---
 
   @EARS-6 @failure

@@ -1,5 +1,55 @@
 # @ds/portal
 
+## 0.16.0
+
+### Minor Changes
+
+- [#1159](https://github.com/doctor-school/ds-platform/pull/1159) [`88bc412`](https://github.com/doctor-school/ds-platform/commit/88bc412cb3620e83202979c9026e8505d3a696d1) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Instant in-room presence counter — server-published count over Centrifugo (006 EARS-5, [#1141](https://github.com/doctor-school/ds-platform/issues/1141)).
+
+  The live «N врачей в комнате» webinar-room counter now updates the moment another
+  doctor joins or leaves — within ~1 s — instead of only on the observer's own next
+  heartbeat (the [#1122](https://github.com/doctor-school/ds-platform/issues/1122) "frozen until my beat" perception). The count stays the same
+  server-authoritative distinct-doctor aggregate (never Centrifugo native channel
+  presence; sponsor attendance reporting is untouched).
+
+  - `@ds/schemas` — a new `RoomPresenceCountMessage` (a `type: "presence-count"`
+    discriminant) fanned out over the room channel; it never cross-parses a chat
+    message.
+  - `@ds/api` — on an accepted beat that CHANGES the distinct-doctor count, or a
+    presence-window expiry (a leave, caught by a per-room timer), the recomputed count
+    is published to the existing `room:event:<id>` channel. Publish only on change;
+    best-effort, so a Centrifugo blip never turns a beat into an error.
+  - `@ds/portal` — the room's single Centrifugo connection (owned by the chat panel)
+    routes the published count straight into the header. When the channel is
+    unavailable the counter degrades to the heartbeat-ack refresh path ([#1136](https://github.com/doctor-school/ds-platform/issues/1136)) —
+    beat-paced, never silently frozen.
+
+- [#1154](https://github.com/doctor-school/ds-platform/pull/1154) [`7355ade`](https://github.com/doctor-school/ds-platform/commit/7355adea6c7d76b471deecdee774f339ce049750) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add VK Video and CDNVideo to the webinar stream-provider enum end-to-end ([#1134](https://github.com/doctor-school/ds-platform/issues/1134)).
+
+  The closed `STREAM_PROVIDERS` enum grows from `rutube | youtube` to
+  `rutube | youtube | vk | cdnvideo` (all RU-reachable, embeddable providers),
+  additively across every layer that reads the SSOT:
+
+  - `@ds/schemas` — per-provider `EMBED_REF_SHAPES`: VK's `oid_id_hash` triple (the
+    hash is mandatory and non-derivable) and CDNVideo's host-allowlisted player URL
+    (`playercdn.cdnvideo.ru/aloha/players/`, an SSRF guard on the value the room
+    drops into its `<iframe src>`). CDNVideo is the recorded stored-URL exception; the
+    URL-shaped-paste guard is now provider-scoped so the id-style providers still
+    reject a link.
+  - `@ds/db` — the Postgres `stream_provider` enum gains `vk` + `cdnvideo` via an
+    additive `ALTER TYPE … ADD VALUE` migration.
+  - `@ds/portal` — the room resolves the VK `video_ext.php` embed from the triple and
+    embeds the CDNVideo player URL verbatim; a provider-scoped direct watch URL is
+    derived per provider.
+  - `@ds/admin` — ConfigureStream offers all four providers with a per-provider embed
+    reference hint and provider-named RU validation errors.
+
+### Patch Changes
+
+- Updated dependencies [[`88bc412`](https://github.com/doctor-school/ds-platform/commit/88bc412cb3620e83202979c9026e8505d3a696d1), [`7355ade`](https://github.com/doctor-school/ds-platform/commit/7355adea6c7d76b471deecdee774f339ce049750)]:
+  - @ds/schemas@2.1.0
+  - @ds/design-system@4.0.1
+
 ## 0.15.0
 
 ### Minor Changes

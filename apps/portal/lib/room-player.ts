@@ -64,26 +64,6 @@ const EMBED_SRC: Record<StreamProvider, (embedRef: string) => string> = {
   cdnvideo: (url) => url,
 };
 
-/**
- * Provider DIRECT (non-embed) watch-URL templates — the provider-scoped link to
- * the video's own page, derived from the same enum + `embedRef` contract:
- * - `rutube` — `rutube.ru/video/<id>/`; `youtube` — `youtu.be/<id>`.
- * - `vk` — `vk.com/video<oid>_<id>` (the embed-only hash is dropped; the public
- *   watch URL needs only oid/id, #1134).
- * - `cdnvideo` — no distinct watch page exists; the player URL IS the artifact,
- *   so the direct URL is the embedRef verbatim (#1134).
- */
-const DIRECT_URL: Record<StreamProvider, (embedRef: string) => string | null> = {
-  rutube: (id) => `https://rutube.ru/video/${encodeURIComponent(id)}/`,
-  youtube: (id) => `https://youtu.be/${encodeURIComponent(id)}`,
-  vk: (embedRef) => {
-    const t = parseVkTriple(embedRef);
-    if (!t) return null;
-    return `https://vk.com/video${t.oid}_${t.id}`;
-  },
-  cdnvideo: (url) => url,
-};
-
 export function resolveEmbed(
   stream: StreamConfig | null | undefined,
 ): ResolvedEmbed {
@@ -94,18 +74,4 @@ export function resolveEmbed(
   const build = EMBED_SRC[stream.provider];
   if (!build) return { kind: "unavailable" };
   return { kind: stream.provider, src: build(stream.embedRef) };
-}
-
-/**
- * The provider-scoped DIRECT watch URL for the stream, or `null` when there is no
- * stream / no known provider (never a guessed link) — the same fail-closed posture
- * as {@link resolveEmbed}. Switches on the `provider` enum, never URL-sniffed.
- */
-export function resolveDirectUrl(
-  stream: StreamConfig | null | undefined,
-): string | null {
-  if (!stream) return null;
-  const build = DIRECT_URL[stream.provider];
-  if (!build) return null;
-  return build(stream.embedRef);
 }

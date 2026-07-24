@@ -2,10 +2,9 @@
 
 import { useCallback, useState } from "react";
 import { Badge } from "@ds/design-system/badge";
-import { Link as DsLink } from "@ds/design-system/link";
 import { WebinarRoomLayout } from "@ds/design-system/webinar-room";
 import { useTranslations } from "next-intl";
-import { resolveDirectUrl, resolveEmbed } from "../../../../lib/room-player";
+import { resolveEmbed } from "../../../../lib/room-player";
 import type { RoomConfig } from "@ds/schemas";
 import { RoomChat } from "./room-chat";
 import { usePresenceCount } from "./room-presence";
@@ -43,9 +42,6 @@ export interface RoomCopy {
   unavailableBody: string;
   playerTitle: string;
   playerRefresh: string;
-  /** The direct-link fallback label — opens the stream on the provider's own site
-   *  when the embed is refused broadcaster-side (#1134, the #1125 black-screen class). */
-  openDirect: string;
   programNow: string;
 }
 
@@ -55,13 +51,7 @@ export interface RoomContext {
   speakers: string;
 }
 
-export function PlayerFrame({
-  config,
-  copy,
-}: {
-  config: RoomConfig;
-  copy: RoomCopy;
-}) {
+function PlayerFrame({ config, copy }: { config: RoomConfig; copy: RoomCopy }) {
   const embed = resolveEmbed(config.stream);
   if (embed.kind === "unavailable") {
     // EARS-2 — truthful "stream unavailable" state, canvas-styled (dark region,
@@ -95,8 +85,9 @@ export function PlayerFrame({
   // transcode / re-host / proxy / DRM / record and no custom player chrome (the
   // provider owns its own controls inside the iframe). `src` is built by switching
   // on the provider ENUM, never by sniffing the URL. The live overlay badge rides
-  // on top.
-  const directUrl = resolveDirectUrl(config.stream);
+  // on top. There is deliberately NO off-platform/direct link in the room — the
+  // platform must not invite viewers off-platform (presence control is the sponsor
+  // value; owner decision 2026-07-24).
   return (
     <>
       <Badge variant="live" className="absolute left-4 top-4 z-10">
@@ -110,32 +101,6 @@ export function PlayerFrame({
         allowFullScreen
         className="absolute inset-0 h-full w-full"
       />
-      {/* EARS-9 — a truthful DIRECT-LINK fallback (#1134 AC): an anchor to the
-          provider's OWN watch page (never a proxy/re-host — the embed boundary
-          holds), the recovery affordance when the embed is refused broadcaster-side
-          (the #1125 black-screen class). Overlaid bottom-right on the z-10 layer the
-          live badge already uses — no layout change. Routed through the DS `Link`
-          primitive (`asChild`) so hover/focus states come from the primitive. */}
-      {directUrl ? (
-        // primitives-first-ok: an overlaid pill on the PERMANENTLY-dark player
-        // letterbox — the fixed-white border/bg/text override the primitive's
-        // brand-blue (which would render wrong on the always-dark region, the same
-        // reason the «Обновить страницу» control above is fixed-white); a bordered
-        // affordance on video, not a body text link, so no DS variant fits.
-        <DsLink
-          asChild
-          className="absolute bottom-4 right-4 z-10 border-2 border-white/40 bg-black/40 px-3 py-1.5 text-2xs font-extrabold uppercase tracking-micro text-white/80 backdrop-blur-sm hover:border-white hover:text-white"
-        >
-          <a
-            data-testid="room-player-direct"
-            href={directUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {copy.openDirect} ↗
-          </a>
-        </DsLink>
-      ) : null}
     </>
   );
 }

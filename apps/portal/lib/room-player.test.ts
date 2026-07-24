@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StreamConfig } from "@ds/schemas";
-import { resolveDirectUrl, resolveEmbed } from "./room-player";
+import { resolveEmbed } from "./room-player";
 
 // 006 EARS-2 — the portal instantiates the embed player by switching on the
 // explicit provider enum carried in `RoomConfig.stream`, never by sniffing the
@@ -78,39 +78,5 @@ describe("006 EARS-2 resolveEmbed — provider enum → embed frame, never URL-s
       embedRef: "youtube.com/watch?v=dQw4w9WgXcQ",
     } as StreamConfig;
     expect(resolveEmbed(stream).kind).toBe("rutube");
-  });
-});
-
-// 006 EARS-2 — the provider-scoped DIRECT (non-embed) watch URL, derived from the
-// same enum + embedRef contract. VK's watch URL drops the embed-only hash; CDNVideo
-// has no distinct watch page, so its direct URL IS the player URL (#1134).
-describe("006 EARS-2 resolveDirectUrl — provider-scoped direct watch link", () => {
-  it("EARS-2: derives the direct watch URL per provider from the enum + embedRef", () => {
-    expect(
-      resolveDirectUrl({ provider: "rutube", embedRef: "caafe83ff1c6ed38d394635b83ece578" }),
-    ).toBe("https://rutube.ru/video/caafe83ff1c6ed38d394635b83ece578/");
-    expect(
-      resolveDirectUrl({ provider: "youtube", embedRef: "dQw4w9WgXcQ" }),
-    ).toBe("https://youtu.be/dQw4w9WgXcQ");
-    // VK: literal `video` + `<oid>_<id>` (sign preserved), hash omitted — same
-    // whether or not the embedRef carried a hash.
-    expect(
-      resolveDirectUrl({
-        provider: "vk",
-        embedRef: "-9944999_456239622_5ee41bc00ebc765a",
-      }),
-    ).toBe("https://vk.com/video-9944999_456239622");
-    expect(
-      resolveDirectUrl({ provider: "vk", embedRef: "-9944999_456239622" }),
-    ).toBe("https://vk.com/video-9944999_456239622");
-    // CDNVideo: no separate watch page — the player URL is the artifact.
-    const url =
-      "https://playercdn.cdnvideo.ru/aloha/players/iframe_moygorod_potok2_player.html";
-    expect(resolveDirectUrl({ provider: "cdnvideo", embedRef: url })).toBe(url);
-  });
-
-  it("EARS-2: an absent stream has no direct URL (null, never a guessed link)", () => {
-    expect(resolveDirectUrl(null)).toBeNull();
-    expect(resolveDirectUrl(undefined)).toBeNull();
   });
 });

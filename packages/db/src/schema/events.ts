@@ -95,11 +95,17 @@ export const eventSpeakers = pgTable(
 
 /**
  * The closed stream-provider enum (design §3, EARS-3). A real Postgres enum
- * mirroring `StreamProviderSchema` in `@ds/schemas` — wave 1 is exactly
- * `rutube | youtube`; extending it later is an additive migration, never a
- * URL-sniffed inference. drizzle-kit emits the `CREATE TYPE` in the migration.
+ * mirroring `StreamProviderSchema` in `@ds/schemas` — `rutube | youtube | vk |
+ * cdnvideo` (all RU-reachable, embeddable providers; vk/cdnvideo added #1134).
+ * Extending it is an additive migration (`ALTER TYPE … ADD VALUE`), never a
+ * URL-sniffed inference. drizzle-kit emits the enum change in the migration.
  */
-export const streamProvider = pgEnum("stream_provider", ["rutube", "youtube"]);
+export const streamProvider = pgEnum("stream_provider", [
+  "rutube",
+  "youtube",
+  "vk",
+  "cdnvideo",
+]);
 
 /**
  * The event's stream config (design §3, EARS-3) — the `{ provider, embed_ref }`

@@ -7,7 +7,8 @@ import {
 import { resolveRoomStream } from "./provider-enum.js";
 
 // 006 EARS-2 — the embed player is instantiated from the event stream config's
-// EXPLICIT provider enum (`rutube | youtube`), never by sniffing the stream URL.
+// EXPLICIT provider enum (`rutube | youtube | vk | cdnvideo`), never by sniffing
+// the stream URL.
 // `resolveRoomStream` is the pure read the `RoomConfig` grant carries into the
 // portal: it takes the 007-authored stream config (or its absence) and yields
 // either the enum-typed `{ provider, embedRef }` the room switches the player on,
@@ -23,6 +24,9 @@ describe("006 EARS-2 embed provider resolution — explicit enum, never URL-snif
     const cases: Record<(typeof STREAM_PROVIDERS)[number], string> = {
       rutube: "caafe83ff1c6ed38d394635b83ece578",
       youtube: "dQw4w9WgXcQ",
+      vk: "-9944999_456239622_5ee41bc00ebc765a",
+      cdnvideo:
+        "https://playercdn.cdnvideo.ru/aloha/players/auto_player1.html?clid=kcta544ubo&plid=c263cdf6-253e-400b-a008-d1775d3ee190",
     };
     for (const provider of STREAM_PROVIDERS) {
       const config: StreamConfig = { provider, embedRef: cases[provider] };

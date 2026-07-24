@@ -132,6 +132,17 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
     expect(
       keysFor(StreamConfigFormSchema, { provider: "youtube", embedRef: "ччсапп" }),
     ).toEqual(["embedRefYoutube"]);
+    // #1134 — vk (malformed triple) and cdnvideo (non-allowlisted URL) map to
+    // their own provider-named RU guidance, never the generic URL copy or fallback.
+    expect(
+      keysFor(StreamConfigFormSchema, { provider: "vk", embedRef: "ччсапп" }),
+    ).toEqual(["embedRefVk"]);
+    expect(
+      keysFor(StreamConfigFormSchema, {
+        provider: "cdnvideo",
+        embedRef: "https://evil.example.com/aloha/players/x.html",
+      }),
+    ).toEqual(["embedRefCdnvideo"]);
   });
 
   it("login form: every field's real failing rule maps to a specific key, never fallback", () => {

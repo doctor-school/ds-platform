@@ -28,14 +28,16 @@ import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 
 /**
  * Stream-config form (EARS-3) — the operator picks the provider EXPLICITLY from
- * the closed enum `rutube | youtube` (never URL-sniffing) + an embed reference.
- * The choices are the `@ds/schemas` `STREAM_PROVIDERS` SSOT the api validates
- * against, so an unknown provider can't even be selected here. Client-side
- * validation (#665) is derived from the same `ConfigureStreamRequestSchema` SSOT
- * via {@link StreamConfigFormSchema}: `embedRef` is required and must be a
- * provider-scoped id, NOT a URL — a pasted share link is refused inline with an RU
- * message (EARS-10) before the round-trip. Writes via `PUT /v1/admin/events/:id/
- * stream` through the Refine custom mutation. Stock DS controls (EARS-11).
+ * the closed enum `rutube | youtube | vk | cdnvideo` (never URL-sniffing) + an
+ * embed reference. The choices are the `@ds/schemas` `STREAM_PROVIDERS` SSOT the
+ * api validates against, so an unknown provider can't even be selected here.
+ * Client-side validation (#665, #1134) is derived from the same
+ * `ConfigureStreamRequestSchema` SSOT via {@link StreamConfigFormSchema}: the
+ * reference must match the chosen provider's real shape — a provider-scoped id for
+ * rutube/youtube, the `oid_id_hash` triple for vk, or the host-allowlisted player
+ * URL for cdnvideo — refused inline with a provider-named RU message (EARS-10)
+ * before the round-trip. Writes via `PUT /v1/admin/events/:id/stream` through the
+ * Refine custom mutation. Stock DS controls (EARS-11).
  */
 export function StreamConfigForm({
   detail,
@@ -131,7 +133,11 @@ export function StreamConfigForm({
               <FormControl>
                 <Input id="embedRef" data-testid="embed-ref" {...field} />
               </FormControl>
-              <FormMessage>{t("events.fields.embedRefHint")}</FormMessage>
+              {/* The reference shape differs per provider (id vs VK triple vs the
+                  cdnvideo player URL, #1134) — the hint tracks the selected one. */}
+              <FormMessage>
+                {t(`events.fields.embedRefHint.${form.watch("provider")}`)}
+              </FormMessage>
             </FormItem>
           )}
         />

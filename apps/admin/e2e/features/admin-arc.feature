@@ -32,10 +32,10 @@ Feature: Minimal event admin — one operator creates, streams, runs, and archiv
     And no invalid transition action is offered from draft
 
   @EARS-3 @failure
-  Scenario: The stream provider is a closed enum — nothing outside rutube|youtube can be chosen
+  Scenario: The stream provider is a closed enum — nothing outside rutube|youtube|vk|cdnvideo can be chosen
     Given a platform_admin operator in the admin app
     When the operator creates a draft event with a program PDF
-    Then the stream provider choices are exactly rutube and youtube
+    Then the stream provider choices are exactly rutube, youtube, vk and cdnvideo
 
   @EARS-10 @happy
   Scenario: Absolute admin times render in МСК regardless of the operator's timezone
@@ -100,6 +100,8 @@ Feature: Minimal event admin — one operator creates, streams, runs, and archiv
     When the operator creates a draft event with a program PDF
     And the operator configures the stream with provider "youtube"
     And the operator configures the stream with provider "rutube"
+    And the operator configures the stream with provider "vk"
+    And the operator configures the stream with provider "cdnvideo"
 
   @EARS-8 @validation @failure
   Scenario: The login form refuses an empty submit with rendered RU errors, never native bubbles

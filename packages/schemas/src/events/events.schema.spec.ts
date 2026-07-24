@@ -26,14 +26,20 @@ import {
 // runs in the shared CI unit job (no infra), complementing the API e2e.
 
 /**
- * Realistic provider-scoped embed ids (EARS-3, #665): YouTube = the 11-char
- * video id (`youtu.be/<id>`, `/watch?v=<id>`, `/live/<id>`); Rutube = the
- * 32-char lowercase-hex video id (`rutube.ru/video/<id>/`, `/play/embed/<id>`).
+ * Realistic provider-scoped embed refs (EARS-3, #665, #1134): YouTube = the
+ * 11-char video id (`youtu.be/<id>`); Rutube = the 32-char lowercase-hex video id
+ * (`rutube.ru/video/<id>/`); VK = the `oid_id_hash` triple (oid may be negative
+ * for a community, hash = mandatory non-derivable access hash, from VK's export
+ * dialog); CDNVideo = the FULL provisioned Aloha-player URL (host-allowlisted to
+ * `playercdn.cdnvideo.ru/aloha/players/`, no bare stream id exists — §1134).
  */
-const VALID_EMBED_REFS = {
+const VALID_EMBED_REFS: Record<(typeof STREAM_PROVIDERS)[number], string> = {
   rutube: "caafe83ff1c6ed38d394635b83ece578",
   youtube: "dQw4w9WgXcQ",
-} as const;
+  vk: "-9944999_456239622_5ee41bc00ebc765a",
+  cdnvideo:
+    "https://playercdn.cdnvideo.ru/aloha/players/auto_player1.html?clid=kcta544ubo&plid=c263cdf6-253e-400b-a008-d1775d3ee190",
+};
 describe("007 events schema", () => {
   describe("mskLocalToInstant (EARS-1/EARS-10 — one canonical instant)", () => {
     it("folds a МСК wall-clock into the UTC instant (UTC+3, no DST)", () => {
@@ -193,10 +199,17 @@ describe("007 events schema", () => {
   });
 
   describe("ConfigureStreamRequestSchema (EARS-3 — explicit closed provider enum)", () => {
-    it("EARS-3: the closed provider set is exactly rutube | youtube (no additive drift)", () => {
-      // Locks the wave-1 enum — extending it later is a deliberate additive
-      // migration (owner decision 2026-07-06), never a silent widening.
-      expect([...STREAM_PROVIDERS]).toEqual(["rutube", "youtube"]);
+    it("EARS-3: the closed provider set is exactly rutube | youtube | vk | cdnvideo (no additive drift)", () => {
+      // Locks the enum — extending it is a deliberate additive migration
+      // (rutube/youtube wave 1, owner decision 2026-07-06; vk/cdnvideo #1134),
+      // never a silent widening. The DB `stream_provider` enum + the admin
+      // `providers.*` catalog mirror this exact set.
+      expect([...STREAM_PROVIDERS]).toEqual([
+        "rutube",
+        "youtube",
+        "vk",
+        "cdnvideo",
+      ]);
     });
 
     it("EARS-3: accepts each provider from the closed enum + a realistic provider-scoped id", () => {
@@ -317,6 +330,78 @@ describe("007 events schema", () => {
           embedRef: "dQw4w9WgXcQ",
         }).success,
       ).toBe(true);
+    });
+
+    it("EARS-3: vk accepts the oid_id_hash triple (community oid negative), rejects a missing/short hash", () => {
+      // VK's embed identity is the irreducible `(oid, id, hash)` triple — the hash
+      // is a mandatory, server-minted, non-derivable access token (#1134). A bare
+      // oid_id without a hash cannot embed, so it is refused at the SSOT boundary.
+      for (const ref of [
+        "-9944999_456239622_5ee41bc00ebc765a", // community (negative oid)
+        "550870741_456239017_94c2c100ea1976f9", // user profile (positive oid)
+      ]) {
+        expect(
+          ConfigureStreamRequestSchema.safeParse({ provider: "vk", embedRef: ref })
+            .success,
+          `valid vk triple must be accepted: ${ref}`,
+        ).toBe(true);
+      }
+      for (const ref of [
+        "-9944999_456239622", // no hash
+        "-9944999_456239622_deadbeef", // hash too short (< 16 hex)
+        "abc_def_5ee41bc00ebc765a", // non-numeric oid/id
+      ]) {
+        expect(
+          ConfigureStreamRequestSchema.safeParse({ provider: "vk", embedRef: ref })
+            .success,
+          `malformed vk triple must be rejected: ${ref}`,
+        ).toBe(false);
+      }
+    });
+
+    it("EARS-3: cdnvideo accepts the allowlisted Aloha-player URL verbatim (both provisioned forms)", () => {
+      // CDNVideo hands the customer a whole provisioned player URL — there is no
+      // bare stream id (#1134). embedRef IS that URL, host-pinned to
+      // `playercdn.cdnvideo.ru/aloha/players/`; the base URL-guard is waived for
+      // this one provider (the recorded stored-URL exception, 006-design §3).
+      for (const url of [
+        "https://playercdn.cdnvideo.ru/aloha/players/iframe_moygorod_potok2_player.html",
+        "https://playercdn.cdnvideo.ru/aloha/players/auto_player1.html?clid=kcta544ubo&plid=c263cdf6-253e-400b-a008-d1775d3ee190",
+      ]) {
+        expect(
+          ConfigureStreamRequestSchema.safeParse({
+            provider: "cdnvideo",
+            embedRef: url,
+          }).success,
+          `allowlisted cdnvideo URL must be accepted: ${url}`,
+        ).toBe(true);
+      }
+    });
+
+    it("EARS-3: cdnvideo rejects a non-allowlisted host / http / off-path URL (SSRF-safety) with the shape issue", () => {
+      // The allowlist is the SSRF guard: a mis-authored config can never point the
+      // 006 room's iframe at an arbitrary origin. Each rejection carries the
+      // structured `custom` + `params.shape = cdnvideo` the admin resolver renders.
+      for (const url of [
+        "https://evil.example.com/aloha/players/auto_player1.html", // wrong host
+        "http://playercdn.cdnvideo.ru/aloha/players/auto_player1.html", // not https
+        "https://playercdn.cdnvideo.ru/other/path.html", // off the /aloha/players/ prefix
+        "https://player.cdnvideo.ru.evil.com/aloha/players/x.html", // host-suffix spoof
+      ]) {
+        const result = ConfigureStreamRequestSchema.safeParse({
+          provider: "cdnvideo",
+          embedRef: url,
+        });
+        expect(result.success, `non-allowlisted URL must be rejected: ${url}`).toBe(
+          false,
+        );
+        const issue = result.success ? undefined : result.error.issues[0];
+        expect(issue?.code).toBe("custom");
+        expect(issue?.path).toEqual(["embedRef"]);
+        expect((issue as { params?: { shape?: string } })?.params).toEqual({
+          shape: "cdnvideo",
+        });
+      }
     });
   });
 

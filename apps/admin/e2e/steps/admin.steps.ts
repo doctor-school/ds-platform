@@ -121,12 +121,16 @@ When(
 );
 
 /**
- * Realistic provider-scoped embed ids (the `@ds/schemas` `EMBED_REF_SHAPES`
- * SSOT, #665): YouTube = the 11-char video id, Rutube = the 32-hex video id.
+ * Realistic provider-scoped embed refs (the `@ds/schemas` `EMBED_REF_SHAPES`
+ * SSOT, #665, #1134): YouTube = the 11-char video id, Rutube = the 32-hex video
+ * id, VK = the `oid_id_hash` triple, CDNVideo = the allowlisted player URL.
  */
 const VALID_EMBED_REF: Record<string, string> = {
   rutube: "caafe83ff1c6ed38d394635b83ece578",
   youtube: "dQw4w9WgXcQ",
+  vk: "-9944999_456239622_5ee41bc00ebc765a",
+  cdnvideo:
+    "https://playercdn.cdnvideo.ru/aloha/players/auto_player1.html?clid=kcta544ubo&plid=c263cdf6-253e-400b-a008-d1775d3ee190",
 };
 
 When(
@@ -198,16 +202,19 @@ Then("no lifecycle action is offered", async ({ page }) => {
   await expect(page.getByTestId("lifecycle-actions")).toHaveCount(0);
 });
 
-Then("the stream provider choices are exactly rutube and youtube", async ({ page }) => {
-  // `evaluateAll` has no auto-wait — anchor on the rendered select first (the edit
-  // page loads the detail via useOne, so the stream form appears a beat later).
-  await expect(page.getByTestId("provider")).toBeVisible();
-  const options = await page
-    .getByTestId("provider")
-    .locator("option")
-    .evaluateAll((els) => els.map((e) => (e as HTMLOptionElement).value));
-  expect(options).toEqual(["rutube", "youtube"]);
-});
+Then(
+  "the stream provider choices are exactly rutube, youtube, vk and cdnvideo",
+  async ({ page }) => {
+    // `evaluateAll` has no auto-wait — anchor on the rendered select first (the edit
+    // page loads the detail via useOne, so the stream form appears a beat later).
+    await expect(page.getByTestId("provider")).toBeVisible();
+    const options = await page
+      .getByTestId("provider")
+      .locator("option")
+      .evaluateAll((els) => els.map((e) => (e as HTMLOptionElement).value));
+    expect(options).toEqual(["rutube", "youtube", "vk", "cdnvideo"]);
+  },
+);
 
 Then(
   "the event air time renders as {string} МСК in the admin list",

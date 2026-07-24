@@ -64,15 +64,19 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
   const path = issue.path ?? [];
   const has = (key: string) => path.includes(key);
 
-  // Stream `embedRef` (EARS-3): a `custom` issue is either the SSOT per-provider
-  // shape refinement (`EMBED_REF_SHAPES`, tagged `params.shape` — the Stage-B
-  // «ччсапп» garbage-id class, #665) or the URL guard (`EmbedRefSchema.refine`,
-  // untagged) — "paste the whole share link" gets its own actionable copy.
+  // Stream `embedRef` (EARS-3, #1134): a `custom` issue is either the SSOT
+  // per-provider shape refinement (`EMBED_REF_SHAPES`, tagged `params.shape` —
+  // the Stage-B «ччсапп» garbage-id class #665, incl. vk's malformed triple and
+  // cdnvideo's non-allowlisted URL) or the URL guard (untagged) — "paste the whole
+  // share link" gets its own actionable copy (never fired for cdnvideo, whose
+  // reference IS a URL).
   if (has("embedRef")) {
     if (issue.code === "custom") {
       const shape = issue.params?.shape;
       if (shape === "rutube") return t("embedRefRutube");
       if (shape === "youtube") return t("embedRefYoutube");
+      if (shape === "vk") return t("embedRefVk");
+      if (shape === "cdnvideo") return t("embedRefCdnvideo");
       return t("embedRefUrl");
     }
     if (issue.code === "too_big") return t("maxLength");

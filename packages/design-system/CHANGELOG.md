@@ -1,5 +1,18 @@
 # @ds/design-system
 
+## 4.0.0
+
+### Major Changes
+
+- [#1151](https://github.com/doctor-school/ds-platform/pull/1151) [`807887e`](https://github.com/doctor-school/ds-platform/commit/807887e60668264b467e943f61d2e7e30ebbb335) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(006): Twitch-model webinar room — maximized player, viewport-bounded shell, collapsible minimal chat ([#1123](https://github.com/doctor-school/ds-platform/issues/1123))
+
+  `WebinarRoomLayout` is reworked from the `1fr 400px` page-flow grid to a viewport-bounded flex shell: the page no longer scrolls, the player region is maximized (the embed iframe fills a dark letterbox, no custom player chrome — EARS-9), a one-line context strip sits under it, and the desktop chat is a 340px aside that collapses to a 44px rail with a live unread badge. The chat ledger becomes Twitch-minimal — borderless single-paragraph rows (no timestamps/avatars), `flex-col-reverse` stick-to-bottom with a «Новые сообщения ↓» chip, composer pinned. BREAKING: the primitive's props changed (new required `contextStrip`, `chatHeading`, `collapseLabel`, `expandLabel`; `context` now the mobile info-tab block; `player` is region content, not its own aspect box).
+
+### Patch Changes
+
+- Updated dependencies [[`326df3c`](https://github.com/doctor-school/ds-platform/commit/326df3cce477af6792d9f282e594888784cab69a)]:
+  - @ds/schemas@2.0.0
+
 ## 3.1.0
 
 ### Minor Changes

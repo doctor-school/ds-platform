@@ -160,8 +160,12 @@ evaluates the resource-scoped rule and refuses server-side. See
   `appendBeat(userId, eventId)` (INSERT-only, server-stamped instant) +
   `findUserIdBySub` (the 003 mirror read, read-only) + the EARS-5 read-time
   `deriveEventMinutes(eventId, intervalSeconds)` (the `count(DISTINCT
-floor(epoch/N))` per-doctor bucket scan). No update/delete surface — the
-  structural half of the append-only contract.
+floor(epoch/N))` per-doctor bucket scan), `countLivePresence(eventId,
+intervalSeconds)` (the distinct-doctor count inside the live attendance
+  window) and `nextPresenceExpiry(eventId, intervalSeconds)` (the soonest
+  instant the live count can drop — feeds the `PresencePublisher` expiry
+  timer). No update/delete surface — the structural half of the append-only
+  contract.
 - `PresenceDerivationService` — the EARS-5 per-doctor minute derivation:
   `deriveForEvent(eventId, intervalSeconds?)` → the `EventPresence` read model
   (parameterized over N from `ROOM_HEARTBEAT_INTERVAL_SECONDS` by default,
@@ -177,7 +181,18 @@ floor(epoch/N))` per-doctor bucket scan). No update/delete surface — the
   server-mediated publish over the Centrifugo HTTP API), `authorTag(userId)` (the
   stable, non-reversible, PII-free author tag), and `channelForEvent`. Its config
   (`ROOM_CHAT_CONFIG`) is resolved from `CENTRIFUGO_*` env by `resolveRoomChatConfig`
-  (`null` ⇒ chat disabled). Domain error: `ChatUnavailableError` (→ 503).
+  (`null` ⇒ chat disabled). Domain error: `ChatUnavailableError` (→ 503). Also
+  carries `publishPresenceCount(eventId, count)` — the EARS-5 realtime push:
+  publishes the typed `presence-count` message onto the same `room:event:<id>`
+  channel, best-effort (failures are swallowed; clients degrade to the
+  heartbeat-ack refresh).
+- `PresencePublisher` (`presence-publisher.service.ts`) — the EARS-5
+  publish-on-change service: recomputes the live distinct-doctor count on each
+  accepted beat and on window expiry (per-room in-memory timer armed at
+  `nextPresenceExpiry`, re-armed on beats), publishes via
+  `CentrifugoChatGateway.publishPresenceCount` ONLY when the count changed
+  (last-published latch). Fire-and-forget from `recordHeartbeat`; state is
+  in-memory per api instance (Phase-0 scope — see `DEBT.md`).
 - `RoomController` — `GET /v1/events/:idOrSlug/room` (EARS-1) + `POST
 /v1/events/:idOrSlug/heartbeat` (EARS-4) + `POST /v1/events/:idOrSlug/chat`
   (EARS-3), all `doctor_guest`-authenticated with the resource-scoped `policy` gate

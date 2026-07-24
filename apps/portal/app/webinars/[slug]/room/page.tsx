@@ -150,6 +150,13 @@ export default async function RoomPage({
             unavailableBody: t("unavailableBody"),
             playerTitle: t("playerTitle"),
             playerRefresh: t("playerRefresh"),
+            playerFailedTitle: t("playerFailedTitle"),
+            playerFailedBody: t("playerFailedBody"),
+            playerEmbeddingDisabled: t("playerEmbeddingDisabled"),
+            playerUnavailable: t("playerUnavailable"),
+            playerRetrying: t("playerRetrying"),
+            playerSuspectedBody: t("playerSuspectedBody"),
+            playerRestart: t("playerRestart"),
             programNow: t("programNow"),
           }}
         />

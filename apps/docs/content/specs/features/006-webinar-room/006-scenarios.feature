@@ -54,17 +54,17 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
   # --- In-room player failure states: watchdog + truthful status + in-room retry (US-1) ---
 
   @EARS-18 @failure
-  Scenario: A stream that never starts playing shows a truthful in-frame status, not a black frame
-    Given a gated doctor in a live room whose configured embed has mounted
-    When no playing signal is observed within the watchdog threshold
-    Then the player region shows a truthful "stream not loading" status overlay
+  Scenario: A confirmed failure covers the frame with a truthful status, not a black frame
+    Given a gated doctor in a live room on a "youtube" stream whose player handshake was established
+    When the stream then stalls with no playing signal within the watchdog threshold
+    Then the player region shows a covering, truthful "stream not loading" status overlay
     And the doctor never faces a silent black frame
 
   @EARS-18 @failure
-  Scenario Outline: A YouTube error distinguishes embedding-disabled from unavailable
+  Scenario Outline: A YouTube error is a confirmed failure that distinguishes embedding-disabled from unavailable
     Given a gated doctor in a live room on a "youtube" stream
     When the player reports error code "<code>"
-    Then the status overlay shows "<status>"
+    Then the covering status overlay shows "<status>"
 
     Examples:
       | code    | status                                       |
@@ -73,31 +73,39 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
       | 100     | the video is unavailable                     |
 
   @EARS-18 @edge
-  Scenario Outline: Live vk and cdnvideo embeds are watchdog-only
-    Given a gated doctor in a live room on a "<provider>" stream that does not start playing
+  Scenario Outline: An unobservable stall shows a non-covering advisory banner, not a covering wall
+    Given a gated doctor in a live room on a "<provider>" stream that never emits a playing signal
     When no playing signal is observed within the watchdog threshold
-    Then the player region shows the truthful "stream not loading" status overlay
-    And no provider event API is required to detect the failure
+    Then the player region shows a NON-covering advisory banner beside the still-visible embed
+    And the room does not auto-retry or re-create the embed
+    And the room offers a manual «Перезапустить плеер» affordance
 
     Examples:
       | provider |
       | vk       |
       | cdnvideo |
 
+  @EARS-18 @edge
+  Scenario: A YouTube embed whose handshake never arrives is treated as suspected, not a false confirmed failure
+    Given a gated doctor in a live room on a "youtube" stream whose player API never handshakes
+    When no playing signal is observed within the watchdog threshold
+    Then the player region shows a NON-covering advisory banner beside the still-visible embed
+    And the room does not auto-retry or re-create the embed
+
   @EARS-18 @happy
-  Scenario: On failure the room retries in-room and offers a restart, never a page reload or off-platform link
-    Given a gated doctor in a live room whose embed failed to start playing
-    When the room reaches the failure state
+  Scenario: On a confirmed failure the room retries in-room and offers a restart, never a page reload or off-platform link
+    Given a gated doctor in a live room whose embed reached a confirmed failure state
+    When the room reaches the confirmed failure state
     Then the room auto-retries the embed a bounded number of times
     And if it still fails the room offers a «Перезапустить плеер» affordance
     And activating it re-creates the embed without reloading the whole page
     And the room never offers a link to watch off the platform
 
   @EARS-18 @happy
-  Scenario: Recovery clears the status overlay
+  Scenario: Recovery clears the truthful status
     Given a gated doctor in a live room showing the "stream not loading" status
     When a playing signal is observed after the failure state
-    Then the status overlay clears
+    Then the status (covering overlay or advisory banner) clears
     And the playing stream is presented
 
   @EARS-18 @EARS-4 @happy

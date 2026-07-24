@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@ds/design-system/badge";
 import { WebinarRoomLayout } from "@ds/design-system/webinar-room";
 import { useTranslations } from "next-intl";
 import { resolveEmbed } from "../../../../lib/room-player";
+import { usePlayerFailureState } from "../../../../lib/use-player-failure-state";
 import type { RoomConfig } from "@ds/schemas";
 import { RoomChat } from "./room-chat";
 import { usePresenceCount } from "./room-presence";
@@ -42,6 +43,17 @@ export interface RoomCopy {
   unavailableBody: string;
   playerTitle: string;
   playerRefresh: string;
+  // 006 EARS-18 — the in-room player-FAILURE overlay copy (a mounted embed that
+  // never starts playing), distinct from the config-absent `unavailable*` state.
+  playerFailedTitle: string;
+  playerFailedBody: string;
+  playerEmbeddingDisabled: string;
+  playerUnavailable: string;
+  playerRetrying: string;
+  // 006 EARS-18 — the SUSPECTED-grade non-covering advisory copy (watchdog stall with
+  // no observable signal — a possibly-healthy but unobservable stream).
+  playerSuspectedBody: string;
+  playerRestart: string;
   programNow: string;
 }
 
@@ -51,8 +63,127 @@ export interface RoomContext {
   speakers: string;
 }
 
-function PlayerFrame({ config, copy }: { config: RoomConfig; copy: RoomCopy }) {
+/** The fixed-white outline restart control — the same «Перезапустить плеер» affordance
+ *  in both the CONFIRMED overlay and the SUSPECTED banner (EARS-18.3). primitives-first-ok:
+ *  every themed DS Button variant flips with the theme and renders wrong on the
+ *  PERMANENTLY-dark player region (matches the EARS-2 refresh button). */
+function RestartButton({
+  label,
+  onRestart,
+  className = "",
+}: {
+  label: string;
+  onRestart: () => void;
+  className?: string;
+}) {
+  return (
+    // primitives-first-ok: fixed-white outline control on the PERMANENTLY-dark player
+    // letterbox — every themed DS Button variant flips with the theme and renders wrong
+    // on the always-dark region (matches the EARS-2 refresh button).
+    <button
+      type="button"
+      data-testid="room-player-restart"
+      onClick={onRestart}
+      className={`border-2 border-white/50 font-extrabold text-white cursor-pointer hover:border-white focus-visible:outline-none focus-visible:shadow-focus ${className}`}
+    >
+      {label}
+    </button>
+  );
+}
+
+/**
+ * 006 EARS-18 CONFIRMED grade — the truthful, COVERING in-frame failure overlay for a
+ * proven failure (an observed provider error, or a watchdog stall AFTER the provider
+ * handshake was established — real signal loss). It covers the embed with specific
+ * truthful copy; a bounded auto-retry runs, then the manual «Перезапустить плеер»
+ * re-creates the embed. NEVER a silent black frame, a full page reload, or an
+ * off-platform link. Rides over the still-live iframe so a provider self-heal's
+ * playing event still clears it (EARS-18.4).
+ */
+function PlayerFailureOverlay({
+  status,
+  failure,
+  copy,
+  onRestart,
+}: {
+  status: "failed" | "retrying";
+  failure: "embedding-disabled" | "unavailable" | "generic" | null;
+  copy: RoomCopy;
+  onRestart: () => void;
+}) {
+  const title =
+    failure === "embedding-disabled"
+      ? copy.playerEmbeddingDisabled
+      : failure === "unavailable"
+        ? copy.playerUnavailable
+        : copy.playerFailedTitle;
+  return (
+    <div
+      data-testid="room-player-failure"
+      className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2.5 bg-black/80 px-6 text-center"
+    >
+      <p className="text-lg font-extrabold text-white">{title}</p>
+      <p className="max-w-sm text-sm leading-relaxed text-white/60">
+        {status === "retrying" ? copy.playerRetrying : copy.playerFailedBody}
+      </p>
+      {status === "failed" && (
+        <RestartButton label={copy.playerRestart} onRestart={onRestart} className="mt-2.5 px-5 py-3 text-sm" />
+      )}
+    </div>
+  );
+}
+
+/**
+ * 006 EARS-18 SUSPECTED grade — the NON-COVERING advisory banner for an UNPROVABLE
+ * failure: the watchdog elapsed with no positive signal ever observed (vk + cdnvideo
+ * always — no parent API; youtube/rutube when no handshake arrived). The room can NOT
+ * prove the stream failed — a healthy video may simply be unobservable — so the embed
+ * stays FULLY VISIBLE and interactive (the banner container is `pointer-events-none`;
+ * only the restart button captures clicks) and there is NO auto-retry (an auto
+ * re-create would interrupt a possibly-healthy stream). Soft truthful copy + the same
+ * manual «Перезапустить плеер». A later playing signal clears it (EARS-18.4).
+ */
+function PlayerSuspectedBanner({ copy, onRestart }: { copy: RoomCopy; onRestart: () => void }) {
+  return (
+    <div
+      data-testid="room-player-suspected"
+      className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 bg-black/70 px-5 py-3 text-center"
+    >
+      <p className="text-sm leading-snug text-white/80">{copy.playerSuspectedBody}</p>
+      <RestartButton
+        label={copy.playerRestart}
+        onRestart={onRestart}
+        className="pointer-events-auto px-4 py-2 text-2xs uppercase tracking-micro"
+      />
+    </div>
+  );
+}
+
+/** Post the YouTube IFrame Player API `listening` handshake so the embed streams
+ *  its state/error events to the parent (EARS-18.2). Best-effort — a script-less,
+ *  RU-safe path; failure degrades to the watchdog floor, never breaks the room. */
+function postYouTubeListening(iframe: HTMLIFrameElement) {
+  iframe.contentWindow?.postMessage(
+    JSON.stringify({ event: "listening", id: 1, channel: "widget" }),
+    "https://www.youtube.com",
+  );
+}
+
+export function PlayerFrame({ config, copy }: { config: RoomConfig; copy: RoomCopy }) {
   const embed = resolveEmbed(config.stream);
+  // 006 EARS-18 — the runtime player-failure state machine. Hooks run unconditionally
+  // (a config-absent `unavailable` embed still calls it with a harmless provider);
+  // it only drives the iframe branch below.
+  const provider = embed.kind === "unavailable" ? "cdnvideo" : embed.kind;
+  const { status, grade, failure, embedKey, restart } = usePlayerFailureState(provider);
+  // The `origin` param YouTube's IFrame API wants is resolved AFTER mount so the
+  // first client render matches SSR (both `?enablejsapi=1`), avoiding a hydration
+  // mismatch; the extra param arrives on the post-mount re-render.
+  const [origin, setOrigin] = useState("");
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+
   if (embed.kind === "unavailable") {
     // EARS-2 — truthful "stream unavailable" state, canvas-styled (dark region,
     // «Обновить страницу» outline button): no guessed embed. The gate still
@@ -88,19 +219,47 @@ function PlayerFrame({ config, copy }: { config: RoomConfig; copy: RoomCopy }) {
   // on top. There is deliberately NO off-platform/direct link in the room — the
   // platform must not invite viewers off-platform (presence control is the sponsor
   // value; owner decision 2026-07-24).
+  //
+  // EARS-18.2 — for YouTube, request the IFrame Player API events (`enablejsapi=1`
+  // + `origin`); the watchdog is the universal floor for every provider regardless.
+  const src =
+    embed.kind === "youtube"
+      ? `${embed.src}?enablejsapi=1${origin ? `&origin=${encodeURIComponent(origin)}` : ""}`
+      : embed.src;
   return (
     <>
       <Badge variant="live" className="absolute left-4 top-4 z-10">
         {copy.liveBadge}
       </Badge>
       <iframe
+        // EARS-18.3 — the mount key: each auto-retry / «Перезапустить плеер» bumps it,
+        // re-creating the embed in place (never a full page reload).
+        key={embedKey}
         data-testid={`room-player-${embed.kind}`}
-        src={embed.src}
+        src={src}
         title={copy.playerTitle}
         allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
         allowFullScreen
+        onLoad={
+          embed.kind === "youtube"
+            ? (e) => postYouTubeListening(e.currentTarget)
+            : undefined
+        }
         className="absolute inset-0 h-full w-full"
       />
+      {/* CONFIRMED grade — covering overlay + (auto-retry) manual restart. */}
+      {(status === "retrying" || (status === "failed" && grade === "confirmed")) && (
+        <PlayerFailureOverlay
+          status={status}
+          failure={failure}
+          copy={copy}
+          onRestart={restart}
+        />
+      )}
+      {/* SUSPECTED grade — non-covering advisory banner, embed stays visible. */}
+      {status === "failed" && grade === "suspected" && (
+        <PlayerSuspectedBanner copy={copy} onRestart={restart} />
+      )}
     </>
   );
 }

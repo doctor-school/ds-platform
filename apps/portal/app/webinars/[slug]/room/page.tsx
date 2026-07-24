@@ -155,6 +155,7 @@ export default async function RoomPage({
             playerEmbeddingDisabled: t("playerEmbeddingDisabled"),
             playerUnavailable: t("playerUnavailable"),
             playerRetrying: t("playerRetrying"),
+            playerSuspectedBody: t("playerSuspectedBody"),
             playerRestart: t("playerRestart"),
             programNow: t("programNow"),
           }}

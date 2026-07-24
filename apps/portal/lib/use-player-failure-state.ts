@@ -10,11 +10,14 @@ import {
   parseProviderSignal,
   playerReducer,
   type PlayerFailureKind,
+  type PlayerGrade,
   type PlayerStatus,
 } from "./room-player-state";
 
 export interface PlayerFailureState {
   readonly status: PlayerStatus;
+  /** CONFIRMED (covering overlay + auto-retry) vs SUSPECTED (advisory banner only). */
+  readonly grade: PlayerGrade | null;
   readonly failure: PlayerFailureKind | null;
   /** Bump this as the iframe `key` — each change re-creates the embed (EARS-18.3). */
   readonly embedKey: number;
@@ -41,15 +44,13 @@ export interface PlayerFailureState {
  */
 export function usePlayerFailureState(provider: StreamProvider): PlayerFailureState {
   const [state, dispatch] = useReducer(playerReducer, INITIAL_PLAYER_STATE);
-  const { status, failure, embedKey, attempt } = state;
+  const { status, grade, failure, embedKey, attempt } = state;
 
   // Watchdog — re-armed on every fresh load (a new embedKey or a return to loading).
+  // The reducer grades the stall (SUSPECTED without a handshake, CONFIRMED with one).
   useEffect(() => {
     if (status !== "loading") return;
-    const timer = setTimeout(
-      () => dispatch({ type: "fail", failure: "generic" }),
-      PLAYER_WATCHDOG_MS,
-    );
+    const timer = setTimeout(() => dispatch({ type: "watchdog" }), PLAYER_WATCHDOG_MS);
     return () => clearTimeout(timer);
   }, [status, embedKey]);
 
@@ -70,12 +71,14 @@ export function usePlayerFailureState(provider: StreamProvider): PlayerFailureSt
       });
       if (!signal) return;
       if (signal.kind === "playing") dispatch({ type: "playing" });
-      else if (signal.kind === "error") dispatch({ type: "fail", failure: signal.failure });
+      else if (signal.kind === "ready" || signal.kind === "buffering")
+        dispatch({ type: "handshake" });
+      else if (signal.kind === "error") dispatch({ type: "error", failure: signal.failure });
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
   }, [provider]);
 
   const restart = useCallback(() => dispatch({ type: "restart" }), []);
-  return { status, failure, embedKey, restart };
+  return { status, grade, failure, embedKey, restart };
 }

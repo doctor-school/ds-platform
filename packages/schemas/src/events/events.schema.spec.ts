@@ -332,29 +332,34 @@ describe("007 events schema", () => {
       ).toBe(true);
     });
 
-    it("EARS-3: vk accepts the oid_id_hash triple (community oid negative), rejects a missing/short hash", () => {
-      // VK's embed identity is the irreducible `(oid, id, hash)` triple — the hash
-      // is a mandatory, server-minted, non-derivable access token (#1134). A bare
-      // oid_id without a hash cannot embed, so it is refused at the SSOT boundary.
+    it("EARS-3: vk accepts oid_id (hash OPTIONAL) or the oid_id_hash triple, rejects a malformed ref", () => {
+      // VK's current «Встроить» dialog for a PUBLIC video returns
+      // `video_ext.php?oid=<oid>&id=<id>&hd=3` — NO hash; the player renders from
+      // oid+id alone (an arbitrary hash is ignored). Private/unlisted embeds still
+      // carry the access hash. Both are valid — the hash is OPTIONAL
+      // (#1134 rework, live-verified 2026-07-24). oid may be negative (community).
       for (const ref of [
-        "-9944999_456239622_5ee41bc00ebc765a", // community (negative oid)
-        "550870741_456239017_94c2c100ea1976f9", // user profile (positive oid)
+        "-9944999_456239622", // public: bare oid_id, no hash (community / negative oid)
+        "550870741_456239017", // public: bare oid_id (user / positive oid)
+        "-9944999_456239622_5ee41bc00ebc765a", // private: full triple
+        "550870741_456239017_94c2c100ea1976f9",
       ]) {
         expect(
           ConfigureStreamRequestSchema.safeParse({ provider: "vk", embedRef: ref })
             .success,
-          `valid vk triple must be accepted: ${ref}`,
+          `valid vk ref must be accepted: ${ref}`,
         ).toBe(true);
       }
       for (const ref of [
-        "-9944999_456239622", // no hash
-        "-9944999_456239622_deadbeef", // hash too short (< 16 hex)
-        "abc_def_5ee41bc00ebc765a", // non-numeric oid/id
+        "-9944999_456239622_", // trailing underscore / empty hash
+        "-9944999_456239622_deadbeef", // hash present but too short (< 16 hex)
+        "-9944999", // oid only, no id
+        "abc_def", // non-numeric oid/id
       ]) {
         expect(
           ConfigureStreamRequestSchema.safeParse({ provider: "vk", embedRef: ref })
             .success,
-          `malformed vk triple must be rejected: ${ref}`,
+          `malformed vk ref must be rejected: ${ref}`,
         ).toBe(false);
       }
     });

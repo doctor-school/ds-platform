@@ -19,27 +19,36 @@ export type ResolvedEmbed =
   | { readonly kind: "unavailable" };
 
 /**
- * VK's `embedRef` is the irreducible `oid_id_hash` triple (the hash is a
- * mandatory, non-derivable access token; `@ds/schemas` `EMBED_REF_SHAPES.vk`
- * validated the shape at authoring time, #1134). Split on `_` into its three
- * parts — the hash carries no underscore, so the third segment is the whole hash;
- * `oid` keeps its leading `-` for a community. Returns `null` if the value is not
- * a well-formed triple (defensive; the server-side shape guard means it is).
+ * VK's `embedRef` is `oid_id` with an OPTIONAL `_hash` suffix (`@ds/schemas`
+ * `EMBED_REF_SHAPES.vk` validated the shape at authoring time, #1134). VK's
+ * current «Встроить» dialog for a public video omits the hash (the player renders
+ * from oid+id alone); private/unlisted embeds carry it. Split on `_`: 2 parts =
+ * bare oid_id (no hash), 3 parts = with hash (the hash carries no underscore, so
+ * the third segment is the whole hash). `oid` keeps its leading `-` for a
+ * community. Returns `null` if the value is not well-formed (defensive; the
+ * server-side shape guard means it is).
  */
 function parseVkTriple(
   embedRef: string,
-): { oid: string; id: string; hash: string } | null {
+): { oid: string; id: string; hash?: string } | null {
   const parts = embedRef.split("_");
-  if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null;
-  return { oid: parts[0], id: parts[1], hash: parts[2] };
+  if (parts.length === 2 && parts[0] && parts[1]) {
+    return { oid: parts[0], id: parts[1] };
+  }
+  if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+    return { oid: parts[0], id: parts[1], hash: parts[2] };
+  }
+  return null;
 }
 
 /**
  * Provider embed-URL templates. Keyed by the enum value, never derived by
  * inspecting `embedRef`:
  * - `rutube` / `youtube` — the provider's fixed published embed path + the id.
- * - `vk` — re-composes VK's `video_ext.php?oid&id&hash` embed endpoint from the
- *   triple (canonical host `vk.com`; live streams use the same shape, #1134).
+ * - `vk` — re-composes VK's `video_ext.php?oid&id` embed endpoint from the ref,
+ *   appending `&hash` only when the ref carried one (canonical host `vk.com`; the
+ *   hash is optional per VK's current «Встроить» dialog; live streams use the same
+ *   shape, #1134).
  * - `cdnvideo` — the embedRef IS the whole provisioned Aloha-player URL
  *   (host-allowlisted at the 007 SSOT boundary), embedded verbatim (#1134).
  */
@@ -49,7 +58,8 @@ const EMBED_SRC: Record<StreamProvider, (embedRef: string) => string> = {
   vk: (embedRef) => {
     const t = parseVkTriple(embedRef);
     if (!t) return "";
-    return `https://vk.com/video_ext.php?oid=${t.oid}&id=${t.id}&hash=${t.hash}`;
+    const base = `https://vk.com/video_ext.php?oid=${t.oid}&id=${t.id}`;
+    return t.hash ? `${base}&hash=${t.hash}` : base;
   },
   cdnvideo: (url) => url,
 };

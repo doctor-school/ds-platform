@@ -167,12 +167,15 @@ export const EmbedRefSchema = z.string().trim().min(1).max(300);
  *   embed FAQ, rutube.ru/info/embed). Ids are machine-copied from the URL, so
  *   the canonical lowercase is required — an uppercase variant is not a valid
  *   Rutube path segment.
- * - `vk` — the `oid_id_hash` triple (#1134). VK's embed identity is irreducible:
- *   `oid` (owner id, **negative for a community**), `id` (video id), and `hash`
- *   (a mandatory, server-minted, **non-derivable** access token from VK's export
- *   dialog — a bare oid/id cannot embed). This stays an opaque id, not a URL, so
- *   the no-URL-sniffing invariant (006-design §3) holds unchanged for vk: the
- *   portal re-composes `video_ext.php?oid&id&hash` from the triple.
+ * - `vk` — `oid_id` with an **OPTIONAL** `_hash` suffix (#1134). `oid` (owner id,
+ *   **negative for a community**) + `id` (video id) identify the video; VK's
+ *   current «Встроить» dialog for a PUBLIC video emits `video_ext.php?oid&id&hd`
+ *   with **no hash** and the player renders from oid+id alone, so a bare `oid_id`
+ *   is valid (live-verified 2026-07-24). Private/unlisted embeds carry the extra
+ *   `hash` (a server-minted access token) — accepted as the third part. Either way
+ *   this stays an opaque id, not a URL, so the no-URL-sniffing invariant
+ *   (006-design §3) holds for vk: the portal re-composes `video_ext.php?oid&id`
+ *   and appends `&hash` only when the ref carried one.
  * - `cdnvideo` — the **stored-URL exception** (#1134). CDNVideo provisions a whole
  *   hosted Aloha-player page per stream and hands the customer that URL; there is
  *   NO bare stream id to store. So `embedRef` for cdnvideo IS the full player URL,
@@ -189,7 +192,7 @@ export const EmbedRefSchema = z.string().trim().min(1).max(300);
 export const EMBED_REF_SHAPES = {
   rutube: /^[0-9a-f]{32}$/,
   youtube: /^[A-Za-z0-9_-]{11}$/,
-  vk: /^-?\d+_\d+_[0-9a-f]{16,}$/,
+  vk: /^-?\d+_\d+(_[0-9a-f]{16,})?$/,
   cdnvideo:
     /^https:\/\/playercdn\.cdnvideo\.ru\/aloha\/players\/[A-Za-z0-9_.\-/]+\.html(\?[A-Za-z0-9_.\-/=&%]*)?$/,
 } as const satisfies Record<StreamProvider, RegExp>;

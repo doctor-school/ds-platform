@@ -42,6 +42,18 @@ describe("006 EARS-2 resolveEmbed — provider enum → embed frame, never URL-s
     });
   });
 
+  it("EARS-2: builds the VK embed frame from bare oid_id when the hash is absent (VK «Встроить» public embed, #1134)", () => {
+    // VK's current embed dialog for a public video omits the hash; the player
+    // renders from oid+id alone. EMBED_SRC must NOT append a `&hash=` when absent.
+    const stream: StreamConfig = { provider: "vk", embedRef: "-9944999_456239622" };
+    const embed = resolveEmbed(stream);
+    expect(embed.kind).toBe("vk");
+    expect(embed).toMatchObject({
+      src: "https://vk.com/video_ext.php?oid=-9944999&id=456239622",
+    });
+    if (embed.kind === "vk") expect(embed.src).not.toContain("hash");
+  });
+
   it("EARS-2: builds the CDNVideo embed frame from the provisioned player URL verbatim", () => {
     // CDNVideo has no bare stream id — embedRef IS the host-allowlisted player URL
     // (validated at the 007 SSOT boundary); the room embeds it verbatim (#1134).
@@ -80,12 +92,16 @@ describe("006 EARS-2 resolveDirectUrl — provider-scoped direct watch link", ()
     expect(
       resolveDirectUrl({ provider: "youtube", embedRef: "dQw4w9WgXcQ" }),
     ).toBe("https://youtu.be/dQw4w9WgXcQ");
-    // VK: literal `video` + `<oid>_<id>` (sign preserved), hash omitted.
+    // VK: literal `video` + `<oid>_<id>` (sign preserved), hash omitted — same
+    // whether or not the embedRef carried a hash.
     expect(
       resolveDirectUrl({
         provider: "vk",
         embedRef: "-9944999_456239622_5ee41bc00ebc765a",
       }),
+    ).toBe("https://vk.com/video-9944999_456239622");
+    expect(
+      resolveDirectUrl({ provider: "vk", embedRef: "-9944999_456239622" }),
     ).toBe("https://vk.com/video-9944999_456239622");
     // CDNVideo: no separate watch page — the player URL is the artifact.
     const url =

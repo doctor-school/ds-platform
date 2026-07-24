@@ -150,6 +150,7 @@ export default async function RoomPage({
             unavailableBody: t("unavailableBody"),
             playerTitle: t("playerTitle"),
             playerRefresh: t("playerRefresh"),
+            openDirect: t("openDirect"),
             programNow: t("programNow"),
           }}
         />

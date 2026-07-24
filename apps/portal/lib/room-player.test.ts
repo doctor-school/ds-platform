@@ -30,6 +30,41 @@ describe("006 EARS-2 resolveEmbed — provider enum → embed frame, never URL-s
     });
   });
 
+  it("EARS-2: builds the VK embed frame by re-composing video_ext.php from the oid_id_hash triple", () => {
+    const stream: StreamConfig = {
+      provider: "vk",
+      embedRef: "-9944999_456239622_5ee41bc00ebc765a",
+    };
+    const embed = resolveEmbed(stream);
+    expect(embed.kind).toBe("vk");
+    expect(embed).toMatchObject({
+      src: "https://vk.com/video_ext.php?oid=-9944999&id=456239622&hash=5ee41bc00ebc765a",
+    });
+  });
+
+  it("EARS-2: builds the VK embed frame from bare oid_id when the hash is absent (VK «Встроить» public embed, #1134)", () => {
+    // VK's current embed dialog for a public video omits the hash; the player
+    // renders from oid+id alone. EMBED_SRC must NOT append a `&hash=` when absent.
+    const stream: StreamConfig = { provider: "vk", embedRef: "-9944999_456239622" };
+    const embed = resolveEmbed(stream);
+    expect(embed.kind).toBe("vk");
+    expect(embed).toMatchObject({
+      src: "https://vk.com/video_ext.php?oid=-9944999&id=456239622",
+    });
+    if (embed.kind === "vk") expect(embed.src).not.toContain("hash");
+  });
+
+  it("EARS-2: builds the CDNVideo embed frame from the provisioned player URL verbatim", () => {
+    // CDNVideo has no bare stream id — embedRef IS the host-allowlisted player URL
+    // (validated at the 007 SSOT boundary); the room embeds it verbatim (#1134).
+    const url =
+      "https://playercdn.cdnvideo.ru/aloha/players/auto_player1.html?clid=kcta544ubo&plid=c263cdf6-253e-400b-a008-d1775d3ee190";
+    const stream: StreamConfig = { provider: "cdnvideo", embedRef: url };
+    const embed = resolveEmbed(stream);
+    expect(embed.kind).toBe("cdnvideo");
+    expect(embed).toMatchObject({ src: url });
+  });
+
   it("EARS-2: an absent stream yields the 'stream unavailable' state (never a guessed embed)", () => {
     expect(resolveEmbed(null)).toEqual({ kind: "unavailable" });
     expect(resolveEmbed(undefined)).toEqual({ kind: "unavailable" });

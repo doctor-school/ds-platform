@@ -83,21 +83,25 @@ sequenceDiagram
 
 ## 3. The embed player — explicit provider enum, never URL-sniffing
 
-`RoomConfig.provider` is a **closed enum** authored in the event stream config (007): wave 1 is exactly `rutube | youtube`.
+`RoomConfig.provider` is a **closed enum** authored in the event stream config (007): `rutube | youtube | vk | cdnvideo` — the RU-reachable, embeddable providers.
 
 ```mermaid
 erDiagram
     event ||--o| stream_config : "has (authored in 007)"
     stream_config {
       uuid event_id "FK event.id"
-      text provider "enum: rutube | youtube (wave 1)"
-      text embed_ref "provider-scoped stream id / embed reference (not URL-sniffed)"
+      text provider "enum: rutube | youtube | vk | cdnvideo"
+      text embed_ref "provider-scoped stream reference (never URL-sniffed)"
     }
 ```
 
-- The portal instantiates the embed by **switching on `provider`** — `react-player` for `youtube`, a thin iframe for `rutube` (epic adopt-vs-build) — using `embedRef` as the provider-scoped stream identifier. It **never** parses the URL string to guess the provider (the legacy mistake, recon §5).
+- The portal instantiates the embed by **switching on `provider`**, using `embedRef` as the provider-scoped stream reference — an iframe to each provider's own published embed endpoint. It **never** parses the URL string to guess the provider (the legacy mistake, recon §5). The per-provider `embedRef` shape is validated at the 007 SSOT boundary (`@ds/schemas` `EMBED_REF_SHAPES`):
+  - `rutube` / `youtube` — an opaque provider id (`rutube.ru/play/embed/<id>`, `youtube.com/embed/<id>`).
+  - `vk` — `oid_id` with an **optional** `_hash` suffix. VK's current «Встроить» dialog for a **public** video emits `video_ext.php?oid&id&hd` with **no hash** and the player renders from oid+id alone (live-verified 2026-07-24), so a bare `oid_id` is valid; **private/unlisted** embeds carry the extra server-minted `hash`. Either way the reference stays an opaque id (not a link), so the no-URL-sniffing invariant holds unchanged: the portal re-composes `vk.com/video_ext.php?oid&id` and appends `&hash` only when the ref carried one. Live broadcasts use the same shape.
+  - `cdnvideo` — the **stored-URL exception**. CDNVideo provisions a whole hosted Aloha-player page per stream and hands the customer that URL; there is no bare stream id, so `embedRef` **is** the full player URL and the room embeds it verbatim. Because that value flows straight into the `<iframe src>`, its `EMBED_REF_SHAPES` entry is a strict **https + host + path allowlist** pinned to `playercdn.cdnvideo.ru/aloha/players/` — the **SSRF guard** that keeps a mis-authored 007 config from pointing the frame at an arbitrary origin. This is the one provider whose reference is a URL; the id-style providers still reject a URL-shaped paste.
+- **No off-platform / direct link in the room.** The room renders the embed **only** — there is deliberately no "watch on the provider's site" affordance. The platform must not invite viewers off-platform: verified in-room presence is the sponsor value (the presence-minute derivation), and an off-platform link leaks that audience away (owner decision 2026-07-24). A refused embed degrades to the truthful "stream unavailable" state, not an escape hatch.
 - **Unknown/absent provider** → a truthful "stream unavailable" room state (EARS-2), never a guessed embed. This is the fail-closed default when 007's stream config is incomplete.
-- **Extending the enum is a migration.** SDN Player (or any third provider) is **not** wave 1; adding it later is an additive change to the enum + a new embed branch, not a shape 006 pre-builds (owner decision 2026-07-06). The enum lives in `packages/schemas/` (Zod), the single SSOT the API and portal share.
+- **Extending the enum is a migration.** Adding a further provider is an additive change to the enum (`ALTER TYPE … ADD VALUE`) + a new embed branch + its `EMBED_REF_SHAPES` entry, not a shape 006 pre-builds. The enum lives in `packages/schemas/` (Zod), the single SSOT the API, the DB enum, and the portal share.
 
 ## 4. Live chat over Centrifugo
 

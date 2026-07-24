@@ -5,7 +5,8 @@ import { StreamProviderSchema, type StreamConfig } from "@ds/schemas";
  * the event's 007-authored stream config (design §3).
  *
  * The provider is read from the **closed enum** {@link StreamProviderSchema}
- * (`rutube | youtube`) — the room switches the player on this value and NEVER
+ * (`rutube | youtube | vk | cdnvideo`) — the room switches the player on this
+ * value and NEVER
  * inspects/sniffs the `embedRef` (a provider-scoped stream id, possibly
  * URL-shaped) to guess which player to build (the legacy URL-sniffing mistake,
  * requirements Constraints / design §3).

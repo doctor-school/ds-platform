@@ -111,12 +111,14 @@ export function mskLocalToInstant(local: string): Date {
  * The closed stream-provider enum (007 requirements EARS-3, design §3). The
  * provider is chosen **explicitly** by the operator — it is NEVER inferred by
  * sniffing the embed URL (the legacy mistake, recon §5). The 006 room switches
- * on this value to instantiate the right player. Wave 1 is exactly
- * `rutube | youtube`; extending the set later is an additive migration, not a
- * shape 007 pre-builds (mirrors the 006 owner decision 2026-07-06). This is the
- * shared SSOT the API, the Refine admin app, and the 006 consumer all read.
+ * on this value to instantiate the right player. The set is
+ * `rutube | youtube | vk | cdnvideo` — all RU-reachable, embeddable providers;
+ * extending it further is an additive migration (rutube/youtube per the 006 owner
+ * decision 2026-07-06; vk/cdnvideo added #1134), never a URL-sniffed inference.
+ * This is the shared SSOT the API, the Refine admin app, the DB `stream_provider`
+ * enum, and the 006 consumer all read.
  */
-export const STREAM_PROVIDERS = ["rutube", "youtube"] as const;
+export const STREAM_PROVIDERS = ["rutube", "youtube", "vk", "cdnvideo"] as const;
 export const StreamProviderSchema = z.enum(STREAM_PROVIDERS);
 export type StreamProvider = z.infer<typeof StreamProviderSchema>;
 
@@ -132,22 +134,24 @@ export type StreamProvider = z.infer<typeof StreamProviderSchema>;
 export const EMBED_REF_LOOKS_LIKE_URL = /:\/\/|^\s*(?:https?:|www\.)/i;
 
 /**
- * The `embedRef` field validator (EARS-3) — a bounded free token that is a
- * provider-scoped stream id / embed reference, **never a URL**. Trimmed, 1–300
- * chars, and refused when it is URL-shaped ({@link EMBED_REF_LOOKS_LIKE_URL}). The
- * single SSOT the api DTO and the admin client resolver both read, so the two can
- * never drift.
+ * The `embedRef` **base** field validator (EARS-3) — a bounded, trimmed token,
+ * 1–300 chars. The single SSOT the api DTO and the admin client resolver both read
+ * for the field-level bounds, so the two can never drift.
+ *
+ * The URL-shape rejection is deliberately NOT baked here: it is
+ * **provider-scoped** and enforced in {@link ConfigureStreamRequestSchema}'s
+ * cross-field refinement instead. For the id-style providers (`rutube`, `youtube`,
+ * `vk`) a URL-shaped paste is the legacy "paste the whole share link" mistake and
+ * is refused; for `cdnvideo` the embedRef IS the provisioned player URL
+ * (host-allowlisted), so a field-level URL ban would wrongly reject the only valid
+ * value. Keeping the URL guard in the provider-aware superRefine is what lets both
+ * hold from one SSOT (#1134).
  */
-// NB: deliberately NO baked `message` on the refine — a zod v4 schema-level
-// message outranks a consumer's per-parse error map, which would leak English
-// into the admin form's RU rendering (the 003 precedent, #200). Consumers key
-// on the `custom` issue code + `embedRef` path instead.
-export const EmbedRefSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(300)
-  .refine((value) => !EMBED_REF_LOOKS_LIKE_URL.test(value));
+// NB: deliberately NO baked `message` — a zod v4 schema-level message outranks a
+// consumer's per-parse error map, which would leak English into the admin form's
+// RU rendering (the 003 precedent, #200). Consumers key on the `custom` issue code
+// + `embedRef` path instead.
+export const EmbedRefSchema = z.string().trim().min(1).max(300);
 
 /**
  * Per-provider embed-id shapes (EARS-3, #665 Stage-B). The provider's REAL id
@@ -163,6 +167,24 @@ export const EmbedRefSchema = z
  *   embed FAQ, rutube.ru/info/embed). Ids are machine-copied from the URL, so
  *   the canonical lowercase is required — an uppercase variant is not a valid
  *   Rutube path segment.
+ * - `vk` — `oid_id` with an **OPTIONAL** `_hash` suffix (#1134). `oid` (owner id,
+ *   **negative for a community**) + `id` (video id) identify the video; VK's
+ *   current «Встроить» dialog for a PUBLIC video emits `video_ext.php?oid&id&hd`
+ *   with **no hash** and the player renders from oid+id alone, so a bare `oid_id`
+ *   is valid (live-verified 2026-07-24). Private/unlisted embeds carry the extra
+ *   `hash` (a server-minted access token) — accepted as the third part. Either way
+ *   this stays an opaque id, not a URL, so the no-URL-sniffing invariant
+ *   (006-design §3) holds for vk: the portal re-composes `video_ext.php?oid&id`
+ *   and appends `&hash` only when the ref carried one.
+ * - `cdnvideo` — the **stored-URL exception** (#1134). CDNVideo provisions a whole
+ *   hosted Aloha-player page per stream and hands the customer that URL; there is
+ *   NO bare stream id to store. So `embedRef` for cdnvideo IS the full player URL,
+ *   and its "shape" is a strict **https + host + path allowlist** pinned to
+ *   `playercdn.cdnvideo.ru/aloha/players/` (covering both provisioned forms —
+ *   `iframe_<client>_<stream>_player.html` and `auto_playerN.html?clid&plid`).
+ *   The allowlist is the **SSRF guard**: because the value flows straight into the
+ *   006 room's `<iframe src>`, pinning the origin means a mis-authored 007 config
+ *   can never point the frame at an arbitrary host (006-design §3, inline).
  *
  * Extending {@link STREAM_PROVIDERS} later MUST add the new provider's shape here
  * (the `satisfies` clause makes a missing entry a compile error).
@@ -170,25 +192,31 @@ export const EmbedRefSchema = z
 export const EMBED_REF_SHAPES = {
   rutube: /^[0-9a-f]{32}$/,
   youtube: /^[A-Za-z0-9_-]{11}$/,
+  vk: /^-?\d+_\d+(_[0-9a-f]{16,})?$/,
+  cdnvideo:
+    /^https:\/\/playercdn\.cdnvideo\.ru\/aloha\/players\/[A-Za-z0-9_.\-/]+\.html(\?[A-Za-z0-9_.\-/=&%]*)?$/,
 } as const satisfies Record<StreamProvider, RegExp>;
 
 /**
  * `ConfigureStream` request body (EARS-3). Records `{ provider, embedRef }`: the
  * provider is an explicit member of the closed enum (an out-of-enum value is a
  * 400 at the I/O boundary, before any handler runs, so no config is recorded for
- * an unknown provider); `embedRef` is the **provider-scoped stream id / embed
- * reference** ({@link EmbedRefSchema}), and it must match the chosen provider's
- * real id shape ({@link EMBED_REF_SHAPES}) — never a URL to be sniffed, never a
- * free token. Configuring is an idempotent upsert (one config per event); it is
- * correctable while the event is `published` (US-3), so a wrong reference is fixed
- * with an edit, never a state reversal.
+ * an unknown provider); `embedRef` is the **provider-scoped stream reference**
+ * ({@link EmbedRefSchema} bounds) that must match the chosen provider's real shape
+ * ({@link EMBED_REF_SHAPES}) — never a free token. For the id-style providers
+ * (`rutube`, `youtube`, `vk`) it is an opaque id and a URL-shaped paste is refused
+ * (the legacy sniff mistake); `cdnvideo` is the recorded stored-URL exception —
+ * its reference IS the host-allowlisted player URL. Configuring is an idempotent
+ * upsert (one config per event); it is correctable while the event is `published`
+ * (US-3), so a wrong reference is fixed with an edit, never a state reversal.
  */
-// NB: the cross-field shape check lives on the OBJECT (the shape depends on the
-// chosen provider) and stays silent while either field is still invalid on its
-// own — each problem renders exactly one issue. As with EmbedRefSchema, NO baked
-// `message` (#200); consumers key on `custom` + `embedRef` path + `params.shape`
-// (the provider), which is how the admin resolver picks the provider-specific RU
-// copy.
+// NB: the cross-field checks live on the OBJECT (the URL ban + shape both depend
+// on the chosen provider) and stay silent while either field is still invalid on
+// its own — each problem renders exactly one issue. As with EmbedRefSchema, NO
+// baked `message` (#200); consumers key on `custom` + `embedRef` path. The URL ban
+// emits an UNTAGGED issue (the admin resolver's "paste a link" copy); the shape
+// mismatch carries `params.shape` (the provider), which picks the provider-named
+// RU copy.
 export const ConfigureStreamRequestSchema = z
   .object({
     provider: StreamProviderSchema,
@@ -197,6 +225,16 @@ export const ConfigureStreamRequestSchema = z
   .superRefine((value, ctx) => {
     if (!StreamProviderSchema.safeParse(value.provider).success) return;
     if (!EmbedRefSchema.safeParse(value.embedRef).success) return;
+    // Id-style providers reject a URL-shaped paste up front with the actionable
+    // "you pasted a link" copy; `cdnvideo`'s reference IS a URL (validated by its
+    // allowlist shape below), so it is exempt from this guard (#1134).
+    if (
+      value.provider !== "cdnvideo" &&
+      EMBED_REF_LOOKS_LIKE_URL.test(value.embedRef)
+    ) {
+      ctx.addIssue({ code: "custom", path: ["embedRef"] });
+      return;
+    }
     if (!EMBED_REF_SHAPES[value.provider].test(value.embedRef)) {
       ctx.addIssue({
         code: "custom",

@@ -116,13 +116,19 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     };
 
     /**
-     * Realistic provider-scoped embed ids per the `@ds/schemas`
-     * `EMBED_REF_SHAPES` SSOT (#665): YouTube = the 11-char video id,
-     * Rutube = the 32-char lowercase-hex video id.
+     * Realistic provider-scoped embed refs per the `@ds/schemas`
+     * `EMBED_REF_SHAPES` SSOT (#665, #1134): YouTube = the 11-char video id,
+     * Rutube = the 32-char lowercase-hex video id, VK = the `oid_id_hash` triple,
+     * CDNVideo = the host-allowlisted Aloha-player URL. The accept-loop below
+     * inserts each into the real `stream_config` row, exercising the additive DB
+     * `stream_provider` enum values end-to-end.
      */
     const VALID_EMBED_REFS: Record<(typeof STREAM_PROVIDERS)[number], string> = {
       rutube: "caafe83ff1c6ed38d394635b83ece578",
       youtube: "dQw4w9WgXcQ",
+      vk: "-9944999_456239622_5ee41bc00ebc765a",
+      cdnvideo:
+        "https://playercdn.cdnvideo.ru/aloha/players/auto_player1.html?clid=kcta544ubo&plid=c263cdf6-253e-400b-a008-d1775d3ee190",
     };
 
     /** Create a fresh draft event through the EARS-1 create endpoint; return its id + slug. */

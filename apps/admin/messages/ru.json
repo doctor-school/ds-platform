@@ -86,11 +86,18 @@
       "programPdfReplaceHint": "Загрузка нового файла заменит текущий — публичная страница будет отдавать новый файл.",
       "provider": "Провайдер",
       "embedRef": "Идентификатор трансляции (embed)",
-      "embedRefHint": "Идентификатор потока у провайдера — не URL."
+      "embedRefHint": {
+        "rutube": "Код видео Rutube (32 символа) из адреса rutube.ru/video/<код>/ — не ссылку целиком.",
+        "youtube": "Код видео YouTube (11 символов) из адреса youtu.be/<код> — не ссылку целиком.",
+        "vk": "Из кода «Встроить» VK: oid_id (или oid_id_hash, если в коде есть hash), например -9944999_456239622.",
+        "cdnvideo": "Полная ссылка на плеер CDNVideo (https://playercdn.cdnvideo.ru/aloha/players/…) из кода вставки."
+      }
     },
     "providers": {
       "rutube": "RuTube",
-      "youtube": "YouTube"
+      "youtube": "YouTube",
+      "vk": "VK Видео",
+      "cdnvideo": "CDNVideo"
     },
     "state": {
       "draft": "Черновик",
@@ -135,6 +142,8 @@
       "embedRefUrl": "Укажите идентификатор потока у провайдера, а не ссылку (URL).",
       "embedRefRutube": "Неверный идентификатор Rutube: нужен код видео из 32 символов — строчные латинские буквы a–f и цифры (из адреса rutube.ru/video/<код>/).",
       "embedRefYoutube": "Неверный идентификатор YouTube: нужен код видео из 11 символов — латинские буквы, цифры, «-» и «_» (из адреса youtu.be/<код>).",
+      "embedRefVk": "Неверный идентификатор VK: нужны oid_id из кода «Встроить» VK (hash — только если он есть в коде), например -9944999_456239622.",
+      "embedRefCdnvideo": "Неверная ссылка CDNVideo: нужен полный адрес плеера на https://playercdn.cdnvideo.ru/aloha/players/… из кода вставки.",
       "fallback": "Проверьте значение поля."
     }
   }

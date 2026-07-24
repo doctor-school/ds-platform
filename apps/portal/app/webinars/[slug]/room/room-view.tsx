@@ -85,7 +85,9 @@ function PlayerFrame({ config, copy }: { config: RoomConfig; copy: RoomCopy }) {
   // transcode / re-host / proxy / DRM / record and no custom player chrome (the
   // provider owns its own controls inside the iframe). `src` is built by switching
   // on the provider ENUM, never by sniffing the URL. The live overlay badge rides
-  // on top.
+  // on top. There is deliberately NO off-platform/direct link in the room — the
+  // platform must not invite viewers off-platform (presence control is the sponsor
+  // value; owner decision 2026-07-24).
   return (
     <>
       <Badge variant="live" className="absolute left-4 top-4 z-10">

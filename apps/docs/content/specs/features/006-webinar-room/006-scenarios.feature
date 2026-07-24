@@ -41,6 +41,8 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
       | provider |
       | rutube   |
       | youtube  |
+      | vk       |
+      | cdnvideo |
 
   @EARS-2 @edge
   Scenario: An unknown or absent provider yields a truthful stream-unavailable state
@@ -48,6 +50,62 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
     When a gated doctor opens the room
     Then the room shows a truthful "stream unavailable" state
     And no guessed embed is rendered
+
+  # --- In-room player failure states: watchdog + truthful status + in-room retry (US-1) ---
+
+  @EARS-18 @failure
+  Scenario: A stream that never starts playing shows a truthful in-frame status, not a black frame
+    Given a gated doctor in a live room whose configured embed has mounted
+    When no playing signal is observed within the watchdog threshold
+    Then the player region shows a truthful "stream not loading" status overlay
+    And the doctor never faces a silent black frame
+
+  @EARS-18 @failure
+  Scenario Outline: A YouTube error distinguishes embedding-disabled from unavailable
+    Given a gated doctor in a live room on a "youtube" stream
+    When the player reports error code "<code>"
+    Then the status overlay shows "<status>"
+
+    Examples:
+      | code    | status                                       |
+      | 101     | embedding disabled by the broadcaster        |
+      | 150     | embedding disabled by the broadcaster        |
+      | 100     | the video is unavailable                     |
+
+  @EARS-18 @edge
+  Scenario Outline: Live vk and cdnvideo embeds are watchdog-only
+    Given a gated doctor in a live room on a "<provider>" stream that does not start playing
+    When no playing signal is observed within the watchdog threshold
+    Then the player region shows the truthful "stream not loading" status overlay
+    And no provider event API is required to detect the failure
+
+    Examples:
+      | provider |
+      | vk       |
+      | cdnvideo |
+
+  @EARS-18 @happy
+  Scenario: On failure the room retries in-room and offers a restart, never a page reload or off-platform link
+    Given a gated doctor in a live room whose embed failed to start playing
+    When the room reaches the failure state
+    Then the room auto-retries the embed a bounded number of times
+    And if it still fails the room offers a «Перезапустить плеер» affordance
+    And activating it re-creates the embed without reloading the whole page
+    And the room never offers a link to watch off the platform
+
+  @EARS-18 @happy
+  Scenario: Recovery clears the status overlay
+    Given a gated doctor in a live room showing the "stream not loading" status
+    When a playing signal is observed after the failure state
+    Then the status overlay clears
+    And the playing stream is presented
+
+  @EARS-18 @EARS-4 @happy
+  Scenario: A player failure does not interrupt presence capture
+    Given a gated doctor in a live room posting heartbeats with the tab visible
+    When the embed enters and stays in the failure state
+    Then the heartbeat loop keeps posting every N seconds
+    And the doctor remains counted present in the room
 
   # --- Live chat (US-2) ---
 

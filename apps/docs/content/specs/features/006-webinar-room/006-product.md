@@ -14,7 +14,7 @@ lang: en
 
 ## Feature summary
 
-The room where a registered doctor actually watches the webinar: an embedded external stream (Rutube or similar — we build **no** transcoding and **no** media server), a live chat, and invisible-to-the-doctor presence capture. Access is **server-side gated** — authenticated **and** registered only; there is no legacy-style soft UI wall over the player. The player is selected by an **explicit provider enum** (e.g. `rutube | youtube`) configured in admin — never by URL-sniffing. Chat rides Centrifugo (already in our stack). Presence is captured from minute one via a **server-authoritative heartbeat** — the room posts an authenticated signal every N seconds, the backend appends it to a durable Postgres table — because per-doctor presence minutes are the sponsor's deliverable; for the first webinar the sponsor report is a manual export from that data.
+The room where a registered doctor actually watches the webinar: an embedded external stream (Rutube or similar — we build **no** transcoding and **no** media server), a live chat, and invisible-to-the-doctor presence capture. Access is **server-side gated** — authenticated **and** registered only; there is no legacy-style soft UI wall over the player. The player is selected by an **explicit provider enum** (`rutube | youtube | vk | cdnvideo`) configured in admin — never by URL-sniffing. Chat rides Centrifugo (already in our stack). Presence is captured from minute one via a **server-authoritative heartbeat** — the room posts an authenticated signal every N seconds, the backend appends it to a durable Postgres table — because per-doctor presence minutes are the sponsor's deliverable; for the first webinar the sponsor report is a manual export from that data.
 
 Room composition for the 2026-07-17 webinar: **embed player + live chat + heartbeat presence**, with the room header carrying the doctor-facing chrome from the canvas: a light/dark **theme toggle** (backed by a portal-wide theme mechanism; the visible toggle ships only here until the unified portal chrome re-skin, #510) and an **initials avatar** built from the doctor's real display name — collected **just-in-time** once, before the first room entry (registration stays untouched). Polls and question-to-lecturer are wave 2.
 
@@ -62,7 +62,8 @@ Room composition for the 2026-07-17 webinar: **embed player + live chat + heartb
 ## Product acceptance criteria
 
 - Room access is **enforced server-side**: only an authenticated, registered doctor receives the room content (player config, chat access, heartbeat acceptance). A direct URL, a shared link, or a crafted request does not bypass the gate.
-- The player is instantiated from an **explicit provider enum** stored in the event's stream config; provider values are a closed list (e.g. `rutube`, `youtube`) — never inferred from the URL string.
+- The player is instantiated from an **explicit provider enum** stored in the event's stream config; provider values are a closed list (`rutube | youtube | vk | cdnvideo`) — never inferred from the URL string.
+- When the embedded stream **fails to start playing** (a provider CDN stall, an embedding-disabled video), the doctor sees a **truthful in-room status** and the room **auto-retries** and offers a **«Перезапустить плеер»** control — never a silent black screen, never a full page reload, and never a link that takes the doctor off the platform (in-room presence control is a key platform function — owner decision 2026-07-22). Presence keeps counting throughout the failure. (US-1)
 - Chat is **real-time**: a posted message reaches other room participants without reload (Centrifugo transport); chat is available while the room is open.
 - Presence heartbeats are **server-authoritative and durable**: authenticated beats append to a Postgres table with enough fidelity to compute actual per-doctor presence minutes; concurrent tabs do not inflate a doctor's minutes.
 - The captured data is sufficient to hand the first webinar's sponsor a per-doctor presence-minutes report via **manual export** — no report UI required in wave 1.
@@ -82,7 +83,7 @@ Room composition for the 2026-07-17 webinar: **embed player + live chat + heartb
 
 ## Open questions
 
-- **Player discrepancy** (recon §5, §10-1): the knowledge base says "SDN Player (primary) or rutube"; the Bubble export shows only YouTube + Rutube embeds. Resolve with the webinar operator **before fixing the provider enum values**.
+- **Player discrepancy** (recon §5, §10-1): _resolved._ The provider enum is fixed at the closed list `rutube | youtube | vk | cdnvideo` — the RU-reachable, embeddable providers (Rutube the standing default; #1154). SDN Player is not in the list; extending it later is an additive migration.
 - **Heartbeat cadence** (recon §10-3): the legacy export shows 60 s pings but production may differ; confirm the live cadence before fixing N and the "1 beat = N seconds" math.
 - **Certificate artifact** (recon §10-5, wave 2): NMO points only, or a downloadable certificate PDF? Owner call before the wave-2 NMO feature.
 - **Sponsor report V2 exact shape** (recon §10-9, wave 2): confirm the exact columns/joins with the owner before building the auto-report; wave 1's manual export only needs the raw minutes.

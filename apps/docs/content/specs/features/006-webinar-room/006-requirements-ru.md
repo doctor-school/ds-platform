@@ -6,7 +6,8 @@ status: Shipped
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/7
 parent_issue: https://github.com/doctor-school/ds-platform/issues/471
-issues: [576, 577, 578, 579, 580, 581, 582, 583, 584, 702, 705, 1121, 1141]
+issues:
+  [576, 577, 578, 579, 580, 581, 582, 583, 584, 702, 705, 1121, 1141, 1162]
 prior_decisions:
   - ADR-0014 — Жизненный цикл продуктового дизайна (§2 трасса PRD → EARS `realizes:`; §3/§4 канвас — источник, репозиторий держит собранный артефакт)
   - ADR-0001 — Identity / Auth / RBAC (§2 матрица endpoint-authz — read конфига комнаты, чат и heartbeat-эндпоинты — `authenticated` `doctor_guest` с auth_check `policy`: гейт «зарегистрирован и live» — это policy-оценка сверх role fast-path; self-scoped write/read отображаемого имени — `fast-path`)

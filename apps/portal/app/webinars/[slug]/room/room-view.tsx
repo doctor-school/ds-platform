@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@ds/design-system/badge";
 import { WebinarRoomLayout } from "@ds/design-system/webinar-room";
 import { useTranslations } from "next-intl";
 import { resolveEmbed } from "../../../../lib/room-player";
+import { usePlayerFailureState } from "../../../../lib/use-player-failure-state";
 import type { RoomConfig } from "@ds/schemas";
 import { RoomChat } from "./room-chat";
 import { usePresenceCount } from "./room-presence";
@@ -42,6 +43,14 @@ export interface RoomCopy {
   unavailableBody: string;
   playerTitle: string;
   playerRefresh: string;
+  // 006 EARS-18 — the in-room player-FAILURE overlay copy (a mounted embed that
+  // never starts playing), distinct from the config-absent `unavailable*` state.
+  playerFailedTitle: string;
+  playerFailedBody: string;
+  playerEmbeddingDisabled: string;
+  playerUnavailable: string;
+  playerRetrying: string;
+  playerRestart: string;
   programNow: string;
 }
 
@@ -51,8 +60,83 @@ export interface RoomContext {
   speakers: string;
 }
 
-function PlayerFrame({ config, copy }: { config: RoomConfig; copy: RoomCopy }) {
+/**
+ * 006 EARS-18 — the truthful in-frame failure overlay: a mounted embed that never
+ * starts playing (watchdog elapsed / provider error) raises this over the still-live
+ * iframe (so a provider self-heal's playing event still clears it). NEVER a silent
+ * black frame, a full page reload, or an off-platform link — the remedy is an
+ * in-room «Перезапустить плеер» that re-creates the embed. Copy is the typed catalog
+ * (EARS-10); the fixed-white styling matches the always-dark player letterbox and
+ * the EARS-2 unavailable-state pattern.
+ */
+function PlayerFailureOverlay({
+  status,
+  failure,
+  copy,
+  onRestart,
+}: {
+  status: "failed" | "retrying";
+  failure: "embedding-disabled" | "unavailable" | "generic" | null;
+  copy: RoomCopy;
+  onRestart: () => void;
+}) {
+  const title =
+    failure === "embedding-disabled"
+      ? copy.playerEmbeddingDisabled
+      : failure === "unavailable"
+        ? copy.playerUnavailable
+        : copy.playerFailedTitle;
+  return (
+    <div
+      data-testid="room-player-failure"
+      className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2.5 bg-black/80 px-6 text-center"
+    >
+      <p className="text-lg font-extrabold text-white">{title}</p>
+      <p className="max-w-sm text-sm leading-relaxed text-white/60">
+        {status === "retrying" ? copy.playerRetrying : copy.playerFailedBody}
+      </p>
+      {status === "failed" && (
+        // primitives-first-ok: fixed-white outline control on the PERMANENTLY-dark
+        // player letterbox — every themed DS Button variant flips with the theme and
+        // renders wrong on the always-dark region (matches the EARS-2 refresh button).
+        <button
+          type="button"
+          data-testid="room-player-restart"
+          onClick={onRestart}
+          className="mt-2.5 border-2 border-white/50 px-5 py-3 text-sm font-extrabold text-white cursor-pointer hover:border-white focus-visible:outline-none focus-visible:shadow-focus"
+        >
+          {copy.playerRestart}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Post the YouTube IFrame Player API `listening` handshake so the embed streams
+ *  its state/error events to the parent (EARS-18.2). Best-effort — a script-less,
+ *  RU-safe path; failure degrades to the watchdog floor, never breaks the room. */
+function postYouTubeListening(iframe: HTMLIFrameElement) {
+  iframe.contentWindow?.postMessage(
+    JSON.stringify({ event: "listening", id: 1, channel: "widget" }),
+    "https://www.youtube.com",
+  );
+}
+
+export function PlayerFrame({ config, copy }: { config: RoomConfig; copy: RoomCopy }) {
   const embed = resolveEmbed(config.stream);
+  // 006 EARS-18 — the runtime player-failure state machine. Hooks run unconditionally
+  // (a config-absent `unavailable` embed still calls it with a harmless provider);
+  // it only drives the iframe branch below.
+  const provider = embed.kind === "unavailable" ? "cdnvideo" : embed.kind;
+  const { status, failure, embedKey, restart } = usePlayerFailureState(provider);
+  // The `origin` param YouTube's IFrame API wants is resolved AFTER mount so the
+  // first client render matches SSR (both `?enablejsapi=1`), avoiding a hydration
+  // mismatch; the extra param arrives on the post-mount re-render.
+  const [origin, setOrigin] = useState("");
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+
   if (embed.kind === "unavailable") {
     // EARS-2 — truthful "stream unavailable" state, canvas-styled (dark region,
     // «Обновить страницу» outline button): no guessed embed. The gate still
@@ -88,19 +172,42 @@ function PlayerFrame({ config, copy }: { config: RoomConfig; copy: RoomCopy }) {
   // on top. There is deliberately NO off-platform/direct link in the room — the
   // platform must not invite viewers off-platform (presence control is the sponsor
   // value; owner decision 2026-07-24).
+  //
+  // EARS-18.2 — for YouTube, request the IFrame Player API events (`enablejsapi=1`
+  // + `origin`); the watchdog is the universal floor for every provider regardless.
+  const src =
+    embed.kind === "youtube"
+      ? `${embed.src}?enablejsapi=1${origin ? `&origin=${encodeURIComponent(origin)}` : ""}`
+      : embed.src;
   return (
     <>
       <Badge variant="live" className="absolute left-4 top-4 z-10">
         {copy.liveBadge}
       </Badge>
       <iframe
+        // EARS-18.3 — the mount key: each auto-retry / «Перезапустить плеер» bumps it,
+        // re-creating the embed in place (never a full page reload).
+        key={embedKey}
         data-testid={`room-player-${embed.kind}`}
-        src={embed.src}
+        src={src}
         title={copy.playerTitle}
         allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
         allowFullScreen
+        onLoad={
+          embed.kind === "youtube"
+            ? (e) => postYouTubeListening(e.currentTarget)
+            : undefined
+        }
         className="absolute inset-0 h-full w-full"
       />
+      {(status === "failed" || status === "retrying") && (
+        <PlayerFailureOverlay
+          status={status}
+          failure={failure}
+          copy={copy}
+          onRestart={restart}
+        />
+      )}
     </>
   );
 }

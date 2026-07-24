@@ -110,6 +110,40 @@ export class PresenceRepository {
   }
 
   /**
+   * The earliest instant at which {@link countLivePresence} could DROP for this
+   * event if no further beat arrives — the moment the currently-freshest beat of
+   * the soonest-to-age-out doctor leaves the window (006 EARS-5 realtime push). It
+   * is the smallest per-doctor `max(beat_at)` among the doctors still inside the
+   * window, plus `windowSeconds`. `null` when no doctor is currently in the window
+   * (nothing left to age out — no timer to arm).
+   *
+   * {@link PresencePublisher} arms a per-room timer at this instant so a *leave*
+   * (a doctor whose beats simply stopped) is published within ~1 s of the count
+   * changing server-side — not merely on the next surviving observer's beat. It is
+   * re-derived (never trusted stale) on every beat and after every timer fire, so a
+   * fresh beat that postpones the next age-out re-arms the timer later. Read-only.
+   */
+  async nextPresenceExpiry(
+    eventId: string,
+    windowSeconds: number,
+  ): Promise<Date | null> {
+    const result = await this.db.execute<{ expiresAt: string | null }>(
+      sql`
+        SELECT min(last_beat) + make_interval(secs => ${windowSeconds}) AS "expiresAt"
+        FROM (
+          SELECT max(${presenceBeats.beatAt}) AS last_beat
+          FROM ${presenceBeats}
+          WHERE ${presenceBeats.eventId} = ${eventId}
+          GROUP BY ${presenceBeats.userId}
+        ) doctors
+        WHERE last_beat >= now() - make_interval(secs => ${windowSeconds})
+      `,
+    );
+    const expiresAt = result.rows[0]?.expiresAt ?? null;
+    return expiresAt ? new Date(expiresAt) : null;
+  }
+
+  /**
    * Derive per-doctor presence minutes for one event from the append-only beats
    * (006 EARS-5; design §5). Read-only — the durable beats are never mutated.
    *

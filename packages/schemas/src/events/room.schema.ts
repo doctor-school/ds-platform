@@ -180,6 +180,33 @@ export const PostChatMessageAckSchema = z.object({
 export type PostChatMessageAck = z.infer<typeof PostChatMessageAckSchema>;
 
 /**
+ * `RoomPresenceCountMessage` — the server-authoritative live presence count fanned
+ * out over the room channel in realtime (EARS-5; design §5 "Realtime presence-count
+ * push"). It rides the SAME `room:event:<id>` channel as the chat fan-out (the
+ * already-provisioned, subscribe-only credential the `RoomConfig` grant carried) —
+ * no dedicated presence channel, no second credential — and is discriminated from a
+ * {@link RoomChatMessage} client-side by the `type` literal (a chat message carries
+ * no `type` key, so the two never cross-parse).
+ *
+ * The api publishes one of these ONLY when an accepted beat, or a presence-window
+ * expiry, **changes** the distinct-doctor count (no publish on an unchanged count),
+ * so a subscribed client renders the new value instantly — without waiting on its
+ * own next heartbeat. `count` is the same server-side aggregate the grant seeds and
+ * every heartbeat ack carries — a bare integer, never a per-doctor identity or the
+ * roster (EARS-8). While the realtime channel is unavailable the portal degrades to
+ * the heartbeat-ack refresh path (#1136); this message is the fast path, never the
+ * only path.
+ */
+export const RoomPresenceCountMessageSchema = z.object({
+  type: z.literal("presence-count"),
+  count: z.number().int().nonnegative(),
+  at: z.iso.datetime({ offset: true }),
+});
+export type RoomPresenceCountMessage = z.infer<
+  typeof RoomPresenceCountMessageSchema
+>;
+
+/**
  * `PresenceHeartbeatAck` — the acknowledgement of one accepted presence beat
  * (EARS-4; design §5, §7). Returned by `POST /v1/events/:idOrSlug/heartbeat`
  * **only** to a caller the same server-side gate admits (authenticated ∧

@@ -12,6 +12,7 @@ import {
   UnknownSubjectError,
 } from "../registration/registration.service.js";
 import { CentrifugoChatGateway } from "./chat.gateway.js";
+import { PresencePublisher } from "./presence-publisher.service.js";
 import { PresenceRepository } from "./presence.repository.js";
 import { resolveRoomStream } from "./provider-enum.js";
 import { RoomRepository, type EventForRoom } from "./room.repository.js";
@@ -94,6 +95,8 @@ export class RoomService {
     @Inject(PresenceRepository) private readonly presence: PresenceRepository,
     @Inject(CentrifugoChatGateway)
     private readonly chat: CentrifugoChatGateway,
+    @Inject(PresencePublisher)
+    private readonly presencePublisher: PresencePublisher,
     @Inject(ROOM_HEARTBEAT_INTERVAL_SECONDS)
     private readonly heartbeatIntervalSeconds: number,
   ) {}
@@ -249,6 +252,13 @@ export class RoomService {
       event.id,
       this.presenceWindowSeconds(),
     );
+    // EARS-5 realtime push: fan the fresh count out over the room channel when this
+    // beat CHANGED it (a join, or the caller's own first beat), and (re-)arm the
+    // room's window-expiry timer so an ensuing leave is published too — WITHOUT
+    // waiting on any observer's next beat. Fire-and-forget: the publisher swallows
+    // every failure so a Centrifugo blip never turns this beat into a 5xx (the
+    // portal then degrades to this same ack's count — #1136). The ack is unchanged.
+    void this.presencePublisher.onBeat(event.id, presenceCount);
     return { eventId: event.id, beatAt: beatAt.toISOString(), presenceCount };
   }
 }

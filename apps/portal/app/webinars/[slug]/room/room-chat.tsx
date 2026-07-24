@@ -11,6 +11,8 @@ import {
   type RoomChatMessage,
 } from "@ds/schemas";
 import { fetchFreshChatToken } from "../../../../lib/room-chat-token";
+import { applyPresenceCountPublication } from "./presence-channel";
+import { usePresenceCountSetter } from "./room-presence";
 
 /**
  * 006 EARS-3 — the live chat panel. A gated doctor READS the room chat in real
@@ -58,6 +60,11 @@ export function RoomChat({
   onIncomingWhileCollapsed?: (delta: number) => void;
 }) {
   const t = useTranslations("room");
+  // EARS-5: the live presence count rides this SAME channel/connection; the chat
+  // panel owns the room's only Centrifugo connection (it stays mounted even when
+  // collapsed, #1123), so it routes the server-published count into the shared
+  // header provider — no second connection, no second credential.
+  const setPresenceCount = usePresenceCountSetter();
   const [messages, setMessages] = useState<RoomChatMessage[]>([]);
   // History-bootstrap latch (#843): `chatEmpty` («Пока нет сообщений») is a
   // STATEMENT about the room, so it must never render while the answer is
@@ -131,6 +138,10 @@ export function RoomChat({
     });
     const onPublication = (ctx: PublicationContext): void => {
       if (ctx.channel !== chat.channel) return;
+      // EARS-5: the same channel also carries the server-published live presence
+      // count. Route it to the header (discriminated by its `type` literal) and
+      // stop — it is not a chat message, so it never enters the ledger.
+      if (applyPresenceCountPublication(ctx.data, setPresenceCount)) return;
       const parsed = RoomChatMessageSchema.safeParse(ctx.data);
       if (!parsed.success) return;
       // The poster is subscribed too, so its own message echoes back over the
@@ -182,7 +193,7 @@ export function RoomChat({
       centrifuge.removeListener("disconnected", onDisconnected);
       centrifuge.disconnect();
     };
-  }, [slug, chat.url, chat.token, chat.channel]);
+  }, [slug, chat.url, chat.token, chat.channel, setPresenceCount]);
 
   // React to the log growing: stuck → autoscroll to newest (scrollTop 0 in the
   // reversed ledger); scrolled-up → raise the «Новые сообщения ↓» chip; collapsed

@@ -7,6 +7,7 @@ import {
   type RoomChatConfig,
 } from "./chat.gateway.js";
 import { PresenceDerivationService } from "./presence-derivation.service.js";
+import { PresencePublisher } from "./presence-publisher.service.js";
 import { PresenceRepository } from "./presence.repository.js";
 import { RoomController } from "./room.controller.js";
 import { RoomRepository } from "./room.repository.js";
@@ -43,6 +44,14 @@ import {
  * over N, concurrent-tab-coalesced) for the wave-1 manual sponsor export. It is a
  * standalone ops read (the `presence:export` CLI), NOT a public endpoint — the
  * derivation is never exposed on a public surface (EARS-8).
+ *
+ * EARS-5 also adds the {@link PresencePublisher}: the realtime side of the live
+ * in-room count. On an accepted beat that CHANGES the distinct-doctor count — or a
+ * window expiry (a leave) — it publishes the recomputed count over the room's
+ * Centrifugo channel ({@link CentrifugoChatGateway}), so subscribers render it
+ * instantly; best-effort, so a transport blip degrades to the heartbeat-ack refresh
+ * (#1136) rather than breaking a beat. The sponsor minutes derivation source is
+ * untouched.
  */
 @Module({
   imports: [RegistrationModule],
@@ -52,6 +61,7 @@ import {
     RoomRepository,
     PresenceRepository,
     PresenceDerivationService,
+    PresencePublisher,
     CentrifugoChatGateway,
     {
       provide: ROOM_HEARTBEAT_INTERVAL_SECONDS,

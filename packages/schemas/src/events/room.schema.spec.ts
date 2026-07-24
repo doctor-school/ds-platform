@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { RoomChatMessageSchema } from "./room.schema.js";
+import {
+  RoomChatMessageSchema,
+  RoomPresenceCountMessageSchema,
+} from "./room.schema.js";
 
 // 006 EARS-17 — the chat payload's author identity. A message carries the
 // poster's own display name in `authorName`, shown to every participant; the
@@ -37,6 +40,46 @@ describe("006 EARS-17 RoomChatMessage.authorName", () => {
   it("EARS-17: rejects an empty-string authorName (a name is a real value or absent, never blank)", () => {
     expect(
       RoomChatMessageSchema.safeParse({ ...base, authorName: "" }).success,
+    ).toBe(false);
+  });
+});
+
+// 006 EARS-5 — the realtime presence-count message rides the same room channel as
+// chat, discriminated by its `type` literal. These two shapes must NEVER cross-parse
+// (a chat message applied as a count, or vice-versa, would corrupt the header).
+describe("006 EARS-5 RoomPresenceCountMessage discrimination", () => {
+  const presence = {
+    type: "presence-count",
+    count: 3,
+    at: "2026-07-13T10:00:00.000Z",
+  } as const;
+
+  it("EARS-5: parses a server-published presence-count message", () => {
+    expect(RoomPresenceCountMessageSchema.parse(presence).count).toBe(3);
+  });
+
+  it("EARS-5: accepts a zero count (a room that just emptied out)", () => {
+    expect(
+      RoomPresenceCountMessageSchema.parse({ ...presence, count: 0 }).count,
+    ).toBe(0);
+  });
+
+  it("EARS-5: a chat message is NOT a presence-count message (no cross-parse)", () => {
+    expect(RoomPresenceCountMessageSchema.safeParse(base).success).toBe(false);
+  });
+
+  it("EARS-5: a presence-count message is NOT a chat message (no cross-parse)", () => {
+    expect(RoomChatMessageSchema.safeParse(presence).success).toBe(false);
+  });
+
+  it("EARS-5: rejects a fractional / negative count (a distinct-doctor count is a non-negative integer)", () => {
+    expect(
+      RoomPresenceCountMessageSchema.safeParse({ ...presence, count: 1.5 })
+        .success,
+    ).toBe(false);
+    expect(
+      RoomPresenceCountMessageSchema.safeParse({ ...presence, count: -1 })
+        .success,
     ).toBe(false);
   });
 });

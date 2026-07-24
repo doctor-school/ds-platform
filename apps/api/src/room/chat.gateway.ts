@@ -1,6 +1,10 @@
 import { createHash, createHmac } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
-import type { RoomChatCredential, RoomChatMessage } from "@ds/schemas";
+import type {
+  RoomChatCredential,
+  RoomChatMessage,
+  RoomPresenceCountMessage,
+} from "@ds/schemas";
 import type { ApiEnv } from "../config/env.schema.js";
 import { ROOM_CHAT_CONFIG } from "./room.tokens.js";
 
@@ -177,6 +181,42 @@ export class CentrifugoChatGateway {
    * success.
    */
   async publish(eventId: string, message: RoomChatMessage): Promise<void> {
+    await this.publishToChannel(this.channelForEvent(eventId), message);
+  }
+
+  /**
+   * Publish the live in-room presence count to the room channel over the SAME
+   * Centrifugo HTTP API + channel as chat (EARS-5; design §5). Called ONLY when an
+   * accepted beat or a window expiry CHANGED the distinct-doctor count, so the fan-
+   * out carries the fresh «N врачей в комнате» value to every subscriber instantly
+   * — no client waits on its own next beat. The message is discriminated from a
+   * chat publication by its `type: "presence-count"` literal (a chat message has no
+   * `type` key), so the shared subscription routes it without a second channel.
+   *
+   * Throws {@link ChatUnavailableError} on an unconfigured / failing transport,
+   * exactly like {@link publish} — but the presence path is best-effort: its caller
+   * ({@link PresencePublisher}) swallows the failure and lets the portal degrade to
+   * the heartbeat-ack refresh (#1136), so a Centrifugo blip never breaks a beat.
+   */
+  async publishPresenceCount(eventId: string, count: number): Promise<void> {
+    const message: RoomPresenceCountMessage = {
+      type: "presence-count",
+      count,
+      at: new Date().toISOString(),
+    };
+    await this.publishToChannel(this.channelForEvent(eventId), message);
+  }
+
+  /**
+   * The single Centrifugo HTTP-API publish primitive both the chat fan-out and the
+   * presence-count push ride — one server-only `X-API-Key` POST, one error-mapping
+   * contract (a transport failure or a Centrifugo error body both raise
+   * {@link ChatUnavailableError}, never a phantom success).
+   */
+  private async publishToChannel(
+    channel: string,
+    data: RoomChatMessage | RoomPresenceCountMessage,
+  ): Promise<void> {
     const config = this.config;
     if (!config) throw new ChatUnavailableError();
     let res: Response;
@@ -187,10 +227,7 @@ export class CentrifugoChatGateway {
           "content-type": "application/json",
           "X-API-Key": config.apiKey,
         },
-        body: JSON.stringify({
-          channel: this.channelForEvent(eventId),
-          data: message,
-        }),
+        body: JSON.stringify({ channel, data }),
       });
     } catch (cause) {
       throw new ChatUnavailableError(

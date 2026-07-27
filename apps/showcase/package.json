@@ -15,19 +15,19 @@
   "dependencies": {
     "@ds/design-system": "workspace:*",
     "@ds/schemas": "workspace:*",
-    "next": "16.2.10",
-    "react": "19.2.7",
-    "react-dom": "19.2.7",
-    "react-hook-form": "^7.82.0"
+    "next": "16.2.12",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-hook-form": "^7.83.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
-    "@playwright/test": "^1.61.1",
+    "@playwright/test": "^1.62.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.1.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "postcss": "^8.5.20",
+    "postcss": "^8.5.23",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3"
   }

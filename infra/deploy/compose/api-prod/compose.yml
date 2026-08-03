@@ -87,7 +87,7 @@ services:
       start_period: 30s
     # no published ports — Caddy reaches it over the compose network (api:3000)
 
-  # --- portal — Next.js standalone, user-facing auth screens (app.doctor.school) ---
+  # --- portal — Next.js standalone, user-facing auth screens (academy.doctor.school) ---
   portal:
     build:
       context: ../../../..

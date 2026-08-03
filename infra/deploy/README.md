@@ -171,10 +171,14 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    join the VPC via a `local_network {id,ip,mode}` block — DSO-100 2026-07-02).
    Review the plan (region/preset/cost) before `apply`.
 4. **DNS (manual, at Beget — the zone is NOT at Timeweb):** point A-records
-   `api.` / `app.` / `id.` / `admin.doctor.school` at the `api_prod_public_ip`
-   output (`admin.` is the wave-1 addition — Wave-1 apply order step 2). Root
-   `doctor.school` A-record is untouched. Email records (MX/SPF/DKIM/DMARC) are
-   already live (memory `reference_doctor_school_email_dns`).
+   `api.` / `academy.` / `id.` / `admin.doctor.school` at the `api_prod_public_ip`
+   output (`admin.` is the wave-1 addition — Wave-1 apply order step 2;
+   `academy.` is the portal host per #1171). The legacy `app.doctor.school`
+   A-record stays pointed at the same IP for the migration window — Caddy answers
+   it with a permanent redirect to `academy.` so already-sent e-mail links keep
+   resolving; retiring that record is a tracked follow-up, not a cutover step.
+   Root `doctor.school` A-record is untouched. Email records (MX/SPF/DKIM/DMARC)
+   are already live (memory `reference_doctor_school_email_dns`).
 5. **Get the committed `main` source onto both boxes (images build on-box, no registry).**
 
    > **DSO-100 on-box finding:** deploy keys are **disabled org-wide** for
@@ -348,7 +352,7 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
      sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; \
        IDP_BASE_URL=https://id.doctor.school \
        IDP_REDIRECT_URIS=https://api.doctor.school/auth/callback \
-       IDP_POST_LOGOUT_URIS=https://app.doctor.school \
+       IDP_POST_LOGOUT_URIS=https://academy.doctor.school,https://app.doctor.school \
        EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real \
        ./provision.sh --pat-file /etc/ds-platform/idp-bootstrap-pat.txt'
      # copy the emitted IDP_CLIENT_ID / IDP_CLIENT_SECRET / IDP_PROJECT_ID into api.env,
@@ -356,7 +360,7 @@ http://api:3000`. A portal image built before this fix must be REBUILT.
      ```
 
 10. **Verify (definition of done, spec §10).** Drive the auth vertical in the live
-    UI (`https://app.doctor.school`, Playwright): register → **real** verification
+    UI (`https://academy.doctor.school`, Playwright): register → **real** verification
     email (mail.ru); email-OTP login; **one supervised paid** SMS-OTP login
     (SMS-Aero); `/me/*` behind a session; valid TLS on all three hostnames; a
     pgbackrest basebackup + WAL in S3 with a restore dry-run (RTO ≤ 2 h).
@@ -444,13 +448,16 @@ events/rooms migrations like any other).
 
 2. **[OWNER-GATED] Beget DNS — `admin.doctor.school` A-record.** At Beget (the
    zone is NOT at Timeweb), add the A-record `admin.doctor.school` → the
-   existing `api_prod_public_ip` output (same target as `api.`/`app.`/`id.`).
+   existing `api_prod_public_ip` output (same target as `api.`/`academy.`/`id.`).
    Caddy auto-issues the cert on first request once the record resolves — no
    manual cert step.
 
 3. **[OWNER-GATED] SmartCaptcha keypair (#186).** In the Yandex Cloud console,
-   create a prod SmartCaptcha with **allowed domains = `app.doctor.school`**
-   (the widget renders on the portal registration surface). Capture the pair:
+   create a prod SmartCaptcha with **allowed domains = `academy.doctor.school`**
+   (the widget renders on the portal registration surface). Keep
+   `app.doctor.school` in the allowed list while the legacy host still resolves
+   (#1171) — the console list is out-of-band state, so adding `academy.` there
+   is a prerequisite of the cutover, not a consequence of it. Capture the pair:
    the **site key** (public, build-time) and the **server key** (secret).
    This step precedes the image builds on purpose — the site key is baked into
    the portal bundle at `next build` (a portal image built before the key
@@ -540,7 +547,7 @@ events/rooms migrations like any other).
 9. **[OWNER-GATED] Wave-1 smoke (spec §10.7–10.8).** Drive the journey in the
    live UI: a `platform_admin` operator creates a test event (with a program
    PDF upload) via `https://admin.doctor.school` → a doctor registers for it
-   from `https://app.doctor.school` (SmartCaptcha widget live on registration)
+   from `https://academy.doctor.school` (SmartCaptcha widget live on registration)
    → enters the room → exchanges **live chat** messages (real Centrifugo path,
    wss on `api.doctor.school/connection/websocket`) → fetches the program PDF
    back through the portal. **Real-S3 assertion (mandatory, spec §10.8):**
@@ -621,6 +628,43 @@ already-migrated schema. Sequence a removal across **two** deploys — expand
 only once no rolled-back app version can need it. This keeps app rollback a
 one-command, no-DB-rollback operation and reserves the pgbackrest restore for
 genuine data corruption, not routine reverts.
+
+## Portal host cutover — `app.` → `academy.doctor.school` (#1171)
+
+The portal's public host moves to `academy.doctor.school`. The repo config is
+**additive-first**: the new host is fully wired and the old one degrades to a
+permanent redirect, so there is no window where a live link 404s. Two of the
+five steps are out-of-band console state (Beget, Yandex Cloud) and MUST land
+**before** the deploy that flips the vhost — a redirect to a host with no DNS
+record, or a captcha whose allowed-domain list omits `academy.`, breaks
+registration for every user at once.
+
+Order (owner-gated at steps 1–2):
+
+1. **[OWNER-GATED] Beget DNS.** Add A-record `academy.doctor.school` →
+   `api_prod_public_ip` (`terraform output`). Leave the `app.` record in place.
+   Wait for it to resolve — Caddy issues the cert on first request, so a
+   pre-DNS deploy yields an ACME failure, not a working vhost.
+2. **[OWNER-GATED] SmartCaptcha allowed domains.** In the Yandex Cloud console,
+   add `academy.doctor.school` to the existing prod captcha's allowed domains,
+   keeping `app.doctor.school`. The site key is unchanged, so **no portal
+   rebuild is needed** for this step.
+3. **Zitadel post-logout URI.** Re-run `provision.sh` (idempotent, Apply order
+   step 9) with `IDP_POST_LOGOUT_URIS=https://academy.doctor.school,https://app.doctor.school`.
+   Redirect URIs are unaffected — the OIDC callback is on `api.`, not the portal.
+4. **On-box env.** In `/etc/ds-platform/api.env` set
+   `MAILER_PORTAL_BASE_URL=https://academy.doctor.school`, then restart the api.
+   This is what moves **newly sent** e-mail links (Zitadel OTP `sendCode`
+   template + the BFF duplicate-registration notice) onto the new host.
+5. **Deploy.** `pnpm deploy:prod` ships the Caddyfile (academy vhost + `app.`
+   redirect) and the Centrifugo origin allowlist. Then `pnpm deploy:smoke` —
+   its `PORTAL_HOST` default is already `academy.doctor.school`.
+
+**Retiring `app.`** is deliberately NOT part of the cutover. Verification and
+OTP e-mails already delivered carry `app.` links with a real expiry window, and
+mail clients cache; the redirect vhost + its A-record stay until those age out.
+Dropping the `app.` vhost, its A-record, its Centrifugo origin, and its
+SmartCaptcha domain is one tracked follow-up, done together.
 
 ## Key gotchas
 
@@ -756,5 +800,6 @@ As-built (OBS-трек, живьём верифицировано):
   недоступен — bbm-side egress-блокер): `S3BackupStale-ds` (pgbackrest
   `ds-prod-pgbackrest` >26ч), `ServiceDown`/`CertExpirySoon` (3 эндпоинта),
   `HostTelemetryStale-api-prod`/`-data-prod`, `DiskFillHigh` (>85/92%).
-- **Blackbox-эндпоинты:** `api.doctor.school/v1/health`, `app.doctor.school/`,
-  `id.doctor.school/`.
+- **Blackbox-эндпоинты:** `api.doctor.school/v1/health`,
+  `academy.doctor.school/`, `id.doctor.school/`. Цель для портала переехала с
+  `app.` на `academy.` (#1171) — правится в конфиге blackbox на mon вне репозитория.

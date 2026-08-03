@@ -8,9 +8,9 @@
 //
 //   api    GET https://api.doctor.school/v1/health   → 200 + status:"ok" (+ SHA)
 //          GET https://api.doctor.school/v1/ready     → 200 + postgres+pgvector ok
-//   portal GET https://app.doctor.school/             → follows redirects; final
+//   portal GET https://academy.doctor.school/         → follows redirects; final
 //          page < 500 AND no Next error-boundary markup (#866)
-//          GET https://app.doctor.school/login        → COLD (cookie-less) 200 +
+//          GET https://academy.doctor.school/login    → COLD (cookie-less) 200 +
 //          Next app-shell RSC stream, no error boundary (#866/#885: the portal
 //          login form is CLIENT-rendered, so assert the server-streamed shell —
 //          not <input>, which only exists post-hydration)
@@ -59,7 +59,7 @@ const PROBE_TIMEOUT_MS = 15000;
 const TLS_MIN_DAYS = 7;
 
 const API_HOST = process.env.PROD_API_HOST || "api.doctor.school";
-const PORTAL_HOST = process.env.PROD_PORTAL_HOST || "app.doctor.school";
+const PORTAL_HOST = process.env.PROD_PORTAL_HOST || "academy.doctor.school";
 const ADMIN_HOST = process.env.PROD_ADMIN_HOST || "admin.doctor.school";
 const ID_HOST = process.env.PROD_ID_HOST || "id.doctor.school";
 // PUBLIC OIDC client id (api.env IDP_CLIENT_ID — visible in every browser

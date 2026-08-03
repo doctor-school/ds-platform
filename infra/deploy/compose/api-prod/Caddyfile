@@ -11,9 +11,18 @@
 	email a@preencipium.com
 }
 
-# Portal (Next.js standalone) — user-facing auth screens.
-app.doctor.school {
+# Portal (Next.js standalone) — user-facing auth screens (#1171).
+academy.doctor.school {
 	reverse_proxy portal:3001
+}
+
+# Legacy portal host (#1171). Kept as a path-preserving permanent redirect, not a
+# second origin: e-mail links already delivered (Zitadel OTP `sendCode.urlTemplate`,
+# BFF mailer notices) carry app.doctor.school and must keep resolving until they age
+# out. `{uri}` preserves path + query, so a deep link survives the hop. Retiring this
+# vhost (and its A-record) is a tracked follow-up, not part of the cutover.
+app.doctor.school {
+	redir https://academy.doctor.school{uri} permanent
 }
 
 # Admin app (Next.js + Refine standalone) — operator event/program management

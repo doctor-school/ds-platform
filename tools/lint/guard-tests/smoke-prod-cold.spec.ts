@@ -43,7 +43,7 @@ const CLIENT_RENDERED_PORTAL_LOGIN_BODY = `<!DOCTYPE html><html><head><title>Doc
 // A portal error boundary streamed with status 200 (a server component threw):
 // no form, but the Next production boundary markers ARE present — the #866
 // failure mode a client-rendered probe must still reject.
-const PORTAL_ERROR_BOUNDARY_BODY = `<!DOCTYPE html><html><body><h2>Application error: a server-side exception has occurred while loading app.doctor.school (see the server logs for more information).</h2><p>Digest: 987654321</p></body></html>`;
+const PORTAL_ERROR_BOUNDARY_BODY = `<!DOCTYPE html><html><body><h2>Application error: a server-side exception has occurred while loading academy.doctor.school (see the server logs for more information).</h2><p>Digest: 987654321</p></body></html>`;
 
 describe("smoke-prod findColdErrorMarker()", () => {
   it("flags the Next production error boundary (both classic and Next 15 wording)", () => {

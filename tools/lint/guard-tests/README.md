@@ -148,6 +148,15 @@ it must NOT steer callers out of the tree — the server refuses that with `File
 denied` — so the refusal text points at `.playwright-mcp/<task>/<name>.png` and the
 spec asserts the message does **not** name an out-of-tree scratch dir.
 
+Two live-server facts shape the refusal text, both asserted by the spec: the target
+name must be FLAT (`.playwright-mcp/<task>-<name>.png`) because a caller-supplied
+filename is never mkdir'd — `workspaceFile()` only resolves + access-checks and
+`_writeFile()` writes straight through, so a nested path is `ENOENT` unless the dir
+already exists; only the omitted-filename branch (`outputFile()`) calls `mkdir`
+recursive. And `guardedRoots()` protects the SHARED main tree as well as the cwd when
+the session runs from `<main>/.claude/worktrees/<N>`, so a `../../../shot.png` escape
+out of the worktree is blocked rather than falling into the allow branch.
+
 Both halves are asserted: the pure seams by direct import (`isScreenshotTool` — any
 MCP server id, so a re-install cannot disarm it, and `browser_pdf_save` too;
 case-folding `normPath`/`isPathInside`; `decideScreenshotBlock`; `blockMessage`) and

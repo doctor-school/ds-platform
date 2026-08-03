@@ -93,9 +93,14 @@ export function blockMessage({ filename, resolved, cwd }) {
     `Playwright MCP resolves a relative filename against its cwd — the repo root — so the ` +
     `file lands in the SHARED working tree as untracked clutter (#1169: 18 stray files, ` +
     `5.8 MB, from 73 such calls).\n` +
-    `Write under '${SERVER_OUTPUT_DIR}/' instead — e.g. filename ` +
-    `'${SERVER_OUTPUT_DIR}/<task>/<name>.png'. That directory is .gitignore'd and is where ` +
+    `Write into '${SERVER_OUTPUT_DIR}/' instead, with a FLAT name that carries the task: ` +
+    `'${SERVER_OUTPUT_DIR}/<task>-<name>.png'. That directory is .gitignore'd and is where ` +
     `the server's own auto-named files already go.\n` +
+    `A caller-supplied filename is NOT mkdir'd: the server's workspaceFile() branch only ` +
+    `resolves + access-checks, and _writeFile() then writes straight through — a nested ` +
+    `'${SERVER_OUTPUT_DIR}/<dir>/x.png' fails with ENOENT unless <dir> already exists ` +
+    `(only the OMITTED-filename branch, outputFile(), calls mkdir recursive). Need a ` +
+    `subdirectory? create it with the Bash tool first.\n` +
     `Do NOT retarget outside the repo: the server's allowed roots are exactly ` +
     `'${cwd}' and '${cwd}/${SERVER_OUTPUT_DIR}' (playwright-core checkFile) — anything else ` +
     `raises 'File access denied'.\n` +
@@ -105,7 +110,22 @@ export function blockMessage({ filename, resolved, cwd }) {
 }
 
 /**
- * Pure decision seam. BLOCK only when the call would write into the repo tree
+ * Every tree this guard protects, given the server's cwd: the cwd itself and —
+ * when the cwd is a worktree under `<main>/.claude/worktrees/<N>` — the SHARED
+ * main tree above it. Without the second root a `../../../shot.png` from a
+ * worktree resolves outside the worktree and would take the allow branch, while
+ * landing squarely in the main tree the owner works in (AGENTS.md §6; same
+ * derivation as `worktree-path-guard.mjs`).
+ */
+export function guardedRoots(cwd) {
+  const roots = [cwd];
+  const m = String(cwd).match(/^(.*)[\\/]\.claude[\\/]worktrees[\\/][^\\/]+/);
+  if (m && m[1]) roots.push(m[1]);
+  return roots;
+}
+
+/**
+ * Pure decision seam. BLOCK only when the call would write into a guarded tree
  * OUTSIDE the git-ignored `.playwright-mcp/` dir. Explicitly allowed:
  *
  * - another tool, a malformed `tool_input`, a non-string / empty `filename`;
@@ -139,11 +159,19 @@ export function decideScreenshotBlock({ toolName, toolInput, cwd }) {
   }
 
   const resolved = resolve(cwd, filename);
-  const outputDir = resolve(cwd, SERVER_OUTPUT_DIR);
+  const roots = guardedRoots(cwd);
 
-  if (isPathInside(outputDir, resolved)) return { block: false };
-  if (isPathInside(cwd, resolved))
-    return { block: true, filename, resolved, cwd };
+  // Output dirs win over the tree check — `.playwright-mcp/` is git-ignored.
+  for (const root of roots) {
+    if (isPathInside(resolve(root, SERVER_OUTPUT_DIR), resolved)) {
+      return { block: false };
+    }
+  }
+  for (const root of roots) {
+    if (isPathInside(root, resolved)) {
+      return { block: true, filename, resolved, cwd };
+    }
+  }
   return { block: false };
 }
 

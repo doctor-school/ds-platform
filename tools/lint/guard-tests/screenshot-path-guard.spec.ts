@@ -12,6 +12,7 @@ import {
   SERVER_OUTPUT_DIR,
   blockMessage,
   decideScreenshotBlock,
+  guardedRoots,
   isPathInside,
   isScreenshotTool,
   normPath,
@@ -136,6 +137,33 @@ describe("decideScreenshotBlock — the #1169 class", () => {
   });
 });
 
+describe("guardedRoots — the worktree escape", () => {
+  const WT = resolve(CWD, ".claude", "worktrees", "1169");
+
+  it("adds the shared main tree when the cwd is a worktree", () => {
+    expect(guardedRoots(WT).map(normPath)).toEqual([
+      normPath(WT),
+      normPath(CWD),
+    ]);
+  });
+
+  it("is just the cwd for a non-worktree tree", () => {
+    expect(guardedRoots(CWD).map(normPath)).toEqual([normPath(CWD)]);
+  });
+
+  it("blocks a traversal out of the worktree into the main tree", () => {
+    // Resolves outside the worktree, so the single-root check let it through —
+    // straight into the shared tree the owner works in.
+    expect(decide("../../../shot.png", WT).block).toBe(true);
+    expect(decide(resolve(CWD, "shot.png"), WT).block).toBe(true);
+  });
+
+  it("still allows either tree's .playwright-mcp/ from inside the worktree", () => {
+    expect(decide(`${SERVER_OUTPUT_DIR}/shot.png`, WT).block).toBe(false);
+    expect(decide(resolve(OUTPUT_DIR, "shot.png"), WT).block).toBe(false);
+  });
+});
+
 describe("decideScreenshotBlock — what must keep working", () => {
   it("allows the server's own output dir, relative or absolute", () => {
     expect(decide(`${SERVER_OUTPUT_DIR}/shot.png`).block).toBe(false);
@@ -223,6 +251,11 @@ describe("blockMessage", () => {
     // It must NOT steer outside the tree — that is `File access denied`.
     expect(msg).toContain("File access denied");
     expect(msg).not.toContain("LOCALAPPDATA");
+    // Nor into a nested dir: a caller-supplied filename is never mkdir'd, so
+    // `.playwright-mcp/<dir>/x.png` fails with ENOENT unless <dir> exists.
+    expect(msg).toContain("ENOENT");
+    expect(msg).toContain(`${SERVER_OUTPUT_DIR}/<task>-<name>.png`);
+    expect(msg).not.toContain(`${SERVER_OUTPUT_DIR}/<task>/<name>.png`);
   });
 });
 

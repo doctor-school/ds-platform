@@ -43,6 +43,16 @@
         ]
       },
       {
+        "matcher": "mcp__.*__browser_take_screenshot",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/hooks/screenshot-path-guard.mjs\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": "AskUserQuestion",
         "hooks": [
           {

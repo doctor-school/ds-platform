@@ -136,6 +136,19 @@ plus the slug/prefix/path derivation of
 task:worktree`). Same entry-point-guard discipline — the import fires no
 `git`/`gh` subprocess.
 
+`screenshot-path-guard.spec.ts` covers the #1169 PreToolUse hook
+[`tools/hooks/screenshot-path-guard.mjs`](../../hooks/screenshot-path-guard.mjs),
+which BLOCKS a `browser_take_screenshot` carrying a RELATIVE `filename`: Playwright
+MCP resolves it against the server's cwd — the repo root — so a bare name drops a
+stray PNG into the shared main tree (18 files / 5.8 MB found at root on 2026-08-03,
+from 73 such calls in the session transcripts). Both halves are asserted: the pure
+seams by direct import (`isAbsolutePath`, `isScreenshotTool` — matched under any MCP
+server id so a re-install cannot disarm it, `decideScreenshotBlock`, `blockMessage`)
+and the process contract by spawning the hook with a real PreToolUse payload (exit 2
+
+- actionable stderr / exit 0 / fail-open on unparseable stdin). An OMITTED `filename`
+  is allowed — the server then writes into its own output dir, never the repo root.
+
 `worktree-teardown.spec.ts` unit-covers the pure helpers of
 [`tools/dev/worktree-teardown.mjs`](../../dev/worktree-teardown.mjs) (`pnpm
 worktree:teardown`): `resolveWorktreePath()` (#598 — a bare name resolves

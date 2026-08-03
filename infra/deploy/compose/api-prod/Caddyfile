@@ -20,7 +20,7 @@ academy.doctor.school {
 # second origin: e-mail links already delivered (Zitadel OTP `sendCode.urlTemplate`,
 # BFF mailer notices) carry app.doctor.school and must keep resolving until they age
 # out. `{uri}` preserves path + query, so a deep link survives the hop. Retiring this
-# vhost (and its A-record) is a tracked follow-up, not part of the cutover.
+# vhost (and its A-record) is tracked as #1173, not part of the cutover.
 app.doctor.school {
 	redir https://academy.doctor.school{uri} permanent
 }

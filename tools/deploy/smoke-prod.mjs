@@ -10,6 +10,9 @@
 //          GET https://api.doctor.school/v1/ready     → 200 + postgres+pgvector ok
 //   portal GET https://academy.doctor.school/         → follows redirects; final
 //          page < 500 AND no Next error-boundary markup (#866)
+//          GET https://app.doctor.school/login?smoke=1 → NO-follow 301 whose
+//          Location preserves path + query (#1171 legacy-host redirect; #1173
+//          retires the host and this probe together)
 //          GET https://academy.doctor.school/login    → COLD (cookie-less) 200 +
 //          Next app-shell RSC stream, no error boundary (#866/#885: the portal
 //          login form is CLIENT-rendered, so assert the server-streamed shell —
@@ -62,6 +65,11 @@ const API_HOST = process.env.PROD_API_HOST || "api.doctor.school";
 const PORTAL_HOST = process.env.PROD_PORTAL_HOST || "academy.doctor.school";
 const ADMIN_HOST = process.env.PROD_ADMIN_HOST || "admin.doctor.school";
 const ID_HOST = process.env.PROD_ID_HOST || "id.doctor.school";
+// Legacy portal host (#1171) — kept as a path-preserving 301 to PORTAL_HOST until
+// already-delivered e-mail links age out (#1173 retires it). Probed so the day the
+// redirect (or its cert) dies is a smoke failure, not a user report.
+const LEGACY_PORTAL_HOST =
+  process.env.PROD_LEGACY_PORTAL_HOST || "app.doctor.school";
 // PUBLIC OIDC client id (api.env IDP_CLIENT_ID — visible in every browser
 // authorize URL, NOT a credential). Opt-in: enables the full cookie-less
 // authorize→login flow probe; unset ⇒ that one probe prints SKIP.
@@ -288,6 +296,23 @@ async function probePortal() {
   return `${res.status} after ${res.hops} redirect(s) (real render, no error boundary)`;
 }
 
+async function probeLegacyPortalRedirect() {
+  // #1171 AC: the legacy host must 301 to the new one PATH-PRESERVINGLY. Probe a
+  // deep link with a query string and do NOT follow — the hop itself is the
+  // assertion. A plain `httpsGetFollow` would land on a healthy 200 and hide a
+  // redirect that dropped the path (the exact way an old OTP link dies silently).
+  const path = "/login?smoke=1";
+  const res = await httpsGet(`https://${LEGACY_PORTAL_HOST}${path}`);
+  if (res.status !== 301)
+    throw new Error(`${path} → ${res.status} (expected 301)`);
+  const want = `https://${PORTAL_HOST}${path}`;
+  if (res.headers.location !== want)
+    throw new Error(
+      `Location: ${res.headers.location ?? "(absent)"} (expected ${want})`,
+    );
+  return `301 → ${want} (path + query preserved)`;
+}
+
 async function probePortalLoginCold() {
   // The portal's own cold login entry (#866): cookie-less GET /login must be
   // a REAL render — exact 200, no error boundary. UNLIKE the Zitadel-hosted
@@ -437,6 +462,7 @@ const PROBES = [
   ["api /v1/health", probeApiHealth],
   ["api /v1/ready", probeApiReady],
   ["portal /", probePortal],
+  ["legacy portal 301", probeLegacyPortalRedirect],
   ["portal /login cold", probePortalLoginCold],
   ["portal /verify cold", probeVerifyCold],
   ["admin /", probeAdmin],
@@ -446,6 +472,7 @@ const PROBES = [
   ["register closed", probeRegisterClosed],
   [`TLS ${API_HOST}`, () => probeTls(API_HOST)],
   [`TLS ${PORTAL_HOST}`, () => probeTls(PORTAL_HOST)],
+  [`TLS ${LEGACY_PORTAL_HOST}`, () => probeTls(LEGACY_PORTAL_HOST)],
   [`TLS ${ADMIN_HOST}`, () => probeTls(ADMIN_HOST)],
   [`TLS ${ID_HOST}`, () => probeTls(ID_HOST)],
 ];

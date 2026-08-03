@@ -12,7 +12,7 @@ On-demand detail: branches/commits/versioning/Issues/PRs/merge → `.claude/rule
 
 Medical-education platform for Doctor.School (B2B pharma sponsor → B2D doctor audience). ADRs 0001–0008 accepted.
 
-**Production is live with users** on Timeweb (ru-3): `app.doctor.school` / `api.` / `id.`. Never tell the owner "there is no production". Authoritative deployed scope = the derived `## Project reality` bootstrap section (`pnpm bootstrap`) + GitHub Releases/Deployments — never inferred from these docs (static prose rots).
+**Production is live with users** on Timeweb (ru-3): `academy.doctor.school` / `api.` / `id.`. Never tell the owner "there is no production". Authoritative deployed scope = the derived `## Project reality` bootstrap section (`pnpm bootstrap`) + GitHub Releases/Deployments — never inferred from these docs (static prose rots).
 
 Stack (reference `apps/docs/content/adr/`; long-form `README.md`): NestJS + Zod + REST + openapi-typescript SDK (ADR-0002); Postgres 17 + Drizzle + pgvector (ADR-0003); Next.js 15 + Refine — promo / portal / admin / cms-Payload-v3 (ADR-0004); React Native + Expo + WatermelonDB (ADR-0005); Fumadocs + Keystatic + glossary.yaml (ADR-0006).
 

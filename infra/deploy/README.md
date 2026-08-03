@@ -176,7 +176,7 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
    `academy.` is the portal host per #1171). The legacy `app.doctor.school`
    A-record stays pointed at the same IP for the migration window — Caddy answers
    it with a permanent redirect to `academy.` so already-sent e-mail links keep
-   resolving; retiring that record is a tracked follow-up, not a cutover step.
+   resolving; retiring that record is tracked as #1173, not a cutover step.
    Root `doctor.school` A-record is untouched. Email records (MX/SPF/DKIM/DMARC)
    are already live (memory `reference_doctor_school_email_dns`).
 5. **Get the committed `main` source onto both boxes (images build on-box, no registry).**
@@ -639,7 +639,13 @@ five steps are out-of-band console state (Beget, Yandex Cloud) and MUST land
 record, or a captcha whose allowed-domain list omits `academy.`, breaks
 registration for every user at once.
 
-Order (owner-gated at steps 1–2):
+**Every signed-in user is logged out by this cutover** — expected, not a fault.
+The session cookie is `__Host-`-prefixed, therefore host-only: it does not travel
+through the 301, so anyone currently signed in re-authenticates on `academy.`
+(a user sitting in a live webinar room lands on `/login?returnTo=…`). Do **not**
+cut over during a scheduled webinar.
+
+Order — steps run in sequence; **do not reorder 4 and 5** (the reason is in 5):
 
 1. **[OWNER-GATED] Beget DNS.** Add A-record `academy.doctor.school` →
    `api_prod_public_ip` (`terraform output`). Leave the `app.` record in place.
@@ -649,22 +655,89 @@ Order (owner-gated at steps 1–2):
    add `academy.doctor.school` to the existing prod captcha's allowed domains,
    keeping `app.doctor.school`. The site key is unchanged, so **no portal
    rebuild is needed** for this step.
-3. **Zitadel post-logout URI.** Re-run `provision.sh` (idempotent, Apply order
-   step 9) with `IDP_POST_LOGOUT_URIS=https://academy.doctor.school,https://app.doctor.school`.
-   Redirect URIs are unaffected — the OIDC callback is on `api.`, not the portal.
-4. **On-box env.** In `/etc/ds-platform/api.env` set
-   `MAILER_PORTAL_BASE_URL=https://academy.doctor.school`, then restart the api.
-   This is what moves **newly sent** e-mail links (Zitadel OTP `sendCode`
-   template + the BFF duplicate-registration notice) onto the new host.
-5. **Deploy.** `pnpm deploy:prod` ships the Caddyfile (academy vhost + `app.`
-   redirect) and the Centrifugo origin allowlist. Then `pnpm deploy:smoke` —
-   its `PORTAL_HOST` default is already `academy.doctor.school`.
+3. **Zitadel URI set — re-pass EVERY URI, not just the new one.** `provision.sh`
+   sends ONE full-object `PUT` on `oidc_config`: the payload it builds carries
+   both `redirectUris` and `postLogoutRedirectUris`, so the PUT **replaces** both
+   arrays — it is idempotent, not additive. Any URI you omit is deleted, and
+   `IDP_REDIRECT_URIS` falls back to a `http://localhost` default that `devMode:true`
+   happily accepts, so the run **reports success while prod's OIDC callback is
+   gone** and every login fails with a redirect_uri mismatch. Sourcing `api.env`
+   does not save you: it defines `IDP_REDIRECT_URI` (singular, the api's own
+   callback), never the plural `IDP_REDIRECT_URIS` the script reads.
 
-**Retiring `app.`** is deliberately NOT part of the cutover. Verification and
-OTP e-mails already delivered carry `app.` links with a real expiry window, and
-mail clients cache; the redirect vhost + its A-record stay until those age out.
-Dropping the `app.` vhost, its A-record, its Centrifugo origin, and its
-SmartCaptcha domain is one tracked follow-up, done together.
+   Run exactly this — every variable spelled out, no partial invocation:
+
+   ```bash
+   cd ~/ds-platform/infra/dev-stand/idp
+   sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; \
+     IDP_BASE_URL=https://id.doctor.school \
+     IDP_REDIRECT_URIS=https://api.doctor.school/auth/callback \
+     IDP_POST_LOGOUT_URIS=https://academy.doctor.school,https://app.doctor.school \
+     EMAIL_DELIVERY_MODE=real SMS_DELIVERY_MODE=real \
+     ./provision.sh --pat-file /etc/ds-platform/idp-bootstrap-pat.txt'
+   ```
+
+   Then **verify the callback survived** before moving on — the failure above is
+   silent, so read the registered set back:
+
+   ```bash
+   sudo docker compose exec api node -e "console.log(process.env.IDP_REDIRECT_URI)"
+   # must print https://api.doctor.school/auth/callback — then drive one real
+   # login through https://academy.doctor.school before declaring step 3 done.
+   ```
+
+   What this step actually buys: registering `academy.` in `postLogoutRedirectUris`
+   is forward-looking hygiene — nothing in `apps/api` or `apps/portal` currently
+   sends `post_logout_redirect_uri` or calls `end_session`. The **real** risk of
+   the step is the redirect-URI clobber above, which is why the full command is
+   spelled out rather than a one-flag delta.
+
+4. **Deploy.** `pnpm deploy:prod` ships the Caddyfile (academy vhost + `app.`
+   redirect) and the Centrifugo origin allowlist.
+
+   **Restart Centrifugo by hand** — `./centrifugo/config.json` is a read-only
+   **bind mount** and the container definition is unchanged, so `compose up -d`
+   does not recreate the container when only the file's contents changed, and
+   Centrifugo has no config hot-reload. `deploy:prod` reloads Caddy only (the
+   same lesson already learned for the `admin.` vhost, #751/#729) — there is no
+   centrifugo counterpart:
+
+   ```bash
+   sudo docker compose restart centrifugo
+   ```
+
+   Skipping it leaves the pre-cutover allowlist live, so every websocket from the
+   `academy.` origin is rejected and in-room chat + the presence counter are dead
+   while HTTP smoke stays green. The restart drops open sockets; clients reconnect.
+
+   Then confirm the new host actually serves over a valid cert:
+
+   ```bash
+   curl -sSI https://academy.doctor.school/ | head -1   # 200/3xx over valid TLS
+   pnpm deploy:smoke                                    # PORTAL_HOST already academy.
+   ```
+
+5. **On-box env — only after step 4 is verified green.** In
+   `/etc/ds-platform/api.env` set
+   `MAILER_PORTAL_BASE_URL=https://academy.doctor.school`, then restart the api.
+   This moves **newly sent** e-mail links (Zitadel OTP `sendCode` template + the
+   BFF duplicate-registration notice) onto the new host.
+
+   This is last **on purpose**: flip it before the deploy and mail sent in the gap
+   points at a host with DNS but no Caddy site block and no ACME certificate — the
+   TLS handshake simply fails, and an OTP link with a real expiry clock is dead on
+   arrival. Once `academy.` serves, the window is closed in both directions.
+
+**Retiring `app.`** is deliberately NOT part of the cutover — tracked as **#1173**.
+Verification and OTP e-mails already delivered carry `app.` links with a real
+expiry window, and mail clients cache; the redirect vhost + its A-record stay
+until those age out. #1173 drops the `app.` vhost, its A-record, its Centrifugo
+origin, its SmartCaptcha domain, and the `legacy portal 301` smoke probe together.
+
+**Post-cutover doc sync** (live-state prose that goes false the moment this lands,
+tracked with #1173): the off-repo blackbox target on `mon` (monitoring section
+below), `apps/portal/README.md:3`, and `apps/portal/package.json` `description`.
+`AGENTS.md` §1 is updated in the same PR as this runbook.
 
 ## Key gotchas
 

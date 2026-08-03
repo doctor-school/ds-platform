@@ -141,11 +141,12 @@ task:worktree`). Same entry-point-guard discipline — the import fires no
 Playwright MCP resolves a caller-supplied `filename` against its own cwd — the repo
 root — and then accepts it only if it lands in the repo tree or in
 `<cwd>/.playwright-mcp` (playwright-core 0.0.78 `checkFile`/`outputDir`). So the hook
-blocks exactly one class: a write INSIDE the tree but OUTSIDE the git-ignored
-`.playwright-mcp/`. That is the class that left 18 stray PNGs (5.8 MB) at the repo
-root by 2026-08-03, from 73 bare-filename calls in the session transcripts. Crucially
-it must NOT steer callers out of the tree — the server refuses that with `File access
-denied` — so the refusal text points at `.playwright-mcp/<task>/<name>.png` and the
+blocks writes that land in a GUARDED TREE but OUTSIDE its git-ignored
+`.playwright-mcp/` — the cwd, plus the shared main tree when the cwd is a worktree
+(see `guardedRoots()` below). That is the class that left 18 stray PNGs (5.8 MB) at
+the repo root by 2026-08-03, from 73 bare-filename calls in the session transcripts.
+Crucially it must NOT steer callers out of the tree — the server refuses that with
+`File access denied` — so the refusal text points INTO `.playwright-mcp/`, and the
 spec asserts the message does **not** name an out-of-tree scratch dir.
 
 Two live-server facts shape the refusal text, both asserted by the spec: the target

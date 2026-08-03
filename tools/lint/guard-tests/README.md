@@ -136,6 +136,39 @@ plus the slug/prefix/path derivation of
 task:worktree`). Same entry-point-guard discipline — the import fires no
 `git`/`gh` subprocess.
 
+`screenshot-path-guard.spec.ts` covers the #1169 PreToolUse hook
+[`tools/hooks/screenshot-path-guard.mjs`](../../hooks/screenshot-path-guard.mjs).
+Playwright MCP resolves a caller-supplied `filename` against its own cwd — the repo
+root — and then accepts it only if it lands in the repo tree or in
+`<cwd>/.playwright-mcp` (playwright-core 0.0.78 `checkFile`/`outputDir`). So the hook
+blocks writes that land in a GUARDED TREE but OUTSIDE its git-ignored
+`.playwright-mcp/` — the cwd, plus the shared main tree when the cwd is a worktree
+(see `guardedRoots()` below). That is the class that left 18 stray PNGs (5.8 MB) at
+the repo root by 2026-08-03, from 73 bare-filename calls in the session transcripts.
+Crucially it must NOT steer callers out of the tree — the server refuses that with
+`File access denied` — so the refusal text points INTO `.playwright-mcp/`, and the
+spec asserts the message does **not** name an out-of-tree scratch dir.
+
+Two live-server facts shape the refusal text, both asserted by the spec: the target
+name must be FLAT (`.playwright-mcp/<task>-<name>.png`) because a caller-supplied
+filename is never mkdir'd — `workspaceFile()` only resolves + access-checks and
+`_writeFile()` writes straight through, so a nested path is `ENOENT` unless the dir
+already exists; only the omitted-filename branch (`outputFile()`) calls `mkdir`
+recursive. And `guardedRoots()` protects the SHARED main tree as well as the cwd when
+the session runs from `<main>/.claude/worktrees/<N>`, so a `../../../shot.png` escape
+out of the worktree is blocked rather than falling into the allow branch.
+
+Both halves are asserted: the pure seams by direct import (`isScreenshotTool` — any
+MCP server id, so a re-install cannot disarm it, and `browser_pdf_save` too;
+case-folding `normPath`/`isPathInside`; `decideScreenshotBlock`; `blockMessage`) and
+the process contract by spawning the hook with a real PreToolUse payload. The blocked
+cases include an ABSOLUTE in-tree path and a `..` traversal that climbs back into the
+tree — shapes a naive "absolute is fine" rule would let through; the allowed cases
+(the output dir relative and absolute, an out-of-tree path, an omitted `filename`, an
+unrelated tool) additionally assert an EMPTY stderr, so an inert hook cannot pass
+them by accident. Fail-open on unparseable stdin, and a no-`cwd` payload falls back
+to the shape rule.
+
 `worktree-teardown.spec.ts` unit-covers the pure helpers of
 [`tools/dev/worktree-teardown.mjs`](../../dev/worktree-teardown.mjs) (`pnpm
 worktree:teardown`): `resolveWorktreePath()` (#598 — a bare name resolves

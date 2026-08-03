@@ -43,7 +43,7 @@
         ]
       },
       {
-        "matcher": "mcp__.*__browser_take_screenshot",
+        "matcher": "mcp__.*__browser_(take_screenshot|pdf_save)",
         "hooks": [
           {
             "type": "command",

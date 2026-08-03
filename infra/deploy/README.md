@@ -660,7 +660,7 @@ Order — steps run in sequence; **do not reorder 4 and 5** (the reason is in 5)
    this is a delete-then-add, and it **evicts that landing from this hostname**.
 
    Owner-approved (2026-08-03, decision recorded on
-   [#1171](https://github.com/doctor-school/ds-platform/issues/1171#issuecomment-5163200411)):
+   [#1171](https://github.com/doctor-school/ds-platform/issues/1171)):
    «Лендинг остаётся только на тех. домене — там была временная презентация» —
    the landing keeps living on its own `*.vercel.app` technical domain (owner's
    Vercel account, outside this repo), and `academy.` is released to the portal.

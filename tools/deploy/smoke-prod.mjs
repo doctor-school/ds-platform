@@ -159,17 +159,6 @@ export function findColdErrorMarker(body) {
   return COLD_ERROR_MARKERS.find((m) => body.includes(m)) ?? null;
 }
 
-// Throws unless `res` is a real, successfully rendered cold page: exact 200,
-// no error-boundary marker, and (when given) the expected page markup present.
-//
-// `requireMarkup` is a single token OR a list of tokens that must ALL be present
-// in the body. A server-rendered surface (the Zitadel-hosted login) asserts the
-// literal form field "<input"; a CLIENT-rendered Next surface (the portal /login,
-// #885) asserts a server-streamed app-shell signal instead — its <input> fields
-// are drawn only after hydration, so requiring "<input" false-positives on a
-// perfectly healthy cold page. The error-boundary markers above keep the #866
-// teeth either way: a blank/degraded/proxy-error body carries none of the
-// required markup and still fails.
 // Throws unless `res` is the legacy host's path-preserving permanent redirect to
 // the new portal host (#1171). Exported so the three ways this logic could itself
 // be wrong — path dropped, query dropped, 302 instead of 301 — are unit-covered
@@ -192,6 +181,17 @@ export function checkLegacyRedirect(res, { path, expectHost }) {
   return `301 → ${want} (path + query preserved)`;
 }
 
+// Throws unless `res` is a real, successfully rendered cold page: exact 200,
+// no error-boundary marker, and (when given) the expected page markup present.
+//
+// `requireMarkup` is a single token OR a list of tokens that must ALL be present
+// in the body. A server-rendered surface (the Zitadel-hosted login) asserts the
+// literal form field "<input"; a CLIENT-rendered Next surface (the portal /login,
+// #885) asserts a server-streamed app-shell signal instead — its <input> fields
+// are drawn only after hydration, so requiring "<input" false-positives on a
+// perfectly healthy cold page. The error-boundary markers above keep the #866
+// teeth either way: a blank/degraded/proxy-error body carries none of the
+// required markup and still fails.
 export function checkColdPage(res, { requireMarkup = "<input", expectPath } = {}) {
   const where = res.url ? ` (${res.url})` : "";
   if (res.status !== 200)

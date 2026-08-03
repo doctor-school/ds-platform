@@ -635,9 +635,9 @@ The portal's public host moves to `academy.doctor.school`. The repo config is
 **additive-first**: the new host is fully wired and the old one degrades to a
 permanent redirect, so there is no window where a live link 404s. Two of the
 five steps are out-of-band console state (Beget, Yandex Cloud) and MUST land
-**before** the deploy that flips the vhost — a redirect to a host with no DNS
-record, or a captcha whose allowed-domain list omits `academy.`, breaks
-registration for every user at once.
+**before** the deploy that flips the vhost — a redirect to a host that still
+answers as something else, or a captcha whose allowed-domain list omits
+`academy.`, breaks registration for every user at once.
 
 **Every signed-in user is logged out by this cutover** — expected, not a fault.
 The session cookie is `__Host-`-prefixed, therefore host-only: it does not travel
@@ -645,12 +645,48 @@ through the 301, so anyone currently signed in re-authenticates on `academy.`
 (a user sitting in a live webinar room lands on `/login?returnTo=…`). Do **not**
 cut over during a scheduled webinar.
 
+**Precondition — step 1 (DNS) must be verified live BEFORE the deploy step runs.**
+The Caddyfile in this repo already 301s `app.` → `academy.`, so the flip rides in
+whichever `pnpm deploy:prod` happens first, for any unrelated feature. Until
+`academy.` resolves to api-prod, that deploy silently sends every portal user to
+whatever else answers on that name. Do not deploy on an unverified step 1.
+
 Order — steps run in sequence; **do not reorder 4 and 5** (the reason is in 5):
 
-1. **[OWNER-GATED] Beget DNS.** Add A-record `academy.doctor.school` →
-   `api_prod_public_ip` (`terraform output`). Leave the `app.` record in place.
-   Wait for it to resolve — Caddy issues the cert on first request, so a
-   pre-DNS deploy yields an ACME failure, not a working vhost.
+1. **[OWNER-GATED] Beget DNS — REPOINT, not an add.** `academy.doctor.school`
+   is **not a free name**: it currently holds a `CNAME → cname.vercel-dns.com`
+   serving the «OrtoBio School × Doctor.School» sponsorship landing on the
+   owner's Vercel. A CNAME and an A-record cannot coexist at the same name, so
+   this is a delete-then-add, and it **evicts that landing from this hostname**.
+
+   Owner-approved (2026-08-03, decision recorded on
+   [#1171](https://github.com/doctor-school/ds-platform/issues/1171#issuecomment-5163200411)):
+   «Лендинг остаётся только на тех. домене — там была временная презентация» —
+   the landing keeps living on its own `*.vercel.app` technical domain (owner's
+   Vercel account, outside this repo), and `academy.` is released to the portal.
+   Nothing on the Vercel side needs deleting; only the DNS record here moves.
+
+   There is **no Beget API access in our tooling** (`~/.ds-platform/.env.local`
+   holds no Beget credentials) — these are manual owner-side console steps:
+
+   1. Beget DNS console → zone `doctor.school` → **delete** the `academy`
+      CNAME record (`cname.vercel-dns.com`).
+   2. **Add** A-record `academy` → `77.233.220.222` (the `api_prod_public_ip`
+      terraform output — re-read it rather than trusting this literal).
+   3. Leave the `app.` A-record untouched (it keeps serving the redirect).
+
+   Then **verify propagation before proceeding** — Caddy issues the cert on
+   first request, so a deploy that runs while the old CNAME is still cached
+   yields an ACME failure, not a working vhost:
+
+   ```bash
+   nslookup academy.doctor.school 8.8.8.8   # must return A 77.233.220.222,
+   nslookup academy.doctor.school 1.1.1.1   # NOT a cname.vercel-dns.com alias
+   ```
+
+   Both resolvers must show the A-record before step 4. Beget's zone TTL governs
+   how long the stale CNAME lingers; re-check rather than assuming.
+
 2. **[OWNER-GATED] SmartCaptcha allowed domains.** In the Yandex Cloud console,
    add `academy.doctor.school` to the existing prod captcha's allowed domains,
    keeping `app.doctor.school`. The site key is unchanged, so **no portal
@@ -677,14 +713,34 @@ Order — steps run in sequence; **do not reorder 4 and 5** (the reason is in 5)
      ./provision.sh --pat-file /etc/ds-platform/idp-bootstrap-pat.txt'
    ```
 
-   Then **verify the callback survived** before moving on — the failure above is
-   silent, so read the registered set back:
+   Then **verify the callback survived** before moving on. The failure is silent,
+   so read the set back **from Zitadel** — the api container's own
+   `IDP_REDIRECT_URI` (from `api.env`) is NOT the registered set: `provision.sh`
+   never reads or writes it, so it prints the expected string whether or not the
+   `redirectUris` array was just clobbered. Query the management API with the same
+   PAT the provision script uses:
 
    ```bash
-   sudo docker compose exec api node -e "console.log(process.env.IDP_REDIRECT_URI)"
-   # must print https://api.doctor.school/auth/callback — then drive one real
-   # login through https://academy.doctor.school before declaring step 3 done.
+   sudo bash -c 'set -a; . /etc/ds-platform/api.env; set +a; \
+     PAT="$(cat /etc/ds-platform/idp-bootstrap-pat.txt)"; \
+     APP_ID="$(curl -sS -X POST \
+       "https://id.doctor.school/management/v1/projects/${IDP_PROJECT_ID}/apps/_search" \
+       -H "Authorization: Bearer ${PAT}" -H "Content-Type: application/json" \
+       -d "{\"queries\":[{\"nameQuery\":{\"name\":\"ds-platform-dev\",\"method\":\"TEXT_QUERY_METHOD_EQUALS\"}}]}" \
+       | jq -r ".result[0].id")"; \
+     curl -sS "https://id.doctor.school/management/v1/projects/${IDP_PROJECT_ID}/apps/${APP_ID}" \
+       -H "Authorization: Bearer ${PAT}" \
+       | jq ".app.oidcConfig | {redirectUris, postLogoutRedirectUris}"'
    ```
+
+   `redirectUris` MUST contain `https://api.doctor.school/auth/callback`. If it
+   shows `http://localhost:...` instead, the PUT clobbered it — re-run the command
+   above with every variable present before going further. (App name = `IDP_APP_NAME`,
+   default `ds-platform-dev`; adjust if the prod app was provisioned under another name.)
+
+   Finally, **drive one real login through `https://app.doctor.school`** — the
+   still-live host. Not `academy.`: its vhost does not exist until step 4's deploy,
+   so a login attempt there proves nothing about this step.
 
    What this step actually buys: registering `academy.` in `postLogoutRedirectUris`
    is forward-looking hygiene — nothing in `apps/api` or `apps/portal` currently

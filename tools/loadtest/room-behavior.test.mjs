@@ -22,10 +22,12 @@ const successfulTrace = {
   baselineCount: 1,
   joinAckCount: 2,
   joinedCount: 2,
-  joinElapsedMs: 420,
+  joinObserverElapsedMs: 470,
+  joinPayloadAfterBeatMs: 420,
   leftCount: 1,
-  leaveElapsedMs: 30_640,
-  leavePublishAfterExpiryMs: 640,
+  leaveObserverElapsedMs: 30_700,
+  leavePayloadAfterBeatMs: 30_640,
+  leavePayloadAfterExpiryMs: 640,
   chatBeforeObservedLive: true,
   chatBeforeId: "11111111-1111-4111-8111-111111111111",
   chatDuringDisconnectId: "22222222-2222-4222-8222-222222222222",
@@ -105,9 +107,10 @@ test("EARS-5: join is realtime and leave ages out by 2xN plus the publication bu
   const late = evaluateBehaviorTrace(
     {
       ...successfulTrace,
-      joinElapsedMs: 1_001,
-      leaveElapsedMs: 31_001,
-      leavePublishAfterExpiryMs: 1_001,
+      joinObserverElapsedMs: 1_001,
+      leaveObserverElapsedMs: 31_001,
+      leavePayloadAfterBeatMs: 31_001,
+      leavePayloadAfterExpiryMs: 1_001,
     },
     { publicationGraceMs: 1_000 },
   );
@@ -115,6 +118,37 @@ test("EARS-5: join is realtime and leave ages out by 2xN plus the publication bu
   assert.deepEqual(
     late.checks.slice(0, 2).map(({ passed }) => passed),
     [false, false],
+  );
+});
+
+test("EARS-5: prompt server payload stamps cannot hide a missed observer-reflection deadline", () => {
+  const lateJoinReceipt = evaluateBehaviorTrace(
+    {
+      ...successfulTrace,
+      joinObserverElapsedMs: 1_001,
+      joinPayloadAfterBeatMs: 5,
+    },
+    { publicationGraceMs: 1_000 },
+  );
+  assert.equal(
+    lateJoinReceipt.checks.find((check) => check.id === "presence-join")
+      ?.passed,
+    false,
+  );
+
+  const lateLeaveReceipt = evaluateBehaviorTrace(
+    {
+      ...successfulTrace,
+      leaveObserverElapsedMs: 31_001,
+      leavePayloadAfterBeatMs: 30_005,
+      leavePayloadAfterExpiryMs: 5,
+    },
+    { publicationGraceMs: 1_000 },
+  );
+  assert.equal(
+    lateLeaveReceipt.checks.find((check) => check.id === "presence-age-out")
+      ?.passed,
+    false,
   );
 });
 
@@ -162,8 +196,9 @@ test("EARS-5: age-out ignores a delayed baseline publication before the confirme
   const result = evaluateBehaviorTrace(
     {
       ...successfulTrace,
-      leaveElapsedMs: 121,
-      leavePublishAfterExpiryMs: -29_879,
+      leaveObserverElapsedMs: 121,
+      leavePayloadAfterBeatMs: 121,
+      leavePayloadAfterExpiryMs: -29_879,
     },
     { publicationGraceMs: 1_000 },
   );
@@ -207,6 +242,8 @@ test("EARS-4: an intentionally refused heartbeat is printed as an owner-readable
   assert.match(output, /run UTC: 2026-08-04T12:34:56\.000Z/);
   assert.match(output, /PASS presence join/);
   assert.match(output, /PASS presence age-out/);
+  assert.match(output, /observer reflected/);
+  assert.match(output, /server payload/);
   assert.match(output, /PASS chat reconnect/);
   assert.match(output, /PASS failed heartbeat diagnostic/);
   assert.match(output, /VERDICT: PASS \(4\/4\)/);

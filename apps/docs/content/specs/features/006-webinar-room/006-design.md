@@ -25,7 +25,7 @@ flowchart LR
     GATE[Gate policy: authenticated ∧ registered ∧ live]
   end
   PG[(Postgres — append-only presence table)]
-  CF[[Centrifugo — room channel + presence]]
+  CF[[Centrifugo — room channel / realtime fan-out]]
   AUTH[feature 003 — BFF session]
   P004[feature 004 — event page / join path / lifecycle state]
   P005[feature 005 — EventRoster registration record]
@@ -255,7 +255,7 @@ Built from `@ds/design-system` tokens to the vendored `webinar-room.dc.html` (AD
 - **The «Задать вопрос» / «Вопросы» affordances are not built** in wave 1 (question-to-lecturer is wave 2) — the desktop aside is a single chat pane, and the mobile tab strip omits Вопросы. This is the exact analogue of 005 shipping only the `my-events` Предстоящие tab.
 - **"Stream unavailable" state** (EARS-2): when the provider is unknown/absent (no stream configured), the player region renders a truthful, canvas-styled unavailable state (dark region) — no guessed embed, keeping the room chrome. This is the **config-absent** dead-end (pending 007 config); it is distinct from the **runtime failure** state below (a configured embed that fails to play).
 - **Player failure state** (EARS-18, §3.1): a configured embed that mounts but never starts playing (watchdog elapsed, or a provider `onError`) renders the truthful in-frame status overlay (canvas-styled, «Трансляция не загружается» / for YouTube the distinct «встраивание запрещено владельцем трансляции» vs «видео недоступно») over the dark player region — the room auto-retries (bounded) and then surfaces the **«Перезапустить плеер»** outline button that **re-creates the embed** (never a full page reload, never an off-platform link), clearing on recovery. The room chrome, chat, and heartbeat keep running throughout.
-- **Visibility-gated heartbeat** (EARS-4): no visible affordance — the heartbeat loop runs from the room mount on the `RoomConfig.heartbeatIntervalSeconds` cadence **while the room tab is the visible, active tab** (Page Visibility API — `document.hidden`), with **no** doctor-facing "prove you're here" control; when the tab is backgrounded the loop pauses (its minutes do not count toward the sponsor report) and re-focusing the tab resumes it.
+- **Visibility-gated heartbeat** (EARS-4): no visible affordance — room entry sends an immediate beat, then the heartbeat loop runs on the `RoomConfig.heartbeatIntervalSeconds` cadence **while the room tab is the visible, active tab** (Page Visibility API — `document.hidden`), with **no** doctor-facing "prove you're here" control; when the tab is backgrounded the loop pauses (its minutes do not count toward the sponsor report), and returning it to visible sends an immediate beat before restarting the N-second cadence.
 - **Room header (canvas):** alongside the room chrome the header carries two doctor-facing controls from the canvas — the light/dark **theme toggle** (the canvas **44×44 icon-button** in the header's icon-button family, the portal's only visible theme control until #510; mechanism + look in §10) and the **initials avatar** derived from the doctor's real display name (JIT-collected; §11). The avatar is the shipped DS `avatar.tsx` primitive; the theme toggle is the canvas icon-button built from tokens — the DS `switch.tsx` stays the FORM switch primitive and is **not** the room-header theme control (owner Stage-B decision 2026-07-12; ADR-0013 canvas-wins).
 
 ### 8.2 Time, copy & i18n

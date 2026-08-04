@@ -126,18 +126,26 @@ export function evaluateBehaviorTrace(trace, { publicationGraceMs }) {
   const joinCountIsExact =
     trace.joinAckCount === trace.baselineCount + 1 &&
     trace.joinedCount === trace.joinAckCount;
-  const joinOnTime =
-    Number.isFinite(trace.joinElapsedMs) &&
-    trace.joinElapsedMs >= 0 &&
-    trace.joinElapsedMs <= publicationGraceMs;
+  const joinPayloadIsCausal =
+    Number.isFinite(trace.joinPayloadAfterBeatMs) &&
+    trace.joinPayloadAfterBeatMs >= 0;
+  const joinObservedOnTime =
+    Number.isFinite(trace.joinObserverElapsedMs) &&
+    trace.joinObserverElapsedMs >= 0 &&
+    trace.joinObserverElapsedMs <= publicationGraceMs;
 
   const leaveCountIsExact = trace.leftCount === trace.baselineCount;
-  const leaveOnTime =
-    Number.isFinite(trace.leaveElapsedMs) &&
-    trace.leaveElapsedMs <= freshnessWindowMs + publicationGraceMs &&
-    Number.isFinite(trace.leavePublishAfterExpiryMs) &&
-    trace.leavePublishAfterExpiryMs >= 0 &&
-    trace.leavePublishAfterExpiryMs <= publicationGraceMs;
+  const leavePayloadOnTime =
+    Number.isFinite(trace.leavePayloadAfterBeatMs) &&
+    trace.leavePayloadAfterBeatMs >= freshnessWindowMs &&
+    trace.leavePayloadAfterBeatMs <= freshnessWindowMs + publicationGraceMs &&
+    Number.isFinite(trace.leavePayloadAfterExpiryMs) &&
+    trace.leavePayloadAfterExpiryMs >= 0 &&
+    trace.leavePayloadAfterExpiryMs <= publicationGraceMs;
+  const leaveObservedOnTime =
+    Number.isFinite(trace.leaveObserverElapsedMs) &&
+    trace.leaveObserverElapsedMs >= 0 &&
+    trace.leaveObserverElapsedMs <= freshnessWindowMs + publicationGraceMs;
 
   const recoveredIds = new Set(trace.recoveredChatIds ?? []);
   const chatContinuous =
@@ -152,20 +160,24 @@ export function evaluateBehaviorTrace(trace, { publicationGraceMs }) {
     {
       id: "presence-join",
       label: "presence join",
-      passed: joinCountIsExact && joinOnTime,
+      passed: joinCountIsExact && joinPayloadIsCausal && joinObservedOnTime,
       detail:
-        `${trace.baselineCount}→${trace.joinedCount} in ${displayMs(trace.joinElapsedMs)} ` +
-        `after the accepted joining beat (budget ~1s: ≤${publicationGraceMs}ms)`,
+        `${trace.baselineCount}→${trace.joinedCount}; observer reflected in ` +
+        `${displayMs(trace.joinObserverElapsedMs)} from heartbeat request start ` +
+        `(≤${publicationGraceMs}ms); server payload stamped ` +
+        `${displayMs(trace.joinPayloadAfterBeatMs)} after the accepted beat (must be ≥0ms)`,
     },
     {
       id: "presence-age-out",
       label: "presence age-out",
-      passed: leaveCountIsExact && leaveOnTime,
+      passed: leaveCountIsExact && leavePayloadOnTime && leaveObservedOnTime,
       detail:
-        `${trace.joinedCount}→${trace.leftCount} in ${displayMs(trace.leaveElapsedMs)} ` +
-        `after the last accepted beat; freshness=2×${trace.heartbeatIntervalSeconds}s, ` +
-        `publication after expiry=${displayMs(trace.leavePublishAfterExpiryMs)} ` +
-        `(≤${publicationGraceMs}ms)`,
+        `${trace.joinedCount}→${trace.leftCount}; observer reflected in ` +
+        `${displayMs(trace.leaveObserverElapsedMs)} from joining heartbeat request start ` +
+        `(≤${freshnessWindowMs + publicationGraceMs}ms); server payload stamped ` +
+        `${displayMs(trace.leavePayloadAfterBeatMs)} after the last accepted beat, ` +
+        `${displayMs(trace.leavePayloadAfterExpiryMs)} after 2×${trace.heartbeatIntervalSeconds}s expiry ` +
+        `(0..${publicationGraceMs}ms)`,
     },
     {
       id: "chat-reconnect",
@@ -204,7 +216,7 @@ export function formatBehaviorReport(result) {
     `run UTC: ${result.runStartedAt}`,
     `target: ${result.origin ?? "(injected test driver)"}`,
     `event: ${result.eventId}`,
-    `contract: fresh +1 publication ≤~1s; stopped beats age out at 2×N, then −1 publication ≤~1s (N=${result.heartbeatIntervalSeconds}s)`,
+    `contract: observer receives fresh +1 ≤~1s from request start; stopped beats age out at 2×N, then observer receives −1 by 2×N+~1s; server stamp is never before expiry (N=${result.heartbeatIntervalSeconds}s)`,
     "presence note: WS close is not attendance leave; a visible foreground tab that keeps beating remains present; concurrent tabs coalesce",
     "─".repeat(72),
   ];
@@ -420,7 +432,7 @@ export async function runRoomBehaviorVerification({
       intervalSeconds,
     );
 
-    const joinAfterMs = performance.now();
+    const joinRequestStartedAtMs = performance.now();
     const joinAck = await acceptedHeartbeat(
       origin,
       eventId,
@@ -438,11 +450,14 @@ export async function runRoomBehaviorVerification({
           data?.type === PRESENCE_TYPE && data.count === joinAck.presenceCount,
         {
           timeoutMs: publicationGraceMs + commandTimeoutMs,
-          afterMs: joinAfterMs,
+          afterMs: joinRequestStartedAtMs,
         },
       )
       .catch(() => null);
-    const joinElapsedMs = joinPublication
+    const joinObserverElapsedMs = joinPublication
+      ? joinPublication.receivedAtMs - joinRequestStartedAtMs
+      : Number.POSITIVE_INFINITY;
+    const joinPayloadAfterBeatMs = joinPublication
       ? publicationServerMs(joinPublication) - Date.parse(joinAck.beatAt)
       : Number.POSITIVE_INFINITY;
     const confirmedJoinReceiveOrder = joinPublication?.receiveOrder ?? 0;
@@ -502,15 +517,19 @@ export async function runRoomBehaviorVerification({
           data.count === baselineAck.presenceCount,
         {
           timeoutMs: freshnessWindowMs + publicationGraceMs + commandTimeoutMs,
-          afterMs: joinAfterMs,
+          afterMs: joinRequestStartedAtMs,
           afterReceiveOrder: confirmedJoinReceiveOrder,
         },
       )
       .catch(() => null);
-    const leaveElapsedMs = leavePublication
+    const leaveObserverElapsedMs = leavePublication
+      ? leavePublication.receivedAtMs - joinRequestStartedAtMs
+      : Number.POSITIVE_INFINITY;
+    const leavePayloadAfterBeatMs = leavePublication
       ? publicationServerMs(leavePublication) - Date.parse(joinAck.beatAt)
       : Number.POSITIVE_INFINITY;
-    const leavePublishAfterExpiryMs = leaveElapsedMs - freshnessWindowMs;
+    const leavePayloadAfterExpiryMs =
+      leavePayloadAfterBeatMs - freshnessWindowMs;
 
     const failedStartedAt = performance.now();
     const failedResponse = await timedFetch(
@@ -537,10 +556,12 @@ export async function runRoomBehaviorVerification({
       baselineCount: baselineAck.presenceCount,
       joinAckCount: joinAck.presenceCount,
       joinedCount: joinPublication?.data?.count ?? Number.NaN,
-      joinElapsedMs,
+      joinObserverElapsedMs,
+      joinPayloadAfterBeatMs,
       leftCount: leavePublication?.data?.count ?? Number.NaN,
-      leaveElapsedMs,
-      leavePublishAfterExpiryMs,
+      leaveObserverElapsedMs,
+      leavePayloadAfterBeatMs,
+      leavePayloadAfterExpiryMs,
       chatBeforeObservedLive: beforeObserved,
       chatBeforeId: beforeChat.id,
       chatDuringDisconnectId: disconnectedChat.id,

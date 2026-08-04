@@ -36,10 +36,10 @@ const PresenceContext = createContext<{
 } | null>(null);
 
 /**
- * Client context holding the live room-presence count. Wraps the room surface so
- * the invisible {@link PresenceHeartbeat} loop (which owns the beat→ack) and the
- * header's {@link PresenceCount} (which renders it) share one number without either
- * polling. Seeded from the EARS-1 grant's `presenceCount`.
+ * Client context holding the live room-presence count. The EARS-1 grant seeds it,
+ * Centrifugo room publications are the primary realtime fan-out, and heartbeat
+ * acks are the fallback. The header's {@link PresenceCount} renders the shared
+ * value without polling.
  */
 export function RoomPresenceProvider({
   initialCount,
@@ -64,7 +64,7 @@ export function usePresenceCount(): number {
 /** Stable no-op so a provider-less mount keeps a referentially-stable setter (effect deps). */
 const NOOP_SETTER = (): void => {};
 
-/** The setter the heartbeat loop pushes each ack's fresh count into (no-op without a provider). */
+/** Setter shared by Centrifugo publications and heartbeat-ack fallback (no-op without a provider). */
 export function usePresenceCountSetter(): (n: number) => void {
   const ctx = useContext(PresenceContext);
   return ctx ? ctx.setCount : NOOP_SETTER;

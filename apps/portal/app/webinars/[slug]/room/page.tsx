@@ -104,9 +104,9 @@ export default async function RoomPage({
     // to the remaining height, where only the chat ledger scrolls.
     <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       {/* 006 EARS-5 — the live room-presence count («N врачей в комнате») is a
-          client aggregate shared between the invisible heartbeat loop (which owns
-          the beat→ack) and the header (which renders it). The provider seeds it
-          from the EARS-1 grant and the loop refreshes it each beat. */}
+          server aggregate shared through the client provider to the header. The
+          EARS-1 grant seeds it, Centrifugo publications are the primary realtime
+          refresh, and heartbeat acks are only a best-effort fallback. */}
       <RoomPresenceProvider initialCount={access.config.presenceCount}>
         {/* 006 EARS-2 / EARS-5 / EARS-11 — the room's top app-header bar (canvas
             header, ADR-0013 canvas-wins): brand-home wordmark + reused live pill
@@ -126,9 +126,9 @@ export default async function RoomPage({
           }}
         />
         {/* EARS-4 — the visibility-gated server-authoritative heartbeat loop. No
-            rendered affordance; it POSTs a beat every N seconds while the tab is
-            visible (N from the grant), capturing presence from mount and pushing
-            the live presence count from each ack into the provider (EARS-5). */}
+            rendered affordance; it POSTs immediately on entry / visible resume,
+            then every N seconds while visible (N from the grant). Its ack updates
+            the provider only as a fallback to primary Centrifugo fan-out (EARS-5). */}
         <PresenceHeartbeat
           slug={slug}
           intervalSeconds={access.config.heartbeatIntervalSeconds}

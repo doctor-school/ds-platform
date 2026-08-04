@@ -5,7 +5,8 @@
 //   login → GET /v1/events/:id/room (grant: chat {url,token,channel}, stream,
 //   heartbeatIntervalSeconds) → Centrifugo WS connect (server-side subscribe to
 //   room:event:<id> via the connection token's channels claim) → hold, beating
-//   POST /v1/events/:id/heartbeat every N seconds → a fraction of VUs POST
+//   POST /v1/events/:id/heartbeat immediately on entry and then every N seconds
+//   while visible → a fraction of VUs POST
 //   /v1/events/:id/chat (server-mediated publish; clients never publish direct).
 //
 // FIXTURE (phase-2 / smoke doc): the grant gate is authenticated AND registered

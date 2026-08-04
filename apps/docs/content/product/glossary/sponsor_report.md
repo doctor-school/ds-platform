@@ -9,9 +9,9 @@ lang: en
 **Bounded context:** webinars · **Canonical id:** `sponsor_report`
 
 The **sponsor report** is the attendance report a `sponsor` receives after a
-webinar: which registered doctors attended and for how long, drawn from the
-`event_roster` (membership) and the per-doctor `presence_minutes` (attendance
-derived from the durable heartbeat beats).
+webinar: registered doctor identities plus their accepted-heartbeat-covered,
+browser-observed `presence_minutes`, drawn from the `event_roster` (membership)
+and durable heartbeat beats. It does not prove physical attention.
 
 In **wave 1** the report is a **manual export** from the captured presence data —
 there is **no report UI** and no report-export button in either the room (006) or

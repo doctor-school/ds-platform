@@ -137,9 +137,10 @@ events`, `registered_at`), migration `0007_registrations.sql`. No cancelled
 - [#683](https://github.com/doctor-school/ds-platform/pull/683) [`f20f1da`](https://github.com/doctor-school/ds-platform/commit/f20f1da596fce75b03c6696b968e52f95566934c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(room): 006 EARS-4 — server-authoritative heartbeat presence capture (append-only)
 
   While a gated doctor is in a live room with the tab visible, the client posts an
-  authenticated heartbeat every N seconds and the backend appends each accepted
-  beat to a durable append-only Postgres table — the durable basis for the
-  per-doctor sponsor minutes (feature 006, EARS-4; realizes US-3).
+  authenticated heartbeat immediately on entry and visible resume, then every N
+  seconds; the backend appends each accepted beat to a durable append-only
+  Postgres table — the durable basis for the per-doctor sponsor minutes (feature
+  006, EARS-4; realizes US-3).
 
   - `@ds/schemas` — new `PresenceHeartbeatAckSchema` (`{ eventId, beatAt }`): the
     server-authoritative ack of one accepted beat. `beatAt` is the server-stamped
@@ -156,10 +157,10 @@ beat_at)` (ADR-0003 §3). Immutable rows (no mutable column → nothing to updat
     admission it appends exactly one row and returns the ack. Classified
     `authenticated` / `doctor_guest` / `policy` in the endpoint-authz matrix.
   - `@ds/portal` — the room mounts a visibility-gated `PresenceHeartbeat` loop (no
-    doctor-facing affordance): it POSTs a beat every N seconds — N from
-    `RoomConfig.heartbeatIntervalSeconds` (server config, default 60 s) — while the
-    tab is the visible, active tab (Page Visibility API); a backgrounded tab
-    (`document.hidden`) emits none, and the loop resumes on re-visibility.
+    doctor-facing affordance): it POSTs a beat immediately on entry and visible
+    resume, then every N seconds — N from `RoomConfig.heartbeatIntervalSeconds`
+    (server config, default 60 s) — while the tab is the visible, active tab (Page
+    Visibility API); a backgrounded tab (`document.hidden`) emits none.
 
   Cadence N is server config, parameterized downstream: the per-doctor
   minute derivation + concurrent-tab coalescing is EARS-5 ([#581](https://github.com/doctor-school/ds-platform/issues/581)), room-close

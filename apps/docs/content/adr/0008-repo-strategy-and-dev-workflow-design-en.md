@@ -59,7 +59,7 @@ This document is the implementation detail for ADR-0008. The ADR fixes "what and
   "license": "UNLICENSED",
   "packageManager": "pnpm@10.7.0",
   "engines": {
-    "node": ">=22.0.0 <23.0.0",
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0",
     "pnpm": ">=10.0.0"
   },
   "scripts": {

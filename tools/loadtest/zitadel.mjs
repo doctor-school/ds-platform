@@ -29,6 +29,7 @@ export function idpConfig() {
     issuer: reqEnv("LOADTEST_IDP_ISSUER").replace(/\/+$/, ""),
     token: reqEnv("LOADTEST_IDP_SERVICE_TOKEN"),
     orgId: optEnv("LOADTEST_IDP_ORG_ID", ""),
+    projectId: optEnv("LOADTEST_IDP_PROJECT_ID", ""),
     domain: optEnv("LOADTEST_SYNTHETIC_DOMAIN", "loadtest.invalid"),
     password: optEnv("LOADTEST_AUTH_PASSWORD", "LoadTest!" + "Passw0rd"),
   };
@@ -73,7 +74,13 @@ export async function resolveOrgId({ issuer, token, orgId }) {
  * Create ONE pre-verified synthetic human. Returns { sub, email }. A 409
  * (duplicate) resolves to { alreadyExisted: true }.
  */
-export async function createSyntheticUser({ issuer, token, orgId, email, password }) {
+export async function createSyntheticUser({
+  issuer,
+  token,
+  orgId,
+  email,
+  password,
+}) {
   const givenName = email.split("@")[0] || "loadtest";
   const body = {
     organizationId: orgId,
@@ -94,10 +101,55 @@ export async function createSyntheticUser({ issuer, token, orgId, email, passwor
   if (res.status === 409) return { alreadyExisted: true, email };
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`createUser ${email} → HTTP ${res.status}: ${text.slice(0, 160)}`);
+    throw new Error(
+      `createUser ${email} → HTTP ${res.status}: ${text.slice(0, 160)}`,
+    );
   }
   const data = await res.json();
   return { sub: data?.id ?? "", email };
+}
+
+/**
+ * Grant a synthetic human the real `doctor_guest` Zitadel project role. The
+ * BFF session snapshots IdP roles at login, so provisioning must converge this
+ * assignment BEFORE the room verifier logs in; a later mirror self-heal cannot
+ * add the role to an already-issued session.
+ *
+ * Uses the same GA AuthorizationService v2 RPC as the API's IdP adapter. Zitadel
+ * reports an existing assignment as 409 / ALREADY_EXISTS, which is success for
+ * this idempotent provision step.
+ */
+export async function grantProjectRole(
+  { issuer, token, orgId, projectId },
+  sub,
+  roleKey = "doctor_guest",
+  fetchImpl = fetch,
+) {
+  if (!projectId) {
+    throw new Error(
+      "LOADTEST_IDP_PROJECT_ID is required to grant the synthetic user's project role",
+    );
+  }
+  if (!orgId)
+    throw new Error("organization id is required to grant a project role");
+  if (!sub)
+    throw new Error("synthetic user id is required to grant a project role");
+
+  const res = await fetchImpl(
+    `${issuer}/zitadel.authorization.v2.AuthorizationService/CreateAuthorization`,
+    {
+      method: "POST",
+      headers: headers(token),
+      body: JSON.stringify({
+        userId: sub,
+        projectId,
+        organizationId: orgId,
+        roleKeys: [roleKey],
+      }),
+    },
+  );
+  if (res.ok || res.status === 409) return;
+  throw new Error(`grantProjectRole ${roleKey} → HTTP ${res.status}`);
 }
 
 /** Find a user id by exact email (v2 search). Returns the id or null. */
@@ -105,7 +157,9 @@ export async function findUserIdByEmail({ issuer, token }, email) {
   const res = await fetch(`${issuer}/v2/users`, {
     method: "POST",
     headers: headers(token),
-    body: JSON.stringify({ queries: [{ emailQuery: { emailAddress: email } }] }),
+    body: JSON.stringify({
+      queries: [{ emailQuery: { emailAddress: email } }],
+    }),
   });
   if (!res.ok) return null;
   const data = await res.json();

@@ -71,10 +71,10 @@ Feature: 006 Webinar room journey — a registered doctor watches live, chats in
   # --- Visibility-gated heartbeat presence capture (US-3) — EARS-4 ---
 
   @EARS-4 @happy
-  Scenario: The room fires an authenticated heartbeat every N seconds with no doctor action
+  Scenario: The room fires an immediate authenticated heartbeat, then every N seconds with no doctor action
     Given a registered doctor watching in the live room with the tab visible
     When the doctor stays in the room across several cadence intervals
-    Then the client posts more than one authenticated heartbeat, driven only by the timer
+    Then the client posts an entry heartbeat and more timer-driven authenticated heartbeats
 
   @EARS-4 @edge
   Scenario: A backgrounded tab pauses the heartbeat and resumes when visible again
@@ -82,7 +82,7 @@ Feature: 006 Webinar room journey — a registered doctor watches live, chats in
     When the room tab is backgrounded so document.hidden becomes true
     Then the client stops posting heartbeats while the tab is hidden
     When the room tab becomes visible again
-    Then the client resumes posting authenticated heartbeats
+    Then the client posts an immediate authenticated heartbeat before resuming the N-second grid
 
   # --- Denied-access routing, never a soft wall (US-1, US-5) — EARS-6 ---
 

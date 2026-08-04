@@ -46,12 +46,12 @@ import {
  * derivation is never exposed on a public surface (EARS-8).
  *
  * EARS-5 also adds the {@link PresencePublisher}: the realtime side of the live
- * in-room count. On an accepted beat that CHANGES the distinct-doctor count — or a
- * window expiry (a leave) — it publishes the recomputed count over the room's
+ * in-room count. On an accepted beat that CHANGES the distinct-doctor count — or
+ * when stopped beats reach the count-only `2 × N` expiry — it publishes the recomputed count over the room's
  * Centrifugo channel ({@link CentrifugoChatGateway}), so subscribers render it
  * instantly; best-effort, so a transport blip degrades to the heartbeat-ack refresh
- * (#1136) rather than breaking a beat. The sponsor minutes derivation source is
- * untouched.
+ * (#1136) rather than breaking a beat. WebSocket close alone changes nothing, and
+ * the `2 × N` freshness grace adds no sponsor minutes.
  */
 @Module({
   imports: [RegistrationModule],
@@ -69,8 +69,7 @@ import {
     },
     {
       provide: ROOM_CHAT_CONFIG,
-      useFactory: (): RoomChatConfig | null =>
-        resolveRoomChatConfig(loadEnv()),
+      useFactory: (): RoomChatConfig | null => resolveRoomChatConfig(loadEnv()),
     },
   ],
 })

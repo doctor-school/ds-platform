@@ -6,17 +6,19 @@
 
 - [#1159](https://github.com/doctor-school/ds-platform/pull/1159) [`88bc412`](https://github.com/doctor-school/ds-platform/commit/88bc412cb3620e83202979c9026e8505d3a696d1) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Instant in-room presence counter — server-published count over Centrifugo (006 EARS-5, [#1141](https://github.com/doctor-school/ds-platform/issues/1141)).
 
-  The live «N врачей в комнате» webinar-room counter now updates the moment another
-  doctor joins or leaves — within ~1 s — instead of only on the observer's own next
-  heartbeat (the [#1122](https://github.com/doctor-school/ds-platform/issues/1122) "frozen until my beat" perception). The count stays the same
+  The live «N врачей в комнате» webinar-room counter now publishes a fresh doctor's
+  +1 within ~1 s of their accepted beat; when that doctor's beats stop, the −1 is
+  published within ~1 s after the `2 × N` freshness window expires — instead of
+  only on the observer's own next heartbeat (the [#1122](https://github.com/doctor-school/ds-platform/issues/1122) "frozen until my beat" perception). The count stays the same
   server-authoritative distinct-doctor aggregate (never Centrifugo native channel
-  presence; sponsor attendance reporting is untouched).
+  presence); sponsor minutes remain the separate accepted-beat N-bucket derivation,
+  with no trailing `2 × N` award.
 
   - `@ds/schemas` — a new `RoomPresenceCountMessage` (a `type: "presence-count"`
     discriminant) fanned out over the room channel; it never cross-parses a chat
     message.
-  - `@ds/api` — on an accepted beat that CHANGES the distinct-doctor count, or a
-    presence-window expiry (a leave, caught by a per-room timer), the recomputed count
+  - `@ds/api` — on an accepted beat that CHANGES the distinct-doctor count, or when
+    stopped beats age out (caught by a per-room timer), the recomputed count
     is published to the existing `room:event:<id>` channel. Publish only on change;
     best-effort, so a Centrifugo blip never turns a beat into an error.
   - `@ds/portal` — the room's single Centrifugo connection (owned by the chat panel)
@@ -330,7 +332,7 @@ events`, `registered_at`), migration `0007_registrations.sql`. No cancelled
 - [#683](https://github.com/doctor-school/ds-platform/pull/683) [`f20f1da`](https://github.com/doctor-school/ds-platform/commit/f20f1da596fce75b03c6696b968e52f95566934c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(room): 006 EARS-4 — server-authoritative heartbeat presence capture (append-only)
 
   While a gated doctor is in a live room with the tab visible, the client posts an
-  authenticated heartbeat every N seconds and the backend appends each accepted
+  authenticated heartbeat immediately on entry / visible resume and then every N seconds; the backend appends each accepted
   beat to a durable append-only Postgres table — the durable basis for the
   per-doctor sponsor minutes (feature 006, EARS-4; realizes US-3).
 
@@ -349,10 +351,11 @@ beat_at)` (ADR-0003 §3). Immutable rows (no mutable column → nothing to updat
     admission it appends exactly one row and returns the ack. Classified
     `authenticated` / `doctor_guest` / `policy` in the endpoint-authz matrix.
   - `@ds/portal` — the room mounts a visibility-gated `PresenceHeartbeat` loop (no
-    doctor-facing affordance): it POSTs a beat every N seconds — N from
+    doctor-facing affordance): it POSTs immediately on entry/re-entry and every N seconds — N from
     `RoomConfig.heartbeatIntervalSeconds` (server config, default 60 s) — while the
     tab is the visible, active tab (Page Visibility API); a backgrounded tab
-    (`document.hidden`) emits none, and the loop resumes on re-visibility.
+    (`document.hidden`) emits none, and returning visible posts immediately before
+    the N-second grid resumes. A still-visible tab cannot prove physical presence.
 
   Cadence N is server config, parameterized downstream: the per-doctor
   minute derivation + concurrent-tab coalescing is EARS-5 ([#581](https://github.com/doctor-school/ds-platform/issues/581)), room-close
@@ -361,8 +364,9 @@ beat_at)` (ADR-0003 §3). Immutable rows (no mutable column → nothing to updat
 
 - [#686](https://github.com/doctor-school/ds-platform/pull/686) [`b46b15a`](https://github.com/doctor-school/ds-platform/commit/b46b15ad2e7b37d0129db0461240979544438c10) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(room): 006 EARS-5 — per-doctor presence-minute derivation (parameterized over N, tab-coalesced)
 
-  The append-only `presence_beats` rows EARS-4 captures now yield **actual per-doctor
-  presence minutes** for an event — the durable basis for the wave-1 sponsor report,
+  The append-only `presence_beats` rows EARS-4 captures now yield **per-doctor
+  accepted-heartbeat-covered minutes** for an event — browser-observed rather than
+  proof of physical attention, and the durable basis for the wave-1 sponsor report,
   by manual export (feature 006, EARS-5; realizes US-3, US-4). Read-time derivation
   only: no new write, no report UI, no public endpoint.
 

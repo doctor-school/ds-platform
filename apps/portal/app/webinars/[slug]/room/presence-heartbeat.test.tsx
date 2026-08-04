@@ -13,14 +13,13 @@ import { PresenceCount, RoomPresenceProvider } from "./room-presence";
  * and drives the N-second beat grid with fake timers. The server aggregate itself
  * (distinct-doctor count, tab-coalescing, freshness-window age-out) is proven by
  * `apps/api/test/room/presence-count.e2e-spec.ts`; here we lock the CLIENT push
- * path — the loop pushing each ack's count into the header — and the cadence
- * mechanism that made #1122 read as "frozen without a reload".
+ * heartbeat-ack fallback path — the loop pushing each ack's count into the header
+ * when the realtime Centrifugo publication is unavailable — and the cadence
+ * mechanism that made #1122 read as "frozen without a reload" before #1141.
  */
 vi.mock("next-intl", () => ({
-  useTranslations:
-    () =>
-    (key: string, opts?: { count?: number }) =>
-      opts && typeof opts.count === "number" ? `${key}:${opts.count}` : key,
+  useTranslations: () => (key: string, opts?: { count?: number }) =>
+    opts && typeof opts.count === "number" ? `${key}:${opts.count}` : key,
 }));
 
 const slug = "hsn-therapy";
@@ -30,18 +29,29 @@ function ack(presenceCount: number): Response {
   return {
     ok: true,
     json: () =>
-      Promise.resolve({ eventId, beatAt: new Date().toISOString(), presenceCount }),
+      Promise.resolve({
+        eventId,
+        beatAt: new Date().toISOString(),
+        presenceCount,
+      }),
   } as unknown as Response;
 }
 
 /** A refused beat (server-side gate / closed room) — `res.ok` false. */
 function nonOk(status: number): Response {
-  return { ok: false, status, json: () => Promise.resolve({}) } as unknown as Response;
+  return {
+    ok: false,
+    status,
+    json: () => Promise.resolve({}),
+  } as unknown as Response;
 }
 
 /** An ok response whose body no longer matches the ack contract (schema drift). */
 function badShape(): Response {
-  return { ok: true, json: () => Promise.resolve({ unexpected: true }) } as unknown as Response;
+  return {
+    ok: true,
+    json: () => Promise.resolve({ unexpected: true }),
+  } as unknown as Response;
 }
 
 function renderRoom(intervalSeconds = 60): void {
@@ -64,10 +74,13 @@ function count(): string | null {
   return screen.queryByTestId("room-presence-count")?.textContent ?? null;
 }
 
-describe("006 EARS-5 live presence count refresh (#1122)", () => {
+describe("006 EARS-5 heartbeat-ack fallback for the live presence count (#1122/#1141)", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      get: () => false,
+    });
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -94,7 +107,38 @@ describe("006 EARS-5 live presence count refresh (#1122)", () => {
     expect(count()).toBe("presenceCount:2");
   });
 
-  it("EARS-5: the header count reflects a leave — a later ack with a lower count decrements without a reload", async () => {
+  it("EARS-4: returning from hidden to visible posts an immediate beat before the next N-second tick", async () => {
+    let hidden = false;
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      get: () => hidden,
+    });
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(ack(1))
+      .mockResolvedValueOnce(ack(1));
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderRoom(60);
+    await flushBeat();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    hidden = true;
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+    await flushBeat();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    hidden = false;
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await flushBeat();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("EARS-5: the ack fallback applies a lower aggregate after age-out without a reload", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(ack(2))
@@ -112,7 +156,7 @@ describe("006 EARS-5 live presence count refresh (#1122)", () => {
     expect(count()).toBe("presenceCount:1");
   });
 
-  it("EARS-5: between beats the count holds — a join is invisible until the observer's own next beat lands (the cadence gap #1122 reads as 'frozen')", async () => {
+  it("EARS-5: with the realtime channel unavailable, the ack fallback holds between observer beats and refreshes on the next one", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(ack(1))
@@ -123,9 +167,9 @@ describe("006 EARS-5 live presence count refresh (#1122)", () => {
     await flushBeat();
     expect(count()).toBe("presenceCount:1");
 
-    // One second short of the cadence: the second doctor has already joined
-    // server-side, but the observer has sent NO new beat, so the header cannot
-    // know yet — exactly the "не меняется без перезагрузки" perception.
+    // Fallback-only: the second doctor has joined server-side, but no Centrifugo
+    // publication reaches this component test. Until the observer's next beat,
+    // its last heartbeat ack remains the only count source (#1136 degradation).
     await act(async () => {
       vi.advanceTimersByTime(59_000);
     });

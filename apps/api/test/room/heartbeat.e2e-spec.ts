@@ -25,9 +25,10 @@ import {
 
 // 006 EARS-4 — server-authoritative heartbeat presence capture (append-only).
 //
-// While a gated doctor is in a live room, the client posts an authenticated
-// heartbeat every N seconds (N = server config, default 60 s, delivered in
-// `RoomConfig`) and the backend appends each ACCEPTED beat to a durable
+// While a gated doctor is in a live room with the tab visible, the client posts an
+// authenticated heartbeat immediately on entry and visible resume, then every N
+// seconds (N = server config, default 60 s, delivered in `RoomConfig`); the backend
+// appends each ACCEPTED beat to a durable
 // append-only Postgres table carrying `(doctor, event, instant)`. The SAME
 // server-side gate as EARS-1 wraps the write: a guest (401), an unregistered
 // doctor (403), and a registered doctor whose event is not `live` / already

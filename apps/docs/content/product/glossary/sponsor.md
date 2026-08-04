@@ -19,9 +19,10 @@ The sponsor is the party whose **external stream** the webinar room embeds — t
 room composes an iframe/player around the sponsor's stream and nothing more, never
 transcoding or re-hosting it (006 EARS-9). The sponsor is also the recipient of the
 attendance deliverables: the trustworthy **`event_roster`** (who registered) and the
-per-doctor **`presence_minutes`** exported as the **`sponsor_report`** (who watched,
-and for how long). Registrant PII in those deliverables never leaks to a public
-surface (005 EARS-8; 006 EARS-8).
+per-doctor **`presence_minutes`** exported as the **`sponsor_report`** (doctor
+identities plus accepted-heartbeat-covered, browser-observed minutes — never
+proof of physical attention). Registrant PII in those deliverables never leaks to
+a public surface (005 EARS-8; 006 EARS-8).
 
 **Related terms:** event, sponsor_report, event_roster, presence_minutes.
 

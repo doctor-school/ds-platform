@@ -37,11 +37,11 @@
   },
   "presence_heartbeat": {
     "title": "presence heartbeat",
-    "description": "The server-authoritative signal a live-room client posts every N seconds while its tab is visible — each accepted beat appended to a durable Postgres table."
+    "description": "The server-authoritative signal posted immediately on visible entry/re-entry and every N seconds thereafter — each accepted beat appended to durable Postgres."
   },
   "presence_minutes": {
     "title": "presence minutes",
-    "description": "The per-doctor minutes of attendance derived from the append-only heartbeat beats — the sponsor deliverable, concurrent-tab-coalesced and parameterized over N."
+    "description": "Per-doctor heartbeat-covered minutes derived from append-only beats — the sponsor deliverable, concurrent-tab-coalesced and parameterized over N."
   },
   "sponsor": {
     "title": "sponsor",

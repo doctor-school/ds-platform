@@ -141,7 +141,10 @@ test.describe("006 EARS-4 server-authoritative heartbeat presence (e2e)", () => 
   test("006 EARS-4: the room fires an authenticated heartbeat on the N-second cadence with no doctor action", async ({
     page,
   }) => {
-    test.skip(!SLUG_LIVE, "requires a seeded live room the doctor is registered for");
+    test.skip(
+      !SLUG_LIVE,
+      "requires a seeded live room the doctor is registered for",
+    );
     const heartbeats = trackHeartbeats(page);
     await login(page);
     await page.goto(`${BASE}/webinars/${SLUG_LIVE}/room`, {
@@ -176,10 +179,13 @@ test.describe("006 EARS-4 server-authoritative heartbeat presence (e2e)", () => 
     }, hidden);
   }
 
-  test("006 EARS-4: backgrounding the tab (document.hidden) pauses beats; re-focusing resumes them", async ({
+  test("006 EARS-4: hidden pauses beats; returning visible emits an immediate beat", async ({
     page,
   }) => {
-    test.skip(!SLUG_LIVE, "requires a seeded live room the doctor is registered for");
+    test.skip(
+      !SLUG_LIVE,
+      "requires a seeded live room the doctor is registered for",
+    );
     const heartbeats = trackHeartbeats(page);
     await login(page);
     await page.goto(`${BASE}/webinars/${SLUG_LIVE}/room`, {
@@ -199,9 +205,10 @@ test.describe("006 EARS-4 server-authoritative heartbeat presence (e2e)", () => 
     await page.waitForTimeout(HEARTBEAT_SECONDS * 3000);
     expect(heartbeats()).toBe(whileHidden);
 
-    // Re-focus the room tab → the loop resumes and beats grow again.
+    // Returning visible emits immediately, before another full N-second interval.
     await setHidden(page, false);
-    await page.waitForTimeout(HEARTBEAT_SECONDS * 2200);
-    expect(heartbeats()).toBeGreaterThan(whileHidden);
+    await expect
+      .poll(heartbeats, { timeout: 2_000, intervals: [50] })
+      .toBeGreaterThan(whileHidden);
   });
 });

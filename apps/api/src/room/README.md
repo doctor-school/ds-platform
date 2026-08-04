@@ -15,8 +15,10 @@ the `fast-path` `doctor_guest` writes/reads).
   go-live instant (`liveAt` — stamped by 007 `OpenRoom`, `null` on a legacy
   `live` row; the room's «В эфире · N мин» pill counts from it, never the
   scheduled `startsAt`, #690), and the live room-presence count (`presenceCount`
-  — distinct doctors with a beat inside the freshness window `2 × N`, an
-  **aggregate** integer, never per-doctor identity or the roster, #690). A guest, an
+  — distinct doctors whose latest accepted beat is inside the count-only freshness
+  window `2 × N`, an **aggregate** integer, never physical-presence proof,
+  per-doctor identity, or the roster, #690). This grace awards no trailing sponsor
+  minutes; those remain the distinct accepted-beat N-bucket derivation. A guest, an
   unregistered doctor, or a non-`live` event is refused **server-side** (401 /
   403 / 409) and never receives room content — there is no soft UI wall that
   renders the room for an ungated caller (EARS-1, EARS-8). A direct room URL, a
@@ -45,10 +47,13 @@ the `fast-path` `doctor_guest` writes/reads).
   guest (401), an unregistered doctor (403), and a non-`live` / `ended` event
   (409) each append **nothing** (EARS-8). The instant is **server-stamped**, never
   a client-supplied count — presence is server-authoritative and durable. The
-  client posts on the server-config cadence N (`heartbeatIntervalSeconds` from the
-  grant), visibility-gated in the portal (a backgrounded tab emits none). The raw
-  beats are the EARS-5 per-doctor-minute derivation's input (coalesced there, not
-  suppressed at write time).
+  client posts immediately on entry/re-entry and then on the server-config cadence
+  N (`heartbeatIntervalSeconds` from the grant), visibility-gated in the portal: a
+  backgrounded tab emits none and returning visible emits an immediate beat before
+  restarting the N-second grid. A still-visible foreground tab keeps beating even
+  if the person physically walks away because the platform has no truthful signal
+  for that case. The raw beats are the EARS-5 per-doctor-minute derivation's input
+  (coalesced there, not suppressed at write time).
 
 **EARS-3** adds the gated chat command + the subscribe-only credential behind the
 **same** gate:
@@ -90,6 +95,13 @@ no new write):
   tabs beating in one bucket count once, not twice. The coalescing is this
   read-time derivation, not a write-time suppression (every raw beat is still
   durably appended by EARS-4).
+- **Live count freshness is separate from sponsor minutes.** A fresh doctor — one
+  not already inside `2 × N` — increases the distinct-doctor count and the changed
+  aggregate is published within about one second after the accepted beat. If beats
+  stop, the latest beat ages out no later than `2 × N`, then the decrease is
+  published within about one second. WebSocket close alone is not leave; quick
+  re-entry/concurrent tabs while already fresh only refresh the same membership.
+  The `2 × N` grace belongs only to this live count and adds zero sponsor minutes.
 - **No public surface (EARS-8).** There is **no** report UI and **no** public
   endpoint in wave 1 — the derivation is never exposed on a public surface, and it
   carries no registrant PII (the per-doctor unit is the opaque domain `userId`
@@ -161,11 +173,11 @@ evaluates the resource-scoped rule and refuses server-side. See
   `findUserIdBySub` (the 003 mirror read, read-only) + the EARS-5 read-time
   `deriveEventMinutes(eventId, intervalSeconds)` (the `count(DISTINCT
 floor(epoch/N))` per-doctor bucket scan), `countLivePresence(eventId,
-intervalSeconds)` (the distinct-doctor count inside the live attendance
-  window) and `nextPresenceExpiry(eventId, intervalSeconds)` (the soonest
-  instant the live count can drop — feeds the `PresencePublisher` expiry
-  timer). No update/delete surface — the structural half of the append-only
-  contract.
+windowSeconds)` (the distinct-doctor count inside the `2 × N` count-only
+  freshness window) and `nextPresenceExpiry(eventId, windowSeconds)` (the soonest
+  instant a latest beat can cease to be fresh — feeds the `PresencePublisher`
+  expiry timer). This grace adds no trailing sponsor minutes. No update/delete
+  surface — the structural half of the append-only contract.
 - `PresenceDerivationService` — the EARS-5 per-doctor minute derivation:
   `deriveForEvent(eventId, intervalSeconds?)` → the `EventPresence` read model
   (parameterized over N from `ROOM_HEARTBEAT_INTERVAL_SECONDS` by default,
@@ -188,7 +200,8 @@ intervalSeconds)` (the distinct-doctor count inside the live attendance
   heartbeat-ack refresh).
 - `PresencePublisher` (`presence-publisher.service.ts`) — the EARS-5
   publish-on-change service: recomputes the live distinct-doctor count on each
-  accepted beat and on window expiry (per-room in-memory timer armed at
+  accepted beat and when a stopped beat stream reaches its `2 × N` expiry
+  (per-room in-memory timer armed at
   `nextPresenceExpiry`, re-armed on beats), publishes via
   `CentrifugoChatGateway.publishPresenceCount` ONLY when the count changed
   (last-published latch). Fire-and-forget from `recordHeartbeat`; state is

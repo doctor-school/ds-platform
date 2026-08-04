@@ -28,7 +28,7 @@ lang: en
 
 ## Jobs-to-be-done
 
-- **Pharma sponsor** (pays for everything): get **verifiable reach of a specialty-targeted doctor audience** — a report with contacts + actual minutes of presence per doctor.
+- **Pharma sponsor** (pays for everything): get **browser-observed, heartbeat-evidenced reach of a specialty-targeted doctor audience** — a report with verified doctor identities and contacts + per-doctor heartbeat-covered minutes, never a claim of physical attention.
 - **Doctor:** find a relevant broadcast, register in a couple of clicks, watch live and chat; later — receive NMO credits automatically.
 - **Operator / director:** create the event ≥1 month ahead; on air day paste the stream link and open the room; afterwards close it and hand over attendance data.
 
@@ -39,7 +39,7 @@ lang: en
 - **Admin surfaces live in the `admin` app** (Refine, ADR-0004).
 - **Event lifecycle is a single state machine** — `draft → published → live → ended → archived` — not the legacy scatter of booleans.
 - **Webinar room is built by us as a composition**, with the video as an **external stream (Rutube or similar) embedded as a configured iframe/player** — no video transcoding, no own media server. The Mediator.cloud buy-option was evaluated and **rejected**.
-- **Presence is captured from day one** via a **server-authoritative heartbeat** (authenticated POST every N seconds → append table in our Postgres). The sponsor report for the first webinar is a **manual export** from that data; auto-NMO and auto-report are wave 2.
+- **Presence is captured from day one** via a **server-authoritative heartbeat** (authenticated POST immediately on entry / visible-tab resume, then every N seconds only while visible; hidden pauses → append table in our Postgres). The sponsor report for the first webinar is a **manual export** from that data; auto-NMO and auto-report are wave 2.
 
 ## Feature decomposition
 
@@ -75,15 +75,15 @@ The legacy Doctor.School system (Bubble + Directual + Supabase + the business kn
 
 ### Adopt-vs-build verdicts (recon 2026-07-04)
 
-| Component                                    | Verdict                                | Rationale + source                                                                                                                                                |
-| -------------------------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Whole webinar framework                      | **BUILD** (as composition)             | plugNmeet / BigBlueButton / La Suite Meet are WebRTC stacks with own media servers — contradicts the embed frame. (plugnmeet.org, github.com/suitenumerique/meet) |
-| Realtime channel (chat, join/leave, widgets) | **ADOPT** Centrifugo                   | Already in our stack; per-channel presence, presence_stats, join/leave, history. (centrifugal.dev/docs/server/presence)                                           |
-| Chat UI                                      | **ADOPT** shadcn                       | Official chat primitives (ui.shadcn.com changelog 2026-06) or MIT shadcn-chat (shadcn-chat.vercel.app); final pick at delivery via `build-ui-from-design-system`. |
-| Presence storage                             | **BUILD** (small)                      | Centrifugo presence is ephemeral; the sponsor report needs durable minutes → 1 authenticated endpoint + 1 append table.                                           |
-| Embed player                                 | **ADOPT** react-player / thin iframe   | react-player for YouTube (github.com/cookpete/react-player); thin iframe for Rutube; **explicit provider enum, never URL-sniffing**.                              |
-| Calendar / listing UI                        | **ADOPT** shadcn event-calendar blocks | At delivery (shadcn-event-calendar.vercel.app etc.); wave 1 needs only a minimal listing.                                                                         |
-| Director console / admin                     | **ADOPT** Refine                       | Already the admin-app stack (ADR-0004).                                                                                                                           |
+| Component                                                        | Verdict                                | Rationale + source                                                                                                                                                                                                                                                                                             |
+| ---------------------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Whole webinar framework                                          | **BUILD** (as composition)             | plugNmeet / BigBlueButton / La Suite Meet are WebRTC stacks with own media servers — contradicts the embed frame. (plugnmeet.org, github.com/suitenumerique/meet)                                                                                                                                              |
+| Realtime transport (chat, server-derived count fan-out, widgets) | **ADOPT** Centrifugo                   | Already in our stack: fan-out + bounded history. Native channel presence/join-leave counts connections/tabs, so it is transport telemetry only — never the live distinct-doctor count authority.                                                                                                               |
+| Chat UI                                                          | **ADOPT** shadcn                       | Official chat primitives (ui.shadcn.com changelog 2026-06) or MIT shadcn-chat (shadcn-chat.vercel.app); final pick at delivery via `build-ui-from-design-system`.                                                                                                                                              |
+| Presence storage + count authority                               | **BUILD** (small)                      | One durable server-authoritative beat source, two separate derivations: latest-beat freshness supplies the `2 × N` distinct-doctor live count; accepted-beat N-buckets supply sponsor minutes with no trailing grace. Centrifugo native presence supplies neither → 1 authenticated endpoint + 1 append table. |
+| Embed player                                                     | **ADOPT** react-player / thin iframe   | react-player for YouTube (github.com/cookpete/react-player); thin iframe for Rutube; **explicit provider enum, never URL-sniffing**.                                                                                                                                                                           |
+| Calendar / listing UI                                            | **ADOPT** shadcn event-calendar blocks | At delivery (shadcn-event-calendar.vercel.app etc.); wave 1 needs only a minimal listing.                                                                                                                                                                                                                      |
+| Director console / admin                                         | **ADOPT** Refine                       | Already the admin-app stack (ADR-0004).                                                                                                                                                                                                                                                                        |
 
 ---
 

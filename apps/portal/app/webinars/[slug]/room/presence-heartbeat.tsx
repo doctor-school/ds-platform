@@ -18,8 +18,8 @@ function reportBeatFailure(reason: string, error?: unknown): void {
 }
 
 /**
- * 006 EARS-4 — the client presence-capture loop. While the room tab is the
- * VISIBLE, active tab it POSTs an authenticated heartbeat every N seconds
+ * 006 EARS-4 — the client presence-capture loop. It POSTs an authenticated
+ * heartbeat immediately on entry / visible resume, then every N seconds while visible
  * (`intervalSeconds` = `RoomConfig.heartbeatIntervalSeconds`, the server-config
  * cadence delivered in the EARS-1 grant) to the gated
  * `POST /v1/events/:slug/heartbeat` endpoint — same-origin, so the `__Host-`
@@ -40,10 +40,10 @@ function reportBeatFailure(reason: string, error?: unknown): void {
  * concurrent-tab coalescing is an EARS-5 server-side read-time derivation, so a
  * duplicate beat on rapid re-focus is harmless.
  *
- * **Live presence count (EARS-5).** Each accepted beat's ack carries the live
- * room-presence count (distinct doctors within the freshness window — a server-side
- * aggregate, never PII); the loop pushes it into {@link RoomPresenceProvider} so the
- * header's «N врачей в комнате» indicator refreshes every beat with no extra poll.
+ * **Live presence count fallback (EARS-5).** Each accepted beat's ack carries the
+ * server-derived distinct-doctor count (never PII). The primary realtime path is
+ * Centrifugo fan-out; this loop applies the ack to {@link RoomPresenceProvider} only
+ * as a best-effort fallback, with no extra poll.
  */
 export function PresenceHeartbeat({
   slug,
@@ -71,9 +71,9 @@ export function PresenceHeartbeat({
         keepalive: true,
       })
         .then(async (res) => {
-          // Refresh the live presence count from the ack (best-effort — a parse
-          // failure or a refused beat leaves the last known count untouched, but
-          // no longer disappears with zero signal — #1122).
+          // Apply the ack as a best-effort fallback to primary Centrifugo count
+          // fan-out. A parse failure or refused beat leaves the last known count
+          // untouched, but no longer disappears with zero signal — #1122.
           if (!res.ok) {
             reportBeatFailure(`server refused the beat (HTTP ${res.status})`);
             return;

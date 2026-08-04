@@ -60,7 +60,9 @@ function loadManifestEmails() {
   );
   if (!existsSync(path)) return [];
   const m = JSON.parse(readFileSync(path, "utf8"));
-  return (m.users ?? []).map((u) => ({ email: u.email, password: u.password }));
+  return (m.users ?? [])
+    .filter((u) => u.usable !== false)
+    .map((u) => ({ email: u.email, password: u.password }));
 }
 
 async function main() {

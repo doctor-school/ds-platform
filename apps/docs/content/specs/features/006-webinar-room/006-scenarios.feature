@@ -134,10 +134,10 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
   # --- Heartbeat presence capture (US-3) ---
 
   @EARS-4 @happy
-  Scenario: Presence is captured by a visibility-gated heartbeat every N seconds
+  Scenario: Presence is captured immediately on entry or visible resume, then every N seconds while visible
     Given a registered doctor watching in a live room with the room tab visible and active
     When the doctor stays in the room
-    Then the client posts an authenticated heartbeat every N seconds
+    Then the client posts an immediate authenticated heartbeat and then one every N seconds
     And each accepted beat appends one durable row (doctor, event, instant) to the presence table
     And the doctor never clicks anything to prove presence
 
@@ -148,7 +148,14 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
     Then the client stops posting heartbeats
     And the backgrounded tab's minutes do not count toward the sponsor report
     When the room tab becomes visible again
-    Then the client resumes posting an authenticated heartbeat every N seconds
+    Then the client posts an immediate authenticated heartbeat and resumes the N-second grid
+
+  @EARS-4 @edge
+  Scenario: A still-visible foreground tab keeps beating when the person physically walks away
+    Given a registered doctor in a live room whose tab remains visible and active
+    When the person physically walks away without backgrounding or closing the tab
+    Then the client keeps posting authenticated heartbeats every N seconds
+    And the platform does not claim to distinguish physical absence without an interactive confirmation signal
 
   # --- Presence-minute derivation (US-3, US-4) ---
 
@@ -163,7 +170,8 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
   Scenario: The captured data yields per-doctor minutes sufficient for the manual sponsor export
     Given a live room that captured heartbeats from several doctors
     When the operator derives presence minutes over the cadence N
-    Then each doctor has actual presence minutes computed from the beats
+    Then each doctor has browser-observed, heartbeat-covered minutes computed from the accepted beats
+    And the live-count freshness grace of 2 × N adds no trailing sponsor minutes after the last beat
     And the data is sufficient to produce the sponsor report by manual export
     And no report UI is required in wave 1
 
@@ -175,13 +183,25 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
     And no spec or code change is required
 
   @EARS-5 @happy
-  Scenario: The in-room counter reflects another doctor's presence in realtime
-    Given two doctors are live in the same open room
+  Scenario: The in-room counter reflects another doctor's accepted join beat in realtime
+    Given an observer is live in an open room
     And an observer is watching the room without posting a new heartbeat
-    When a second doctor joins or leaves and the distinct-doctor count changes
+    And a second doctor is not already inside the 2 × N freshness window
+    When a second doctor enters and emits the immediate authenticated heartbeat
     Then the api publishes the recomputed count to the room's realtime channel
     And the observer's in-room counter reflects the change within about one second
     And no beat from the observer's own client is required for the update
+
+  @EARS-5 @happy
+  Scenario: A doctor whose beats stop ages out after the two-cadence freshness window
+    Given two doctors have accepted beats in the same open room
+    And the observer emits on an independent N-second grid whose next beat falls after the second doctor's 2 × N expiry plus the publication budget
+    When the second doctor emits no further heartbeat
+    Then closing that doctor's WebSocket alone does not change the live presence count
+    And no later than 2 × N after that doctor's last accepted beat the latest beat ages out of the live presence count
+    And the api publishes the decreased count within about one second after expiry
+    And the decreased publication arrives before the observer's next scheduled beat
+    And the 2 × N live-count grace awards no additional sponsor minutes
 
   @EARS-5 @edge
   Scenario: The counter degrades to the heartbeat-ack cadence when the realtime channel is down

@@ -445,6 +445,7 @@ export async function runRoomBehaviorVerification({
     const joinElapsedMs = joinPublication
       ? publicationServerMs(joinPublication) - Date.parse(joinAck.beatAt)
       : Number.POSITIVE_INFINITY;
+    const confirmedJoinReceiveOrder = joinPublication?.receiveOrder ?? 0;
 
     const marker = `behavioral-${Date.now()}-${randomUUID()}`;
     const beforeChat = await acceptedChat(
@@ -502,6 +503,7 @@ export async function runRoomBehaviorVerification({
         {
           timeoutMs: freshnessWindowMs + publicationGraceMs + commandTimeoutMs,
           afterMs: joinAfterMs,
+          afterReceiveOrder: confirmedJoinReceiveOrder,
         },
       )
       .catch(() => null);

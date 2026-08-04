@@ -9,7 +9,11 @@ import {
   parseCentrifugoReplyData,
   selectBehaviorCredentials,
 } from "./room-behavior.mjs";
-import { manifestCredentials, roomSessionHeaders } from "./room-seams.mjs";
+import {
+  manifestCredentials,
+  publicationPassesReceiveCursor,
+  roomSessionHeaders,
+} from "./room-seams.mjs";
 
 const successfulTrace = {
   runStartedAt: "2026-08-04T12:34:56.000Z",
@@ -111,6 +115,61 @@ test("EARS-5: join is realtime and leave ages out by 2xN plus the publication bu
   assert.deepEqual(
     late.checks.slice(0, 2).map(({ passed }) => passed),
     [false, false],
+  );
+});
+
+test("EARS-5: age-out ignores a delayed baseline publication before the confirmed join receive cursor", () => {
+  const joinCommandStartedAt = 100;
+  const delayedBaseline = {
+    data: { type: "presence-count", count: 1 },
+    receivedAtMs: 110,
+    receiveOrder: 1,
+  };
+  const confirmedJoin = {
+    data: { type: "presence-count", count: 2 },
+    receivedAtMs: 120,
+    receiveOrder: 2,
+  };
+  const genuineEarlyDrop = {
+    data: { type: "presence-count", count: 1 },
+    receivedAtMs: 121,
+    receiveOrder: 3,
+  };
+
+  // The old command-start cursor admits the delayed baseline and caused the
+  // live false negative. A receive-order cursor confirmed by count=2 excludes
+  // it, but still admits any count=baseline published after that confirmation;
+  // evaluateBehaviorTrace then correctly fails such a genuinely early drop.
+  assert.equal(
+    publicationPassesReceiveCursor(delayedBaseline, {
+      afterMs: joinCommandStartedAt,
+    }),
+    true,
+  );
+  assert.equal(
+    publicationPassesReceiveCursor(delayedBaseline, {
+      afterReceiveOrder: confirmedJoin.receiveOrder,
+    }),
+    false,
+  );
+  assert.equal(
+    publicationPassesReceiveCursor(genuineEarlyDrop, {
+      afterReceiveOrder: confirmedJoin.receiveOrder,
+    }),
+    true,
+  );
+
+  const result = evaluateBehaviorTrace(
+    {
+      ...successfulTrace,
+      leaveElapsedMs: 121,
+      leavePublishAfterExpiryMs: -29_879,
+    },
+    { publicationGraceMs: 1_000 },
+  );
+  assert.equal(
+    result.checks.find((check) => check.id === "presence-age-out")?.passed,
+    false,
   );
 });
 

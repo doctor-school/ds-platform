@@ -127,6 +127,23 @@ export function parseCentrifugoReplyData(raw) {
 }
 
 /**
+ * Apply both supported receive cursors to a buffered/live publication. Time is
+ * useful before a command has a response publication; receive order is the
+ * causal cursor once that publication is confirmed. The latter is deliberately
+ * strict so a delayed pre-confirmation publication can never satisfy a later
+ * behavioral phase.
+ */
+export function publicationPassesReceiveCursor(
+  publication,
+  { afterMs = 0, afterReceiveOrder = 0 } = {},
+) {
+  return (
+    publication.receivedAtMs >= afterMs &&
+    publication.receiveOrder > afterReceiveOrder
+  );
+}
+
+/**
  * Minimal Centrifugo JSON-protocol connection used by both room tools. The room
  * token server-subscribes the connection, so this client needs only connect,
  * publications, history, and ping/pong; it never carries client publish rights.
@@ -141,6 +158,7 @@ export class CentrifugoRoomConnection {
     this.nextId = 0;
     this.pending = new Map();
     this.publications = [];
+    this.nextPublicationReceiveOrder = 0;
     this.publicationWaiters = new Set();
     this.closed = false;
   }
@@ -213,10 +231,16 @@ export class CentrifugoRoomConnection {
     }));
   }
 
-  waitForPublication(predicate, { timeoutMs, afterMs = 0 } = {}) {
+  waitForPublication(
+    predicate,
+    { timeoutMs, afterMs = 0, afterReceiveOrder = 0 } = {},
+  ) {
     const buffered = this.publications.find(
       (publication) =>
-        publication.receivedAtMs >= afterMs && predicate(publication),
+        publicationPassesReceiveCursor(publication, {
+          afterMs,
+          afterReceiveOrder,
+        }) && predicate(publication),
     );
     if (buffered) return Promise.resolve(buffered);
 
@@ -225,6 +249,7 @@ export class CentrifugoRoomConnection {
       const waiter = {
         predicate,
         afterMs,
+        afterReceiveOrder,
         resolve: resolvePublication,
         reject: rejectPublication,
         timer: null,
@@ -327,10 +352,14 @@ export class CentrifugoRoomConnection {
       data: publication.data,
       offset: publication.offset,
       receivedAtMs: performance.now(),
+      receiveOrder: ++this.nextPublicationReceiveOrder,
     };
     this.publications.push(record);
     for (const waiter of this.publicationWaiters) {
-      if (record.receivedAtMs < waiter.afterMs || !waiter.predicate(record))
+      if (
+        !publicationPassesReceiveCursor(record, waiter) ||
+        !waiter.predicate(record)
+      )
         continue;
       clearTimeout(waiter.timer);
       this.publicationWaiters.delete(waiter);

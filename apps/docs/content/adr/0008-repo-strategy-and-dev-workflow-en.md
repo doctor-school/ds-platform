@@ -52,7 +52,7 @@ AI-stack design spec §11 already listed the AI-loop tooling steps (bootstrap, l
 - **pnpm 10.x** (workspaces) — inherited ADR-0006 §2.
 - **Turborepo** — inherited ADR-0006 §2; root `turbo.json` manages the build/lint/test pipeline + remote cache (cache server — decision deferred until "local cache is insufficient", Phase 1+).
 - **`packageManager` field** in root `package.json` (`pnpm@10.x`) — corepack auto-fetch, no global install needed.
-- **`engines`** requires `node >= 22 < 23` (LTS Iron) + `pnpm >= 10`; `.npmrc` `engine-strict=true` blocks install on mismatch.
+- **`engines`** requires `node ^22.22.2 || ^24.15.0 || >=26.0.0` + `pnpm >= 10`; `.npmrc` `engine-strict=true` blocks install on mismatch.
 - **Node version pin:** `.nvmrc` with `22` + `packageManager` — two sources, both automatically honored by different tools (nvm/fnm/Volta/mise/corepack), no required client-side tool.
 
 ### 2.3 Top-level layout

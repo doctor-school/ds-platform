@@ -9,7 +9,9 @@
 //   POST /v1/events/:id/heartbeat → a fraction of VUs POST /v1/events/:id/chat
 //   (server-mediated publish; clients never publish direct). This capacity leg
 //   does not simulate Page Visibility or the production client's immediate and
-//   repeating heartbeat loop; `room-behavior` verifies that behavior separately.
+//   repeating heartbeat loop; component/Playwright tests verify that client
+//   behavior. `room-behavior` separately verifies server-side count timing and
+//   reconnect continuity.
 //
 // FIXTURE (phase-2 / smoke doc): the grant gate is authenticated AND registered
 // (005 roster) AND live — so a real run needs LOADTEST_EVENT_ID pointing at a

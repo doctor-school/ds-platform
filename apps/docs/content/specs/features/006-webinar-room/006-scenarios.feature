@@ -170,7 +170,7 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
   Scenario: The captured data yields per-doctor minutes sufficient for the manual sponsor export
     Given a live room that captured heartbeats from several doctors
     When the operator derives presence minutes over the cadence N
-    Then each doctor has actual presence minutes computed from the beats
+    Then each doctor has browser-observed, heartbeat-covered minutes computed from the accepted beats
     And the live-count freshness grace of 2 × N adds no trailing sponsor minutes after the last beat
     And the data is sufficient to produce the sponsor report by manual export
     And no report UI is required in wave 1
@@ -195,12 +195,12 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
   @EARS-5 @happy
   Scenario: A doctor whose beats stop ages out after the two-cadence freshness window
     Given two doctors have accepted beats in the same open room
-    And an observer keeps emitting heartbeats
+    And the observer emits on an independent N-second grid whose next beat falls after the second doctor's 2 × N expiry plus the publication budget
     When the second doctor emits no further heartbeat
     Then closing that doctor's WebSocket alone does not change the live presence count
     And no later than 2 × N after that doctor's last accepted beat the latest beat ages out of the live presence count
     And the api publishes the decreased count within about one second after expiry
-    And no beat from the observer's own client is required to trigger the decrease
+    And the decreased publication arrives before the observer's next scheduled beat
     And the 2 × N live-count grace awards no additional sponsor minutes
 
   @EARS-5 @edge

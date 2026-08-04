@@ -113,13 +113,20 @@ The owner-readable stdout starts with a UTC run timestamp and records the API
 target, derived Centrifugo WebSocket target, event, N, each check, measured
 timing, and the final verdict without credentials or doctor PII. Paste the
 complete report into the Issue/PR and link that artifact from the Stage-B record.
-The asserted contract is deliberately precise:
+The verifier's direct assertions are deliberately bounded:
 
 - a fresh doctor (not already inside the live-count freshness window) produces
   `+1`, published within about one second after the accepted entry/re-entry beat;
 - stopping that doctor's beats ages the doctor out no later than `2 × N` after the
-  last accepted beat, then publishes `-1` within about one second; WebSocket close
-  alone is not leave;
+  last accepted beat, then publishes `-1` within about one second;
+- separately, the forced chat reconnect/history-continuity story and the
+  intentional failed-heartbeat diagnostic are direct checks in the same report.
+
+The following bullets are settled surrounding room contract, not additional
+assertions by this harness; component/runtime tests and the feature spec cover
+them:
+
+- WebSocket close alone is not leave;
 - quick re-entry/concurrent tabs while already fresh coalesce and require no
   count-change publication;
 - `2 × N` is live distinct-count freshness grace only. Sponsor minutes remain the

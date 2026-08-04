@@ -364,8 +364,9 @@ beat_at)` (ADR-0003 §3). Immutable rows (no mutable column → nothing to updat
 
 - [#686](https://github.com/doctor-school/ds-platform/pull/686) [`b46b15a`](https://github.com/doctor-school/ds-platform/commit/b46b15ad2e7b37d0129db0461240979544438c10) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(room): 006 EARS-5 — per-doctor presence-minute derivation (parameterized over N, tab-coalesced)
 
-  The append-only `presence_beats` rows EARS-4 captures now yield **actual per-doctor
-  presence minutes** for an event — the durable basis for the wave-1 sponsor report,
+  The append-only `presence_beats` rows EARS-4 captures now yield **per-doctor
+  accepted-heartbeat-covered minutes** for an event — browser-observed rather than
+  proof of physical attention, and the durable basis for the wave-1 sponsor report,
   by manual export (feature 006, EARS-5; realizes US-3, US-4). Read-time derivation
   only: no new write, no report UI, no public endpoint.
 

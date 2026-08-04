@@ -28,7 +28,7 @@ lang: en
 
 ## Jobs-to-be-done
 
-- **Pharma sponsor** (pays for everything): get **verifiable reach of a specialty-targeted doctor audience** — a report with contacts + actual minutes of presence per doctor.
+- **Pharma sponsor** (pays for everything): get **browser-observed, heartbeat-evidenced reach of a specialty-targeted doctor audience** — a report with verified doctor identities and contacts + per-doctor heartbeat-covered minutes, never a claim of physical attention.
 - **Doctor:** find a relevant broadcast, register in a couple of clicks, watch live and chat; later — receive NMO credits automatically.
 - **Operator / director:** create the event ≥1 month ahead; on air day paste the stream link and open the room; afterwards close it and hand over attendance data.
 

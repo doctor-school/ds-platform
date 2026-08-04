@@ -41,7 +41,7 @@ Any question you put to the owner — in the report **and** in the `⏸ ЖДУ �
 A confirmation or report visual the user **cannot see** is worthless — images you `Read` render only in your own CLI, not to the user. To produce and DELIVER one:
 
 1. **Build the artifact** — render the real surface, or a focused HTML mock of the change (real tokens + Inter), on a local server. **`file://` is blocked in the Playwright MCP**, so `python -m http.server <port> --bind 127.0.0.1` and navigate to `http://127.0.0.1:<port>/`.
-2. **Screenshot** via Playwright (`browser_take_screenshot`, full page). The MCP saves into the repo root — **`mv` it out** and confirm `git status` is clean (never leave preview PNGs in the repo).
+2. **Screenshot** via Playwright (`browser_take_screenshot`, full page). The guard permits named in-tree output only under `<repo>/.playwright-mcp/`, where the MCP also puts auto-named files — **move it out** and confirm the source file is gone (`git status` alone cannot see this ignored directory).
 3. **Deliver to the user** — copy to a local, user-visible folder OUTSIDE git (machine-specific path in memory `feedback_final_report_format`, e.g. `Pictures\<task-slug>\`) and **open it** (`cmd //c start "" "<path>"`). Never ask «подтверждаешь?» / "approve?" while the image is visible only inside your own CLI.
 4. For a change to visible UI, make it a **before/after** pair (old vs new, side by side), not only the final state.
 5. Tear down the local preview server (free the port) when done.
@@ -61,7 +61,7 @@ A confirmation or report visual the user **cannot see** is worthless — images 
 - **A `feature`/`bug` PR whose body's `## Product note (RU)` section is left `none` or unfilled** — the «Для пользователя» paragraph is the release note; not mirroring it into the PR body fails the `product-note` guard and starves the team's Mattermost channel (Issue #654).
 - **Opening a decision request mid-thread with no "why this surfaced" context.**
 - **An owner question in internal shorthand** — jargon, a token name, or a «см. Issue/отчёт» redirect instead of the self-contained что-случилось / почему / что-изменит / где-посмотреть block.
-- **Leaving preview PNGs in the repo root** (the MCP saves there) — `mv` them out, keep `git status` clean.
+- **Leaving preview PNGs in `<repo>/.playwright-mcp/`** — move them out and confirm the ignored source files are gone.
 
 ## Related
 

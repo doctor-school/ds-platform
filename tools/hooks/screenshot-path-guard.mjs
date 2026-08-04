@@ -86,24 +86,33 @@ export function isPathInside(parent, child) {
   return c === p || c.startsWith(p + "/");
 }
 
-export function blockMessage({ filename, resolved, cwd }) {
+export function blockMessage({ filename, resolved, cwd, toolName }) {
+  const calledTool =
+    String(toolName).match(/browser_(?:take_screenshot|pdf_save)$/)?.[0] ??
+    "browser_take_screenshot";
+  const extension = calledTool === "browser_pdf_save" ? "pdf" : "png";
+  const allowedRoots = cwd
+    ? `Do NOT retarget outside the repo: the server's allowed roots are exactly ` +
+      `'${cwd}' and '${cwd}/${SERVER_OUTPUT_DIR}' (playwright-core checkFile) — anything else ` +
+      `raises 'File access denied'.\n`
+    : `Do NOT retarget outside the repo: the hook payload did not include cwd, so the ` +
+      `server's allowed roots cannot be rendered here; Playwright MCP still adjudicates ` +
+      `them with checkFile.\n`;
   return (
-    `BLOCKED: browser_take_screenshot filename '${filename}' writes INSIDE the repository tree.\n` +
+    `BLOCKED: ${calledTool} filename '${filename}' writes INSIDE the repository tree.\n` +
     `Resolved target: ${resolved}\n` +
     `Playwright MCP resolves a relative filename against its cwd — the repo root — so the ` +
     `file lands in the SHARED working tree as untracked clutter (#1169: 18 stray files, ` +
     `5.8 MB, from 73 such calls).\n` +
     `Write into '${SERVER_OUTPUT_DIR}/' instead, with a FLAT name that carries the task: ` +
-    `'${SERVER_OUTPUT_DIR}/<task>-<name>.png'. That directory is .gitignore'd and is where ` +
+    `'${SERVER_OUTPUT_DIR}/<task>-<name>.${extension}'. That directory is .gitignore'd and is where ` +
     `the server's own auto-named files already go.\n` +
     `A caller-supplied filename is NOT mkdir'd: the server's workspaceFile() branch only ` +
     `resolves + access-checks, and _writeFile() then writes straight through — a nested ` +
     `'${SERVER_OUTPUT_DIR}/<dir>/x.png' fails with ENOENT unless <dir> already exists ` +
     `(only the OMITTED-filename branch, outputFile(), calls mkdir recursive). Need a ` +
     `subdirectory? create it with the Bash tool first.\n` +
-    `Do NOT retarget outside the repo: the server's allowed roots are exactly ` +
-    `'${cwd}' and '${cwd}/${SERVER_OUTPUT_DIR}' (playwright-core checkFile) — anything else ` +
-    `raises 'File access denied'.\n` +
+    allowedRoots +
     `For a deliverable, copy the file out to 'Pictures\\<task>\\' afterwards with the Bash ` +
     `tool — never leave the only copy in the repo tree.\n`
   );
@@ -111,16 +120,21 @@ export function blockMessage({ filename, resolved, cwd }) {
 
 /**
  * Every tree this guard protects, given the server's cwd: the cwd itself and —
- * when the cwd is a worktree under `<main>/.claude/worktrees/<N>` — the SHARED
- * main tree above it. Without the second root a `../../../shot.png` from a
- * worktree resolves outside the worktree and would take the allow branch, while
- * landing squarely in the main tree the owner works in (AGENTS.md §6; same
- * derivation as `worktree-path-guard.mjs`).
+ * when cwd is at or below `<main>/.claude/worktrees/<N>` — that worktree root
+ * plus the SHARED main tree above it. Without the main root a
+ * `../../../shot.png` escape would take the allow branch while landing squarely
+ * in the tree the owner works in (AGENTS.md §6; same derivation as
+ * `worktree-path-guard.mjs`).
  */
 export function guardedRoots(cwd) {
   const roots = [cwd];
   const m = String(cwd).match(/^(.*)[\\/]\.claude[\\/]worktrees[\\/][^\\/]+/);
-  if (m && m[1]) roots.push(m[1]);
+  if (m && m[1]) {
+    // A hook may run below the worktree root. Protect and allow the worktree's
+    // own output dir independently from that subdirectory and the main tree.
+    if (normPath(m[0]) !== normPath(cwd)) roots.push(m[0]);
+    roots.push(m[1]);
+  }
   return roots;
 }
 
@@ -155,7 +169,7 @@ export function decideScreenshotBlock({ toolName, toolInput, cwd }) {
     if (rel === SERVER_OUTPUT_DIR || rel.startsWith(`${SERVER_OUTPUT_DIR}/`)) {
       return { block: false };
     }
-    return { block: true, filename, resolved: filename, cwd: "" };
+    return { block: true, toolName, filename, resolved: filename, cwd: "" };
   }
 
   const resolved = resolve(cwd, filename);
@@ -169,7 +183,7 @@ export function decideScreenshotBlock({ toolName, toolInput, cwd }) {
   }
   for (const root of roots) {
     if (isPathInside(root, resolved)) {
-      return { block: true, filename, resolved, cwd };
+      return { block: true, toolName, filename, resolved, cwd };
     }
   }
   return { block: false };

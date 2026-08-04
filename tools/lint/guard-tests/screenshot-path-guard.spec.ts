@@ -41,6 +41,7 @@ const HOOK = fileURLToPath(
 const CWD = resolve(tmpdir(), "fake-ds-root");
 const OUTPUT_DIR = resolve(CWD, SERVER_OUTPUT_DIR);
 const OUTSIDE = resolve(tmpdir(), "fake-elsewhere");
+const PDF_TOOL = "mcp__playwright__browser_pdf_save";
 
 function runHook(payload: unknown) {
   return spawnSync(process.execPath, [HOOK], {
@@ -162,6 +163,21 @@ describe("guardedRoots — the worktree escape", () => {
     expect(decide(`${SERVER_OUTPUT_DIR}/shot.png`, WT).block).toBe(false);
     expect(decide(resolve(OUTPUT_DIR, "shot.png"), WT).block).toBe(false);
   });
+
+  it("allows the worktree-root output dir when cwd is a worktree subdirectory", () => {
+    const worktreeSubdirectory = resolve(WT, "apps", "portal");
+    expect(guardedRoots(worktreeSubdirectory).map(normPath)).toEqual([
+      normPath(worktreeSubdirectory),
+      normPath(WT),
+      normPath(CWD),
+    ]);
+    expect(
+      decide(
+        resolve(WT, SERVER_OUTPUT_DIR, "1174-worktree-root.png"),
+        worktreeSubdirectory,
+      ).block,
+    ).toBe(false);
+  });
 });
 
 describe("decideScreenshotBlock — what must keep working", () => {
@@ -238,6 +254,18 @@ describe("decideScreenshotBlock — no-cwd fallback", () => {
   });
 });
 
+describe("decideScreenshotBlock — PDF writes", () => {
+  it("blocks browser_pdf_save and carries the actual tool into the refusal", () => {
+    const decision = decideScreenshotBlock({
+      toolName: PDF_TOOL,
+      toolInput: { filename: "room-export.pdf" },
+      cwd: CWD,
+    });
+    expect(decision.block).toBe(true);
+    expect(decision.toolName).toBe(PDF_TOOL);
+  });
+});
+
 describe("blockMessage", () => {
   it("names the file, the resolved target, and the only writable in-tree dir", () => {
     const msg = blockMessage({
@@ -270,6 +298,23 @@ describe("hook process contract", () => {
   it("exits 2 on an absolute in-tree filename", () => {
     const res = runHook(payloadWith({ filename: resolve(CWD, "shot.png") }));
     expect(res.status).toBe(2);
+  });
+
+  it("exits 2 and names browser_pdf_save for a PDF filename", () => {
+    const res = runHook(payloadWith({ filename: "room-export.pdf" }, PDF_TOOL));
+    expect(res.status).toBe(2);
+    expect(res.stderr).toContain("browser_pdf_save");
+    expect(res.stderr).not.toContain("browser_take_screenshot");
+    expect(res.stderr).toContain(`${SERVER_OUTPUT_DIR}/<task>-<name>.pdf`);
+  });
+
+  it("does not render empty allowed roots when cwd is omitted", () => {
+    const res = runHook(
+      payloadWith({ filename: "room-vk-playing.png" }, SCREENSHOT_TOOL, ""),
+    );
+    expect(res.status).toBe(2);
+    expect(res.stderr).toContain("hook payload did not include cwd");
+    expect(res.stderr).not.toContain("'' and '/.playwright-mcp'");
   });
 
   it("exits 0 — silently — for the paths that must keep working", () => {

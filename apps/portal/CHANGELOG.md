@@ -38,11 +38,13 @@
 
 - [#1159](https://github.com/doctor-school/ds-platform/pull/1159) [`88bc412`](https://github.com/doctor-school/ds-platform/commit/88bc412cb3620e83202979c9026e8505d3a696d1) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Instant in-room presence counter — server-published count over Centrifugo (006 EARS-5, [#1141](https://github.com/doctor-school/ds-platform/issues/1141)).
 
-  The live «N врачей в комнате» webinar-room counter now updates the moment another
-  doctor joins or leaves — within ~1 s — instead of only on the observer's own next
-  heartbeat (the [#1122](https://github.com/doctor-school/ds-platform/issues/1122) "frozen until my beat" perception). The count stays the same
+  The live «N врачей в комнате» webinar-room counter now publishes a fresh doctor's
+  +1 within ~1 s of their accepted beat; when that doctor's beats stop, the −1 is
+  published within ~1 s after the `2 × N` freshness window expires — instead of
+  only on the observer's own next heartbeat (the [#1122](https://github.com/doctor-school/ds-platform/issues/1122) "frozen until my beat" perception). The count stays the same
   server-authoritative distinct-doctor aggregate (never Centrifugo native channel
-  presence; sponsor attendance reporting is untouched).
+  presence); sponsor minutes remain the separate accepted-beat N-bucket derivation,
+  with no trailing `2 × N` award.
 
   - `@ds/schemas` — a new `RoomPresenceCountMessage` (a `type: "presence-count"`
     discriminant) fanned out over the room channel; it never cross-parses a chat
@@ -545,10 +547,11 @@ beat_at)` (ADR-0003 §3). Immutable rows (no mutable column → nothing to updat
     admission it appends exactly one row and returns the ack. Classified
     `authenticated` / `doctor_guest` / `policy` in the endpoint-authz matrix.
   - `@ds/portal` — the room mounts a visibility-gated `PresenceHeartbeat` loop (no
-    doctor-facing affordance): it POSTs a beat every N seconds — N from
+    doctor-facing affordance): it POSTs immediately on entry/re-entry and every N seconds — N from
     `RoomConfig.heartbeatIntervalSeconds` (server config, default 60 s) — while the
     tab is the visible, active tab (Page Visibility API); a backgrounded tab
-    (`document.hidden`) emits none, and the loop resumes on re-visibility.
+    (`document.hidden`) emits none, and returning visible posts immediately before
+    the N-second grid resumes. A still-visible tab cannot prove physical presence.
 
   Cadence N is server config, parameterized downstream: the per-doctor
   minute derivation + concurrent-tab coalescing is EARS-5 ([#581](https://github.com/doctor-school/ds-platform/issues/581)), room-close

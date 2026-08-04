@@ -12,6 +12,7 @@ import { resolve } from "node:path";
 import { intEnv, invokedDirectly, optEnv } from "./lib.mjs";
 import {
   createSyntheticUser,
+  grantProjectRole,
   idpConfig,
   resolveOrgId,
   syntheticEmail,
@@ -25,6 +26,11 @@ const MANIFEST = optEnv(
 async function main() {
   const cfg = idpConfig();
   const count = intEnv("LOADTEST_USERS", 5);
+  if (!cfg.projectId) {
+    throw new Error(
+      "LOADTEST_IDP_PROJECT_ID is required so provisioned users receive doctor_guest before login",
+    );
+  }
   const orgId = await resolveOrgId(cfg);
   console.log(
     `provisioning ${count} synthetic user(s) @${cfg.domain} in org ${orgId} on ${cfg.issuer}`,
@@ -36,12 +42,30 @@ async function main() {
     const email = syntheticEmail(cfg.domain);
     try {
       const r = await createSyntheticUser({ ...cfg, orgId, email });
+      // Preserve every exact-created account in the manifest even if the role
+      // assignment fails, so normal cleanup can reap it. Scenario loaders ignore
+      // `usable:false`; old manifests without the marker remain compatible.
+      const manifestUser = {
+        email,
+        sub: r.sub ?? "",
+        password: cfg.password,
+        usable: false,
+      };
+      created.push(manifestUser);
+      if (!r.sub) {
+        throw new Error(
+          r.alreadyExisted
+            ? "synthetic email collision returned no user id; rerun provisioning"
+            : "Zitadel create response returned no user id",
+        );
+      }
+      await grantProjectRole({ ...cfg, orgId }, r.sub, "doctor_guest");
+      manifestUser.usable = true;
       if (r.alreadyExisted) {
         console.log(`  DUP   ${email}`);
       } else {
         console.log(`  OK    ${email} (${r.sub})`);
       }
-      created.push({ email, sub: r.sub ?? "", password: cfg.password });
     } catch (err) {
       failed += 1;
       console.log(`  FAIL  ${email} — ${err.message}`);
@@ -50,12 +74,17 @@ async function main() {
 
   writeFileSync(
     MANIFEST,
-    JSON.stringify({ domain: cfg.domain, issuer: cfg.issuer, users: created }, null, 2),
+    JSON.stringify(
+      { domain: cfg.domain, issuer: cfg.issuer, users: created },
+      null,
+      2,
+    ),
   );
+  const usable = created.filter((user) => user.usable).length;
   console.log(
-    `─ wrote ${created.length} user(s) to ${MANIFEST}${failed ? ` (${failed} failed)` : ""}`,
+    `─ wrote ${created.length} account(s) to ${MANIFEST}; ${usable} usable${failed ? ` (${failed} failed)` : ""}`,
   );
-  process.exit(failed > 0 && created.length === 0 ? 1 : 0);
+  process.exit(failed > 0 && usable === 0 ? 1 : 0);
 }
 
 if (invokedDirectly(import.meta.url)) {

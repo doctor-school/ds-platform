@@ -26,14 +26,12 @@ import {
 
 // 006 EARS-5 — the LIVE room-presence count («N врачей в комнате»).
 //
-// The canvas header shows a live count of distinct doctors currently in the room.
-// It is a read-time AGGREGATE derived over the SAME durable append-only
-// `presence_beats` the sponsor minutes draw from (never a separate presence store,
-// never Centrifugo presence): the count of DISTINCT users with a beat inside the
-// freshness window (≈ 2 × N). Two load-bearing rules fall out of the DISTINCT +
-// window: a doctor's concurrent tabs coalesce to one (no inflation — the same rule
-// as the minutes), and a doctor who left the room ages out within two cadences (the
-// number is who is *currently* watching, not everyone who ever beat). The count is
+// The canvas header shows distinct doctors whose latest accepted beat is fresh.
+// One durable append-only source feeds two separate derivations: this count uses a
+// `2 × N` latest-beat freshness window; sponsor minutes use accepted-beat N-buckets
+// and receive no trailing grace. Never Centrifugo native presence. DISTINCT
+// coalesces concurrent tabs; when beats stop, the latest beat ceases to count no
+// later than `2 × N`. This is not proof that the person is physically watching. The count is
 // an integer only — never a per-doctor identity or the roster — so it leaks no PII
 // (EARS-8). It rides the EARS-1 grant (initial value) and every heartbeat ack (the
 // live refresh). Runs against the dev-stand Postgres + the fake IdP; skips when
@@ -141,10 +139,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
     }
 
-    async function heartbeat(
-      slug: string,
-      cookie: string,
-    ): Promise<number> {
+    async function heartbeat(slug: string, cookie: string): Promise<number> {
       const res = await app.inject({
         method: "POST",
         url: `/v1/events/${slug}/heartbeat`,
@@ -188,7 +183,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterEach(async () => {
       for (const id of createdEventIds.splice(0)) {
-        await pool.query("DELETE FROM presence_beats WHERE event_id = $1", [id]);
+        await pool.query("DELETE FROM presence_beats WHERE event_id = $1", [
+          id,
+        ]);
         await pool.query("DELETE FROM events WHERE id = $1", [id]);
       }
       for (const email of createdEmails.splice(0))
@@ -245,7 +242,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(grant.presenceCount).toBe(1);
     });
 
-    it("EARS-5: a beat older than the freshness window ages out — the live count reflects who is currently watching, not everyone who ever beat", async () => {
+    it("EARS-5: a latest beat older than 2xN is excluded from the live distinct-doctor count", async () => {
       const { id, slug } = await seedEvent("published");
       await setState(id, "live");
       const freshEmail = uniqueEmail("presence-fresh");
@@ -255,7 +252,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       await register(slug, fresh);
       await register(slug, stale);
       // The fresh doctor beats now; the stale doctor's only beat is backdated an
-      // hour (a scoped raw insert simulates a doctor who left long ago).
+      // hour (a scoped raw insert simulates a beat stream that stopped long ago).
       await heartbeat(slug, fresh);
       const staleUser = (
         await pool.query<{ id: string }>(

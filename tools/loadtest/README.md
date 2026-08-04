@@ -1,15 +1,16 @@
 # Load-test harness (`tools/loadtest/`)
 
-Prod load-testing campaign for the webinar room and adjacent surfaces (Issue
-#873). **Phase 1 (this harness): build + smoke against the local dev stand only.
-Phase 2 (a separate, owner-windowed run) is where prod is ever targeted** — and
-even then only under the guards below. Nothing here runs against prod on its own.
+Two related webinar-room tools live here: the #873 capacity/load campaign and
+the #1139 low-N behavioral verifier. **Phase 1 of the capacity harness and the
+entire behavioral verifier target the local dev stand only. Phase 2 (a separate,
+owner-windowed capacity run) is where prod is ever targeted** — and even then
+only under the guards below. Nothing here runs against prod on its own.
 
 ## Runner: pure-Node (chosen) vs k6 (rejected)
 
 **Chosen: a zero-dependency, Node-native harness.** Every scenario is a plain
 `.mjs` run by the repo's existing `node`/`tsx` toolchain, using Node's built-in
-`fetch` and global `WebSocket` (Node ≥22 — the repo's `engines.node`). No install
+`fetch` and global `WebSocket` (the repo's Node contract). No install
 step, no new lockfile entry, no external binary.
 
 **Rationale (recon fact 6):** the `tools/` convention is flat, env-driven
@@ -26,32 +27,36 @@ distributed multi-node generation — is not needed for the single-box, low-hund
 before capacity anyway (see auth-burst). If a future campaign needs true
 multi-node distributed generation, revisit k6 then.
 
-**Install:** none. Requires Node ≥22 (`node --version`). That's it.
+**Install:** none. Requires Node `^22.22.2 || ^24.15.0 || >=26.0.0`
+(`node --version`), exactly the root `engines.node` contract. That's it.
 
 ## Configuration — everything is env-driven (no hardcoded hosts)
 
 No scenario has a default host. `LOADTEST_API_ORIGIN` unset is a hard error, never
 a silent fallback to prod.
 
-| Env var                          | Scenarios                | Meaning                                                                     |
-| -------------------------------- | ------------------------ | --------------------------------------------------------------------------- |
-| `LOADTEST_API_ORIGIN`            | all                      | api origin, no trailing `/v1` (e.g. `http://localhost:3000`). **Required.** |
-| `LOADTEST_VUS`                   | load                     | concurrent virtual users                                                    |
-| `LOADTEST_DURATION_SECONDS`      | load                     | steady-state duration                                                       |
-| `LOADTEST_RAMP_SECONDS`          | load                     | ramp-up window (VU starts staggered across it)                              |
-| `LOADTEST_P95_MS`                | load                     | p95 latency threshold — exceed ⇒ FAIL exit 1 (unset ⇒ report-only)          |
-| `LOADTEST_ERROR_RATE`            | load                     | max error rate (0–1) — exceed ⇒ FAIL (unset ⇒ report-only)                  |
-| `LOADTEST_EVENT_ID`              | room, browse             | live event id/slug (room grant target; browse event-page)                   |
-| `LOADTEST_CHAT_FRACTION`         | room                     | fraction of VUs that POST chat (default 0.1)                                |
-| `LOADTEST_USE_PROVISIONED`       | room, auth               | `1` ⇒ use the provision manifest instead of registering                     |
-| `LOADTEST_SUPPRESSION_CONFIRMED` | auth                     | `1` unlocks auth-burst against a prod host (see guard)                      |
-| `LOADTEST_IDP_ISSUER`            | provision, cleanup       | Zitadel issuer base URL                                                     |
-| `LOADTEST_IDP_SERVICE_TOKEN`     | provision, cleanup       | org-owner PAT                                                               |
-| `LOADTEST_IDP_ORG_ID`            | provision                | org id (else resolved via `orgs/me`)                                        |
-| `LOADTEST_SYNTHETIC_DOMAIN`      | provision, cleanup, auth | reserved domain (default `loadtest.invalid`)                                |
-| `LOADTEST_AUTH_PASSWORD`         | provision, auth, room    | synthetic-account password                                                  |
-| `LOADTEST_USERS`                 | provision                | how many accounts to create                                                 |
-| `LOADTEST_MANIFEST`              | provision, cleanup, …    | manifest path (default `tools/loadtest/.synthetic-users.json`, gitignored)  |
+| Env var                                | Scenarios                | Meaning                                                                              |
+| -------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------ |
+| `LOADTEST_API_ORIGIN`                  | all                      | api origin, no trailing `/v1` (e.g. `http://localhost:3000`). **Required.**          |
+| `LOADTEST_VUS`                         | load                     | concurrent virtual users                                                             |
+| `LOADTEST_DURATION_SECONDS`            | load                     | steady-state duration                                                                |
+| `LOADTEST_RAMP_SECONDS`                | load                     | ramp-up window (VU starts staggered across it)                                       |
+| `LOADTEST_P95_MS`                      | load                     | p95 latency threshold — exceed ⇒ FAIL exit 1 (unset ⇒ report-only)                   |
+| `LOADTEST_ERROR_RATE`                  | load                     | max error rate (0–1) — exceed ⇒ FAIL (unset ⇒ report-only)                           |
+| `LOADTEST_EVENT_ID`                    | room, browse             | live event id/slug (room grant target; browse event-page)                            |
+| `LOADTEST_CHAT_FRACTION`               | room                     | fraction of VUs that POST chat (default 0.1)                                         |
+| `LOADTEST_USE_PROVISIONED`             | room, auth               | `1` ⇒ use the provision manifest instead of registering                              |
+| `LOADTEST_SUPPRESSION_CONFIRMED`       | auth                     | `1` unlocks auth-burst against a prod host (see guard)                               |
+| `LOADTEST_IDP_ISSUER`                  | provision, cleanup       | Zitadel issuer base URL                                                              |
+| `LOADTEST_IDP_SERVICE_TOKEN`           | provision, cleanup       | org-owner PAT                                                                        |
+| `LOADTEST_IDP_ORG_ID`                  | provision                | org id (else resolved via `orgs/me`)                                                 |
+| `LOADTEST_IDP_PROJECT_ID`              | provision                | Zitadel project that owns `doctor_guest`; required so login gets the real role claim |
+| `LOADTEST_SYNTHETIC_DOMAIN`            | provision, cleanup, auth | reserved domain (default `loadtest.invalid`)                                         |
+| `LOADTEST_AUTH_PASSWORD`               | provision, auth, room    | synthetic-account password                                                           |
+| `LOADTEST_USERS`                       | provision                | how many accounts to create                                                          |
+| `LOADTEST_MANIFEST`                    | provision, cleanup, …    | manifest path (default `tools/loadtest/.synthetic-users.json`, gitignored)           |
+| `LOADTEST_BEHAVIOR_PUBLISH_GRACE_MS`   | room verify              | fresh +1 / age-out −1 publication budget (default `1000`)                            |
+| `LOADTEST_BEHAVIOR_COMMAND_TIMEOUT_MS` | room verify              | transport/setup command timeout (default `10000`)                                    |
 
 Read local-stand values from `~/.ds-platform/.env.local` and map them onto
 `LOADTEST_*` (e.g. `LOADTEST_IDP_ISSUER=$IDP_ISSUER`) — never hardcode.
@@ -65,12 +70,63 @@ Read local-stand values from `~/.ds-platform/.env.local` and map them onto
   are the limiter/bot/bad-cred wall — reported, not counted as capacity errors.
 - **`loadtest:room`** — the webinar-room fan-out: grant → Centrifugo WS connect →
   heartbeat → server-mediated chat. Needs the room fixture (below).
+- **`loadtest:room:verify`** — the #1139 two-doctor, low-N behavioral proof:
+  fresh join/age-out timing, chat reconnect/history continuity, and an intentional
+  failed-heartbeat diagnostic. It is a deterministic Stage-B artifact generator,
+  **not** a capacity test and **not** a CI test; it hard-refuses production.
 - **`loadtest:provision` / `loadtest:cleanup`** — synthetic-account lifecycle,
   direct against Zitadel v2 (never the bot-gated BFF register). Accounts are born
   **verified** (`email.isVerified`) so **no email/SMS is ever dispatched** for
-  them — the delivery-suppression seam for synthetic users. Cleanup is the v2
+  them — the delivery-suppression seam for synthetic users — and provisioning
+  idempotently grants the real `doctor_guest` project role **before login**, so the
+  BFF session contains the authority required by the registration/room gates.
+  Cleanup is the v2
   search+DELETE precedent (`apps/api/test/auth/zitadel-create-user.e2e-spec.ts`);
   `LOADTEST_CLEANUP_SWEEP=1` additionally reaps every `@<domain>` account.
+
+### Low-N room behavior proof (#1139, dev stand only)
+
+Prerequisites:
+
+- map the stand's `API_ORIGIN`, `IDP_ISSUER`, `IDP_PROJECT_ID`, and related IdP
+  values from `~/.ds-platform/.env.local` to the corresponding `LOADTEST_*` vars;
+- designate a real event with `LOADTEST_EVENT_ID`; it must already be `live`, and
+  Centrifugo must be configured;
+- run `LOADTEST_USERS=2 pnpm loadtest:provision` (or use a manifest containing at
+  least two distinct, provisioned doctors). Provisioning creates verified humans
+  and grants `doctor_guest`; the verifier logs both in through the real BFF;
+- use a quiescent room/fresh participant. The verifier idempotently registers each
+  doctor through the real `POST /v1/events/:idOrSlug/registration` command — never
+  by a DB write or manual roster join. A repeated run can find the participant
+  still fresh; if so it exits `SETUP ERROR` and tells the operator to wait the full
+  `2 × N` after that newly accepted beat or provision fresh accounts.
+
+Run exactly one command:
+
+```sh
+pnpm loadtest:room:verify
+```
+
+The owner-readable stdout starts with a UTC run timestamp and records target,
+event, N, each check, measured timing, and the final verdict without credentials
+or doctor PII. Paste the complete report into the Issue/PR and link that artifact
+from the Stage-B record. The asserted contract is deliberately precise:
+
+- a fresh doctor (not already inside the live-count freshness window) produces
+  `+1`, published within about one second after the accepted entry/re-entry beat;
+- stopping that doctor's beats ages the doctor out no later than `2 × N` after the
+  last accepted beat, then publishes `-1` within about one second; WebSocket close
+  alone is not leave;
+- quick re-entry/concurrent tabs while already fresh coalesce and require no
+  count-change publication;
+- `2 × N` is live distinct-count freshness grace only. Sponsor minutes remain the
+  distinct accepted-beat N-bucket derivation; the grace awards no trailing time;
+- a hidden tab emits no beats, returning visible emits one immediately, and a
+  still-visible foreground tab cannot prove that the person has physically left.
+
+This verifier has no remote-target override: it allowlists loopback origins only
+(`localhost`, `127.0.0.1`, `[::1]`, with trailing-dot normalization). A production
+domain or IP-literal remote endpoint is refused before login or any room mutation.
 
 ### auth-burst prod guard (fail-closed, #1068)
 

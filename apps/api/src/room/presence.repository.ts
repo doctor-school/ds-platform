@@ -86,13 +86,13 @@ export class PresenceRepository {
    * append-only `presence_beats` the minute derivation reads — no separate presence
    * store, no Centrifugo presence dependency (the durable beats already carry it).
    *
-   * The window (the caller passes `≈ 2 × N`, two heartbeat cadences) is what makes
-   * the count *live* rather than cumulative: a doctor who dropped one beat still
-   * counts, but a doctor who left the room ages out within two cadences — so the
-   * number tracks who is *currently* watching, not everyone who ever beat. `DISTINCT
-   * user_id` coalesces a doctor's concurrent tabs to one (the same non-inflation
-   * rule as the minutes). It is an **aggregate** — a single integer, never a
-   * per-doctor identity or the roster — so it exposes no PII (EARS-8).
+   * The caller passes exactly `2 × N` (two heartbeat cadences). A latest beat stays
+   * fresh across one missed cadence; where that doctor's beats stop, it ceases to
+   * count no later than `2 × N` after the last accepted beat. This is count
+   * freshness, not proof the person is physically watching, and the grace adds no
+   * sponsor minutes. `DISTINCT user_id` coalesces concurrent tabs to one. It is an
+   * **aggregate** — a single integer, never a per-doctor identity or the roster —
+   * so it exposes no PII (EARS-8).
    */
   async countLivePresence(
     eventId: string,
@@ -112,14 +112,14 @@ export class PresenceRepository {
   /**
    * The earliest instant at which {@link countLivePresence} could DROP for this
    * event if no further beat arrives — the moment the currently-freshest beat of
-   * the soonest-to-age-out doctor leaves the window (006 EARS-5 realtime push). It
+   * the soonest-to-age-out doctor's latest beat leaves the window (006 EARS-5 realtime push). It
    * is the smallest per-doctor `max(beat_at)` among the doctors still inside the
    * window, plus `windowSeconds`. `null` when no doctor is currently in the window
    * (nothing left to age out — no timer to arm).
    *
-   * {@link PresencePublisher} arms a per-room timer at this instant so a *leave*
-   * (a doctor whose beats simply stopped) is published within ~1 s of the count
-   * changing server-side — not merely on the next surviving observer's beat. It is
+   * {@link PresencePublisher} arms a per-room timer at this instant so stopped
+   * beats are reflected within ~1 s after the count changes at `2 × N` expiry —
+   * not merely on the next surviving observer's beat. It is
    * re-derived (never trusted stale) on every beat and after every timer fire, so a
    * fresh beat that postpones the next age-out re-arms the timer later. Read-only.
    */
@@ -189,7 +189,8 @@ export class PresenceRepository {
       userId: row.userId,
       eventId,
       minutes:
-        Math.round(((Number(row.buckets) * intervalSeconds) / 60) * 1000) / 1000,
+        Math.round(((Number(row.buckets) * intervalSeconds) / 60) * 1000) /
+        1000,
     }));
   }
 }

@@ -6,13 +6,14 @@ import { test, expect, type Page } from "@playwright/test";
  * doctor's header count rises WITHOUT the observer sending their own heartbeat —
  * the count is server-published on the joiner's beat and fanned out over the shared
  * room channel, so the observer renders it instantly (the #1122 "frozen until my
- * own beat" perception is gone). When that doctor LEAVES, the count falls after the
- * presence window ages their last beat out (a server-side expiry publish, again
- * with no observer beat).
+ * own beat" perception is gone). When that doctor's beats stop, the count falls
+ * only after the `2 × N` freshness window ages the latest beat out (a server-side
+ * expiry publish, again with no observer beat). Closing a browser/WS merely stops
+ * this test client; it is not itself the count-changing event.
  *
- * This is the live-verify vehicle for #1141 (the #1139 behavioural harness is not
- * ready): it drives the REAL dev-stand Centrifugo + api + Postgres. It asserts
- * RELATIVE change (observer's count +1 on a join, −1 on a leave), never an absolute
+ * This broad live E2E drives real dev-stand Centrifugo + api + Postgres; the #1139
+ * low-N harness is the exact ~1 s / `2 × N` timing proof. This test asserts
+ * RELATIVE change (observer's count +1 on a fresh beat, −1 at stopped-beat age-out), never an absolute
  * value, so it is robust to other doctors lingering on the shared stand. The
  * deterministic push-vs-beat separation (publish only on change; no publish when
  * unchanged; expiry-driven decrease) is pinned by
@@ -33,10 +34,10 @@ const SLUG_LIVE =
   process.env.E2E_ROOM_CHAT_SLUG ??
   process.env.E2E_ROOM_SLUG_LIVE ??
   process.env.E2E_ROOM_SLUG_YOUTUBE;
-// The presence freshness window (≈ 2 × heartbeat cadence) bounds how long a leave
-// takes to age out server-side. Export it (seconds) to enable the leave assertion;
+// The presence freshness window (2 × heartbeat cadence) bounds when stopped beats
+// age out server-side. Export it (seconds) to enable the age-out assertion;
 // with the 60 s default the window is 120 s — too long to wait in most runs — so
-// the leave case is skipped unless a shorter cadence is configured and surfaced.
+// the age-out case is skipped unless a shorter cadence is configured and surfaced.
 const PRESENCE_WINDOW_SECONDS = Number(
   process.env.E2E_ROOM_PRESENCE_WINDOW_SECONDS ?? "0",
 );
@@ -112,11 +113,12 @@ test.describe("006 EARS-5 realtime presence count over Centrifugo (e2e)", () => 
         .poll(() => presenceValue(pageA), { timeout: 8_000, intervals: [250] })
         .toBeGreaterThanOrEqual(before + 1);
 
-      // Leave: B closes its session. After the presence window ages B's last beat
-      // out, the server publishes the decreased count — again with no A beat.
+      // Closing B stops this client's beats but does not itself change the count.
+      // At `2 × N` expiry the latest beat ceases to be fresh, and only then does the
+      // server publish the decreased count — again with no A beat.
       test.skip(
         !PRESENCE_WINDOW_SECONDS || PRESENCE_WINDOW_SECONDS > 40,
-        "leave assertion needs a short E2E_ROOM_PRESENCE_WINDOW_SECONDS (≈ 2 × a short heartbeat cadence)",
+        "age-out assertion needs a short E2E_ROOM_PRESENCE_WINDOW_SECONDS (2 × a short heartbeat cadence)",
       );
       const afterJoin = await presenceValue(pageA);
       await ctxB.close();

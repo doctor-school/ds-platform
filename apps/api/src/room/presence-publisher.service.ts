@@ -21,20 +21,21 @@ interface RoomTimer {
  * CHANGE it:
  *
  * 1. **Accepted beat.** {@link RoomService.recordHeartbeat} already computed the
- *    post-append count for its ack; it hands that value here so a *join* (or the
- *    caller's own first beat) fans out to every other subscriber immediately —
+ *    post-append count for its ack; it hands that value here so a fresh doctor's
+ *    beat (not already inside `2 × N`) fans the changed count out immediately —
  *    without them waiting on their own next beat (the #1122 "frozen until my beat"
  *    perception, now the fast path).
- * 2. **Window expiry.** A *leave* is a beat that simply stopped — no request fires
- *    when a doctor closes the tab. So on each beat the publisher (re-)arms ONE
+ * 2. **Window expiry.** A count decrease means beats simply stopped and the latest
+ *    beat reached `2 × N`; WebSocket close alone is not leave. On each beat the publisher (re-)arms ONE
  *    per-room timer at the next {@link PresenceRepository.nextPresenceExpiry}
  *    instant; when it fires it recomputes the count and, if it dropped, publishes —
- *    so a leave is fanned out within ~1 s of the count changing server-side, not on
+ *    so the decrease is fanned out within ~1 s of expiry, not on
  *    the next surviving observer's beat.
  *
  * **Publish only on change.** A per-room `lastPublished` latch suppresses a
  * fan-out when the recomputed count equals the last one published, so a steady room
- * (every doctor beating, nobody joining/leaving) emits nothing.
+ * (every fresh membership unchanged) emits nothing. This count-only grace adds no
+ * sponsor minutes.
  *
  * **Best-effort, never in the beat's critical path.** `recordHeartbeat` fire-and-
  * forgets `onBeat` (it does not await it), and every publish/query failure is
@@ -72,7 +73,7 @@ export class PresencePublisher implements OnModuleDestroy {
 
   /**
    * The beat path: publish the just-computed `count` if it changed, then (re-)arm
-   * the room's expiry timer so an ensuing leave is caught. Fire-and-forget from
+   * the room's expiry timer so a stopped beat stream is aged out. Fire-and-forget from
    * {@link RoomService.recordHeartbeat} — it NEVER throws (a failure is swallowed so
    * the beat is unaffected) and returns a promise only so tests can await it.
    */
@@ -90,7 +91,10 @@ export class PresencePublisher implements OnModuleDestroy {
   /** Publish `count` over the room channel unless it equals the last fanned-out
    * value. `lastPublished` advances ONLY on a successful publish, so a transient
    * Centrifugo failure is retried on the next change rather than latched as done. */
-  private async publishIfChanged(eventId: string, count: number): Promise<void> {
+  private async publishIfChanged(
+    eventId: string,
+    count: number,
+  ): Promise<void> {
     const room = this.roomState(eventId);
     if (room.lastPublished === count) return;
     await this.gateway.publishPresenceCount(eventId, count);

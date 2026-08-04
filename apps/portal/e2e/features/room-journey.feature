@@ -82,7 +82,7 @@ Feature: 006 Webinar room journey — a registered doctor watches live, chats in
     When the room tab is backgrounded so document.hidden becomes true
     Then the client stops posting heartbeats while the tab is hidden
     When the room tab becomes visible again
-    Then the client resumes posting authenticated heartbeats
+    Then the client posts an immediate authenticated heartbeat before resuming the N-second grid
 
   # --- Denied-access routing, never a soft wall (US-1, US-5) — EARS-6 ---
 

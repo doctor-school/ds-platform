@@ -173,12 +173,12 @@ export class RoomService {
   }
 
   /**
-   * The freshness window (seconds) the live presence count is derived over — two
-   * heartbeat cadences (`2 × N`), so a doctor who dropped a single beat still
-   * counts as present while one who actually left ages out within two cadences.
-   * Derived from the SAME server-config `N` the client drives its beat loop from,
-   * so an operator-confirmed different cadence widens the window with no code
-   * change (the EARS-5 parameterized-over-N discipline).
+   * The freshness window (seconds) for the live distinct-doctor count is two
+   * heartbeat cadences (`2 × N`): a latest beat survives one missed cadence, then
+   * ceases to count no later than `2 × N` if beats stop. This count-only grace is
+   * not proof of physical presence and adds no sponsor minutes. It derives from the
+   * SAME server-config `N` that drives the client loop, so an operator-confirmed
+   * cadence change widens the count window with no code change (EARS-5).
    */
   private presenceWindowSeconds(): number {
     return this.heartbeatIntervalSeconds * 2;
@@ -254,7 +254,7 @@ export class RoomService {
     );
     // EARS-5 realtime push: fan the fresh count out over the room channel when this
     // beat CHANGED it (a join, or the caller's own first beat), and (re-)arm the
-    // room's window-expiry timer so an ensuing leave is published too — WITHOUT
+    // room's window-expiry timer so stopped beats are aged out and published too — WITHOUT
     // waiting on any observer's next beat. Fire-and-forget: the publisher swallows
     // every failure so a Centrifugo blip never turns this beat into a 5xx (the
     // portal then degrades to this same ack's count — #1136). The ack is unchanged.

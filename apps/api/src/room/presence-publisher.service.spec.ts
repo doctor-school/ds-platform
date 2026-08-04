@@ -28,8 +28,8 @@ function makeGateway(enabled = true) {
 function makeRepo() {
   return {
     countLivePresence: vi.fn<PresenceRepository["countLivePresence"]>(),
-    nextPresenceExpiry: vi.fn<PresenceRepository["nextPresenceExpiry"]>(
-      () => Promise.resolve(null),
+    nextPresenceExpiry: vi.fn<PresenceRepository["nextPresenceExpiry"]>(() =>
+      Promise.resolve(null),
     ),
   };
 }
@@ -87,7 +87,7 @@ describe("006 EARS-5 realtime presence-count publisher", () => {
     publisher.onModuleDestroy();
   });
 
-  it("EARS-5: a window expiry (a leave) publishes the decreased count without any beat", async () => {
+  it("EARS-5: stopped beats reaching window expiry publish the decreased count without another beat", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-13T10:00:00.000Z"));
     const gateway = makeGateway();

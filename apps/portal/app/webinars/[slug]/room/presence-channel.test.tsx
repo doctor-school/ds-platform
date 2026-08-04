@@ -18,10 +18,8 @@ import {
  * provider wiring `room-chat.tsx` drives from its Centrifugo publication handler.
  */
 vi.mock("next-intl", () => ({
-  useTranslations:
-    () =>
-    (key: string, opts?: { count?: number }) =>
-      opts && typeof opts.count === "number" ? `${key}:${opts.count}` : key,
+  useTranslations: () => (key: string, opts?: { count?: number }) =>
+    opts && typeof opts.count === "number" ? `${key}:${opts.count}` : key,
 }));
 
 let setCount: (n: number) => void = () => {};
@@ -68,7 +66,7 @@ describe("006 EARS-5 realtime presence-count client push", () => {
     expect(count()).toBe("presenceCount:4");
   });
 
-  it("EARS-5: a published leave brings the header down to zero (the count then hides)", () => {
+  it("EARS-5: a published age-out brings the header down to zero (the count then hides)", () => {
     renderHeader(3);
     act(() => {
       applyPresenceCountPublication(presence(0), setCount);
@@ -90,9 +88,9 @@ describe("006 EARS-5 realtime presence-count client push", () => {
   it("EARS-5: malformed channel data is ignored — the header never breaks", () => {
     renderHeader(2);
     act(() => {
-      expect(applyPresenceCountPublication({ unexpected: true }, setCount)).toBe(
-        false,
-      );
+      expect(
+        applyPresenceCountPublication({ unexpected: true }, setCount),
+      ).toBe(false);
       expect(applyPresenceCountPublication(null, setCount)).toBe(false);
     });
     expect(count()).toBe("presenceCount:2");

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // DS Platform — load-test harness shared library (Issue #873 phase 1).
 //
-// Zero-dependency, Node-native (Node >=22: global `fetch` + global `WebSocket`).
+// Zero-dependency, Node-native (root `engines.node`: ^22.22.2 || ^24.15.0 ||
+// >=26.0.0; global `fetch` + global `WebSocket`).
 // Everything a scenario needs — env-driven config, a prod-host tripwire, a VU
 // ramp runner, a p95/error-rate aggregator, and a compact reporter — lives here
 // so the scenario files stay thin and declarative.

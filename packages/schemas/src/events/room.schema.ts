@@ -86,13 +86,14 @@ export type RoomChatCredential = z.infer<typeof RoomChatCredentialSchema>;
  * `liveAt: null`, and the room renders the pill with **no** minute suffix (truthful,
  * never back-filled from the schedule).
  *
- * `presenceCount` (the canvas «N врачей в комнате» indicator) is the **live count of
- * distinct doctors currently in the room** — the number of distinct users who
- * emitted a presence beat within the freshness window (≈ `2 ×
- * heartbeatIntervalSeconds`, so a doctor who missed one beat still counts, but one
- * who left ages out within two cadences). It is a server-side **aggregate** derived
- * at read time over the same append-only `presence_beats` the EARS-5 minutes draw
- * from — an integer, never a per-doctor identity or the roster, so it leaks no PII
+ * `presenceCount` (the canvas «N врачей в комнате» indicator) is the **live
+ * distinct-doctor count** — distinct users whose latest accepted beat is inside
+ * the count-only freshness window (`2 × heartbeatIntervalSeconds`). One missed
+ * cadence remains fresh; if beats stop, the doctor ceases to count no later than
+ * `2 × N`. This is not proof the person is physically watching, and the freshness
+ * grace adds no sponsor minutes: those remain the distinct accepted-beat N-bucket
+ * derivation. It is a server-side **aggregate** over append-only `presence_beats` —
+ * an integer, never a per-doctor identity or the roster, so it leaks no PII
  * (EARS-8: aggregate presence ≠ another doctor's presence data). It is the initial
  * value the client renders; each heartbeat ack refreshes it (below). `0` is valid
  * (the first doctor in an empty room; the beat this read follows makes it ≥ 1).
@@ -116,11 +117,7 @@ export type RoomConfig = z.infer<typeof RoomConfigSchema>;
  * and bounded at 2000 chars (a chat line, not a document). `.trim()` normalises
  * before the length checks so the persisted/published text carries no padding.
  */
-export const ChatMessageTextSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(2000);
+export const ChatMessageTextSchema = z.string().trim().min(1).max(2000);
 
 /**
  * `PostChatMessage` request body (EARS-3) — the gated command's only input. The
@@ -229,13 +226,13 @@ export const PresenceHeartbeatAckSchema = z.object({
   beatAt: z.iso.datetime({ offset: true }),
   /**
    * The live room-presence count **after** this beat was appended — the count of
-   * distinct doctors with a beat inside the freshness window (≈ `2 × N`), the same
-   * server-side aggregate the `RoomConfig` grant seeds `presenceCount` with. The
-   * client refreshes the header's «N врачей в комнате» indicator from it on every
-   * beat, so the count tracks doctors joining and ageing out without a separate
-   * poll. An aggregate integer only — never a per-doctor identity, presence detail,
-   * or the roster (EARS-8). It is ≥ 1 in this ack (this caller's own just-appended
-   * beat is inside the window).
+   * distinct doctors whose latest beat is inside the count-only `2 × N` freshness
+   * window, the same aggregate the `RoomConfig` grant seeds. A fresh doctor's beat
+   * can add one; a beat already inside the window only refreshes the same membership;
+   * stopped beats cease to count at expiry. WebSocket close alone changes nothing.
+   * The client uses the ack as fallback when realtime fan-out is unavailable. An
+   * aggregate integer only — never per-doctor presence detail or the roster
+   * (EARS-8). It is ≥ 1 here because this caller's just-appended beat is fresh.
    */
   presenceCount: z.number().int().nonnegative(),
 });
@@ -251,10 +248,10 @@ export type PresenceHeartbeatAck = z.infer<typeof PresenceHeartbeatAckSchema>;
  *   identity, so the derivation carries no PII onto any surface (EARS-8).
  * - `eventId` is the event the minutes were captured for.
  * - `minutes` are **derived**, not stored: `(distinct N-second buckets the doctor
- *   emitted a beat in) × N / 60` over the durable append-only `presence_beats`
- *   (design §5). Concurrent tabs coalesce into one presence timeline (two tabs in
- *   the same bucket count once), so the value never inflates past real covered
- *   time; it is `nonnegative` (a doctor with no beats does not appear at all).
+ *   emitted a beat in) × N / 60` over durable append-only `presence_beats` (design
+ *   §5). Concurrent tabs coalesce into one timeline. The separate `2 × N` live-count
+ *   freshness grace awards **zero** extra minutes after the last accepted beat; it
+ *   is `nonnegative` (a doctor with no beats does not appear at all).
  *
  * There is no minute count in the durable table — the value is a server-side
  * read-time derivation, never a client-supplied or client-trusted number
@@ -274,7 +271,8 @@ export type DoctorPresenceMinutes = z.infer<typeof DoctorPresenceMinutesSchema>;
  * minutes were computed at (the server config `ROOM_HEARTBEAT_INTERVAL_SECONDS`
  * by default), so an operator-confirmed different cadence recomputes the SAME
  * beats with no code change (owner decision 2026-07-06). `doctors` carries only
- * the doctors who emitted at least one beat.
+ * doctors who emitted at least one beat; the live counter's separate `2 × N`
+ * freshness window never extends these sponsor minutes.
  *
  * This is the shape the **wave-1 manual sponsor export** reads — there is **no**
  * report UI and **no** public endpoint in wave 1 (EARS-5); the derivation is

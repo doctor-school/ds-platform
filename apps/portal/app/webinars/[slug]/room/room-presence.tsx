@@ -13,12 +13,12 @@ import { useTranslations } from "next-intl";
  * 006 EARS-5 / EARS-10 — the room header's LIVE indicators, realizing the two
  * data-backed canvas header elements deferred by #584 (Issue #690):
  *
- * - **`PresenceCount`** («N врачей в комнате») renders the live count of distinct
- *   doctors currently in the room. The value is a server-side AGGREGATE (never a
- *   per-doctor identity or the roster — EARS-8): the EARS-1 grant seeds the initial
- *   count, and every heartbeat ack refreshes it (the {@link PresenceHeartbeat} loop
- *   pushes the fresh count into {@link RoomPresenceProvider} context). Desktop-only
- *   per the canvas (the mobile header is wordmark + pill + compact exit).
+ * - **`PresenceCount`** («N врачей в комнате») renders distinct doctors whose
+ *   latest accepted beat remains inside the count-only `2 × N` freshness window.
+ *   It is a server-side aggregate, never physical-presence proof, per-doctor
+ *   identity, or the roster (EARS-8); its grace adds no sponsor minutes. The grant
+ *   seeds it, realtime publications update it, and heartbeat acks are the fallback.
+ *   Desktop-only per the canvas (mobile is wordmark + pill + compact exit).
  * - **`LiveDuration`** (the «· N мин» suffix on the live pill) counts elapsed
  *   minutes from the event's ACTUAL go-live instant (`liveAt`, stamped by 007
  *   `OpenRoom`) — never the scheduled `startsAt`. A legacy live row with no `liveAt`
@@ -108,12 +108,17 @@ export function LiveDuration({ liveAt }: { liveAt: string | null }) {
   useEffect(() => {
     if (!valid) return;
     setMinutes(elapsedMinutes(liveAtMs));
-    const timer = setInterval(() => setMinutes(elapsedMinutes(liveAtMs)), 15_000);
+    const timer = setInterval(
+      () => setMinutes(elapsedMinutes(liveAtMs)),
+      15_000,
+    );
     return () => clearInterval(timer);
   }, [liveAtMs, valid]);
 
   if (!valid) return null;
   return (
-    <span data-testid="room-live-duration">{t("liveDuration", { minutes })}</span>
+    <span data-testid="room-live-duration">
+      {t("liveDuration", { minutes })}
+    </span>
   );
 }

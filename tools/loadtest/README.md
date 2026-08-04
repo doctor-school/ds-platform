@@ -32,12 +32,13 @@ multi-node distributed generation, revisit k6 then.
 
 ## Configuration — everything is env-driven (no hardcoded hosts)
 
-No scenario has a default host. `LOADTEST_API_ORIGIN` unset is a hard error, never
-a silent fallback to prod.
+No scenario has a default host. A required target variable left unset is a hard
+error, never a silent fallback to prod.
 
 | Env var                                | Scenarios                | Meaning                                                                              |
 | -------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------ |
 | `LOADTEST_API_ORIGIN`                  | all                      | api origin, no trailing `/v1` (e.g. `http://localhost:3000`). **Required.**          |
+| `LOADTEST_CENTRIFUGO_ORIGIN`           | room verify              | authoritative Centrifugo HTTP(S) origin; mapped from `CENTRIFUGO_URL`. **Required.** |
 | `LOADTEST_VUS`                         | load                     | concurrent virtual users                                                             |
 | `LOADTEST_DURATION_SECONDS`            | load                     | steady-state duration                                                                |
 | `LOADTEST_RAMP_SECONDS`                | load                     | ramp-up window (VU starts staggered across it)                                       |
@@ -88,8 +89,9 @@ Read local-stand values from `~/.ds-platform/.env.local` and map them onto
 
 Prerequisites:
 
-- map the stand's `API_ORIGIN`, `IDP_ISSUER`, `IDP_PROJECT_ID`, and related IdP
-  values from `~/.ds-platform/.env.local` to the corresponding `LOADTEST_*` vars;
+- map the stand's `API_ORIGIN`, `CENTRIFUGO_URL`, `IDP_ISSUER`, `IDP_PROJECT_ID`,
+  and related IdP values from `~/.ds-platform/.env.local` to the corresponding
+  `LOADTEST_*` vars, including `LOADTEST_CENTRIFUGO_ORIGIN=$CENTRIFUGO_URL`;
 - designate a real event with `LOADTEST_EVENT_ID`; it must already be `live`, and
   Centrifugo must be configured;
 - run `LOADTEST_USERS=2 pnpm loadtest:provision` (or use a manifest containing at
@@ -104,13 +106,14 @@ Prerequisites:
 Run exactly one command:
 
 ```sh
-pnpm loadtest:room:verify
+LOADTEST_CENTRIFUGO_ORIGIN="$CENTRIFUGO_URL" pnpm loadtest:room:verify
 ```
 
-The owner-readable stdout starts with a UTC run timestamp and records target,
-event, N, each check, measured timing, and the final verdict without credentials
-or doctor PII. Paste the complete report into the Issue/PR and link that artifact
-from the Stage-B record. The asserted contract is deliberately precise:
+The owner-readable stdout starts with a UTC run timestamp and records the API
+target, derived Centrifugo WebSocket target, event, N, each check, measured
+timing, and the final verdict without credentials or doctor PII. Paste the
+complete report into the Issue/PR and link that artifact from the Stage-B record.
+The asserted contract is deliberately precise:
 
 - a fresh doctor (not already inside the live-count freshness window) produces
   `+1`, published within about one second after the accepted entry/re-entry beat;
@@ -124,9 +127,16 @@ from the Stage-B record. The asserted contract is deliberately precise:
 - a hidden tab emits no beats, returning visible emits one immediately, and a
   still-visible foreground tab cannot prove that the person has physically left.
 
-This verifier has no remote-target override: it allowlists loopback origins only
-(`localhost`, `127.0.0.1`, `[::1]`, with trailing-dot normalization). A production
-domain or IP-literal remote endpoint is refused before login or any room mutation.
+The REST target remains loopback-only: `LOADTEST_API_ORIGIN` accepts `localhost`,
+`127.0.0.1`, or `[::1]` (with trailing-dot normalization). Realtime may live on a
+non-production recipe host or IP, so the verifier requires the operator to map
+the stand's authoritative `CENTRIFUGO_URL` to `LOADTEST_CENTRIFUGO_ORIGIN`. That
+value must be a bare HTTP(S) origin; known `doctor.school` production hosts are
+always refused. The verifier derives the matching `ws:` or `wss:` URL on the
+same host and port with the exact `/connection/websocket` path. Both initial
+grants and the refreshed reconnect grant must match it after normalization.
+Scheme, host, port, path, credentials, query, or fragment drift is refused
+before any WebSocket connect.
 
 ### auth-burst prod guard (fail-closed, #1068)
 

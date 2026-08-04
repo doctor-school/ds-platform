@@ -12,6 +12,7 @@ import {
   apiOrigin,
   intEnv,
   invokedDirectly,
+  isProdTarget,
   reqEnv,
   timedFetch,
 } from "./lib.mjs";
@@ -62,6 +63,81 @@ export function assertDevStandOrigin(origin) {
   }
 }
 
+function normalizedUrlHost(parsed) {
+  const hostname = parsed.hostname.toLowerCase().replace(/\.+$/, "");
+  return parsed.port ? `${hostname}:${parsed.port}` : hostname;
+}
+
+/**
+ * Derive the verifier's single allowed websocket endpoint from the operator's
+ * authoritative dev-stand Centrifugo HTTP(S) origin. The expected value itself
+ * must be an origin, never a credential-bearing URL or an endpoint-shaped path.
+ */
+export function deriveExpectedCentrifugoWebSocketUrl(origin) {
+  let parsed;
+  try {
+    parsed = new URL(origin);
+  } catch {
+    throw new BehaviorSetupError(
+      "LOADTEST_CENTRIFUGO_ORIGIN must be an explicit HTTP(S) origin with no credentials, path, query, or fragment",
+    );
+  }
+  if (
+    !["http:", "https:"].includes(parsed.protocol) ||
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== "/" ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    throw new BehaviorSetupError(
+      "LOADTEST_CENTRIFUGO_ORIGIN must be an explicit HTTP(S) origin with no credentials, path, query, or fragment",
+    );
+  }
+  const hostname = parsed.hostname.toLowerCase().replace(/\.+$/, "");
+  if (isProdTarget(hostname)) {
+    throw new BehaviorSetupError(
+      "LOADTEST_CENTRIFUGO_ORIGIN must not target known production doctor.school hosts",
+    );
+  }
+  const protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${normalizedUrlHost(parsed)}/connection/websocket`;
+}
+
+/**
+ * Fail closed unless a server-returned grant points at the one endpoint derived
+ * from LOADTEST_CENTRIFUGO_ORIGIN. Return the expected canonical URL so callers
+ * never pass the server-returned string into the websocket constructor.
+ */
+export function assertCentrifugoGrantTarget(
+  grantUrl,
+  expectedWebSocketUrl,
+  label,
+) {
+  let parsed;
+  try {
+    parsed = new URL(grantUrl);
+  } catch {
+    throw new BehaviorSetupError(
+      `${label} Centrifugo URL does not match LOADTEST_CENTRIFUGO_ORIGIN`,
+    );
+  }
+  const validShape =
+    ["ws:", "wss:"].includes(parsed.protocol) &&
+    !parsed.username &&
+    !parsed.password &&
+    parsed.pathname === "/connection/websocket" &&
+    !parsed.search &&
+    !parsed.hash;
+  const normalized = `${parsed.protocol}//${normalizedUrlHost(parsed)}${parsed.pathname}`;
+  if (!validShape || normalized !== expectedWebSocketUrl) {
+    throw new BehaviorSetupError(
+      `${label} Centrifugo URL does not match LOADTEST_CENTRIFUGO_ORIGIN`,
+    );
+  }
+  return expectedWebSocketUrl;
+}
+
 /** Select the first two distinct #873 provision-manifest doctors. */
 export function selectBehaviorCredentials(credentials) {
   if (credentials.length < 2) {
@@ -99,7 +175,11 @@ export function assertFreshJoinPrecondition(
 }
 
 /** Fail pointedly if a refreshed connection credential drifted mid-story. */
-export function assertReconnectGrant(original, refreshed) {
+export function assertReconnectGrant(
+  original,
+  refreshed,
+  expectedWebSocketUrl,
+) {
   if (
     !refreshed?.chat?.url ||
     !refreshed?.chat?.token ||
@@ -109,6 +189,11 @@ export function assertReconnectGrant(original, refreshed) {
       "participant reconnect grant has no complete Centrifugo credential",
     );
   }
+  assertCentrifugoGrantTarget(
+    refreshed.chat.url,
+    expectedWebSocketUrl,
+    "participant reconnect grant",
+  );
   if (
     refreshed.eventId !== original.eventId ||
     refreshed.chat.channel !== original.chat.channel ||
@@ -201,6 +286,7 @@ export function evaluateBehaviorTrace(trace, { publicationGraceMs }) {
     runStartedAt: trace.runStartedAt,
     eventId: trace.eventId,
     origin: trace.origin,
+    centrifugoWebSocketUrl: trace.centrifugoWebSocketUrl,
     heartbeatIntervalSeconds: trace.heartbeatIntervalSeconds,
     freshnessWindowMs,
     publicationGraceMs,
@@ -215,6 +301,7 @@ export function formatBehaviorReport(result) {
     "Webinar-room behavioral verification (#1139)",
     `run UTC: ${result.runStartedAt}`,
     `target: ${result.origin ?? "(injected test driver)"}`,
+    `centrifugo target: ${result.centrifugoWebSocketUrl ?? "(injected test driver)"}`,
     `event: ${result.eventId}`,
     `contract: observer receives fresh +1 ≤~1s from request start; stopped beats age out at 2×N, then observer receives −1 by 2×N+~1s; server stamp is never before expiry (N=${result.heartbeatIntervalSeconds}s)`,
     "presence note: WS close is not attendance leave; a visible foreground tab that keeps beating remains present; concurrent tabs coalesce",
@@ -261,7 +348,13 @@ function responseMessage(response) {
   return `HTTP ${response.status}${message ? ` ${message}` : ""}`;
 }
 
-async function prepareActor(origin, eventId, credential, label) {
+async function prepareActor(
+  origin,
+  eventId,
+  credential,
+  label,
+  expectedWebSocketUrl,
+) {
   const cookie = await loginCookie(
     origin,
     credential.email,
@@ -294,6 +387,11 @@ async function prepareActor(origin, eventId, credential, label) {
       `${label} room grant has no complete chat credential; configure Centrifugo on the dev stand`,
     );
   }
+  assertCentrifugoGrantTarget(
+    grant.chat.url,
+    expectedWebSocketUrl,
+    `${label} initial grant`,
+  );
   if (
     !Number.isFinite(grant.heartbeatIntervalSeconds) ||
     grant.heartbeatIntervalSeconds <= 0
@@ -361,9 +459,9 @@ function startObserverHeartbeat(origin, eventId, cookie, intervalSeconds) {
   };
 }
 
-function connectionFor(actor, timeoutMs) {
+function connectionFor(actor, expectedWebSocketUrl, timeoutMs) {
   return new CentrifugoRoomConnection({
-    url: actor.grant.chat.url,
+    url: expectedWebSocketUrl,
     token: actor.grant.chat.token,
     channel: actor.grant.chat.channel,
     timeoutMs,
@@ -378,6 +476,7 @@ function publicationServerMs(publication) {
 /** Drive the complete behavioral story against a real designated dev-stand room. */
 export async function runRoomBehaviorVerification({
   origin,
+  centrifugoOrigin,
   eventId,
   credentials,
   publicationGraceMs,
@@ -385,6 +484,8 @@ export async function runRoomBehaviorVerification({
 }) {
   const runStartedAt = new Date().toISOString();
   assertDevStandOrigin(origin);
+  const expectedWebSocketUrl =
+    deriveExpectedCentrifugoWebSocketUrl(centrifugoOrigin);
   const [observerCredential, participantCredential] =
     selectBehaviorCredentials(credentials);
   const observer = await prepareActor(
@@ -392,12 +493,14 @@ export async function runRoomBehaviorVerification({
     eventId,
     observerCredential,
     "observer",
+    expectedWebSocketUrl,
   );
   const participant = await prepareActor(
     origin,
     eventId,
     participantCredential,
     "participant",
+    expectedWebSocketUrl,
   );
 
   if (
@@ -412,8 +515,16 @@ export async function runRoomBehaviorVerification({
   }
 
   const intervalSeconds = observer.grant.heartbeatIntervalSeconds;
-  const observerConnection = connectionFor(observer, commandTimeoutMs);
-  let participantConnection = connectionFor(participant, commandTimeoutMs);
+  const observerConnection = connectionFor(
+    observer,
+    expectedWebSocketUrl,
+    commandTimeoutMs,
+  );
+  let participantConnection = connectionFor(
+    participant,
+    expectedWebSocketUrl,
+    commandTimeoutMs,
+  );
   let keepalive;
   try {
     await observerConnection.connect();
@@ -500,9 +611,17 @@ export async function runRoomBehaviorVerification({
       refreshedGrant,
       "participant reconnect grant",
     );
-    assertReconnectGrant(participant.grant, reconnectedGrant);
+    assertReconnectGrant(
+      participant.grant,
+      reconnectedGrant,
+      expectedWebSocketUrl,
+    );
     participant.grant = reconnectedGrant;
-    participantConnection = connectionFor(participant, commandTimeoutMs);
+    participantConnection = connectionFor(
+      participant,
+      expectedWebSocketUrl,
+      commandTimeoutMs,
+    );
     await participantConnection.connect();
     const history = await participantConnection.history(100);
     const recoveredChatIds = history
@@ -551,6 +670,7 @@ export async function runRoomBehaviorVerification({
     const trace = {
       runStartedAt,
       origin,
+      centrifugoWebSocketUrl: expectedWebSocketUrl,
       eventId,
       heartbeatIntervalSeconds: intervalSeconds,
       baselineCount: baselineAck.presenceCount,
@@ -578,9 +698,11 @@ export async function runRoomBehaviorVerification({
 
 async function main() {
   const origin = apiOrigin();
+  const centrifugoOrigin = reqEnv("LOADTEST_CENTRIFUGO_ORIGIN");
   const eventId = reqEnv("LOADTEST_EVENT_ID");
   const result = await runRoomBehaviorVerification({
     origin,
+    centrifugoOrigin,
     eventId,
     credentials: loadManifestCredentials(),
     publicationGraceMs: intEnv("LOADTEST_BEHAVIOR_PUBLISH_GRACE_MS", 1_000),

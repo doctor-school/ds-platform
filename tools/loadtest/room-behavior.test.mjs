@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  assertCentrifugoGrantTarget,
   assertDevStandOrigin,
   assertFreshJoinPrecondition,
   assertReconnectGrant,
+  BehaviorSetupError,
+  deriveExpectedCentrifugoWebSocketUrl,
   evaluateBehaviorTrace,
   formatBehaviorReport,
   parseCentrifugoReplyData,
@@ -18,6 +21,7 @@ import {
 const successfulTrace = {
   runStartedAt: "2026-08-04T12:34:56.000Z",
   eventId: "seed-live-room",
+  centrifugoWebSocketUrl: "ws://truenas.local:8100/connection/websocket",
   heartbeatIntervalSeconds: 15,
   baselineCount: 1,
   joinAckCount: 2,
@@ -64,29 +68,171 @@ test("#1139 verifier allows loopback dev-stand origins only", () => {
   }
 });
 
+test("#1139 verifier derives one exact websocket target from the explicit Centrifugo HTTP(S) origin", () => {
+  for (const [origin, expected] of [
+    [
+      "http://truenas.local:8100",
+      "ws://truenas.local:8100/connection/websocket",
+    ],
+    [
+      "https://truenas.local:8443/",
+      "wss://truenas.local:8443/connection/websocket",
+    ],
+    ["http://localhost:8000", "ws://localhost:8000/connection/websocket"],
+    ["http://192.168.1.20:8100", "ws://192.168.1.20:8100/connection/websocket"],
+    ["http://localhost.:8000/", "ws://localhost:8000/connection/websocket"],
+  ]) {
+    assert.equal(deriveExpectedCentrifugoWebSocketUrl(origin), expected);
+  }
+
+  for (const origin of [
+    "",
+    "ws://truenas.local:8100",
+    "http://operator:secret@truenas.local:8100",
+    "http://truenas.local:8100/connection/websocket",
+    "http://truenas.local:8100/?debug=1",
+    "http://truenas.local:8100/#fragment",
+  ]) {
+    assert.throws(
+      () => deriveExpectedCentrifugoWebSocketUrl(origin),
+      /LOADTEST_CENTRIFUGO_ORIGIN.*HTTP\(S\) origin/,
+    );
+  }
+
+  for (const origin of [
+    "https://doctor.school",
+    "https://api.doctor.school",
+    "https://centrifugo.doctor.school.",
+  ]) {
+    assert.throws(
+      () => deriveExpectedCentrifugoWebSocketUrl(origin),
+      /LOADTEST_CENTRIFUGO_ORIGIN.*known production doctor\.school/,
+    );
+  }
+});
+
+test("#1139 verifier rejects every grant target except the explicitly expected normalized endpoint", () => {
+  const expected = deriveExpectedCentrifugoWebSocketUrl(
+    "http://truenas.local:8100",
+  );
+  assert.equal(
+    assertCentrifugoGrantTarget(
+      "ws://truenas.local.:8100/connection/websocket",
+      expected,
+      "observer initial grant",
+    ),
+    expected,
+  );
+
+  assert.throws(
+    () =>
+      assertCentrifugoGrantTarget(
+        "ws://truenas.local:8101/connection/websocket",
+        expected,
+        "participant initial grant",
+      ),
+    (error) =>
+      error instanceof BehaviorSetupError &&
+      /participant initial grant.*LOADTEST_CENTRIFUGO_ORIGIN/.test(
+        error.message,
+      ),
+  );
+
+  for (const url of [
+    "wss://centrifugo.doctor.school/connection/websocket",
+    "ws://203.0.113.10:8100/connection/websocket",
+    "ws://truenas.local:8101/connection/websocket",
+    "wss://truenas.local:8100/connection/websocket",
+    "ws://truenas.local:8100/wrong-path",
+    "ws://truenas.local:8100/connection/websocket/",
+    "ws://truenas.local:8100/connection/websocket?token=leak",
+    "ws://truenas.local:8100/connection/websocket#fragment",
+    "ws://operator:secret@truenas.local:8100/connection/websocket",
+  ]) {
+    assert.throws(
+      () =>
+        assertCentrifugoGrantTarget(url, expected, "observer initial grant"),
+      /observer initial grant.*LOADTEST_CENTRIFUGO_ORIGIN/,
+    );
+  }
+});
+
 test("reconnect grant must remain on the same complete room/channel/cadence", () => {
+  const expectedWebSocketUrl = "ws://truenas.local:8100/connection/websocket";
   const original = {
     eventId: "event-1",
     heartbeatIntervalSeconds: 5,
-    chat: { url: "ws://localhost:8000", token: "old", channel: "room:event:1" },
+    chat: {
+      url: expectedWebSocketUrl,
+      token: "old",
+      channel: "room:event:1",
+    },
   };
   assert.doesNotThrow(() =>
-    assertReconnectGrant(original, {
-      ...original,
-      chat: { ...original.chat, token: "new" },
-    }),
+    assertReconnectGrant(
+      original,
+      {
+        ...original,
+        chat: { ...original.chat, token: "new" },
+      },
+      expectedWebSocketUrl,
+    ),
   );
   assert.throws(
-    () => assertReconnectGrant(original, { ...original, chat: null }),
+    () =>
+      assertReconnectGrant(
+        original,
+        { ...original, chat: null },
+        expectedWebSocketUrl,
+      ),
     /reconnect grant/,
   );
   assert.throws(
     () =>
-      assertReconnectGrant(original, {
-        ...original,
-        heartbeatIntervalSeconds: 10,
-      }),
+      assertReconnectGrant(
+        original,
+        {
+          ...original,
+          heartbeatIntervalSeconds: 10,
+        },
+        expectedWebSocketUrl,
+      ),
     /same room, channel, and cadence/,
+  );
+  for (const url of [
+    "wss://centrifugo.doctor.school/connection/websocket",
+    "ws://203.0.113.10:8100/connection/websocket",
+    "ws://truenas.local:8101/connection/websocket",
+    "ws://truenas.local:8100/wrong-path",
+  ]) {
+    assert.throws(
+      () =>
+        assertReconnectGrant(
+          original,
+          {
+            ...original,
+            chat: { ...original.chat, url, token: "new" },
+          },
+          expectedWebSocketUrl,
+        ),
+      /reconnect grant.*LOADTEST_CENTRIFUGO_ORIGIN/,
+    );
+  }
+  assert.throws(
+    () =>
+      assertReconnectGrant(
+        original,
+        {
+          ...original,
+          chat: {
+            ...original.chat,
+            url: "ws://truenas.local:8101/connection/websocket",
+            token: "new",
+          },
+        },
+        expectedWebSocketUrl,
+      ),
+    BehaviorSetupError,
   );
 });
 
@@ -240,6 +386,10 @@ test("EARS-4: an intentionally refused heartbeat is printed as an owner-readable
 
   const output = formatBehaviorReport(result);
   assert.match(output, /run UTC: 2026-08-04T12:34:56\.000Z/);
+  assert.match(
+    output,
+    /centrifugo target: ws:\/\/truenas\.local:8100\/connection\/websocket/,
+  );
   assert.match(output, /PASS presence join/);
   assert.match(output, /PASS presence age-out/);
   assert.match(output, /observer reflected/);

@@ -241,7 +241,7 @@ Three endpoints, all classified **`access: authenticated`, `required_roles: doct
 
 - **`GET /v1/events/:idOrSlug/room`** → `RoomConfig` for the gated caller: `{ provider ∈ {rutube, youtube, vk, cdnvideo}, embedRef, chatToken, heartbeatIntervalSeconds }`. `200` only when authenticated ∧ registered ∧ live; `401`/`403`/`409` respectively drive the three EARS-6 branches. Per-caller (the `chatToken` is caller-scoped) ⇒ not a shared-cacheable resource.
 - **`POST /v1/events/:idOrSlug/chat`** → `PostChatMessage`. Gate → publish to Centrifugo `room:event:<id>`; refused if the room is not open or the caller is ungated (EARS-3, EARS-7). Emits `ChatMessagePosted` (transient, not the presence record).
-- **`POST /v1/events/:idOrSlug/heartbeat`** → `RecordPresenceHeartbeat`. Gate → append one `presence_beat` row; refused once the room is closed (EARS-4, EARS-7). Idempotent within an interval (concurrent tabs coalesce, §5). Emits `PresenceHeartbeatRecorded`.
+- **`POST /v1/events/:idOrSlug/heartbeat`** → `RecordPresenceHeartbeat`. Gate → append one immutable raw `presence_beat` row for every accepted call; refused once the room is closed (EARS-4, EARS-7). Concurrent tabs are not suppressed at write time. Only the EARS-5 derivations coalesce: the live count by distinct doctor within the freshness window, and sponsor minutes by distinct doctor/N bucket (§5). Emits `PresenceHeartbeatRecorded`.
 
 ## 8. Portal surface (canvas-faithful)
 

@@ -108,7 +108,7 @@ Feature 006 is the **room vertical**: a `doctor_guest`-authenticated, registrati
 ### Commands (handled by `apps/api`, `doctor_guest`-authenticated + registration-and-live `policy` gate)
 
 - `PostChatMessage(idOrSlug, text)` — post a chat message to the room channel; the backend authorizes the gate, then publishes to Centrifugo. Refused if the room is not open (event not `live`) or the caller is not gated.
-- `RecordPresenceHeartbeat(idOrSlug)` — append one presence beat for `(doctor, event, instant)`. Refused if the room is not open or the caller is not gated. Idempotent within an interval (concurrent tabs coalesce; EARS-5).
+- `RecordPresenceHeartbeat(idOrSlug)` — append one immutable raw presence beat for every accepted invocation `(doctor, event, instant)`. Refused if the room is not open or the caller is not gated. Concurrent tabs are not suppressed at write time; only the downstream EARS-5 derivations coalesce them, by distinct doctor for the live count and by distinct doctor/N bucket for sponsor minutes.
 - `SetDisplayName(displayName)` — write the caller's display name to the `users`-mirror column (`authenticated` `doctor_guest` `fast-path` — self-scoped, no room gate). Rejects an empty or whitespace-only value; invoked once from the JIT room-entry prompt (EARS-14), after which the prompt never reappears.
 
 ### Events

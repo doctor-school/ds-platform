@@ -4,10 +4,12 @@
 // Models N doctors in a live webinar room (feature 006, recon fact 1):
 //   login → GET /v1/events/:id/room (grant: chat {url,token,channel}, stream,
 //   heartbeatIntervalSeconds) → Centrifugo WS connect (server-side subscribe to
-//   room:event:<id> via the connection token's channels claim) → hold, beating
-//   POST /v1/events/:id/heartbeat immediately on entry and then every N seconds
-//   while visible → a fraction of VUs POST
-//   /v1/events/:id/chat (server-mediated publish; clients never publish direct).
+//   room:event:<id> via the connection token's channels claim) → hold the socket
+//   for one reported cadence N → send exactly one sampled
+//   POST /v1/events/:id/heartbeat → a fraction of VUs POST /v1/events/:id/chat
+//   (server-mediated publish; clients never publish direct). This capacity leg
+//   does not simulate Page Visibility or the production client's immediate and
+//   repeating heartbeat loop; `room-behavior` verifies that behavior separately.
 //
 // FIXTURE (phase-2 / smoke doc): the grant gate is authenticated AND registered
 // (005 roster) AND live — so a real run needs LOADTEST_EVENT_ID pointing at a
@@ -101,7 +103,7 @@ async function main() {
       isError: !hold.ok,
     });
 
-    // 4. heartbeat
+    // 4. one heartbeat sample after the N-second socket hold
     const hb = await postRoomHeartbeat(origin, eventId, cookie);
     samples.record({
       status: hb.status,

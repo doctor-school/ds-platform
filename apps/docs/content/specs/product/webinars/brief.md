@@ -39,7 +39,7 @@ lang: en
 - **Admin surfaces live in the `admin` app** (Refine, ADR-0004).
 - **Event lifecycle is a single state machine** — `draft → published → live → ended → archived` — not the legacy scatter of booleans.
 - **Webinar room is built by us as a composition**, with the video as an **external stream (Rutube or similar) embedded as a configured iframe/player** — no video transcoding, no own media server. The Mediator.cloud buy-option was evaluated and **rejected**.
-- **Presence is captured from day one** via a **server-authoritative heartbeat** (authenticated POST every N seconds → append table in our Postgres). The sponsor report for the first webinar is a **manual export** from that data; auto-NMO and auto-report are wave 2.
+- **Presence is captured from day one** via a **server-authoritative heartbeat** (authenticated POST immediately on entry / visible-tab resume, then every N seconds only while visible; hidden pauses → append table in our Postgres). The sponsor report for the first webinar is a **manual export** from that data; auto-NMO and auto-report are wave 2.
 
 ## Feature decomposition
 

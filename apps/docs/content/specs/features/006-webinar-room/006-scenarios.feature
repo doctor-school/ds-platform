@@ -134,7 +134,7 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
   # --- Heartbeat presence capture (US-3) ---
 
   @EARS-4 @happy
-  Scenario: Presence is captured by a visibility-gated heartbeat every N seconds
+  Scenario: Presence is captured immediately on entry or visible resume, then every N seconds while visible
     Given a registered doctor watching in a live room with the room tab visible and active
     When the doctor stays in the room
     Then the client posts an immediate authenticated heartbeat and then one every N seconds

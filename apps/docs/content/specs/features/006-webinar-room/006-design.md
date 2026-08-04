@@ -33,7 +33,7 @@ flowchart LR
 
   RM -->|read room config| Q1 --> GATE
   RM -->|post message| C1 --> GATE --> CF
-  RM -->|heartbeat every N s| C2 --> GATE --> PG
+  RM -->|heartbeat immediate + every N s while visible| C2 --> GATE --> PG
   GATE -. reads roster .-> P005
   GATE -. reads lifecycle state .-> P004
   Q1 -. reads provider enum + embed ref .-> W007

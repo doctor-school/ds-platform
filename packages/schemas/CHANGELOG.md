@@ -17,8 +17,8 @@
   - `@ds/schemas` — a new `RoomPresenceCountMessage` (a `type: "presence-count"`
     discriminant) fanned out over the room channel; it never cross-parses a chat
     message.
-  - `@ds/api` — on an accepted beat that CHANGES the distinct-doctor count, or a
-    presence-window expiry (a leave, caught by a per-room timer), the recomputed count
+  - `@ds/api` — on an accepted beat that CHANGES the distinct-doctor count, or when
+    stopped beats age out (caught by a per-room timer), the recomputed count
     is published to the existing `room:event:<id>` channel. Publish only on change;
     best-effort, so a Centrifugo blip never turns a beat into an error.
   - `@ds/portal` — the room's single Centrifugo connection (owned by the chat panel)
@@ -302,7 +302,7 @@ events`, `registered_at`), migration `0007_registrations.sql`. No cancelled
 - [#683](https://github.com/doctor-school/ds-platform/pull/683) [`f20f1da`](https://github.com/doctor-school/ds-platform/commit/f20f1da596fce75b03c6696b968e52f95566934c) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - feat(room): 006 EARS-4 — server-authoritative heartbeat presence capture (append-only)
 
   While a gated doctor is in a live room with the tab visible, the client posts an
-  authenticated heartbeat every N seconds and the backend appends each accepted
+  authenticated heartbeat immediately on entry / visible resume and then every N seconds; the backend appends each accepted
   beat to a durable append-only Postgres table — the durable basis for the
   per-doctor sponsor minutes (feature 006, EARS-4; realizes US-3).
 

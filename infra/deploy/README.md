@@ -122,10 +122,10 @@ Pipeline (`tools/deploy/prod.mjs`), fail-closed and stops at the first red step:
 5. **api-prod** — `migrate` (idempotent drizzle-kit) → `build` → `up -d`. Images
    are SHA-tagged **`ds-api:<sha>` / `ds-portal:<sha>`** (DSO-127) — the compose
    `image:` reads `DEPLOY_SHA` from a `.env` the script writes beside `compose.yml`.
-   The script then **reloads the caddy config automatically** (`caddy reload`,
-   falling back to `restart caddy`) — the Caddyfile is a bind mount that `up -d`
-   alone never re-reads, so Caddyfile-only changes go live without manual
-   intervention (#751).
+   The script then compares the shipped `Caddyfile` and
+   `centrifugo/config.json` with the files visible through the running containers
+   and **restarts only consumers whose bind mount is stale**. It verifies both
+   mounts again after apply; a mismatch fails the deploy (#1175).
 6. **Retention (DSO-127)** — keeps the **last 3** SHA-tagged images per repo,
    prunes older (never `:local`, never the running one).
 7. **Smoke (DSO-128)** — `tools/deploy/smoke-prod.mjs --expect-sha <sha>`; a red
@@ -749,22 +749,11 @@ Order — steps run in sequence; **do not reorder 4 and 5** (the reason is in 5)
    spelled out rather than a one-flag delta.
 
 4. **Deploy.** `pnpm deploy:prod` ships the Caddyfile (academy vhost + `app.`
-   redirect) and the Centrifugo origin allowlist.
-
-   **Restart Centrifugo by hand** — `./centrifugo/config.json` is a read-only
-   **bind mount** and the container definition is unchanged, so `compose up -d`
-   does not recreate the container when only the file's contents changed, and
-   Centrifugo has no config hot-reload. `deploy:prod` reloads Caddy only (the
-   same lesson already learned for the `admin.` vhost, #751/#729) — there is no
-   centrifugo counterpart:
-
-   ```bash
-   sudo docker compose restart centrifugo
-   ```
-
-   Skipping it leaves the pre-cutover allowlist live, so every websocket from the
-   `academy.` origin is rejected and in-room chat + the presence counter are dead
-   while HTTP smoke stays green. The restart drops open sockets; clients reconnect.
+   redirect) and the Centrifugo origin allowlist, then compares both running
+   single-file mounts with the shipped files. Only a stale consumer is restarted,
+   and both mounts are verified afterward (#1175). No manual SSH restart is
+   required. When the Centrifugo config changed, its restart drops open sockets;
+   clients reconnect.
 
    Then confirm the new host actually serves over a valid cert:
 

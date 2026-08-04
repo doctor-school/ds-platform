@@ -22,7 +22,7 @@
 //   data-prod   up -d --build (idempotent; attestations off → no-op ≠ recreate, #486)
 //   checkpoint  pgbackrest pre-migrate incr backup  (DSO-129 — BEFORE migrate)
 //   api-prod    migrate → build (ds-api:<sha>, ds-portal:<sha>, ds-admin:<sha>) → up -d
-//   caddy       reload the bind-mounted Caddyfile (`up -d` never re-reads it, #751)
+//   config      compare running bind mounts; restart only stale consumers (#1175)
 //   retention   keep the last 3 SHA-tagged images per repo  (DSO-127)
 //   smoke       tools/deploy/smoke-prod.mjs --expect-sha <sha>  (DSO-128)
 //
@@ -75,6 +75,91 @@ const NO_ATTEST = "BUILDX_NO_DEFAULT_ATTESTATIONS=1";
 
 const API_COMPOSE = `${REMOTE_TREE}/infra/deploy/compose/api-prod`;
 const DATA_COMPOSE = `${REMOTE_TREE}/infra/deploy/compose/data-prod`;
+
+// `shipTree` replaces the remote tree, so single-file bind mounts stay pinned
+// to the pre-deploy inodes until their containers restart. Compare the shipped
+// host files with copies read through the RUNNING containers: `docker cp` is
+// daemon-side, so this does not assume either image contains a shell/hash tool.
+// A missing/unreadable comparison is conservatively stale. The post-restart
+// comparison is the fail-closed proof that the shipped bytes are really mounted.
+const RUNTIME_CONFIG_SERVICES = ["caddy", "centrifugo"];
+
+export function runtimeConfigComparisonScript() {
+  return `cd ${API_COMPOSE}
+mounted_file_matches() {
+  local service="$1" shipped_path="$2" mounted_path="$3"
+  local container_id mounted_copy result
+  container_id=$(sudo docker compose ps -q "$service")
+  [ -n "$container_id" ] || return 1
+  mounted_copy=$(mktemp)
+  if sudo docker cp "\${container_id}:\${mounted_path}" "$mounted_copy" >/dev/null 2>&1 \\
+     && sudo cmp -s "$shipped_path" "$mounted_copy"; then
+    result=0
+  else
+    result=1
+  fi
+  sudo rm -f "$mounted_copy"
+  return "$result"
+}
+if mounted_file_matches caddy Caddyfile /etc/caddy/Caddyfile; then
+  echo 'caddy=match'
+else
+  echo 'caddy=mismatch'
+fi
+if mounted_file_matches centrifugo centrifugo/config.json /centrifugo/config.json; then
+  echo 'centrifugo=match'
+else
+  echo 'centrifugo=mismatch'
+fi
+`;
+}
+
+export function runtimeConfigServicesToRestart(comparisonOutput) {
+  const matches = new Set(
+    comparisonOutput
+      .split(/\r?\n/)
+      .filter((line) => line.endsWith("=match"))
+      .map((line) => line.slice(0, -"=match".length)),
+  );
+  return RUNTIME_CONFIG_SERVICES.filter((service) => !matches.has(service));
+}
+
+export function runtimeConfigRestartScript(services) {
+  if (
+    services.length === 0 ||
+    services.some((service) => !RUNTIME_CONFIG_SERVICES.includes(service))
+  ) {
+    throw new Error("runtime config restart needs known service names");
+  }
+  return `cd ${API_COMPOSE}
+sudo docker compose restart ${services.join(" ")}
+`;
+}
+
+export async function applyRuntimeConfigs({
+  compare = () => sshCapture(API_PROD, runtimeConfigComparisonScript()),
+  restart = (script) =>
+    sshScript(API_PROD, script, { label: "runtime config restart" }),
+  log = (message) => console.log(message),
+} = {}) {
+  const beforeApply = await compare();
+  const servicesToRestart = runtimeConfigServicesToRestart(beforeApply);
+  if (servicesToRestart.length > 0) {
+    log(`      stale bind mount(s): ${servicesToRestart.join(", ")}`);
+    await restart(runtimeConfigRestartScript(servicesToRestart));
+  } else {
+    log("      both running mounts already match — no restart");
+  }
+
+  const afterApply = await compare();
+  const staleAfterApply = runtimeConfigServicesToRestart(afterApply);
+  if (staleAfterApply.length > 0) {
+    throw new Error(
+      `runtime config apply did not mount the shipped file(s): ${staleAfterApply.join(", ")}`,
+    );
+  }
+  return { restarted: servicesToRestart };
+}
 
 // --- tiny console ---------------------------------------------------------
 
@@ -249,13 +334,7 @@ function assertGreenCi(sha) {
 // every 15s and gives up after 4 missed probes (~60s): the channel dies LOUDLY
 // (non-zero ssh exit → the existing die() path) instead of hanging half-open.
 export function sshBaseArgs(host) {
-  return [
-    "-o",
-    "ServerAliveInterval=15",
-    "-o",
-    "ServerAliveCountMax=4",
-    host,
-  ];
+  return ["-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4", host];
 }
 
 // Per-step no-output budgets for the sshScript inactivity watchdog (#905).
@@ -579,24 +658,10 @@ sudo docker compose up -d
   );
   ok("migrate + build + up -d", t);
 
-  step("caddy: reload config (bind-mounted Caddyfile, #751)");
+  step("api-prod: apply bind-mounted Caddy + Centrifugo configs (#1175)");
   t = Date.now();
-  // The Caddyfile is a read-only BIND MOUNT (compose.yml), so `up -d` sees an
-  // unchanged container definition and does NOT recreate caddy when only the
-  // Caddyfile changed — new vhosts/routes stay unloaded until a reload (#729
-  // wave-1: the fresh admin.doctor.school vhost drew a Caddy 404 until a manual
-  // `docker compose restart caddy`). Always reload via caddy's admin API; if the
-  // exec fails (container just (re)created and not up yet, or stopped), fall
-  // back to a full `restart caddy` — either way the shipped Caddyfile is live.
-  await sshScript(
-    API_PROD,
-    `cd ${API_COMPOSE}
-sudo docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile \\
-  || { echo '  ⚠ caddy reload failed — falling back to: docker compose restart caddy'; sudo docker compose restart caddy; }
-`,
-    { label: "caddy reload" },
-  );
-  ok("caddy serves the shipped Caddyfile", t);
+  await applyRuntimeConfigs();
+  ok("Caddy + Centrifugo run with the shipped configs", t);
 
   step("Verify the RUNNING containers carry the deployed SHA");
   await verifyRunningSha(sha);

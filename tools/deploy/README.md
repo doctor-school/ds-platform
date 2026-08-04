@@ -45,9 +45,10 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    freshly shipped tree — a reused stale image would apply old migrations) →
    `build` → `up -d`; images SHA-tagged **`ds-api:<sha>` / `ds-portal:<sha>`**
    (DSO-127) via a `DEPLOY_SHA` `.env` the script writes beside `compose.yml`.
-   Then **`caddy reload`** (fallback: `restart caddy`) — the Caddyfile is a bind
-   mount `up -d` never re-reads, so Caddyfile-only changes go live without a
-   manual restart (#751).
+   Then compare the shipped `Caddyfile` and `centrifugo/config.json` with the
+   files visible through the running containers and **restart only consumers
+   whose bind mount is stale**. Both mounts are compared again after apply, so
+   a mismatch fails the deploy instead of requiring a manual SSH step (#1175).
 6. **Truthful-success verify** — the script polls `docker inspect` on-box until
    the RUNNING api + portal containers carry exactly `ds-*:<sha>` **and** report
    healthy (≤ 4 min); otherwise the deploy is FAILED, never "OK". (Added after

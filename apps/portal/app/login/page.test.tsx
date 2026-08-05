@@ -1,4 +1,11 @@
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -26,6 +33,45 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
 
+type CaptchaProps = {
+  requestKey: number | null;
+  onToken: (token?: string) => void;
+  onError: (reason: "expired" | "unavailable" | "incomplete") => void;
+};
+let captchaMode: "bypass" | "manual" = "bypass";
+let captchaProps: CaptchaProps | undefined;
+vi.mock("@/components/bot-protection", async () => {
+  const React = await import("react");
+  const actual = await vi.importActual<
+    typeof import("@/components/bot-protection")
+  >("@/components/bot-protection");
+  return {
+    ...actual,
+    BotProtectionField: (props: CaptchaProps) => {
+      captchaProps = props;
+      React.useEffect(() => {
+        if (captchaMode === "bypass" && props.requestKey !== null) {
+          props.onToken(undefined);
+        }
+      }, [props.onToken, props.requestKey]);
+      return <div data-testid="bot-protection-field" />;
+    },
+  };
+});
+
+const MockAuthError = vi.hoisted(
+  () =>
+    class MockAuthError extends Error {
+      constructor(
+        readonly status: number,
+        message: string,
+        readonly code?: string,
+      ) {
+        super(message);
+      }
+    },
+);
+
 let resolveLogin: (() => void) | undefined;
 let resolveRequestOtp: (() => void) | undefined;
 const login = vi.fn(
@@ -48,7 +94,7 @@ vi.mock("@/lib/auth-client", () => ({
     loginWithOtp: (body: unknown) => loginWithOtp(body),
     session: () => session(),
   },
-  AuthError: class extends Error {},
+  AuthError: MockAuthError,
 }));
 
 // 005 EARS-2: the post-auth registration resume fires the real EARS-1 command
@@ -72,6 +118,12 @@ async function renderLogin() {
   await screen.findByTestId("login-method-password");
 }
 
+async function flushAuthGuard() {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
+
 beforeEach(() => {
   push.mockClear();
   replace.mockClear();
@@ -82,6 +134,115 @@ beforeEach(() => {
   resolveLogin = undefined;
   resolveRequestOtp = undefined;
   searchParams = new URLSearchParams();
+  captchaMode = "bypass";
+  captchaProps = undefined;
+});
+
+describe("003 EARS-17 on-demand login protection", () => {
+  it("EARS-17: password login starts without CAPTCHA, then a stable backend challenge retries the original values exactly once", async () => {
+    captchaMode = "manual";
+    login
+      .mockRejectedValueOnce(
+        new MockAuthError(403, "challenge required", "BOT_PROTECTION_REQUIRED"),
+      )
+      .mockResolvedValueOnce(undefined);
+    const user = userEvent.setup();
+    await renderLogin();
+    await user.type(screen.getByLabelText("emailOrPhone"), EMAIL);
+    await user.type(screen.getByLabelText("password"), PASSWORD);
+
+    await user.click(screen.getByTestId("password-login-submit"));
+    await waitFor(() => expect(login).toHaveBeenCalledTimes(1));
+    expect(login).toHaveBeenNthCalledWith(
+      1,
+      expect.not.objectContaining({ captchaToken: expect.anything() }),
+    );
+    await waitFor(() => expect(captchaProps?.requestKey).not.toBeNull());
+
+    act(() => captchaProps?.onToken("fresh-login-token"));
+    await waitFor(() => expect(login).toHaveBeenCalledTimes(2));
+    expect(login).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        identifier: EMAIL,
+        password: PASSWORD,
+        captchaToken: "fresh-login-token",
+      }),
+    );
+    act(() => captchaProps?.onToken("fresh-login-token"));
+    expect(login).toHaveBeenCalledTimes(2);
+  });
+
+  it("EARS-17: the initial sign-in-code request waits for a fresh challenge token", async () => {
+    captchaMode = "manual";
+    requestOtp.mockResolvedValueOnce(undefined);
+    const user = userEvent.setup();
+    await renderLogin();
+    await user.click(screen.getByTestId("login-method-otp"));
+    await user.type(screen.getByLabelText("email"), EMAIL);
+    await user.click(screen.getByTestId("otp-send"));
+
+    expect(requestOtp).not.toHaveBeenCalled();
+    await waitFor(() => expect(captchaProps?.requestKey).not.toBeNull());
+    act(() => captchaProps?.onToken("fresh-otp-token"));
+    await waitFor(() => expect(requestOtp).toHaveBeenCalledTimes(1));
+    expect(requestOtp).toHaveBeenCalledWith(
+      expect.objectContaining({ captchaToken: "fresh-otp-token" }),
+    );
+  });
+
+  it("EARS-17: login-code confirmation stays challenge-free", async () => {
+    requestOtp.mockResolvedValueOnce(undefined);
+    const user = userEvent.setup();
+    await renderLogin();
+    await user.click(screen.getByTestId("login-method-otp"));
+    await user.type(screen.getByLabelText("email"), EMAIL);
+    await user.click(screen.getByTestId("otp-send"));
+    await screen.findByTestId("otp-verify");
+
+    captchaMode = "manual";
+    await user.type(screen.getByRole("textbox"), "12345678");
+    await waitFor(() => expect(loginWithOtp).toHaveBeenCalledTimes(1));
+    expect(captchaProps?.requestKey).toBeNull();
+  });
+
+  it("EARS-17: login-code resend executes a new challenge and sends once", async () => {
+    requestOtp.mockResolvedValue(undefined);
+    vi.useFakeTimers();
+    try {
+      render(<LoginPage />);
+      await flushAuthGuard();
+      fireEvent.mouseDown(screen.getByTestId("login-method-otp"), {
+        button: 0,
+        ctrlKey: false,
+      });
+      fireEvent.change(screen.getByLabelText("email"), {
+        target: { value: EMAIL },
+      });
+      fireEvent.click(screen.getByTestId("otp-send"));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(requestOtp).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("otp-verify")).toBeInTheDocument();
+
+      captchaMode = "manual";
+      act(() => vi.advanceTimersByTime(30_000));
+      fireEvent.click(screen.getByTestId("otp-resend"));
+      expect(requestOtp).toHaveBeenCalledTimes(1);
+      expect(captchaProps?.requestKey).not.toBeNull();
+
+      act(() => captchaProps?.onToken("fresh-otp-resend-token"));
+      await act(async () => Promise.resolve());
+      expect(requestOtp).toHaveBeenCalledTimes(2);
+      expect(requestOtp).toHaveBeenLastCalledWith(
+        expect.objectContaining({ captchaToken: "fresh-otp-resend-token" }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 afterEach(() => {
   resolveLogin?.();

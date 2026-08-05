@@ -40,6 +40,32 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
 
+type CaptchaProps = {
+  requestKey: number | null;
+  onToken: (token?: string) => void;
+  onError: (reason: "expired" | "unavailable" | "incomplete") => void;
+};
+let captchaMode: "bypass" | "manual" = "bypass";
+let captchaProps: CaptchaProps | undefined;
+vi.mock("@/components/bot-protection", async () => {
+  const React = await import("react");
+  const actual = await vi.importActual<
+    typeof import("@/components/bot-protection")
+  >("@/components/bot-protection");
+  return {
+    ...actual,
+    BotProtectionField: (props: CaptchaProps) => {
+      captchaProps = props;
+      React.useEffect(() => {
+        if (captchaMode === "bypass" && props.requestKey !== null) {
+          props.onToken(undefined);
+        }
+      }, [props.onToken, props.requestKey]);
+      return <div data-testid="bot-protection-field" />;
+    },
+  };
+});
+
 const requestPasswordReset = vi.fn().mockResolvedValue({});
 const completePasswordReset = vi.fn().mockResolvedValue({});
 // #675: rendering the page mounts the <AuthShell> auth-surface guard, which reads
@@ -60,6 +86,8 @@ beforeEach(() => {
   replace.mockClear();
   requestPasswordReset.mockClear();
   completePasswordReset.mockClear();
+  captchaMode = "bypass";
+  captchaProps = undefined;
 });
 afterEach(cleanup);
 
@@ -79,7 +107,56 @@ const IDENTIFIER = "user@example.com";
 const RESET_CODE = "PVDC3R";
 const NEW_PASSWORD = "Sup3r$ecretPw!9";
 
-async function advanceToCompleteStage(user: ReturnType<typeof userEvent.setup>) {
+describe("003 EARS-17 on-demand password-reset protection", () => {
+  it("EARS-17: the initial reset request waits for a fresh challenge token", async () => {
+    captchaMode = "manual";
+    const user = userEvent.setup();
+    render(<ResetPage />);
+    await screen.findByTestId("reset-request-submit");
+    await user.type(screen.getByRole("textbox"), IDENTIFIER);
+    await user.click(screen.getByTestId("reset-request-submit"));
+
+    expect(requestPasswordReset).not.toHaveBeenCalled();
+    await waitFor(() => expect(captchaProps?.requestKey).not.toBeNull());
+    act(() => captchaProps?.onToken("fresh-reset-token"));
+    await waitFor(() => expect(requestPasswordReset).toHaveBeenCalledTimes(1));
+    expect(requestPasswordReset).toHaveBeenCalledWith(
+      expect.objectContaining({ captchaToken: "fresh-reset-token" }),
+    );
+  });
+
+  it("EARS-17: reset-code resend uses a new challenge while reset completion stays challenge-free", async () => {
+    vi.useFakeTimers();
+    try {
+      render(<ResetPage />);
+      await flushAuthGuard();
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: IDENTIFIER },
+      });
+      fireEvent.click(screen.getByTestId("reset-request-submit"));
+      await act(async () => Promise.resolve());
+      expect(requestPasswordReset).toHaveBeenCalledTimes(1);
+
+      captchaMode = "manual";
+      act(() => vi.advanceTimersByTime(30_000));
+      fireEvent.click(screen.getByTestId("reset-resend"));
+      expect(requestPasswordReset).toHaveBeenCalledTimes(1);
+      expect(captchaProps?.requestKey).not.toBeNull();
+      act(() => captchaProps?.onToken("fresh-reset-resend-token"));
+      await act(async () => Promise.resolve());
+      expect(requestPasswordReset).toHaveBeenCalledTimes(2);
+      expect(requestPasswordReset).toHaveBeenLastCalledWith(
+        expect.objectContaining({ captchaToken: "fresh-reset-resend-token" }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+async function advanceToCompleteStage(
+  user: ReturnType<typeof userEvent.setup>,
+) {
   // #675: wait past the <AuthShell> session-guard so the request form is mounted.
   await screen.findByTestId("reset-request-submit");
   // Request step: fill the union identifier box and submit to toggle stage→complete.
@@ -170,7 +247,8 @@ describe("/reset complete step — resend with cooldown (#267)", () => {
         await act(async () => {
           await Promise.resolve();
         });
-        const text = screen.getByTestId("reset-resend-notice").textContent ?? "";
+        const text =
+          screen.getByTestId("reset-resend-notice").textContent ?? "";
         cleanup();
         return text;
       } finally {
@@ -195,18 +273,21 @@ describe("/reset complete step — resend with cooldown (#267)", () => {
     await user.click(screen.getByTestId("reset-restart"));
 
     await waitFor(() =>
-      expect(screen.queryByLabelText("newPasswordLabel")).not.toBeInTheDocument(),
+      expect(
+        screen.queryByLabelText("newPasswordLabel"),
+      ).not.toBeInTheDocument(),
     );
     expect(screen.getByTestId("reset-request-submit")).toBeInTheDocument();
   });
 });
 
 describe("/reset complete step (late-mounted slotted code field)", () => {
-  it("ingests the code typed AFTER the request->complete toggle and submits it", async () => {
+  it("EARS-17: ingests the code after the toggle and completes reset challenge-free", async () => {
     const user = userEvent.setup();
     render(<ResetPage />);
 
     await advanceToCompleteStage(user);
+    captchaMode = "manual";
 
     // input-otp exposes a single hidden textbox for the slotted group.
     const codeInput = screen.getByRole("textbox");
@@ -219,9 +300,7 @@ describe("/reset complete step (late-mounted slotted code field)", () => {
 
     await user.click(screen.getByRole("button", { name: "setNewPassword" }));
 
-    await waitFor(() =>
-      expect(completePasswordReset).toHaveBeenCalledTimes(1),
-    );
+    await waitFor(() => expect(completePasswordReset).toHaveBeenCalledTimes(1));
     // The code typed into the late-mounted field must reach the submit body — the
     // exact value the pre-fix /reset structure dropped to "".
     expect(completePasswordReset).toHaveBeenCalledWith(
@@ -231,6 +310,7 @@ describe("/reset complete step (late-mounted slotted code field)", () => {
         newPassword: NEW_PASSWORD,
       }),
     );
+    expect(captchaProps?.requestKey).toBeNull();
   });
 
   // #221 (EARS-12): a completed reset auto-logs-in (the BFF set the session

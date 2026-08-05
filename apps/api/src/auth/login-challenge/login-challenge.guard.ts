@@ -1,15 +1,16 @@
 import {
-  ForbiddenException,
   Inject,
   Injectable,
   type CanActivate,
   type ExecutionContext,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
+import { BotProtectionErrorCodes } from "@ds/schemas";
 import {
   BOT_PROTECTION,
   BOT_PROTECTION_TOKEN_FIELD,
   BOT_PROTECTION_TOKEN_HEADER,
+  BotProtectionException,
   type BotProtection,
 } from "../../bot-protection/index.js";
 import { LoginChallengePolicy } from "./login-challenge.policy.js";
@@ -60,7 +61,11 @@ export class LoginChallengeGuard implements CanActivate {
     const token = this.extractToken(request) ?? "";
     const result = await this.provider.verify(token, "login-challenge", ip);
     if (!result.ok) {
-      throw new ForbiddenException("bot-protection challenge failed");
+      throw new BotProtectionException(
+        result.reason === "missing-token"
+          ? BotProtectionErrorCodes.required
+          : BotProtectionErrorCodes.rejected,
+      );
     }
     return true;
   }

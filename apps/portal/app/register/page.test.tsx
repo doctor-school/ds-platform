@@ -1,4 +1,4 @@
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import { act, render, screen, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -29,6 +29,45 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
 
+type CaptchaProps = {
+  requestKey: number | null;
+  onToken: (token?: string) => void;
+  onError: (reason: "expired" | "unavailable" | "incomplete") => void;
+};
+let captchaMode: "bypass" | "manual" = "bypass";
+let captchaProps: CaptchaProps | undefined;
+vi.mock("@/components/bot-protection", async () => {
+  const React = await import("react");
+  const actual = await vi.importActual<
+    typeof import("@/components/bot-protection")
+  >("@/components/bot-protection");
+  return {
+    ...actual,
+    BotProtectionField: (props: CaptchaProps) => {
+      captchaProps = props;
+      React.useEffect(() => {
+        if (captchaMode === "bypass" && props.requestKey !== null) {
+          props.onToken(undefined);
+        }
+      }, [props.onToken, props.requestKey]);
+      return <div data-testid="bot-protection-field" />;
+    },
+  };
+});
+
+const MockAuthError = vi.hoisted(
+  () =>
+    class MockAuthError extends Error {
+      constructor(
+        readonly status: number,
+        message: string,
+        readonly code?: string,
+      ) {
+        super(message);
+      }
+    },
+);
+
 // Deferred so the submit stays in-flight while we assert the pending affordance.
 let resolveRegister: (() => void) | undefined;
 const register = vi.fn(
@@ -46,7 +85,7 @@ vi.mock("@/lib/auth-client", () => ({
     register: (body: unknown) => register(body),
     session: () => session(),
   },
-  AuthError: class extends Error {},
+  AuthError: MockAuthError,
 }));
 
 const EMAIL = "doc@example.com";
@@ -68,6 +107,64 @@ beforeEach(() => {
   register.mockClear();
   resolveRegister = undefined;
   searchParams = new URLSearchParams();
+  captchaMode = "bypass";
+  captchaProps = undefined;
+});
+
+describe("003 EARS-17 on-demand registration protection", () => {
+  it("EARS-17: submit executes a fresh invisible challenge and resumes registration exactly once with its token", async () => {
+    captchaMode = "manual";
+    register.mockResolvedValueOnce(undefined);
+    const user = userEvent.setup();
+    await renderRegister();
+    await user.type(screen.getByLabelText("email"), EMAIL);
+    await user.type(screen.getByLabelText("password"), PASSWORD);
+
+    await user.click(screen.getByTestId("register-submit"));
+    expect(register).not.toHaveBeenCalled();
+    await waitFor(() => expect(captchaProps?.requestKey).not.toBeNull());
+
+    act(() => captchaProps?.onToken("fresh-register-token"));
+    await waitFor(() => expect(register).toHaveBeenCalledTimes(1));
+    expect(register).toHaveBeenCalledWith(
+      expect.objectContaining({ captchaToken: "fresh-register-token" }),
+    );
+
+    act(() => captchaProps?.onToken("fresh-register-token"));
+    expect(register).toHaveBeenCalledTimes(1);
+  });
+
+  it("EARS-17: a rejected token gets truthful CAPTCHA feedback and a fresh retry without losing form data", async () => {
+    captchaMode = "manual";
+    register.mockRejectedValueOnce(
+      new MockAuthError(
+        403,
+        "bot protection failed",
+        "BOT_PROTECTION_REJECTED",
+      ),
+    );
+    const user = userEvent.setup();
+    await renderRegister();
+    await user.type(screen.getByLabelText("email"), EMAIL);
+    await user.type(screen.getByLabelText("password"), PASSWORD);
+    await user.click(screen.getByTestId("register-submit"));
+
+    act(() => captchaProps?.onToken("rejected-token"));
+    await waitFor(() =>
+      expect(screen.getByText("captchaRejected")).toBeInTheDocument(),
+    );
+    expect(screen.getByLabelText("email")).toHaveValue(EMAIL);
+    expect(screen.getByLabelText("password")).toHaveValue(PASSWORD);
+    await waitFor(() => expect(captchaProps?.requestKey).toBeNull());
+
+    register.mockResolvedValueOnce(undefined);
+    await user.click(screen.getByTestId("register-submit"));
+    await waitFor(() => expect(captchaProps?.requestKey).not.toBeNull());
+    act(() => captchaProps?.onToken("fresh-retry-token"));
+    await waitFor(() =>
+      expect(screen.queryByText("captchaRejected")).not.toBeInTheDocument(),
+    );
+  });
 });
 afterEach(() => {
   // Drain any still-pending submit so it does not leak across tests.

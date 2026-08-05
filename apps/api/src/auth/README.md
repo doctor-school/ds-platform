@@ -187,8 +187,13 @@ gate touches no other call site:
 - **Login captcha-after-N-failures** (EARS-17) — `login-challenge/`:
   `LoginChallengePolicy` tallies failures per origin; `@LoginChallenged` +
   guard requires a `BotProtection` token once the threshold is crossed (cleared
-  on a successful login). The OTP-request surface is now statically
-  `@BotProtected("otp-request")` (closes #129's email-OTP abuse gap).
+  on a successful login). A first password attempt is unchallenged; the guard's
+  stable `BOT_PROTECTION_REQUIRED` response starts an invisible check in the
+  portal and the original values are retried once. Register, OTP request (initial
+  and resend), verify resend, and password-reset request (initial and resend) are
+  statically `@BotProtected`; verify/OTP confirmation and reset completion are
+  deliberately not. Missing and rejected proofs use the shared
+  `BOT_PROTECTION_REQUIRED` / `BOT_PROTECTION_REJECTED` codes, never provider text.
 - **Account lockout** (EARS-15) — native Zitadel policy; the BFF only _observes_
   the `locked` verdict from `IdpClient.passwordLogin` and emits
   `auth.lockout.triggered`. The counter, lock, and notification email are native.

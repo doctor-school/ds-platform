@@ -1,5 +1,31 @@
 import { z } from "zod";
 
+/**
+ * Stable, account-agnostic bot-protection outcomes returned by auth guards.
+ * The portal branches on these codes (never on English exception text):
+ * `REQUIRED` starts the conditional password-login challenge; `REJECTED`
+ * asks for a fresh one-time proof. Neither code discloses account existence.
+ */
+export const BotProtectionErrorCodes = {
+  required: "BOT_PROTECTION_REQUIRED",
+  rejected: "BOT_PROTECTION_REJECTED",
+} as const;
+
+export type BotProtectionErrorCode =
+  (typeof BotProtectionErrorCodes)[keyof typeof BotProtectionErrorCodes];
+
+export const BotProtectionErrorResponseSchema = z.object({
+  statusCode: z.literal(403),
+  code: z.enum([
+    BotProtectionErrorCodes.required,
+    BotProtectionErrorCodes.rejected,
+  ]),
+  message: z.string(),
+});
+export type BotProtectionErrorResponse = z.infer<
+  typeof BotProtectionErrorResponseSchema
+>;
+
 // 003 — User authentication request/response contracts (API SSOT, ADR-0002 §3,
 // ADR-0006 §6.2). Framework-agnostic; `apps/api` wraps these with `createZodDto`
 // at the I/O boundary. This file covers the F1 surface (#85): registration,

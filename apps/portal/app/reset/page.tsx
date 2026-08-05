@@ -13,8 +13,18 @@ import {
 } from "@ds/schemas";
 
 import { AuthShell } from "@/components/auth-shell";
-import { BotProtectionField } from "@/components/bot-protection";
-import { IdentifierField, OtpField, PasswordField } from "@ds/design-system/fields";
+import {
+  BotProtectionField,
+  botProtectionFailureMessage,
+  isBotProtectionRejected,
+  isBotProtectionRequired,
+  useBotProtectedAction,
+} from "@/components/bot-protection";
+import {
+  IdentifierField,
+  OtpField,
+  PasswordField,
+} from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
 import { refreshHeaderAuth } from "@/lib/header-auth";
@@ -68,8 +78,24 @@ export default function ResetPage() {
   const te = useTranslations("errors");
   const [stage, setStage] = useState<"request" | "complete">("request");
   const [identifier, setIdentifier] = useState("");
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
+  const captcha = useBotProtectedAction({
+    onVerified: () => setCaptchaError(null),
+    onChallengeError: (failure) =>
+      setCaptchaError(botProtectionFailureMessage(failure, te)),
+    onActionError: (err) => {
+      if (isBotProtectionRejected(err)) {
+        setCaptchaError(te("captchaRejected"));
+        return;
+      }
+      if (isBotProtectionRequired(err)) {
+        setCaptchaError(te("captchaRequired"));
+        return;
+      }
+      setError(authErrorMessage(err, te, te("resetRequestFailed")));
+    },
+  });
 
   // #196: validate the identifier with the union guard (email OR E.164 phone), NOT
   // the loose `PasswordResetRequestSchema` (which stays `identifier:
@@ -84,9 +110,9 @@ export default function ResetPage() {
     defaultValues: { identifier: "" },
   });
 
-  async function onRequest(values: PasswordResetRequest) {
+  function onRequest(values: PasswordResetRequest) {
     setError(null);
-    try {
+    captcha.request(async (captchaToken) => {
       await authClient.requestPasswordReset({
         ...values,
         ...(captchaToken ? { captchaToken } : {}),
@@ -103,9 +129,7 @@ export default function ResetPage() {
       // is the same fix /login uses for its OTP verify step.
       setIdentifier(values.identifier);
       setStage("complete");
-    } catch (err) {
-      setError(authErrorMessage(err, te, te("resetRequestFailed")));
-    }
+    });
   }
 
   return (
@@ -160,12 +184,12 @@ export default function ResetPage() {
                   />
                 )}
               />
-              <BotProtectionField onToken={setCaptchaToken} />
-              <FormError>{error}</FormError>
+              <BotProtectionField {...captcha.fieldProps} />
+              <FormError>{captchaError ?? error}</FormError>
               <Button
                 type="submit"
                 className="w-full"
-                loading={requestForm.formState.isSubmitting}
+                loading={requestForm.formState.isSubmitting || captcha.pending}
                 data-testid="reset-request-submit"
               >
                 {t("sendResetCode")}
@@ -179,7 +203,7 @@ export default function ResetPage() {
               // «Начать заново»: return to the request stage so the user can change
               // the identifier (e.g. mistyped email/phone) and request a fresh code.
               setError(null);
-              setCaptchaToken(null);
+              setCaptchaError(null);
               setIdentifier("");
               requestForm.reset({ identifier: "" });
               setStage("request");
@@ -213,6 +237,8 @@ function ResetCompleteForm({
   const tc = useTranslations("common");
   const te = useTranslations("errors");
   const [error, setError] = useState<string | null>(null);
+  const [resendError, setResendError] = useState<string | null>(null);
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
   // #326: neutral, enumeration-safe resend acknowledgement. The on-screen response is
   // generic and IDENTICAL whether or not an account exists for the identifier — the
   // "account exists" fact is disclosed out-of-band by email, never on-screen (OWASP
@@ -221,13 +247,13 @@ function ResetCompleteForm({
   // endpoint and sends no additional notice email. Fixes the "dead button" — the
   // resend re-armed the cooldown but acknowledged nothing on success.
   const [notice, setNotice] = useState<string | null>(null);
-  // The resend re-hits `POST /v1/auth/password/reset`, which is
-  // `@BotProtected("password-reset")` (EARS-17) — so the resend needs its own
-  // captcha token (the request step's token lives in the parent and is not
-  // carried here). Renders nothing when no provider is configured (dev default).
-  const [resendCaptchaToken, setResendCaptchaToken] = useState<string | null>(
-    null,
-  );
+  const captcha = useBotProtectedAction({
+    onVerified: () => setCaptchaError(null),
+    onChallengeError: (failure) =>
+      setCaptchaError(botProtectionFailureMessage(failure, te)),
+    onActionError: (err) =>
+      setResendError(authErrorMessage(err, te, te("resetResendFailed"))),
+  });
 
   // #200: resolve the complete step from the portal `ResetCompleteFormSchema` (field
   // primitives), NOT `PasswordResetCompleteRequestSchema`. The request schema's
@@ -248,27 +274,40 @@ function ResetCompleteForm({
   // whether the identifier exists, so resend leaks nothing. Bumping the nonce
   // restarts the shared cooldown timer + clears the now-stale typed code.
   const { resendNonce, onResend } = useResendCooldown({
-    resend: async () => {
+    resend: async (captchaToken) => {
       await authClient.requestPasswordReset({
         identifier,
-        ...(resendCaptchaToken ? { captchaToken: resendCaptchaToken } : {}),
+        ...(captchaToken ? { captchaToken } : {}),
       });
     },
-    onError: (err) =>
-      setError(authErrorMessage(err, te, te("resetResendFailed"))),
-    // Clear BOTH channels before a fresh attempt so neither a prior error nor a stale
-    // confirmation lingers across the next resend (#326).
+    onError: (err) => {
+      if (isBotProtectionRejected(err)) {
+        setCaptchaError(te("captchaRejected"));
+        return;
+      }
+      if (isBotProtectionRequired(err)) {
+        setCaptchaError(te("captchaRequired"));
+        return;
+      }
+      setResendError(authErrorMessage(err, te, te("resetResendFailed")));
+    },
+    // Clear only resend-owned state; reset-completion feedback is unrelated.
     onBeforeResend: () => {
-      setError(null);
+      setResendError(null);
       setNotice(null);
     },
     // #326: neutral confirmation, conditionally phrased so it discloses nothing about
     // account existence (identical for every visitor). The masked destination reuses
     // the same `maskDestination` helper the card description shows.
     onSuccess: () =>
-      setNotice(t("resendAcknowledged", { identifier: maskDestination(identifier) })),
+      setNotice(
+        t("resendAcknowledged", { identifier: maskDestination(identifier) }),
+      ),
   });
-  const remaining = useResendCountdown(RESET_RESEND_COOLDOWN_SECONDS, resendNonce);
+  const remaining = useResendCountdown(
+    RESET_RESEND_COOLDOWN_SECONDS,
+    resendNonce,
+  );
   const resendDisabled = remaining > 0;
 
   // On a successful resend clear the superseded code (the new password is kept — the
@@ -280,7 +319,6 @@ function ResetCompleteForm({
       return;
     }
     completeForm.resetField("code");
-
   }, [resendNonce]);
 
   async function onComplete(values: PasswordResetCompleteRequest) {
@@ -350,9 +388,8 @@ function ResetCompleteForm({
           change-method/resend pairing, kept inline because the reset step submits
           the code together with a new password. */}
       <div className="mt-6 space-y-3 border-t pt-4">
-        {/* EARS-17 bot-protection for the resend (renders nothing when no provider
-            is configured — the dev default). */}
-        <BotProtectionField onToken={setResendCaptchaToken} />
+        <BotProtectionField {...captcha.fieldProps} />
+        <FormError>{captchaError ?? resendError}</FormError>
         <div className="flex items-center justify-between gap-2">
           <Button
             type="button"
@@ -370,8 +407,9 @@ function ResetCompleteForm({
             type="button"
             variant="link"
             size="sm"
-            disabled={resendDisabled}
-            onClick={() => void onResend()}
+            disabled={resendDisabled || captcha.pending}
+            loading={captcha.pending}
+            onClick={() => captcha.request(onResend)}
             data-testid="reset-resend"
             // `tabular-nums` — fixed-width digits so the countdown does not jitter
             // (#227/#267 owner finding). `min-w-0` + `whitespace-normal` override the

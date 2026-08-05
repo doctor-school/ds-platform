@@ -1,6 +1,8 @@
 "use client";
 
+import { BotProtectionErrorCodes } from "@ds/schemas";
 import type {
+  BotProtectionErrorCode,
   LoginRequest,
   LoginResponse,
   LogoutResponse,
@@ -46,6 +48,7 @@ export class AuthError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly code?: BotProtectionErrorCode,
   ) {
     super(message);
     this.name = "AuthError";
@@ -64,21 +67,34 @@ async function post<TReq, TRes>(path: string, body: TReq): Promise<TRes> {
     credentials: "include",
   });
   if (!res.ok) {
-    throw new AuthError(res.status, await safeMessage(res));
+    const error = await safeError(res);
+    throw new AuthError(res.status, error.message, error.code);
   }
   // Some endpoints (logout/refresh) carry only a status; all are JSON.
   return (await res.json()) as TRes;
 }
 
 /** Best-effort generic message extraction; never discloses the BFF's internals. */
-async function safeMessage(res: Response): Promise<string> {
+async function safeError(res: Response): Promise<{
+  message: string;
+  code?: BotProtectionErrorCode;
+}> {
   try {
-    const data = (await res.json()) as { message?: unknown };
-    if (typeof data.message === "string") return data.message;
+    const data = (await res.json()) as { message?: unknown; code?: unknown };
+    return {
+      message:
+        typeof data.message === "string"
+          ? data.message
+          : `request failed (${res.status})`,
+      ...(data.code === BotProtectionErrorCodes.required ||
+      data.code === BotProtectionErrorCodes.rejected
+        ? { code: data.code }
+        : {}),
+    };
   } catch {
     // Non-JSON / empty body — fall through to the generic text.
   }
-  return `request failed (${res.status})`;
+  return { message: `request failed (${res.status})` };
 }
 
 export const authClient = {
@@ -133,7 +149,10 @@ export const authClient = {
       headers: { accept: "application/json" },
     });
     if (res.status === 401) return null;
-    if (!res.ok) throw new AuthError(res.status, await safeMessage(res));
+    if (!res.ok) {
+      const error = await safeError(res);
+      throw new AuthError(res.status, error.message, error.code);
+    }
     return (await res.json()) as SessionClaims;
   },
 };

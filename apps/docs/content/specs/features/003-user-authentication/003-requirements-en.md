@@ -27,6 +27,7 @@ issues:
     1047,
     1068,
     1131,
+    1184,
   ]
 prior_decisions:
   - ADR-0001 — Identity / Auth / RBAC (IdP = Zitadel; §1 hybrid RBAC, §3 dual identifiers, §4 auth methods, §6 tokens, §7 security baseline, §7.3 audit)
@@ -174,7 +175,7 @@ The auth vertical is the platform's first real aggregate cluster (unlike the que
 - **EARS-14:** While issuing SMS (verification or login OTP), the system shall enforce per-phone (3/h), per-IP (10/h), per-ASN (100/h) limits and a global daily SMS-budget circuit-breaker (≤ 2000/day), refusing further sends when any threshold is exceeded.
 - **EARS-15:** When a user reaches 10 failed password attempts within 30 min, the system shall soft-lock the account (native Zitadel lockout policy) and send a notification email; the account unlocks per policy.
 - **EARS-16:** The system shall return idempotent, enumeration-resistant responses on register / login / reset with a timing delta ≤ 50 ms between the existing-account and unknown-account paths (ADR-0001 §7).
-- **EARS-17:** When a request originates from an unauthenticated abuse-prone surface (registration, password reset, or login after N failures), the system shall require a valid bot-protection token — verified through the `BotProtection` provider interface (Yandex SmartCaptcha is the v1 adapter) — before processing.
+- **EARS-17:** When a visitor initiates an abuse-prone unauthenticated action, the portal shall execute Yandex SmartCaptcha through the provider's native **invisible, on-demand** flow and shall resume the pending action exactly once with a **fresh, single-use** token; no permanent checkbox shall occupy an auth form, and provider challenge UI shall appear only when Yandex requires it. Registration, an initial email/SMS login-code request, an initial password-reset request, and **every** verification/login/reset resend are protected this way. Password login shall start without CAPTCHA; only the stable backend `BOT_PROTECTION_REQUIRED` outcome after the failed-login threshold shall execute a fresh challenge and retry the original login values exactly once. Email-verification-code confirmation, login-OTP confirmation, and password-reset completion shall never request CAPTCHA. The widget shall use the portal's resolved light/dark theme initially and follow live theme changes. Every expiry, rejection, script/network failure, or dismissed incomplete challenge shall terminate and reset that attempt, preserve entered form data, and show truthful localized CAPTCHA-specific feedback; a successful later solve shall clear only that feedback, and neither a token nor a provider callback may replay an action.
 - **EARS-18:** The system shall append every auth event — `auth.{register, account.verified, login.succeeded, login.failed, logout, token.refresh, token.reuse_detected, password.reset.requested, password.reset.completed, otp.sent, otp.verified, otp.failed, lockout, consent.captured}` — to `audit_ledger` (ADR-0003 §6) with PD masked.
 - **EARS-19:** When Zitadel emits a user create/update Action webhook, the system shall upsert the corresponding `UserMirror` row, ensure the `doctor_guest` role grant, and reconcile divergence on a periodic sweep (eventual consistency, ADR-0001 Consequences).
 - **EARS-20:** When a registration is processed, the system shall record the registrant's accepted per-purpose consent versions (ADR-0009) and shall refuse to activate the PD-bearing mirror row if consent is absent.
@@ -231,7 +232,7 @@ The auth vertical is the platform's first real aggregate cluster (unlike the que
 | 13,16 | Vitest e2e + unit | `apps/api/test/auth/abuse-limits.e2e-spec.ts` | Rate-limit thresholds; timing-delta assertion for enumeration. |
 | 14 | Vitest unit | `apps/api/src/auth/sms-budget.spec.ts` | Per-phone/IP/ASN counters + daily circuit-breaker (mocked clock + SMS client). |
 | 15 | Vitest e2e | `apps/api/test/auth/lockout.e2e-spec.ts` | 10 fails → lock + notification email (Mailpit assertion in dev-stand). |
-| 17 | Vitest unit | `apps/api/src/auth/captcha.guard.spec.ts` | Missing/invalid SmartCaptcha token → rejected. |
+| 17 | Vitest unit + portal integration | `apps/api/src/bot-protection/bot-protection.guard.spec.ts`, `apps/api/src/auth/login-challenge/login-challenge.guard.spec.ts`, `apps/portal/components/bot-protection/smart-captcha.test.tsx`, `apps/portal/lib/auth-client.test.ts`, auth page tests | Pins stable `BOT_PROTECTION_REQUIRED` / `BOT_PROTECTION_REJECTED` outcomes; provider-native invisible execution; initial + live portal theme; truthful terminal provider errors; fresh-token, resume-once behavior on register / OTP request / reset and every resend; conditional password-login retry; no challenge on code confirmation or reset completion. #1184. |
 | 18 | Vitest unit | `apps/api/src/auth/audit.spec.ts` | Each command emits exactly one `audit_ledger` entry; PD masked. |
 | 19 | Vitest e2e | `apps/api/test/auth/mirror-sync.e2e-spec.ts` | Webhook upsert + role grant; reconciliation sweep closes injected divergence. |
 | 20 | Vitest e2e | `apps/api/test/auth/consent.e2e-spec.ts` | Registration without consent refused; with consent → versions recorded. |

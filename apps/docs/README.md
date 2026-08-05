@@ -29,7 +29,7 @@ pnpm --filter @ds/docs dev        # next dev --webpack
 pnpm --filter @ds/docs build      # next build --webpack
 pnpm --filter @ds/docs start      # next start
 pnpm --filter @ds/docs typecheck  # tsc --noEmit
-pnpm --filter @ds/docs lint       # next lint
+pnpm --filter @ds/docs lint       # eslint .
 ```
 
 `postinstall` runs `fumadocs-mdx` to generate the MDX source index.

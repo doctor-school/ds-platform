@@ -24,7 +24,7 @@ pnpm --filter @ds/docs-cms dev        # next dev -p 3001
 pnpm --filter @ds/docs-cms build      # next build
 pnpm --filter @ds/docs-cms start      # next start -p 3001
 pnpm --filter @ds/docs-cms typecheck  # tsc --noEmit
-pnpm --filter @ds/docs-cms lint       # next lint
+pnpm --filter @ds/docs-cms lint       # eslint .
 ```
 
 ## Owning ADR

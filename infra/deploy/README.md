@@ -420,10 +420,12 @@ door.
 The webinars wave-1 increment onto the already-live 003 stand: admin app
 (`admin.doctor.school`), Centrifugo room chat, S3 `uploads` bucket, prod
 SmartCaptcha (#186). The repo payload (compose/Caddy/Terraform/env templates) is
-apply-ready; the steps below are the **one-time** wave-1 provisioning — after
+apply-ready; the steps below cover **initial provisioning or recovery** — after
 them, `pnpm deploy:prod` covers steady-state redeploys (it already builds every
 `build:` service, admin included, and the migrate step picks up the wave-1
-events/rooms migrations like any other).
+events/rooms migrations like any other). Out-of-band provider resources and
+on-box values still have to satisfy the invariants below before each affected
+image build.
 
 > Steps marked **[OWNER-GATED]** are irreversible/paid provider actions or
 > product-owner calls — they need an explicit owner "go" (AGENTS.md §6,
@@ -452,19 +454,31 @@ events/rooms migrations like any other).
    Caddy auto-issues the cert on first request once the record resolves — no
    manual cert step.
 
-3. **[OWNER-GATED] SmartCaptcha keypair (#186).** In the Yandex Cloud console,
-   create a prod SmartCaptcha with **allowed domains = `academy.doctor.school`**
-   (the widget renders on the portal registration surface). Keep
-   `app.doctor.school` in the allowed list while the legacy host still resolves
-   (#1171) — the console list is out-of-band state, so adding `academy.` there
-   is a prerequisite of the cutover, not a consequence of it. Capture the pair:
-   the **site key** (public, build-time) and the **server key** (secret).
-   This step precedes the image builds on purpose — the site key is baked into
-   the portal bundle at `next build` (a portal image built before the key
-   exists must be rebuilt).
+3. **SmartCaptcha production invariant (#186).** Use the dedicated Yandex Cloud
+   resource `ds-platform-prod`; never reuse the localhost-only dev keypair.
+   Keep domain validation **ON** and allow `academy.doctor.school` (the portal
+   auth surface) plus `app.doctor.school` while the legacy host still resolves
+   (#1171). Creating or replacing the provider resource is **[OWNER-GATED]**;
+   capture its **site key** (public, build-time) and **server key** (secret), but
+   never print or copy the server key into a repo file, command transcript, or
+   issue/PR.
 
-4. **Extend the on-box env (out-of-band, root:root 0600).** On api-prod, add to
-   `/etc/ds-platform/api.env` the wave-1 blocks from `api.env.example`:
+   Before an image build that activates or revalidates bot protection, confirm
+   the on-box state without printing either value:
+
+   ```bash
+   test "$(sudo grep -c '^BOT_PROTECTION_ENABLED=true$' /etc/ds-platform/api.env)" -eq 1
+   test "$(sudo grep -c '^SMARTCAPTCHA_SERVER_KEY=ysc2_' /etc/ds-platform/api.env)" -eq 1
+   test "$(grep -c '^SMARTCAPTCHA_SITE_KEY=ysc1_' ~/ds-platform/infra/deploy/compose/api-prod/.env)" -eq 1
+   ```
+
+   The site key is baked into the portal bundle at `next build`, so a portal
+   image built before the binding exists must be rebuilt even when the source
+   SHA is unchanged.
+
+4. **Converge the on-box env (out-of-band, root:root 0600).** On api-prod,
+   ensure `/etc/ds-platform/api.env` contains the wave-1 blocks from
+   `api.env.example`:
    - the Centrifugo triple (`CENTRIFUGO_URL=https://api.doctor.school`,
      `CENTRIFUGO_API_KEY`, `CENTRIFUGO_TOKEN_HMAC_SECRET` — `openssl rand -hex 32`
      each) **plus** their Centrifugo-native duplicates
@@ -475,10 +489,11 @@ events/rooms migrations like any other).
    - `BOT_PROTECTION_ENABLED=true` + `SMARTCAPTCHA_SERVER_KEY` from step 3.
 
    And in the **non-secret** `.env` beside `compose/api-prod/compose.yml` (the
-   `DEPLOY_SHA` interpolation file), add the build-time site key:
+   `DEPLOY_SHA` interpolation file), ensure there is exactly one build-time site
+   key entry, preserving every other line:
 
-   ```bash
-   echo "SMARTCAPTCHA_SITE_KEY=<site-key-from-step-3>" >> ~/ds-platform/infra/deploy/compose/api-prod/.env
+   ```dotenv
+   SMARTCAPTCHA_SITE_KEY=<site-key-from-step-3>
    ```
 
 5. **Ship source + build images.** Ship the merged `origin/main` tree to the

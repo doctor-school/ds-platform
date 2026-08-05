@@ -46,6 +46,7 @@ describe("SmartCaptcha provider adapter", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     cleanup();
     document.documentElement.classList.remove("dark");
     delete captchaWindow.smartCaptcha;
@@ -104,6 +105,31 @@ describe("SmartCaptcha provider adapter", () => {
         line: 0,
       }),
     );
+    expect(onError).toHaveBeenCalledWith("unavailable");
+  });
+
+  it("EARS-17: reports a provider bootstrap that stalls without emitting an error", async () => {
+    vi.useFakeTimers();
+    const onError = vi.fn();
+
+    render(
+      <SmartCaptcha
+        sitekey="client-key"
+        active
+        onToken={vi.fn()}
+        onError={onError}
+      />,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(renderWidget).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(onError).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledWith("unavailable");
   });
 });

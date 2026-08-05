@@ -39,6 +39,8 @@ export interface SmartCaptchaProps {
   hl?: InvisibleSmartCaptchaProps["language"];
 }
 
+const PROVIDER_BOOTSTRAP_TIMEOUT_MS = 10_000;
+
 /**
  * Thin EARS-17 adapter over Yandex's official MIT React package.
  *
@@ -56,10 +58,29 @@ export function SmartCaptcha({
 }: SmartCaptchaProps) {
   const theme = useSyncExternalStore(subscribeToTheme, readTheme, serverTheme);
   const solved = useRef(false);
+  const challengeVisible = useRef(false);
+  const providerSettled = useRef(false);
 
   useEffect(() => {
-    if (active) solved.current = false;
-  }, [active]);
+    if (!active) {
+      providerSettled.current = true;
+      challengeVisible.current = false;
+      return;
+    }
+
+    solved.current = false;
+    challengeVisible.current = false;
+    providerSettled.current = false;
+
+    const bootstrapTimeout = window.setTimeout(() => {
+      if (!providerSettled.current && !challengeVisible.current) {
+        providerSettled.current = true;
+        onError("unavailable");
+      }
+    }, PROVIDER_BOOTSTRAP_TIMEOUT_MS);
+
+    return () => window.clearTimeout(bootstrapTimeout);
+  }, [active, onError]);
 
   return (
     <InvisibleSmartCaptcha
@@ -69,16 +90,34 @@ export function SmartCaptcha({
       theme={theme}
       onSuccess={(token) => {
         solved.current = true;
+        providerSettled.current = true;
         onToken(token);
       }}
-      onTokenExpired={() => onError("expired")}
-      onNetworkError={() => onError("unavailable")}
-      onJavascriptError={() => onError("unavailable")}
+      onTokenExpired={() => {
+        providerSettled.current = true;
+        onError("expired");
+      }}
+      onNetworkError={() => {
+        providerSettled.current = true;
+        onError("unavailable");
+      }}
+      onJavascriptError={() => {
+        providerSettled.current = true;
+        onError("unavailable");
+      }}
+      onChallengeVisible={() => {
+        // A person may legitimately need longer than the bootstrap timeout to
+        // solve the provider challenge. Once it is visible, never time them out.
+        challengeVisible.current = true;
+      }}
       onChallengeHidden={() => {
         // Yandex also hides the challenge after success. Defer one microtask so
         // the success callback wins regardless of provider event ordering.
         queueMicrotask(() => {
-          if (active && !solved.current) onError("incomplete");
+          if (active && !solved.current) {
+            providerSettled.current = true;
+            onError("incomplete");
+          }
         });
       }}
     />

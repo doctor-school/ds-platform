@@ -531,15 +531,21 @@ previous="$work/previous"
 preserved_rel="infra/deploy/compose/api-prod/.env"
 swapping=0
 restore_live() {
-  status=$?
+  status="$1"
   trap - EXIT HUP INT TERM
   if [ "$swapping" -eq 1 ] && [ ! -e "$live" ] && [ -e "$previous" ]; then
-    mv "$previous" "$live" || true
+    if ! mv "$previous" "$live"; then
+      printf 'EMERGENCY: previous deploy tree remains recoverable at %s\\n' "$previous" >&2
+      exit "$status"
+    fi
   fi
   rm -rf "$work"
   exit "$status"
 }
-trap restore_live EXIT HUP INT TERM
+trap 'restore_live $?' EXIT
+trap 'restore_live 129' HUP
+trap 'restore_live 130' INT
+trap 'restore_live 143' TERM
 
 mkdir -p "$stage"
 tar xzf - --strip-components=1 -C "$stage"

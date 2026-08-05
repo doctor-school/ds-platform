@@ -518,8 +518,52 @@ done`,
   ok(`api + portal + admin RUN ds-*:${sha.slice(0, 12)} and are healthy`);
 }
 
-// Ship the committed tree to a box: git archive <sha> | ssh box 'rm -rf && tar x'.
+// Ship the committed tree to a box through a sibling staging directory. The
+// committed archive is extracted completely before the live tree is swapped,
+// carrying forward only the documented api-prod compose interpolation file.
 // Streams are piped in-process (Windows-safe — no shell pipe / redirection).
+export function shipTreeCommand() {
+  return `set -eu
+live="$HOME/ds-platform"
+work=$(mktemp -d "$HOME/ds-platform.ship.XXXXXX")
+stage="$work/stage"
+previous="$work/previous"
+preserved_rel="infra/deploy/compose/api-prod/.env"
+swapping=0
+restore_live() {
+  status="$1"
+  trap - EXIT HUP INT TERM
+  if [ "$swapping" -eq 1 ] && [ ! -e "$live" ] && [ -e "$previous" ]; then
+    if ! mv "$previous" "$live"; then
+      printf 'EMERGENCY: previous deploy tree remains recoverable at %s\\n' "$previous" >&2
+      exit "$status"
+    fi
+  fi
+  rm -rf "$work"
+  exit "$status"
+}
+trap 'restore_live $?' EXIT
+trap 'restore_live 129' HUP
+trap 'restore_live 130' INT
+trap 'restore_live 143' TERM
+
+mkdir -p "$stage"
+tar xzf - --strip-components=1 -C "$stage"
+if [ -f "$live/$preserved_rel" ]; then
+  mkdir -p "$stage/infra/deploy/compose/api-prod"
+  cp -p "$live/$preserved_rel" "$stage/$preserved_rel"
+fi
+
+if [ -e "$live" ]; then
+  swapping=1
+  mv "$live" "$previous"
+fi
+mv "$stage" "$live"
+swapping=0
+rm -rf "$work"
+trap - EXIT HUP INT TERM`;
+}
+
 async function shipTree(sha, host) {
   const tmp = join(tmpdir(), `ds-deploy-${sha.slice(0, 12)}.tar.gz`);
   await new Promise((resolve, reject) => {
@@ -538,14 +582,9 @@ async function shipTree(sha, host) {
   });
   try {
     await new Promise((resolve, reject) => {
-      const child = spawn(
-        "ssh",
-        [
-          ...sshBaseArgs(host),
-          `rm -rf ${REMOTE_TREE} && mkdir -p ~ && tar xzf - -C ~`,
-        ],
-        { stdio: ["pipe", "inherit", "inherit"] },
-      );
+      const child = spawn("ssh", [...sshBaseArgs(host), shipTreeCommand()], {
+        stdio: ["pipe", "inherit", "inherit"],
+      });
       child.on("error", reject);
       child.on("close", (c) =>
         c === 0 ? resolve() : reject(new Error(`tar x on ${host} exited ${c}`)),

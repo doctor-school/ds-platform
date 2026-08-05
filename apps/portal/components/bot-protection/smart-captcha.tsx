@@ -88,6 +88,7 @@ export function SmartCaptcha({
       language={hl}
       visible={active}
       theme={theme}
+      hideShield={true}
       onSuccess={(token) => {
         solved.current = true;
         providerSettled.current = true;

@@ -16,7 +16,10 @@
     "eyebrow": "Врачи учат врачей",
     "headline": "Медицинское образование для врачей",
     "subcopy": "Учебные программы и сертификация от ведущих экспертов отрасли — в едином пространстве Doctor.School.",
-    "footer": "© Doctor.School. Платформа непрерывного медицинского образования."
+    "footer": "© Doctor.School. Платформа непрерывного медицинского образования.",
+    "captchaDisclosure": "Форма защищена Yandex SmartCaptcha.",
+    "captchaDisclosureLink": "Условия обработки данных.",
+    "captchaDisclosureLinkLabel": "Условия обработки данных Yandex SmartCaptcha (откроются в новой вкладке)"
   },
   "register": {
     "title": "Создание аккаунта",

@@ -27,7 +27,15 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("next-intl", () => ({
-  useTranslations: () => (key: string) => key,
+  useTranslations: () => (key: string) => {
+    const copy: Record<string, string> = {
+      captchaDisclosure: "Форма защищена Yandex SmartCaptcha.",
+      captchaDisclosureLink: "Условия обработки данных.",
+      captchaDisclosureLinkLabel:
+        "Условия обработки данных Yandex SmartCaptcha (откроются в новой вкладке)",
+    };
+    return copy[key] ?? key;
+  },
 }));
 
 const session = vi.fn();
@@ -40,12 +48,20 @@ vi.mock("@/lib/auth-client", () => ({
 beforeEach(() => {
   replace.mockClear();
   session.mockReset();
+  vi.stubEnv("NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY", "");
 });
-afterEach(cleanup);
+afterEach(() => {
+  vi.unstubAllEnvs();
+  cleanup();
+});
 
 describe("#675 AuthShell auth-surface guard", () => {
   it("redirects an authenticated visitor to /account and renders no auth form", async () => {
-    session.mockResolvedValue({ sub: "u1", roles: ["doctor_guest"], mfa: false });
+    session.mockResolvedValue({
+      sub: "u1",
+      roles: ["doctor_guest"],
+      mfa: false,
+    });
 
     render(
       <AuthShell>
@@ -75,7 +91,11 @@ describe("#675 AuthShell auth-surface guard", () => {
   it("EARS-28: allowAuthenticated (the /reset exemption) renders the form for an AUTHENTICATED visitor and never redirects", async () => {
     // Even with a live session, the exempted surface renders immediately — the
     // /account «Сменить пароль» handoff must not dead-end back to /account.
-    session.mockResolvedValue({ sub: "u1", roles: ["doctor_guest"], mfa: false });
+    session.mockResolvedValue({
+      sub: "u1",
+      roles: ["doctor_guest"],
+      mfa: false,
+    });
 
     render(
       <AuthShell allowAuthenticated>
@@ -87,5 +107,54 @@ describe("#675 AuthShell auth-surface guard", () => {
     expect(replace).not.toHaveBeenCalled();
     // Guard disabled ⇒ no session read is even issued for the exempted surface.
     expect(session).not.toHaveBeenCalled();
+  });
+});
+
+describe("EARS-17 AuthShell SmartCaptcha processing disclosure", () => {
+  it.each(["login", "register", "verify", "reset"])(
+    "renders one localized notice below the %s AuthCard when SmartCaptcha is configured",
+    async (surface) => {
+      vi.stubEnv("NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY", "configured-client-key");
+      session.mockResolvedValue(null);
+
+      render(
+        <AuthShell>
+          <div data-testid={`${surface}-auth-card`}>{surface}</div>
+        </AuthShell>,
+      );
+
+      await screen.findByTestId(`${surface}-auth-card`);
+      const notices = screen.getAllByTestId("smartcaptcha-disclosure");
+      expect(notices).toHaveLength(1);
+      expect(notices[0]).toBeVisible();
+      expect(notices[0]).toHaveTextContent(
+        "Форма защищена Yandex SmartCaptcha. Условия обработки данных.",
+      );
+
+      const noticeLink = screen.getByRole("link", {
+        name: "Условия обработки данных Yandex SmartCaptcha (откроются в новой вкладке)",
+      });
+      expect(noticeLink).toHaveAttribute(
+        "href",
+        "https://yandex.com/legal/smartcaptcha_notice/",
+      );
+      expect(noticeLink).toHaveAttribute("target", "_blank");
+      expect(noticeLink).toHaveAttribute("rel", "noopener noreferrer");
+    },
+  );
+
+  it("renders no processing notice when SmartCaptcha is not configured", async () => {
+    session.mockResolvedValue(null);
+
+    render(
+      <AuthShell>
+        <div data-testid="auth-form">form</div>
+      </AuthShell>,
+    );
+
+    await screen.findByTestId("auth-form");
+    expect(
+      screen.queryByTestId("smartcaptcha-disclosure"),
+    ).not.toBeInTheDocument();
   });
 });

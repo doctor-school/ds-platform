@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useTranslations } from "next-intl";
 
 import { AuthLayout } from "@ds/design-system/blocks";
+import { Link as DsLink } from "@ds/design-system/link";
 
 import { useRedirectIfAuthenticated } from "@/lib/use-redirect-if-authenticated";
 
@@ -46,6 +47,9 @@ export function AuthShell({
   allowAuthenticated?: boolean;
 }) {
   const t = useTranslations("brand");
+  const smartCaptchaConfigured = Boolean(
+    process.env.NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY,
+  );
   // #675: an already-authenticated visitor is redirected to `/account` and NO auth
   // chrome is rendered. While the session check is pending — and once it resolves to
   // an authenticated principal — the shell renders nothing (both hooks above run
@@ -104,11 +108,30 @@ export function AuthShell({
               {t("subcopy")}
             </p>
           </div>
-          <p className="text-sm font-semibold text-primary-surface-muted">{t("footer")}</p>
+          <p className="text-sm font-semibold text-primary-surface-muted">
+            {t("footer")}
+          </p>
         </>
       }
     >
       {children}
+      {smartCaptchaConfigured ? (
+        <p
+          className="mt-3 text-center text-xs text-muted-foreground"
+          data-testid="smartcaptcha-disclosure"
+        >
+          {t("captchaDisclosure")}{" "}
+          <DsLink
+            href="https://yandex.com/legal/smartcaptcha_notice/"
+            variant="inline"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={t("captchaDisclosureLinkLabel")}
+          >
+            {t("captchaDisclosureLink")}
+          </DsLink>
+        </p>
+      ) : null}
     </AuthLayout>
   );
 }

@@ -68,6 +68,7 @@ describe("SmartCaptcha provider adapter", () => {
       expect.objectContaining({
         sitekey: "client-key",
         invisible: true,
+        hideShield: true,
         theme: "dark",
       }),
     );

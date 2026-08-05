@@ -107,8 +107,12 @@ Pipeline (`tools/deploy/prod.mjs`), fail-closed and stops at the first red step:
 1. **Pre-flight** — refuses a **dirty working tree**, a HEAD **≠ `origin/main`**,
    or a **red CI** for that SHA (latest check-run per name via `gh api
 …/commits/<sha>/check-runs`). The deployed commit is `origin/main`'s SHA.
-2. **Ship** — `git archive <sha>` streamed over SSH to **both** boxes
-   (`rm -rf ~/ds-platform && tar x`); no registry, no deploy key (README step 5).
+2. **Ship** — `git archive <sha>` streamed over SSH to a sibling staging tree on
+   **both** boxes; only after successful extraction does it replace
+   `~/ds-platform`. The gitignored api-prod compose `.env` (the non-secret
+   `DEPLOY_SHA` / `SMARTCAPTCHA_SITE_KEY` interpolation file) is the single
+   carried-forward file; other untracked files are not preserved. No registry,
+   no deploy key (README step 5).
 3. **data-prod** — `docker compose up -d --build` (idempotent). Builds run with
    **`BUILDX_NO_DEFAULT_ATTESTATIONS=1`** so an unchanged build yields a
    byte-identical image ID: a no-op redeploy is a **true no-op** and does NOT

@@ -468,9 +468,21 @@ image build.
 
    ```bash
    test "$(sudo grep -c '^BOT_PROTECTION_ENABLED=true$' /etc/ds-platform/api.env)" -eq 1
+   test "$(sudo grep -c '^SMARTCAPTCHA_SERVER_KEY=' /etc/ds-platform/api.env)" -eq 1
    test "$(sudo grep -c '^SMARTCAPTCHA_SERVER_KEY=ysc2_' /etc/ds-platform/api.env)" -eq 1
+   test "$(grep -c '^SMARTCAPTCHA_SITE_KEY=' ~/ds-platform/infra/deploy/compose/api-prod/.env)" -eq 1
    test "$(grep -c '^SMARTCAPTCHA_SITE_KEY=ysc1_' ~/ds-platform/infra/deploy/compose/api-prod/.env)" -eq 1
+
+   server_pair_id="$(sudo sed -n 's/^SMARTCAPTCHA_SERVER_KEY=ysc2_\([^[:space:]]\{20\}\).*/\1/p' /etc/ds-platform/api.env)"
+   site_pair_id="$(sed -n 's/^SMARTCAPTCHA_SITE_KEY=ysc1_\([^[:space:]]\{20\}\).*/\1/p' ~/ds-platform/infra/deploy/compose/api-prod/.env)"
+   test -n "$server_pair_id" && test "$server_pair_id" = "$site_pair_id"
+   unset server_pair_id site_pair_id
    ```
+
+   [Yandex defines](https://yandex.cloud/en/docs/smartcaptcha/concepts/keys)
+   those 20 characters after the `ysc1_` / `ysc2_` prefixes as the shared
+   keypair identifier; comparing only that identifier verifies the pair without
+   printing the server key.
 
    The site key is baked into the portal bundle at `next build`, so a portal
    image built before the binding exists must be rebuilt even when the source

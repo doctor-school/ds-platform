@@ -110,7 +110,7 @@ describe("#675 AuthShell auth-surface guard", () => {
   });
 });
 
-describe("EARS-17 AuthShell SmartCaptcha processing disclosure", () => {
+describe("EARS-17: AuthShell SmartCaptcha processing disclosure", () => {
   it.each(["login", "register", "verify", "reset"])(
     "renders one localized notice below the %s AuthCard when SmartCaptcha is configured",
     async (surface) => {

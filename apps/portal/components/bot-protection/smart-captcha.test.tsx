@@ -13,7 +13,10 @@ type CaptchaEvent =
 
 describe("SmartCaptcha provider adapter", () => {
   const captchaWindow = window as Window & { smartCaptcha?: unknown };
-  const subscriptions = new Map<CaptchaEvent, (...args: unknown[]) => void>();
+  const subscriptions = new Map<
+    number,
+    Map<CaptchaEvent, (...args: unknown[]) => void>
+  >();
   const renderWidget = vi.fn(() => 17);
   const execute = vi.fn();
   const setTheme = vi.fn();
@@ -21,7 +24,8 @@ describe("SmartCaptcha provider adapter", () => {
 
   beforeEach(() => {
     subscriptions.clear();
-    renderWidget.mockClear();
+    renderWidget.mockReset();
+    renderWidget.mockReturnValue(17);
     execute.mockClear();
     setTheme.mockClear();
     destroy.mockClear();
@@ -35,8 +39,12 @@ describe("SmartCaptcha provider adapter", () => {
       getResponse: vi.fn(),
       executePromise: vi.fn(),
       showError: vi.fn(),
-      subscribe: vi.fn((_, event, callback) => {
-        subscriptions.set(event as CaptchaEvent, callback);
+      subscribe: vi.fn((widgetId, event, callback) => {
+        const widgetSubscriptions =
+          subscriptions.get(widgetId) ??
+          new Map<CaptchaEvent, (...args: unknown[]) => void>();
+        widgetSubscriptions.set(event as CaptchaEvent, callback);
+        subscriptions.set(widgetId, widgetSubscriptions);
         return vi.fn();
       }),
       _origin: "",
@@ -52,13 +60,17 @@ describe("SmartCaptcha provider adapter", () => {
     delete captchaWindow.smartCaptcha;
   });
 
-  it("EARS-17: executes an invisible challenge on demand and follows the resolved portal theme live", async () => {
+  it("EARS-17: remounts the official widget for a new theme when its initial id is zero and resumes the action once", async () => {
+    renderWidget.mockReturnValueOnce(0).mockReturnValueOnce(1);
+    const onToken = vi.fn();
+    const onError = vi.fn();
+
     render(
       <SmartCaptcha
         sitekey="client-key"
         active
-        onToken={vi.fn()}
-        onError={vi.fn()}
+        onToken={onToken}
+        onError={onError}
       />,
     );
 
@@ -72,10 +84,38 @@ describe("SmartCaptcha provider adapter", () => {
         theme: "dark",
       }),
     );
-    await waitFor(() => expect(execute).toHaveBeenCalledWith(17));
+    await waitFor(() => expect(execute).toHaveBeenCalledWith(0));
+    await waitFor(() =>
+      expect(subscriptions.get(0)?.get("success")).toEqual(
+        expect.any(Function),
+      ),
+    );
+    const staleChallengeHidden = subscriptions.get(0)?.get("challenge-hidden");
+    const staleSuccess = subscriptions.get(0)?.get("success");
 
     act(() => document.documentElement.classList.remove("dark"));
-    await waitFor(() => expect(setTheme).toHaveBeenCalledWith(17, "light"));
+    await waitFor(() => expect(renderWidget).toHaveBeenCalledTimes(2));
+    expect(renderWidget).toHaveBeenNthCalledWith(
+      2,
+      expect.any(HTMLElement),
+      expect.objectContaining({ theme: "light" }),
+    );
+    expect(destroy).toHaveBeenCalledWith(0);
+    await waitFor(() => expect(execute).toHaveBeenCalledWith(1));
+
+    await act(async () => {
+      staleChallengeHidden?.();
+      await Promise.resolve();
+    });
+    expect(onError).not.toHaveBeenCalled();
+
+    act(() => staleSuccess?.("stale-token"));
+    expect(onToken).not.toHaveBeenCalled();
+
+    act(() => subscriptions.get(1)?.get("success")?.("fresh-token"));
+    expect(onToken).toHaveBeenCalledTimes(1);
+    expect(onToken).toHaveBeenCalledWith("fresh-token");
+    expect(onError).not.toHaveBeenCalled();
   });
 
   it("EARS-17: reports provider failures truthfully instead of converting them into an empty token", async () => {
@@ -91,15 +131,15 @@ describe("SmartCaptcha provider adapter", () => {
     );
     await waitFor(() => expect(renderWidget).toHaveBeenCalledTimes(1));
 
-    act(() => subscriptions.get("network-error")?.());
+    act(() => subscriptions.get(17)?.get("network-error")?.());
     expect(onError).toHaveBeenCalledWith("unavailable");
     expect(onToken).not.toHaveBeenCalled();
 
-    act(() => subscriptions.get("token-expired")?.());
+    act(() => subscriptions.get(17)?.get("token-expired")?.());
     expect(onError).toHaveBeenCalledWith("expired");
 
     act(() =>
-      subscriptions.get("javascript-error")?.({
+      subscriptions.get(17)?.get("javascript-error")?.({
         filename: "captcha.js",
         message: "load failed",
         col: 0,
@@ -132,5 +172,30 @@ describe("SmartCaptcha provider adapter", () => {
     });
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledWith("unavailable");
+  });
+
+  it("EARS-17: lets a visible human challenge outlive the provider bootstrap timeout", async () => {
+    vi.useFakeTimers();
+    const onError = vi.fn();
+
+    render(
+      <SmartCaptcha
+        sitekey="client-key"
+        active
+        onToken={vi.fn()}
+        onError={onError}
+      />,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(renderWidget).toHaveBeenCalledTimes(1);
+
+    act(() => subscriptions.get(17)?.get("challenge-visible")?.());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(onError).not.toHaveBeenCalled();
   });
 });

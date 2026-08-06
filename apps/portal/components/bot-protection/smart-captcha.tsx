@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
+} from "react";
 import {
   InvisibleSmartCaptcha,
   type InvisibleSmartCaptchaProps,
@@ -40,6 +45,54 @@ export interface SmartCaptchaProps {
 }
 
 const PROVIDER_BOOTSTRAP_TIMEOUT_MS = 10_000;
+
+/**
+ * Retires callbacks together with the keyed provider instance. Yandex's public
+ * destroy lifecycle may leave an already-queued callback behind; that retiring
+ * widget must not settle the protected action owned by its replacement.
+ */
+function ThemeBoundInvisibleSmartCaptcha({
+  onChallengeHidden,
+  onChallengeVisible,
+  onSuccess,
+  onNetworkError,
+  onTokenExpired,
+  onJavascriptError,
+  ...props
+}: InvisibleSmartCaptchaProps) {
+  const current = useRef(true);
+
+  useLayoutEffect(() => {
+    current.current = true;
+    return () => {
+      current.current = false;
+    };
+  }, []);
+
+  return (
+    <InvisibleSmartCaptcha
+      {...props}
+      onChallengeHidden={() => {
+        if (current.current) onChallengeHidden?.();
+      }}
+      onChallengeVisible={() => {
+        if (current.current) onChallengeVisible?.();
+      }}
+      onSuccess={(token) => {
+        if (current.current) onSuccess?.(token);
+      }}
+      onNetworkError={() => {
+        if (current.current) onNetworkError?.();
+      }}
+      onTokenExpired={() => {
+        if (current.current) onTokenExpired?.();
+      }}
+      onJavascriptError={(error) => {
+        if (current.current) onJavascriptError?.(error);
+      }}
+    />
+  );
+}
 
 /**
  * Thin EARS-17 adapter over Yandex's official MIT React package.
@@ -83,7 +136,8 @@ export function SmartCaptcha({
   }, [active, onError]);
 
   return (
-    <InvisibleSmartCaptcha
+    <ThemeBoundInvisibleSmartCaptcha
+      key={theme}
       sitekey={sitekey}
       language={hl}
       visible={active}

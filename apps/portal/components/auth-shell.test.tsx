@@ -140,6 +140,8 @@ describe("EARS-17 AuthShell SmartCaptcha processing disclosure", () => {
       );
       expect(noticeLink).toHaveAttribute("target", "_blank");
       expect(noticeLink).toHaveAttribute("rel", "noopener noreferrer");
+      expect(noticeLink).not.toHaveClass("underline");
+      expect(noticeLink).toHaveClass("hover:underline");
     },
   );
 

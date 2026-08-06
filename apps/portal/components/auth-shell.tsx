@@ -123,7 +123,7 @@ export function AuthShell({
           {t("captchaDisclosure")}{" "}
           <DsLink
             href="https://yandex.com/legal/smartcaptcha_notice/"
-            variant="inline"
+            variant="standalone"
             target="_blank"
             rel="noopener noreferrer"
             aria-label={t("captchaDisclosureLinkLabel")}

@@ -73,7 +73,9 @@ function ThemeBoundInvisibleSmartCaptcha({
     <InvisibleSmartCaptcha
       {...props}
       onChallengeHidden={() => {
-        if (current.current) onChallengeHidden?.();
+        queueMicrotask(() => {
+          if (current.current) onChallengeHidden?.();
+        });
       }}
       onChallengeVisible={() => {
         if (current.current) onChallengeVisible?.();
@@ -133,7 +135,7 @@ export function SmartCaptcha({
     }, PROVIDER_BOOTSTRAP_TIMEOUT_MS);
 
     return () => window.clearTimeout(bootstrapTimeout);
-  }, [active, onError]);
+  }, [active, onError, theme]);
 
   return (
     <ThemeBoundInvisibleSmartCaptcha
@@ -166,14 +168,12 @@ export function SmartCaptcha({
         challengeVisible.current = true;
       }}
       onChallengeHidden={() => {
-        // Yandex also hides the challenge after success. Defer one microtask so
-        // the success callback wins regardless of provider event ordering.
-        queueMicrotask(() => {
-          if (active && !solved.current) {
-            providerSettled.current = true;
-            onError("incomplete");
-          }
-        });
+        // The keyed child defers this callback so provider success wins and a
+        // retiring theme instance can invalidate its own queued event first.
+        if (active && !solved.current) {
+          providerSettled.current = true;
+          onError("incomplete");
+        }
       }}
     />
   );

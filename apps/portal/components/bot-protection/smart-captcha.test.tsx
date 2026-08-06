@@ -64,15 +64,16 @@ describe("SmartCaptcha provider adapter", () => {
     renderWidget.mockReturnValueOnce(0).mockReturnValueOnce(1);
     const onToken = vi.fn();
     const onError = vi.fn();
-
-    render(
+    const captcha = () => (
       <SmartCaptcha
         sitekey="client-key"
         active
         onToken={onToken}
         onError={onError}
-      />,
+      />
     );
+
+    const { rerender } = render(captcha());
 
     await waitFor(() => expect(renderWidget).toHaveBeenCalledTimes(1));
     expect(renderWidget).toHaveBeenCalledWith(
@@ -93,7 +94,11 @@ describe("SmartCaptcha provider adapter", () => {
     const staleChallengeHidden = subscriptions.get(0)?.get("challenge-hidden");
     const staleSuccess = subscriptions.get(0)?.get("success");
 
-    act(() => document.documentElement.classList.remove("dark"));
+    act(() => {
+      staleChallengeHidden?.();
+      document.documentElement.classList.remove("dark");
+    });
+    rerender(captcha());
     await waitFor(() => expect(renderWidget).toHaveBeenCalledTimes(2));
     expect(renderWidget).toHaveBeenNthCalledWith(
       2,
@@ -103,19 +108,58 @@ describe("SmartCaptcha provider adapter", () => {
     expect(destroy).toHaveBeenCalledWith(0);
     await waitFor(() => expect(execute).toHaveBeenCalledWith(1));
 
-    await act(async () => {
-      staleChallengeHidden?.();
-      await Promise.resolve();
-    });
+    await act(async () => Promise.resolve());
     expect(onError).not.toHaveBeenCalled();
 
     act(() => staleSuccess?.("stale-token"));
     expect(onToken).not.toHaveBeenCalled();
 
-    act(() => subscriptions.get(1)?.get("success")?.("fresh-token"));
+    await act(async () => {
+      subscriptions.get(1)?.get("challenge-hidden")?.();
+      subscriptions.get(1)?.get("success")?.("fresh-token");
+      await Promise.resolve();
+    });
     expect(onToken).toHaveBeenCalledTimes(1);
     expect(onToken).toHaveBeenCalledWith("fresh-token");
     expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("EARS-17: gives a stalled replacement widget its own bootstrap timeout after a visible predecessor", async () => {
+    vi.useFakeTimers();
+    renderWidget.mockReturnValueOnce(0).mockReturnValueOnce(1);
+    const onError = vi.fn();
+    const captcha = () => (
+      <SmartCaptcha
+        sitekey="client-key"
+        active
+        onToken={vi.fn()}
+        onError={onError}
+      />
+    );
+
+    const { rerender } = render(captcha());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(renderWidget).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledWith(0);
+
+    act(() => subscriptions.get(0)?.get("challenge-visible")?.());
+    document.documentElement.classList.remove("dark");
+    rerender(captcha());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(renderWidget).toHaveBeenCalledTimes(2);
+    expect(destroy).toHaveBeenCalledWith(0);
+    expect(execute).toHaveBeenCalledWith(1);
+    expect(onError).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith("unavailable");
   });
 
   it("EARS-17: reports provider failures truthfully instead of converting them into an empty token", async () => {

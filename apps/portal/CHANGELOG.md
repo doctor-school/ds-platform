@@ -1,5 +1,17 @@
 # @ds/portal
 
+## 0.17.0
+
+### Minor Changes
+
+- [#1179](https://github.com/doctor-school/ds-platform/pull/1179) [`ad8edb2`](https://github.com/doctor-school/ds-platform/commit/ad8edb2bd7e5a942c70f9c729f073032a2e97878) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Enable Yandex SmartCaptcha on the production authentication surfaces: the portal now renders the widget and the API validates its token on protected actions.
+
+### Patch Changes
+
+- [#1183](https://github.com/doctor-school/ds-platform/pull/1183) [`8a50824`](https://github.com/doctor-school/ds-platform/commit/8a5082410c6638411ec1a6d15a28af760aeb3e10) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Keep the production SmartCaptcha site key available when deploying a clean portal tree.
+
+- [#1187](https://github.com/doctor-school/ds-platform/pull/1187) [`2526447`](https://github.com/doctor-school/ds-platform/commit/25264470e8bf4d36c9522d9219842633ba655d48) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Run SmartCaptcha invisibly on demand, follow the portal theme, and show truthful retry feedback without repeating checks on code-confirmation steps.
+
 ## 0.16.1
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @ds/api
 
+## 0.23.0
+
+### Minor Changes
+
+- [#1179](https://github.com/doctor-school/ds-platform/pull/1179) [`ad8edb2`](https://github.com/doctor-school/ds-platform/commit/ad8edb2bd7e5a942c70f9c729f073032a2e97878) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Enable Yandex SmartCaptcha on the production authentication surfaces: the portal now renders the widget and the API validates its token on protected actions.
+
 ## 0.22.0
 
 ### Minor Changes

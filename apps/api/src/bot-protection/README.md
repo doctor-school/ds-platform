@@ -31,9 +31,12 @@ The guard pulls the widget token from the `x-smartcaptcha-token` header (or the
 `captchaToken` body field), reads the client IP, and delegates to the bound
 provider — including a **missing** token (passed as `""`), so the missing-token
 decision lives in the provider, not the guard: a disabled provider still passes,
-an enabled one rejects. A rejected result is a **generic** `ForbiddenException`;
-the specific reason lives only in the provider result for the audit ledger and
-never reaches the client (timing-equalized generic failures, EARS-16).
+an enabled one rejects. The guard exposes only two stable, provider-independent
+codes from `@ds/schemas`: `BOT_PROTECTION_REQUIRED` for a missing proof and
+`BOT_PROTECTION_REJECTED` for a supplied proof the provider rejects. Provider
+diagnostics stay server-side and never reach the client; the codes disclose no
+account/credential outcome and let the portal trigger or repeat the check without
+parsing exception text (EARS-16/17).
 
 ## Swapping the provider (DSO-26)
 
@@ -62,10 +65,14 @@ downtime ⇒ block + alert).
 
 ## Frontend half
 
-The SmartCaptcha widget that emits the token this guard verifies lives in the
-portal: `apps/portal/components/bot-protection/`. Policy — which surfaces show
-it, and when (post-failure for login) — is EARS-17, owned by 003 F1/F5/F6, not
-by this mechanism.
+The official `@yandex/smart-captcha` React adapter lives behind the portal's
+provider-neutral `apps/portal/components/bot-protection/` wrapper. It executes
+provider-native invisible checks on demand, follows the resolved portal theme,
+and creates a fresh single-use token for each protected action. There is no
+permanent checkbox. Policy — register / initial OTP/reset request / every resend,
+conditional password login after `BOT_PROTECTION_REQUIRED`, and no check on code
+confirmation or reset completion — is EARS-17, owned by 003, not by this backend
+mechanism.
 
 [design]: ../../../docs/content/specs/features/003-user-authentication/003-design.md
 [adr]: ../../../docs/content/adr/0001-identity-provider-shortlist-design-en.md

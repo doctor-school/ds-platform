@@ -24,7 +24,7 @@ import { useCallback, useState } from "react";
  */
 export function useResendCooldown(opts: {
   /** Re-issue the code against the real backend. Throws on failure. */
-  resend: () => Promise<void>;
+  resend: (captchaToken?: string) => Promise<void>;
   /** Report a resend failure (mapped via the page's `authErrorMessage`). */
   onError: (err: unknown) => void;
   /** Clear the page error before a fresh attempt. */
@@ -36,24 +36,31 @@ export function useResendCooldown(opts: {
    * case, so success leaks no account-existence signal).
    */
   onSuccess?: () => void;
-}): { resendNonce: number; onResend: () => Promise<void>; resetNonce: () => void } {
+}): {
+  resendNonce: number;
+  onResend: (captchaToken?: string) => Promise<void>;
+  resetNonce: () => void;
+} {
   const { resend, onError, onBeforeResend, onSuccess } = opts;
   // Bumped on each successful resend; the focus-screen / inline countdown restarts
   // on the change without a remount (#266).
   const [resendNonce, setResendNonce] = useState(0);
 
-  const onResend = useCallback(async () => {
-    onBeforeResend?.();
-    try {
-      await resend();
-      setResendNonce((n) => n + 1);
-      // Success-only: the neutral confirmation never fires on the error path, where
-      // `onError` already surfaces the failure copy instead (#326).
-      onSuccess?.();
-    } catch (err) {
-      onError(err);
-    }
-  }, [resend, onError, onBeforeResend, onSuccess]);
+  const onResend = useCallback(
+    async (captchaToken?: string) => {
+      onBeforeResend?.();
+      try {
+        await resend(captchaToken);
+        setResendNonce((n) => n + 1);
+        // Success-only: the neutral confirmation never fires on the error path, where
+        // `onError` already surfaces the failure copy instead (#326).
+        onSuccess?.();
+      } catch (err) {
+        onError(err);
+      }
+    },
+    [resend, onError, onBeforeResend, onSuccess],
+  );
 
   // Reset the nonce when a new challenge is issued (so the cooldown starts fresh
   // from the first send, matching the `/login` request→verify transition).

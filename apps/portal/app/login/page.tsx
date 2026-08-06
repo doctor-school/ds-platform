@@ -23,7 +23,13 @@ import {
 } from "@ds/schemas";
 
 import { AuthShell } from "@/components/auth-shell";
-import { BotProtectionField } from "@/components/bot-protection";
+import {
+  BotProtectionField,
+  botProtectionFailureMessage,
+  isBotProtectionRejected,
+  isBotProtectionRequired,
+  useBotProtectedAction,
+} from "@/components/bot-protection";
 import {
   EmailField,
   IdentifierField,
@@ -102,51 +108,51 @@ function LoginCard() {
   // consumption point; this surface only forwards or completes it).
   const returnTo = useSearchParams().get("returnTo");
   return (
-      <AuthCard
-        icon={<ShieldCheck className="text-primary" aria-hidden />}
-        // #1033: the page title is the document's single h1 (a11y landmark).
-        // Bare h1 — Tailwind preflight makes it inherit the CardTitle styling,
-        // so the render is pixel-identical.
-        title={<h1>{t("title")}</h1>}
-        description={t("description")}
-        footer={
-          <>
-            <DsLink asChild>
-              {/* 005 EARS-2: signup is a co-equal auth path — the event context
+    <AuthCard
+      icon={<ShieldCheck className="text-primary" aria-hidden />}
+      // #1033: the page title is the document's single h1 (a11y landmark).
+      // Bare h1 — Tailwind preflight makes it inherit the CardTitle styling,
+      // so the render is pixel-identical.
+      title={<h1>{t("title")}</h1>}
+      description={t("description")}
+      footer={
+        <>
+          <DsLink asChild>
+            {/* 005 EARS-2: signup is a co-equal auth path — the event context
                   rides onward into /register so it survives this hop too. */}
-              <Link href={withReturnTarget("/register", returnTo)}>
-                {t("createAccount")}
-              </Link>
-            </DsLink>
-            <DsLink asChild>
-              <Link href="/reset">{t("forgotPassword")}</Link>
-            </DsLink>
-          </>
-        }
-      >
-        {/* #179: pick a sign-in method first (segmented control) and render
+            <Link href={withReturnTarget("/register", returnTo)}>
+              {t("createAccount")}
+            </Link>
+          </DsLink>
+          <DsLink asChild>
+            <Link href="/reset">{t("forgotPassword")}</Link>
+          </DsLink>
+        </>
+      }
+    >
+      {/* #179: pick a sign-in method first (segmented control) and render
             ONLY that method's fields — Radix Tabs unmounts the inactive
             `TabsContent`, so the password fields are absent from the DOM while
             the OTP tab is active and vice-versa. Defaults to Password (no
             "last-used" persistence — not persisting auth UI state matches the
             security posture). */}
-        <Tabs defaultValue="password">
-          <TabsList aria-label={t("methodSwitcherLabel")}>
-            <TabsTrigger value="password" data-testid="login-method-password">
-              {t("methodPassword")}
-            </TabsTrigger>
-            <TabsTrigger value="otp" data-testid="login-method-otp">
-              {t("methodOtp")}
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="password">
-            <PasswordLogin returnTo={returnTo} />
-          </TabsContent>
-          <TabsContent value="otp">
-            <OtpLogin returnTo={returnTo} />
-          </TabsContent>
-        </Tabs>
-      </AuthCard>
+      <Tabs defaultValue="password">
+        <TabsList aria-label={t("methodSwitcherLabel")}>
+          <TabsTrigger value="password" data-testid="login-method-password">
+            {t("methodPassword")}
+          </TabsTrigger>
+          <TabsTrigger value="otp" data-testid="login-method-otp">
+            {t("methodOtp")}
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="password">
+          <PasswordLogin returnTo={returnTo} />
+        </TabsContent>
+        <TabsContent value="otp">
+          <OtpLogin returnTo={returnTo} />
+        </TabsContent>
+      </Tabs>
+    </AuthCard>
   );
 }
 
@@ -156,8 +162,24 @@ function PasswordLogin({ returnTo }: { returnTo: string | null }) {
   const t = useTranslations("login");
   const tc = useTranslations("common");
   const te = useTranslations("errors");
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
+  const captcha = useBotProtectedAction({
+    onVerified: () => setCaptchaError(null),
+    onChallengeError: (failure) =>
+      setCaptchaError(botProtectionFailureMessage(failure, te)),
+    onActionError: (err) => {
+      if (isBotProtectionRejected(err)) {
+        setCaptchaError(te("captchaRejected"));
+        return;
+      }
+      if (isBotProtectionRequired(err)) {
+        setCaptchaError(te("captchaRequired"));
+        return;
+      }
+      setError(authErrorMessage(err, te, te("loginFailed")));
+    },
+  });
 
   // #192: validate with a portal-side per-channel guard, NOT the loose
   // `LoginRequestSchema` (which stays `identifier: z.string().min(1)` so Zitadel
@@ -173,22 +195,35 @@ function PasswordLogin({ returnTo }: { returnTo: string | null }) {
     defaultValues: { identifier: "", password: "" },
   });
 
+  async function finishLogin(values: LoginRequest, captchaToken?: string) {
+    await authClient.login({
+      ...values,
+      ...(captchaToken ? { captchaToken } : {}),
+    });
+    // The BFF set the `__Host-` cookie; the session shell reads it server-side.
+    // 005 EARS-2: with a carried event context the session now exists, so the
+    // registration completes and the doctor lands back on that event page;
+    // without one this is the 008 EARS-7 discovery front-door (`/`) landing.
+    // #1004: signal the persistent header to re-read the profile so the avatar
+    // appears on this SOFT landing, without a hard reload.
+    refreshHeaderAuth();
+    router.push(await completeReturnTarget(returnTo));
+  }
+
   async function onSubmit(values: LoginRequest) {
     setError(null);
+    setCaptchaError(null);
     try {
-      await authClient.login({
-        ...values,
-        ...(captchaToken ? { captchaToken } : {}),
-      });
-      // The BFF set the `__Host-` cookie; the session shell reads it server-side.
-      // 005 EARS-2: with a carried event context the session now exists, so the
-      // registration completes and the doctor lands back on that event page;
-      // without one this is the 008 EARS-7 discovery front-door (`/`) landing.
-      // #1004: signal the persistent header to re-read the profile so the avatar
-      // appears on this SOFT landing, without a hard reload.
-      refreshHeaderAuth();
-      router.push(await completeReturnTarget(returnTo));
+      await finishLogin(values);
     } catch (err) {
+      if (isBotProtectionRequired(err)) {
+        const original = {
+          identifier: values.identifier,
+          password: values.password,
+        };
+        captcha.request((captchaToken) => finishLogin(original, captchaToken));
+        return;
+      }
       // EARS-16: the login OUTCOME (wrong credential / unknown account) stays the
       // generic message so the UI never leaks an existence/error oracle. Only the
       // non-oracle statuses get a specific message: 429 → too-many-attempts,
@@ -232,15 +267,12 @@ function PasswordLogin({ returnTo }: { returnTo: string | null }) {
             />
           )}
         />
-        {/* Bot-protection mechanism (#84); the EARS-17 after-N-failures policy is
-            F6/#90, so here it renders unconditionally (harmless — the guard no-ops
-            without a configured provider). Its token rides as `captchaToken`. */}
-        <BotProtectionField onToken={setCaptchaToken} />
-        <FormError>{error}</FormError>
+        <BotProtectionField {...captcha.fieldProps} />
+        <FormError>{captchaError ?? error}</FormError>
         <Button
           type="submit"
           className="w-full"
-          loading={form.formState.isSubmitting}
+          loading={form.formState.isSubmitting || captcha.pending}
           data-testid="password-login-submit"
         >
           {t("submit")}
@@ -265,13 +297,29 @@ function OtpLogin({ returnTo }: { returnTo: string | null }) {
   const [channel, setChannel] = useState<OtpChannel>("email");
   const [sent, setSent] = useState(false);
   const [identifier, setIdentifier] = useState("");
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState<string | null>(null);
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
   // #266: a successful resend bumps this nonce, passed to <OtpVerifyForm> →
   // <OtpFocusScreen>, which restarts its `RESEND_COOLDOWN_SECONDS` countdown on the
   // change WITHOUT a remount (the old #237 `key={resendNonce}` remount hack is gone).
   // <OtpVerifyForm> also clears the now-superseded typed code on the same signal.
   const [resendNonce, setResendNonce] = useState(0);
+  const captcha = useBotProtectedAction({
+    onVerified: () => setCaptchaError(null),
+    onChallengeError: (failure) =>
+      setCaptchaError(botProtectionFailureMessage(failure, te)),
+    onActionError: (err) => {
+      if (isBotProtectionRejected(err)) {
+        setCaptchaError(te("captchaRejected"));
+        return;
+      }
+      if (isBotProtectionRequired(err)) {
+        setCaptchaError(te("captchaRequired"));
+        return;
+      }
+      setRequestError(authErrorMessage(err, te, te("otpSendFailed")));
+    },
+  });
 
   // #192: the resolver tracks the ACTIVE channel — email channel requires a valid
   // email, SMS channel requires an E.164 phone. Rebuilt per channel so switching
@@ -288,7 +336,7 @@ function OtpLogin({ returnTo }: { returnTo: string | null }) {
     defaultValues: { identifier: "", channel: "email" },
   });
 
-  async function sendOtp(value: string) {
+  async function sendOtp(value: string, captchaToken?: string) {
     await authClient.requestOtp({
       identifier: value,
       channel,
@@ -296,10 +344,10 @@ function OtpLogin({ returnTo }: { returnTo: string | null }) {
     });
   }
 
-  async function onRequest(values: OtpRequest) {
-    setError(null);
-    try {
-      await sendOtp(values.identifier);
+  function onRequest(values: OtpRequest) {
+    setRequestError(null);
+    captcha.request(async (captchaToken) => {
+      await sendOtp(values.identifier, captchaToken);
       // Carry the identifier into the focus-screen (the BFF re-resolves it on
       // verify). The verify step is a SEPARATE component (<OtpVerifyForm/>) that
       // mounts only once `sent` flips, so its own useForm registers the `code`
@@ -307,26 +355,23 @@ function OtpLogin({ returnTo }: { returnTo: string | null }) {
       setIdentifier(values.identifier);
       setResendNonce(0);
       setSent(true);
-    } catch (err) {
-      setError(authErrorMessage(err, te, te("otpSendFailed")));
-    }
+    });
   }
 
   // #227/#266 resend: re-request the SAME identifier+channel code. On success bump the
   // nonce (the focus-screen restarts its cooldown + the verify form clears the stale
   // code, both without a remount); on failure surface the error and leave the screen.
-  async function onResend() {
-    setError(null);
-    try {
-      await sendOtp(identifier);
+  function onResend() {
+    setRequestError(null);
+    captcha.request(async (captchaToken) => {
+      await sendOtp(identifier, captchaToken);
       setResendNonce((n) => n + 1);
-    } catch (err) {
-      setError(authErrorMessage(err, te, te("otpSendFailed")));
-    }
+    });
   }
 
   return (
     <div className="space-y-4" aria-label={t("otpFormLabel")}>
+      <BotProtectionField {...captcha.fieldProps} />
       {!sent ? (
         <>
           <div className="space-y-1">
@@ -400,13 +445,12 @@ function OtpLogin({ returnTo }: { returnTo: string | null }) {
                   )
                 }
               />
-              <BotProtectionField onToken={setCaptchaToken} />
-              <FormError>{error}</FormError>
+              <FormError>{captchaError ?? requestError}</FormError>
               <Button
                 type="submit"
                 variant="secondary"
                 className="w-full"
-                loading={requestForm.formState.isSubmitting}
+                loading={requestForm.formState.isSubmitting || captcha.pending}
                 data-testid="otp-send"
               >
                 {t("sendCode")}
@@ -419,14 +463,14 @@ function OtpLogin({ returnTo }: { returnTo: string | null }) {
           identifier={identifier}
           channel={channel}
           returnTo={returnTo}
-          error={error}
+          actionError={captchaError ?? requestError}
           cooldownSeconds={RESEND_COOLDOWN_SECONDS}
           resendNonce={resendNonce}
           onResend={onResend}
-          onError={setError}
           onBack={() => {
             setSent(false);
-            setError(null);
+            setRequestError(null);
+            setCaptchaError(null);
           }}
         />
       )}
@@ -451,10 +495,9 @@ const LOGIN_OTP_LENGTH = 8;
  * detached and dropped every keystroke — #131/#153 live). `identifier`+`channel` come
  * in as props (the BFF re-resolves them); the user only types the code.
  *
- * Error + resend are lifted to the parent <OtpLogin> (which owns the network call
- * and the resend cooldown signal): `error` is shown in the focus-screen's slot,
- * `onResend` re-requests the code, `onError` reports a verify failure upward, and
- * `onBack` ("Изменить способ") returns to channel selection. `resendNonce` is bumped
+ * Resend failures are lifted to the parent <OtpLogin> (which owns the protected
+ * network call and cooldown signal); verification failures stay local so solving
+ * a resend CAPTCHA never clears an unrelated code error. `resendNonce` is bumped
  * by the parent on a successful resend — it restarts the focus-screen cooldown and
  * clears the now-stale code here, both WITHOUT a remount (#266).
  */
@@ -462,27 +505,26 @@ function OtpVerifyForm({
   identifier,
   channel,
   returnTo,
-  error,
+  actionError,
   cooldownSeconds,
   resendNonce,
   onResend,
-  onError,
   onBack,
 }: {
   identifier: string;
   channel: OtpChannel;
   /** 005 EARS-2: the carried registration-intent, completed on verify success. */
   returnTo: string | null;
-  error: string | null;
+  actionError: string | null;
   cooldownSeconds: number;
   resendNonce: number;
   onResend: () => void;
-  onError: (message: string) => void;
   onBack: () => void;
 }) {
   const router = useRouter();
   const t = useTranslations("login");
   const te = useTranslations("errors");
+  const [verifyError, setVerifyError] = useState<string | null>(null);
 
   const verifyForm = useForm<OtpVerify>({
     mode: "onTouched", // #200: consistent on-blur validation across the auth forms.
@@ -505,6 +547,7 @@ function OtpVerifyForm({
   }, [resendNonce]);
 
   async function onVerify(values: OtpVerify) {
+    setVerifyError(null);
     try {
       await authClient.loginWithOtp({ ...values, identifier, channel });
       // 005 EARS-2: complete the carried registration (if any) now the session
@@ -513,7 +556,7 @@ function OtpVerifyForm({
       refreshHeaderAuth();
       router.push(await completeReturnTarget(returnTo));
     } catch (err) {
-      onError(authErrorMessage(err, te, te("otpVerifyFailed")));
+      setVerifyError(authErrorMessage(err, te, te("otpVerifyFailed")));
     }
   }
 
@@ -554,7 +597,7 @@ function OtpVerifyForm({
             onSubmit={submit}
             onResend={onResend}
             onChangeMethod={onBack}
-            error={error}
+            error={actionError ?? verifyError}
             submitTestId="otp-verify"
             resendTestId="otp-resend"
             changeMethodTestId="otp-change-method"

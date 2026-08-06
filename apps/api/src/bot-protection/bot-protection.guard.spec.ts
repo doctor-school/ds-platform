@@ -54,15 +54,20 @@ describe("BotProtectionGuard (additive, fail-closed)", () => {
     expect(calls).toHaveLength(0); // provider never consulted
   });
 
-  it("delegates a missing token to the provider as an empty string (enabled provider rejects)", async () => {
+  it("EARS-17: delegates a missing token and returns the stable REQUIRED code", async () => {
     const { provider, calls } = fakeProvider({
       ok: false,
       reason: "missing-token",
     });
     const guard = new BotProtectionGuard(provider, reflector);
-    await expect(
-      guard.canActivate(ctx("register", { headers: {}, body: {} })),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    const error = await guard
+      .canActivate(ctx("register", { headers: {}, body: {} }))
+      .catch((caught) => caught);
+    expect(error).toBeInstanceOf(ForbiddenException);
+    expect((error as ForbiddenException).getResponse()).toMatchObject({
+      statusCode: 403,
+      code: "BOT_PROTECTION_REQUIRED",
+    });
     // The empty token reaches the provider — the missing-token decision lives
     // there (so a disabled provider can still pass), not in the guard.
     expect(calls).toEqual([["", "register", ""]]);
@@ -79,17 +84,22 @@ describe("BotProtectionGuard (additive, fail-closed)", () => {
     ).resolves.toBe(true);
   });
 
-  it("rejects a guarded request whose token the provider invalidates", async () => {
+  it("EARS-17: returns the stable REJECTED code for an invalid token", async () => {
     const { provider } = fakeProvider({ ok: false, reason: "validate-failed" });
     const guard = new BotProtectionGuard(provider, reflector);
-    await expect(
-      guard.canActivate(
+    const error = await guard
+      .canActivate(
         ctx("password-reset", {
           headers: { [BOT_PROTECTION_TOKEN_HEADER]: "bad-token" },
           ip: "203.0.113.7",
         }),
-      ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+      )
+      .catch((caught) => caught);
+    expect(error).toBeInstanceOf(ForbiddenException);
+    expect((error as ForbiddenException).getResponse()).toMatchObject({
+      statusCode: 403,
+      code: "BOT_PROTECTION_REJECTED",
+    });
   });
 
   it("passes the token, action, and client IP to the provider on a header token", async () => {
@@ -121,16 +131,19 @@ describe("BotProtectionGuard (additive, fail-closed)", () => {
     expect(calls[0]?.[0]).toBe("body-token");
   });
 
-  it("never leaks the provider reason in the thrown message (EARS-16 generic failure)", async () => {
+  it("EARS-17: never leaks the provider reason in the stable response", async () => {
     const { provider } = fakeProvider({ ok: false, reason: "secret-internal" });
     const guard = new BotProtectionGuard(provider, reflector);
-    await expect(
-      guard.canActivate(
+    const error = await guard
+      .canActivate(
         ctx("register", {
           headers: { [BOT_PROTECTION_TOKEN_HEADER]: "t" },
           ip: "203.0.113.1",
         }),
-      ),
-    ).rejects.toThrow(/challenge failed/);
+      )
+      .catch((caught) => caught);
+    const response = (error as ForbiddenException).getResponse();
+    expect(response).toMatchObject({ code: "BOT_PROTECTION_REJECTED" });
+    expect(JSON.stringify(response)).not.toContain("secret-internal");
   });
 });

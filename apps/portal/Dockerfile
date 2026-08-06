@@ -26,11 +26,10 @@ WORKDIR /repo
 FROM base AS build
 ENV NEXT_TELEMETRY_DISABLED=1
 # NEXT_PUBLIC_* are INLINED into the client bundle at BUILD time, so the Yandex
-# SmartCaptcha site key must arrive as a build-arg (not runtime env). Empty by
-# default — bot protection is OFF in the 003 slice (BOT_PROTECTION_ENABLED unset ⇒
-# the field renders an inactive placeholder, portal still builds). Pass a real key
-# via compose `build.args` to bake the live widget. The SERVER half lives in
-# api.env (SMARTCAPTCHA_SERVER_KEY), never here.
+# SmartCaptcha site key must arrive as a build-arg (not runtime env). Empty is the
+# local-dev default and renders no widget because the matching backend provider is
+# disabled there; production supplies a real key and executes the invisible check
+# on demand. The SERVER half lives in api.env (SMARTCAPTCHA_SERVER_KEY), never here.
 ARG NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY=
 ENV NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY=$NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY
 # API_PROXY_TARGET must be present at BUILD time: Next evaluates `rewrites()` during

@@ -10,7 +10,13 @@ import { UserPlus } from "lucide-react";
 import { type RegisterRequest } from "@ds/schemas";
 
 import { AuthShell } from "@/components/auth-shell";
-import { BotProtectionField } from "@/components/bot-protection";
+import {
+  BotProtectionField,
+  botProtectionFailureMessage,
+  isBotProtectionRejected,
+  isBotProtectionRequired,
+  useBotProtectedAction,
+} from "@/components/bot-protection";
 import { EmailField, PasswordField } from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
@@ -68,8 +74,24 @@ function RegisterCard() {
   // point by `parseReturnTarget` inside `withReturnTarget` — this page only
   // forwards it, never navigates to it).
   const returnTo = useSearchParams().get("returnTo");
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
+  const captcha = useBotProtectedAction({
+    onVerified: () => setCaptchaError(null),
+    onChallengeError: (failure) =>
+      setCaptchaError(botProtectionFailureMessage(failure, te)),
+    onActionError: (err) => {
+      if (isBotProtectionRejected(err)) {
+        setCaptchaError(te("captchaRejected"));
+        return;
+      }
+      if (isBotProtectionRequired(err)) {
+        setCaptchaError(te("captchaRequired"));
+        return;
+      }
+      setError(authErrorMessage(err, te, te("registerFailed")));
+    },
+  });
 
   // #200/#202: validate with the email-only portal resolver built from the field
   // primitives, NOT the loose `RegisterRequestSchema`. Its `password` is the
@@ -90,13 +112,13 @@ function RegisterCard() {
     },
   });
 
-  async function onSubmit(values: RegisterRequest) {
+  function onSubmit(values: RegisterRequest) {
     setError(null);
     // Drop any password held from a prior (e.g. failed-then-retried) registration
     // before we re-stash, so the single in-memory slot never carries a stale
     // credential into this attempt (#175 — explicit single-slot replace).
     clearPendingRegistration();
-    try {
+    captcha.request(async (captchaToken) => {
       await authClient.register({
         email: values.email,
         password: values.password,
@@ -122,76 +144,72 @@ function RegisterCard() {
           returnTo,
         ),
       );
-    } catch (err) {
-      // EARS-16: identical ack for new vs already-registered — the auth OUTCOME
-      // stays the generic ack; only 429/5xx/network get a specific message.
-      setError(authErrorMessage(err, te, te("registerFailed")));
-    }
+    });
   }
 
   return (
     <AuthCard
-        icon={<UserPlus className="text-primary" aria-hidden />}
-        // #1033: the page title is the document's single h1 (a11y landmark).
-        // Bare h1 — Tailwind preflight makes it inherit the CardTitle styling,
-        // so the render is pixel-identical.
-        title={<h1>{t("title")}</h1>}
-        description={t("description")}
-        footer={
-          <DsLink asChild>
-            {/* 005 EARS-2: the already-registered guest's path — the event
+      icon={<UserPlus className="text-primary" aria-hidden />}
+      // #1033: the page title is the document's single h1 (a11y landmark).
+      // Bare h1 — Tailwind preflight makes it inherit the CardTitle styling,
+      // so the render is pixel-identical.
+      title={<h1>{t("title")}</h1>}
+      description={t("description")}
+      footer={
+        <DsLink asChild>
+          {/* 005 EARS-2: the already-registered guest's path — the event
                 context rides onward into /login so it survives this hop too. */}
-            <Link href={withReturnTarget("/login", returnTo)}>
-              {t("haveAccount")}
-            </Link>
-          </DsLink>
-        }
-      >
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="space-y-4"
-            noValidate
+          <Link href={withReturnTarget("/login", returnTo)}>
+            {t("haveAccount")}
+          </Link>
+        </DsLink>
+      }
+    >
+      <Form {...form}>
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          className="space-y-4"
+          noValidate
+        >
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <EmailField
+                field={field}
+                label={tc("email")}
+                placeholder={tc("emailPlaceholder")}
+              />
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="password"
+            render={({ field }) => (
+              <PasswordField
+                field={field}
+                purpose="new"
+                label={tc("password")}
+                policyHint={tc("passwordPolicy")}
+              />
+            )}
+          />
+
+          <p className="text-xs text-muted-foreground">{t("consent")}</p>
+
+          <BotProtectionField {...captcha.fieldProps} />
+          <FormError>{captchaError ?? error}</FormError>
+          <Button
+            type="submit"
+            className="w-full"
+            loading={form.formState.isSubmitting || captcha.pending}
+            data-testid="register-submit"
           >
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <EmailField
-                  field={field}
-                  label={tc("email")}
-                  placeholder={tc("emailPlaceholder")}
-                />
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <PasswordField
-                  field={field}
-                  purpose="new"
-                  label={tc("password")}
-                  policyHint={tc("passwordPolicy")}
-                />
-              )}
-            />
-
-            <p className="text-xs text-muted-foreground">{t("consent")}</p>
-
-            <BotProtectionField onToken={setCaptchaToken} />
-            <FormError>{error}</FormError>
-            <Button
-              type="submit"
-              className="w-full"
-              loading={form.formState.isSubmitting}
-              data-testid="register-submit"
-            >
-              {t("submit")}
-            </Button>
-          </form>
-        </Form>
-      </AuthCard>
+            {t("submit")}
+          </Button>
+        </form>
+      </Form>
+    </AuthCard>
   );
 }

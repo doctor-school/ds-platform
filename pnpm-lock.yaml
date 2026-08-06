@@ -346,6 +346,9 @@ importers:
       '@hookform/resolvers':
         specifier: ^5.5.7
         version: 5.5.7(@standard-schema/spec@1.1.0)(ajv-formats@2.1.1(ajv@8.20.0))(ajv@8.20.0)(class-transformer@0.5.1)(react-hook-form@7.83.0(react@19.2.8))(superstruct@1.0.4)(zod@4.4.3)
+      '@yandex/smart-captcha':
+        specifier: 2.9.1
+        version: 2.9.1(react@19.2.8)
       centrifuge:
         specifier: ^5.7.0
         version: 5.7.0
@@ -4542,6 +4545,11 @@ packages:
 
   '@xtuc/long@4.2.2':
     resolution: {integrity: sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ==}
+
+  '@yandex/smart-captcha@2.9.1':
+    resolution: {integrity: sha512-0PnrNOxAQqskDhaDI3TL9qk27WGIgJACuKwtWc1u34tkbOJBzoo3cPvzyOLiYIIc8P0FuYP4KosSaf9hH9gXZg==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   '@yuku-analyzer/binding-android-arm64@0.8.3':
     resolution: {integrity: sha512-t1H+d/ubotHLJPQ2gTPZ9C+XD5ZYsxasmxi8wBsUm9WONr0DEFtlxwIgvGZS1Kvlc+sZH9xErCtnKS+odKCabA==}
@@ -12652,6 +12660,10 @@ snapshots:
   '@xtuc/ieee754@1.2.0': {}
 
   '@xtuc/long@4.2.2': {}
+
+  '@yandex/smart-captcha@2.9.1(react@19.2.8)':
+    dependencies:
+      react: 19.2.8
 
   '@yuku-analyzer/binding-android-arm64@0.8.3':
     optional: true

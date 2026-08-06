@@ -42,9 +42,37 @@ vi.mock("next-intl", () => ({
   },
 }));
 
+type CaptchaProps = {
+  requestKey: number | null;
+  onToken: (token?: string) => void;
+  onError: (reason: "expired" | "unavailable" | "incomplete") => void;
+};
+let captchaMode: "bypass" | "manual" = "bypass";
+let captchaProps: CaptchaProps | undefined;
+vi.mock("@/components/bot-protection", async () => {
+  const React = await import("react");
+  const actual = await vi.importActual<
+    typeof import("@/components/bot-protection")
+  >("@/components/bot-protection");
+  return {
+    ...actual,
+    BotProtectionField: (props: CaptchaProps) => {
+      captchaProps = props;
+      React.useEffect(() => {
+        if (captchaMode === "bypass" && props.requestKey !== null) {
+          props.onToken(undefined);
+        }
+      }, [props.onToken, props.requestKey]);
+      return <div data-testid="bot-protection-field" />;
+    },
+  };
+});
+
 const verify = vi.fn().mockResolvedValue({ status: "verified" });
 const login = vi.fn().mockResolvedValue({});
-const resendVerification = vi.fn().mockResolvedValue({ status: "resend_requested" });
+const resendVerification = vi
+  .fn()
+  .mockResolvedValue({ status: "resend_requested" });
 // #675: rendering the page mounts the <AuthShell> auth-surface guard, which reads
 // `authClient.session()` on mount — default it to the unauthenticated path so the
 // surface renders as before (the authed branch lives in components/auth-shell.test.tsx).
@@ -89,6 +117,8 @@ beforeEach(() => {
   // `window.location.hash` directly schedules a jsdom fragment-navigation timer
   // that outlives the test and trips the #434 orphan-timer guard.
   window.history.replaceState(null, "", "/");
+  captchaMode = "bypass";
+  captchaProps = undefined;
 });
 afterEach(() => {
   cleanup();
@@ -116,6 +146,47 @@ async function flushAuthGuard() {
 }
 
 describe("/verify dual-affordance + resend (#227/#267)", () => {
+  it("EARS-17: verification-code confirmation stays challenge-free", async () => {
+    captchaMode = "manual";
+    const user = userEvent.setup();
+    await renderVerify();
+    await user.type(screen.getByRole("textbox"), VERIFY_CODE);
+
+    await waitFor(() => expect(verify).toHaveBeenCalledTimes(1));
+    expect(captchaProps?.requestKey).toBeNull();
+  });
+
+  it("EARS-17: an enabled resend click executes a fresh challenge and its solve resends exactly once", async () => {
+    captchaMode = "manual";
+    vi.useFakeTimers();
+    try {
+      render(<VerifyPage />);
+      await flushAuthGuard();
+      const resend = screen.getByTestId("verify-resend");
+      act(() => vi.advanceTimersByTime(30_000));
+      fireEvent.click(resend);
+
+      expect(resendVerification).not.toHaveBeenCalled();
+      expect(captchaProps?.requestKey).not.toBeNull();
+      act(() => captchaProps?.onToken("fresh-verify-resend-token"));
+      await act(async () => Promise.resolve());
+
+      expect(resendVerification).toHaveBeenCalledTimes(1);
+      expect(resendVerification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          identifier: EMAIL,
+          captchaToken: "fresh-verify-resend-token",
+        }),
+      );
+      act(() => captchaProps?.onToken("fresh-verify-resend-token"));
+      expect(resendVerification).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("verify-resend-notice")).toBeInTheDocument();
+      expect(captchaProps?.requestKey).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps BOTH co-equal paths: the code form AND the sign-in / reset actions", async () => {
     await renderVerify();
     // (a) code entry path.
@@ -186,7 +257,8 @@ describe("/verify dual-affordance + resend (#227/#267)", () => {
         await act(async () => {
           await Promise.resolve();
         });
-        const text = screen.getByTestId("verify-resend-notice").textContent ?? "";
+        const text =
+          screen.getByTestId("verify-resend-notice").textContent ?? "";
         cleanup();
         return text;
       } finally {

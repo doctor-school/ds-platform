@@ -14,7 +14,13 @@ import {
 } from "@ds/schemas";
 
 import { AuthShell } from "@/components/auth-shell";
-import { BotProtectionField } from "@/components/bot-protection";
+import {
+  BotProtectionField,
+  botProtectionFailureMessage,
+  isBotProtectionRejected,
+  isBotProtectionRequired,
+  useBotProtectedAction,
+} from "@/components/bot-protection";
 import { OtpField } from "@ds/design-system/fields";
 import { authClient } from "@/lib/auth-client";
 import { authErrorMessage } from "@/lib/auth-error-message";
@@ -108,7 +114,9 @@ function VerifyCard() {
   // is no `?email=` query, so seed the account from the fragment. The hash is not
   // available at SSR (it never leaves the browser), so read it on mount client-side.
   // The `?email=` query stays the same-tab primary + a backward-compat fallback.
-  const [fragmentEmail, setFragmentEmail] = useState<string | undefined>(undefined);
+  const [fragmentEmail, setFragmentEmail] = useState<string | undefined>(
+    undefined,
+  );
   useEffect(() => {
     if (queryEmail) return; // same-tab query wins; no need to consult the fragment.
     const hash = window.location.hash; // e.g. "#email=doc%40example.com"
@@ -123,6 +131,8 @@ function VerifyCard() {
   // be navigated to nor propagated onward.
   const returnTo = params.get("returnTo");
   const [error, setError] = useState<string | null>(null);
+  const [resendError, setResendError] = useState<string | null>(null);
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
   // #326: neutral, enumeration-safe resend acknowledgement. The on-screen response
   // to a resend is generic and IDENTICAL in every case (registered / unregistered /
   // already-verified) — the "account exists" fact is disclosed out-of-band by email,
@@ -138,11 +148,13 @@ function VerifyCard() {
   // so it never asserts acceptance the server has not confirmed; cleared if the
   // login replay then fails (back to the error slot) or on a resend.
   const [succeeded, setSucceeded] = useState(false);
-  // Resend is an abuse-prone unauthenticated surface (EARS-17), so the EARS-25
-  // endpoint is `@BotProtected("verify-resend")`. The widget token rides as
-  // `captchaToken`; when no provider is configured (the dev default)
-  // `<BotProtectionField>` renders nothing and the guard short-circuits to ok.
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const captcha = useBotProtectedAction({
+    onVerified: () => setCaptchaError(null),
+    onChallengeError: (failure) =>
+      setCaptchaError(botProtectionFailureMessage(failure, te)),
+    onActionError: (err) =>
+      setResendError(authErrorMessage(err, te, te("verifyResendFailed"))),
+  });
 
   const form = useForm<VerifyRequest>({
     resolver: useLocalizedResolver(VerifyRequestSchema),
@@ -160,14 +172,15 @@ function VerifyCard() {
   useEffect(() => {
     if (email) form.setValue("email", email);
     // Keyed only on the resolved email — `form` is a stable useForm handle.
-
   }, [email]);
 
   // Privacy-masked destination (#227): the screen confirms WHERE the code went
   // without re-printing the full address (`a•••@p•••.com`); reuses the same
   // `maskDestination` helper the login-OTP focus-screen displays. Computed here so
   // both the card description and the #326 resend confirmation can interpolate it.
-  const identifierLabel = email ? maskDestination(email) : t("fallbackIdentifier");
+  const identifierLabel = email
+    ? maskDestination(email)
+    : t("fallbackIdentifier");
 
   // #267 resend: re-issue the registration code via the dedicated EARS-25 endpoint
   // (`/v1/auth/verify/resend`, #319) — NOT a re-`register` (no held password here).
@@ -175,29 +188,41 @@ function VerifyCard() {
   // resend has nothing to target, so the control is hidden. EARS-16: the ack is
   // existence-agnostic, so resend never reveals whether the account exists.
   const { resendNonce, onResend } = useResendCooldown({
-    resend: async () => {
+    resend: async (captchaToken) => {
       await authClient.resendVerification({
         identifier: email ?? "",
         ...(captchaToken ? { captchaToken } : {}),
       });
     },
-    onError: (err) =>
-      setError(authErrorMessage(err, te, te("verifyResendFailed"))),
-    // Clear BOTH channels before a fresh attempt: a prior error or a stale
-    // confirmation must not linger across the next resend (#326).
+    onError: (err) => {
+      if (isBotProtectionRejected(err)) {
+        setCaptchaError(te("captchaRejected"));
+        return;
+      }
+      if (isBotProtectionRequired(err)) {
+        setCaptchaError(te("captchaRequired"));
+        return;
+      }
+      setResendError(authErrorMessage(err, te, te("verifyResendFailed")));
+    },
+    // Clear only resend-owned state; code-verification feedback is unrelated.
     onBeforeResend: () => {
-      setError(null);
+      setResendError(null);
       setNotice(null);
       setSucceeded(false);
     },
     // #326: neutral confirmation, conditionally phrased so it asserts nothing about
     // account existence (identical for every visitor — see the `notice` comment above).
-    onSuccess: () => setNotice(t("resendAcknowledged", { identifier: identifierLabel })),
+    onSuccess: () =>
+      setNotice(t("resendAcknowledged", { identifier: identifierLabel })),
   });
   // The block's countdown lives inside <OtpFocusScreen>; the /verify code section
   // keeps its existing dual-affordance layout (NOT the single-focus block, per
   // EARS-24), so it runs the SAME shared timer inline for its own resend control.
-  const remaining = useResendCountdown(VERIFY_RESEND_COOLDOWN_SECONDS, resendNonce);
+  const remaining = useResendCountdown(
+    VERIFY_RESEND_COOLDOWN_SECONDS,
+    resendNonce,
+  );
   const resendDisabled = remaining > 0;
 
   // On a successful resend (nonce bump) clear the now-superseded typed code, so the
@@ -210,7 +235,6 @@ function VerifyCard() {
     }
     form.resetField("code");
     // Keyed only on the resend signal — `form` is a stable useForm handle.
-
   }, [resendNonce]);
 
   async function onSubmit(values: VerifyRequest) {
@@ -298,128 +322,128 @@ function VerifyCard() {
       })}
       contentClassName="space-y-6"
     >
-        {/* (a) New-registrant path — enter the email code (unchanged auto-submit
+      {/* (a) New-registrant path — enter the email code (unchanged auto-submit
             + post-verify auto-login). A co-equal affordance, not the only one. */}
-        <section className="space-y-3" aria-label={t("newAccountHeading")}>
-          <h2 className="text-eyebrow font-extrabold uppercase tracking-micro text-muted-foreground">
-            {t("newAccountHeading")}
-          </h2>
-          <Form {...form}>
-            <form onSubmit={submit} className="space-y-4" noValidate>
-              <FormField
-                control={form.control}
-                name="code"
-                render={({ field }) => (
-                  <OtpField
-                    field={field}
-                    length={VERIFY_OTP_LENGTH}
-                    variant="slotted"
-                    charset="alphanumeric"
-                    label={t("codeLabel")}
-                    onComplete={onComplete}
-                  />
-                )}
-              />
-              {/* Canvas success row: confirms acceptance while the auto-login replay
+      <section className="space-y-3" aria-label={t("newAccountHeading")}>
+        <h2 className="text-eyebrow font-extrabold uppercase tracking-micro text-muted-foreground">
+          {t("newAccountHeading")}
+        </h2>
+        <Form {...form}>
+          <form onSubmit={submit} className="space-y-4" noValidate>
+            <FormField
+              control={form.control}
+              name="code"
+              render={({ field }) => (
+                <OtpField
+                  field={field}
+                  length={VERIFY_OTP_LENGTH}
+                  variant="slotted"
+                  charset="alphanumeric"
+                  label={t("codeLabel")}
+                  onComplete={onComplete}
+                />
+              )}
+            />
+            {/* Canvas success row: confirms acceptance while the auto-login replay
                   completes. Adopts the DS `Alert` success variant (✓ + success-tint
                   frame, role=status) — no bespoke callout. */}
-              {succeeded ? (
-                <Alert variant="success" data-testid="verify-succeeded">
-                  {t("codeAccepted")}
-                </Alert>
-              ) : null}
-              <FormError>{error}</FormError>
-              <Button
-                type="submit"
-                className="w-full"
-                loading={form.formState.isSubmitting}
-                data-testid="verify-submit"
-              >
-                {t("submit")}
-              </Button>
-            </form>
-          </Form>
-          {/* #267 resend-with-cooldown, wired to the real EARS-25 endpoint. Only
+            {succeeded ? (
+              <Alert variant="success" data-testid="verify-succeeded">
+                {t("codeAccepted")}
+              </Alert>
+            ) : null}
+            <FormError>{error}</FormError>
+            <Button
+              type="submit"
+              className="w-full"
+              loading={form.formState.isSubmitting}
+              data-testid="verify-submit"
+            >
+              {t("submit")}
+            </Button>
+          </form>
+        </Form>
+        {/* #267 resend-with-cooldown, wired to the real EARS-25 endpoint. Only
               meaningful when an email destination is known (it is seeded from the
               `?email=` the register step passes); on a bare deep-link there is
               nothing to resend to, so the control is hidden rather than firing an
               empty request. The countdown reuses the SAME timer the focus-screen
               block runs. */}
-          {email ? (
-            <div className="space-y-2">
-              {/* EARS-17 bot-protection for the resend (renders nothing when no
-                  provider is configured — the dev default). */}
-              <BotProtectionField onToken={setCaptchaToken} />
-              <div className="flex justify-end">
-                <Button
-                  type="button"
-                  variant="link"
-                  size="sm"
-                  disabled={resendDisabled}
-                  onClick={() => void onResend()}
-                  data-testid="verify-resend"
-                  // `tabular-nums` — fixed-width digits so the countdown label does
-                  // not jitter as the seconds tick down (#227/#267 owner finding).
-                  // `min-w-0` + `whitespace-normal` override the Button base
-                  // `whitespace-nowrap` so the label wraps instead of overflowing the
-                  // card at any width (#542).
-                  className="min-w-0 whitespace-normal text-right tabular-nums"
-                >
-                  {resendDisabled
-                    ? t("resendIn", { seconds: remaining })
-                    : t("resend")}
-                </Button>
-              </div>
-              {/* #326: neutral, enumeration-safe confirmation — NOT destructive (it is
+        {email ? (
+          <div className="space-y-2">
+            <BotProtectionField {...captcha.fieldProps} />
+            <FormError>{captchaError ?? resendError}</FormError>
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                disabled={resendDisabled || captcha.pending}
+                loading={captcha.pending}
+                onClick={() => captcha.request(onResend)}
+                data-testid="verify-resend"
+                // `tabular-nums` — fixed-width digits so the countdown label does
+                // not jitter as the seconds tick down (#227/#267 owner finding).
+                // `min-w-0` + `whitespace-normal` override the Button base
+                // `whitespace-nowrap` so the label wraps instead of overflowing the
+                // card at any width (#542).
+                className="min-w-0 whitespace-normal text-right tabular-nums"
+              >
+                {resendDisabled
+                  ? t("resendIn", { seconds: remaining })
+                  : t("resend")}
+              </Button>
+            </div>
+            {/* #326: neutral, enumeration-safe confirmation — NOT destructive (it is
                   a success ack, not an error). Identical copy in every case; the
                   account-exists fact is disclosed out-of-band by email, never here. */}
-              {notice && (
-                <p
-                  role="status"
-                  aria-live="polite"
-                  className="text-sm text-muted-foreground"
-                  data-testid="verify-resend-notice"
-                >
-                  {notice}
-                </p>
-              )}
-            </div>
-          ) : null}
-        </section>
+            {notice && (
+              <p
+                role="status"
+                aria-live="polite"
+                className="text-sm text-muted-foreground"
+                data-testid="verify-resend-notice"
+              >
+                {notice}
+              </p>
+            )}
+          </div>
+        ) : null}
+      </section>
 
-        {/* (b) Already-registered owner's path — prominent, co-equal sign-in /
+      {/* (b) Already-registered owner's path — prominent, co-equal sign-in /
             reset actions (NOT a footnote link). The screen never branches on
             account existence; the owner's path is also reinforced out-of-band by
             the EARS-23 notice email. */}
-        <section
-          className="space-y-3 border-t pt-6"
-          aria-label={t("existingAccountHeading")}
-        >
-          <h2 className="text-eyebrow font-extrabold uppercase tracking-micro text-muted-foreground">
-            {t("existingAccountHeading")}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            {t("existingAccountHint")}
-          </p>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button asChild variant="default" className="flex-1">
-              {/* 005 EARS-2: the already-registered owner's sign-in path — the
+      <section
+        className="space-y-3 border-t pt-6"
+        aria-label={t("existingAccountHeading")}
+      >
+        <h2 className="text-eyebrow font-extrabold uppercase tracking-micro text-muted-foreground">
+          {t("existingAccountHeading")}
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          {t("existingAccountHint")}
+        </p>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button asChild variant="default" className="flex-1">
+            {/* 005 EARS-2: the already-registered owner's sign-in path — the
                   event context rides onward into /login so completing auth there
                   still finishes the carried registration. */}
-              <Link
-                href={withReturnTarget("/login", returnTo)}
-                data-testid="verify-go-to-login"
-              >
-                {t("goToSignIn")}
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="flex-1">
-              <Link href="/reset" data-testid="verify-go-to-reset">
-                {t("goToReset")}
-              </Link>
-            </Button>
-          </div>
-        </section>
+            <Link
+              href={withReturnTarget("/login", returnTo)}
+              data-testid="verify-go-to-login"
+            >
+              {t("goToSignIn")}
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="flex-1">
+            <Link href="/reset" data-testid="verify-go-to-reset">
+              {t("goToReset")}
+            </Link>
+          </Button>
+        </div>
+      </section>
     </AuthCard>
   );
 }

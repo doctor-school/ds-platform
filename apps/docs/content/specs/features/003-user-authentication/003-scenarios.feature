@@ -13,7 +13,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   @EARS-1 @EARS-20 @EARS-19 @happy
   Scenario: Register with email and password
-    Given a visitor with a never-registered email and a valid SmartCaptcha token
+    Given a visitor with a never-registered email
     When the visitor submits the registration form with email, a policy-conforming password, and accepted consent versions
     Then a Zitadel user is created
     And a doctor_guest UserMirror row is upserted with that zitadel_sub
@@ -23,7 +23,7 @@ Feature: Net-new web authentication producing a doctor_guest identity
 
   @EARS-20 @failure
   Scenario: Registration is refused without consent
-    Given a visitor with a valid email, password, and SmartCaptcha token
+    Given a visitor with a valid email and password
     When the visitor submits the registration form without any accepted consent version
     Then no PD-bearing UserMirror row is committed
     And the response is a generic validation failure
@@ -168,6 +168,41 @@ Feature: Net-new web authentication producing a doctor_guest identity
     When a user requests an SMS login code
     Then no SMS is sent to the provider
     And a generic "try again later" response is returned
+
+  @EARS-17 @happy
+  Scenario: A protected auth send executes an invisible challenge only on demand
+    Given no permanent CAPTCHA checkbox is rendered in the auth form
+    When a visitor submits registration, requests an initial login or reset code, or clicks any code resend
+    Then the portal executes a fresh provider-native invisible SmartCaptcha check
+    And provider challenge UI appears only if Yandex requires interaction
+    And the first success callback resumes that pending action exactly once with the fresh token
+    And duplicate callbacks or a previously used token cannot replay the action
+
+  @EARS-17 @happy
+  Scenario: Password login challenges only after the backend threshold
+    Given a visitor has entered an identifier and password
+    When the visitor submits password login before the failed-login threshold
+    Then the portal sends the login request without requesting CAPTCHA
+    When the backend returns BOT_PROTECTION_REQUIRED after the threshold
+    Then the portal executes a fresh invisible challenge
+    And a successful solve retries the captured original login values exactly once
+
+  @EARS-17 @happy
+  Scenario: Proving a code or completing reset is not challenged again
+    Given a visitor already requested a verification, login, or reset code through a protected action
+    When the visitor submits that verification code or login OTP, or completes password reset
+    Then the portal sends the confirmation without requesting CAPTCHA
+    When the visitor explicitly asks to resend a code
+    Then the portal executes a new invisible check and uses a fresh token for that resend
+
+  @EARS-17 @failure
+  Scenario: CAPTCHA failure is truthful, terminal, theme-aware, and non-destructive
+    Given the invisible widget uses the portal's resolved light or dark theme and follows a live theme change
+    When its token expires, Yandex rejects it, its script or network fails, or an incomplete challenge closes
+    Then the pending action is not sent or replayed
+    And the widget and one-time token are reset for a fresh attempt
+    And the portal preserves entered form values and shows localized CAPTCHA-specific feedback
+    And a later successful solve clears only the CAPTCHA-specific feedback
 
   @EARS-9 @happy
   Scenario: Refresh rotation issues a new access token

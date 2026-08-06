@@ -1,11 +1,12 @@
 import {
-  ForbiddenException,
   Inject,
   Injectable,
   type CanActivate,
   type ExecutionContext,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
+import { BotProtectionErrorCodes } from "@ds/schemas";
+import { BotProtectionException } from "./bot-protection.exception.js";
 import { BOT_PROTECTION } from "./bot-protection.tokens.js";
 import {
   BOT_PROTECTED_KEY,
@@ -65,7 +66,11 @@ export class BotProtectionGuard implements CanActivate {
 
     const result = await this.provider.verify(token, action, request.ip ?? "");
     if (!result.ok) {
-      throw new ForbiddenException("bot-protection challenge failed");
+      throw new BotProtectionException(
+        result.reason === "missing-token"
+          ? BotProtectionErrorCodes.required
+          : BotProtectionErrorCodes.rejected,
+      );
     }
     return true;
   }

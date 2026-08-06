@@ -1,140 +1,180 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
+} from "react";
+import {
+  InvisibleSmartCaptcha,
+  type InvisibleSmartCaptchaProps,
+} from "@yandex/smart-captcha";
 
-/**
- * Yandex SmartCaptcha widget (003 design §10.1, ADR-0001 open-q #7).
- *
- * The frontend half of the bot-protection abstraction: it renders the
- * RF-accessible captcha and emits the token the backend `BotProtectionGuard`
- * verifies. It is provider-specific by design and never imported directly by a
- * form — call sites depend on the neutral {@link BotProtectionField} wrapper, so
- * swapping the provider (DSO-26) is a one-file change.
- *
- * Self-contained loader (no npm dependency): it injects the official
- * `captcha.js` once and drives the documented `window.smartCaptcha` API.
- */
+export type BotProtectionFailure = "expired" | "unavailable" | "incomplete";
 
-const SCRIPT_ID = "yandex-smart-captcha";
-const SCRIPT_SRC = "https://smartcaptcha.yandexcloud.net/captcha.js";
+type PortalTheme = "light" | "dark";
 
-interface SmartCaptchaApi {
-  render: (
-    container: HTMLElement,
-    params: {
-      sitekey: string;
-      hl?: string;
-      callback?: (token: string) => void;
-    },
-  ) => number;
-  subscribe: (
-    widgetId: number,
-    event: "token-expired" | "challenge-hidden" | "network-error",
-    callback: () => void,
-  ) => () => void;
-  destroy: (widgetId: number) => void;
-}
-
-declare global {
-  interface Window {
-    smartCaptcha?: SmartCaptchaApi;
-  }
-}
-
-/** Load `captcha.js` once; resolve when `window.smartCaptcha` is available. */
-function loadScript(): Promise<SmartCaptchaApi> {
-  return new Promise((resolve, reject) => {
-    if (window.smartCaptcha) {
-      resolve(window.smartCaptcha);
-      return;
-    }
-    const onReady = (): void => {
-      if (window.smartCaptcha) resolve(window.smartCaptcha);
-      else reject(new Error("smartCaptcha unavailable after load"));
-    };
-    const existing = document.getElementById(SCRIPT_ID);
-    if (existing) {
-      // The script may already have fired `load` before this listener attaches
-      // (a second widget mounting after the first loaded it) — resolve eagerly.
-      if (window.smartCaptcha) {
-        resolve(window.smartCaptcha);
-        return;
-      }
-      existing.addEventListener("load", onReady, { once: true });
-      existing.addEventListener(
-        "error",
-        () => reject(new Error("captcha.js failed")),
-        {
-          once: true,
-        },
-      );
-      return;
-    }
-    const script = document.createElement("script");
-    script.id = SCRIPT_ID;
-    script.src = SCRIPT_SRC;
-    script.defer = true;
-    script.addEventListener("load", onReady, { once: true });
-    script.addEventListener(
-      "error",
-      () => reject(new Error("captcha.js failed")),
-      {
-        once: true,
-      },
-    );
-    document.head.appendChild(script);
+function subscribeToTheme(onChange: () => void): () => void {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["class"],
   });
+  return () => observer.disconnect();
+}
+
+function readTheme(): PortalTheme {
+  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+}
+
+function serverTheme(): PortalTheme {
+  return "light";
 }
 
 export interface SmartCaptchaProps {
   sitekey: string;
-  /** Emits the solve token, or `null` when it expires / is reset. */
-  onToken: (token: string | null) => void;
+  /** Execute the provider-native invisible check for the pending action. */
+  active: boolean;
+  /** A fresh one-time token, or `undefined` when protection is disabled upstream. */
+  onToken: (token?: string) => void;
+  /** Provider/script lifecycle failure; callers map it to localized action copy. */
+  onError: (failure: BotProtectionFailure) => void;
   /** Widget UI language; defaults to Russian (the portal default locale). */
-  hl?: string;
+  hl?: InvisibleSmartCaptchaProps["language"];
 }
 
+const PROVIDER_BOOTSTRAP_TIMEOUT_MS = 10_000;
+
+/**
+ * Retires callbacks together with the keyed provider instance. Yandex's public
+ * destroy lifecycle may leave an already-queued callback behind; that retiring
+ * widget must not settle the protected action owned by its replacement.
+ */
+function ThemeBoundInvisibleSmartCaptcha({
+  onChallengeHidden,
+  onChallengeVisible,
+  onSuccess,
+  onNetworkError,
+  onTokenExpired,
+  onJavascriptError,
+  ...props
+}: InvisibleSmartCaptchaProps) {
+  const current = useRef(true);
+
+  useLayoutEffect(() => {
+    current.current = true;
+    return () => {
+      current.current = false;
+    };
+  }, []);
+
+  return (
+    <InvisibleSmartCaptcha
+      {...props}
+      onChallengeHidden={() => {
+        queueMicrotask(() => {
+          if (current.current) onChallengeHidden?.();
+        });
+      }}
+      onChallengeVisible={() => {
+        if (current.current) onChallengeVisible?.();
+      }}
+      onSuccess={(token) => {
+        if (current.current) onSuccess?.(token);
+      }}
+      onNetworkError={() => {
+        if (current.current) onNetworkError?.();
+      }}
+      onTokenExpired={() => {
+        if (current.current) onTokenExpired?.();
+      }}
+      onJavascriptError={(error) => {
+        if (current.current) onJavascriptError?.(error);
+      }}
+    />
+  );
+}
+
+/**
+ * Thin EARS-17 adapter over Yandex's official MIT React package.
+ *
+ * `InvisibleSmartCaptcha` owns script loading, provider challenge UI and the
+ * imperative execute lifecycle. The portal supplies only policy: when to run,
+ * its resolved `.dark`/light theme, and truthful error routing. No custom
+ * challenge UI is implemented here.
+ */
 export function SmartCaptcha({
   sitekey,
+  active,
   onToken,
+  onError,
   hl = "ru",
 }: SmartCaptchaProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const theme = useSyncExternalStore(subscribeToTheme, readTheme, serverTheme);
+  const solved = useRef(false);
+  const challengeVisible = useRef(false);
+  const providerSettled = useRef(false);
 
   useEffect(() => {
-    let widgetId: number | undefined;
-    const unsubscribers: Array<() => void> = [];
-    let cancelled = false;
-    const container = containerRef.current;
-    if (!container) return;
+    if (!active) {
+      providerSettled.current = true;
+      challengeVisible.current = false;
+      return;
+    }
 
-    void loadScript()
-      .then((api) => {
-        if (cancelled || !container) return;
-        widgetId = api.render(container, {
-          sitekey,
-          hl,
-          callback: (token) => onToken(token),
-        });
-        // Expiry or a mid-challenge network error invalidates the solve — clear
-        // the token so the gate stays closed (fail-closed) until it re-solves.
-        unsubscribers.push(
-          api.subscribe(widgetId, "token-expired", () => onToken(null)),
-          api.subscribe(widgetId, "network-error", () => onToken(null)),
-        );
-      })
-      .catch(() => {
-        // Load failure: emit no token so the gate stays closed (fail-closed,
-        // mirroring the backend adapter). Errors are not surfaced to the user.
-        if (!cancelled) onToken(null);
-      });
+    solved.current = false;
+    challengeVisible.current = false;
+    providerSettled.current = false;
 
-    return () => {
-      cancelled = true;
-      for (const off of unsubscribers) off();
-      if (widgetId !== undefined) window.smartCaptcha?.destroy(widgetId);
-    };
-  }, [sitekey, hl, onToken]);
+    const bootstrapTimeout = window.setTimeout(() => {
+      if (!providerSettled.current && !challengeVisible.current) {
+        providerSettled.current = true;
+        onError("unavailable");
+      }
+    }, PROVIDER_BOOTSTRAP_TIMEOUT_MS);
 
-  return <div ref={containerRef} />;
+    return () => window.clearTimeout(bootstrapTimeout);
+  }, [active, onError, theme]);
+
+  return (
+    <ThemeBoundInvisibleSmartCaptcha
+      key={theme}
+      sitekey={sitekey}
+      language={hl}
+      visible={active}
+      theme={theme}
+      hideShield={true}
+      onSuccess={(token) => {
+        solved.current = true;
+        providerSettled.current = true;
+        onToken(token);
+      }}
+      onTokenExpired={() => {
+        providerSettled.current = true;
+        onError("expired");
+      }}
+      onNetworkError={() => {
+        providerSettled.current = true;
+        onError("unavailable");
+      }}
+      onJavascriptError={() => {
+        providerSettled.current = true;
+        onError("unavailable");
+      }}
+      onChallengeVisible={() => {
+        // A person may legitimately need longer than the bootstrap timeout to
+        // solve the provider challenge. Once it is visible, never time them out.
+        challengeVisible.current = true;
+      }}
+      onChallengeHidden={() => {
+        // The keyed child defers this callback so provider success wins and a
+        // retiring theme instance can invalidate its own queued event first.
+        if (active && !solved.current) {
+          providerSettled.current = true;
+          onError("incomplete");
+        }
+      }}
+    />
+  );
 }

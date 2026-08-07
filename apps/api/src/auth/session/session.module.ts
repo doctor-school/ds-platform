@@ -61,6 +61,14 @@ import { SessionAuthHook } from "./session-auth.hook.js";
   // ledger binding the session layer already uses (EARS-18) — not a second sink.
   // UserMirrorService is exported for the same single-instance reason (EARS-26):
   // AuthService / ReconcileService reuse the binding the auth hook heals through.
-  exports: [SessionService, AUTH_AUDIT, UserMirrorService],
+  // MirrorSelfHealService is exported for the 011 admin-tier hook, which owes
+  // the same EARS-26 read-path heal the portal hook does — one instance, not a
+  // second healer.
+  exports: [
+    SessionService,
+    AUTH_AUDIT,
+    UserMirrorService,
+    MirrorSelfHealService,
+  ],
 })
 export class SessionModule {}

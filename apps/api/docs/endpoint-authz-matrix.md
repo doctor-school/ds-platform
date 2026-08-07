@@ -16,6 +16,8 @@
 | GET /v1/public/events/month-counts     | public        | —                            | none       | —            | false   | none        | EARS-16, EARS-10                 |
 | GET /v1/ready                          | public        | —                            | none       | —            | false   | none        | EARS-1, EARS-2                   |
 | PATCH /v1/admin/events/:id             | authenticated | platform_admin               | fast-path  | —            | false   | low-stakes  | EARS-2, EARS-8                   |
+| POST /v1/admin/auth/login              | public        | —                            | none       | —            | false   | high-stakes | EARS-3                           |
+| POST /v1/admin/auth/logout             | authenticated | platform_admin               | fast-path  | —            | false   | high-stakes | EARS-2                           |
 | POST /v1/admin/events                  | authenticated | platform_admin               | fast-path  | —            | false   | low-stakes  | EARS-1, EARS-8                   |
 | POST /v1/admin/events/:id/archive      | authenticated | platform_admin               | fast-path  | —            | false   | low-stakes  | EARS-6, EARS-8                   |
 | POST /v1/admin/events/:id/close        | authenticated | platform_admin               | fast-path  | —            | false   | low-stakes  | EARS-5, EARS-8                   |

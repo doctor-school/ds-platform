@@ -115,6 +115,23 @@ const HIGH_STAKES_AUDIT_COVERAGE: Record<string, Coverage> = {
     coveredBy:
       "audit-ledger.e2e: EARS-18 email verification appends one auth.account.verified row; auth.service.spec #1112 covers the auth.account.verify_failed row",
   },
+  "POST /v1/admin/auth/login": {
+    // 011 EARS-3: primary auth at the admin origin. Success emits the canonical
+    // `auth.login.success` carrying `tier: "admin"` and NO session (the policy
+    // fork issues a pending reference instead); every refusal branch — wrong
+    // password, locked, and a principal the `role → mfa_required` policy does
+    // not cover — emits `auth.login.failure` with the same tier field.
+    emits: ["AdminPrimaryAuthSucceeded", "AdminPrimaryAuthFailed"],
+    coveredBy:
+      "mfa-policy.e2e (011 EARS-3): admin primary auth appends auth.login.success carrying tier: admin; the non-policy principal path appends auth.login.failure",
+  },
+  "POST /v1/admin/auth/logout": {
+    // 011 EARS-2: terminates the admin session record only — the concurrent
+    // portal session (and its own `auth.session.terminated` row) is untouched.
+    emits: ["AdminSessionEnded"],
+    coveredBy:
+      "admin-session-separation.e2e (011 EARS-2): admin logout clears only the admin cookies and leaves a concurrent portal session valid",
+  },
   "POST /v1/auth/verify/resend": {
     // #319 (EARS-25): a resend re-issues the otp_email code ONLY for an existing,
     // unverified registrant → one auth.otp.sent row; the no-op paths (unknown /

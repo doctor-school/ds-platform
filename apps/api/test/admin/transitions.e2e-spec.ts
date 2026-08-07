@@ -13,6 +13,7 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { authHeaders, establishAdminSession } from "../setup/admin-session.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -67,6 +68,18 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await fake.grantProjectRole(rows[0]!.zitadel_sub, "platform_admin");
       }
 
+      // 011 EARS-2: an admin route authenticates ONLY through
+      // __Host-ds_admin_session, so a platform_admin principal holds an ADMIN
+      // session here, not the doctor-portal one it borrowed in wave 1.
+      if (role === "platform_admin") {
+        const admin = await establishAdminSession(app, {
+          identifier: email,
+          password,
+          device,
+        });
+        return admin.sid;
+      }
+
       const res = await app.inject({
         method: "POST",
         url: "/v1/auth/login",
@@ -116,7 +129,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         url: "/v1/admin/events",
         headers: {
           ...device,
-          cookie: `${SESSION_COOKIE_NAME}=${cookie}`,
+          ...authHeaders(cookie),
           "content-type": mp.contentType,
         },
         payload: mp.body,
@@ -138,7 +151,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         url: `/v1/admin/events/${id}/transition`,
         headers: {
           ...device,
-          cookie: `${SESSION_COOKIE_NAME}=${cookie}`,
+          ...authHeaders(cookie),
           "content-type": "application/json",
         },
         payload: { to },
@@ -147,7 +160,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     /** Force a persisted lifecycle state (arrange a mid-lifecycle fixture without the sibling commands). */
     async function forceState(id: string, state: EventLifecycleState) {
-      await pool.query("UPDATE events SET state = $1 WHERE id = $2", [state, id]);
+      await pool.query("UPDATE events SET state = $1 WHERE id = $2", [
+        state,
+        id,
+      ]);
     }
 
     beforeAll(async () => {
@@ -194,7 +210,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       let previous: EventLifecycleState = "draft";
       for (const to of order) {
         const res = await transition(cookie, id, to);
-        expect(res.statusCode, `${previous}→${to} should be permitted`).toBe(200);
+        expect(res.statusCode, `${previous}→${to} should be permitted`).toBe(
+          200,
+        );
         const body = res.json() as {
           state: EventLifecycleState;
           validTransitions: EventLifecycleState[];
@@ -262,7 +280,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       // No reopen: archived→published / archived→ended are refused.
       await forceState(id, "archived");
-      for (const to of ["ended", "published", "draft"] as EventLifecycleState[]) {
+      for (const to of [
+        "ended",
+        "published",
+        "draft",
+      ] as EventLifecycleState[]) {
         const res = await transition(cookie, id, to);
         expect(res.statusCode, `archived→${to} must be refused`).toBe(409);
       }
@@ -286,7 +308,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         url: `/v1/admin/events/${id}/transition`,
         headers: {
           ...device,
-          cookie: `${SESSION_COOKIE_NAME}=${cookie}`,
+          ...authHeaders(cookie),
           "content-type": "application/json",
         },
         payload: { to: "cancelled" },
@@ -304,12 +326,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(res.statusCode).toBe(404);
     });
 
-    it("EARS-8: a doctor_guest is refused (403) on the transition command — the guard is never reachable without platform_admin", async () => {
+    it("EARS-8: a doctor_guest is refused (401) on the transition command — the guard is never reachable without an admin session", async () => {
       const admin = await session(uniqueEmail("admin"), "platform_admin");
       const id = await createDraft(admin);
       const doc = await session(uniqueEmail("doc"), "doctor_guest");
       const res = await transition(doc, id, "published");
-      expect(res.statusCode).toBe(403);
+      // 011 EARS-2: refused 401, not 403 — since the admin tier, a doctor-portal cookie authenticates NO admin route, so the request never reaches the role check.
+      expect(res.statusCode).toBe(401);
       expect(
         (
           await pool.query<{ state: string }>(

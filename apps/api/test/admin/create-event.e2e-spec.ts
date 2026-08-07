@@ -13,6 +13,7 @@ import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { OBJECT_STORAGE, type ObjectStorage } from "../../src/storage/index.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { authHeaders, establishAdminSession } from "../setup/admin-session.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -28,7 +29,9 @@ import {
 // IdP for the session; skips when those are absent so the shared CI unit job
 // stays green (requirements Verification, row 1).
 describe.skipIf(
-  !process.env.DATABASE_URL || !process.env.IDP_ISSUER || !process.env.S3_ENDPOINT,
+  !process.env.DATABASE_URL ||
+    !process.env.IDP_ISSUER ||
+    !process.env.S3_ENDPOINT,
 )("007 EARS-1 create event → draft (e2e)", () => {
   let app: NestFastifyApplication;
   let pool: pg.Pool;
@@ -67,6 +70,18 @@ describe.skipIf(
       );
       expect(rows[0]).toBeDefined();
       await fake.grantProjectRole(rows[0]!.zitadel_sub, "platform_admin");
+    }
+
+    // 011 EARS-2: an admin route authenticates ONLY through
+    // __Host-ds_admin_session, so a platform_admin principal holds an ADMIN
+    // session here, not the doctor-portal one it borrowed in wave 1.
+    if (role === "platform_admin") {
+      const admin = await establishAdminSession(app, {
+        identifier: email,
+        password,
+        device,
+      });
+      return admin.sid;
     }
 
     const res = await app.inject({
@@ -130,7 +145,9 @@ describe.skipIf(
     partnerRef: "sponsor:acme-pharma",
   };
 
-  const pdfBytes = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF");
+  const pdfBytes = Buffer.from(
+    "%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF",
+  );
 
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -181,7 +198,7 @@ describe.skipIf(
       url: "/v1/admin/events",
       headers: {
         ...device,
-        cookie: `${SESSION_COOKIE_NAME}=${cookie}`,
+        ...authHeaders(cookie),
         "content-type": mp.contentType,
       },
       payload: mp.body,
@@ -240,7 +257,7 @@ describe.skipIf(
       url: "/v1/admin/events",
       headers: {
         ...device,
-        cookie: `${SESSION_COOKIE_NAME}=${cookie}`,
+        ...authHeaders(cookie),
         "content-type": mp.contentType,
       },
       payload: mp.body,
@@ -251,7 +268,7 @@ describe.skipIf(
     const list = await app.inject({
       method: "GET",
       url: "/v1/admin/events",
-      headers: { ...device, cookie: `${SESSION_COOKIE_NAME}=${cookie}` },
+      headers: { ...device, ...authHeaders(cookie) },
     });
     expect(list.statusCode).toBe(200);
     const listBody = list.json() as { data: { id: string; state: string }[] };
@@ -262,7 +279,7 @@ describe.skipIf(
     const detail = await app.inject({
       method: "GET",
       url: `/v1/admin/events/${id}`,
-      headers: { ...device, cookie: `${SESSION_COOKIE_NAME}=${cookie}` },
+      headers: { ...device, ...authHeaders(cookie) },
     });
     expect(detail.statusCode).toBe(200);
     expect((detail.json() as { id: string }).id).toBe(id);
@@ -282,7 +299,7 @@ describe.skipIf(
     expect(list.statusCode).toBe(401);
   });
 
-  it("EARS-8: a doctor_guest is refused (403) — not silently satisfied — on the admin create and reads", async () => {
+  it("EARS-8: a doctor_guest is refused (401) — not silently satisfied — on the admin create and reads", async () => {
     const cookie = await session(uniqueEmail("doc"), "doctor_guest");
     const mp = multipartBody(
       { payload: JSON.stringify(validPayload) },
@@ -298,32 +315,36 @@ describe.skipIf(
       url: "/v1/admin/events",
       headers: {
         ...device,
-        cookie: `${SESSION_COOKIE_NAME}=${cookie}`,
+        ...authHeaders(cookie),
         "content-type": mp.contentType,
       },
       payload: mp.body,
     });
-    expect(create.statusCode).toBe(403);
+    // 011 EARS-2: refused 401, not 403 — since the admin tier, a doctor-portal cookie authenticates NO admin route, so the request never reaches the role check.
+    expect(create.statusCode).toBe(401);
 
     const list = await app.inject({
       method: "GET",
       url: "/v1/admin/events",
-      headers: { ...device, cookie: `${SESSION_COOKIE_NAME}=${cookie}` },
+      headers: { ...device, ...authHeaders(cookie) },
     });
-    expect(list.statusCode).toBe(403);
+    expect(list.statusCode).toBe(401);
   });
 
   it("EARS-1: an unknown provider / malformed payload is rejected (the МСК field and speakers are validated)", async () => {
     const cookie = await session(uniqueEmail("admin"), "platform_admin");
     const bad = multipartBody({
-      payload: JSON.stringify({ ...validPayload, startsAtMsk: "17.07.2026 19:00" }),
+      payload: JSON.stringify({
+        ...validPayload,
+        startsAtMsk: "17.07.2026 19:00",
+      }),
     });
     const res = await app.inject({
       method: "POST",
       url: "/v1/admin/events",
       headers: {
         ...device,
-        cookie: `${SESSION_COOKIE_NAME}=${cookie}`,
+        ...authHeaders(cookie),
         "content-type": bad.contentType,
       },
       payload: bad.body,

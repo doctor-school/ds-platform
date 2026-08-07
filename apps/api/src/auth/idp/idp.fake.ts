@@ -93,6 +93,13 @@ export class FakeIdpClient implements IdpClient {
    * of the three write paths (register / webhook / sweep) has actually granted it.
    */
   private readonly grants = new Map<string, Set<string>>();
+  /**
+   * 011 EARS-3: subs holding a REGISTERED (ready) TOTP factor. Empty by default —
+   * a freshly provisioned admin has no factor and therefore lands in forced
+   * enrollment, which is the correct first-run behaviour (011 design §7).
+   * Written only by the {@link setTotpFactor} test accessor in this slice.
+   */
+  private readonly totpFactors = new Set<string>();
   /** Subs with a live email login-OTP challenge (EARS-6). Set on request, cleared on a successful verify — models Zitadel requiring a challenge before the check. */
   private readonly emailOtpChallenges = new Set<string>();
   /** Subs with a live SMS login-OTP challenge (EARS-7). */
@@ -396,6 +403,33 @@ export class FakeIdpClient implements IdpClient {
   /** Test accessor: the project roles granted to `sub` (empty if none). */
   grantedRoles(sub: string): string[] {
     return [...(this.grants.get(sub) ?? [])];
+  }
+
+  /**
+   * 011 EARS-3: does `sub` hold a REGISTERED (ready) TOTP factor?
+   *
+   * Fake/real parity (the recorded project rule — a fake is never more
+   * permissive than the real adapter): this resolves `true` **only** for a sub
+   * explicitly recorded in {@link totpFactors}. There is no "any sub with a
+   * password has a factor" shortcut, and no provisional/started state resolves
+   * `true` — exactly what the Zitadel adapter does when it filters
+   * `ListAuthenticationFactors` down to a READY `otp` entry. Nothing in this
+   * slice can WRITE a factor (the register/verify seam is #1191's), so the only
+   * writer is the {@link setTotpFactor} test accessor.
+   */
+  hasTotpFactor(sub: string): Promise<boolean> {
+    return Promise.resolve(this.totpFactors.has(sub));
+  }
+
+  /**
+   * Test accessor: record (or clear) a REGISTERED TOTP factor for `sub`, so the
+   * EARS-3 policy fork can be exercised on both branches without the (not yet
+   * built) enrollment endpoints. Not part of {@link IdpClient} — the real adapter
+   * has no such write, and 011's real factor writes land in #1191.
+   */
+  setTotpFactor(sub: string, registered: boolean): void {
+    if (registered) this.totpFactors.add(sub);
+    else this.totpFactors.delete(sub);
   }
 
   private findByIdentifier(identifier: string): FakeRecord | undefined {

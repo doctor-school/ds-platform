@@ -2,7 +2,7 @@
 title: "011 — Admin session hardening: dedicated __Host-ds_admin_session + mandatory TOTP for platform_admin"
 description: "Requirements: the pre-pilot admin session tier — a dedicated host-only __Host-ds_admin_session cookie (HttpOnly, Secure, SameSite=Strict) that is the only credential the admin surface accepts, plus mandatory TOTP for every platform_admin session: self-serve forced enrollment in the admin app (QR + verify) on first login, a TOTP challenge on every login thereafter, the 003 role → mfa_required policy seam populated with its first elevated role, Zitadel TOTP enabled as provisioned configuration, and the admin-session/MFA audit trail. Closes the ADR-0004 design §3.2 staged-model wave-1 acceptance."
 slug: 011-admin-session-2fa
-status: Draft
+status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/11
 parent_issue: https://github.com/doctor-school/ds-platform/issues/718

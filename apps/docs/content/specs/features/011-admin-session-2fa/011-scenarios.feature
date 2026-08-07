@@ -168,9 +168,10 @@ Feature: Admin session hardening — a dedicated admin cookie and mandatory TOTP
 
   @EARS-13
   Scenario: An operator removes a locked-out admin's factor and that admin re-enrols
-    Given a platform_admin operator holding a step-up-fresh admin session
+    Given at least two platform_admin operators hold an enrolled factor
+    And a platform_admin operator with a valid admin session and their own authenticator to hand
     And a target platform_admin who has lost their authenticator
-    When the operator invokes the factor-removal command against the target account
+    When the operator invokes the factor-removal command against the target account supplying their own current TOTP code
     Then the target's TOTP factor is removed
     And exactly one factor-reset audit row is appended naming the acting operator
     When the target admin logs in with correct credentials
@@ -178,22 +179,36 @@ Feature: Admin session hardening — a dedicated admin cookie and mandatory TOTP
     And the target is forced to the TOTP enrollment screen
 
   @EARS-13 @failure
-  Scenario: Factor removal without a fresh step-up is refused
-    Given a platform_admin operator whose admin session has no fresh step-up
-    When the operator invokes the factor-removal command against another admin account
-    Then the request is refused with the step-up-required error contract
-    And the response carries the step-up URL to re-authenticate against
+  Scenario: Factor removal without the caller's own current code is refused
+    Given a platform_admin operator with a valid admin session
+    When the operator invokes the factor-removal command against another admin account without their own current TOTP code
+    Then the request is refused
+    And the response is identical to the uniform failure returned for a wrong code
+    And the refused attempt counts against the same rate-limit budget as a failed challenge
     And the target's factor is not removed
+    And the published endpoint authorization matrix does not advertise step-up protection on this route
 
   @EARS-13 @failure
   Scenario: An operator cannot strip their own last factor, and a doctor cannot strip anyone's
-    Given a platform_admin operator holding a step-up-fresh admin session
+    Given a platform_admin operator with a valid admin session and their own current TOTP code
     When the operator invokes the factor-removal command against their own account holding a single factor
     Then the request is refused
     And the operator's factor remains registered
     Given a signed-in doctor_guest
     When the doctor invokes the factor-removal command against an admin account
     Then the request is refused
+
+  @EARS-13 @LD-2
+  Scenario: With a single operator the break-glass path keeps the audit trail complete
+    Given fewer than two platform_admin operators hold an enrolled factor
+    And the sole operator has lost their authenticator
+    When the Tech Lead removes the factor through the identity provider admin API following the module runbook
+    And the runbook's compensating step appends the factor-reset audit row through the ops script
+    Then a factor-reset audit row exists that is shape-identical to one written by the removal endpoint
+    And the row names the acting operator
+    And the post-action note is recorded on the tracking issue
+    When the sole operator logs in again
+    Then the operator is forced to the TOTP enrollment screen
 
   # --- Provisioning and audit hygiene ---
 

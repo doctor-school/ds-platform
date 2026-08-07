@@ -169,6 +169,33 @@ shell, no interpolation — so a `$(...)`/backtick in a note cannot execute.
   (`git log` non-zero) → log + **skip green** — never a fabricated all-history
   range, never a broken deploy.
 
+## IdP prod-parity obligation — MFA login policy (011 EARS-8)
+
+**Not a code change and not part of `deploy:prod`.** The admin tier's mandatory
+TOTP (spec 011, ADR-0001 §4) needs a _capability_ the IdP provides, and that
+capability lives in Zitadel's **instance login policy** — configuration on the
+box, not in an image. `infra/dev-stand/idp/provision.sh` step 9 converges it on
+the dev stand; **prod Zitadel must carry the identical posture**, or an admin who
+can enrol on the stand cannot enrol in prod — a shipped outage that no deploy
+step would surface.
+
+The same script is the prod instrument (`infra/deploy/README.md` §5–§10 runs it
+against the prod issuer with the prod bootstrap PAT), so parity is applied by
+re-running it, never by clicking the Console. What must match:
+
+| Login-policy field               | Required value                        | Why                                                                                                                                                                                                                                                     |
+| -------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| second factors                   | must include `SECOND_FACTOR_TYPE_OTP` | The TOTP capability itself. Additive — U2F and anything else already registered stay.                                                                                                                                                                   |
+| `mfaInitSkipLifetime`            | `60s`                                 | An MFA-setup skip must not carry into the next login. **Never `0s`** — a zero skip-lifetime means "never prompt for setup at all" in Zitadel.                                                                                                           |
+| `secondFactorCheckLifetime`      | `300s`                                | A satisfied factor check must not survive across logins (the Zitadel default of 18 h does).                                                                                                                                                             |
+| `multiFactorCheckLifetime`       | `300s`                                | Same, for the multi-factor check (Zitadel default 12 h).                                                                                                                                                                                                |
+| `forceMfa` / `forceMfaLocalOnly` | **`false`**                           | Load-bearing. Zitadel login policies are **organisation-scoped**, so the org-wide switch would impose TOTP on every `doctor_guest`. The MFA _mandate_ is our backend's `role → mfa_required` policy (011 EARS-3); the IdP supplies only the capability. |
+
+Verification after a prod (re)provision: the script's own `mfa sweep:` verdict
+lines echo all four values from the converged policy. The dev-stand equivalent is
+asserted by `apps/api/test/auth/idp-mfa-config.e2e-spec.ts`, which reads the same
+fields over the Admin API and fails on any drift.
+
 ## Release record cycle
 
 A successful deploy leaves a durable, queryable trail. Every record step is

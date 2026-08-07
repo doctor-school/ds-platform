@@ -2,7 +2,7 @@
 title: "011 — Усиление админской сессии: выделенная __Host-ds_admin_session + обязательный TOTP для platform_admin"
 description: "Требования: пред-пилотный уровень админской сессии — выделенная host-only кука __Host-ds_admin_session (HttpOnly, Secure, SameSite=Strict), которая является единственным принимаемым админ-поверхностью удостоверением, плюс обязательный TOTP для каждой сессии platform_admin: самостоятельная принудительная регистрация фактора в админке (QR + подтверждение кода) при первом входе, TOTP-челлендж при каждом последующем входе, заселение шва политики role → mfa_required из 003 первой привилегированной ролью, включение TOTP в Zitadel как провижининг-конфигурации и аудит-след жизненного цикла админской сессии и MFA. Закрывает волну 1 поэтапной модели из ADR-0004 design §3.2."
 slug: 011-admin-session-2fa
-status: Draft
+status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/11
 parent_issue: https://github.com/doctor-school/ds-platform/issues/718

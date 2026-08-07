@@ -825,6 +825,101 @@ else
     && echo "notification policy: disabled password-change notice (passwordChange -> false)" >&2
 fi
 
+# ── 9. MFA capability on the default login policy (011 EARS-8) ───────────────
+# Spec: apps/docs/content/specs/features/011-admin-session-2fa/011-requirements-en.md
+# (EARS-8). TOTP for `platform_admin` is mandatory (ADR-0001 §4). Zitadel supplies
+# the CAPABILITY here; the MANDATE is our backend's `role -> mfa_required` policy
+# (EARS-3). That split is load-bearing: Zitadel login policies are
+# ORGANISATION-scoped, not role-scoped, so the org-wide `forceMfa` switch would
+# impose TOTP on every `doctor_guest`. `forceMfa` is therefore NEVER set here —
+# step 8.quater's read-modify-write echoes it back as-is, and the EARS-8 e2e
+# (apps/api/test/auth/idp-mfa-config.e2e-spec.ts) asserts it stays off.
+#
+# Two converged things, so a freshly provisioned stand is MFA-capable with no
+# console step:
+#   (a) OTP (TOTP) registered as an ALLOWED second factor on the login policy.
+#       Zitadel ships OTP+U2F enabled by default, but "happens to be a vendor
+#       default" is not provisioned configuration — a future instance default or
+#       an operator's console edit would silently remove the capability the admin
+#       tier depends on. This step converges it explicitly and additively (U2F and
+#       anything else already registered are untouched).
+#   (b) The three MFA lifetimes. The Zitadel defaults are 30 d skip / 18 h second-
+#       factor check / 12 h multi-factor check — i.e. a satisfied factor check
+#       SURVIVES across logins and an MFA-setup skip survives a month, both of
+#       which EARS-8 forbids.
+MFA_INIT_SKIP_LIFETIME="60s"        # a skip cannot carry into the next login
+MFA_SECOND_FACTOR_CHECK_LIFETIME="300s"  # completes one flow, survives no gap
+MFA_MULTI_FACTOR_CHECK_LIFETIME="300s"
+# `mfaInitSkipLifetime` is deliberately NOT `0s`: in Zitadel's auth-request logic
+# a ZERO skip-lifetime means "never prompt for MFA setup at all" (the skip is
+# treated as permanently satisfied), which is the exact opposite of "enrollment
+# cannot be skipped". A short non-zero value expires the skip almost immediately,
+# so the prompt returns on the next login.
+#
+# (a) second factor — list-then-add. The list endpoint is a POST `_search`
+# (a GET on the collection answers 405); the add is a plain POST. Idempotent by
+# read-before-write, with api_idempotent absorbing a raced code-9 "already exists".
+SECOND_FACTORS="$(api POST /admin/v1/policies/login/second_factors/_search '{}' | jq -c '.result // []')"
+if [[ "$(jq -r 'index("SECOND_FACTOR_TYPE_OTP") != null' <<< "$SECOND_FACTORS")" == "true" ]]; then
+  echo "login policy: TOTP (SECOND_FACTOR_TYPE_OTP) already an allowed second factor" >&2
+else
+  api_idempotent POST /admin/v1/policies/login/second_factors \
+    '{"type":"SECOND_FACTOR_TYPE_OTP"}' >/dev/null \
+    && echo "login policy: registered TOTP (SECOND_FACTOR_TYPE_OTP) as an allowed second factor" >&2
+fi
+
+# (b) lifetimes — READ-MODIFY-WRITE, same contract as step 8.quater: `PUT
+# /admin/v1/policies/login` is a proto3 FULL-MESSAGE update, so every updatable
+# field is echoed back verbatim and only the three MFA durations are replaced.
+# Omitting a boolean would reset it (allowRegister would silently reopen, #877);
+# omitting a duration would zero it. `secondFactors`/`multiFactors`/`idps` are not
+# part of this update message — they ride their own endpoints, so (a) above is not
+# undone by this PUT.
+LOGIN_POLICY="$(api GET /admin/v1/policies/login | jq '.policy')"
+if [[ "$(jq -r --arg s "$MFA_INIT_SKIP_LIFETIME" --arg sf "$MFA_SECOND_FACTOR_CHECK_LIFETIME" \
+          --arg mf "$MFA_MULTI_FACTOR_CHECK_LIFETIME" \
+          '(.mfaInitSkipLifetime == $s) and (.secondFactorCheckLifetime == $sf) and (.multiFactorCheckLifetime == $mf)' \
+          <<< "$LOGIN_POLICY")" == "true" ]]; then
+  echo "login policy: MFA lifetimes already converged (skip=${MFA_INIT_SKIP_LIFETIME}, 2FA=${MFA_SECOND_FACTOR_CHECK_LIFETIME}, MFA=${MFA_MULTI_FACTOR_CHECK_LIFETIME})" >&2
+else
+  MFA_POLICY_UPDATE="$(jq -c \
+    --arg s "$MFA_INIT_SKIP_LIFETIME" --arg sf "$MFA_SECOND_FACTOR_CHECK_LIFETIME" \
+    --arg mf "$MFA_MULTI_FACTOR_CHECK_LIFETIME" '
+    {
+      allowUsernamePassword: (.allowUsernamePassword // false),
+      allowRegister: (.allowRegister // false),
+      allowExternalIdp: (.allowExternalIdp // false),
+      forceMfa: (.forceMfa // false),
+      forceMfaLocalOnly: (.forceMfaLocalOnly // false),
+      passwordlessType: (.passwordlessType // "PASSWORDLESS_TYPE_NOT_ALLOWED"),
+      hidePasswordReset: (.hidePasswordReset // false),
+      ignoreUnknownUsernames: (.ignoreUnknownUsernames // false),
+      defaultRedirectUri: (.defaultRedirectUri // ""),
+      allowDomainDiscovery: (.allowDomainDiscovery // false),
+      disableLoginWithEmail: (.disableLoginWithEmail // false),
+      disableLoginWithPhone: (.disableLoginWithPhone // false),
+      mfaInitSkipLifetime: $s,
+      secondFactorCheckLifetime: $sf,
+      multiFactorCheckLifetime: $mf
+    }
+    + ({ passwordCheckLifetime, externalLoginCheckLifetime }
+       | with_entries(select(.value != null)))
+  ' <<< "$LOGIN_POLICY")"
+  api_idempotent PUT /admin/v1/policies/login "$MFA_POLICY_UPDATE" >/dev/null \
+    && echo "login policy: converged MFA lifetimes (mfaInitSkip=${MFA_INIT_SKIP_LIFETIME}, secondFactorCheck=${MFA_SECOND_FACTOR_CHECK_LIFETIME}, multiFactorCheck=${MFA_MULTI_FACTOR_CHECK_LIFETIME})" >&2
+fi
+
+# Converged MFA posture — one verdict line per EARS-8 knob (operator visibility,
+# the 8.quater sweep precedent). `forceMfa=false` is the assertion that matters
+# most: it is what keeps every `doctor_guest` out of an MFA step.
+api GET /admin/v1/policies/login | jq -r '.policy |
+  "mfa sweep: forceMfa=\(.forceMfa // false), forceMfaLocalOnly=\(.forceMfaLocalOnly // false) — org-wide mandate stays OFF; the role mandate is ours (011 EARS-3)",
+  "mfa sweep: mfaInitSkipLifetime=\(.mfaInitSkipLifetime // "0s") — an MFA-setup skip cannot carry into the next login",
+  "mfa sweep: secondFactorCheckLifetime=\(.secondFactorCheckLifetime // "0s"), multiFactorCheckLifetime=\(.multiFactorCheckLifetime // "0s") — a factor check does not survive across logins"
+' >&2
+api POST /admin/v1/policies/login/second_factors/_search '{}' | jq -r \
+  '"mfa sweep: allowed second factors=\((.result // []) | join(","))"' >&2
+
 # ── output (machine-parseable; secret only when freshly created) ─────────────
 echo "IDP_PROJECT_ID=${PROJECT_ID}"
 echo "IDP_CLIENT_ID=${CLIENT_ID}"

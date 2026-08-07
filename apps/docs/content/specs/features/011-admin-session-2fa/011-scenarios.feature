@@ -39,7 +39,7 @@ Feature: Admin session hardening — a dedicated admin cookie and mandatory TOTP
     And the same secret is presented in manually transcribable form
     When the admin submits the correct first code from their authenticator
     Then the TOTP factor is registered
-    And an "mfa_enrolled" audit row is appended without the secret
+    And an MFA-enrolled audit row is appended without the secret
     And a "__Host-ds_admin_session" cookie is set with no Domain attribute, Path=/, HttpOnly, Secure and SameSite=Strict
     And the cookie value is an opaque server-side reference rather than a token
     And the admin session carries mfa = true
@@ -61,7 +61,7 @@ Feature: Admin session hardening — a dedicated admin cookie and mandatory TOTP
     And no "__Host-ds_admin_session" cookie is present
     When a request is made to an admin route through the admin origin
     Then the request is refused as unauthenticated
-    And an "admin_session_rejected" audit row is appended
+    And a session-rejected audit row is appended carrying the admin tier
     And no admin data is returned in the response body
 
   @EARS-2 @failure
@@ -101,15 +101,16 @@ Feature: Admin session hardening — a dedicated admin cookie and mandatory TOTP
     Then the response body and status are identical to the response for an unregistered factor
     And the response body and status are identical to the response for a locked account
     And the response times differ by no more than the specified timing delta
-    And an "mfa_challenge_failed" audit row is appended
+    And an MFA-failure audit row is appended
     And the failed attempt counts against both the per-user and the per-IP budget
+    And the admin auth state endpoint discloses neither the lock state nor the remaining attempt budget
 
   @EARS-7 @failure
   Scenario: Crossing the lockout threshold soft-locks the account, and a correct code does not rescue it
     Given a platform_admin at the TOTP challenge screen
     When incorrect codes are submitted until the account lockout threshold is crossed
     Then the account is soft-locked
-    And a "lockout_triggered" audit row is appended
+    And a lockout-triggered audit row is appended
     And the account-lockout notification is sent
     When a correct current TOTP code is submitted while the account is soft-locked
     Then no admin session is issued
@@ -163,6 +164,37 @@ Feature: Admin session hardening — a dedicated admin cookie and mandatory TOTP
     When a state-changing admin request is made without the CSRF double-submit header
     Then the request is refused
 
+  # --- Operator factor recovery (the LD-2 path, as an audited endpoint) ---
+
+  @EARS-13
+  Scenario: An operator removes a locked-out admin's factor and that admin re-enrols
+    Given a platform_admin operator holding a step-up-fresh admin session
+    And a target platform_admin who has lost their authenticator
+    When the operator invokes the factor-removal command against the target account
+    Then the target's TOTP factor is removed
+    And exactly one factor-reset audit row is appended naming the acting operator
+    When the target admin logs in with correct credentials
+    Then the target is placed in the mfa_pending_enrollment state
+    And the target is forced to the TOTP enrollment screen
+
+  @EARS-13 @failure
+  Scenario: Factor removal without a fresh step-up is refused
+    Given a platform_admin operator whose admin session has no fresh step-up
+    When the operator invokes the factor-removal command against another admin account
+    Then the request is refused with the step-up-required error contract
+    And the response carries the step-up URL to re-authenticate against
+    And the target's factor is not removed
+
+  @EARS-13 @failure
+  Scenario: An operator cannot strip their own last factor, and a doctor cannot strip anyone's
+    Given a platform_admin operator holding a step-up-fresh admin session
+    When the operator invokes the factor-removal command against their own account holding a single factor
+    Then the request is refused
+    And the operator's factor remains registered
+    Given a signed-in doctor_guest
+    When the doctor invokes the factor-removal command against an admin account
+    Then the request is refused
+
   # --- Provisioning and audit hygiene ---
 
   @EARS-8
@@ -178,6 +210,9 @@ Feature: Admin session hardening — a dedicated admin cookie and mandatory TOTP
   Scenario: The admin session and MFA lifecycle is auditable and secret-free
     Given an admin has enrolled a factor, logged in, failed a code, and logged out
     Then exactly one terminal audit row is appended per lifecycle event
+    And each row carries the canonical wire id its domain event maps to in the specification
+    And each row carries the admin tier discriminator
+    And an admin-session query by tier returns no doctor portal rows
     And each row carries the actor, timestamp, IP and user agent
     And no row contains the TOTP secret, the provisioning URI or any submitted code
     And personal data fields are masked

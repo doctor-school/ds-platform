@@ -6,7 +6,7 @@ status: Draft
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/11
 parent_issue: https://github.com/doctor-school/ds-platform/issues/718
-issues: []
+issues: [1189, 1190, 1191, 1192, 1193, 1194, 1195]
 prior_decisions:
   - "ADR-0001 §4 — методы аутентификации v1: MFA TOTP **обязателен** для `platform_admin`. Фактор зафиксирован ADR; 011 строит механизм, а не пере-выбирает метод."
   - "ADR-0001 §6 — токены и профиль куки: каждое приложение держит **собственную host-only куку сессии**, привязанную к своему origin; общая кука через границу зон доверия отвергнута. Привязка к отпечатку клиента обязательна; access JWT 15 мин, refresh — непрозрачный, ротируемый, одноразовый, 30 д для веба, хранилище сессий — Redis на сервере."

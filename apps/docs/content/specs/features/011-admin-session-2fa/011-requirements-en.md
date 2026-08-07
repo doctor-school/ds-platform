@@ -6,7 +6,7 @@ status: Draft
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/11
 parent_issue: https://github.com/doctor-school/ds-platform/issues/718
-issues: []
+issues: [1189, 1190, 1191, 1192, 1193, 1194, 1195]
 prior_decisions:
   - "ADR-0001 §4 — Auth methods v1: MFA TOTP is **mandatory** for `platform_admin`. The factor is ADR-fixed; 011 builds the mechanism, it does not re-choose the method."
   - "ADR-0001 §6 — Tokens & cookie profile: every app holds its **own host-only session cookie** scoped to that app's origin; a shared cookie spanning trust zones is rejected. Fingerprint binding is mandatory; access JWT 15 min, refresh opaque + rotating single-use, 30 d web, session store Redis server-side."

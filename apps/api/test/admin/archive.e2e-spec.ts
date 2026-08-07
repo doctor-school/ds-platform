@@ -21,6 +21,7 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { authHeaders, establishAdminSession } from "../setup/admin-session.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -118,6 +119,18 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await fake.grantProjectRole(rows[0]!.zitadel_sub, "platform_admin");
       }
 
+      // 011 EARS-2: an admin route authenticates ONLY through
+      // __Host-ds_admin_session, so a platform_admin principal holds an ADMIN
+      // session here, not the doctor-portal one it borrowed in wave 1.
+      if (role === "platform_admin") {
+        const admin = await establishAdminSession(app, {
+          identifier: email,
+          password,
+          device,
+        });
+        return admin.sid;
+      }
+
       const res = await app.inject({
         method: "POST",
         url: "/v1/auth/login",
@@ -171,7 +184,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         url: "/v1/admin/events",
         headers: {
           ...device,
-          cookie: `${SESSION_COOKIE_NAME}=${cookie}`,
+          ...authHeaders(cookie),
           "content-type": mp.contentType,
         },
         payload: mp.body,
@@ -193,7 +206,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         url: `/v1/admin/events/${id}/${verb}`,
         headers: {
           ...device,
-          ...(cookie ? { cookie: `${SESSION_COOKIE_NAME}=${cookie}` } : {}),
+          ...(cookie ? { ...authHeaders(cookie) } : {}),
         },
       });
     }
@@ -218,7 +231,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     /** Force a persisted lifecycle state (arrange a fixture in a specific state). */
     async function forceState(id: string, state: EventLifecycleState) {
-      await pool.query("UPDATE events SET state = $1 WHERE id = $2", [state, id]);
+      await pool.query("UPDATE events SET state = $1 WHERE id = $2", [
+        state,
+        id,
+      ]);
     }
 
     /** Drive the real create → publish → open → close arc to an `ended` event. */
@@ -341,7 +357,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       for (const state of ["draft", "published", "live", "archived"] as const) {
         await forceState(id, state);
         const res = await command("archive", cookie, id);
-        expect(res.statusCode, `archive must be refused from ${state}`).toBe(409);
+        expect(res.statusCode, `archive must be refused from ${state}`).toBe(
+          409,
+        );
         expect(await currentState(id)).toBe(state); // unchanged
         expect(await auditCount(id, "event.archived")).toBe(0); // no terminal row
       }
@@ -353,13 +371,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect((await command("archive", cookie, missing)).statusCode).toBe(404);
     });
 
-    it("EARS-8: a doctor_guest is refused (403) on archive — the command is never reached without platform_admin, state and ledger untouched", async () => {
+    it("EARS-8: a doctor_guest is refused (401) on archive — the command is never reached without an admin session, state and ledger untouched", async () => {
       const admin = await session(uniqueEmail("admin"), "platform_admin");
       const { id } = await makeEnded(admin);
       const doc = await session(uniqueEmail("doc"), "doctor_guest");
 
       const res = await command("archive", doc, id);
-      expect(res.statusCode).toBe(403);
+      // 011 EARS-2: refused 401, not 403 — since the admin tier, a doctor-portal cookie authenticates NO admin route, so the request never reaches the role check.
+      expect(res.statusCode).toBe(401);
       expect(await currentState(id)).toBe("ended"); // untouched
       expect(await auditCount(id, "event.archived")).toBe(0);
     });

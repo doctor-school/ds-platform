@@ -17,6 +17,7 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { authHeaders, establishAdminSession } from "../setup/admin-session.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -74,6 +75,18 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await fake.grantProjectRole(rows[0]!.zitadel_sub, "platform_admin");
       }
 
+      // 011 EARS-2: an admin route authenticates ONLY through
+      // __Host-ds_admin_session, so a platform_admin principal holds an ADMIN
+      // session here, not the doctor-portal one it borrowed in wave 1.
+      if (role === "platform_admin") {
+        const admin = await establishAdminSession(app, {
+          identifier: email,
+          password,
+          device,
+        });
+        return admin.sid;
+      }
+
       const res = await app.inject({
         method: "POST",
         url: "/v1/auth/login",
@@ -123,13 +136,14 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
      * inserts each into the real `stream_config` row, exercising the additive DB
      * `stream_provider` enum values end-to-end.
      */
-    const VALID_EMBED_REFS: Record<(typeof STREAM_PROVIDERS)[number], string> = {
-      rutube: "caafe83ff1c6ed38d394635b83ece578",
-      youtube: "dQw4w9WgXcQ",
-      vk: "-9944999_456239622_5ee41bc00ebc765a",
-      cdnvideo:
-        "https://playercdn.cdnvideo.ru/aloha/players/auto_player1.html?clid=kcta544ubo&plid=c263cdf6-253e-400b-a008-d1775d3ee190",
-    };
+    const VALID_EMBED_REFS: Record<(typeof STREAM_PROVIDERS)[number], string> =
+      {
+        rutube: "caafe83ff1c6ed38d394635b83ece578",
+        youtube: "dQw4w9WgXcQ",
+        vk: "-9944999_456239622_5ee41bc00ebc765a",
+        cdnvideo:
+          "https://playercdn.cdnvideo.ru/aloha/players/auto_player1.html?clid=kcta544ubo&plid=c263cdf6-253e-400b-a008-d1775d3ee190",
+      };
 
     /** Create a fresh draft event through the EARS-1 create endpoint; return its id + slug. */
     async function createDraft(
@@ -141,7 +155,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         url: "/v1/admin/events",
         headers: {
           ...device,
-          cookie: `${SESSION_COOKIE_NAME}=${cookie}`,
+          ...authHeaders(cookie),
           "content-type": mp.contentType,
         },
         payload: mp.body,
@@ -164,7 +178,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         headers: {
           ...device,
           "content-type": "application/json",
-          ...(cookie ? { cookie: `${SESSION_COOKIE_NAME}=${cookie}` } : {}),
+          ...(cookie ? { ...authHeaders(cookie) } : {}),
         },
         payload: payload as Record<string, unknown>,
       });
@@ -174,16 +188,21 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     async function persistedConfig(
       id: string,
     ): Promise<{ provider: string; embed_ref: string } | undefined> {
-      const { rows } = await pool.query<{ provider: string; embed_ref: string }>(
-        "SELECT provider, embed_ref FROM stream_config WHERE event_id = $1",
-        [id],
-      );
+      const { rows } = await pool.query<{
+        provider: string;
+        embed_ref: string;
+      }>("SELECT provider, embed_ref FROM stream_config WHERE event_id = $1", [
+        id,
+      ]);
       return rows[0];
     }
 
     /** Force a persisted lifecycle state (arrange a non-configurable fixture directly). */
     async function forceState(id: string, state: EventLifecycleState) {
-      await pool.query("UPDATE events SET state = $1 WHERE id = $2", [state, id]);
+      await pool.query("UPDATE events SET state = $1 WHERE id = $2", [
+        state,
+        id,
+      ]);
     }
 
     beforeAll(async () => {
@@ -288,7 +307,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const pub = await app.inject({
         method: "POST",
         url: `/v1/admin/events/${id}/publish`,
-        headers: { ...device, cookie: `${SESSION_COOKIE_NAME}=${cookie}` },
+        headers: { ...device, ...authHeaders(cookie) },
       });
       expect(pub.statusCode).toBe(200);
 
@@ -343,7 +362,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(res.statusCode).toBe(404);
     });
 
-    it("EARS-8: a doctor_guest is refused (403) — the command is never reached, no config recorded", async () => {
+    it("EARS-8: a doctor_guest is refused (401) — the command is never reached, no config recorded", async () => {
       const admin = await session(uniqueEmail("admin"), "platform_admin");
       const { id } = await createDraft(admin);
       const doc = await session(uniqueEmail("doc"), "doctor_guest");
@@ -351,7 +370,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         provider: "rutube",
         embedRef: VALID_EMBED_REFS.rutube,
       });
-      expect(res.statusCode).toBe(403);
+      // 011 EARS-2: refused 401, not 403 — since the admin tier, a doctor-portal cookie authenticates NO admin route, so the request never reaches the role check.
+      expect(res.statusCode).toBe(401);
       expect(await persistedConfig(id)).toBeUndefined();
     });
 

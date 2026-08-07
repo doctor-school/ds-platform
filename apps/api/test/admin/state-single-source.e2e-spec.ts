@@ -11,7 +11,7 @@ import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
-import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { authHeaders, establishAdminSession } from "../setup/admin-session.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -27,7 +27,9 @@ import {
 // + the real public read path against dev-stand Postgres; skips when the stand
 // env is absent so the shared CI unit job stays green.
 describe.skipIf(
-  !process.env.DATABASE_URL || !process.env.IDP_ISSUER || !process.env.S3_ENDPOINT,
+  !process.env.DATABASE_URL ||
+    !process.env.IDP_ISSUER ||
+    !process.env.S3_ENDPOINT,
 )("007 EARS-9 single source of truth: admin state == portal read state", () => {
   let app: NestFastifyApplication;
   let pool: pg.Pool;
@@ -59,18 +61,18 @@ describe.skipIf(
       [email],
     );
     await fake.grantProjectRole(rows[0]!.zitadel_sub, "platform_admin");
-    const res = await app.inject({
-      method: "POST",
-      url: "/v1/auth/login",
-      headers: device,
-      payload: { identifier: email, password },
+    // 011 EARS-2: admin routes accept ONLY __Host-ds_admin_session.
+    const admin = await establishAdminSession(app, {
+      identifier: email,
+      password,
+      device,
     });
-    expect(res.statusCode).toBe(200);
-    return res.cookies.find((c) => c.name === SESSION_COOKIE_NAME)!.value;
+    return admin.sid;
   }
 
-  function authHeaders(cookie: string) {
-    return { ...device, cookie: `${SESSION_COOKIE_NAME}=${cookie}` };
+  /** Device headers + the tier-correct cookie/CSRF pair for this reference. */
+  function deviceAuthHeaders(cookie: string) {
+    return { ...device, ...authHeaders(cookie) };
   }
 
   function multipartBody(fields: Record<string, string>) {
@@ -106,7 +108,7 @@ describe.skipIf(
     const res = await app.inject({
       method: "GET",
       url: `/v1/admin/events/${id}`,
-      headers: authHeaders(cookie),
+      headers: deviceAuthHeaders(cookie),
     });
     expect(res.statusCode).toBe(200);
     return (res.json() as { state: string }).state;
@@ -138,7 +140,7 @@ describe.skipIf(
     const res = await app.inject({
       method: "POST",
       url: `/v1/admin/events/${id}/${command}`,
-      headers: authHeaders(cookie),
+      headers: deviceAuthHeaders(cookie),
     });
     expect(res.statusCode).toBe(200);
   }
@@ -180,7 +182,7 @@ describe.skipIf(
     const created = await app.inject({
       method: "POST",
       url: "/v1/admin/events",
-      headers: { ...authHeaders(cookie), "content-type": mp.contentType },
+      headers: { ...deviceAuthHeaders(cookie), "content-type": mp.contentType },
       payload: mp.body,
     });
     expect(created.statusCode).toBe(201);

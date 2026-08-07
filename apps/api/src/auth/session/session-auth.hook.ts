@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import { HttpAdapterHost } from "@nestjs/core";
 import { MirrorSelfHealService } from "../mirror-self-heal.service.js";
+import { isAdminRoute } from "../admin-session/admin-session.cookie.js";
 import { SessionService } from "./session.service.js";
 import {
   computeFingerprint,
@@ -19,9 +20,10 @@ export interface RequestSubject {
   mfa: boolean;
 }
 
-/** The request surface the hook reads — headers + Fastify-resolved client IP. */
+/** The request surface the hook reads — headers, url + Fastify-resolved client IP. */
 interface HookRequest {
   headers: Record<string, string | string[] | undefined>;
+  url: string;
   ip?: string;
   user?: RequestSubject;
 }
@@ -42,7 +44,9 @@ export async function resolveSubject(
   session: SessionService,
   req: Pick<HookRequest, "headers" | "ip">,
 ): Promise<RequestSubject | undefined> {
-  const sid = parseCookies(headerValue(req.headers.cookie))[SESSION_COOKIE_NAME];
+  const sid = parseCookies(headerValue(req.headers.cookie))[
+    SESSION_COOKIE_NAME
+  ];
   if (!sid) return undefined;
 
   const record = await session.getBySid(sid);
@@ -86,14 +90,24 @@ export class SessionAuthHook implements OnApplicationBootstrap {
     // HTTP server) — e.g. the endpoint-authz lint gate. No server ⇒ no requests
     // to authenticate, so quietly skip rather than crash the boot.
     const fastify = this.adapterHost?.httpAdapter?.getInstance() as
-      | { addHook?: (event: string, fn: unknown) => void }
-      | undefined;
+      { addHook?: (event: string, fn: unknown) => void } | undefined;
     if (!fastify?.addHook) {
-      this.logger.warn("no Fastify instance — session auth hook not registered");
+      this.logger.warn(
+        "no Fastify instance — session auth hook not registered",
+      );
       return;
     }
 
     fastify.addHook("onRequest", async (req: HookRequest) => {
+      // 011 EARS-2 — the portal tier stops at the admin route namespace. The
+      // admin tier authenticates through `AdminSessionAuthHook` and
+      // `__Host-ds_admin_session` ONLY; letting this hook populate a subject
+      // from the portal cookie on an admin route is precisely the wave-1
+      // weakness ADR-0004 design §3.2 recorded and 011 exists to close. The two
+      // hooks are disjoint by route, so neither can fall back to the other's
+      // cookie.
+      if (isAdminRoute(req.url)) return;
+
       const subject = await resolveSubject(this.session, req);
       if (subject) {
         req.user = subject;

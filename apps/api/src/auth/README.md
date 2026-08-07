@@ -32,6 +32,46 @@ durable `audit_ledger` writer).
 | Read-path mirror self-heal                      | `mirror-self-heal.service.ts` | 26                      |
 | IdP port + adapters                             | `idp/`                        | (design §2)             |
 | BFF session establish/refresh/logout/revoke-all | `session/`                    | 5, 8, 9, 10, 12         |
+| Admin session tier (011)                        | `admin-session/`              | 011: 1, 2, 3, 10        |
+
+## Admin session tier (`admin-session/`, spec 011 — EARS-1/2/3/10)
+
+A **second, stricter cookie tier** beside the portal's, not a second session
+model. The structural change: primary authentication at the admin origin no
+longer produces a session — it produces a short-lived, server-side **pending
+authentication**, and only a satisfied second factor converts that into
+`__Host-ds_admin_session` (host-only, `HttpOnly`, `Secure`, `SameSite=Strict`,
+opaque reference).
+
+| Concern                                           | File                                  |
+| ------------------------------------------------- | ------------------------------------- |
+| Cookie names/attributes + route-namespace helpers | `admin-session.cookie.ts`             |
+| `role → mfa_required` policy (EARS-3)             | `mfa-policy.ts`                       |
+| Record shapes + the two store ports               | `admin-session.types.ts`              |
+| Store adapters (in-memory / Redis)                | `admin-session-store.{fake,redis}.ts` |
+| Login → pending → session lifecycle               | `admin-session.service.ts`            |
+| Admin-tier request hook (separation + CSRF)       | `admin-session-auth.hook.ts`          |
+| `/v1/admin/auth/{login,logout}`                   | `admin-auth.controller.ts`            |
+
+Three properties carry it:
+
+1. **Two cookies, enforced apart (EARS-2).** `AdminSessionAuthHook` handles
+   `/v1/admin/**` and `SessionAuthHook` handles everything else — disjoint by
+   route, so neither can fall back to the other's cookie. A portal cookie on an
+   admin route is an explicit refusal with an `auth.session.rejected` row, not an
+   accidental miss.
+2. **No session without a factor (EARS-3).** The `role → mfa_required` policy is
+   evaluated immediately after primary auth; a policy role gets a pending
+   reference plus a next step, never a session.
+3. **Pending-auth is not a session.** Separate Redis namespace, separate port,
+   separate record type, minutes-long TTL — and the admin hook does not know how
+   to read it.
+
+**Sequencing (011 WBS).** The enrollment and challenge endpoints land in
+#1191/#1192. Until they do, `AdminSessionService.upgradePending` — the in-place
+upgrade LD-1 specifies — has no HTTP caller: those verify handlers are its
+callers. The admin app therefore cannot complete an admin login against this
+tier yet; that is the chain's sequencing, not a stub.
 
 ## BFF session model (`session/`, design §3, ADR-0001 §6)
 

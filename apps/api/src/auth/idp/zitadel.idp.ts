@@ -998,9 +998,7 @@ export class ZitadelIdpClient implements IdpClient {
    * Fails closed — any non-2xx or empty result is `null` — so the callers stay
    * enumeration-safe (an unknown identifier looks like a hiccup).
    */
-  private async resolveUserVerification(
-    identifier: string,
-  ): Promise<{
+  private async resolveUserVerification(identifier: string): Promise<{
     userId: string;
     emailVerified: boolean;
     email: string | undefined;
@@ -1478,6 +1476,57 @@ export class ZitadelIdpClient implements IdpClient {
     // failure — Zitadel signals it with 409 (ALREADY_EXISTS). Resolve.
     if (res.ok || res.status === 409) return;
     throw new Error(`zitadel grant project role failed: HTTP ${res.status}`);
+  }
+
+  /**
+   * 011 EARS-3: does `sub` hold a **registered (ready)** TOTP factor?
+   *
+   * Reads Zitadel's per-user authentication factors
+   * (`GET /management/v1/users/{id}/auth_factors`, the same management-v1 surface
+   * this adapter already uses for `orgs/me`) and looks for an `otp` entry in
+   * state `AUTH_FACTOR_STATE_READY`. A factor that exists but is only
+   * **provisional** (`…_NOT_READY` — enrollment started, first code never
+   * verified) resolves `false`: an unverified enrollment is not a usable second
+   * factor, and calling it one would route a half-enrolled admin into a challenge
+   * they cannot pass. The in-repo fake mirrors exactly this — no state other than
+   * "registered" answers `true` (011 Constraints: the fake is never more
+   * permissive than the real adapter).
+   *
+   * **Fails loudly, not open.** A non-2xx (other than the 404 that genuinely
+   * means "this user has no factors") throws {@link IdpUnavailableError} → 503,
+   * because a silent `false` on an outage would mis-route an enrolled admin into
+   * re-enrollment. This method never creates, verifies, or removes a factor —
+   * that seam lands with the enrollment/challenge handlers (011 design §7).
+   */
+  async hasTotpFactor(sub: string): Promise<boolean> {
+    let res: Awaited<ReturnType<FetchLike>>;
+    try {
+      res = await this.fetchImpl(
+        this.url(
+          `/management/v1/users/${encodeURIComponent(sub)}/auth_factors`,
+        ),
+        { method: "GET", headers: this.headers() },
+      );
+    } catch (cause) {
+      throw new IdpUnavailableError(
+        `zitadel auth-factor read failed: ${(cause as Error).message}`,
+      );
+    }
+    // 404 = no factor resource for this user — a real "no factor", not a fault.
+    if (res.status === 404) return false;
+    if (!res.ok) {
+      throw new IdpUnavailableError(
+        `zitadel auth-factor read failed: HTTP ${res.status}`,
+      );
+    }
+    const data = (await res.json()) as {
+      result?: Array<{ otp?: { state?: string }; state?: string }>;
+    };
+    return (data.result ?? []).some(
+      (factor) =>
+        factor.otp !== undefined &&
+        (factor.otp.state ?? factor.state) === "AUTH_FACTOR_STATE_READY",
+    );
   }
 
   /**

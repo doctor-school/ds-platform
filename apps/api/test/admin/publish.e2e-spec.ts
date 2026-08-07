@@ -13,6 +13,7 @@ import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { authHeaders, establishAdminSession } from "../setup/admin-session.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -69,6 +70,18 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await fake.grantProjectRole(rows[0]!.zitadel_sub, "platform_admin");
       }
 
+      // 011 EARS-2: an admin route authenticates ONLY through
+      // __Host-ds_admin_session, so a platform_admin principal holds an ADMIN
+      // session here, not the doctor-portal one it borrowed in wave 1.
+      if (role === "platform_admin") {
+        const admin = await establishAdminSession(app, {
+          identifier: email,
+          password,
+          device,
+        });
+        return admin.sid;
+      }
+
       const res = await app.inject({
         method: "POST",
         url: "/v1/auth/login",
@@ -120,7 +133,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         url: "/v1/admin/events",
         headers: {
           ...device,
-          cookie: `${SESSION_COOKIE_NAME}=${cookie}`,
+          ...authHeaders(cookie),
           "content-type": mp.contentType,
         },
         payload: mp.body,
@@ -138,14 +151,17 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         url: `/v1/admin/events/${id}/publish`,
         headers: {
           ...device,
-          ...(cookie ? { cookie: `${SESSION_COOKIE_NAME}=${cookie}` } : {}),
+          ...(cookie ? { ...authHeaders(cookie) } : {}),
         },
       });
     }
 
     /** GET the 004 public projection for an event (unauthenticated). */
     async function publicPage(idOrSlug: string) {
-      return app.inject({ method: "GET", url: `/v1/public/events/${idOrSlug}` });
+      return app.inject({
+        method: "GET",
+        url: `/v1/public/events/${idOrSlug}`,
+      });
     }
 
     async function currentState(id: string): Promise<string | undefined> {
@@ -168,7 +184,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     /** Force a persisted lifecycle state (arrange a non-draft fixture directly). */
     async function forceState(id: string, state: EventLifecycleState) {
-      await pool.query("UPDATE events SET state = $1 WHERE id = $2", [state, id]);
+      await pool.query("UPDATE events SET state = $1 WHERE id = $2", [
+        state,
+        id,
+      ]);
     }
 
     beforeAll(async () => {
@@ -243,7 +262,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       for (const state of ["published", "live", "ended", "archived"] as const) {
         await forceState(id, state);
         const res = await publish(cookie, id);
-        expect(res.statusCode, `publish must be refused from ${state}`).toBe(409);
+        expect(res.statusCode, `publish must be refused from ${state}`).toBe(
+          409,
+        );
         expect(await currentState(id)).toBe(state); // unchanged
         expect(await publishAuditCount(id)).toBe(0); // no terminal row
       }
@@ -255,12 +276,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(res.statusCode).toBe(404);
     });
 
-    it("EARS-8: a doctor_guest is refused (403) — the publish command is never reached without platform_admin, state and ledger untouched", async () => {
+    it("EARS-8: a doctor_guest is refused (401) — the publish command is never reached without an admin session, state and ledger untouched", async () => {
       const admin = await session(uniqueEmail("admin"), "platform_admin");
       const { id } = await createDraft(admin);
       const doc = await session(uniqueEmail("doc"), "doctor_guest");
       const res = await publish(doc, id);
-      expect(res.statusCode).toBe(403);
+      // 011 EARS-2: refused 401, not 403 — since the admin tier, a doctor-portal cookie authenticates NO admin route, so the request never reaches the role check.
+      expect(res.statusCode).toBe(401);
       expect(await currentState(id)).toBe("draft");
       expect(await publishAuditCount(id)).toBe(0);
     });

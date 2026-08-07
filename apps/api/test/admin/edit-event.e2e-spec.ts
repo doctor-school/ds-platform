@@ -13,6 +13,7 @@ import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { OBJECT_STORAGE, type ObjectStorage } from "../../src/storage/index.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { authHeaders, establishAdminSession } from "../setup/admin-session.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
@@ -70,6 +71,18 @@ describe.skipIf(
       );
       expect(rows[0]).toBeDefined();
       await fake.grantProjectRole(rows[0]!.zitadel_sub, "platform_admin");
+    }
+
+    // 011 EARS-2: an admin route authenticates ONLY through
+    // __Host-ds_admin_session, so a platform_admin principal holds an ADMIN
+    // session here, not the doctor-portal one it borrowed in wave 1.
+    if (role === "platform_admin") {
+      const admin = await establishAdminSession(app, {
+        identifier: email,
+        password,
+        device,
+      });
+      return admin.sid;
     }
 
     const res = await app.inject({
@@ -141,7 +154,7 @@ describe.skipIf(
   function admHeaders(cookie: string, contentType: string) {
     return {
       ...device,
-      cookie: `${SESSION_COOKIE_NAME}=${cookie}`,
+      ...authHeaders(cookie),
       "content-type": contentType,
     };
   }
@@ -425,7 +438,7 @@ describe.skipIf(
     expect(rows[0]?.starts_at.toISOString()).toBe("2026-07-17T16:00:00.000Z");
   });
 
-  it("EARS-8: a doctor_guest is refused (403) — not silently satisfied — on the edit command", async () => {
+  it("EARS-8: a doctor_guest is refused (401) — not silently satisfied — on the edit command", async () => {
     const adminCookie = await session(uniqueEmail("admin"), "platform_admin");
     const created = await createEvent(adminCookie);
     const id = created.id as string;
@@ -438,7 +451,8 @@ describe.skipIf(
       headers: admHeaders(guestCookie, edit.contentType),
       payload: edit.body,
     });
-    expect(res.statusCode).toBe(403);
+    // 011 EARS-2: refused 401, not 403 — since the admin tier, a doctor-portal cookie authenticates NO admin route, so the request never reaches the role check.
+    expect(res.statusCode).toBe(401);
   });
 
   it("EARS-8: an unauthenticated caller is refused (401) on the edit command", async () => {

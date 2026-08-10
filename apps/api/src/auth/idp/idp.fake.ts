@@ -426,7 +426,11 @@ export class FakeIdpClient implements IdpClient {
    * explicitly recorded in {@link totpFactors}. There is no "any sub with a
    * password has a factor" shortcut, and no provisional/started state resolves
    * `true` — exactly what the Zitadel adapter does when it filters
-   * `ListAuthenticationFactors` down to a READY `otp` entry. Nothing in this
+   * the `ListHumanAuthFactors` search hop (`POST …/auth_factors/_search`,
+   * #1208) down to a READY `otp` entry. An unrecorded sub is this fake's
+   * counterpart of that search's empty `result[]`; the real adapter's fault
+   * branch (a throw on any non-2xx) has no fake analogue, which keeps the fake
+   * no MORE permissive than the real one. Nothing in this
    * slice can WRITE a factor (the register/verify seam is #1191's), so the only
    * writer is the {@link setTotpFactor} test accessor.
    */

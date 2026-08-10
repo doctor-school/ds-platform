@@ -8,7 +8,11 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
-import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
+import {
+  IDP_CLIENT,
+  IdpUnavailableError,
+  type IdpSession,
+} from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import {
   RATE_LIMIT_THRESHOLDS,
@@ -22,6 +26,7 @@ import {
 } from "../../src/auth/admin-session/admin-session.cookie.js";
 import { AdminSessionService } from "../../src/auth/admin-session/admin-session.service.js";
 import { ADMIN_DEVICE } from "../setup/admin-session.js";
+import { DEFAULT_TIMING_FLOOR_MS } from "../../src/auth/timing/timing-equalization.types.js";
 
 /** The 007 admin route set — the pending reference must reach none of it. */
 const ADMIN_ROUTES: ReadonlyArray<{ method: string; url: string }> = [
@@ -337,6 +342,155 @@ describe.skipIf(!process.env.DATABASE_URL)(
         tier: "admin",
         method: "password",
       });
+    });
+  },
+);
+
+/**
+ * 011 EARS-3 + #202 (#1208 follow-up) — the IdP-fault posture of admin primary
+ * auth at the HTTP layer.
+ *
+ * `hasTotpFactor` fails LOUD by design (#1208: a swallowed fault would report an
+ * enrolled admin as factor-less). That throw must not reach the client as a bare
+ * 500, for two independent reasons:
+ *
+ * 1. The recorded project rule (`register.e2e-spec.ts` #202): a genuine IdP infra
+ *    fault is a 503 "unavailable", NEVER a 500 — the portal path maps it at
+ *    `auth.service.ts` and the admin path must match.
+ * 2. Enumeration safety (`GENERIC_ADMIN_LOGIN_FAILURE`). The factor read sits
+ *    AFTER `passwordLogin` succeeded and AFTER `requiresMfa(roles)` passed, so
+ *    an unmapped status here is returned **only** for a valid credential pair on
+ *    a `platform_admin` — a membership oracle every other outcome (the uniform
+ *    401) is built to deny.
+ */
+describe.skipIf(!process.env.DATABASE_URL)(
+  "011 EARS-3 — an IdP fault during the factor read (e2e, #1208)",
+  () => {
+    /** The #1208 fault window: the factor read is down, everything else works. */
+    class FactorReadUnavailableIdp extends FakeIdpClient {
+      readonly terminated: string[] = [];
+      override hasTotpFactor(): Promise<boolean> {
+        return Promise.reject(new IdpUnavailableError("factor read is down"));
+      }
+      override terminateSession(session: IdpSession): Promise<void> {
+        this.terminated.push(session.zitadelSessionId);
+        return super.terminateSession(session);
+      }
+    }
+
+    let app: NestFastifyApplication;
+    let pool: pg.Pool;
+    let fake: FactorReadUnavailableIdp;
+    const consent = [{ purpose: "tos", version: "2026-01" }];
+    const password = "Aa1!ufficiently-long-pw";
+    const createdEmails: string[] = [];
+
+    beforeAll(async () => {
+      fake = new FactorReadUnavailableIdp();
+      const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+        .overrideProvider(IDP_CLIENT)
+        .useValue(fake)
+        .overrideProvider(RATE_LIMIT_THRESHOLDS)
+        .useValue(RELAXED_RATE_LIMIT)
+        .compile();
+      app = moduleRef.createNestApplication<NestFastifyApplication>(
+        new FastifyAdapter(),
+      );
+      app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
+      await app.init();
+      await app.getHttpAdapter().getInstance().ready();
+      pool = app.get<pg.Pool>(DRIZZLE_POOL);
+    });
+
+    afterEach(async () => {
+      for (const email of createdEmails.splice(0))
+        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+    });
+
+    afterAll(async () => {
+      await app.close();
+    });
+
+    /** Register a doctor, then grant it the policy role. */
+    async function registerAdmin(): Promise<string> {
+      const email = `ears1208-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
+      createdEmails.push(email);
+      const reg = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: { email, password, consent },
+      });
+      expect(reg.statusCode).toBe(200);
+      const { rows } = await pool.query<{ zitadel_sub: string }>(
+        "SELECT zitadel_sub FROM users WHERE email = $1",
+        [email],
+      );
+      await fake.grantProjectRole(rows[0]!.zitadel_sub, "platform_admin");
+      return email;
+    }
+
+    function adminLogin(email: string) {
+      return app.inject({
+        method: "POST",
+        url: "/v1/admin/auth/login",
+        headers: ADMIN_DEVICE,
+        payload: { identifier: email, password },
+      });
+    }
+
+    it("EARS-3: an IdP fault during the factor read yields a 503, NEVER a 500 (#1208)", async () => {
+      const email = await registerAdmin();
+
+      const res = await adminLogin(email);
+
+      expect(res.statusCode).toBe(503);
+      expect(res.statusCode).not.toBe(500);
+      // No session, no pending reference — the fault admits nothing.
+      const names = res.cookies.map((c) => c.name);
+      expect(names).not.toContain(ADMIN_SESSION_COOKIE_NAME);
+      expect(names).not.toContain(ADMIN_PENDING_COOKIE_NAME);
+    });
+
+    it("EARS-3: the 503 body discloses nothing — no identifier, sub, role, or IdP detail (#1208)", async () => {
+      const email = await registerAdmin();
+
+      const res = await adminLogin(email);
+      const body = res.body.toLowerCase();
+
+      expect(body).not.toContain(email.toLowerCase());
+      expect(body).not.toContain("platform_admin");
+      expect(body).not.toContain("totp");
+      expect(body).not.toContain("factor");
+      expect(body).not.toContain("zitadel");
+      // A generic "unavailable" is honest about an outage without discriminating.
+      expect(body).toContain("unavailable");
+    });
+
+    it("EARS-3: the fault path is timing-equalized like every other admin-login outcome (#1208)", async () => {
+      const email = await registerAdmin();
+
+      const start = Date.now();
+      const res = await adminLogin(email);
+      const elapsed = Date.now() - start;
+
+      // The mapping happens inside the handler, so the terminal error still
+      // travels through TimingEqualizationInterceptor's padded catchError
+      // branch (the padding mechanism itself is owned by
+      // timing-equalization.interceptor.spec.ts).
+      expect(res.statusCode).toBe(503);
+      expect(elapsed).toBeGreaterThanOrEqual(DEFAULT_TIMING_FLOOR_MS - 5);
+    });
+
+    it("EARS-3: the Zitadel session created by the password check does not outlive the fault (#1208)", async () => {
+      const email = await registerAdmin();
+      const before = fake.terminated.length;
+
+      await adminLogin(email);
+
+      // The BFF is abandoning the request the session was created for; under a
+      // persistent fault, leaving it live would leak one IdP session per login
+      // attempt. Same disposal the non-policy refusal branch performs.
+      expect(fake.terminated.length).toBeGreaterThan(before);
     });
   },
 );

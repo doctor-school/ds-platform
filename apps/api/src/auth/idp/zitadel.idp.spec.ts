@@ -2026,6 +2026,20 @@ describe("ZitadelIdpClient.hasTotpFactor wire shape (011 EARS-3, #1208)", () => 
   });
 
   it("011 EARS-3: a provisional (NOT_READY) otp factor resolves false — an unverified enrollment is not a usable second factor", async () => {
+    // The canonical wire shape the live `_search` returns, with `state` on the
+    // FACTOR (not nested under `otp`) — exactly what #1191's enrollment-start
+    // creates before the first code is verified.
+    const { fetchImpl } = factorFetch({
+      json: {
+        result: [{ otp: {}, state: "AUTH_FACTOR_STATE_NOT_READY" }],
+      },
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.hasTotpFactor("user-1")).resolves.toBe(false);
+  });
+
+  it("011 EARS-3: a NOT_READY state nested under `otp` also resolves false (the defensive shape the filter falls back to)", async () => {
     const { fetchImpl } = factorFetch({
       json: {
         result: [{ otp: { state: "AUTH_FACTOR_STATE_NOT_READY" } }],

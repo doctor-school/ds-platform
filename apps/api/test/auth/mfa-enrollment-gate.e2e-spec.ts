@@ -4,7 +4,7 @@ import {
   type NestFastifyApplication,
 } from "@nestjs/platform-fastify";
 import { VersioningType } from "@nestjs/common";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
@@ -81,8 +81,19 @@ describe.skipIf(!process.env.DATABASE_URL)(
     const consent = [{ purpose: "tos", version: "2026-01" }];
     const password = "Aa1!ufficiently-long-pw";
 
+    /**
+     * Every principal this suite registers, dropped in `afterEach`. The fake IdP
+     * numbers its subjects from a per-app counter, so a `users` row surviving a
+     * previous run collides with the next run's `zitadel_sub` and the cascade
+     * silently updates the stale row instead of inserting the new one — cleanup
+     * is what keeps a re-run deterministic against a shared branch database.
+     */
+    const createdEmails: string[] = [];
+
     function uniqueEmail(): string {
-      return `ears1191gate-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
+      const email = `ears1191gate-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
+      createdEmails.push(email);
+      return email;
     }
 
     /** Register, grant `platform_admin`, and return the IdP subject. */
@@ -135,6 +146,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await app.getHttpAdapter().getInstance().ready();
       pool = app.get<pg.Pool>(DRIZZLE_POOL);
       fake = app.get<FakeIdpClient>(IDP_CLIENT);
+    });
+
+    afterEach(async () => {
+      for (const email of createdEmails.splice(0))
+        await pool.query("DELETE FROM users WHERE email = $1", [email]);
     });
 
     afterAll(async () => {

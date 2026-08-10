@@ -125,6 +125,22 @@ const HIGH_STAKES_AUDIT_COVERAGE: Record<string, Coverage> = {
     coveredBy:
       "mfa-policy.e2e (011 EARS-3): admin primary auth appends auth.login.success carrying tier: admin; the non-policy principal path appends auth.login.failure",
   },
+  // `POST /v1/admin/auth/mfa/enroll/start` is deliberately absent: it is
+  // classified `audit: low-stakes` because the 011 Event Model states that
+  // `StartMfaEnrollment` "emits nothing durable (the factor is not yet
+  // confirmed)". Carrying `high-stakes` there would assert a mandatory terminal
+  // row that the spec forbids — and this registry has no honest way to say "owes
+  // no row": `emits: []` is rejected, and `deferred` means a tracked GAP, which
+  // this is not. The lifecycle row belongs to the verify below, which is where
+  // possession is actually proven.
+  "POST /v1/admin/auth/mfa/enroll/verify": {
+    // 011 EARS-5: a correct first code confirms the factor (`auth.mfa.enrolled`,
+    // secret-free) and upgrades the pending authentication in place into the
+    // admin session (`auth.session.created`, LD-1 — no second login).
+    emits: ["MfaEnrolled", "AdminSessionEstablished"],
+    coveredBy:
+      "mfa-enroll.e2e (011 EARS-5.4): enrollment appends exactly one auth.mfa.enrolled row carrying method: totp + tier: admin, plus the one auth.session.created of the in-place upgrade",
+  },
   "POST /v1/admin/auth/logout": {
     // 011 EARS-2: terminates the admin session record only — the concurrent
     // portal session (and its own `auth.session.terminated` row) is untouched.

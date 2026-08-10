@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
-import type { AdminAuthState } from "@ds/schemas";
+import type { AdminAuthState, AdminEnrollmentOffer } from "@ds/schemas";
 import { IDP_CLIENT, type IdpClient } from "../idp/idp.types.js";
 import {
   AUTH_AUDIT,
@@ -43,6 +43,44 @@ const PENDING_TTL_SECONDS = 5 * 60;
  * not a silent divergence discovered in a diff.
  */
 const ADMIN_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
+
+/**
+ * EARS-5: read the issuer/account labels out of the provisioning URI the IdP
+ * minted, so the offer's four fields all describe **one** registration.
+ *
+ * Deriving them rather than composing our own is the point: the authenticator app
+ * files the factor under whatever the URI says, so a label we invented here would
+ * disagree with what the operator actually sees on their phone. `otpauth://totp/`
+ * carries the label as `issuer:account` in the path with `issuer` repeated as a
+ * query parameter (the form this repo's fake and Zitadel both emit). A URI that
+ * does not parse falls back to the platform label and the subject — a
+ * cosmetically poorer offer, never a broken enrollment.
+ */
+function labelsFrom(
+  uri: string,
+  sub: string,
+): { issuer: string; account: string } {
+  const match = /^otpauth:\/\/totp\/([^?]*)/.exec(uri);
+  const label = decodeURIComponent(match?.[1] ?? "");
+  const separator = label.indexOf(":");
+  const query = new URLSearchParams(uri.slice(uri.indexOf("?") + 1));
+  const issuer =
+    query.get("issuer") ??
+    (separator > 0 ? label.slice(0, separator) : DEFAULT_TOTP_ISSUER);
+  const account = separator >= 0 ? label.slice(separator + 1) : label;
+  return {
+    issuer: issuer || DEFAULT_TOTP_ISSUER,
+    account: account || sub,
+  };
+}
+
+/**
+ * The label shown when the provisioning URI carries none. A product name, not an
+ * origin or endpoint — the AGENTS.md §9 no-hardcoded-endpoint rule does not reach
+ * it, and an authenticator entry with no issuer is unusable for an operator
+ * holding several factors.
+ */
+const DEFAULT_TOTP_ISSUER = "Doctor.School";
 
 /** What `startLogin` resolved to — the EARS-3 policy fork, or a uniform refusal. */
 export type AdminLoginOutcome =
@@ -188,6 +226,113 @@ export class AdminSessionService {
   /** Resolve a pending authentication by its reference (EARS-3). */
   getPending(ref: string): Promise<PendingAuthRecord | undefined> {
     return this.pending.get(ref);
+  }
+
+  /**
+   * EARS-4 — resolve the pending authentication a request may act on, or
+   * `undefined`.
+   *
+   * This is the gate the two enrollment endpoints sit behind, and it is
+   * deliberately **one** function: every condition that must hold for a caller to
+   * be "in `mfa_pending_enrollment`" is checked in a single place, so no handler
+   * can be written that checks three of the four. A caller passes only when it
+   * presents a live pending reference, bound to THIS device's fingerprint, whose
+   * next step is the one the route serves.
+   *
+   * A caller holding an established admin session is NOT pending and gets
+   * `undefined` — the enrollment endpoints exist for one state, not "any admin
+   * credential" (011 Constraints: the pending-auth state is not a session, and
+   * the converse holds too).
+   */
+  async getPendingForStep(
+    ref: string,
+    fingerprint: string,
+    step: AdminNextStep,
+  ): Promise<PendingAuthRecord | undefined> {
+    if (!ref) return undefined;
+    const record = await this.pending.get(ref);
+    if (!record) return undefined;
+    if (record.fingerprint !== fingerprint) return undefined;
+    if (record.nextStep !== step) return undefined;
+    return record;
+  }
+
+  /**
+   * EARS-5 — `StartMfaEnrollment`. Register a **provisional** TOTP factor for the
+   * pending principal and return the one-time offer: the scannable provisioning
+   * URI, the same secret in transcribable form, and the issuer/account labels.
+   *
+   * **Nothing durable is emitted.** The factor is not yet confirmed, so there is
+   * no lifecycle event to record — `auth.mfa.enrolled` is written by
+   * {@link verifyEnrollment}, and only for a factor an operator has proven they
+   * hold. Recording an "enrollment started" row would also be the one place the
+   * secret could plausibly leak into the ledger.
+   *
+   * **The offer is not re-servable.** A second call registers a NEW provisional
+   * factor with a NEW secret and the previous one stops verifying (the
+   * {@link IdpClient.startTotpRegistration} contract). An operator who lost the
+   * screen gets a fresh factor, never a second look at the old secret — which is
+   * what makes "shown exactly once" true rather than aspirational.
+   *
+   * Resolves `undefined` when the caller is not a pending-enrollment principal;
+   * the handler answers that with the same uniform refusal as a wrong code.
+   */
+  async startEnrollment(
+    ref: string,
+    fingerprint: string,
+  ): Promise<AdminEnrollmentOffer | undefined> {
+    const record = await this.getPendingForStep(
+      ref,
+      fingerprint,
+      "mfa_enrollment_required",
+    );
+    if (!record) return undefined;
+
+    const registration = await this.idp.startTotpRegistration(record.sub);
+    return {
+      provisioningUri: registration.uri,
+      secret: registration.secret,
+      ...labelsFrom(registration.uri, record.sub),
+    };
+  }
+
+  /**
+   * EARS-5 — `VerifyMfaEnrollment`. Verify the first code against the provisional
+   * factor and, on success, complete the login **in place** (LD-1).
+   *
+   * The ordering is the requirement: confirm the factor at the IdP → append
+   * `auth.mfa.enrolled` → upgrade the pending record into a full admin session.
+   * Both factors have been presented in this login (a completed password
+   * authentication, PD-1, plus a TOTP verification of the factor just
+   * registered), so forcing a second full login would add friction that proves
+   * nothing — the ADR-0001 design §8.5 re-login step exists because ITS vehicle
+   * is a magic link, a weaker primary credential (LD-1).
+   *
+   * Resolves `undefined` for every refusal — wrong code, expired window, replayed
+   * code, no provisional factor, a stale or foreign pending reference — so the
+   * handler answers all of them identically (EARS-7). The pending authentication
+   * **survives** a wrong code: the operator retries against the same provisional
+   * factor rather than being thrown back to the login screen.
+   */
+  async verifyEnrollment(
+    ref: string,
+    fingerprint: string,
+    code: string,
+  ): Promise<
+    { cookies: string[]; principal: AdminSessionPrincipal } | undefined
+  > {
+    const record = await this.getPendingForStep(
+      ref,
+      fingerprint,
+      "mfa_enrollment_required",
+    );
+    if (!record) return undefined;
+
+    const verified = await this.idp.verifyTotpRegistration(record.sub, code);
+    if (!verified) return undefined;
+
+    await this.audit.record({ type: "MfaEnrolled", sub: record.sub });
+    return this.upgradePending(ref, fingerprint);
   }
 
   /**

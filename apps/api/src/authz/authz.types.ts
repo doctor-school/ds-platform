@@ -25,8 +25,22 @@ export const ROLES = [
 ] as const;
 export type Role = (typeof ROLES)[number];
 
-/** `public` = no authenticated subject required; `authenticated` = valid session subject required (spec §3). */
-export type AuthzAccess = "public" | "authenticated";
+/**
+ * Access class (spec §3):
+ * - `public`        — no authenticated subject required.
+ * - `authenticated` — a valid session subject is required.
+ * - `pending-auth`  — 011 EARS-4: reachable **only** by a principal that has
+ *   completed primary authentication and owes a second factor. It is neither of
+ *   the other two, and collapsing it into one of them would be a lie in a
+ *   security artifact: `public` would advertise the enrollment/challenge
+ *   endpoints as open to anyone, and `authenticated` would claim the guard
+ *   resolves an `AdminSessionPrincipal` there — it cannot, because the whole
+ *   point of the state is that no session exists yet. The pending reference is
+ *   verified by the classified handler against the server-side pending-auth
+ *   record (its fingerprint and its required next step); the guard's job on these
+ *   rows is to NOT wave through a session-based subject.
+ */
+export type AuthzAccess = "public" | "authenticated" | "pending-auth";
 
 /**
  * Engine-neutral enforcement strength (spec §3):
@@ -54,7 +68,12 @@ export type AuthzAudit = "none" | "low-stakes" | "high-stakes";
 /** The authored classification — the eight-column row contract minus the derived `endpoint` (spec §3). */
 export interface AuthzMeta {
   access: AuthzAccess;
-  /** required when `access: "authenticated"`; omitted/`—` when `public`. */
+  /**
+   * required when `access: "authenticated"`; omitted/`—` when `public`. On a
+   * `pending-auth` row it records the role the pending principal was admitted
+   * under (`platform_admin`) — the policy fork that created the pending record
+   * already checked it, so the row states the truth rather than an em-dash.
+   */
   roles?: Role[];
   check: AuthzCheck;
   /** object-level (ABAC) predicates; only valid when `check: "policy"`. */

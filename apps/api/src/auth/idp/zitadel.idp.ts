@@ -13,6 +13,7 @@ import {
   type IdpTokens,
   type IdpUser,
   type PasswordLoginResult,
+  type TotpRegistration,
 } from "./idp.types.js";
 import { InMemoryOtpChallengeStore } from "./otp-challenge-store.fake.js";
 import type { OtpChallengeStore } from "./otp-challenge-store.types.js";
@@ -1553,6 +1554,91 @@ export class ZitadelIdpClient implements IdpClient {
         factor.otp !== undefined &&
         (factor.otp.state ?? factor.state) === "AUTH_FACTOR_STATE_READY",
     );
+  }
+
+  /**
+   * 011 EARS-5: register a **provisional** TOTP factor for `sub`.
+   *
+   * `POST /v2/users/{id}/totp` is Zitadel's User-v2 TOTP registration: it mints
+   * the shared secret and answers with both forms — the `uri`
+   * (`otpauth://totp/…`, the QR payload) and the bare base32 `secret` for manual
+   * transcription. The factor stays `AUTH_FACTOR_STATE_NOT_READY` until
+   * {@link verifyTotpRegistration} confirms the first code, so
+   * {@link hasTotpFactor} keeps answering `false` for it.
+   *
+   * Zitadel replaces any existing provisional registration on a repeat call,
+   * which is exactly the port contract (a re-start yields a NEW secret rather
+   * than re-reading the old one) and is what makes the one-time offer honest.
+   *
+   * **Fails loudly** — a non-2xx throws {@link IdpUnavailableError} → 503 rather
+   * than resolving an empty offer, because a screen rendering a blank QR would
+   * strand the operator inside a gate they cannot leave.
+   */
+  async startTotpRegistration(sub: string): Promise<TotpRegistration> {
+    let res: Awaited<ReturnType<FetchLike>>;
+    try {
+      res = await this.fetchImpl(
+        this.url(`/v2/users/${encodeURIComponent(sub)}/totp`),
+        { method: "POST", headers: this.headers(), body: JSON.stringify({}) },
+      );
+    } catch (cause) {
+      throw new IdpUnavailableError(
+        `zitadel totp registration failed: ${(cause as Error).message}`,
+      );
+    }
+    if (!res.ok) {
+      throw new IdpUnavailableError(
+        `zitadel totp registration failed: HTTP ${res.status}`,
+      );
+    }
+    const data = (await res.json()) as { uri?: string; secret?: string };
+    if (!data.uri || !data.secret) {
+      throw new IdpUnavailableError(
+        "zitadel totp registration returned no uri/secret",
+      );
+    }
+    return { uri: data.uri, secret: data.secret };
+  }
+
+  /**
+   * 011 EARS-5: verify the first code against the provisional factor
+   * (`POST /v2/users/{id}/totp/verify`); a 2xx promotes it to
+   * `AUTH_FACTOR_STATE_READY`.
+   *
+   * **Resolves `false` rather than throwing on every rejection** — wrong code,
+   * expired window, replayed code, no provisional factor — because the caller
+   * must answer all of them with one uniform failure (EARS-7) in constant time.
+   * Letting a 400 escape as an exception here would turn an HTTP status into the
+   * enumeration oracle the uniform-failure rule exists to deny. A genuine
+   * transport fault still throws {@link IdpUnavailableError}: an outage is not a
+   * wrong code, and reporting it as one would tell an operator their correct code
+   * is bad.
+   */
+  async verifyTotpRegistration(sub: string, code: string): Promise<boolean> {
+    let res: Awaited<ReturnType<FetchLike>>;
+    try {
+      res = await this.fetchImpl(
+        this.url(`/v2/users/${encodeURIComponent(sub)}/totp/verify`),
+        {
+          method: "POST",
+          headers: this.headers(),
+          body: JSON.stringify({ code }),
+        },
+      );
+    } catch (cause) {
+      throw new IdpUnavailableError(
+        `zitadel totp verify failed: ${(cause as Error).message}`,
+      );
+    }
+    if (res.ok) return true;
+    // 4xx = the code (or the factor) was refused — a client-truth outcome the
+    // caller collapses into its uniform failure. 5xx = the IdP is broken.
+    if (res.status >= 500) {
+      throw new IdpUnavailableError(
+        `zitadel totp verify failed: HTTP ${res.status}`,
+      );
+    }
+    return false;
   }
 
   /**

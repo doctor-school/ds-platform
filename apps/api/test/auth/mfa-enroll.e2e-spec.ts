@@ -4,7 +4,7 @@ import {
   type NestFastifyApplication,
 } from "@nestjs/platform-fastify";
 import { VersioningType } from "@nestjs/common";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
@@ -42,8 +42,23 @@ describe.skipIf(!process.env.DATABASE_URL)(
     const consent = [{ purpose: "tos", version: "2026-01" }];
     const password = "Aa1!ufficiently-long-pw";
 
+    /**
+     * Every principal this suite registers, dropped in `afterEach`.
+     *
+     * Not hygiene for its own sake: the fake IdP numbers its subjects from a
+     * per-app counter (`fake-sub-1`, `fake-sub-2`, …), so a `users` row left
+     * behind by a previous run collides with the NEXT run's subject on the
+     * `zitadel_sub` unique key. The registration cascade's `onConflictDoUpdate`
+     * then quietly refreshes that stale row instead of inserting the new one, and
+     * the suite fails claiming the mirror row never appeared. Cleaning up is what
+     * keeps a re-run deterministic against a shared branch database.
+     */
+    const createdEmails: string[] = [];
+
     function uniqueEmail(): string {
-      return `ears1191enroll-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
+      const email = `ears1191enroll-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@ds.test`;
+      createdEmails.push(email);
+      return email;
     }
 
     async function registerAdmin(email: string): Promise<string> {
@@ -114,6 +129,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await app.getHttpAdapter().getInstance().ready();
       pool = app.get<pg.Pool>(DRIZZLE_POOL);
       fake = app.get<FakeIdpClient>(IDP_CLIENT);
+    });
+
+    afterEach(async () => {
+      for (const email of createdEmails.splice(0))
+        await pool.query("DELETE FROM users WHERE email = $1", [email]);
     });
 
     afterAll(async () => {
@@ -194,6 +214,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
     it("EARS-5.4: enrollment appends exactly one auth.mfa.enrolled row, and no row ever carries the secret", async () => {
       const email = uniqueEmail();
       const { sub, ref, secret } = await enroll(email);
+      // The fake IdP numbers subjects per app instance, so the same `fake-sub-N`
+      // string is minted by every suite in the run and the ledger is append-only:
+      // the window pins the assertion to THIS enrollment's rows rather than every
+      // row any suite ever wrote for that subject id.
+      const since = new Date();
       const verify = await app.inject({
         method: "POST",
         url: VERIFY_URL,
@@ -206,8 +231,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
         event_type: string;
         metadata: Record<string, unknown>;
       }>(
-        "SELECT event_type, metadata FROM audit_ledger WHERE subject_id = $1 ORDER BY created_at ASC",
-        [sub],
+        "SELECT event_type, metadata FROM audit_ledger WHERE subject_id = $1 AND created_at >= $2 ORDER BY created_at ASC",
+        [sub, since],
       );
       const enrolled = rows.filter((r) => r.event_type === "auth.mfa.enrolled");
       expect(enrolled).toHaveLength(1);
@@ -258,29 +283,45 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(retry.statusCode).toBe(200);
     });
 
-    it("EARS-5.6: a replayed code is refused inside its own validity window", async () => {
+    it("EARS-5.6: an enrolled admin's next login is a CHALLENGE, and the enrollment endpoints close behind them", async () => {
       const email = uniqueEmail();
       const { ref, secret } = await enroll(email);
-      const code = totpCode(secret);
-
       const first = await app.inject({
         method: "POST",
         url: VERIFY_URL,
         headers: pendingHeaders(ref),
-        payload: { code },
+        payload: { code: totpCode(secret) },
       });
       expect(first.statusCode).toBe(200);
 
-      // A second pending authentication for the same principal, same code: the
-      // step was consumed, so the replay must not enrol or verify anything.
-      const secondRef = await pendingRef(email);
-      const replay = await app.inject({
+      // The bootstrap ran ONCE (PD-1): the factor now exists, so primary auth
+      // routes to the challenge step — and the enrollment endpoints, which serve
+      // `mfa_enrollment_required` only, refuse that pending reference. A second
+      // enrollment would silently replace a live second factor with one an
+      // attacker holding the password just registered.
+      const relogin = await app.inject({
         method: "POST",
-        url: VERIFY_URL,
-        headers: pendingHeaders(secondRef),
-        payload: { code },
+        url: "/v1/admin/auth/login",
+        headers: ADMIN_DEVICE,
+        payload: { identifier: email, password },
       });
-      expect(replay.statusCode).toBe(401);
+      expect(relogin.statusCode).toBe(200);
+      expect(relogin.json()).toEqual({ state: "mfa_pending_challenge" });
+
+      const challengeRef = relogin.cookies.find(
+        (c) => c.name === ADMIN_PENDING_COOKIE_NAME,
+      )!.value;
+      for (const url of [START_URL, VERIFY_URL]) {
+        const res = await app.inject({
+          method: "POST",
+          url,
+          headers: pendingHeaders(challengeRef),
+          payload: { code: totpCode(secret) },
+        });
+        expect(res.statusCode, `${url} for a challenge-step principal`).toBe(
+          401,
+        );
+      }
     });
 
     it("EARS-5.7: the code field is constrained by the schema — non-numeric input is rejected before the handler", async () => {

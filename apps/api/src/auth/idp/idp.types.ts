@@ -460,6 +460,55 @@ export interface IdpClient {
    * a silent `false` would mis-route an enrolled admin into re-enrollment.
    */
   hasTotpFactor(sub: string): Promise<boolean>;
+  /**
+   * 011 EARS-5: register a **provisional** TOTP factor for `sub` and return the
+   * material the operator needs to add it to their authenticator app.
+   *
+   * The factor is provisional until {@link verifyTotpRegistration} confirms it —
+   * {@link hasTotpFactor} answers `false` for it, so a half-enrolled admin is
+   * never routed into a challenge they cannot pass.
+   *
+   * **Idempotence is deliberately NOT the contract here.** Calling this again
+   * REPLACES the provisional factor with a fresh secret; the previous one stops
+   * verifying (011 design §4: _"a re-start replaces the provisional factor rather
+   * than re-reading the old secret"_). That is what makes the one-time offer
+   * honest — a secret is shown once, and an operator who lost it gets a new
+   * factor rather than a second look at the old one. Calling it for a subject who
+   * already holds a REGISTERED factor is a caller error; the enrollment handler
+   * only reaches it in the `mfa_pending_enrollment` state.
+   */
+  startTotpRegistration(sub: string): Promise<TotpRegistration>;
+  /**
+   * 011 EARS-5: verify the first code against `sub`'s provisional TOTP factor
+   * and, on success, promote the factor to **registered** (so
+   * {@link hasTotpFactor} starts answering `true`).
+   *
+   * Resolves `false` — never throws, never discriminates — for every refusal the
+   * uniform-failure discipline covers: a wrong code, a code from an expired time
+   * window, a code already consumed inside its own window, and a subject with no
+   * provisional factor at all. The caller answers all of them identically
+   * (EARS-7), so a distinguishable outcome here would leak straight through.
+   */
+  verifyTotpRegistration(sub: string, code: string): Promise<boolean>;
+}
+
+/**
+ * 011 EARS-5: the material a freshly registered provisional TOTP factor yields.
+ *
+ * Both fields describe the SAME shared secret — `uri` is the scannable
+ * `otpauth://totp/...` form, `secret` the transcribable base32 an operator types
+ * when they cannot scan. The port returns both because the IdP is the party that
+ * minted the secret; `apps/api` never generates, stores, or re-derives one (011
+ * Constraints — the factor lives in the IdP, not in our tables).
+ *
+ * This value is returned to the pending principal exactly once and is never
+ * logged, audited, or persisted anywhere in `apps/api`.
+ */
+export interface TotpRegistration {
+  /** `otpauth://totp/<issuer>:<account>?secret=…` — the QR payload. */
+  uri: string;
+  /** The same secret, base32, for manual transcription. */
+  secret: string;
 }
 
 /**

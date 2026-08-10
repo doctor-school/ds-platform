@@ -123,6 +123,7 @@ export class AdminSessionService {
       await this.audit.record({
         type: "AdminPrimaryAuthFailed",
         identifier,
+        sub: null,
         reason: result.outcome === "locked" ? "lock" : "wrong_password",
       });
       return { status: "refused" };
@@ -133,11 +134,23 @@ export class AdminSessionService {
 
     // EARS-3: the policy fork. A role NOT in the policy gets no admin session and
     // no pending reference — the uniform refusal, recorded as a failure.
+    //
+    // The row tells the truth about this branch: the credentials were VALID and
+    // the IdP asserted this subject, the policy simply does not cover it. That is
+    // the sharpest signal the admin surface can produce (a stolen doctor password
+    // probed at the admin origin), so it is recorded with its own reason and its
+    // subject rather than collapsed into the anonymous `no_user` of an unknown
+    // identifier. The reason and the subject are audit-only — the response below
+    // is the same uniform refusal every other branch returns (EARS-16).
     if (!requiresMfa(roles)) {
+      // The password check already created a Zitadel session; the BFF is refusing
+      // the request it was created for, so it does not get to outlive the refusal.
+      await this.idp.terminateSession(result.session);
       await this.audit.record({
         type: "AdminPrimaryAuthFailed",
         identifier,
-        reason: "no_user",
+        sub,
+        reason: "not_permitted",
       });
       return { status: "refused" };
     }
@@ -205,7 +218,12 @@ export class AdminSessionService {
     if (!record) return undefined;
     if (record.fingerprint !== fingerprint) return undefined;
 
-    const tokens = await this.idp.exchangeSessionForTokens({
+    // The exchange runs for its effect, not its payload: it is the IdP's
+    // re-assertion that the checked session behind this pending reference is
+    // still live, and it consumes the single-use proof-of-check. Its token
+    // material is deliberately dropped — the admin session record holds no IdP
+    // token at rest, because nothing on this tier reads one.
+    await this.idp.exchangeSessionForTokens({
       zitadelSessionId: record.zitadelSessionId,
       sub: record.sub,
       sessionToken: record.sessionToken,
@@ -217,8 +235,6 @@ export class AdminSessionService {
       sub: record.sub,
       roles: record.roles,
       mfa: true,
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
       fingerprint,
       csrfToken: randomUUID(),
       expiresAtMs: Date.now() + ADMIN_SESSION_TTL_SECONDS * 1000,

@@ -170,12 +170,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const segments = sid.split(".");
       expect(segments.length).not.toBe(3);
 
-      // It IS a live reference: the record it names lives server-side and holds
-      // the tokens the browser never sees.
+      // It IS a live reference: the record it names lives server-side, and the
+      // cookie carries none of that record's contents.
       const record = await admin.getBySid(sid);
       expect(record).toBeDefined();
-      expect(record!.accessToken.length).toBeGreaterThan(0);
-      expect(sid).not.toContain(record!.accessToken);
+      expect(record!.sub.length).toBeGreaterThan(0);
+      expect(sid).not.toContain(record!.sub);
+      expect(sid).not.toContain(record!.zitadelSessionId);
     });
 
     it("EARS-1: an established admin session carries mfa = true by construction", async () => {

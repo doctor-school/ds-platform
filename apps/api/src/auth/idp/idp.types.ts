@@ -375,6 +375,24 @@ export interface IdpClient {
    */
   exchangeSessionForTokens(session: IdpSession): Promise<IdpTokens>;
   /**
+   * 011 EARS-3: terminate a checked Zitadel session at the IdP, so a session
+   * created by {@link passwordLogin} does not outlive the BFF's decision to
+   * refuse the request it was created for.
+   *
+   * The admin origin refuses a principal the `role → mfa_required` policy does
+   * not cover **after** the password check has already created a Zitadel session
+   * — without this call every such attempt would leave a live IdP session behind,
+   * an artifact of an authentication the BFF declined to honour. Takes the whole
+   * {@link IdpSession} handle because the Session v2 delete is authorized by the
+   * same single-use `sessionToken` proof-of-check the exchange consumes.
+   *
+   * **Fails soft:** a provider hiccup resolves rather than throws — the refusal
+   * is already decided and must stay byte-identical and constant-time to every
+   * other refusal branch (EARS-16), so a failed cleanup can never change what the
+   * caller answers.
+   */
+  terminateSession(session: IdpSession): Promise<void>;
+  /**
    * EARS-9: rotate a single-use refresh token. On success the old token is
    * consumed and fresh access + refresh tokens are returned; a replay of an
    * already-consumed token resolves to `{ reuseDetected: true }` (RFC 6819,

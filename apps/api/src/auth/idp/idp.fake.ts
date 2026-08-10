@@ -345,6 +345,19 @@ export class FakeIdpClient implements IdpClient {
     });
   }
 
+  /**
+   * 011 EARS-3: drop the checked session, exactly as Zitadel's session delete
+   * does. Fake/real parity in the strict direction (the project rule: a fake is
+   * never MORE permissive than the real IdP) — after this the handle is dead, so
+   * {@link exchangeSessionForTokens} on it rejects with "unknown zitadel
+   * session" rather than minting tokens for an authentication the BFF refused.
+   * Idempotent and fail-soft: terminating an unknown session resolves.
+   */
+  terminateSession(session: IdpSession): Promise<void> {
+    this.sessions.delete(session.zitadelSessionId);
+    return Promise.resolve();
+  }
+
   refreshTokens(refreshToken: string): Promise<IdpRefreshResult> {
     // RFC-6819 reuse detection (EARS-9): replaying an already-consumed token —
     // or any token this IdP never issued — fails closed, so the BFF invalidates

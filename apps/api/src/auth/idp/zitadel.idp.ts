@@ -751,6 +751,32 @@ export class ZitadelIdpClient implements IdpClient {
     return data.session?.factors?.user?.id;
   }
 
+  /**
+   * 011 EARS-3: `DELETE /v2/sessions/{id}` — drop a checked session the BFF
+   * decided not to honour. The Session v2 delete is authorized by the session's
+   * own `sessionToken` (the same proof-of-check the OIDC exchange presents), so
+   * the whole port handle is taken rather than a bare id.
+   *
+   * Fail-soft by contract: a non-2xx or a transport error is swallowed, because
+   * the caller has already resolved to the uniform refusal and must answer
+   * identically (and in the same time envelope) whether or not the IdP-side
+   * cleanup succeeded (EARS-16). The session it failed to delete expires on
+   * Zitadel's own session lifetime.
+   */
+  async terminateSession(session: IdpSession): Promise<void> {
+    const { zitadelSessionId, sessionToken } = session;
+    if (!zitadelSessionId || !sessionToken) return;
+    try {
+      await this.fetchImpl(this.url(`/v2/sessions/${zitadelSessionId}`), {
+        method: "DELETE",
+        headers: this.headers(),
+        body: JSON.stringify({ sessionToken }),
+      });
+    } catch {
+      // Cleanup is best-effort — never a second failure mode on a refusal path.
+    }
+  }
+
   /** OIDC-application config the token/refresh grants require, or throw if absent. */
   private requireOidcApp(): {
     clientId: string;

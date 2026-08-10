@@ -287,6 +287,32 @@ describe.skipIf(!process.env.DATABASE_URL)(
       );
     });
 
+    it("EARS-3: the non-policy refusal is recorded honestly — reason not_permitted, keyed by the subject", async () => {
+      const email = uniqueEmail();
+      const sub = await register(email);
+
+      await adminLogin(email);
+
+      const { rows } = await pool.query<{
+        event_type: string;
+        reason: string | null;
+        metadata: { tier?: string };
+      }>(
+        `SELECT event_type, reason, metadata FROM audit_ledger
+          WHERE subject_id = $1 AND event_type = 'auth.login.failure'
+          ORDER BY created_at DESC LIMIT 1`,
+        [sub],
+      );
+      // Valid credentials at the admin origin from a principal the policy does
+      // not cover is the sharpest signal this surface produces — recorded as
+      // itself, keyed by the subject the IdP asserted, instead of collapsing
+      // into the anonymous `no_user` of an unknown identifier. Audit-only: the
+      // response above is the same uniform 401 every refusal branch returns.
+      expect(rows[0]).toBeDefined();
+      expect(rows[0]!.reason).toBe("not_permitted");
+      expect(rows[0]!.metadata).toMatchObject({ tier: "admin" });
+    });
+
     it("EARS-3: primary auth at the admin origin appends auth.login.success carrying tier: admin", async () => {
       const email = uniqueEmail();
       const sub = await register(email);

@@ -54,22 +54,6 @@ export class RedisAdminSessionStore implements AdminSessionStore {
     return JSON.parse(raw) as AdminSessionRecord;
   }
 
-  async rotate(
-    sid: string,
-    accessToken: string,
-    refreshToken: string,
-  ): Promise<void> {
-    const record = await this.get(sid);
-    // No-op if the session is gone (expired/revoked) — rotation never resurrects.
-    if (!record) return;
-    await this.redis.set(
-      `${ADMIN_SESSION_PREFIX}${sid}`,
-      JSON.stringify({ ...record, accessToken, refreshToken }),
-      "EX",
-      ttlSecondsUntil(record.expiresAtMs),
-    );
-  }
-
   async delete(sid: string): Promise<void> {
     const record = await this.get(sid);
     await this.redis.del(`${ADMIN_SESSION_PREFIX}${sid}`);
@@ -84,13 +68,25 @@ export class RedisAdminSessionStore implements AdminSessionStore {
   async deleteBySub(sub: string): Promise<string[]> {
     const indexKey = `${ADMIN_SESSION_SUB_INDEX_PREFIX}${sub}`;
     const sids = await this.redis.smembers(indexKey);
-    if (sids.length > 0) {
-      await this.redis.del(
-        ...sids.map((sid) => `${ADMIN_SESSION_PREFIX}${sid}`),
-      );
+    // The index outlives its members: a session key expires by TTL while its sid
+    // stays listed (only an explicit `delete` prunes it), so with a 30-day TTL and
+    // a daily login the set accumulates stale sids. Resolve each member against
+    // the session key and return ONLY the ones that were actually live, pruning
+    // the misses — otherwise force-logout would emit an
+    // `auth.session.terminated` row for a session that ended days ago, breaking
+    // EARS-9's one-terminal-row-per-lifecycle-event discipline. Same filter the
+    // in-memory store applies, so the two adapters agree on what "revoked" means.
+    // The stale members need no `srem` — the whole index key is dropped below.
+    const revoked: string[] = [];
+    for (const sid of sids) {
+      const key = `${ADMIN_SESSION_PREFIX}${sid}`;
+      if (await this.redis.get(key)) {
+        await this.redis.del(key);
+        revoked.push(sid);
+      }
     }
     await this.redis.del(indexKey);
-    return sids;
+    return revoked;
   }
 }
 

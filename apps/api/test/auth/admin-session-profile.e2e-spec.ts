@@ -103,11 +103,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const record = await store.get(admin.sid);
       expect(record).toBeDefined();
       expect(record!.sub).toBe(sub);
-      // The tokens are in the record, never in anything the browser received.
-      expect(record!.accessToken.length).toBeGreaterThan(0);
-      expect(record!.refreshToken.length).toBeGreaterThan(0);
-      expect(admin.cookieHeader).not.toContain(record!.accessToken);
-      expect(admin.cookieHeader).not.toContain(record!.refreshToken);
+      // Every field of the principal is in the record, and none of it is in
+      // anything the browser received — the cookie is a reference, not a payload.
+      expect(admin.cookieHeader).not.toContain(record!.sub);
+      expect(admin.cookieHeader).not.toContain(record!.zitadelSessionId);
+      expect(admin.cookieHeader).toContain(admin.sid);
     });
 
     it("EARS-10: a fingerprint mismatch invalidates the session on the very next request", async () => {
@@ -254,7 +254,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(res.statusCode).toBe(401);
     });
 
-    it("EARS-10: the admin tier introduces no new credential store — its record holds the 003 token pair and nothing new", async () => {
+    it("EARS-10: the admin tier stores no credential at all — no IdP token is held at rest", async () => {
       const email = uniqueEmail();
       await registerAdmin(email);
       const admin = await establishAdminSession(app, {
@@ -265,14 +265,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const record = (await app
         .get<AdminSessionStore>(ADMIN_SESSION_STORE)
         .get(admin.sid))!;
+      // The exact field set — pinned so a future field cannot arrive unnoticed.
+      // No `accessToken` / `refreshToken`: nothing on this tier reads one, and a
+      // live 30-day refresh token at rest would widen the blast radius of a Redis
+      // compromise on precisely the tier 011 exists to harden.
       expect(Object.keys(record).sort()).toEqual(
         [
-          "accessToken",
           "csrfToken",
           "expiresAtMs",
           "fingerprint",
           "mfa",
-          "refreshToken",
           "roles",
           "sid",
           "sub",

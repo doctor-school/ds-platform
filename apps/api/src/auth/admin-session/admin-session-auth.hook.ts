@@ -1,3 +1,5 @@
+import { Buffer } from "node:buffer";
+import { timingSafeEqual } from "node:crypto";
 import {
   Inject,
   Injectable,
@@ -40,6 +42,19 @@ interface HookRequest {
 
 function headerValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+/**
+ * EARS-10: compare the presented double-submit token against the stored one in
+ * time independent of how many leading bytes match. `timingSafeEqual` throws on
+ * unequal lengths, so the length is checked first — that check leaks only the
+ * token's length, which is a fixed property of the format, not of its value.
+ */
+function csrfMatches(presented: string, stored: string): boolean {
+  const a = Buffer.from(presented, "utf8");
+  const b = Buffer.from(stored, "utf8");
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
 
 /** Either an admin principal, or the audit-only reason the request was refused. */
@@ -107,7 +122,7 @@ export async function resolveAdminRequest(
   // substitute for it.
   if (isStateChangingMethod(req.method)) {
     const presented = headerValue(req.headers[ADMIN_CSRF_HEADER]);
-    if (!presented || presented !== record.csrfToken) {
+    if (!presented || !csrfMatches(presented, record.csrfToken)) {
       return { rejection: "csrf_mismatch", sub: record.sub };
     }
   }
@@ -176,11 +191,13 @@ export class AdminSessionAuthHook implements OnApplicationBootstrap {
       }
       if ("anonymous" in resolution) return;
 
-      // The admin auth-entry routes (`/v1/admin/auth/**`) are where a caller
-      // legitimately arrives WITHOUT an admin session — the login route is
-      // `public`, and the enrollment/challenge routes (#1191/#1192) are reached
-      // on a pending reference. A missing or "wrong" cookie there is the normal
-      // state, not a refused admin route, so it owes no rejection row.
+      // The admin auth-entry routes are where a caller legitimately arrives
+      // WITHOUT an admin session (today: the `public` login route). A missing or
+      // "wrong" cookie there is the normal state, not a refused admin route, so
+      // it owes no rejection row. The exemption is an explicit route list, not
+      // the `/v1/admin/auth/` prefix — `logout` lives under that prefix and IS an
+      // authenticated admin route, so a portal cookie presented there is exactly
+      // the EARS-2 case that owes a row.
       if (isAdminAuthEntryRoute(req.url)) return;
 
       await this.audit.record({

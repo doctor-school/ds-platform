@@ -35,17 +35,6 @@ export class InMemoryAdminSessionStore implements AdminSessionStore {
     return Promise.resolve(record);
   }
 
-  rotate(
-    sid: string,
-    accessToken: string,
-    refreshToken: string,
-  ): Promise<void> {
-    const record = this.bySid.get(sid);
-    // No-op if the session is gone (expired/revoked) — rotation never resurrects.
-    if (record) this.bySid.set(sid, { ...record, accessToken, refreshToken });
-    return Promise.resolve();
-  }
-
   delete(sid: string): Promise<void> {
     const record = this.bySid.get(sid);
     if (record) this.unlink(record);

@@ -224,7 +224,10 @@ export function toLedgerRow(
     case "AdminPrimaryAuthFailed":
       return {
         eventType: "auth.login.failure",
-        subjectId: null,
+        // Named only on the `not_permitted` branch (see the event's doc): the
+        // IdP had already asserted this subject, so the row can say WHO was
+        // refused instead of filing a valid-credential probe as anonymous noise.
+        subjectId: event.sub,
         sid: null,
         reason: event.reason,
         metadata: { identifier_hash: mask(event.identifier), tier: ADMIN_TIER },

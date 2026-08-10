@@ -53,6 +53,11 @@ export interface PendingAuthRecord {
  * force-logout revocable. `mfa` is `true` by construction — no code path writes
  * this record without a satisfied factor, so the field is an invariant the guard
  * re-asserts defensively rather than a state to branch on (design §8).
+ *
+ * It holds **no IdP token material**. Authorization on this tier is the role
+ * check the guard runs off these `roles`; nothing reads an access or refresh
+ * token, so keeping a live 30-day refresh token at rest would widen the blast
+ * radius of a Redis compromise for no consumer.
  */
 export interface AdminSessionRecord {
   /** Opaque admin session id — the value carried in `__Host-ds_admin_session`. */
@@ -64,10 +69,6 @@ export interface AdminSessionRecord {
   roles: string[];
   /** ALWAYS `true` — the EARS-1/3 invariant (design §8). */
   mfa: true;
-  /** Access JWT, held server-side; never sent to the browser. */
-  accessToken: string;
-  /** Opaque rotating refresh token, held server-side. */
-  refreshToken: string;
   /** `hash(UA + IP/24 + accept-language)`, re-checked on every request (EARS-10). */
   fingerprint: string;
   /** EARS-10 CSRF double-submit token; matched against the request header. */
@@ -88,8 +89,6 @@ export interface PendingAuthStore {
 export interface AdminSessionStore {
   create(record: AdminSessionRecord): Promise<void>;
   get(sid: string): Promise<AdminSessionRecord | undefined>;
-  /** Replace the stored token pair after a rotation, keeping sid/principal/TTL. */
-  rotate(sid: string, accessToken: string, refreshToken: string): Promise<void>;
   /** Revoke one admin session (logout). Idempotent. */
   delete(sid: string): Promise<void>;
   /**

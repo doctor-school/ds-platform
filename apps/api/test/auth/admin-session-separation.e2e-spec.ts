@@ -221,6 +221,34 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(latest.metadata).toMatchObject({ tier: "admin" });
     });
 
+    it("EARS-2: a portal cookie at the admin LOGOUT route is refused with a row — the auth-entry exemption does not cover it", async () => {
+      const email = uniqueEmail();
+      const sub = await registerAdmin(email);
+      const portal = await portalSession(email);
+      const before = (await rejectionRows(sub)).length;
+
+      // `/v1/admin/auth/logout` shares the `/v1/admin/auth/` prefix with the
+      // public login route, but it is an `access: authenticated` admin route —
+      // a foreign cookie here is a refused admin request, not a caller who has
+      // simply not logged in yet, so it owes the EARS-2 row like any other.
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/admin/auth/logout",
+        headers: {
+          ...ADMIN_DEVICE,
+          cookie: `${SESSION_COOKIE_NAME}=${portal}`,
+        },
+      });
+      expect(res.statusCode).toBe(401);
+
+      const rows = await rejectionRows(sub);
+      expect(rows.length).toBeGreaterThan(before);
+      const latest = rows[0]!;
+      expect(latest.event_type).toBe("auth.session.rejected");
+      expect(latest.reason).toBe("wrong_cookie");
+      expect(latest.metadata).toMatchObject({ tier: "admin" });
+    });
+
     it("EARS-2: an admin session cookie authenticates NO portal route", async () => {
       const email = uniqueEmail();
       await registerAdmin(email);

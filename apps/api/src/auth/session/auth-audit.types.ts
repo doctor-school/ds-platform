@@ -53,8 +53,28 @@ export type AdminSessionRejectionReason =
   /** The EARS-10 double-submit header was absent or did not match the cookie. */
   | "csrf_mismatch";
 
-/** 011 EARS-2: why an admin session ended — the `auth.session.terminated` reason. */
-export type AdminSessionEndReason = "logout" | "force" | "expiry";
+/**
+ * 011 EARS-2: why an admin session ended — the `auth.session.terminated` reason.
+ * Every member has an emitter: store-TTL expiry is silent by design (the record
+ * vanishes and the next request records `auth.session.rejected` / `expired`), so
+ * no `"expiry"` member is declared here — a union member advertising an emission
+ * that does not exist reads as coverage the ledger cannot deliver.
+ */
+export type AdminSessionEndReason = "logout" | "force";
+
+/**
+ * 011 EARS-3: why primary auth at the ADMIN origin failed. The portal's
+ * {@link LoginFailureReason} plus `not_permitted` — valid credentials presented
+ * at the admin origin by a principal the `role → mfa_required` policy does not
+ * cover. That row is the forensically interesting one this tier exists to
+ * produce (a stolen doctor password probed against the admin login), and
+ * recording it as `no_user` would file it as enumeration noise. **Audit-only**:
+ * the HTTP answer stays the one uniform 401 every refusal branch returns, so
+ * nothing here is an existence oracle (EARS-16).
+ */
+export type AdminPrimaryAuthFailureReason =
+  | LoginFailureReason
+  | "not_permitted";
 
 /**
  * The auth-event taxonomy (EARS-18). The `type` is the internal (spec/EARS)
@@ -134,10 +154,16 @@ export type AuthAuditEvent =
   // the tier field is the whole of the difference — and emits NO session (the
   // policy fork of EARS-3 runs immediately after).
   | { type: "AdminPrimaryAuthSucceeded"; sub: string }
+  // The `sub` is present ONLY on the branch where the IdP already asserted the
+  // principal — `not_permitted` (credentials were valid, the policy was not
+  // met). Every pre-identity branch (wrong password, unknown identifier, lock)
+  // carries `null`: there is no subject to name, and inventing one would put an
+  // enumeration signal in the ledger's subject column.
   | {
       type: "AdminPrimaryAuthFailed";
       identifier: string;
-      reason: LoginFailureReason;
+      sub: string | null;
+      reason: AdminPrimaryAuthFailureReason;
     }
   // `__Host-ds_admin_session` issued with `mfa = true` (EARS-1).
   | { type: "AdminSessionEstablished"; sub: string; sid: string }

@@ -40,13 +40,22 @@ export const ADMIN_CSRF_HEADER = "x-ds-admin-csrf";
 const ADMIN_ROUTE_PREFIX = "/v1/admin/";
 
 /**
- * The admin **auth-entry** namespace: the routes a caller reaches *before* it
- * holds an admin session (`/v1/admin/auth/login` today; the enrollment and
- * challenge endpoints land here in #1191/#1192). Requests here are not "refused
- * admin routes" when they carry no admin cookie — that is their normal state —
- * so the EARS-2 `auth.session.rejected` row is not written for them.
+ * The admin **auth-entry** routes: the ones a caller reaches *before* it holds an
+ * admin session, where a missing or foreign cookie is the normal state rather
+ * than a refused admin route — so the EARS-2 `auth.session.rejected` row is not
+ * written for them.
+ *
+ * An explicit list, NOT the `/v1/admin/auth/` prefix. The prefix also covers
+ * `POST /v1/admin/auth/logout`, which is an `access: authenticated` admin route:
+ * a portal cookie (or a CSRF-mismatched admin session) presented there is exactly
+ * the case EARS-2 mandates a row for, and exempting it would suppress that row.
+ * The enrollment/challenge routes join this list with the handlers that make them
+ * reachable on a pending reference (#1191/#1192) — an entry added before its
+ * route exists is a hole with no test behind it.
  */
-const ADMIN_AUTH_ROUTE_PREFIX = "/v1/admin/auth/";
+const ADMIN_AUTH_ENTRY_ROUTES: ReadonlySet<string> = new Set([
+  "/v1/admin/auth/login",
+]);
 
 /** Strip the query string from a raw request URL, leaving the path. */
 function pathOf(rawUrl: string): string {
@@ -63,9 +72,9 @@ export function isAdminRoute(rawUrl: string): boolean {
   return pathOf(rawUrl).startsWith(ADMIN_ROUTE_PREFIX);
 }
 
-/** Is this one of the admin auth-entry routes (see {@link ADMIN_AUTH_ROUTE_PREFIX})? */
+/** Is this one of the admin auth-entry routes (see {@link ADMIN_AUTH_ENTRY_ROUTES})? */
 export function isAdminAuthEntryRoute(rawUrl: string): boolean {
-  return pathOf(rawUrl).startsWith(ADMIN_AUTH_ROUTE_PREFIX);
+  return ADMIN_AUTH_ENTRY_ROUTES.has(pathOf(rawUrl));
 }
 
 /** HTTP methods that change state and therefore owe the EARS-10 double-submit proof. */

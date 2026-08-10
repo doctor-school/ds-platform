@@ -66,9 +66,16 @@ describe("011 EARS-1/EARS-2/EARS-10 — admin-tier cookie primitives", () => {
     expect(isAdminRoute("/v1/administrators")).toBe(false);
   });
 
-  it("EARS-2: the admin auth-entry namespace is the subset that legitimately has no session", () => {
+  it("EARS-2: the admin auth-entry set is exactly the routes reached without a session", () => {
     expect(isAdminAuthEntryRoute("/v1/admin/auth/login")).toBe(true);
+    expect(isAdminAuthEntryRoute("/v1/admin/auth/login?next=/")).toBe(true);
     expect(isAdminAuthEntryRoute("/v1/admin/events")).toBe(false);
+    // NOT the whole `/v1/admin/auth/` prefix: logout is an authenticated admin
+    // route, so a refusal there owes its EARS-2 `auth.session.rejected` row.
+    expect(isAdminAuthEntryRoute("/v1/admin/auth/logout")).toBe(false);
+    // Routes that do not exist yet are not pre-exempted (#1191/#1192 add theirs
+    // together with the handlers that make them reachable).
+    expect(isAdminAuthEntryRoute("/v1/admin/auth/mfa/enroll")).toBe(false);
   });
 
   it("EARS-10: state-changing methods are exactly the ones that owe a CSRF proof", () => {

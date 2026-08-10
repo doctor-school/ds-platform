@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import type { AdminAuthState, AdminEnrollmentOffer } from "@ds/schemas";
-import { IDP_CLIENT, type IdpClient } from "../idp/idp.types.js";
+import {
+  IDP_CLIENT,
+  type IdpClient,
+  type IdpSession,
+} from "../idp/idp.types.js";
 import {
   AUTH_AUDIT,
   type AuthAuditLog,
@@ -167,7 +171,42 @@ export class AdminSessionService {
       return { status: "refused" };
     }
 
-    const tokens = await this.idp.exchangeSessionForTokens(result.session);
+    // Everything past the password check runs under a disposal guard. A throw
+    // here (an IdP fault on the token exchange or the #1208 factor read) abandons
+    // the request the Zitadel session was created for, so the session must not
+    // outlive it — the same disposal the non-policy refusal below performs,
+    // extended to the fault path. Without it a persistent fault leaks one live
+    // IdP session per login attempt. The disposal is fail-soft: it must never
+    // replace the original fault with a second one, which the caller maps to its
+    // HTTP status (`AdminAuthController.login` → 503).
+    try {
+      return await this.startLoginAfterPassword(
+        identifier,
+        fingerprint,
+        result.session,
+      );
+    } catch (cause) {
+      try {
+        await this.idp.terminateSession(result.session);
+      } catch {
+        /* the fault below is the one worth reporting */
+      }
+      throw cause;
+    }
+  }
+
+  /**
+   * The post-password remainder of {@link startLogin} — the OIDC exchange, the
+   * EARS-3 policy fork, and the pending record. Split out so the caller can wrap
+   * exactly this span in the Zitadel-session disposal guard: every exit that is
+   * not a returned outcome leaves the checked session behind.
+   */
+  private async startLoginAfterPassword(
+    identifier: string,
+    fingerprint: string,
+    session: IdpSession,
+  ): Promise<AdminLoginOutcome> {
+    const tokens = await this.idp.exchangeSessionForTokens(session);
     const { sub, roles } = tokens.claims;
 
     // EARS-3: the policy fork. A role NOT in the policy gets no admin session and
@@ -183,7 +222,7 @@ export class AdminSessionService {
     if (!requiresMfa(roles)) {
       // The password check already created a Zitadel session; the BFF is refusing
       // the request it was created for, so it does not get to outlive the refusal.
-      await this.idp.terminateSession(result.session);
+      await this.idp.terminateSession(session);
       await this.audit.record({
         type: "AdminPrimaryAuthFailed",
         identifier,
@@ -204,8 +243,8 @@ export class AdminSessionService {
       sub,
       roles,
       nextStep,
-      zitadelSessionId: result.session.zitadelSessionId,
-      sessionToken: result.session.sessionToken,
+      zitadelSessionId: session.zitadelSessionId,
+      sessionToken: session.sessionToken,
       fingerprint,
       expiresAtMs: Date.now() + PENDING_TTL_SECONDS * 1000,
     };

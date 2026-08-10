@@ -1508,10 +1508,13 @@ export class ZitadelIdpClient implements IdpClient {
   /**
    * 011 EARS-3: does `sub` hold a **registered (ready)** TOTP factor?
    *
-   * Reads Zitadel's per-user authentication factors
-   * (`GET /management/v1/users/{id}/auth_factors`, the same management-v1 surface
-   * this adapter already uses for `orgs/me`) and looks for an `otp` entry in
-   * state `AUTH_FACTOR_STATE_READY`. A factor that exists but is only
+   * Reads Zitadel's per-user authentication factors via the management-v1
+   * **search** RPC — `POST /management/v1/users/{id}/auth_factors/_search`
+   * (`ListHumanAuthFactors`) — and looks for an `otp` entry in state
+   * `AUTH_FACTOR_STATE_READY`. The plain `GET …/auth_factors` is NOT routed by
+   * the deployed Zitadel: it answers **404 for every user**, enrolled or not
+   * (proven live on the stand, #1208), so only the `_search` hop can distinguish
+   * "no factor" from "not a route". A factor that exists but is only
    * **provisional** (`…_NOT_READY` — enrollment started, first code never
    * verified) resolves `false`: an unverified enrollment is not a usable second
    * factor, and calling it one would route a half-enrolled admin into a challenge
@@ -1519,28 +1522,31 @@ export class ZitadelIdpClient implements IdpClient {
    * "registered" answers `true` (011 Constraints: the fake is never more
    * permissive than the real adapter).
    *
-   * **Fails loudly, not open.** A non-2xx (other than the 404 that genuinely
-   * means "this user has no factors") throws {@link IdpUnavailableError} → 503,
-   * because a silent `false` on an outage would mis-route an enrolled admin into
-   * re-enrollment. This method never creates, verifies, or removes a factor —
-   * that seam lands with the enrollment/challenge handlers (011 design §7).
+   * **Fails loudly, never open — including on 404.** EVERY non-2xx throws
+   * {@link IdpUnavailableError} → 503. With the search RPC an absent factor is
+   * an empty `result[]`, never a 404, so a 404 here means the route is gone or
+   * the token cannot reach it — a fault. Swallowing it as `false` is exactly the
+   * #1208 defect: an ENROLLED admin was re-routed into `mfa_pending_enrollment`
+   * on every login, and that false negative composes with the enrollment
+   * endpoints into an admin-MFA bypass (a password-only caller replacing the
+   * victim's factor — PR #1207 Mode (a), round 3). This method never creates,
+   * verifies, or removes a factor — that seam lands with the
+   * enrollment/challenge handlers (011 design §7).
    */
   async hasTotpFactor(sub: string): Promise<boolean> {
     let res: Awaited<ReturnType<FetchLike>>;
     try {
       res = await this.fetchImpl(
         this.url(
-          `/management/v1/users/${encodeURIComponent(sub)}/auth_factors`,
+          `/management/v1/users/${encodeURIComponent(sub)}/auth_factors/_search`,
         ),
-        { method: "GET", headers: this.headers() },
+        { method: "POST", headers: this.headers(), body: JSON.stringify({}) },
       );
     } catch (cause) {
       throw new IdpUnavailableError(
         `zitadel auth-factor read failed: ${(cause as Error).message}`,
       );
     }
-    // 404 = no factor resource for this user — a real "no factor", not a fault.
-    if (res.status === 404) return false;
     if (!res.ok) {
       throw new IdpUnavailableError(
         `zitadel auth-factor read failed: HTTP ${res.status}`,

@@ -454,11 +454,15 @@ export class FakeIdpClient implements IdpClient {
    * explicitly recorded in {@link totpFactors}. There is no "any sub with a
    * password has a factor" shortcut, and no provisional/started state resolves
    * `true` — exactly what the Zitadel adapter does when it filters
-   * `ListAuthenticationFactors` down to a READY `otp` entry. A PROVISIONAL
-   * factor — one {@link startTotpRegistration} created and no correct code has
-   * confirmed — deliberately resolves `false`: an unverified enrollment is not a
-   * usable second factor, and treating it as one would route a half-enrolled
-   * admin into a challenge they cannot pass.
+   * the `ListHumanAuthFactors` search hop (`POST …/auth_factors/_search`,
+   * #1208) down to a READY `otp` entry. An unrecorded sub is this fake's
+   * counterpart of that search's empty `result[]`; the real adapter's fault
+   * branch (a throw on any non-2xx) has no fake analogue, which keeps the fake
+   * no MORE permissive than the real one. A PROVISIONAL factor — one
+   * {@link startTotpRegistration} created and no correct code has confirmed —
+   * deliberately resolves `false`: an unverified enrollment is not a usable
+   * second factor, and treating it as one would route a half-enrolled admin
+   * into a challenge they cannot pass.
    */
   hasTotpFactor(sub: string): Promise<boolean> {
     return Promise.resolve(this.totpFactors.has(sub));

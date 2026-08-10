@@ -69,6 +69,12 @@ claim is empty and `AuthzGuard` 403s.
   `verificationCode`.
 - OTP factor registration: `POST /v2/users/{id}/{otp_email|otp_sms}` — 409
   means the factor already exists (tolerated).
+- Auth-factor read: plain `GET /management/v1/users/{id}/auth_factors` is
+  **unrouted — 404 for every user**; only
+  `POST /management/v1/users/{id}/auth_factors/_search` is served (filter to
+  `AUTH_FACTOR_STATE_READY`). A 404 on this hop means fault, never "no factor" —
+  resolving it to `false` re-opens the enrolled-admin MFA bypass (#1208); the
+  adapter raises `IdpUnavailableError` on every non-2xx here.
 
 ## Emails: Zitadel-rendered vs BFF link-free
 

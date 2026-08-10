@@ -1962,3 +1962,119 @@ describe("ZitadelIdpClient.markEmailVerified wire shape (003 EARS-35, #1131)", (
     await expect(client.markEmailVerified("no-such-sub")).resolves.toBe(false);
   });
 });
+
+// 011 EARS-3 (#1208): the real adapter's registered-TOTP-factor read. The
+// factor list is served by the management-v1 **search** RPC
+// (`POST …/auth_factors/_search`) — the plain `GET …/auth_factors` this
+// adapter first shipped is not routed by the deployed Zitadel and answers 404
+// for EVERY user, enrolled or not. Combined with a 404→`false` carve-out that
+// made a genuinely enrolled admin look factor-less, re-routing them into
+// `mfa_pending_enrollment` on every login and (composed with the #1191
+// enrollment endpoints — PR #1207 Mode (a) round 3) opening a password-only
+// caller a path to REPLACE the victim's factor. So these pin the METHOD + PATH,
+// not only the READY-filter semantics, and pin every non-2xx — 404 included —
+// as a loud {@link IdpUnavailableError}, never a silent `false`.
+describe("ZitadelIdpClient.hasTotpFactor wire shape (011 EARS-3, #1208)", () => {
+  const CONFIG = { baseUrl: "http://idp.test:9080", serviceToken: "svc-token" };
+  const SEARCH_PATH =
+    "http://idp.test:9080/management/v1/users/user-1/auth_factors/_search";
+
+  /** A fetch double recording the single factor-read hop. */
+  function factorFetch(res: {
+    ok?: boolean;
+    status?: number;
+    json?: unknown;
+  }): { fetchImpl: FetchLike; calls: ScriptedCall[] } {
+    const calls: ScriptedCall[] = [];
+    const fetchImpl: FetchLike = (url, init) => {
+      calls.push({
+        url,
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
+      });
+      return Promise.resolve({
+        ok: res.ok ?? true,
+        status: res.status ?? 200,
+        json: () => Promise.resolve(res.json ?? {}),
+      });
+    };
+    return { fetchImpl, calls };
+  }
+
+  it("011 EARS-3: a READY otp factor resolves true — read via POST …/auth_factors/_search, never the unrouted GET", async () => {
+    const { fetchImpl, calls } = factorFetch({
+      json: {
+        result: [{ otp: {}, state: "AUTH_FACTOR_STATE_READY" }],
+      },
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.hasTotpFactor("user-1")).resolves.toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.method).toBe("POST");
+    expect(calls[0]!.url).toBe(SEARCH_PATH);
+    expect(calls[0]!.headers.authorization).toBe("Bearer svc-token");
+  });
+
+  it("011 EARS-3: an empty result resolves false (a genuinely factor-less user)", async () => {
+    const { fetchImpl, calls } = factorFetch({ json: { result: [] } });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.hasTotpFactor("user-1")).resolves.toBe(false);
+    expect(calls[0]!.url).toBe(SEARCH_PATH);
+  });
+
+  it("011 EARS-3: a provisional (NOT_READY) otp factor resolves false — an unverified enrollment is not a usable second factor", async () => {
+    // The canonical wire shape the live `_search` returns, with `state` on the
+    // FACTOR (not nested under `otp`) — exactly what #1191's enrollment-start
+    // creates before the first code is verified.
+    const { fetchImpl } = factorFetch({
+      json: {
+        result: [{ otp: {}, state: "AUTH_FACTOR_STATE_NOT_READY" }],
+      },
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.hasTotpFactor("user-1")).resolves.toBe(false);
+  });
+
+  it("011 EARS-3: a NOT_READY state nested under `otp` also resolves false (the defensive shape the filter falls back to)", async () => {
+    const { fetchImpl } = factorFetch({
+      json: {
+        result: [{ otp: { state: "AUTH_FACTOR_STATE_NOT_READY" } }],
+      },
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.hasTotpFactor("user-1")).resolves.toBe(false);
+  });
+
+  it("011 EARS-3: a non-2xx throws IdpUnavailableError — an IdP fault never reads as 'no factor'", async () => {
+    const { fetchImpl } = factorFetch({ ok: false, status: 500 });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.hasTotpFactor("user-1")).rejects.toBeInstanceOf(
+      IdpUnavailableError,
+    );
+  });
+
+  it("011 EARS-3/#1208: a 404 throws IdpUnavailableError — the unrouted-path signal must not be swallowed as 'no factor'", async () => {
+    const { fetchImpl } = factorFetch({ ok: false, status: 404 });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.hasTotpFactor("user-1")).rejects.toBeInstanceOf(
+      IdpUnavailableError,
+    );
+  });
+
+  it("011 EARS-3: a transport-level failure throws IdpUnavailableError", async () => {
+    const fetchImpl: FetchLike = () =>
+      Promise.reject(new Error("ECONNREFUSED"));
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.hasTotpFactor("user-1")).rejects.toBeInstanceOf(
+      IdpUnavailableError,
+    );
+  });
+});

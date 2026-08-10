@@ -6,6 +6,7 @@ import {
   Ip,
   Post,
   Res,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
@@ -16,6 +17,7 @@ import type {
   AdminMfaEnrollVerifyResponse,
 } from "@ds/schemas";
 import { Authz, Public } from "../../authz/index.js";
+import { IdpUnavailableError } from "../idp/idp.types.js";
 import { RateLimited } from "../rate-limit/index.js";
 import { TimingEqualized } from "../timing/index.js";
 import { computeFingerprint, parseCookies } from "../session/session.cookie.js";
@@ -23,7 +25,10 @@ import {
   ADMIN_PENDING_COOKIE_NAME,
   ADMIN_SESSION_COOKIE_NAME,
 } from "./admin-session.cookie.js";
-import { AdminSessionService } from "./admin-session.service.js";
+import {
+  AdminSessionService,
+  type AdminLoginOutcome,
+} from "./admin-session.service.js";
 import {
   AdminLoginRequestDto,
   AdminMfaCodeRequestDto,
@@ -48,6 +53,21 @@ const GENERIC_ADMIN_LOGIN_FAILURE = "invalid credentials";
  * in the ledger, never in the response.
  */
 const GENERIC_ADMIN_MFA_FAILURE = "verification failed";
+
+/**
+ * The IdP-fault answer, mirroring the portal's #202 mapping
+ * (`auth.service.ts` → `GENERIC_UNAVAILABLE`): a genuine infra fault is an
+ * honest 503 "unavailable", **never** a bare 500.
+ *
+ * This is a security control, not cosmetics. The IdP calls behind `startLogin`
+ * — the OIDC exchange and the EARS-3 factor read — run only AFTER the password
+ * matched AND `requiresMfa(roles)` passed. An unmapped throw would therefore
+ * surface a 500 for exactly one input class (valid credentials on a
+ * `platform_admin`) while every other outcome stays the uniform 401 — a
+ * `platform_admin`-membership oracle. Both refusal and fault are mapped here, in
+ * the handler, so `TimingEqualizationInterceptor` still pads them identically.
+ */
+const GENERIC_ADMIN_UNAVAILABLE = "the service is temporarily unavailable";
 
 /**
  * 011 admin auth surface (EARS-2, EARS-3) — the admin tier's own entry points,
@@ -93,11 +113,22 @@ export class AdminAuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<AdminLoginResponse> {
     const fingerprint = computeFingerprint({ userAgent, ip, acceptLanguage });
-    const outcome = await this.admin.startLogin(
-      dto.identifier,
-      dto.password,
-      fingerprint,
-    );
+    let outcome: AdminLoginOutcome;
+    try {
+      outcome = await this.admin.startLogin(
+        dto.identifier,
+        dto.password,
+        fingerprint,
+      );
+    } catch (err) {
+      // A genuine IdP infra fault (5xx / transport / an unroutable management
+      // path — #1208) is "unavailable", carrying no detail that would separate
+      // this caller from any other. Anything else keeps its own handling.
+      if (err instanceof IdpUnavailableError) {
+        throw new ServiceUnavailableException(GENERIC_ADMIN_UNAVAILABLE);
+      }
+      throw err;
+    }
     if (outcome.status !== "pending") {
       throw new UnauthorizedException(GENERIC_ADMIN_LOGIN_FAILURE);
     }

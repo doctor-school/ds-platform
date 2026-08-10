@@ -208,8 +208,7 @@ export interface IdpTokens {
  * invalidating the chain + revoking the session.
  */
 export type IdpRefreshResult =
-  | { reuseDetected: false; tokens: IdpTokens }
-  | { reuseDetected: true };
+  { reuseDetected: false; tokens: IdpTokens } | { reuseDetected: true };
 
 /**
  * EARS-34 (#1131): the server-side branch an email login-code request resolved to
@@ -337,7 +336,10 @@ export interface IdpClient {
    * `null` on any failure (unknown identifier / wrong-or-expired code), which are
    * indistinguishable so the caller stays enumeration-safe (EARS-16).
    */
-  loginWithEmailOtp(identifier: string, code: string): Promise<IdpSession | null>;
+  loginWithEmailOtp(
+    identifier: string,
+    code: string,
+  ): Promise<IdpSession | null>;
   /**
    * EARS-7: trigger a Zitadel `otp_sms` **login** code. Same enumeration-safe
    * contract as {@link requestEmailOtp}. The SMS toll-fraud budget (EARS-14) is
@@ -358,7 +360,10 @@ export interface IdpClient {
    * for the audit ledger and the EARS-15 lockout observation). A failed check is
    * counted by the native Zitadel lockout policy (EARS-15), never by the BFF.
    */
-  passwordLogin(identifier: string, password: string): Promise<PasswordLoginResult>;
+  passwordLogin(
+    identifier: string,
+    password: string,
+  ): Promise<PasswordLoginResult>;
   /**
    * EARS-8: complete the OIDC exchange against a checked session, yielding the
    * access JWT, the rotating opaque refresh token, and the principal claims. Takes
@@ -369,6 +374,24 @@ export interface IdpClient {
    * empty/missing one fails closed (mints nothing, ADR-0001 §7).
    */
   exchangeSessionForTokens(session: IdpSession): Promise<IdpTokens>;
+  /**
+   * 011 EARS-3: terminate a checked Zitadel session at the IdP, so a session
+   * created by {@link passwordLogin} does not outlive the BFF's decision to
+   * refuse the request it was created for.
+   *
+   * The admin origin refuses a principal the `role → mfa_required` policy does
+   * not cover **after** the password check has already created a Zitadel session
+   * — without this call every such attempt would leave a live IdP session behind,
+   * an artifact of an authentication the BFF declined to honour. Takes the whole
+   * {@link IdpSession} handle because the Session v2 delete is authorized by the
+   * same single-use `sessionToken` proof-of-check the exchange consumes.
+   *
+   * **Fails soft:** a provider hiccup resolves rather than throws — the refusal
+   * is already decided and must stay byte-identical and constant-time to every
+   * other refusal branch (EARS-16), so a failed cleanup can never change what the
+   * caller answers.
+   */
+  terminateSession(session: IdpSession): Promise<void>;
   /**
    * EARS-9: rotate a single-use refresh token. On success the old token is
    * consumed and fresh access + refresh tokens are returned; a replay of an
@@ -418,6 +441,25 @@ export interface IdpClient {
    * rather than silently leaving a registered user un-authorized.
    */
   grantProjectRole(sub: string, roleKey: string): Promise<void>;
+  /**
+   * 011 EARS-3: does `sub` hold a **registered** (ready) TOTP factor at the IdP?
+   *
+   * The single factor-existence READ the `role → mfa_required` fork needs to
+   * decide the next step — `mfa_enrollment_required` when this resolves `false`,
+   * `mfa_challenge_required` when it resolves `true`. It is deliberately the
+   * whole of 011's IdP factor surface in this slice: the TOTP **register /
+   * verify** seam (011 design §7) lands with the enrollment and challenge
+   * handlers, not here, so nothing in this slice can create or consume a factor.
+   *
+   * The factor lives in the IdP, never in our tables (design §8) — 011
+   * introduces no second credential store. A provisional (started-but-unverified)
+   * factor resolves `false`: an unverified enrollment is not a usable second
+   * factor, and treating it as one would route a half-enrolled admin into a
+   * challenge they cannot pass. **Fails loudly** rather than fails-open: an IdP
+   * fault throws {@link IdpUnavailableError} (→ 503) instead of guessing, because
+   * a silent `false` would mis-route an enrolled admin into re-enrollment.
+   */
+  hasTotpFactor(sub: string): Promise<boolean>;
 }
 
 /**

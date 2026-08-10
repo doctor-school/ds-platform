@@ -185,7 +185,7 @@ Resolves ADR-0001 §10's "full list of auth audit events — identity-auth-rbac-
 | `auth.mfa`          | `enrolled`, `used`, `failure`, `reset`        | user_id, method (totp/sms), reason, by_admin, ts                         |
 | `auth.password`     | `changed`, `reset_requested`                  | user_id (or null), identifier_hash, by_self/by_admin, ip, ts             |
 | `auth.magic_link`   | `sent`, `used`                                | user_id, channel, ts                                                     |
-| `auth.session`      | `created`, `terminated`                       | user_id, sid, device_id, reason (logout/force/expiry/theft_detected), ts |
+| `auth.session`      | `created`, `terminated`, `rejected`           | user_id, sid, device_id, reason (logout/force/expiry/theft_detected; rejected: wrong_cookie/pending_ref/fingerprint_mismatch/expired/role_without_mfa/csrf_mismatch), tier, ts |
 | `auth.token`        | `rotated`, `theft_detected`                   | user_id, sid, ts                                                         |
 | `auth.account_link` | `linked_auto`, `attempt_rejected`, `unlinked` | user_id, provider, reason, by_self/by_admin, ts                          |
 | `auth.role`         | `granted`, `revoked`                          | user_id, role, by_admin, ts                                              |
@@ -199,6 +199,7 @@ Resolves ADR-0001 §10's "full list of auth audit events — identity-auth-rbac-
 - **Retention:** ≥3 years (ADR-0001 design §7.3 / PRD §31); the platform retention matrix sets the audit ledger at **5 years** with crypto-shred at term (ADR-0009 §2.6, OQ-D3 CLOSED). (ADR-0003's OQ-D3 spells this table `audit_log`; ADR-0009 §2.6 spells the same table `audit_ledger` — one table, two corpus spellings.)
 - **Audit-class registration:** each class above is registered per ADR-0009 §2.4; the `@Authz({ audit: 'low-stakes' | 'high-stakes' })` classification (matrix §3) determines whether a given route's outcome _must_ produce a row, while this taxonomy fixes the event's identity and fields.
 - **Corpus alignment:** the `auth_audit` table name and these class-qualified ids are used consistently across ADR-0001 design §2.5/§7.3, the endpoint-authorization-matrix spec, and 003-design §5 (ADR-0001 reconciled to this taxonomy in #111). This §7.3 is the canonical taxonomy of record; ADR-0001 §7.3 mirrors the v1-mandatory subset.
+- **Forward reference — `auth.session.rejected`** is defined by feature spec **011** (`apps/docs/content/specs/features/011-admin-session-2fa/`, Event Model → Events; design §8a). It is a **new event inside the existing `auth.session` class**, not a new class: an admin route refusing a request, with the cause in `reason`. 011 also introduces the `tier` metadata discriminator (`tier: "admin"`) so admin-tier rows stay separable from the doctor portal's on the shared `auth.session.*` / `auth.login.*` classes — the same within-a-class-by-attribute idiom `method`, `reason` and `by_admin` already use here. This line is the registration; the defining spec owns the semantics (the ADR-0009/ADR-0010 `ai_dual_llm` precedent).
 
 ### 7.4 JWT fast-path vs introspection for step-up
 

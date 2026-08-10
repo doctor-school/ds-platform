@@ -10,6 +10,7 @@ import { RateLimitModule } from "./auth/rate-limit/rate-limit.module.js";
 import { TimingEqualizationModule } from "./auth/timing/timing-equalization.module.js";
 import { LoginChallengeModule } from "./auth/login-challenge/login-challenge.module.js";
 import { AuthModule } from "./auth/auth.module.js";
+import { AdminSessionModule } from "./auth/admin-session/admin-session.module.js";
 import { ObservabilityModule } from "./observability/observability.module.js";
 import { StorageModule } from "./storage/storage.module.js";
 import { EventsModule } from "./events/events.module.js";
@@ -41,6 +42,11 @@ import { AuditModule } from "./audit/audit.module.js";
     // the global BOT_PROTECTION provider it binds.
     LoginChallengeModule,
     AuthModule,
+    // 011 admin session tier: the dedicated __Host-ds_admin_session cookie, the
+    // role -> mfa_required policy fork, and the pending-auth state. Registered
+    // AFTER AuthModule so the admin-tier onRequest hook is added after the 003
+    // portal hook; the two are disjoint by route namespace (EARS-2).
+    AdminSessionModule,
     DatabaseModule,
     // Object storage for the 007 program-PDF binary (real S3/MinIO when
     // configured, in-memory fake otherwise).

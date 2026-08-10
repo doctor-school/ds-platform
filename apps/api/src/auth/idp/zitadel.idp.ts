@@ -751,6 +751,32 @@ export class ZitadelIdpClient implements IdpClient {
     return data.session?.factors?.user?.id;
   }
 
+  /**
+   * 011 EARS-3: `DELETE /v2/sessions/{id}` — drop a checked session the BFF
+   * decided not to honour. The Session v2 delete is authorized by the session's
+   * own `sessionToken` (the same proof-of-check the OIDC exchange presents), so
+   * the whole port handle is taken rather than a bare id.
+   *
+   * Fail-soft by contract: a non-2xx or a transport error is swallowed, because
+   * the caller has already resolved to the uniform refusal and must answer
+   * identically (and in the same time envelope) whether or not the IdP-side
+   * cleanup succeeded (EARS-16). The session it failed to delete expires on
+   * Zitadel's own session lifetime.
+   */
+  async terminateSession(session: IdpSession): Promise<void> {
+    const { zitadelSessionId, sessionToken } = session;
+    if (!zitadelSessionId || !sessionToken) return;
+    try {
+      await this.fetchImpl(this.url(`/v2/sessions/${zitadelSessionId}`), {
+        method: "DELETE",
+        headers: this.headers(),
+        body: JSON.stringify({ sessionToken }),
+      });
+    } catch {
+      // Cleanup is best-effort — never a second failure mode on a refusal path.
+    }
+  }
+
   /** OIDC-application config the token/refresh grants require, or throw if absent. */
   private requireOidcApp(): {
     clientId: string;
@@ -998,9 +1024,7 @@ export class ZitadelIdpClient implements IdpClient {
    * Fails closed — any non-2xx or empty result is `null` — so the callers stay
    * enumeration-safe (an unknown identifier looks like a hiccup).
    */
-  private async resolveUserVerification(
-    identifier: string,
-  ): Promise<{
+  private async resolveUserVerification(identifier: string): Promise<{
     userId: string;
     emailVerified: boolean;
     email: string | undefined;
@@ -1478,6 +1502,57 @@ export class ZitadelIdpClient implements IdpClient {
     // failure — Zitadel signals it with 409 (ALREADY_EXISTS). Resolve.
     if (res.ok || res.status === 409) return;
     throw new Error(`zitadel grant project role failed: HTTP ${res.status}`);
+  }
+
+  /**
+   * 011 EARS-3: does `sub` hold a **registered (ready)** TOTP factor?
+   *
+   * Reads Zitadel's per-user authentication factors
+   * (`GET /management/v1/users/{id}/auth_factors`, the same management-v1 surface
+   * this adapter already uses for `orgs/me`) and looks for an `otp` entry in
+   * state `AUTH_FACTOR_STATE_READY`. A factor that exists but is only
+   * **provisional** (`…_NOT_READY` — enrollment started, first code never
+   * verified) resolves `false`: an unverified enrollment is not a usable second
+   * factor, and calling it one would route a half-enrolled admin into a challenge
+   * they cannot pass. The in-repo fake mirrors exactly this — no state other than
+   * "registered" answers `true` (011 Constraints: the fake is never more
+   * permissive than the real adapter).
+   *
+   * **Fails loudly, not open.** A non-2xx (other than the 404 that genuinely
+   * means "this user has no factors") throws {@link IdpUnavailableError} → 503,
+   * because a silent `false` on an outage would mis-route an enrolled admin into
+   * re-enrollment. This method never creates, verifies, or removes a factor —
+   * that seam lands with the enrollment/challenge handlers (011 design §7).
+   */
+  async hasTotpFactor(sub: string): Promise<boolean> {
+    let res: Awaited<ReturnType<FetchLike>>;
+    try {
+      res = await this.fetchImpl(
+        this.url(
+          `/management/v1/users/${encodeURIComponent(sub)}/auth_factors`,
+        ),
+        { method: "GET", headers: this.headers() },
+      );
+    } catch (cause) {
+      throw new IdpUnavailableError(
+        `zitadel auth-factor read failed: ${(cause as Error).message}`,
+      );
+    }
+    // 404 = no factor resource for this user — a real "no factor", not a fault.
+    if (res.status === 404) return false;
+    if (!res.ok) {
+      throw new IdpUnavailableError(
+        `zitadel auth-factor read failed: HTTP ${res.status}`,
+      );
+    }
+    const data = (await res.json()) as {
+      result?: Array<{ otp?: { state?: string }; state?: string }>;
+    };
+    return (data.result ?? []).some(
+      (factor) =>
+        factor.otp !== undefined &&
+        (factor.otp.state ?? factor.state) === "AUTH_FACTOR_STATE_READY",
+    );
   }
 
   /**

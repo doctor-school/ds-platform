@@ -1,6 +1,10 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
-import { auditLedger, type DrizzleHandle, type NewAuditLedgerRow } from "@ds/db";
+import {
+  auditLedger,
+  type DrizzleHandle,
+  type NewAuditLedgerRow,
+} from "@ds/db";
 import { DRIZZLE_DB } from "../../database/database.tokens.js";
 import { loadEnv } from "../../config/env.schema.js";
 import type { AuthAuditEvent, AuthAuditLog } from "./auth-audit.types.js";
@@ -13,6 +17,15 @@ type Db = DrizzleHandle["db"];
  * non-test runtime — the writer fails closed there when no real pepper is set.
  */
 const TEST_FALLBACK_PEPPER = "test-only-insecure-audit-identifier-pepper";
+
+/**
+ * 011 EARS-9 tier discriminator. The admin tier shares the canonical
+ * `auth.session.*` / `auth.login.*` classes with the doctor portal, so every row
+ * the admin tier writes carries `tier: "admin"` in the ledger row's `metadata` —
+ * the §7.3 idiom of discriminating within a class by attribute (as `method` does
+ * on `auth.mfa.*` and `reason` on `auth.session.terminated`), not a new class.
+ */
+export const ADMIN_TIER = "admin";
 
 /**
  * Mask a raw identifier (email / phone) for the ledger (ADR-0001 §7, ADR-0003
@@ -192,6 +205,59 @@ export function toLedgerRow(
         sid: null,
         reason: null,
         metadata: { fields: event.fields },
+      };
+
+    // ---- 011 admin tier (EARS-9) --------------------------------------------
+    // Canonical §7.3 ids only — 011 invents none and defines no parallel
+    // taxonomy (011 design §8a). `tier: "admin"` is the discriminating field
+    // that keeps an admin forensic query from silently returning portal rows on
+    // the shared `auth.session.*` / `auth.login.*` classes; it rides the
+    // existing `metadata` jsonb, so there is NO schema migration.
+    case "AdminPrimaryAuthSucceeded":
+      return {
+        eventType: "auth.login.success",
+        subjectId: event.sub,
+        sid: null,
+        reason: null,
+        metadata: { method: "password", tier: ADMIN_TIER },
+      };
+    case "AdminPrimaryAuthFailed":
+      return {
+        eventType: "auth.login.failure",
+        // Named only on the `not_permitted` branch (see the event's doc): the
+        // IdP had already asserted this subject, so the row can say WHO was
+        // refused instead of filing a valid-credential probe as anonymous noise.
+        subjectId: event.sub,
+        sid: null,
+        reason: event.reason,
+        metadata: { identifier_hash: mask(event.identifier), tier: ADMIN_TIER },
+      };
+    case "AdminSessionEstablished":
+      return {
+        eventType: "auth.session.created",
+        subjectId: event.sub,
+        sid: event.sid,
+        reason: null,
+        metadata: { tier: ADMIN_TIER },
+      };
+    case "AdminSessionEnded":
+      return {
+        eventType: "auth.session.terminated",
+        subjectId: event.sub,
+        sid: event.sid,
+        reason: event.reason,
+        metadata: { tier: ADMIN_TIER },
+      };
+    case "AdminSessionRejected":
+      // The one id 011 adds: a NEW event inside the EXISTING canonical
+      // `auth.session` class (not a new class). Registered upstream by the
+      // forward-reference line in ADR-0001 design §7.3 naming spec 011.
+      return {
+        eventType: "auth.session.rejected",
+        subjectId: event.sub,
+        sid: null,
+        reason: event.reason,
+        metadata: { tier: ADMIN_TIER },
       };
   }
 }

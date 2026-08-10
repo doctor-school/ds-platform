@@ -405,3 +405,58 @@ export const ZitadelWebhookResponseSchema = z.strictObject({
 export type ZitadelWebhookResponse = z.infer<
   typeof ZitadelWebhookResponseSchema
 >;
+
+/* ------------------------------------------------------------------ *
+ * 011 — admin session tier (EARS-1/2/3/10)
+ * ------------------------------------------------------------------ */
+
+/**
+ * 011 `AdminAuthState` read model — **the state enum and nothing else**.
+ *
+ * Deliberately carries no attempt budget, no lock indicator, no factor id and no
+ * session claims (011 requirements → Read models): the caller reading it has
+ * passed primary auth only, which is precisely the stolen-password attacker the
+ * second factor exists to stop. A budget/lock field here would hand that attacker
+ * the enumeration oracle the uniform-failure rule spends a clause denying — one
+ * disclosure rule for the state surface and the verify surfaces, not two.
+ */
+export const AdminAuthStateSchema = z.enum([
+  "unauthenticated",
+  "mfa_pending_enrollment",
+  "mfa_pending_challenge",
+  "active",
+]);
+export type AdminAuthState = z.infer<typeof AdminAuthStateSchema>;
+
+/**
+ * `StartAdminLogin` request (EARS-3) — primary password authentication at the
+ * admin origin. Same deliberately-loose `identifier` shape as
+ * {@link LoginRequestSchema}: Zitadel is the credential authority and resolves
+ * the identifier itself (003 design §2), so the BFF does not pre-classify it.
+ */
+export const AdminLoginRequestSchema = z.object({
+  identifier: z.string().min(1),
+  password: z.string().min(1),
+});
+export type AdminLoginRequest = z.infer<typeof AdminLoginRequestSchema>;
+
+/**
+ * `StartAdminLogin` response (EARS-3). Primary auth at the admin origin issues
+ * **no session** — it returns only the required next step, carried as the pending
+ * half of {@link AdminAuthStateSchema}. The short-lived pending-auth reference
+ * itself travels in its own host-only cookie, never in the body (011 design §3).
+ */
+export const AdminLoginResponseSchema = z.strictObject({
+  state: z.enum(["mfa_pending_enrollment", "mfa_pending_challenge"]),
+});
+export type AdminLoginResponse = z.infer<typeof AdminLoginResponseSchema>;
+
+/**
+ * `EndAdminSession` response (EARS-2). The admin session record is deleted and
+ * `__Host-ds_admin_session` cleared via `Set-Cookie`; any concurrent portal
+ * session is untouched. The body just acknowledges.
+ */
+export const AdminLogoutResponseSchema = z.strictObject({
+  status: z.literal("logged_out"),
+});
+export type AdminLogoutResponse = z.infer<typeof AdminLogoutResponseSchema>;

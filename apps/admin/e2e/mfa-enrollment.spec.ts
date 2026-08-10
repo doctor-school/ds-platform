@@ -10,9 +10,18 @@ import { totpCode } from "./support/totp";
  * API directly. This proves the operator-facing arc the owner approved at Stage A:
  * a factor-less `platform_admin` completes primary auth, is put in front of the
  * enrollment card, cannot reach an admin resource by typing its URL, transcribes
- * the secret, and — on a correct code — lands in admin **without a second login**
- * (LD-1). Plus the wrong-code branch, which must leave them exactly where they
- * were with one uniform RU message.
+ * the secret, and — on a correct code — has `__Host-ds_admin_session` issued
+ * **without a second login** (LD-1). Plus the wrong-code branch, which must leave
+ * them exactly where they were with one uniform RU message.
+ *
+ * The EARS-5 landing is asserted as the INTERIM it currently is: the admin app's
+ * `authProvider.check` still reads the 003 portal session, so it bounces to the
+ * login form while the admin session it never consults is live. The spec asserts
+ * both halves — the live session (proved by an admin API call from the bounced-to
+ * page) and the bounce itself — because an `/events` assertion here would pass on
+ * the transient navigation and report green while the operator is not in admin.
+ * When the authProvider migration (#1192) lands, its spec flips this to a true
+ * `/events` landing.
  *
  * Dev-stand-gated like the rest of `apps/admin/e2e` (a MANUAL gate, not CI): the
  * bootstrap provisions a real `platform_admin` against the stand's Zitadel and
@@ -81,7 +90,7 @@ test.describe("011 EARS-4/5 — forced TOTP enrollment (admin)", () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test("EARS-5: the offer is scannable AND transcribable, a wrong code is refused in RU, and a correct code lands in admin with no second login", async ({
+  test("EARS-5: the offer is scannable AND transcribable, a wrong code is refused in RU, and a correct code issues the admin session in place (UI lands on the #1192 authProvider bounce)", async ({
     page,
   }) => {
     const { email, password } = await bootstrapAdminSession(ORIGIN);
@@ -105,13 +114,45 @@ test.describe("011 EARS-4/5 — forced TOTP enrollment (admin)", () => {
     await expect(page.getByTestId("mfa-error")).toContainText(/[А-Яа-я]/);
     await expect(page).toHaveURL(/\/mfa\/enroll/);
 
+    // Every primary-auth POST from here on, so "no second login" is an observed
+    // fact rather than an inference from what the DOM happens to show.
+    const loginPosts: string[] = [];
+    page.on("request", (req) => {
+      if (req.method() === "POST" && /\/auth\/login$/.test(req.url()))
+        loginPosts.push(req.url());
+    });
+
     // A correct code — derived from the rendered secret exactly as the operator's
     // authenticator app would — completes the login IN PLACE (LD-1).
     await page
       .getByTestId("mfa-enroll-form")
       .getByRole("textbox")
       .fill(totpCode(secret));
-    await page.waitForURL(/\/events/, { timeout: 20_000 });
-    await expect(page.getByTestId("mfa-enroll-form")).toBeHidden();
+
+    // INTERIM, and asserted as such: the admin app's `authProvider.check` still
+    // reads the 003 portal session, so it bounces the operator to the login form
+    // even though the admin session it never looks at is live. Asserting the
+    // `/events` landing here would pass on the transient navigation and hide the
+    // bounce — the test would be green while the operator is not in admin.
+    await page.waitForURL(/\/login\?to=%2Fevents/, { timeout: 20_000 });
+
+    // The durable truth underneath that bounce: the enrollment verify DID issue
+    // `__Host-ds_admin_session`, and it authenticates the admin API right now —
+    // read from the bounced-to page, so the cookie is proven live after the
+    // redirect, not merely at the moment of the response.
+    const admitted = await page.evaluate(async () => {
+      const res = await fetch("/v1/admin/events", { credentials: "include" });
+      return res.status;
+    });
+    expect(
+      admitted,
+      "the enrollment verify must issue a live __Host-ds_admin_session — the /login bounce is the admin app's authProvider (migrated by #1192), not a missing session",
+    ).toBe(200);
+
+    // LD-1: nothing in this flow asked for credentials a second time.
+    expect(
+      loginPosts,
+      "a successful enrollment verify completes the login in place — no second primary auth",
+    ).toEqual([]);
   });
 });

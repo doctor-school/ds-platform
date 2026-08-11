@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import { defineConfig } from "vitest/config";
 
 /**
@@ -8,6 +10,14 @@ import { defineConfig } from "vitest/config";
  * this tier.
  */
 export default defineConfig({
+  // The app's own `@/*` paths mapping (tsconfig), mirrored for the unit tier so a
+  // module that imports a sibling the way the app does — the Refine auth provider
+  // does — is testable here rather than only through the browser suite.
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL(".", import.meta.url)).replace(/[\\/]$/, ""),
+    },
+  },
   test: {
     environment: "node",
     globals: true,

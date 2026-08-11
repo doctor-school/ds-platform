@@ -26,6 +26,10 @@ import {
 import { LoginFormSchema, type LoginFormFields } from "@/lib/form-schemas";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 import { readAdminAuthState } from "@/lib/admin-auth";
+import {
+  loginFailureFromMessage,
+  type LoginFailurePresentation,
+} from "@/lib/login-failure";
 
 /**
  * Admin login — since 011, **primary authentication only**.
@@ -52,7 +56,7 @@ import { readAdminAuthState } from "@/lib/admin-auth";
 function LoginForm() {
   const t = useTranslations();
   const { mutate: login, isPending } = useLogin();
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<LoginFailurePresentation | null>(null);
   const form = useForm<LoginFormFields>({
     mode: "onTouched",
     resolver: useLocalizedResolver(LoginFormSchema, "login.validation"),
@@ -60,18 +64,19 @@ function LoginForm() {
   });
 
   function submit(values: LoginFormFields) {
-    setError(null);
+    setFailure(null);
     login(values, {
       onSuccess: (data) => {
         if (!data.success) {
-          setError(
-            data.error?.message === "login.errorThrottled"
-              ? t("login.errorThrottled")
-              : t("login.errorGeneric"),
-          );
+          // What the refusal WAS is decided by the provider and re-read here
+          // (`login-failure.ts`): an IdP outage must not be repainted as a
+          // verdict on the credentials, which were never checked (#1217).
+          setFailure(loginFailureFromMessage(data.error?.message));
         }
       },
-      onError: () => setError(t("login.errorGeneric")),
+      // A thrown transport error says nothing about the service being down in
+      // the way a 503 does, so it stays the uniform refusal.
+      onError: () => setFailure(loginFailureFromMessage(undefined)),
     });
   }
 
@@ -90,9 +95,9 @@ function LoginForm() {
               noValidate
               onSubmit={form.handleSubmit(submit)}
             >
-              {error ? (
-                <Alert variant="danger" data-testid="login-error">
-                  {error}
+              {failure ? (
+                <Alert variant={failure.variant} data-testid={failure.testId}>
+                  {t(`login.${failure.messageKey}`)}
                 </Alert>
               ) : null}
               <FormField

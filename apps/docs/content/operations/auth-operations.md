@@ -255,7 +255,9 @@ clears the tally, which matters after the window rolls over. The native password
 lockout is Zitadel's to clear, per its own policy. If the operator has genuinely
 lost their authenticator, the lock is the wrong lever — the recovery path is
 LD-2: the Tech Lead removes the registered factor, and the target's next login
-re-enters forced enrollment.
+re-enters forced enrollment. An **api restart also clears every live soft-lock**
+(the counter is in-process, see `DEBT.md`), so a lock that vanished well before
+its 30 minutes were up is explained by a deploy or restart, not by a bug.
 
 **Was it an attack?** `auth.mfa.failure` rows with `sub = NULL`
 (`reason: "no_pending"`) are attempts carrying no resolvable pending

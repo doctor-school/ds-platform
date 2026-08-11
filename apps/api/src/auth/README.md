@@ -43,15 +43,16 @@ authentication**, and only a satisfied second factor converts that into
 `__Host-ds_admin_session` (host-only, `HttpOnly`, `Secure`, `SameSite=Strict`,
 opaque reference).
 
-| Concern                                           | File                                  |
-| ------------------------------------------------- | ------------------------------------- |
-| Cookie names/attributes + route-namespace helpers | `admin-session.cookie.ts`             |
-| `role → mfa_required` policy (EARS-3)             | `mfa-policy.ts`                       |
-| Record shapes + the two store ports               | `admin-session.types.ts`              |
-| Store adapters (in-memory / Redis)                | `admin-session-store.{fake,redis}.ts` |
-| Login → pending → session lifecycle               | `admin-session.service.ts`            |
-| Admin-tier request hook (separation + CSRF)       | `admin-session-auth.hook.ts`          |
-| `/v1/admin/auth/{login,logout}`                   | `admin-auth.controller.ts`            |
+| Concern                                                                      | File                                  |
+| ---------------------------------------------------------------------------- | ------------------------------------- |
+| Cookie names/attributes + route-namespace helpers                            | `admin-session.cookie.ts`             |
+| `role → mfa_required` policy (EARS-3)                                        | `mfa-policy.ts`                       |
+| Record shapes + the two store ports                                          | `admin-session.types.ts`              |
+| Store adapters (in-memory / Redis)                                           | `admin-session-store.{fake,redis}.ts` |
+| Login → pending → session lifecycle                                          | `admin-session.service.ts`            |
+| Admin-tier request hook (separation + CSRF)                                  | `admin-session-auth.hook.ts`          |
+| `/v1/admin/auth/{login,logout}` + `/v1/admin/auth/mfa/enroll/{start,verify}` | `admin-auth.controller.ts`            |
+| TOTP registration seam (Zitadel v2 / fake)                                   | `../idp/totp.ts`                      |
 
 Three properties carry it:
 
@@ -67,11 +68,14 @@ Three properties carry it:
    separate record type, minutes-long TTL — and the admin hook does not know how
    to read it.
 
-**Sequencing (011 WBS).** The enrollment and challenge endpoints land in
-#1191/#1192. Until they do, `AdminSessionService.upgradePending` — the in-place
-upgrade LD-1 specifies — has no HTTP caller: those verify handlers are its
-callers. The admin app therefore cannot complete an admin login against this
-tier yet; that is the chain's sequencing, not a stub.
+**Sequencing (011 WBS).** The enrollment endpoints
+(`/v1/admin/auth/mfa/enroll/{start,verify}`, #1191) are live: the enrollment
+verify handler is the HTTP caller of `AdminSessionService.upgradePending` — the
+in-place upgrade LD-1 specifies — for the `mfa_pending_enrollment` branch. The
+TOTP challenge for already-enrolled admins lands in #1192, together with the
+admin app's login migration onto this tier (until then `apps/admin` still
+authenticates via the portal tier); that is the chain's sequencing, not a stub.
+Release blocker #1204 holds prod deploys of the range until the journey closes.
 
 ## BFF session model (`session/`, design §3, ADR-0001 §6)
 
@@ -134,8 +138,10 @@ keyed by the cookie's `sid`. No token is ever in a response body (EARS-8).
 creation, password storage, the session password-check (`passwordLogin`), the
 passwordless OTP-login flows (`requestEmailOtp` / `loginWithEmailOtp` /
 `requestSmsOtp` / `loginWithSmsOtp` — `otp_email` / `otp_sms`, design §6), the
-OIDC token exchange (`exchangeSessionForTokens`), and the forgot-password code
-flow (`requestPasswordReset` / `completePasswordReset`) are **native Zitadel**,
+OIDC token exchange (`exchangeSessionForTokens`), the forgot-password code
+flow (`requestPasswordReset` / `completePasswordReset`), and the TOTP factor
+lifecycle (`hasTotpFactor` / `startTotpRegistration` / `verifyTotpRegistration`
+in `idp/totp.ts`, plus `terminateSession`) are **native Zitadel**,
 consumed through this interface and never reimplemented here (Constraints;
 ADR-0001 §8, AGPL §13). `apps/api` signs no token and hashes no password. Each
 OTP-login `loginWith…` returns a **checked `IdpSession`** — the same shape

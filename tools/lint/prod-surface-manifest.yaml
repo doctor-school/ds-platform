@@ -71,6 +71,15 @@ routes:
     route: /login
     file: apps/admin/app/login/page.tsx
     status: product-ready
+  # 011 EARS-4/5: the forced TOTP-enrollment screen. A real product deliverable —
+  # the Stage-A layout the product owner picked (#718, 2026-08-07), driven live in
+  # `apps/admin/e2e/mfa-enrollment.spec.ts`. It is the ONLY surface a
+  # `mfa_pending_enrollment` admin can reach, and the bootstrap path for the
+  # admins who exist today (PD-1).
+  - app: admin
+    route: /mfa/enroll
+    file: apps/admin/app/mfa/enroll/page.tsx
+    status: product-ready
   - app: admin
     route: /events
     file: apps/admin/app/events/page.tsx

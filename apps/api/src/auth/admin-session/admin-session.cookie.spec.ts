@@ -73,8 +73,15 @@ describe("011 EARS-1/EARS-2/EARS-10 — admin-tier cookie primitives", () => {
     // NOT the whole `/v1/admin/auth/` prefix: logout is an authenticated admin
     // route, so a refusal there owes its EARS-2 `auth.session.rejected` row.
     expect(isAdminAuthEntryRoute("/v1/admin/auth/logout")).toBe(false);
-    // Routes that do not exist yet are not pre-exempted (#1191/#1192 add theirs
-    // together with the handlers that make them reachable).
+    // EARS-4/EARS-5 (#1191): the two enrollment endpoints are reached with a
+    // PENDING reference and no session by design, so a refusal there is the
+    // normal state rather than a refused admin route — they join the set with
+    // the handlers that made them reachable.
+    expect(isAdminAuthEntryRoute("/v1/admin/auth/mfa/enroll/start")).toBe(true);
+    expect(isAdminAuthEntryRoute("/v1/admin/auth/mfa/enroll/verify")).toBe(true);
+    // Still an explicit set, not the `/mfa/` prefix: the EARS-6 challenge route
+    // joins with #1192, and a lookalike path is not pre-exempted.
+    expect(isAdminAuthEntryRoute("/v1/admin/auth/mfa/verify")).toBe(false);
     expect(isAdminAuthEntryRoute("/v1/admin/auth/mfa/enroll")).toBe(false);
   });
 

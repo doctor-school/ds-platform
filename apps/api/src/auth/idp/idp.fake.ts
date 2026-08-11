@@ -10,7 +10,13 @@ import {
   type IdpTokens,
   type IdpUser,
   type PasswordLoginResult,
+  type TotpRegistration,
 } from "./idp.types.js";
+import {
+  generateTotpSecret,
+  totpProvisioningUri,
+  verifyTotpCode,
+} from "./totp.js";
 
 /**
  * The one OTP code the fake treats as valid. Tests submit this for the happy
@@ -24,6 +30,14 @@ export const FAKE_VALID_CODE = "424242";
  * the BFF's lockout *observation* (`auth.lockout.triggered`) is testable.
  */
 export const FAKE_LOCKOUT_THRESHOLD = 10;
+
+/**
+ * The issuer label the fake stamps into its `otpauth://` provisioning URIs — the
+ * name an authenticator app files the factor under. A fixed literal, not an
+ * origin: it labels the platform, not a deployment, so the AGENTS.md §9
+ * no-hardcoded-endpoint rule does not apply (the real adapter takes Zitadel's).
+ */
+export const FAKE_TOTP_ISSUER = "Doctor.School";
 
 interface FakeRecord {
   sub: string;
@@ -97,9 +111,23 @@ export class FakeIdpClient implements IdpClient {
    * 011 EARS-3: subs holding a REGISTERED (ready) TOTP factor. Empty by default —
    * a freshly provisioned admin has no factor and therefore lands in forced
    * enrollment, which is the correct first-run behaviour (011 design §7).
-   * Written only by the {@link setTotpFactor} test accessor in this slice.
+   * Written by {@link verifyTotpRegistration} (a confirmed enrollment) and by the
+   * {@link setTotpFactor} test accessor.
    */
   private readonly totpFactors = new Set<string>();
+  /**
+   * 011 EARS-5: provisional (started-but-unconfirmed) TOTP factors, `sub` → its
+   * shared secret plus the time steps already consumed by an accepted code.
+   *
+   * The consumed set is what makes a replay refusable: a TOTP code is valid for
+   * its whole 30-second step, so without recording the step an accepted code
+   * stays reusable for the remainder of it (011 design §5). Kept per-sub, so a
+   * re-registration wipes both the secret and its ledger together.
+   */
+  private readonly provisionalTotp = new Map<
+    string,
+    { secret: string; consumed: Set<number> }
+  >();
   /** Subs with a live email login-OTP challenge (EARS-6). Set on request, cleared on a successful verify — models Zitadel requiring a challenge before the check. */
   private readonly emailOtpChallenges = new Set<string>();
   /** Subs with a live SMS login-OTP challenge (EARS-7). */
@@ -430,23 +458,80 @@ export class FakeIdpClient implements IdpClient {
    * #1208) down to a READY `otp` entry. An unrecorded sub is this fake's
    * counterpart of that search's empty `result[]`; the real adapter's fault
    * branch (a throw on any non-2xx) has no fake analogue, which keeps the fake
-   * no MORE permissive than the real one. Nothing in this
-   * slice can WRITE a factor (the register/verify seam is #1191's), so the only
-   * writer is the {@link setTotpFactor} test accessor.
+   * no MORE permissive than the real one. A PROVISIONAL factor — one
+   * {@link startTotpRegistration} created and no correct code has confirmed —
+   * deliberately resolves `false`: an unverified enrollment is not a usable
+   * second factor, and treating it as one would route a half-enrolled admin
+   * into a challenge they cannot pass.
    */
   hasTotpFactor(sub: string): Promise<boolean> {
     return Promise.resolve(this.totpFactors.has(sub));
   }
 
   /**
-   * Test accessor: record (or clear) a REGISTERED TOTP factor for `sub`, so the
-   * EARS-3 policy fork can be exercised on both branches without the (not yet
-   * built) enrollment endpoints. Not part of {@link IdpClient} — the real adapter
-   * has no such write, and 011's real factor writes land in #1191.
+   * 011 EARS-5: register a provisional TOTP factor and return its material.
+   *
+   * The secret is a real RFC 4226 shared secret and the returned URI is the real
+   * `otpauth://` provisioning form, so the fake's offer is structurally
+   * indistinguishable from Zitadel's — the screen and the tests have nothing to
+   * branch on. Re-registering REPLACES the provisional factor (and its consumed-
+   * step ledger), which is exactly the port contract: the previous secret stops
+   * verifying rather than lingering as a second live enrollment path.
+   */
+  startTotpRegistration(sub: string): Promise<TotpRegistration> {
+    const secret = generateTotpSecret();
+    const record = this.bySub.get(sub);
+    const account = record?.email ?? record?.phone ?? sub;
+    this.provisionalTotp.set(sub, { secret, consumed: new Set() });
+    return Promise.resolve({
+      uri: totpProvisioningUri({
+        issuer: FAKE_TOTP_ISSUER,
+        account,
+        secret,
+      }),
+      secret,
+    });
+  }
+
+  /**
+   * 011 EARS-5: verify the first code against the provisional factor and promote
+   * it to REGISTERED.
+   *
+   * Fake/real parity is the whole point of this method (011 Constraints — _the
+   * fake is never more permissive than the real one_). It runs the real RFC 6238
+   * check, so it refuses, indistinguishably and without throwing:
+   * - a **wrong** code (no accepted step produces it);
+   * - an **expired** code (outside the ±1-step tolerance window);
+   * - a **replayed** code (its step is already in the consumed ledger — the
+   *   single-use-within-its-window rule of EARS-6);
+   * - a subject with **no provisional factor** at all.
+   *
+   * The consumed ledger survives the promotion, so a code burned on enrollment
+   * cannot be replayed at the challenge endpoint inside the same window.
+   */
+  verifyTotpRegistration(sub: string, code: string): Promise<boolean> {
+    const provisional = this.provisionalTotp.get(sub);
+    if (!provisional) return Promise.resolve(false);
+    const counter = verifyTotpCode(provisional.secret, code);
+    if (counter === undefined) return Promise.resolve(false);
+    if (provisional.consumed.has(counter)) return Promise.resolve(false);
+    provisional.consumed.add(counter);
+    this.totpFactors.add(sub);
+    return Promise.resolve(true);
+  }
+
+  /**
+   * Test accessor: record (or clear) a REGISTERED TOTP factor for `sub`, so a
+   * suite can reach the "already enrolled" branch of the EARS-3 policy fork
+   * without driving the whole enrollment arc. Not part of {@link IdpClient} — the
+   * real adapter's only factor writes are the register/verify pair above.
    */
   setTotpFactor(sub: string, registered: boolean): void {
     if (registered) this.totpFactors.add(sub);
-    else this.totpFactors.delete(sub);
+    else {
+      this.totpFactors.delete(sub);
+      this.provisionalTotp.delete(sub);
+    }
   }
 
   private findByIdentifier(identifier: string): FakeRecord | undefined {

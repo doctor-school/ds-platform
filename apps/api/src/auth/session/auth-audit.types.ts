@@ -165,6 +165,14 @@ export type AuthAuditEvent =
       sub: string | null;
       reason: AdminPrimaryAuthFailureReason;
     }
+  // EARS-5: a first TOTP factor registered AND confirmed by its first correct
+  // code. Maps to the canonical `auth.mfa.enrolled` id ADR-0001 design §8.5
+  // already defines — 011 reuses it rather than minting an admin-specific twin
+  // (the `tier` field is the whole of the difference). It carries the SUBJECT and
+  // nothing else on purpose: the shared secret, the provisioning URI, and the
+  // submitted code are all absent from the event shape itself, so no future
+  // mapper edit can leak them into a row.
+  | { type: "MfaEnrolled"; sub: string }
   // `__Host-ds_admin_session` issued with `mfa = true` (EARS-1).
   | { type: "AdminSessionEstablished"; sub: string; sid: string }
   | {
@@ -208,6 +216,7 @@ export const AUTH_AUDIT_EVENT_TYPES = [
   "ReconcileDivergence",
   "AdminPrimaryAuthSucceeded",
   "AdminPrimaryAuthFailed",
+  "MfaEnrolled",
   "AdminSessionEstablished",
   "AdminSessionEnded",
   "AdminSessionRejected",

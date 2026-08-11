@@ -232,6 +232,19 @@ export function toLedgerRow(
         reason: event.reason,
         metadata: { identifier_hash: mask(event.identifier), tier: ADMIN_TIER },
       };
+    case "MfaEnrolled":
+      // EARS-5/EARS-9: the canonical id ADR-0001 design §8.5 already defines,
+      // reused rather than twinned. `method` is the §7.3 discriminator within
+      // `auth.mfa.*`; `tier` separates this from any future portal-side factor.
+      // The row is deliberately secret-free — there is no field here that could
+      // carry the shared secret, the provisioning URI, or the submitted code.
+      return {
+        eventType: "auth.mfa.enrolled",
+        subjectId: event.sub,
+        sid: null,
+        reason: null,
+        metadata: { method: "totp", tier: ADMIN_TIER },
+      };
     case "AdminSessionEstablished":
       return {
         eventType: "auth.session.created",

@@ -49,12 +49,18 @@ const ADMIN_ROUTE_PREFIX = "/v1/admin/";
  * `POST /v1/admin/auth/logout`, which is an `access: authenticated` admin route:
  * a portal cookie (or a CSRF-mismatched admin session) presented there is exactly
  * the case EARS-2 mandates a row for, and exempting it would suppress that row.
- * The enrollment/challenge routes join this list with the handlers that make them
- * reachable on a pending reference (#1191/#1192) — an entry added before its
- * route exists is a hole with no test behind it.
+ * The enrollment routes joined the list with the handlers that made them
+ * reachable on a pending reference (#1191); the challenge route joins with
+ * EARS-6 (#1192) — an entry added before its route exists is a hole with no test
+ * behind it. They belong here because a pending reference is the NORMAL and only
+ * credential at those routes: the hook cannot resolve a session from it (by
+ * design), so writing `auth.session.rejected` for every enrollment request would
+ * fill the ledger with rows describing the happy path.
  */
 const ADMIN_AUTH_ENTRY_ROUTES: ReadonlySet<string> = new Set([
   "/v1/admin/auth/login",
+  "/v1/admin/auth/mfa/enroll/start",
+  "/v1/admin/auth/mfa/enroll/verify",
 ]);
 
 /** Strip the query string from a raw request URL, leaving the path. */

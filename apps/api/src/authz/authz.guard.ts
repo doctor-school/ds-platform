@@ -63,6 +63,18 @@ export class AuthzGuard implements CanActivate {
     // in this guard.
     if (meta.access === "public") return true;
 
+    // 011 EARS-4: `pending-auth`. There is no session subject to authorize — the
+    // caller holds a pending reference, which the admin session hook refuses by
+    // design. The classified handler resolves that reference against the
+    // server-side pending record (live, fingerprint-bound, and owing THIS route's
+    // next step) and refuses uniformly otherwise. The guard's contribution is to
+    // let the request reach that handler without pretending a subject exists;
+    // it is not a bypass, because a `pending-auth` row can only be authored on a
+    // route whose handler performs that resolution — the matrix validator refuses
+    // any engine-evaluated `auth_check` on these rows precisely so no reader can
+    // mistake this for a guard-enforced check.
+    if (meta.access === "pending-auth") return true;
+
     // access: authenticated — a valid session subject is required.
     const request = context.switchToHttp().getRequest<{
       user?: AuthzSubject;

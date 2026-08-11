@@ -77,6 +77,34 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     for (const theme of THEMES) await scan(page, theme);
   });
 
+  test("011 EARS-12: the TOTP enrollment screen passes WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    // The 011 forced-enrollment screen is reachable only for a principal holding
+    // a live pending-auth reference (EARS-4), so the scan drives the real admin
+    // primary auth first rather than scanning an empty shell. The screen is
+    // mandatory and not skippable, which is exactly why its a11y is not optional:
+    // an operator who cannot scan a QR or read a code field cannot get in at all.
+    const { email, password } = await bootstrapAdminSession(ORIGIN);
+    await page.goto("/login");
+    await page.evaluate(async (creds) => {
+      const res = await fetch("/v1/admin/auth/login", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          identifier: creds.email,
+          password: creds.password,
+        }),
+      });
+      if (!res.ok) throw new Error(`admin primary auth failed: ${res.status}`);
+    }, { email, password });
+
+    await page.goto("/mfa/enroll");
+    await page.getByTestId("mfa-qr").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
   test("the event list + create + edit surfaces pass WCAG 2 A/AA (light)", async ({
     page,
   }) => {

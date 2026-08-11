@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "bddgen && playwright test",
-    "test:axe": "playwright test --config=playwright.axe.config.ts"
+    "test:axe": "playwright test --config=playwright.axe.config.ts",
+    "test:flows": "playwright test --config=playwright.flows.config.ts"
   },
   "dependencies": {
     "@ds/design-system": "workspace:*",
@@ -27,6 +28,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-hook-form": "^7.84.0",
+    "uqr": "^0.1.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {

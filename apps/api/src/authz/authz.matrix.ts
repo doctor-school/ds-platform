@@ -7,7 +7,7 @@
  */
 import { ROLES, type AuthzMeta } from "./authz.types.js";
 
-const ACCESS = new Set(["public", "authenticated"]);
+const ACCESS = new Set(["public", "authenticated", "pending-auth"]);
 const CHECK = new Set(["none", "fast-path", "policy"]);
 const AUDIT = new Set(["none", "low-stakes", "high-stakes"]);
 const ROLE_SET = new Set<string>(ROLES);
@@ -74,6 +74,19 @@ export function validateRow(
       at("`access: authenticated` requires a non-empty `required_roles`");
     if (check === "none")
       at("`access: authenticated` requires `auth_check` in {fast-path, policy}");
+  }
+
+  // 011 EARS-4: a `pending-auth` row must name the role its pending principal was
+  // admitted under (the policy fork already checked it) and must NOT claim an
+  // engine-evaluated check — no session subject exists for one to run against.
+  // The verification is the handler's, over the server-side pending record, so a
+  // `fast-path`/`policy` value here would advertise a guard step that never runs.
+  if (access === "pending-auth") {
+    if (!hasRoles)
+      at("`access: pending-auth` requires a non-empty `required_roles`");
+    if (check !== undefined && check !== "none")
+      at("`access: pending-auth` requires `auth_check: none`");
+    if (hasAttrs) at("`access: pending-auth` must not carry `object_attrs`");
   }
 
   if (hasAttrs && check !== "policy")

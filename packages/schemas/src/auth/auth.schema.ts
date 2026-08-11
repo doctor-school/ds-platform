@@ -460,3 +460,59 @@ export const AdminLogoutResponseSchema = z.strictObject({
   status: z.literal("logged_out"),
 });
 export type AdminLogoutResponse = z.infer<typeof AdminLogoutResponseSchema>;
+
+/**
+ * 011 `AdminEnrollmentOffer` read model (EARS-5) — the one-time enrollment
+ * payload, returned to the pending principal and to nobody else.
+ *
+ * It carries the SAME secret twice on purpose: once inside the scannable
+ * `provisioningUri` and once as a bare, **manually transcribable** string. Some
+ * authenticator apps cannot scan and a screen-reader user cannot scan at all, so
+ * an image-only offer would lock those operators out of a mandatory control
+ * (EARS-12). Both forms must enrol the same factor — the screen renders the URI
+ * as a QR and the secret as selectable text.
+ *
+ * `issuer` / `account` are the labels the authenticator app shows in its list, so
+ * an operator holding several factors can tell them apart. Nothing here is ever
+ * logged, audited, or re-served: a re-request replaces the provisional factor and
+ * yields a NEW secret rather than re-reading this one (011 design §4).
+ */
+export const AdminEnrollmentOfferSchema = z.strictObject({
+  /** `otpauth://totp/...` — the scannable form. */
+  provisioningUri: z.string().min(1),
+  /** The same shared secret, base32, for manual transcription. */
+  secret: z.string().min(1),
+  /** Label the authenticator app files the factor under. */
+  issuer: z.string().min(1),
+  /** The operator's account label inside that issuer. */
+  account: z.string().min(1),
+});
+export type AdminEnrollmentOffer = z.infer<typeof AdminEnrollmentOfferSchema>;
+
+/**
+ * A submitted TOTP code (EARS-5, EARS-6) — the shared request shape of the
+ * enrollment-verify and challenge-verify endpoints.
+ *
+ * The **exactly six digits** constraint is the SSOT's job, not the handler's: a
+ * malformed code is a 400 from the validation pipe before any verification path
+ * runs, so garbage input never consumes an attempt budget and never reaches the
+ * IdP. TOTP is fixed at six digits by the provisioning URI this same slice emits
+ * (`digits=6`), so the constraint is the contract, not a guess.
+ */
+export const AdminMfaCodeRequestSchema = z.strictObject({
+  code: z.string().regex(/^\d{6}$/),
+});
+export type AdminMfaCodeRequest = z.infer<typeof AdminMfaCodeRequestSchema>;
+
+/**
+ * Response to a successful enrollment verify (EARS-5, LD-1). The state moves
+ * straight to `active` — the pending authentication is upgraded **in place** and
+ * `__Host-ds_admin_session` rides the same response, so there is no second login
+ * for the client to orchestrate and nothing else for this body to say.
+ */
+export const AdminMfaEnrollVerifyResponseSchema = z.strictObject({
+  state: z.literal("active"),
+});
+export type AdminMfaEnrollVerifyResponse = z.infer<
+  typeof AdminMfaEnrollVerifyResponseSchema
+>;

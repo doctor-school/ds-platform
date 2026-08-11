@@ -1,5 +1,13 @@
 # @ds/portal
 
+## 0.17.1
+
+### Patch Changes
+
+- Updated dependencies [[`823f0d3`](https://github.com/doctor-school/ds-platform/commit/823f0d319994754e6eb24092508ff5c76189cb88), [`d6b365f`](https://github.com/doctor-school/ds-platform/commit/d6b365fbeb28732c2b561f78b420ea060e96970b), [`40f50a8`](https://github.com/doctor-school/ds-platform/commit/40f50a8d316a17b00642d78de8bc64439ab0464d), [`2114512`](https://github.com/doctor-school/ds-platform/commit/2114512b17822587280804a012b875e1512d4343)]:
+  - @ds/schemas@2.2.0
+  - @ds/design-system@4.0.2
+
 ## 0.17.0
 
 ### Minor Changes

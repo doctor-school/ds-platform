@@ -1,5 +1,37 @@
 # @ds/admin
 
+## 0.4.0
+
+### Minor Changes
+
+- [#1207](https://github.com/doctor-school/ds-platform/pull/1207) [`d6b365f`](https://github.com/doctor-school/ds-platform/commit/d6b365fbeb28732c2b561f78b420ea060e96970b) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 011 EARS-4/5 — forced-enrollment gate + self-serve TOTP enrollment.
+
+  A `platform_admin` who completes primary auth with no registered TOTP factor is
+  now held in `mfa_pending_enrollment`: the API refuses every admin route for that
+  state and admits only the two enrollment endpoints, and the admin app renders the
+  enrollment screen — QR, the same secret as selectable text, and a six-digit code
+  field. A correct first code registers the factor, appends a secret-free
+  `auth.mfa.enrolled` row, and upgrades the pending authentication in place into
+  `__Host-ds_admin_session`, so the operator lands in admin with no second login.
+
+  Additive: `POST /v1/admin/auth/mfa/enroll/{start,verify}`, the `IdpPort` TOTP
+  register/verify seam, the enrollment schemas, and the `pending-auth`
+  endpoint-authz access class.
+
+- [#1210](https://github.com/doctor-school/ds-platform/pull/1210) [`40f50a8`](https://github.com/doctor-school/ds-platform/commit/40f50a8d316a17b00642d78de8bc64439ab0464d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 011 EARS-6/7 — TOTP challenge on admin login, with the ADR-0001 §7 failure discipline behind it.
+
+  An enrolled `platform_admin` completing primary auth at the admin origin is now presented a TOTP challenge, and `POST /v1/admin/auth/mfa/verify` is the only thing that turns their pending authentication into `__Host-ds_admin_session` — verified against the IdP session itself, single-use within its window, with nothing on the admin surface reachable in between. A new `GET /v1/admin/auth/state` read reports where a browser sits in that flow (the enum and nothing else — no budget, no lock, no subject), which is what the admin app routes on now that the cookies carrying the answer are `HttpOnly`.
+
+  Failed verifications on **both** the enrollment and challenge surfaces now count against the shared per-user/per-IP budgets, append an `auth.mfa.failure` row, and soft-lock the account at the §7 threshold with an `auth.lockout.triggered` row and an email notice — a locked account is refused even on a correct code, and every refusal stays one uniform message.
+
+  `apps/admin` moves off the doctor-portal session onto the admin tier end to end: login → challenge or enrollment → admin, admin writes carrying the CSRF double-submit header, and the new RU challenge screen. Both code screens now disable their submit control until six digits are present, so a cleared field after a failed code no longer leaves a button that looks live and cannot act.
+
+### Patch Changes
+
+- Updated dependencies [[`823f0d3`](https://github.com/doctor-school/ds-platform/commit/823f0d319994754e6eb24092508ff5c76189cb88), [`d6b365f`](https://github.com/doctor-school/ds-platform/commit/d6b365fbeb28732c2b561f78b420ea060e96970b), [`40f50a8`](https://github.com/doctor-school/ds-platform/commit/40f50a8d316a17b00642d78de8bc64439ab0464d), [`2114512`](https://github.com/doctor-school/ds-platform/commit/2114512b17822587280804a012b875e1512d4343)]:
+  - @ds/schemas@2.2.0
+  - @ds/design-system@4.0.2
+
 ## 0.3.0
 
 ### Minor Changes

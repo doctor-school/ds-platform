@@ -186,6 +186,15 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // the IdP's own default label must not survive anywhere in it.
       expect(offer.provisioningUri).not.toMatch(/zitadel/i);
 
+      // RAW substring first, BEFORE any parse. `URLSearchParams` decodes `+` as a
+      // space, so a parsed assertion round-trips clean over a form-encoded
+      // `issuer=Doctor.School+Admin` and cannot see the defect at all — while a
+      // strict RFC-3986 authenticator reads that `+` literally and files the
+      // factor under «Doctor.School+Admin». The path label is percent-encoded, so
+      // this is also the assertion that the URI spells the issuer ONE way.
+      expect(offer.provisioningUri).toContain("issuer=Doctor.School%20Admin");
+      expect(offer.provisioningUri).not.toContain("issuer=Doctor.School+Admin");
+
       const parsed = parseProvisioningUri(offer.provisioningUri);
       expect(parsed.label).toBe(`${ADMIN_TOTP_ISSUER}:${email}`);
       expect(parsed.params.get("issuer")).toBe(ADMIN_TOTP_ISSUER);

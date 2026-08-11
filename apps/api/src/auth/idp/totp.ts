@@ -193,5 +193,14 @@ export function totpProvisioningUri(
     digits: String(input.digits ?? TOTP_DIGITS),
     period: String(input.period ?? TOTP_STEP_SECONDS),
   });
-  return `otpauth://totp/${label}?${params.toString()}`;
+  // `URLSearchParams.toString()` serializes as `application/x-www-form-urlencoded`,
+  // which spells a space `+`. The path label above is percent-encoded
+  // (`encodeURIComponent` → `%20`), so an issuer containing a space would be
+  // written two different ways in one URI — and the key-URI format requires the
+  // label's issuer prefix and the `issuer` parameter to AGREE, with a strict
+  // RFC-3986 reader taking the `+` literally («Doctor.School+Admin»). Rewriting
+  // `+` to `%20` is lossless here: a literal plus in a value is already escaped
+  // to `%2B` by the serializer, so every bare `+` left in the output is a space.
+  const query = params.toString().replace(/\+/g, "%20");
+  return `otpauth://totp/${label}?${query}`;
 }

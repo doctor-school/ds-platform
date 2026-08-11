@@ -2,6 +2,7 @@
 
 | endpoint                               | access        | required_roles               | auth_check | object_attrs | step_up | audit       | test_coverage                    |
 | -------------------------------------- | ------------- | ---------------------------- | ---------- | ------------ | ------- | ----------- | -------------------------------- |
+| DELETE /v1/admin/users/:id/mfa         | authenticated | platform_admin               | fast-path  | —            | false   | high-stakes | EARS-13                          |
 | GET /v1/admin/auth/state               | public        | —                            | none       | —            | false   | low-stakes  | EARS-6                           |
 | GET /v1/admin/events                   | authenticated | platform_admin               | fast-path  | —            | false   | none        | EARS-8                           |
 | GET /v1/admin/events/:id               | authenticated | platform_admin               | fast-path  | —            | false   | none        | EARS-8                           |

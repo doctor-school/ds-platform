@@ -13,6 +13,7 @@
     "reconcile:sweep": "tsx scripts/reconcile-sweep.ts",
     "presence:export": "tsx scripts/presence-export.ts",
     "seed:events": "tsx scripts/seed-events.ts",
+    "break-glass:remove-mfa": "tsx scripts/break-glass-remove-mfa.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",

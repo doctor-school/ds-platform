@@ -452,7 +452,11 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
     const { fetchImpl, calls } = returnCodeFetch({ verificationCode: "NEVER" });
     const mailer = new FakeMailer();
     const client = new ZitadelIdpClient({ ...SEND_CONFIG, mailer, fetchImpl });
-    await client.requestEmailVerification("user-1", "doc@example.com", "CR8ATE");
+    await client.requestEmailVerification(
+      "user-1",
+      "doc@example.com",
+      "CR8ATE",
+    );
     expect(
       calls.some((c) => c.url.endsWith("/email/resend")),
       "no resend hop when a create-time code is supplied",
@@ -465,7 +469,9 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
   it("003 EARS-1/29 (#1128): with NO create-time code, requestEmailVerification FALLS BACK to the /email/resend regeneration hop and delivers the fresh code", async () => {
     // The code-less-create fallback (the implicit retry seam): no code in hand →
     // regenerate via /email/resend, then mail the returned code.
-    const { fetchImpl, calls } = returnCodeFetch({ verificationCode: "FB5H2K" });
+    const { fetchImpl, calls } = returnCodeFetch({
+      verificationCode: "FB5H2K",
+    });
     const mailer = new FakeMailer();
     const client = new ZitadelIdpClient({ ...SEND_CONFIG, mailer, fetchImpl });
     await client.requestEmailVerification("user-1", "doc@example.com");
@@ -585,9 +591,9 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
       mailer,
       fetchImpl: buildFetch([]),
     });
-    await expect(unknown.resendEmailVerification("ghost@ds.test")).resolves.toBe(
-      false,
-    );
+    await expect(
+      unknown.resendEmailVerification("ghost@ds.test"),
+    ).resolves.toBe(false);
     // Already-verified registrant: resolves, but no resend hop is reached.
     const verified = new ZitadelIdpClient({
       ...SEND_CONFIG,
@@ -599,9 +605,9 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
         },
       ]),
     });
-    await expect(verified.resendEmailVerification("user@ds.test")).resolves.toBe(
-      false,
-    );
+    await expect(
+      verified.resendEmailVerification("user@ds.test"),
+    ).resolves.toBe(false);
     expect(mailer.verificationCodeEmails).toEqual([]);
   });
 
@@ -1739,7 +1745,9 @@ describe("ZitadelIdpClient.requestEmailLoginCode wire shape (003 EARS-34, #1131)
               result: [
                 {
                   userId: "user-9",
-                  human: { email: { email: "user@ds.test", isVerified: false } },
+                  human: {
+                    email: { email: "user@ds.test", isVerified: false },
+                  },
                 },
               ],
             }),
@@ -1894,7 +1902,9 @@ describe("ZitadelIdpClient.markEmailVerified wire shape (003 EARS-35, #1131)", (
               result: [
                 {
                   userId: "user-9",
-                  human: { email: { email: "user@ds.test", isVerified: false } },
+                  human: {
+                    email: { email: "user@ds.test", isVerified: false },
+                  },
                 },
               ],
             }),
@@ -2075,6 +2085,345 @@ describe("ZitadelIdpClient.hasTotpFactor wire shape (011 EARS-3, #1208)", () => 
     const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
 
     await expect(client.hasTotpFactor("user-1")).rejects.toBeInstanceOf(
+      IdpUnavailableError,
+    );
+  });
+});
+
+// 011 EARS-13 (#1214 Mode (a)): the real adapter's two factor-removal hops. Every
+// e2e suite behind this route runs against `FakeIdpClient` — which verifies codes
+// for real — so the ONLY thing that can be wrong in production is the WIRE, and
+// only these tests can see it. Both methods are pinned the way `hasTotpFactor`
+// is: method + path + body, then each outcome class, with 404 loud rather than
+// semantic (#1208 — on this instance an unrouted verb answers 404 exactly like a
+// legitimate "not there").
+describe("ZitadelIdpClient.checkTotpCode wire shape (011 EARS-13)", () => {
+  const CONFIG = { baseUrl: "http://idp.test:9080", serviceToken: "svc-token" };
+  const CREATE_PATH = "http://idp.test:9080/v2/sessions";
+  const SESSION_PATH = "http://idp.test:9080/v2/sessions/sess-1";
+
+  /**
+   * A fetch double for the three hops the check can make: the session create
+   * (POST), the factor read-back (GET), and the disposal (DELETE).
+   */
+  function checkFetch(opts: {
+    create?: { ok?: boolean; status?: number; json?: unknown };
+    read?: { ok?: boolean; status?: number; json?: unknown };
+    createThrows?: boolean;
+    readThrows?: boolean;
+  }): { fetchImpl: FetchLike; calls: ScriptedCall[] } {
+    const calls: ScriptedCall[] = [];
+    const fetchImpl: FetchLike = (url, init) => {
+      calls.push({
+        url,
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
+      });
+      if (init.method === "POST") {
+        if (opts.createThrows) return Promise.reject(new Error("ECONNREFUSED"));
+        const c = opts.create ?? {};
+        return Promise.resolve({
+          ok: c.ok ?? true,
+          status: c.status ?? 200,
+          json: () =>
+            Promise.resolve(
+              c.json ?? { sessionId: "sess-1", sessionToken: "tok-1" },
+            ),
+        });
+      }
+      if (init.method === "GET") {
+        if (opts.readThrows) return Promise.reject(new Error("ECONNREFUSED"));
+        const r = opts.read ?? {};
+        return Promise.resolve({
+          ok: r.ok ?? true,
+          status: r.status ?? 200,
+          json: () =>
+            Promise.resolve(
+              r.json ?? {
+                session: {
+                  factors: {
+                    user: { id: "user-1" },
+                    totp: { verifiedAt: "2026-08-11T09:00:00Z" },
+                  },
+                },
+              },
+            ),
+        });
+      }
+      // The disposal.
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      });
+    };
+    return { fetchImpl, calls };
+  }
+
+  it("011 EARS-13: a session whose totp factor is verifiedAt resolves true — POST /v2/sessions with a user + totp check pair", async () => {
+    const { fetchImpl, calls } = checkFetch({});
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.checkTotpCode("user-1", "123456")).resolves.toBe(true);
+
+    const create = calls[0]!;
+    expect(create.method).toBe("POST");
+    expect(create.url).toBe(CREATE_PATH);
+    expect(create.headers.authorization).toBe("Bearer svc-token");
+    // The check pair is the whole protection: a drifted field name here is what
+    // would admit any six digits, so the body is pinned exactly.
+    expect(JSON.parse(create.body!)).toEqual({
+      checks: { user: { userId: "user-1" }, totp: { code: "123456" } },
+    });
+  });
+
+  it("011 EARS-13: the verdict is read off the SESSION, not the create status — a 2xx create whose factor never verified resolves false", async () => {
+    // The regression this suite exists for: `POST /v2/sessions` answers 2xx with
+    // `sessionId`/`sessionToken` and does NOT echo `factors` (#145), so a bare
+    // `true` on 2xx would admit any code the instance happened to accept-and-
+    // ignore — on the route that strips another admin's second factor.
+    const { fetchImpl, calls } = checkFetch({
+      read: { json: { session: { factors: { user: { id: "user-1" } } } } },
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.checkTotpCode("user-1", "123456")).resolves.toBe(false);
+    const read = calls[1]!;
+    expect(read.method).toBe("GET");
+    expect(read.url).toBe(SESSION_PATH);
+  });
+
+  it("011 EARS-13: a session checked for a DIFFERENT subject resolves false, however verified its totp factor is", async () => {
+    const { fetchImpl } = checkFetch({
+      read: {
+        json: {
+          session: {
+            factors: {
+              user: { id: "somebody-else" },
+              totp: { verifiedAt: "2026-08-11T09:00:00Z" },
+            },
+          },
+        },
+      },
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.checkTotpCode("user-1", "123456")).resolves.toBe(false);
+  });
+
+  it("011 EARS-13: the proof session is DISPOSED with its own id and token — a possession check must never mint a usable credential", async () => {
+    const { fetchImpl, calls } = checkFetch({});
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await client.checkTotpCode("user-1", "123456");
+
+    const dispose = calls.find((c) => c.method === "DELETE");
+    expect(dispose, "the proof session must be terminated").toBeDefined();
+    expect(dispose!.url).toBe(SESSION_PATH);
+    expect(JSON.parse(dispose!.body!)).toEqual({ sessionToken: "tok-1" });
+  });
+
+  it("011 EARS-13: the proof session is disposed even when the read-back faults", async () => {
+    const { fetchImpl, calls } = checkFetch({
+      read: { ok: false, status: 500 },
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(
+      client.checkTotpCode("user-1", "123456"),
+    ).rejects.toBeInstanceOf(IdpUnavailableError);
+    expect(calls.some((c) => c.method === "DELETE")).toBe(true);
+  });
+
+  it("011 EARS-13: a refused check (4xx on the create) resolves false — a wrong/expired/replayed code is not a fault", async () => {
+    const { fetchImpl, calls } = checkFetch({
+      create: { ok: false, status: 400 },
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.checkTotpCode("user-1", "123456")).resolves.toBe(false);
+    // No session was created, so nothing is read back or disposed.
+    expect(calls).toHaveLength(1);
+  });
+
+  it("011 EARS-13/#1208: a 404 on the create throws — Zitadel refuses a bad code with 4xx, so 404 means the route moved, not that the code is wrong", async () => {
+    const { fetchImpl } = checkFetch({ create: { ok: false, status: 404 } });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(
+      client.checkTotpCode("user-1", "123456"),
+    ).rejects.toBeInstanceOf(IdpUnavailableError);
+  });
+
+  it("011 EARS-13: a 5xx on the create throws IdpUnavailableError", async () => {
+    const { fetchImpl } = checkFetch({ create: { ok: false, status: 503 } });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(
+      client.checkTotpCode("user-1", "123456"),
+    ).rejects.toBeInstanceOf(IdpUnavailableError);
+  });
+
+  it("011 EARS-13: a 2xx create carrying no session id throws — there is nothing to read a verdict off", async () => {
+    const { fetchImpl } = checkFetch({ create: { json: {} } });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(
+      client.checkTotpCode("user-1", "123456"),
+    ).rejects.toBeInstanceOf(IdpUnavailableError);
+  });
+
+  it("011 EARS-13: a transport failure on either hop throws IdpUnavailableError, never a code verdict", async () => {
+    const created = new ZitadelIdpClient({
+      ...CONFIG,
+      fetchImpl: checkFetch({ createThrows: true }).fetchImpl,
+    });
+    await expect(
+      created.checkTotpCode("user-1", "123456"),
+    ).rejects.toBeInstanceOf(IdpUnavailableError);
+
+    const read = new ZitadelIdpClient({
+      ...CONFIG,
+      fetchImpl: checkFetch({ readThrows: true }).fetchImpl,
+    });
+    await expect(read.checkTotpCode("user-1", "123456")).rejects.toBeInstanceOf(
+      IdpUnavailableError,
+    );
+  });
+});
+
+// 011 EARS-13: the removal, whose contract is PROVEN ABSENCE rather than a status
+// — see the method docblock. The 404 case is the one that matters: this is the
+// `…/auth_factors` family the deployed Zitadel does not route (#1208), so a
+// 404-as-converged carve-out would let the endpoint write `auth.mfa.reset` and
+// answer 200 while removing nothing.
+describe("ZitadelIdpClient.removeTotpFactor wire shape (011 EARS-13, #1208)", () => {
+  const CONFIG = { baseUrl: "http://idp.test:9080", serviceToken: "svc-token" };
+  const DELETE_PATH =
+    "http://idp.test:9080/management/v1/users/user-1/auth_factors/otp";
+  const SEARCH_PATH =
+    "http://idp.test:9080/management/v1/users/user-1/auth_factors/_search";
+
+  /** A fetch double for the DELETE plus the `_search` convergence read. */
+  function removalFetch(opts: {
+    del?: { ok?: boolean; status?: number };
+    stillRegistered?: boolean;
+    searchFails?: boolean;
+    deleteThrows?: boolean;
+  }): { fetchImpl: FetchLike; calls: ScriptedCall[] } {
+    const calls: ScriptedCall[] = [];
+    const fetchImpl: FetchLike = (url, init) => {
+      calls.push({
+        url,
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
+      });
+      if (init.method === "DELETE") {
+        if (opts.deleteThrows) return Promise.reject(new Error("ECONNREFUSED"));
+        const d = opts.del ?? {};
+        return Promise.resolve({
+          ok: d.ok ?? true,
+          status: d.status ?? 200,
+          json: () => Promise.resolve({}),
+        });
+      }
+      // The `_search` convergence read.
+      if (opts.searchFails) {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          json: () => Promise.resolve({}),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            result: opts.stillRegistered
+              ? [{ otp: {}, state: "AUTH_FACTOR_STATE_READY" }]
+              : [],
+          }),
+      });
+    };
+    return { fetchImpl, calls };
+  }
+
+  it("011 EARS-13: a 2xx delete resolves only after the _search read confirms the factor is gone", async () => {
+    const { fetchImpl, calls } = removalFetch({});
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.removeTotpFactor("user-1")).resolves.toBeUndefined();
+    expect(calls).toHaveLength(2);
+    expect(calls[0]!.method).toBe("DELETE");
+    expect(calls[0]!.url).toBe(DELETE_PATH);
+    expect(calls[0]!.headers.authorization).toBe("Bearer svc-token");
+    // The confirmation goes through the POST `_search` hop, never the GET the
+    // deployed instance does not route.
+    expect(calls[1]!.method).toBe("POST");
+    expect(calls[1]!.url).toBe(SEARCH_PATH);
+  });
+
+  it("011 EARS-13/#1208: a 404 delete does NOT report success on its own — it is confirmed by the _search read", async () => {
+    const { fetchImpl, calls } = removalFetch({
+      del: { ok: false, status: 404 },
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    // Genuinely absent → converged, and the caller still gets its uniform answer.
+    await expect(client.removeTotpFactor("user-1")).resolves.toBeUndefined();
+    expect(calls[1]!.url).toBe(SEARCH_PATH);
+  });
+
+  it("011 EARS-13/#1208: a 404 delete on a user who STILL holds the factor throws — the unrouted-verb case that would otherwise ledger a phantom recovery", async () => {
+    const { fetchImpl } = removalFetch({
+      del: { ok: false, status: 404 },
+      stillRegistered: true,
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.removeTotpFactor("user-1")).rejects.toBeInstanceOf(
+      IdpUnavailableError,
+    );
+  });
+
+  it("011 EARS-13: a 2xx delete that did not actually remove the factor throws — the status is never the answer", async () => {
+    const { fetchImpl } = removalFetch({ stillRegistered: true });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.removeTotpFactor("user-1")).rejects.toBeInstanceOf(
+      IdpUnavailableError,
+    );
+  });
+
+  it("011 EARS-13: an unverifiable removal is a fault — a failing _search read throws rather than assuming success", async () => {
+    const { fetchImpl } = removalFetch({ searchFails: true });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.removeTotpFactor("user-1")).rejects.toBeInstanceOf(
+      IdpUnavailableError,
+    );
+  });
+
+  it("011 EARS-13: a non-404 error status throws immediately, without a convergence read", async () => {
+    const { fetchImpl, calls } = removalFetch({
+      del: { ok: false, status: 500 },
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.removeTotpFactor("user-1")).rejects.toBeInstanceOf(
+      IdpUnavailableError,
+    );
+    expect(calls).toHaveLength(1);
+  });
+
+  it("011 EARS-13: a transport-level failure throws IdpUnavailableError", async () => {
+    const { fetchImpl } = removalFetch({ deleteThrows: true });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.removeTotpFactor("user-1")).rejects.toBeInstanceOf(
       IdpUnavailableError,
     );
   });

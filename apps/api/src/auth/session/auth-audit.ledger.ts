@@ -273,6 +273,25 @@ export function toLedgerRow(
         reason: event.reason,
         metadata: { method: "totp", stage: event.stage, tier: ADMIN_TIER },
       };
+    case "MfaFactorRemoved":
+      // EARS-13/EARS-9: the canonical `auth.mfa.reset` id. `by_admin` is the
+      // §7.3 field defined for exactly this action — it names the OPERATOR, while
+      // `subjectId` names the admin whose factor is gone; a row carrying only one
+      // of the two would answer "whose factor?" or "who did it?" but never both,
+      // and the whole reason this action is an endpoint is that both are the
+      // record (011 requirements → LD-2).
+      //
+      // The metadata is exactly the pair the 011 Event Model declares. It is also
+      // the SHAPE the LD-2 break-glass script writes, because that script goes
+      // through this same mapper — so a ledger reader cannot tell an endpoint
+      // removal from a break-glass one, and the trail has no hole (design §10).
+      return {
+        eventType: "auth.mfa.reset",
+        subjectId: event.sub,
+        sid: null,
+        reason: null,
+        metadata: { by_admin: event.byAdmin, tier: ADMIN_TIER },
+      };
     case "LockoutTriggered":
       // EARS-7: the admin-tier soft-lock. Shares 003's canonical
       // `auth.lockout.triggered` id; `reason: "mfa_attempts"` is what separates a

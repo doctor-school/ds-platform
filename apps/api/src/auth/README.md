@@ -14,25 +14,25 @@ durable `audit_ledger` writer).
 
 ## What's here
 
-| Concern                                         | File                          | EARS                    |
-| ----------------------------------------------- | ----------------------------- | ----------------------- |
-| Registration + verify routes                    | `auth.controller.ts`          | 1, 2, 3, 4, 19          |
-| Login + session-read routes                     | `auth.controller.ts`          | 5, 8                    |
-| Passwordless OTP-login routes                   | `auth.controller.ts`          | 6, 7, 8, 14             |
-| Refresh + logout routes                         | `auth.controller.ts`          | 9, 10                   |
-| Password-reset routes                           | `auth.controller.ts`          | 11, 12                  |
-| Cascade + login + OTP + reset orchestration     | `auth.service.ts`             | 1–7, 11, 12, 14, 16, 20 |
-| SMS toll-fraud budget                           | `sms-budget/`                 | 14                      |
-| Rate limiter (per-user/IP/ASN)                  | `rate-limit/`                 | 13                      |
-| Timing equalization                             | `timing/`                     | 16                      |
-| Login captcha-after-N policy                    | `login-challenge/`            | 17                      |
-| Durable audit_ledger writer                     | `session/auth-audit.*`        | 9, 10, 12, 15, 18       |
-| `doctor_guest` mirror row                       | `user-mirror.service.ts`      | 3, 4, 19, 26            |
-| Reconciliation sweep                            | `reconcile.service.ts`        | 19                      |
-| Read-path mirror self-heal                      | `mirror-self-heal.service.ts` | 26                      |
-| IdP port + adapters                             | `idp/`                        | (design §2)             |
-| BFF session establish/refresh/logout/revoke-all | `session/`                    | 5, 8, 9, 10, 12         |
-| Admin session tier (011)                        | `admin-session/`              | 011: 1, 2, 3, 6, 7, 10  |
+| Concern                                         | File                          | EARS                                 |
+| ----------------------------------------------- | ----------------------------- | ------------------------------------ |
+| Registration + verify routes                    | `auth.controller.ts`          | 1, 2, 3, 4, 19                       |
+| Login + session-read routes                     | `auth.controller.ts`          | 5, 8                                 |
+| Passwordless OTP-login routes                   | `auth.controller.ts`          | 6, 7, 8, 14                          |
+| Refresh + logout routes                         | `auth.controller.ts`          | 9, 10                                |
+| Password-reset routes                           | `auth.controller.ts`          | 11, 12                               |
+| Cascade + login + OTP + reset orchestration     | `auth.service.ts`             | 1–7, 11, 12, 14, 16, 20              |
+| SMS toll-fraud budget                           | `sms-budget/`                 | 14                                   |
+| Rate limiter (per-user/IP/ASN)                  | `rate-limit/`                 | 13                                   |
+| Timing equalization                             | `timing/`                     | 16                                   |
+| Login captcha-after-N policy                    | `login-challenge/`            | 17                                   |
+| Durable audit_ledger writer                     | `session/auth-audit.*`        | 9, 10, 12, 15, 18                    |
+| `doctor_guest` mirror row                       | `user-mirror.service.ts`      | 3, 4, 19, 26                         |
+| Reconciliation sweep                            | `reconcile.service.ts`        | 19                                   |
+| Read-path mirror self-heal                      | `mirror-self-heal.service.ts` | 26                                   |
+| IdP port + adapters                             | `idp/`                        | (design §2)                          |
+| BFF session establish/refresh/logout/revoke-all | `session/`                    | 5, 8, 9, 10, 12                      |
+| Admin session tier (011)                        | `admin-session/`              | 011: 1, 2, 3, 5, 6, 7, 9, 10, 11, 13 |
 
 ## Admin session tier (`admin-session/`, spec 011 — EARS-1/2/3/10)
 
@@ -53,6 +53,8 @@ opaque reference).
 | Admin-tier request hook (separation + CSRF)                                          | `admin-session-auth.hook.ts`          |
 | Second-factor soft-lock counter (011 EARS-7)                                         | `mfa-lockout.service.ts`              |
 | `/v1/admin/auth/{login,logout,state}` + `/mfa/verify` + `/mfa/enroll/{start,verify}` | `admin-auth.controller.ts`            |
+| `DELETE /v1/admin/users/:id/mfa` — operator factor removal (011 EARS-13)             | `admin-users.controller.ts`           |
+| LD-2 break-glass removal (ops CLI half)                                              | `break-glass-cli.ts`                  |
 | TOTP registration + login-check seam (Zitadel v2 / fake)                             | `../idp/totp.ts`                      |
 
 Three properties carry it:
@@ -92,6 +94,57 @@ asks for a second sign-in:
 access-control / data providers, plus the EARS-10 CSRF double-submit header on
 every admin write). Release blocker #1204 holds prod deploys of the range until
 the journey closes.
+
+### Operator factor recovery (011 EARS-13 / LD-2) — runbook
+
+A `platform_admin` who has lost their authenticator is locked out of a live
+medical platform. Recovery in this slice is an **operator action**, not a
+self-serve flow (self-serve recovery codes are a tracked follow-up), and it runs
+**through our API, never the IdP console** — a console-side removal is not
+observed by `apps/api`, so the `auth.mfa.reset` row EARS-9 mandates would never
+be written and the trail would have a hole exactly where it matters most.
+
+**The endpoint.** `DELETE /v1/admin/users/:id/mfa`, body `{ "code": "123456" }`.
+
+- `:id` is the **target's** IdP subject — the admin who lost their factor.
+- `code` is the **caller's OWN current TOTP code**, not the target's. This is the
+  route-local fresh-possession proof: it realises ADR-0001 §10's policy intent
+  ("an MFA change is an elevated action and demands fresh MFA") for this one
+  route, because the general step-up mechanism has never been built here. The
+  route therefore declares `step_up: false` — an honest matrix value beats one
+  that advertises a guard nothing enforces.
+- Requires a live, MFA-verified `__Host-ds_admin_session` with `platform_admin`,
+  plus the EARS-10 CSRF double-submit header (`x-ds-admin-csrf`).
+- **When to use it:** an operator lost or replaced their authenticator, or their
+  factor is suspected compromised. After removal, the target's next login lands
+  on the forced-enrollment screen (EARS-4) and they enrol a fresh factor.
+- **Refusals.** A wrong / expired / replayed code is the same uniform 401 a
+  login-time verify returns, counting against the same per-user rate window and
+  the same soft-lock counter — the route is not a code-guessing oracle with a
+  budget of its own. Removing your **own** factor is refused (403): it would turn
+  the recovery endpoint into an MFA opt-out.
+- **Precondition.** The endpoint presumes **≥2 enrolled `platform_admin`
+  operators**. With fewer, nobody can satisfy it — use break-glass below.
+
+**BREAK-GLASS (fewer than two enrolled operators).** The single named exception,
+and still not an unobserved path — it writes the same `auth.mfa.reset` row,
+through the same writer, with the acting operator in `by_admin`, so a ledger
+reader cannot tell it apart from an endpoint removal:
+
+```bash
+set -a; source ~/.ds-platform/.env.local; set +a   # or the prod env
+pnpm --filter @ds/api break-glass:remove-mfa --target <target IdP sub> --by <acting operator IdP sub>
+```
+
+**A post-action note on the tracking Issue is MANDATORY, in the same session as
+the removal.** The script cannot capture the one thing the endpoint captures —
+proof that the operator who authorised the removal was present — so that proof
+becomes a written record instead. The note states: who ran it (a role plus the
+IdP subject), whose factor was removed, **why the endpoint could not be used**
+(i.e. the enrolled-operator count at the time), and when the target re-enrolled.
+A break-glass run with no note is an unrecorded removal of a second factor on a
+production medical platform; treat a missing note as an incident, not an
+oversight.
 
 ## BFF session model (`session/`, design §3, ADR-0001 §6)
 

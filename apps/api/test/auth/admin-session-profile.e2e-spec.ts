@@ -269,11 +269,18 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // No `accessToken` / `refreshToken`: nothing on this tier reads one, and a
       // live 30-day refresh token at rest would widen the blast radius of a Redis
       // compromise on precisely the tier 011 exists to harden.
+      //
+      // `identifier` is the one non-opaque field, and it is PD rather than a
+      // credential: it is the key the ADR-0001 §7 per-user rate window counts
+      // under, carried over from the pending authentication so the EARS-13
+      // factor-removal route draws on the SAME budget primary auth does instead of
+      // opening a fourth allowance of its own. It authenticates nothing.
       expect(Object.keys(record).sort()).toEqual(
         [
           "csrfToken",
           "expiresAtMs",
           "fingerprint",
+          "identifier",
           "mfa",
           "roles",
           "sid",

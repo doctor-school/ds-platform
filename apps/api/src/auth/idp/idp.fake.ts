@@ -1,6 +1,7 @@
 import type { Mailer } from "../../mailer/mailer.types.js";
 import {
   IdpInvalidArgumentError,
+  IdpUnavailableError,
   type CreatedUser,
   type CreateUserInput,
   type EmailLoginOutcome,
@@ -569,6 +570,65 @@ export class FakeIdpClient implements IdpClient {
     const rotated = `fake-session-token-${++this.seq}`;
     this.sessions.set(session.zitadelSessionId, { sub, sessionToken: rotated });
     return Promise.resolve({ ...session, sub, sessionToken: rotated });
+  }
+
+  /**
+   * 011 EARS-13: the standalone possession proof, with the same strictness the
+   * login-time check applies.
+   *
+   * Fake/real parity in the strict direction (011 Constraints). It refuses,
+   * indistinguishably and without throwing, every case the Zitadel session
+   * `user` + `totp` check pair refuses:
+   * - a subject with **no REGISTERED factor** — a merely provisional enrollment
+   *   proves nothing, so it cannot authorize a factor removal;
+   * - a **wrong** code (no accepted step produces it);
+   * - an **expired** code (outside the ±1-step tolerance window);
+   * - a **replayed** code — its step is already in the SHARED consumed ledger, so
+   *   a code burned on a login challenge cannot be re-spent here (and vice versa),
+   *   which is what makes "the caller's CURRENT code" mean current.
+   *
+   * It changes nothing else: no factor is created, promoted, or removed, and no
+   * session is minted — matching the real adapter, whose proof session is disposed
+   * of in the same call.
+   */
+  checkTotpCode(sub: string, code: string): Promise<boolean> {
+    if (!this.totpFactors.has(sub)) return Promise.resolve(false);
+    const factor = this.totpSecrets.get(sub);
+    if (!factor) return Promise.resolve(false);
+    const counter = verifyTotpCode(factor.secret, code);
+    if (counter === undefined) return Promise.resolve(false);
+    if (factor.consumed.has(counter)) return Promise.resolve(false);
+    factor.consumed.add(counter);
+    return Promise.resolve(true);
+  }
+
+  /**
+   * 011 EARS-13: remove `sub`'s registered TOTP factor.
+   *
+   * Idempotent, exactly as the real adapter is (which treats the management-v1
+   * 404 as the converged state): removing a factor that is not there resolves
+   * normally, so the endpoint cannot become a "does this admin hold a factor?"
+   * oracle. The shared secret goes with it — a re-enrolment mints a new one, so a
+   * removed factor can never be resurrected by replaying the old secret.
+   */
+  removeTotpFactor(sub: string): Promise<void> {
+    this.totpFactors.delete(sub);
+    this.totpSecrets.delete(sub);
+    // The same convergence contract the real adapter enforces through its
+    // `_search` re-read: this method resolves on PROVEN absence, never on "the
+    // call did not fail". Trivially satisfied here — which is the point: the
+    // assertion is what keeps a future fake edit from resolving while the factor
+    // is still standing, i.e. from being more permissive than the real adapter
+    // (011 Constraints) on the one property that decides whether an
+    // `auth.mfa.reset` row is honest.
+    if (this.totpFactors.has(sub)) {
+      return Promise.reject(
+        new IdpUnavailableError(
+          "fake totp factor removal did not converge: the factor is still registered",
+        ),
+      );
+    }
+    return Promise.resolve();
   }
 
   /**

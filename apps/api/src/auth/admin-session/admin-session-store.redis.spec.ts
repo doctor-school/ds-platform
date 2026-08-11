@@ -58,6 +58,7 @@ function record(sid: string, sub: string): AdminSessionRecord {
     sid,
     zitadelSessionId: `zit-${sid}`,
     sub,
+    identifier: `${sub}@ds.test`,
     roles: ["platform_admin"],
     mfa: true,
     fingerprint: "fp",

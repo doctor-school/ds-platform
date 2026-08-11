@@ -516,7 +516,49 @@ export interface IdpClient {
    * wrong code, and reporting it as one would tell an operator their correct code
    * is bad.
    */
-  checkTotpFactor(session: IdpSession, code: string): Promise<IdpSession | null>;
+  checkTotpFactor(
+    session: IdpSession,
+    code: string,
+  ): Promise<IdpSession | null>;
+  /**
+   * 011 EARS-13: check a TOTP code against `sub`'s **registered** factor,
+   * standalone — no in-flight login, no session handle.
+   *
+   * This is the factor-removal route's fresh-possession proof. Its caller holds
+   * an established admin session, not a pending authentication: the admin session
+   * record deliberately keeps **no IdP token material** at rest (011 design §8),
+   * so there is no `sessionToken` to authorize {@link checkTotpFactor} with, and
+   * {@link verifyTotpRegistration} is the wrong instrument — it confirms a
+   * *provisional* factor and would silently re-register a registered one.
+   *
+   * It proves possession and **changes nothing**: no factor is created, promoted,
+   * or removed, and no login session is left behind (an adapter that has to mint
+   * one to run the check disposes of it).
+   *
+   * Resolves `false` — never throws, never discriminates — for every refusal the
+   * uniform-failure discipline covers: a wrong code, an expired window, a code
+   * already consumed inside its window, and a subject holding no registered
+   * factor at all. A genuine infra fault throws {@link IdpUnavailableError}
+   * (→ 503), because an outage is not a wrong code (#1208/#1211).
+   */
+  checkTotpCode(sub: string, code: string): Promise<boolean>;
+  /**
+   * 011 EARS-13: remove `sub`'s registered TOTP factor — the LD-2 operator
+   * recovery action, after which the subject's next login re-enters the EARS-4
+   * forced-enrollment gate.
+   *
+   * **Idempotent by contract.** A subject who holds no factor is already in the
+   * state this call produces, so "there was nothing to remove" resolves normally
+   * rather than failing. That is not leniency: the calling endpoint must not
+   * distinguish the two, or a `platform_admin` could probe which of their peers
+   * hold a factor by reading removal statuses.
+   *
+   * A genuine infra fault throws {@link IdpUnavailableError} (→ 503) — fail loud,
+   * never fail open. Silently swallowing a failed removal would let the endpoint
+   * report a recovery that never happened and write an `auth.mfa.reset` row for
+   * it, which is worse than an outage: the ledger would disagree with the IdP.
+   */
+  removeTotpFactor(sub: string): Promise<void>;
 }
 
 /**

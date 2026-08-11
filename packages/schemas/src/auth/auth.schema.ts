@@ -564,3 +564,45 @@ export const AdminAuthStateResponseSchema = z.strictObject({
 export type AdminAuthStateResponse = z.infer<
   typeof AdminAuthStateResponseSchema
 >;
+
+/**
+ * 011 `RemoveMfaFactor` request (EARS-13) — the LD-2 operator recovery command.
+ *
+ * The body carries the **caller's own current TOTP code**, not the target's: this
+ * is the route-local fresh-possession proof that realises the ADR-0001 §10 policy
+ * intent ("an MFA change is an elevated action and demands fresh MFA") for this
+ * one route, because the general step-up mechanism is unbuilt (011 design §9). The
+ * target account is named by the path parameter and appears nowhere in this body.
+ *
+ * Shape-identical to {@link AdminMfaCodeRequestSchema} and deliberately a
+ * **separate** declaration, for the same reason the two verify responses are
+ * separate: these are distinct contracts that happen to agree today, and one
+ * shared symbol would make a future change to a login code silently redefine what
+ * a factor-removal request must carry. The six-digit constraint is the SSOT's job
+ * — a malformed code is a 400 from the validation pipe, so it never consumes an
+ * attempt budget and never reaches the IdP.
+ */
+export const AdminFactorRemovalRequestSchema = z.strictObject({
+  code: z.string().regex(/^\d{6}$/),
+});
+export type AdminFactorRemovalRequest = z.infer<
+  typeof AdminFactorRemovalRequestSchema
+>;
+
+/**
+ * 011 `RemoveMfaFactor` response (EARS-13). The target's registered TOTP factor is
+ * gone and their next login re-enters the forced-enrollment state of EARS-4; the
+ * body only acknowledges.
+ *
+ * It carries **no** account detail — not whether the target existed, not whether
+ * they held a factor, not their identifier. The removal is idempotent by design
+ * (a target with no factor is already in the state this command produces), so a
+ * body that distinguished "removed one" from "there was none" would turn a
+ * recovery endpoint into a factor-enrollment oracle over the admin population.
+ */
+export const AdminFactorRemovalResponseSchema = z.strictObject({
+  status: z.literal("removed"),
+});
+export type AdminFactorRemovalResponse = z.infer<
+  typeof AdminFactorRemovalResponseSchema
+>;

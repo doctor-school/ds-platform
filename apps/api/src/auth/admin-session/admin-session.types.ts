@@ -82,6 +82,23 @@ export interface AdminSessionRecord {
   /** The Zitadel session this admin session wraps. */
   zitadelSessionId: string;
   sub: string;
+  /**
+   * The identifier this principal authenticated with — carried over from the
+   * {@link PendingAuthRecord} the session was upgraded from.
+   *
+   * It is here for one reason: the EARS-13 factor-removal route runs a TOTP
+   * verification whose failures must draw on the **same** ADR-0001 §7 per-user
+   * window primary auth and the two login verifies key on (EARS-7: "no separate
+   * attempt budget"). That window is keyed by identifier, and the removal request
+   * carries a `{ code }` body with no identifier in it — so without this field the
+   * route would either key on something else (a fourth parallel allowance) or have
+   * to re-read the identifier from the IdP on every call.
+   *
+   * PD, and treated as such: server-side only, for the session's lifetime, never
+   * logged, never returned in a response, and never written to the ledger unmasked
+   * (the audit path masks it to an `identifier_hash`).
+   */
+  identifier: string;
   /** Roles asserted by the IdP (includes `platform_admin`). */
   roles: string[];
   /** ALWAYS `true` — the EARS-1/3 invariant (design §8). */

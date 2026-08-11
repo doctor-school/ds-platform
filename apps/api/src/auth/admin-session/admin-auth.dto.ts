@@ -1,5 +1,9 @@
 import { createZodDto } from "nestjs-zod";
-import { AdminLoginRequestSchema, AdminMfaCodeRequestSchema } from "@ds/schemas";
+import {
+  AdminFactorRemovalRequestSchema,
+  AdminLoginRequestSchema,
+  AdminMfaCodeRequestSchema,
+} from "@ds/schemas";
 
 // nestjs-zod DTO at the I/O boundary (ADR-0002 §3). The schema is the SSOT in
 // `packages/schemas`; this class only adapts it to Nest's `@Body()` +
@@ -15,4 +19,14 @@ export class AdminLoginRequestDto extends createZodDto(
  */
 export class AdminMfaCodeRequestDto extends createZodDto(
   AdminMfaCodeRequestSchema,
+) {}
+
+/**
+ * 011 EARS-13: the CALLER's own current TOTP code, carried with the
+ * factor-removal command. The six-digit constraint lives in the SSOT schema, so a
+ * malformed code is a 400 from the validation pipe — it never reaches the IdP and
+ * never consumes an attempt budget.
+ */
+export class AdminFactorRemovalRequestDto extends createZodDto(
+  AdminFactorRemovalRequestSchema,
 ) {}

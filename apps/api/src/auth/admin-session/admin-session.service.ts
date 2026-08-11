@@ -7,10 +7,7 @@ import {
   type IdpClient,
   type IdpSession,
 } from "../idp/idp.types.js";
-import {
-  totpParametersFrom,
-  totpProvisioningUri,
-} from "../idp/totp.js";
+import { totpParametersFrom, totpProvisioningUri } from "../idp/totp.js";
 import { RateLimitService } from "../rate-limit/rate-limit.service.js";
 import {
   AUTH_AUDIT,
@@ -102,6 +99,37 @@ export type AdminLoginOutcome =
  */
 export type AdminMfaVerifyOutcome =
   | { status: "verified"; cookies: string[]; principal: AdminSessionPrincipal }
+  | { status: "refused" }
+  | { status: "throttled" };
+
+/**
+ * What the EARS-13 factor-removal command resolved to.
+ *
+ * `refused` and `throttled` are deliberately the SAME two members the verify
+ * surfaces return, and the handler answers them identically: EARS-13 states that a
+ * missing / wrong / expired / replayed caller code refuses "under the same
+ * uniform-failure and rate-limit discipline as EARS-7 — no distinct error, no
+ * separate attempt budget". A richer failure type here would be a standing
+ * invitation to branch on it.
+ *
+ * `self_removal` is the one refusal that is NOT a code outcome and is therefore
+ * allowed its own answer: the caller aimed the command at themselves, and they
+ * already know their own subject, so naming the reason discloses nothing to them
+ * that they did not supply. It is resolved BEFORE any verification, so an operator
+ * error costs neither an attempt budget nor a lockout unit.
+ */
+export type AdminFactorRemovalOutcome =
+  | { status: "removed" }
+  | { status: "refused" }
+  | { status: "throttled" }
+  | { status: "self_removal" };
+
+/**
+ * The generic result of a guarded TOTP check — the EARS-7 envelope, independent
+ * of what the proven value is.
+ */
+type GuardedCheckOutcome<T> =
+  | { status: "verified"; proven: T }
   | { status: "refused" }
   | { status: "throttled" };
 
@@ -513,7 +541,9 @@ export class AdminSessionService {
     fingerprint: string;
     stage: AdminMfaStage;
     step: AdminNextStep;
-    check: (record: PendingAuthRecord) => Promise<PendingAuthRecord | undefined>;
+    check: (
+      record: PendingAuthRecord,
+    ) => Promise<PendingAuthRecord | undefined>;
     onVerified: (record: PendingAuthRecord) => Promise<void>;
   }): Promise<AdminMfaVerifyOutcome> {
     const record = await this.getPendingForStep(
@@ -531,26 +561,69 @@ export class AdminSessionService {
       return { status: "refused" };
     }
 
-    // The ADR-0001 §7 per-user ceiling. The guard's `@RateLimited()` pass already
-    // consumed the per-IP / per-ASN windows for this request but skipped this
-    // one — the verify body carries no identifier (see `tryConsumeUser`).
-    if (!this.limiter.tryConsumeUser(record.identifier)) {
+    const outcome = await this.guardedTotpCheck({
+      sub: record.sub,
+      identifier: record.identifier,
+      stage: input.stage,
+      check: () => input.check(record),
+    });
+    if (outcome.status !== "verified") return outcome;
+
+    await input.onVerified(outcome.proven);
+    const upgraded = await this.completePending(
+      outcome.proven,
+      input.fingerprint,
+    );
+    if (!upgraded) return { status: "refused" };
+    return { status: "verified", ...upgraded };
+  }
+
+  /**
+   * EARS-7 — the **accounting envelope** every TOTP check in the admin tier runs
+   * inside: the shared per-user rate window, the shared lockout counter, the
+   * failure row, the uniform refusal, and the forgiveness a proven factor earns.
+   *
+   * It is separate from {@link verifyFactor} because EARS-13's factor-removal
+   * proof needs exactly this envelope and none of the pending-authentication
+   * machinery around it — its caller holds an established admin session, not a
+   * pending reference. Writing the envelope twice is how "no separate attempt
+   * budget" (EARS-13) silently becomes three parallel allowances, and that drift
+   * is invisible in a diff.
+   *
+   * Order is load-bearing, and unchanged from the login surfaces:
+   *
+   * 1. **Rate limit before the lock check and before the IdP call**, so a
+   *    throttled attempt costs neither an IdP round-trip nor a lockout unit. The
+   *    guard's `@RateLimited()` pass already consumed the per-IP / per-ASN windows
+   *    for this request but skipped the per-user one — the request bodies carry no
+   *    identifier (see `tryConsumeUser`), so it is wired in explicitly here.
+   * 2. **Lock check before the code check.** A locked account's code is never
+   *    verified at all, which is what makes "the lock beats a correct code"
+   *    (design §6) structural rather than a branch after the verify.
+   */
+  private async guardedTotpCheck<T>(input: {
+    sub: string;
+    identifier: string;
+    stage: AdminMfaStage;
+    check: () => Promise<T | undefined>;
+  }): Promise<GuardedCheckOutcome<T>> {
+    if (!this.limiter.tryConsumeUser(input.identifier)) {
       return { status: "throttled" };
     }
 
-    if (this.lockout.isLocked(record.sub)) {
+    if (this.lockout.isLocked(input.sub)) {
       await this.audit.record({
         type: "MfaChallengeFailed",
-        sub: record.sub,
+        sub: input.sub,
         stage: input.stage,
         reason: "locked",
       });
       return { status: "refused" };
     }
 
-    const proven = await input.check(record);
-    if (!proven) {
-      await this.recordVerifyFailure(record, input.stage);
+    const proven = await input.check();
+    if (proven === undefined) {
+      await this.recordVerifyFailure(input.sub, input.stage);
       return { status: "refused" };
     }
 
@@ -558,13 +631,90 @@ export class AdminSessionService {
     // forgiven outright, and the per-user rate window with it (#222's rule — the
     // per-IP / per-ASN windows are deliberately NOT refunded, so a success cannot
     // buy back an origin's broader budget).
-    this.lockout.clear(record.sub);
-    this.limiter.reset({ ip: "", identifier: record.identifier });
+    this.lockout.clear(input.sub);
+    this.limiter.reset({ ip: "", identifier: input.identifier });
+    return { status: "verified", proven };
+  }
 
-    await input.onVerified(proven);
-    const upgraded = await this.completePending(proven, input.fingerprint);
-    if (!upgraded) return { status: "refused" };
-    return { status: "verified", ...upgraded };
+  /**
+   * EARS-13 — `RemoveMfaFactor`. The LD-2 operator recovery action: a
+   * `platform_admin` removes ANOTHER admin's registered TOTP factor, and the
+   * target's next login re-enters the forced-enrollment gate of EARS-4.
+   *
+   * **The protection is a route-local fresh-possession proof.** The caller
+   * supplies their OWN current TOTP code, verified at call time against their own
+   * registered factor. That realises ADR-0001 §10's policy intent — an MFA change
+   * is elevated and demands fresh MFA — for this one route, by something that
+   * actually runs: the general step-up mechanism (`StepUpGuard`, the
+   * `acr=mfa-fresh` claim, the elevated session) has never been built here, so
+   * declaring `step_up` metadata would make the endpoint-authz matrix advertise a
+   * guard that does not exist (011 design §9).
+   *
+   * The proof runs inside {@link guardedTotpCheck}, so a wrong code draws on the
+   * SAME per-user window and the SAME lockout counter the login verifies use, and
+   * writes the same `auth.mfa.failure` row — discriminated by
+   * `stage: "factor_removal"`. The endpoint is therefore not a code-guessing
+   * oracle with a budget of its own (EARS-13).
+   *
+   * **Self-removal is refused**, first and before any budget is spent. In this
+   * slice TOTP is the only factor kind, so a caller removing their own factor is
+   * removing their own LAST factor — and they would walk straight back in through
+   * forced enrollment, converting the recovery endpoint into an MFA opt-out
+   * (design §9). The only path that removes a sole operator's factor is the LD-2
+   * break-glass script, under its stated precondition.
+   */
+  async removeMfaFactor(
+    caller: AdminSessionPrincipal,
+    targetSub: string,
+    code: string,
+  ): Promise<AdminFactorRemovalOutcome> {
+    if (targetSub === caller.sub) return { status: "self_removal" };
+
+    // The identifier the §7 per-user window is keyed by travels on the session
+    // record (carried over from the pending authentication), so this route counts
+    // against the same budget primary auth and both verifies do. A session that
+    // vanished between the hook and the handler resolves to the uniform refusal.
+    const session = await this.sessions.get(caller.sid);
+    if (!session) return { status: "refused" };
+
+    const outcome = await this.guardedTotpCheck({
+      sub: caller.sub,
+      identifier: session.identifier,
+      stage: "factor_removal",
+      check: async () =>
+        (await this.idp.checkTotpCode(caller.sub, code)) ? true : undefined,
+    });
+    if (outcome.status !== "verified") return outcome;
+
+    await this.applyFactorRemoval(targetSub, caller.sub);
+    return { status: "removed" };
+  }
+
+  /**
+   * EARS-13 / LD-2 — the **one** writer of a factor removal: drop the factor at
+   * the IdP, then append the canonical `auth.mfa.reset` row naming the acting
+   * operator in `by_admin`.
+   *
+   * Both removal paths enter here — the endpoint above, after it has verified the
+   * caller's own code, and the break-glass ops script, which cannot verify one
+   * because its precondition is that no second operator holds a factor. That is
+   * what makes the two rows **shape-identical** by construction rather than by
+   * convention: a ledger reader cannot tell which path wrote a row, so the audit
+   * trail of factor removals has no hole (011 design §10, LD-2).
+   *
+   * **Order is load-bearing.** The IdP call runs first and fails LOUD: an outage
+   * throws {@link IdpUnavailableError} (→ 503) before any row is written, so the
+   * ledger never asserts a recovery that did not happen. The reverse order would
+   * leave an `auth.mfa.reset` row standing for a factor that is still registered —
+   * strictly worse than the outage, because it is silent.
+   */
+  async applyFactorRemoval(targetSub: string, byAdmin: string): Promise<void> {
+    await this.idp.removeTotpFactor(targetSub);
+    await this.audit.record({
+      type: "MfaFactorRemoved",
+      sub: targetSub,
+      byAdmin,
+    });
   }
 
   /**
@@ -578,25 +728,26 @@ export class AdminSessionService {
    * forensic reader could see an account lock with nothing explaining it.
    */
   private async recordVerifyFailure(
-    record: PendingAuthRecord,
+    sub: string,
     stage: AdminMfaStage,
   ): Promise<void> {
-    const { justLocked } = this.lockout.recordFailure(record.sub);
+    const { justLocked } = this.lockout.recordFailure(sub);
     await this.audit.record({
       type: "MfaChallengeFailed",
-      sub: record.sub,
+      sub,
       stage,
       reason: "invalid",
     });
     if (!justLocked) return;
-    await this.audit.record({ type: "LockoutTriggered", sub: record.sub });
-    // Fire-and-forget, exactly like the EARS-23 account-exists notice. The
+    await this.audit.record({ type: "LockoutTriggered", sub });
+    // Fire-and-forget, exactly like the EARS-23 account-exists notice (the
+    // subject is all this needs — the address is resolved from the IdP). The
     // response for the threshold-crossing attempt must land in the same ≤50 ms
     // band as every other failure (EARS-7), and an SMTP round-trip inside the
     // request would make attempt #10 measurably slower than attempts #1-9 — a
     // timing oracle for "this account just locked", built by the very code meant
     // to avoid one.
-    void this.notifyLockout(record.sub);
+    void this.notifyLockout(sub);
   }
 
   /**
@@ -729,6 +880,9 @@ export class AdminSessionService {
       sid: randomUUID(),
       zitadelSessionId: record.zitadelSessionId,
       sub: record.sub,
+      // Carried over so the EARS-13 route can count against the SAME §7 per-user
+      // window primary auth keyed on (design §8 / EARS-7's shared budget).
+      identifier: record.identifier,
       roles: record.roles,
       mfa: true,
       fingerprint,

@@ -23,6 +23,7 @@ import {
 import { AdminSessionService } from "./admin-session.service.js";
 import { AdminSessionAuthHook } from "./admin-session-auth.hook.js";
 import { AdminAuthController } from "./admin-auth.controller.js";
+import { AdminUsersController } from "./admin-users.controller.js";
 
 /**
  * Wires the 011 admin session tier (EARS-1, EARS-2, EARS-3, EARS-10).
@@ -51,7 +52,10 @@ import { AdminAuthController } from "./admin-auth.controller.js";
   // cannot key it); `MailerModule` for the §7 lockout notification, which the BFF
   // owes because the TOTP-attempt lock is its own counter, not Zitadel's.
   imports: [IdpModule, SessionModule, RateLimitModule, MailerModule],
-  controllers: [AdminAuthController],
+  // `AdminUsersController` carries the EARS-13 factor-removal route, which acts
+  // on ANOTHER admin's account and therefore lives under `/v1/admin/users/:id`
+  // rather than the caller-scoped `/v1/admin/auth` namespace.
+  controllers: [AdminAuthController, AdminUsersController],
   providers: [
     {
       provide: ADMIN_SESSION_STORE,

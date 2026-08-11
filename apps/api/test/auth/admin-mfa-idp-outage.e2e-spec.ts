@@ -202,11 +202,35 @@ describe.skipIf(!process.env.DATABASE_URL)(
       return totpCode(secret) === "123456" ? "654321" : "123456";
     }
 
-    async function mfaFailureRows(sub: string): Promise<number> {
+    /**
+     * The **ledger's own clock**, used to fence each count below.
+     *
+     * A `new Date()` taken in the test process is not usable here: `created_at` is
+     * stamped by Postgres, which on a dev stand runs on a different host and can
+     * be tens of milliseconds off — so a row this suite just produced can land
+     * outside a fence taken moments before it. Reading the fence from the clock
+     * that stamps the rows removes the skew.
+     */
+    async function dbNow(): Promise<Date> {
+      const { rows } = await pool.query<{ t: Date }>("SELECT now() AS t");
+      return rows[0]!.t;
+    }
+
+    /**
+     * Failure rows for `sub` **written since `since`**.
+     *
+     * The window is load-bearing, not decoration: the fake IdP numbers subjects
+     * from a per-app-instance counter, so every suite in the run mints the same
+     * `fake-sub-N` strings — and the ledger is append-only. Counting a subject's
+     * rows unwindowed therefore counts other suites' rows too, and the assertion
+     * silently becomes a function of how many suites ran first.
+     */
+    async function mfaFailureRows(sub: string, since: Date): Promise<number> {
       const { rows } = await pool.query<{ n: string }>(
         `SELECT COUNT(*)::text AS n FROM audit_ledger
-          WHERE subject_id = $1 AND event_type = 'auth.mfa.failure'`,
-        [sub],
+          WHERE subject_id = $1 AND event_type = 'auth.mfa.failure'
+            AND created_at >= $2`,
+        [sub, since],
       );
       return Number(rows[0]!.n);
     }
@@ -315,6 +339,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     it("EARS-7: an outage is not a failed attempt — no auth.mfa.failure row, no lockout unit, and the correct code still verifies once the IdP recovers", async () => {
       const email = uniqueEmail();
       const { sub, ref, secret } = await pendingEnrollment(email);
+      const since = await dbNow();
 
       fake.outage = true;
       for (let i = 0; i < 3; i += 1) {
@@ -329,7 +354,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
       // An outage produced no evidence of guessing: the EARS-7 ledger row is for
       // a REFUSED attempt, and nothing was refused here.
-      expect(await mfaFailureRows(sub)).toBe(0);
+      expect(await mfaFailureRows(sub, since)).toBe(0);
 
       // …and it spent no lockout unit either: the same pending authentication,
       // with the code that was correct all along, completes the moment the IdP is
@@ -347,6 +372,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     it("EARS-7: the refusal taxonomy is unchanged — with the IdP healthy a wrong code is still the uniform 401 with its failure row", async () => {
       const email = uniqueEmail();
       const { sub, ref, secret } = await pendingEnrollment(email);
+      const since = await dbNow();
 
       const res = await app.inject({
         method: "POST",
@@ -359,7 +385,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // wrong code keeps the uniform refusal, body and all.
       expect(res.statusCode).toBe(401);
       expect(res.body.toLowerCase()).toContain("verification failed");
-      expect(await mfaFailureRows(sub)).toBe(1);
+      expect(await mfaFailureRows(sub, since)).toBe(1);
     });
   },
 );

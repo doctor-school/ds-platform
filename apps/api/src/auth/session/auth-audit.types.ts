@@ -73,17 +73,23 @@ export type AdminSessionEndReason = "logout" | "force";
  * nothing here is an existence oracle (EARS-16).
  */
 export type AdminPrimaryAuthFailureReason =
-  | LoginFailureReason
-  | "not_permitted";
+  LoginFailureReason | "not_permitted";
 
 /**
- * 011 EARS-7: which of the two TOTP verification surfaces produced a row. Both
- * the enrollment verify and the challenge verify are "a TOTP verification" to
- * EARS-7 — one uniform failure, one shared budget, one lockout counter — so they
- * share the `auth.mfa.*` wire ids and this field is what a forensic reader uses
- * to tell an enrollment attempt from a login attempt. Audit-only.
+ * 011 EARS-7: which TOTP verification surface produced a row. Enrollment verify,
+ * challenge verify, and the EARS-13 factor-removal proof are all "a TOTP
+ * verification" to EARS-7 — one uniform failure, one shared budget, one lockout
+ * counter — so they share the `auth.mfa.*` wire ids and this field is what a
+ * forensic reader uses to tell them apart. Audit-only.
+ *
+ * `factor_removal` is the EARS-13 route-local fresh-possession proof: the caller
+ * proving their OWN current code before another admin's factor is removed. It is
+ * a third value rather than a reuse of `challenge` because it is not a login —
+ * collapsing it into one would make "an operator failed to authenticate" and "an
+ * operator failed to authorize the most destructive action in this spec" the same
+ * row, which is precisely the distinction a forensic reader is looking for.
  */
-export type AdminMfaStage = "enrollment" | "challenge";
+export type AdminMfaStage = "enrollment" | "challenge" | "factor_removal";
 
 /**
  * 011 EARS-7: why a TOTP verification was refused. **Audit-only** — the caller
@@ -218,6 +224,16 @@ export type AuthAuditEvent =
       stage: AdminMfaStage;
       reason: AdminMfaFailureReason;
     }
+  // EARS-13: an operator removed ANOTHER admin's registered TOTP factor — the
+  // LD-2 recovery action, mapped to the canonical `auth.mfa.reset` id. `by_admin`
+  // is the §7.3 field defined for exactly this action, and it is the whole reason
+  // the removal is an endpoint rather than an IdP-console step: a console-side
+  // removal is never observed by `apps/api`, so this row could never be written
+  // (011 requirements → LD-2).
+  //
+  // `sub` is the TARGET whose factor is gone; `byAdmin` is the acting operator.
+  // Both are opaque IdP subjects — no identifier, no code, no secret.
+  | { type: "MfaFactorRemoved"; sub: string; byAdmin: string }
   // EARS-7: the §7 lockout threshold (10 failed verifies / 30 min) crossed — the
   // admin-tier counterpart of 003's `AccountLocked`, which OBSERVES Zitadel's
   // native password lockout. This one the BFF owns outright, because Zitadel has
@@ -271,6 +287,7 @@ export const AUTH_AUDIT_EVENT_TYPES = [
   "MfaEnrolled",
   "MfaChallengeSucceeded",
   "MfaChallengeFailed",
+  "MfaFactorRemoved",
   "LockoutTriggered",
   "AdminSessionEstablished",
   "AdminSessionEnded",

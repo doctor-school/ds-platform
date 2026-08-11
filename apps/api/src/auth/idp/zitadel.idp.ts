@@ -1715,6 +1715,103 @@ export class ZitadelIdpClient implements IdpClient {
   }
 
   /**
+   * 011 EARS-13: the standalone possession proof — `POST /v2/sessions` carrying a
+   * `user` + `totp` check pair, then an immediate `DELETE` of whatever it created.
+   *
+   * **Why a session at all.** Zitadel records a TOTP check ON a session; there is
+   * no "verify this registered factor in isolation" RPC. The registration verify
+   * (`/v2/users/{id}/totp/verify`) is not a substitute — it confirms a
+   * *provisional* factor, so pointing it at a registered one is a re-registration,
+   * not a check. And {@link checkTotpFactor} cannot be reused here because its
+   * authorization is the session's own `sessionToken`, which the admin session
+   * record deliberately does not hold (011 design §8: no IdP token at rest). So
+   * the check creates the minimal session that can carry it and disposes of it in
+   * the same breath: the caller is proving possession, not logging in, and a
+   * surviving session would be a live credential minted by a removal request.
+   *
+   * The disposal is **fail-soft** (as {@link terminateSession} is): a session we
+   * failed to delete expires on Zitadel's own lifetime, and turning that into a
+   * second failure mode would report a correct code as a fault.
+   *
+   * Refusals resolve `false`; only a 5xx or a transport fault throws
+   * {@link IdpUnavailableError} — the same split {@link verifyTotpRegistration}
+   * makes, for the same enumeration-safety reason.
+   */
+  async checkTotpCode(sub: string, code: string): Promise<boolean> {
+    let res: Awaited<ReturnType<FetchLike>>;
+    try {
+      res = await this.fetchImpl(this.url("/v2/sessions"), {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({
+          checks: { user: { userId: sub }, totp: { code } },
+        }),
+      });
+    } catch (cause) {
+      throw new IdpUnavailableError(
+        `zitadel totp possession check failed: ${(cause as Error).message}`,
+      );
+    }
+    if (!res.ok) {
+      if (res.status >= 500) {
+        throw new IdpUnavailableError(
+          `zitadel totp possession check failed: HTTP ${res.status}`,
+        );
+      }
+      return false;
+    }
+    const data = (await res.json()) as {
+      sessionId?: string;
+      sessionToken?: string;
+    };
+    // Dispose of the proof session immediately — it exists for the duration of
+    // one check and must never become a credential the caller could reuse.
+    if (data.sessionId) {
+      await this.terminateSession({
+        zitadelSessionId: data.sessionId,
+        sub,
+        sessionToken: data.sessionToken ?? "",
+      });
+    }
+    return true;
+  }
+
+  /**
+   * 011 EARS-13: remove the registered TOTP factor — management-v1
+   * `DELETE /management/v1/users/{id}/auth_factors/otp`
+   * (`RemoveHumanAuthFactorOTP`), the same `…/auth_factors` family
+   * {@link hasTotpFactor} reads.
+   *
+   * **404 is the converged state, not a fault** — the same idempotency
+   * {@link grantProjectRole} applies to its 409. A subject holding no factor is
+   * already in the state this call produces, and the calling endpoint must not be
+   * able to distinguish the two (a status that did would let one `platform_admin`
+   * enumerate which peers hold a factor). Every OTHER non-2xx throws
+   * {@link IdpUnavailableError} → 503: a removal that silently did nothing would
+   * still get an `auth.mfa.reset` row written for it, leaving the ledger asserting
+   * a recovery the IdP never performed.
+   */
+  async removeTotpFactor(sub: string): Promise<void> {
+    let res: Awaited<ReturnType<FetchLike>>;
+    try {
+      res = await this.fetchImpl(
+        this.url(
+          `/management/v1/users/${encodeURIComponent(sub)}/auth_factors/otp`,
+        ),
+        { method: "DELETE", headers: this.headers() },
+      );
+    } catch (cause) {
+      throw new IdpUnavailableError(
+        `zitadel totp factor removal failed: ${(cause as Error).message}`,
+      );
+    }
+    if (res.ok || res.status === 404) return;
+    throw new IdpUnavailableError(
+      `zitadel totp factor removal failed: HTTP ${res.status}`,
+    );
+  }
+
+  /**
    * Enumerate EVERY Zitadel user for the reconcile sweep (EARS-19). Since #753
    * the sweep soft-deletes a mirror row whose sub is **absent** from this set, so
    * completeness and trustworthiness are load-bearing:

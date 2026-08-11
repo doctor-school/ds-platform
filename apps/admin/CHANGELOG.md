@@ -1,5 +1,22 @@
 # @ds/admin
 
+## 0.5.0
+
+### Minor Changes
+
+- [#1220](https://github.com/doctor-school/ds-platform/pull/1220) [`15c586a`](https://github.com/doctor-school/ds-platform/commit/15c586aa0184d17a3d581e65b4acf09b2c0d1c05) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The admin login screen now tells an operator the truth when the identity service is
+  down. A 503 from `POST /v1/admin/auth/login` renders a warning alert («Сервис входа
+  временно недоступен…») instead of the wrong-credentials verdict, keeps the typed
+  email and password (they were never checked) and leaves the submit button active.
+  The uniform 401 refusal and the 429 throttling message are unchanged.
+
+- [#1215](https://github.com/doctor-school/ds-platform/pull/1215) [`dd4868e`](https://github.com/doctor-school/ds-platform/commit/dd4868e4acf90eed9e52d7719384f8372942a3b8) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Admin MFA screens now tell an operator the truth when the IdP is down. A 503 from
+  `mfa/enroll/start`, `mfa/enroll/verify` or `mfa/verify` renders a warning alert
+  («Сервис проверки кода временно недоступен…») instead of the wrong-code verdict,
+  keeps the typed code and leaves the submit button active, and — on the enrollment
+  offer — no longer bounces the operator to `/login`. The uniform 401 refusal and the
+  429 throttling message are unchanged.
+
 ## 0.4.0
 
 ### Minor Changes

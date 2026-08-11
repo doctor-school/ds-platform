@@ -16,6 +16,10 @@ import {
 } from "@ds/design-system";
 import { Form, FormField } from "@ds/design-system/form";
 import { readAdminAuthState, verifyMfaChallenge } from "@/lib/admin-auth";
+import {
+  mfaFailurePresentation,
+  type MfaFailurePresentation,
+} from "@/lib/mfa-failure";
 
 /** The TOTP code length the provisioning URI this tier emits declares (`digits=6`). */
 const CODE_LENGTH = 6;
@@ -38,9 +42,11 @@ interface CodeForm {
  * **Every refusal renders one message.** A wrong code, an expired window, a
  * replayed code, a stale pending reference, and a soft-locked account are one
  * uniform 401 at the API (EARS-7); a client-side taxonomy would leak precisely
- * what the server spent a clause refusing to disclose. The single exception is
- * the ADR-0001 §7 rate limit, which reports the operator's own attempt rate and
- * tells them to wait rather than telling them their correct code is wrong.
+ * what the server spent a clause refusing to disclose. The exceptions are the two
+ * answers that describe the SERVICE rather than the account — the ADR-0001 §7 rate
+ * limit (429) and an IdP outage (503, #1213) — and neither can leak account state
+ * because neither depends on it. Which alert each renders is decided once, for both
+ * MFA screens, by `mfaFailurePresentation`.
  *
  * The recovery guidance (LD-2 — the Tech Lead removes the factor, the next login
  * re-enters enrollment) is on the screen permanently, not surfaced after failure:
@@ -51,7 +57,7 @@ export default function MfaChallengePage() {
   const t = useTranslations("mfaChallenge");
   const router = useRouter();
   const [checking, setChecking] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<MfaFailurePresentation | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const form = useForm<CodeForm>({ defaultValues: { code: "" } });
   const code = form.watch("code");
@@ -85,16 +91,22 @@ export default function MfaChallengePage() {
     async ({ code: submitted }: CodeForm) => {
       if (submitting) return;
       setSubmitting(true);
-      setError(null);
+      setFailure(null);
       const result = await verifyMfaChallenge(submitted);
       setSubmitting(false);
       if (!result.ok) {
-        setError(result.throttled ? t("errorThrottled") : t("errorGeneric"));
-        // Clear + refocus so the next code goes straight in. The CTA disables
-        // itself while the field is short of six digits (see the button below),
-        // so the operator is never left clicking a control that cannot act.
-        form.setValue("code", "");
-        form.setFocus("code");
+        setFailure(mfaFailurePresentation(result));
+        // A CHECKED code that failed is spent: clear + refocus so the next one
+        // goes straight in. An outage code was never checked, so it is kept —
+        // that is what "submit stays active" means here (Stage-A, #1213): a
+        // service back within the code's 30-second window is one click away, and
+        // wiping the field would impose a re-type the failure did not earn. The
+        // CTA disables itself while the field is short of six digits (see the
+        // button below), so the operator is never left clicking a dead control.
+        if (!result.outage) {
+          form.setValue("code", "");
+          form.setFocus("code");
+        }
         return;
       }
       // LD-1: the verify response carried `__Host-ds_admin_session` — the login
@@ -123,9 +135,12 @@ export default function MfaChallengePage() {
                   noValidate
                   onSubmit={form.handleSubmit(submit)}
                 >
-                  {error ? (
-                    <Alert variant="danger" data-testid="mfa-error">
-                      {error}
+                  {failure ? (
+                    <Alert
+                      variant={failure.variant}
+                      data-testid={failure.testId}
+                    >
+                      {t(failure.messageKey)}
                     </Alert>
                   ) : null}
                   <FormField

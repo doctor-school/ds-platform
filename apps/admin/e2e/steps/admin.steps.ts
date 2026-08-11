@@ -11,6 +11,7 @@ import {
   bootstrapDoctorSession,
   E2E_PASSWORD,
 } from "../support/admin-session";
+import { totpCode } from "../support/totp";
 
 const PDF = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF");
 const DEFAULT_MSK = "2026-07-17T19:00";
@@ -29,11 +30,41 @@ function getSharedAdmin() {
 }
 
 /**
- * Submit the admin LOGIN UI once (fill + click) — a browser-native navigation so
- * the `__Host-ds_session` Set-Cookie is processed by the browser (an
+ * The shared admin's TOTP secret, and the last time step a code was spent in.
+ *
+ * Since 011 (#1191/#1192) an admin login is password **plus** a second factor, so
+ * these steps have to hold what an operator's phone holds. The secret is captured
+ * once, off the enrollment screen the first login is forced through; the counter
+ * is tracked because a TOTP code is single-use within its 30-second step (EARS-6)
+ * — two scenarios logging in inside one step would submit the same digits and the
+ * second would be refused as a replay, which is the API behaving correctly and
+ * the suite mis-reading it as a broken login.
+ */
+let adminTotpSecret: string | undefined;
+let lastSpentCounter = -1;
+
+/** A code no earlier step has spent — waits out the current window if it has. */
+async function freshTotpCode(page: Page, secret: string): Promise<string> {
+  let counter = Math.floor(Date.now() / 1000 / 30);
+  while (counter <= lastSpentCounter) {
+    await page.waitForTimeout(1500);
+    counter = Math.floor(Date.now() / 1000 / 30);
+  }
+  lastSpentCounter = counter;
+  return totpCode(secret, counter * 30_000);
+}
+
+/**
+ * Submit the admin LOGIN UI once (fill + click) and walk whatever second-factor
+ * step the admin tier puts in front of the operator — a browser-native navigation
+ * so the `__Host-ds_admin_*` Set-Cookies are processed by the browser (an
  * APIRequestContext POST over http does not persist a Secure cookie into the page
- * jar; the real login form does). Returns `true` when the login lands on `/events`
- * (admin admitted), `false` when it is refused / stays on `/login`.
+ * jar; the real login form does). Returns `true` when the operator lands on
+ * `/events` (admitted), `false` when the login is refused / stays on `/login`.
+ *
+ * The MFA hop is walked rather than bypassed on purpose: these 007 scenarios are
+ * about the admin surface, and reaching it through a seeded cookie would mean a
+ * broken gate never fails a single one of them.
  */
 async function submitLogin(
   page: Page,
@@ -45,7 +76,35 @@ async function submitLogin(
   await page.locator("#password").fill(password);
   await page.getByTestId("login-submit").click();
   try {
-    await page.waitForURL(/\/events/, { timeout: 8000 });
+    await page.waitForURL(/\/(events|mfa\/enroll|mfa\/challenge)/, {
+      timeout: 8000,
+    });
+  } catch {
+    return false;
+  }
+
+  if (/\/mfa\/enroll/.test(page.url())) {
+    // The one-time forced enrollment (EARS-4/5). Transcribe the secret exactly as
+    // an operator would, then confirm it — the login completes in place (LD-1).
+    adminTotpSecret = (await page.getByTestId("mfa-secret").innerText()).trim();
+    await page
+      .getByTestId("mfa-enroll-form")
+      .getByRole("textbox")
+      .fill(await freshTotpCode(page, adminTotpSecret));
+  } else if (/\/mfa\/challenge/.test(page.url())) {
+    if (!adminTotpSecret) {
+      throw new Error(
+        "a challenge was presented before any enrollment captured a secret — the shared admin fixture is out of order",
+      );
+    }
+    await page
+      .getByTestId("mfa-challenge-form")
+      .getByRole("textbox")
+      .fill(await freshTotpCode(page, adminTotpSecret));
+  }
+
+  try {
+    await page.waitForURL(/\/events/, { timeout: 20_000 });
     return true;
   } catch {
     return false;
@@ -100,8 +159,11 @@ Given("a platform_admin operator in the admin app", async ({ page, world }) => {
 Given("a doctor_guest caller with a session", async ({ page, world }) => {
   const { email } = await bootstrapDoctorSession(adminOrigin());
   world.email = email;
-  // A non-admin who tries the admin login is refused (authProvider admits only
-  // platform_admin, EARS-8) and kept on /login — never admitted to the surface.
+  // A non-admin who tries the admin login is refused by the API itself since 011:
+  // the admin tier refuses every principal the `role → mfa_required` policy does
+  // not cover, with the SAME uniform 401 a wrong password gets (EARS-3/16). The
+  // operator is kept on /login — never admitted to the surface, and never told
+  // which of the two it was.
   const admitted = await submitLogin(page, email, E2E_PASSWORD);
   expect(admitted, "a doctor_guest must not be admitted to the admin app").toBe(
     false,
@@ -248,9 +310,10 @@ When("the operator opens the login screen", async ({ page }) => {
 Then(
   "the operator is redirected to the events list without a login form",
   async ({ page }) => {
-    // #675: the admin `/login` gates on `useIsAuthenticated` — an already-admitted
-    // platform_admin is sent to the `events` resource root and the login form is
-    // never rendered (the form shows only when unauthenticated).
+    // #675, re-based on the 011 state read (#1192): `/login` resolves
+    // `GET /v1/admin/auth/state` on mount, and an `active` admin is sent to the
+    // `events` resource root with the login form never rendered (the form shows
+    // only for `unauthenticated`).
     await page.waitForURL(/\/events/);
     await expect(page.getByTestId("login-form")).toHaveCount(0);
   },

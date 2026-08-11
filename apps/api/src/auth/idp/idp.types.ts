@@ -490,6 +490,33 @@ export interface IdpClient {
    * (EARS-7), so a distinguishable outcome here would leak straight through.
    */
   verifyTotpRegistration(sub: string, code: string): Promise<boolean>;
+  /**
+   * 011 EARS-6: check a TOTP code as the **second factor of an in-flight login**,
+   * against the checked Zitadel session a pending authentication wraps.
+   *
+   * This is deliberately NOT {@link verifyTotpRegistration} with a different name.
+   * That one confirms a *provisional factor* and promotes it; this one proves
+   * *possession during a login* against a factor that is already registered, and
+   * the IdP records the check on the session itself — which is what makes the
+   * resulting session MFA-satisfied rather than merely password-checked. Routing
+   * the challenge through the registration verify would silently re-register the
+   * factor and leave the session's factor set unchanged.
+   *
+   * **Resolves the ROTATED session handle, not a boolean.** The IdP's session
+   * update consumes the single-use proof-of-check token and mints a new one, so a
+   * caller that discarded the result would hold a dead handle and its later OIDC
+   * exchange would fail *after* a correct code — a wrong-code report for a right
+   * code. The returned {@link IdpSession} is the handle the upgrade must carry.
+   *
+   * Resolves `null` — never throws, never discriminates — for every refusal the
+   * uniform-failure discipline covers: a wrong code, a code from an expired time
+   * window, a code already consumed inside its own window, a session with no
+   * registered factor, and a session the IdP no longer honours. A genuine infra
+   * fault still throws {@link IdpUnavailableError} (→ 503): an outage is not a
+   * wrong code, and reporting it as one would tell an operator their correct code
+   * is bad.
+   */
+  checkTotpFactor(session: IdpSession, code: string): Promise<IdpSession | null>;
 }
 
 /**

@@ -82,10 +82,15 @@ Detail: `infra/dev-stand/README.md` → delivery flags.
   else the in-memory fake — the single place each backend is chosen (mirroring
   `SessionModule`). Both are `exports` so `AuthService` consumes them.
 - **`Mailer`** + **`MAILER`** (`mailer.types.ts`) — the port
-  (`sendAccountExistsNotice(email)` carrying no secret;
-  `sendVerificationCodeEmail(email, code)` / `sendPasswordResetCodeEmail(email,
-code)` carrying exactly one) and its `Symbol` DI token. `IdpModule` injects it
-  into the IdP adapters for the EARS-29 `returnCode` → mailer hand-off.
+  (`sendAccountExistsNotice(email)` and `sendAdminLockoutNotice(email)` carrying
+  no secret; `sendVerificationCodeEmail(email, code)` /
+  `sendPasswordResetCodeEmail(email, code)` carrying exactly one) and its
+  `Symbol` DI token. `IdpModule` injects it into the IdP adapters for the EARS-29
+  `returnCode` → mailer hand-off; `AdminSessionModule` injects it for the 011
+  EARS-7 lockout notice. That notice carries **no code, no attempt count and no
+  remaining time** — its recipient is by construction an account someone has just
+  failed ten second-factor attempts against, so the mailbox may be the attacker's
+  next target and the mail must not become their progress report.
 - **`assertSendableEmail(email)`** / **`assertSendableCode(code)`**
   (`mailer.types.ts`) — the shared create-time validation every `Mailer`
   implementation runs, so the fake is **no more permissive** than the real

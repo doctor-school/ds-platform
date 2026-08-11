@@ -98,6 +98,39 @@ export class RateLimitService {
   }
 
   /**
+   * 011 EARS-7: consume one unit from the **per-user window only**, for a subject
+   * the *handler* resolved rather than the request body.
+   *
+   * `tryConsume` derives its per-user key from the submitted `identifier` /
+   * `email` / `phone` field, which is right for every 003 endpoint and silently
+   * wrong for the 011 TOTP verifies: their body is `{ code }` and nothing else, so
+   * decorating them with `@RateLimited()` engages the per-IP and per-ASN windows
+   * and skips the per-user one entirely — the ADR-0001 §7 ceiling that actually
+   * bounds guessing against ONE account. The identifier those endpoints must be
+   * keyed by is not in the request at all; it is bound into the server-side
+   * pending-auth record at primary auth, and only the handler can read it.
+   *
+   * This method is that second phase, deliberately narrow: the per-IP / per-ASN
+   * windows have already been consumed by the guard for this request, so
+   * re-evaluating them here would double-count. Keyed identically to
+   * `tryConsume`'s per-user dimension (lower-cased), which is what makes the
+   * budget genuinely **shared** with primary auth and across both verify
+   * endpoints (011 design §6) rather than three parallel allowances.
+   */
+  tryConsumeUser(identifier: string): boolean {
+    const dimension: Dimension = {
+      map: this.byUser,
+      key: identifier.toLowerCase(),
+      windowMs: FIFTEEN_MIN_MS,
+      limit: this.thresholds.perUserPer15Min,
+    };
+    const t = this.now();
+    if (this.current(dimension, t) >= dimension.limit) return false;
+    this.bump(dimension, t);
+    return true;
+  }
+
+  /**
    * #222 (EARS-13): forgive the **per-user** window for this attempt's identifier
    * — clear the counter so a recovering user who just succeeded starts fresh. Only
    * the per-user dimension is cleared (keyed identically to {@link tryConsume}'s

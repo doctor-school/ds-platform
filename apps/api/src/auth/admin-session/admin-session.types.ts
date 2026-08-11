@@ -33,6 +33,23 @@ export interface PendingAuthRecord {
   ref: string;
   /** IdP subject that completed primary auth. */
   sub: string;
+  /**
+   * The identifier submitted at primary auth — the key the ADR-0001 §7 per-user
+   * rate-limit window is counted under (EARS-7).
+   *
+   * It is here because the §7 budget is **shared** between primary auth and both
+   * TOTP verifies (011 design §6), and the verify requests carry a `{ code }`
+   * body with no identifier in it: without this field the two verify surfaces
+   * would each key on something else and an attacker would get three parallel
+   * allowances instead of one.
+   *
+   * PD, and treated as such: it lives only inside this server-side record, for
+   * the record's few-minute lifetime, in the same Redis entry that already holds
+   * a live single-use proof-of-check token; it is never logged, never returned in
+   * a response, and never written to the ledger unmasked (the audit path masks it
+   * to an `identifier_hash`).
+   */
+  identifier: string;
   /** Roles asserted by the IdP; the policy verdict was computed from these. */
   roles: string[];
   /** Which second-factor step this principal owes (EARS-3). */

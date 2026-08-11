@@ -1648,6 +1648,73 @@ export class ZitadelIdpClient implements IdpClient {
   }
 
   /**
+   * 011 EARS-6: the login-time TOTP check — `PATCH /v2/sessions/{id}` (Session v2
+   * `SetSession`) carrying `checks.totp.code` and the session's own
+   * `sessionToken` as the authorization for updating THAT session, exactly as the
+   * `DELETE` above does.
+   *
+   * **Session v2, not the User v2 TOTP verify.** The registration verify
+   * (`/v2/users/{id}/totp/verify`) confirms a provisional factor; it records
+   * nothing on the in-flight session. The challenge has to record the factor
+   * check ON the session, because that check is what the OIDC exchange then
+   * reflects as `amr` → the `mfa` claim (design §7). This is also why the route
+   * family is `/v2/sessions/…`, which the deployed instance routes correctly —
+   * the #1208/#1209 404 hazard is a **management-v1 GET** problem (worked around
+   * by the `_search` POST in {@link hasTotpFactor}); the Session v2 verbs are
+   * already proven live here by `passwordLogin` (POST), `fetchSessionUserId`
+   * (GET) and `terminateSession` (DELETE).
+   *
+   * **The rotated token is the return value.** Zitadel documents SetSession as
+   * "a new session token will be returned; the previous token will be
+   * invalidated". Resolving a bare `true` would leave the caller holding a dead
+   * handle and fail its later token exchange — surfacing a *correct* code as a
+   * failure. A 2xx with no token is therefore a fault, not a success.
+   *
+   * Refusals resolve `null`; only a 5xx or a transport fault throws
+   * {@link IdpUnavailableError} — the same split `verifyTotpRegistration` makes,
+   * for the same enumeration-safety reason.
+   */
+  async checkTotpFactor(
+    session: IdpSession,
+    code: string,
+  ): Promise<IdpSession | null> {
+    const { zitadelSessionId, sessionToken } = session;
+    // A handle with no proof-of-check cannot authorize a session update. Fail
+    // CLOSED (a refusal), never fall through to an unauthenticated PATCH.
+    if (!zitadelSessionId || !sessionToken) return null;
+    let res: Awaited<ReturnType<FetchLike>>;
+    try {
+      res = await this.fetchImpl(
+        this.url(`/v2/sessions/${encodeURIComponent(zitadelSessionId)}`),
+        {
+          method: "PATCH",
+          headers: this.headers(),
+          body: JSON.stringify({ sessionToken, checks: { totp: { code } } }),
+        },
+      );
+    } catch (cause) {
+      throw new IdpUnavailableError(
+        `zitadel totp challenge failed: ${(cause as Error).message}`,
+      );
+    }
+    if (!res.ok) {
+      if (res.status >= 500) {
+        throw new IdpUnavailableError(
+          `zitadel totp challenge failed: HTTP ${res.status}`,
+        );
+      }
+      return null;
+    }
+    const data = (await res.json()) as { sessionToken?: string };
+    if (!data.sessionToken) {
+      throw new IdpUnavailableError(
+        "zitadel totp challenge returned no rotated session token",
+      );
+    }
+    return { ...session, sessionToken: data.sessionToken };
+  }
+
+  /**
    * Enumerate EVERY Zitadel user for the reconcile sweep (EARS-19). Since #753
    * the sweep soft-deletes a mirror row whose sub is **absent** from this set, so
    * completeness and trustworthiness are load-bearing:

@@ -116,15 +116,21 @@ export class FakeIdpClient implements IdpClient {
    */
   private readonly totpFactors = new Set<string>();
   /**
-   * 011 EARS-5: provisional (started-but-unconfirmed) TOTP factors, `sub` → its
-   * shared secret plus the time steps already consumed by an accepted code.
+   * 011 EARS-5/EARS-6: every TOTP factor the fake holds, `sub` → its shared
+   * secret plus the time steps already consumed by an accepted code — whether the
+   * factor is still provisional or has been promoted to registered
+   * ({@link totpFactors} is the promotion marker, this is the material).
    *
-   * The consumed set is what makes a replay refusable: a TOTP code is valid for
-   * its whole 30-second step, so without recording the step an accepted code
-   * stays reusable for the remainder of it (011 design §5). Kept per-sub, so a
-   * re-registration wipes both the secret and its ledger together.
+   * **One ledger across both states, on purpose.** The consumed set is what makes
+   * a replay refusable: a TOTP code is valid for its whole 30-second step, so
+   * without recording the step an accepted code stays reusable for the remainder
+   * of it (011 design §5). Splitting the ledger at promotion would make a code
+   * burned on the enrollment verify replayable at the challenge endpoint inside
+   * the same window — a fake strictly more permissive than the IdP, which is the
+   * one direction the project rule forbids. Kept per-sub, so a re-registration
+   * wipes both the secret and its ledger together.
    */
-  private readonly provisionalTotp = new Map<
+  private readonly totpSecrets = new Map<
     string,
     { secret: string; consumed: Set<number> }
   >();
@@ -482,7 +488,7 @@ export class FakeIdpClient implements IdpClient {
     const secret = generateTotpSecret();
     const record = this.bySub.get(sub);
     const account = record?.email ?? record?.phone ?? sub;
-    this.provisionalTotp.set(sub, { secret, consumed: new Set() });
+    this.totpSecrets.set(sub, { secret, consumed: new Set() });
     return Promise.resolve({
       uri: totpProvisioningUri({
         issuer: FAKE_TOTP_ISSUER,
@@ -510,14 +516,59 @@ export class FakeIdpClient implements IdpClient {
    * cannot be replayed at the challenge endpoint inside the same window.
    */
   verifyTotpRegistration(sub: string, code: string): Promise<boolean> {
-    const provisional = this.provisionalTotp.get(sub);
-    if (!provisional) return Promise.resolve(false);
-    const counter = verifyTotpCode(provisional.secret, code);
+    const factor = this.totpSecrets.get(sub);
+    if (!factor) return Promise.resolve(false);
+    const counter = verifyTotpCode(factor.secret, code);
     if (counter === undefined) return Promise.resolve(false);
-    if (provisional.consumed.has(counter)) return Promise.resolve(false);
-    provisional.consumed.add(counter);
+    if (factor.consumed.has(counter)) return Promise.resolve(false);
+    factor.consumed.add(counter);
     this.totpFactors.add(sub);
     return Promise.resolve(true);
+  }
+
+  /**
+   * 011 EARS-6: the login-time factor check against a checked session.
+   *
+   * Fake/real parity, in the strict direction — this refuses, indistinguishably
+   * and without throwing, every case the Zitadel `SetSession` TOTP check refuses:
+   * - a session the IdP does not hold (unknown / already terminated);
+   * - a **stale proof-of-check token** on the handle (the real adapter's PATCH is
+   *   authorized by that token and 4xxs without it);
+   * - a subject with **no REGISTERED factor** — a merely provisional enrollment
+   *   is not a usable second factor, so a half-enrolled principal cannot pass a
+   *   challenge here any more than at Zitadel;
+   * - a **wrong** code (no accepted step produces it);
+   * - an **expired** code (outside the ±1-step tolerance window);
+   * - a **replayed** code — its step is already in the shared consumed ledger,
+   *   which is what makes single-use-within-its-window (EARS-6) real rather than
+   *   asserted, including a code burned on the enrollment verify.
+   *
+   * On acceptance it **rotates the session token** exactly as Zitadel documents
+   * ("a new session token will be returned; the previous token will be
+   * invalidated") and returns the fresh handle, so a BFF that dropped the rotated
+   * token fails its downstream {@link exchangeSessionForTokens} here too instead
+   * of only in production.
+   */
+  checkTotpFactor(
+    session: IdpSession,
+    code: string,
+  ): Promise<IdpSession | null> {
+    const minted = this.sessions.get(session.zitadelSessionId);
+    if (!minted) return Promise.resolve(null);
+    if (!session.sessionToken || session.sessionToken !== minted.sessionToken) {
+      return Promise.resolve(null);
+    }
+    const sub = minted.sub;
+    if (!this.totpFactors.has(sub)) return Promise.resolve(null);
+    const factor = this.totpSecrets.get(sub);
+    if (!factor) return Promise.resolve(null);
+    const counter = verifyTotpCode(factor.secret, code);
+    if (counter === undefined) return Promise.resolve(null);
+    if (factor.consumed.has(counter)) return Promise.resolve(null);
+    factor.consumed.add(counter);
+    const rotated = `fake-session-token-${++this.seq}`;
+    this.sessions.set(session.zitadelSessionId, { sub, sessionToken: rotated });
+    return Promise.resolve({ ...session, sub, sessionToken: rotated });
   }
 
   /**
@@ -525,13 +576,36 @@ export class FakeIdpClient implements IdpClient {
    * suite can reach the "already enrolled" branch of the EARS-3 policy fork
    * without driving the whole enrollment arc. Not part of {@link IdpClient} — the
    * real adapter's only factor writes are the register/verify pair above.
+   *
+   * Registering mints a real shared secret when the sub holds none, so the factor
+   * it records is one an operator could actually produce codes for — a suite
+   * reaches the EARS-6 challenge through {@link totpSecretFor} + the real RFC 6238
+   * derivation, never through a back door that accepts any six digits.
    */
   setTotpFactor(sub: string, registered: boolean): void {
-    if (registered) this.totpFactors.add(sub);
-    else {
+    if (registered) {
+      if (!this.totpSecrets.has(sub)) {
+        this.totpSecrets.set(sub, {
+          secret: generateTotpSecret(),
+          consumed: new Set(),
+        });
+      }
+      this.totpFactors.add(sub);
+    } else {
       this.totpFactors.delete(sub);
-      this.provisionalTotp.delete(sub);
+      this.totpSecrets.delete(sub);
     }
+  }
+
+  /**
+   * Test accessor: the shared secret behind `sub`'s factor — the fake's stand-in
+   * for what an operator reads off their authenticator app. Test-only and NOT on
+   * {@link IdpClient}: the real adapter can never re-read a registered secret, so
+   * exposing this on the port would invite production code to depend on something
+   * that does not exist.
+   */
+  totpSecretFor(sub: string): string | undefined {
+    return this.totpSecrets.get(sub)?.secret;
   }
 
   private findByIdentifier(identifier: string): FakeRecord | undefined {

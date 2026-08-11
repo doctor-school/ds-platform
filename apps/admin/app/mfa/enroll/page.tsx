@@ -58,6 +58,7 @@ export default function MfaEnrollPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const form = useForm<CodeForm>({ defaultValues: { code: "" } });
+  const code = form.watch("code");
 
   useEffect(() => {
     let cancelled = false;
@@ -86,7 +87,17 @@ export default function MfaEnrollPage() {
       const result = await verifyMfaEnrollment(code);
       setSubmitting(false);
       if (!result.ok) {
-        setError(t("errorGeneric"));
+        // The API answers every refusal identically (EARS-7) except the ADR-0001
+        // §7 rate limit, which is about the operator's own attempt rate rather
+        // than the account — telling them to wait beats telling them a correct
+        // code is wrong.
+        setError(result.throttled ? t("errorThrottled") : t("errorGeneric"));
+        // Clear + refocus so the next code goes straight in. The CTA disables
+        // itself while the field is short of six digits (see the button below),
+        // so the operator is never left clicking a control that cannot act —
+        // the #1191 Stage-B finding: an enabled submit over an EMPTY code field
+        // reads as a broken button, because the six-digit constraint would
+        // reject it before any verification path ran.
         form.setValue("code", "");
         form.setFocus("code");
         return;
@@ -179,6 +190,7 @@ export default function MfaEnrollPage() {
                   <Button
                     type="submit"
                     loading={submitting}
+                    disabled={code.length !== CODE_LENGTH}
                     data-testid="mfa-submit"
                   >
                     {t("submit")}

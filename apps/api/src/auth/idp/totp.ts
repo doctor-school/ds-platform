@@ -133,23 +133,74 @@ export function verifyTotpCode(
   return undefined;
 }
 
+/** HMAC algorithm named in a provisioning URI (RFC 6238 default, and Zitadel's). */
+export const TOTP_ALGORITHM = "SHA1";
+
 /**
- * Build the `otpauth://totp/...` provisioning URI an authenticator app scans —
- * the same shape Zitadel returns, so the fake's offer is structurally
- * indistinguishable from the real one and the screen has nothing to branch on.
+ * The cryptographic parameters a provisioning URI declares, separate from its
+ * labels. Carried as their own type because 011 EARS-5 **rebuilds** the URI in
+ * the BFF (to brand the label) and must copy the IdP's declared parameters
+ * through verbatim: re-labelling is a cosmetic change, and silently swapping
+ * `algorithm` or `period` while doing it would hand the operator an app that
+ * computes codes the IdP rejects.
  */
-export function totpProvisioningUri(input: {
-  issuer: string;
-  account: string;
-  secret: string;
-}): string {
+export interface TotpParameters {
+  algorithm?: string | undefined;
+  digits?: number | undefined;
+  period?: number | undefined;
+}
+
+/**
+ * Read the `algorithm` / `digits` / `period` an existing `otpauth://` URI
+ * declares. Absent or malformed values resolve `undefined`, so the caller falls
+ * back to the RFC 6238 defaults every authenticator app assumes — which is also
+ * what an authenticator does with a URI that omits them.
+ */
+export function totpParametersFrom(uri: string): TotpParameters {
+  const query = uri.slice(uri.indexOf("?") + 1);
+  const params = new URLSearchParams(uri.includes("?") ? query : "");
+  const digits = Number(params.get("digits"));
+  const period = Number(params.get("period"));
+  return {
+    algorithm: params.get("algorithm") ?? undefined,
+    digits: Number.isInteger(digits) && digits > 0 ? digits : undefined,
+    period: Number.isInteger(period) && period > 0 ? period : undefined,
+  };
+}
+
+/**
+ * Build the `otpauth://totp/...` provisioning URI an authenticator app scans.
+ *
+ * The label is `issuer:account` in the path AND `issuer` repeated as a query
+ * parameter — the redundant form every authenticator app reads, and the one this
+ * repo's parsers assume. `algorithm` / `digits` / `period` are always written
+ * **explicitly** rather than left to the reader's defaults: an app that assumed
+ * differently would silently generate codes the IdP rejects, and "the code is
+ * wrong" is the least debuggable failure this flow has.
+ */
+export function totpProvisioningUri(
+  input: {
+    issuer: string;
+    account: string;
+    secret: string;
+  } & TotpParameters,
+): string {
   const label = encodeURIComponent(`${input.issuer}:${input.account}`);
   const params = new URLSearchParams({
     secret: input.secret,
     issuer: input.issuer,
-    algorithm: "SHA1",
-    digits: String(TOTP_DIGITS),
-    period: String(TOTP_STEP_SECONDS),
+    algorithm: input.algorithm ?? TOTP_ALGORITHM,
+    digits: String(input.digits ?? TOTP_DIGITS),
+    period: String(input.period ?? TOTP_STEP_SECONDS),
   });
-  return `otpauth://totp/${label}?${params.toString()}`;
+  // `URLSearchParams.toString()` serializes as `application/x-www-form-urlencoded`,
+  // which spells a space `+`. The path label above is percent-encoded
+  // (`encodeURIComponent` → `%20`), so an issuer containing a space would be
+  // written two different ways in one URI — and the key-URI format requires the
+  // label's issuer prefix and the `issuer` parameter to AGREE, with a strict
+  // RFC-3986 reader taking the `+` literally («Doctor.School+Admin»). Rewriting
+  // `+` to `%20` is lossless here: a literal plus in a value is already escaped
+  // to `%2B` by the serializer, so every bare `+` left in the output is a space.
+  const query = params.toString().replace(/\+/g, "%20");
+  return `otpauth://totp/${label}?${query}`;
 }

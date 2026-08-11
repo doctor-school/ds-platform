@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { bootstrapAdminSession } from "../support/admin-session";
+import { totpCode } from "../support/totp";
 
 /**
  * 007 EARS-11 — axe-core WCAG 2 A/AA scan of the admin event surface (the runtime
@@ -20,6 +21,16 @@ const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 const THEMES = ["light"] as const;
 const ORIGIN = process.env.E2E_ADMIN_URL ?? "http://localhost:3200";
 
+/**
+ * Sign a freshly provisioned `platform_admin` all the way INTO admin.
+ *
+ * Since 011 that is two steps, not one: primary auth issues no session, and the
+ * forced TOTP enrollment (EARS-4) is the only door onward. The helper therefore
+ * walks the real gate — password, then the first code derived from the secret the
+ * enrollment screen rendered — so the scanned event surfaces are reached the way
+ * an operator reaches them, not through a back door that would let a broken gate
+ * pass unnoticed.
+ */
 async function loginAsAdmin(page: Page): Promise<string> {
   const { email, password } = await bootstrapAdminSession(ORIGIN);
   for (let attempt = 0; attempt < 4; attempt++) {
@@ -29,11 +40,18 @@ async function loginAsAdmin(page: Page): Promise<string> {
     await page.locator("#password").fill(password);
     await page.getByTestId("login-submit").click();
     try {
-      await page.waitForURL(/\/events/, { timeout: 8000 });
-      return password;
+      await page.waitForURL(/\/mfa\/enroll/, { timeout: 8000 });
     } catch {
       /* role not yet projected — retry */
+      continue;
     }
+    const secret = (await page.getByTestId("mfa-secret").innerText()).trim();
+    await page
+      .getByTestId("mfa-enroll-form")
+      .getByRole("textbox")
+      .fill(totpCode(secret));
+    await page.waitForURL(/\/events/, { timeout: 20_000 });
+    return password;
   }
   throw new Error("admin login did not reach /events for the axe scan");
 }
@@ -102,6 +120,46 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
 
     await page.goto("/mfa/enroll");
     await page.getByTestId("mfa-qr").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
+  test("011 EARS-12: the TOTP challenge screen passes WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    // The challenge is the screen EVERY admin login after the first passes
+    // through, so its a11y is the one that compounds: a code field a screen
+    // reader cannot label is a daily lockout, not a one-time one. Reachable only
+    // for a principal in `mfa_pending_challenge`, so the scan enrols first and
+    // then logs back in — the real arc, not a seeded state.
+    const { email, password } = await bootstrapAdminSession(ORIGIN);
+    await page.goto("/login");
+    await page.locator("#email").fill(email);
+    await page.locator("#password").fill(password);
+    await page.getByTestId("login-submit").click();
+    await page.waitForURL(/\/mfa\/enroll/, { timeout: 20_000 });
+    const secret = (await page.getByTestId("mfa-secret").innerText()).trim();
+    await page
+      .getByTestId("mfa-enroll-form")
+      .getByRole("textbox")
+      .fill(totpCode(secret));
+    await page.waitForURL(/\/events/, { timeout: 20_000 });
+
+    await page.getByTestId("sign-out").click();
+    await page.waitForURL(/\/login/, { timeout: 20_000 });
+    await page.locator("#email").fill(email);
+    await page.locator("#password").fill(password);
+    await page.getByTestId("login-submit").click();
+    await page.waitForURL(/\/mfa\/challenge/, { timeout: 20_000 });
+    await page.getByTestId("mfa-challenge-form").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    // …and the same screen carrying its uniform failure Alert, because an error
+    // an operator cannot perceive is the same as no error at all.
+    await page
+      .getByTestId("mfa-challenge-form")
+      .getByRole("textbox")
+      .fill("000000");
+    await page.getByTestId("mfa-error").waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
   });
 

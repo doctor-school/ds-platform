@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FakeIdpClient } from "./idp.fake.js";
+import type { IdpSession } from "./idp.types.js";
 import {
   TOTP_STEP_SECONDS,
   base32Decode,
@@ -108,5 +109,116 @@ describe("FakeIdpClient TOTP parity (011 Constraints — the fake rejects what t
     expect(await idp.verifyTotpRegistration(sub, totpCode(second.secret))).toBe(
       true,
     );
+  });
+});
+
+/**
+ * 011 EARS-6 — the LOGIN-time factor check (`checkTotpFactor`), the seam the
+ * challenge handler stands on.
+ *
+ * Same discipline as the block above and for the same reason: the whole EARS-6/7
+ * e2e is only as strong as the fake's willingness to say no. A fake that accepted
+ * an unregistered factor, a stale session token, or a replayed code would make
+ * every downstream assertion vacuous — the recorded project rule (_fakes reject
+ * what real rejects_) is load-bearing exactly here.
+ */
+describe("FakeIdpClient TOTP challenge parity (011 EARS-6)", () => {
+  const password = "Aa1!ufficiently-long-pw";
+
+  /** A logged-in subject holding a REGISTERED factor — the challenge fixture. */
+  async function enrolled(): Promise<{
+    idp: FakeIdpClient;
+    session: IdpSession;
+    secret: string;
+    sub: string;
+  }> {
+    const idp = new FakeIdpClient();
+    const { sub } = await idp.createUser({
+      email: `chal-${Math.random().toString(36).slice(2)}@ds.test`,
+      password,
+    });
+    const { secret } = await idp.startTotpRegistration(sub);
+    expect(
+      await idp.verifyTotpRegistration(sub, totpCode(secret)),
+    ).toBe(true);
+    const login = await idp.passwordLogin(
+      (await idp.getUser(sub))!.email!,
+      password,
+    );
+    expect(login.outcome).toBe("authenticated");
+    return {
+      idp,
+      session: (login as { session: IdpSession }).session,
+      secret,
+      sub,
+    };
+  }
+
+  it("EARS-6: a correct code passes and ROTATES the session token", async () => {
+    const { idp, session, secret } = await enrolled();
+    // The enrollment burned the current step, so the challenge asks for the next
+    // one — exactly what an operator reading their phone a moment later gets.
+    const code = totpCode(secret, Date.now() + TOTP_STEP_SECONDS * 1000);
+
+    const checked = await idp.checkTotpFactor(session, code);
+    expect(checked).not.toBeNull();
+    expect(checked!.sessionToken).not.toBe(session.sessionToken);
+    // The rotated handle is the live one; the stale one is dead, so a caller that
+    // dropped the rotation fails HERE rather than only in production.
+    await expect(idp.exchangeSessionForTokens(checked!)).resolves.toBeDefined();
+    await expect(idp.exchangeSessionForTokens(session)).rejects.toThrow();
+  });
+
+  it("EARS-6: a wrong code, a replayed code and a stale session token are all refused", async () => {
+    const { idp, session, secret } = await enrolled();
+    expect(await idp.checkTotpFactor(session, "000000")).toBeNull();
+
+    const code = totpCode(secret, Date.now() + TOTP_STEP_SECONDS * 1000);
+    const checked = await idp.checkTotpFactor(session, code);
+    expect(checked).not.toBeNull();
+    // Replay inside the same window — refused, and refused identically.
+    expect(await idp.checkTotpFactor(checked!, code)).toBeNull();
+    // The pre-rotation handle is no longer a valid proof-of-check.
+    expect(await idp.checkTotpFactor(session, code)).toBeNull();
+  });
+
+  it("EARS-6: a subject with only a PROVISIONAL factor cannot pass a challenge", async () => {
+    const idp = new FakeIdpClient();
+    const email = `prov-${Math.random().toString(36).slice(2)}@ds.test`;
+    const { sub } = await idp.createUser({ email, password });
+    const { secret } = await idp.startTotpRegistration(sub);
+    const login = await idp.passwordLogin(email, password);
+    const session = (login as { session: IdpSession }).session;
+
+    // Correct digits, unregistered factor: an unconfirmed enrollment is not a
+    // second factor, so the challenge refuses rather than admitting a
+    // half-enrolled principal.
+    expect(await idp.checkTotpFactor(session, totpCode(secret))).toBeNull();
+  });
+
+  it("EARS-6: an unknown or terminated session is refused", async () => {
+    const { idp, session, secret } = await enrolled();
+    await idp.terminateSession(session);
+    expect(
+      await idp.checkTotpFactor(
+        session,
+        totpCode(secret, Date.now() + TOTP_STEP_SECONDS * 1000),
+      ),
+    ).toBeNull();
+  });
+
+  it("EARS-6: a code burned on the ENROLLMENT verify cannot be replayed at the challenge", async () => {
+    const idp = new FakeIdpClient();
+    const email = `share-${Math.random().toString(36).slice(2)}@ds.test`;
+    const { sub } = await idp.createUser({ email, password });
+    const { secret } = await idp.startTotpRegistration(sub);
+    const code = totpCode(secret);
+    expect(await idp.verifyTotpRegistration(sub, code)).toBe(true);
+
+    const login = await idp.passwordLogin(email, password);
+    const session = (login as { session: IdpSession }).session;
+    // One consumed-step ledger across both surfaces — splitting it would let a
+    // shoulder-surfed enrollment code walk straight into a challenge.
+    expect(await idp.checkTotpFactor(session, code)).toBeNull();
   });
 });

@@ -32,7 +32,7 @@ durable `audit_ledger` writer).
 | Read-path mirror self-heal                      | `mirror-self-heal.service.ts` | 26                      |
 | IdP port + adapters                             | `idp/`                        | (design §2)             |
 | BFF session establish/refresh/logout/revoke-all | `session/`                    | 5, 8, 9, 10, 12         |
-| Admin session tier (011)                        | `admin-session/`              | 011: 1, 2, 3, 10        |
+| Admin session tier (011)                        | `admin-session/`              | 011: 1, 2, 3, 6, 7, 10  |
 
 ## Admin session tier (`admin-session/`, spec 011 — EARS-1/2/3/10)
 
@@ -43,16 +43,17 @@ authentication**, and only a satisfied second factor converts that into
 `__Host-ds_admin_session` (host-only, `HttpOnly`, `Secure`, `SameSite=Strict`,
 opaque reference).
 
-| Concern                                                                      | File                                  |
-| ---------------------------------------------------------------------------- | ------------------------------------- |
-| Cookie names/attributes + route-namespace helpers                            | `admin-session.cookie.ts`             |
-| `role → mfa_required` policy (EARS-3)                                        | `mfa-policy.ts`                       |
-| Record shapes + the two store ports                                          | `admin-session.types.ts`              |
-| Store adapters (in-memory / Redis)                                           | `admin-session-store.{fake,redis}.ts` |
-| Login → pending → session lifecycle                                          | `admin-session.service.ts`            |
-| Admin-tier request hook (separation + CSRF)                                  | `admin-session-auth.hook.ts`          |
-| `/v1/admin/auth/{login,logout}` + `/v1/admin/auth/mfa/enroll/{start,verify}` | `admin-auth.controller.ts`            |
-| TOTP registration seam (Zitadel v2 / fake)                                   | `../idp/totp.ts`                      |
+| Concern                                                                              | File                                  |
+| ------------------------------------------------------------------------------------ | ------------------------------------- |
+| Cookie names/attributes + route-namespace helpers                                    | `admin-session.cookie.ts`             |
+| `role → mfa_required` policy (EARS-3)                                                | `mfa-policy.ts`                       |
+| Record shapes + the two store ports                                                  | `admin-session.types.ts`              |
+| Store adapters (in-memory / Redis)                                                   | `admin-session-store.{fake,redis}.ts` |
+| Login → pending → session lifecycle                                                  | `admin-session.service.ts`            |
+| Admin-tier request hook (separation + CSRF)                                          | `admin-session-auth.hook.ts`          |
+| Second-factor soft-lock counter (011 EARS-7)                                         | `mfa-lockout.service.ts`              |
+| `/v1/admin/auth/{login,logout,state}` + `/mfa/verify` + `/mfa/enroll/{start,verify}` | `admin-auth.controller.ts`            |
+| TOTP registration + login-check seam (Zitadel v2 / fake)                             | `../idp/totp.ts`                      |
 
 Three properties carry it:
 
@@ -68,14 +69,29 @@ Three properties carry it:
    separate record type, minutes-long TTL — and the admin hook does not know how
    to read it.
 
-**Sequencing (011 WBS).** The enrollment endpoints
-(`/v1/admin/auth/mfa/enroll/{start,verify}`, #1191) are live: the enrollment
-verify handler is the HTTP caller of `AdminSessionService.upgradePending` — the
-in-place upgrade LD-1 specifies — for the `mfa_pending_enrollment` branch. The
-TOTP challenge for already-enrolled admins lands in #1192, together with the
-admin app's login migration onto this tier (until then `apps/admin` still
-authenticates via the portal tier); that is the chain's sequencing, not a stub.
-Release blocker #1204 holds prod deploys of the range until the journey closes.
+**The full second-factor arc is live.** Both verify handlers call
+`AdminSessionService` and complete the login **in place** (LD-1), so neither ever
+asks for a second sign-in:
+
+- `/mfa/enroll/{start,verify}` (EARS-4/5) serve the `mfa_pending_enrollment`
+  branch — the one-time bootstrap every existing admin passes through once;
+- `/mfa/verify` (EARS-6) serves `mfa_pending_challenge` — every login after that.
+  It checks the code against the **checked Zitadel session** the pending record
+  wraps (`IdpClient.checkTotpFactor`, Session-v2 `SetSession`), not against the
+  factor in isolation, so the resulting session is MFA-satisfied at the IdP too.
+  That call rotates the session token, and the rotated handle is threaded into
+  the upgrade — a version that dropped it would fail the OIDC exchange _after_ a
+  correct code and report a right code as wrong;
+- `GET /v1/admin/auth/state` is the client-readable `AdminAuthState` read the
+  admin app routes on: all three admin cookies are `HttpOnly` or authority-free,
+  so "login form, enrollment, challenge, or the app?" is a server read by
+  construction. It returns the state enum and nothing else — no budget, no lock
+  indicator, no subject (011 design §9 → Read models).
+
+`apps/admin` authenticates through this tier end to end (auth /
+access-control / data providers, plus the EARS-10 CSRF double-submit header on
+every admin write). Release blocker #1204 holds prod deploys of the range until
+the journey closes.
 
 ## BFF session model (`session/`, design §3, ADR-0001 §6)
 
@@ -240,9 +256,25 @@ gate touches no other call site:
   statically `@BotProtected`; verify/OTP confirmation and reset completion are
   deliberately not. Missing and rejected proofs use the shared
   `BOT_PROTECTION_REQUIRED` / `BOT_PROTECTION_REJECTED` codes, never provider text.
-- **Account lockout** (EARS-15) — native Zitadel policy; the BFF only _observes_
-  the `locked` verdict from `IdpClient.passwordLogin` and emits
-  `auth.lockout.triggered`. The counter, lock, and notification email are native.
+- **Account lockout** — two different mechanisms behind one canonical wire id
+  (`auth.lockout.triggered`), told apart by the row's `reason`:
+  - **Password lockout** (003 EARS-15, `reason: "lock"`) — a native Zitadel
+    policy. The BFF only _observes_ the `locked` verdict from
+    `IdpClient.passwordLogin` and emits the row; the counter, the lock, and the
+    notification email are all native.
+  - **Second-factor lockout** (011 EARS-7, `reason: "mfa_attempts"`) — **the
+    BFF's own**, in `admin-session/mfa-lockout.service.ts`: 10 failed TOTP
+    verifies / 30 min, keyed by IdP subject, shared across the enrollment and
+    challenge surfaces. It is ours because Zitadel exposes no per-subject
+    TOTP-attempt lock to observe — its verify answers a bare accept/refuse — so
+    an "observe it" design would be a clause with nothing behind it. The lock is
+    checked **before** the code is sent to the IdP, which is what makes "the lock
+    beats a correct code" structural rather than a branch after the verify; it
+    expires with its own 30-minute window, and a satisfied factor clears the
+    tally. The notification is ours too (`Mailer.sendAdminLockoutNotice`), sent
+    **fire-and-forget**: an SMTP round-trip inside the threshold-crossing request
+    would make attempt #10 measurably slower than #1-9 and rebuild the timing
+    oracle the ≤50 ms band exists to close.
 - **Audit ledger** (EARS-18) — see the `AuthAuditLog` port above.
 
 ## Auth failure observability + incident runbook (#1112)

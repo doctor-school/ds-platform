@@ -23,6 +23,27 @@ const START_URL = "/v1/admin/auth/mfa/enroll/start";
 const VERIFY_URL = "/v1/admin/auth/mfa/enroll/verify";
 
 /**
+ * The brand an admin's authenticator app must file this factor under, written
+ * out **as a literal on purpose**: importing the production constant would make
+ * the assertion tautological (it would prove the URI contains whatever the code
+ * says), and this string is the owner's Stage-B decision on #1192, not an
+ * implementation detail the code gets to change unilaterally.
+ */
+const ADMIN_TOTP_ISSUER = "Doctor.School Admin";
+
+/** Split an `otpauth://totp/` URI into its decoded label and its parameters. */
+function parseProvisioningUri(uri: string): {
+  label: string;
+  params: URLSearchParams;
+} {
+  const [path, query = ""] = uri.split("?");
+  return {
+    label: decodeURIComponent(path!.replace("otpauth://totp/", "")),
+    params: new URLSearchParams(query),
+  };
+}
+
+/**
  * 011 Verification row 5 — EARS-5: self-serve TOTP enrollment.
  *
  * The three load-bearing claims, each asserted directly against the API rather
@@ -141,7 +162,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("EARS-5.1: the enrollment offer carries a scannable URI AND the same secret in transcribable form", async () => {
-      const { secret, offer } = await enroll(uniqueEmail());
+      const email = uniqueEmail();
+      const { secret, offer } = await enroll(email);
 
       // Transcribable: a base32 string a human can type, never image-only (EARS-12).
       expect(secret).toMatch(/^[A-Z2-7]{16,}$/);
@@ -152,6 +174,67 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(offer.provisioningUri).toContain(`secret=${secret}`);
       expect(offer.issuer).toBeTruthy();
       expect(offer.account).toBeTruthy();
+    });
+
+    it("EARS-5.1.1: the authenticator entry is branded Doctor.School Admin + the operator's email, in the URI and in the offer's labels alike", async () => {
+      const email = uniqueEmail();
+      const { offer } = await enroll(email);
+
+      // The owner's Stage-B verdict on #1192: an entry reading «Zitadel» names a
+      // component the operator has never heard of, on the one screen where they
+      // must know WHICH login this code belongs to. The BFF rebuilds the URI, so
+      // the IdP's own default label must not survive anywhere in it.
+      expect(offer.provisioningUri).not.toMatch(/zitadel/i);
+
+      // RAW substring first, BEFORE any parse. `URLSearchParams` decodes `+` as a
+      // space, so a parsed assertion round-trips clean over a form-encoded
+      // `issuer=Doctor.School+Admin` and cannot see the defect at all — while a
+      // strict RFC-3986 authenticator reads that `+` literally and files the
+      // factor under «Doctor.School+Admin». The path label is percent-encoded, so
+      // this is also the assertion that the URI spells the issuer ONE way.
+      expect(offer.provisioningUri).toContain("issuer=Doctor.School%20Admin");
+      expect(offer.provisioningUri).not.toContain("issuer=Doctor.School+Admin");
+
+      const parsed = parseProvisioningUri(offer.provisioningUri);
+      expect(parsed.label).toBe(`${ADMIN_TOTP_ISSUER}:${email}`);
+      expect(parsed.params.get("issuer")).toBe(ADMIN_TOTP_ISSUER);
+      // The manual-entry block on the screen renders these two fields, so they
+      // must be the SAME strings the QR encodes — one source, or a hand-typed
+      // factor lands under a different name than a scanned one.
+      expect(offer.issuer).toBe(ADMIN_TOTP_ISSUER);
+      expect(offer.account).toBe(email);
+
+      // Re-labelling is cosmetic and must stay cosmetic: the parameters an
+      // authenticator computes codes with are still declared explicitly, so a
+      // rebuilt URI can never silently hand the operator a wrong algorithm.
+      expect(parsed.params.get("algorithm")).toBe("SHA1");
+      expect(parsed.params.get("digits")).toBe("6");
+      expect(parsed.params.get("period")).toBe("30");
+    });
+
+    it("EARS-5.1.2: a code derived from the REBUILT URI's own secret enrols the factor", async () => {
+      const email = uniqueEmail();
+      const { sub, ref, offer } = await enroll(email);
+
+      // The interop proof, taken end-to-end through the artifact the operator
+      // actually scans: read the secret out of the provisioning URI (as an
+      // authenticator app does), derive the code from THAT, and submit it. If the
+      // rebuild ever dropped or mangled the secret, this is where it fails —
+      // asserting only on `offer.secret` would keep passing while every scanned
+      // QR produced a factor the server does not hold.
+      const scanned = parseProvisioningUri(offer.provisioningUri).params.get(
+        "secret",
+      );
+      expect(scanned).toBe(offer.secret);
+
+      const verify = await app.inject({
+        method: "POST",
+        url: VERIFY_URL,
+        headers: pendingHeaders(ref),
+        payload: { code: totpCode(scanned!) },
+      });
+      expect(verify.statusCode).toBe(200);
+      expect(await fake.hasTotpFactor(sub)).toBe(true);
     });
 
     it("EARS-5.2: the offer is not re-servable — a re-start replaces the provisional factor", async () => {

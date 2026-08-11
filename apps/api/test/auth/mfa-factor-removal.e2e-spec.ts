@@ -21,6 +21,11 @@ import {
   ADMIN_PENDING_COOKIE_NAME,
   ADMIN_SESSION_COOKIE_NAME,
 } from "../../src/auth/admin-session/admin-session.cookie.js";
+import {
+  ADMIN_SESSION_STORE,
+  type AdminSessionRecord,
+  type AdminSessionStore,
+} from "../../src/auth/admin-session/admin-session.types.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import {
   RATE_LIMIT_THRESHOLDS,
@@ -140,6 +145,8 @@ describe.skipIf(!process.env.DATABASE_URL)(
       email: string;
       sub: string;
       secret: string;
+      /** The opaque admin session id, so a test can reach the stored record. */
+      sid: string;
       headers: Record<string, string>;
     }
 
@@ -179,6 +186,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         email,
         sub,
         secret,
+        sid,
         headers: {
           ...ADMIN_DEVICE,
           cookie: `${ADMIN_SESSION_COOKIE_NAME}=${sid}; ${ADMIN_CSRF_COOKIE_NAME}=${csrf}`,
@@ -193,6 +201,32 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const sub = await registerAdmin(email);
       fake.setTotpFactor(sub, true);
       expect(await fake.hasTotpFactor(sub)).toBe(true);
+      return { email, sub };
+    }
+
+    /**
+     * A NON-admin account that nonetheless holds a TOTP factor — the target the
+     * route must refuse. It is registered exactly as any user is and never
+     * granted `platform_admin`, so what disqualifies it is the role policy, not a
+     * missing factor: without the target-role floor the removal would succeed and
+     * write an `auth.mfa.reset` row asserting an admin factor reset for an
+     * account that was never an admin.
+     */
+    async function enrolledNonAdmin(): Promise<{ email: string; sub: string }> {
+      const email = uniqueEmail("nonadmin");
+      const reg = await app.inject({
+        method: "POST",
+        url: "/v1/auth/register",
+        payload: { email, password, consent },
+      });
+      expect(reg.statusCode).toBe(200);
+      const { rows } = await pool.query<{ zitadel_sub: string }>(
+        "SELECT zitadel_sub FROM users WHERE email = $1",
+        [email],
+      );
+      const sub = rows[0]!.zitadel_sub;
+      expect(fake.grantedRoles(sub)).not.toContain("platform_admin");
+      fake.setTotpFactor(sub, true);
       return { email, sub };
     }
 
@@ -492,6 +526,72 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(scriptRow!.reason).toBe(endpointRow!.reason);
       expect(scriptRow!.sid).toBe(endpointRow!.sid);
       expect(scriptRow!.metadata).toEqual(endpointRow!.metadata);
+    });
+
+    it("EARS-13.9: a target outside the role → mfa_required policy is refused with the uniform failure, keeps its factor, and produces no reset row", async () => {
+      const operator = await enrolledOperator("roleflo");
+      const outsider = await enrolledNonAdmin();
+      const since = await dbNow();
+
+      const res = await app.inject({
+        method: "DELETE",
+        url: removalUrl(outsider.sub),
+        headers: operator.headers,
+        payload: { code: nextWindowCode(operator.secret) },
+      });
+
+      // The caller's code was CORRECT — what refuses here is the target, and the
+      // answer says nothing about which of the two it was. A distinct status or
+      // body would turn the endpoint into a role oracle over the user population,
+      // readable by any operator holding a valid code.
+      expect(res.statusCode).toBe(401);
+      const challengeRefusal = await app.inject({
+        method: "POST",
+        url: CHALLENGE_URL,
+        headers: pendingHeaders("00000000-0000-4000-8000-000000000000"),
+        payload: { code: "000000" },
+      });
+      expect(res.json()).toEqual(challengeRefusal.json());
+
+      // Nothing was deleted, and the ledger asserts no admin factor reset for an
+      // account that never held an admin factor.
+      expect(await fake.hasTotpFactor(outsider.sub)).toBe(true);
+      expect(await resetRowsFor(outsider.sub, since)).toHaveLength(0);
+    });
+
+    it("EARS-13.10: an admin-session record predating the carried identifier is refused uniformly, never a 500", async () => {
+      const operator = await enrolledOperator("legacy");
+      const target = await enrolledTarget();
+      const since = await dbNow();
+
+      // Rewrite the stored record into the shape a session minted before the
+      // identifier was carried onto it would have. The field keys the ADR-0001 §7
+      // per-user window; with it absent the route used to fault inside the
+      // limiter and answer 500 — a status that both breaks the EARS-7 uniformity
+      // and tells a caller their session is unusual.
+      const store = app.get<AdminSessionStore>(ADMIN_SESSION_STORE);
+      const record = (await store.get(operator.sid))!;
+      const legacy: Partial<AdminSessionRecord> = { ...record };
+      delete legacy.identifier;
+      await store.create(legacy as AdminSessionRecord);
+
+      const res = await app.inject({
+        method: "DELETE",
+        url: removalUrl(target.sub),
+        headers: operator.headers,
+        payload: { code: nextWindowCode(operator.secret) },
+      });
+
+      expect(res.statusCode).toBe(401);
+      const challengeRefusal = await app.inject({
+        method: "POST",
+        url: CHALLENGE_URL,
+        headers: pendingHeaders("00000000-0000-4000-8000-000000000000"),
+        payload: { code: "000000" },
+      });
+      expect(res.json()).toEqual(challengeRefusal.json());
+      expect(await fake.hasTotpFactor(target.sub)).toBe(true);
+      expect(await resetRowsFor(target.sub, since)).toHaveLength(0);
     });
   },
 );

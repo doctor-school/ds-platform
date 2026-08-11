@@ -1506,6 +1506,55 @@ export class ZitadelIdpClient implements IdpClient {
   }
 
   /**
+   * 011 EARS-13: the project roles `sub` holds, read through the management-v1
+   * **user-grant search** RPC (`POST /management/v1/users/grants/_search` with a
+   * `userIdQuery`), filtered to this deployment's project.
+   *
+   * Zitadel keeps at most ONE grant per user+project, carrying a `roleKeys`
+   * array — so the project's grant, if present, is the whole answer. Grants for
+   * other projects in the same org are filtered out: a role key that means
+   * "admin" somewhere else must not be readable as `platform_admin` here.
+   *
+   * **Fails loudly, never open.** Any non-2xx, transport fault, or absent project
+   * config throws {@link IdpUnavailableError} (→ 503). The caller refuses when
+   * the roles do not qualify, so a swallowed fault returning `[]` would present
+   * an outage as a policy refusal — and, worse, would do it on the recovery path
+   * an operator reaches for precisely when things are already broken.
+   */
+  async getProjectRoles(sub: string): Promise<string[]> {
+    if (!this.config.projectId) {
+      throw new IdpUnavailableError(
+        "zitadel project config (IDP_PROJECT_ID) is not set; cannot read the project roles",
+      );
+    }
+    let res: Awaited<ReturnType<FetchLike>>;
+    try {
+      res = await this.fetchImpl(this.url("/management/v1/users/grants/_search"), {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({
+          queries: [{ userIdQuery: { userId: sub } }],
+        }),
+      });
+    } catch (cause) {
+      throw new IdpUnavailableError(
+        `zitadel user-grant read failed: ${(cause as Error).message}`,
+      );
+    }
+    if (!res.ok) {
+      throw new IdpUnavailableError(
+        `zitadel user-grant read failed: HTTP ${res.status}`,
+      );
+    }
+    const data = (await res.json()) as {
+      result?: Array<{ projectId?: string; roleKeys?: string[] }>;
+    };
+    return (data.result ?? [])
+      .filter((grant) => grant.projectId === this.config.projectId)
+      .flatMap((grant) => grant.roleKeys ?? []);
+  }
+
+  /**
    * 011 EARS-3: does `sub` hold a **registered (ready)** TOTP factor?
    *
    * Reads Zitadel's per-user authentication factors via the management-v1

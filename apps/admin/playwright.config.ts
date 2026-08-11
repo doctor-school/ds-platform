@@ -15,8 +15,19 @@ import { defineBddConfig } from "playwright-bdd";
  *   E2E_ADMIN_URL=http://localhost:3200 IDP_ISSUER=… IDP_SERVICE_TOKEN=… \
  *   IDP_PROJECT_ID=… pnpm --filter @ds/admin test:e2e
  * The admin app must be booted with `API_PROXY_TARGET` pointing at an api whose
- * bot-protection is off (dev-stand recipe) so the 003 register/login provisioning
- * is not captcha-gated.
+ * bot-protection is off (`BOT_PROTECTION_ENABLED=false`, and no Unleash override
+ * — the live flag wins over the env default) so the 003 register/login
+ * provisioning is not captcha-gated.
+ *
+ * The api must ALSO be booted with the #1076 ops-window ceilings raised
+ * (`RATE_LIMIT_PER_IP_15MIN=…`, `RATE_LIMIT_PER_USER_15MIN=…`). The 011 MFA
+ * journey costs several auth calls per scenario from one loopback address, and
+ * its lockout scenario deliberately spends the whole 10-failure budget: at
+ * production ceilings the per-user rate window closes FIRST, so the refusal the
+ * scenario proves is the throttle rather than the soft-lock (nothing is admitted
+ * either way, but only the raised ceilings make it the LOCK that is proven). The
+ * ceilings themselves are proven by `abuse-limits.e2e` + `mfa-challenge.e2e`, not
+ * here.
  *
  * `timezoneId` is pinned to a NON-Moscow zone for EVERY scenario, so the МСК
  * rendering assertions (EARS-10) prove no operator-local drift globally, not just

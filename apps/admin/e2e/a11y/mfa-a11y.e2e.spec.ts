@@ -154,7 +154,17 @@ test.describe("011 EARS-12 — the MFA screens are localized and accessible", ()
     // cannot scan an image, and this screen cannot be skipped.
     const qr = page.getByTestId("mfa-qr");
     await expect(qr).toHaveAttribute("role", "img");
-    expect(await qr.getAttribute("aria-label")).toContain("QR");
+    const qrAlt = await qr.getAttribute("aria-label");
+    // Compared against the CATALOG, not a literal re-typed here — the same
+    // discipline the rest of this suite applies, and `qrAlt` is the one string on
+    // either screen carrying an ICU placeholder, so it is also the one where a
+    // hand-written expectation would hide the interesting failure.
+    expect(qrAlt).toContain(ru.mfaEnroll.qrAlt!.split("{issuer}")[0]!.trim());
+    // …and the placeholder is SUBSTITUTED. This lives in an attribute, which
+    // `innerText` does not include — so the body-level `UNRESOLVED` sweep below
+    // cannot see it, and a never-substituted `{issuer}` would sail through the
+    // suite that advertises "no unsubstituted placeholder in the DOM".
+    expect(qrAlt).not.toMatch(UNRESOLVED);
 
     // The secret is selectable TEXT, not pixels: the operator whose app cannot
     // scan types it, and a screen reader reads it out.

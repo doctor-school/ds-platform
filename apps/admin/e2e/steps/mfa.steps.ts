@@ -34,8 +34,19 @@ import { totpCode } from "../support/totp";
 
 /** The admin-tier session cookie — a protocol constant, checked by absence. */
 const ADMIN_SESSION_COOKIE = "__Host-ds_admin_session";
-/** The lockout budget the API enforces (`mfa-lockout.service.ts`, ADR-0001 §7). */
-const LOCKOUT_THRESHOLD = 10;
+/**
+ * The lockout budget the API enforces. The source of truth is
+ * `MFA_LOCKOUT_THRESHOLD` in `apps/api/src/auth/admin-session/mfa-lockout.service.ts`
+ * (ADR-0001 §7, 10 failed / 30 min) — `apps/admin` has no dependency on the api
+ * package, so it is mirrored here rather than imported, and overridable from the
+ * environment so a threshold change needs no code edit in two places.
+ *
+ * If it ever drifts BELOW the server's, the step under-spends the budget and the
+ * scenario fails as "a correct code was refused" — a symptom that reads like a
+ * broken login rather than a stale constant. The assertion message in the step
+ * names this explicitly so the next reader is not sent hunting.
+ */
+const LOCKOUT_THRESHOLD = Number(process.env.E2E_MFA_LOCKOUT_THRESHOLD ?? "10");
 
 function mfa(world: { mfa?: MfaWorld }): MfaWorld {
   if (!world.mfa) {
@@ -282,15 +293,19 @@ When(
     // admits nobody.
     //
     // Run the suite with the #1076 ops-window ceilings raised
-    // (`RATE_LIMIT_PER_IP_15MIN` / `RATE_LIMIT_PER_USER_15MIN`, see
-    // `playwright.config.ts`); at production ceilings the per-user rate window
-    // closes first and the refusal proven here is the throttle rather than the
-    // lock. Either way nothing is admitted, which is the assertion — but only the
-    // raised ceilings make it the LOCK that is proven.
+    // (`RATE_LIMIT_PER_IP_15MIN` / `RATE_LIMIT_PER_USER_15MIN` — the requirement
+    // is stated in this suite's own config docblock, `playwright.config.ts`); at
+    // production ceilings the per-user rate window closes first and the refusal
+    // proven here is the throttle rather than the lock. Either way nothing is
+    // admitted, which is the assertion — but only the raised ceilings make it the
+    // LOCK that is proven.
     mfa(world);
     for (let attempt = 0; attempt < LOCKOUT_THRESHOLD; attempt++) {
       await submitCode(page, "000000");
-      await expect(page.getByTestId("mfa-error")).toBeVisible();
+      await expect(
+        page.getByTestId("mfa-error"),
+        `refusal ${attempt + 1}/${LOCKOUT_THRESHOLD} — if a LATER step in this scenario fails as "a correct code was refused", suspect this threshold drifting from MFA_LOCKOUT_THRESHOLD in apps/api/src/auth/admin-session/mfa-lockout.service.ts (override with E2E_MFA_LOCKOUT_THRESHOLD)`,
+      ).toBeVisible();
     }
   },
 );

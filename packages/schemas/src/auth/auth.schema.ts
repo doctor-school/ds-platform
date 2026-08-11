@@ -473,18 +473,25 @@ export type AdminLogoutResponse = z.infer<typeof AdminLogoutResponseSchema>;
  * as a QR and the secret as selectable text.
  *
  * `issuer` / `account` are the labels the authenticator app shows in its list, so
- * an operator holding several factors can tell them apart. Nothing here is ever
- * logged, audited, or re-served: a re-request replaces the provisional factor and
- * yields a NEW secret rather than re-reading this one (011 design §4).
+ * an operator holding several factors can tell them apart. They are **the same
+ * strings the `provisioningUri` encodes**, not a second description of it: the
+ * BFF composes the URI from them, so the screen can render them beside the secret
+ * for manual entry and a hand-typed factor lands under the identical label a
+ * scanned one does. Two sources here would mean the QR and the manual path
+ * disagreeing about what the entry is called.
+ *
+ * Nothing here is ever logged, audited, or re-served: a re-request replaces the
+ * provisional factor and yields a NEW secret rather than re-reading this one
+ * (011 design §4).
  */
 export const AdminEnrollmentOfferSchema = z.strictObject({
-  /** `otpauth://totp/...` — the scannable form. */
+  /** `otpauth://totp/<issuer>:<account>?secret=…` — the scannable form. */
   provisioningUri: z.string().min(1),
   /** The same shared secret, base32, for manual transcription. */
   secret: z.string().min(1),
-  /** Label the authenticator app files the factor under. */
+  /** Product brand the authenticator app files the factor under — never translated. */
   issuer: z.string().min(1),
-  /** The operator's account label inside that issuer. */
+  /** The operator's account label inside that issuer (their email). */
   account: z.string().min(1),
 });
 export type AdminEnrollmentOffer = z.infer<typeof AdminEnrollmentOfferSchema>;

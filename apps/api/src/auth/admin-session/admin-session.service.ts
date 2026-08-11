@@ -7,6 +7,10 @@ import {
   type IdpClient,
   type IdpSession,
 } from "../idp/idp.types.js";
+import {
+  totpParametersFrom,
+  totpProvisioningUri,
+} from "../idp/totp.js";
 import { RateLimitService } from "../rate-limit/rate-limit.service.js";
 import {
   AUTH_AUDIT,
@@ -53,42 +57,18 @@ const PENDING_TTL_SECONDS = 5 * 60;
 const ADMIN_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 /**
- * EARS-5: read the issuer/account labels out of the provisioning URI the IdP
- * minted, so the offer's four fields all describe **one** registration.
+ * EARS-5: the issuer an admin's authenticator app files this factor under.
  *
- * Deriving them rather than composing our own is the point: the authenticator app
- * files the factor under whatever the URI says, so a label we invented here would
- * disagree with what the operator actually sees on their phone. `otpauth://totp/`
- * carries the label as `issuer:account` in the path with `issuer` repeated as a
- * query parameter (the form this repo's fake and Zitadel both emit). A URI that
- * does not parse falls back to the platform label and the subject — a
- * cosmetically poorer offer, never a broken enrollment.
+ * A **product brand string, verbatim and never translated** — it is what the
+ * operator reads in a list of one-time-code entries, so it must name the thing
+ * they are logging into. It is not an origin or an endpoint, so the AGENTS.md §9
+ * no-hardcoded-endpoint rule does not reach it.
+ *
+ * `Admin` is part of the name on purpose: an operator can hold a Doctor.School
+ * factor for more than one surface, and two entries both reading "Doctor.School"
+ * are indistinguishable at exactly the moment they are needed.
  */
-function labelsFrom(
-  uri: string,
-  sub: string,
-): { issuer: string; account: string } {
-  const match = /^otpauth:\/\/totp\/([^?]*)/.exec(uri);
-  const label = decodeURIComponent(match?.[1] ?? "");
-  const separator = label.indexOf(":");
-  const query = new URLSearchParams(uri.slice(uri.indexOf("?") + 1));
-  const issuer =
-    query.get("issuer") ??
-    (separator > 0 ? label.slice(0, separator) : DEFAULT_TOTP_ISSUER);
-  const account = separator >= 0 ? label.slice(separator + 1) : label;
-  return {
-    issuer: issuer || DEFAULT_TOTP_ISSUER,
-    account: account || sub,
-  };
-}
-
-/**
- * The label shown when the provisioning URI carries none. A product name, not an
- * origin or endpoint — the AGENTS.md §9 no-hardcoded-endpoint rule does not reach
- * it, and an authenticator entry with no issuer is unusable for an operator
- * holding several factors.
- */
-const DEFAULT_TOTP_ISSUER = "Doctor.School";
+const ADMIN_TOTP_ISSUER = "Doctor.School Admin";
 
 /** What `startLogin` resolved to — the EARS-3 policy fork, or a uniform refusal. */
 export type AdminLoginOutcome =
@@ -342,6 +322,17 @@ export class AdminSessionService {
    * screen gets a fresh factor, never a second look at the old secret — which is
    * what makes "shown exactly once" true rather than aspirational.
    *
+   * **The provisioning URI is rebuilt here, not passed through.** Zitadel's
+   * `POST /v2/users/{id}/totp` answers with an `otpauth://` URI carrying ITS own
+   * default label, so an operator who scanned it got an authenticator entry
+   * reading «Zitadel» — the name of a component they have never heard of, on the
+   * one screen where they need to know which login this code belongs to (owner
+   * Stage-B verdict on #1192). The IdP owns the secret; the product owns the
+   * label. So the same secret is re-emitted under {@link ADMIN_TOTP_ISSUER} and
+   * the operator's own email, and the IdP's declared `algorithm`/`digits`/`period`
+   * are copied through verbatim — re-labelling must never silently change the
+   * parameters the app computes codes with.
+   *
    * Resolves `undefined` when the caller is not a pending-enrollment principal;
    * the handler answers that with the same uniform refusal as a wrong code.
    */
@@ -357,11 +348,42 @@ export class AdminSessionService {
     if (!record) return undefined;
 
     const registration = await this.idp.startTotpRegistration(record.sub);
+    const account = await this.accountLabelFor(record);
     return {
-      provisioningUri: registration.uri,
+      provisioningUri: totpProvisioningUri({
+        issuer: ADMIN_TOTP_ISSUER,
+        account,
+        secret: registration.secret,
+        ...totpParametersFrom(registration.uri),
+      }),
       secret: registration.secret,
-      ...labelsFrom(registration.uri, record.sub),
+      issuer: ADMIN_TOTP_ISSUER,
+      account,
     };
+  }
+
+  /**
+   * The account label the authenticator entry carries — the operator's **email**,
+   * because that is what they recognise as "who am I logging in as" and what the
+   * owner asked the entry to read.
+   *
+   * The IdP is the authority for it (`apps/api` holds no admin mailbox of its
+   * own). Fail-soft, and the fallbacks are ordered by how useful they are to a
+   * human reading a list on their phone: the identifier they typed at the login
+   * form, then the opaque subject. A label is never worth failing an enrollment
+   * over — an operator with a poorly-named entry can still log in; one who cannot
+   * enrol at all cannot.
+   */
+  private async accountLabelFor(record: PendingAuthRecord): Promise<string> {
+    try {
+      const user = await this.idp.getUser(record.sub);
+      if (user?.email) return user.email;
+    } catch (cause) {
+      this.logger.warn(
+        `admin enrollment label fell back to the login identifier: ${(cause as Error).message}`,
+      );
+    }
+    return record.identifier || record.sub;
   }
 
   /**

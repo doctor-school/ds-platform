@@ -1733,9 +1733,24 @@ export class ZitadelIdpClient implements IdpClient {
    * failed to delete expires on Zitadel's own lifetime, and turning that into a
    * second failure mode would report a correct code as a fault.
    *
-   * Refusals resolve `false`; only a 5xx or a transport fault throws
-   * {@link IdpUnavailableError} — the same split {@link verifyTotpRegistration}
-   * makes, for the same enumeration-safety reason.
+   * **A 2xx is not the answer — the recorded factor check is.** The create's own
+   * status only says the request was accepted, and the `POST /v2/sessions`
+   * response body carries `sessionId`/`sessionToken` and does **not** echo
+   * `factors` (the live v4 wire-shape delta #145 already documents for
+   * `passwordLogin`). So this reads the session back and requires a `totp` factor
+   * with a `verifiedAt` on it, for the expected subject. Resolving a bare `true`
+   * on any 2xx would mean a drifted request shape — a renamed check field, a body
+   * Zitadel accepts and ignores — silently admitting ANY six digits on the route
+   * that removes another admin's second factor, and no fake-backed suite could
+   * ever see it: the fake verifies the code for real, so only the wire is at risk.
+   *
+   * Refusals resolve `false` — a wrong / expired / replayed code is a 4xx from
+   * the create, or a session whose `totp` factor is unverified. A **404** is not
+   * treated as a refusal: Zitadel refuses a bad code with 400/401, never by
+   * un-routing the endpoint, so a 404 means the session API moved — and reporting
+   * that as "your code is wrong" is the #1208 failure shape (an outage reported as
+   * a credential verdict). It throws, as do 5xx, a transport fault, and any
+   * failure of the read-back itself.
    */
   async checkTotpCode(sub: string, code: string): Promise<boolean> {
     let res: Awaited<ReturnType<FetchLike>>;
@@ -1753,7 +1768,7 @@ export class ZitadelIdpClient implements IdpClient {
       );
     }
     if (!res.ok) {
-      if (res.status >= 500) {
+      if (res.status >= 500 || res.status === 404) {
         throw new IdpUnavailableError(
           `zitadel totp possession check failed: HTTP ${res.status}`,
         );
@@ -1764,16 +1779,73 @@ export class ZitadelIdpClient implements IdpClient {
       sessionId?: string;
       sessionToken?: string;
     };
-    // Dispose of the proof session immediately — it exists for the duration of
-    // one check and must never become a credential the caller could reuse.
-    if (data.sessionId) {
+    // A 2xx with no session is a wire-shape fault, not a verdict: there is
+    // nothing to read the factor check off, so it fails LOUD rather than
+    // guessing in either direction.
+    if (!data.sessionId) {
+      throw new IdpUnavailableError(
+        "zitadel totp possession check returned no session id",
+      );
+    }
+    try {
+      return await this.totpFactorVerifiedOn(data.sessionId, sub);
+    } finally {
+      // Dispose of the proof session immediately, on every exit including the
+      // throwing one — it exists for the duration of one check and must never
+      // become a credential the caller could reuse.
       await this.terminateSession({
         zitadelSessionId: data.sessionId,
         sub,
         sessionToken: data.sessionToken ?? "",
       });
     }
-    return true;
+  }
+
+  /**
+   * Read a session back (`GET /v2/sessions/{id}`) and answer whether it records a
+   * **passed** TOTP check for `sub` — the evidence half of
+   * {@link checkTotpCode}.
+   *
+   * The subject is re-asserted alongside the factor: the caller is proving that
+   * THIS operator holds the factor, so a session checked for somebody else is
+   * `false` regardless of its `totp` state.
+   *
+   * A failure to read is a fault, never a refusal ({@link IdpUnavailableError} →
+   * 503). We could not observe the check, and answering `false` would tell an
+   * operator their correct code was wrong — the #1208 rule that an outage is not
+   * a credential verdict.
+   */
+  private async totpFactorVerifiedOn(
+    zitadelSessionId: string,
+    sub: string,
+  ): Promise<boolean> {
+    let res: Awaited<ReturnType<FetchLike>>;
+    try {
+      res = await this.fetchImpl(
+        this.url(`/v2/sessions/${encodeURIComponent(zitadelSessionId)}`),
+        { method: "GET", headers: this.headers() },
+      );
+    } catch (cause) {
+      throw new IdpUnavailableError(
+        `zitadel totp possession read-back failed: ${(cause as Error).message}`,
+      );
+    }
+    if (!res.ok) {
+      throw new IdpUnavailableError(
+        `zitadel totp possession read-back failed: HTTP ${res.status}`,
+      );
+    }
+    const data = (await res.json()) as {
+      session?: {
+        factors?: {
+          user?: { id?: string };
+          totp?: { verifiedAt?: string };
+        };
+      };
+    };
+    const factors = data.session?.factors;
+    if (factors?.user?.id !== sub) return false;
+    return Boolean(factors.totp?.verifiedAt);
   }
 
   /**
@@ -1782,14 +1854,30 @@ export class ZitadelIdpClient implements IdpClient {
    * (`RemoveHumanAuthFactorOTP`), the same `…/auth_factors` family
    * {@link hasTotpFactor} reads.
    *
-   * **404 is the converged state, not a fault** — the same idempotency
-   * {@link grantProjectRole} applies to its 409. A subject holding no factor is
-   * already in the state this call produces, and the calling endpoint must not be
-   * able to distinguish the two (a status that did would let one `platform_admin`
-   * enumerate which peers hold a factor). Every OTHER non-2xx throws
-   * {@link IdpUnavailableError} → 503: a removal that silently did nothing would
-   * still get an `auth.mfa.reset` row written for it, leaving the ledger asserting
-   * a recovery the IdP never performed.
+   * **The DELETE's own status is never the answer — the `_search` read is.**
+   * This is the same route family the deployed Zitadel proved it does not route:
+   * a plain `…/auth_factors` verb answers **404 for every user**, enrolled or not
+   * (#1208), which is precisely why {@link hasTotpFactor} had to move to the
+   * `_search` POST. Reading a 404 here as "already converged" would therefore be
+   * the #1208 defect in its most damaging form: on an instance where this verb is
+   * unrouted the call removes NOTHING, `applyFactorRemoval` still appends
+   * `auth.mfa.reset`, the endpoint answers `200 {status:"removed"}` — and the
+   * ledger asserts a recovery that never happened while the locked-out operator
+   * stays locked out. Silent, and worse than an outage.
+   *
+   * So this method resolves on **proven absence**, not on a status: whatever the
+   * DELETE reports, the factor set is re-read through the one hop this repo has
+   * proven routes, and a factor still standing throws
+   * {@link IdpUnavailableError} → 503 **before** any audit row is written. A
+   * genuine 5xx / transport fault still throws directly; a 404 is neither trusted
+   * nor rejected on its own, because on this instance it cannot distinguish "no
+   * factor to remove" from "no route to remove it with".
+   *
+   * **Idempotence survives, and so does enumeration-safety.** A subject who held
+   * no factor converges (the read says absent) and the caller still gets the
+   * uniform `{status:"removed"}` — the response never discloses whether a factor
+   * existed, so no `platform_admin` can probe which peers hold one. The
+   * confirmation is server-side only.
    */
   async removeTotpFactor(sub: string): Promise<void> {
     let res: Awaited<ReturnType<FetchLike>>;
@@ -1805,10 +1893,23 @@ export class ZitadelIdpClient implements IdpClient {
         `zitadel totp factor removal failed: ${(cause as Error).message}`,
       );
     }
-    if (res.ok || res.status === 404) return;
-    throw new IdpUnavailableError(
-      `zitadel totp factor removal failed: HTTP ${res.status}`,
-    );
+    // A 404 falls through to the convergence read rather than throwing here: on
+    // this instance it is ambiguous (absent factor vs unrouted verb), and the
+    // read resolves the ambiguity with evidence. Every other non-2xx is an
+    // unambiguous fault.
+    if (!res.ok && res.status !== 404) {
+      throw new IdpUnavailableError(
+        `zitadel totp factor removal failed: HTTP ${res.status}`,
+      );
+    }
+    // The convergence check, through the proven `_search` hop. It throws on any
+    // fault of its own (#1208 discipline), so an unverifiable removal is a 503
+    // too — this method never resolves on an assumption.
+    if (await this.hasTotpFactor(sub)) {
+      throw new IdpUnavailableError(
+        `zitadel totp factor removal did not converge: the factor is still registered after HTTP ${res.status}`,
+      );
+    }
   }
 
   /**

@@ -1,6 +1,7 @@
 import type { Mailer } from "../../mailer/mailer.types.js";
 import {
   IdpInvalidArgumentError,
+  IdpUnavailableError,
   type CreatedUser,
   type CreateUserInput,
   type EmailLoginOutcome,
@@ -613,6 +614,20 @@ export class FakeIdpClient implements IdpClient {
   removeTotpFactor(sub: string): Promise<void> {
     this.totpFactors.delete(sub);
     this.totpSecrets.delete(sub);
+    // The same convergence contract the real adapter enforces through its
+    // `_search` re-read: this method resolves on PROVEN absence, never on "the
+    // call did not fail". Trivially satisfied here — which is the point: the
+    // assertion is what keeps a future fake edit from resolving while the factor
+    // is still standing, i.e. from being more permissive than the real adapter
+    // (011 Constraints) on the one property that decides whether an
+    // `auth.mfa.reset` row is honest.
+    if (this.totpFactors.has(sub)) {
+      return Promise.reject(
+        new IdpUnavailableError(
+          "fake totp factor removal did not converge: the factor is still registered",
+        ),
+      );
+    }
     return Promise.resolve();
   }
 

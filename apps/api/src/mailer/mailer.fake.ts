@@ -21,6 +21,8 @@ import {
 export class FakeMailer implements Mailer {
   /** Lowercased recipient addresses of every accepted account-exists notice, in order. */
   readonly accountExistsNotices: string[] = [];
+  /** Lowercased recipients of every accepted 011 EARS-7 admin-lockout notice, in order. */
+  readonly adminLockoutNotices: string[] = [];
   /** Every accepted §13.3 verification-code send (EARS-1/3/25), in order. */
   readonly verificationCodeEmails: Array<{ to: string; code: string }> = [];
   /** Every accepted §13.4 password-reset-code send (EARS-11), in order. */
@@ -43,6 +45,11 @@ export class FakeMailer implements Mailer {
   async sendAccountExistsNotice(email: string): Promise<void> {
     assertSendableEmail(email);
     this.accountExistsNotices.push(email.trim().toLowerCase());
+  }
+
+  async sendAdminLockoutNotice(email: string): Promise<void> {
+    assertSendableEmail(email);
+    this.adminLockoutNotices.push(email.trim().toLowerCase());
   }
 
   async sendVerificationCodeEmail(email: string, code: string): Promise<void> {

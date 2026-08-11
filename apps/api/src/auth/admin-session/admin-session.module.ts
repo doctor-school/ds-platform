@@ -1,8 +1,11 @@
 import { Logger, Module } from "@nestjs/common";
 import { Redis } from "ioredis";
 import { loadEnv } from "../../config/env.schema.js";
+import { MailerModule } from "../../mailer/mailer.module.js";
 import { IdpModule } from "../idp/idp.module.js";
+import { RateLimitModule } from "../rate-limit/rate-limit.module.js";
 import { SessionModule } from "../session/session.module.js";
+import { MfaLockoutService } from "./mfa-lockout.service.js";
 import {
   ADMIN_SESSION_STORE,
   PENDING_AUTH_STORE,
@@ -43,7 +46,11 @@ import { AdminAuthController } from "./admin-auth.controller.js";
  * unhandled 'error' event.
  */
 @Module({
-  imports: [IdpModule, SessionModule],
+  // `RateLimitModule` for the EARS-7 per-user ceiling the verify handlers consume
+  // explicitly (their body carries no identifier, so the guard's decorator pass
+  // cannot key it); `MailerModule` for the §7 lockout notification, which the BFF
+  // owes because the TOTP-attempt lock is its own counter, not Zitadel's.
+  imports: [IdpModule, SessionModule, RateLimitModule, MailerModule],
   controllers: [AdminAuthController],
   providers: [
     {
@@ -64,8 +71,9 @@ import { AdminAuthController } from "./admin-auth.controller.js";
     },
     AdminSessionService,
     AdminSessionAuthHook,
+    MfaLockoutService,
   ],
-  exports: [AdminSessionService],
+  exports: [AdminSessionService, MfaLockoutService],
 })
 export class AdminSessionModule {}
 

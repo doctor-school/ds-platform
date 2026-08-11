@@ -50,17 +50,29 @@ const ADMIN_ROUTE_PREFIX = "/v1/admin/";
  * a portal cookie (or a CSRF-mismatched admin session) presented there is exactly
  * the case EARS-2 mandates a row for, and exempting it would suppress that row.
  * The enrollment routes joined the list with the handlers that made them
- * reachable on a pending reference (#1191); the challenge route joins with
- * EARS-6 (#1192) — an entry added before its route exists is a hole with no test
- * behind it. They belong here because a pending reference is the NORMAL and only
- * credential at those routes: the hook cannot resolve a session from it (by
- * design), so writing `auth.session.rejected` for every enrollment request would
- * fill the ledger with rows describing the happy path.
+ * reachable on a pending reference (#1191); the challenge route and the state
+ * read joined with EARS-6 (#1192) — an entry added before its route exists is a
+ * hole with no test behind it. They belong here because a pending reference is
+ * the NORMAL and only credential at those routes: the hook cannot resolve a
+ * session from it (by design), so writing `auth.session.rejected` for every
+ * enrollment request would fill the ledger with rows describing the happy path.
+ *
+ * `GET /v1/admin/auth/state` is the load-bearing case for that rule. The admin
+ * app reads it on every entry to decide which screen to render, and the browser
+ * legitimately holds a pending reference for most of those reads — so without the
+ * exemption the ledger would gain an `auth.session.rejected` row per navigation
+ * through the normal login flow, and `pending_ref`, the spec's sharpest signal,
+ * would become the noisiest row in the table. The cost is bounded and deliberate:
+ * a fingerprint mismatch presented at this ONE read route writes no row (the
+ * caller is told `unauthenticated` and nothing else), and the next admin route
+ * that browser touches records it.
  */
 const ADMIN_AUTH_ENTRY_ROUTES: ReadonlySet<string> = new Set([
   "/v1/admin/auth/login",
+  "/v1/admin/auth/state",
   "/v1/admin/auth/mfa/enroll/start",
   "/v1/admin/auth/mfa/enroll/verify",
+  "/v1/admin/auth/mfa/verify",
 ]);
 
 /** Strip the query string from a raw request URL, leaving the path. */

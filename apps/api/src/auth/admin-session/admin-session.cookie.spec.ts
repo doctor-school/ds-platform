@@ -79,10 +79,18 @@ describe("011 EARS-1/EARS-2/EARS-10 — admin-tier cookie primitives", () => {
     // the handlers that made them reachable.
     expect(isAdminAuthEntryRoute("/v1/admin/auth/mfa/enroll/start")).toBe(true);
     expect(isAdminAuthEntryRoute("/v1/admin/auth/mfa/enroll/verify")).toBe(true);
-    // Still an explicit set, not the `/mfa/` prefix: the EARS-6 challenge route
-    // joins with #1192, and a lookalike path is not pre-exempted.
-    expect(isAdminAuthEntryRoute("/v1/admin/auth/mfa/verify")).toBe(false);
+    // EARS-6 (#1192): the challenge verify and the state read joined with the
+    // handlers that made them reachable — both are reached with a PENDING
+    // reference and no session by design, and the state read is polled on every
+    // entry to the admin app, so exempting it is what keeps `pending_ref` (the
+    // spec's sharpest signal) from becoming the ledger's noisiest row.
+    expect(isAdminAuthEntryRoute("/v1/admin/auth/mfa/verify")).toBe(true);
+    expect(isAdminAuthEntryRoute("/v1/admin/auth/state")).toBe(true);
+    // Still an explicit set, not the `/mfa/` prefix: a lookalike path that no
+    // handler serves is NOT exempted, so a future route cannot inherit the
+    // exemption by being named nearby.
     expect(isAdminAuthEntryRoute("/v1/admin/auth/mfa/enroll")).toBe(false);
+    expect(isAdminAuthEntryRoute("/v1/admin/auth/mfa/verify/extra")).toBe(false);
   });
 
   it("EARS-10: state-changing methods are exactly the ones that owe a CSRF proof", () => {

@@ -495,6 +495,7 @@ describe("ZitadelIdpClient email/phone verification wire shape (#148)", () => {
           ),
         ),
       sendPasswordResetCodeEmail: () => Promise.resolve(),
+      sendAdminLockoutNotice: () => Promise.resolve(),
     };
     const client = new ZitadelIdpClient({
       ...SEND_CONFIG,

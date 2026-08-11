@@ -9,7 +9,9 @@ import { Button } from "@ds/design-system";
  * The thin admin chrome — brand eyebrow + a sign-out affordance — wrapping every
  * authenticated page. Stock layout on @ds/design-system tokens (007 EARS-11): no
  * bespoke element, copy from the RU catalog (EARS-10). Sign-out routes through the
- * Refine `useLogout` binding → the 003 `/v1/auth/logout` BFF.
+ * Refine `useLogout` binding → `authProvider.logout` → the 011 admin-tier
+ * `POST /v1/admin/auth/logout` (which clears ONLY the admin cookie pair — a
+ * concurrent doctor-portal session is deliberately untouched, EARS-2).
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const t = useTranslations();
@@ -29,6 +31,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             type="button"
             variant="outline"
             size="sm"
+            data-testid="sign-out"
             onClick={() => logout()}
           >
             {t("app.signOut")}

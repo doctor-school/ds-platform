@@ -20,14 +20,18 @@ import { AdminSessionService } from "../../src/auth/admin-session/admin-session.
  * Every suite that drives `/v1/admin/**` therefore needs an admin session, and
  * this is the single place that arc is expressed.
  *
- * **Why it calls `upgradePending` directly.** The admin session is issued by the
- * enrollment-verify / challenge-verify handlers, which land with EARS-5/EARS-6 in
- * #1191/#1192 — so in this slice there is no HTTP route that completes a second
- * factor. The helper therefore drives the real production path as far as it goes
- * (`POST /v1/admin/auth/login` → pending reference) and then calls the same
- * service method those handlers will call, with the same fingerprint the request
- * bound. Nothing here is a test-only code path: it is the production seam, driven
- * one hop earlier than the (not yet built) HTTP verb.
+ * **Why it calls `upgradePending` directly.** Both verify handlers now exist
+ * (EARS-5 in #1191, EARS-6 in #1192), so a suite COULD drive a full enrollment or
+ * challenge over HTTP — and the two suites whose subject that is
+ * (`mfa-enroll.e2e`, `mfa-challenge.e2e`) do exactly that. Every OTHER admin
+ * suite wants a session, not a factor arc: routing them all through a TOTP
+ * enrollment would make an unrelated failure in the factor seam fail a dozen
+ * suites about events and separation, and would tie each of them to the 30-second
+ * TOTP window. So this helper drives the real production path as far as the
+ * pending reference and then calls the same service method the handlers call,
+ * with the same fingerprint the request bound. Nothing here is a test-only code
+ * path: it is the production seam, entered one hop past the factor check that the
+ * factor suites own.
  */
 
 /** The device headers the fingerprint is derived from; `app.inject` reports IP `127.0.0.1`. */

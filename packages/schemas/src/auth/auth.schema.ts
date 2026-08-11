@@ -516,3 +516,44 @@ export const AdminMfaEnrollVerifyResponseSchema = z.strictObject({
 export type AdminMfaEnrollVerifyResponse = z.infer<
   typeof AdminMfaEnrollVerifyResponseSchema
 >;
+
+/**
+ * Response to a successful challenge verify (EARS-6, LD-1). Identical in shape to
+ * {@link AdminMfaEnrollVerifyResponseSchema} and deliberately a **separate**
+ * declaration: the two endpoints are separate contracts that happen to agree
+ * today, and collapsing them would make a future divergence on one silently
+ * change the other. The admin session cookie pair rides the same response, so
+ * there is nothing else for this body to say.
+ */
+export const AdminMfaVerifyResponseSchema = z.strictObject({
+  state: z.literal("active"),
+});
+export type AdminMfaVerifyResponse = z.infer<
+  typeof AdminMfaVerifyResponseSchema
+>;
+
+/**
+ * 011 `ReadAdminAuthState` response (EARS-6, design §9) — the client-readable
+ * pending/authenticated state the admin app routes on.
+ *
+ * The admin app has to answer "where does this browser belong: login, enrollment,
+ * challenge, or the app?" and the three credentials that could tell it apart
+ * (`__Host-ds_admin_pending`, `__Host-ds_admin_session`, the CSRF half) are either
+ * `HttpOnly` or carry no state — so the state is a server read, not a cookie
+ * sniff. This endpoint is that read and nothing more.
+ *
+ * It carries **exactly** {@link AdminAuthStateSchema} — no attempt budget, no lock
+ * indicator, no factor id, no session claims, no subject (011 requirements → Read
+ * models). A caller reading it has passed primary auth AT MOST, which is precisely
+ * the stolen-password attacker the second factor exists to stop: a budget or lock
+ * field here would hand that attacker the oracle the uniform-failure rule spends a
+ * whole clause denying. `unauthenticated` is therefore also the answer for an
+ * expired, foreign-fingerprint, or entirely absent credential — one shape for
+ * "you are not anywhere", never a diagnosis.
+ */
+export const AdminAuthStateResponseSchema = z.strictObject({
+  state: AdminAuthStateSchema,
+});
+export type AdminAuthStateResponse = z.infer<
+  typeof AdminAuthStateResponseSchema
+>;

@@ -1,6 +1,7 @@
 "use client";
 
 import type { AccessControlProvider } from "@refinedev/core";
+import { readAdminAuthState } from "@/lib/admin-auth";
 
 /**
  * Refine access-control provider (ADR-0004 §5 — generic `accessControlProvider`
@@ -11,22 +12,25 @@ import type { AccessControlProvider } from "@refinedev/core";
  * wave 1's role gate is sufficient (spec §7). This is a UI convenience — the api
  * `AuthzGuard` is the authority (EARS-8), so a hidden action is still refused
  * server-side if reached directly.
+ *
+ * **Migrated onto the 011 admin tier (#1192).** It used to read the doctor-portal
+ * `GET /v1/auth/session` and inspect its `roles[]`. Since 011 an admin operator
+ * has no portal session at all, so that read answered 401 for every legitimate
+ * admin and the provider hid the whole authoring surface — a client-side lockout
+ * with a perfectly healthy server behind it. The admin tier issues a session
+ * ONLY to a principal the `role → mfa_required` policy covers and ONLY after a
+ * satisfied second factor, so "holds an active admin session" IS the role check;
+ * there is no separate claim left to inspect (`AdminAuthState` carries none, by
+ * design — 011 design §9 → Read models).
  */
-const ADMIN_ROLE = "platform_admin";
 
-async function hasAdminRole(): Promise<boolean> {
-  const res = await fetch("/v1/auth/session", {
-    credentials: "include",
-    headers: { accept: "application/json" },
-  });
-  if (!res.ok) return false;
-  const claims = (await res.json()) as { roles?: string[] };
-  return Array.isArray(claims.roles) && claims.roles.includes(ADMIN_ROLE);
+async function hasAdminSession(): Promise<boolean> {
+  return (await readAdminAuthState()) === "active";
 }
 
 export const accessControlProvider: AccessControlProvider = {
   can: async () => {
-    const can = await hasAdminRole();
+    const can = await hasAdminSession();
     return can
       ? { can: true }
       : { can: false, reason: "login.errorForbidden" };

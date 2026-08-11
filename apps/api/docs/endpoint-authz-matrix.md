@@ -2,6 +2,7 @@
 
 | endpoint                               | access        | required_roles               | auth_check | object_attrs | step_up | audit       | test_coverage                    |
 | -------------------------------------- | ------------- | ---------------------------- | ---------- | ------------ | ------- | ----------- | -------------------------------- |
+| GET /v1/admin/auth/state               | public        | —                            | none       | —            | false   | low-stakes  | EARS-6                           |
 | GET /v1/admin/events                   | authenticated | platform_admin               | fast-path  | —            | false   | none        | EARS-8                           |
 | GET /v1/admin/events/:id               | authenticated | platform_admin               | fast-path  | —            | false   | none        | EARS-8                           |
 | GET /v1/auth/session                   | authenticated | doctor_guest, platform_admin | fast-path  | —            | false   | low-stakes  | EARS-8                           |
@@ -20,6 +21,7 @@
 | POST /v1/admin/auth/logout             | authenticated | platform_admin               | fast-path  | —            | false   | high-stakes | EARS-2                           |
 | POST /v1/admin/auth/mfa/enroll/start   | pending-auth  | platform_admin               | none       | —            | false   | low-stakes  | EARS-4, EARS-5                   |
 | POST /v1/admin/auth/mfa/enroll/verify  | pending-auth  | platform_admin               | none       | —            | false   | high-stakes | EARS-4, EARS-5                   |
+| POST /v1/admin/auth/mfa/verify         | pending-auth  | platform_admin               | none       | —            | false   | high-stakes | EARS-6, EARS-7                   |
 | POST /v1/admin/events                  | authenticated | platform_admin               | fast-path  | —            | false   | low-stakes  | EARS-1, EARS-8                   |
 | POST /v1/admin/events/:id/archive      | authenticated | platform_admin               | fast-path  | —            | false   | low-stakes  | EARS-6, EARS-8                   |
 | POST /v1/admin/events/:id/close        | authenticated | platform_admin               | fast-path  | —            | false   | low-stakes  | EARS-5, EARS-8                   |

@@ -21,7 +21,13 @@ import { defineConfig, devices } from "@playwright/test";
  *   IDP_PROJECT_ID=… pnpm --filter @ds/admin test:flows
  *
  * The api must be booted with bot-protection off (the dev-stand recipe), because
- * the session bootstrap registers through `/v1/auth/register`.
+ * the session bootstrap registers through `/v1/auth/register` — and, since the
+ * 011 MFA arc costs several auth calls per test from ONE loopback address, with
+ * the #1076 ops-window ceilings raised (`RATE_LIMIT_PER_IP_15MIN=…`,
+ * `RATE_LIMIT_PER_USER_15MIN=…`). Without them the run trips the production
+ * per-IP ceiling mid-suite and reports `login.errorThrottled` as a broken login;
+ * the ceilings themselves are proven by `abuse-limits.e2e` + `mfa-challenge.e2e`,
+ * not here.
  */
 export default defineConfig({
   testDir: "./e2e",

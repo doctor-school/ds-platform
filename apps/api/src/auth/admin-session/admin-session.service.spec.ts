@@ -2,11 +2,18 @@ import { randomUUID } from "node:crypto";
 import { ForbiddenException, type ExecutionContext } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { FakeIdpClient } from "../idp/idp.fake.js";
+import { RateLimitService } from "../rate-limit/rate-limit.service.js";
+import { DEFAULT_RATE_LIMIT_THRESHOLDS } from "../rate-limit/rate-limit.types.js";
 import { InMemoryAuthAuditLog } from "../session/auth-audit.fake.js";
 import { computeFingerprint } from "../session/session.cookie.js";
+import { FakeMailer } from "../../mailer/mailer.fake.js";
 import { AuthzGuard } from "../../authz/authz.guard.js";
 import { AUTHZ_KEY, type AuthzMeta } from "../../authz/authz.types.js";
 import { AdminSessionService } from "./admin-session.service.js";
+import {
+  MFA_LOCKOUT_THRESHOLD,
+  MfaLockoutService,
+} from "./mfa-lockout.service.js";
 import { resolveAdminRequest } from "./admin-session-auth.hook.js";
 import {
   InMemoryAdminSessionStore,
@@ -47,6 +54,10 @@ describe("011 EARS-3/EARS-10 — admin tier refusal + role gate (unit)", () => {
     store: InMemoryAdminSessionStore;
     email: string;
     sub: string;
+    mailer: FakeMailer;
+    lockout: MfaLockoutService;
+    /** Mutable wall clock shared by the limiter + the lockout window. */
+    clock: { now: number };
   }> {
     const idp = new FakeIdpClient();
     const email = `admin-${randomUUID()}@ds.test`;
@@ -54,13 +65,23 @@ describe("011 EARS-3/EARS-10 — admin tier refusal + role gate (unit)", () => {
     if (role) await idp.grantProjectRole(sub, role);
     const store = new InMemoryAdminSessionStore();
     const audit = new InMemoryAuthAuditLog();
+    const mailer = new FakeMailer();
+    const clock = { now: Date.now() };
+    const limiter = new RateLimitService(
+      DEFAULT_RATE_LIMIT_THRESHOLDS,
+      () => clock.now,
+    );
+    const lockout = new MfaLockoutService(() => clock.now);
     const svc = new AdminSessionService(
       idp,
       store,
       new InMemoryPendingAuthStore(),
       audit,
+      mailer,
+      limiter,
+      lockout,
     );
-    return { svc, idp, audit, store, email, sub };
+    return { svc, idp, audit, store, email, sub, mailer, lockout, clock };
   }
 
   it("EARS-3: a valid-credential principal outside the policy is recorded as not_permitted, with its subject", async () => {
@@ -200,6 +221,84 @@ describe("011 EARS-3/EARS-10 — admin tier refusal + role gate (unit)", () => {
     );
   });
 });
+
+/**
+ * 011 EARS-7 — the lockout **notification**, at the only altitude it is
+ * observable.
+ *
+ * The e2e proves the lock and its `auth.lockout.triggered` row, but the mail
+ * cannot be seen there: `AppModule` binds the real `SmtpMailer`, which is a
+ * logged no-op with no SMTP host configured. So the notice is asserted here,
+ * against the `FakeMailer` the port exists for — and asserted as
+ * fire-and-forget, because putting an SMTP round-trip on the response path of
+ * attempt #10 would make it measurably slower than attempts #1-9 and hand back
+ * the timing oracle EARS-7 spends a clause denying.
+ */
+describe("011 EARS-7 — lockout notification (unit)", () => {
+  const password = "Aa1!ufficiently-long-pw";
+  const FP = "fp-admin-device";
+
+  it("EARS-7: crossing the threshold notifies the operator exactly once, off the response path", async () => {
+    const idp = new FakeIdpClient();
+    const email = `lockout-${randomUUID()}@ds.test`;
+    const { sub } = await idp.createUser({ email, password });
+    await idp.grantProjectRole(sub, "platform_admin");
+    const mailer = new FakeMailer();
+    const lockout = new MfaLockoutService(() => Date.now());
+    const svc = new AdminSessionService(
+      idp,
+      new InMemoryAdminSessionStore(),
+      new InMemoryPendingAuthStore(),
+      new InMemoryAuthAuditLog(),
+      mailer,
+      new RateLimitService(DEFAULT_RATE_LIMIT_THRESHOLDS, () => Date.now()),
+      lockout,
+    );
+
+    // Enrol so the principal reaches the CHALLENGE step, then fail it enough
+    // times to trip the §7 threshold. The per-user rate window is the production
+    // default (10/15 min) and the lockout threshold is 10, so the failures are
+    // driven straight against the lockout service rather than through ten HTTP
+    // requests that the limiter would refuse first — the two ceilings are
+    // separately proven (e2e EARS-7.4 / EARS-7.5).
+    idp.setTotpFactor(sub, true);
+    const login = await svc.startLogin(email, password, FP);
+    expect(login.status).toBe("pending");
+
+    for (let attempt = 0; attempt < MFA_LOCKOUT_THRESHOLD - 1; attempt++) {
+      lockout.recordFailure(sub);
+    }
+    const ref = pendingRefFrom(
+      (login as { status: "pending"; cookie: string }).cookie,
+    );
+    const refused = await svc.verifyChallenge(ref, FP, "000000");
+    expect(refused.status).toBe("refused");
+
+    // Fire-and-forget: the send is in flight when the call returns, so the
+    // assertion waits for it rather than assuming it already happened.
+    await vi.waitFor(() =>
+      expect(mailer.adminLockoutNotices).toEqual([email.toLowerCase()]),
+    );
+
+    // Continuing to guess does NOT re-notify — the notice is one per lock, not
+    // one per attempt, or an attacker could aim a mail flood at an operator.
+    const again = await svc.verifyChallenge(ref, FP, "000000");
+    expect(again.status).toBe("refused");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mailer.adminLockoutNotices).toHaveLength(1);
+  });
+});
+
+/**
+ * The pending reference out of the `Set-Cookie` the login outcome carries — the
+ * same value a browser would send back, read the same way the handler reads it.
+ * No reflection into the store: the test travels the production path.
+ */
+function pendingRefFrom(setCookie: string): string {
+  const ref = /__Host-ds_admin_pending=([^;]+)/.exec(setCookie)?.[1];
+  if (!ref) throw new Error(`no pending reference in ${setCookie}`);
+  return ref;
+}
 
 /** A fake `ExecutionContext` whose handler carries `meta` and request carries `user`. */
 function ctx(meta: AuthzMeta, user: unknown): ExecutionContext {

@@ -141,6 +141,23 @@ const HIGH_STAKES_AUDIT_COVERAGE: Record<string, Coverage> = {
     coveredBy:
       "mfa-enroll.e2e (011 EARS-5.4): enrollment appends exactly one auth.mfa.enrolled row carrying method: totp + tier: admin, plus the one auth.session.created of the in-place upgrade",
   },
+  "POST /v1/admin/auth/mfa/verify": {
+    // 011 EARS-6/EARS-7: the challenge. A correct code satisfies the login's
+    // second factor (`auth.mfa.used`) and upgrades the pending authentication in
+    // place (`auth.session.created`); a refused one appends `auth.mfa.failure`,
+    // and the attempt that crosses the §7 threshold additionally appends
+    // `auth.lockout.triggered`. All four are listed because this route is the
+    // producing site for each — a lockout row with no failure rows behind it, or
+    // vice versa, is precisely the evidence gap this registry exists to catch.
+    emits: [
+      "MfaChallengeSucceeded",
+      "AdminSessionEstablished",
+      "MfaChallengeFailed",
+      "LockoutTriggered",
+    ],
+    coveredBy:
+      "mfa-challenge.e2e (011 EARS-6.1/7.3/7.4): the challenge appends auth.mfa.used + auth.session.created on success, auth.mfa.failure on every refusal (both verify surfaces, discriminated by metadata.stage), and exactly one auth.lockout.triggered with reason mfa_attempts at the §7 threshold",
+  },
   "POST /v1/admin/auth/logout": {
     // 011 EARS-2: terminates the admin session record only — the concurrent
     // portal session (and its own `auth.session.terminated` row) is untouched.

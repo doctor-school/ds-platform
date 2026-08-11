@@ -80,6 +80,15 @@ routes:
     route: /mfa/enroll
     file: apps/admin/app/mfa/enroll/page.tsx
     status: product-ready
+  # 011 EARS-6/12: the TOTP challenge screen — the one every admin login after the
+  # first passes through. A real product deliverable in the same Stage-A language
+  # as the enrollment card it follows, driven live in
+  # `apps/admin/e2e/mfa-login.spec.ts` and axe-scanned (clean + error state) in
+  # `apps/admin/e2e/a11y/a11y-axe.e2e.spec.ts`.
+  - app: admin
+    route: /mfa/challenge
+    file: apps/admin/app/mfa/challenge/page.tsx
+    status: product-ready
   - app: admin
     route: /events
     file: apps/admin/app/events/page.tsx

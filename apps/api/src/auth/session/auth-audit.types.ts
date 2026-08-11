@@ -77,6 +77,34 @@ export type AdminPrimaryAuthFailureReason =
   | "not_permitted";
 
 /**
+ * 011 EARS-7: which of the two TOTP verification surfaces produced a row. Both
+ * the enrollment verify and the challenge verify are "a TOTP verification" to
+ * EARS-7 — one uniform failure, one shared budget, one lockout counter — so they
+ * share the `auth.mfa.*` wire ids and this field is what a forensic reader uses
+ * to tell an enrollment attempt from a login attempt. Audit-only.
+ */
+export type AdminMfaStage = "enrollment" | "challenge";
+
+/**
+ * 011 EARS-7: why a TOTP verification was refused. **Audit-only** — the caller
+ * always receives the one uniform failure, so this reason exists in the ledger
+ * and nowhere else.
+ *
+ * `invalid` deliberately collapses wrong / expired / replayed / no-such-factor:
+ * the BFF delegates the check to a port that answers `boolean` / `session|null`
+ * (the same collapse {@link AuthFailureReason} documents for the 003 verify
+ * paths), so the finer distinction is not observable here and inventing it would
+ * be a row that lies. Widen only if the port starts exposing it.
+ */
+export type AdminMfaFailureReason =
+  /** Wrong, expired, replayed, or against a factor the IdP does not hold. */
+  | "invalid"
+  /** The EARS-7 soft-lock was in force — the code was never checked at all. */
+  | "locked"
+  /** No live pending authentication for this reference / fingerprint / step. */
+  | "no_pending";
+
+/**
  * The auth-event taxonomy (EARS-18). The `type` is the internal (spec/EARS)
  * name; its canonical `auth.<class>.<event>` wire id — owned by
  * identity-auth-rbac-design §7.3 / ADR-0001 §7.3 — is assigned in exactly one
@@ -173,6 +201,30 @@ export type AuthAuditEvent =
   // submitted code are all absent from the event shape itself, so no future
   // mapper edit can leak them into a row.
   | { type: "MfaEnrolled"; sub: string }
+  // EARS-6: a login's second factor satisfied — the canonical `auth.mfa.used`
+  // id of the 011 Event Model. Written on the CHALLENGE path only: the
+  // enrollment path's terminal row is `auth.mfa.enrolled` (the same code both
+  // registered the factor and proved possession, and 011's one-terminal-row
+  // discipline does not want two rows for one command).
+  | { type: "MfaChallengeSucceeded"; sub: string }
+  // EARS-7: a REFUSED TOTP verification, on either verify surface. The `sub` is
+  // `null` exactly when no live pending authentication resolved — there is no
+  // subject to name, and inventing one would put an enumeration signal in the
+  // ledger's subject column (the same rule `AdminPrimaryAuthFailed` follows).
+  // Never carries the submitted code (EARS-30 discipline, 011 design §8a).
+  | {
+      type: "MfaChallengeFailed";
+      sub: string | null;
+      stage: AdminMfaStage;
+      reason: AdminMfaFailureReason;
+    }
+  // EARS-7: the §7 lockout threshold (10 failed verifies / 30 min) crossed — the
+  // admin-tier counterpart of 003's `AccountLocked`, which OBSERVES Zitadel's
+  // native password lockout. This one the BFF owns outright, because Zitadel has
+  // no per-subject TOTP-attempt lock the BFF can read. Emitted exactly once per
+  // lock (the attempt that crosses the threshold), never once per attempt while
+  // locked.
+  | { type: "LockoutTriggered"; sub: string }
   // `__Host-ds_admin_session` issued with `mfa = true` (EARS-1).
   | { type: "AdminSessionEstablished"; sub: string; sid: string }
   | {
@@ -217,6 +269,9 @@ export const AUTH_AUDIT_EVENT_TYPES = [
   "AdminPrimaryAuthSucceeded",
   "AdminPrimaryAuthFailed",
   "MfaEnrolled",
+  "MfaChallengeSucceeded",
+  "MfaChallengeFailed",
+  "LockoutTriggered",
   "AdminSessionEstablished",
   "AdminSessionEnded",
   "AdminSessionRejected",

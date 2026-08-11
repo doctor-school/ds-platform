@@ -1,8 +1,11 @@
 import {
   Body,
   Controller,
+  Get,
   Headers,
   HttpCode,
+  HttpException,
+  HttpStatus,
   Ip,
   Post,
   Res,
@@ -11,10 +14,12 @@ import {
 } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
 import type {
+  AdminAuthStateResponse,
   AdminEnrollmentOffer,
   AdminLoginResponse,
   AdminLogoutResponse,
   AdminMfaEnrollVerifyResponse,
+  AdminMfaVerifyResponse,
 } from "@ds/schemas";
 import { Authz, Public } from "../../authz/index.js";
 import { IdpUnavailableError } from "../idp/idp.types.js";
@@ -28,6 +33,7 @@ import {
 import {
   AdminSessionService,
   type AdminLoginOutcome,
+  type AdminMfaVerifyOutcome,
 } from "./admin-session.service.js";
 import {
   AdminLoginRequestDto,
@@ -70,15 +76,30 @@ const GENERIC_ADMIN_MFA_FAILURE = "verification failed";
 const GENERIC_ADMIN_UNAVAILABLE = "the service is temporarily unavailable";
 
 /**
- * 011 admin auth surface (EARS-2, EARS-3) — the admin tier's own entry points,
- * mounted under the `/v1/admin/**` namespace so `AdminSessionAuthHook` owns their
- * authentication.
+ * The ADR-0001 §7 throttled answer, worded identically to the global
+ * `RateLimitGuard`'s (EARS-13/16): it names no threshold, no dimension and no
+ * account. This is not a second failure taxonomy sneaking past EARS-7 — it
+ * reports the CALLER's own attempt rate, which the caller already knows, and it
+ * is the same answer the guard gives every over-rate caller on this route.
+ */
+const GENERIC_ADMIN_THROTTLED = "too many requests, please try again later";
+
+/**
+ * 011 admin auth surface (EARS-2, EARS-3, EARS-5, EARS-6, EARS-7) — the admin
+ * tier's own entry points, mounted under the `/v1/admin/**` namespace so
+ * `AdminSessionAuthHook` owns their authentication.
  *
- * **What this slice deliberately does not have.** The enrollment and challenge
- * endpoints (`/mfa/enroll/start`, `/mfa/enroll/verify`, `/mfa/verify`) land with
- * EARS-4/5/6 in #1191/#1192. Until they do, a pending authentication has nowhere
- * to go — which is the WBS sequencing of the 011 chain, stated plainly rather
- * than papered over with a stub that would have to be un-built later.
+ * The whole arc lives here: primary auth produces a pending authentication and no
+ * session; enrollment or challenge turns that pending authentication into
+ * `__Host-ds_admin_session` in place (LD-1); `GET state` is the one read the admin
+ * app routes on, because the cookies carrying the answer are `HttpOnly`. Every
+ * second-factor refusal on this controller is one uniform 401, and the routes
+ * that can refuse one share a single tail ({@link issueAdminSession}) so they
+ * cannot drift apart.
+ *
+ * Still out of this controller by WBS: `DELETE /v1/admin/users/:id/mfa` (EARS-13,
+ * the LD-2 operator recovery), whose Issue is open and whose absence is stated
+ * rather than papered over with a stub that would have to be un-built later.
  */
 @Controller({ path: "admin/auth", version: "1" })
 export class AdminAuthController {
@@ -223,20 +244,135 @@ export class AdminAuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<AdminMfaEnrollVerifyResponse> {
     const ref = parseCookies(cookieHeader)[ADMIN_PENDING_COOKIE_NAME] ?? "";
-    const upgraded = await this.admin.verifyEnrollment(
+    const outcome = await this.admin.verifyEnrollment(
       ref,
       computeFingerprint({ userAgent, ip, acceptLanguage }),
       dto.code,
     );
-    if (!upgraded) throw new UnauthorizedException(GENERIC_ADMIN_MFA_FAILURE);
+    this.issueAdminSession(outcome, reply);
+    return { state: "active" };
+  }
+
+  /**
+   * EARS-6 — `VerifyMfaChallenge`. The second factor of every admin login after
+   * the first. An **enrolled** `platform_admin` who completed primary auth holds
+   * only a pending reference; a correct, unexpired, not-previously-used code
+   * verified against their registered factor is the single thing that turns it
+   * into `__Host-ds_admin_session` (upgraded in place, LD-1) — and nothing on the
+   * admin surface is reachable until it does.
+   *
+   * `access: pending-auth` and the `mfa_challenge_required` step specifically: a
+   * principal still owing enrollment cannot reach this route, and a caller
+   * already holding an admin session is not pending and gets the same refusal.
+   *
+   * Every refusal — wrong code, expired window, replayed code, soft-locked
+   * account, stale or foreign pending reference — is the same 401 with the same
+   * body, under `@TimingEqualized()` (EARS-7). The pending authentication
+   * survives it, so a mistyped code leaves the operator on the challenge screen
+   * rather than back at the login form.
+   */
+  @Post("mfa/verify")
+  @Public()
+  @RateLimited()
+  @TimingEqualized()
+  @HttpCode(200)
+  @Authz({
+    access: "pending-auth",
+    roles: ["platform_admin"],
+    check: "none",
+    audit: "high-stakes",
+    tests: ["EARS-6", "EARS-7"],
+  })
+  async verifyMfaChallenge(
+    @Body() dto: AdminMfaCodeRequestDto,
+    @Headers("cookie") cookieHeader: string | undefined,
+    @Headers("user-agent") userAgent: string | undefined,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @Ip() ip: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<AdminMfaVerifyResponse> {
+    const ref = parseCookies(cookieHeader)[ADMIN_PENDING_COOKIE_NAME] ?? "";
+    const outcome = await this.admin.verifyChallenge(
+      ref,
+      computeFingerprint({ userAgent, ip, acceptLanguage }),
+      dto.code,
+    );
+    this.issueAdminSession(outcome, reply);
+    return { state: "active" };
+  }
+
+  /**
+   * EARS-6 — `ReadAdminAuthState`. The one client-readable read the admin app
+   * routes on: login form, enrollment screen, challenge screen, or the app.
+   *
+   * It exists because the three cookies that hold the answer are unreadable to
+   * the app by design — `__Host-ds_admin_session` and `__Host-ds_admin_pending`
+   * are `HttpOnly` — so "where am I in this flow?" has to be a server read. It
+   * returns the state enum and NOTHING else: no attempt budget, no lock
+   * indicator, no factor id, no subject (design §9, Read models). One disclosure
+   * rule binds this route and the verify routes alike; a locked account's
+   * response here is byte-identical to an unlocked one in the same state.
+   *
+   * `access: public` is the honest classification: it must answer a caller with
+   * no credential at all (`unauthenticated`), which is precisely how the login
+   * screen learns it should render the form. It is a read — no CSRF proof is owed
+   * (EARS-10 covers state-changing methods) and none is asked for.
+   */
+  @Get("state")
+  @Public()
+  @HttpCode(200)
+  // `audit: low-stakes` — a read that changes nothing and resolves no principal
+  // owes no terminal ledger row; claiming `high-stakes` would advertise a row
+  // nothing writes (endpoint-authz design §3).
+  @Authz({
+    access: "public",
+    check: "none",
+    audit: "low-stakes",
+    tests: ["EARS-6"],
+  })
+  async readAuthState(
+    @Headers("cookie") cookieHeader: string | undefined,
+    @Headers("user-agent") userAgent: string | undefined,
+    @Headers("accept-language") acceptLanguage: string | undefined,
+    @Ip() ip: string,
+  ): Promise<AdminAuthStateResponse> {
+    const cookies = parseCookies(cookieHeader);
+    const state = await this.admin.readState({
+      sid: cookies[ADMIN_SESSION_COOKIE_NAME],
+      pendingRef: cookies[ADMIN_PENDING_COOKIE_NAME],
+      fingerprint: computeFingerprint({ userAgent, ip, acceptLanguage }),
+    });
+    return { state };
+  }
+
+  /**
+   * The shared tail of both verify handlers (EARS-5, EARS-6): translate the
+   * verification outcome into cookies or the uniform refusal.
+   *
+   * Written once because the two surfaces must be indistinguishable to a caller
+   * (EARS-7) — including in status code, body, and which cookies come back. Two
+   * copies would be two chances for one of them to grow a distinguishing detail.
+   */
+  private issueAdminSession(
+    outcome: AdminMfaVerifyOutcome,
+    reply: FastifyReply,
+  ): void {
+    if (outcome.status === "throttled") {
+      throw new HttpException(
+        GENERIC_ADMIN_THROTTLED,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    if (outcome.status !== "verified") {
+      throw new UnauthorizedException(GENERIC_ADMIN_MFA_FAILURE);
+    }
     // The admin session pair, plus the clearing of the pending cookie the
     // upgrade consumed — a pending reference never coexists with the session it
     // became (design §8).
     reply.header("set-cookie", [
-      ...upgraded.cookies,
+      ...outcome.cookies,
       this.admin.clearPending(),
     ]);
-    return { state: "active" };
   }
 
   /**

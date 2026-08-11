@@ -245,6 +245,46 @@ export function toLedgerRow(
         reason: null,
         metadata: { method: "totp", tier: ADMIN_TIER },
       };
+    case "MfaChallengeSucceeded":
+      // EARS-6/EARS-9: the canonical `auth.mfa.used` id of the 011 Event Model —
+      // "a login's second factor satisfied". Distinct from `auth.mfa.enrolled`
+      // (a factor came into existence) because a forensic reader asking "when did
+      // this operator last prove possession?" must not have to guess which of the
+      // two a row meant.
+      return {
+        eventType: "auth.mfa.used",
+        subjectId: event.sub,
+        sid: null,
+        reason: null,
+        metadata: { method: "totp", tier: ADMIN_TIER },
+      };
+    case "MfaChallengeFailed":
+      // EARS-7/EARS-9: `auth.mfa.failure`, written by BOTH verify surfaces — the
+      // enrollment verify had no failure row at all before this slice, which made
+      // "10 failed attempts" a threshold with no evidence trail behind it. `stage`
+      // separates the two surfaces without splitting the wire id, exactly as
+      // `tier` separates admin from portal inside a shared class (design §8a).
+      // The submitted code is absent from the event SHAPE, so no future edit to
+      // this mapper can leak it into a row.
+      return {
+        eventType: "auth.mfa.failure",
+        subjectId: event.sub,
+        sid: null,
+        reason: event.reason,
+        metadata: { method: "totp", stage: event.stage, tier: ADMIN_TIER },
+      };
+    case "LockoutTriggered":
+      // EARS-7: the admin-tier soft-lock. Shares 003's canonical
+      // `auth.lockout.triggered` id; `reason: "mfa_attempts"` is what separates a
+      // BFF-owned TOTP-attempt lock from the `lock` rows that merely OBSERVE
+      // Zitadel's native password lockout (`AccountLocked`).
+      return {
+        eventType: "auth.lockout.triggered",
+        subjectId: event.sub,
+        sid: null,
+        reason: "mfa_attempts",
+        metadata: { tier: ADMIN_TIER },
+      };
     case "AdminSessionEstablished":
       return {
         eventType: "auth.session.created",

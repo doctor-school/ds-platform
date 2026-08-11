@@ -141,6 +141,54 @@ function accountExistsMessage(portalBaseUrl: string): {
   return { subject, text, html };
 }
 
+/**
+ * Subject + RU body of the 011 EARS-7 admin-lockout notice — carries NO secret,
+ * NO attempt count, and NO remaining-time figure.
+ *
+ * The recipient of this mail is, by construction, an account someone has just
+ * failed ten second-factor attempts against — so the mailbox may well be the
+ * attacker's next target and the mail itself must not become the progress report
+ * the uniform-failure rule spends a whole clause denying (EARS-7). It states the
+ * fact (temporarily locked), the reassurance (nothing was changed), and the one
+ * recovery path the spec actually ships (LD-2: the Tech Lead removes the factor,
+ * the next login re-enters enrollment).
+ */
+function adminLockoutMessage(): {
+  subject: string;
+  text: string;
+  html: string;
+} {
+  const subject = "Doctor.School — вход в панель администрирования временно заблокирован";
+  const text = [
+    "Здравствуйте!",
+    "",
+    "Мы временно заблокировали вход в панель администрирования Doctor.School " +
+      "для вашей учётной записи: одноразовый код вводился неверно слишком " +
+      "много раз подряд.",
+    "",
+    "Пароль и данные учётной записи не изменились. Попробуйте войти позже.",
+    "",
+    "Если приложение-аутентификатор недоступно, обратитесь к техническому " +
+      "руководителю — он снимет старый фактор, и вы подключите приложение заново.",
+    "",
+    "Если это были не вы, сообщите об этом техническому руководителю.",
+    "",
+    "Команда Doctor.School",
+  ].join("\n");
+  const html = [
+    `<p>Здравствуйте!</p>`,
+    `<p>Мы временно заблокировали вход в панель администрирования ` +
+      `Doctor.School для вашей учётной записи: одноразовый код вводился ` +
+      `неверно слишком много раз подряд.</p>`,
+    `<p>Пароль и данные учётной записи не изменились. Попробуйте войти позже.</p>`,
+    `<p>Если приложение-аутентификатор недоступно, обратитесь к техническому ` +
+      `руководителю — он снимет старый фактор, и вы подключите приложение заново.</p>`,
+    `<p>Если это были не вы, сообщите об этом техническому руководителю.</p>`,
+    `<p>Команда Doctor.School</p>`,
+  ].join("\n");
+  return { subject, text, html };
+}
+
 /** Default transport builder — wraps `nodemailer.createTransport`. */
 const nodemailerFactory: TransportFactory = (opts) =>
   createTransport(opts) as unknown as SmtpTransport;
@@ -194,6 +242,16 @@ export class SmtpMailer implements Mailer {
       email,
       accountExistsMessage(this.config.portalBaseUrl),
       "account-exists notice",
+    );
+  }
+
+  async sendAdminLockoutNotice(email: string): Promise<void> {
+    // Parity guard first, exactly as the account-exists notice does.
+    assertSendableEmail(email);
+    await this.dispatch(
+      email,
+      adminLockoutMessage(),
+      "admin-lockout notice",
     );
   }
 

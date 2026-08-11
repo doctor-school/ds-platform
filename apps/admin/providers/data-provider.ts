@@ -1,6 +1,7 @@
 "use client";
 
 import type { DataProvider, HttpError } from "@refinedev/core";
+import { adminCsrfHeaders } from "@/lib/admin-auth";
 import type {
   ConfigureStreamRequest,
   CreateEventRequest,
@@ -13,8 +14,15 @@ import type {
  * Custom Refine REST data provider over the NestJS 007 admin surface (ADR-0004 §5
  * — Refine + custom REST data provider). Every call hits the RELATIVE `/v1/admin/*`
  * path with `credentials: "include"`, so it rides the admin's own origin and the
- * `__Host-ds_session` `platform_admin` cookie the shipped 003 BFF set (proxied to
- * the api by `next.config.ts` `rewrites()`). No absolute api URL, no token in JS.
+ * `__Host-ds_admin_session` cookie the 011 admin tier issued (proxied to the api
+ * by `next.config.ts` `rewrites()`). No absolute api URL, no token in JS.
+ *
+ * **Every state-changing call carries the EARS-10 CSRF double-submit header.**
+ * Since 011 an admin route refuses a POST/PATCH/PUT/DELETE whose
+ * `x-ds-admin-csrf` header does not match the readable `__Host-ds_admin_csrf`
+ * cookie — `SameSite=Strict` already makes a cross-site write hard to reach, and
+ * the double-submit is the defence-in-depth ADR-0004 design §3.2.1 asks for on
+ * top of it. Reads owe no proof and send none.
  *
  * The `events` resource maps to the design §7 endpoints:
  *   getList  → GET   /v1/admin/events            (EventAdminList)
@@ -90,6 +98,7 @@ export const dataProvider: DataProvider = {
     const res = await fetch(`${ADMIN_BASE}/events`, {
       method: "POST",
       credentials: "include",
+      headers: adminCsrfHeaders(),
       body: toAuthoringForm(variables as CreateEventVars),
     });
     if (!res.ok) throw await toHttpError(res);
@@ -102,6 +111,7 @@ export const dataProvider: DataProvider = {
     const res = await fetch(`${ADMIN_BASE}/events/${id}`, {
       method: "PATCH",
       credentials: "include",
+      headers: adminCsrfHeaders(),
       body: toAuthoringForm(variables as UpdateEventVars),
     });
     if (!res.ok) throw await toHttpError(res);
@@ -126,9 +136,14 @@ export const dataProvider: DataProvider = {
     const res = await fetch(url, {
       method: (method ?? "post").toUpperCase(),
       credentials: "include",
-      headers: hasBody
-        ? { "content-type": "application/json", accept: "application/json" }
-        : { accept: "application/json" },
+      // A `get` through `custom` is a read and owes no CSRF proof; everything
+      // else on this path is a state-changing admin command (EARS-10).
+      headers: {
+        ...(hasBody
+          ? { "content-type": "application/json", accept: "application/json" }
+          : { accept: "application/json" }),
+        ...(method === "get" ? {} : adminCsrfHeaders()),
+      },
       body: hasBody
         ? JSON.stringify(payload as ConfigureStreamRequest | undefined)
         : undefined,

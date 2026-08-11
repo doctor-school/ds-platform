@@ -18,6 +18,10 @@ import {
 import { Form, FormField } from "@ds/design-system/form";
 import { QrCode } from "@/components/qr-code";
 import { startMfaEnrollment, verifyMfaEnrollment } from "@/lib/admin-auth";
+import {
+  mfaFailurePresentation,
+  type MfaFailurePresentation,
+} from "@/lib/mfa-failure";
 
 /** The TOTP code length the provisioning URI this screen renders declares (`digits=6`). */
 const CODE_LENGTH = 6;
@@ -48,14 +52,19 @@ interface CodeForm {
  * the screen gets a fresh factor rather than a second look at the old one. Copy
  * resolves from the RU catalog; every refusal renders one message, because the
  * API answers every refusal identically (EARS-7) and a client-side taxonomy would
- * leak exactly what the server refused to disclose.
+ * leak exactly what the server refused to disclose. The exceptions are the two
+ * answers about the SERVICE rather than the account — the rate limit (429) and an
+ * IdP outage (503, #1213) — mapped for both MFA screens by
+ * `mfaFailurePresentation`. An outage on the OFFER call is the one refusal that
+ * must not bounce the operator to `/login`: there is nothing to fix by logging in
+ * again, and the second attempt would hit the same downed IdP at the password step.
  */
 export default function MfaEnrollPage() {
   const t = useTranslations("mfaEnroll");
   const router = useRouter();
   const [offer, setOffer] = useState<AdminEnrollmentOffer | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<MfaFailurePresentation | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const form = useForm<CodeForm>({ defaultValues: { code: "" } });
   const code = form.watch("code");
@@ -65,10 +74,18 @@ export default function MfaEnrollPage() {
     void startMfaEnrollment().then((result) => {
       if (cancelled) return;
       setLoading(false);
-      // Not a pending-enrollment principal (no pending reference, an expired one,
-      // or one owing a different step): send them to the login form rather than
-      // render an empty card that suggests the flow is broken.
       if (!result.ok) {
+        // The IdP is down (503): the operator IS a pending-enrollment principal
+        // and nothing about their credentials is wrong, so bouncing them to
+        // /login would hide the real cause behind a second failing login. Say
+        // what is true and leave them where a reload can succeed.
+        if (result.outage) {
+          setFailure(mfaFailurePresentation(result));
+          return;
+        }
+        // Not a pending-enrollment principal (no pending reference, an expired
+        // one, or one owing a different step): send them to the login form rather
+        // than render an empty card that suggests the flow is broken.
         router.replace("/login");
         return;
       }
@@ -83,23 +100,28 @@ export default function MfaEnrollPage() {
     async ({ code }: CodeForm) => {
       if (submitting) return;
       setSubmitting(true);
-      setError(null);
+      setFailure(null);
       const result = await verifyMfaEnrollment(code);
       setSubmitting(false);
       if (!result.ok) {
-        // The API answers every refusal identically (EARS-7) except the ADR-0001
-        // §7 rate limit, which is about the operator's own attempt rate rather
-        // than the account — telling them to wait beats telling them a correct
-        // code is wrong.
-        setError(result.throttled ? t("errorThrottled") : t("errorGeneric"));
-        // Clear + refocus so the next code goes straight in. The CTA disables
-        // itself while the field is short of six digits (see the button below),
-        // so the operator is never left clicking a control that cannot act —
-        // the #1191 Stage-B finding: an enabled submit over an EMPTY code field
-        // reads as a broken button, because the six-digit constraint would
-        // reject it before any verification path ran.
-        form.setValue("code", "");
-        form.setFocus("code");
+        // The API answers every refusal identically (EARS-7) except the two that
+        // are about the service, not the account: the ADR-0001 §7 rate limit and
+        // an IdP outage. Telling an operator to wait — or that the checker is
+        // down — beats telling them a correct code is wrong.
+        setFailure(mfaFailurePresentation(result));
+        // A CHECKED code that failed is spent: clear + refocus so the next one
+        // goes straight in. An outage code was never checked, so it is kept —
+        // that is what "submit stays active" means here (Stage-A, #1213): a
+        // service back within the code's 30-second window is one click away.
+        // The CTA disables itself while the field is short of six digits (see
+        // the button below), so the operator is never left clicking a control
+        // that cannot act — the #1191 Stage-B finding: an enabled submit over an
+        // EMPTY code field reads as a broken button, because the six-digit
+        // constraint would reject it before any verification path ran.
+        if (!result.outage) {
+          form.setValue("code", "");
+          form.setFocus("code");
+        }
         return;
       }
       // LD-1: the verify response carried `__Host-ds_admin_session` — the login is
@@ -108,6 +130,16 @@ export default function MfaEnrollPage() {
     },
     [form, router, submitting, t],
   );
+
+  // One alert, two possible hosts: the verify form when an offer is on screen, and
+  // the card itself when the offer call is what failed (an outage — the only
+  // no-offer refusal that stays on this screen). Same element either way, so the
+  // two paths cannot drift into two different-looking outage states.
+  const failureAlert = failure ? (
+    <Alert variant={failure.variant} data-testid={failure.testId}>
+      {t(failure.messageKey)}
+    </Alert>
+  ) : null;
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md items-center px-6">
@@ -120,6 +152,8 @@ export default function MfaEnrollPage() {
           {loading ? (
             <p className="text-sm text-muted-foreground">{t("loading")}</p>
           ) : null}
+
+          {!offer ? failureAlert : null}
 
           {offer ? (
             <>
@@ -168,11 +202,7 @@ export default function MfaEnrollPage() {
                   noValidate
                   onSubmit={form.handleSubmit(submit)}
                 >
-                  {error ? (
-                    <Alert variant="danger" data-testid="mfa-error">
-                      {error}
-                    </Alert>
-                  ) : null}
+                  {failureAlert}
                   <FormField
                     control={form.control}
                     name="code"

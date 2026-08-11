@@ -27,22 +27,37 @@ export const ADMIN_CSRF_COOKIE_NAME = "__Host-ds_admin_csrf";
 export const ADMIN_CSRF_HEADER = "x-ds-admin-csrf";
 
 /**
- * Outcome of an admin-auth call — deliberately two-valued, mirroring the API.
+ * Outcome of an admin-auth call — one uniform refusal, plus two carve-outs that
+ * are not refusals OF THE SUBMITTED CREDENTIAL at all.
  *
  * Every refusal the API makes is one uniform 401 (EARS-7): a wrong code, an
  * expired window, a replay, a soft-locked account, a stale pending reference.
  * The client does not get to invent a taxonomy the server refused to expose — so
- * this carries no reason, and the screens render one message for all of them.
- * `throttled` is the one genuinely different answer: it is the ADR-0001 §7 rate
- * limit reporting the CALLER's own attempt rate, not a fact about the account,
- * and an operator who is told "try again in a moment" is better served than one
- * told their correct code is wrong.
+ * that arm carries no reason, and the screens render one message for all of them.
+ *
+ * The two flags below are carve-outs precisely because neither describes the
+ * account, so neither can leak what the 401 spends a clause hiding:
+ *
+ * - `throttled` (**429**) — the ADR-0001 §7 rate limit reporting the CALLER's own
+ *   attempt rate. An operator told "try again in a moment" is better served than
+ *   one told their correct code is wrong.
+ * - `outage` (**503**) — `IdpUnavailableError`: the verification service is down,
+ *   so the code was never checked and no attempt budget was spent (#1212). Folding
+ *   it into the uniform message tells an operator holding a CORRECT code that the
+ *   code is wrong and sends them to re-check a phone clock that is fine — the
+ *   #1213 defect. Honest unavailability is disclosed; account state is not.
  */
 export type AdminAuthResult<T> =
   | { ok: true; value: T }
-  | { ok: false; refused: true; throttled?: boolean };
+  | { ok: false; refused: true; throttled?: boolean; outage?: boolean };
 
-function refusal(res: Response): { ok: false; refused: true; throttled?: boolean } {
+function refusal(res: Response): {
+  ok: false;
+  refused: true;
+  throttled?: boolean;
+  outage?: boolean;
+} {
+  if (res.status === 503) return { ok: false, refused: true, outage: true };
   return res.status === 429
     ? { ok: false, refused: true, throttled: true }
     : { ok: false, refused: true };

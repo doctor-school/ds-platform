@@ -202,9 +202,11 @@ export class AdminAuthController {
     @Ip() ip: string,
   ): Promise<AdminEnrollmentOffer> {
     const ref = parseCookies(cookieHeader)[ADMIN_PENDING_COOKIE_NAME] ?? "";
-    const offer = await this.admin.startEnrollment(
-      ref,
-      computeFingerprint({ userAgent, ip, acceptLanguage }),
+    const offer = await this.mapIdpFault(() =>
+      this.admin.startEnrollment(
+        ref,
+        computeFingerprint({ userAgent, ip, acceptLanguage }),
+      ),
     );
     if (!offer) throw new UnauthorizedException(GENERIC_ADMIN_MFA_FAILURE);
     return offer;
@@ -244,10 +246,12 @@ export class AdminAuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<AdminMfaEnrollVerifyResponse> {
     const ref = parseCookies(cookieHeader)[ADMIN_PENDING_COOKIE_NAME] ?? "";
-    const outcome = await this.admin.verifyEnrollment(
-      ref,
-      computeFingerprint({ userAgent, ip, acceptLanguage }),
-      dto.code,
+    const outcome = await this.mapIdpFault(() =>
+      this.admin.verifyEnrollment(
+        ref,
+        computeFingerprint({ userAgent, ip, acceptLanguage }),
+        dto.code,
+      ),
     );
     this.issueAdminSession(outcome, reply);
     return { state: "active" };
@@ -292,10 +296,12 @@ export class AdminAuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<AdminMfaVerifyResponse> {
     const ref = parseCookies(cookieHeader)[ADMIN_PENDING_COOKIE_NAME] ?? "";
-    const outcome = await this.admin.verifyChallenge(
-      ref,
-      computeFingerprint({ userAgent, ip, acceptLanguage }),
-      dto.code,
+    const outcome = await this.mapIdpFault(() =>
+      this.admin.verifyChallenge(
+        ref,
+        computeFingerprint({ userAgent, ip, acceptLanguage }),
+        dto.code,
+      ),
     );
     this.issueAdminSession(outcome, reply);
     return { state: "active" };
@@ -343,6 +349,42 @@ export class AdminAuthController {
       fingerprint: computeFingerprint({ userAgent, ip, acceptLanguage }),
     });
     return { state };
+  }
+
+  /**
+   * The shared IdP-fault mapping of every pending-auth second-factor route
+   * (EARS-5, EARS-6) — the mirror of the one `login` applies: a genuine IdP infra
+   * fault is the same generic 503 "unavailable", never a bare 500 (#202, #1211).
+   *
+   * This is a security control, not cosmetics — for the same reason it is one on
+   * `login`. The TOTP seam fails LOUD (#1208: `startTotpRegistration`,
+   * `verifyTotpRegistration` and `checkTotpFactor` throw rather than resolve "not
+   * verified", so an outage can never be reported as a wrong code). Unmapped, that
+   * throw would surface a 500 — a THIRD answer beside the uniform 401 (EARS-7) and
+   * the 429 — reachable only by a caller who already holds a live pending
+   * authentication, i.e. one who passed primary auth on a `platform_admin`. The
+   * outage must not become the one status that confirms it.
+   *
+   * All three pending-auth routes take it, not just the two verifies: an operator
+   * whose enrollment START faults gets the same honest "come back later" as one
+   * whose code check faults, and one unmapped sibling would be the only route on
+   * this controller that still turns an outage into a 500.
+   *
+   * The mapping lives here, in the handler, so the terminal error still travels
+   * through `TimingEqualizationInterceptor`'s padded branch, exactly like the
+   * refusal it must be indistinguishable from in timing. An outage is not a failed
+   * attempt: the throw leaves `verifyFactor` before its failure accounting, so no
+   * `auth.mfa.failure` row is written and no lockout unit is spent.
+   */
+  private async mapIdpFault<T>(call: () => Promise<T>): Promise<T> {
+    try {
+      return await call();
+    } catch (err) {
+      if (err instanceof IdpUnavailableError) {
+        throw new ServiceUnavailableException(GENERIC_ADMIN_UNAVAILABLE);
+      }
+      throw err;
+    }
   }
 
   /**

@@ -1506,6 +1506,99 @@ export class ZitadelIdpClient implements IdpClient {
   }
 
   /**
+   * 011 EARS-13: the project roles `sub` holds, read through the management-v1
+   * **user-grant search** RPC (`POST /management/v1/users/grants/_search` with a
+   * `userIdQuery`), scoped to this deployment's org and filtered to its project.
+   *
+   * Zitadel keeps at most ONE grant per user+project, carrying a `roleKeys`
+   * array — so the project's grant, if present, is the whole answer. Grants for
+   * other projects in the same org are filtered out: a role key that means
+   * "admin" somewhere else must not be readable as `platform_admin` here.
+   *
+   * **Wire shape proven live (#1194, v4.15 dev-stand).** The docblock is not an
+   * assumption — the RPC was probed against the stand's Zitadel before this
+   * shipped, because the dangerous branch here is the QUIET one: a 200 carrying a
+   * different shape (another result key, or `projectId` absent from the
+   * projection) yields `[]`, `requiresMfa([])` is false, and the LD-2 recovery
+   * route goes silently dead behind a uniform 401 — indistinguishable from a
+   * policy refusal. That is the #1208 class of failure (an unproven Zitadel route
+   * assumption that shipped and composed into an admin-MFA bypass). Recorded
+   * results:
+   *   • `POST /management/v1/users/grants/_search` + `{ queries: [{ userIdQuery:
+   *     { userId } }] }` → **200**, `{ details, result: [{ id, roleKeys, state,
+   *     userId, orgId, projectId, … }] }`; a multi-role holder came back as
+   *     `roleKeys: ["doctor_guest", "platform_admin"]`, so the flattening below
+   *     is over the real shape.
+   *   • `x-zitadel-orgid` is accepted on this hop → **200** (see the org note).
+   * The shape is additionally pinned by `zitadel.idp.spec.ts` → «getProjectRoles
+   * wire shape», so a future Zitadel that answers 200 with a renamed key fails a
+   * test rather than silently emptying the role set.
+   *
+   * **Org scoping is explicit, matching {@link grantProjectRole}.** The write
+   * sends `organizationId` from {@link resolveOrgId}; without the matching
+   * `x-zitadel-orgid` here the search would fall back to the service token's own
+   * org, so a deployment whose `IDP_ORG_ID` names a different org would WRITE the
+   * grant to org A and READ roles from org B — `[]`, and a permanently refused
+   * recovery route. Symmetric scoping removes that failure mode entirely.
+   *
+   * **Why the deprecated management-v1 surface.** #203 records management-v1 as
+   * deprecated wholesale in the v4.15 proto, which is why the *write* moved to
+   * `zitadel.authorization.v2.AuthorizationService/CreateAuthorization`. Its read
+   * counterpart `ListAuthorizations` IS routed on this instance (it answers a
+   * `400 invalid_argument`, not a 404) but rejected every
+   * `AuthorizationsSearchFilter` field name probed in #1194 — so migrating the
+   * read needs a proto-verified filter shape and its own live proof, which is
+   * more than this slice can honestly carry. Until then this joins the other
+   * management-v1 reads already in the adapter ({@link hasTotpFactor},
+   * {@link resolveOrgId}) under one tracked migration (`DEBT.md`, 2026-08-11).
+   *
+   * **Fails loudly, never open.** Any non-2xx, transport fault, absent project
+   * config, or failed org resolution throws {@link IdpUnavailableError} (→ 503).
+   * The caller refuses when the roles do not qualify, so a swallowed fault
+   * returning `[]` would present an outage as a policy refusal — and would do it
+   * on the recovery path an operator reaches for precisely when things are
+   * already broken.
+   */
+  async getProjectRoles(sub: string): Promise<string[]> {
+    if (!this.config.projectId) {
+      throw new IdpUnavailableError(
+        "zitadel project config (IDP_PROJECT_ID) is not set; cannot read the project roles",
+      );
+    }
+    // Throws `IdpUnavailableError` on its own failure paths, so the fail-loud
+    // contract holds across the org hop too.
+    const orgId = await this.resolveOrgId();
+    let res: Awaited<ReturnType<FetchLike>>;
+    try {
+      res = await this.fetchImpl(
+        this.url("/management/v1/users/grants/_search"),
+        {
+          method: "POST",
+          headers: { ...this.headers(), "x-zitadel-orgid": orgId },
+          body: JSON.stringify({
+            queries: [{ userIdQuery: { userId: sub } }],
+          }),
+        },
+      );
+    } catch (cause) {
+      throw new IdpUnavailableError(
+        `zitadel user-grant read failed: ${(cause as Error).message}`,
+      );
+    }
+    if (!res.ok) {
+      throw new IdpUnavailableError(
+        `zitadel user-grant read failed: HTTP ${res.status}`,
+      );
+    }
+    const data = (await res.json()) as {
+      result?: Array<{ projectId?: string; roleKeys?: string[] }>;
+    };
+    return (data.result ?? [])
+      .filter((grant) => grant.projectId === this.config.projectId)
+      .flatMap((grant) => grant.roleKeys ?? []);
+  }
+
+  /**
    * 011 EARS-3: does `sub` hold a **registered (ready)** TOTP factor?
    *
    * Reads Zitadel's per-user authentication factors via the management-v1

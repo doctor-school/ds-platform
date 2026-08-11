@@ -13,6 +13,29 @@ export interface AdminWorld {
   email?: string;
   provider: string;
   embedRef: string;
+  /**
+   * The 011 MFA journey's scenario state (`steps/mfa.steps.ts`). Optional
+   * because the 007 scenarios never establish it — a scenario that submits a
+   * code without having provisioned an operator first is a mis-wired feature
+   * file, and the steps say so rather than resolving to a blank account.
+   */
+  mfa?: MfaWorld;
+  /** The last raw admin-route probe made from the page (011 EARS-2). */
+  probe?: { status: number; body: string };
+}
+
+/** Scenario state for the 011 admin MFA journey. */
+export interface MfaWorld {
+  email: string;
+  password: string;
+  /** The secret the enrollment screen rendered — what the operator's app holds. */
+  secret?: string;
+  /** Login-form submissions this scenario performed, retries included. */
+  signIns: number;
+  /** Primary-auth POSTs the BROWSER actually made — must never exceed `signIns`. */
+  loginPosts: string[];
+  /** The last TOTP time step a code was spent in (a code is single-use). */
+  lastSpentCounter: number;
 }
 
 // playwright-bdd's bddgen detects the custom test instance by the

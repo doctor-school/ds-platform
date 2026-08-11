@@ -454,6 +454,20 @@ export class FakeIdpClient implements IdpClient {
   }
 
   /**
+   * 011 EARS-13: the project roles `sub` holds — the same set
+   * {@link grantedRoles} exposes, as the async IdP read the interface declares.
+   *
+   * Fake/real parity: an unknown sub resolves to `[]` ("holds no project role"),
+   * which is what the real adapter's empty `result[]` means. The real adapter's
+   * fault branch (a throw on any non-2xx) has no fake analogue, so the fake stays
+   * no MORE permissive than the real one — `[]` never opens a door here, it
+   * closes one.
+   */
+  getProjectRoles(sub: string): Promise<string[]> {
+    return Promise.resolve(this.grantedRoles(sub));
+  }
+
+  /**
    * 011 EARS-3: does `sub` hold a REGISTERED (ready) TOTP factor?
    *
    * Fake/real parity (the recorded project rule — a fake is never more

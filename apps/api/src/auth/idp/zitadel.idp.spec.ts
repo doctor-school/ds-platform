@@ -2428,3 +2428,219 @@ describe("ZitadelIdpClient.removeTotpFactor wire shape (011 EARS-13, #1208)", ()
     );
   });
 });
+
+// 011 EARS-13 (#1194 Mode (a)): the target-role floor on the LD-2 factor-removal
+// route rests entirely on this read, and every e2e behind that route runs against
+// `FakeIdpClient` — which answers from an in-memory Map and can never be wrong
+// about the WIRE. So only these tests can see the failure that matters here, and
+// it is the QUIET one: a 200 whose shape differs (a renamed result key, an absent
+// `projectId`) yields `[]`, `requiresMfa([])` is false, and the recovery endpoint
+// goes silently dead behind a uniform 401 — an outage wearing a policy refusal's
+// clothes. Pinned the way `hasTotpFactor` (#1208) is: method + path + org header
+// + body, then each outcome class, with every fault loud rather than semantic.
+//
+// The shape asserted below was probed live against the v4.15 dev-stand Zitadel
+// (#1194): `{ details, result: [{ id, roleKeys, state, userId, orgId, projectId,
+// … }] }`, with a multi-role holder returning
+// `roleKeys: ["doctor_guest", "platform_admin"]`.
+describe("ZitadelIdpClient.getProjectRoles wire shape (011 EARS-13, #1194)", () => {
+  const SEARCH_URL = "http://idp.test:9080/management/v1/users/grants/_search";
+  const ORGS_ME_URL = "http://idp.test:9080/management/v1/orgs/me";
+
+  /** Org id configured ⇒ no orgs/me round-trip in the focused assertions. */
+  const CONFIG = {
+    baseUrl: "http://idp.test:9080",
+    serviceToken: "svc-token",
+    projectId: "proj-1",
+    orgId: "org-1",
+  };
+
+  /** A fetch double recording the grant-search hop (and any orgs/me hop). */
+  function grantsFetch(res: {
+    ok?: boolean;
+    status?: number;
+    json?: unknown;
+    throws?: boolean;
+    orgsMe?: { ok: boolean; status: number; body?: unknown };
+  }): { fetchImpl: FetchLike; calls: ScriptedCall[] } {
+    const calls: ScriptedCall[] = [];
+    const fetchImpl: FetchLike = (url, init) => {
+      calls.push({
+        url,
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
+      });
+      if (url.endsWith("/management/v1/orgs/me")) {
+        const om = res.orgsMe ?? { ok: true, status: 200 };
+        return Promise.resolve({
+          ok: om.ok,
+          status: om.status,
+          json: () =>
+            Promise.resolve(om.body ?? { org: { id: "org-resolved" } }),
+        });
+      }
+      if (res.throws) return Promise.reject(new Error("ECONNREFUSED"));
+      return Promise.resolve({
+        ok: res.ok ?? true,
+        status: res.status ?? 200,
+        json: () => Promise.resolve(res.json ?? {}),
+      });
+    };
+    return { fetchImpl, calls };
+  }
+
+  it("011 EARS-13: POSTs users/grants/_search with a userIdQuery and the org header, and returns the grant's roleKeys", async () => {
+    const { fetchImpl, calls } = grantsFetch({
+      json: {
+        details: { totalResult: "1" },
+        result: [
+          {
+            id: "grant-1",
+            userId: "user-1",
+            orgId: "org-1",
+            projectId: "proj-1",
+            roleKeys: ["doctor_guest", "platform_admin"],
+            state: "USER_GRANT_STATE_ACTIVE",
+          },
+        ],
+      },
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.getProjectRoles("user-1")).resolves.toEqual([
+      "doctor_guest",
+      "platform_admin",
+    ]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe(SEARCH_URL);
+    expect(calls[0]!.method).toBe("POST");
+    expect(calls[0]!.headers.authorization).toBe("Bearer svc-token");
+    // Symmetric with `grantProjectRole`'s `organizationId`: without it the search
+    // falls back to the token's own org, so a deployment with a configured
+    // `IDP_ORG_ID` would write the grant to one org and read roles from another.
+    expect(calls[0]!.headers["x-zitadel-orgid"]).toBe("org-1");
+    expect(JSON.parse(calls[0]!.body ?? "{}")).toEqual({
+      queries: [{ userIdQuery: { userId: "user-1" } }],
+    });
+  });
+
+  it("011 EARS-13: a grant on ANOTHER project is not readable as a role here — the projectId filter is the security claim", async () => {
+    // The whole point of the filter: `platform_admin` granted on some other
+    // project in the same org must not admit its holder to THIS deployment's
+    // factor-removal target check.
+    const { fetchImpl } = grantsFetch({
+      json: {
+        result: [
+          { projectId: "other-proj", roleKeys: ["platform_admin", "admin"] },
+          { projectId: "proj-1", roleKeys: ["doctor_guest"] },
+        ],
+      },
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.getProjectRoles("user-1")).resolves.toEqual([
+      "doctor_guest",
+    ]);
+  });
+
+  it("011 EARS-13: a grant with no roleKeys, and an empty result, both resolve to no roles", async () => {
+    const { fetchImpl } = grantsFetch({
+      json: { result: [{ projectId: "proj-1" }] },
+    });
+    await expect(
+      new ZitadelIdpClient({ ...CONFIG, fetchImpl }).getProjectRoles("user-1"),
+    ).resolves.toEqual([]);
+
+    const empty = grantsFetch({ json: { result: [] } });
+    await expect(
+      new ZitadelIdpClient({
+        ...CONFIG,
+        fetchImpl: empty.fetchImpl,
+      }).getProjectRoles("user-1"),
+    ).resolves.toEqual([]);
+  });
+
+  it("011 EARS-13: a 200 with an unrecognised body shape resolves to no roles — which is exactly why the shape above is pinned", async () => {
+    // This is the QUIET failure the live probe and these assertions exist to
+    // catch: nothing throws, the caller reads "not a platform_admin", and the
+    // recovery route answers a uniform 401 forever. A drifted Zitadel projection
+    // must fail the wire assertion above rather than reach production here.
+    const { fetchImpl } = grantsFetch({
+      json: { authorizations: [{ projectId: "proj-1", roleKeys: ["x"] }] },
+    });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.getProjectRoles("user-1")).resolves.toEqual([]);
+  });
+
+  it("011 EARS-13: a non-2xx throws IdpUnavailableError — an IdP fault never reads as 'holds no role'", async () => {
+    const { fetchImpl } = grantsFetch({ ok: false, status: 500 });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.getProjectRoles("user-1")).rejects.toBeInstanceOf(
+      IdpUnavailableError,
+    );
+  });
+
+  it("011 EARS-13/#203: a 404 throws too — on this instance an unrouted management-v1 verb answers 404 exactly like a legitimate 'not there'", async () => {
+    const { fetchImpl } = grantsFetch({ ok: false, status: 404 });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.getProjectRoles("user-1")).rejects.toBeInstanceOf(
+      IdpUnavailableError,
+    );
+  });
+
+  it("011 EARS-13: a transport-level failure throws IdpUnavailableError", async () => {
+    const { fetchImpl } = grantsFetch({ throws: true });
+    const client = new ZitadelIdpClient({ ...CONFIG, fetchImpl });
+
+    await expect(client.getProjectRoles("user-1")).rejects.toBeInstanceOf(
+      IdpUnavailableError,
+    );
+  });
+
+  it("011 EARS-13: an absent project config fails CLOSED, before any IdP call", async () => {
+    const { fetchImpl, calls } = grantsFetch({ json: { result: [] } });
+    const client = new ZitadelIdpClient({
+      baseUrl: "http://idp.test:9080",
+      serviceToken: "svc-token",
+      fetchImpl,
+    });
+
+    await expect(client.getProjectRoles("user-1")).rejects.toBeInstanceOf(
+      IdpUnavailableError,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  it("011 EARS-13: an unconfigured org is resolved via orgs/me, and a failing resolution is loud", async () => {
+    const resolved = grantsFetch({ json: { result: [] } });
+    const client = new ZitadelIdpClient({
+      baseUrl: "http://idp.test:9080",
+      serviceToken: "svc-token",
+      projectId: "proj-1",
+      fetchImpl: resolved.fetchImpl,
+    });
+    await expect(client.getProjectRoles("user-1")).resolves.toEqual([]);
+    expect(resolved.calls[0]!.url).toBe(ORGS_ME_URL);
+    expect(resolved.calls[1]!.headers["x-zitadel-orgid"]).toBe("org-resolved");
+
+    const broken = grantsFetch({
+      json: { result: [] },
+      orgsMe: { ok: false, status: 503 },
+    });
+    const failing = new ZitadelIdpClient({
+      baseUrl: "http://idp.test:9080",
+      serviceToken: "svc-token",
+      projectId: "proj-1",
+      fetchImpl: broken.fetchImpl,
+    });
+    await expect(failing.getProjectRoles("user-1")).rejects.toBeInstanceOf(
+      IdpUnavailableError,
+    );
+    // The grant search is never attempted without a resolved org scope.
+    expect(broken.calls).toHaveLength(1);
+  });
+});

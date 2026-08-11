@@ -442,6 +442,24 @@ export interface IdpClient {
    */
   grantProjectRole(sub: string, roleKey: string): Promise<void>;
   /**
+   * 011 EARS-13: the Zitadel **project roles** `sub` currently holds.
+   *
+   * The read counterpart of {@link grantProjectRole}, and for the same reason:
+   * Zitadel is the authz authority and the `users.role` column is a downstream
+   * mirror, so a decision about *what kind of principal an account is* has to ask
+   * the IdP rather than our projection. Its one caller today is the LD-2 factor
+   * removal, which must establish that the account whose second factor it is
+   * about to delete is a mandatory-MFA principal (`platform_admin`) and not an
+   * arbitrary user id an operator mistyped into the path.
+   *
+   * **Fails loudly, never open** — an IdP fault throws
+   * {@link IdpUnavailableError} (→ 503). An empty array must mean "this account
+   * genuinely holds no project role", because the caller treats it as grounds to
+   * refuse; returning `[]` for an unreachable IdP would turn an outage into a
+   * silent refusal of a legitimate recovery.
+   */
+  getProjectRoles(sub: string): Promise<string[]>;
+  /**
    * 011 EARS-3: does `sub` hold a **registered** (ready) TOTP factor at the IdP?
    *
    * The single factor-existence READ the `role → mfa_required` fork needs to

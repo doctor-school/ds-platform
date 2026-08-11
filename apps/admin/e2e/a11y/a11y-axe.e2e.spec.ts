@@ -95,73 +95,8 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     for (const theme of THEMES) await scan(page, theme);
   });
 
-  test("011 EARS-12: the TOTP enrollment screen passes WCAG 2 A/AA (light)", async ({
-    page,
-  }) => {
-    // The 011 forced-enrollment screen is reachable only for a principal holding
-    // a live pending-auth reference (EARS-4), so the scan drives the real admin
-    // primary auth first rather than scanning an empty shell. The screen is
-    // mandatory and not skippable, which is exactly why its a11y is not optional:
-    // an operator who cannot scan a QR or read a code field cannot get in at all.
-    const { email, password } = await bootstrapAdminSession(ORIGIN);
-    await page.goto("/login");
-    await page.evaluate(async (creds) => {
-      const res = await fetch("/v1/admin/auth/login", {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          identifier: creds.email,
-          password: creds.password,
-        }),
-      });
-      if (!res.ok) throw new Error(`admin primary auth failed: ${res.status}`);
-    }, { email, password });
-
-    await page.goto("/mfa/enroll");
-    await page.getByTestId("mfa-qr").waitFor({ state: "visible" });
-    for (const theme of THEMES) await scan(page, theme);
-  });
-
-  test("011 EARS-12: the TOTP challenge screen passes WCAG 2 A/AA (light)", async ({
-    page,
-  }) => {
-    // The challenge is the screen EVERY admin login after the first passes
-    // through, so its a11y is the one that compounds: a code field a screen
-    // reader cannot label is a daily lockout, not a one-time one. Reachable only
-    // for a principal in `mfa_pending_challenge`, so the scan enrols first and
-    // then logs back in — the real arc, not a seeded state.
-    const { email, password } = await bootstrapAdminSession(ORIGIN);
-    await page.goto("/login");
-    await page.locator("#email").fill(email);
-    await page.locator("#password").fill(password);
-    await page.getByTestId("login-submit").click();
-    await page.waitForURL(/\/mfa\/enroll/, { timeout: 20_000 });
-    const secret = (await page.getByTestId("mfa-secret").innerText()).trim();
-    await page
-      .getByTestId("mfa-enroll-form")
-      .getByRole("textbox")
-      .fill(totpCode(secret));
-    await page.waitForURL(/\/events/, { timeout: 20_000 });
-
-    await page.getByTestId("sign-out").click();
-    await page.waitForURL(/\/login/, { timeout: 20_000 });
-    await page.locator("#email").fill(email);
-    await page.locator("#password").fill(password);
-    await page.getByTestId("login-submit").click();
-    await page.waitForURL(/\/mfa\/challenge/, { timeout: 20_000 });
-    await page.getByTestId("mfa-challenge-form").waitFor({ state: "visible" });
-    for (const theme of THEMES) await scan(page, theme);
-
-    // …and the same screen carrying its uniform failure Alert, because an error
-    // an operator cannot perceive is the same as no error at all.
-    await page
-      .getByTestId("mfa-challenge-form")
-      .getByRole("textbox")
-      .fill("000000");
-    await page.getByTestId("mfa-error").waitFor({ state: "visible" });
-    for (const theme of THEMES) await scan(page, theme);
-  });
+  // The 011 MFA screens' scan lives in `mfa-a11y.e2e.spec.ts`, with the i18n half
+  // of EARS-12 it fails together with — this file is the 007 event surface.
 
   test("the event list + create + edit surfaces pass WCAG 2 A/AA (light)", async ({
     page,

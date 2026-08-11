@@ -676,6 +676,14 @@ export class AdminSessionService {
     // vanished between the hook and the handler resolves to the uniform refusal.
     const session = await this.sessions.get(caller.sid);
     if (!session) return { status: "refused" };
+    // A record written before the identifier was carried onto the admin session
+    // has nothing to key the §7 per-user window by — and an absent key is not a
+    // free pass: it would either throw inside the limiter (a 500 on the recovery
+    // route, which is how #1214 Mode (a) found this) or, worse, spend an
+    // unbudgeted attempt. Refused with the SAME uniform failure every other
+    // refusal returns, and self-healing: the operator's next login writes a
+    // record that carries the identifier.
+    if (!session.identifier) return { status: "refused" };
 
     const outcome = await this.guardedTotpCheck({
       sub: caller.sub,
@@ -685,6 +693,23 @@ export class AdminSessionService {
         (await this.idp.checkTotpCode(caller.sub, code)) ? true : undefined,
     });
     if (outcome.status !== "verified") return outcome;
+
+    // The target must be a principal the MFA mandate actually covers (#1214 Mode
+    // (a)). `:id` is a raw IdP subject supplied by the caller, so without this
+    // the LD-2 recovery endpoint is a general "delete this user's TOTP factor"
+    // command over the whole IdP population — and the `auth.mfa.reset` row it
+    // writes would assert an ADMIN factor reset for an account that never held
+    // an admin factor, quietly corrupting the one ledger EARS-9 exists to keep
+    // trustworthy. Checked AFTER the possession proof so the read costs an IdP
+    // round-trip only for callers who have already proven their own factor.
+    //
+    // Refused with the uniform failure rather than a distinct 404/400: a
+    // separate answer here would make the endpoint a role oracle over the user
+    // population, readable by any operator with a valid code. No failure row is
+    // written — nothing about the caller's factor failed.
+    if (!requiresMfa(await this.idp.getProjectRoles(targetSub))) {
+      return { status: "refused" };
+    }
 
     await this.applyFactorRemoval(targetSub, caller.sub);
     return { status: "removed" };

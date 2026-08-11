@@ -115,14 +115,36 @@ be written and the trail would have a hole exactly where it matters most.
   that advertises a guard nothing enforces.
 - Requires a live, MFA-verified `__Host-ds_admin_session` with `platform_admin`,
   plus the EARS-10 CSRF double-submit header (`x-ds-admin-csrf`).
-- **When to use it:** an operator lost or replaced their authenticator, or their
-  factor is suspected compromised. After removal, the target's next login lands
-  on the forced-enrollment screen (EARS-4) and they enrol a fresh factor.
+- **When to use it:** an operator lost or replaced their authenticator. After
+  removal, the target's next login lands on the forced-enrollment screen
+  (EARS-4) and they enrol a fresh factor.
+- **A suspected-compromise case needs MORE than this call.** Removing the factor
+  only forces re-enrollment at the target's **next** login — it does not end the
+  sessions an attacker may already hold, because IdP-side session revocation is
+  not built in this slice (tracked as #1205). So for a suspected compromise, run
+  the removal AND terminate the target's live sessions through the IdP, or the
+  attacker keeps the access the removal was meant to take away.
+- **The target must be a `platform_admin`.** `:id` is a raw IdP subject typed by
+  the caller, so the route asserts the target is a principal the MFA mandate
+  covers (`role → mfa_required`, `mfa-policy.ts`) before deleting anything. A
+  target outside the policy draws the uniform 401 — a distinct answer would make
+  the endpoint a role oracle over the user population.
 - **Refusals.** A wrong / expired / replayed code is the same uniform 401 a
   login-time verify returns, counting against the same per-user rate window and
   the same soft-lock counter — the route is not a code-guessing oracle with a
   budget of its own. Removing your **own** factor is refused (403): it would turn
-  the recovery endpoint into an MFA opt-out.
+  the recovery endpoint into an MFA opt-out. An admin-session record predating
+  the carried `identifier` also draws the uniform 401 (the §7 per-user window has
+  no key without it); logging in again writes a record that carries it.
+- **A 503 on this route can mean the factor is ALREADY GONE.** The removal calls
+  the IdP first and only then writes the ledger row, and the IdP-side delete is
+  followed by a convergence read — so a `503` returned _after_ Zitadel accepted
+  the DELETE means the convergence read faulted: the factor is removed, and no
+  `auth.mfa.reset` row was appended. Do not treat the 503 as "nothing happened".
+  **Retry the same call**: the removal is idempotent, and the retry is what
+  closes the ledger. If retries keep faulting, confirm the factor's state at the
+  IdP and fall back to the break-glass script below (which writes the same row
+  through the same writer) so the trail has no hole.
 - **Precondition.** The endpoint presumes **≥2 enrolled `platform_admin`
   operators**. With fewer, nobody can satisfy it — use break-glass below.
 

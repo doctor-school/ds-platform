@@ -33,7 +33,7 @@
     "@sentry/node": "^10.69.0",
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.11.2",
-    "ioredis": "^5.11.1",
+    "ioredis": "^6.0.0",
     "nestjs-zod": "^5.5.0",
     "nodemailer": "^9.0.4",
     "pg": "^8.22.0",

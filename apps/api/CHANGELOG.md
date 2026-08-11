@@ -1,5 +1,16 @@
 # @ds/api
 
+## 1.1.0
+
+### Minor Changes
+
+- [#1218](https://github.com/doctor-school/ds-platform/pull/1218) [`ab0d2d9`](https://github.com/doctor-school/ds-platform/commit/ab0d2d9f1f2f19d8abd468a4e0763a17d69c176d) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 011 ([#1194](https://github.com/doctor-school/ds-platform/issues/1194)) — the LD-2 factor-removal route gains two refusals it was missing, and the module runbook gains the three facts an operator needs while using it.
+
+  - **The removal target must be a mandatory-MFA principal.** `:id` is a raw IdP subject typed by the caller, so without a role floor `DELETE /v1/admin/users/:id/mfa` was a general "delete this account's TOTP factor" command over the whole IdP population — and the `auth.mfa.reset` row it writes would assert an ADMIN factor reset for an account that never held an admin factor, corrupting the one ledger EARS-9 exists to keep trustworthy. The target is now checked against the `role → mfa_required` policy (after the caller's own possession proof, so the read costs an IdP round-trip only for callers who already proved their factor) and a target outside it draws the EARS-7 uniform 401 — a distinct answer would make the endpoint a role oracle over the user population.
+  - **An admin-session record predating the carried `identifier` is refused uniformly, not 500.** The field keys the ADR-0001 §7 per-user window; with it absent the route faulted inside the limiter and answered `500`, which both broke the EARS-7 uniformity and told a caller their session was unusual. It is now the same uniform refusal, and self-healing — the operator's next login writes a record that carries the identifier.
+  - **`IdpClient.getProjectRoles(sub)`** is the read counterpart of `grantProjectRole`, implemented on the Zitadel adapter through the management-v1 user-grant search RPC (filtered to this deployment's project) and on the in-repo fake. It is org-scoped with `x-zitadel-orgid` exactly as the write sends `organizationId`, so a deployment with a configured `IDP_ORG_ID` cannot write the grant to one org and read roles from another; and it fails loudly (`IdpUnavailableError` → 503) rather than returning `[]`, so an outage can never present itself as a policy refusal on the recovery path. The wire shape is proven live against the v4.15 dev-stand and pinned by `zitadel.idp.spec.ts`.
+  - **Runbook (`src/auth/README.md`).** A `503` returned _after_ the IdP accepted the DELETE means the convergence read faulted: the factor is gone and no `auth.mfa.reset` row was written — retry the (idempotent) call to close the ledger, rather than reading the 503 as "nothing happened". A suspected-compromise case additionally needs IdP-side session termination, because removal only forces re-enrollment at the target's _next_ login (revocation is tracked in [#1205](https://github.com/doctor-school/ds-platform/issues/1205)).
+
 ## 1.0.0
 
 ### Major Changes

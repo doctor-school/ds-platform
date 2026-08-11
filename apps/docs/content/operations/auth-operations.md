@@ -169,16 +169,37 @@ ADR-0001 §7, ADR-0003 §6) records the EARS-18 auth event taxonomy. The canonic
 wire ids (`auth.<class>.<event>`, reconciled in
 `apps/api/src/auth/session/auth-audit.ledger.ts`) currently emitted are:
 
-| Event                                        | When                                   |
-| -------------------------------------------- | -------------------------------------- |
-| `auth.register`                              | a registration completes               |
-| `auth.account.verified`                      | an email/phone verification succeeds   |
-| `auth.login.success` / `.failure`            | a password/OTP login outcome           |
-| `auth.token.rotated`                         | a refresh-token rotation               |
-| `auth.token.theft_detected`                  | a refresh-token reuse (RFC-6819)       |
-| `auth.session.terminated`                    | logout / global revoke                 |
-| `auth.password.reset_requested` / `.changed` | a reset is initiated / completed       |
-| `auth.lockout.triggered`                     | the native Zitadel lockout is observed |
+| Event                                        | When                                                            |
+| -------------------------------------------- | --------------------------------------------------------------- |
+| `auth.register`                              | a registration completes                                        |
+| `auth.account.verified`                      | an email/phone verification succeeds                            |
+| `auth.login.success` / `.failure`            | a password/OTP login outcome                                    |
+| `auth.token.rotated`                         | a refresh-token rotation                                        |
+| `auth.token.theft_detected`                  | a refresh-token reuse (RFC-6819)                                |
+| `auth.session.created`                       | an admin session is issued (011)                                |
+| `auth.session.terminated`                    | logout / global revoke                                          |
+| `auth.session.rejected`                      | an admin route refuses a request (011; cause in `reason`)       |
+| `auth.password.reset_requested` / `.changed` | a reset is initiated / completed                                |
+| `auth.mfa.enrolled`                          | a first TOTP factor is registered **and** confirmed (011)       |
+| `auth.mfa.used`                              | a login's TOTP challenge is satisfied (011)                     |
+| `auth.mfa.failure`                           | a TOTP verify is refused (011; `stage` = enrollment\|challenge) |
+| `auth.lockout.triggered`                     | an account is soft-locked — see the two `reason`s below         |
+
+**Admin-tier rows carry `tier: "admin"` in `metadata`.** The admin tier and the
+doctor portal share the canonical `auth.session.*` / `auth.login.*` classes, so
+that attribute — not a parallel class family — is what keeps an admin forensic
+query from silently returning portal rows. Portal rows carry no `tier` at all.
+
+**`auth.lockout.triggered` has two producers**, told apart by `reason`:
+
+- `reason: "lock"` — the **native Zitadel password lockout**, merely _observed_
+  by the BFF off `IdpClient.passwordLogin`. Zitadel owns the counter, the lock,
+  and the notification email.
+- `reason: "mfa_attempts"` — the **BFF-owned second-factor lockout** (011
+  EARS-7): 10 failed TOTP verifies / 30 min, keyed by IdP subject, shared across
+  the enrollment and challenge endpoints. The BFF owns it because Zitadel exposes
+  no per-subject TOTP-attempt lock to read back. Exactly one row per lock (the
+  attempt that crosses the threshold), never one per attempt while locked.
 
 **The webhook and the reconciliation sweep do not currently emit an audit row.**
 Their effect is the idempotent mirror upsert + grant, observable in the `users`
@@ -198,9 +219,49 @@ then, do not assume a ledger row exists for a sweep.
 | Manual sweep fails on a DB CHECK error    | A user with neither email nor phone reached the upsert. Expected machine accounts are skipped (#119); if a _human_ row fails, inspect the `users_email_or_phone` constraint and the offending `zitadel_sub`. |
 | Sweep "skipped this tick" warnings        | A sweep is outlasting the interval — raise `RECONCILE_SWEEP_INTERVAL_MS` or investigate `listUsers()` latency.                                                                                               |
 | Periodic sweep not running                | Confirm `RECONCILE_SWEEP_INTERVAL_MS` is not `0`; check the BFF boot logs for "reconcile sweep scheduled".                                                                                                   |
+| Admin cannot get into the admin panel     | See [Admin locked out](#admin-locked-out-of-the-admin-panel) below — a refused TOTP code and a soft-lock look identical to the operator by design.                                                           |
 
 Dev-stand pre-flight and recovery (the stand is power-cycled, not 24/7):
 `.claude/rules/dev-stand.md`.
+
+### Admin locked out of the admin panel
+
+The operator sees one message for every second-factor refusal (011 EARS-7), so
+the screen tells you nothing — the ledger does. Ask three questions in order.
+
+**What locked it?** Query the subject's recent rows:
+
+```sql
+SELECT created_at, event_type, reason, metadata
+FROM audit_ledger
+WHERE subject_id = '<zitadel_sub>' AND created_at > now() - interval '1 hour'
+ORDER BY created_at;
+```
+
+- a run of `auth.mfa.failure` (`reason: "invalid"`) then one
+  `auth.lockout.triggered` (`reason: "mfa_attempts"`) ⇒ the **BFF soft-lock**;
+  every `auth.mfa.failure` after it carries `reason: "locked"` — the code was
+  never checked, so a _correct_ code is refused too;
+- `auth.lockout.triggered` with `reason: "lock"` ⇒ the **native Zitadel password
+  lockout** — they are failing the password, not the code;
+- `auth.login.failure` with `reason: "not_permitted"` ⇒ the credentials are
+  valid but the principal holds no `platform_admin` grant;
+- a `429` with no ledger row at all ⇒ the ADR-0001 §7 rate limit, not a lock.
+
+**What clears it?** The soft-lock expires **on its own, 30 minutes after the
+window opened** — there is no unlock command and none is wanted: an operator
+endpoint that lifts a lock is a bypass of the control. A satisfied factor also
+clears the tally, which matters after the window rolls over. The native password
+lockout is Zitadel's to clear, per its own policy. If the operator has genuinely
+lost their authenticator, the lock is the wrong lever — the recovery path is
+LD-2: the Tech Lead removes the registered factor, and the target's next login
+re-enters forced enrollment.
+
+**Was it an attack?** `auth.mfa.failure` rows with `sub = NULL`
+(`reason: "no_pending"`) are attempts carrying no resolvable pending
+authentication — noise, or someone replaying a stale reference. A burst of
+`invalid` rows against one real subject from a live login is the case worth
+escalating.
 
 ## Open deferrals
 

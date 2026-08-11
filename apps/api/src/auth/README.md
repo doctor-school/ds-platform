@@ -138,7 +138,7 @@ be written and the trail would have a hole exactly where it matters most.
   no key without it); logging in again writes a record that carries it.
 - **A 503 on this route can mean the factor is ALREADY GONE.** The removal calls
   the IdP first and only then writes the ledger row, and the IdP-side delete is
-  followed by a convergence read — so a `503` returned *after* Zitadel accepted
+  followed by a convergence read — so a `503` returned _after_ Zitadel accepted
   the DELETE means the convergence read faulted: the factor is removed, and no
   `auth.mfa.reset` row was appended. Do not treat the 503 as "nothing happened".
   **Retry the same call**: the removal is idempotent, and the retry is what

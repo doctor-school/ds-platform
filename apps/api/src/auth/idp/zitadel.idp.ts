@@ -1529,13 +1529,16 @@ export class ZitadelIdpClient implements IdpClient {
     }
     let res: Awaited<ReturnType<FetchLike>>;
     try {
-      res = await this.fetchImpl(this.url("/management/v1/users/grants/_search"), {
-        method: "POST",
-        headers: this.headers(),
-        body: JSON.stringify({
-          queries: [{ userIdQuery: { userId: sub } }],
-        }),
-      });
+      res = await this.fetchImpl(
+        this.url("/management/v1/users/grants/_search"),
+        {
+          method: "POST",
+          headers: this.headers(),
+          body: JSON.stringify({
+            queries: [{ userIdQuery: { userId: sub } }],
+          }),
+        },
+      );
     } catch (cause) {
       throw new IdpUnavailableError(
         `zitadel user-grant read failed: ${(cause as Error).message}`,

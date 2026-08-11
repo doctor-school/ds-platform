@@ -203,18 +203,21 @@ Given(
     // portal cookie lands in THIS page's jar — the browser state an operator
     // would really be carrying if they used both surfaces from one machine.
     await page.goto("/login");
-    const status = await page.evaluate(async (creds) => {
-      const res = await fetch("/v1/auth/login", {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          identifier: creds.email,
-          password: creds.password,
-        }),
-      });
-      return res.status;
-    }, { email, password });
+    const status = await page.evaluate(
+      async (creds) => {
+        const res = await fetch("/v1/auth/login", {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            identifier: creds.email,
+            password: creds.password,
+          }),
+        });
+        return res.status;
+      },
+      { email, password },
+    );
     expect(status, "the 003 portal login must succeed").toBe(200);
 
     const cookies = await page.context().cookies();
@@ -296,12 +299,12 @@ When("the admin signs out", async ({ page }) => {
   await page.getByTestId("sign-out").click();
 });
 
-When("an admin route is requested through the admin origin", async ({
-  page,
-  world,
-}) => {
-  world.probe = await probeAdminApi(page);
-});
+When(
+  "an admin route is requested through the admin origin",
+  async ({ page, world }) => {
+    world.probe = await probeAdminApi(page);
+  },
+);
 
 // --- Then -------------------------------------------------------------------
 
@@ -364,10 +367,9 @@ Then("the admin API answers this browser", async ({ page }) => {
   // The durable truth under the landing: a real `__Host-ds_admin_session`, live
   // right now — read AFTER the redirect, not merely at the moment of response.
   const probe = await probeAdminApi(page);
-  expect(
-    probe.status,
-    "the verify must have issued a live admin session",
-  ).toBe(200);
+  expect(probe.status, "the verify must have issued a live admin session").toBe(
+    200,
+  );
 });
 
 Then(

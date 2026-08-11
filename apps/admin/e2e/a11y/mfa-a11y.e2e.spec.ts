@@ -85,7 +85,8 @@ async function scan(page: Page, label: string) {
 async function reachableByTab(page: Page, target: Locator): Promise<boolean> {
   for (let step = 0; step < 20; step++) {
     await page.keyboard.press("Tab");
-    if (await target.evaluate((el) => el === document.activeElement)) return true;
+    if (await target.evaluate((el) => el === document.activeElement))
+      return true;
   }
   return false;
 }
@@ -236,7 +237,9 @@ test.describe("011 EARS-12 — the MFA screens are localized and accessible", ()
     // The recovery guidance is on the screen BEFORE any failure — an operator
     // whose phone is lost needs it before they have burned ten attempts finding
     // out (LD-2).
-    await expect(page.getByText(ru.mfaChallenge.lostFactor!).first()).toBeVisible();
+    await expect(
+      page.getByText(ru.mfaChallenge.lostFactor!).first(),
+    ).toBeVisible();
 
     await field.focus();
     await page.keyboard.type("000000");

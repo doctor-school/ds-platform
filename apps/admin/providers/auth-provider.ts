@@ -6,6 +6,7 @@ import {
   adminLogout,
   readAdminAuthState,
 } from "@/lib/admin-auth";
+import { loginFailureMessage } from "@/lib/login-failure";
 
 /**
  * Refine auth provider over the **011 admin session tier**.
@@ -52,9 +53,14 @@ export const authProvider: AuthProvider = {
           // account, a principal outside the policy, a locked account. The API
           // answers all of them identically (ADR-0001 §7 enumeration safety) and
           // a client-side taxonomy would leak exactly what it refused to say.
-          message: result.throttled
-            ? "login.errorThrottled"
-            : "login.errorGeneric",
+          //
+          // The two carve-outs describe the SERVICE, not the account, so neither
+          // can leak what the uniform 401 hides: the 429 rate limit, and the 503
+          // IdP outage (#1212) where the credentials were never checked at all —
+          // reporting THAT as «проверьте данные» is a false verdict (#1217).
+          // Refine carries a single string here, so the refusal crosses as its
+          // catalog key and the screen re-reads it (`login-failure.ts`).
+          message: loginFailureMessage(result),
         },
       };
     }

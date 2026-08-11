@@ -339,32 +339,35 @@ Reviewer note: "JWT 15min + introspection — internally contradictory". Accepte
 
 3-year retention (PRD §31). Events that **must** be written to `auth_audit` (the auth-domain projection of the append-only ledger). The **canonical event taxonomy is owned by `identity-auth-rbac-design §7.3`** — the two-level `<class>.<event>` scheme, plus the `auth.step_up.*` and `auth.sms.*` classes not listed here; this table mirrors it for the events mandatory at v1, with the canonical wire id in each row:
 
-| Event (`<class>.<event>`)            | Fields                                                                                  |
-| ------------------------------------ | --------------------------------------------------------------------------------------- |
-| `auth.login.success`                 | user_id, method (password/magic-link/SMS-OTP/social/biometric), ip, user_agent, geo, ts |
-| `auth.login.failure`                 | identifier_hash, reason (wrong_password, no_user, lock, captcha_failed), ip, ts         |
-| `auth.account.verified`              | user_id, channel (email/sms), ts                                                        |
-| `auth.mfa.enrolled`                  | user_id, method (totp/sms), ts                                                          |
-| `auth.mfa.used`                      | user_id, method, ts                                                                     |
-| `auth.mfa.failure`                   | user_id, method, reason, ts                                                             |
-| `auth.mfa.reset`                     | user_id, by_admin (uuid or null), ts                                                    |
-| `auth.password.changed`              | user_id, by_self/by_admin, ts                                                           |
-| `auth.password.reset_requested`      | user_id (or null), identifier_hash, ip, ts                                              |
-| `auth.magic_link.sent`               | user_id, channel (email), ts                                                            |
-| `auth.magic_link.used`               | user_id, ts                                                                             |
-| `auth.session.created`               | user_id, sid, device_id, ts                                                             |
-| `auth.session.terminated`            | user_id, sid, reason (logout/force/expiry/theft_detected), ts                           |
-| `auth.token.rotated`                 | user_id, sid, ts                                                                        |
-| `auth.token.theft_detected`          | user_id, sid, ts                                                                        |
-| `auth.account_link.linked_auto`      | user_id, provider, ts                                                                   |
-| `auth.account_link.attempt_rejected` | user_id, provider, reason, ts                                                           |
-| `auth.account_link.unlinked`         | user_id, provider, by_self/by_admin, ts                                                 |
-| `auth.role.granted`                  | user_id, role, by_admin, ts                                                             |
-| `auth.role.revoked`                  | user_id, role, by_admin, ts                                                             |
-| `auth.lockout.triggered`             | user_id, reason, ts                                                                     |
-| `auth.lockout.released`              | user_id, by_admin/auto, ts                                                              |
-| `auth.sync.drift_detected`           | user_id, diff, ts                                                                       |
-| `auth.erasure.executed`              | user_id, scope, ts                                                                      |
+| Event (`<class>.<event>`)            | Fields                                                                                                                         |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `auth.login.success`                 | user_id, method (password/magic-link/SMS-OTP/social/biometric), ip, user_agent, geo, ts                                        |
+| `auth.login.failure`                 | identifier_hash, reason (wrong_password, no_user, lock, captcha_failed), ip, ts                                                |
+| `auth.account.verified`              | user_id, channel (email/sms), ts                                                                                               |
+| `auth.mfa.enrolled`                  | user_id, method (totp/sms), ts                                                                                                 |
+| `auth.mfa.used`                      | user_id, method, ts                                                                                                            |
+| `auth.mfa.failure`                   | user_id, method, reason, ts                                                                                                    |
+| `auth.mfa.reset`                     | user_id, by_admin (uuid or null), ts                                                                                           |
+| `auth.password.changed`              | user_id, by_self/by_admin, ts                                                                                                  |
+| `auth.password.reset_requested`      | user_id (or null), identifier_hash, ip, ts                                                                                     |
+| `auth.magic_link.sent`               | user_id, channel (email), ts                                                                                                   |
+| `auth.magic_link.used`               | user_id, ts                                                                                                                    |
+| `auth.session.created`               | user_id, sid, device_id, ts                                                                                                    |
+| `auth.session.terminated`            | user_id, sid, reason (logout/force/expiry/theft_detected), ts                                                                  |
+| `auth.session.rejected`              | user_id (or null), reason (wrong_cookie/pending_ref/fingerprint_mismatch/expired/role_without_mfa/csrf_mismatch), tier, ip, ts |
+| `auth.token.rotated`                 | user_id, sid, ts                                                                                                               |
+| `auth.token.theft_detected`          | user_id, sid, ts                                                                                                               |
+| `auth.account_link.linked_auto`      | user_id, provider, ts                                                                                                          |
+| `auth.account_link.attempt_rejected` | user_id, provider, reason, ts                                                                                                  |
+| `auth.account_link.unlinked`         | user_id, provider, by_self/by_admin, ts                                                                                        |
+| `auth.role.granted`                  | user_id, role, by_admin, ts                                                                                                    |
+| `auth.role.revoked`                  | user_id, role, by_admin, ts                                                                                                    |
+| `auth.lockout.triggered`             | user_id, reason, ts                                                                                                            |
+| `auth.lockout.released`              | user_id, by_admin/auto, ts                                                                                                     |
+| `auth.sync.drift_detected`           | user_id, diff, ts                                                                                                              |
+| `auth.erasure.executed`              | user_id, scope, ts                                                                                                             |
+
+**Forward reference — `auth.session.rejected`** is defined by feature spec **011** (`apps/docs/content/specs/features/011-admin-session-2fa/`, Event Model → Events; design §8a). It is a **new event inside the existing `auth.session` class**, not a new class: an admin route refusing a request, with the cause in `reason`. 011 also introduces the `tier` metadata discriminator (`tier: "admin"`), so admin-tier rows stay separable from the doctor portal's on the shared `auth.session.*` / `auth.login.*` classes — the same within-a-class-by-attribute idiom `method`, `reason` and `by_admin` already use above. This row is the registration; the defining spec owns the semantics (the ADR-0009/ADR-0010 `ai_dual_llm` precedent). The canonical taxonomy owner `identity-auth-rbac-design §7.3` carries the same registration.
 
 Storage — append-only Postgres table or event-store (if IdP = Zitadel — natively event-sourced). Read access — only `platform_admin` + DPO; deletion is not permitted even for them (enforced at the DB level).
 

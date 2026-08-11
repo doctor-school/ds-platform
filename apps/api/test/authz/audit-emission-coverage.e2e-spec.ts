@@ -165,6 +165,18 @@ const HIGH_STAKES_AUDIT_COVERAGE: Record<string, Coverage> = {
     coveredBy:
       "admin-session-separation.e2e (011 EARS-2): admin logout clears only the admin cookies and leaves a concurrent portal session valid",
   },
+  "DELETE /v1/admin/users/:id/mfa": {
+    // 011 EARS-13: the LD-2 operator recovery. The whole reason this action is
+    // an endpoint rather than an IdP-console step is that the console is never
+    // observed by `apps/api`, so `auth.mfa.reset` — the terminal row EARS-9
+    // mandates for a factor removal — could never be written. The refusal
+    // branches emit `MfaChallengeFailed` (stage `factor_removal`) under the
+    // shared EARS-7 discipline, so the ledger shows attempts against this route
+    // and not only its successes.
+    emits: ["MfaFactorRemoved", "MfaChallengeFailed"],
+    coveredBy:
+      "mfa-factor-removal.e2e (011 EARS-13.1/13.3): a removal appends exactly one auth.mfa.reset carrying by_admin + tier: admin, and a wrong caller code appends auth.mfa.failure with stage: factor_removal; admin-audit.e2e (011 EARS-9.7) asserts the same row from the audit side",
+  },
   "POST /v1/auth/verify/resend": {
     // #319 (EARS-25): a resend re-issues the otp_email code ONLY for an existing,
     // unverified registrant → one auth.otp.sent row; the no-op paths (unknown /

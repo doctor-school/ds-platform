@@ -14,25 +14,25 @@ durable `audit_ledger` writer).
 
 ## What's here
 
-| Concern                                         | File                          | EARS                    |
-| ----------------------------------------------- | ----------------------------- | ----------------------- |
-| Registration + verify routes                    | `auth.controller.ts`          | 1, 2, 3, 4, 19          |
-| Login + session-read routes                     | `auth.controller.ts`          | 5, 8                    |
-| Passwordless OTP-login routes                   | `auth.controller.ts`          | 6, 7, 8, 14             |
-| Refresh + logout routes                         | `auth.controller.ts`          | 9, 10                   |
-| Password-reset routes                           | `auth.controller.ts`          | 11, 12                  |
-| Cascade + login + OTP + reset orchestration     | `auth.service.ts`             | 1–7, 11, 12, 14, 16, 20 |
-| SMS toll-fraud budget                           | `sms-budget/`                 | 14                      |
-| Rate limiter (per-user/IP/ASN)                  | `rate-limit/`                 | 13                      |
-| Timing equalization                             | `timing/`                     | 16                      |
-| Login captcha-after-N policy                    | `login-challenge/`            | 17                      |
-| Durable audit_ledger writer                     | `session/auth-audit.*`        | 9, 10, 12, 15, 18       |
-| `doctor_guest` mirror row                       | `user-mirror.service.ts`      | 3, 4, 19, 26            |
-| Reconciliation sweep                            | `reconcile.service.ts`        | 19                      |
-| Read-path mirror self-heal                      | `mirror-self-heal.service.ts` | 26                      |
-| IdP port + adapters                             | `idp/`                        | (design §2)             |
-| BFF session establish/refresh/logout/revoke-all | `session/`                    | 5, 8, 9, 10, 12         |
-| Admin session tier (011)                        | `admin-session/`              | 011: 1, 2, 3, 6, 7, 10  |
+| Concern                                         | File                          | EARS                                 |
+| ----------------------------------------------- | ----------------------------- | ------------------------------------ |
+| Registration + verify routes                    | `auth.controller.ts`          | 1, 2, 3, 4, 19                       |
+| Login + session-read routes                     | `auth.controller.ts`          | 5, 8                                 |
+| Passwordless OTP-login routes                   | `auth.controller.ts`          | 6, 7, 8, 14                          |
+| Refresh + logout routes                         | `auth.controller.ts`          | 9, 10                                |
+| Password-reset routes                           | `auth.controller.ts`          | 11, 12                               |
+| Cascade + login + OTP + reset orchestration     | `auth.service.ts`             | 1–7, 11, 12, 14, 16, 20              |
+| SMS toll-fraud budget                           | `sms-budget/`                 | 14                                   |
+| Rate limiter (per-user/IP/ASN)                  | `rate-limit/`                 | 13                                   |
+| Timing equalization                             | `timing/`                     | 16                                   |
+| Login captcha-after-N policy                    | `login-challenge/`            | 17                                   |
+| Durable audit_ledger writer                     | `session/auth-audit.*`        | 9, 10, 12, 15, 18                    |
+| `doctor_guest` mirror row                       | `user-mirror.service.ts`      | 3, 4, 19, 26                         |
+| Reconciliation sweep                            | `reconcile.service.ts`        | 19                                   |
+| Read-path mirror self-heal                      | `mirror-self-heal.service.ts` | 26                                   |
+| IdP port + adapters                             | `idp/`                        | (design §2)                          |
+| BFF session establish/refresh/logout/revoke-all | `session/`                    | 5, 8, 9, 10, 12                      |
+| Admin session tier (011)                        | `admin-session/`              | 011: 1, 2, 3, 5, 6, 7, 9, 10, 11, 13 |
 
 ## Admin session tier (`admin-session/`, spec 011 — EARS-1/2/3/10)
 

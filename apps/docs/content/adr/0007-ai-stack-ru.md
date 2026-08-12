@@ -173,7 +173,7 @@ Cost-tracking ведётся в собственной консоли vendor'а 
 | **PII filter** (regex v1, NER v2)            | Same trigger                                                                          |
 | **OTel GenAI collector** (gen_ai.\* semconv) | Same trigger; в Phase 0 — minimal stderr token logging                                |
 | **Vector DB Qdrant** (вместо pgvector)       | mobile v3 AI-рекомендации p95 query >100ms или vector workload мешает OLTP            |
-| **Self-hosted GHA runner на Timeweb**        | DSO-31 setup (general CI), не AI-specific                                             |
+| **Self-hosted GHA runner**                   | Разрешён: общий пул BBM per ADR-0008 §2.8, не AI-specific                             |
 | **Sandbox / experimentation environment**    | Команда ≥3 инженеров с параллельными agent-PR или регулярная нужда отлаживать gateway |
 | **Codex cloud async activation**             | Tech Lead решает запустить первую async-задачу (opt-in self-serve)                    |
 

@@ -174,7 +174,7 @@ These components are **designed now** (see design spec §9), **implemented on tr
 | **PD filter** (regex v1, NER v2)             | Same trigger                                                                          |
 | **OTel GenAI collector** (gen_ai.\* semconv) | Same trigger; in Phase 0 — minimal stderr token logging                               |
 | **Vector DB Qdrant** (replacing pgvector)    | Mobile v3 AI recommendations p95 query >100ms or vector workload interferes with OLTP |
-| **Self-hosted GHA runner on Timeweb**        | DSO-31 setup (general CI), not AI-specific                                            |
+| **Self-hosted GHA runner**                   | Resolved: BBM shared pool per ADR-0008 §2.8, not AI-specific                          |
 | **Sandbox / experimentation environment**    | Team ≥3 engineers with parallel agent-PRs, or regular need to debug gateway           |
 | **Codex cloud async activation**             | Tech Lead decides to launch the first async task (opt-in self-serve)                  |
 

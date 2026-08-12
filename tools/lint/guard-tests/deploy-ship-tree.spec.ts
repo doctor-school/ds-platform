@@ -1,6 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -73,32 +72,43 @@ function createFixture() {
   return { root, home, live, archive, composeEnv };
 }
 
-function installMvWrapper(root: string) {
-  const bin = join(root, "wrapper-bin");
-  const wrapper = join(bin, "mv");
-  mkdirSync(bin, { recursive: true });
-  writeFileSync(
-    wrapper,
-    [
-      "#!/bin/sh",
-      'case "$1" in',
-      "  */stage)",
-      '    if [ "$FAIL_STAGE_TO_LIVE" = "1" ] && [ "$2" = "$HOME/ds-platform" ]; then exit 71; fi',
-      "    ;;",
-      "  */previous)",
-      '    if [ "$FAIL_RESTORE_TO_LIVE" = "1" ] && [ "$2" = "$HOME/ds-platform" ]; then exit 72; fi',
-      "    ;;",
-      "esac",
-      'exec "$REAL_MV" "$@"',
-      "",
-    ].join("\n"),
-    { mode: 0o755 },
-  );
-  chmodSync(wrapper, 0o755);
-  const realMv = execFileSync(POSIX_SHELL, ["-c", "command -v mv"], {
-    encoding: "utf8",
-  }).trim();
-  return { bin, realMv };
+// Shell-level `mv` failure injection, prepended to the ship script.
+//
+// A shell function shadows `mv` for the whole script — the swap AND the
+// restore inside the EXIT trap — so the failure is injected by the shell's
+// own command resolution order (function → builtin → PATH). The previous
+// fixture instead dropped an executable `mv` shim into a directory prepended
+// to PATH; that only fails the move when the OS actually executes the shim, so
+// any runtime where the temp dir is mounted `noexec` (the containerised CI
+// pool, #1230) or where the exec bit is not honoured silently falls through to
+// the real `mv`, the swap succeeds, and the failure path is never exercised.
+// A shell function has no file mode, no mount options and no exec bit.
+//
+// `command mv` reaches the real binary; `${VAR:-0}` keeps the shim safe under
+// the script's `set -u`. Each injection announces itself on stderr so a shim
+// that stops firing fails the test loudly instead of degrading into a
+// green-but-vacuous run.
+function mvFailureShim() {
+  return [
+    "mv() {",
+    '  case "$1" in',
+    "    */stage)",
+    '      if [ "${FAIL_STAGE_TO_LIVE:-0}" = "1" ] && [ "$2" = "$HOME/ds-platform" ]; then',
+    "        printf 'ship-test: injected mv failure (stage->live)\\n' >&2",
+    "        return 71",
+    "      fi",
+    "      ;;",
+    "    */previous)",
+    '      if [ "${FAIL_RESTORE_TO_LIVE:-0}" = "1" ] && [ "$2" = "$HOME/ds-platform" ]; then',
+    "        printf 'ship-test: injected mv failure (previous->live)\\n' >&2",
+    "        return 72",
+    "      fi",
+    "      ;;",
+    "  esac",
+    '  command mv "$@"',
+    "}",
+    "",
+  ].join("\n");
 }
 
 function runShip({
@@ -209,22 +219,19 @@ describe("prod deploy tree shipping (#1182)", () => {
 
   it("restores the previous live tree when the staged-tree swap fails", () => {
     const fixture = createFixture();
-    const { bin, realMv } = installMvWrapper(fixture.root);
-    const command = `PATH="$MV_WRAPPER_BIN:$PATH"
-export PATH
-${shipTreeCommand()}`;
 
     const result = runShip({
       ...fixture,
-      command,
-      env: {
-        MV_WRAPPER_BIN: toPosixPath(bin),
-        REAL_MV: realMv,
-        FAIL_STAGE_TO_LIVE: "1",
-      },
+      command: `${mvFailureShim()}${shipTreeCommand()}`,
+      env: { FAIL_STAGE_TO_LIVE: "1" },
     });
 
-    expect(result.status).not.toBe(0);
+    // Proof the failure path really ran: the shim announced itself and its
+    // exit status (71) travelled out through the EXIT trap. Asserting only
+    // "nonzero" would pass on any unrelated error and — as on the CI pool —
+    // could not tell a working injection from one that never fired.
+    expect(result.stderr).toContain("injected mv failure (stage->live)");
+    expect(result.status).toBe(71);
     expect(readFileSync(join(fixture.live, "untracked.txt"), "utf8")).toBe(
       "must not survive\n",
     );
@@ -234,24 +241,20 @@ ${shipTreeCommand()}`;
 
   it("keeps previous live recoverable when both swap and restore moves fail", () => {
     const fixture = createFixture();
-    const { bin, realMv } = installMvWrapper(fixture.root);
-    const command = `PATH="$MV_WRAPPER_BIN:$PATH"
-export PATH
-${shipTreeCommand()}`;
 
     const result = runShip({
       ...fixture,
-      command,
+      command: `${mvFailureShim()}${shipTreeCommand()}`,
       env: {
-        MV_WRAPPER_BIN: toPosixPath(bin),
-        REAL_MV: realMv,
         FAIL_STAGE_TO_LIVE: "1",
         FAIL_RESTORE_TO_LIVE: "1",
       },
     });
     const workdirs = shipWorkdirs(fixture.home);
 
-    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("injected mv failure (stage->live)");
+    expect(result.stderr).toContain("injected mv failure (previous->live)");
+    expect(result.status).toBe(71);
     expect(workdirs).toHaveLength(1);
     expect(
       readFileSync(join(workdirs[0], "previous", "untracked.txt"), "utf8"),

@@ -47,6 +47,8 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      # `gh issue view` on linked Issues — 403s without this on a private repo (#1232).
+      issues: read
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -96,6 +98,8 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      # #608 fail-closed path fetches `Closes #N` Issues — 403s without this on a private repo (#1232).
+      issues: read
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6

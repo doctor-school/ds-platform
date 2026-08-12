@@ -14,7 +14,7 @@ Phase 0 (greenfield, brainstorm complete). Pre-pilot target: 2026 Q3 (TBD).
 - **Mobile:** React Native + Expo + WatermelonDB (ADR-0005); `apps/mobile/`
 - **Docs:** Fumadocs (`apps/docs/`) + Keystatic editor (`apps/docs-cms/`) + glossary.yaml in `apps/docs/content/product/glossary/` (ADR-0006)
 - **AI dev loop:** Claude Code + Codex async + reviewer-bot (ADR-0007)
-- **Repo:** pnpm workspaces + Turborepo + changesets + GitHub Actions CI on the BBM self-hosted pool + hosted keep-set (ADR-0008 §2.8)
+- **Repo:** pnpm workspaces + Turborepo + changesets + GitHub Actions CI on the BBM self-hosted runner pool (ADR-0008 §2.8)
 - **Identity:** Zitadel (ADR-0001 §8, closed per DSP-209) + Cerbos RBAC (ADR-0003 §5)
 
 Full reference: `apps/docs/content/adr/`.

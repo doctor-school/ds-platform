@@ -914,7 +914,7 @@ Output-direction PII filter — **v3 concern**. До v3 — operational mitigati
 
 ### 9.5 Self-hosted GitHub Actions runner
 
-**Trigger:** не AI-specific. Разрешён на уровне репозитория: eligible CI-jobs выполняются на общем self-hosted пуле BBM per ADR-0008 §2.8; keep-hosted остаток остаётся на GitHub-hosted runners.
+**Trigger:** не AI-specific. Разрешён на уровне репозитория: CI-jobs выполняются на общем self-hosted пуле BBM с ресурсным профилем на job per ADR-0008 §2.8.
 
 ### 9.6 Sandbox / experimentation environment
 

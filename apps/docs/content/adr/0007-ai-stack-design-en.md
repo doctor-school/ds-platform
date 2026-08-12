@@ -915,7 +915,7 @@ In Phase 0 — no in-repo semconv collector; cost and token usage are read from 
 
 ### 9.5 Self-hosted GitHub Actions runner
 
-**Trigger:** not AI-specific. Resolved at the repo level: eligible CI jobs run on the shared BBM self-hosted pool per ADR-0008 §2.8; the keep-hosted remainder stays on GitHub-hosted runners.
+**Trigger:** not AI-specific. Resolved at the repo level: CI jobs run on the shared BBM self-hosted pool under per-job resource profiles per ADR-0008 §2.8.
 
 ### 9.6 Sandbox / experimentation environment
 

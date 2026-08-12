@@ -15,7 +15,7 @@ env:
 
 jobs:
   setup:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -37,7 +37,7 @@ jobs:
   # this job is in the `ci` meta-job needs-list, so any guardrail failure blocks merge.
   lint:
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -48,7 +48,7 @@ jobs:
 
   types:
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -63,7 +63,7 @@ jobs:
   # service-free and fast.
   unit:
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -119,7 +119,7 @@ jobs:
 
   build:
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -137,7 +137,7 @@ jobs:
   # Infra-free: both defects fail before any DB/Redis/Zitadel I/O — no services.
   api-build-smoke:
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -151,7 +151,7 @@ jobs:
 
   docs-build:
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -168,7 +168,7 @@ jobs:
   # lockstep. The token-build also validates that every reference resolves.
   tokens-fresh:
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -207,7 +207,7 @@ jobs:
   # glossary checks) — so no burn-in is warranted.
   events-drift:
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -246,7 +246,7 @@ jobs:
   module-readme:
     needs: setup
     continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -264,7 +264,7 @@ jobs:
   route-targets:
     needs: setup
     continue-on-error: true # WARN v1 (promote to BLOCK once stable) — ADR-0007 §2.6
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -283,7 +283,7 @@ jobs:
   axe-exclude:
     needs: setup
     continue-on-error: true # WARN v1 (promote to BLOCK once stable) — ADR-0007 §2.6
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -313,7 +313,7 @@ jobs:
   glossary-mdx:
     needs: setup
     continue-on-error: true # WARN (burn-in) — Pilot-phased + `[[…]]` namespace FP risk; re-entry criterion in the header
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -346,7 +346,7 @@ jobs:
   glossary-ids:
     needs: setup
     continue-on-error: true # WARN (burn-in) — promotable check surface; re-entry criterion in the header
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -369,7 +369,7 @@ jobs:
   # burned in for genuine `[[…]]` namespace ambiguity.)
   glossary-roundtrip:
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -396,7 +396,7 @@ jobs:
   # placeholder DATABASE_URL and never issues a query (the pool is lazy).
   endpoint-authz:
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -423,7 +423,7 @@ jobs:
   # class. GH_TOKEN enables the deferred-Issue OPEN check (skipped without it).
   prod-surface:
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     permissions:
       contents: read
       issues: read
@@ -440,7 +440,7 @@ jobs:
   no-stub:
     needs: setup
     continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -460,7 +460,7 @@ jobs:
   no-hardcoded-path:
     needs: setup
     continue-on-error: true # WARN v1 (promote to BLOCK once stable)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -479,7 +479,7 @@ jobs:
   external-anchor:
     needs: setup
     continue-on-error: true # WARN v1 (promote to BLOCK once stable)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -499,7 +499,7 @@ jobs:
   migration-index:
     needs: setup
     continue-on-error: true # WARN v1 — promote to BLOCK per ADR-0007 §2.6 promotion policy
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -520,7 +520,7 @@ jobs:
   audit-coverage:
     needs: setup
     continue-on-error: true # WARN v1 — promote to BLOCK per ADR-0007 §2.6 promotion policy
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -538,7 +538,7 @@ jobs:
   showcase-coverage:
     needs: setup
     continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -557,7 +557,7 @@ jobs:
   showcase-snippet:
     needs: setup
     continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -573,7 +573,7 @@ jobs:
   asset-format:
     needs: setup
     continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -589,7 +589,7 @@ jobs:
   interaction-states:
     needs: setup
     continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -612,7 +612,7 @@ jobs:
   # raw-state BLOCK class (zero in-repo today) exits 1.
   primitives-first:
     needs: setup
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -631,7 +631,7 @@ jobs:
   aa-contrast:
     needs: setup
     continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -649,7 +649,7 @@ jobs:
   form-error:
     needs: setup
     continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -669,7 +669,7 @@ jobs:
   form-rhythm:
     needs: setup
     continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -689,7 +689,7 @@ jobs:
   submit-pending:
     needs: setup
     continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -710,7 +710,7 @@ jobs:
   ears-tests:
     needs: setup
     continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -728,7 +728,7 @@ jobs:
   ears-naming:
     needs: setup
     continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -802,7 +802,7 @@ jobs:
   tdd-signal:
     needs: setup
     continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     # The guard calls `gh pr view <N>` — same wiring as spec-link: the default
     # GITHUB_TOKEN under restrictive workflow permissions lacks
     # `pull-requests: read`, which makes `gh pr view` exit non-zero before the
@@ -839,7 +839,7 @@ jobs:
   product-note:
     needs: setup
     continue-on-error: true # WARN v1 (promote to BLOCK once stable)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     permissions:
       contents: read
       pull-requests: read
@@ -869,7 +869,7 @@ jobs:
   workflow-auth:
     needs: setup
     continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6

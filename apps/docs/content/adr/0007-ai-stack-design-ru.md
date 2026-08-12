@@ -914,7 +914,7 @@ Output-direction PII filter — **v3 concern**. До v3 — operational mitigati
 
 ### 9.5 Self-hosted GitHub Actions runner
 
-**Trigger:** не AI-specific. Подключается в DSO-31 (engineering-readiness setup) для общего CI на Timeweb. Phase 0 — GitHub-hosted runners (ubuntu-latest) достаточно.
+**Trigger:** не AI-specific. Разрешён на уровне репозитория: eligible CI-jobs выполняются на общем self-hosted пуле BBM per ADR-0008 §2.8; keep-hosted остаток остаётся на GitHub-hosted runners.
 
 ### 9.6 Sandbox / experimentation environment
 

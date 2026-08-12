@@ -20,29 +20,29 @@ lang: ru
 
 ## 1. Сводка решений (cross-ref ADR-0008)
 
-| Решение                | Выбор                                                                                                                                                            | ADR-0008 §                  |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| GitHub org             | `doctor-school` (GitHub Free plan)                                                                                                                               | §2.1                        |
-| Repo name + visibility | `doctor-school/ds-platform`, private                                                                                                                             | §2.1                        |
-| Monorepo orchestrator  | Turborepo 2.x + pnpm 10.x workspaces                                                                                                                             | §2.2                        |
-| Node version pin       | `.nvmrc` (`22`) + `packageManager: pnpm@10.x` + `engines` + `engine-strict=true`                                                                                 | §2.2                        |
-| Repo layout root       | `apps/`, `packages/`, `tools/`, `.github/`, `.changeset/`, manifest files                                                                                        | §2.3                        |
-| Apps inventory         | api (NestJS) + promo + portal + admin + cms (Payload v3) + docs (Fumadocs) + docs-cms (Keystatic) + mobile (Expo). 8 apps.                                       | §2.3                        |
-| Packages inventory     | schemas, api-client, db, glossary, hooks, design-system, observability, utils, eslint-config, tsconfig, llm-utils                                                | §2.3                        |
-| ADR location           | `apps/docs/content/adr/NNNN-<slug>.md` + companion `NNNN-<slug>-design.md`                                                                                       | §2.3                        |
-| Feature spec location  | `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}`                                                        | §2.3 (inherits ADR-0006)    |
-| Tech spec location     | `apps/docs/content/specs/tech/<topic>.md`                                                                                                                        | §2.3 (inherits ADR-0006 §4) |
-| Drizzle schema master  | `packages/db/schema/` per ADR-0006 §1 (supersedes ADR-0003 §4 location); migrations в `apps/api/drizzle/`                                                        | §2.3                        |
-| Release tooling        | changesets + `changesets/action` GitHub workflow                                                                                                                 | §2.4                        |
-| Commit convention      | conventional-commits (light, no enforce)                                                                                                                         | §2.4                        |
-| Merge style            | squash-only                                                                                                                                                      | §2.4                        |
-| Pre-commit hooks       | simple-git-hooks + lint-staged                                                                                                                                   | §2.5                        |
-| Branch strategy        | trunk-based, ветки `feat/DSO-NN-<slug>` short-lived                                                                                                              | §2.6                        |
-| Branch protection rule | Target-state contract per ADR-0008 §2.6 (deferred enforcement; required status check `ci` only)                                                                  | §2.6                        |
-| CODEOWNERS Phase 0     | `* @sidorovanthon`                                                                                                                                               | §2.7                        |
-| CI runner              | Self-hosted пул BBM `bbm-ci`, ресурсный профиль на job (`light`/`browser`/`heavy`/`docker`); `ubuntu-latest` только для двух credential-blocked бот-jobs (#1224) | §2.8                        |
-| Dependabot             | weekly, grouped, ecosystems npm + github-actions                                                                                                                 | §2.9                        |
-| Bootstrap steps        | extends AI-stack design spec §11 + steps 15–22                                                                                                                   | §2.10                       |
+| Решение                | Выбор                                                                                                                                                                     | ADR-0008 §                  |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| GitHub org             | `doctor-school` (GitHub Free plan)                                                                                                                                        | §2.1                        |
+| Repo name + visibility | `doctor-school/ds-platform`, private                                                                                                                                      | §2.1                        |
+| Monorepo orchestrator  | Turborepo 2.x + pnpm 10.x workspaces                                                                                                                                      | §2.2                        |
+| Node version pin       | `.nvmrc` (`22`) + `packageManager: pnpm@10.x` + `engines` + `engine-strict=true`                                                                                          | §2.2                        |
+| Repo layout root       | `apps/`, `packages/`, `tools/`, `.github/`, `.changeset/`, manifest files                                                                                                 | §2.3                        |
+| Apps inventory         | api (NestJS) + promo + portal + admin + cms (Payload v3) + docs (Fumadocs) + docs-cms (Keystatic) + mobile (Expo). 8 apps.                                                | §2.3                        |
+| Packages inventory     | schemas, api-client, db, glossary, hooks, design-system, observability, utils, eslint-config, tsconfig, llm-utils                                                         | §2.3                        |
+| ADR location           | `apps/docs/content/adr/NNNN-<slug>.md` + companion `NNNN-<slug>-design.md`                                                                                                | §2.3                        |
+| Feature spec location  | `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}`                                                                 | §2.3 (inherits ADR-0006)    |
+| Tech spec location     | `apps/docs/content/specs/tech/<topic>.md`                                                                                                                                 | §2.3 (inherits ADR-0006 §4) |
+| Drizzle schema master  | `packages/db/schema/` per ADR-0006 §1 (supersedes ADR-0003 §4 location); migrations в `apps/api/drizzle/`                                                                 | §2.3                        |
+| Release tooling        | changesets + `changesets/action` GitHub workflow                                                                                                                          | §2.4                        |
+| Commit convention      | conventional-commits (light, no enforce)                                                                                                                                  | §2.4                        |
+| Merge style            | squash-only                                                                                                                                                               | §2.4                        |
+| Pre-commit hooks       | simple-git-hooks + lint-staged                                                                                                                                            | §2.5                        |
+| Branch strategy        | trunk-based, ветки `feat/DSO-NN-<slug>` short-lived                                                                                                                       | §2.6                        |
+| Branch protection rule | Target-state contract per ADR-0008 §2.6 (deferred enforcement; required status check `ci` only)                                                                           | §2.6                        |
+| CODEOWNERS Phase 0     | `* @sidorovanthon`                                                                                                                                                        | §2.7                        |
+| CI runner              | Self-hosted пул BBM `bbm-ci`, ресурсный профиль на job (`light`/`browser`/`heavy`/`docker`/`notify`); `ubuntu-latest` только для двух credential-blocked бот-jobs (#1224) | §2.8                        |
+| Dependabot             | weekly, grouped, ecosystems npm + github-actions                                                                                                                          | §2.9                        |
+| Bootstrap steps        | extends AI-stack design spec §11 + steps 15–22                                                                                                                            | §2.10                       |
 
 ---
 

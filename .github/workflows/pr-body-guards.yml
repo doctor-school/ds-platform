@@ -43,7 +43,7 @@ jobs:
   # (tools/gh/merge-gate.mjs), so this check still gates the merge.
   spec-link:
     if: github.event.action != 'edited' || github.event.changes.body != null
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
     permissions:
       contents: read
       pull-requests: read
@@ -66,7 +66,7 @@ jobs:
   registry-research:
     if: github.event.action != 'edited' || github.event.changes.body != null
     continue-on-error: true # WARN v1 (promote to BLOCK once stable)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
     permissions:
       contents: read
       pull-requests: read
@@ -92,7 +92,7 @@ jobs:
   spec-status-fresh:
     if: github.event.action != 'edited' || github.event.changes.body != null
     continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
     permissions:
       contents: read
       pull-requests: read
@@ -117,7 +117,7 @@ jobs:
   prior-decisions:
     if: github.event.action != 'edited' || github.event.changes.body != null
     continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
     permissions:
       contents: read
       pull-requests: read
@@ -145,7 +145,7 @@ jobs:
   spec-deletion:
     if: github.event.action != 'edited' || github.event.changes.body != null
     continue-on-error: true # WARN v1 (promote to BLOCK: remove this line)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
     permissions:
       contents: read
       pull-requests: read
@@ -174,7 +174,7 @@ jobs:
   epic-autoclose:
     if: github.event.action != 'edited' || github.event.changes.body != null
     continue-on-error: true # WARN v1 (promote to BLOCK once stable — ADR-0007 §2.6)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
     permissions:
       contents: read
       pull-requests: read

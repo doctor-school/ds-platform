@@ -33,6 +33,13 @@
 design-source/assets/
 design-source/support\.js
 
+# GOV.UK Design System: the site's WAF resets TCP connections from
+# GitHub-hosted (Azure) runner IPs — `Connection reset by peer (os error 104)`,
+# reproduced twice on PR #1227 — while the page answers 200 in <1s from a
+# residential connection. Cited in design/constitution.md; verified manually.
+# Same crawler-hostile false-positive class as the npmjs 403 entry above. #1228
+^https://design-system\.service\.gov\.uk($|/.*$)
+
 # Lint-guard test fixtures deliberately carry placeholder/broken markdown links
 # (e.g. a MEMORY.md fixture mimicking the auto-memory index). They are test data,
 # not docs — exclude the whole fixture tree from the link check. See #293.

@@ -44,7 +44,7 @@ The academy's front door. `/` stops redirecting to `/webinars` and becomes a lan
 
 1. Guest taps **[Стать партнёром]** in the hero → the page moves to the lead form in the closing screen (a single form, reached from either CTA).
 2. Guest reads the partner-benefit and participation-format screens on the way — the form is the end of an argument, not a cold ask.
-3. Guest fills the form (name, company, contact, message) → submits.
+3. Guest fills the form — **имя · компания/клиника · email или Telegram · роль (селект) · обязательный чекбокс согласия на обработку персональных данных со ссылкой на политику (152-ФЗ)** — and submits via «Обсудить партнёрство». _(Field set agent-proposed — UNCONFIRMED, taken from the Stage-A design package block 9; Stage A resolves the final list. The consent checkbox is not part of that uncertainty — see acceptance criteria.)_
 4. The request is **persisted** as a `leads` record **and** posted to the Mattermost channel «DS Лиды».
 5. The page shows a confirmation state in place of the form: request received, we will contact you.
 
@@ -70,7 +70,7 @@ Eight screens from the owner's PDF brief, in order, plus the owner-added live fe
 5. **People + media — «Кто стоит за брендом»**: expert cards (name, specialty, role) plus the academy's own media block (podcast / discussions).
 6. **Partner benefits — 3–4 cards**: what a sponsoring partner gets.
 7. **Participation formats — cards**: the concrete ways a partner can take part.
-8. **Closing CTA + lead form**: the single lead form both CTAs lead to, with its confirmation state.
+8. **Closing CTA + lead form**: the single lead form both CTAs lead to — имя · компания/клиника · email или Telegram · роль (селект) · mandatory personal-data consent checkbox with a policy link (152-ФЗ) · «Обсудить партнёрство» — with its filling, validation-error, and confirmation states. _(Field set agent-proposed — UNCONFIRMED per the Stage-A package block 9; Stage A resolves.)_
 
 **Live эфиры feed (owner addition, decision #7–8 of the epic tracker).** A feed of the latest эфиры sits on the page as a content screen — placed between the doctor-facing argument and the partner-facing argument, so the doctor path completes before the partner pitch begins. _(agent-proposed — UNCONFIRMED: the owner fixed that the feed exists, not its position in the screen order; Stage A decides.)_ It is **rendered by the reusable event-list design-system unit** — the same card + list + filters + pagination components used on `/webinars`, project pages, expert pages, and the «Прошедшие» tab. The home instance shows the latest N with no filters and links onward to `/webinars`.
 
@@ -98,6 +98,7 @@ Placeholder RU copy, drafted fresh at this PRD. The legacy PDF texts are **rejec
 - The эфиры feed shows real, currently published events and each entry opens that event's page; the feed is rendered by the **shared event-list unit**, not by a home-page-only copy of it.
 - Both hero CTAs work: «Стать партнёром» reaches the lead form, «Посмотреть эфиры» reaches content.
 - Section entry points to эфиры, projects, and experts are present. Until 015/016 ship, the projects and experts entry points behave per the tracked deferral below — never as a dead link or a 404.
+- The lead form carries a **mandatory personal-data consent checkbox with a link to the privacy policy** (152-ФЗ): submission is impossible while it is unchecked, and the consent given is recorded with the lead. Consent is a legal requirement of a public contact form, not a design option.
 - A lead submission **persists a `leads` record** and **posts to the Mattermost channel «DS Лиды»**; the visitor sees an explicit confirmation state. The persisted record is the record of truth — a channel-delivery failure does not lose the lead and does not surface to the visitor.
 - Form validation errors are actionable (they say what to fix) and never discard the visitor's other input.
 - The page is fully usable on mobile — every screen, the feed, and the form.
@@ -120,12 +121,12 @@ Placeholder RU copy, drafted fresh at this PRD. The legacy PDF texts are **rejec
 ## Open questions
 
 - **Final copy.** Every text in the Copy table is placeholder; the owner's editorial pass is pending and lands before Stage-B GO.
-- **Lead form fields.** Name / company / contact / message is this PRD's assumed minimum; the Stage-A design brief proposes name · company/clinic · email **or** Telegram · role (select: эксперт / представитель компании / другое) with the CTA «Обсудить партнёрство». The two must be reconciled into one field list before the EARS triplet — owner call.
+- **Lead form fields.** The field set is taken from the Stage-A package (имя · компания/клиника · email или Telegram · роль-селект · consent) and is marked `agent-proposed — UNCONFIRMED`: whether a free-text message field is added, and what the role-select options finally are, is a Stage-A resolution. The consent checkbox is **not** in question — it is a fixed requirement above.
 - **Feed size and placement.** This PRD places the feed between the doctor-facing and partner-facing arguments; the Stage-A design brief places it as block 2, directly under the hero, at 3–6 cards. Stage A resolves both position and count.
 - **Deferral resolution for projects/experts entry points** until 015/016 ship (see Tracked deferral) — owner call.
-- **Consent / personal-data notice on the lead form.** A public form collecting contact data on a Russian medical platform plausibly needs an explicit consent checkbox and a policy link; not discussed with the owner, and it is a legal question, not a design one.
+- **Privacy-policy document.** The consent checkbox requires a policy page to link to; which document that is, and whether it exists on the platform today, is unresolved (the requirement itself is fixed, only its link target is open).
 - **Mattermost channel provisioning.** «DS Лиды» is a new channel named by the owner — who creates it, and which credential the API posts under, is unresolved.
 
 ## Approved mockup
 
-_Empty — Stage A pending._ The Claude Design prompt package for this page lives at [`design-brief-013-home-ru.md`](../../product/academy-public/design-brief-013-home-ru.md) (owner-facing RU) — it asks for 2–3 composition options across both breakpoints and both themes. The Stage-A design proposal is authored by `author-design-mockup` from that package; the approved canvas is vendored into `design-source/` and referenced here before implementation starts. Implementation may not begin against this slot while it is empty (AGENTS.md §6 — UI design is approved before it is built).
+_Empty — Stage A pending._ The Claude Design prompt package for the whole epic lives at [`design-brief-academy-public-ru.md`](../../product/academy-public/design-brief-academy-public-ru.md) (owner-facing RU); this page is its **section 1**, run against the shared UX foundation (section 0). It asks for 2–3 composition options across both breakpoints and both themes. The Stage-A design proposal is authored by `author-design-mockup` from that package; the approved canvas is vendored into `design-source/` and referenced here before implementation starts. Implementation may not begin against this slot while it is empty (AGENTS.md §6 — UI design is approved before it is built).

@@ -64,7 +64,7 @@ Webinars-listing filters/facets and the «Прошедшие» tab are assigned 
 
 **Critical path:** 012 → **013** (owner priority #1) → 014 (Plane DSP-229 target 2026-08-21) → 015 → 016.
 
-**Tracked deferral on the critical path.** 013 ships before 015/016, so the landing's links to the projects and experts sections point at surfaces that do not exist yet. This is an accepted, tracked sequencing deferral, not a silent stub: 013 owns the deferral explicitly (its PRD names how those entry points behave until 015/016 land), and it closes when 015/016 ship. Stage-A design work for all pages of the epic runs in parallel with 012; the Claude Design prompt package for the 013 home page lives at [`design-brief-013-home-ru.md`](./design-brief-013-home-ru.md) (owner-facing RU).
+**Tracked deferral on the critical path.** 013 ships before 015/016, so the landing's links to the projects and experts sections point at surfaces that do not exist yet. This is an accepted, tracked sequencing deferral, not a silent stub: 013 owns the deferral explicitly (its PRD names how those entry points behave until 015/016 land), and it closes when 015/016 ship. Stage-A design work for all pages of the epic runs in parallel with 012; the Claude Design prompt package covering **every public page of the epic** — a shared UX foundation (cross-surface navigation, six reusable units) plus per-page sections for `/`, projects, experts, the archived-event state, and the `/webinars` refinement — lives at [`design-brief-academy-public-ru.md`](./design-brief-academy-public-ru.md) (owner-facing RU).
 
 ## Success metrics
 

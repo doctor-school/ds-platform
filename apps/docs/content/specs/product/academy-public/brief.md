@@ -60,7 +60,7 @@ Five features, numbered from 012. PRDs are authored wave by wave — 013 first (
 | 015 | `projects-catalog`                                               | `/projects` and the project page with its events.                                                                                                                                                                     |
 | 016 | `experts-catalog`                                                | `/experts` and the expert page with their events.                                                                                                                                                                     |
 
-Webinars-listing filters/facets and the «Прошедшие» tab are not a separate feature; at spec time they were assigned to **015** (the 014 PRD records the assignment and the reasoning). _(agent-proposed — UNCONFIRMED: 014 ships first on the critical path, so the owner may pull them into 014 instead.)_
+Webinars-listing filters/facets and the «Прошедшие» tab are not a separate feature: they belong to **014**. The owner delegated the UX call to the lead on 2026-08-13 and the lead assigned them to 014 — archive discoverability ships with the archive, since the tab is the registration driver's front door and the accumulated archive is the facets' primary value case; the shared event-list unit gains its filter capability there, and 015/016 consume it ready-made. The 014 PRD records the decision and its full reasoning.
 
 **Critical path:** 012 → **013** (owner priority #1) → 014 (Plane DSP-229 target 2026-08-21) → 015 → 016.
 

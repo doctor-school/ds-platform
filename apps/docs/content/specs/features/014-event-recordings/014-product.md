@@ -1,6 +1,6 @@
 ---
 title: "Feature 014 — Event recordings & the archived-event page (PRD)"
-description: "Product requirements for turning a finished broadcast into standing content: event_recordings (edited / raw) with the edited-on-top display rule, the post-live state of the event page with a publicly readable announcement and a login-gated player, an honest «запись готовится» state, and recordings reachable from «Мои события». Feature 014 of the Academy public surface epic; covers the scope of #1188 / Plane DSP-229; source of the 014 EARS triplet (ADR-0014)."
+description: "Product requirements for turning a finished broadcast into standing content: event_recordings (edited / raw) with the edited-on-top display rule, the post-live state of the event page with a publicly readable announcement and a login-gated player, an honest «запись готовится» state, recordings reachable from «Мои события», and the archive's front door on `/webinars` — the «Прошедшие» tab plus project/expert/topic facets in the shared event-list unit. Feature 014 of the Academy public surface epic; covers the scope of #1188 / Plane DSP-229; source of the 014 EARS triplet (ADR-0014)."
 slug: academy-public-014-event-recordings-product
 epic: ../../product/academy-public/brief.md
 status: Draft
@@ -22,6 +22,8 @@ The event page gets a **post-live state** rather than a new page — `/webinars/
 
 And the doctor's own history stops being upcoming-only: **«Мои события» shows the past events the user registered for**, each leading to its recording — the outcome #1188 asks for, delivered here.
 
+An archive nobody can browse is not an archive, so this feature also gives it a front door: `/webinars` gains a **«Прошедшие» tab** and **filter facets by project, expert and topic**. **Assignment decision (2026-08-13): owner-delegated, lead-decided — these belong to 014, not 015.** The reasoning is recorded because the epic left the call open: the archive is a registration driver (epic decision #3) and a driver needs a browsable entrance shipped with it, not one feature later; the facets' primary value case is precisely the accumulated archive, since a handful of upcoming broadcasts needs no filtering; and the reusable event-list unit (epic decision #7) gains its **filter capability here**, so 015 and 016 consume it ready-made instead of each growing its own. The release ships as one complex, so shipping order does not bear on the assignment. This is a lead decision under delegated authority — not an agent proposal awaiting confirmation.
+
 ## User stories
 
 - **US-1** — As a **doctor who missed a broadcast**, I open its event page and watch the recording, so missing a live эфир no longer means losing the content.
@@ -36,6 +38,10 @@ And the doctor's own history stops being upcoming-only: **«Мои событи�
 - **US-10** — As a **content operator**, publishing the edited version later automatically promotes it and demotes the raw one — I never edit a page to make the display rule happen.
 - **US-11** — As a **doctor on a phone**, the archived page and the player work as well as on desktop, because a large share of the audience watches on mobile.
 - **US-12** — As a **product owner**, the archive measurably drives registration — a guest who came for a recording has an obvious, low-friction path to an account.
+- **US-13** — As a **doctor or a guest**, I browse past эфиры on `/webinars` through a «Прошедшие» tab, so the archive is a place I can walk into rather than a set of links I must already have.
+- **US-14** — As a **doctor or a guest**, I narrow the listing by project, expert and topic, so an archive of dozens of broadcasts leads me to the ones about my subject instead of making me scroll through everything.
+- **US-15** — As a **guest browsing the archive**, an entry I pick from the «Прошедшие» listing takes me to a page I can read in full, where the invitation to sign in for playback is the natural next step — browsing and the registration driver are one continuous path.
+- **US-16** — As a **product owner**, the filter capability lives in the shared event-list unit, so the project, expert and «Мои события» listings gain the same behavior without anyone rebuilding it.
 
 ## Flows
 
@@ -64,6 +70,13 @@ And the doctor's own history stops being upcoming-only: **«Мои событи�
 2. Each past entry links to its event page, where the recording (or the «готовится» state) waits.
 3. The listing is rendered by the **shared event-list unit** (epic decision #7), not by a section-only copy of it.
 
+**Browse the archive on `/webinars` (US-13, US-14, US-15, US-16):**
+
+1. A visitor — signed in or not — opens `/webinars` and switches to the **«Прошедшие»** tab; the listing shows finished events, most recent first. _(Ordering agent-proposed — UNCONFIRMED.)_
+2. The visitor narrows the listing with facets — **project, expert, topic** — reading them from the 012 taxonomy; the facets apply to the upcoming tab as well, since they are a property of the list unit, not of the archive.
+3. Selecting an entry opens `/webinars/[slug]` in its post-live state — for a signed-in doctor the player, for a guest the fully readable page plus the sign-in invitation, which is the archive's registration driver in action.
+4. Both tabs, the facets and the pagination are the **shared event-list unit** (epic decision #7) — the filter capability is added to that unit here, and the project, expert and «Мои события» listings inherit it.
+
 **Operator flow (US-9, US-10):**
 
 1. Operator attaches a recording to an event and marks its kind — `raw` or `edited`.
@@ -85,6 +98,10 @@ And the doctor's own history stops being upcoming-only: **«Мои событи�
 - **Playback renders for authenticated users only.** A guest gets a poster plus an honest, non-paywall invitation to sign in, stating that access is free; the sign-in path is reachable from that spot.
 - When a finished event has no recording, the page shows an explicit **«запись готовится»** state with a timeframe, in the player's position; the state clears automatically once a recording is attached.
 - **«Мои события» lists the user's past registered events**, each linking to its event page and its recording — closing the outcome of #1188 / Plane DSP-229. The listing uses the shared event-list unit.
+- `/webinars` carries a **«Прошедшие» tab** that lists finished events, reachable by any visitor without an account, and **filter facets by project, expert and topic** driven by the 012 taxonomy.
+- The tab, the facets and the pagination are delivered **inside the shared event-list unit**, not as a `/webinars`-only implementation: the same filter capability is available to the project, expert and «Мои события» listings that consume the unit afterwards.
+- An entry opened from the «Прошедшие» listing lands on the event's post-live state, so **browsing the archive and the login-gated player are one continuous path** for a guest.
+- The existing `/webinars` listing is **refined, not redesigned** — upcoming discovery keeps working exactly as it does today.
 - Speakers, project and topics on the archived page come from the **012 taxonomy** — this feature reads that data, it does not re-model it.
 - The whole archived state works on mobile — the player, the secondary recording affordance, and the login invitation alike.
 - The archived page meets the platform's accessibility bar for a public surface — the same `playwright-axe` gate every user-facing surface passes, including the player's controls being keyboard-reachable and the login invitation being a real, labelled action.
@@ -96,7 +113,7 @@ And the doctor's own history stops being upcoming-only: **«Мои событи�
 - The **video hosting / streaming decision** — where recordings physically live, how they are uploaded and transcoded. 014 requires that a recording is a record with a kind and a playable source; the delivery mechanism is a technical decision, not a product one.
 - **Attendance-gated access** — the gate is authentication, not registration for that specific event; any doctor with an account can watch any published recording.
 - **Download of recordings**, offline viewing, and playback position / resume-where-you-left-off.
-- **The «Прошедшие» tab and the filter facets on `/webinars`** — the epic assigns them to 014 or 015 at spec time; this PRD leaves them to 015 with the catalog work, and «Мои события» carries the doctor's own past-event need. _(agent-proposed — UNCONFIRMED: the epic explicitly deferred the assignment to spec time; this is the lead's assignment and the owner may reverse it.)_
+- **A redesign of the `/webinars` listing.** The tab and the facets are a refinement of the existing showcase (design brief section 5); its composition and the upcoming-events experience are not reworked.
 - **Materials beyond the video** (slides, handouts) as a new upload surface — existing event materials keep rendering; no new materials model here.
 - **Analytics on watch behavior** (views, watch time, completion) and any reporting to partners.
 - **Notifications** — telling a registered doctor that "the recording is ready" is not in this epic (the epic excludes notification delivery).
@@ -109,11 +126,15 @@ And the doctor's own history stops being upcoming-only: **«Мои событи�
 - **How far back «Мои события» reaches** — the full registration history or a bounded window, and whether past events are a separate tab or one list with upcoming ones.
 - **A past event the user registered for that has no recording** — does it still appear in «Мои события» (the lead reads #1188 as yes: the section is the user's history, not a recording index), and how is it presented there.
 - **Recording visibility control.** Whether an attached recording is public the moment it is attached, or carries its own published/unpublished switch for the operator.
+- **The form of the tab and the facets.** That `/webinars` gets a «Прошедшие» tab and project/expert/topic facets is decided; how they are presented — tab versus toggle, facets as a sidebar, a chip row or a dropdown set, whether a selection survives in the URL — is Stage-A territory (design brief section 5).
+- **Facet behavior at the edges** — whether facet values that yield no past events are hidden or shown disabled, and whether facets combine as AND across kinds.
 
 ## Approved mockup
 
 **Stage A pending — this slot is deliberately EMPTY.**
 
 The expected Stage-A vehicle is the canvas **«Вебинар архив»**, which the owner is currently designing in the claude.ai Design app (project «DS Platform»), from the archived-event section of the design brief ([`design-brief-academy-public-ru.md`](../../product/academy-public/design-brief-academy-public-ru.md), section 4 — including its composition fork on how the secondary recording is presented). When that canvas is finished and the owner records the pick, it becomes the approved mockup and the composition SoT for this feature's surface.
+
+The `/webinars` refinement this feature now also owns — the «Прошедшие» tab and the project/expert/topic facets — is covered by **section 5 of the same design brief** and needs its own Stage-A resolution before the listing is built; it is a second surface of this feature, not a detail of the archived-event canvas.
 
 Vendoring is **pending** and follows the same constraint as feature 013: Claude Design canvas documents are not exposed through the project's DesignSync file listing, so the `design-source/` copy awaits an owner-side export handover. Implementation may not begin until the canvas is approved, vendored into `design-source/`, and referenced here (AGENTS.md §6 — UI design is approved before it is built), and every canvas-carried resolution — the secondary-recording presentation, the guest gate's poster and invitation, the «запись готовится» plaque — is read off the vendored copy, never off this PRD's prose.

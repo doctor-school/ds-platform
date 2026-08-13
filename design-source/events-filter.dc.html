@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}a{color:#2D84F2}a:hover{color:#114D9E}.fltopts::-webkit-scrollbar{width:8px}.fltopts::-webkit-scrollbar-thumb{background:rgba(0,0,0,.2)}</style></helmet>
+<div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap">
+    <sc-for list="{{ facets }}" as="f" hint-placeholder-count="3">
+      <div style="{{ f.wrapStyle }}">
+        <button onClick="{{ f.onClick }}" style="{{ f.btnStyle }}">
+          <span style="min-width:0"><span style="display:block;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};margin-bottom:3px">{{ f.label }}</span><span style="{{ f.valueStyle }}">{{ f.value }}</span></span>
+          <span style="font-size:10px;color:{{ ink }};flex:none">{{ f.caret }}</span>
+        </button>
+      </div>
+    </sc-for>
+  </div>
+  <sc-if value="{{ panelOpen }}" hint-placeholder-val="{{ false }}">
+  <div style="{{ panelStyle }}">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px">
+      <span style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ panelInk }}">{{ panelTitle }}</span>
+      <button onClick="{{ closePanel }}" style="font:inherit;font-size:17px;line-height:1;color:{{ panelInk }};background:transparent;border:0;cursor:pointer;padding:4px">✕</button>
+    </div>
+    <input value="{{ query }}" onInput="{{ setQuery }}" placeholder="{{ searchPh }}" style="{{ searchStyle }}">
+    <div class="fltopts" style="{{ optionsWrapStyle }}">
+      <sc-for list="{{ options }}" as="fo" hint-placeholder-count="8">
+        <button onClick="{{ fo.onClick }}" style="{{ fo.style }}" style-hover="border-color:{{ chipBorder }}"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fo.name }}</span><span style="{{ fo.metaStyle }}">{{ fo.meta }}</span></button>
+      </sc-for>
+    </div>
+    <sc-if value="{{ noMatches }}" hint-placeholder-val="{{ false }}">
+      <div style="margin-top:10px;font-size:13.5px;font-weight:600;color:{{ panelMuted }}">Ничего не найдено по запросу «{{ query }}»</div>
+    </sc-if>
+  </div>
+  </sc-if>
+  <sc-if value="{{ isFiltered }}" hint-placeholder-val="{{ false }}">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px">
+    <span style="font-size:12.5px;font-weight:700;color:{{ inkMuted }}">Фильтры:</span>
+    <sc-for list="{{ badges }}" as="b" hint-placeholder-count="1">
+      <button onClick="{{ b.onClear }}" style="font:inherit;display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:0;padding:7px 14px;cursor:pointer">{{ b.text }} <span style="font-size:14px">✕</span></button>
+    </sc-for>
+    <button onClick="{{ resetAll }}" style="font:inherit;font-size:12.5px;font-weight:700;color:{{ accent }};background:transparent;border:0;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;cursor:pointer">Сбросить всё</button>
+  </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:960,&quot;height&quot;:200},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;project&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Все&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;expert&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Все&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;topic&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Все&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;onChange&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(sel: {project: string, expert: string, topic: string}) =&gt; void&quot;},&quot;counts&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;{project?: Record&lt;string,number&gt;, expert?: Record&lt;string,number&gt;, topic?: Record&lt;string,number&gt;}&quot;},&quot;projects&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;string[]&quot;},&quot;experts&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;string[]&quot;},&quot;topics&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;string[]&quot;}}">
+class Component extends DCLogic {
+  state = { isMobile: false, openFacet: null, query: '', localSel: null };
+  componentDidMount() {
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.upd = () => this.setState({ isMobile: this.mq.matches });
+    this.upd();
+    this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
+  }
+  renderVals() {
+    const p = this.props, d = !!p.dark, m = this.state.isMobile;
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const shadow = d ? '#6BB1F7' : '#114D9E';
+    const shadowSm = d ? '#1F69C8' : '#AED4FB';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const chipBorder = d ? 'rgba(107,177,247,.45)' : '#AED4FB';
+    const tint = d ? '#0D3A77' : '#D3E8FD';
+    const panelInk = d ? '#fff' : '#114D9E';
+
+    const PROJECTS = ['Школа аллергологии и иммунологии','Школа гастроэнтерологии','Школа гематологии','Школа гинекологии','Школа дерматологии','Школа инфекционных болезней','Школа кардиологии','Школа неврологии','Школа нефрологии','Школа онкологии','Школа офтальмологии','Школа педиатрии','Школа психиатрии','Школа пульмонологии','Школа ревматологии','Школа травматологии и ортопедии','Школа урологии','Школа эндокринологии'];
+    const EXPERTS = ['Алла Жукова','Анна Соколова','Антон Рябцев','Вера Ильина','Галина Штерн','Дарья Литвинова','Денис Крамаренко','Евгения Мороз','Игорь Панин','Ирина Северова','Константин Лебедев','Ксения Волкова','Марат Гареев','Марина Ерёмина','Михаил Верещагин','Наталья Бек','Никита Сафонов','Ольга Ким','Павел Дроздов','Пётр Малахов','Роман Царёв','Сергей Донцов','Тимур Ахметов','Юлия Насонова'];
+    const TOPICS = ['Аллергология','Анестезиология','Гастроэнтерология','Гастрохирургия','Гематология','Гинекология','Дерматология','Инфекционные болезни','Кардиология','Кардиохирургия','Неврология','Нефрология','Общая практика','Онкология','Ортопедия','Оториноларингология','Офтальмология','Педиатрия','Психиатрия','Пульмонология','Реабилитация','Ревматология','Спортивная медицина','Терапия','Травматология','Урология','Функциональная диагностика','Хирургия','Эндокринология'];
+
+    const controlled = typeof p.onChange === 'function';
+    const sel = controlled
+      ? { project: p.project || 'Все', expert: p.expert || 'Все', topic: p.topic || 'Все' }
+      : (this.state.localSel || { project: 'Все', expert: 'Все', topic: 'Все' });
+    const setSel = (patch) => {
+      const next = { project: sel.project, expert: sel.expert, topic: sel.topic, ...patch };
+      if (controlled) p.onChange(next); else this.setState({ localSel: next });
+    };
+    const counts = p.counts || {};
+
+    const defs = [
+      { key: 'project', label: 'Проект', all: 'Все проекты', ph: 'Поиск по проектам…', options: Array.isArray(p.projects) ? p.projects : PROJECTS },
+      { key: 'expert', label: 'Эксперт', all: 'Все эксперты', ph: 'Поиск по экспертам…', options: Array.isArray(p.experts) ? p.experts : EXPERTS },
+      { key: 'topic', label: 'Тема', all: 'Все темы', ph: 'Поиск по темам…', options: Array.isArray(p.topics) ? p.topics : TOPICS }
+    ];
+    const openKey = this.state.openFacet;
+
+    const facets = defs.map(f => {
+      const val = sel[f.key], open = openKey === f.key, active = val !== 'Все';
+      return {
+        label: f.label,
+        value: val === 'Все' ? f.all : val,
+        caret: open ? '▲' : '▼',
+        valueStyle: `display:block;font-size:15px;font-weight:800;color:${active ? accent : ink};overflow:hidden;text-overflow:ellipsis;white-space:nowrap`,
+        btnStyle: `font:inherit;display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;box-sizing:border-box;padding:13px 16px;text-align:left;cursor:pointer;background:${open ? tint : surface};border:2px solid ${border};box-shadow:${open ? 'none' : '3px 3px 0 ' + shadowSm}`,
+        wrapStyle: m ? 'flex:1 1 100%;min-width:0' : 'flex:1;min-width:220px',
+        onClick: () => this.setState(s => ({ openFacet: s.openFacet === f.key ? null : f.key, query: '' }))
+      };
+    });
+
+    const od = defs.find(f => f.key === openKey);
+    let options = [], panelTitle = '', searchPh = '', noMatches = false;
+    if (od) {
+      const val = sel[od.key];
+      const q = this.state.query.trim().toLowerCase();
+      const names = od.options.filter(n => !q || n.toLowerCase().indexOf(q) !== -1);
+      const cts = counts[od.key] || null;
+      const optStyle = (active) => `font:inherit;display:flex;align-items:center;justify-content:space-between;gap:10px;box-sizing:border-box;min-width:0;padding:10px 12px;font-size:13.5px;text-align:left;cursor:pointer;font-weight:${active ? 800 : 600};color:${active ? btnFg : ink};background:${active ? btnBg : surface};border:2px solid ${active ? btnBg : 'transparent'}`;
+      const mkOpt = (name, displayName) => {
+        const active = val === name;
+        const c = cts ? (cts[name] || 0) : 0;
+        return {
+          name: displayName || name,
+          meta: active ? '✓' : (c > 0 ? String(c) : ''),
+          metaStyle: `flex:none;font-size:12px;font-weight:800;color:${active ? btnFg : accent}`,
+          style: optStyle(active),
+          onClick: () => { this.setState({ openFacet: null, query: '' }); setSel({ [od.key]: name }); }
+        };
+      };
+      panelTitle = od.label + ' · ' + od.options.length;
+      searchPh = od.ph;
+      options = (q ? [] : [mkOpt('Все', od.all)]).concat(names.map(n => mkOpt(n)));
+      noMatches = !!q && names.length === 0;
+    }
+
+    const badges = [];
+    defs.forEach(f => { if (sel[f.key] !== 'Все') badges.push({ text: f.label + ': ' + sel[f.key], onClear: () => setSel({ [f.key]: 'Все' }) }); });
+
+    return {
+      accent, ink, btnBg, btnFg, chipBorder, panelInk,
+      inkMuted: d ? 'rgba(255,255,255,.55)' : 'oklch(.45 .014 250)',
+      panelMuted: d ? 'rgba(255,255,255,.6)' : 'oklch(.4 .04 250)',
+      facets,
+      panelOpen: !!od,
+      panelStyle: `margin-top:10px;background:${tint};border:2px solid ${border};box-shadow:${m ? '4px 4px' : '6px 6px'} 0 ${shadow};padding:${m ? '14px' : '18px'}`,
+      panelTitle, searchPh, options, noMatches,
+      query: this.state.query,
+      setQuery: (e) => this.setState({ query: e.target.value }),
+      closePanel: () => this.setState({ openFacet: null, query: '' }),
+      searchStyle: `font:inherit;width:100%;box-sizing:border-box;padding:12px 14px;font-size:14px;font-weight:600;color:${ink};background:${surface};border:2px solid ${border}`,
+      optionsWrapStyle: `margin-top:10px;max-height:280px;overflow-y:auto;display:grid;grid-template-columns:${m ? '1fr' : 'repeat(auto-fill,minmax(230px,1fr))'};gap:6px;align-content:start`,
+      isFiltered: badges.length > 0,
+      badges,
+      resetAll: () => setSel({ project: 'Все', expert: 'Все', topic: 'Все' })
+    };
+  }
+}
+</script>
+</body>
+</html>

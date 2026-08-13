@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}a{color:#114D9E}a:hover{color:#2D84F2}details>summary{list-style:none}details>summary::-webkit-details-marker{display:none}</style></helmet>
+
+<div style="min-height:100vh;background:{{ pageBg }}">
+  <header data-screen-label="Эфир — архив" style="background:#114D9E;padding:16px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
+    <a href="Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
+        <details style="position:relative">
+          <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 {{ headerShadow }}">≡</summary>
+          <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:200px;z-index:30">
+            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:800;color:{{ accent }};text-decoration:none">Эфиры</a>
+            <a href="Проекты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Проекты</a>
+            <a href="Эксперты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Эксперты</a>
+            <a href="Мои события.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Мои события</a>
+          </nav>
+        </details>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+      <nav style="display:flex;align-items:center;gap:28px;font-size:14px;font-weight:700">
+        <a href="Эфиры.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px">Эфиры</a>
+        <a href="Проекты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Проекты</a>
+        <a href="Эксперты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эксперты</a>
+        <a href="Мои события.dc.html" style="color:#D3E8FD;text-decoration:none">Мои события</a>
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
+        <sc-if value="{{ isGuest }}" hint-placeholder-val="{{ false }}">
+          <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;border:0;padding:11px 22px;cursor:pointer;box-shadow:3px 3px 0 {{ headerShadow }};text-decoration:none" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">Войти</a>
+        </sc-if>
+        <sc-if value="{{ isAuthed }}" hint-placeholder-val="{{ true }}">
+          <a href="Профиль.dc.html" title="Профиль" style="width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;font-size:15px;font-weight:800;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">АИ</a>
+        </sc-if>
+      </nav>
+    </sc-if>
+  </header>
+
+  <!-- Плакатное поле -->
+  <div style="background:#114D9E;padding:clamp(24px,4vw,36px) clamp(16px,4vw,48px) 132px">
+    <div style="max-width:1104px;margin:0 auto">
+      <div style="display:flex;align-items:center;gap:10px;font-size:12.5px;font-weight:700;color:#AED4FB;margin-bottom:32px;flex-wrap:wrap">
+        <a href="Эфиры.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Эфиры</a><span>/</span><span>Травматология</span><span>/</span><span>Эфир № 042</span>
+      </div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:32px;flex-wrap:wrap">
+        <div style="max-width:760px">
+          <div style="font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#D3E8FD;margin-bottom:16px">Школа травматологии и ортопедии · Эфир № 042 · прошёл 16 июля</div>
+          <h1 style="margin:0;font-size:clamp(30px,5vw,44px);line-height:1.06;font-weight:800;letter-spacing:-.035em;color:#fff">Пластика ахиллова сухожилия: разбор клинических случаев</h1>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:24px">
+            <span style="font-size:12.5px;font-weight:700;color:#fff;border:2px solid #6BB1F7;padding:5px 12px">Травматология</span>
+            <span style="font-size:12.5px;font-weight:700;color:#fff;border:2px solid #6BB1F7;padding:5px 12px">Ортопедия</span>
+            <span style="font-size:12.5px;font-weight:700;color:#fff;border:2px solid #6BB1F7;padding:5px 12px">Спортивная медицина</span>
+          </div>
+        </div>
+        <span style="{{ heroBadgeStyle }}">{{ heroBadgeText }}</span>
+      </div>
+    </div>
+  </div>
+
+  <main style="max-width:1104px;margin:-80px auto 0;padding:{{ mainPad }};position:relative;z-index:1">
+
+    <!-- Состояние: запись готовится -->
+    <sc-if value="{{ isPreparing }}" hint-placeholder-val="{{ false }}">
+      <div style="{{ prepCardStyle }}">
+        <div style="{{ prepTimeCol }}">
+          <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ tintInk }}">Запись</div>
+          <div style="font-size:{{ prepTimeSize }};font-weight:800;line-height:1;letter-spacing:-.04em;color:{{ tintInk }}">≈2 дня</div>
+          <div style="font-size:12.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:{{ inkSoft }};line-height:1.6">на монтаж</div>
+        </div>
+        <div style="{{ prepBodyStyle }}">
+          <div style="min-width:220px;flex:1">
+            <div style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:{{ ink }};margin-bottom:8px">Запись готовится</div>
+            <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }}">Эфир завершился 16 июля в 20:30. Монтируем запись — опубликуем на этой странице до 18 июля, 12:00 МСК. Всем зарегистрированным пришлём письмо со ссылкой.</div>
+          </div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap">
+            <button style="font:inherit;font-size:15px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:15px 22px;cursor:pointer;white-space:nowrap;box-shadow:4px 4px 0 {{ shadowSm }}" style-hover="transform:translate(1px,1px);box-shadow:3px 3px 0 {{ shadowSm }}">Напомнить на почту</button>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- Плеер записи -->
+    <sc-if value="{{ hasPlayer }}" hint-placeholder-val="{{ true }}">
+      <div style="background:{{ surface }};border:{{ playerCardBorder }};box-shadow:{{ playerCardShadow }};margin:{{ playerCardMargin }}">
+
+        <!-- Вариант Б: вкладки -->
+        <sc-if value="{{ showTabs }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;border-bottom:2px solid {{ border }}">
+            <button onClick="{{ setTabMontage }}" style="{{ tabMontageStyle }}">Монтаж · 90 мин</button>
+            <button onClick="{{ setTabRaw }}" style="{{ tabRawStyle }}">Оригинал трансляции · 2 ч 04 мин</button>
+          </div>
+        </sc-if>
+
+        <!-- Видеообласть -->
+        <div style="position:relative;background:#0A1B33;aspect-ratio:16/9;overflow:hidden">
+          <div style="position:absolute;inset:0;padding:clamp(20px,4vw,48px) clamp(20px,4vw,48px) clamp(64px,8vw,88px);display:flex;flex-direction:column;justify-content:space-between">
+            <div style="font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#6BB1F7">Doctor.School · {{ playerKindLabel }}</div>
+            <div>
+              <div style="font-size:clamp(18px,3vw,34px);font-weight:800;letter-spacing:-.03em;line-height:1.1;color:#fff;max-width:640px">Пластика ахиллова сухожилия: разбор клинических случаев</div>
+              <div style="font-size:clamp(11px,1.4vw,13px);font-weight:700;color:#AED4FB;margin-top:10px">16 июля 2026 · Соколова, Верещагин</div>
+            </div>
+          </div>
+
+          <sc-if value="{{ isAuthed }}" hint-placeholder-val="{{ true }}">
+            <button title="Смотреть" style="font:inherit;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:clamp(64px,9vw,92px);height:clamp(64px,9vw,92px);background:#fff;border:0;cursor:pointer;box-shadow:5px 5px 0 #114D9E;display:flex;align-items:center;justify-content:center" style-hover="transform:translate(calc(-50% + 2px),calc(-50% + 2px));box-shadow:3px 3px 0 #114D9E">
+              <span style="width:0;height:0;border-left:26px solid #114D9E;border-top:16px solid transparent;border-bottom:16px solid transparent;margin-left:6px"></span>
+            </button>
+            <div style="position:absolute;left:0;right:0;bottom:0;padding:0 clamp(16px,3vw,28px) clamp(14px,2.5vw,20px)">
+              <div style="height:6px;background:rgba(255,255,255,.22);position:relative">
+                <span style="position:absolute;left:0;top:0;bottom:0;width:3%;background:#6BB1F7"></span>
+                <span style="position:absolute;left:32%;top:-2px;bottom:-2px;width:2px;background:rgba(255,255,255,.55)" title="Глава 2"></span>
+                <span style="position:absolute;left:73%;top:-2px;bottom:-2px;width:2px;background:rgba(255,255,255,.55)" title="Глава 3"></span>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:12px;font-weight:700;color:#AED4FB;font-variant-numeric:tabular-nums">
+                <span>02:41 / {{ playerTotal }}</span><span>HD · субтитры</span>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- Гейт логина -->
+          <sc-if value="{{ isGuest }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;inset:0;background:rgba(7,17,32,.78);display:flex;align-items:center;justify-content:center;padding:20px">
+              <div style="background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(22px,4vw,36px);max-width:430px;text-align:center">
+                <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:12px">Запись эфира · 90 минут</div>
+                <div style="font-size:clamp(18px,2.4vw,22px);font-weight:800;letter-spacing:-.02em;color:{{ ink }};line-height:1.25">Войдите, чтобы посмотреть запись</div>
+                <div style="font-size:13.5px;line-height:1.6;color:{{ inkMuted }};margin-top:12px">Doctor.School бесплатна для врачей. Вход — почта и специальность, две минуты.</div>
+                <a href="Авторизация.dc.html" style="display:inline-block;margin-top:20px;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};padding:15px 28px;text-decoration:none;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Войти и смотреть ↗</a>
+                <div style="font-size:12.5px;font-weight:600;color:{{ inkFaint }};margin-top:14px">Нет аккаунта? <a href="Авторизация.dc.html" style="color:{{ accent }};font-weight:700">Создать</a></div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+
+        <!-- Мета-строка -->
+        <div style="padding:{{ metaPad }};display:flex;align-items:center;gap:clamp(20px,3vw,40px);flex-wrap:wrap">
+          <div><div style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">{{ metaKindLabel }}</div><div style="font-size:15px;font-weight:700;color:{{ ink }};margin-top:3px">{{ metaDur }}</div></div>
+          <div><div style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Эфир прошёл</div><div style="font-size:15px;font-weight:700;color:{{ ink }};margin-top:3px">16 июля 2026</div></div>
+          <div><div style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Смотрели</div><div style="font-size:15px;font-weight:700;color:{{ ink }};margin-top:3px">214 врачей</div></div>
+          <div><div style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }}">Доступна ещё</div><div style="font-size:15px;font-weight:700;color:{{ ink }};margin-top:3px">30 дней</div></div>
+          <div style="margin-left:auto;display:flex;gap:12px;flex-wrap:wrap">
+            <sc-if value="{{ isAuthed }}" hint-placeholder-val="{{ true }}">
+              <button style="font:inherit;font-size:13px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:10px 16px;cursor:pointer;box-shadow:3px 3px 0 {{ shadowSm }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ shadowSm }}">Материалы ↓</button>
+              <button style="font:inherit;font-size:13px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:10px 16px;cursor:pointer;box-shadow:3px 3px 0 {{ shadowSm }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ shadowSm }}">Сертификат</button>
+            </sc-if>
+            <sc-if value="{{ isGuest }}" hint-placeholder-val="{{ false }}">
+              <span style="font-size:12.5px;font-weight:600;color:{{ inkFaint }}">Материалы и сертификат — после входа</span>
+            </sc-if>
+          </div>
+        </div>
+
+        <!-- Только оригинал: честная плашка -->
+        <sc-if value="{{ isRawOnly }}" hint-placeholder-val="{{ false }}">
+          <div style="background:{{ tint }};padding:16px clamp(16px,3vw,28px);font-size:13px;line-height:1.6;color:{{ tintInk }}"><b>Пока это оригинальная запись трансляции.</b> Смонтированную версию — без пауз и техперерывов — опубликуем здесь же; ссылка не изменится.</div>
+        </sc-if>
+      </div>
+
+      <!-- Вариант А: спойлер под плеером -->
+      <sc-if value="{{ showSpoiler }}" hint-placeholder-val="{{ false }}">
+        <details style="border:2px solid {{ hairline }};margin-top:16px;background:{{ surface }}">
+          <summary style="padding:18px clamp(16px,3vw,28px);cursor:pointer;display:flex;align-items:center;gap:14px;flex-wrap:wrap" style-hover="background:{{ tint }}">
+            <span style="font-size:14px;font-weight:800;color:{{ ink }}">▸ Смотреть оригинал трансляции</span>
+            <span style="font-size:12.5px;font-weight:600;color:{{ inkFaint }}">2 ч 04 мин · без монтажа, с паузами и вопросами между блоками</span>
+          </summary>
+          <div style="padding:0 clamp(16px,3vw,28px) 24px">
+            <div style="position:relative;background:#0A1B33;aspect-ratio:16/9;max-width:560px;display:flex;align-items:center;justify-content:center">
+              <div style="position:absolute;top:14px;left:16px;font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#6BB1F7">Оригинал трансляции</div>
+              <button title="Смотреть оригинал" style="font:inherit;width:60px;height:60px;background:#fff;border:0;cursor:pointer;box-shadow:4px 4px 0 #114D9E;display:flex;align-items:center;justify-content:center" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 #114D9E"><span style="width:0;height:0;border-left:18px solid #114D9E;border-top:11px solid transparent;border-bottom:11px solid transparent;margin-left:4px"></span></button>
+              <div style="position:absolute;right:16px;bottom:12px;font-size:12px;font-weight:700;color:#AED4FB;font-variant-numeric:tabular-nums">2:04:12</div>
+            </div>
+          </div>
+        </details>
+      </sc-if>
+    </sc-if>
+
+    <!-- Две колонки -->
+    <div style="display:grid;grid-template-columns:{{ colsTemplate }};gap:clamp(32px,4vw,56px);margin-top:64px">
+      <div>
+        <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:28px">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">О чём эфир</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <p style="margin:0 0 36px;font-size:16px;line-height:1.7;color:{{ inkBody }};text-wrap:pretty">Три реальных случая пластики ахиллова сухожилия — от выбора техники до реабилитационного протокола. Без лекционной воды: снимки, интраоперационные видео, осложнения и честный разбор ошибок. Таймкоды ниже ведут к главам записи.</p>
+
+        <div style="display:grid;gap:0">
+          <div style="display:grid;grid-template-columns:96px 1fr;gap:24px;padding:22px 0;border-top:1px solid {{ hairline }}">
+            <div><div style="font-size:26px;font-weight:800;color:{{ accent }};letter-spacing:-.02em">01</div><a href="#" style="display:inline-block;font-size:12.5px;font-weight:700;color:{{ accent }};margin-top:4px;font-variant-numeric:tabular-nums;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px">00:00 ▸</a></div>
+            <div><div style="font-size:16.5px;font-weight:700;color:{{ ink }};margin-bottom:6px">Открытая пластика: когда она всё ещё лучший выбор</div><div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">Случай №1 — спортсмен-любитель, застарелый разрыв. Анна Соколова.</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:96px 1fr;gap:24px;padding:22px 0;border-top:1px solid {{ hairline }}">
+            <div><div style="font-size:26px;font-weight:800;color:{{ accent }};letter-spacing:-.02em">02</div><a href="#" style="display:inline-block;font-size:12.5px;font-weight:700;color:{{ accent }};margin-top:4px;font-variant-numeric:tabular-nums;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px">28:40 ▸</a></div>
+            <div><div style="font-size:16.5px;font-weight:700;color:{{ ink }};margin-bottom:6px">Малоинвазивные техники и шовные системы 2026</div><div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">Случаи №2 и №3 — сравнение доступов, интраоперационное видео. Михаил Верещагин.</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:96px 1fr;gap:24px;padding:22px 0;border-top:1px solid {{ hairline }};border-bottom:1px solid {{ hairline }}">
+            <div><div style="font-size:26px;font-weight:800;color:{{ accent }};letter-spacing:-.02em">03</div><a href="#" style="display:inline-block;font-size:12.5px;font-weight:700;color:{{ accent }};margin-top:4px;font-variant-numeric:tabular-nums;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px">66:15 ▸</a></div>
+            <div><div style="font-size:16.5px;font-weight:700;color:{{ ink }};margin-bottom:6px">Ответы на вопросы из чата</div><div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">Оба спикера. В запись вошли все 14 вопросов — самые залайканные первыми.</div></div>
+          </div>
+        </div>
+
+        <div style="margin-top:48px;border:2px solid {{ hairline }};padding:24px 28px;display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+          <div style="width:120px;height:56px;border:2px dashed {{ dashBorder }};display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:{{ inkFaint }};flex:none;text-align:center">Лого<br>спонсора</div>
+          <div style="font-size:13px;line-height:1.65;color:{{ inkMuted }};min-width:180px;flex:1"><b style="color:{{ ink }};text-transform:uppercase;font-size:11px;letter-spacing:.1em">При поддержке</b><br>Спонсор оплачивает эфир и не влияет на программу. Содержание определяют спикеры и школа.</div>
+        </div>
+      </div>
+
+      <aside>
+        <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:28px">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Спикеры</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:24px">
+          <a href="#" style="border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadowSm }};padding:24px;display:flex;gap:18px;background:{{ surface }};text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ shadowSm }}">
+            <span style="width:64px;height:64px;background:{{ tint }};color:{{ tintInk }};display:inline-flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;flex:none">АС</span>
+            <span style="display:block">
+              <span style="display:block;font-size:16px;font-weight:700;color:{{ ink }}">Анна Соколова</span>
+              <span style="display:block;font-size:13px;line-height:1.6;color:{{ inkMuted }};margin-top:6px">Травматолог-ортопед, к.м.н. · НМИЦ им. Пирогова</span>
+              <span style="display:block;font-size:12px;font-weight:700;color:{{ accent }};margin-top:10px">12 эфиров на платформе →</span>
+            </span>
+          </a>
+          <a href="#" style="border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadowSm }};padding:24px;display:flex;gap:18px;background:{{ surface }};text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ shadowSm }}">
+            <span style="width:64px;height:64px;background:{{ tint }};color:{{ tintInk }};display:inline-flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;flex:none">МВ</span>
+            <span style="display:block">
+              <span style="display:block;font-size:16px;font-weight:700;color:{{ ink }}">Михаил Верещагин</span>
+              <span style="display:block;font-size:13px;line-height:1.6;color:{{ inkMuted }};margin-top:6px">Хирург, профессор · Сеченовский университет</span>
+              <span style="display:block;font-size:12px;font-weight:700;color:{{ accent }};margin-top:10px">7 эфиров на платформе →</span>
+            </span>
+          </a>
+
+          <div style="border:2px solid {{ hairline }};padding:24px;background:{{ surface }}">
+            <div style="font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:16px">Материалы эфира</div>
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px"><span style="font-size:13.5px;font-weight:700;color:{{ ink }}">Презентация Соколовой<span style="font-weight:600;color:{{ inkFaint }}"> · PDF, 4,2 МБ</span></span><span style="font-size:12px;font-weight:700;color:{{ matActionColor }};white-space:nowrap">{{ matAction }}</span></div>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px"><span style="font-size:13.5px;font-weight:700;color:{{ ink }}">Протокол реабилитации<span style="font-weight:600;color:{{ inkFaint }}"> · PDF, 380 КБ</span></span><span style="font-size:12px;font-weight:700;color:{{ matActionColor }};white-space:nowrap">{{ matAction }}</span></div>
+            </div>
+          </div>
+
+          <div style="background:{{ tint }};padding:24px;font-size:13.5px;line-height:1.65;color:{{ tintInk }}"><b>Школа травматологии и ортопедии</b> — 38 эфиров, 12 400 подписчиков. Ведут практикующие врачи, программа формируется голосами аудитории.<br><a href="Эфиры.dc.html" style="display:inline-block;margin-top:12px;font-weight:700;color:{{ tintInk }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px">Все эфиры школы</a></div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Вариант В: отдельная секция внизу -->
+    <sc-if value="{{ showSection }}" hint-placeholder-val="{{ false }}">
+      <div style="margin-top:72px">
+        <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:28px">
+          <span style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ ink }};white-space:nowrap">Оригинал трансляции</span>
+          <span style="flex:1;border-top:2px solid {{ ink }}"></span>
+        </div>
+        <div style="display:flex;gap:clamp(24px,4vw,40px);align-items:flex-start;flex-wrap:wrap">
+          <div style="position:relative;background:#0A1B33;aspect-ratio:16/9;flex:1 1 380px;max-width:560px;display:flex;align-items:center;justify-content:center">
+            <div style="position:absolute;top:14px;left:16px;font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#6BB1F7">Без монтажа</div>
+            <button title="Смотреть оригинал" style="font:inherit;width:60px;height:60px;background:#fff;border:0;cursor:pointer;box-shadow:4px 4px 0 #114D9E;display:flex;align-items:center;justify-content:center" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 #114D9E"><span style="width:0;height:0;border-left:18px solid #114D9E;border-top:11px solid transparent;border-bottom:11px solid transparent;margin-left:4px"></span></button>
+            <div style="position:absolute;right:16px;bottom:12px;font-size:12px;font-weight:700;color:#AED4FB;font-variant-numeric:tabular-nums">2:04:12</div>
+          </div>
+          <div style="flex:1 1 280px;font-size:14px;line-height:1.7;color:{{ inkMuted }};max-width:420px"><b style="color:{{ ink }}">Полная запись трансляции — 2 ч 04 мин.</b> Без монтажа: с паузами, техперерывами и обсуждениями между блоками. Пригодится, если в смонтированную версию не вошёл нужный фрагмент дискуссии.</div>
+        </div>
+      </div>
+    </sc-if>
+  </main>
+
+  <!-- Нижний CTA -->
+  <div style="background:#114D9E;padding:clamp(36px,5vw,56px) clamp(16px,4vw,48px)">
+    <div style="max-width:1104px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:32px;flex-wrap:wrap">
+      <div style="font-size:clamp(24px,4vw,32px);font-weight:800;letter-spacing:-.03em;color:#fff">{{ footCtaTitle }}<br><span style="color:#D3E8FD">{{ footCtaSub }}</span></div>
+      <a href="{{ footCtaHref }}" style="font-size:16px;font-weight:800;color:#114D9E;background:#fff;border:0;padding:18px 34px;white-space:nowrap;box-shadow:4px 4px 0 {{ headerShadow }};text-decoration:none" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ headerShadow }}">{{ footCtaLabel }}</a>
+    </div>
+  </div>
+
+  <footer style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:0 auto;box-sizing:content-box;gap:16px;flex-wrap:wrap">
+    {{ footLogoEl }}
+    <nav style="display:flex;gap:20px;font-size:12.5px;font-weight:700;flex-wrap:wrap">
+      <a href="Эфиры.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эфиры</a>
+      <a href="Проекты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
+      <a href="Эксперты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
+      <a href="Главная.dc.html#partner-form" style="color:{{ inkFaint }};text-decoration:none">Партнёрство</a>
+    </nav>
+    <div style="font-size:12.5px;font-weight:600;color:{{ inkFaint }}">Врачи учат врачей · 2026</div>
+  </footer>
+  <div aria-hidden="true" style="overflow:hidden;padding-top:clamp(16px,3vw,36px)">
+    <div style="font-size:clamp(58px,12.6vw,236px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Doctor.School</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1104,&quot;height&quot;:820},&quot;viewer&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;authed&quot;,&quot;guest&quot;],&quot;default&quot;:&quot;authed&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние страницы&quot;},&quot;recording&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;montage&quot;,&quot;raw-only&quot;,&quot;preparing&quot;],&quot;default&quot;:&quot;montage&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Состояние страницы&quot;},&quot;secondaryUi&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;spoiler&quot;,&quot;tabs&quot;,&quot;section&quot;],&quot;default&quot;:&quot;spoiler&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Развилка: подача оригинала&quot;}}">
+class Component extends DCLogic {
+  state = {
+    dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
+    isMobile: false,
+    tab: 'montage'
+  };
+  componentDidMount() {
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.upd = () => this.setState({ isMobile: this.mq.matches });
+    this.upd();
+    this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
+  }
+  renderVals() {
+    const d = this.state.dark, m = this.state.isMobile;
+    const viewer = this.props.viewer || 'authed';
+    const rec = this.props.recording || 'montage';
+    const ui = this.props.secondaryUi || 'spoiler';
+    const isGuest = viewer === 'guest';
+    const isPreparing = rec === 'preparing';
+    const hasMontage = rec === 'montage';
+    const isRawOnly = rec === 'raw-only';
+    const showTabs = hasMontage && !isGuest && ui === 'tabs';
+    const rawTab = showTabs && this.state.tab === 'raw';
+
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const shadow = d ? '#6BB1F7' : '#114D9E';
+    const shadowSm = d ? '#1F69C8' : '#AED4FB';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const tint = d ? '#0D3A77' : '#D3E8FD';
+    const tintInk = d ? '#fff' : '#114D9E';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const inkFaint = d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)';
+    const inkMuted = d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)';
+
+    const badgeBase = 'display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#fff;padding:9px 16px;flex:none;margin-top:8px;box-shadow:3px 3px 0 ' + shadow;
+    const heroBadgeStyle = isPreparing
+      ? badgeBase + ';background:oklch(.45 .02 250);transform:rotate(-2deg)'
+      : badgeBase + ';background:#0D8A5F;transform:rotate(3deg)';
+    const heroBadgeText = isPreparing ? 'Запись готовится' : 'Запись доступна';
+
+    const tabBase = 'font:inherit;flex:1;padding:16px 12px;font-size:13.5px;cursor:pointer;border:0;';
+    const tabActive = tabBase + 'font-weight:800;background:' + tint + ';color:' + tintInk + ';box-shadow:inset 0 -4px 0 ' + accent;
+    const tabIdle = tabBase + 'font-weight:700;background:transparent;color:' + inkMuted;
+
+    let footCtaTitle, footCtaSub, footCtaLabel, footCtaHref;
+    if (isGuest && !isPreparing) {
+      footCtaTitle = 'Запись бесплатна.'; footCtaSub = 'Войдите — и смотрите целиком.';
+      footCtaLabel = 'Войти ↗'; footCtaHref = 'Авторизация.dc.html';
+    } else if (isPreparing) {
+      footCtaTitle = 'Запись скоро.'; footCtaSub = 'А следующий эфир школы — 30 июля.';
+      footCtaLabel = 'Записаться ↗'; footCtaHref = 'Эфиры.dc.html';
+    } else {
+      footCtaTitle = 'Понравился разбор?'; footCtaSub = 'Следующий эфир школы — 30 июля.';
+      footCtaLabel = 'Записаться ↗'; footCtaHref = 'Эфиры.dc.html';
+    }
+
+    return {
+      isMobile: m, isDesktop: !m,
+      isGuest, isAuthed: !isGuest,
+      isPreparing, hasPlayer: !isPreparing, isRawOnly,
+      showTabs,
+      showSpoiler: hasMontage && !isGuest && ui === 'spoiler',
+      showSection: hasMontage && !isGuest && ui === 'section',
+      setTabMontage: () => this.setState({ tab: 'montage' }),
+      setTabRaw: () => this.setState({ tab: 'raw' }),
+      tabMontageStyle: rawTab ? tabIdle : tabActive,
+      tabRawStyle: rawTab ? tabActive : tabIdle,
+      playerKindLabel: (isRawOnly || rawTab) ? 'оригинал трансляции' : 'запись эфира',
+      playerTotal: (isRawOnly || rawTab) ? '2:04:12' : '1:30:00',
+      metaKindLabel: (isRawOnly || rawTab) ? 'Оригинал' : 'Монтаж',
+      metaDur: (isRawOnly || rawTab) ? '2 ч 04 мин' : '90 минут',
+      matAction: isGuest ? 'После входа' : 'Скачать ↓',
+      matActionColor: isGuest ? inkFaint : accent,
+      toggleTheme: () => this.setState(s => { const dark = !s.dark; try { localStorage.setItem('ds-theme', dark ? 'dark' : 'light'); } catch (e) {} return { dark }; }),
+      themeIcon: d ? '☀' : '☾',
+      pageBg: d ? 'oklch(.16 .02 250)' : '#fff',
+      headerShadow: d ? 'oklch(.16 .02 250)' : '#114D9E',
+      surface, ink, border, shadow, shadowSm, accent, tint, tintInk, btnBg, btnFg,
+      inkBody: d ? 'rgba(255,255,255,.82)' : 'oklch(.27 .018 250)',
+      inkMuted, inkFaint,
+      inkSoft: d ? 'rgba(255,255,255,.75)' : 'oklch(.21 .02 250)',
+      hairline: d ? 'rgba(255,255,255,.18)' : 'oklch(.922 .006 250)',
+      dashBorder: d ? 'rgba(255,255,255,.4)' : 'oklch(.704 .01 250)',
+      footLogoEl: React.createElement('img', { src: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo-color.svg', alt: 'Doctor.School', style: { height: '22px', display: 'block' } }), giantInk: d ? 'rgba(174,212,251,.09)' : 'oklch(.945 .018 250)',
+      heroBadgeStyle, heroBadgeText,
+      colsTemplate: m ? '1fr' : '1fr 380px',
+      mainPad: m ? '0 16px 64px' : '0 clamp(16px,4vw,48px) 96px',
+      playerCardBorder: m ? '0' : '2px solid ' + border,
+      playerCardShadow: m ? 'none' : '6px 6px 0 ' + shadow,
+      playerCardMargin: m ? '0 -16px' : '0',
+      metaPad: m ? '18px 16px' : '22px 28px',
+      prepCardStyle: m
+        ? 'background:' + surface + ';display:block;margin:0 -16px'
+        : 'background:' + surface + ';border:2px solid ' + border + ';box-shadow:6px 6px 0 ' + shadow + ';display:grid;grid-template-columns:196px 1fr',
+      prepTimeCol: 'background:' + tint + ';display:flex;flex-direction:column;' + (m ? 'gap:6px;padding:16px' : 'gap:14px;padding:30px 24px;border-right:2px solid ' + border),
+      prepTimeSize: m ? '40px' : '52px',
+      prepBodyStyle: m
+        ? 'padding:20px 16px;display:flex;flex-direction:column;gap:16px'
+        : 'padding:28px 32px;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap',
+      footCtaTitle, footCtaSub, footCtaLabel, footCtaHref
+    };
+  }
+}
+</script>
+</body>
+</html>

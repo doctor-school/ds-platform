@@ -40,10 +40,7 @@ import {
   targetPath,
   writeState,
 } from "./main-tree-read-guard.mjs";
-
-function isAbsolute(p) {
-  return /^[a-zA-Z]:[\\/]/.test(p) || /^\\\\/.test(p) || p.startsWith("/");
-}
+import { mutationPaths, projectRoot } from "./hook-compat.mjs";
 
 export function writeWarnMessage(liveCount) {
   return (
@@ -75,7 +72,8 @@ export function decideWriteWarn({
   nowMs,
   freshWindowMs = FRESH_WINDOW_MS,
 }) {
-  if (!/^(Edit|Write|MultiEdit)$/.test(toolName || "")) return { warn: false };
+  if (!/^(Edit|Write|MultiEdit|apply_patch)$/.test(toolName || ""))
+    return { warn: false };
   if (!cwd || !projectDir) return { warn: false };
   // A worktree-isolated session is exactly the compliant case — never warn.
   if (inWorktree(cwd) || inWorktree(projectDir)) return { warn: false };
@@ -88,14 +86,15 @@ export function decideWriteWarn({
   });
   if (live.length === 0) return { warn: false };
 
-  const target = targetPath(toolInput, cwd);
-  if (!isUnder(target, projectDir)) return { warn: false };
-  if (
-    isUnder(target, `${projectDir}/.claude`) ||
-    isUnder(target, `${projectDir}/.git`)
-  ) {
-    return { warn: false };
-  }
+  const parsed = mutationPaths(toolName, toolInput, cwd);
+  const targets = parsed.length > 0 ? parsed : [targetPath(toolInput, cwd)];
+  const sourceTarget = targets.find(
+    (target) =>
+      isUnder(target, projectDir) &&
+      !isUnder(target, `${projectDir}/.claude`) &&
+      !isUnder(target, `${projectDir}/.git`),
+  );
+  if (!sourceTarget) return { warn: false };
 
   return { warn: true, liveCount: live.length };
 }
@@ -105,25 +104,28 @@ function main() {
     const raw = readFileSync(0, "utf8");
     const payload = JSON.parse(raw);
     const tool = payload.tool_name || "";
-    if (!/^(Edit|Write|MultiEdit)$/.test(tool)) process.exit(0);
+    if (!/^(Edit|Write|MultiEdit|apply_patch)$/.test(tool)) process.exit(0);
 
     const cwd = payload.cwd || "";
-    const filePath = payload.tool_input && payload.tool_input.file_path;
+    const filePaths = mutationPaths(tool, payload.tool_input, cwd);
 
     // --- (1) Escape-BLOCK: absolute main-tree path issued from inside a worktree.
-    if (cwd && filePath && isAbsolute(filePath)) {
+    if (cwd && filePaths.length > 0) {
       const m = cwd.match(/^(.*)[\\/]\.claude[\\/]worktrees[\\/]([^\\/]+)/);
       if (m) {
         const mainRoot = norm(m[1]);
         const worktreeRoot = norm(`${m[1]}/.claude/worktrees/${m[2]}`);
-        const target = norm(filePath);
-        const underMain =
-          target === mainRoot || target.startsWith(mainRoot + "/");
-        const underWorktree =
-          target === worktreeRoot || target.startsWith(worktreeRoot + "/");
-        if (underMain && !underWorktree) {
+        const escaped = filePaths.find((p) => {
+          const target = norm(p);
+          const underMain =
+            target === mainRoot || target.startsWith(mainRoot + "/");
+          const underWorktree =
+            target === worktreeRoot || target.startsWith(worktreeRoot + "/");
+          return underMain && !underWorktree;
+        });
+        if (escaped) {
           process.stderr.write(
-            `BLOCKED: '${filePath}' is an absolute path in the SHARED main tree, but this ` +
+            `BLOCKED: '${escaped}' targets the SHARED main tree, but this ` +
               `session is isolated in a worktree.\n` +
               `Escaping the worktree writes to the main tree (a parallel session can sweep ` +
               `it into the wrong PR; any green there is against the wrong checkout — ` +
@@ -140,7 +142,7 @@ function main() {
     }
 
     // --- (2) Write-WARN: first main-tree write in a non-isolated parallel session.
-    const projectDir = process.env.CLAUDE_PROJECT_DIR || payload.cwd || "";
+    const projectDir = projectRoot(payload);
     let flag = null;
     try {
       flag = JSON.parse(readFileSync(resolve(projectDir, FLAG_REL), "utf8"));

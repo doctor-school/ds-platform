@@ -41,7 +41,7 @@ Execute the steps in order. Each `→` is a hard gate: the next step does not be
 9. **`request-mode-a-review`** (dispatch) — verdict-gated. If `REQUEST_CHANGES`, route to `respond-to-review`. Re-dispatch until APPROVE.
 10. **`respond-to-review`** (inline) — fix or reject-with-rationale per finding. Loop with step 9 until APPROVE + green CI.
 11. **`write-iteration-summary`** (inline) — Issue comment with file paths, decisions taken, decision-debt items, links.
-12. **`merge-when-green`** (inline) — `gh pr merge <N> --auto --squash --delete-branch`. Per ADR-0007 §2.4 + §2.10, a positive Mode (a) verdict + green CI is sufficient; human-merge is not required.
+12. **`merge-when-green`** (inline) — invoke the canonical skill; prefer `pnpm pr:land <N>` for its full merge → Done → teardown → re-sweep tail. Per ADR-0007 §2.4 + §2.10, a positive Mode (a) verdict + green CI is sufficient; human-merge is not required.
 
 ## Output
 
@@ -53,7 +53,7 @@ Execute the steps in order. Each `→` is a hard gate: the next step does not be
 ## Failure mode
 
 - Skipping any of the three discipline gates (`run-iteration-end-checklist`, `request-mode-a-review`, `surface-decision-debt`) — process violation. This is the F-14 / F-15 / F-19 / F-21 pattern documented in G11 findings; the gate-artifact contract exists specifically to prevent silent skip.
-- Direct `gh pr merge` without `--auto --squash --delete-branch` — process violation per ADR-0008 §2.6.
+- Bypassing `merge-when-green` / `pnpm pr:land`, or adding Phase-0 `--auto` — process violation per ADR-0008 §2.6 and the canonical merge skill.
 
 ## Related skills
 

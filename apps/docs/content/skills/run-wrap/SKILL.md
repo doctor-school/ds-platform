@@ -25,17 +25,14 @@ Enumerate live dispatched agents — impl subagents, reviewers, background monit
 
 ### 1. Retro — independent, single-session (dispatch)
 
-Dispatch [`run-session-retro`](../run-session-retro/SKILL.md) **in single-session mode** as an _independent_ Opus agent, so the analysis is never self-review (the constraint the skill enforces). The agent returns the findings array in the #248 schema; consume it as the input to stage 2.
+Dispatch [`run-session-retro`](../run-session-retro/SKILL.md) **in single-session mode** as an _independent, fresh-context_ agent, so the analysis is never self-review (the constraint the skill enforces). The agent returns the findings array in the #248 schema; consume it as the input to stage 2. Do not pin a vendor model in this procedure; select the reviewer-grade agent available in the active harness.
 
-**Resolve the current session's log id first** — pass it to the retro agent so it analyzes _this_ session, not the whole corpus:
+**Resolve and capture the current session id before dispatch** so the retro agent cannot accidentally analyze its own newer log. Branch by harness:
 
-- Logs live under `~/.claude/projects/<repo-slug>/*.jsonl`, where `<repo-slug>` is the repo-root path with `[\\/:]` replaced by `-` (the same slug `tools/retro/extract.mjs` → `defaultLogDir()` and `tools/lint/instruction-budget-lint.ts` → `memoryPath()` derive). On this box: `C--Users-sidor-repos-ds-platform`.
-- **The log dir RE-SLUGS on `EnterWorktree`.** A worktree session's logs move to `~/.claude/projects/<repo-slug>--claude-worktrees-<N>/`, so a single session's segments may span **multiple** slug dirs — the main-tree slug and one per worktree it entered. Globbing only the main slug misses the worktree segments, and a newest-mtime pick in the main dir lands on the wrong session — the 2026-07-06 wrap did exactly that (analyzed wrong session `ad1b4fa1`, cost two retro dispatches).
-- **Resolve by CONTENT, not mtime.** Grep every candidate dir (`~/.claude/projects/*<repo-slug>*/*.jsonl`) for a marker unique to _this_ session — its PR/issue numbers, or a distinctive phrase from its first user message — and take the file(s) that match. Newest-mtime is only a **tiebreaker** among content-matched candidates, never the primary selector.
-- **Verify each resolved segment BEFORE dispatch — grep its assistant `model` field + a task marker (`#N`).** Re-slug on `EnterWorktree` plus adjacent same-day sessions defeat both mtime and first-glance content matching, so confirm every candidate id against the expected assistant `model` (e.g. `claude-opus-*` vs a `claude-fable-*` baseline) **and** a session-unique `#N` before passing it on — a wrong id looks right until the retro analyzes the wrong session. Precedent 2026-07-09: the lead resolved **two** wrong ids (a Jul-2 session as the main segment; an opus session mislabeled as the Fable baseline); the retro corrected both — main `ff4304ff`, Fable `520537c1` / `claude-fable-5`.
-- **Exclude the dispatched retro agent's own log.** A subagent writes its own `*.jsonl`; once dispatched it can become newest-mtime. So **capture the id BEFORE dispatching** the retro agent (resolve by content first, then dispatch with that fixed `--session <id>`). The retro agent must also skip its own log — it is given the explicit id, so it never globs.
+- **Claude Code:** resolve all `~/.claude/projects/*<repo-slug>*` segments by a session-unique task marker, not newest mtime; verify the id and marker, then run `extract.mjs` + `transcripts.mjs --session <id>`.
+- **Codex:** use the active Codex session id with `node tools/retro/codex.mjs --session <id> --out-dir <work-dir>`. For an exported artifact use `--rollout <file>`; for a pre-normalized portable record use `--portable-input <file>`. The adapter emits `harness: codex` plus a versioned portable record and never presents a Codex rollout as a Claude transcript.
 
-Brief the agent with: the resolved `--session <id>`, the `run-session-retro` SKILL.md path, and the instruction to run `tools/retro/extract.mjs` + `transcripts.mjs` in single-session mode and return **only** the findings array + corpus header + consolidation note (the skill's mandatory output). A free-form narrative without the schema'd array is not a valid return — re-dispatch.
+Before dispatch, inspect the generated `summary.json` and compact transcript for the expected task marker and `harness`. Brief the agent with the fixed id, harness command, and `run-session-retro` path. A free-form narrative without the schema'd findings array + corpus header + consolidation note is invalid — re-dispatch.
 
 > The retro writes its digests into the gitignored `.audit-tmp/` (the extractor default). **Never** stage or commit `.audit-tmp/`.
 
@@ -69,7 +66,7 @@ Run the lifecycle tail from [`run-task-lifecycle`](../run-task-lifecycle/SKILL.m
 
 ### 5. Handoff
 
-Run the existing `handoff-prompt` skill (a global Claude Code skill, triggers on `/handoff-prompt`) to emit the copy-pasteable next-session prompt. Do not hand-roll the handoff format — `handoff-prompt` owns it (≤ 300 tokens, fixed section template) — with ONE repo-side override: the emitted block's **first line** is the literal directive `FIRST ACTION: pipe this verbatim block through \`pnpm handoff:verify\` before any tracker/git action.`The resume-side gate rides inside the artifact itself (a 2026-07-13 retro found a resume session substituting hand-rolled`gh` reconciliation for the deterministic gate — in-band beats auto-loaded prose).
+Run the catalog [`handoff-prompt`](../handoff-prompt/SKILL.md) skill to emit the copy-pasteable next-session prompt. It is harness-neutral and owns the ≤300-token fixed shape. Do not hand-roll or substitute a vendor-global skill. Its first line carries the literal `pnpm handoff:verify` directive, so the resume-side gate travels with the artifact.
 
 The handoff cites only document paths that exist at emit time (stat/`Read` each before including) and carries the canonical tracker id (GitHub Issue / Plane item) of the next task; «where we stopped» premises come from tracker comments, not the session's memory of itself. **Premise gate (mandatory, #743):** write the draft handoff to a temp file and run `pnpm handoff:verify <file>` — any STALE row = fix the claim before emitting; this deterministic gate replaces the prose-only premise check. Resume side: an agent that cannot locate a cited document STOPS and asks the owner instead of substituting its own reading.
 
@@ -97,6 +94,6 @@ The handoff cites only document paths that exist at emit time (stat/`Read` each 
 - [../run-session-retro/SKILL.md](../run-session-retro/SKILL.md) — the retro analysis engine (stage 1, dispatched independent).
 - [../run-task-lifecycle/SKILL.md](../run-task-lifecycle/SKILL.md) — the hygiene/merge/board/groom tail (stage 4).
 - [../merge-when-green/SKILL.md](../merge-when-green/SKILL.md) — the single merge command (stage 4.1).
-- `handoff-prompt` (global skill) — the next-session prompt (stage 5).
+- [../handoff-prompt/SKILL.md](../handoff-prompt/SKILL.md) — the portable next-session prompt (stage 5).
 
-Helpers: `tools/retro/extract.mjs` + `transcripts.mjs` (stage 1 corpus); `tools/lint/instruction-budget-lint.ts` / `pnpm lint:instruction-budget` (stage 3 budget); `tools/gh/set-board-status.mjs` / `pnpm board:status` (stage 4 board).
+Helpers: `tools/retro/extract.mjs` + `transcripts.mjs` (Claude corpus), `tools/retro/codex.mjs` (Codex/portable corpus); `tools/lint/instruction-budget-lint.ts` / `pnpm lint:instruction-budget` (stage 3 budget); `tools/gh/set-board-status.mjs` / `pnpm board:status` (stage 4 board).

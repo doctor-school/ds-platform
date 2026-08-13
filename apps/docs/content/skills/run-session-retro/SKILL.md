@@ -39,24 +39,31 @@ did you do X and not Y / how should it be done"), plus the agent's own
 
 ### 1. Build the corpus with the extractor
 
-Run the two `tools/retro` scripts (log dir defaults to the auto-memory project
-dir; out dir to the gitignored `.audit-tmp`):
+Select the active harness and build one explicitly labelled corpus in the
+gitignored `.audit-tmp`:
 
 ```bash
 # single-session mode (the /wrap case):
+# Claude Code
 node tools/retro/extract.mjs     --session <session-id> --out-dir <work-dir>
 node tools/retro/transcripts.mjs --session <session-id> --out-dir <work-dir>
+
+# Codex rollout (resolves ~/.codex/sessions recursively)
+node tools/retro/codex.mjs --session <session-id> --out-dir <work-dir>
+# Or: --rollout <rollout.jsonl> / --portable-input <portable.json>
 
 # batch mode (historical audit over the whole corpus):
 node tools/retro/extract.mjs     --out-dir <work-dir>
 node tools/retro/transcripts.mjs --out-dir <work-dir>
 ```
 
-Writes into `<work-dir>`: `index.json` / `summary.json` (classification +
+Both paths write into `<work-dir>`: `index.json` / `summary.json` (classification +
 totals), `sessions/<id>.json` (per-session human-message digest),
 `corrections.json` (**the gold signal**), `transcripts/<id>.md` (compact
 `[U]` user / `[A]` assistant / `[T]` tool-call transcript, bulky `tool_result`
-payloads dropped), `self-catches.json` (assistant self-corrections).
+payloads dropped), `self-catches.json` (assistant self-corrections). Codex also
+writes `portable/<id>.json` with schema `ds-platform-retro/v1`; never feed a
+Codex rollout into the Claude parser or describe it as a Claude transcript.
 
 ### 2. Isolation + exclusion rules (already enforced by the extractor — verify, don't re-derive)
 

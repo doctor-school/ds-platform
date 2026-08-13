@@ -126,6 +126,27 @@ const GENUINE_REPORT_MIDBODY_INTERIM =
   "запланированного — весь скоуп, но маркер-эмодзи отсутствует.";
 
 describe("surface-decision-debt-gate hook (spawned end-to-end)", () => {
+  it("blocks a Codex Stop payload via last_assistant_message", () => {
+    const r = runHook({
+      session_id: "codex-970",
+      hook_event_name: "Stop",
+      stop_hook_active: false,
+      last_assistant_message: COMPLETION_NO_DEBT,
+    });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("surface-decision-debt");
+  });
+
+  it("returns valid JSON when a Codex Stop payload is allowed", () => {
+    const r = runHook({
+      session_id: "codex-970",
+      hook_event_name: "Stop",
+      stop_hook_active: false,
+      last_assistant_message: COMPLETION_DEBT_EMPTY,
+    });
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout)).toEqual({});
+  });
   it("blocks (exit 2) a completion report missing a surface-decision-debt line, naming the gate + AGENTS.md §3.8", () => {
     const r = runHook(stopPayload(transcriptWith(COMPLETION_NO_DEBT)));
     expect(r.status).toBe(2);

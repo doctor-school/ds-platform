@@ -3,9 +3,10 @@
 Session-log analysis tooling for the agent-workflow retrospective + feedback
 loop (epic [#247](https://github.com/doctor-school/ds-platform/issues/247),
 child [#248](https://github.com/doctor-school/ds-platform/issues/248)).
-These two Node scripts turn raw Claude Code session logs into a compact,
-reviewable corpus that the [`run-session-retro`](../../apps/docs/content/skills/run-session-retro/SKILL.md)
-skill (and the `/wrap` command, #B1) consume to produce **deviation findings**.
+The Node entry points turn Claude Code session logs or Codex rollout artifacts
+into a compact, explicitly labelled corpus that the
+[`run-session-retro`](../../apps/docs/content/skills/run-session-retro/SKILL.md)
+skill (and the wrap loop, #B1) consume to produce **deviation findings**.
 
 The methodology and the finding schema are documented in the SKILL.md; this
 README covers only how to run the tools.
@@ -16,6 +17,7 @@ README covers only how to run the tools.
 | ------------------------ | ----------------------------------------------------------------------------------------- |
 | `extract.mjs`            | `sessions/<id>.json`, `index.json`, `summary.json`, `corrections.json`                    |
 | `transcripts.mjs`        | `transcripts/<id>.md`, `self-catches.json`                                                |
+| `codex.mjs`              | All single-session corpus files above + `portable/<id>.json` (`ds-platform-retro/v1`)     |
 | `orchestration-mine.mjs` | `orchestration-metrics.json`, `orchestration-episodes.json`, `orchestration-summary.json` |
 
 `extract.mjs` isolates interactive sessions (excludes `promptSource: sdk`
@@ -59,12 +61,18 @@ node tools/retro/orchestration-mine.mjs
 node tools/retro/extract.mjs     --session <session-id>
 node tools/retro/transcripts.mjs --session <session-id>
 
+# Codex single-session mode (raw rollout is normalized, never treated as Claude):
+node tools/retro/codex.mjs --session <session-id>
+# Explicit alternatives:
+node tools/retro/codex.mjs --rollout <rollout.jsonl>
+node tools/retro/codex.mjs --portable-input <portable.json>
+
 # Explicit dirs / help:
 node tools/retro/extract.mjs --log-dir <dir> --out-dir <dir>
 node tools/retro/extract.mjs --help
 ```
 
-### Options (both scripts)
+### Claude extractor options
 
 - `--log-dir <dir>` — directory of `*.jsonl` session logs. **Default:** the
   auto-memory project dir `~/.claude/projects/<repo-slug>/`, derived from the
@@ -77,6 +85,20 @@ node tools/retro/extract.mjs --help
   for batch mode over the whole corpus. (`orchestration-mine.mjs` has **no**
   `--session` mode — it is full-corpus only.)
 - `--help`, `-h` — usage.
+
+### Codex adapter options
+
+- `--session <id>` — recursively resolve the rollout under `~/.codex/sessions`.
+- `--rollout <file>` — use an explicitly selected raw Codex rollout.
+- `--portable-input <file>` — use a pre-normalized
+  `ds-platform-retro/v1` record with `harness: codex`.
+- `--out-dir <dir>` / `--help` — same output/help conventions as above.
+
+The Codex transcript format is not used as a stable downstream interface:
+`codex.mjs` owns that harness boundary and writes the versioned portable record.
+Subagent rollouts are labelled `sdk` even when their forked history contains a
+copied user turn, so the independent retro agent cannot mistake itself for the
+interactive owner session.
 
 ## Orchestration mining
 

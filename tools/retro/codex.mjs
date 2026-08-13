@@ -19,6 +19,21 @@ const REPO_ROOT = path.resolve(
   "..",
 );
 export const PORTABLE_SCHEMA = "ds-platform-retro/v1";
+const SAFE_SESSION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+
+// Codex journals project instructions as a role=user response_item even though
+// the owner did not type it. Keep this deliberately narrower than a generic
+// markup/noise filter: the harness envelope has both the exact heading and one
+// of its machine-owned context containers.
+export function isCodexInjectedInstructionEnvelope(text) {
+  if (typeof text !== "string") return false;
+  const value = text.trimStart();
+  return (
+    /^# AGENTS\.md instructions for [^\r\n]+(?:\r?\n|$)/.test(value) &&
+    (value.includes("<INSTRUCTIONS>") ||
+      value.includes("<environment_context>"))
+  );
+}
 
 function textBlocks(content, allowed) {
   if (!Array.isArray(content)) return "";
@@ -65,7 +80,7 @@ export function codexRolloutToPortable(jsonl, sourcePath = null) {
         payload.content.some(
           (block) => block && /image/i.test(String(block.type)),
         );
-      if (text || imageOnly) {
+      if ((text || imageOnly) && !isCodexInjectedInstructionEnvelope(text)) {
         events.push({
           role: "user",
           ts: entry.timestamp ?? null,
@@ -131,6 +146,11 @@ export function validatePortableSession(value) {
   ) {
     throw new Error("portable input requires a session id and events array");
   }
+  if (!SAFE_SESSION_ID_RE.test(value.session)) {
+    throw new Error(
+      "portable input session id must be a safe filename component",
+    );
+  }
   return value;
 }
 
@@ -159,7 +179,20 @@ export function findCodexRollout(sessionsRoot, sessionId) {
 }
 
 export function writeCodexCorpus(portableInput, outDir) {
-  const portable = validatePortableSession(portableInput);
+  const validated = validatePortableSession(portableInput);
+  const events = validated.events.filter(
+    (event) =>
+      event.role !== "user" || !isCodexInjectedInstructionEnvelope(event.text),
+  );
+  const portable = {
+    ...validated,
+    kind:
+      validated.kind === "interactive" &&
+      !events.some((event) => event.role === "user")
+        ? "other"
+        : validated.kind,
+    events,
+  };
   const id = portable.session;
   const interactive = portable.kind === "interactive";
   const humanMsgs = interactive

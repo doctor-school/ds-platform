@@ -50,8 +50,8 @@ The academy's front door. `/` stops redirecting to `/webinars` and becomes a lan
 
 **Authenticated user (US-10):**
 
-1. A logged-in user hits `/` directly → the landing renders (it is public, not blocked), unchanged.
-2. Logging in from anywhere → the post-login landing is `/webinars`, exactly as today. The landing change does not touch the authenticated route.
+1. A logged-in user hits `/` directly → the landing renders (it is public, not blocked).
+2. Logging in from anywhere → the doctor arrives at `/webinars`. **This requires a change 013 owns, not a property it inherits.** Today the login page sends a successful login to `/` (`apps/portal/lib/registration-resume.ts` → `DEFAULT_LANDING = "/"`, consumed by `apps/portal/app/login/page.tsx`), and `/webinars` is reached only because `apps/portal/app/page.tsx` calls `permanentRedirect("/webinars")`; the recorded spec agrees — feature 008 **EARS-7 pins the post-login target to `/`**. The moment 013 takes `/` for the landing that redirect is gone, and an unchanged login target would drop every post-login doctor on the marketing page — the exact regression US-10 forbids.
 
 **Lead-form branches:**
 
@@ -87,18 +87,19 @@ Placeholder RU copy, drafted fresh at this PRD. The legacy PDF texts are **rejec
 | 5 Кто стоит за брендом | «За каждым проектом стоят конкретные люди — врачи, которых знает профессиональное сообщество.» + медиаблок: «Подкаст и дискуссии Академии — разговоры о профессии без формата лекции.»                                                                                                                                                                                                      |
 | 6 Выгоды партнёра      | «Целевая аудитория» — «Врачи нужных специальностей, а не обезличенный трафик.» · «Прозрачная отчётность» — «Подтверждённые участники и минуты присутствия по каждому эфиру.» · «Экспертная среда» — «Ваш бренд рядом с содержанием, которому доверяют.»                                                                                                                                     |
 | 7 Форматы участия      | «Генеральный партнёр проекта» · «Поддержка отдельного эфира» · «Совместный образовательный проект» — с одной поясняющей строкой на карточку.                                                                                                                                                                                                                                                |
-| 8 Финальный CTA        | H2: «Обсудим участие» · «Оставьте заявку — свяжемся и предложим формат под вашу задачу.» · Кнопка: «Отправить заявку». Подтверждение: «Заявка отправлена. Мы свяжемся с вами в ближайшее время.»                                                                                                                                                                                            |
+| 8 Финальный CTA        | H2: «Обсудим участие» · «Оставьте заявку — свяжемся и предложим формат под вашу задачу.» · Кнопка: «Обсудить партнёрство». Подтверждение: «Заявка отправлена. Мы свяжемся с вами в ближайшее время.»                                                                                                                                                                                        |
 
 **Final copy is a later owner editorial pass** — this table is a structural placeholder of reasonable marketing quality, not approved marketing text.
 
 ## Product acceptance criteria
 
-- `/` serves the academy landing to any visitor with **zero authentication**; the previous `/` → `/webinars` redirect is gone, while `/webinars` remains the canonical discovery listing and the **post-login landing is unchanged**.
+- `/` serves the academy landing to any visitor with **zero authentication**; the previous `/` → `/webinars` redirect is gone, while `/webinars` remains the canonical discovery listing.
+- **The post-login landing keeps working — by an in-scope change of this feature, not by inheritance.** Removing the `/` → `/webinars` redirect obliges 013 to re-point the post-login target **from `/` to `/webinars` directly**: the login redirect default (`DEFAULT_LANDING` in `apps/portal/lib/registration-resume.ts`), the two tests pinning it (`apps/portal/app/login/page.test.tsx`) — which assert the route, so they stay green through the regression and must be re-pointed too — and a delivery-time **inline rewrite of feature 008's EARS-7 landing target**, which 013 supersedes. That EARS edit happens in the 013 delivery PR, not in this product-layer PR. A doctor landing on the marketing page after login is the failure this criterion exists to prevent.
 - The page presents the eight screens above, in order, plus a live feed of the latest эфиры.
 - The эфиры feed shows real, currently published events and each entry opens that event's page; the feed is rendered by the **shared event-list unit**, not by a home-page-only copy of it.
 - Both hero CTAs work: «Стать партнёром» reaches the lead form, «Посмотреть эфиры» reaches content.
 - Section entry points to эфиры, projects, and experts are present. Until 015/016 ship, the projects and experts entry points behave per the tracked deferral below — never as a dead link or a 404.
-- The lead form carries a **mandatory personal-data consent checkbox with a link to the privacy policy** (152-ФЗ): submission is impossible while it is unchecked, and the consent given is recorded with the lead. Consent is a legal requirement of a public contact form, not a design option.
+- The lead form carries a **mandatory personal-data consent checkbox with a link to the privacy policy** (152-ФЗ): submission is impossible while it is unchecked, and the consent given is recorded with the lead. _(**Lead-asserted — UNCONFIRMED by the owner.** This is not among the #1240 decisions; it originates in block 9 of this epic's design package and is stated here as a legal constraint on collecting personal data through a public form, not as an owner product decision. It is hardened rather than optional because the lead judges it legally required — the owner can still overrule it.)_
 - A lead submission **persists a `leads` record** and **posts to the Mattermost channel «DS Лиды»**; the visitor sees an explicit confirmation state. The persisted record is the record of truth — a channel-delivery failure does not lose the lead and does not surface to the visitor.
 - Form validation errors are actionable (they say what to fix) and never discard the visitor's other input.
 - The page is fully usable on mobile — every screen, the feed, and the form.
@@ -121,7 +122,7 @@ Placeholder RU copy, drafted fresh at this PRD. The legacy PDF texts are **rejec
 ## Open questions
 
 - **Final copy.** Every text in the Copy table is placeholder; the owner's editorial pass is pending and lands before Stage-B GO.
-- **Lead form fields.** The field set is taken from the Stage-A package (имя · компания/клиника · email или Telegram · роль-селект · consent) and is marked `agent-proposed — UNCONFIRMED`: whether a free-text message field is added, and what the role-select options finally are, is a Stage-A resolution. The consent checkbox is **not** in question — it is a fixed requirement above.
+- **Lead form fields.** The field set is taken from the Stage-A package (имя · компания/клиника · email или Telegram · роль-селект · consent) and is marked `agent-proposed — UNCONFIRMED`: whether a free-text message field is added, and what the role-select options finally are, is a Stage-A resolution. The consent checkbox is treated as fixed above, but on lead assertion rather than owner approval — it is flagged there for the owner to confirm or overrule.
 - **Feed size and placement.** This PRD places the feed between the doctor-facing and partner-facing arguments; the Stage-A design brief places it as block 2, directly under the hero, at 3–6 cards. Stage A resolves both position and count.
 - **Deferral resolution for projects/experts entry points** until 015/016 ship (see Tracked deferral) — owner call.
 - **Privacy-policy document.** The consent checkbox requires a policy page to link to; which document that is, and whether it exists on the platform today, is unresolved (the requirement itself is fixed, only its link target is open).

@@ -14,7 +14,7 @@ lang: en
 
 ## Feature summary
 
-The academy's front door. `/` stops redirecting to `/webinars` and becomes a landing page that serves **two audiences at once** — a doctor who has never heard of Doctor.School and a pharma partner evaluating whether to sponsor. The page explains what the academy is, who stands behind it, and what participation looks like; it carries a **live feed of the latest эфиры** so a doctor can go straight into real content; and it ends on a **lead form** whose submission is persisted on the platform and delivered to the commercial team's Mattermost channel «DS Лиды» in the same moment. The page is fully public — nothing on it requires authentication — and it never intercepts an authenticated user, whose post-login landing stays `/webinars`.
+The academy's front door. `/` stops redirecting to `/webinars` and becomes a landing page that serves **two audiences at once** — a doctor who has never heard of Doctor.School and a pharma partner evaluating whether to sponsor. The page explains what the academy is, who stands behind it, and what participation looks like; it carries a **live feed of the latest эфиры** so a doctor can go straight into real content; and it ends on a **lead form** whose submission is persisted on the platform and delivered to the commercial team's Mattermost channel «DS Лиды» in the same moment. The page is fully public — nothing on it requires authentication — and it never intercepts an authenticated user, whose post-login landing remains `/webinars` — an outcome 013 delivers by re-pointing the login target itself (see the acceptance criteria), not one it inherits.
 
 ## User stories
 
@@ -44,7 +44,7 @@ The academy's front door. `/` stops redirecting to `/webinars` and becomes a lan
 
 1. Guest taps **[Стать партнёром]** in the hero → the page moves to the lead form in the closing screen (a single form, reached from either CTA).
 2. Guest reads the partner-benefit and participation-format screens on the way — the form is the end of an argument, not a cold ask.
-3. Guest fills the form — **имя · компания/клиника · email или Telegram · роль (селект) · обязательный чекбокс согласия на обработку персональных данных со ссылкой на политику (152-ФЗ)** — and submits via «Обсудить партнёрство». _(Field set agent-proposed — UNCONFIRMED, taken from the Stage-A design package block 9; Stage A resolves the final list. The consent checkbox is not part of that uncertainty — see acceptance criteria.)_
+3. Guest fills the form — **имя · компания/клиника · email или Telegram · роль (селект) · обязательный чекбокс согласия на обработку персональных данных со ссылкой на политику (152-ФЗ)** — and submits via «Обсудить партнёрство». _(Field set agent-proposed — UNCONFIRMED, taken from the Stage-A design package block 9; Stage A resolves the final list. The consent checkbox is lead-asserted rather than uncertain — see acceptance criteria.)_
 4. The request is **persisted** as a `leads` record **and** posted to the Mattermost channel «DS Лиды».
 5. The page shows a confirmation state in place of the form: request received, we will contact you.
 

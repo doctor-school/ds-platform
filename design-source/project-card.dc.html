@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<a href="{{ href }}" style="display:flex;flex-direction:column;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};text-decoration:none;height:100%;box-sizing:border-box" style-hover="transform:translate(2px,2px);box-shadow:3px 3px 0 {{ shadow }}">
+  <div style="aspect-ratio:16/9;background:{{ tint }};display:flex;align-items:center;justify-content:center;border-bottom:2px solid {{ border }};position:relative;overflow:hidden;flex:none">
+    <span style="font-size:52px;font-weight:800;letter-spacing:-.03em;color:{{ tintInk }}">{{ emblem }}</span>
+    <span style="position:absolute;bottom:8px;right:10px;font-size:9.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ photoNote }}">обложка</span>
+  </div>
+  <div style="padding:18px 20px 20px;display:flex;flex-direction:column;gap:9px;flex:1;min-width:0">
+    <div style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }}">{{ kind }}</div>
+    <div lang="ru" style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:{{ ink }};line-height:1.25;overflow-wrap:break-word;hyphens:auto;text-wrap:balance">{{ title }}</div>
+    <div style="font-size:13.5px;line-height:1.55;color:{{ inkMuted }};display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">{{ description }}</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:auto;padding-top:12px;flex-wrap:wrap">
+      <span style="font-size:12.5px;font-weight:700;color:{{ accent }};text-decoration:underline;text-underline-offset:4px;white-space:nowrap">{{ count }}</span>
+      <sc-if value="{{ hasPartner }}" hint-placeholder-val="{{ true }}">
+        <span title="Партнёр направления" style="display:inline-flex;align-items:center;gap:8px;min-width:0">
+          <span style="flex:none;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;border:2px solid {{ border }};font-size:10px;font-weight:800;color:{{ ink }};background:{{ surface }}">{{ partnerInitial }}</span>
+          <span style="font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:{{ inkFaint }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Партнёр · {{ partnerName }}</span>
+        </span>
+      </sc-if>
+    </div>
+  </div>
+</a>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:320,&quot;height&quot;:440},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;kind&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Школа&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;title&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Школа травматологии и ортопедии&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;description&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Разборы клинических случаев от артроскопии до эндопротезирования — каждую неделю в прямом эфире.&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;count&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;24 эфира&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;partnerName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Санофарм&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;emblem&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Тр&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;href&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Проект.dc.html&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props, d = !!p.dark;
+    const partner = p.partnerName || '';
+    return {
+      href: p.href || '#',
+      kind: p.kind || 'Школа',
+      title: p.title || '',
+      description: p.description || '',
+      count: p.count || '',
+      emblem: p.emblem || (p.title || '?').replace(/^Школа\s+/i, '').slice(0, 2),
+      hasPartner: !!partner,
+      partnerName: partner,
+      partnerInitial: partner ? partner[0] : '',
+      surface: d ? 'oklch(.21 .02 250)' : '#fff',
+      border: d ? '#fff' : 'oklch(.21 .02 250)',
+      shadow: d ? '#6BB1F7' : '#114D9E',
+      tint: d ? '#0D3A77' : '#D3E8FD',
+      tintInk: d ? '#6BB1F7' : '#114D9E',
+      photoNote: d ? 'rgba(255,255,255,.4)' : 'rgba(17,77,158,.5)',
+      accent: d ? '#6BB1F7' : '#2D84F2',
+      ink: d ? '#fff' : 'oklch(.21 .02 250)',
+      inkMuted: d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)',
+      inkFaint: d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)'
+    };
+  }
+}
+</script>
+</body>
+</html>

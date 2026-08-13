@@ -13,8 +13,62 @@ concurrency:
 env:
   TURBO_TELEMETRY_DISABLED: 1
 
+# ─── Job topology (#1235) ────────────────────────────────────────────────────
+# This workflow is BATCHED for the `bbm-ci` self-hosted pool (#1225): the pool
+# serializes `heavy` work and every job pays its own checkout + `pnpm install`,
+# so 44 one-guard jobs meant 44 installs on a pool that runs them mostly
+# back-to-back. The guards themselves are unchanged — only their PACKAGING is:
+#
+#   core           heavy   setup+lint+types+unit+build+api-build-smoke+
+#                          docs-build+tokens-fresh+endpoint-authz   (BLOCK)
+#   api-e2e        docker  unchanged                                (BLOCK)
+#   playwright-axe / playwright-axe-portal
+#                  browser unchanged                                (BLOCK)
+#   guards-block   light   the 4 hard-red light guards              (BLOCK)
+#   guards-warn    light   the 23 WARN light guards + primitives-first
+#   ci             light   the single required status check
+#
+# POSTURE IS PRESERVED EXACTLY. The old encoding was per-JOB (`BLOCK` = in the
+# `ci` needs-list, `WARN` = job-level `continue-on-error`, never both); the new
+# encoding is per-STEP inside a batch:
+#   • BLOCK guard → a plain step; it fails its batch, and the batch is in the
+#     `ci` needs-list.
+#   • WARN guard  → `continue-on-error: true` on the STEP (the batch job itself
+#     is never `continue-on-error` — that would mask its BLOCK members), PLUS a
+#     final `if: always()` WARN-AGGREGATE step that exits 1 when any WARN step's
+#     `outcome` is `failure`. Both halves are load-bearing:
+#       – the step-level `continue-on-error` is what lets the REMAINING guards
+#         run after one flags (the old per-job parallelism);
+#       – the aggregate is what keeps the OLD de-facto merge-gate strictness. A
+#         job-level `continue-on-error` still recorded a FAILED check-run per
+#         WARN guard, and `tools/gh/merge-gate.mjs::classifyCheckRuns` reds ANY
+#         completed non-success/non-skipped check-run — so a WARN finding
+#         blocked `pr:land` while never entering the `ci` needs-list. Step-level
+#         `continue-on-error` alone would have silently loosened that for all 28
+#         WARN guards; the aggregate re-reds the batch check-run instead.
+#     WARN therefore still means exactly what it meant: it never fails the
+#     required `ci` check, and it is still visible (red) to the merge gate.
+#   • `primitives-first` keeps its third posture (#1108): WARN lives in the TOOL
+#     EXIT CODE, not `continue-on-error`, and the job is NOT in the `ci`
+#     needs-list — so it sits as the one hard step of the `guards-warn` batch,
+#     LAST (a red there is a real #828 BLOCK-class finding the merge gate sees
+#     as a red check-run, exactly as before).
+# Trade-off, deliberate: batching is fail-fast — the first hard failure in a
+# batch skips its remaining steps, where 44 parallel jobs reported every failure
+# at once. Returning to GitHub-hosted runners later = split the batches back
+# out; it is mechanical (each step already carries its own posture comment).
+# `api-drift`/`db-drift`/`generated-artifacts` stay on `ubuntu-latest`: they are
+# `if: false` placeholders that cost no pool time, and folding them into a pool
+# batch would ADD pool wall-time.
 jobs:
-  setup:
+  # ─── Heavy chain: one exclusive pool slot, one install ────────────────
+  # The `heavy` profile is exclusive on the pool, so the old
+  # setup→{lint,types,unit,build,api-build-smoke,docs-build,tokens-fresh,
+  # endpoint-authz} fan-out never actually ran in parallel — it serialized,
+  # paying 9 checkouts + 9 installs. Collapsed into one job; step order follows
+  # the old topological order (install first, then the former siblings). Every
+  # member was BLOCK, so this batch carries no WARN step and needs no aggregate.
+  core:
     runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
       - uses: actions/checkout@v7
@@ -26,52 +80,75 @@ jobs:
           node-version-file: .nvmrc
       - run: pnpm install --frozen-lockfile
 
-  # ─── Core build/test/lint (parallel after setup) ─────────────────────
-  # `pnpm lint` runs, in order: `eslint .` (incl. the #197 auth-field gate and the
-  # #234 design-system guardrails — local/no-arbitrary-tailwind-value,
-  # local/no-token-redefinition, rhythmguard-tailwind/tailwind-class-use-scale),
-  # then `pnpm lint:oxlint` (#234 spec §4 level 1 — tailwindcss/no-hardcoded-colors
-  # via oxlint-tailwindcss), then `pnpm lint:stylelint` (#234 level 2 CSS side —
-  # rhythmguard/use-scale), then `turbo run lint` (per-package). All blocking;
-  # this job is in the `ci` meta-job needs-list, so any guardrail failure blocks merge.
-  lint:
-    needs: setup
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
+      # lint — `pnpm lint` runs, in order: `eslint .` (incl. the #197 auth-field
+      # gate and the #234 design-system guardrails — local/no-arbitrary-tailwind-value,
+      # local/no-token-redefinition, rhythmguard-tailwind/tailwind-class-use-scale),
+      # then `pnpm lint:oxlint` (#234 spec §4 level 1 — tailwindcss/no-hardcoded-colors
+      # via oxlint-tailwindcss), then `pnpm lint:stylelint` (#234 level 2 CSS side —
+      # rhythmguard/use-scale), then `turbo run lint` (per-package). All blocking;
+      # this job is in the `ci` meta-job needs-list, so any guardrail failure blocks merge.
+      - name: lint
+        run: pnpm lint
 
-  types:
-    needs: setup
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
+      - name: types
+        run: pnpm typecheck
 
-  # Pure-unit tests for every package EXCEPT @ds/api. @ds/api's suites boot
-  # DatabaseModule / hit Postgres + pgvector, so they run in the `api-e2e` job
-  # against a service container (#66). Keeping them out here lets `unit` stay
-  # service-free and fast.
-  unit:
-    needs: setup
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec turbo run test --filter='!@ds/api'
-      - run: pnpm test:tools
+      - name: build
+        run: pnpm build
 
+      # unit — pure-unit tests for every package EXCEPT @ds/api. @ds/api's suites
+      # boot DatabaseModule / hit Postgres + pgvector, so they run in the
+      # `api-e2e` job against a service container (#66). Keeping them out here
+      # lets this step stay service-free and fast.
+      - name: unit
+        run: pnpm exec turbo run test --filter='!@ds/api'
+      - name: unit (tools)
+        run: pnpm test:tools
+
+      # api-build-smoke — apps/api build smoke (#158). A single COLD `pnpm build`
+      # (the `build` step above) cannot catch either Issue-#158 defect: (1) a
+      # stale external tsbuildinfo surviving `deleteOutDir` makes a WARM
+      # `nest build` emit an empty `dist/`, and (2) an extensionless
+      # `@nestjs/common/constants` subpath is unresolvable for built ESM on Node
+      # (only tsx/Vitest/webpack tolerate it). `build:smoke` builds twice + does
+      # a real Node `import()` of the built module. Infra-free: both defects fail
+      # before any DB/Redis/Zitadel I/O — no services.
+      #
+      # The built AppModule imports the workspace packages @ds/db + @ds/schemas
+      # by their built `dist/` (their package `exports`), so build deps first.
+      - name: api-build-smoke (deps)
+        run: pnpm exec turbo run build --filter=@ds/api^...
+      - name: api-build-smoke
+        run: pnpm --filter @ds/api build:smoke
+
+      - name: docs-build
+        run: pnpm --filter @ds/docs build
+
+      # tokens-fresh — design-token freshness guard (#233). The generated design
+      # tokens (packages/design-system/src/styles/tokens.css + allowed-tokens.json)
+      # are committed so apps build with no prebuild. This regenerates them from
+      # the DTCG source and fails if the committed output is stale — keeping the
+      # source-of-truth (tokens/*.json) and the emitted CSS in lockstep. The
+      # token-build also validates that every reference resolves.
+      - name: tokens-fresh (build)
+        run: pnpm --filter @ds/design-system build
+      - name: tokens-fresh — verify generated tokens are committed and up to date
+        run: git diff --exit-code -- packages/design-system/src/styles/tokens.css packages/design-system/src/styles/allowed-tokens.json
+
+      # endpoint-authz — endpoint authorization completeness gate (BLOCK).
+      # Spec: 2026-05-18-ds-platform-endpoint-authorization-matrix-design-en.md §6.
+      # Deliberate exception to the Phase-0 WARN posture (ADR-0007 §2.6 / spec §6.3):
+      # ADR-0001 §2.5 and engineering-readiness §3 both mandate hard failure on
+      # missing @Authz metadata, and the matrix is a named pre-pilot security
+      # BLOCKER. Vacuously green when there are no routes to classify. No Postgres
+      # service: the gate boots a Nest application *context* (no listen) with a
+      # placeholder DATABASE_URL and never issues a query (the pool is lazy).
+      # It boots the real AppModule, which imports @ds/db + @ds/schemas by their
+      # built `dist/` — already built by the `build` step above.
+      - name: endpoint-authz
+        run: pnpm lint:endpoint-authz
+
+  # ─── apps/api e2e against a real Postgres (docker profile) ────────────
   # apps/api e2e (readiness EARS-1, health EARS-1) + unit specs against a real
   # Postgres 17 + pgvector + pg_partman. The Vitest globalSetup runs
   # `drizzle:migrate:ci` (drizzle-kit migrate, no dev-stand snapshot) before the
@@ -84,8 +161,11 @@ jobs:
   # (the SSOT image: pgvector + pg_partman, #369) and run it as a step. The
   # migration self-creates the partman schema + extension, so no init.sql mount
   # is needed. Same creds/port/DB name the suite expects on DATABASE_URL.
+  #
+  # Runs on the `docker` pool profile — a different lane from `heavy`, so it no
+  # longer waits on a `setup` job (#1235): it installs for itself and starts
+  # immediately, in parallel with `core`.
   api-e2e:
-    needs: setup
     runs-on: [self-hosted, linux, x64, bbm-ci, node22, docker, ci]
     env:
       DATABASE_URL: postgres://ds:ds@localhost:5432/ds_test
@@ -116,71 +196,12 @@ jobs:
           echo "Postgres did not become ready in time"; docker logs ds-postgres; exit 1
       - run: pnpm exec turbo run test --filter=@ds/api
 
-  build:
-    needs: setup
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-
-  # apps/api build smoke (#158). The plain `build` job above runs a single COLD
-  # `pnpm build`, so it cannot catch either Issue-#158 defect: (1) a stale
-  # external tsbuildinfo surviving `deleteOutDir` makes a WARM `nest build` emit
-  # an empty `dist/`, and (2) an extensionless `@nestjs/common/constants` subpath
-  # is unresolvable for built ESM on Node (only tsx/Vitest/webpack tolerate it).
-  # This guard builds twice + does a real Node `import()` of the built module.
-  # Infra-free: both defects fail before any DB/Redis/Zitadel I/O — no services.
-  api-build-smoke:
-    needs: setup
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      # The built AppModule imports the workspace packages @ds/db + @ds/schemas
-      # by their built `dist/` (their package `exports`), so build deps first.
-      - run: pnpm exec turbo run build --filter=@ds/api^...
-      - run: pnpm --filter @ds/api build:smoke
-
-  docs-build:
-    needs: setup
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @ds/docs build
-
-  # ─── Design-token freshness guard (#233) ─────────────────────────────
-  # The generated design tokens (packages/design-system/src/styles/tokens.css +
-  # allowed-tokens.json) are committed so apps build with no prebuild. This job
-  # regenerates them from the DTCG source and fails if the committed output is
-  # stale — keeping the source-of-truth (tokens/*.json) and the emitted CSS in
-  # lockstep. The token-build also validates that every reference resolves.
-  tokens-fresh:
-    needs: setup
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @ds/design-system build
-      - name: Verify generated tokens are committed and up to date
-        run: git diff --exit-code -- packages/design-system/src/styles/tokens.css packages/design-system/src/styles/allowed-tokens.json
-
-  # ─── Drift guards from ADR-0006 §7 ───────────────────────────────────
+  # ─── Drift guards from ADR-0006 §7 — GitHub-hosted placeholders ───────
+  # These three are `if: false` until their owning group lands, and they run on
+  # `ubuntu-latest`, NOT the pool. Left un-batched on purpose (#1235): they cost
+  # zero pool wall-time today, and folding them into a pool batch would only add
+  # some. They no longer `needs: setup` — that job was folded into `core`.
   api-drift:
-    needs: setup
     if: false # Enabled by G8: apps/api (NestJS) + openapi.snapshot.json land then
     runs-on: ubuntu-latest
     steps:
@@ -188,554 +209,499 @@ jobs:
       - run: echo "api-drift placeholder"
 
   db-drift:
-    needs: setup
     if: false # Enabled by G6: packages/db Drizzle schema lands then
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - run: echo "db-drift placeholder"
 
-  # events-drift — ADR-0006 §7 "Events drift" row (@OutboxEmit call-sites ↔ spec
-  # events.md). REAL guard as of #448 (was a 5-line exit-0 stub). Empty-state is
-  # evaluated emptiness, not hardcoded: it scans, finds no emitters and no
-  # events.md manifests today, and exits 0 "nothing to check" (endpoint-authz
-  # vacuously-green semantics) — it bites the moment the first emitter/manifest
-  # lands. POSTURE: KEPT hard-red (BLOCK, in the `ci` needs-list). It is a
-  # deterministic literal set comparison with no false-positive class, clean on
-  # main, and ADR-0006 §7.0 does NOT phase it into the Pilot tier (unlike the two
-  # glossary checks) — so no burn-in is warranted.
-  events-drift:
-    needs: setup
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsx tools/lint/events-lint.ts
-
   generated-artifacts:
-    needs: setup
     if: false # Enabled by G6: pnpm generate:all + generators (drizzle/openapi-typescript/etc.) land then
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - run: echo "generated-artifacts placeholder"
 
-  markdown-links:
-    needs: setup
+  # ─── BLOCK light guards (hard-red; wired into the `ci` needs-list) ────
+  # Batch of the four light-profile guards that are BLOCK today. Every step here
+  # is a plain step: a failure fails the batch, which fails `ci`. No WARN member,
+  # so no WARN-aggregate step. The checkout is FULL (`fetch-depth: 0`) because
+  # the lychee link check walks the whole tree.
+  guards-block:
     runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - name: Link check
-        uses: lycheeverse/lychee-action@v2
-        with:
-          args: --no-progress --include-fragments .
-          fail: true
-
-  # module-readme: every top-level NestJS module dir under apps/*/src (a dir with a
-  # *.module.ts) carries a README (ADR-0006 §7). Was an exit-0 stub; implemented as
-  # a REAL WARN v1 in #438 — EXITS NON-ZERO on findings, with a tracked-Issue
-  # grandfather allowlist for the 6 pre-existing gaps. Promotion clock (ADR-0007
-  # §2.6, 4 clean weeks) starts at merge — 2026-07-02. Kept WARN
-  # (`continue-on-error`) until the sweep flips it; do not remove it here.
-  module-readme:
-    needs: setup
-    continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsx tools/lint/module-readme-lint.ts
-
-  # route-targets: every internal navigation target in apps/portal + apps/admin
-  # (a `<Link href>`, `router.push/replace`, or `redirect` string/template) must
-  # resolve to an existing app-router route (page.tsx/route.ts). Guards the #673
-  # class of defect — a `/webinars/<slug>/room` link shipped before its route
-  # existed. WARN v1 (ADR-0007 §2.6; new guard lands WARN, promote to BLOCK once
-  # stable) → `continue-on-error: true`, and NOT in the `ci` needs-list.
-  route-targets:
-    needs: setup
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable) — ADR-0007 §2.6
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsx tools/lint/route-target-lint.ts
-
-  # axe-exclude: every `AxeBuilder.exclude(...)` in an e2e a11y spec
-  # (apps/*/e2e/**/*axe*.e2e.spec.ts) must be leaf-scoped (a `#id`/`[attr]`
-  # selector) or carry a `// axe-exclude-ok: #<issue> <reason>` marker. Guards the
-  # #713 class of defect — `.exclude(".bg-header")` excluded a whole container
-  # band, hiding the interactive theme-toggle glyph (#702) from the contrast scan.
-  # WARN v1 (ADR-0007 §2.6; new guard lands WARN, promote to BLOCK once stable) →
-  # `continue-on-error: true`, and NOT in the `ci` needs-list.
-  axe-exclude:
-    needs: setup
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable) — ADR-0007 §2.6
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsx tools/lint/axe-exclude-lint.ts
-
-  # ─── Glossary validation from ADR-0006 §6 ────────────────────────────
-  # glossary-mdx — ADR-0006 §6.4 MDX glossary-lint (a `[[term-id]]` directive in
-  # docs prose must resolve to a glossary term). REAL guard as of #448 (was a
-  # 5-line exit-0 stub). POSTURE: BURN-IN — `continue-on-error: true` (WARN) and
-  # REMOVED from the `ci` needs-list (BLOCK = in needs-list, WARN =
-  # continue-on-error, never both). Rationale: (a) ADR-0006 §7.0 phases
-  # glossary-mdx into the Pilot tier (#449 posture note) — not pre-pilot-mandatory;
-  # (b) the `[[…]]` syntax is OVERLOADED — glossary terms vs. memory/decision
-  # cross-refs (`[[reference_*]]`/`[[feedback_*]]`/`[[project_*]]`, the separate
-  # §7.0 `[[refs]]` check) vs. code-fenced syntax examples — so the guard's
-  # namespace-exclusion + code-masking disambiguation is HEURISTIC, a real
-  # false-positive class the deterministic events-drift/roundtrip checks lack;
-  # (c) no real glossary `[[term-id]]` directive is in use yet, so as BLOCK it
-  # would gate nothing real while carrying that FP risk. RE-ENTRY (→ BLOCK + back
-  # into the needs-list): when the ADR-0006 §6.2 glossary generation pipeline
-  # (#460) + real `[[term-id]]` usage land, the §6.4 directive-marker collision
-  # is settled by the ADR-0006 §6 reconcile (#459), AND the Pilot phase opens —
-  # earliest sweep 2026-07-02 per ADR-0007 §2.6 + ADR-0006 §7.0.
-  glossary-mdx:
-    needs: setup
-    continue-on-error: true # WARN (burn-in) — Pilot-phased + `[[…]]` namespace FP risk; re-entry criterion in the header
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsx tools/lint/glossary-mdx-lint.ts
-
-  # glossary-ids — ADR-0006 §6.3 glossary canonical-id SSOT enforcement. The
-  # ESLint rule `local/glossary-canonical-ids` (#468) forbids a bare string
-  # literal equal to a glossary canonical id in glossary-CONSUMER code
-  # (`apps/cms/**`, `apps/docs/**`), steering it to the typed `GLOSSARY_IDS.<id>`
-  # so a rename breaks the build. It is also wired at `warn` in the main
-  # `eslint.config.js` (editor/dev feedback, rides the `lint` job non-blockingly);
-  # THIS job is the promotable pass/fail check surface — a dedicated
-  # `eslint.glossary-ids.config.mjs` running ONLY that rule at `error`.
-  #
-  # The id-vs-domain-enum collision (`doctor_guest` — a glossary id AND the live
-  # RBAC role wire-value, SSOT apps/api authz.types.ts ROLES / idp.types.ts
-  # DOCTOR_GUEST_ROLE) is handled two ways: the surface scope keeps the rule off
-  # apps/api/**·packages/db|schemas/** entirely, and `domainEnumIds:["doctor_guest"]`
-  # makes the rule abstain on that id. Clean on main (no glossary-consumer code
-  # hardcodes an id yet); it bites the moment one does.
-  #
-  # POSTURE: BURN-IN — `continue-on-error: true` (WARN v1, ADR-0007 §2.6), REMOVED
-  # from the `ci` needs-list (BLOCK = in needs-list, WARN = continue-on-error —
-  # never both). RE-ENTRY (→ BLOCK + into the needs-list): when a real
-  # glossary-consumer surface (Payload GlossaryRef / docs component) lands and the
-  # ADR-0007 §2.6 sweep opens — flip `continue-on-error` to false, no rule change.
-  glossary-ids:
-    needs: setup
-    continue-on-error: true # WARN (burn-in) — promotable check surface; re-entry criterion in the header
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:glossary-ids
-
-  # glossary-roundtrip — ADR-0006 §6 roundtrip (glossary source ids ↔ generated
-  # `packages/glossary/(src/)?ids.ts`). REAL guard as of #448 (was a 5-line exit-0
-  # stub). Parse-and-compare (not regenerate — the §6.2 generator does not exist
-  # yet; pipeline tracked by #460); empty-state is evaluated emptiness: no
-  # generated ids.ts today → exits 0 "nothing to roundtrip", bites the moment
-  # the #460 pipeline lands the committed artifact. POSTURE: KEPT
-  # hard-red (BLOCK, in the `ci` needs-list). It is a deterministic symmetric
-  # id-set diff with no false-positive class; ADR-0006 §7.0 Pilot-phases it, but
-  # that phasing targets FP/overhead noise a set-diff on a currently-ABSENT
-  # artifact cannot create — it can only fire on a genuine source↔generated drift
-  # worth blocking the instant the pipeline lands. (Contrast glossary-mdx above,
-  # burned in for genuine `[[…]]` namespace ambiguity.)
-  glossary-roundtrip:
-    needs: setup
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsx tools/lint/glossary-roundtrip-lint.ts
-
-  # ─── AI-specific guards from ADR-0007 §2.6 ───────────────────────────
-  # The PR-body-parsing guard family (spec-link BLOCK, registry-research,
-  # spec-status-fresh, prior-decisions) lives in `pr-body-guards.yml` (#651):
-  # a dedicated workflow that also triggers on the PR `edited` event, so a
-  # body edit re-runs the guards without re-running this matrix. spec-link is
-  # therefore NOT in the `ci` aggregate needs-list — the merge gate reads its
-  # head-SHA-pinned check-run directly (tools/gh/merge-gate.mjs).
-
-  # ─── Endpoint authorization completeness gate (BLOCK) ────────────────
-  # Spec: 2026-05-18-ds-platform-endpoint-authorization-matrix-design-en.md §6.
-  # Deliberate exception to the Phase-0 WARN posture (ADR-0007 §2.6 / spec §6.3):
-  # ADR-0001 §2.5 and engineering-readiness §3 both mandate hard failure on
-  # missing @Authz metadata, and the matrix is a named pre-pilot security
-  # BLOCKER. Vacuously green when there are no routes to classify. No Postgres
-  # service: the gate boots a Nest application *context* (no listen) with a
-  # placeholder DATABASE_URL and never issues a query (the pool is lazy).
-  endpoint-authz:
-    needs: setup
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      # The gate boots the real AppModule, which imports the workspace packages
-      # @ds/db + @ds/schemas by their built `dist/` (their package `exports`).
-      # @ds/api itself runs from source via tsx, so only its deps need building.
-      - run: pnpm exec turbo run build --filter=@ds/api^...
-      - run: pnpm lint:endpoint-authz
-
-  # ─── Enforcement gates for already-written rules (#251, epic #247) ────
-  # registry-research (PR-body-parsing) moved to `pr-body-guards.yml` (#651).
-  # no-stub: user-facing source must not ship a "set this env var" dev
-  # placeholder or an untracked TODO/FIXME stub (AGENTS.md §6). WARN per the
-  # ADR-0007 §2.6 new-guard posture — promote to BLOCK once stable. Excluded
-  # from the `ci` meta-job needs-list while WARN.
-
-  # ─── Prod-surface readiness gate (BLOCK) ─────────────────────────────
-  # Issue #771 (wave-1 prod-smoke retro). Deliberate exception to the Phase-0
-  # WARN posture (ADR-0007 §2.6): documented day-0 BLOCK mandate — a scaffold
-  # face on a prod-reachable route is the F-22 "no scaffold face in prod"
-  # class. GH_TOKEN enables the deferred-Issue OPEN check (skipped without it).
-  prod-surface:
-    needs: setup
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
+    # Union of the member jobs' permission blocks: only `prod-surface` needed one
+    # (`issues: read`, for its deferred-Issue OPEN check). No member reaches
+    # GitHub through the `gh` CLI or a tools/lint/lib/gh.ts consumer, so the
+    # Issue-#10 `pull-requests: read` pattern does not apply here.
     permissions:
       contents: read
       issues: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:prod-surface
+
+      # events-drift — ADR-0006 §7 "Events drift" row (@OutboxEmit call-sites ↔ spec
+      # events.md). REAL guard as of #448 (was a 5-line exit-0 stub). Empty-state is
+      # evaluated emptiness, not hardcoded: it scans, finds no emitters and no
+      # events.md manifests today, and exits 0 "nothing to check" (endpoint-authz
+      # vacuously-green semantics) — it bites the moment the first emitter/manifest
+      # lands. POSTURE: KEPT hard-red (BLOCK, in the `ci` needs-list). It is a
+      # deterministic literal set comparison with no false-positive class, clean on
+      # main, and ADR-0006 §7.0 does NOT phase it into the Pilot tier (unlike the two
+      # glossary checks) — so no burn-in is warranted.
+      - name: events-drift
+        run: pnpm exec tsx tools/lint/events-lint.ts
+
+      # glossary-roundtrip — ADR-0006 §6 roundtrip (glossary source ids ↔ generated
+      # `packages/glossary/(src/)?ids.ts`). REAL guard as of #448 (was a 5-line exit-0
+      # stub). Parse-and-compare (not regenerate — the §6.2 generator does not exist
+      # yet; pipeline tracked by #460); empty-state is evaluated emptiness: no
+      # generated ids.ts today → exits 0 "nothing to roundtrip", bites the moment
+      # the #460 pipeline lands the committed artifact. POSTURE: KEPT
+      # hard-red (BLOCK, in the `ci` needs-list). It is a deterministic symmetric
+      # id-set diff with no false-positive class; ADR-0006 §7.0 Pilot-phases it, but
+      # that phasing targets FP/overhead noise a set-diff on a currently-ABSENT
+      # artifact cannot create — it can only fire on a genuine source↔generated drift
+      # worth blocking the instant the pipeline lands. (Contrast glossary-mdx in the
+      # `guards-warn` batch, burned in for genuine `[[…]]` namespace ambiguity.)
+      - name: glossary-roundtrip
+        run: pnpm exec tsx tools/lint/glossary-roundtrip-lint.ts
+
+      # prod-surface — prod-surface readiness gate (BLOCK). Issue #771 (wave-1
+      # prod-smoke retro). Deliberate exception to the Phase-0 WARN posture
+      # (ADR-0007 §2.6): documented day-0 BLOCK mandate — a scaffold face on a
+      # prod-reachable route is the F-22 "no scaffold face in prod" class.
+      # GH_TOKEN enables the deferred-Issue OPEN check (skipped without it).
+      - name: prod-surface
+        run: pnpm lint:prod-surface
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  no-stub:
-    needs: setup
-    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
+      # markdown-links — lychee link check over the whole tree (needs the full
+      # checkout above). Last in the batch: it is the only network-bound step, so
+      # the deterministic local guards fail fast ahead of it.
+      - name: markdown-links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --no-progress --include-fragments .
+          fail: true
+
+  # ─── WARN light guards + primitives-first ─────────────────────────────
+  # Batch of every light-profile guard whose finding must NOT fail the required
+  # `ci` check. The JOB is deliberately not `continue-on-error` — WARN lives on
+  # each STEP, so one flagged guard never stops the others — and the final
+  # WARN-aggregate step re-reds this check-run whenever any WARN step flagged,
+  # which is exactly what the old per-job `continue-on-error` did (a failed
+  # check-run that `merge-gate.mjs::classifyCheckRuns` counts as red). This batch
+  # is NOT in the `ci` needs-list, so a WARN finding still never fails `ci`.
+  #
+  # `primitives-first` is the single hard step: its WARN classes exit 0 in the
+  # TOOL, so a non-zero exit is the real #828 BLOCK class and must turn this
+  # check-run red for the merge gate (#1108) — exactly its old posture (red
+  # check-run, but never in the `ci` needs-list).
+  #
+  # The checkout is intentionally SHALLOW: `migration-index` fetches origin/main
+  # itself and falls back to SKIP, which is the behavior its posture assumes.
+  guards-warn:
     runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
+    # Union of the member jobs' permission blocks: `tdd-signal` and `product-note`
+    # are tools/lint/lib/gh.ts consumers, so the batch carries the canonical
+    # Issue-#10 pattern (`contents: read` + `pull-requests: read`) and both steps
+    # carry `GH_TOKEN`/`PR_NUMBER` — enforced by the `workflow-auth` guard below.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:no-stub
 
-  # no-hardcoded-path: committed tooling (`tools/**/*.{mjs,ts}`) must not bake a
-  # machine-specific absolute path literal (drive-letter `C:/…` / home
-  # `/home/<user>/…` / `/Users/<user>/…` / repo-root) into runtime code — a
-  # hardcoded value standing in for config (AGENTS.md §6; dev-stand "never
-  # hardcode a host/port/path"). Derive the root via `git rev-parse
-  # --show-toplevel`. #936 (PR #933 renderBrief() leak). WARN per the ADR-0007
-  # §2.6 new-guard posture — promote to BLOCK once stable. Excluded from the `ci`
-  # meta-job needs-list while WARN.
-  no-hardcoded-path:
-    needs: setup
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:no-hardcoded-path
+      # module-readme: every top-level NestJS module dir under apps/*/src (a dir with a
+      # *.module.ts) carries a README (ADR-0006 §7). Was an exit-0 stub; implemented as
+      # a REAL WARN v1 in #438 — EXITS NON-ZERO on findings, with a tracked-Issue
+      # grandfather allowlist for the 6 pre-existing gaps. Promotion clock (ADR-0007
+      # §2.6, 4 clean weeks) starts at merge — 2026-07-02. Kept WARN until the sweep
+      # flips it; do not remove the `continue-on-error` here.
+      - name: WARN · module-readme
+        id: warn_module_readme
+        continue-on-error: true
+        run: pnpm exec tsx tools/lint/module-readme-lint.ts
 
-  # external-anchor: external-document anchors on user-facing surfaces
-  # (`apps/portal`, `apps/admin`, `packages/design-system/src`) must carry
-  # `target="_blank"` + a `rel` containing `noreferrer`/`noopener`. #867 — the
-  # #864/#865 same-tab drift: the program-PDF affordance shipped WITHOUT them on
-  # the public page while the admin surface had them, and no gate caught the
-  # surface-parity gap. WARN per the ADR-0007 §2.6 new-guard posture — promote to
-  # BLOCK once stable. Excluded from the `ci` meta-job needs-list while WARN.
-  external-anchor:
-    needs: setup
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:external-anchor
+      # route-targets: every internal navigation target in apps/portal + apps/admin
+      # (a `<Link href>`, `router.push/replace`, or `redirect` string/template) must
+      # resolve to an existing app-router route (page.tsx/route.ts). Guards the #673
+      # class of defect — a `/webinars/<slug>/room` link shipped before its route
+      # existed. WARN v1 (ADR-0007 §2.6; new guard lands WARN, promote to BLOCK once
+      # stable), and NOT in the `ci` needs-list.
+      - name: WARN · route-targets
+        id: warn_route_targets
+        continue-on-error: true
+        run: pnpm exec tsx tools/lint/route-target-lint.ts
 
-  # migration-index: Drizzle migration-index collision guard (#799). Parallel
-  # branches independently generate the same next migration index off a stale
-  # base; on merge one branch's _journal.json entry / snapshot drops the sibling
-  # (observed 2026-07-12, #705: 0011_neat_vapor vs 0011_users_deactivated_at).
-  # Fails on a branch-new idx ≤ origin/main max, a duplicate journal idx, a
-  # duplicate SQL-file prefix, or a dropped base entry. The checkout is shallow,
-  # so the guard fetches origin/main itself (falls back to SKIP, never a false
-  # red). Excluded from the `ci` meta-job needs-list while WARN.
-  migration-index:
-    needs: setup
-    continue-on-error: true # WARN v1 — promote to BLOCK per ADR-0007 §2.6 promotion policy
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:migration-index
+      # axe-exclude: every `AxeBuilder.exclude(...)` in an e2e a11y spec
+      # (apps/*/e2e/**/*axe*.e2e.spec.ts) must be leaf-scoped (a `#id`/`[attr]`
+      # selector) or carry a `// axe-exclude-ok: #<issue> <reason>` marker. Guards the
+      # #713 class of defect — `.exclude(".bg-header")` excluded a whole container
+      # band, hiding the interactive theme-toggle glyph (#702) from the contrast scan.
+      # WARN v1 (ADR-0007 §2.6), and NOT in the `ci` needs-list.
+      - name: WARN · axe-exclude
+        id: warn_axe_exclude
+        continue-on-error: true
+        run: pnpm exec tsx tools/lint/axe-exclude-lint.ts
 
-  # audit-coverage: universal edit-audit coverage guard (010 EARS-8, #1089).
-  # Spec 010 audits every domain-table mutation via one generic PL/pgSQL trigger
-  # attached per table by migration; the owner-confirmed requirement is that a
-  # NEW domain table cannot silently ship WITHOUT that trigger. This guard
-  # asserts every `pgTable` in packages/db/src/schema is EITHER covered by an
-  # `audit_row_change()` trigger in apps/api/drizzle/*.sql OR carries a
-  # rationale-bearing AUDIT_CAPTURE_ALLOWLIST entry (packages/db/src/audit.ts) —
-  # red on any table in neither set. Static source scan — no PR/gh context.
-  # Excluded from the `ci` meta-job needs-list while WARN.
-  audit-coverage:
-    needs: setup
-    continue-on-error: true # WARN v1 — promote to BLOCK per ADR-0007 §2.6 promotion policy
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:audit-coverage
+      # glossary-mdx — ADR-0006 §6.4 MDX glossary-lint (a `[[term-id]]` directive in
+      # docs prose must resolve to a glossary term). REAL guard as of #448 (was a
+      # 5-line exit-0 stub). POSTURE: BURN-IN — WARN and NOT in the `ci` needs-list
+      # (BLOCK = in needs-list, WARN = non-blocking for `ci`, never both). Rationale:
+      # (a) ADR-0006 §7.0 phases glossary-mdx into the Pilot tier (#449 posture note) —
+      # not pre-pilot-mandatory; (b) the `[[…]]` syntax is OVERLOADED — glossary terms
+      # vs. memory/decision cross-refs (`[[reference_*]]`/`[[feedback_*]]`/`[[project_*]]`,
+      # the separate §7.0 `[[refs]]` check) vs. code-fenced syntax examples — so the
+      # guard's namespace-exclusion + code-masking disambiguation is HEURISTIC, a real
+      # false-positive class the deterministic events-drift/roundtrip checks lack;
+      # (c) no real glossary `[[term-id]]` directive is in use yet, so as BLOCK it
+      # would gate nothing real while carrying that FP risk. RE-ENTRY (→ BLOCK: move
+      # the step into the `guards-block` batch): when the ADR-0006 §6.2 glossary
+      # generation pipeline (#460) + real `[[term-id]]` usage land, the §6.4
+      # directive-marker collision is settled by the ADR-0006 §6 reconcile (#459),
+      # AND the Pilot phase opens — earliest sweep 2026-07-02 per ADR-0007 §2.6 +
+      # ADR-0006 §7.0.
+      - name: WARN · glossary-mdx
+        id: warn_glossary_mdx
+        continue-on-error: true
+        run: pnpm exec tsx tools/lint/glossary-mdx-lint.ts
 
-  # showcase-coverage: the design-system living showcase (apps/showcase) is the
-  # rendered viewer of @ds/design-system — it must stay *living*. This guard
-  # asserts every package COMPONENT export has a catalogued entry in the showcase
-  # registry (apps/showcase/app/lib/registry.ts), so a new primitive/block cannot
-  # ship without appearing in the catalogue (design-system-showcase spec §5.1,
-  # #350). Static source scan — no PR/gh context needed. WARN per ADR-0007 §2.6.
-  showcase-coverage:
-    needs: setup
-    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:showcase-coverage
+      # glossary-ids — ADR-0006 §6.3 glossary canonical-id SSOT enforcement. The
+      # ESLint rule `local/glossary-canonical-ids` (#468) forbids a bare string
+      # literal equal to a glossary canonical id in glossary-CONSUMER code
+      # (`apps/cms/**`, `apps/docs/**`), steering it to the typed `GLOSSARY_IDS.<id>`
+      # so a rename breaks the build. It is also wired at `warn` in the main
+      # `eslint.config.js` (editor/dev feedback, rides the `lint` step in `core`
+      # non-blockingly); THIS step is the promotable pass/fail check surface — a
+      # dedicated `eslint.glossary-ids.config.mjs` running ONLY that rule at `error`.
+      #
+      # The id-vs-domain-enum collision (`doctor_guest` — a glossary id AND the live
+      # RBAC role wire-value, SSOT apps/api authz.types.ts ROLES / idp.types.ts
+      # DOCTOR_GUEST_ROLE) is handled two ways: the surface scope keeps the rule off
+      # apps/api/**·packages/db|schemas/** entirely, and `domainEnumIds:["doctor_guest"]`
+      # makes the rule abstain on that id. Clean on main (no glossary-consumer code
+      # hardcodes an id yet); it bites the moment one does.
+      #
+      # POSTURE: BURN-IN — WARN v1 (ADR-0007 §2.6), NOT in the `ci` needs-list.
+      # RE-ENTRY (→ BLOCK): when a real glossary-consumer surface (Payload
+      # GlossaryRef / docs component) lands and the ADR-0007 §2.6 sweep opens — move
+      # the step into `guards-block`, no rule change.
+      - name: WARN · glossary-ids
+        id: warn_glossary_ids
+        continue-on-error: true
+        run: pnpm lint:glossary-ids
 
-  # showcase-snippet: the showcase (apps/showcase) is the rendered VIEWER of
-  # @ds/design-system — it re-implements nothing (design-system-showcase spec §2.4).
-  # A hand-typed usage snippet (a STRING/template-literal constant depicting a block
-  # import or PascalCase JSX) is a second, hand-maintained copy of code the package
-  # owns and DRIFTS; mature systems auto-extract displayed code from the real source
-  # so it cannot. This guard flags such literals (#396). Static source scan — no
-  # PR/gh context needed. WARN per ADR-0007 §2.6.
-  showcase-snippet:
-    needs: setup
-    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:showcase-snippet
+      # no-stub: user-facing source must not ship a "set this env var" dev
+      # placeholder or an untracked TODO/FIXME stub (AGENTS.md §6). WARN per the
+      # ADR-0007 §2.6 new-guard posture — promote to BLOCK once stable.
+      - name: WARN · no-stub
+        id: warn_no_stub
+        continue-on-error: true
+        run: pnpm lint:no-stub
 
-  # asset-format: product assets are vector-first (ADR-0013 §8, #275) — logos /
-  # icons ship as SVG, raster as WEBP minimum; committed *.png / *.jpg / *.jpeg
-  # under apps/*/public or @ds/design-system is an asset-hygiene defect. Static
-  # file scan — no PR/gh context needed. WARN per ADR-0007 §2.6.
-  asset-format:
-    needs: setup
-    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:asset-format
+      # no-hardcoded-path: committed tooling (`tools/**/*.{mjs,ts}`) must not bake a
+      # machine-specific absolute path literal (drive-letter `C:/…` / home
+      # `/home/<user>/…` / `/Users/<user>/…` / repo-root) into runtime code — a
+      # hardcoded value standing in for config (AGENTS.md §6; dev-stand "never
+      # hardcode a host/port/path"). Derive the root via `git rev-parse
+      # --show-toplevel`. #936 (PR #933 renderBrief() leak). WARN per the ADR-0007
+      # §2.6 new-guard posture — promote to BLOCK once stable.
+      - name: WARN · no-hardcoded-path
+        id: warn_no_hardcoded_path
+        continue-on-error: true
+        run: pnpm lint:no-hardcoded-path
 
-  # interaction-states: a @ds/design-system clickable primitive must carry its
-  # hover + focus-visible contract, and the globals.css layer-1 base-reset
-  # (cursor / prefers-reduced-motion) must stay intact (ADR-0013 §7 layer 3,
-  # #269). Static source scan — no PR/gh context needed. WARN per ADR-0007 §2.6.
-  interaction-states:
-    needs: setup
-    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:interaction-states
+      # external-anchor: external-document anchors on user-facing surfaces
+      # (`apps/portal`, `apps/admin`, `packages/design-system/src`) must carry
+      # `target="_blank"` + a `rel` containing `noreferrer`/`noopener`. #867 — the
+      # #864/#865 same-tab drift: the program-PDF affordance shipped WITHOUT them on
+      # the public page while the admin surface had them, and no gate caught the
+      # surface-parity gap. WARN per the ADR-0007 §2.6 new-guard posture — promote to
+      # BLOCK once stable.
+      - name: WARN · external-anchor
+        id: warn_external_anchor
+        continue-on-error: true
+        run: pnpm lint:external-anchor
 
-  # primitives-first: a bespoke hover:/active:/focus-visible: utility stack on a
-  # RAW interactive element (<a>/<button>/<input>/… or the file's next/link
-  # default import under ANY alias), plus (#1103) summary/details/role=button
-  # raw hosts and DS-primitive SHELLs whose className rebuilds the look, in
-  # product-app UI source must compose the @ds/design-system primitive that owns
-  # the interaction contract + identity instead (AGENTS.md §6 adopt-before-
-  # bespoke; #818/#828/#1103). Reasoned per-occurrence opt-out:
-  # `primitives-first-ok: <reason>`. Static source scan — no PR/gh context needed.
-  # WARN semantics live in the TOOL EXIT CODE, NOT continue-on-error (ADR-0007
-  # §2.6): the #1103 WARN classes print findings + exit 0 (check-run stays green,
-  # so a standing-WARN finding never blocks merge:gate — #1108); only the #828
-  # raw-state BLOCK class (zero in-repo today) exits 1.
-  primitives-first:
-    needs: setup
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:primitives-first
+      # migration-index: Drizzle migration-index collision guard (#799). Parallel
+      # branches independently generate the same next migration index off a stale
+      # base; on merge one branch's _journal.json entry / snapshot drops the sibling
+      # (observed 2026-07-12, #705: 0011_neat_vapor vs 0011_users_deactivated_at).
+      # Fails on a branch-new idx ≤ origin/main max, a duplicate journal idx, a
+      # duplicate SQL-file prefix, or a dropped base entry. The checkout is shallow,
+      # so the guard fetches origin/main itself (falls back to SKIP, never a false
+      # red). WARN v1 — promote to BLOCK per ADR-0007 §2.6.
+      - name: WARN · migration-index
+        id: warn_migration_index
+        continue-on-error: true
+        run: pnpm lint:migration-index
 
-  # aa-contrast: the cheap STATIC pre-filter for the AA-contrast usage rule (ADR-0013
-  # §7), left of the runtime playwright-axe tier (#351). Flags the two deterministic
-  # token-level anti-patterns — an opacity-dimmed `text-*-foreground/NN` and a
-  # text-bearing raw `bg-primary` fill — that no colour / arbitrary-value guard catches
-  # (both are valid tokens). The #351 retarget caught 4 such defects only at runtime;
-  # this gate catches the static subset early (#402). Static source scan — no PR/gh
-  # context needed. WARN per ADR-0007 §2.6.
-  aa-contrast:
-    needs: setup
-    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:aa-contrast
+      # audit-coverage: universal edit-audit coverage guard (010 EARS-8, #1089).
+      # Spec 010 audits every domain-table mutation via one generic PL/pgSQL trigger
+      # attached per table by migration; the owner-confirmed requirement is that a
+      # NEW domain table cannot silently ship WITHOUT that trigger. This guard
+      # asserts every `pgTable` in packages/db/src/schema is EITHER covered by an
+      # `audit_row_change()` trigger in apps/api/drizzle/*.sql OR carries a
+      # rationale-bearing AUDIT_CAPTURE_ALLOWLIST entry (packages/db/src/audit.ts) —
+      # red on any table in neither set. Static source scan — no PR/gh context.
+      # WARN v1 — promote to BLOCK per ADR-0007 §2.6.
+      - name: WARN · audit-coverage
+        id: warn_audit_coverage
+        continue-on-error: true
+        run: pnpm lint:audit-coverage
 
-  # form-error: a form-level error/message in app UI source must route through the
-  # @ds/design-system `FormError` / `FormMessage` primitive, not be hand-typed as a
-  # raw `<p role="alert" className="text-destructive">` per page (ADR-0013 §7,
-  # #333 redo / #339). `text-destructive` is a valid token, so no color / arbitrary
-  # -value guard catches the duplication — only this one does. Static source scan —
-  # no PR/gh context needed. WARN per ADR-0007 §2.6.
-  form-error:
-    needs: setup
-    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:form-error
+      # showcase-coverage: the design-system living showcase (apps/showcase) is the
+      # rendered viewer of @ds/design-system — it must stay *living*. This guard
+      # asserts every package COMPONENT export has a catalogued entry in the showcase
+      # registry (apps/showcase/app/lib/registry.ts), so a new primitive/block cannot
+      # ship without appearing in the catalogue (design-system-showcase spec §5.1,
+      # #350). Static source scan — no PR/gh context needed. WARN per ADR-0007 §2.6.
+      - name: WARN · showcase-coverage
+        id: warn_showcase_coverage
+        continue-on-error: true
+        run: pnpm lint:showcase-coverage
 
-  # form-rhythm: the settled form vertical-rhythm + error-state contract (ADR-0013
-  # §7 "Form layout & validation contract", #333 redo / #334). Flags the three
-  # valid-token defects the #333 owner review caught and every prior gate missed:
-  # a `min-h-*` reserved blank line on a message (K-1 over-spacing), a duplicate
-  # `formDescriptionId` (a `<FormDescription>` beside a `<FormMessage>` — the
-  # PasswordField bug), and a `text-destructive` label in the error state (K-3 "red
-  # mush"). Static source scan over the DS form primitives + app surfaces — no
-  # PR/gh context. WARN per ADR-0007 §2.6.
-  form-rhythm:
-    needs: setup
-    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:form-rhythm
+      # showcase-snippet: the showcase (apps/showcase) is the rendered VIEWER of
+      # @ds/design-system — it re-implements nothing (design-system-showcase spec §2.4).
+      # A hand-typed usage snippet (a STRING/template-literal constant depicting a block
+      # import or PascalCase JSX) is a second, hand-maintained copy of code the package
+      # owns and DRIFTS; mature systems auto-extract displayed code from the real source
+      # so it cannot. This guard flags such literals (#396). Static source scan — no
+      # PR/gh context needed. WARN per ADR-0007 §2.6.
+      - name: WARN · showcase-snippet
+        id: warn_showcase_snippet
+        continue-on-error: true
+        run: pnpm lint:showcase-snippet
 
-  # submit-pending: the async-submit pending standard (ADR-0013 §7 layer 2, #337).
-  # Flags a `type="submit"` control disabled by an in-flight flag
-  # (`disabled={isSubmitting}`) with no `loading` prop — a static disabled button that
-  # gives no progress signal and reads as hung (the #333 Stage-B owner finding). The
-  # design system already ships the fix (`Button.loading` = spinner + `aria-busy` +
-  # disabled-while-loading); this guard catches the adoption gap, a valid-token combo
-  # every prior gate passes. Static source scan over the DS blocks/primitives + app
-  # surfaces — no PR/gh context. WARN per ADR-0007 §2.6.
-  submit-pending:
-    needs: setup
-    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:submit-pending
+      # asset-format: product assets are vector-first (ADR-0013 §8, #275) — logos /
+      # icons ship as SVG, raster as WEBP minimum; committed *.png / *.jpg / *.jpeg
+      # under apps/*/public or @ds/design-system is an asset-hygiene defect. Static
+      # file scan — no PR/gh context needed. WARN per ADR-0007 §2.6.
+      - name: WARN · asset-format
+        id: warn_asset_format
+        continue-on-error: true
+        run: pnpm lint:asset-format
 
-  # ears-tests: the COVERAGE + ORPHAN direction of the EARS↔test contract (#316,
-  # ADR-0006 §4). Every requirement id has a test title that cites it (folding a
-  # flat `EARS-N` spec ↔ nested `EARS-N.M` tests component-wise), and no test title
-  # cites a requirement no spec declares. As of #437 the guard FOLDS nested ids +
-  # EXITS NON-ZERO on findings (the promotion prerequisite), with a tracked-Issue
-  # deferral allowlist for the genuine gaps. Promotion clock (ADR-0007 §2.6, 4 clean
-  # weeks) starts at merge — 2026-07-02. Kept WARN (`continue-on-error`) until the
-  # sweep flips it; do not remove `continue-on-error` here — promotion is a later
-  # sweep decision, not this change.
-  ears-tests:
-    needs: setup
-    continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsx tools/lint/ears-test-lint.ts
+      # interaction-states: a @ds/design-system clickable primitive must carry its
+      # hover + focus-visible contract, and the globals.css layer-1 base-reset
+      # (cursor / prefers-reduced-motion) must stay intact (ADR-0013 §7 layer 3,
+      # #269). Static source scan — no PR/gh context needed. WARN per ADR-0007 §2.6.
+      # (Its RUNTIME twin, `playwright-axe`, is BLOCK.)
+      - name: WARN · interaction-states
+        id: warn_interaction_states
+        continue-on-error: true
+        run: pnpm lint:interaction-states
 
-  # ears-naming: the FORMAT-hygiene direction of the EARS↔test contract (#316,
-  # ADR-0006 §4). `ears-tests` (above) owns coverage+orphan; this flags a MALFORMED
-  # EARS prefix on a test title (ears-3:, EARS3:, EARS-3 without a colon), accepting
-  # every real shape (flat / nested / compound EARS-N/M / (#issue)). It does NOT
-  # demand every test be EARS-named — a legit non-EARS unit / #issue test is left
-  # alone. Static title scan. WARN per ADR-0007 §2.6.
-  ears-naming:
-    needs: setup
-    continue-on-error: true # WARN — promotion clock starts 2026-07-15 (ADR-0007 §2.6)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:ears-naming
+      # aa-contrast: the cheap STATIC pre-filter for the AA-contrast usage rule (ADR-0013
+      # §7), left of the runtime playwright-axe tier (#351). Flags the two deterministic
+      # token-level anti-patterns — an opacity-dimmed `text-*-foreground/NN` and a
+      # text-bearing raw `bg-primary` fill — that no colour / arbitrary-value guard catches
+      # (both are valid tokens). The #351 retarget caught 4 such defects only at runtime;
+      # this gate catches the static subset early (#402). Static source scan — no PR/gh
+      # context needed. WARN per ADR-0007 §2.6.
+      - name: WARN · aa-contrast
+        id: warn_aa_contrast
+        continue-on-error: true
+        run: pnpm lint:aa-contrast
 
+      # form-error: a form-level error/message in app UI source must route through the
+      # @ds/design-system `FormError` / `FormMessage` primitive, not be hand-typed as a
+      # raw `<p role="alert" className="text-destructive">` per page (ADR-0013 §7,
+      # #333 redo / #339). `text-destructive` is a valid token, so no color / arbitrary
+      # -value guard catches the duplication — only this one does. Static source scan —
+      # no PR/gh context needed. WARN per ADR-0007 §2.6.
+      - name: WARN · form-error
+        id: warn_form_error
+        continue-on-error: true
+        run: pnpm lint:form-error
+
+      # form-rhythm: the settled form vertical-rhythm + error-state contract (ADR-0013
+      # §7 "Form layout & validation contract", #333 redo / #334). Flags the three
+      # valid-token defects the #333 owner review caught and every prior gate missed:
+      # a `min-h-*` reserved blank line on a message (K-1 over-spacing), a duplicate
+      # `formDescriptionId` (a `<FormDescription>` beside a `<FormMessage>` — the
+      # PasswordField bug), and a `text-destructive` label in the error state (K-3 "red
+      # mush"). Static source scan over the DS form primitives + app surfaces — no
+      # PR/gh context. WARN per ADR-0007 §2.6.
+      - name: WARN · form-rhythm
+        id: warn_form_rhythm
+        continue-on-error: true
+        run: pnpm lint:form-rhythm
+
+      # submit-pending: the async-submit pending standard (ADR-0013 §7 layer 2, #337).
+      # Flags a `type="submit"` control disabled by an in-flight flag
+      # (`disabled={isSubmitting}`) with no `loading` prop — a static disabled button that
+      # gives no progress signal and reads as hung (the #333 Stage-B owner finding). The
+      # design system already ships the fix (`Button.loading` = spinner + `aria-busy` +
+      # disabled-while-loading); this guard catches the adoption gap, a valid-token combo
+      # every prior gate passes. Static source scan over the DS blocks/primitives + app
+      # surfaces — no PR/gh context. WARN per ADR-0007 §2.6.
+      - name: WARN · submit-pending
+        id: warn_submit_pending
+        continue-on-error: true
+        run: pnpm lint:submit-pending
+
+      # ears-tests: the COVERAGE + ORPHAN direction of the EARS↔test contract (#316,
+      # ADR-0006 §4). Every requirement id has a test title that cites it (folding a
+      # flat `EARS-N` spec ↔ nested `EARS-N.M` tests component-wise), and no test title
+      # cites a requirement no spec declares. As of #437 the guard FOLDS nested ids +
+      # EXITS NON-ZERO on findings (the promotion prerequisite), with a tracked-Issue
+      # deferral allowlist for the genuine gaps. Promotion clock (ADR-0007 §2.6, 4 clean
+      # weeks) starts at merge — 2026-07-02. Kept WARN until the sweep flips it; do not
+      # remove the `continue-on-error` here — promotion is a later sweep decision.
+      - name: WARN · ears-tests
+        id: warn_ears_tests
+        continue-on-error: true
+        run: pnpm exec tsx tools/lint/ears-test-lint.ts
+
+      # ears-naming: the FORMAT-hygiene direction of the EARS↔test contract (#316,
+      # ADR-0006 §4). `ears-tests` (above) owns coverage+orphan; this flags a MALFORMED
+      # EARS prefix on a test title (ears-3:, EARS3:, EARS-3 without a colon), accepting
+      # every real shape (flat / nested / compound EARS-N/M / (#issue)). It does NOT
+      # demand every test be EARS-named — a legit non-EARS unit / #issue test is left
+      # alone. Static title scan. WARN per ADR-0007 §2.6.
+      - name: WARN · ears-naming
+        id: warn_ears_naming
+        continue-on-error: true
+        run: pnpm lint:ears-naming
+
+      # tdd-signal: a PR that changes production source under apps/*/src with no test
+      # in the diff AND no pre-existing test in the changed module (design §5.2,
+      # heuristic). Was an exit-0 stub; implemented as a REAL WARN v1 in #438 — reads
+      # the changed-file set from `gh pr view` (PR-event-gated; shallow CI checkout has
+      # no base to diff) and EXITS NON-ZERO on findings. Promotion clock (ADR-0007
+      # §2.6, 4 clean weeks) starts at merge — 2026-07-02. Kept WARN until the sweep
+      # flips it.
+      #
+      # The guard calls `gh pr view` — the default GITHUB_TOKEN under restrictive
+      # workflow permissions lacks `pull-requests: read`, which makes `gh pr view` exit
+      # non-zero before the guard's skip short-circuit (Issue #10 root cause 1). The
+      # batch job's `permissions` block carries the grant; the step carries the token.
+      - name: WARN · tdd-signal
+        id: warn_tdd_signal
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: pnpm exec tsx tools/lint/tdd-signal-lint.ts
+
+      # product-note: a user-facing PR (kind label `feature`/`bug`) must carry a real
+      # `Product note (RU)` section in its body — the source of truth the merge-time
+      # Mattermost delivery renders (Issue #654). `none`/absent is allowed only on an
+      # internal-only PR (chore/CI/refactor/deps). PR-event-gated (reads labels+body via
+      # `gh pr view`; exits 0 outside a PR; also run by `pnpm pr:preflight`). WARN v1 per
+      # the ADR-0007 §2.6 new-guard posture — promote to BLOCK once stable.
+      #
+      # `gh pr view` wiring — see the tdd-signal note (Issue #10 root cause 1): the batch
+      # job carries `permissions: { contents: read, pull-requests: read }` and this step
+      # carries `GH_TOKEN`/`PR_NUMBER` (enforced by the workflow-auth guard below).
+      - name: WARN · product-note
+        id: warn_product_note
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: pnpm lint:product-note
+
+      # workflow-auth: enforces the "Issue-#10 auth pattern" on the workflow files
+      # THEMSELVES — every job that runs `gh` or a PR-event-gated guard (a
+      # `tools/lint/lib/gh.ts` consumer) MUST carry `permissions: { contents: read,
+      # pull-requests: read }` on the job + `GH_TOKEN`/`PR_NUMBER` on the invoking step
+      # (the `spec-link` precedent, Issue #10 root cause 1). PR #455 shipped three
+      # PR-gated guard jobs WITHOUT the block → all three vacuous-red on every PR; this
+      # guard makes that gap deterministic + local. The gh-consumer set is DERIVED (scan
+      # tools/lint for the `./lib/gh` import), never a stale literal. Static parse of the
+      # workflow files — no PR/gh context needed, and this step is not itself gh-gated so
+      # it (correctly) needs no auth block. WARN v1 per ADR-0007 §2.6 — promotion clock
+      # starts at merge 2026-07-02.
+      - name: WARN · workflow-auth
+        id: warn_workflow_auth
+        continue-on-error: true
+        run: pnpm exec tsx tools/lint/workflow-auth-lint.ts
+
+      # primitives-first: a bespoke hover:/active:/focus-visible: utility stack on a
+      # RAW interactive element (<a>/<button>/<input>/… or the file's next/link
+      # default import under ANY alias), plus (#1103) summary/details/role=button
+      # raw hosts and DS-primitive SHELLs whose className rebuilds the look, in
+      # product-app UI source must compose the @ds/design-system primitive that owns
+      # the interaction contract + identity instead (AGENTS.md §6 adopt-before-
+      # bespoke; #818/#828/#1103). Reasoned per-occurrence opt-out:
+      # `primitives-first-ok: <reason>`. Static source scan — no PR/gh context needed.
+      # WARN semantics live in the TOOL EXIT CODE, NOT `continue-on-error` (ADR-0007
+      # §2.6): the #1103 WARN classes print findings + exit 0 (check-run stays green,
+      # so a standing-WARN finding never blocks merge:gate — #1108); only the #828
+      # raw-state BLOCK class (zero in-repo today) exits 1. So this is the ONE hard
+      # step of the batch and it runs LAST — a non-zero exit turns this check-run red
+      # for the merge gate without ever entering the `ci` needs-list.
+      - name: primitives-first (hard — tool-encoded WARN/BLOCK)
+        run: pnpm lint:primitives-first
+
+      # WARN aggregate — the second half of the WARN encoding. The OLD per-job
+      # `continue-on-error: true` did NOT hide a WARN finding from the merge gate:
+      # the job still recorded a FAILED check-run, and
+      # `tools/gh/merge-gate.mjs::classifyCheckRuns` reds ANY completed
+      # non-success/non-skipped check-run — so a WARN finding blocked `pr:land`
+      # while staying out of the `ci` needs-list. Step-level `continue-on-error`
+      # alone would have silently loosened that, so this step re-reds the batch
+      # check-run whenever any WARN step's `outcome` is `failure`. `if: always()`
+      # so it also runs when an earlier hard step (primitives-first) failed and
+      # skipped nothing it needs. A `skipped` WARN step is NOT a finding.
+      - name: WARN aggregate (reds this check-run on any WARN finding)
+        if: always()
+        env:
+          WARN_OUTCOMES: |
+            module-readme=${{ steps.warn_module_readme.outcome }}
+            route-targets=${{ steps.warn_route_targets.outcome }}
+            axe-exclude=${{ steps.warn_axe_exclude.outcome }}
+            glossary-mdx=${{ steps.warn_glossary_mdx.outcome }}
+            glossary-ids=${{ steps.warn_glossary_ids.outcome }}
+            no-stub=${{ steps.warn_no_stub.outcome }}
+            no-hardcoded-path=${{ steps.warn_no_hardcoded_path.outcome }}
+            external-anchor=${{ steps.warn_external_anchor.outcome }}
+            migration-index=${{ steps.warn_migration_index.outcome }}
+            audit-coverage=${{ steps.warn_audit_coverage.outcome }}
+            showcase-coverage=${{ steps.warn_showcase_coverage.outcome }}
+            showcase-snippet=${{ steps.warn_showcase_snippet.outcome }}
+            asset-format=${{ steps.warn_asset_format.outcome }}
+            interaction-states=${{ steps.warn_interaction_states.outcome }}
+            aa-contrast=${{ steps.warn_aa_contrast.outcome }}
+            form-error=${{ steps.warn_form_error.outcome }}
+            form-rhythm=${{ steps.warn_form_rhythm.outcome }}
+            submit-pending=${{ steps.warn_submit_pending.outcome }}
+            ears-tests=${{ steps.warn_ears_tests.outcome }}
+            ears-naming=${{ steps.warn_ears_naming.outcome }}
+            tdd-signal=${{ steps.warn_tdd_signal.outcome }}
+            product-note=${{ steps.warn_product_note.outcome }}
+            workflow-auth=${{ steps.warn_workflow_auth.outcome }}
+        run: |
+          failed="$(printf '%s\n' "$WARN_OUTCOMES" | grep -E '=failure$' | cut -d= -f1 || true)"
+          echo "### WARN guards (ADR-0007 §2.6 posture)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$failed" ]; then
+            echo "All WARN guards clean."
+            echo "All WARN guards clean." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "WARN guard(s) with findings (see each step's log):"
+          printf '%s\n' "$failed"
+          printf -- '- `%s`\n' $failed >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "WARN guards are NOT in the \`ci\` needs-list, so they never fail the required \`ci\` check. This batch check-run is red so the finding stays visible to the merge gate — the same behavior the old per-job \`continue-on-error\` encoding had." >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+  # ─── Runtime a11y / interaction tiers (browser profile) ───────────────
   # playwright-axe: the RUNTIME twin of the `interaction-states` STATIC lint
   # (ADR-0013 §7 layer 4, #274). RETARGETED onto the design-system showcase
   # (apps/showcase) per design-system-showcase spec §5.2 (#351): it builds the
@@ -751,8 +717,10 @@ jobs:
   # / Mailpit / Postgres. BLOCKING per ADR-0007 §2.6 (promoted from WARN once
   # stable, #285), so this gate is wired into the `ci` meta-job needs-list. The
   # static twin (`interaction-states`, L3) stays WARN for now.
+  #
+  # Kept as its own job (#1235): the `browser` pool profile is a separate lane
+  # from `heavy`, so batching it in would only serialize it.
   playwright-axe:
-    needs: setup
     runs-on: [self-hosted, linux, x64, bbm-ci, node22, browser, ci]
     steps:
       - uses: actions/checkout@v7
@@ -761,7 +729,7 @@ jobs:
         with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       # Build the showcase (and its workspace deps) so `next start` serves a real
-      # production build — the same path the `build` job exercises, no special env.
+      # production build — the same path the `build` step exercises, no special env.
       - run: pnpm exec turbo run build --filter=@ds/showcase
       - run: pnpm --filter @ds/showcase exec playwright install chromium
       - run: pnpm --filter @ds/showcase test:e2e:ci
@@ -774,10 +742,9 @@ jobs:
   # h1), plus the full WCAG 2 A/AA axe rule set. BACKEND-FREE — the auth pages
   # render their forms client-side and the spec never submits, so no api /
   # Zitadel / Mailpit / Postgres and no special build env (same cold-build path
-  # as the `build` job). BLOCKING alongside `playwright-axe` (restores coverage
+  # as the `build` step). BLOCKING alongside `playwright-axe` (restores coverage
   # that was BLOCK before #351), so it is wired into the `ci` needs-list.
   playwright-axe-portal:
-    needs: setup
     runs-on: [self-hosted, linux, x64, bbm-ci, node22, browser, ci]
     steps:
       - uses: actions/checkout@v7
@@ -786,132 +753,40 @@ jobs:
         with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       # Build the portal (and its workspace deps) so `next start` serves a real
-      # production build — the same path the `build` job exercises, no special env.
+      # production build — the same path the `build` step exercises, no special env.
       - run: pnpm exec turbo run build --filter=@ds/portal
       - run: pnpm --filter @ds/portal exec playwright install chromium
       - run: pnpm --filter @ds/portal test:e2e:ci
 
-  # tdd-signal: a PR that changes production source under apps/*/src with no test
-  # in the diff AND no pre-existing test in the changed module (design §5.2,
-  # heuristic). Was an exit-0 stub; implemented as a REAL WARN v1 in #438 — reads
-  # the changed-file set from `gh pr view` (PR-event-gated; shallow CI checkout has
-  # no base to diff) and EXITS NON-ZERO on findings. Promotion clock (ADR-0007
-  # §2.6, 4 clean weeks) starts at merge — 2026-07-02. Kept WARN
-  # (`continue-on-error`) until the sweep flips it; do not remove it here.
-  tdd-signal:
-    needs: setup
-    continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    # The guard calls `gh pr view <N>` — same wiring as spec-link: the default
-    # GITHUB_TOKEN under restrictive workflow permissions lacks
-    # `pull-requests: read`, which makes `gh pr view` exit non-zero before the
-    # guard's skip short-circuit (Issue #10 root cause 1).
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsx tools/lint/tdd-signal-lint.ts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-
-  # spec-status-fresh + prior-decisions (PR-body-parsing guards) moved to
-  # `pr-body-guards.yml` (#651) — both keep their WARN posture and promotion
-  # clocks there (ADR-0007 §2.6, started at merge 2026-07-02).
-
-  # product-note: a user-facing PR (kind label `feature`/`bug`) must carry a real
-  # `Product note (RU)` section in its body — the source of truth the merge-time
-  # Mattermost delivery renders (Issue #654). `none`/absent is allowed only on an
-  # internal-only PR (chore/CI/refactor/deps). PR-event-gated (reads labels+body via
-  # `gh pr view`; exits 0 outside a PR; also run by `pnpm pr:preflight`). WARN v1 per
-  # the ADR-0007 §2.6 new-guard posture — promote to BLOCK once stable. Excluded
-  # from the `ci` needs-list while WARN.
-  #
-  # `gh pr view` wiring — see the spec-link/tdd-signal note (Issue #10 root cause 1):
-  # the job carries `permissions: { contents: read, pull-requests: read }` and the
-  # invoking step carries `GH_TOKEN`/`PR_NUMBER` (enforced by the workflow-auth guard).
-  product-note:
-    needs: setup
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:product-note
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-
-  # ─── Workflow-auth meta-guard (Issue-#10 pattern enforcement, #462) ───
-  # workflow-auth: enforces the "Issue-#10 auth pattern" on ci.yml ITSELF — every
-  # job that runs `gh` or a PR-event-gated guard (a `tools/lint/lib/gh.ts`
-  # consumer) MUST carry `permissions: { contents: read, pull-requests: read }` on
-  # the job + `GH_TOKEN`/`PR_NUMBER` on the invoking step (the `spec-link`
-  # precedent, Issue #10 root cause 1). PR #455 shipped three PR-gated guard jobs
-  # WITHOUT the block → all three vacuous-red on every PR; this guard makes that
-  # gap deterministic + local. The gh-consumer set is DERIVED (scan tools/lint for
-  # the `./lib/gh` import), never a stale literal. Static parse of ci.yml — no
-  # PR/gh context needed, and the job is NOT itself gh-gated so it (correctly)
-  # needs no auth block. WARN v1 per ADR-0007 §2.6 — promotion clock starts at
-  # merge 2026-07-02. Excluded from the `ci` needs-list while WARN.
-  workflow-auth:
-    needs: setup
-    continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsx tools/lint/workflow-auth-lint.ts
+  # ─── AI-specific guards from ADR-0007 §2.6 ───────────────────────────
+  # The PR-body-parsing guard family (spec-link BLOCK, registry-research,
+  # spec-status-fresh, prior-decisions, spec-deletion, epic-autoclose) lives in
+  # `pr-body-guards.yml` (#651), collapsed there into one batch job (#1235): a
+  # dedicated workflow that also triggers on the PR `edited` event, so a body
+  # edit re-runs the guards without re-running this matrix. spec-link is
+  # therefore NOT in the `ci` aggregate needs-list — the merge gate reads its
+  # head-SHA-pinned check-run directly (tools/gh/merge-gate.mjs).
 
   # ─── Meta-job: single status check for branch protection ─────────────
   # Phase 0 baseline: every hard-red job that actually runs today sits in this
-  # needs-list (#440) — a job is either here (BLOCK), `continue-on-error` (WARN),
-  # or `if: false` (placeholder until its owning group G6/G8/G9 lands: api-drift,
-  # db-drift, generated-artifacts). WARN-only jobs are intentionally excluded.
-  # WARN→BLOCK promotion criterion + sweep cadence: ADR-0007 §2.6 (settled in
-  # #427; first sweep 2026-07-02 — per-guard verdicts recorded on the Issue).
+  # needs-list (#440) — a job is either here (BLOCK), carries per-step WARN
+  # (`guards-warn`), or is `if: false` (placeholder until its owning group
+  # G6/G8/G9 lands: api-drift, db-drift, generated-artifacts). WARN-only work is
+  # intentionally excluded. WARN→BLOCK promotion criterion + sweep cadence:
+  # ADR-0007 §2.6 (settled in #427; first sweep 2026-07-02 — per-guard verdicts
+  # recorded on the Issue); promoting a guard now means moving its STEP from the
+  # `guards-warn` batch into `guards-block` (and dropping its row from that
+  # batch's WARN-aggregate step).
   # Job name must stay `ci` — branch protection on `main` (per ADR-0008
   # §2.6 item 4) requires exactly one status check context named `ci`.
   # Renaming this job breaks merge gating.
   ci:
-    needs:
-      [
-        setup,
-        lint,
-        types,
-        unit,
-        api-e2e,
-        build,
-        api-build-smoke,
-        docs-build,
-        markdown-links,
-        events-drift,
-        glossary-roundtrip,
-        endpoint-authz,
-        prod-surface,
-        tokens-fresh,
-        playwright-axe,
-        playwright-axe-portal,
-      ]
+    needs: [core, api-e2e, guards-block, playwright-axe, playwright-axe-portal]
     if: always()
     runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
     steps:
       # A required job must SUCCEED — `skipped`/`cancelled` fail too, else a red
-      # `setup` skips every downstream job and the aggregate would go green on a
+      # upstream job skips its dependents and the aggregate would go green on a
       # run where nothing built or tested (#449 Mode (a) review).
       - name: Aggregate
         run: |

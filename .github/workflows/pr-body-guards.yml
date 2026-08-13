@@ -1,12 +1,34 @@
 # PR-body-parsing guard family (Issue #651) — spec-link, registry-research,
-# spec-status-fresh, prior-decisions (ADR-0007 §2.6). These four guards
-# evaluate the PR body/metadata, so they live in a DEDICATED workflow that
-# also triggers on the `edited` activity type: a post-create body edit re-runs
-# exactly these checks and never the full test/build matrix in ci.yml (whose
-# `pull_request` trigger keeps the default opened/synchronize/reopened set).
-# The in-place alternative (adding `edited` to ci.yml and fencing every heavy
-# job) was rejected: the `ci` aggregate treats skipped needs as red (#449), so
-# an edited-event run would poison the meta-job.
+# spec-status-fresh, prior-decisions, spec-deletion, epic-autoclose (ADR-0007
+# §2.6). These guards evaluate the PR body/metadata, so they live in a DEDICATED
+# workflow that also triggers on the `edited` activity type: a post-create body
+# edit re-runs exactly these checks and never the full test/build matrix in
+# ci.yml (whose `pull_request` trigger keeps the default
+# opened/synchronize/reopened set). The in-place alternative (adding `edited` to
+# ci.yml and fencing every heavy job) was rejected: the `ci` aggregate treats
+# skipped needs as red (#449), so an edited-event run would poison the meta-job.
+#
+# ONE BATCH JOB (#1235). The six guards were six jobs, each paying its own
+# checkout + `pnpm install` on the `bbm-ci` self-hosted pool (#1225) — six
+# installs to run six sub-second body parsers. They are now sequential steps of a
+# single job. Posture is preserved exactly, re-encoded from per-JOB to per-STEP:
+#   • `spec-link` is BLOCK → a plain step (fails the job → red check-run the
+#     merge gate reads). It runs LAST so a spec-link failure never skips the
+#     WARN guards' findings.
+#   • the other five are WARN → `continue-on-error: true` on the STEP so one
+#     flagged guard never stops the others, PLUS the final `if: always()`
+#     WARN-aggregate step that exits 1 when any WARN step's `outcome` is
+#     `failure`. Both halves are load-bearing: the old per-JOB
+#     `continue-on-error` still recorded a FAILED check-run per WARN guard, and
+#     `tools/gh/merge-gate.mjs::classifyCheckRuns` reds ANY completed
+#     non-success/non-skipped check-run — so a WARN finding blocked `pr:land`.
+#     Step-level `continue-on-error` alone would have silently loosened that;
+#     the aggregate re-reds the batch check-run instead. The JOB is never
+#     `continue-on-error` — that would mask the BLOCK member.
+# The job's `permissions` block is the UNION of the six old blocks
+# (`contents: read` + `pull-requests: read` + `issues: read`), and every step
+# keeps its own `GH_TOKEN`/`PR_NUMBER`/`PR_BODY` wiring — the Issue-#10 pattern
+# the `workflow-auth` guard enforces.
 #
 # Reliable body on the ORIGINAL event (#651 recurrence, PR #685): each guard
 # step passes the event payload's body via `PR_BODY` — the payload is always
@@ -16,13 +38,9 @@
 # match + `body` requested); `pnpm pr:preflight` never sets PR_BODY, so local
 # preflight behavior is unchanged.
 #
-# No-op fence: a title-only edit does not change guard inputs — every job
-# skips `edited` runs whose payload lacks `changes.body`. A `skipped`
-# conclusion is tolerated as green by the merge gate (tools/gh/merge-gate.mjs).
-#
-# `gh pr view` wiring (Issue #10 root cause 1): every job carries
-# `permissions: { contents: read, pull-requests: read }` and the invoking step
-# carries `GH_TOKEN`/`PR_NUMBER` (enforced by the workflow-auth guard).
+# No-op fence: a title-only edit does not change guard inputs — the job skips
+# `edited` runs whose payload lacks `changes.body`. A `skipped` conclusion is
+# tolerated as green by the merge gate (tools/gh/merge-gate.mjs).
 name: PR body guards
 
 on:
@@ -38,159 +56,153 @@ env:
   TURBO_TELEMETRY_DISABLED: 1
 
 jobs:
-  # BLOCK. Not in the ci.yml `ci` aggregate needs-list (cross-workflow `needs`
-  # is impossible) — the merge gate reads head-SHA-pinned check-runs directly
-  # (tools/gh/merge-gate.mjs), so this check still gates the merge.
-  spec-link:
+  pr-body-guards:
     if: github.event.action != 'edited' || github.event.changes.body != null
     runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
+    # Union of the six former per-job blocks:
+    #   contents/pull-requests: read — the Issue-#10 pattern every guard needs;
+    #   issues: read — `gh issue view` on linked Issues (spec-link, #1232), the
+    #     #608 fail-closed `Closes #N` fetch (spec-status-fresh, #1232), and the
+    #     sub_issues API (epic-autoclose). 403s without it on a private repo.
     permissions:
       contents: read
       pull-requests: read
-      # `gh issue view` on linked Issues — 403s without this on a private repo (#1232).
       issues: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsx tools/lint/spec-link-lint.ts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-
-  # registry-research: a PR touching a user-facing UI surface must carry the
-  # `build-ui-from-design-system` adoption artifact in its body (ADR-0013 /
-  # AGENTS.md §6). WARN per the ADR-0007 §2.6 new-guard posture — promote to
-  # BLOCK once stable.
-  registry-research:
-    if: github.event.action != 'edited' || github.event.changes.body != null
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:registry-research
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-
-  # spec-status-fresh: a feature:NNN-<slug> PR whose bound spec is still
-  # `status: Draft` (design §5.2, `In dev` minimum). Implemented as a REAL
-  # WARN v1 in #438 — PR-event-gated, exempts the authoring PR that edits the
-  # requirements file, EXITS NON-ZERO on a Draft-below-floor finding.
-  # Promotion clock (ADR-0007 §2.6, 4 clean weeks) starts at merge —
-  # 2026-07-02. Kept WARN (`continue-on-error`) until the sweep flips it; do
-  # not remove it here.
-  spec-status-fresh:
-    if: github.event.action != 'edited' || github.event.changes.body != null
-    continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    permissions:
-      contents: read
-      pull-requests: read
-      # #608 fail-closed path fetches `Closes #N` Issues — 403s without this on a private repo (#1232).
-      issues: read
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsx tools/lint/spec-status-lint.ts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-
-  # prior-decisions: a PR that adds/edits a feature-spec requirements file must
-  # cite ≥1 ADR in a `## Prior decisions` section (design §5.2). Implemented as
-  # a REAL WARN v1 in #438 — PR-event-gated, diff-scoped to touched
-  # requirements files, EXITS NON-ZERO on findings. Promotion clock (ADR-0007
-  # §2.6, 4 clean weeks) starts at merge — 2026-07-02. Kept WARN
-  # (`continue-on-error`) until the sweep flips it; do not remove it here.
-  prior-decisions:
-    if: github.event.action != 'edited' || github.event.changes.body != null
-    continue-on-error: true # WARN — promotion clock starts at merge 2026-07-02 (ADR-0007 §2.6)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsx tools/lint/prior-decisions-lint.ts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-
-  # spec-deletion: a PR must not `git rm` a feature-spec / ADR file — specs and
-  # ADRs are retired by a `status: Superseded`/`Retired` frontmatter transition,
-  # never file removal (AGENTS.md §6 / ADR-0006 §7; the #971 incident: a complete
-  # two-tier spec layer deleted inside an unrelated feature PR). DIFF-based, so it
-  # checks out full history (`fetch-depth: 0`) and diffs `origin/main...HEAD` for
-  # `--name-status --find-renames` — a rename is not a deletion and passes. It
-  # also runs on a body `edited` event so a newly-added `spec-deletion:` escape
-  # marker re-clears the check. WARN v1 (ADR-0007 §2.6 new-guard posture); TO
-  # PROMOTE TO BLOCK drop the `continue-on-error` line below.
-  spec-deletion:
-    if: github.event.action != 'edited' || github.event.changes.body != null
-    continue-on-error: true # WARN v1 (promote to BLOCK: remove this line)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
+      # FULL history: `spec-deletion` is diff-based and needs
+      # `origin/main...HEAD` with `--name-status --find-renames`.
       - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsx tools/lint/spec-deletion-lint.ts
+
+      # registry-research: a PR touching a user-facing UI surface must carry the
+      # `build-ui-from-design-system` adoption artifact in its body (ADR-0013 /
+      # AGENTS.md §6). WARN per the ADR-0007 §2.6 new-guard posture — promote to
+      # BLOCK once stable.
+      - name: WARN · registry-research
+        id: warn_registry_research
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: pnpm lint:registry-research
+
+      # spec-status-fresh: a feature:NNN-<slug> PR whose bound spec is still
+      # `status: Draft` (design §5.2, `In dev` minimum). Implemented as a REAL
+      # WARN v1 in #438 — PR-event-gated, exempts the authoring PR that edits the
+      # requirements file, EXITS NON-ZERO on a Draft-below-floor finding.
+      # Promotion clock (ADR-0007 §2.6, 4 clean weeks) starts at merge —
+      # 2026-07-02. Kept WARN until the sweep flips it; do not remove the
+      # `continue-on-error` here.
+      - name: WARN · spec-status-fresh
+        id: warn_spec_status_fresh
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: pnpm exec tsx tools/lint/spec-status-lint.ts
+
+      # prior-decisions: a PR that adds/edits a feature-spec requirements file must
+      # cite ≥1 ADR in a `## Prior decisions` section (design §5.2). Implemented as
+      # a REAL WARN v1 in #438 — PR-event-gated, diff-scoped to touched
+      # requirements files, EXITS NON-ZERO on findings. Promotion clock (ADR-0007
+      # §2.6, 4 clean weeks) starts at merge — 2026-07-02. Kept WARN until the
+      # sweep flips it.
+      - name: WARN · prior-decisions
+        id: warn_prior_decisions
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: pnpm exec tsx tools/lint/prior-decisions-lint.ts
+
+      # spec-deletion: a PR must not `git rm` a feature-spec / ADR file — specs and
+      # ADRs are retired by a `status: Superseded`/`Retired` frontmatter transition,
+      # never file removal (AGENTS.md §6 / ADR-0006 §7; the #971 incident: a complete
+      # two-tier spec layer deleted inside an unrelated feature PR). DIFF-based, so it
+      # needs the full history checked out above and diffs `origin/main...HEAD` for
+      # `--name-status --find-renames` — a rename is not a deletion and passes. It
+      # also runs on a body `edited` event so a newly-added `spec-deletion:` escape
+      # marker re-clears the check. WARN v1 (ADR-0007 §2.6 new-guard posture); TO
+      # PROMOTE TO BLOCK drop the `continue-on-error` line below AND its row from the
+      # WARN-aggregate step.
+      - name: WARN · spec-deletion
+        id: warn_spec_deletion
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BODY: ${{ github.event.pull_request.body }}
           LINT_DIFF_BASE: origin/main
+        run: pnpm exec tsx tools/lint/spec-deletion-lint.ts
 
-  # epic-autoclose: a child PR whose body writes `Closes #<epic>` would
-  # auto-close a parent/epic issue on merge even while it still has OPEN
-  # sub-issues (real incident: #927 auto-closed with open children — Issue #964).
-  # This guard reads the native sub-issue graph at PR time and WARNs, telling the
-  # author to link the specific child sub-issue instead of the epic. WARN v1 per
-  # the ADR-0007 §2.6 new-guard posture — promote to BLOCK by removing
-  # `continue-on-error` here AND flipping SEVERITY in the guard source. Needs
-  # `issues: read` for the sub_issues API.
-  epic-autoclose:
-    if: github.event.action != 'edited' || github.event.changes.body != null
-    continue-on-error: true # WARN v1 (promote to BLOCK once stable — ADR-0007 §2.6)
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
-    permissions:
-      contents: read
-      pull-requests: read
-      issues: read
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsx tools/lint/epic-autoclose-lint.ts
+      # epic-autoclose: a child PR whose body writes `Closes #<epic>` would
+      # auto-close a parent/epic issue on merge even while it still has OPEN
+      # sub-issues (real incident: #927 auto-closed with open children — Issue #964).
+      # This guard reads the native sub-issue graph at PR time and WARNs, telling the
+      # author to link the specific child sub-issue instead of the epic. WARN v1 per
+      # the ADR-0007 §2.6 new-guard posture — promote to BLOCK by removing
+      # `continue-on-error` here (and its WARN-aggregate row) AND flipping SEVERITY
+      # in the guard source. Needs `issues: read` for the sub_issues API (granted on
+      # the job above).
+      - name: WARN · epic-autoclose
+        id: warn_epic_autoclose
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BODY: ${{ github.event.pull_request.body }}
+        run: pnpm exec tsx tools/lint/epic-autoclose-lint.ts
+
+      # spec-link: BLOCK. Not in the ci.yml `ci` aggregate needs-list
+      # (cross-workflow `needs` is impossible) — the merge gate reads
+      # head-SHA-pinned check-runs directly (tools/gh/merge-gate.mjs), so this
+      # check still gates the merge: a failure here fails this job and turns the
+      # `pr-body-guards` check-run red. Runs LAST so its hard failure never skips
+      # the WARN guards above.
+      - name: spec-link (BLOCK)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: pnpm exec tsx tools/lint/spec-link-lint.ts
+
+      # WARN aggregate — the second half of the WARN encoding. The OLD per-job
+      # `continue-on-error: true` did NOT hide a WARN finding from the merge gate:
+      # the job still recorded a FAILED check-run, and
+      # `tools/gh/merge-gate.mjs::classifyCheckRuns` reds ANY completed
+      # non-success/non-skipped check-run — so a WARN finding blocked `pr:land`.
+      # Step-level `continue-on-error` alone would have silently loosened that, so
+      # this step re-reds the batch check-run whenever any WARN step's `outcome`
+      # is `failure`. `if: always()` so it also runs after the BLOCK `spec-link`
+      # step failed. A `skipped` WARN step is NOT a finding.
+      - name: WARN aggregate (reds this check-run on any WARN finding)
+        if: always()
+        env:
+          WARN_OUTCOMES: |
+            registry-research=${{ steps.warn_registry_research.outcome }}
+            spec-status-fresh=${{ steps.warn_spec_status_fresh.outcome }}
+            prior-decisions=${{ steps.warn_prior_decisions.outcome }}
+            spec-deletion=${{ steps.warn_spec_deletion.outcome }}
+            epic-autoclose=${{ steps.warn_epic_autoclose.outcome }}
+        run: |
+          failed="$(printf '%s\n' "$WARN_OUTCOMES" | grep -E '=failure$' | cut -d= -f1 || true)"
+          echo "### WARN guards (ADR-0007 §2.6 posture)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$failed" ]; then
+            echo "All WARN guards clean."
+            echo "All WARN guards clean." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "WARN guard(s) with findings (see each step's log):"
+          printf '%s\n' "$failed"
+          printf -- '- `%s`\n' $failed >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "WARN guards never fail the required \`ci\` check. This batch check-run is red so the finding stays visible to the merge gate — the same behavior the old per-job \`continue-on-error\` encoding had." >> "$GITHUB_STEP_SUMMARY"
+          exit 1

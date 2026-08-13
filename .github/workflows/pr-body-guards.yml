@@ -75,7 +75,7 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
 
       # registry-research: a PR touching a user-facing UI surface must carry the

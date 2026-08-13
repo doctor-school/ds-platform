@@ -78,7 +78,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-          cache: pnpm
       - run: pnpm install --frozen-lockfile
 
       # lint — `pnpm lint` runs, in order: `eslint .` (incl. the #197 auth-field
@@ -174,7 +173,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - name: Build the data-layer Postgres image (pgvector + pg_partman)
         run: docker build -t ds-platform/postgres:pg17-partman infra/dev-stand/postgres
@@ -243,7 +242,7 @@ jobs:
           fetch-depth: 0
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
 
       # events-drift — ADR-0006 §7 "Events drift" row (@OutboxEmit call-sites ↔ spec
@@ -321,7 +320,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
 
       # module-readme: every top-level NestJS module dir under apps/*/src (a dir with a
@@ -727,7 +726,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       # Build the showcase (and its workspace deps) so `next start` serves a real
       # production build — the same path the `build` step exercises, no special env.
@@ -751,7 +750,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       # Build the portal (and its workspace deps) so `next start` serves a real
       # production build — the same path the `build` step exercises, no special env.

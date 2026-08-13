@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}html{scroll-behavior:smooth}</style></helmet>
+
+<div style="min-height:100vh;background:{{ pageBg }}">
+  <!-- Хедер -->
+  <header data-screen-label="Главная" style="background:#114D9E;padding:16px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
+    <a href="Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
+        <details style="position:relative">
+          <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 {{ headerShadow }}">≡</summary>
+          <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:200px;z-index:30">
+            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Эфиры</a>
+            <a href="Проекты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Проекты</a>
+            <a href="Эксперты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Эксперты</a>
+            <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}"><a href="Мои события.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Мои события</a></sc-if>
+            <a href="Авторизация.dc.html" style="margin-top:6px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Войти</a>
+          </nav>
+        </details>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+      <nav style="display:flex;align-items:center;gap:28px;font-size:14px;font-weight:700">
+        <a href="Эфиры.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эфиры</a>
+        <a href="Проекты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Проекты</a>
+        <a href="Эксперты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эксперты</a>
+        <sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}"><a href="Мои события.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Мои события</a></sc-if>
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
+        <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">Войти</a>
+      </nav>
+    </sc-if>
+  </header>
+
+  <!-- HERO · одинарный (варианты А и Б) -->
+  <sc-if value="{{ heroSingle }}" hint-placeholder-val="{{ true }}">
+  <div style="background:#114D9E;padding:clamp(48px,8vw,100px) clamp(16px,4vw,48px) clamp(52px,8vw,104px)">
+    <div style="max-width:1104px;margin:0 auto">
+      <div style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#D3E8FD;margin-bottom:20px">Медицинская образовательная платформа</div>
+      <h1 style="margin:0;font-size:clamp(38px,7vw,72px);line-height:1;font-weight:800;letter-spacing:-.035em;color:#fff;text-wrap:balance">Врачи учат врачей.<br>Бесплатно.</h1>
+      <p style="margin:26px 0 0;max-width:620px;font-size:clamp(15px,2vw,17px);line-height:1.65;font-weight:500;color:#D3E8FD">Doctor.School — экспертная среда непрерывного образования: живые эфиры, школы и дискуссии от практикующих врачей. Для врачей всё бесплатно — платформу финансируют партнёры индустрии, не влияя на контент.</p>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:36px">
+        <a href="#partner-form" style="font-size:15px;font-weight:800;color:#114D9E;background:#fff;padding:16px 30px;text-decoration:none;box-shadow:4px 4px 0 {{ headerShadow }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ headerShadow }}">Стать партнёром</a>
+        <a href="Эфиры.dc.html" style="font-size:15px;font-weight:700;color:#fff;background:transparent;border:2px solid rgba(255,255,255,.7);padding:14px 28px;text-decoration:none" style-hover="border-color:#fff">Смотреть эфиры →</a>
+      </div>
+      <div style="display:flex;gap:clamp(20px,4vw,44px);flex-wrap:wrap;margin-top:44px;font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#D3E8FD">
+        <span><span style="color:#fff;font-size:15px">142</span> эфира в июле</span>
+        <span><span style="color:#fff;font-size:15px">38</span> школ</span>
+        <span><span style="color:#fff;font-size:15px">12 400</span> врачей в сообществе</span>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- HERO · сплит (вариант В) -->
+  <sc-if value="{{ heroSplit }}" hint-placeholder-val="{{ false }}">
+  <div style="background:#114D9E;padding:clamp(44px,7vw,80px) clamp(16px,4vw,48px) clamp(52px,8vw,96px)">
+    <div style="max-width:1104px;margin:0 auto">
+      <div style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#D3E8FD;margin-bottom:28px">Doctor.School · Врачи учат врачей</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:clamp(16px,3vw,28px)">
+        <div style="background:#fff;border:2px solid #fff;box-shadow:6px 6px 0 {{ headerShadow }};padding:clamp(24px,4vw,40px)">
+          <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#2D84F2;margin-bottom:14px">Врачам</div>
+          <h1 style="margin:0;font-size:clamp(26px,3.4vw,38px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:oklch(.21 .02 250)">Учитесь у практиков — бесплатно</h1>
+          <p style="margin:16px 0 0;font-size:14.5px;line-height:1.65;color:oklch(.45 .014 250)">Живые эфиры и школы по 38 специальностям. Ведут те, кто оперирует и ведёт приём, — без оплаты и бюрократии.</p>
+          <a href="Эфиры.dc.html" style="display:inline-block;margin-top:24px;font-size:14.5px;font-weight:800;color:#fff;background:#114D9E;padding:15px 26px;text-decoration:none;box-shadow:4px 4px 0 #AED4FB" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 #AED4FB">Смотреть эфиры →</a>
+          <div style="margin-top:18px;font-size:11.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:oklch(.556 .012 250)">142 эфира в июле · время — МСК</div>
+        </div>
+        <div style="border:2px solid rgba(255,255,255,.7);padding:clamp(24px,4vw,40px);display:flex;flex-direction:column">
+          <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#D3E8FD;margin-bottom:14px">Партнёрам</div>
+          <h1 style="margin:0;font-size:clamp(26px,3.4vw,38px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:#fff">Постройте репутацию в экспертной среде</h1>
+          <p style="margin:16px 0 0;font-size:14.5px;line-height:1.65;color:#D3E8FD">Финансируйте бесплатное образование врачей и получайте не рекламу, а участие: соавторство направлений и прямой доступ к экспертам.</p>
+          <a href="#partner-form" style="display:inline-block;align-self:flex-start;margin-top:24px;font-size:14.5px;font-weight:800;color:#114D9E;background:#fff;padding:15px 26px;text-decoration:none;box-shadow:4px 4px 0 {{ headerShadow }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ headerShadow }}">Стать партнёром</a>
+          <div style="margin-top:18px;font-size:11.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:rgba(211,232,253,.75)">14 партнёров · прозрачная модель</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <main style="display:flex;flex-direction:column">
+
+    <!-- ЛЕНТА ЭФИРОВ -->
+    <section style="order:{{ ordFeed }};padding:0 clamp(16px,4vw,48px);margin-top:clamp(56px,8vw,96px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:clamp(20px,4vw,32px)">
+          <div>
+            <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:10px">Эфиры</div>
+            <h2 style="margin:0;font-size:clamp(26px,4vw,40px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Ближайшие и последние эфиры</h2>
+          </div>
+          <a href="Эфиры.dc.html" style="font-size:14px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;white-space:nowrap">Все эфиры →</a>
+        </div>
+        <div style="{{ feedWrap }}">
+          <sc-for list="{{ feedCards }}" as="ev" hint-placeholder-count="3">
+            <dc-import name="ВебинарКарточка" dark="{{ dark }}" variant="{{ ev.variant }}" num="{{ ev.num }}" time="{{ ev.time }}" time-sub="{{ ev.timeSub }}" cta="{{ ev.cta }}" cta-href="{{ ev.ctaHref }}" href="{{ ev.href }}" school="{{ ev.school }}" title="{{ ev.title }}" chips="{{ ev.chips }}" speakers="{{ ev.speakers }}" hint-size="100%,220px"></dc-import>
+          </sc-for>
+        </div>
+      </div>
+    </section>
+
+    <!-- ЧТО ЭТО -->
+    <section style="order:{{ ordWhat }};padding:0 clamp(16px,4vw,48px);margin-top:clamp(56px,8vw,96px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:10px">Платформа</div>
+        <h2 style="margin:0 0 clamp(20px,4vw,32px);font-size:clamp(26px,4vw,40px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Что такое Doctor.School</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:20px">
+          <div style="background:{{ surface }};border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadowSm }};padding:22px 22px 26px">
+            <div style="font-size:11px;font-weight:800;letter-spacing:.14em;color:{{ accent }};margin-bottom:12px">01</div>
+            <div style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:{{ ink }};margin-bottom:10px">Эксперты</div>
+            <div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">Эфиры и школы ведут практикующие врачи ведущих центров — те, кто оперирует и ведёт приём, а не читает по слайдам.</div>
+          </div>
+          <div style="background:{{ surface }};border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadowSm }};padding:22px 22px 26px">
+            <div style="font-size:11px;font-weight:800;letter-spacing:.14em;color:{{ accent }};margin-bottom:12px">02</div>
+            <div style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:{{ ink }};margin-bottom:10px">Образование</div>
+            <div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">Живые эфиры, разборы клинических случаев, длинные программы. Бесплатно для врача, без бюрократии и «баллов ради баллов».</div>
+          </div>
+          <div style="background:{{ surface }};border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadowSm }};padding:22px 22px 26px">
+            <div style="font-size:11px;font-weight:800;letter-spacing:.14em;color:{{ accent }};margin-bottom:12px">03</div>
+            <div style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:{{ ink }};margin-bottom:10px">Индустрия</div>
+            <div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">Платформу финансируют фарм- и медкомпании. Партнёрство прозрачно и не влияет на содержание программ.</div>
+          </div>
+          <div style="background:{{ surface }};border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadowSm }};padding:22px 22px 26px">
+            <div style="font-size:11px;font-weight:800;letter-spacing:.14em;color:{{ accent }};margin-bottom:12px">04</div>
+            <div style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:{{ ink }};margin-bottom:10px">Партнёры</div>
+            <div style="font-size:14px;line-height:1.6;color:{{ inkMuted }}">Партнёр получает не баннер, а участие: репутацию в профессиональной среде, соавторство направлений, доступ к экспертам.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ЗАЧЕМ -->
+    <section style="order:{{ ordWhy }};padding:0 clamp(16px,4vw,48px);margin-top:clamp(56px,8vw,96px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:10px">Зачем</div>
+        <h2 style="margin:0 0 clamp(20px,4vw,32px);font-size:clamp(26px,4vw,40px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Медицинскому образованию нужна другая среда</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:clamp(16px,3vw,24px)">
+          <div style="border:2px dashed {{ dashedBorder }};padding:clamp(22px,4vw,32px)">
+            <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:18px">Сейчас</div>
+            <div style="display:flex;flex-direction:column;gap:14px;font-size:14.5px;line-height:1.55;color:{{ inkMuted }}">
+              <div style="display:flex;gap:12px"><span style="flex:none;font-weight:800;color:{{ inkFaint }}">✕</span><span>Формальное НМО: баллы есть, знаний нет</span></div>
+              <div style="display:flex;gap:12px"><span style="flex:none;font-weight:800;color:{{ inkFaint }}">✕</span><span>Лекции в записи, оторванные от реальной практики</span></div>
+              <div style="display:flex;gap:12px"><span style="flex:none;font-weight:800;color:{{ inkFaint }}">✕</span><span>Доступ к сильным экспертам зависит от города и связей</span></div>
+              <div style="display:flex;gap:12px"><span style="flex:none;font-weight:800;color:{{ inkFaint }}">✕</span><span>Реклама, замаскированная под образование</span></div>
+            </div>
+          </div>
+          <div style="background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(22px,4vw,32px)">
+            <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:18px">Мы создаём</div>
+            <div style="display:flex;flex-direction:column;gap:14px;font-size:14.5px;line-height:1.55;color:{{ ink }};font-weight:600">
+              <div style="display:flex;gap:12px"><span style="flex:none;font-weight:800;color:{{ green }}">✓</span><span>Живые разборы от практикующих врачей</span></div>
+              <div style="display:flex;gap:12px"><span style="flex:none;font-weight:800;color:{{ green }}">✓</span><span>Вопрос эксперту — напрямую, в эфире</span></div>
+              <div style="display:flex;gap:12px"><span style="flex:none;font-weight:800;color:{{ green }}">✓</span><span>Одинаковый доступ из любого региона</span></div>
+              <div style="display:flex;gap:12px"><span style="flex:none;font-weight:800;color:{{ green }}">✓</span><span>Прозрачное партнёрство: индустрия рядом, но не внутри контента</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ЭКОСИСТЕМА -->
+    <section id="projects" style="order:{{ ordEco }};padding:0 clamp(16px,4vw,48px);margin-top:clamp(56px,8vw,96px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:10px">Проекты</div>
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap"><h2 style="margin:0;font-size:clamp(26px,4vw,40px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Что мы создаём</h2><a href="Проекты.dc.html" style="font-size:14px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;white-space:nowrap">Все проекты →</a></div>
+        <p style="margin:14px 0 clamp(20px,4vw,32px);max-width:620px;font-size:15px;line-height:1.65;color:{{ inkMuted }}">Не один продукт, а среда: школы по специальностям, сообщества, дискуссии, длинные программы и стандарты качества контента.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px">
+          <div style="background:{{ tint }};padding:22px 20px 24px">
+            <div style="font-size:17px;font-weight:800;letter-spacing:-.02em;color:{{ tintInk }}">Школы</div>
+            <div style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ accent }};margin:8px 0 10px">38 направлений</div>
+            <div style="font-size:13px;line-height:1.55;color:{{ tintMuted }}">Циклы эфиров по специальностям — от травматологии до педиатрии</div>
+          </div>
+          <div style="background:{{ tint }};padding:22px 20px 24px">
+            <div style="font-size:17px;font-weight:800;letter-spacing:-.02em;color:{{ tintInk }}">Сообщества</div>
+            <div style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ accent }};margin:8px 0 10px">12 клубов</div>
+            <div style="font-size:13px;line-height:1.55;color:{{ tintMuted }}">Профессиональные чаты и встречи вокруг школ</div>
+          </div>
+          <div style="background:{{ tint }};padding:22px 20px 24px">
+            <div style="font-size:17px;font-weight:800;letter-spacing:-.02em;color:{{ tintInk }}">Дискуссии и подкасты</div>
+            <div style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ accent }};margin:8px 0 10px">24 выпуска</div>
+            <div style="font-size:13px;line-height:1.55;color:{{ tintMuted }}">Разговор о медицине за пределами протоколов</div>
+          </div>
+          <div style="background:{{ tint }};padding:22px 20px 24px">
+            <div style="font-size:17px;font-weight:800;letter-spacing:-.02em;color:{{ tintInk }}">Программы</div>
+            <div style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ accent }};margin:8px 0 10px">6 треков</div>
+            <div style="font-size:13px;line-height:1.55;color:{{ tintMuted }}">Длинные образовательные маршруты с куратором</div>
+          </div>
+          <div style="background:{{ tint }};padding:22px 20px 24px">
+            <div style="font-size:17px;font-weight:800;letter-spacing:-.02em;color:{{ tintInk }}">Стандарты</div>
+            <div style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:{{ accent }};margin:8px 0 10px">Методология</div>
+            <div style="font-size:13px;line-height:1.55;color:{{ tintMuted }}">Требования к качеству и независимости контента</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ЛЮДИ -->
+    <section id="people" style="order:{{ ordPeople }};padding:0 clamp(16px,4vw,48px);margin-top:clamp(56px,8vw,96px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:clamp(20px,4vw,32px)">
+          <div>
+            <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:10px">Люди</div>
+            <h2 style="margin:0;font-size:clamp(26px,4vw,40px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Эксперты, которые ведут за собой</h2>
+          </div>
+          <a href="Эксперты.dc.html" style="font-size:14px;font-weight:800;color:{{ accent }};text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;white-space:nowrap">Все эксперты →</a>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px">
+          <dc-import name="ЭкспертКарточка" dark="{{ dark }}" full-name="Анна Соколова" role="Травматолог-ортопед" credentials="д.м.н., ведущий научный сотрудник" org="НМИЦ им. Пирогова" meta="12 эфиров" href="Эксперт.dc.html" hint-size="100%,420px"></dc-import>
+          <dc-import name="ЭкспертКарточка" dark="{{ dark }}" full-name="Пётр Малахов" role="Кардиолог" credentials="Профессор, руководитель отдела сердечной недостаточности, врач высшей категории, член Европейского общества кардиологов (ESC)" org="НМИЦ кардиологии им. Чазова" meta="9 эфиров" href="Эксперт.dc.html" hint-size="100%,420px"></dc-import>
+          <dc-import name="ЭкспертКарточка" dark="{{ dark }}" full-name="Александра Пржевальская-Оболенская" role="Гастроэнтеролог" credentials="к.м.н., доцент кафедры пропедевтики внутренних болезней Сеченовского университета" org="Клиника «Рассвет»" meta="7 эфиров" href="Эксперт.dc.html" hint-size="100%,420px"></dc-import>
+          <dc-import name="ЭкспертКарточка" dark="{{ dark }}" full-name="Ольга Ким" role="Педиатр" org="ДГКБ им. Башляевой" meta="11 эфиров" href="Эксперт.dc.html" hint-size="100%,420px"></dc-import>
+        </div>
+        <!-- Подкаст -->
+        <div style="margin-top:clamp(24px,4vw,36px);background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+          <div style="padding:clamp(22px,4vw,34px);border-bottom:2px solid {{ hairline }}">
+            <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:12px">Подкаст</div>
+            <div style="font-size:clamp(21px,3vw,27px);font-weight:800;letter-spacing:-.02em;line-height:1.15;color:{{ ink }}">Кто стоит за брендом</div>
+            <p style="margin:14px 0 22px;font-size:14px;line-height:1.6;color:{{ inkMuted }}">Разговоры с врачами и людьми индустрии о том, как устроено медицинское образование — и каким оно должно быть.</p>
+            <button style="font:inherit;font-size:13.5px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:12px 22px;cursor:pointer;box-shadow:3px 3px 0 {{ shadowSm }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ shadowSm }}">Все выпуски</button>
+          </div>
+          <div style="display:flex;flex-direction:column;justify-content:center">
+            <a href="#" style="display:flex;align-items:center;gap:16px;padding:18px clamp(18px,3vw,28px);text-decoration:none;border-bottom:1px solid {{ hairline }}" style-hover="background:{{ tint }}">
+              <span style="flex:none;width:38px;height:38px;display:inline-flex;align-items:center;justify-content:center;background:{{ btnBg }};color:{{ btnFg }};font-size:13px">▶</span>
+              <span style="min-width:0"><span style="display:block;font-size:14.5px;font-weight:700;color:{{ ink }};line-height:1.35">Почему врачи выгорают из образования</span><span style="display:block;font-size:12px;font-weight:600;color:{{ inkFaint }};margin-top:3px">Вып. 14 · Анна Соколова · 47 мин</span></span>
+            </a>
+            <a href="#" style="display:flex;align-items:center;gap:16px;padding:18px clamp(18px,3vw,28px);text-decoration:none;border-bottom:1px solid {{ hairline }}" style-hover="background:{{ tint }}">
+              <span style="flex:none;width:38px;height:38px;display:inline-flex;align-items:center;justify-content:center;background:{{ btnBg }};color:{{ btnFg }};font-size:13px">▶</span>
+              <span style="min-width:0"><span style="display:block;font-size:14.5px;font-weight:700;color:{{ ink }};line-height:1.35">Фарма и образование: где граница</span><span style="display:block;font-size:12px;font-weight:600;color:{{ inkFaint }};margin-top:3px">Вып. 13 · Пётр Малахов · 52 мин</span></span>
+            </a>
+            <a href="#" style="display:flex;align-items:center;gap:16px;padding:18px clamp(18px,3vw,28px);text-decoration:none" style-hover="background:{{ tint }}">
+              <span style="flex:none;width:38px;height:38px;display:inline-flex;align-items:center;justify-content:center;background:{{ btnBg }};color:{{ btnFg }};font-size:13px">▶</span>
+              <span style="min-width:0"><span style="display:block;font-size:14.5px;font-weight:700;color:{{ ink }};line-height:1.35">Как строится школа с нуля</span><span style="display:block;font-size:12px;font-weight:600;color:{{ inkFaint }};margin-top:3px">Вып. 12 · Дарья Литвинова · 39 мин</span></span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ПАРТНЁРАМ · синяя полоса -->
+    <section id="partners" style="order:{{ ordPartners }};margin-top:clamp(56px,8vw,96px);background:#114D9E;padding:clamp(44px,7vw,80px) clamp(16px,4vw,48px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#D3E8FD;margin-bottom:10px">Партнёрам</div>
+        <h2 style="margin:0 0 clamp(20px,4vw,32px);font-size:clamp(26px,4vw,40px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:#fff">Что получает партнёр</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:20px">
+          <div style="background:#fff;box-shadow:5px 5px 0 {{ headerShadow }};padding:22px 22px 26px">
+            <div style="font-size:18px;font-weight:800;letter-spacing:-.02em;color:oklch(.21 .02 250);margin-bottom:10px">Репутация</div>
+            <div style="font-size:14px;line-height:1.6;color:oklch(.45 .014 250)">Бренд рядом с экспертным контентом — в среде, которой врачи доверяют.</div>
+          </div>
+          <div style="background:#fff;box-shadow:5px 5px 0 {{ headerShadow }};padding:22px 22px 26px">
+            <div style="font-size:18px;font-weight:800;letter-spacing:-.02em;color:oklch(.21 .02 250);margin-bottom:10px">Участие в среде</div>
+            <div style="font-size:14px;line-height:1.6;color:oklch(.45 .014 250)">Не баннер, а место за столом: события, дискуссии, рабочие группы.</div>
+          </div>
+          <div style="background:#fff;box-shadow:5px 5px 0 {{ headerShadow }};padding:22px 22px 26px">
+            <div style="font-size:18px;font-weight:800;letter-spacing:-.02em;color:oklch(.21 .02 250);margin-bottom:10px">Влияние</div>
+            <div style="font-size:14px;line-height:1.6;color:oklch(.45 .014 250)">Соавторство направлений и образовательной повестки — вместе с экспертами.</div>
+          </div>
+          <div style="background:#fff;box-shadow:5px 5px 0 {{ headerShadow }};padding:22px 22px 26px">
+            <div style="font-size:18px;font-weight:800;letter-spacing:-.02em;color:oklch(.21 .02 250);margin-bottom:10px">Доступ к экспертам</div>
+            <div style="font-size:14px;line-height:1.6;color:oklch(.45 .014 250)">Прямой контакт с лидерами мнений — без посредников и агентских наценок.</div>
+          </div>
+        </div>
+        <a href="#partner-form" style="display:inline-block;margin-top:clamp(24px,4vw,36px);font-size:15px;font-weight:800;color:#114D9E;background:#fff;padding:16px 30px;text-decoration:none;box-shadow:4px 4px 0 {{ headerShadow }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ headerShadow }}">Обсудить партнёрство</a>
+      </div>
+    </section>
+
+    <!-- ФОРМАТЫ УЧАСТИЯ -->
+    <section style="order:{{ ordFormats }};padding:0 clamp(16px,4vw,48px);margin-top:clamp(56px,8vw,96px)">
+      <div style="max-width:1104px;margin:0 auto">
+        <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ accent }};margin-bottom:10px">Форматы</div>
+        <h2 style="margin:0 0 clamp(20px,4vw,32px);font-size:clamp(26px,4vw,40px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:{{ ink }}">Как присоединиться</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+          <div style="border:2px solid {{ border }};padding:20px 20px 22px;display:flex;flex-direction:column;gap:10px;background:{{ surface }}">
+            <div style="font-size:16.5px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Эксперт</div>
+            <div style="font-size:13.5px;line-height:1.55;color:{{ inkMuted }};flex:1">Ведите эфиры и школу по своей специальности</div>
+            <a href="#partner-form" style="font-size:13px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px">Обсудить →</a>
+          </div>
+          <div style="border:2px solid {{ border }};padding:20px 20px 22px;display:flex;flex-direction:column;gap:10px;background:{{ surface }}">
+            <div style="font-size:16.5px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Партнёр</div>
+            <div style="font-size:13.5px;line-height:1.55;color:{{ inkMuted }};flex:1">Финансируйте направление и стройте репутацию в среде</div>
+            <a href="#partner-form" style="font-size:13px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px">Обсудить →</a>
+          </div>
+          <div style="border:2px solid {{ border }};padding:20px 20px 22px;display:flex;flex-direction:column;gap:10px;background:{{ surface }}">
+            <div style="font-size:16.5px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Участник подкаста</div>
+            <div style="font-size:13.5px;line-height:1.55;color:{{ inkMuted }};flex:1">Расскажите свою историю медицины и индустрии</div>
+            <a href="#partner-form" style="font-size:13px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px">Обсудить →</a>
+          </div>
+          <div style="border:2px solid {{ border }};padding:20px 20px 22px;display:flex;flex-direction:column;gap:10px;background:{{ surface }}">
+            <div style="font-size:16.5px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Соавтор направления</div>
+            <div style="font-size:13.5px;line-height:1.55;color:{{ inkMuted }};flex:1">Запустите новую школу или программу вместе с нами</div>
+            <a href="#partner-form" style="font-size:13px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px">Обсудить →</a>
+          </div>
+          <div style="border:2px solid {{ border }};padding:20px 20px 22px;display:flex;flex-direction:column;gap:10px;background:{{ surface }}">
+            <div style="font-size:16.5px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Компания</div>
+            <div style="font-size:13.5px;line-height:1.55;color:{{ inkMuted }};flex:1">Корпоративное обучение и совместные проекты</div>
+            <a href="#partner-form" style="font-size:13px;font-weight:800;color:{{ accent }};text-decoration:underline;text-underline-offset:4px">Обсудить →</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ФИНАЛЬНЫЙ CTA + ФОРМА -->
+    <section id="partner-form" style="order:{{ ordCta }};margin-top:clamp(56px,8vw,96px);background:#114D9E;padding:clamp(44px,7vw,80px) clamp(16px,4vw,48px)">
+      <div style="max-width:1104px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:clamp(24px,5vw,56px);align-items:start">
+        <div>
+          <div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#D3E8FD;margin-bottom:12px">Партнёрство</div>
+          <h2 style="margin:0;font-size:clamp(28px,4.5vw,46px);line-height:1.05;font-weight:800;letter-spacing:-.03em;color:#fff">Обсудим партнёрство?</h2>
+          <p style="margin:18px 0 0;font-size:15px;line-height:1.65;color:#D3E8FD;max-width:440px">Расскажите о себе — вернёмся с ответом в течение двух рабочих дней. Без рассылок и «прогревов»: один разговор по делу.</p>
+          <div style="margin-top:28px;font-size:13px;font-weight:700;color:#D3E8FD">Или напишите напрямую:<br><a href="#" style="color:#fff;font-weight:800;text-underline-offset:4px">partner@doctor.school</a> · <a href="#" style="color:#fff;font-weight:800;text-underline-offset:4px">t.me/doctorschool</a></div>
+        </div>
+        <div style="background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ headerShadow }};padding:clamp(22px,4vw,32px)">
+          <sc-if value="{{ notSent }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:18px">
+              <div>
+                <label style="{{ labelStyle }}">Имя *</label>
+                <input value="{{ fmName }}" onChange="{{ onName }}" placeholder="Как к вам обращаться" style="{{ inpName }}">
+                <sc-if value="{{ errName }}" hint-placeholder-val="{{ false }}"><div style="{{ errTextStyle }}">⚠ {{ errName }}</div></sc-if>
+              </div>
+              <div>
+                <label style="{{ labelStyle }}">Компания или клиника</label>
+                <input value="{{ fmCompany }}" onChange="{{ onCompany }}" placeholder="Название организации" style="{{ inpCompany }}">
+              </div>
+              <div>
+                <label style="{{ labelStyle }}">Email или Telegram *</label>
+                <input value="{{ fmContact }}" onChange="{{ onContact }}" placeholder="name@company.ru или @username" style="{{ inpContact }}">
+                <sc-if value="{{ errContact }}" hint-placeholder-val="{{ false }}"><div style="{{ errTextStyle }}">⚠ {{ errContact }}</div></sc-if>
+              </div>
+              <div>
+                <label style="{{ labelStyle }}">Роль</label>
+                <select value="{{ fmRole }}" onChange="{{ onRole }}" style="{{ inpRole }}">
+                  <option value="">Выберите роль</option>
+                  <option value="pharma">Фармкомпания</option>
+                  <option value="med">Медицинская компания</option>
+                  <option value="clinic">Клиника</option>
+                  <option value="expert">Врач / эксперт</option>
+                  <option value="other">Другое</option>
+                </select>
+              </div>
+              <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">
+                <input type="checkbox" checked="{{ consent }}" onChange="{{ toggleConsent }}" style="width:18px;height:18px;flex:none;margin:2px 0 0;accent-color:{{ btnBg }}">
+                <span style="font-size:13px;line-height:1.5;color:{{ inkMuted }}">Согласен(а) на обработку персональных данных в соответствии со 152-ФЗ. <a href="#" style="font-weight:700">Политика конфиденциальности</a></span>
+              </label>
+              <sc-if value="{{ errConsent }}" hint-placeholder-val="{{ false }}"><div style="{{ errTextStyleTight }}">⚠ {{ errConsent }}</div></sc-if>
+              <button onClick="{{ submit }}" style="font:inherit;font-size:15px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:15px 24px;cursor:pointer;box-shadow:4px 4px 0 {{ border }}" style-hover="transform:translate(2px,2px);box-shadow:2px 2px 0 {{ border }}">Обсудить партнёрство</button>
+            </div>
+          </sc-if>
+          <sc-if value="{{ sent }}" hint-placeholder-val="{{ false }}">
+            <div style="text-align:center;padding:28px 8px">
+              <div style="width:56px;height:56px;margin:0 auto 18px;display:flex;align-items:center;justify-content:center;background:{{ green }};color:{{ greenFg }};font-size:26px;font-weight:800">✓</div>
+              <div style="font-size:20px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Заявка отправлена</div>
+              <p style="margin:12px 0 20px;font-size:14px;line-height:1.6;color:{{ inkMuted }}">Вернёмся к вам в течение двух рабочих дней — письмом или в Telegram.</p>
+              <button onClick="{{ resetForm }}" style="font:inherit;font-size:13px;font-weight:700;color:{{ accent }};background:transparent;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:4px">Отправить ещё одну заявку</button>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+  <div style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:0 auto;box-sizing:content-box;gap:16px;flex-wrap:wrap">
+    {{ footLogoEl }}
+    <nav style="display:flex;gap:20px;font-size:12.5px;font-weight:700;flex-wrap:wrap">
+      <a href="Эфиры.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эфиры</a>
+      <a href="Проекты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
+      <a href="Эксперты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
+      <a href="#partner-form" style="color:{{ inkFaint }};text-decoration:none">Партнёрство</a>
+    </nav>
+    <div style="font-size:12.5px;font-weight:600;color:{{ inkFaint }}">Врачи учат врачей · 2026</div>
+  </div>
+  <div aria-hidden="true" style="overflow:hidden;padding-top:clamp(16px,3vw,36px)">
+    <div style="font-size:clamp(58px,12.6vw,236px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Doctor.School</div>
+  </div>
+  </footer>
+
+  <!-- Переключатель композиции -->
+  <div style="position:fixed;bottom:16px;left:16px;z-index:50;background:{{ surface }};border:2px solid {{ border }};box-shadow:4px 4px 0 {{ shadow }};padding:10px 12px 12px">
+    <div style="font-size:9.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ inkFaint }};margin-bottom:8px">Композиция</div>
+    <div style="display:flex;gap:6px">
+      <sc-for list="{{ varBtns }}" as="vb" hint-placeholder-count="3">
+        <button onClick="{{ vb.onClick }}" title="{{ vb.title }}" style="{{ vb.style }}">{{ vb.label }}</button>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;variant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;a&quot;,&quot;b&quot;,&quot;v&quot;],&quot;default&quot;:&quot;v&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Композиция&quot;},&quot;loggedIn&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Состояние&quot;}}">
+class Component extends DCLogic {
+  state = {
+    dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
+    isMobile: false, variant: null,
+    fm: { name: '', company: '', contact: '', role: '' },
+    consent: false, errs: {}, sent: false
+  };
+  componentDidMount() {
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.upd = () => this.setState({ isMobile: this.mq.matches });
+    this.upd();
+    this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
+  }
+  renderVals() {
+    const d = this.state.dark, m = this.state.isMobile, p = this.props;
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const inkMuted = d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)';
+    const inkFaint = d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)';
+    const surface = d ? 'oklch(.21 .02 250)' : '#fff';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const shadow = d ? '#6BB1F7' : '#114D9E';
+    const shadowSm = d ? '#1F69C8' : '#AED4FB';
+    const accent = d ? '#6BB1F7' : '#2D84F2';
+    const hairline = d ? 'rgba(255,255,255,.16)' : 'oklch(.922 .006 250)';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const tint = d ? '#0D3A77' : '#D3E8FD';
+
+    const v = this.state.variant || p.variant || 'a';
+    const ords = v === 'b'
+      ? { ordWhat: 1, ordWhy: 2, ordFeed: 3 }
+      : { ordFeed: 1, ordWhat: 2, ordWhy: 3 };
+
+    const S = (name, org) => ({ name, org });
+    const feedCards = [
+      { variant: 'live', num: 'Эфир № 042', time: '19:00', timeSub: 'идёт 24 мин · 214 смотрят', cta: 'Войти в эфир ↗', ctaHref: 'Комната эфира.dc.html', href: 'Вебинар.dc.html', school: 'Школа травматологии и ортопедии', title: 'Пластика ахиллова сухожилия: разбор клинических случаев', chips: ['Травматология', 'Ортопедия'], speakers: [S('Анна Соколова', 'НМИЦ им. Пирогова'), S('Михаил Верещагин', 'Сеченовский университет')] },
+      { variant: 'scheduled', num: 'Эфир № 043', time: '20:30', timeSub: 'сегодня · МСК', href: 'Вебинар.dc.html', school: 'Школа гастроэнтерологии', title: 'СИБР и СРК: что нового в 2026 году', chips: ['Гастроэнтерология', 'Терапия'], speakers: [S('Дарья Литвинова', 'ММА, клиника «Рассвет»')] },
+      { variant: 'past', num: 'Эфир № 041', time: '19:00', timeSub: '14 июля · запись · 1 ч 12 мин', ctaHref: 'Вебинар.dc.html', href: 'Вебинар.dc.html', school: 'Школа кардиологии', title: 'ХСН с сохранной фракцией выброса: амбулаторное ведение', chips: ['Кардиология', 'Терапия'], speakers: [S('Пётр Малахов', 'НМИЦ кардиологии')] }
+    ];
+
+    const fm = this.state.fm, errs = this.state.errs;
+    const setF = (k) => (e) => { const val = e.target.value; this.setState(s => ({ fm: { ...s.fm, [k]: val }, errs: { ...s.errs, [k]: undefined } })); };
+    const dangerTint = d ? '#3a1414' : '#fdecec';
+    const inp = (err) => 'width:100%;box-sizing:border-box;font:inherit;font-size:14px;padding:12px 14px;border:2px solid ' + (err ? '#C81E1E' : hairline) + ';background:' + (err ? dangerTint : surface) + ';color:' + ink + ';outline:none';
+    const submit = () => {
+      const f = this.state.fm, e = {};
+      if (!f.name.trim()) e.name = 'Укажите имя';
+      if (!f.contact.trim()) e.contact = 'Оставьте email или Telegram — как вам удобнее';
+      if (!this.state.consent) e.consent = 'Без согласия на обработку данных мы не можем принять заявку';
+      this.setState({ errs: e, sent: Object.keys(e).length === 0 });
+    };
+
+    const varDefs = [
+      { k: 'a', label: 'А', title: 'Контент-первый: лента эфиров сразу под hero' },
+      { k: 'b', label: 'Б', title: 'Смысл-первый: «что это» и «зачем» раньше ленты' },
+      { k: 'v', label: 'В', title: 'Сплит-hero: колонка врача + колонка партнёра' }
+    ];
+    const varBtns = varDefs.map(x => ({
+      label: x.label, title: x.title,
+      onClick: () => this.setState({ variant: x.k }),
+      style: 'font:inherit;font-size:13px;font-weight:800;width:36px;height:36px;cursor:pointer;border:2px solid ' + (v === x.k ? btnBg : border) + ';color:' + (v === x.k ? btnFg : ink) + ';background:' + (v === x.k ? btnBg : 'transparent')
+    }));
+
+    return {
+      dark: d, isMobile: m, isDesktop: !m,
+      loggedIn: !!p.loggedIn,
+      heroSingle: v !== 'v', heroSplit: v === 'v',
+      ordFeed: ords.ordFeed, ordWhat: ords.ordWhat, ordWhy: ords.ordWhy,
+      ordEco: 4, ordPeople: 5, ordPartners: 6, ordFormats: 7, ordCta: 8,
+      feedCards,
+      feedWrap: m ? 'display:flex;flex-direction:column;margin:0 -16px;border-top:2px solid ' + border : 'display:flex;flex-direction:column;gap:28px',
+      pageBg: d ? 'oklch(.16 .02 250)' : '#fff',
+      headerShadow: d ? 'oklch(.16 .02 250)' : '#0D3A77',
+      surface, ink, inkMuted, inkFaint, border, shadow, shadowSm, accent, hairline, btnBg, btnFg, tint,
+      tintInk: d ? '#fff' : '#114D9E',
+      tintMuted: d ? 'rgba(255,255,255,.7)' : 'oklch(.4 .05 255)',
+      dashedBorder: d ? 'rgba(255,255,255,.35)' : 'oklch(.8 .01 250)',
+      green: d ? '#4ADE80' : '#009959',
+      toggleTheme: () => this.setState(s => { const dark = !s.dark; try { localStorage.setItem('ds-theme', dark ? 'dark' : 'light'); } catch (e) {} return { dark }; }),
+      themeIcon: d ? '☀' : '☾',
+      footLogoEl: React.createElement('img', { src: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo-color.svg', alt: 'Doctor.School', style: { height: '22px', display: 'block' } }),
+      fmName: fm.name, fmCompany: fm.company, fmContact: fm.contact, fmRole: fm.role,
+      onName: setF('name'), onCompany: setF('company'), onContact: setF('contact'), onRole: setF('role'),
+      inpName: inp(errs.name), inpCompany: inp(false), inpContact: inp(errs.contact), inpRole: inp(false) + ';appearance:auto',
+      labelStyle: 'display:block;font-size:12px;font-weight:700;color:' + ink + ';margin-bottom:7px',
+      errTextStyle: 'display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#C81E1E;margin-top:7px',
+      errTextStyleTight: 'display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#C81E1E;margin-top:-8px',
+      greenFg: d ? '#0e2a1c' : '#fff',
+      giantInk: d ? 'rgba(174,212,251,.09)' : 'oklch(.945 .018 250)',
+      errName: errs.name || false, errContact: errs.contact || false, errConsent: errs.consent || false,
+      consent: this.state.consent,
+      toggleConsent: (e) => this.setState(s => ({ consent: e.target.checked, errs: { ...s.errs, consent: undefined } })),
+      submit,
+      sent: this.state.sent, notSent: !this.state.sent,
+      resetForm: () => this.setState({ fm: { name: '', company: '', contact: '', role: '' }, consent: false, errs: {}, sent: false }),
+      varBtns
+    };
+  }
+}
+</script>
+</body>
+</html>

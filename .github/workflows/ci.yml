@@ -34,9 +34,20 @@ env:
 #   • BLOCK guard → a plain step; it fails its batch, and the batch is in the
 #     `ci` needs-list.
 #   • WARN guard  → `continue-on-error: true` on the STEP (the batch job itself
-#     is never `continue-on-error` — that would mask its BLOCK members). The
-#     step still exits non-zero, so the finding is annotated on the step AND
-#     echoed into `$GITHUB_STEP_SUMMARY`; the batch stays green.
+#     is never `continue-on-error` — that would mask its BLOCK members), PLUS a
+#     final `if: always()` WARN-AGGREGATE step that exits 1 when any WARN step's
+#     `outcome` is `failure`. Both halves are load-bearing:
+#       – the step-level `continue-on-error` is what lets the REMAINING guards
+#         run after one flags (the old per-job parallelism);
+#       – the aggregate is what keeps the OLD de-facto merge-gate strictness. A
+#         job-level `continue-on-error` still recorded a FAILED check-run per
+#         WARN guard, and `tools/gh/merge-gate.mjs::classifyCheckRuns` reds ANY
+#         completed non-success/non-skipped check-run — so a WARN finding
+#         blocked `pr:land` while never entering the `ci` needs-list. Step-level
+#         `continue-on-error` alone would have silently loosened that for all 28
+#         WARN guards; the aggregate re-reds the batch check-run instead.
+#     WARN therefore still means exactly what it meant: it never fails the
+#     required `ci` check, and it is still visible (red) to the merge gate.
 #   • `primitives-first` keeps its third posture (#1108): WARN lives in the TOOL
 #     EXIT CODE, not `continue-on-error`, and the job is NOT in the `ci`
 #     needs-list — so it sits as the one hard step of the `guards-warn` batch,
@@ -55,7 +66,8 @@ jobs:
   # setup→{lint,types,unit,build,api-build-smoke,docs-build,tokens-fresh,
   # endpoint-authz} fan-out never actually ran in parallel — it serialized,
   # paying 9 checkouts + 9 installs. Collapsed into one job; step order follows
-  # the old topological order (install first, then the former siblings).
+  # the old topological order (install first, then the former siblings). Every
+  # member was BLOCK, so this batch carries no WARN step and needs no aggregate.
   core:
     runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
     steps:
@@ -213,8 +225,9 @@ jobs:
 
   # ─── BLOCK light guards (hard-red; wired into the `ci` needs-list) ────
   # Batch of the four light-profile guards that are BLOCK today. Every step here
-  # is a plain step: a failure fails the batch, which fails `ci`. The checkout is
-  # FULL (`fetch-depth: 0`) because the lychee link check walks the whole tree.
+  # is a plain step: a failure fails the batch, which fails `ci`. No WARN member,
+  # so no WARN-aggregate step. The checkout is FULL (`fetch-depth: 0`) because
+  # the lychee link check walks the whole tree.
   guards-block:
     runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
     # Union of the member jobs' permission blocks: only `prod-surface` needed one
@@ -280,15 +293,18 @@ jobs:
           fail: true
 
   # ─── WARN light guards + primitives-first ─────────────────────────────
-  # Batch of every light-profile guard whose finding must NOT block the merge.
-  # The JOB is deliberately not `continue-on-error` — WARN lives on each STEP, so
-  # a step failure is annotated + summarized while the batch stays green. This
-  # batch is NOT in the `ci` needs-list.
+  # Batch of every light-profile guard whose finding must NOT fail the required
+  # `ci` check. The JOB is deliberately not `continue-on-error` — WARN lives on
+  # each STEP, so one flagged guard never stops the others — and the final
+  # WARN-aggregate step re-reds this check-run whenever any WARN step flagged,
+  # which is exactly what the old per-job `continue-on-error` did (a failed
+  # check-run that `merge-gate.mjs::classifyCheckRuns` counts as red). This batch
+  # is NOT in the `ci` needs-list, so a WARN finding still never fails `ci`.
   #
-  # The last step (`primitives-first`) is the single hard step: its WARN classes
-  # exit 0 in the TOOL, so a non-zero exit is the real #828 BLOCK class and must
-  # turn this check-run red for the merge gate (#1108) — exactly its old posture
-  # (red check-run, but never in the `ci` needs-list).
+  # `primitives-first` is the single hard step: its WARN classes exit 0 in the
+  # TOOL, so a non-zero exit is the real #828 BLOCK class and must turn this
+  # check-run red for the merge gate (#1108) — exactly its old posture (red
+  # check-run, but never in the `ci` needs-list).
   #
   # The checkout is intentionally SHALLOW: `migration-index` fetches origin/main
   # itself and falls back to SKIP, which is the behavior its posture assumes.
@@ -307,15 +323,6 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - name: WARN guard summary header
-        run: |
-          {
-            echo "### WARN guards (non-blocking)"
-            echo
-            echo "Every finding below is advisory — it does not fail this check."
-            echo "An empty list means all WARN guards were clean."
-            echo
-          } >> "$GITHUB_STEP_SUMMARY"
 
       # module-readme: every top-level NestJS module dir under apps/*/src (a dir with a
       # *.module.ts) carries a README (ADR-0006 §7). Was an exit-0 stub; implemented as
@@ -324,10 +331,9 @@ jobs:
       # §2.6, 4 clean weeks) starts at merge — 2026-07-02. Kept WARN until the sweep
       # flips it; do not remove the `continue-on-error` here.
       - name: WARN · module-readme
+        id: warn_module_readme
         continue-on-error: true
-        run: |
-          pnpm exec tsx tools/lint/module-readme-lint.ts \
-            || { echo "- \`module-readme\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm exec tsx tools/lint/module-readme-lint.ts
 
       # route-targets: every internal navigation target in apps/portal + apps/admin
       # (a `<Link href>`, `router.push/replace`, or `redirect` string/template) must
@@ -336,10 +342,9 @@ jobs:
       # existed. WARN v1 (ADR-0007 §2.6; new guard lands WARN, promote to BLOCK once
       # stable), and NOT in the `ci` needs-list.
       - name: WARN · route-targets
+        id: warn_route_targets
         continue-on-error: true
-        run: |
-          pnpm exec tsx tools/lint/route-target-lint.ts \
-            || { echo "- \`route-targets\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm exec tsx tools/lint/route-target-lint.ts
 
       # axe-exclude: every `AxeBuilder.exclude(...)` in an e2e a11y spec
       # (apps/*/e2e/**/*axe*.e2e.spec.ts) must be leaf-scoped (a `#id`/`[attr]`
@@ -348,16 +353,15 @@ jobs:
       # band, hiding the interactive theme-toggle glyph (#702) from the contrast scan.
       # WARN v1 (ADR-0007 §2.6), and NOT in the `ci` needs-list.
       - name: WARN · axe-exclude
+        id: warn_axe_exclude
         continue-on-error: true
-        run: |
-          pnpm exec tsx tools/lint/axe-exclude-lint.ts \
-            || { echo "- \`axe-exclude\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm exec tsx tools/lint/axe-exclude-lint.ts
 
       # glossary-mdx — ADR-0006 §6.4 MDX glossary-lint (a `[[term-id]]` directive in
       # docs prose must resolve to a glossary term). REAL guard as of #448 (was a
       # 5-line exit-0 stub). POSTURE: BURN-IN — WARN and NOT in the `ci` needs-list
-      # (BLOCK = in needs-list, WARN = non-blocking, never both). Rationale: (a)
-      # ADR-0006 §7.0 phases glossary-mdx into the Pilot tier (#449 posture note) —
+      # (BLOCK = in needs-list, WARN = non-blocking for `ci`, never both). Rationale:
+      # (a) ADR-0006 §7.0 phases glossary-mdx into the Pilot tier (#449 posture note) —
       # not pre-pilot-mandatory; (b) the `[[…]]` syntax is OVERLOADED — glossary terms
       # vs. memory/decision cross-refs (`[[reference_*]]`/`[[feedback_*]]`/`[[project_*]]`,
       # the separate §7.0 `[[refs]]` check) vs. code-fenced syntax examples — so the
@@ -371,10 +375,9 @@ jobs:
       # AND the Pilot phase opens — earliest sweep 2026-07-02 per ADR-0007 §2.6 +
       # ADR-0006 §7.0.
       - name: WARN · glossary-mdx
+        id: warn_glossary_mdx
         continue-on-error: true
-        run: |
-          pnpm exec tsx tools/lint/glossary-mdx-lint.ts \
-            || { echo "- \`glossary-mdx\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm exec tsx tools/lint/glossary-mdx-lint.ts
 
       # glossary-ids — ADR-0006 §6.3 glossary canonical-id SSOT enforcement. The
       # ESLint rule `local/glossary-canonical-ids` (#468) forbids a bare string
@@ -397,19 +400,17 @@ jobs:
       # GlossaryRef / docs component) lands and the ADR-0007 §2.6 sweep opens — move
       # the step into `guards-block`, no rule change.
       - name: WARN · glossary-ids
+        id: warn_glossary_ids
         continue-on-error: true
-        run: |
-          pnpm lint:glossary-ids \
-            || { echo "- \`glossary-ids\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm lint:glossary-ids
 
       # no-stub: user-facing source must not ship a "set this env var" dev
       # placeholder or an untracked TODO/FIXME stub (AGENTS.md §6). WARN per the
       # ADR-0007 §2.6 new-guard posture — promote to BLOCK once stable.
       - name: WARN · no-stub
+        id: warn_no_stub
         continue-on-error: true
-        run: |
-          pnpm lint:no-stub \
-            || { echo "- \`no-stub\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm lint:no-stub
 
       # no-hardcoded-path: committed tooling (`tools/**/*.{mjs,ts}`) must not bake a
       # machine-specific absolute path literal (drive-letter `C:/…` / home
@@ -419,10 +420,9 @@ jobs:
       # --show-toplevel`. #936 (PR #933 renderBrief() leak). WARN per the ADR-0007
       # §2.6 new-guard posture — promote to BLOCK once stable.
       - name: WARN · no-hardcoded-path
+        id: warn_no_hardcoded_path
         continue-on-error: true
-        run: |
-          pnpm lint:no-hardcoded-path \
-            || { echo "- \`no-hardcoded-path\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm lint:no-hardcoded-path
 
       # external-anchor: external-document anchors on user-facing surfaces
       # (`apps/portal`, `apps/admin`, `packages/design-system/src`) must carry
@@ -432,10 +432,9 @@ jobs:
       # surface-parity gap. WARN per the ADR-0007 §2.6 new-guard posture — promote to
       # BLOCK once stable.
       - name: WARN · external-anchor
+        id: warn_external_anchor
         continue-on-error: true
-        run: |
-          pnpm lint:external-anchor \
-            || { echo "- \`external-anchor\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm lint:external-anchor
 
       # migration-index: Drizzle migration-index collision guard (#799). Parallel
       # branches independently generate the same next migration index off a stale
@@ -446,10 +445,9 @@ jobs:
       # so the guard fetches origin/main itself (falls back to SKIP, never a false
       # red). WARN v1 — promote to BLOCK per ADR-0007 §2.6.
       - name: WARN · migration-index
+        id: warn_migration_index
         continue-on-error: true
-        run: |
-          pnpm lint:migration-index \
-            || { echo "- \`migration-index\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm lint:migration-index
 
       # audit-coverage: universal edit-audit coverage guard (010 EARS-8, #1089).
       # Spec 010 audits every domain-table mutation via one generic PL/pgSQL trigger
@@ -461,10 +459,9 @@ jobs:
       # red on any table in neither set. Static source scan — no PR/gh context.
       # WARN v1 — promote to BLOCK per ADR-0007 §2.6.
       - name: WARN · audit-coverage
+        id: warn_audit_coverage
         continue-on-error: true
-        run: |
-          pnpm lint:audit-coverage \
-            || { echo "- \`audit-coverage\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm lint:audit-coverage
 
       # showcase-coverage: the design-system living showcase (apps/showcase) is the
       # rendered viewer of @ds/design-system — it must stay *living*. This guard
@@ -473,10 +470,9 @@ jobs:
       # ship without appearing in the catalogue (design-system-showcase spec §5.1,
       # #350). Static source scan — no PR/gh context needed. WARN per ADR-0007 §2.6.
       - name: WARN · showcase-coverage
+        id: warn_showcase_coverage
         continue-on-error: true
-        run: |
-          pnpm lint:showcase-coverage \
-            || { echo "- \`showcase-coverage\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm lint:showcase-coverage
 
       # showcase-snippet: the showcase (apps/showcase) is the rendered VIEWER of
       # @ds/design-system — it re-implements nothing (design-system-showcase spec §2.4).
@@ -486,20 +482,18 @@ jobs:
       # so it cannot. This guard flags such literals (#396). Static source scan — no
       # PR/gh context needed. WARN per ADR-0007 §2.6.
       - name: WARN · showcase-snippet
+        id: warn_showcase_snippet
         continue-on-error: true
-        run: |
-          pnpm lint:showcase-snippet \
-            || { echo "- \`showcase-snippet\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm lint:showcase-snippet
 
       # asset-format: product assets are vector-first (ADR-0013 §8, #275) — logos /
       # icons ship as SVG, raster as WEBP minimum; committed *.png / *.jpg / *.jpeg
       # under apps/*/public or @ds/design-system is an asset-hygiene defect. Static
       # file scan — no PR/gh context needed. WARN per ADR-0007 §2.6.
       - name: WARN · asset-format
+        id: warn_asset_format
         continue-on-error: true
-        run: |
-          pnpm lint:asset-format \
-            || { echo "- \`asset-format\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm lint:asset-format
 
       # interaction-states: a @ds/design-system clickable primitive must carry its
       # hover + focus-visible contract, and the globals.css layer-1 base-reset
@@ -507,10 +501,9 @@ jobs:
       # #269). Static source scan — no PR/gh context needed. WARN per ADR-0007 §2.6.
       # (Its RUNTIME twin, `playwright-axe`, is BLOCK.)
       - name: WARN · interaction-states
+        id: warn_interaction_states
         continue-on-error: true
-        run: |
-          pnpm lint:interaction-states \
-            || { echo "- \`interaction-states\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm lint:interaction-states
 
       # aa-contrast: the cheap STATIC pre-filter for the AA-contrast usage rule (ADR-0013
       # §7), left of the runtime playwright-axe tier (#351). Flags the two deterministic
@@ -520,10 +513,9 @@ jobs:
       # this gate catches the static subset early (#402). Static source scan — no PR/gh
       # context needed. WARN per ADR-0007 §2.6.
       - name: WARN · aa-contrast
+        id: warn_aa_contrast
         continue-on-error: true
-        run: |
-          pnpm lint:aa-contrast \
-            || { echo "- \`aa-contrast\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm lint:aa-contrast
 
       # form-error: a form-level error/message in app UI source must route through the
       # @ds/design-system `FormError` / `FormMessage` primitive, not be hand-typed as a
@@ -532,10 +524,9 @@ jobs:
       # -value guard catches the duplication — only this one does. Static source scan —
       # no PR/gh context needed. WARN per ADR-0007 §2.6.
       - name: WARN · form-error
+        id: warn_form_error
         continue-on-error: true
-        run: |
-          pnpm lint:form-error \
-            || { echo "- \`form-error\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm lint:form-error
 
       # form-rhythm: the settled form vertical-rhythm + error-state contract (ADR-0013
       # §7 "Form layout & validation contract", #333 redo / #334). Flags the three
@@ -546,10 +537,9 @@ jobs:
       # mush"). Static source scan over the DS form primitives + app surfaces — no
       # PR/gh context. WARN per ADR-0007 §2.6.
       - name: WARN · form-rhythm
+        id: warn_form_rhythm
         continue-on-error: true
-        run: |
-          pnpm lint:form-rhythm \
-            || { echo "- \`form-rhythm\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm lint:form-rhythm
 
       # submit-pending: the async-submit pending standard (ADR-0013 §7 layer 2, #337).
       # Flags a `type="submit"` control disabled by an in-flight flag
@@ -560,10 +550,9 @@ jobs:
       # every prior gate passes. Static source scan over the DS blocks/primitives + app
       # surfaces — no PR/gh context. WARN per ADR-0007 §2.6.
       - name: WARN · submit-pending
+        id: warn_submit_pending
         continue-on-error: true
-        run: |
-          pnpm lint:submit-pending \
-            || { echo "- \`submit-pending\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm lint:submit-pending
 
       # ears-tests: the COVERAGE + ORPHAN direction of the EARS↔test contract (#316,
       # ADR-0006 §4). Every requirement id has a test title that cites it (folding a
@@ -574,10 +563,9 @@ jobs:
       # weeks) starts at merge — 2026-07-02. Kept WARN until the sweep flips it; do not
       # remove the `continue-on-error` here — promotion is a later sweep decision.
       - name: WARN · ears-tests
+        id: warn_ears_tests
         continue-on-error: true
-        run: |
-          pnpm exec tsx tools/lint/ears-test-lint.ts \
-            || { echo "- \`ears-tests\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm exec tsx tools/lint/ears-test-lint.ts
 
       # ears-naming: the FORMAT-hygiene direction of the EARS↔test contract (#316,
       # ADR-0006 §4). `ears-tests` (above) owns coverage+orphan; this flags a MALFORMED
@@ -586,10 +574,9 @@ jobs:
       # demand every test be EARS-named — a legit non-EARS unit / #issue test is left
       # alone. Static title scan. WARN per ADR-0007 §2.6.
       - name: WARN · ears-naming
+        id: warn_ears_naming
         continue-on-error: true
-        run: |
-          pnpm lint:ears-naming \
-            || { echo "- \`ears-naming\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm lint:ears-naming
 
       # tdd-signal: a PR that changes production source under apps/*/src with no test
       # in the diff AND no pre-existing test in the changed module (design §5.2,
@@ -604,13 +591,12 @@ jobs:
       # non-zero before the guard's skip short-circuit (Issue #10 root cause 1). The
       # batch job's `permissions` block carries the grant; the step carries the token.
       - name: WARN · tdd-signal
+        id: warn_tdd_signal
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          pnpm exec tsx tools/lint/tdd-signal-lint.ts \
-            || { echo "- \`tdd-signal\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm exec tsx tools/lint/tdd-signal-lint.ts
 
       # product-note: a user-facing PR (kind label `feature`/`bug`) must carry a real
       # `Product note (RU)` section in its body — the source of truth the merge-time
@@ -623,13 +609,12 @@ jobs:
       # job carries `permissions: { contents: read, pull-requests: read }` and this step
       # carries `GH_TOKEN`/`PR_NUMBER` (enforced by the workflow-auth guard below).
       - name: WARN · product-note
+        id: warn_product_note
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          pnpm lint:product-note \
-            || { echo "- \`product-note\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm lint:product-note
 
       # workflow-auth: enforces the "Issue-#10 auth pattern" on the workflow files
       # THEMSELVES — every job that runs `gh` or a PR-event-gated guard (a
@@ -643,10 +628,9 @@ jobs:
       # it (correctly) needs no auth block. WARN v1 per ADR-0007 §2.6 — promotion clock
       # starts at merge 2026-07-02.
       - name: WARN · workflow-auth
+        id: warn_workflow_auth
         continue-on-error: true
-        run: |
-          pnpm exec tsx tools/lint/workflow-auth-lint.ts \
-            || { echo "- \`workflow-auth\` — findings, see the step log" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+        run: pnpm exec tsx tools/lint/workflow-auth-lint.ts
 
       # primitives-first: a bespoke hover:/active:/focus-visible: utility stack on a
       # RAW interactive element (<a>/<button>/<input>/… or the file's next/link
@@ -664,6 +648,59 @@ jobs:
       # for the merge gate without ever entering the `ci` needs-list.
       - name: primitives-first (hard — tool-encoded WARN/BLOCK)
         run: pnpm lint:primitives-first
+
+      # WARN aggregate — the second half of the WARN encoding. The OLD per-job
+      # `continue-on-error: true` did NOT hide a WARN finding from the merge gate:
+      # the job still recorded a FAILED check-run, and
+      # `tools/gh/merge-gate.mjs::classifyCheckRuns` reds ANY completed
+      # non-success/non-skipped check-run — so a WARN finding blocked `pr:land`
+      # while staying out of the `ci` needs-list. Step-level `continue-on-error`
+      # alone would have silently loosened that, so this step re-reds the batch
+      # check-run whenever any WARN step's `outcome` is `failure`. `if: always()`
+      # so it also runs when an earlier hard step (primitives-first) failed and
+      # skipped nothing it needs. A `skipped` WARN step is NOT a finding.
+      - name: WARN aggregate (reds this check-run on any WARN finding)
+        if: always()
+        env:
+          WARN_OUTCOMES: |
+            module-readme=${{ steps.warn_module_readme.outcome }}
+            route-targets=${{ steps.warn_route_targets.outcome }}
+            axe-exclude=${{ steps.warn_axe_exclude.outcome }}
+            glossary-mdx=${{ steps.warn_glossary_mdx.outcome }}
+            glossary-ids=${{ steps.warn_glossary_ids.outcome }}
+            no-stub=${{ steps.warn_no_stub.outcome }}
+            no-hardcoded-path=${{ steps.warn_no_hardcoded_path.outcome }}
+            external-anchor=${{ steps.warn_external_anchor.outcome }}
+            migration-index=${{ steps.warn_migration_index.outcome }}
+            audit-coverage=${{ steps.warn_audit_coverage.outcome }}
+            showcase-coverage=${{ steps.warn_showcase_coverage.outcome }}
+            showcase-snippet=${{ steps.warn_showcase_snippet.outcome }}
+            asset-format=${{ steps.warn_asset_format.outcome }}
+            interaction-states=${{ steps.warn_interaction_states.outcome }}
+            aa-contrast=${{ steps.warn_aa_contrast.outcome }}
+            form-error=${{ steps.warn_form_error.outcome }}
+            form-rhythm=${{ steps.warn_form_rhythm.outcome }}
+            submit-pending=${{ steps.warn_submit_pending.outcome }}
+            ears-tests=${{ steps.warn_ears_tests.outcome }}
+            ears-naming=${{ steps.warn_ears_naming.outcome }}
+            tdd-signal=${{ steps.warn_tdd_signal.outcome }}
+            product-note=${{ steps.warn_product_note.outcome }}
+            workflow-auth=${{ steps.warn_workflow_auth.outcome }}
+        run: |
+          failed="$(printf '%s\n' "$WARN_OUTCOMES" | grep -E '=failure$' | cut -d= -f1 || true)"
+          echo "### WARN guards (ADR-0007 §2.6 posture)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$failed" ]; then
+            echo "All WARN guards clean."
+            echo "All WARN guards clean." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "WARN guard(s) with findings (see each step's log):"
+          printf '%s\n' "$failed"
+          printf -- '- `%s`\n' $failed >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "WARN guards are NOT in the \`ci\` needs-list, so they never fail the required \`ci\` check. This batch check-run is red so the finding stays visible to the merge gate — the same behavior the old per-job \`continue-on-error\` encoding had." >> "$GITHUB_STEP_SUMMARY"
+          exit 1
 
   # ─── Runtime a11y / interaction tiers (browser profile) ───────────────
   # playwright-axe: the RUNTIME twin of the `interaction-states` STATIC lint
@@ -739,7 +776,8 @@ jobs:
   # intentionally excluded. WARN→BLOCK promotion criterion + sweep cadence:
   # ADR-0007 §2.6 (settled in #427; first sweep 2026-07-02 — per-guard verdicts
   # recorded on the Issue); promoting a guard now means moving its STEP from the
-  # `guards-warn` batch into `guards-block`.
+  # `guards-warn` batch into `guards-block` (and dropping its row from that
+  # batch's WARN-aggregate step).
   # Job name must stay `ci` — branch protection on `main` (per ADR-0008
   # §2.6 item 4) requires exactly one status check context named `ci`.
   # Renaming this job breaks merge gating.

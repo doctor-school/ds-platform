@@ -1,0 +1,119 @@
+---
+title: "Feature 014 — Event recordings & the archived-event page (PRD)"
+description: "Product requirements for turning a finished broadcast into standing content: event_recordings (edited / raw) with the edited-on-top display rule, the post-live state of the event page with a publicly readable announcement and a login-gated player, an honest «запись готовится» state, and recordings reachable from «Мои события». Feature 014 of the Academy public surface epic; covers the scope of #1188 / Plane DSP-229; source of the 014 EARS triplet (ADR-0014)."
+slug: academy-public-014-event-recordings-product
+epic: ../../product/academy-public/brief.md
+status: Draft
+surface: user-facing
+lang: en
+---
+
+> **EN (this)** · **RU:** [`014-product-ru.md`](./014-product-ru.md)
+
+> Epic: [Academy public surface — product brief](../../product/academy-public/brief.md) · Third on the critical path (after 012 and 013) · Covers the scope of [#1188](https://github.com/doctor-school/ds-platform/issues/1188) / Plane DSP-229, target 2026-08-21 — that Issue is delivered through this feature and is not specified separately.
+
+## Feature summary
+
+Today a broadcast ends and its page becomes a dead end: an announcement for something that already happened, with nothing to watch and no reason to come back. The academy has dozens of past events and all of that value evaporates the moment the stream stops.
+
+Feature 014 gives an event a **life after the broadcast**. A recording becomes a real record attached to the event — in two kinds, the **raw** capture of the stream and the later **edited** cut — with a display rule that never leaves the doctor waiting for the montage: while only raw exists, raw plays; once edited appears, edited takes the main player and raw moves to a secondary «Смотреть оригинал трансляции» slot.
+
+The event page gets a **post-live state** rather than a new page — `/webinars/[slug]` stays the single event page for every context (epic decision #4). That state is **publicly readable**: the announcement, description, speakers, project and topics are visible to anyone, because the archive is how a guest discovers the academy. **Playback is login-gated** (epic decision #3): for a guest the player position carries a poster and an honest invitation to sign in — free registration, an entry driver, deliberately not a paywall. When the broadcast is over and no recording exists yet, the page says so plainly with a timeframe instead of showing a broken player.
+
+And the doctor's own history stops being upcoming-only: **«Мои события» shows the past events the user registered for**, each leading to its recording — the outcome #1188 asks for, delivered here.
+
+## User stories
+
+- **US-1** — As a **doctor who missed a broadcast**, I open its event page and watch the recording, so missing a live эфир no longer means losing the content.
+- **US-2** — As a **doctor**, when only the raw stream capture exists I can already watch it — I am not made to wait for the edited cut before the content is available at all.
+- **US-3** — As a **doctor**, once the edited version is published it is the one I get by default, with the original broadcast still reachable if I want it — the better version is never buried under the rougher one.
+- **US-4** — As a **guest**, I can read a past event's page fully — what it was about, who spoke, which project it belonged to — without an account, so an archived broadcast is a real entry point to the academy.
+- **US-5** — As a **guest**, when I try to watch I am told clearly that viewing requires signing in and that it is free, and I can sign in or register right there and come back to the same recording.
+- **US-6** — As a **doctor**, when a broadcast has ended but its recording is not ready yet, the page tells me honestly that it is being prepared and when to expect it — instead of an empty player or silence.
+- **US-7** — As a **registered doctor**, «Мои события» shows me the past events I signed up for, not only the upcoming ones, so my own history is where I look first.
+- **US-8** — As a **registered doctor**, each past event in «Мои события» takes me straight to its recording, making the section the shortest path back to content I already chose.
+- **US-9** — As a **content operator**, I attach a recording to an event and state its kind (raw or edited), and the page reflects the right one without any further intervention from me.
+- **US-10** — As a **content operator**, publishing the edited version later automatically promotes it and demotes the raw one — I never edit a page to make the display rule happen.
+- **US-11** — As a **doctor on a phone**, the archived page and the player work as well as on desktop, because a large share of the audience watches on mobile.
+- **US-12** — As a **product owner**, the archive measurably drives registration — a guest who came for a recording has an obvious, low-friction path to an account.
+
+## Flows
+
+**Watch a recording as a registered doctor (US-1, US-2, US-3):**
+
+1. Doctor opens `/webinars/[slug]` for a finished event → the page renders in its post-live state, the player in the hero position.
+2. If both kinds exist → the **edited** recording is in the main player, and the raw capture is reachable through the secondary «Смотреть оригинал трансляции» affordance.
+3. If only **raw** exists → it plays in the main player, with no secondary slot.
+4. The rest of the page — speakers (clickable expert cards), project(s), topics, materials — renders as on a live event page, reading the 012 taxonomy.
+
+**Guest hits the gate (US-4, US-5, US-12):**
+
+1. Guest opens the same page → announcement, description, speakers, project and topics all render; nothing is hidden.
+2. In the player's position the guest sees a poster plus a plain invitation to sign in to watch, stating that access is free.
+3. Guest signs in or registers → returns to the same event page and the player renders. _(agent-proposed — UNCONFIRMED: the owner approved the gate and its framing as a registration driver; that the return lands back on the same recording is the lead's reading of «двигатель регистраций», not an owner-stated mechanic.)_
+
+**Recording not ready (US-6):**
+
+1. The broadcast has ended and no recording of either kind is attached.
+2. The page shows an honest «запись готовится» state with an expected timeframe, in the player's position — never an empty or broken player, and never a silently missing section.
+3. The state disappears by itself the moment a recording is attached; the operator does not edit the page. _(The timeframe's source — a fixed promise like «в течение нескольких дней» versus a per-event date the operator sets — is an open question below.)_
+
+**«Мои события» (US-7, US-8):**
+
+1. Registered doctor opens `/account/events` → alongside upcoming events they see the **past events they registered for**.
+2. Each past entry links to its event page, where the recording (or the «готовится» state) waits.
+3. The listing is rendered by the **shared event-list unit** (epic decision #7), not by a section-only copy of it.
+
+**Operator flow (US-9, US-10):**
+
+1. Operator attaches a recording to an event and marks its kind — `raw` or `edited`.
+2. The page applies the display rule from the data alone; publishing an edited recording later promotes it without any page edit.
+3. The rule is data-driven, so a mistake is fixed by fixing the record, not by re-touching a page.
+
+**Branches:**
+
+- **Both recordings absent but the event never happened** (cancelled) → out of scope here; the cancelled state belongs to the event lifecycle, not to this feature.
+- **More than one recording of the same kind** on one event → treated as an operator error rather than a supported state. _(agent-proposed — UNCONFIRMED.)_
+- **A recording exists but its source is unavailable** at playback time → the page must fail honestly (an explicit "recording temporarily unavailable" message), never a silently dead player. _(agent-proposed — UNCONFIRMED.)_
+
+## Product acceptance criteria
+
+- An event carries **recordings as first-class records** with an explicit **kind — `edited` or `raw`** — not a single video URL field on the event.
+- The **display rule holds without operator intervention**: raw alone → raw in the main player; edited present → edited in the main player and raw in a secondary slot behind a «Смотреть оригинал трансляции» affordance. Publishing the edited cut later changes the page by itself.
+- `/webinars/[slug]` remains the **single event page for every context** — the post-live state is a state of that page, not a second route.
+- The post-live page is **publicly readable in full** — announcement, description, speakers, project(s), topics, materials — for a visitor with no account.
+- **Playback renders for authenticated users only.** A guest gets a poster plus an honest, non-paywall invitation to sign in, stating that access is free; the sign-in path is reachable from that spot.
+- When a finished event has no recording, the page shows an explicit **«запись готовится»** state with a timeframe, in the player's position; the state clears automatically once a recording is attached.
+- **«Мои события» lists the user's past registered events**, each linking to its event page and its recording — closing the outcome of #1188 / Plane DSP-229. The listing uses the shared event-list unit.
+- Speakers, project and topics on the archived page come from the **012 taxonomy** — this feature reads that data, it does not re-model it.
+- The whole archived state works on mobile — the player, the secondary recording affordance, and the login invitation alike.
+- The archived page meets the platform's accessibility bar for a public surface — the same `playwright-axe` gate every user-facing surface passes, including the player's controls being keyboard-reachable and the login invitation being a real, labelled action.
+- Nothing about the pre-live event page (announcement + registration, features 004/005) regresses — 014 adds a state, it does not redesign the page.
+
+## Out of scope
+
+- **Redesigning the live event page.** The design brief is explicit: the existing page is not reworked; only its post-live state is designed (design brief section 4).
+- The **video hosting / streaming decision** — where recordings physically live, how they are uploaded and transcoded. 014 requires that a recording is a record with a kind and a playable source; the delivery mechanism is a technical decision, not a product one.
+- **Attendance-gated access** — the gate is authentication, not registration for that specific event; any doctor with an account can watch any published recording.
+- **Download of recordings**, offline viewing, and playback position / resume-where-you-left-off.
+- **The «Прошедшие» tab and the filter facets on `/webinars`** — the epic assigns them to 014 or 015 at spec time; this PRD leaves them to 015 with the catalog work, and «Мои события» carries the doctor's own past-event need. _(agent-proposed — UNCONFIRMED: the epic explicitly deferred the assignment to spec time; this is the lead's assignment and the owner may reverse it.)_
+- **Materials beyond the video** (slides, handouts) as a new upload surface — existing event materials keep rendering; no new materials model here.
+- **Analytics on watch behavior** (views, watch time, completion) and any reporting to partners.
+- **Notifications** — telling a registered doctor that "the recording is ready" is not in this epic (the epic excludes notification delivery).
+
+## Open questions
+
+- **The «запись готовится» timeframe.** Whether the page states a fixed promise (e.g. «в течение нескольких дней») or a per-event date the operator sets — the honest-plaque requirement is fixed, its content is not.
+- **Presentation of the secondary recording.** The design brief offers three forms — (a) a spoiler under the player, (b) «Монтаж / Оригинал» tabs, (c) a separate section at the bottom. Stage-A territory by owner decision #6.
+- **Guest-return behavior after sign-in** — returning to the same recording is agent-proposed above and needs confirmation.
+- **How far back «Мои события» reaches** — the full registration history or a bounded window, and whether past events are a separate tab or one list with upcoming ones.
+- **A past event the user registered for that has no recording** — does it still appear in «Мои события» (the lead reads #1188 as yes: the section is the user's history, not a recording index), and how is it presented there.
+- **Recording visibility control.** Whether an attached recording is public the moment it is attached, or carries its own published/unpublished switch for the operator.
+
+## Approved mockup
+
+**Stage A pending — this slot is deliberately EMPTY.**
+
+The expected Stage-A vehicle is the canvas **«Вебинар архив»**, which the owner is currently designing in the claude.ai Design app (project «DS Platform»), from the archived-event section of the design brief ([`design-brief-academy-public-ru.md`](../../product/academy-public/design-brief-academy-public-ru.md), section 4 — including its composition fork on how the secondary recording is presented). When that canvas is finished and the owner records the pick, it becomes the approved mockup and the composition SoT for this feature's surface.
+
+Vendoring is **pending** and follows the same constraint as feature 013: Claude Design canvas documents are not exposed through the project's DesignSync file listing, so the `design-source/` copy awaits an owner-side export handover. Implementation may not begin until the canvas is approved, vendored into `design-source/`, and referenced here (AGENTS.md §6 — UI design is approved before it is built), and every canvas-carried resolution — the secondary-recording presentation, the guest gate's poster and invitation, the «запись готовится» plaque — is read off the vendored copy, never off this PRD's prose.

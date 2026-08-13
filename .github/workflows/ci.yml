@@ -24,7 +24,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-          cache: pnpm
       - run: pnpm install --frozen-lockfile
 
   # ─── Core build/test/lint (parallel after setup) ─────────────────────
@@ -42,7 +41,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
 
@@ -53,7 +52,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
 
@@ -68,7 +67,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec turbo run test --filter='!@ds/api'
       - run: pnpm test:tools
@@ -94,7 +93,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - name: Build the data-layer Postgres image (pgvector + pg_partman)
         run: docker build -t ds-platform/postgres:pg17-partman infra/dev-stand/postgres
@@ -124,7 +123,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
@@ -142,7 +141,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       # The built AppModule imports the workspace packages @ds/db + @ds/schemas
       # by their built `dist/` (their package `exports`), so build deps first.
@@ -156,7 +155,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @ds/docs build
 
@@ -173,7 +172,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @ds/design-system build
       - name: Verify generated tokens are committed and up to date
@@ -212,7 +211,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/events-lint.ts
 
@@ -251,7 +250,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/module-readme-lint.ts
 
@@ -269,7 +268,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/route-target-lint.ts
 
@@ -288,7 +287,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/axe-exclude-lint.ts
 
@@ -318,7 +317,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/glossary-mdx-lint.ts
 
@@ -351,7 +350,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:glossary-ids
 
@@ -374,7 +373,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/glossary-roundtrip-lint.ts
 
@@ -401,7 +400,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       # The gate boots the real AppModule, which imports the workspace packages
       # @ds/db + @ds/schemas by their built `dist/` (their package `exports`).
@@ -431,7 +430,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:prod-surface
         env:
@@ -445,7 +444,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:no-stub
 
@@ -465,7 +464,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:no-hardcoded-path
 
@@ -484,7 +483,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:external-anchor
 
@@ -504,7 +503,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:migration-index
 
@@ -525,7 +524,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:audit-coverage
 
@@ -543,7 +542,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:showcase-coverage
 
@@ -562,7 +561,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:showcase-snippet
 
@@ -578,7 +577,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:asset-format
 
@@ -594,7 +593,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:interaction-states
 
@@ -617,7 +616,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:primitives-first
 
@@ -636,7 +635,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:aa-contrast
 
@@ -654,7 +653,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:form-error
 
@@ -674,7 +673,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:form-rhythm
 
@@ -694,7 +693,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:submit-pending
 
@@ -715,7 +714,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/ears-test-lint.ts
 
@@ -733,7 +732,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:ears-naming
 
@@ -759,7 +758,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       # Build the showcase (and its workspace deps) so `next start` serves a real
       # production build — the same path the `build` job exercises, no special env.
@@ -784,7 +783,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       # Build the portal (and its workspace deps) so `next start` serves a real
       # production build — the same path the `build` job exercises, no special env.
@@ -814,7 +813,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/tdd-signal-lint.ts
         env:
@@ -847,7 +846,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:product-note
         env:
@@ -874,7 +873,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc, cache: pnpm }
+        with: { node-version-file: .nvmrc }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsx tools/lint/workflow-auth-lint.ts
 

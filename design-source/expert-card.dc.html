@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<a href="{{ href }}" style="display:flex;flex-direction:column;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};text-decoration:none;height:100%;box-sizing:border-box" style-hover="transform:translate(2px,2px);box-shadow:3px 3px 0 {{ shadow }}">
+  <div style="aspect-ratio:4/3;background:{{ tint }};display:flex;align-items:center;justify-content:center;border-bottom:2px solid {{ border }};position:relative;overflow:hidden;flex:none">
+    <span style="font-size:44px;font-weight:800;letter-spacing:-.02em;color:{{ tintInk }}">{{ initials }}</span>
+    <span style="position:absolute;bottom:8px;right:10px;font-size:9.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ photoNote }}">фото</span>
+  </div>
+  <div style="padding:16px 18px 20px;display:flex;flex-direction:column;gap:8px;flex:1;min-width:0">
+    <div style="font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:{{ accent }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="{{ role }}">{{ role }}</div>
+    <div lang="ru" style="font-size:18px;font-weight:800;letter-spacing:-.02em;color:{{ ink }};line-height:1.25;overflow-wrap:break-word;hyphens:auto;text-wrap:balance">{{ fullName }}</div>
+    <sc-if value="{{ hasCred }}" hint-placeholder-val="{{ true }}">
+      <div title="{{ credentials }}" style="font-size:13px;line-height:1.5;color:{{ inkMuted }};display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">{{ credentials }}</div>
+    </sc-if>
+    <div title="{{ org }}" style="font-size:12.5px;font-weight:700;color:{{ inkFaint }};display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ org }}</div>
+    <div style="font-size:12.5px;font-weight:700;color:{{ accent }};margin-top:auto;padding-top:10px;text-decoration:underline;text-underline-offset:4px">{{ meta }}</div>
+  </div>
+</a>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:280,&quot;height&quot;:420},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;fullName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Анна Соколова&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;role&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Травматолог-ортопед&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;credentials&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;д.м.н., ведущий научный сотрудник&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;org&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;НМИЦ им. Пирогова&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;meta&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;12 эфиров&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;href&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;#&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props, d = !!p.dark;
+    const name = p.fullName || '';
+    const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('');
+    const cred = p.credentials || '';
+    return {
+      href: p.href || '#',
+      fullName: name,
+      role: p.role || '',
+      credentials: cred,
+      hasCred: !!cred,
+      org: p.org || '',
+      meta: p.meta || '',
+      initials,
+      surface: d ? 'oklch(.21 .02 250)' : '#fff',
+      border: d ? '#fff' : 'oklch(.21 .02 250)',
+      shadow: d ? '#6BB1F7' : '#114D9E',
+      tint: d ? '#0D3A77' : '#D3E8FD',
+      tintInk: d ? '#6BB1F7' : '#114D9E',
+      photoNote: d ? 'rgba(255,255,255,.4)' : 'rgba(17,77,158,.5)',
+      accent: d ? '#6BB1F7' : '#2D84F2',
+      ink: d ? '#fff' : 'oklch(.21 .02 250)',
+      inkMuted: d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)',
+      inkFaint: d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)'
+    };
+  }
+}
+</script>
+</body>
+</html>

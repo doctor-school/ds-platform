@@ -283,21 +283,26 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     expect(created.alreadyExisted).toBe(false);
     expect(created.sub).toBeTruthy();
 
-    // Some Zitadel OTP-Email configs require a VERIFIED email before the login
-    // challenge will dispatch. Verify the address first (best-effort: if the
-    // instance does not require it the round-trip still works). Read the create
-    // mail's code, verify, then settle before requesting the login OTP.
-    await sleep(3000);
-    const verifySentAt = new Date().toISOString();
-    await client.requestEmailVerification(created.sub);
-    const verifyCode = await fetchOtpCode(
-      email,
-      verifySentAt,
-      NOTIFICATION_SUBJECTS.verifyEmail,
+    // Zitadel arms an `otp_email` LOGIN challenge ONLY for a VERIFIED email
+    // (proven live, #1131) — so the address MUST be verified before the EARS-6
+    // request below, or Zitadel accepts the challenge and mails nothing.
+    //
+    // The verification is driven CODE-SIDE, not through Mailpit (#1200): since
+    // #910/#1045 (EARS-29) the `verifyemail` type rides the `returnCode` oneof —
+    // Zitadel generates/stores the code and SENDS NOTHING; the branded mail is
+    // composed and dispatched by the BFF mailer. This spec drives the raw
+    // `ZitadelIdpClient` with no mailer bound, so `requestEmailVerification`
+    // delivers no mail at all and a Mailpit read for the verify code can never
+    // hit — the address stayed unverified and the login-OTP mail was never sent
+    // (the #1200 red). `markEmailVerified` (EARS-35, #1131) is the mailer-free
+    // flip: regenerate with `returnCode` and verify the returned code in-process.
+    // The SMS twin below needs no such change — `requestPhoneVerification` still
+    // rides the `sendCode` oneof, so Zitadel itself delivers to the sink.
+    await sleep(1000);
+    const verified = await client.markEmailVerified(created.sub);
+    expect(verified, "email should be verified before the OTP challenge").toBe(
+      true,
     );
-    if (verifyCode) {
-      await client.verifyEmail(created.sub, verifyCode);
-    }
     await sleep(1000);
 
     // EARS-6 step 1: arm the login challenge — Zitadel mails the code.

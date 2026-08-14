@@ -33,7 +33,7 @@ jobs:
   deliver:
     # Only merged PRs (a closed-without-merge PR delivers nothing).
     if: github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7

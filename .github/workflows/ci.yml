@@ -208,21 +208,21 @@ jobs:
   # some. They no longer `needs: setup` — that job was folded into `core`.
   api-drift:
     if: false # Enabled by G8: apps/api (NestJS) + openapi.snapshot.json land then
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v7
       - run: echo "api-drift placeholder"
 
   db-drift:
     if: false # Enabled by G6: packages/db Drizzle schema lands then
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v7
       - run: echo "db-drift placeholder"
 
   generated-artifacts:
     if: false # Enabled by G6: pnpm generate:all + generators (drizzle/openapi-typescript/etc.) land then
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v7
       - run: echo "generated-artifacts placeholder"

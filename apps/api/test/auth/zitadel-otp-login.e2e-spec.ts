@@ -63,6 +63,64 @@ const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * Bound for {@link untilProjected}. Zitadel is event-sourced: a command
+ * (`CreateUser`, `verifyEmail`, `verifyPhone`) returns as soon as the event is
+ * written, while the User v2 READ surface these steps depend on is served from a
+ * projection that catches up asynchronously. A fixed `sleep` before a one-shot
+ * read is therefore a guess, and a guess that loses is a FLAKE that reads like a
+ * genuine red — the one failure class this live-verify path must not ship
+ * (#1200 review). So every projection-dependent step polls on a short interval
+ * up to a hard deadline instead: the fast path costs one interval, the slow path
+ * still converges, and a real stall fails with a message that NAMES projection
+ * lag rather than surfacing 40 s later as an inexplicably missing OTP mail.
+ *
+ * The deadline is sized against the enclosing 45 s test timeout: the email test
+ * spends at most 2 × 8 s here plus one 15 s Mailpit poll, so a genuine lag is
+ * still reported by the assertion, never by an opaque suite-level timeout.
+ */
+const PROJECTION_DEADLINE_MS = 8_000;
+const PROJECTION_INTERVAL_MS = 250;
+
+/**
+ * Poll `read` until `accept` holds, or fail with a projection-lag message.
+ *
+ * `read` MUST be side-effect-free or idempotent — it is retried. Both callers
+ * satisfy that: `getUser` is a pure read, and `markEmailVerified` is the
+ * idempotent `returnCode`-regenerate + verify flip (a superseded code is simply
+ * replaced, never consumed by anyone else). A throw is treated as
+ * not-yet-converged and retried, so a transient 5xx during projection catch-up
+ * does not fail the step either; the last error is reported if the deadline hits.
+ */
+async function untilProjected<T>(
+  what: string,
+  read: () => Promise<T>,
+  accept: (value: T) => boolean,
+): Promise<T> {
+  const deadline = Date.now() + PROJECTION_DEADLINE_MS;
+  let last: T | undefined;
+  let lastError: unknown;
+  for (;;) {
+    try {
+      last = await read();
+      lastError = undefined;
+      if (accept(last)) return last;
+    } catch (err) {
+      lastError = err;
+    }
+    if (Date.now() >= deadline) {
+      const detail = lastError
+        ? `last error: ${lastError instanceof Error ? lastError.message : String(lastError)}`
+        : `last value: ${JSON.stringify(last)}`;
+      throw new Error(
+        `${what} did not converge within ${PROJECTION_DEADLINE_MS} ms — ` +
+          `Zitadel projection lag (${detail})`,
+      );
+    }
+    await sleep(PROJECTION_INTERVAL_MS);
+  }
+}
+
+/**
  * Extract a 6-ish-char OTP code from a Mailpit message.
  *
  * The branded verify-email (#869, provision.sh step 8.ter) is CODE-ONLY: the
@@ -283,22 +341,39 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     expect(created.alreadyExisted).toBe(false);
     expect(created.sub).toBeTruthy();
 
-    // Some Zitadel OTP-Email configs require a VERIFIED email before the login
-    // challenge will dispatch. Verify the address first (best-effort: if the
-    // instance does not require it the round-trip still works). Read the create
-    // mail's code, verify, then settle before requesting the login OTP.
-    await sleep(3000);
-    const verifySentAt = new Date().toISOString();
-    await client.requestEmailVerification(created.sub);
-    const verifyCode = await fetchOtpCode(
-      email,
-      verifySentAt,
-      NOTIFICATION_SUBJECTS.verifyEmail,
+    // Zitadel arms an `otp_email` LOGIN challenge ONLY for a VERIFIED email
+    // (proven live, #1131) — so the address MUST be verified before the EARS-6
+    // request below, or Zitadel accepts the challenge and mails nothing.
+    //
+    // The verification is driven CODE-SIDE, not through Mailpit (#1200): since
+    // #910/#1045 (EARS-29) the `verifyemail` type rides the `returnCode` oneof —
+    // Zitadel generates/stores the code and SENDS NOTHING; the branded mail is
+    // composed and dispatched by the BFF mailer. This spec drives the raw
+    // `ZitadelIdpClient` with no mailer bound, so `requestEmailVerification`
+    // delivers no mail at all and a Mailpit read for the verify code can never
+    // hit — the address stayed unverified and the login-OTP mail was never sent
+    // (the #1200 red). `markEmailVerified` (EARS-35, #1131) is the mailer-free
+    // flip: regenerate with `returnCode` and verify the returned code in-process.
+    // The SMS twin below needs no such change — `requestPhoneVerification` still
+    // rides the `sendCode` oneof, so Zitadel itself delivers to the sink.
+    //
+    // Both hops are BOUNDED-POLLED, never slept-then-read: `markEmailVerified`
+    // opens with a projection read (it resolves `false` for a user the read side
+    // has not caught up to yet), and the challenge below only mails for an email
+    // the projection already reports verified.
+    const verified = await untilProjected(
+      "markEmailVerified(created.sub)",
+      () => client.markEmailVerified(created.sub),
+      (ok) => ok === true,
     );
-    if (verifyCode) {
-      await client.verifyEmail(created.sub, verifyCode);
-    }
-    await sleep(1000);
+    expect(verified, "email should be verified before the OTP challenge").toBe(
+      true,
+    );
+    await untilProjected(
+      "getUser(created.sub).emailVerified",
+      () => client.getUser(created.sub),
+      (user) => user?.emailVerified === true,
+    );
 
     // EARS-6 step 1: arm the login challenge — Zitadel mails the code.
     let tokens: Awaited<
@@ -355,7 +430,17 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     // The otpSms challenge requires a VERIFIED phone (live delta, #170: an
     // unverified phone yields a phone-verify SMS, not a login OTP). Verify the
     // phone first: read the deliberate phone-verify SMS from the sink and confirm.
-    await sleep(2000);
+    //
+    // Bounded-polled for the same reason as the email twin above (#1200 review):
+    // the phone-verify send is a one-shot that throws on a non-2xx, so waiting a
+    // fixed 2 s for the freshly created user to appear on the read side made a
+    // projection lag look like a real failure. Wait for the phone to be VISIBLE
+    // instead — a pure read, no SMS sent while polling.
+    await untilProjected(
+      "getUser(created.sub).phone",
+      () => client.getUser(created.sub),
+      (user) => !!user?.phone,
+    );
     const verifyAt = new Date().toISOString();
     await client.requestPhoneVerification(created.sub);
     const verifyCode = await fetchSmsCode(
@@ -366,7 +451,13 @@ describe.skipIf(!LIVE_OIDC)("Zitadel OTP login (integration)", () => {
     expect(verifyCode, "phone-verify SMS should reach the sink").toBeTruthy();
     const verified = await client.verifyPhone(created.sub, verifyCode!);
     expect(verified).toBe(true);
-    await sleep(1000);
+    // Same bound on the way out: the challenge below only sends for a phone the
+    // projection already reports verified.
+    await untilProjected(
+      "getUser(created.sub).phoneVerified",
+      () => client.getUser(created.sub),
+      (user) => user?.phoneVerified === true,
+    );
 
     // EARS-7 step 1: arm the SMS login challenge — Zitadel sends the code.
     let tokens: Awaited<

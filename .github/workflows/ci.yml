@@ -20,8 +20,10 @@ env:
 
 # ─── Job topology (#1235) ────────────────────────────────────────────────────
 # This workflow is BATCHED: every job pays its own checkout + `pnpm install`,
-# so 44 one-guard jobs meant 44 installs — the CI-minutes diet ADR-0008 §2.1
-# names as an enabler. The guards themselves are unchanged — only their
+# so this workflow's 44 declared jobs meant 44 installs (46 executing across
+# both workflows, counting `pr-body-guards.yml`'s six and excluding four
+# `if: false` placeholders) — the CI-minutes diet ADR-0008 §2.1 names as an
+# enabler. The guards themselves are unchanged — only their
 # PACKAGING is:
 #
 #   core                   setup+lint+types+unit+build+api-build-smoke+
@@ -59,8 +61,8 @@ env:
 #     LAST (a red there is a real #828 BLOCK-class finding the merge gate sees
 #     as a red check-run, exactly as before).
 # Trade-off, deliberate: batching is fail-fast — the first hard failure in a
-# batch skips its remaining steps, where 44 parallel jobs reported every failure
-# at once. Splitting a batch back out is mechanical (each step already carries
+# batch skips its remaining steps, where the old parallel fan-out reported every
+# failure at once. Splitting a batch back out is mechanical (each step already carries
 # its own posture comment). `api-drift`/`db-drift`/`generated-artifacts` stay
 # their own jobs: they are `if: false` placeholders that cost no runner time.
 jobs:

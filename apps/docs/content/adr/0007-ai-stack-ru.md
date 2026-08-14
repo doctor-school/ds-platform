@@ -167,15 +167,15 @@ Cost-tracking ведётся в собственной консоли vendor'а 
 
 Эти компоненты **спроектированы сейчас** (см. design spec §9), **реализуются по trigger'ам** отдельными ADR'ами:
 
-| Component                                    | Trigger                                                                               |
-| -------------------------------------------- | ------------------------------------------------------------------------------------- |
-| **LiteLLM Proxy + Zone-AI VM** (Hetzner EU)  | First runtime AI feature deploy (Content Pipeline v2 LLM draft)                       |
-| **PII filter** (regex v1, NER v2)            | Same trigger                                                                          |
-| **OTel GenAI collector** (gen_ai.\* semconv) | Same trigger; в Phase 0 — minimal stderr token logging                                |
-| **Vector DB Qdrant** (вместо pgvector)       | mobile v3 AI-рекомендации p95 query >100ms или vector workload мешает OLTP            |
-| **Self-hosted GHA runner**                   | Разрешён: общий пул BBM per ADR-0008 §2.8, не AI-specific                             |
-| **Sandbox / experimentation environment**    | Команда ≥3 инженеров с параллельными agent-PR или регулярная нужда отлаживать gateway |
-| **Codex cloud async activation**             | Tech Lead решает запустить первую async-задачу (opt-in self-serve)                    |
+| Component                                    | Trigger                                                                                                                                                                                                                                                                  |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **LiteLLM Proxy + Zone-AI VM** (Hetzner EU)  | First runtime AI feature deploy (Content Pipeline v2 LLM draft)                                                                                                                                                                                                          |
+| **PII filter** (regex v1, NER v2)            | Same trigger                                                                                                                                                                                                                                                             |
+| **OTel GenAI collector** (gen_ai.\* semconv) | Same trigger; в Phase 0 — minimal stderr token logging                                                                                                                                                                                                                   |
+| **Vector DB Qdrant** (вместо pgvector)       | mobile v3 AI-рекомендации p95 query >100ms или vector workload мешает OLTP                                                                                                                                                                                               |
+| **Self-hosted GHA runner**                   | Не AI-specific; решается на уровне репо (ADR-0008 §2.8). CI выполняется GitHub-hosted; общий пул BBM был испытан и отклонён по starvation очереди (#1249). Re-trigger: ожидаемая после отката ревизия потребления минут признаёт hosted-раннеры невыгодными по стоимости |
+| **Sandbox / experimentation environment**    | Команда ≥3 инженеров с параллельными agent-PR или регулярная нужда отлаживать gateway                                                                                                                                                                                    |
+| **Codex cloud async activation**             | Tech Lead решает запустить первую async-задачу (opt-in self-serve)                                                                                                                                                                                                       |
 
 Архитектура runtime gateway:
 

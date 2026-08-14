@@ -10,7 +10,8 @@
 #
 # ONE BATCH JOB (#1235). The six guards were six jobs, each paying its own
 # checkout + `pnpm install` — six installs to run six sub-second body parsers.
-# They are now sequential steps of a single job. Posture is preserved exactly, re-encoded from per-JOB to per-STEP:
+# They are now sequential steps of a single job. Posture is preserved exactly,
+# re-encoded from per-JOB to per-STEP:
 #   • `spec-link` is BLOCK → a plain step (fails the job → red check-run the
 #     merge gate reads). It runs LAST so a spec-link failure never skips the
 #     WARN guards' findings.

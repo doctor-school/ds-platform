@@ -65,14 +65,126 @@ env:
 # failure at once. Splitting a batch back out is mechanical (each step already carries
 # its own posture comment). `api-drift`/`db-drift`/`generated-artifacts` stay
 # their own jobs: they are `if: false` placeholders that cost no runner time.
+#
+# ─── PR-time path gating (#1251) ─────────────────────────────────────────────
+# #1235 changed job PACKAGING, not the trigger surface: a docs-only PR still
+# billed `api-e2e` + both axe jobs + every code step of `core` — ≈5–6 wasted
+# job-minutes per PR on metered private-repo Actions minutes.
+#
+# The trigger surface stays UNCHANGED on purpose. Workflow-level `paths-ignore`
+# would mean the workflow does not run at all, so the required `ci` status check
+# never registers, and `tools/gh/merge-gate.mjs` treats zero registered
+# check-runs at head as FAIL (skill `merge-when-green` Step 1) — a docs PR would
+# become UNMERGEABLE rather than cheap. So the gate is JOB-level, the same shape
+# `api-drift`/`db-drift`/`generated-artifacts` use (a job-level `if:` yielding a
+# SKIPPED job, which the merge gate reads as green):
+#
+#   changes                cheap classifier job — one checkout, no install; emits
+#                          `code=true|false` for the PR's changed-file set
+#   api-e2e / playwright-axe / playwright-axe-portal
+#                          `needs: changes` + `if: needs.changes.outputs.code == 'true'`
+#   core                   ALWAYS runs (it owns `docs-build`); its CODE steps
+#                          carry the same step-level `if:`, so a docs-only diff
+#                          pays install + docs-build only
+#   guards-block / guards-warn / pr-body-guards
+#                          UNCONDITIONAL — they are exactly the checks that DO
+#                          apply to a docs diff (markdown-links, spec-link,
+#                          EARS/glossary/product-note, …)
+#
+# `code` is TRUE unless EVERY changed file is docs-class (`*.md` anywhere,
+# `apps/docs/content/**`, `design-source/**`). Fail-open by construction: a
+# non-`pull_request` event (`push: main`, `workflow_dispatch`), an empty diff, or
+# an unclassifiable path all yield `code=true` — `main` still verifies the FULL
+# set, and the filter is a PR-time optimization only. `.changeset/*.md` entries
+# ride the `*.md` rule; `.changeset/config.json` is deliberately code-class
+# (release tooling config).
+#
+# The `ci` aggregator can no longer treat `skipped` as red across the board (see
+# its own comment): unconditional needs must be `success`, path-gated needs must
+# be `success` OR `skipped`, and `changes` is itself an unconditional need — so a
+# broken classifier reds `ci` instead of silently skipping the gated jobs green.
 jobs:
+  # ─── Changed-path classifier (#1251) ──────────────────────────────────
+  # One checkout, no `pnpm install`, no build — the cheapest possible job. It
+  # exists so the expensive jobs can carry a job-level `if:` (SKIPPED, hence
+  # still a registered check-run) instead of the workflow carrying `paths-ignore`
+  # (no run at all, hence no `ci` check-run and a failed merge gate).
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+    steps:
+      # Full history: the classifier diffs the PR head against the PR base sha,
+      # and both parents of the merge ref must be present.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Classify the changed-file set
+        id: classify
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          emit() {
+            echo "code=$1" >> "$GITHUB_OUTPUT"
+            echo "code-relevant changes: $1" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          # Fail-open 1: anything that is not a PR (`push: main`,
+          # `workflow_dispatch`) runs the FULL set — the filter never reduces
+          # what `main` verifies.
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "event '$EVENT_NAME' is not a pull_request — full run"
+            emit true; exit 0
+          fi
+
+          files="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
+
+          # Fail-open 2: an empty/unreadable diff is not evidence of a docs-only
+          # change — run everything.
+          if [ -z "$files" ]; then
+            echo "empty changed-file set — full run"
+            emit true; exit 0
+          fi
+
+          echo "changed files:"; printf '%s\n' "$files"
+
+          code=false
+          while IFS= read -r f; do
+            if [ -z "$f" ]; then continue; fi
+            case "$f" in
+              # docs-class: prose + spec content + vendored design canvases.
+              # `apps/docs/content/**` is any extension (mdx, meta.json, assets)
+              # — it is built by the unconditional `docs-build` step.
+              apps/docs/content/*|design-source/*|*.md) continue ;;
+            esac
+            echo "code-relevant path: $f"
+            code=true
+          done <<EOF
+          $files
+          EOF
+
+          emit "$code"
+
   # ─── Heavy chain: one runner, one install ─────────────────────────────
   # The old setup→{lint,types,unit,build,api-build-smoke,docs-build,tokens-fresh,
   # endpoint-authz} fan-out paid 9 checkouts + 9 installs for work that is mostly
   # sequential anyway. Collapsed into one job; step order follows the old
   # topological order (install first, then the former siblings). Every member was
   # BLOCK, so this batch carries no WARN step and needs no aggregate.
+  #
+  # The JOB is unconditional (#1251) — it owns `docs-build`, which a docs-only
+  # diff DOES need, and keeping it in the `ci` needs-list as a must-be-`success`
+  # need is the simplest correct shape. The gating is per-STEP instead: every
+  # code step carries `if: needs.changes.outputs.code == 'true'`, so a docs-only
+  # PR pays checkout + install + docs-build (~2 min) instead of ~7 min. Splitting
+  # `docs-build` into its own job was rejected: a second checkout + install would
+  # be charged to EVERY code PR to save nothing on it.
   core:
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -93,12 +205,15 @@ jobs:
       # rhythmguard/use-scale), then `turbo run lint` (per-package). All blocking;
       # this job is in the `ci` meta-job needs-list, so any guardrail failure blocks merge.
       - name: lint
+        if: needs.changes.outputs.code == 'true'
         run: pnpm lint
 
       - name: types
+        if: needs.changes.outputs.code == 'true'
         run: pnpm typecheck
 
       - name: build
+        if: needs.changes.outputs.code == 'true'
         run: pnpm build
 
       # unit — pure-unit tests for every package EXCEPT @ds/api. @ds/api's suites
@@ -106,8 +221,10 @@ jobs:
       # `api-e2e` job against a service container (#66). Keeping them out here
       # lets this step stay service-free and fast.
       - name: unit
+        if: needs.changes.outputs.code == 'true'
         run: pnpm exec turbo run test --filter='!@ds/api'
       - name: unit (tools)
+        if: needs.changes.outputs.code == 'true'
         run: pnpm test:tools
 
       # api-build-smoke — apps/api build smoke (#158). A single COLD `pnpm build`
@@ -122,8 +239,10 @@ jobs:
       # The built AppModule imports the workspace packages @ds/db + @ds/schemas
       # by their built `dist/` (their package `exports`), so build deps first.
       - name: api-build-smoke (deps)
+        if: needs.changes.outputs.code == 'true'
         run: pnpm exec turbo run build --filter=@ds/api^...
       - name: api-build-smoke
+        if: needs.changes.outputs.code == 'true'
         run: pnpm --filter @ds/api build:smoke
 
       - name: docs-build
@@ -136,8 +255,10 @@ jobs:
       # source-of-truth (tokens/*.json) and the emitted CSS in lockstep. The
       # token-build also validates that every reference resolves.
       - name: tokens-fresh (build)
+        if: needs.changes.outputs.code == 'true'
         run: pnpm --filter @ds/design-system build
       - name: tokens-fresh — verify generated tokens are committed and up to date
+        if: needs.changes.outputs.code == 'true'
         run: git diff --exit-code -- packages/design-system/src/styles/tokens.css packages/design-system/src/styles/allowed-tokens.json
 
       # endpoint-authz — endpoint authorization completeness gate (BLOCK).
@@ -151,6 +272,7 @@ jobs:
       # It boots the real AppModule, which imports @ds/db + @ds/schemas by their
       # built `dist/` — already built by the `build` step above.
       - name: endpoint-authz
+        if: needs.changes.outputs.code == 'true'
         run: pnpm lint:endpoint-authz
 
   # ─── apps/api e2e against a real Postgres (docker profile) ────────────
@@ -170,7 +292,14 @@ jobs:
   # Runs on the `docker` pool profile — a different lane from `heavy`, so it no
   # longer waits on a `setup` job (#1235): it installs for itself and starts
   # immediately, in parallel with `core`.
+  #
+  # PATH-GATED (#1251): a diff confined to prose/spec/canvas files cannot change
+  # a migration, an entity or a suite, so this job is skipped there — a SKIPPED
+  # check-run (still registered, still read as green by the merge gate), never an
+  # absent one.
   api-e2e:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgres://ds:ds@localhost:5432/ds_test
@@ -725,7 +854,12 @@ jobs:
   #
   # Kept as its own job (#1235): the `browser` pool profile is a separate lane
   # from `heavy`, so batching it in would only serialize it.
+  #
+  # PATH-GATED (#1251): it drives the rendered showcase, which no docs-class file
+  # feeds — skipped on a docs-only diff.
   playwright-axe:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -749,7 +883,12 @@ jobs:
   # Zitadel / Mailpit / Postgres and no special build env (same cold-build path
   # as the `build` step). BLOCKING alongside `playwright-axe` (restores coverage
   # that was BLOCK before #351), so it is wired into the `ci` needs-list.
+  #
+  # PATH-GATED (#1251), same rationale as `playwright-axe`: it scans the composed
+  # portal auth pages, which no docs-class file feeds.
   playwright-axe-portal:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -786,16 +925,80 @@ jobs:
   # §2.6 item 4) requires exactly one status check context named `ci`.
   # Renaming this job breaks merge gating.
   ci:
-    needs: [core, api-e2e, guards-block, playwright-axe, playwright-axe-portal]
+    needs:
+      [
+        changes,
+        core,
+        api-e2e,
+        guards-block,
+        playwright-axe,
+        playwright-axe-portal,
+      ]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      # A required job must SUCCEED — `skipped`/`cancelled` fail too, else a red
-      # upstream job skips its dependents and the aggregate would go green on a
-      # run where nothing built or tested (#449 Mode (a) review).
+      # Two classes of need, because #1251 made `skipped` a LEGITIMATE outcome
+      # for three of them. The old blanket
+      # `contains(needs.*.result, 'skipped') → red` cannot be kept: it would red
+      # every docs-only PR. It also cannot simply be dropped — the #449 Mode (a)
+      # finding it encodes is real (a red upstream job skips its dependents, and
+      # the aggregate would go green on a run where nothing built or tested). So
+      # the two classes are enumerated EXPLICITLY, never derived from `needs.*`:
+      #
+      #   UNCONDITIONAL — `changes`, `core`, `guards-block`. These carry no
+      #   `if:`, so `skipped` can only mean "an upstream need failed" and
+      #   `success` is the ONLY green outcome. `changes` is in this class on
+      #   purpose: it is what decides the other class, so a broken classifier
+      #   must red `ci` rather than skip the gated jobs into a free green.
+      #
+      #   PATH-GATED — `api-e2e`, `playwright-axe`, `playwright-axe-portal`.
+      #   `success` OR `skipped` is green; `failure`/`cancelled` is still red.
+      #   `skipped` here is reachable ONLY via `needs.changes.outputs.code`
+      #   (a docs-only diff) or via `changes` itself not succeeding — and that
+      #   second path is already red through the unconditional class above.
+      #
+      # Net: a docs-only PR is green with three SKIPPED jobs; any FAILURE in any
+      # of the six is still red; a run where the classifier broke is red.
       - name: Aggregate
+        env:
+          UNCONDITIONAL: |
+            changes=${{ needs.changes.result }}
+            core=${{ needs.core.result }}
+            guards-block=${{ needs['guards-block'].result }}
+          PATH_GATED: |
+            api-e2e=${{ needs['api-e2e'].result }}
+            playwright-axe=${{ needs['playwright-axe'].result }}
+            playwright-axe-portal=${{ needs['playwright-axe-portal'].result }}
         run: |
-          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'skipped') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
-            echo "Required job failed, was skipped, or was cancelled"; exit 1
+          fail=0
+
+          while IFS='=' read -r job result; do
+            if [ -z "$job" ]; then continue; fi
+            if [ "$result" != "success" ]; then
+              echo "RED — required job '$job' is '$result' (must be success)"
+              fail=1
+            else
+              echo "ok — '$job' = success"
+            fi
+          done <<EOF
+          $UNCONDITIONAL
+          EOF
+
+          while IFS='=' read -r job result; do
+            if [ -z "$job" ]; then continue; fi
+            case "$result" in
+              success|skipped) echo "ok — path-gated '$job' = $result" ;;
+              *)
+                echo "RED — path-gated job '$job' is '$result' (must be success or skipped)"
+                fail=1
+                ;;
+            esac
+          done <<EOF
+          $PATH_GATED
+          EOF
+
+          if [ "$fail" != 0 ]; then
+            echo "Required job failed, was cancelled, or was skipped without a path gate"
+            exit 1
           fi
-          echo "All required jobs green"
+          echo "All required jobs green (path-gated jobs may be skipped — #1251)"

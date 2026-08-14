@@ -734,7 +734,7 @@ jobs:
       # Build the showcase (and its workspace deps) so `next start` serves a real
       # production build — the same path the `build` step exercises, no special env.
       - run: pnpm exec turbo run build --filter=@ds/showcase
-      - run: pnpm --filter @ds/showcase exec playwright install chromium
+      - run: pnpm --filter @ds/showcase exec playwright install --with-deps chromium
       - run: pnpm --filter @ds/showcase test:e2e:ci
 
   # playwright-axe-portal: the PAGE-LEVEL twin of `playwright-axe` (#400 — the
@@ -758,7 +758,7 @@ jobs:
       # Build the portal (and its workspace deps) so `next start` serves a real
       # production build — the same path the `build` step exercises, no special env.
       - run: pnpm exec turbo run build --filter=@ds/portal
-      - run: pnpm --filter @ds/portal exec playwright install chromium
+      - run: pnpm --filter @ds/portal exec playwright install --with-deps chromium
       - run: pnpm --filter @ds/portal test:e2e:ci
 
   # ─── AI-specific guards from ADR-0007 §2.6 ───────────────────────────

@@ -178,7 +178,11 @@ test.describe("006 EARS-6 denied-access routing (auth/register/not-live front do
     // A freshly provisioned doctor: authenticated (003 session) but NOT registered
     // for the seeded live event.
     await registerDoctor(page);
-    await page.waitForURL(/\/account/);
+    // The precondition is "authenticated, unregistered", not a specific landing
+    // route: a returnTo-less auto-login now lands on the logged-in `/webinars`
+    // home (observed 2026-08-14), not `/account`. Accept either — this test's
+    // subject is the room front door reached below, not the post-signup landing.
+    await page.waitForURL(/\/(webinars|account)(?:$|[/?#])/);
 
     // Directly navigating to the room is refused (403 → register) and routed to the
     // 005 register front door on the event page, carrying `?from=room`.

@@ -34,6 +34,10 @@
  *      (AGENTS.md §3.8: pure docs / test-only / generated-regen; the Version
  *      Packages bot PR) skip the check ONLY via an explicit, loudly-printed
  *      `--mode-a-exempt "<reason>"` — no silent auto-detection.
+ *   6. No name-based severity (#1253) — every non-success terminal check-run
+ *      blocks, whatever it is called. WARN guards are made non-blocking where
+ *      severity belongs, in exit codes (ADR-0007 §2.6): a WARN run concludes
+ *      SUCCESS, so a red WARN batch means the batch never ran, and that blocks.
  *
  * Bounded FOREGROUND poll with a mandatory terminal GREEN/RED/TIMEOUT line
  * (CLAUDE.md → checkpoint rule for CI waits; retro 85170286).
@@ -149,6 +153,17 @@ export function latestRunsByName(runs) {
  *   - `green`   — run count > 0 and every non-skipped run is
  *                 terminal-successful (`completed` + `success`); `skipped`
  *                 runs are non-blocking (drift jobs skip on unrelated diffs).
+ *
+ * The rule is TOTAL — no check-run name is special (#1253). WARN severity is
+ * expressed upstream, in exit codes: a WARN guard is a `continue-on-error: true`
+ * step and its batch's closing step reports to the job summary and exits 0, so a
+ * run carrying WARN findings CONCLUDES SUCCESS and there is no red here to
+ * forgive. A name-based exemption would therefore buy nothing in the benign case
+ * and fail OPEN in the dangerous one: after that workflow change, a FAILED
+ * `guards-warn` can only mean the batch never executed (checkout/install died,
+ * the runner vanished, a step is malformed, a new WARN guard landed without
+ * `continue-on-error`) — and "the guards never ran" reads exactly like
+ * "everything is clean" on the board, so it must block.
  *
  * @param {{name?: string, status?: string, conclusion?: string|null}[]|null|undefined} runs
  * @returns {{state: "empty"|"red"|"pending"|"green", red: string[], pending: string[]}}
@@ -325,12 +340,18 @@ export function classifyModeAVerdict(reviews, headSha) {
     ];
   });
   if (modeA.length === 0) {
-    return { state: "no-verdict", verdict: null, commitId: null, submittedAt: null };
+    return {
+      state: "no-verdict",
+      verdict: null,
+      commitId: null,
+      submittedAt: null,
+    };
   }
   // Latest Mode-a review wins; `>=` lets a later array position break ties.
   let latest = modeA[0];
   for (const cur of modeA.slice(1)) {
-    if (runTimeMs(cur.submittedAt) >= runTimeMs(latest.submittedAt)) latest = cur;
+    if (runTimeMs(cur.submittedAt) >= runTimeMs(latest.submittedAt))
+      latest = cur;
   }
   if (latest.verdict === "REQUEST_CHANGES")
     return { state: "request-changes", ...latest };

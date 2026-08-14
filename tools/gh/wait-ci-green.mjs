@@ -23,7 +23,9 @@
  * <interval> seconds (default 20) until no check is `pending`, or until
  * <timeout> seconds elapse (default 900). A `skipping` / `cancel`-less, all-`pass`
  * board is green. `skipping` is treated as non-blocking (drift jobs skip on
- * unrelated diffs); any `fail` or `cancel` is a hard red.
+ * unrelated diffs); any `fail` or `cancel` is a hard red, whatever the check is
+ * called. WARN guards never produce one: their severity lives in the exit code
+ * (ADR-0007 §2.6), so a WARN-findings run concludes SUCCESS — see `classify`.
  *
  * Exit codes: 0 = all checks resolved green (pass/skipping); 1 = at least one
  * check failed or was cancelled; 2 = timed out while still pending; 3 = usage /
@@ -49,7 +51,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * Kept side-effect-free so the fail / pending / pass / empty branches are
  * unit-checkable without a live failing PR.
  *
- * @param {{bucket?: string}[]} checks
+ * This tool and `tools/gh/merge-gate.mjs` answer the same question off two
+ * different APIs (`gh pr checks` buckets here, check-runs `status`/`conclusion`
+ * there), so they MUST agree — two gates disagreeing about one board is worse
+ * than the bug #1253 fixed. They agree by holding the same TOTAL rule: any
+ * non-success terminal check blocks, no name is special. WARN severity lives
+ * upstream in exit codes (ADR-0007 §2.6) — a WARN guard is a
+ * `continue-on-error: true` step and its batch's closing step exits 0, so a
+ * WARN-findings run concludes SUCCESS. A FAILED WARN batch therefore means it
+ * never ran, which must block.
+ *
+ * @param {{name?: string, bucket?: string}[]} checks
  * @returns {{ state: "green"|"red"|"pending", red: string[], pending: string[] }}
  */
 export function classify(checks) {

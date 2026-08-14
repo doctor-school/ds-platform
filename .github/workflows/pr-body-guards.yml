@@ -16,15 +16,12 @@
 #     merge gate reads). It runs LAST so a spec-link failure never skips the
 #     WARN guards' findings.
 #   • the other five are WARN → `continue-on-error: true` on the STEP so one
-#     flagged guard never stops the others, PLUS the final `if: always()`
-#     WARN-aggregate step that exits 1 when any WARN step's `outcome` is
-#     `failure`. Both halves are load-bearing: the old per-JOB
-#     `continue-on-error` still recorded a FAILED check-run per WARN guard, and
-#     `tools/gh/merge-gate.mjs::classifyCheckRuns` reds ANY completed
-#     non-success/non-skipped check-run — so a WARN finding blocked `pr:land`.
-#     Step-level `continue-on-error` alone would have silently loosened that;
-#     the aggregate re-reds the batch check-run instead. The JOB is never
-#     `continue-on-error` — that would mask the BLOCK member.
+#     flagged guard never stops the others, PLUS a final `if: always()`
+#     WARN-REPORT step that lists every flagged guard in the job summary and
+#     exits 0. WARN is visible and NEVER merge-blocking (ADR-0007 §2.6, #1253):
+#     this check-run's red is reserved for the BLOCK member. The JOB is never
+#     `continue-on-error` — that would mask the BLOCK member and hide infra
+#     failures.
 # The job's `permissions` block is the UNION of the six old blocks
 # (`contents: read` + `pull-requests: read` + `issues: read`), and every step
 # keeps its own `GH_TOKEN`/`PR_NUMBER`/`PR_BODY` wiring — the Issue-#10 pattern
@@ -131,7 +128,7 @@ jobs:
       # also runs on a body `edited` event so a newly-added `spec-deletion:` escape
       # marker re-clears the check. WARN v1 (ADR-0007 §2.6 new-guard posture); TO
       # PROMOTE TO BLOCK drop the `continue-on-error` line below AND its row from the
-      # WARN-aggregate step.
+      # WARN-report step.
       - name: WARN · spec-deletion
         id: warn_spec_deletion
         continue-on-error: true
@@ -148,7 +145,7 @@ jobs:
       # This guard reads the native sub-issue graph at PR time and WARNs, telling the
       # author to link the specific child sub-issue instead of the epic. WARN v1 per
       # the ADR-0007 §2.6 new-guard posture — promote to BLOCK by removing
-      # `continue-on-error` here (and its WARN-aggregate row) AND flipping SEVERITY
+      # `continue-on-error` here (and its WARN-report row) AND flipping SEVERITY
       # in the guard source. Needs `issues: read` for the sub_issues API (granted on
       # the job above).
       - name: WARN · epic-autoclose
@@ -173,16 +170,30 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: pnpm exec tsx tools/lint/spec-link-lint.ts
 
-      # WARN aggregate — the second half of the WARN encoding. The OLD per-job
-      # `continue-on-error: true` did NOT hide a WARN finding from the merge gate:
-      # the job still recorded a FAILED check-run, and
-      # `tools/gh/merge-gate.mjs::classifyCheckRuns` reds ANY completed
-      # non-success/non-skipped check-run — so a WARN finding blocked `pr:land`.
-      # Step-level `continue-on-error` alone would have silently loosened that, so
-      # this step re-reds the batch check-run whenever any WARN step's `outcome`
-      # is `failure`. `if: always()` so it also runs after the BLOCK `spec-link`
-      # step failed. A `skipped` WARN step is NOT a finding.
-      - name: WARN aggregate (reds this check-run on any WARN finding)
+      # WARN report — the second half of the WARN encoding, and this batch's
+      # VISIBILITY surface. It lists every WARN step whose `outcome` is `failure`
+      # in the job summary and exits 0 by design.
+      #
+      # It replaces an aggregate that exited 1 to re-red this check-run, back
+      # when `tools/gh/merge-gate.mjs` reded ANY non-success check-run — which
+      # made a WARN finding block `pnpm pr:land` on every open PR, contradicting
+      # ADR-0007 §2.6 (WARN is visible, never merge-blocking). Fixed in #1253.
+      #
+      # No classifier exempts this check-run by name — none exempts any name
+      # (#1253). The batch is MIXED: it hosts the BLOCK `spec-link`, whose red IS
+      # this check-run's red (cross-workflow `needs` is impossible, so
+      # `spec-link` gates only through the head-SHA check-run the gate reads). A
+      # check-run carries one bit, so the WARN/BLOCK decision is resolved HERE,
+      # in the exit codes: only a BLOCK member — or an infra failure that means
+      # the guards never ran — may turn it red.
+      #
+      # WARN findings stay fully VISIBLE: each flagged step is annotated red in
+      # the Checks UI, its log carries the findings, and the summary below names
+      # every flagged guard in one place.
+      #
+      # `if: always()` so the report runs after the BLOCK `spec-link` step failed
+      # too. A `skipped` WARN step is NOT a finding.
+      - name: WARN report (job summary — non-blocking by contract)
         if: always()
         env:
           WARN_OUTCOMES: |
@@ -204,5 +215,5 @@ jobs:
           printf '%s\n' "$failed"
           printf -- '- `%s`\n' $failed >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "WARN guards never fail the required \`ci\` check. This batch check-run is red so the finding stays visible to the merge gate — the same behavior the old per-job \`continue-on-error\` encoding had." >> "$GITHUB_STEP_SUMMARY"
-          exit 1
+          echo "WARN is visible, never merge-blocking (ADR-0007 §2.6): these guards exit 0 here, so they do not fail this check-run and do not block \`merge:gate\`. Only the BLOCK member (\`spec-link\`) reds this check-run. Fix the findings or promote the guard — do not silence it." >> "$GITHUB_STEP_SUMMARY"
+          exit 0

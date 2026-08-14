@@ -31,35 +31,32 @@ env:
 #   api-e2e                unchanged                                (BLOCK)
 #   playwright-axe / playwright-axe-portal
 #                          unchanged                                (BLOCK)
-#   guards-block           the 4 hard-red light guards              (BLOCK)
-#   guards-warn            the 23 WARN light guards + primitives-first
+#   guards-block           the hard-red light guards + primitives-first
+#                                                                    (BLOCK)
+#   guards-warn            the 23 WARN light guards                  (WARN)
 #   ci                     the single required status check
 #
-# POSTURE IS PRESERVED EXACTLY. The old encoding was per-JOB (`BLOCK` = in the
-# `ci` needs-list, `WARN` = job-level `continue-on-error`, never both); the new
-# encoding is per-STEP inside a batch:
-#   • BLOCK guard → a plain step; it fails its batch, and the batch is in the
-#     `ci` needs-list.
-#   • WARN guard  → `continue-on-error: true` on the STEP (the batch job itself
-#     is never `continue-on-error` — that would mask its BLOCK members), PLUS a
-#     final `if: always()` WARN-AGGREGATE step that exits 1 when any WARN step's
-#     `outcome` is `failure`. Both halves are load-bearing:
-#       – the step-level `continue-on-error` is what lets the REMAINING guards
-#         run after one flags (the old per-job parallelism);
-#       – the aggregate is what keeps the OLD de-facto merge-gate strictness. A
-#         job-level `continue-on-error` still recorded a FAILED check-run per
-#         WARN guard, and `tools/gh/merge-gate.mjs::classifyCheckRuns` reds ANY
-#         completed non-success/non-skipped check-run — so a WARN finding
-#         blocked `pr:land` while never entering the `ci` needs-list. Step-level
-#         `continue-on-error` alone would have silently loosened that for all 28
-#         WARN guards; the aggregate re-reds the batch check-run instead.
-#     WARN therefore still means exactly what it meant: it never fails the
-#     required `ci` check, and it is still visible (red) to the merge gate.
-#   • `primitives-first` keeps its third posture (#1108): WARN lives in the TOOL
-#     EXIT CODE, not `continue-on-error`, and the job is NOT in the `ci`
-#     needs-list — so it sits as the one hard step of the `guards-warn` batch,
-#     LAST (a red there is a real #828 BLOCK-class finding the merge gate sees
-#     as a red check-run, exactly as before).
+# SEVERITY LIVES IN EXIT CODES (ADR-0007 §2.6, #1253). No tool anywhere reads a
+# check-run NAME to decide whether it blocks — the merge gate blocks on any red
+# check-run, full stop, so the workflow must not manufacture a red it does not
+# mean:
+#   • BLOCK guard → a plain step; it fails its batch, and `guards-block` is in
+#     the `ci` needs-list.
+#   • WARN guard  → `continue-on-error: true` on the STEP inside `guards-warn`,
+#     PLUS a final `if: always()` WARN-REPORT step that lists every flagged
+#     guard in the job summary and exits 0. Those two exit codes are the whole
+#     mechanism: a run carrying WARN findings CONCLUDES SUCCESS, so it is
+#     VISIBLE (per-step red annotation + log + job summary) and never blocks
+#     anything — no classifier exemption needed or wanted.
+#     The batch job itself is never `continue-on-error`: an infra failure
+#     (checkout/install/dead runner/malformed step) must still fail it. After
+#     the above, that is the ONLY thing a red `guards-warn` can mean — the
+#     guards never ran — and it must block, because on the board that is
+#     indistinguishable from "everything is clean".
+#   • `primitives-first` keeps its tool-encoded posture (#1108): WARN lives in
+#     the TOOL EXIT CODE, so a non-zero exit is a real #828 BLOCK-class finding.
+#     It is a plain step of `guards-block`; wrapping it in `continue-on-error`
+#     inside `guards-warn` would swallow that BLOCK class.
 # Trade-off, deliberate: batching is fail-fast — the first hard failure in a
 # batch skips its remaining steps, where the old parallel fan-out reported every
 # failure at once. Splitting a batch back out is mechanical (each step already carries
@@ -357,10 +354,11 @@ jobs:
       - run: echo "generated-artifacts placeholder"
 
   # ─── BLOCK light guards (hard-red; wired into the `ci` needs-list) ────
-  # Batch of the four light-profile guards that are BLOCK today. Every step here
-  # is a plain step: a failure fails the batch, which fails `ci`. No WARN member,
-  # so no WARN-aggregate step. The checkout is FULL (`fetch-depth: 0`) because
-  # the lychee link check walks the whole tree.
+  # Batch of the light-profile guards that are BLOCK today. Every step here is a
+  # plain step: a failure fails the batch, which fails `ci`. No WARN member, so
+  # no WARN-report step — a guard whose findings must not block belongs in
+  # `guards-warn` instead. The checkout is FULL (`fetch-depth: 0`) because the
+  # lychee link check walks the whole tree.
   guards-block:
     runs-on: ubuntu-latest
     # Union of the member jobs' permission blocks: only `prod-surface` needed one
@@ -416,6 +414,26 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # primitives-first — a raw `<button>`/`<a>`/`<input>`/`<select>`/`<textarea>`
+      # (or a `next/link` default import under ANY alias), plus (#1103)
+      # summary/details/role=button raw hosts and DS-primitive SHELLs whose
+      # className rebuilds the look, in product-app UI source must compose the
+      # @ds/design-system primitive that owns the interaction contract + identity
+      # (AGENTS.md §6 adopt-before-bespoke; #818/#828/#1103). Reasoned
+      # per-occurrence opt-out: `primitives-first-ok: <reason>`. Static source
+      # scan — no PR/gh context needed.
+      #
+      # POSTURE: this guard's severity lives in the TOOL EXIT CODE (#1108) — the
+      # #1103 WARN classes print findings and exit 0, only the #828 raw-state
+      # BLOCK class (zero in-repo today) exits 1. A non-zero exit is therefore a
+      # real BLOCK-class finding, which is why the step belongs in THIS batch and
+      # not in `guards-warn` (#1253): every step there is wrapped in
+      # `continue-on-error: true`, which would swallow this guard's BLOCK class
+      # outright. Here it is a plain step, so its red fails the batch — a red
+      # BLOCK check-run in the `ci` needs-list, blocking and visibly so.
+      - name: primitives-first (tool-encoded WARN/BLOCK — a non-zero exit is the BLOCK class)
+        run: pnpm lint:primitives-first
+
       # markdown-links — lychee link check over the whole tree (needs the full
       # checkout above). Last in the batch: it is the only network-bound step, so
       # the deterministic local guards fail fast ahead of it.
@@ -425,19 +443,23 @@ jobs:
           args: --no-progress --include-fragments .
           fail: true
 
-  # ─── WARN light guards + primitives-first ─────────────────────────────
-  # Batch of every light-profile guard whose finding must NOT fail the required
-  # `ci` check. The JOB is deliberately not `continue-on-error` — WARN lives on
-  # each STEP, so one flagged guard never stops the others — and the final
-  # WARN-aggregate step re-reds this check-run whenever any WARN step flagged,
-  # which is exactly what the old per-job `continue-on-error` did (a failed
-  # check-run that `merge-gate.mjs::classifyCheckRuns` counts as red). This batch
-  # is NOT in the `ci` needs-list, so a WARN finding still never fails `ci`.
+  # ─── WARN light guards ────────────────────────────────────────────────
+  # Batch of every light-profile guard whose finding must NOT block a merge.
+  # Every member is WARN — a guard that must block goes in `guards-block` (that
+  # is where `primitives-first` lives: its severity is tool-exit-code-encoded, so
+  # a non-zero exit is a real BLOCK finding).
   #
-  # `primitives-first` is the single hard step: its WARN classes exit 0 in the
-  # TOOL, so a non-zero exit is the real #828 BLOCK class and must turn this
-  # check-run red for the merge gate (#1108) — exactly its old posture (red
-  # check-run, but never in the `ci` needs-list).
+  # WARN lives on each STEP (`continue-on-error: true`), so one flagged guard
+  # never stops the others, and the final WARN-report step lists the flagged
+  # guards in the job summary and exits 0. Net: a WARN-findings run CONCLUDES
+  # SUCCESS — visible, never blocking, with no classifier special-casing this
+  # job's name. This batch is also NOT in the `ci` needs-list.
+  #
+  # The JOB is deliberately not `continue-on-error`, so an infrastructure failure
+  # still fails it — and that is now the ONLY meaning of a red check-run here
+  # ("the 23 guards never ran"), which the merge gate blocks on. Adding a WARN
+  # guard WITHOUT `continue-on-error` therefore blocks every PR: that is the
+  # loud direction, on purpose.
   #
   # The checkout is intentionally SHALLOW: `migration-index` fetches origin/main
   # itself and falls back to SKIP, which is the behavior its posture assumes.
@@ -765,34 +787,29 @@ jobs:
         continue-on-error: true
         run: pnpm exec tsx tools/lint/workflow-auth-lint.ts
 
-      # primitives-first: a bespoke hover:/active:/focus-visible: utility stack on a
-      # RAW interactive element (<a>/<button>/<input>/… or the file's next/link
-      # default import under ANY alias), plus (#1103) summary/details/role=button
-      # raw hosts and DS-primitive SHELLs whose className rebuilds the look, in
-      # product-app UI source must compose the @ds/design-system primitive that owns
-      # the interaction contract + identity instead (AGENTS.md §6 adopt-before-
-      # bespoke; #818/#828/#1103). Reasoned per-occurrence opt-out:
-      # `primitives-first-ok: <reason>`. Static source scan — no PR/gh context needed.
-      # WARN semantics live in the TOOL EXIT CODE, NOT `continue-on-error` (ADR-0007
-      # §2.6): the #1103 WARN classes print findings + exit 0 (check-run stays green,
-      # so a standing-WARN finding never blocks merge:gate — #1108); only the #828
-      # raw-state BLOCK class (zero in-repo today) exits 1. So this is the ONE hard
-      # step of the batch and it runs LAST — a non-zero exit turns this check-run red
-      # for the merge gate without ever entering the `ci` needs-list.
-      - name: primitives-first (hard — tool-encoded WARN/BLOCK)
-        run: pnpm lint:primitives-first
-
-      # WARN aggregate — the second half of the WARN encoding. The OLD per-job
-      # `continue-on-error: true` did NOT hide a WARN finding from the merge gate:
-      # the job still recorded a FAILED check-run, and
-      # `tools/gh/merge-gate.mjs::classifyCheckRuns` reds ANY completed
-      # non-success/non-skipped check-run — so a WARN finding blocked `pr:land`
-      # while staying out of the `ci` needs-list. Step-level `continue-on-error`
-      # alone would have silently loosened that, so this step re-reds the batch
-      # check-run whenever any WARN step's `outcome` is `failure`. `if: always()`
-      # so it also runs when an earlier hard step (primitives-first) failed and
-      # skipped nothing it needs. A `skipped` WARN step is NOT a finding.
-      - name: WARN aggregate (reds this check-run on any WARN finding)
+      # WARN report — the second half of the WARN encoding, and the batch's
+      # VISIBILITY surface. It collects every WARN step whose `outcome` is
+      # `failure` and writes them to the job summary; it exits 0 by design.
+      #
+      # It replaces an aggregate step that exited 1. That step's ONLY purpose was
+      # to re-red this check-run so `tools/gh/merge-gate.mjs` — which reded ANY
+      # completed non-success check-run — kept treating a WARN finding as a
+      # merge-blocker. That is precisely the contradiction #1253 closes: ADR-0007
+      # §2.6 defines WARN as visible and NEVER merge-blocking, yet one WARN
+      # finding on any of the 23 guards below blocked `pnpm pr:land` on every open
+      # PR at once while the required `ci` check stayed green. Nothing exempts
+      # this check-run at the gate — the fix is that this step stops
+      # manufacturing a red the contract never wanted, so a WARN-findings run
+      # concludes SUCCESS and there is no red to exempt.
+      #
+      # WARN findings stay fully VISIBLE: each flagged step is annotated red in
+      # the PR's Checks UI (a `continue-on-error` step failure is still recorded
+      # per step), its log carries the findings, and the summary below names every
+      # flagged guard in one place. Invisible WARN is NOT the outcome here.
+      #
+      # `if: always()` so the report runs even after a step failed hard. A
+      # `skipped` WARN step is NOT a finding.
+      - name: WARN report (job summary — non-blocking by contract)
         if: always()
         env:
           WARN_OUTCOMES: |
@@ -832,8 +849,8 @@ jobs:
           printf '%s\n' "$failed"
           printf -- '- `%s`\n' $failed >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "WARN guards are NOT in the \`ci\` needs-list, so they never fail the required \`ci\` check. This batch check-run is red so the finding stays visible to the merge gate — the same behavior the old per-job \`continue-on-error\` encoding had." >> "$GITHUB_STEP_SUMMARY"
-          exit 1
+          echo "WARN is visible, never merge-blocking (ADR-0007 §2.6): these guards are not in the \`ci\` needs-list, and this step exits 0, so the check-run stays green and no merge gate is blocked. Fix the findings or promote the guard — do not silence it." >> "$GITHUB_STEP_SUMMARY"
+          exit 0
 
   # ─── Runtime a11y / interaction tiers (browser profile) ───────────────
   # playwright-axe: the RUNTIME twin of the `interaction-states` STATIC lint
@@ -920,7 +937,9 @@ jobs:
   # ADR-0007 §2.6 (settled in #427; first sweep 2026-07-02 — per-guard verdicts
   # recorded on the Issue); promoting a guard now means moving its STEP from the
   # `guards-warn` batch into `guards-block` (and dropping its row from that
-  # batch's WARN-aggregate step).
+  # batch's WARN-report step). Dropping `continue-on-error` IS the promotion:
+  # from that moment the guard's failure fails a check-run the merge gate blocks
+  # on (#1253).
   # Job name must stay `ci` — branch protection on `main` (per ADR-0008
   # §2.6 item 4) requires exactly one status check context named `ci`.
   # Renaming this job breaks merge gating.

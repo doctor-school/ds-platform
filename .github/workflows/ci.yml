@@ -5,6 +5,11 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # Manual re-verification of the pipeline itself (#1246) — `gh workflow run CI
+  # --ref <branch>` replaces the throwaway no-op PR (#1244, opened only to exercise
+  # the pool). A dispatch takes the same non-PR path as `push: main`, so no guard
+  # behaves differently.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

@@ -54,11 +54,31 @@ function note(source: string, err: unknown): void {
   warnings.push({ source, message });
 }
 
-interface GitState {
+export interface GitState {
   branch: string;
   clean: boolean;
   recent: string[];
   aheadOfMain: string; // "?" if unknown
+  behindMain?: string; // absent for legacy callers; "?" if unknown
+}
+
+/** Label the CURRENT checkout branch separately from the primary checkout's
+ * local `main` freshness banner. A feature worktree may be in sync while the
+ * primary checkout main is behind; naming both subjects prevents a false
+ * contradiction in the bootstrap output (#1243). */
+export function renderCurrentBranchSummary(git: GitState): string {
+  const behind = git.behindMain ?? "?";
+  const relation =
+    git.aheadOfMain === "?" || behind === "?"
+      ? "origin/main relation unknown"
+      : git.aheadOfMain === "0" && behind === "0"
+        ? "current branch in sync with origin/main"
+        : git.aheadOfMain === "0"
+          ? `current branch ${behind} behind origin/main`
+          : behind === "0"
+            ? `current branch ${git.aheadOfMain} ahead of origin/main`
+            : `current branch diverged from origin/main (${git.aheadOfMain} ahead, ${behind} behind)`;
+  return `- Current checkout branch: \`${git.branch}\` ${git.clean ? "(clean)" : "(DIRTY)"} — ${relation}`;
 }
 
 async function gitState(): Promise<GitState> {
@@ -66,6 +86,7 @@ async function gitState(): Promise<GitState> {
   let clean = true;
   let recent: string[] = [];
   let aheadOfMain = "?";
+  let behindMain = "?";
 
   try {
     const { stdout } = await execa("git", ["branch", "--show-current"], {
@@ -97,18 +118,21 @@ async function gitState(): Promise<GitState> {
   try {
     const { stdout } = await execa(
       "git",
-      ["rev-list", "--count", "origin/main..HEAD"],
+      ["rev-list", "--left-right", "--count", "origin/main...HEAD"],
       {
         cwd: REPO_ROOT,
       },
     );
-    aheadOfMain = stdout.trim();
+    const [behind, ahead] = stdout.trim().split(/\s+/);
+    behindMain = /^\d+$/.test(behind) ? behind : "?";
+    aheadOfMain = /^\d+$/.test(ahead) ? ahead : "?";
   } catch {
     // origin/main not fetched yet — common on fresh clone / fresh repo.
     aheadOfMain = "?";
+    behindMain = "?";
   }
 
-  return { branch, clean, recent, aheadOfMain };
+  return { branch, clean, recent, aheadOfMain, behindMain };
 }
 
 interface GhIssue {
@@ -728,7 +752,7 @@ async function main(): Promise<void> {
   if (sync.kind === "behind") {
     const fix = mainSyncFixCommand(await primaryWorktreePath(REPO_ROOT));
     out.push(
-      `> 🛑 **STALE MAIN — ${syncMsg}.** Your local \`main\` is behind \`origin/main\`, so readiness and tooling computed now may be stale (#630/#418). Run this exact command, then re-run bootstrap/triage before trusting readiness:\n> \`${fix}\``,
+      `> 🛑 **STALE PRIMARY CHECKOUT MAIN — ${syncMsg}.** The primary checkout's local \`main\` is behind \`origin/main\`; this is separate from the current worktree branch relation below. Readiness and tooling computed now may be stale (#630/#418). Run this exact command, then re-run bootstrap/triage before trusting readiness:\n> \`${fix}\``,
     );
     out.push("");
   } else if (syncMsg) {
@@ -737,15 +761,7 @@ async function main(): Promise<void> {
   }
 
   out.push("## Git");
-  const aheadStr =
-    git.aheadOfMain === "?"
-      ? "(origin/main unknown)"
-      : git.aheadOfMain === "0"
-        ? "in sync with origin/main"
-        : `${git.aheadOfMain} ahead of origin/main`;
-  out.push(
-    `- Branch: \`${git.branch}\` ${git.clean ? "(clean)" : "(DIRTY)"} — ${aheadStr}`,
-  );
+  out.push(renderCurrentBranchSummary(git));
   if (git.recent.length > 0) {
     out.push("- Recent commits:");
     for (const c of git.recent) out.push(`  - ${c}`);
@@ -794,9 +810,15 @@ async function main(): Promise<void> {
   });
   if (freshProbe) {
     if (freshProbe.section1Error)
-      warnings.push({ source: "AGENTS.md §1 marker", message: freshProbe.section1Error });
+      warnings.push({
+        source: "AGENTS.md §1 marker",
+        message: freshProbe.section1Error,
+      });
     if (freshProbe.headError)
-      warnings.push({ source: "changeset-head fallback", message: freshProbe.headError });
+      warnings.push({
+        source: "changeset-head fallback",
+        message: freshProbe.headError,
+      });
     const staleness = evaluateContextStaleness({
       section1Date: freshProbe.section1Date,
       headDate: freshProbe.headDate,

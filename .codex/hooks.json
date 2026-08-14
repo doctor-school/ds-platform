@@ -1,0 +1,112 @@
+{
+  "description": "DS Platform agent-discipline hooks for Codex.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/run-project-hook.mjs\" bootstrap",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/run-project-hook.mjs') bootstrap\"",
+            "timeout": 60,
+            "statusMessage": "Loading DS Platform project state"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "apply_patch|Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/worktree-path-guard.mjs\"",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/worktree-path-guard.mjs')\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Read|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/main-tree-read-guard.mjs\"",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/main-tree-read-guard.mjs')\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "spawn_agent|Agent|Task|apply_patch|Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/dispatch-guard.mjs\"",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/dispatch-guard.mjs')\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*__browser_(take_screenshot|pdf_save)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/screenshot-path-guard.mjs\"",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/screenshot-path-guard.mjs')\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "request_user_input|AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/askuserquestion-calibration-guard.mjs\"",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/askuserquestion-calibration-guard.mjs')\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/completion-report-gate.mjs\"",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/completion-report-gate.mjs')\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/surface-decision-debt-gate.mjs\"",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/surface-decision-debt-gate.mjs')\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/context-budget.mjs\"",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/context-budget.mjs')\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/hooks/handoff-verify-reminder.mjs\"",
+            "commandWindows": "powershell -NoProfile -Command \"node ((git rev-parse --show-toplevel) + '/tools/hooks/handoff-verify-reminder.mjs')\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

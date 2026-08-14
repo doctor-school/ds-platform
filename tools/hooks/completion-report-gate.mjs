@@ -18,6 +18,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { allowStop, stopAssistantText } from "./hook-compat.mjs";
 
 /** Marker whose absence trips the gate — the «📈 % от запланированного»
  * section of skill `report-task-outcome` opens with it. The presence check is a
@@ -325,10 +326,13 @@ export function decideBlock({ stopHookActive, lastAssistantText }) {
 function main() {
   try {
     const payload = JSON.parse(readFileSync(0, "utf8"));
-    if (payload.stop_hook_active) process.exit(0);
-    if (!payload.transcript_path) process.exit(0);
-    const lastAssistantText = extractLastAssistantText(
-      readFileSync(payload.transcript_path, "utf8"),
+    if (payload.stop_hook_active) {
+      allowStop();
+      process.exit(0);
+    }
+    const lastAssistantText = stopAssistantText(
+      payload,
+      extractLastAssistantText,
     );
     const decision = decideBlock({
       stopHookActive: Boolean(payload.stop_hook_active),
@@ -341,8 +345,10 @@ function main() {
       process.stderr.write(msg);
       process.exit(2);
     }
+    allowStop();
     process.exit(0);
   } catch {
+    allowStop();
     process.exit(0); // fail-open: never break a normal stop on a guard bug
   }
 }

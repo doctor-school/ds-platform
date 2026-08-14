@@ -75,7 +75,7 @@ Invoke **`request-mode-a-review`** (Mode (a) subagent). It returns a structured 
 
 ### 6. Merge (autonomous — do not wait for the human)
 
-With APPROVE + green CI, invoke **`merge-when-green`**: the single command `gh pr merge <N> --auto --squash --delete-branch`. Per AGENTS.md §4 / §6, the agent merges itself — human-merge is not required (only Mode (c) review is human). Any other merge form is a process violation (ADR-0008 §2.6).
+With APPROVE + green CI, invoke the canonical **`merge-when-green`** skill; prefer `pnpm pr:land <N>` for the complete closeout tail. Per AGENTS.md §4 / §6, the agent merges itself — human-merge is not required (only Mode (c) review is human). Phase-0 `--auto` and hand-rolled merge chains are forbidden; the owning skill defines the exact current command.
 
 ### 7. Close → board Status = Done → re-sweep + groom (closes Theme A tail)
 

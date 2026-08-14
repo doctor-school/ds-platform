@@ -33,7 +33,10 @@ const WORKTREE = join(ROOT, ".claude", "worktrees", "913");
 
 /** Drive N consecutive mutations through the pure seam, threading the streak,
  * and return the action of each step. */
-function runStreak(count: number, over: Record<string, unknown> = {}): string[] {
+function runStreak(
+  count: number,
+  over: Record<string, unknown> = {},
+): string[] {
   let streak = 0;
   const actions: string[] = [];
   for (let i = 0; i < count; i++) {
@@ -77,9 +80,32 @@ describe("dispatch-guard decideDispatch() — counting + threshold", () => {
 
   it("Task is accepted as the cross-harness dispatch alias", () => {
     expect(
-      decideDispatch({ toolName: "Task", cwd: ROOT, projectDir: ROOT, streak: 2 })
-        .action,
+      decideDispatch({
+        toolName: "Task",
+        cwd: ROOT,
+        projectDir: ROOT,
+        streak: 2,
+      }).action,
     ).toBe("reset");
+  });
+
+  it("Codex spawn_agent resets and apply_patch counts", () => {
+    expect(
+      decideDispatch({
+        toolName: "spawn_agent",
+        cwd: ROOT,
+        projectDir: ROOT,
+        streak: 2,
+      }),
+    ).toEqual({ action: "reset", streak: 0 });
+    expect(
+      decideDispatch({
+        toolName: "apply_patch",
+        cwd: ROOT,
+        projectDir: ROOT,
+        streak: 2,
+      }),
+    ).toEqual({ action: "warn", streak: 3 });
   });
 
   it("an intervening Agent resets so the count restarts (no false warn)", () => {
@@ -87,7 +113,12 @@ describe("dispatch-guard decideDispatch() — counting + threshold", () => {
     let streak = 0;
     const seq = ["Edit", "Edit", "Agent", "Edit", "Edit"];
     const actions = seq.map((toolName) => {
-      const d = decideDispatch({ toolName, cwd: ROOT, projectDir: ROOT, streak });
+      const d = decideDispatch({
+        toolName,
+        cwd: ROOT,
+        projectDir: ROOT,
+        streak,
+      });
       if (typeof d.streak === "number") streak = d.streak;
       return d.action;
     });
@@ -112,15 +143,17 @@ describe("dispatch-guard decideDispatch() — carve-outs", () => {
     // A session that only reads never invokes decideDispatch with a mutation;
     // dispatch/other tools produce reset/silent, never warn.
     expect(
-      decideDispatch({ toolName: "Read", cwd: ROOT, projectDir: ROOT, streak: 0 })
-        .action,
+      decideDispatch({
+        toolName: "Read",
+        cwd: ROOT,
+        projectDir: ROOT,
+        streak: 0,
+      }).action,
     ).toBe("silent");
   });
 
   it("a worktree-isolated session (subagent executor) is never warned", () => {
-    expect(runStreak(5, { cwd: WORKTREE })).toEqual(
-      Array(5).fill("silent"),
-    );
+    expect(runStreak(5, { cwd: WORKTREE })).toEqual(Array(5).fill("silent"));
   });
 
   it("a session born in a worktree (projectDir under worktrees) is silent", () => {
@@ -200,14 +233,10 @@ describe("dispatch-guard state seam", () => {
   it("writeStreak mkdirs the parent then writes JSON (injected FS)", () => {
     const calls: Array<[string, string]> = [];
     const mkdirs: string[] = [];
-    writeStreak(
-      join(ROOT, ".claude", "dispatch-guard-state", "s.json"),
-      2,
-      {
-        mkdir: (d: string) => mkdirs.push(d),
-        writeFile: (p: string, c: string) => calls.push([p, c]),
-      },
-    );
+    writeStreak(join(ROOT, ".claude", "dispatch-guard-state", "s.json"), 2, {
+      mkdir: (d: string) => mkdirs.push(d),
+      writeFile: (p: string, c: string) => calls.push([p, c]),
+    });
     expect(mkdirs).toHaveLength(1);
     expect(calls).toHaveLength(1);
     expect(JSON.parse(calls[0][1])).toEqual({ streak: 2 });

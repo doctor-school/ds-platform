@@ -11,7 +11,8 @@
     "pnpm": ">=10.0.0"
   },
   "scripts": {
-    "bootstrap": "tsx tools/agent-bootstrap.ts",
+    "agent:setup": "node tools/agent/ensure-codex-skills.mjs",
+    "bootstrap": "pnpm agent:setup && tsx tools/agent-bootstrap.ts",
     "backlog:triage": "tsx tools/backlog-triage.ts",
     "board:status": "node tools/gh/set-board-status.mjs",
     "ci:wait": "node tools/gh/wait-ci-green.mjs",
@@ -72,7 +73,7 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "changeset publish",
-    "prepare": "simple-git-hooks",
+    "prepare": "pnpm agent:setup && simple-git-hooks",
     "dev:up": "node tools/dev/run.mjs up",
     "dev:down": "node tools/dev/run.mjs down",
     "dev:logs": "node tools/dev/run.mjs logs",

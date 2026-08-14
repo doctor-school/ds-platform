@@ -24,6 +24,7 @@
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { projectRoot } from "./hook-compat.mjs";
 
 /** Flag file the bootstrap writes — MUST match `PARALLEL_FLAG_REL` in
  * `tools/agent-bootstrap.ts` (asserted equal by the guard-tests spec). */
@@ -170,7 +171,7 @@ export function decideWarn({
   nowMs,
   freshWindowMs = FRESH_WINDOW_MS,
 }) {
-  if (!/^(Read|Grep|Glob)$/.test(toolName || "")) return { warn: false };
+  if (!/^(Read|Grep|Glob|Bash)$/.test(toolName || "")) return { warn: false };
   if (!cwd || !projectDir) return { warn: false };
   // Worktree entered (session cwd, or the session was born in one) → isolated.
   if (inWorktree(cwd) || inWorktree(projectDir)) return { warn: false };
@@ -202,7 +203,7 @@ export function decideWarn({
 function main() {
   try {
     const payload = JSON.parse(readFileSync(0, "utf8"));
-    const projectDir = process.env.CLAUDE_PROJECT_DIR || payload.cwd || "";
+    const projectDir = projectRoot(payload);
     let flag = null;
     try {
       flag = JSON.parse(readFileSync(resolve(projectDir, FLAG_REL), "utf8"));

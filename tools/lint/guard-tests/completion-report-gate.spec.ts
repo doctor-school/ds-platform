@@ -211,6 +211,27 @@ const DOD_DEFER_WITH_HEX_NO_EVIDENCE =
   "Осталось: задеплоить релиз 447c3c5 в прод — следующим шагом.";
 
 describe("completion-report-gate hook (spawned end-to-end)", () => {
+  it("blocks a Codex Stop payload via last_assistant_message", () => {
+    const r = runHook({
+      session_id: "codex-824",
+      hook_event_name: "Stop",
+      stop_hook_active: false,
+      last_assistant_message: COMPLETION_NO_MARKER,
+    });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("completion-report gate");
+  });
+
+  it("returns valid JSON when a Codex Stop payload is allowed", () => {
+    const r = runHook({
+      session_id: "codex-824",
+      hook_event_name: "Stop",
+      stop_hook_active: false,
+      last_assistant_message: COMPLETION_WITH_MARKER,
+    });
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout)).toEqual({});
+  });
   it("BLOCKS (exit 2) a report deferring release/deploy in remaining with no artifact evidence (#984)", () => {
     const r = runHook(stopPayload(transcriptWith(DOD_DEFER_NO_EVIDENCE)));
     expect(r.status).toBe(2);
@@ -237,7 +258,6 @@ describe("completion-report-gate hook (spawned end-to-end)", () => {
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("DoD-vs-title");
   });
-
 
   it("blocks (exit 2) a completion report missing «📈», naming report-task-outcome", () => {
     const r = runHook(stopPayload(transcriptWith(COMPLETION_NO_MARKER)));
@@ -337,7 +357,9 @@ describe("completion-report-gate hook (spawned end-to-end)", () => {
   });
 
   it("STILL blocks a genuine report whose appendix narrates PAST-tense «dispatched»/«диспатчил» (#966 false-negative guard)", () => {
-    const r = runHook(stopPayload(transcriptWith(GENUINE_REPORT_PAST_DISPATCH)));
+    const r = runHook(
+      stopPayload(transcriptWith(GENUINE_REPORT_PAST_DISPATCH)),
+    );
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("report-task-outcome");
   });
@@ -596,7 +618,9 @@ describe("hasDeferredReleaseVerb() (#984)", () => {
 
   it("matches a release verb on a bullet under a remaining heading", () => {
     expect(
-      hasDeferredReleaseVerb("## Осталось\n- прогнать тесты\n- задеплоить в прод"),
+      hasDeferredReleaseVerb(
+        "## Осталось\n- прогнать тесты\n- задеплоить в прод",
+      ),
     ).toBe(true);
     expect(
       hasDeferredReleaseVerb("Remaining:\n1. write docs\n2. deploy to prod"),
@@ -604,7 +628,9 @@ describe("hasDeferredReleaseVerb() (#984)", () => {
   });
 
   it("does NOT match a release verb outside a remaining region (a done-statement / description)", () => {
-    expect(hasDeferredReleaseVerb("Deployed to prod, release cut.")).toBe(false);
+    expect(hasDeferredReleaseVerb("Deployed to prod, release cut.")).toBe(
+      false,
+    );
     expect(hasDeferredReleaseVerb("Этот PR добавляет deploy-скрипт.")).toBe(
       false,
     );
@@ -613,7 +639,9 @@ describe("hasDeferredReleaseVerb() (#984)", () => {
   });
 
   it("does NOT match a remaining list without any release verb", () => {
-    expect(hasDeferredReleaseVerb("Осталось: дренаж debt-бэклога.")).toBe(false);
+    expect(hasDeferredReleaseVerb("Осталось: дренаж debt-бэклога.")).toBe(
+      false,
+    );
     expect(hasDeferredReleaseVerb(GENUINE_REPORT_NO_MARKER)).toBe(false);
   });
 
@@ -622,7 +650,9 @@ describe("hasDeferredReleaseVerb() (#984)", () => {
     // (^|[^а-яёa-z]) boundary means a mid-word occurrence never matches — the
     // OLD boundaryless RU stems tripped «республик».
     expect(
-      hasDeferredReleaseVerb("Осталось:\n- обновить справочник республик и городов"),
+      hasDeferredReleaseVerb(
+        "Осталось:\n- обновить справочник республик и городов",
+      ),
     ).toBe(false);
     expect(
       hasDeferredReleaseVerb("Remaining:\n- refactor the membership flow"),
@@ -676,7 +706,9 @@ describe("hasReleaseArtifactEvidence() (#984)", () => {
   });
 
   it("is false when there is no artifact evidence", () => {
-    expect(hasReleaseArtifactEvidence("Осталось задеплоить позже.")).toBe(false);
+    expect(hasReleaseArtifactEvidence("Осталось задеплоить позже.")).toBe(
+      false,
+    );
     expect(hasReleaseArtifactEvidence(COMPLETION_NO_MARKER)).toBe(false);
   });
 });

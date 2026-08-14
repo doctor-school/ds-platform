@@ -22,17 +22,14 @@
  * must never break prompting.
  */
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const WARN_THRESHOLD = 110_000;
-const WRAP_THRESHOLD = 120_000;
+export const WARN_THRESHOLD = 110_000;
+export const WRAP_THRESHOLD = 120_000;
 
-try {
-  const stdin = readFileSync(0, "utf8");
-  const { transcript_path: transcriptPath } = JSON.parse(stdin);
-  if (!transcriptPath) process.exit(0);
-
-  const lines = readFileSync(transcriptPath, "utf8").split("\n");
-  let context = 0;
+export function contextTokensFromJsonl(jsonl) {
+  const lines = String(jsonl).split("\n");
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i].trim();
     if (!line) continue;
@@ -44,30 +41,53 @@ try {
     }
     const usage = entry?.message?.usage;
     if (entry?.type === "assistant" && usage) {
-      context =
+      return (
         (usage.input_tokens ?? 0) +
         (usage.cache_read_input_tokens ?? 0) +
-        (usage.cache_creation_input_tokens ?? 0);
-      break;
+        (usage.cache_creation_input_tokens ?? 0)
+      );
+    }
+    if (entry?.type === "event_msg" && entry?.payload?.type === "token_count") {
+      // Codex reports cached input as a subset of input_tokens. Using the last
+      // request's input_tokens avoids double-counting the cache component.
+      const input = entry?.payload?.info?.last_token_usage?.input_tokens;
+      if (Number.isFinite(input)) return input;
     }
   }
+  return 0;
+}
 
-  if (context >= WRAP_THRESHOLD) {
-    const k = Math.round(context / 1000);
-    process.stdout.write(
-      JSON.stringify({
-        systemMessage: `⚠ Контекст сессии ≈ ${k}K токенов (порог 120K) — каждый следующий ход дорожает кэш-ридами. Пора /wrap.`,
-      }),
+function main() {
+  try {
+    const stdin = readFileSync(0, "utf8");
+    const { transcript_path: transcriptPath } = JSON.parse(stdin);
+    if (!transcriptPath) process.exit(0);
+    const context = contextTokensFromJsonl(
+      readFileSync(transcriptPath, "utf8"),
     );
-  } else if (context >= WARN_THRESHOLD) {
-    const k = Math.round(context / 1000);
-    process.stdout.write(
-      JSON.stringify({
-        systemMessage: `⚠ Контекст сессии ≈ ${k}K токенов — приближается порог /wrap (120K). Решение за вами.`,
-      }),
-    );
+
+    if (context >= WRAP_THRESHOLD) {
+      const k = Math.round(context / 1000);
+      process.stdout.write(
+        JSON.stringify({
+          systemMessage: `⚠ Контекст сессии ≈ ${k}K токенов (порог 120K) — каждый следующий ход дорожает кэш-ридами. Пора /wrap.`,
+        }),
+      );
+    } else if (context >= WARN_THRESHOLD) {
+      const k = Math.round(context / 1000);
+      process.stdout.write(
+        JSON.stringify({
+          systemMessage: `⚠ Контекст сессии ≈ ${k}K токенов — приближается порог /wrap (120K). Решение за вами.`,
+        }),
+      );
+    }
+    process.exit(0);
+  } catch {
+    process.exit(0);
   }
-  process.exit(0);
-} catch {
-  process.exit(0);
+}
+
+const invoked = process.argv[1] ? resolve(process.argv[1]) : "";
+if (invoked && invoked === resolve(fileURLToPath(import.meta.url))) {
+  main();
 }

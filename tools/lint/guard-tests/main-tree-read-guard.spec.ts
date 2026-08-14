@@ -103,9 +103,23 @@ describe("main-tree-read-guard decideWarn()", () => {
     expect(decideWarn({ ...base, projectDir }).warn).toBe(false);
   });
 
-  it("ignores non-read tools", () => {
-    expect(decideWarn({ ...base, toolName: "Bash" }).warn).toBe(false);
+  it("observes Codex Bash as a repo-root read surface", () => {
+    expect(
+      decideWarn({ ...base, toolName: "Bash", toolInput: { command: "rg x" } })
+        .warn,
+    ).toBe(true);
     expect(decideWarn({ ...base, toolName: "Edit" }).warn).toBe(false);
+  });
+
+  it("observes Codex apply_patch in the write guard", () => {
+    const d = decideWriteWarn({
+      ...base,
+      toolName: "apply_patch",
+      toolInput: {
+        command: "*** Begin Patch\n*** Update File: tools/x.ts\n*** End Patch",
+      },
+    });
+    expect(d.warn).toBe(true);
   });
 
   it("ignores targets outside the repo (scratchpad, auto-memory)", () => {
@@ -215,9 +229,9 @@ describe("main-tree-read-guard decideReadAction() — #854 carve-out", () => {
   const notWarned = { warn: false as const };
 
   it("stays silent when the underlying warn conditions don't hold", () => {
-    expect(decideReadAction({ warnDecision: notWarned, state: {} }).action).toBe(
-      "silent",
-    );
+    expect(
+      decideReadAction({ warnDecision: notWarned, state: {} }).action,
+    ).toBe("silent");
   });
 
   it("(a) first read, zero writes → one softened notice + flags noticeShown", () => {
@@ -291,7 +305,9 @@ describe("main-tree guard state seam (#854)", () => {
 
   it("readState coerces truthy-but-nonboolean fields to false", () => {
     expect(
-      readState("x", () => JSON.stringify({ noticeShown: 1, mainTreeWriteSeen: true })),
+      readState("x", () =>
+        JSON.stringify({ noticeShown: 1, mainTreeWriteSeen: true }),
+      ),
     ).toEqual({ noticeShown: false, mainTreeWriteSeen: true });
   });
 
@@ -316,12 +332,16 @@ describe("main-tree guard state seam (#854)", () => {
 
   it("writeState swallows FS errors (fail-open, never throws)", () => {
     expect(() =>
-      writeState("x", { noticeShown: true, mainTreeWriteSeen: true }, {
-        mkdir: () => {
-          throw new Error("EACCES");
+      writeState(
+        "x",
+        { noticeShown: true, mainTreeWriteSeen: true },
+        {
+          mkdir: () => {
+            throw new Error("EACCES");
+          },
+          writeFile: () => undefined,
         },
-        writeFile: () => undefined,
-      }),
+      ),
     ).not.toThrow();
   });
 });
@@ -350,7 +370,9 @@ describe("worktree-path-guard decideWriteWarn() — #854", () => {
 
   it("warns for Edit and MultiEdit too", () => {
     expect(decideWriteWarn({ ...wbase, toolName: "Edit" }).warn).toBe(true);
-    expect(decideWriteWarn({ ...wbase, toolName: "MultiEdit" }).warn).toBe(true);
+    expect(decideWriteWarn({ ...wbase, toolName: "MultiEdit" }).warn).toBe(
+      true,
+    );
   });
 
   it("(e) no-op once the session is inside a worktree", () => {

@@ -46,7 +46,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       ( github.event.deployment_status.state == 'success' &&
         github.event.deployment.environment == 'production' )
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, notify, ci]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:

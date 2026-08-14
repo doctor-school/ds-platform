@@ -9,9 +9,9 @@
 # skipped needs as red (#449), so an edited-event run would poison the meta-job.
 #
 # ONE BATCH JOB (#1235). The six guards were six jobs, each paying its own
-# checkout + `pnpm install` on the `bbm-ci` self-hosted pool (#1225) — six
-# installs to run six sub-second body parsers. They are now sequential steps of a
-# single job. Posture is preserved exactly, re-encoded from per-JOB to per-STEP:
+# checkout + `pnpm install` — six installs to run six sub-second body parsers.
+# They are now sequential steps of a single job. Posture is preserved exactly,
+# re-encoded from per-JOB to per-STEP:
 #   • `spec-link` is BLOCK → a plain step (fails the job → red check-run the
 #     merge gate reads). It runs LAST so a spec-link failure never skips the
 #     WARN guards' findings.
@@ -58,7 +58,7 @@ env:
 jobs:
   pr-body-guards:
     if: github.event.action != 'edited' || github.event.changes.body != null
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
+    runs-on: ubuntu-latest
     # Union of the six former per-job blocks:
     #   contents/pull-requests: read — the Issue-#10 pattern every guard needs;
     #   issues: read — `gh issue view` on linked Issues (spec-link, #1232), the
@@ -75,7 +75,7 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
+        with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
 
       # registry-research: a PR touching a user-facing UI surface must carry the

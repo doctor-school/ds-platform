@@ -19,19 +19,21 @@ env:
   TURBO_TELEMETRY_DISABLED: 1
 
 # ─── Job topology (#1235) ────────────────────────────────────────────────────
-# This workflow is BATCHED for the `bbm-ci` self-hosted pool (#1225): the pool
-# serializes `heavy` work and every job pays its own checkout + `pnpm install`,
-# so 44 one-guard jobs meant 44 installs on a pool that runs them mostly
-# back-to-back. The guards themselves are unchanged — only their PACKAGING is:
+# This workflow is BATCHED: every job pays its own checkout + `pnpm install`,
+# so this workflow's 44 declared jobs meant 44 installs (47 executing across
+# both workflows, counting `pr-body-guards.yml`'s six and excluding this file's
+# three job-level `if: false` placeholders) — the CI-minutes diet ADR-0008 §2.1
+# names as an enabler. The guards themselves are unchanged — only their
+# PACKAGING is:
 #
-#   core           heavy   setup+lint+types+unit+build+api-build-smoke+
+#   core                   setup+lint+types+unit+build+api-build-smoke+
 #                          docs-build+tokens-fresh+endpoint-authz   (BLOCK)
-#   api-e2e        docker  unchanged                                (BLOCK)
+#   api-e2e                unchanged                                (BLOCK)
 #   playwright-axe / playwright-axe-portal
-#                  browser unchanged                                (BLOCK)
-#   guards-block   light   the 4 hard-red light guards              (BLOCK)
-#   guards-warn    light   the 23 WARN light guards + primitives-first
-#   ci             light   the single required status check
+#                          unchanged                                (BLOCK)
+#   guards-block           the 4 hard-red light guards              (BLOCK)
+#   guards-warn            the 23 WARN light guards + primitives-first
+#   ci                     the single required status check
 #
 # POSTURE IS PRESERVED EXACTLY. The old encoding was per-JOB (`BLOCK` = in the
 # `ci` needs-list, `WARN` = job-level `continue-on-error`, never both); the new
@@ -59,22 +61,19 @@ env:
 #     LAST (a red there is a real #828 BLOCK-class finding the merge gate sees
 #     as a red check-run, exactly as before).
 # Trade-off, deliberate: batching is fail-fast — the first hard failure in a
-# batch skips its remaining steps, where 44 parallel jobs reported every failure
-# at once. Returning to GitHub-hosted runners later = split the batches back
-# out; it is mechanical (each step already carries its own posture comment).
-# `api-drift`/`db-drift`/`generated-artifacts` stay on `ubuntu-latest`: they are
-# `if: false` placeholders that cost no pool time, and folding them into a pool
-# batch would ADD pool wall-time.
+# batch skips its remaining steps, where the old parallel fan-out reported every
+# failure at once. Splitting a batch back out is mechanical (each step already carries
+# its own posture comment). `api-drift`/`db-drift`/`generated-artifacts` stay
+# their own jobs: they are `if: false` placeholders that cost no runner time.
 jobs:
-  # ─── Heavy chain: one exclusive pool slot, one install ────────────────
-  # The `heavy` profile is exclusive on the pool, so the old
-  # setup→{lint,types,unit,build,api-build-smoke,docs-build,tokens-fresh,
-  # endpoint-authz} fan-out never actually ran in parallel — it serialized,
-  # paying 9 checkouts + 9 installs. Collapsed into one job; step order follows
-  # the old topological order (install first, then the former siblings). Every
-  # member was BLOCK, so this batch carries no WARN step and needs no aggregate.
+  # ─── Heavy chain: one runner, one install ─────────────────────────────
+  # The old setup→{lint,types,unit,build,api-build-smoke,docs-build,tokens-fresh,
+  # endpoint-authz} fan-out paid 9 checkouts + 9 installs for work that is mostly
+  # sequential anyway. Collapsed into one job; step order follows the old
+  # topological order (install first, then the former siblings). Every member was
+  # BLOCK, so this batch carries no WARN step and needs no aggregate.
   core:
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, heavy, ci]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
@@ -83,6 +82,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+          cache: pnpm
       - run: pnpm install --frozen-lockfile
 
       # lint — `pnpm lint` runs, in order: `eslint .` (incl. the #197 auth-field
@@ -171,14 +171,14 @@ jobs:
   # longer waits on a `setup` job (#1235): it installs for itself and starts
   # immediately, in parallel with `core`.
   api-e2e:
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, docker, ci]
+    runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgres://ds:ds@localhost:5432/ds_test
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
+        with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - name: Build the data-layer Postgres image (pgvector + pg_partman)
         run: docker build -t ds-platform/postgres:pg17-partman infra/dev-stand/postgres
@@ -233,7 +233,7 @@ jobs:
   # so no WARN-aggregate step. The checkout is FULL (`fetch-depth: 0`) because
   # the lychee link check walks the whole tree.
   guards-block:
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
+    runs-on: ubuntu-latest
     # Union of the member jobs' permission blocks: only `prod-surface` needed one
     # (`issues: read`, for its deferred-Issue OPEN check). No member reaches
     # GitHub through the `gh` CLI or a tools/lint/lib/gh.ts consumer, so the
@@ -247,7 +247,7 @@ jobs:
           fetch-depth: 0
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
+        with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
 
       # events-drift — ADR-0006 §7 "Events drift" row (@OutboxEmit call-sites ↔ spec
@@ -313,7 +313,7 @@ jobs:
   # The checkout is intentionally SHALLOW: `migration-index` fetches origin/main
   # itself and falls back to SKIP, which is the behavior its posture assumes.
   guards-warn:
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
+    runs-on: ubuntu-latest
     # Union of the member jobs' permission blocks: `tdd-signal` and `product-note`
     # are tools/lint/lib/gh.ts consumers, so the batch carries the canonical
     # Issue-#10 pattern (`contents: read` + `pull-requests: read`) and both steps
@@ -325,7 +325,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
+        with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
 
       # module-readme: every top-level NestJS module dir under apps/*/src (a dir with a
@@ -726,17 +726,17 @@ jobs:
   # Kept as its own job (#1235): the `browser` pool profile is a separate lane
   # from `heavy`, so batching it in would only serialize it.
   playwright-axe:
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, browser, ci]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
+        with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # Build the showcase (and its workspace deps) so `next start` serves a real
       # production build — the same path the `build` step exercises, no special env.
       - run: pnpm exec turbo run build --filter=@ds/showcase
-      - run: pnpm --filter @ds/showcase exec playwright install chromium
+      - run: pnpm --filter @ds/showcase exec playwright install --with-deps chromium
       - run: pnpm --filter @ds/showcase test:e2e:ci
 
   # playwright-axe-portal: the PAGE-LEVEL twin of `playwright-axe` (#400 — the
@@ -750,17 +750,17 @@ jobs:
   # as the `build` step). BLOCKING alongside `playwright-axe` (restores coverage
   # that was BLOCK before #351), so it is wired into the `ci` needs-list.
   playwright-axe-portal:
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, browser, ci]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version-file: .nvmrc }
+        with: { node-version-file: .nvmrc, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # Build the portal (and its workspace deps) so `next start` serves a real
       # production build — the same path the `build` step exercises, no special env.
       - run: pnpm exec turbo run build --filter=@ds/portal
-      - run: pnpm --filter @ds/portal exec playwright install chromium
+      - run: pnpm --filter @ds/portal exec playwright install --with-deps chromium
       - run: pnpm --filter @ds/portal test:e2e:ci
 
   # ─── AI-specific guards from ADR-0007 §2.6 ───────────────────────────
@@ -788,7 +788,7 @@ jobs:
   ci:
     needs: [core, api-e2e, guards-block, playwright-axe, playwright-axe-portal]
     if: always()
-    runs-on: [self-hosted, linux, x64, bbm-ci, node22, light, ci]
+    runs-on: ubuntu-latest
     steps:
       # A required job must SUCCEED — `skipped`/`cancelled` fail too, else a red
       # upstream job skips its dependents and the aggregate would go green on a

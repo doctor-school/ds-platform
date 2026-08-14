@@ -914,7 +914,7 @@ Output-direction PII filter — **v3 concern**. До v3 — operational mitigati
 
 ### 9.5 Self-hosted GitHub Actions runner
 
-**Trigger:** не AI-specific. Разрешён на уровне репозитория: CI-jobs выполняются на общем self-hosted пуле BBM с ресурсным профилем на job per ADR-0008 §2.8.
+**Trigger:** не AI-specific — вопрос решается на уровне репозитория (ADR-0008 §2.8) и всё ещё открыт. Текущий ответ: CI-jobs выполняются на GitHub-hosted `ubuntu-latest`, нагрузка собрана в 8 batch-jobs, чтобы удерживать потребление минут. Общий self-hosted пул BBM был испытан в #1224 и отклонён в #1249 (измерено 20–814 мин на прогон — starvation очереди, не compute). Re-trigger: ревизия потребления минут после отката признаёт hosted-раннеры невыгодными по стоимости — тогда managed runner service либо выделенная машина взвешиваются на реальных числах и вердикт записывается ревизией ADR-0008.
 
 ### 9.6 Sandbox / experimentation environment
 

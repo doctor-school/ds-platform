@@ -915,7 +915,7 @@ In Phase 0 — no in-repo semconv collector; cost and token usage are read from 
 
 ### 9.5 Self-hosted GitHub Actions runner
 
-**Trigger:** not AI-specific. Resolved at the repo level: CI jobs run on the shared BBM self-hosted pool under per-job resource profiles per ADR-0008 §2.8.
+**Trigger:** not AI-specific — the question is owned at the repo level (ADR-0008 §2.8), and it is still open. Current answer: CI jobs run on GitHub-hosted `ubuntu-latest`, with the workload batched into 8 jobs to hold minute consumption down. A shared BBM self-hosted pool was trialled under #1224 and rejected under #1249 (measured 20–814 min per run — queue starvation, not compute). Re-trigger: the post-revert minute-consumption review finds hosted runners not viable on cost — then a managed runner service or a dedicated box is weighed with real numbers, recorded as an ADR-0008 revision.
 
 ### 9.6 Sandbox / experimentation environment
 

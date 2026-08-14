@@ -40,13 +40,33 @@ design-source/support\.js
 # Same crawler-hostile false-positive class as the npmjs 403 entry above. #1228
 ^https://design-system\.service\.gov\.uk($|/.*$)
 
+# GitHub Primer, GitHub's own design system — cited in design/constitution.md at
+# three places (button states, form errors, segmented control). Excluded because
+# it is FLAKY, not because it is down: on 2026-08-14 three CI runs on one branch
+# with NO change to the tree between them produced `markdown-links` red, red,
+# then green — the two reds reporting three `Timeouts` and zero `Errors` on the
+# same three URLs. Residential probes hung on both `/product/` pages across the
+# entire window, including at the moment the green run passed, so this is
+# neither a regional split nor a clean site-down; earlier in the same window
+# `/ui-patterns/forms/` returned 502 and the domain root hung. A nondeterministic
+# third-party dependency on a BLOCK gate is worse than a steady red — it gates
+# merges at random — so the exclusion is domain-wide and does NOT lapse when the
+# site next answers. Not a stale citation: Primer's own redirect from
+# `/components/button` targets the hanging `/product/components/button/`, so the
+# cited URLs are canonical. In the tree since 2026-07-01 (f4c46f72, PR #415) and
+# green in CI until today. Owner decision 2026-08-14 (#1249): CI must not gate
+# on a third party's availability. Same class as the GOV.UK entry above.
+^https://primer\.style($|/.*$)
+
 # GitHub profile page of the repo author, auto-linked by changesets in every
-# CHANGELOG.md entry ("Thanks @sidorovanthon!"). Through the bbm-ci pool's
-# egress path (squid CONNECT / slirp4netns) lychee's HTTP/2 request to this
-# one URL intermittently dies with "HTTP/2 protocol error" (2 of 3 pool runs;
-# repo/API github.com links in the same runs pass). Boilerplate attribution,
-# not documentation — verified manually. Egress-side investigation tracked in
-# bbm (BBMP); migration context: #1224.
+# CHANGELOG.md entry ("Thanks @sidorovanthon!"). The recorded CAUSE is retired:
+# the intermittent "HTTP/2 protocol error" (2 of 3 runs; repo/API github.com
+# links in the same runs passed) was attributed to the bbm-ci pool's egress path
+# (squid CONNECT / slirp4netns), and that pool is gone as of #1249. The
+# exclusion STAYS for now because we have no hosted-runner evidence either way —
+# removing it blind risks a fresh red on a boilerplate attribution link. Pending
+# a re-test once clean hosted `markdown-links` runs exist to compare against;
+# tracked in DEBT.md. Original migration context: #1224.
 ^https://github\.com/sidorovanthon$
 
 # Lint-guard test fixtures deliberately carry placeholder/broken markdown links

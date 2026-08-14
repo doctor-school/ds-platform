@@ -34,7 +34,7 @@
  * `pr-body-guards` batch step uses `continue-on-error: true`. SEVERITY below is
  * the single clearly-marked constant; flipping the guard to BLOCK is a one-line
  * change here PLUS dropping `continue-on-error` from the `epic-autoclose` STEP in
- * pr-body-guards.yml and its row from that batch's WARN-aggregate step.
+ * pr-body-guards.yml and its row from that batch's WARN-report step.
  *
  * Non-PR runs, and PRs whose body has no closing keyword → exit 0 with a skip
  * note. Findings: stderr, exit 1. Clean: stdout summary, exit 0.
@@ -55,7 +55,7 @@ const TAG = "[epic-autoclose]";
  * WARN v1 (ADR-0007 §2.6). To promote to BLOCK: change this to "BLOCK" AND
  * remove `continue-on-error: true` from the `epic-autoclose` STEP of the
  * `pr-body-guards` batch job (`.github/workflows/pr-body-guards.yml`), plus its
- * row from that batch's WARN-aggregate step. Both edits are required — this
+ * row from that batch's WARN-report step. Both edits are required — this
  * constant is documentation/intent; the CI `continue-on-error` is what actually
  * gates the merge.
  */

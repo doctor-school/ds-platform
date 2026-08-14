@@ -67,6 +67,31 @@ const warnSteps = (block: string) =>
 const reportStep = (block: string) =>
   steps(block).find((s) => /^ {6}- name: WARN report/.test(s));
 
+/**
+ * Every `exit <token>` in a step, wherever it sits. Deliberately NOT
+ * `not.toMatch(/\n\s+exit 1\b/)`: that anchors on a line start, so the common
+ * inline forms — `<cmd> || exit 1`, `test -z "$x" && exit 1` — slip straight
+ * through, and any code other than 1 (`exit 2`, `exit "$rc"`) is invisible to
+ * it. Collecting the codes and asserting they are ALL `0` closes both holes:
+ * this spec is the only thing standing between the repo and a silent return of
+ * the WARN-blocks-merge posture, so it enumerates rather than spot-checks.
+ */
+const exitCodes = (step: string): string[] =>
+  [...step.matchAll(/\bexit\s+(\S+)/g)].map((m) => m[1]);
+
+/** Assert a batch's closing report step is visible and cannot fail the job. */
+function assertReportIsNonBlocking(block: string) {
+  const report = reportStep(block);
+  expect(report).toBeDefined();
+  // `if: always()` is load-bearing for VISIBILITY, not just tidiness: without
+  // it the report is SKIPPED whenever an earlier step failed hard (a BLOCK
+  // member, or an infra failure), which is precisely the run whose WARN
+  // findings a reader most needs summarised.
+  expect(report).toMatch(/\n\s+if: always\(\)/);
+  expect(exitCodes(report!)).not.toEqual([]); // it must actually exit explicitly
+  expect(exitCodes(report!)).toEqual(exitCodes(report!).map(() => "0"));
+}
+
 describe("ci.yml `guards-warn` — a WARN-findings run must conclude SUCCESS (#1253)", () => {
   const block = jobBlock(read("ci.yml"), "guards-warn");
 
@@ -79,11 +104,8 @@ describe("ci.yml `guards-warn` — a WARN-findings run must conclude SUCCESS (#1
     expect(missing).toEqual([]);
   });
 
-  it("EARS-1253.8: the closing report step exits 0 and never manufactures a failure", () => {
-    const report = reportStep(block);
-    expect(report).toBeDefined();
-    expect(report).toMatch(/\n\s+exit 0\b/);
-    expect(report).not.toMatch(/\n\s+exit 1\b/);
+  it("EARS-1253.8: the closing report step runs always, exits 0, and never manufactures a failure", () => {
+    assertReportIsNonBlocking(block);
   });
 
   it("EARS-1253.9: the job itself is never `continue-on-error` — an infra failure must still fail it", () => {
@@ -117,11 +139,8 @@ describe("pr-body-guards.yml — same posture, mixed batch (#1253)", () => {
     expect(missing).toEqual([]);
   });
 
-  it("EARS-1253.12: the closing report step exits 0", () => {
-    const report = reportStep(block);
-    expect(report).toBeDefined();
-    expect(report).toMatch(/\n\s+exit 0\b/);
-    expect(report).not.toMatch(/\n\s+exit 1\b/);
+  it("EARS-1253.12: the closing report step runs always and exits 0 — even after the BLOCK member failed", () => {
+    assertReportIsNonBlocking(block);
   });
 
   it("EARS-1253.13: the BLOCK member `spec-link` stays hard — this check-run's red is reserved for it", () => {

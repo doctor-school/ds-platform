@@ -105,9 +105,11 @@
  * A run with BOTH exits 1 (the block dominates). WARN→BLOCK promotion for the
  * #1103 classes: once the app-code WARN count reaches 0 and holds for one sweep
  * cadence (ADR-0007 §2.6), move those tags/SHELL into the block set — a new
- * bespoke shell is then a hard regression, not drift. Its `guards-warn` batch step
- * runs WITHOUT `continue-on-error` (and carries no WARN-aggregate row): the
- * tool's own exit code is the single severity source.
+ * bespoke shell is then a hard regression, not drift. The step lives in the
+ * `guards-block` batch and runs WITHOUT `continue-on-error` (and carries no
+ * WARN-report row): the tool's own exit code is the single severity source, so
+ * hosting it in `guards-warn` — where every step is `continue-on-error` — would
+ * swallow the BLOCK class outright (#1253).
  *
  * Run: `pnpm lint:primitives-first`. BLOCK: stderr + exit 1. WARN-only: stderr +
  * exit 0. Clean: exit 0.
@@ -160,7 +162,8 @@ const RAW_INTERACTIVE_TAGS = [...BLOCK_RAW_TAGS, ...WARN_RAW_TAGS];
 // `group-*` / `peer-*` variants (a bespoke group-hover is still a bespoke
 // hover). `focus:` alone is not flagged — the DS contract is `focus-visible:`,
 // and legacy `focus:` usage is `interaction-states` territory.
-const STATE_UTILITY_RE = /(?:^|[\s"'`([{:])(?:group-|peer-)?(?:hover|active|focus-visible):/;
+const STATE_UTILITY_RE =
+  /(?:^|[\s"'`([{:])(?:group-|peer-)?(?:hover|active|focus-visible):/;
 
 // A `role="button"` (or `role='button'`) host — a non-`<button>` tag given
 // button semantics (#1103 (a)). Detected wherever it appears in an opening tag.
@@ -185,7 +188,8 @@ const NEXT_LINK_IMPORT_RE =
 // default). Only the INTERACTIVE primitives (`Button`, `Link`) are shell-checked
 // — layout primitives (`Container`, `Card`, `Badge`) legitimately carry
 // padding / bg and are out of the #1103 "bespoke interactive control" scope.
-const DS_IMPORT_RE = /import\s+([\s\S]*?)\s+from\s+["']@ds\/design-system[^"']*["']/g;
+const DS_IMPORT_RE =
+  /import\s+([\s\S]*?)\s+from\s+["']@ds\/design-system[^"']*["']/g;
 const INTERACTIVE_DS_EXPORTS = new Set(["Button", "Link"]);
 
 // STRONG visual-identity bases (#1103 SHELL). A DS primitive owns these; a call
@@ -223,7 +227,10 @@ const SHELL_THRESHOLD = 1;
 function blankJsComments(src: string): string {
   return src
     .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
-    .replace(/(^|\s)\/\/[^\n]*/g, (m, p1: string) => p1 + " ".repeat(m.length - p1.length));
+    .replace(
+      /(^|\s)\/\/[^\n]*/g,
+      (m, p1: string) => p1 + " ".repeat(m.length - p1.length),
+    );
 }
 
 interface Violation {
@@ -266,7 +273,8 @@ function findTagEnd(src: string, start: number): number {
   for (let i = start + 1; i < src.length; i++) {
     const ch = src[i];
     if (quote !== null) {
-      if (ch === "\\") i++; // skip escaped char inside a string
+      if (ch === "\\")
+        i++; // skip escaped char inside a string
       else if (ch === quote) quote = null;
       continue;
     }
@@ -300,7 +308,9 @@ function collectStringConsts(src: string): Map<string, string> {
   const re = /(?:^|\n)\s*const\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]*?);/g;
   for (const m of src.matchAll(re)) {
     const init = m[2];
-    const literals = [...init.matchAll(/["'`]([^"'`]*)["'`]/g)].map((s) => s[1]);
+    const literals = [...init.matchAll(/["'`]([^"'`]*)["'`]/g)].map(
+      (s) => s[1],
+    );
     if (literals.length > 0) consts.set(m[1], literals.join(" "));
   }
   return consts;
@@ -351,7 +361,8 @@ function strongIdentityCount(className: string): number {
     const base = parts[parts.length - 1];
     const prefixes = parts.slice(0, -1);
     if (prefixes.some((p) => STATE_VARIANT_RE.test(p))) continue; // state override — allowed
-    if (TEXT_SIZE_RE.test(base) || STRONG_BASE_RES.some((re) => re.test(base))) n++;
+    if (TEXT_SIZE_RE.test(base) || STRONG_BASE_RES.some((re) => re.test(base)))
+      n++;
   }
   return n;
 }
@@ -439,7 +450,9 @@ function scanFile(file: string, violations: Violation[]): void {
   // ── Rule 2: SHELL — interactive DS primitive rebuilding its look (#1103) ──
   const shellNames: string[] = [];
   for (const m of src.matchAll(DS_IMPORT_RE)) {
-    for (const spec of m[1].matchAll(/([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?/g)) {
+    for (const spec of m[1].matchAll(
+      /([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?/g,
+    )) {
       const orig = spec[1];
       const local = spec[2] ?? spec[1];
       if (orig === "import" || orig === "type" || local === "type") continue;
@@ -490,7 +503,10 @@ function main(): void {
         `(${blocking.length} BLOCK, ${warnings.length} WARN):\n`,
     );
     for (const v of violations) {
-      const rel = relative(REPO_ROOT, resolve(REPO_ROOT, v.file)).replace(/\\/g, "/");
+      const rel = relative(REPO_ROOT, resolve(REPO_ROOT, v.file)).replace(
+        /\\/g,
+        "/",
+      );
       process.stderr.write(
         `${TAG}   ${v.severity.toUpperCase()} ${rel}:${v.line}: ${v.message}\n`,
       );

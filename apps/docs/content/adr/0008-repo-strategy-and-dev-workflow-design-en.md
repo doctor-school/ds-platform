@@ -288,6 +288,8 @@ test-results/
 
 Multi-job workflow with a meta-job `ci-result` that depends on all required jobs and sets a single status check `ci`. All required jobs run in parallel after `setup`; the meta-job suffix so that branch protection sees one `ci` check.
 
+The skeleton below is the PRE-IMPLEMENTATION sketch — read it for the shape of the decision, never as the current topology. The shipped workflow has since diverged deliberately: `setup` was folded into `core`, the guards were batched into `guards-block` / `guards-warn` (#1235), the jobs are path-gated by a `changes` classifier (#1251), and `db-drift` runs as a `guards-block` step rather than a job of its own (#1236). `.github/workflows/ci.yml` is authoritative.
+
 ```yaml
 name: CI
 

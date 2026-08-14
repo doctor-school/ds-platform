@@ -21,9 +21,10 @@ env:
 # ─── Job topology (#1235) ────────────────────────────────────────────────────
 # This workflow is BATCHED: every job pays its own checkout + `pnpm install`,
 # so this workflow's 44 declared jobs meant 44 installs (47 executing across
-# both workflows, counting `pr-body-guards.yml`'s six and excluding this file's
-# two job-level `if: false` placeholders) — the CI-minutes diet ADR-0008 §2.1
-# names as an enabler. The guards themselves are unchanged — only their
+# both workflows, counting `pr-body-guards.yml`'s six and excluding the three
+# job-level `if: false` placeholders this file carried AT THE TIME — #1236 later
+# activated one of them, `db-drift`, leaving two) — the CI-minutes diet
+# ADR-0008 §2.1 names as an enabler. The guards themselves are unchanged — only their
 # PACKAGING is:
 #
 #   core                   setup+lint+types+unit+build+api-build-smoke+
@@ -76,8 +77,8 @@ env:
 # never registers, and `tools/gh/merge-gate.mjs` treats zero registered
 # check-runs at head as FAIL (skill `merge-when-green` Step 1) — a docs PR would
 # become UNMERGEABLE rather than cheap. So the gate is JOB-level, the same shape
-# `api-drift`/`db-drift`/`generated-artifacts` use (a job-level `if:` yielding a
-# SKIPPED job, which the merge gate reads as green):
+# `api-drift`/`generated-artifacts` use (a job-level `if:` yielding a SKIPPED
+# job, which the merge gate reads as green):
 #
 #   changes                cheap classifier job — one checkout, no install; emits
 #                          `code=true|false` for the PR's changed-file set
@@ -430,11 +431,17 @@ jobs:
       # the latest `meta/` snapshot and opens NO database connection (only
       # `push`/`migrate` do), so this needs no service container; the full
       # checkout above is what makes the `git status` comparison meaningful.
-      # POSTURE: BLOCK — a plain step of this batch. It is a byte comparison of
-      # generated output against committed output, with no heuristic and no
-      # false-positive class, and the defect it catches (ORM types a column no
-      # database has) is invisible to typecheck/unit/e2e and surfaces only as a
-      # prod runtime error. Guard rationale + SKIP semantics: the file header of
+      # POSTURE: BLOCK — a plain step of this batch. The defect it catches (ORM
+      # types a column no database has) is invisible to typecheck/unit/e2e and
+      # surfaces only as a prod runtime error, and the remedy is always the same
+      # one command. It has ONE false-positive class, routine and worth naming: a
+      # `drizzle-kit` version bump that changes snapshot shape or generated-SQL
+      # formatting reds this step on an unrelated PR (Dependabot included),
+      # because generated output is compared byte-wise against output committed
+      # by an OLDER generator. Read a red on a dep-bump PR as that, not as a
+      # missing migration — the fix ("regenerate and commit") is the same either
+      # way, which is why it does not argue for WARN. Guard rationale, the
+      # schema-coverage check, and SKIP semantics: the file header of
       # tools/lint/db-drift-lint.ts.
       - name: db-drift
         run: pnpm lint:db-drift

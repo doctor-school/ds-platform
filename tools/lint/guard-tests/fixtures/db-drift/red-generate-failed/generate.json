@@ -1,0 +1,5 @@
+{
+  "status": null,
+  "signal": "SIGTERM",
+  "stderr": "drizzle-kit: waiting for input"
+}

@@ -14,12 +14,12 @@ A guard can only be driven deterministically if its inputs are injectable. The
 guards expose four seams, each inert in production (the env var is unset, so the
 guard resolves real paths / spawns real `gh` exactly as before):
 
-| Seam env var          | Replaces                                   | Used by                                                                                                                                                                                                                                          |
-| --------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `LINT_FIXTURE_ROOT`   | the repo root the guard scans (FS)         | interaction-states, form-error, form-rhythm, ears-naming, ears-test, no-stub, no-hardcoded-path, asset-format, spec-link, instruction-budget, events-drift, glossary-mdx, glossary-roundtrip, frontmatter-yaml, migration-index, external-anchor |
-| `LINT_GH_FIXTURE_DIR` | `gh pr/issue view` (canned JSON)           | registry-research, spec-link                                                                                                                                                                                                                     |
-| `LINT_MEMORY_FILE`    | the derived `~/.claude/.../MEMORY.md` path | instruction-budget                                                                                                                                                                                                                               |
-| _(args)_              | CLI flags (`runGuard(..., { extraArgs })`) | —                                                                                                                                                                                                                                                |
+| Seam env var          | Replaces                                   | Used by                                                                                                                                                                                                                                                    |
+| --------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LINT_FIXTURE_ROOT`   | the repo root the guard scans (FS)         | interaction-states, form-error, form-rhythm, ears-naming, ears-test, no-stub, no-hardcoded-path, asset-format, spec-link, instruction-budget, events-drift, glossary-mdx, glossary-roundtrip, frontmatter-yaml, migration-index, external-anchor, db-drift |
+| `LINT_GH_FIXTURE_DIR` | `gh pr/issue view` (canned JSON)           | registry-research, spec-link                                                                                                                                                                                                                               |
+| `LINT_MEMORY_FILE`    | the derived `~/.claude/.../MEMORY.md` path | instruction-budget                                                                                                                                                                                                                                         |
+| _(args)_              | CLI flags (`runGuard(..., { extraArgs })`) | —                                                                                                                                                                                                                                                          |
 
 `LINT_FIXTURE_ROOT` is set to the case dir automatically by `runGuard`; the rest
 are passed per case via `runGuard(guard, caseDir, { env })`.
@@ -46,7 +46,7 @@ Covered here (FS / gh / memory seams): `interaction-states`, `form-error`,
 `asset-format`, `registry-research`, `spec-link`, `instruction-budget`,
 `module-readme`, `tdd-signal`, `spec-status`, `prior-decisions`, `events-drift`,
 `glossary-mdx`, `glossary-roundtrip`, `frontmatter-yaml`, `migration-index`,
-`external-anchor`.
+`external-anchor`, `db-drift`.
 
 `no-hardcoded-path` (#936) is an FS-scan guard over committed `tools/**/*.{mjs,ts}`
 runtime code for machine-specific absolute path literals (drive-letter `C:/…`,
@@ -84,6 +84,25 @@ origin/main base journal is read from `<case>/origin-main/_journal.json`
 production it comes from `git show origin/main:apps/api/drizzle/meta/_journal.json`
 with a shallow-checkout fetch fallback, and an unobtainable base is a SKIP,
 never a false red.
+
+`db-drift` (#1236) is the ADR-0006 §7 "DB drift" row: a schema edit shipped
+without its generated migration types a column no database has — invisible to
+typecheck/unit/e2e (all run against the same stale chain), visible only as a prod
+runtime error. It runs as a BLOCK step of the `guards-block` batch. Two checks:
+schema-coverage (every `packages/db/src/schema/*.ts` declaring a `pgTable(` must
+appear in the hand-maintained `schema:` array of `packages/db/drizzle.config.ts`
+— an unlisted new table is invisible to drizzle-kit, so its drift would pass the
+diff green) and regenerate-and-assert-clean (`drizzle-kit generate` from CWD
+`apps/api`, then a before/after porcelain set difference over `apps/api/drizzle`;
+pre-existing local dirt is excluded so a developer mid-migration is never
+false-red). Both subprocess boundaries are fixture-backed under
+`LINT_FIXTURE_ROOT` — `<case>/generate.json` for the `generate` outcome,
+`<case>/git-status/{before,after}.txt` for the porcelain — so all branches run
+without git or drizzle-kit. Ships three green cases (in-sync; a non-table helper
+file exempt from the config list; pre-existing dirt ignored), three reds
+(unlisted table file, drift detected, `generate` killed by the timeout on its
+interactive rename-vs-drop prompt — which must fail CLOSED), and the two SKIPs
+(no config, no committed migration dir).
 
 `frontmatter-yaml` (#597) is a FS-scan guard that parses every
 `apps/docs/content/**/*.{md,mdx}` frontmatter block with **gray-matter**

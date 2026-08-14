@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#fff;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#2D84F2}a:hover{color:#114D9E}:focus-visible{outline:3px solid #6BB1F7;outline-offset:2px}input::placeholder{color:inherit;opacity:.45}</style></helmet>
+
+<div style="min-height:100vh;background:{{ pageBg }};display:flex;flex-direction:column">
+  <header data-screen-label="Каталог экспертов" style="background:#114D9E;padding:16px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
+    <a href="Главная.dc.html" style="display:flex;flex:none"><img src="assets/ds-logo-white.svg" alt="Doctor.School" style="height:26px;display:block"></a>
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:16px">{{ themeIcon }}</button>
+        <details style="position:relative">
+          <summary style="list-style:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#114D9E;cursor:pointer;font-size:20px;font-weight:800;box-shadow:3px 3px 0 {{ headerShadow }}">≡</summary>
+          <nav style="position:absolute;top:calc(100% + 10px);right:0;background:{{ surface }};border:2px solid {{ border }};box-shadow:5px 5px 0 {{ shadow }};padding:8px;display:flex;flex-direction:column;min-width:200px;z-index:30">
+            <a href="Эфиры.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Эфиры</a>
+            <a href="Проекты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:700;color:{{ ink }};text-decoration:none">Проекты</a>
+            <a href="Эксперты.dc.html" style="padding:12px 16px;font-size:15px;font-weight:800;color:{{ accent }};text-decoration:none">Эксперты</a>
+            <a href="Авторизация.dc.html" style="margin-top:6px;padding:12px 16px;font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};text-decoration:none;text-align:center">Войти</a>
+          </nav>
+        </details>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+      <nav style="display:flex;align-items:center;gap:28px;font-size:14px;font-weight:700">
+        <a href="Эфиры.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Эфиры</a>
+        <a href="Проекты.dc.html" style="color:#D3E8FD;text-decoration:none" style-hover="color:#fff">Проекты</a>
+        <a href="Эксперты.dc.html" style="color:#fff;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px">Эксперты</a>
+        <button onClick="{{ toggleTheme }}" title="Тема" style="font:inherit;width:44px;height:44px;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.5);cursor:pointer;font-size:15px" style-hover="border-color:#fff">{{ themeIcon }}</button>
+        <a href="Авторизация.dc.html" style="font-size:13.5px;font-weight:700;color:#114D9E;background:#fff;padding:12px 22px;text-decoration:none;box-shadow:3px 3px 0 {{ headerShadow }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ headerShadow }}">Войти</a>
+      </nav>
+    </sc-if>
+  </header>
+
+  <div style="background:#114D9E;padding:clamp(36px,6vw,56px) clamp(16px,4vw,48px) clamp(40px,6vw,64px)">
+    <div style="max-width:1104px;margin:0 auto;display:flex;align-items:flex-end;justify-content:space-between;gap:32px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#D3E8FD;margin-bottom:16px">Эксперты платформы</div>
+        <h1 style="margin:0;font-size:clamp(34px,6vw,56px);line-height:1;font-weight:800;letter-spacing:-.035em;color:#fff">Врачи, которые ведут эфиры</h1>
+        <div style="font-size:15px;font-weight:600;color:#D3E8FD;margin-top:16px;max-width:560px;line-height:1.6">Практикующие клиницисты из ведущих центров. Каждый эфир — их собственные случаи, а не чужие слайды.</div>
+      </div>
+      <div style="font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#D3E8FD;line-height:2;padding-bottom:6px">9 экспертов · 4 школы<br><span style="color:#fff">98 эфиров с 2024 года</span></div>
+    </div>
+  </div>
+
+  <main style="flex:1;padding:0 clamp(16px,4vw,48px)">
+    <div style="max-width:1104px;margin:clamp(32px,5vw,48px) auto 0">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+        <input value="{{ q }}" onInput="{{ setQ }}" aria-label="Поиск по имени" placeholder="Поиск по имени" style="font:inherit;font-size:14.5px;font-weight:600;padding:13px 16px;border:2px solid {{ border }};background:{{ surface }};color:{{ ink }};box-sizing:border-box;flex:1;min-width:220px;max-width:420px">
+        <span style="font-size:12.5px;font-weight:700;color:{{ inkFaint }}">{{ countNote }}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:clamp(24px,4vw,36px)">
+        <span style="font-size:10.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:{{ inkFaint }};margin-right:4px">Проект</span>
+        <sc-for list="{{ projBtns }}" as="pb" hint-placeholder-count="5"><button onClick="{{ pb.onClick }}" style="{{ pb.style }}">{{ pb.label }}</button></sc-for>
+      </div>
+
+      <sc-if value="{{ showGrid }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(240px,100%),1fr));gap:20px">
+          <sc-for list="{{ shown }}" as="ex" hint-placeholder-count="9">
+            <dc-import name="ЭкспертКарточка" dark="{{ dark }}" full-name="{{ ex.fullName }}" role="{{ ex.role }}" credentials="{{ ex.credentials }}" org="{{ ex.org }}" meta="{{ ex.meta }}" href="Эксперт.dc.html" hint-size="100%,420px"></dc-import>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ showEmpty }}" hint-placeholder-val="{{ false }}">
+        <div style="border:2px dashed {{ dashedBorder }};padding:clamp(32px,6vw,52px);text-align:center">
+          <div style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">{{ emptyTitle }}</div>
+          <p style="margin:10px auto 22px;max-width:440px;font-size:14px;line-height:1.6;color:{{ inkMuted }}">Проверьте написание имени или сбросьте фильтр по проекту.</p>
+          <button onClick="{{ resetAll }}" style="font:inherit;font-size:14px;font-weight:700;color:{{ ink }};background:{{ surface }};border:2px solid {{ border }};padding:13px 22px;cursor:pointer;box-shadow:3px 3px 0 {{ shadowSm }}" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ shadowSm }}">Сбросить поиск и фильтры</button>
+        </div>
+      </sc-if>
+
+      <div style="margin-top:clamp(40px,6vw,64px);background:{{ surface }};border:2px solid {{ border }};box-shadow:6px 6px 0 {{ shadow }};padding:clamp(22px,4vw,32px);display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap">
+        <div style="min-width:260px;flex:1">
+          <div style="font-size:20px;font-weight:800;letter-spacing:-.02em;color:{{ ink }}">Хотите вести эфиры?</div>
+          <div style="font-size:14px;line-height:1.6;color:{{ inkMuted }};margin-top:8px;max-width:520px">Ищем практиков, которым есть что разобрать вслух. Гонорар, продюсер и аудитория — с нас.</div>
+        </div>
+        <a href="Главная.dc.html#partner-form" style="font-size:14px;font-weight:800;color:{{ btnFg }};background:{{ btnBg }};border:2px solid {{ btnBg }};padding:13px 22px;text-decoration:none;box-shadow:3px 3px 0 {{ border }};white-space:nowrap" style-hover="transform:translate(1px,1px);box-shadow:2px 2px 0 {{ border }}">Стать экспертом</a>
+      </div>
+    </div>
+  </main>
+
+  <footer style="margin-top:clamp(56px,8vw,96px)">
+    <div style="border-top:2px solid {{ ink }};padding:32px clamp(16px,4vw,48px);display:flex;align-items:center;justify-content:space-between;max-width:1104px;margin:0 auto;box-sizing:content-box;gap:16px;flex-wrap:wrap">
+      {{ footLogoEl }}
+      <nav style="display:flex;gap:20px;font-size:12.5px;font-weight:700;flex-wrap:wrap">
+        <a href="Эфиры.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эфиры</a>
+        <a href="Проекты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Проекты</a>
+        <a href="Эксперты.dc.html" style="color:{{ inkFaint }};text-decoration:none">Эксперты</a>
+        <a href="Главная.dc.html#partner-form" style="color:{{ inkFaint }};text-decoration:none">Партнёрство</a>
+      </nav>
+      <div style="font-size:12.5px;font-weight:600;color:{{ inkFaint }}">Врачи учат врачей · 2026</div>
+    </div>
+    <div aria-hidden="true" style="overflow:hidden;padding-top:clamp(16px,3vw,36px)">
+      <div style="font-size:clamp(58px,12.6vw,236px);font-weight:800;letter-spacing:-.05em;line-height:.78;white-space:nowrap;text-align:center;color:{{ giantInk }};transform:translateY(.16em);user-select:none">Doctor.School</div>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    dark: (() => { try { return localStorage.getItem('ds-theme') === 'dark'; } catch (e) { return false; } })(),
+    isMobile: false, q: '', proj: 'Все'
+  };
+  componentDidMount() {
+    this.mq = window.matchMedia('(max-width: 900px)');
+    this.upd = () => this.setState({ isMobile: this.mq.matches });
+    this.upd();
+    this.mq.addEventListener ? this.mq.addEventListener('change', this.upd) : this.mq.addListener(this.upd);
+  }
+  renderVals() {
+    const d = this.state.dark, m = this.state.isMobile;
+    const ink = d ? '#fff' : 'oklch(.21 .02 250)';
+    const border = d ? '#fff' : 'oklch(.21 .02 250)';
+    const btnBg = d ? '#6BB1F7' : '#114D9E';
+    const btnFg = d ? '#0D3A77' : '#fff';
+    const E = (fullName, role, credentials, org, meta, proj) => ({ fullName, role, credentials, org, meta, proj });
+    const experts = [
+      E('Анна Соколова', 'Травматолог-ортопед', 'д.м.н., ведущий научный сотрудник', 'НМИЦ им. Пирогова', 'Куратор · 12 эфиров', 'Травматология'),
+      E('Сергей Апраксин', 'Кардиолог', 'д.м.н., профессор кафедры кардиологии', 'РМАНПО', 'Куратор · 11 эфиров', 'Кардиология'),
+      E('Дмитрий Ковалёв', 'Гастроэнтеролог', 'к.м.н., старший научный сотрудник', 'МКНЦ им. Логинова', 'Куратор · 9 эфиров', 'Гастроэнтерология'),
+      E('Михаил Верещагин', 'Травматолог-ортопед', 'к.м.н., доцент кафедры травматологии', 'Сеченовский университет', '8 эфиров', 'Травматология'),
+      E('Наталья Виноградова', 'Педиатр', 'к.м.н., куратор школы педиатрии', 'РНИМУ им. Пирогова', 'Куратор · 7 эфиров', 'Педиатрия'),
+      E('Ольга Ремизова', 'Гастроэнтеролог-диетолог', 'врач высшей категории', 'ГКБ им. Боткина', '5 эфиров', 'Гастроэнтерология'),
+      E('Павел Гусев', 'Кардиолог-аритмолог', 'к.м.н.', 'НМИЦ кардиологии', '4 эфира', 'Кардиология'),
+      E('Игорь Савченко', 'Хирург-вертебролог', 'врач высшей категории', 'ЦИТО им. Приорова', '3 эфира', 'Травматология'),
+      E('Елена Дроздова', 'Реабилитолог', '', 'ФНКЦ ФМБА России', '1 эфир', 'Травматология')
+    ];
+    const q = this.state.q.trim().toLowerCase();
+    const proj = this.state.proj;
+    const shown = experts.filter(e =>
+      (proj === 'Все' || e.proj === proj) &&
+      (!q || e.fullName.toLowerCase().includes(q))
+    );
+    const chip = (active) => 'font:inherit;font-size:12.5px;font-weight:800;padding:10px 14px;cursor:pointer;border:2px solid ' + (active ? btnBg : border) + ';color:' + (active ? btnFg : ink) + ';background:' + (active ? btnBg : 'transparent');
+    const projBtns = ['Все', 'Травматология', 'Гастроэнтерология', 'Кардиология', 'Педиатрия'].map(p => ({
+      label: p, onClick: () => this.setState({ proj: p }), style: chip(proj === p)
+    }));
+    return {
+      dark: d, isMobile: m, isDesktop: !m,
+      q: this.state.q,
+      setQ: (e) => this.setState({ q: e.target.value }),
+      shown, projBtns,
+      showGrid: shown.length > 0,
+      showEmpty: shown.length === 0,
+      emptyTitle: q ? 'По запросу «' + this.state.q.trim() + '» никого не нашли' : 'В этом проекте пока нет экспертов',
+      countNote: shown.length === experts.length ? experts.length + ' экспертов' : 'Показаны ' + shown.length + ' из ' + experts.length,
+      resetAll: () => this.setState({ q: '', proj: 'Все' }),
+      pageBg: d ? 'oklch(.16 .02 250)' : '#fff',
+      headerShadow: d ? 'oklch(.16 .02 250)' : '#0D3A77',
+      surface: d ? 'oklch(.21 .02 250)' : '#fff',
+      border,
+      shadow: d ? '#6BB1F7' : '#114D9E',
+      shadowSm: d ? '#1F69C8' : '#AED4FB',
+      accent: d ? '#6BB1F7' : '#2D84F2',
+      ink,
+      inkMuted: d ? 'rgba(255,255,255,.62)' : 'oklch(.45 .014 250)',
+      inkFaint: d ? 'rgba(255,255,255,.5)' : 'oklch(.556 .012 250)',
+      dashedBorder: d ? 'rgba(255,255,255,.35)' : 'oklch(.8 .01 250)',
+      btnBg, btnFg,
+      toggleTheme: () => this.setState(s => { const dark = !s.dark; try { localStorage.setItem('ds-theme', dark ? 'dark' : 'light'); } catch (e) {} return { dark }; }),
+      themeIcon: d ? '☀' : '☾',
+      footLogoEl: React.createElement('img', { src: d ? 'assets/ds-logo-white.svg' : 'assets/ds-logo-color.svg', alt: 'Doctor.School', style: { height: '22px', display: 'block' } }), giantInk: d ? 'rgba(174,212,251,.09)' : 'oklch(.945 .018 250)'
+    };
+  }
+}
+</script>
+</body>
+</html>

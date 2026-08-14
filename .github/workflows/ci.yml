@@ -22,7 +22,7 @@ env:
 # This workflow is BATCHED: every job pays its own checkout + `pnpm install`,
 # so this workflow's 44 declared jobs meant 44 installs (47 executing across
 # both workflows, counting `pr-body-guards.yml`'s six and excluding this file's
-# three job-level `if: false` placeholders) — the CI-minutes diet ADR-0008 §2.1
+# two job-level `if: false` placeholders) — the CI-minutes diet ADR-0008 §2.1
 # names as an enabler. The guards themselves are unchanged — only their
 # PACKAGING is:
 #
@@ -31,8 +31,8 @@ env:
 #   api-e2e                unchanged                                (BLOCK)
 #   playwright-axe / playwright-axe-portal
 #                          unchanged                                (BLOCK)
-#   guards-block           the hard-red light guards + primitives-first
-#                                                                    (BLOCK)
+#   guards-block           the hard-red light guards + primitives-first +
+#                          db-drift                                  (BLOCK)
 #   guards-warn            the 23 WARN light guards                  (WARN)
 #   ci                     the single required status check
 #
@@ -60,8 +60,11 @@ env:
 # Trade-off, deliberate: batching is fail-fast — the first hard failure in a
 # batch skips its remaining steps, where the old parallel fan-out reported every
 # failure at once. Splitting a batch back out is mechanical (each step already carries
-# its own posture comment). `api-drift`/`db-drift`/`generated-artifacts` stay
-# their own jobs: they are `if: false` placeholders that cost no runner time.
+# its own posture comment). `api-drift`/`generated-artifacts` stay their own
+# jobs: they are `if: false` placeholders that cost no runner time. `db-drift`
+# was the third such placeholder until #1236 activated it — being live, it is a
+# STEP of `guards-block` like every other active light guard, so it pays no
+# checkout/install of its own.
 #
 # ─── PR-time path gating (#1251) ─────────────────────────────────────────────
 # #1235 changed job PACKAGING, not the trigger surface: a docs-only PR still
@@ -328,26 +331,41 @@ jobs:
       - run: pnpm exec turbo run test --filter=@ds/api
 
   # ─── Drift guards from ADR-0006 §7 — GitHub-hosted placeholders ───────
-  # These three are `if: false` until their owning group lands, and they run on
-  # `ubuntu-latest`, NOT the pool. Left un-batched on purpose (#1235): they cost
-  # zero pool wall-time today, and folding them into a pool batch would only add
-  # some. They no longer `needs: setup` — that job was folded into `core`.
+  # TWO of the three §7 drift rows are still dormant, and each states the ONE
+  # real precondition it is waiting on (#1236 — a gate comment naming an
+  # already-landed precondition is the defect, not the dormancy). They are
+  # `if: false` one-step jobs on `ubuntu-latest`, NOT the pool, and left
+  # un-batched on purpose (#1235): they cost zero wall-time today, and folding
+  # them into a batch would only add some. The third row, `db-drift`, is LIVE as
+  # of #1236 — as a step of the `guards-block` batch below, not a job here, so
+  # it reuses that batch's checkout + install (the same reason every other
+  # active light guard lives there).
   api-drift:
-    if: false # Enabled by G8: apps/api (NestJS) + openapi.snapshot.json land then
+    # Enabled when the OpenAPI snapshot artifact (`openapi.snapshot.json`) lands
+    # — nothing in the repo emits or commits one today, so there is no committed
+    # baseline for a generated spec to be diffed against. `apps/api` itself
+    # landed long ago and is NOT what this is waiting on.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - run: echo "api-drift placeholder"
 
-  db-drift:
-    if: false # Enabled by G6: packages/db Drizzle schema lands then
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - run: echo "db-drift placeholder"
+  # `db-drift` is no longer a placeholder job: see the `db-drift` step of
+  # `guards-block` below (`pnpm lint:db-drift`).
 
   generated-artifacts:
-    if: false # Enabled by G6: pnpm generate:all + generators (drizzle/openapi-typescript/etc.) land then
+    # Enabled when a REGENERATING generator pipeline lands. `pnpm generate:all`
+    # exists, but today it is exactly `pnpm generate:glossary` — one generator,
+    # whose committed output (`packages/glossary/(src/)?ids.ts`) is ALREADY
+    # covered by the `glossary-roundtrip` step of `guards-block`. A regenerate-
+    # and-assert-clean job here would duplicate that check, and duplicating a
+    # BLOCK guard buys nothing but a second way to be red for one cause. The
+    # precondition is a second committed generated artifact with no roundtrip
+    # guard of its own — `packages/api-client` is the expected first (it is
+    # generated per AGENTS.md §8 but has no generator wired into `generate:all`);
+    # the glossary regenerating pipeline is tracked by #460.
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -403,6 +421,23 @@ jobs:
       # `guards-warn` batch, burned in for genuine `[[…]]` namespace ambiguity.)
       - name: glossary-roundtrip
         run: pnpm exec tsx tools/lint/glossary-roundtrip-lint.ts
+
+      # db-drift — ADR-0006 §7 "DB drift" row, ACTIVATED in #1236 (was one of
+      # three `if: false` echo placeholders). Regenerates the Drizzle migrations
+      # from `packages/db/src/schema/*` into the committed `apps/api/drizzle/`
+      # and fails if the working tree changed — i.e. a schema edit shipped
+      # without its migration. `drizzle-kit generate` diffs the schema against
+      # the latest `meta/` snapshot and opens NO database connection (only
+      # `push`/`migrate` do), so this needs no service container; the full
+      # checkout above is what makes the `git status` comparison meaningful.
+      # POSTURE: BLOCK — a plain step of this batch. It is a byte comparison of
+      # generated output against committed output, with no heuristic and no
+      # false-positive class, and the defect it catches (ORM types a column no
+      # database has) is invisible to typecheck/unit/e2e and surfaces only as a
+      # prod runtime error. Guard rationale + SKIP semantics: the file header of
+      # tools/lint/db-drift-lint.ts.
+      - name: db-drift
+        run: pnpm lint:db-drift
 
       # prod-surface — prod-surface readiness gate (BLOCK). Issue #771 (wave-1
       # prod-smoke retro). Deliberate exception to the Phase-0 WARN posture
@@ -931,8 +966,9 @@ jobs:
   # ─── Meta-job: single status check for branch protection ─────────────
   # Phase 0 baseline: every hard-red job that actually runs today sits in this
   # needs-list (#440) — a job is either here (BLOCK), carries per-step WARN
-  # (`guards-warn`), or is `if: false` (placeholder until its owning group
-  # G6/G8/G9 lands: api-drift, db-drift, generated-artifacts). WARN-only work is
+  # (`guards-warn`), or is `if: false` (placeholder until its precondition
+  # lands: api-drift, generated-artifacts — db-drift is live since #1236, as a
+  # `guards-block` STEP, so it is covered here through that job). WARN-only work is
   # intentionally excluded. WARN→BLOCK promotion criterion + sweep cadence:
   # ADR-0007 §2.6 (settled in #427; first sweep 2026-07-02 — per-guard verdicts
   # recorded on the Issue); promoting a guard now means moving its STEP from the

@@ -40,7 +40,7 @@
  * acknowledge a genuinely required absolute path (rare). The reason is required.
  *
  * Severity: WARN in Phase 0 (ADR-0007 §2.6 new-guard posture; promote to BLOCK
- * once stable). The CI job uses `continue-on-error`.
+ * once stable). Its `guards-warn` batch step is `continue-on-error`.
  *
  * Run: `pnpm lint:no-hardcoded-path`. Failures: stderr + exit 1. Clean: exit 0.
  */

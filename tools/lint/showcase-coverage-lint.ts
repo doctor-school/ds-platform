@@ -50,8 +50,8 @@
  *
  * Severity: WARN in Phase 0 (ADR-0007 §2.6: new AI-specific guards land as WARN,
  * promote to BLOCK once stable), consistent with `registry-research` / `no-stub` /
- * `interaction-states`. The CI job uses `continue-on-error` — the WARN posture is
- * the CI config, NOT a suppressed exit code here.
+ * `interaction-states`. Its `guards-warn` batch step is `continue-on-error` — the
+ * WARN posture is the CI config, NOT a suppressed exit code here.
  *
  * Run: `pnpm lint:showcase-coverage`. Violations: stderr + exit 1. Clean: exit 0.
  */

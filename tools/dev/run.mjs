@@ -70,6 +70,9 @@ function usage() {
       "  config             validate compose + secret interpolation (no up)",
       "  db-branch <N|slug> create ds_dev_<n> + migrate it; prints the DATABASE_URL to export (#428)",
       "  db-drop <N|slug>   drop the ds_dev_<n> branch database (refuses the shared ds_dev)",
+      "",
+      "  db-branch and db-drop accept --help / -h (prints their own usage, exits 0,",
+      "  touches no database).",
     ].join("\n"),
   );
   process.exit(2);
@@ -283,16 +286,31 @@ function runRecipeScript(name, scriptArgs) {
 
 // --- per-branch DB seams (#428, unit-tested in tools/lint/guard-tests) ------
 
+/** `--help` / `-h`, the only option these subcommands accept (#1139). */
+export function isHelpFlag(arg) {
+  return arg === "--help" || arg === "-h";
+}
+
 /**
  * Derive the branch database name from an issue number or slug: lowercase,
  * dashes folded to underscores, must reduce to [a-z0-9_]+ — anything else is
  * refused (the value is interpolated into SQL identifiers).
+ *
+ * A LEADING DASH is refused before the fold (#1139): dashes fold to
+ * underscores, so `--help` used to reduce to a valid `__help` and silently
+ * created + migrated `ds_dev___help` (and, via db-drop, was droppable). An
+ * option is never a branch slug — refuse the whole leading-dash class rather
+ * than special-casing the two help spellings.
  */
 export function branchDbName(input) {
-  const folded = String(input ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/-/g, "_");
+  const raw = String(input ?? "").trim();
+  if (raw.startsWith("-")) {
+    throw new Error(
+      `db-branch: "${raw}" looks like an option, not a branch name — ` +
+        "branch arguments must not start with a dash (try `--help`)",
+    );
+  }
+  const folded = raw.toLowerCase().replace(/-/g, "_");
   if (!/^[a-z0-9_]+$/.test(folded)) {
     throw new Error(
       `db-branch: "${input}" does not reduce to [a-z0-9_]+ — use the issue number or a plain slug`,
@@ -346,9 +364,36 @@ function psqlExec(db, sql) {
   ]);
 }
 
+// Resolve the branch DB name, turning branchDbName's throw into a one-line
+// `dev: …` error + exit 1 instead of an uncaught stack trace (#1139).
+function resolveBranchDb(input) {
+  try {
+    return branchDbName(input);
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : String(err));
+  }
+}
+
 function cmdDbBranch(input) {
+  if (isHelpFlag(input)) {
+    console.log(
+      [
+        "Usage: pnpm dev:db:branch <issue-N|slug>",
+        "",
+        "Create (idempotently) and migrate the per-branch database ds_dev_<n> in the",
+        "shared stand Postgres, then print the DATABASE_URL to export for this",
+        "session's api (#428). The argument is an issue number or a plain slug; it",
+        "must reduce to [a-z0-9_]+ and must not start with a dash.",
+        "",
+        "  --help, -h   show this help and exit (creates nothing)",
+        "",
+        "Tear a branch database down with `pnpm dev:db:drop <issue-N|slug>`.",
+      ].join("\n"),
+    );
+    return 0;
+  }
   if (!input) fail("usage: pnpm dev:db:branch <issue-N|slug>");
-  const db = branchDbName(input);
+  const db = resolveBranchDb(input);
   const baseUrl = (cfg().serviceEnv.DATABASE_URL || "").trim();
   if (!baseUrl)
     fail(
@@ -387,8 +432,23 @@ function cmdDbBranch(input) {
 }
 
 function cmdDbDrop(input) {
+  if (isHelpFlag(input)) {
+    console.log(
+      [
+        "Usage: pnpm dev:db:drop <issue-N|slug>",
+        "",
+        "Drop the per-branch database ds_dev_<n> (terminating its connections",
+        "first). Only the ds_dev_<branch> namespace is droppable — the shared",
+        "ds_dev and every other database are refused (#428). The argument is an",
+        "issue number or a plain slug and must not start with a dash.",
+        "",
+        "  --help, -h   show this help and exit (drops nothing)",
+      ].join("\n"),
+    );
+    return 0;
+  }
   if (!input) fail("usage: pnpm dev:db:drop <issue-N|slug>");
-  const db = branchDbName(input);
+  const db = resolveBranchDb(input);
   assertDroppableDbName(db);
   const term = psqlExec(
     "postgres",

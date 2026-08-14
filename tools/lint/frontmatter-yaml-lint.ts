@@ -1,7 +1,8 @@
 #!/usr/bin/env tsx
 /**
- * tools/lint/frontmatter-yaml-lint.ts — STATIC tree-scan guard (job
- * `frontmatter-yaml`) for the frontmatter-YAML parse class that broke the docs
+ * tools/lint/frontmatter-yaml-lint.ts — STATIC tree-scan guard
+ * (`frontmatter-yaml`, local-only — see "Static, not PR-gated" below) for the
+ * frontmatter-YAML parse class that broke the docs
  * build post-merge in the #596 wave (Issue #597).
  *
  * ── The failure it catches ────────────────────────────────────────────────────
@@ -26,7 +27,9 @@
  * ── Static, not PR-gated ──────────────────────────────────────────────────────
  * Needs no PR context, no `gh`, no Nest boot — a pure tree scan. Wired into
  * `pnpm pr:preflight --static` (STATIC_GUARDS) so it runs pre-push alongside the
- * other cheap guards. It carries no dedicated CI job: the `docs-build` job
+ * other cheap guards. It has no CI step of its own — neither in the
+ * `guards-block`/`guards-warn` batches nor elsewhere: the `docs-build` step of
+ * the `core` job
  * already fails hard-red on this class in CI (fumadocs compile), so this guard is
  * the LOCAL pre-push mirror of that existing gate, not a new CI gate.
  *

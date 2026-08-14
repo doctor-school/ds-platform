@@ -4,6 +4,7 @@ import {
   branchDbName,
   branchDatabaseUrl,
   assertDroppableDbName,
+  isHelpFlag,
 } from "../../dev/run.mjs";
 
 /**
@@ -33,6 +34,25 @@ describe("db-branch branchDbName()", () => {
     expect(() => branchDbName("４２８; DROP TABLE")).toThrow();
     expect(() => branchDbName("")).toThrow();
     expect(() => branchDbName("../etc")).toThrow();
+  });
+
+  // #1139: dashes fold to underscores, so `--help` used to reduce to the valid
+  // `__help` and silently created + migrated `ds_dev___help`. The whole
+  // leading-dash class is refused — an option is never a branch slug.
+  it("refuses a leading-dash argument instead of deriving a database from it", () => {
+    for (const arg of ["--help", "-h", "--force", "-x"]) {
+      expect(() => branchDbName(arg)).toThrow(/must not start with a dash/);
+    }
+  });
+});
+
+describe("db-branch isHelpFlag()", () => {
+  it("recognises the two help spellings and nothing else", () => {
+    expect(isHelpFlag("--help")).toBe(true);
+    expect(isHelpFlag("-h")).toBe(true);
+    expect(isHelpFlag("help")).toBe(false);
+    expect(isHelpFlag("428")).toBe(false);
+    expect(isHelpFlag(undefined)).toBe(false);
   });
 });
 

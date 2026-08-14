@@ -1,15 +1,16 @@
 #!/usr/bin/env tsx
 /**
- * tools/lint/workflow-auth-lint.ts — WARN v1 meta-guard (job `workflow-auth`) that
+ * tools/lint/workflow-auth-lint.ts — WARN v1 meta-guard (the `workflow-auth` step
+ * of the `guards-warn` batch job) that
  * enforces the "Issue-#10 auth pattern" on every `.github/workflows/*.yml`
  * (originally ci.yml only; widened in #651 when the PR-body-parsing guard
  * family moved to its own `pr-body-guards.yml` — a hardcoded ci.yml scan would
  * have let the moved jobs escape enforcement).
  *
  * Implemented per Issue #462 (surfaced by the /wrap retro of the 2026-07-02
- * guard-debt session). Lands as a REAL WARN v1: exits non-zero on findings; the
- * CI job keeps `continue-on-error: true` until its own ADR-0007 §2.6 promotion
- * window matures (clock starts at merge 2026-07-02).
+ * guard-debt session). Lands as a REAL WARN v1: exits non-zero on findings; its
+ * `guards-warn` batch step keeps `continue-on-error: true` until its own
+ * ADR-0007 §2.6 promotion window matures (clock starts at merge 2026-07-02).
  *
  * ── Why this guard exists (the tribal knowledge it hardens) ───────────────────
  * A ci.yml job that reads PR metadata through the `gh` CLI needs an explicit
@@ -57,8 +58,11 @@
  * endpoint-authz.
  *
  * ── The guard satisfies its own rule ──────────────────────────────────────────
- * `workflow-auth-lint.ts` neither imports `./lib/gh` nor calls the `gh` CLI, so
- * the `workflow-auth` job is NOT gh-gated and (correctly) needs no auth block.
+ * `workflow-auth-lint.ts` neither imports `./lib/gh` nor calls the `gh` CLI. Its
+ * own step therefore contributes nothing to the gh-gated verdict — but the
+ * `guards-warn` batch job it now sits in IS gh-gated (the `tdd-signal` and
+ * `product-note` steps consume `./lib/gh`), so that job legitimately carries the
+ * canonical auth block, which the guard checks per JOB.
  *
  * Seam: `LINT_FIXTURE_ROOT` (guard-tests harness) — points the workflow read, the
  * gh-consumer scan, and the script-map read at a fixture tree. Inert in production.

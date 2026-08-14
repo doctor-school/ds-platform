@@ -31,7 +31,8 @@
  * remedies (attach the trigger, or allowlist it with a rationale).
  *
  * Severity: WARN in Phase 0 (ADR-0007 §2.6; new guard lands WARN, promote to
- * BLOCK once stable) — the CI job uses `continue-on-error`. The guard itself
+ * BLOCK once stable) — its `guards-warn` batch step is `continue-on-error`. The
+ * guard itself
  * still exits 1 on a finding so `pnpm pr:preflight --static` surfaces it at the
  * developer's keyboard.
  *

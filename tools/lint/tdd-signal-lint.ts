@@ -6,8 +6,8 @@
  *
  * Was a `[stub]` exit-0 (never failed → vacuous green history, not promotable).
  * Implemented per Issue #438. Lands as a REAL WARN v1: exits non-zero on
- * findings; the CI job keeps `continue-on-error: true` until its ADR-0007 §2.6
- * promotion window matures.
+ * findings; its `guards-warn` batch step keeps `continue-on-error: true` until
+ * its ADR-0007 §2.6 promotion window matures.
  *
  * ── The rule (exact) ──────────────────────────────────────────────────────────
  * A PR that changes production source code but ships NO test — and whose changed

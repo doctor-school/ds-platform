@@ -91,7 +91,8 @@
  * EXIT CONTRACT (#437): exits **non-zero (1) on any finding** — the WARN→BLOCK
  * promotion prerequisite (ADR-0007 §2.6). Exits 0 when there are no findings and
  * on the empty-state (no specs). An unexpected internal error also exits 1 (fail
- * loud). The CI job keeps `continue-on-error: true` until the §2.6 sweep flips it.
+ * loud). Its `guards-warn` batch step keeps `continue-on-error: true` until the
+ * §2.6 sweep flips it.
  */
 import fg from 'fast-glob';
 import { readFile } from 'node:fs/promises';

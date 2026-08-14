@@ -26,7 +26,8 @@
  * «Для пользователя» paragraph — skill `report-task-outcome`).
  *
  * Severity: WARN in Phase 0 (ADR-0007 §2.6 posture — new AI/process guards land as
- * WARN, promote to BLOCK once stable). The CI job uses `continue-on-error`.
+ * WARN, promote to BLOCK once stable). Its `guards-warn` batch step is
+ * `continue-on-error`.
  *
  * Non-PR runs → exit 0 with a skip note. PR-event-gated (needs `gh pr view`), so it
  * also runs under `pnpm pr:preflight <N>`. Failures: stderr, exit 1. Success:

@@ -27,7 +27,8 @@
  * rationale, fails — a checkbox the author can leave blank is not evidence.
  *
  * Severity: WARN in Phase 0 (ADR-0007 §2.6 posture: new AI-specific guards land
- * as WARN, promote to BLOCK once stable). The CI job uses `continue-on-error`.
+ * as WARN, promote to BLOCK once stable). Its `pr-body-guards` batch step is
+ * `continue-on-error`.
  *
  * Non-PR runs, and PRs that touch no UI surface → exit 0 with a skip note.
  * Failures: stderr, exit 1. Success: stdout summary, exit 0.

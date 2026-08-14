@@ -53,8 +53,8 @@
  *
  * ── Output / severity ─────────────────────────────────────────────────────────
  * Each offending anchor → stderr `file:line  <reason>` + exit 1. Clean → exit 0.
- * WARN v1 in Phase 0 (ADR-0007 §2.6; new guard lands WARN, the CI job uses
- * `continue-on-error: true`, promote to BLOCK once stable).
+ * WARN v1 in Phase 0 (ADR-0007 §2.6; new guard lands WARN, its `guards-warn`
+ * batch step uses `continue-on-error: true`, promote to BLOCK once stable).
  *
  * Seam: `LINT_FIXTURE_ROOT` (guard-tests harness) points the scan at a fixture
  * tree; inert in production (unset → repo root from import.meta.url).

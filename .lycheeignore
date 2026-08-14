@@ -58,17 +58,6 @@ design-source/support\.js
 # on a third party's availability. Same class as the GOV.UK entry above.
 ^https://primer\.style($|/.*$)
 
-# GitHub profile page of the repo author, auto-linked by changesets in every
-# CHANGELOG.md entry ("Thanks @sidorovanthon!"). The recorded CAUSE is retired:
-# the intermittent "HTTP/2 protocol error" (2 of 3 runs; repo/API github.com
-# links in the same runs passed) was attributed to the bbm-ci pool's egress path
-# (squid CONNECT / slirp4netns), and that pool is gone as of #1249. The
-# exclusion STAYS for now because we have no hosted-runner evidence either way —
-# removing it blind risks a fresh red on a boilerplate attribution link. Pending
-# a re-test once clean hosted `markdown-links` runs exist to compare against;
-# tracked in DEBT.md. Original migration context: #1224.
-^https://github\.com/sidorovanthon$
-
 # Lint-guard test fixtures deliberately carry placeholder/broken markdown links
 # (e.g. a MEMORY.md fixture mimicking the auto-memory index). They are test data,
 # not docs — exclude the whole fixture tree from the link check. See #293.

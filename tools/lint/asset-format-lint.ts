@@ -27,8 +27,8 @@
  * covers every current asset.
  *
  * Severity: WARN in Phase 0 (ADR-0007 §2.6; a new guard lands WARN, promote to
- * BLOCK once stable). The CI job uses `continue-on-error` and is excluded from
- * the `ci` meta-job needs-list while WARN.
+ * BLOCK once stable). Its `guards-warn` batch step is `continue-on-error`, and
+ * the batch is excluded from the `ci` meta-job needs-list.
  *
  * Run: `pnpm lint:asset-format`. Failures: stderr + exit 1. Clean: exit 0.
  */

@@ -31,8 +31,8 @@
  * is required.
  *
  * Severity: WARN in Phase 0 (ADR-0007 §2.6) — same shape as `form-error` (#339),
- * `form-rhythm` (#334) and `interaction-states` (#269); the CI job uses
- * `continue-on-error`. Promote to BLOCK once stable.
+ * `form-rhythm` (#334) and `interaction-states` (#269); its `guards-warn` batch
+ * step is `continue-on-error`. Promote to BLOCK once stable.
  *
  * Run: `pnpm lint:submit-pending`. Violations: stderr + exit 1. Clean: exit 0.
  */

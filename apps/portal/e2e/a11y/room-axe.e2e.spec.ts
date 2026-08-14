@@ -115,7 +115,11 @@ test.describe("006 EARS-11 axe-core a11y scan of the portal room route", () => {
     await expect(page.getByTestId("display-name-prompt")).toBeVisible();
     await page.getByTestId("display-name-input").fill("Тест Врачов");
     await page.getByTestId("display-name-submit").click();
-    await expect(page.getByTestId("room-context").first()).toBeVisible();
+    // Desktop Chrome (the only project in playwright.axe.config.ts): since #1123
+    // `WebinarRoomLayout` mounts the one-line `room-context-strip` on desktop and
+    // the `room-context` block only inside the mobile «О эфире» tab — asserting
+    // the latter here failed the precondition before any axe scan ran.
+    await expect(page.getByTestId("room-context-strip")).toBeVisible();
     await expect(page.getByTestId("room-chat").first()).toBeVisible();
     await expect(page.getByTestId("room-player-rutube")).toBeVisible();
 

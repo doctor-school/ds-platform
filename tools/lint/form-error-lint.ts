@@ -39,7 +39,7 @@
  *
  * Severity: WARN in Phase 0 (ADR-0007 §2.6: new AI-specific guards land as WARN,
  * promote to BLOCK once stable), consistent with `interaction-states` /
- * `no-stub`. The CI job uses `continue-on-error`.
+ * `no-stub`. Its `guards-warn` batch step is `continue-on-error`.
  *
  * Run: `pnpm lint:form-error`. Violations: stderr + exit 1. Clean: exit 0.
  */

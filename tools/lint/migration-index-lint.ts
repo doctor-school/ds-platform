@@ -38,7 +38,7 @@
  *     in fixture mode). Inert in production.
  *
  * Severity: WARN in Phase 0 (ADR-0007 §2.6; new guard lands WARN, promote to
- * BLOCK once stable). The CI job uses `continue-on-error`.
+ * BLOCK once stable). Its `guards-warn` batch step is `continue-on-error`.
  *
  * Run: `pnpm lint:migration-index`. Failures: stderr + exit 1. Clean: exit 0.
  */

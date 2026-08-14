@@ -1,6 +1,7 @@
 #!/usr/bin/env tsx
 /**
- * tools/lint/epic-autoclose-lint.ts — WARN v1 (job `epic-autoclose`) guarding
+ * tools/lint/epic-autoclose-lint.ts — WARN v1 (the `epic-autoclose` step of the
+ * `pr-body-guards` batch job) guarding
  * against a child PR silently auto-closing an EPIC/parent issue on merge.
  *
  * Why this exists (real incident, Issue #964): a child PR wrote `Closes #927`,
@@ -29,10 +30,11 @@
  * data — no network.
  *
  * Severity: WARN in Phase 0 (ADR-0007 §2.6 posture: new AI/process guards land
- * as WARN, promote to BLOCK once the promotion window matures). The CI job uses
- * `continue-on-error: true`. SEVERITY below is the single clearly-marked
- * constant; flipping the guard to BLOCK is a one-line change here PLUS dropping
- * `continue-on-error` from the `epic-autoclose` job in pr-body-guards.yml.
+ * as WARN, promote to BLOCK once the promotion window matures). Its
+ * `pr-body-guards` batch step uses `continue-on-error: true`. SEVERITY below is
+ * the single clearly-marked constant; flipping the guard to BLOCK is a one-line
+ * change here PLUS dropping `continue-on-error` from the `epic-autoclose` STEP in
+ * pr-body-guards.yml and its row from that batch's WARN-aggregate step.
  *
  * Non-PR runs, and PRs whose body has no closing keyword → exit 0 with a skip
  * note. Findings: stderr, exit 1. Clean: stdout summary, exit 0.
@@ -51,8 +53,9 @@ const TAG = "[epic-autoclose]";
 /**
  * ── SEVERITY ──────────────────────────────────────────────────────────────
  * WARN v1 (ADR-0007 §2.6). To promote to BLOCK: change this to "BLOCK" AND
- * remove `continue-on-error: true` from the `epic-autoclose` job in
- * `.github/workflows/pr-body-guards.yml`. Both edits are required — this
+ * remove `continue-on-error: true` from the `epic-autoclose` STEP of the
+ * `pr-body-guards` batch job (`.github/workflows/pr-body-guards.yml`), plus its
+ * row from that batch's WARN-aggregate step. Both edits are required — this
  * constant is documentation/intent; the CI `continue-on-error` is what actually
  * gates the merge.
  */

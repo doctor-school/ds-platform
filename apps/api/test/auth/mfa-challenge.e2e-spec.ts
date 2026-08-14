@@ -86,6 +86,17 @@ describe.skipIf(!process.env.DATABASE_URL)(
       return totpCode(secret, Date.now() + TOTP_STEP_SECONDS * 1000);
     }
 
+    /**
+     * The **ledger's own clock**, not the test process's. Every assertion windows
+     * on `created_at`, which Postgres stamps — and on a dev stand that Postgres
+     * lives on another host, tens of ms off, so a `new Date()` fence is a
+     * knife-edge the DB writes on the wrong side of.
+     */
+    async function dbNow(): Promise<Date> {
+      const { rows } = await pool.query<{ t: Date }>("SELECT now() AS t");
+      return rows[0]!.t;
+    }
+
     async function registerAdmin(email: string): Promise<string> {
       const reg = await app.inject({
         method: "POST",
@@ -391,7 +402,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
     it("EARS-7.3: the enrollment verify and the challenge verify BOTH append an auth.mfa.failure row", async () => {
       const email = uniqueEmail();
       const sub = await registerAdmin(email);
-      const since = new Date();
+      const since = await dbNow();
 
       const enrolling = await primaryAuth(email);
       const enrollFail = await app.inject({
@@ -463,7 +474,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("EARS-7.4: the §7 threshold soft-locks the account, writes auth.lockout.triggered, and beats a CORRECT code", async () => {
       const { sub, secret, ref } = await enrolledAtChallenge();
-      const since = new Date();
+      const since = await dbNow();
 
       for (let attempt = 0; attempt < MFA_LOCKOUT_THRESHOLD; attempt++) {
         const res = await app.inject({

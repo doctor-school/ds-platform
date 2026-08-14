@@ -20,10 +20,10 @@ env:
 
 # ─── Job topology (#1235) ────────────────────────────────────────────────────
 # This workflow is BATCHED: every job pays its own checkout + `pnpm install`,
-# so this workflow's 44 declared jobs meant 44 installs (46 executing across
-# both workflows, counting `pr-body-guards.yml`'s six and excluding four
-# `if: false` placeholders) — the CI-minutes diet ADR-0008 §2.1 names as an
-# enabler. The guards themselves are unchanged — only their
+# so this workflow's 44 declared jobs meant 44 installs (47 executing across
+# both workflows, counting `pr-body-guards.yml`'s six and excluding this file's
+# three job-level `if: false` placeholders) — the CI-minutes diet ADR-0008 §2.1
+# names as an enabler. The guards themselves are unchanged — only their
 # PACKAGING is:
 #
 #   core                   setup+lint+types+unit+build+api-build-smoke+

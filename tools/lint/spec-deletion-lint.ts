@@ -37,12 +37,13 @@
  * exit 0.
  *
  * ── SEVERITY: WARN ────────────────────────────────────────────────────────────
- * The guard exits non-zero on a finding; its step in the `pr-body-guards` batch
- * job (`.github/workflows/pr-body-guards.yml`) carries `continue-on-error: true`,
- * so a finding surfaces as a WARN, not a merge blocker (ADR-0007 §2.6 new-guard
- * posture). TO PROMOTE TO BLOCK: drop `continue-on-error: true` from that step
- * AND its row from the batch's WARN-aggregate step — the guard code needs no
- * change.
+ * The guard exits non-zero on a finding; its CI STEP (`WARN · spec-deletion`, in
+ * the `pr-body-guards` batch of `.github/workflows/pr-body-guards.yml`) carries
+ * `continue-on-error: true`, and that batch's closing WARN-report step exits 0 —
+ * so the check-run stays green and a finding surfaces as a WARN, never a merge
+ * blocker (ADR-0007 §2.6 new-guard posture). TO PROMOTE TO BLOCK: drop
+ * `continue-on-error: true` from that step and its row from the WARN-report step
+ * — the guard code needs no change.
  */
 import { execa } from "execa";
 import { readFile } from "node:fs/promises";
@@ -239,7 +240,9 @@ async function prBody(prNumber: string): Promise<string> {
   );
   if (!res.ok) {
     // Fail-closed: with no body we cannot confirm the marker → the WARN fires.
-    info(`could not read PR #${prNumber} body (${res.error}); treating as no marker`);
+    info(
+      `could not read PR #${prNumber} body (${res.error}); treating as no marker`,
+    );
     return "";
   }
   return res.data.body ?? "";
@@ -262,7 +265,9 @@ async function main(): Promise<void> {
   try {
     nameStatus = await readNameStatus();
   } catch (e) {
-    fail(`could not compute the PR diff: ${(e as Error).message.split("\n")[0]}`);
+    fail(
+      `could not compute the PR diff: ${(e as Error).message.split("\n")[0]}`,
+    );
   }
   const entries = parseNameStatus(nameStatus);
 
@@ -304,7 +309,9 @@ async function main(): Promise<void> {
       `(AGENTS.md §6 / ADR-0006 §7). If this removal is intentional, either transition the ` +
       `affected file's frontmatter instead of deleting it, or add a ` +
       `\`spec-deletion: <reason + superseding ref>\` line to the PR body. A pure rename ` +
-      `(\`git mv\`) is not a deletion and passes. [SEVERITY: ${SEVERITY} — CI job is continue-on-error.]`,
+      `(\`git mv\`) is not a deletion and passes. [SEVERITY: ${SEVERITY} — this step is ` +
+      `\`continue-on-error\` and its batch reports without failing, so the check-run stays ` +
+      `green and this finding does not block the merge (ADR-0007 §2.6).]`,
   );
 }
 

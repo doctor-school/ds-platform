@@ -107,7 +107,12 @@ describe("merge-gate classifyCheckRuns() (#836)", () => {
     // GitHub keeps BOTH runs on the head SHA: a PR-body edit's concurrency group
     // cancels the in-flight body guard, a success run replaces it ~40s later.
     // The stale `cancelled` must not read as blocking (permanent false RED).
-    const bodyGuards = ["spec-link", "prior-decisions", "registry-research", "spec-status-fresh"];
+    const bodyGuards = [
+      "spec-link",
+      "prior-decisions",
+      "registry-research",
+      "spec-status-fresh",
+    ];
     const runs = bodyGuards.flatMap((name) => [
       {
         name,
@@ -219,6 +224,62 @@ describe("merge-gate classifyCheckRuns() (#836)", () => {
   });
 });
 
+/**
+ * No name-based exemption — severity lives in the exit code (#1253).
+ *
+ * ADR-0007 §2.6 makes WARN visible and never merge-blocking, and that is
+ * delivered ENTIRELY in the workflow: every WARN guard is a
+ * `continue-on-error: true` step and the batch's closing step reports to the job
+ * summary and exits 0, so a run with WARN findings CONCLUDES SUCCESS and the
+ * gate never sees a red to forgive.
+ *
+ * Which means a FAILED `guards-warn` check-run can now only mean the batch did
+ * not execute — checkout/install failed, the runner died, a step's `run:` is
+ * malformed, or a new WARN guard was added without `continue-on-error`. That is
+ * strictly worse than a finding: to anyone reading the board, "the guards never
+ * ran" is indistinguishable from "everything is clean". So it MUST block, and
+ * the gate keeps its simple, total rule — any non-success terminal check-run is
+ * red, no name is special.
+ */
+describe("merge-gate has no WARN-name exemption (#1253)", () => {
+  it("EARS-1253.1: a FAILED `guards-warn` check-run BLOCKS — it can only mean the batch never ran", () => {
+    const runs = [
+      { name: "ci", status: "completed", conclusion: "success" },
+      { name: "guards-warn", status: "completed", conclusion: "failure" },
+    ];
+    const verdict = classifyCheckRuns(runs);
+    expect(verdict.state).toBe("red");
+    expect(verdict.red).toEqual(["guards-warn"]);
+  });
+
+  it("EARS-1253.2: no check-run name is exempt — the rule is total", () => {
+    for (const name of [
+      "guards-warn",
+      "guards-warn-v2",
+      "guards-block",
+      "pr-body-guards",
+      "core",
+      "ci",
+    ]) {
+      const runs = [
+        { name: "changes", status: "completed", conclusion: "success" },
+        { name, status: "completed", conclusion: "failure" },
+      ];
+      const verdict = classifyCheckRuns(runs);
+      expect(verdict.state).toBe("red");
+      expect(verdict.red).toEqual([name]);
+    }
+  });
+
+  it("EARS-1253.3: the classifier exposes no WARN channel to reason about", () => {
+    const verdict = classifyCheckRuns([
+      { name: "ci", status: "completed", conclusion: "success" },
+    ]);
+    expect(verdict.state).toBe("green");
+    expect(verdict).not.toHaveProperty("warn");
+  });
+});
+
 describe("merge-gate latestRunsByName() (#955)", () => {
   it("keeps one run per distinct name", () => {
     const runs = [
@@ -274,7 +335,11 @@ describe("merge-gate latestRunsByName() (#955)", () => {
 
   it("a run missing timestamps sorts oldest (a timestamped run wins its name)", () => {
     const runs = [
-      { name: "x", conclusion: "success", completed_at: "2026-07-15T10:00:50Z" },
+      {
+        name: "x",
+        conclusion: "success",
+        completed_at: "2026-07-15T10:00:50Z",
+      },
       { name: "x", conclusion: "cancelled" },
     ];
     expect(latestRunsByName(runs)[0].conclusion).toBe("success");
@@ -312,9 +377,9 @@ describe("merge-gate assertOpenPr() (#963)", () => {
 
   it("accepts an OPEN draft PR (a draft is still OPEN)", () => {
     // A draft PR resolves state OPEN; the gate does not read the draft flag.
-    expect(assertOpenPr({ state: "OPEN", headRefOid: "abc123" }, "456").ok).toBe(
-      true,
-    );
+    expect(
+      assertOpenPr({ state: "OPEN", headRefOid: "abc123" }, "456").ok,
+    ).toBe(true);
   });
 
   it("rejects a CLOSED PR (its check-runs are stale — silent no-op)", () => {
@@ -350,9 +415,9 @@ describe("merge-gate isWorktreeCwd() (#836)", () => {
   // pure-string fixtures never resolved against the filesystem, exempt from the
   // no-absolute-literal rule (they exercise separator handling only).
   it("detects a cwd inside .claude/worktrees/<N>", () => {
-    expect(
-      isWorktreeCwd(join("repo", ".claude", "worktrees", "836")),
-    ).toBe(true);
+    expect(isWorktreeCwd(join("repo", ".claude", "worktrees", "836"))).toBe(
+      true,
+    );
     expect(
       isWorktreeCwd(join("repo", ".claude", "worktrees", "836", "apps", "api")),
     ).toBe(true);

@@ -33,9 +33,10 @@
  *
  * ── Posture (recorded on the ci.yml step header) ──────────────────────────────
  * BURN-IN: step-level `continue-on-error: true` (WARN) plus the batch's
- * WARN-aggregate row, in the `guards-warn` batch job — which is NOT in the `ci`
- * needs-list
- * (BLOCK = in needs-list, WARN = continue-on-error — never both). Rationale:
+ * WARN-report row, in the `guards-warn` batch job — which is NOT in the `ci`
+ * needs-list. The report step exits 0, so a finding here leaves the check-run
+ * GREEN and never blocks the merge (ADR-0007 §2.6; severity lives in exit
+ * codes, never in a check-run name). Rationale:
  *   (a) ADR-0006 §7.0 phases glossary-mdx into the Pilot tier (the #449 posture
  *       note flags this) — it is not a pre-pilot-mandatory check;
  *   (b) the `[[…]]` namespace overload above makes resolution a heuristic
@@ -83,8 +84,9 @@ function info(msg: string): void {
 function maskCode(text: string): string {
   let out = text;
   // Fenced blocks first (``` … ``` or ~~~ … ~~~), across lines.
-  out = out.replace(/^([ \t]*)(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1?\2[^\n]*$/gm, (m) =>
-    m.replace(/[^\n]/g, " "),
+  out = out.replace(
+    /^([ \t]*)(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1?\2[^\n]*$/gm,
+    (m) => m.replace(/[^\n]/g, " "),
   );
   // Then inline code spans (`…`, ``…``) — single line.
   out = out.replace(/(`+)(?:(?!\1).)*\1/g, (m) => m.replace(/[^\n]/g, " "));
@@ -116,7 +118,10 @@ async function main(): Promise<void> {
       // Same-line `new-term: <id>` opt-out (a new term added in the same PR).
       const lineStart = raw.lastIndexOf("\n", m.index) + 1;
       const lineEndRaw = raw.indexOf("\n", m.index);
-      const line = raw.slice(lineStart, lineEndRaw === -1 ? raw.length : lineEndRaw);
+      const line = raw.slice(
+        lineStart,
+        lineEndRaw === -1 ? raw.length : lineEndRaw,
+      );
       if (line.includes(`new-term: ${id}`)) continue;
       errors.push(
         `${posix}: [[${id}]] does not resolve to a glossary term (and has no \`new-term: ${id}\` opt-out).`,
@@ -130,7 +135,9 @@ async function main(): Promise<void> {
   );
 
   if (errors.length === 0) {
-    info("PASS — every glossary directive resolves (or carries a new-term opt-out).");
+    info(
+      "PASS — every glossary directive resolves (or carries a new-term opt-out).",
+    );
     process.exit(0);
   }
 
@@ -144,6 +151,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((e) => {
-  process.stderr.write(`${TAG} unexpected error: ${(e as Error).stack ?? String(e)}\n`);
+  process.stderr.write(
+    `${TAG} unexpected error: ${(e as Error).stack ?? String(e)}\n`,
+  );
   process.exit(1);
 });

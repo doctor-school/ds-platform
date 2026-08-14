@@ -6,8 +6,10 @@
  *
  * Was a `[stub]` exit-0 (never failed → vacuous green history, not promotable).
  * Implemented per Issue #438. Lands as a REAL WARN v1: exits non-zero on
- * findings; its `guards-warn` batch step keeps `continue-on-error: true` until
- * its ADR-0007 §2.6 promotion window matures.
+ * findings; its CI STEP (`WARN · tdd-signal`, in the `guards-warn` batch) keeps
+ * `continue-on-error: true` — and that batch's closing WARN-report step exits 0,
+ * so the check-run stays green and the finding never blocks a merge — until its
+ * ADR-0007 §2.6 promotion window matures.
  *
  * ── The rule (exact) ──────────────────────────────────────────────────────────
  * A PR that changes production source code but ships NO test — and whose changed
@@ -107,10 +109,13 @@ function moduleRoot(fileRel: string): string {
 
 /** True iff any `*.test/spec/e2e-spec` file exists under `moduleDir` in the tree. */
 async function moduleHasTest(moduleDir: string): Promise<boolean> {
-  const hits = await fg(`${moduleDir}/**/*.{test,spec,e2e-spec}.{ts,tsx,js,jsx}`, {
-    cwd: REPO_ROOT,
-    ignore: ["**/node_modules/**"],
-  });
+  const hits = await fg(
+    `${moduleDir}/**/*.{test,spec,e2e-spec}.{ts,tsx,js,jsx}`,
+    {
+      cwd: REPO_ROOT,
+      ignore: ["**/node_modules/**"],
+    },
+  );
   return hits.length > 0;
 }
 
@@ -170,12 +175,15 @@ async function main(): Promise<void> {
   }
 
   for (const f of uncovered) {
-    process.stderr.write(`${TAG} untested change  ${f}  (module \`${moduleRoot(f)}\` has no test)\n`);
+    process.stderr.write(
+      `${TAG} untested change  ${f}  (module \`${moduleRoot(f)}\` has no test)\n`,
+    );
   }
   fail(
     `${uncovered.length} production source file(s) changed with no test in the diff and no existing test in their module. ` +
       `Per AGENTS.md §6 (TDD) add a failing \`it('EARS-N: …')\` test with the change. ` +
-      `Heuristic (design §5.2); if this is a genuine test-exempt change (pure types, config), the WARN can be ignored — the CI job is \`continue-on-error\`.`,
+      `Heuristic (design §5.2); if this is a genuine test-exempt change (pure types, config), the WARN can be ignored — ` +
+      `this step is \`continue-on-error\` and its batch reports without failing, so the check-run stays green and this finding does not block the merge (ADR-0007 §2.6).`,
   );
 }
 

@@ -112,6 +112,17 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       return rows[0]!.id;
     }
 
+    /**
+     * The **ledger's own clock**, not the test process's. Every assertion windows
+     * on `created_at`, which Postgres stamps — and on a dev stand that Postgres
+     * lives on another host, tens of ms off, so a `new Date()` fence is a
+     * knife-edge the DB writes on the wrong side of.
+     */
+    async function dbNow(): Promise<Date> {
+      const { rows } = await pool.query<{ t: Date }>("SELECT now() AS t");
+      return rows[0]!.t;
+    }
+
     async function registrationCount(
       userId: string,
       eventId: string,
@@ -252,7 +263,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const email = uniqueEmail("doc");
       const cookie = await doctorSession(email);
 
-      const since = new Date();
+      const since = await dbNow();
       const first = await register(slug, cookie);
       expect(first.statusCode).toBe(200);
       // First insert → exactly one terminal audit row.

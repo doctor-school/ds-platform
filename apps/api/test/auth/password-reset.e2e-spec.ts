@@ -238,6 +238,17 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(res.statusCode).toBe(200);
     }
 
+    /**
+     * The **ledger's own clock**, not the test process's. Every assertion windows
+     * on `created_at`, which Postgres stamps — and on a dev stand that Postgres
+     * lives on another host, tens of ms off, so a `new Date()` fence is a
+     * knife-edge the DB writes on the wrong side of.
+     */
+    async function dbNow(): Promise<Date> {
+      const { rows } = await pool.query<{ t: Date }>("SELECT now() AS t");
+      return rows[0]!.t;
+    }
+
     async function resetAndComplete(email: string, code: string): Promise<number> {
       await app.inject({
         method: "POST",
@@ -313,7 +324,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
       // Scope the append-only ledger assertion to this test's window (the fake's
       // sub is deterministic across re-runs; created_at isolates the fresh row).
-      const since = new Date();
+      // The bound is read from the clock that STAMPS `created_at` — Postgres —
+      // because on a dev stand it sits on another host tens of ms off.
+      const since = await dbNow();
       expect(await resetAndComplete(email, FAKE_VALID_CODE)).toBe(200);
 
       // The mirror users row is now verified (EARS-19/26 mirror of the IdP flip).

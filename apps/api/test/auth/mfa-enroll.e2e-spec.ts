@@ -82,6 +82,17 @@ describe.skipIf(!process.env.DATABASE_URL)(
       return email;
     }
 
+    /**
+     * The **ledger's own clock**, not the test process's. Every assertion windows
+     * on `created_at`, which Postgres stamps — and on a dev stand that Postgres
+     * lives on another host, tens of ms off, so a `new Date()` fence is a
+     * knife-edge the DB writes on the wrong side of.
+     */
+    async function dbNow(): Promise<Date> {
+      const { rows } = await pool.query<{ t: Date }>("SELECT now() AS t");
+      return rows[0]!.t;
+    }
+
     async function registerAdmin(email: string): Promise<string> {
       const reg = await app.inject({
         method: "POST",
@@ -300,8 +311,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // The fake IdP numbers subjects per app instance, so the same `fake-sub-N`
       // string is minted by every suite in the run and the ledger is append-only:
       // the window pins the assertion to THIS enrollment's rows rather than every
-      // row any suite ever wrote for that subject id.
-      const since = new Date();
+      // row any suite ever wrote for that subject id. The bound comes from the
+      // ledger's own clock — Postgres stamps `created_at`, and on a dev stand it
+      // sits on another host tens of ms off, so a `new Date()` fence lands on the
+      // wrong side of the very row this test just wrote.
+      const since = await dbNow();
       const verify = await app.inject({
         method: "POST",
         url: VERIFY_URL,

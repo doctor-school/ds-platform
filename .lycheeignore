@@ -40,6 +40,22 @@ design-source/support\.js
 # Same crawler-hostile false-positive class as the npmjs 403 entry above. #1228
 ^https://design-system\.service\.gov\.uk($|/.*$)
 
+# GitHub Primer, GitHub's own design system — cited in design/constitution.md at
+# three places (button states, form errors, segmented control). Measured
+# 2026-08-14: `/product/components/button/` and `/product/ui-patterns/forms/` do
+# not respond from a residential connection either (three probes over ~40 min),
+# `/ui-patterns/forms/` returns 502, and the domain root hangs — a live
+# third-party outage, not a stale citation: Primer's own redirect from
+# `/components/button` points at the hanging `/product/components/button/`, so
+# the cited URLs are canonical. `/components/segmented-control` does answer
+# 301→200 residentially yet still times out from GitHub-hosted runners — a
+# reachability gap stacked on top of the outage, which is why the exclusion is
+# domain-wide and not the three URLs. The links have been in the tree since
+# 2026-07-01 (f4c46f72, PR #415) and passed CI until today. Owner decision
+# 2026-08-14 (#1249): CI must not gate on a third party's uptime. Verified
+# manually; same class as the GOV.UK entry above.
+^https://primer\.style($|/.*$)
+
 # GitHub profile page of the repo author, auto-linked by changesets in every
 # CHANGELOG.md entry ("Thanks @sidorovanthon!"). The recorded CAUSE is retired:
 # the intermittent "HTTP/2 protocol error" (2 of 3 runs; repo/API github.com

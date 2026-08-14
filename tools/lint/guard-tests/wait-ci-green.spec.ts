@@ -25,7 +25,7 @@ describe("wait-ci-green classify() — baseline board", () => {
   it("is green when every row is pass/skipping", () => {
     const checks = [
       { name: "ci", bucket: "pass" },
-      { name: "db-drift", bucket: "skipping" },
+      { name: "api-drift", bucket: "skipping" },
     ];
     expect(classify(checks).state).toBe("green");
   });

@@ -217,7 +217,7 @@ The table below is the guard registry — one row per GUARD with its source and 
 | `unit`                  | `pnpm test` (Vitest per app/package)                                            | ADR-0007 §2.3 | required           |
 | `build`                 | `pnpm build` (Turborepo cache)                                                  | —             | required           |
 | `api-drift`             | Spectral lint + `openapi.snapshot.json` diff                                    | ADR-0006 §7   | BLOCK              |
-| `db-drift`              | `pnpm exec drizzle-kit check`                                                   | ADR-0006 §7   | BLOCK              |
+| `db-drift`              | `tools/lint/db-drift-lint.ts` (regenerate ↔ committed migrations)               | ADR-0006 §7   | BLOCK              |
 | `events-drift`          | `tools/lint/events-lint.ts` (@OutboxEmit ↔ events.md)                           | ADR-0006 §7   | BLOCK              |
 | `generated-artifacts`   | `pnpm generate:all --check` (openapi-typescript SDK + glossary IDs + ERD)       | ADR-0006 §7   | BLOCK              |
 | `markdown-links`        | `lychee` cross-doc link check                                                   | ADR-0006 §7   | BLOCK              |

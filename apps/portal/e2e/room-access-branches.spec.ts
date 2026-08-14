@@ -100,12 +100,37 @@ async function loginAs(
  * Assert the current page renders NO room composition — no player frame (real or
  * the "unavailable" state), no chat aside, no room context. This is the "no soft
  * wall" invariant: a denied caller never sees the player, chat, or a room shell.
+ *
+ * The context assertions cover BOTH breakpoint faces of the #1123
+ * `WebinarRoomLayout` split — desktop mounts `room-context-strip`, mobile mounts
+ * `room-context` in its «О эфире» tab — so the absence check stays meaningful
+ * whichever branch renders. (The positive "the room rendered" assertions in this
+ * file target `room-context-strip`: this project is Desktop Chrome, where
+ * `room-context` is never in the DOM.)
  */
+/**
+ * Assert the room composition RENDERED on the admitted branches. Since 006
+ * EARS-14 (#803) a freshly provisioned doctor carries NO display name, so the
+ * admitted room url first serves the just-in-time «Имя и фамилия» prompt —
+ * complete it (the way `room-display-name.spec.ts` / `room-axe.e2e.spec.ts` do)
+ * and the refreshed server page composes the room. Precondition only; the
+ * assertion is still "the room rendered".
+ */
+async function expectRoomRendered(page: Page): Promise<void> {
+  const prompt = page.getByTestId("display-name-prompt");
+  if (await prompt.isVisible().catch(() => false)) {
+    await page.getByTestId("display-name-input").fill("Тест Врачов");
+    await page.getByTestId("display-name-submit").click();
+  }
+  await expect(page.getByTestId("room-context-strip")).toBeVisible();
+}
+
 async function expectNoRoom(page: Page): Promise<void> {
   await expect(page.getByTestId("room-player-youtube")).toHaveCount(0);
   await expect(page.getByTestId("room-player-rutube")).toHaveCount(0);
   await expect(page.getByTestId("room-player-unavailable")).toHaveCount(0);
   await expect(page.getByTestId("room-chat")).toHaveCount(0);
+  await expect(page.getByTestId("room-context-strip")).toHaveCount(0);
   await expect(page.getByTestId("room-context")).toHaveCount(0);
 }
 
@@ -144,7 +169,7 @@ test.describe("006 EARS-6 denied-access routing (auth/register/not-live front do
     // `/account`) and — registered for a live room — is admitted, the room renders.
     await loginAs(page, email, password);
     await page.waitForURL(new RegExp(`/webinars/${SLUG_LIVE}/room$`));
-    await expect(page.getByTestId("room-context").first()).toBeVisible();
+    await expectRoomRendered(page);
   });
 
   test("006 EARS-6.2: an authenticated-but-unregistered doctor is guided to the register front door (no player), and admitted to the room on register", async ({
@@ -153,7 +178,11 @@ test.describe("006 EARS-6 denied-access routing (auth/register/not-live front do
     // A freshly provisioned doctor: authenticated (003 session) but NOT registered
     // for the seeded live event.
     await registerDoctor(page);
-    await page.waitForURL(/\/account/);
+    // The precondition is "authenticated, unregistered", not a specific landing
+    // route: a returnTo-less auto-login now lands on the logged-in `/webinars`
+    // home (observed 2026-08-14), not `/account`. Accept either — this test's
+    // subject is the room front door reached below, not the post-signup landing.
+    await page.waitForURL(/\/(webinars|account)(?:$|[/?#])/);
 
     // Directly navigating to the room is refused (403 → register) and routed to the
     // 005 register front door on the event page, carrying `?from=room`.
@@ -180,7 +209,7 @@ test.describe("006 EARS-6 denied-access routing (auth/register/not-live front do
       waitUntil: "domcontentloaded",
     });
     await page.waitForURL(new RegExp(`/webinars/${SLUG_LIVE}/room$`));
-    await expect(page.getByTestId("room-context").first()).toBeVisible();
+    await expectRoomRendered(page);
   });
 
   test("006 EARS-6.3: a registered doctor reaching the room of a NOT-`live` event lands on the truthful 004 lifecycle state, no watchable room", async ({

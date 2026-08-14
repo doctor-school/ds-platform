@@ -1,13 +1,14 @@
 #!/usr/bin/env tsx
 /**
- * tools/lint/spec-status-lint.ts — WARN v1 (job `spec-status-fresh`) for the
+ * tools/lint/spec-status-lint.ts — WARN v1 (the `spec-status-fresh` step of the
+ * `pr-body-guards` batch job) for the
  * ADR-0007 design §5.2 "Spec status freshness" row ("Merged PR with spec:NNN but
  * spec status='Draft'. Custom lint: at merge — check `status: In dev` minimum").
  *
  * Was a `[stub]` exit-0 (never failed → vacuous green history, not promotable).
  * Implemented per Issue #438. Lands as a REAL WARN v1: exits non-zero on
- * findings; the CI job keeps `continue-on-error: true` until its ADR-0007 §2.6
- * promotion window matures. PR-event-gated (like spec-link) and run by
+ * findings; its `pr-body-guards` batch step keeps `continue-on-error: true` until
+ * its ADR-0007 §2.6 promotion window matures. PR-event-gated (like spec-link) and run by
  * `pnpm pr:preflight` — so it MUST exit 0 cleanly outside a PR context.
  *
  * ── The rule (exact) ──────────────────────────────────────────────────────────

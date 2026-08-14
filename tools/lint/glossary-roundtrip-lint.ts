@@ -1,10 +1,11 @@
 #!/usr/bin/env tsx
 /**
- * tools/lint/glossary-roundtrip-lint.ts — BASELINE hard-red guard (job
- * `glossary-roundtrip`) for the ADR-0006 §6 glossary roundtrip check: the
+ * tools/lint/glossary-roundtrip-lint.ts — BASELINE hard-red guard (the
+ * `glossary-roundtrip` step of the `guards-block` batch job) for the ADR-0006 §6
+ * glossary roundtrip check: the
  * glossary SOURCE-of-truth and the GENERATED id artifact stay in lockstep.
  * Implemented per Issue #448 (was a 5-line exit-0 stub gating merge vacuously
- * once #440 wired the job into the `ci` needs-list).
+ * once #440 wired it into the `ci` needs-list).
  *
  * ── The rule (exact) ──────────────────────────────────────────────────────────
  * The set of canonical ids in the glossary source
@@ -30,8 +31,9 @@
  * it is exercised only by the fixture test (`LINT_FIXTURE_ROOT` no-artifact case),
  * not production reality. Kept because it is a real evaluated code path, not a stub.
  *
- * ── Posture (recorded on the ci.yml job header) ───────────────────────────────
- * KEPT hard-red (BLOCK, in the `ci` needs-list). It is a deterministic pure
+ * ── Posture (recorded on the ci.yml step header) ──────────────────────────────
+ * KEPT hard-red (BLOCK: a plain step of `guards-block`, which is in the `ci`
+ * needs-list — a failure fails the batch, which fails `ci`). It is a deterministic pure
  * set comparison with no false-positive class, and clean (in lockstep) on `main`.
  * ADR-0006 §7.0 phases roundtrip into the Pilot tier — that phasing addressed
  * FALSE-POSITIVE / overhead noise, which a symmetric id-set diff cannot produce;

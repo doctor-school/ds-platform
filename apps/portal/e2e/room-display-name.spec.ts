@@ -16,6 +16,12 @@ import { LIVE_STAND, provisionLoggedInDoctor } from "./support/doctor-session";
  * prompt is guaranteed to fire on first room entry and no cross-run name leaks in.
  * Selectors are locale-agnostic (data-testids) except the avatar initial, whose
  * visible text IS the assertion (EARS-15).
+ *
+ * "The room rendered" is asserted on `room-context-strip` — the DESKTOP one-line
+ * context strip under the player. Since #1123 the `WebinarRoomLayout` primitive
+ * branches on a JS media query: desktop mounts the strip and mobile mounts the
+ * `room-context` block inside its «О эфире» tab, so `room-context` is not in the
+ * desktop DOM at all. Both playwright projects here are Desktop Chrome.
  */
 
 const SLUG_LIVE = process.env.E2E_ROOM_SLUG_LIVE;
@@ -63,12 +69,12 @@ test.describe("006 EARS-14 JIT display-name prompt on first room entry (e2e)", (
     // A valid two-word name is accepted → the room renders.
     await page.getByTestId("display-name-input").fill("Тест Врачов");
     await page.getByTestId("display-name-submit").click();
-    await expect(page.getByTestId("room-context").first()).toBeVisible();
+    await expect(page.getByTestId("room-context-strip")).toBeVisible();
     await expect(page.getByTestId("display-name-prompt")).toHaveCount(0);
 
     // Reloading the room does NOT re-prompt — the name is persisted server-side.
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("room-context").first()).toBeVisible();
+    await expect(page.getByTestId("room-context-strip")).toBeVisible();
     await expect(page.getByTestId("display-name-prompt")).toHaveCount(0);
   });
 });
@@ -87,7 +93,7 @@ test.describe("006 EARS-15 header-avatar initials from the real saved name (e2e)
     await expect(page.getByTestId("display-name-prompt")).toBeVisible();
     await page.getByTestId("display-name-input").fill("Врачова");
     await page.getByTestId("display-name-submit").click();
-    await expect(page.getByTestId("room-context").first()).toBeVisible();
+    await expect(page.getByTestId("room-context-strip")).toBeVisible();
 
     // The header avatar (queried by its accessible name) shows the ONE initial «В»
     // — derived from the real saved name, never fabricated.

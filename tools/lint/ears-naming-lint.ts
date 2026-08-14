@@ -29,8 +29,8 @@
  * the guard is self-scoping to "titles that meant to be EARS". A file may opt out
  * with a reasoned `/* ears-naming-ok: <reason> *\/`.
  *
- * Severity: WARN in Phase 0 (ADR-0007 §2.6), `continue-on-error` CI job; promote to
- * BLOCK once stable. Run: `pnpm lint:ears-naming`. Violations: stderr + exit 1.
+ * Severity: WARN in Phase 0 (ADR-0007 §2.6), a `continue-on-error` step of the
+ * `guards-warn` batch job; promote to BLOCK once stable. Run: `pnpm lint:ears-naming`. Violations: stderr + exit 1.
  */
 import { readFileSync } from 'node:fs';
 import { resolve, dirname, relative } from 'node:path';

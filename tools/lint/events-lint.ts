@@ -1,9 +1,10 @@
 #!/usr/bin/env tsx
 /**
- * tools/lint/events-lint.ts — BASELINE hard-red guard (job `events-drift`) for the
+ * tools/lint/events-lint.ts — BASELINE hard-red guard (the `events-drift` step of
+ * the `guards-block` batch job) for the
  * ADR-0006 §7 "Events drift" row: "`@OutboxEmit` calls ↔ spec's `events.md`"
  * (Custom AST). Implemented per Issue #448 (was a 5-line exit-0 stub that gated
- * merge vacuously once #440 wired the job into the `ci` needs-list).
+ * merge vacuously once #440 wired it into the `ci` needs-list).
  *
  * ── The rule (exact) ──────────────────────────────────────────────────────────
  * The set of event names EMITTED in code (each `@OutboxEmit('<name>')` call-site
@@ -29,8 +30,9 @@
  * those tokens as the documented set. Revisit this extraction when the first real
  * manifest defines the convention concretely (tracked with the guard).
  *
- * ── Posture (recorded on the ci.yml job header) ───────────────────────────────
- * KEPT hard-red (BLOCK, in the `ci` needs-list). It is a deterministic set
+ * ── Posture (recorded on the ci.yml step header) ──────────────────────────────
+ * KEPT hard-red (BLOCK: a plain step of `guards-block`, which is in the `ci`
+ * needs-list — a failure fails the batch, which fails `ci`). It is a deterministic set
  * comparison over literal string tokens — no heuristic, no false-positive class —
  * and it is clean (empty) on `main`. ADR-0006 §7.0 does not phase events-drift
  * into the Pilot tier (unlike the two glossary checks), so there is no phasing

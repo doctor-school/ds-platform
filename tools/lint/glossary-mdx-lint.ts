@@ -1,6 +1,7 @@
 #!/usr/bin/env tsx
 /**
- * tools/lint/glossary-mdx-lint.ts — guard (job `glossary-mdx`) for the ADR-0006
+ * tools/lint/glossary-mdx-lint.ts — guard (the `glossary-mdx` step of the
+ * `guards-warn` batch job) for the ADR-0006
  * §6 MDX glossary-lint layer: a `[[term-id]]` glossary directive in docs/MDX
  * prose must resolve to a glossary canonical id. Implemented per Issue #448 (was
  * a 5-line exit-0 stub gating merge vacuously once #440 wired it into `ci`).
@@ -26,12 +27,14 @@
  * After both exclusions, a residual `[[id]]` in live prose is a real glossary
  * directive and must resolve. This disambiguation is HEURISTIC (a new memory
  * prefix or a novel prose cross-ref could slip the net), which is exactly why the
- * job is burned in as WARN rather than a hard BLOCK — see the posture note. The
+ * step is burned in as WARN rather than a hard BLOCK — see the posture note. The
  * §6.4 directive-marker collision itself was settled by the ADR-0006 §6 reconcile
  * (#459), which defined a distinct glossary-directive marker grammar.
  *
- * ── Posture (recorded on the ci.yml job header) ───────────────────────────────
- * BURN-IN: `continue-on-error: true` (WARN), and REMOVED from the `ci` needs-list
+ * ── Posture (recorded on the ci.yml step header) ──────────────────────────────
+ * BURN-IN: step-level `continue-on-error: true` (WARN) plus the batch's
+ * WARN-aggregate row, in the `guards-warn` batch job — which is NOT in the `ci`
+ * needs-list
  * (BLOCK = in needs-list, WARN = continue-on-error — never both). Rationale:
  *   (a) ADR-0006 §7.0 phases glossary-mdx into the Pilot tier (the #449 posture
  *       note flags this) — it is not a pre-pilot-mandatory check;

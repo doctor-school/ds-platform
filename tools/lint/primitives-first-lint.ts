@@ -105,8 +105,9 @@
  * A run with BOTH exits 1 (the block dominates). WARN→BLOCK promotion for the
  * #1103 classes: once the app-code WARN count reaches 0 and holds for one sweep
  * cadence (ADR-0007 §2.6), move those tags/SHELL into the block set — a new
- * bespoke shell is then a hard regression, not drift. The CI job runs WITHOUT
- * `continue-on-error`: the tool's own exit code is the single severity source.
+ * bespoke shell is then a hard regression, not drift. Its `guards-warn` batch step
+ * runs WITHOUT `continue-on-error` (and carries no WARN-aggregate row): the
+ * tool's own exit code is the single severity source.
  *
  * Run: `pnpm lint:primitives-first`. BLOCK: stderr + exit 1. WARN-only: stderr +
  * exit 0. Clean: exit 0.

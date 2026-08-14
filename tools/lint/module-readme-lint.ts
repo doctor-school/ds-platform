@@ -5,8 +5,9 @@
  *
  * Was a `[stub]` exit-0 (never failed → 6-week green history vacuous, not
  * promotable). Implemented per Issue #438 (the #427 WARN→BLOCK sweep found the
- * four stubs). Lands as a REAL WARN v1: exits non-zero on findings; the CI job
- * keeps `continue-on-error: true` until its own ADR-0007 §2.6 promotion window
+ * four stubs). Lands as a REAL WARN v1: exits non-zero on findings; its
+ * `guards-warn` batch step keeps `continue-on-error: true` until its own
+ * ADR-0007 §2.6 promotion window
  * matures.
  *
  * ── The rule (exact) ──────────────────────────────────────────────────────────

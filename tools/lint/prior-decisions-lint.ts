@@ -1,14 +1,15 @@
 #!/usr/bin/env tsx
 /**
- * tools/lint/prior-decisions-lint.ts — WARN v1 (job `prior-decisions`) for the
+ * tools/lint/prior-decisions-lint.ts — WARN v1 (the `prior-decisions` step of the
+ * `pr-body-guards` batch job) for the
  * ADR-0007 design §5.2 "Prior decisions cited" row ("New spec without cited ADRs
  * in 'Prior decisions' if category ≠ docs-only. Spec lint: `NNN-requirements.md`
  * has a section with ≥1 ADR-link").
  *
  * Was a `[stub]` exit-0 (never failed → vacuous green history, not promotable).
  * Implemented per Issue #438. Lands as a REAL WARN v1: exits non-zero on
- * findings; the CI job keeps `continue-on-error: true` until its ADR-0007 §2.6
- * promotion window matures. PR-event-gated and run by `pnpm pr:preflight` — so it
+ * findings; its `pr-body-guards` batch step keeps `continue-on-error: true` until
+ * its ADR-0007 §2.6 promotion window matures. PR-event-gated and run by `pnpm pr:preflight` — so it
  * MUST exit 0 cleanly outside a PR context.
  *
  * ── The rule (exact) ──────────────────────────────────────────────────────────

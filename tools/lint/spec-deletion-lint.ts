@@ -37,11 +37,12 @@
  * exit 0.
  *
  * ── SEVERITY: WARN ────────────────────────────────────────────────────────────
- * The guard exits non-zero on a finding; its CI job (`spec-deletion` in
- * `.github/workflows/pr-body-guards.yml`) carries `continue-on-error: true`, so
- * a finding surfaces as a WARN, not a merge blocker (ADR-0007 §2.6 new-guard
- * posture). TO PROMOTE TO BLOCK: drop `continue-on-error: true` from that one CI
- * job — the guard code needs no change.
+ * The guard exits non-zero on a finding; its step in the `pr-body-guards` batch
+ * job (`.github/workflows/pr-body-guards.yml`) carries `continue-on-error: true`,
+ * so a finding surfaces as a WARN, not a merge blocker (ADR-0007 §2.6 new-guard
+ * posture). TO PROMOTE TO BLOCK: drop `continue-on-error: true` from that step
+ * AND its row from the batch's WARN-aggregate step — the guard code needs no
+ * change.
  */
 import { execa } from "execa";
 import { readFile } from "node:fs/promises";

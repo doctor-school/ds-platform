@@ -106,8 +106,8 @@ Withdrawal — отзыв активного согласия. Cascading effects
 |   1 | `users`                                 | email, phone, name, dob, photo_url      | 152-ФЗ ст. 6 п. 1 / consent (`tos`, `medical_data_processing`) | active + 3y after deactivation      | value erasure + tombstone                   | none                            | Legal/CTO       |
 |   2 | `user_profiles_medical`                 | specialty, license_no, regalia          | 152-ФЗ ст. 10 (special category)                               | active + 3y                         | value erasure + tombstone                   | none                            | Legal/CTO       |
 |   3 | `consent_versions`                      | body_markdown                           | — (системные данные)                                           | indefinite                          | retained unchanged                          | n/a                             | Legal/CTO       |
-|   4 | `consent_acceptances`                   | subject_id, ip, ua                      | 152-ФЗ доказательство                                          | 5y after withdrawal                 | tombstone + subject-link crypto-shred       | proof retained                  | Legal/CTO       |
-|   5 | `consent_withdrawals`                   | subject_id, channel                     | 152-ФЗ доказательство                                          | 5y                                  | tombstone + subject-link crypto-shred       | proof retained                  | Legal/CTO       |
+|   4 | `consent_acceptances`                   | subject_id, ip, ua                      | 152-ФЗ доказательство                                          | 5y after withdrawal                 | immutable row; subject-link crypto-shred    | proof retained                  | Legal/CTO       |
+|   5 | `consent_withdrawals`                   | subject_id, channel                     | 152-ФЗ доказательство                                          | 5y                                  | immutable row; subject-link crypto-shred    | proof retained                  | Legal/CTO       |
 |   6 | `audit_ledger`                          | subject_id, ip, ua, payload_hash        | 152-ФЗ + НК РФ + medical                                       | 5y                                  | crypto-shred at term; retain hash-chain row | retain hash-chain               | Legal/CTO       |
 |   7 | `data_export_requests`                  | subject_id, signed_link_id              | operational                                                    | 90d after fulfillment               | value erasure + tombstone                   | none                            | Backend/SRE     |
 |   8 | `erasure_requests`                      | subject_id, status, legal_note          | operational + 152-ФЗ доказательство                            | 5y                                  | tombstone + subject-link crypto-shred       | proof retained                  | Legal/CTO       |
@@ -129,7 +129,7 @@ Withdrawal — отзыв активного согласия. Cascading effects
 
 ## 4. Schemas (DDL outline)
 
-Каждая soft-deletable доменная сущность и строка связи дополнительно имеет доменный lifecycle `status` и nullable `deleted_at` по ADR-0003 design §3.6. Immutable/append-only записи явно не поддерживают удаление. Snippets ниже показывают поля, относящиеся к этому ADR; `tombstone_at` стандартизирован как `deleted_at`.
+Каждая soft-deletable доменная сущность и строка связи дополнительно имеет доменный lifecycle `status` и nullable `deleted_at` по ADR-0003 design §3.6. Immutable/append-only записи явно не поддерживают удаление и стираются только через свой payload/key-контракт. Snippets ниже показывают поля, относящиеся к этому ADR; legacy `tombstone_at` на soft-deletable request records стандартизирован как `deleted_at`.
 
 Drizzle-схемы (TS). Не полный DDL — выжимка с ключевыми полями. Полные миграции — в `packages/db/migrations/` после bootstrap.
 
@@ -177,8 +177,6 @@ export const consentAcceptances = pgTable(
     ip_encrypted: bytea("ip_encrypted"),
     user_agent_encrypted: bytea("user_agent_encrypted"),
     channel: text("channel").notNull(), // 'web', 'mobile', 'admin-import', 'directual-migration'
-    status: text("status").notNull().default("active"), // 'active' | 'erased'
-    deleted_at: timestamp("deleted_at", { withTimezone: true }), // set when lifecycle tombstone is created
   },
   (t) => ({
     idxVersion: index().on(t.consent_version_id),
@@ -202,8 +200,6 @@ export const consentWithdrawals = pgTable("consent_withdrawals", {
     .defaultNow()
     .notNull(),
   channel: text("channel").notNull(),
-  status: text("status").notNull().default("active"), // 'active' | 'erased'
-  deleted_at: timestamp("deleted_at", { withTimezone: true }),
 });
 ```
 
@@ -472,7 +468,7 @@ Access control: только роль `pd_officer` (новая; ADR-0001 §1 RBA
 2. Каждая new table в migration без entry в `retention.ts` → CI fail.
 3. Каждое поле с PD должно иметь корректный retained-row erasure mechanism из {value_erasure, tombstone, crypto_shred, retain}.
 4. Каждая soft-deletable доменная таблица и relationship table должна объявлять lifecycle `status` + nullable `deleted_at`; immutable/append-only доменная таблица должна явно объявлять, что удаление не поддерживается. Migrations и runtime repositories не должны физически удалять доменные строки или добавлять `ON DELETE CASCADE`.
-5. `consent_*` таблицы не должны иметь `DELETE` migrations; lifecycle- и PD-erasure updates ограничены явными tombstone/zeroization columns.
+5. `consent_versions`, `consent_acceptances` и `consent_withdrawals` остаются append-only: без `UPDATE`/`DELETE`; subject identity стирается через zeroization `subject_keys`. Любая отдельно soft-deletable таблица consent-домена следует правилу 4.
 
 **Red-team тесты** (`tests/red-team/pd-leakage.test.ts`):
 

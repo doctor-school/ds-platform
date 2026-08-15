@@ -106,8 +106,8 @@ Withdrawal = revocation of an active consent. Cascading effects:
 |   1 | `users`                              | email, phone, name, dob, photo_url      | 152-FZ art. 6 p. 1 / consent (`tos`, `medical_data_processing`) | active + 3y after deactivation      | value erasure + tombstone                   | none                            | Legal/CTO       |
 |   2 | `user_profiles_medical`              | specialty, license_no, regalia          | 152-FZ art. 10 (special category)                               | active + 3y                         | value erasure + tombstone                   | none                            | Legal/CTO       |
 |   3 | `consent_versions`                   | body_markdown                           | — (system data)                                                 | indefinite                          | retained unchanged                          | n/a                             | Legal/CTO       |
-|   4 | `consent_acceptances`                | subject_id, ip, ua                      | 152-FZ proof                                                    | 5y after withdrawal                 | tombstone + subject-link crypto-shred       | proof retained                  | Legal/CTO       |
-|   5 | `consent_withdrawals`                | subject_id, channel                     | 152-FZ proof                                                    | 5y                                  | tombstone + subject-link crypto-shred       | proof retained                  | Legal/CTO       |
+|   4 | `consent_acceptances`                | subject_id, ip, ua                      | 152-FZ proof                                                    | 5y after withdrawal                 | immutable row; subject-link crypto-shred    | proof retained                  | Legal/CTO       |
+|   5 | `consent_withdrawals`                | subject_id, channel                     | 152-FZ proof                                                    | 5y                                  | immutable row; subject-link crypto-shred    | proof retained                  | Legal/CTO       |
 |   6 | `audit_ledger`                       | subject_id, ip, ua, payload_hash        | 152-FZ + НК РФ + medical                                        | 5y                                  | crypto-shred at term; retain hash-chain row | retain hash-chain               | Legal/CTO       |
 |   7 | `data_export_requests`               | subject_id, signed_link_id              | operational                                                     | 90d after fulfillment               | value erasure + tombstone                   | none                            | Backend/SRE     |
 |   8 | `erasure_requests`                   | subject_id, status, legal_note          | operational + 152-FZ proof                                      | 5y                                  | tombstone + subject-link crypto-shred       | proof retained                  | Legal/CTO       |
@@ -131,7 +131,7 @@ Withdrawal = revocation of an active consent. Cascading effects:
 
 Drizzle schemas (TS). Not full DDL — outline of key fields. Full migrations land in `packages/db/migrations/` post-bootstrap.
 
-Every soft-deletable domain entity and relationship row additionally carries a domain lifecycle `status` and nullable `deleted_at` as defined by ADR-0003 design §3.6. Immutable/append-only records explicitly do not support removal. The snippets below show the fields relevant to this ADR; `tombstone_at` is standardized to `deleted_at`.
+Every soft-deletable domain entity and relationship row additionally carries a domain lifecycle `status` and nullable `deleted_at` as defined by ADR-0003 design §3.6. Immutable/append-only records explicitly do not support removal and are erased only through their payload/key contract. The snippets below show the fields relevant to this ADR; legacy `tombstone_at` on soft-deletable request records is standardized to `deleted_at`.
 
 ### 4.1 `consent_versions`
 
@@ -177,8 +177,6 @@ export const consentAcceptances = pgTable(
     ip_encrypted: bytea("ip_encrypted"),
     user_agent_encrypted: bytea("user_agent_encrypted"),
     channel: text("channel").notNull(), // 'web', 'mobile', 'admin-import', 'directual-migration'
-    status: text("status").notNull().default("active"), // 'active' | 'erased'
-    deleted_at: timestamp("deleted_at", { withTimezone: true }), // set when lifecycle tombstone is created
   },
   (t) => ({
     idxVersion: index().on(t.consent_version_id),
@@ -202,8 +200,6 @@ export const consentWithdrawals = pgTable("consent_withdrawals", {
     .defaultNow()
     .notNull(),
   channel: text("channel").notNull(),
-  status: text("status").notNull().default("active"), // 'active' | 'erased'
-  deleted_at: timestamp("deleted_at", { withTimezone: true }),
 });
 ```
 
@@ -472,7 +468,7 @@ Access control: role `pd_officer` only (a new role; ADR-0001 §1 RBAC catalog is
 2. A new table in a migration without an entry in `retention.ts` → CI fails.
 3. Every PD field must have a valid retained-row erasure mechanism from {value_erasure, tombstone, crypto_shred, retain}.
 4. Every soft-deletable domain table and relationship table must declare lifecycle `status` + nullable `deleted_at`; an immutable/append-only domain table must declare that removal is unsupported. Migrations and runtime repositories must not physically delete domain rows or add `ON DELETE CASCADE`.
-5. `consent_*` tables must not have `DELETE` migrations; lifecycle and PD-erasure updates are limited to the explicit tombstone/zeroization columns.
+5. `consent_versions`, `consent_acceptances` and `consent_withdrawals` remain append-only: no `UPDATE`/`DELETE`; subject identity is erased by zeroizing `subject_keys`. Any separately soft-deletable consent-domain table follows rule 4.
 
 **Red-team tests** (`tests/red-team/pd-leakage.test.ts`):
 

@@ -102,17 +102,17 @@ Forward reference: the erasure execution contract (BullMQ `erasure-execute` job,
 
 Full matrix per entity/table — in design spec §3. Summary:
 
-| Entity                                   | Legal basis                  | Retention                      | Erasure                                 | Audit exception            |
-| ---------------------------------------- | ---------------------------- | ------------------------------ | --------------------------------------- | -------------------------- |
-| `users`                                  | 152-FZ art. 6 p. 1 / consent | active + 3y after deactivation | value erasure on retained tombstone     | none                       |
-| `consent_acceptances`                    | 152-FZ proof                 | 5y after withdrawal            | tombstone (subject_id encrypted)        | proof retained             |
-| `consent_withdrawals`                    | 152-FZ proof                 | 5y                             | tombstone                               | proof retained             |
-| `audit_ledger`                           | 152-FZ + НК РФ + medical     | 5y                             | crypto-shred at term                    | retain hash-chain          |
-| `payments`                               | НК РФ art. 23                | 5y                             | retained; crypto-shred at term          | full retention             |
-| `webinar_attendance`                     | NMO compliance               | 3y                             | tombstone                               | retain attendance proof    |
-| `marketing_consent` / `marketing_events` | consent                      | until withdrawn + 90d          | value erasure on retained tombstone     | retain proof of revocation |
-| `embeddings` (AI zone, derived)          | derivative                   | recomputable                   | erase vector/payload + retain tombstone | n/a                        |
-| `prompt_eval_corpus` (AI zone)           | consent                      | per-corpus consent             | erase payload + retain tombstone        | n/a                        |
+| Entity                                   | Legal basis                  | Retention                      | Erasure                                  | Audit exception            |
+| ---------------------------------------- | ---------------------------- | ------------------------------ | ---------------------------------------- | -------------------------- |
+| `users`                                  | 152-FZ art. 6 p. 1 / consent | active + 3y after deactivation | value erasure on retained tombstone      | none                       |
+| `consent_acceptances`                    | 152-FZ proof                 | 5y after withdrawal            | immutable row; subject-link crypto-shred | proof retained             |
+| `consent_withdrawals`                    | 152-FZ proof                 | 5y                             | immutable row; subject-link crypto-shred | proof retained             |
+| `audit_ledger`                           | 152-FZ + НК РФ + medical     | 5y                             | crypto-shred at term                     | retain hash-chain          |
+| `payments`                               | НК РФ art. 23                | 5y                             | retained; crypto-shred at term           | full retention             |
+| `webinar_attendance`                     | NMO compliance               | 3y                             | tombstone                                | retain attendance proof    |
+| `marketing_consent` / `marketing_events` | consent                      | until withdrawn + 90d          | value erasure on retained tombstone      | retain proof of revocation |
+| `embeddings` (AI zone, derived)          | derivative                   | recomputable                   | erase vector/payload + retain tombstone  | n/a                        |
+| `prompt_eval_corpus` (AI zone)           | consent                      | per-corpus consent             | erase payload + retain tombstone         | n/a                        |
 
 ### 2.7 Cross-zone erasure propagation
 

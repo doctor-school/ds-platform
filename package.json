@@ -61,6 +61,7 @@
     "lint:stage-b": "tsx tools/lint/stage-b-lint.ts",
     "lint:submit-pending": "tsx tools/lint/submit-pending-lint.ts",
     "lint:tdd-signal": "tsx tools/lint/tdd-signal-lint.ts",
+    "lint:tsc-version": "tsx tools/lint/tsc-version-lint.ts",
     "lint:workflow-auth": "tsx tools/lint/workflow-auth-lint.ts",
     "lint:oxlint": "oxlint -c .oxlintrc.json --disable-unicorn-plugin --disable-oxc-plugin --disable-typescript-plugin -A all apps packages",
     "lint:stylelint": "stylelint \"apps/**/*.css\" \"packages/**/*.css\"",
@@ -151,7 +152,8 @@
       "simple-git-hooks"
     ],
     "overrides": {
-      "fastify": "5.10.0"
+      "fastify": "5.10.0",
+      "typescript": "$typescript"
     }
   }
 }

@@ -320,6 +320,82 @@ describe("backlog-triage parseProseBlockers()", () => {
     expect(b).toHaveLength(1);
     expect(b[0]!.issues).toEqual([873]);
   });
+
+  // ── #1264: the DASH + PARENTHESISED empty-marker forms the repo actually ────
+  // writes. Each survived normalisation and was classified as a named absent
+  // owning subsystem, i.e. blocked — hiding five takeable Issues (#1188 #1221
+  // #1222 #1238 #1240). One case per marker form in the docstring contract.
+  const emptyMarkerForms: Array<[string, string]> = [
+    ["em-dash + bare parenthesised none (#1221/#1222/#1240)", "— (none)"],
+    ["… with a trailing period (#1221/#1222)", "— (none)."],
+    ["a QUALIFIED tail after the marker word (#1238)", "— (none technical)"],
+    [
+      "a long qualified tail with inner punctuation (#1188)",
+      "— (none known yet; the spec will surface backend dependencies, e.g. the ingestion worker)",
+    ],
+    ["en-dash + parenthesised", "– (none)"],
+    ["hyphen + parenthesised", "- (none)"],
+    ["dash + unparenthesised bare word", "— none"],
+    ["dash + 'nothing'", "— nothing"],
+    ["dash + 'n/a'", "— n/a"],
+    ["dash + 'tbd'", "— tbd"],
+    ["parenthesised with NO leading dash", "(none)"],
+    ["upper-case marker word", "— (NONE)"],
+  ];
+
+  for (const [label, marker] of emptyMarkerForms) {
+    it(`inline '**Blocked by:** ${marker}' yields NO blocker — ${label} (#1264)`, () => {
+      const body = `## Dependencies\n\n**Blocked by:** ${marker}\n**Blocks:** ${marker}\n`;
+      expect(parseProseBlockers(body)).toEqual([]);
+    });
+
+    it(`the combined '· **Blocks:**' Dependencies line with ${marker} yields NO blocker (#1264)`, () => {
+      const body = `## Dependencies\n\n**Blocked by:** ${marker} · **Blocks:** ${marker}\n`;
+      expect(parseProseBlockers(body)).toEqual([]);
+    });
+
+    it(`a '## Blocked by' section bullet '- ${marker}' yields NO blocker (#1264)`, () => {
+      const body = `## Blocked by\n\n- ${marker}\n\n## Notes\n\n- something.\n`;
+      expect(parseProseBlockers(body)).toEqual([]);
+    });
+  }
+
+  // NEGATIVE LOCK (#1264) — THE important case. The failure this fix must not
+  // introduce is the opposite one: over-matching would silently free genuinely
+  // blocked rows. A REAL prose subsystem blocker stays a blocker.
+  it("a REAL prose subsystem blocker is still classified blocked (#383 shape — #1264 negative lock)", () => {
+    const body =
+      "## Dependencies\n\n**Blocked by:** ADR-0009 retention.ts SSOT · **Blocks:** — (none)\n";
+    const b = parseProseBlockers(body);
+    expect(b).toHaveLength(1);
+    expect(b[0]!.issues).toEqual([]);
+    expect(b[0]!.subsystem).toBe("ADR-0009 retention.ts SSOT");
+  });
+
+  it("a '## Blocked by' section bullet naming a real subsystem still blocks (#1264 negative lock)", () => {
+    const body =
+      "## Blocked by\n\n- ADR-0009 retention.ts SSOT\n- the notification-none-of-the-above worker\n\n## Notes\n";
+    const b = parseProseBlockers(body);
+    expect(b).toHaveLength(2);
+    expect(b.map((x) => x.subsystem)).toEqual([
+      "ADR-0009 retention.ts SSOT",
+      "the notification-none-of-the-above worker",
+    ]);
+  });
+
+  it("a dash-prefixed clause naming a REAL issue ref still parses that ref (#1264 negative lock)", () => {
+    const body = "## Dependencies\n\n**Blocked by:** — #1173 (prod DNS cutover)\n";
+    const b = parseProseBlockers(body);
+    expect(b).toHaveLength(1);
+    expect(b[0]!.issues).toEqual([1173]);
+  });
+
+  it("'none' as a PREFIX of a real word never reads as the empty marker (#1264 word-boundary lock)", () => {
+    const body = "## Dependencies\n\n**Blocked by:** nonexistent-user cleanup job\n";
+    const b = parseProseBlockers(body);
+    expect(b).toHaveLength(1);
+    expect(b[0]!.subsystem).toBe("nonexistent-user cleanup job");
+  });
 });
 
 describe("backlog-triage findSiblingByEars()", () => {

@@ -14,12 +14,12 @@ A guard can only be driven deterministically if its inputs are injectable. The
 guards expose four seams, each inert in production (the env var is unset, so the
 guard resolves real paths / spawns real `gh` exactly as before):
 
-| Seam env var          | Replaces                                   | Used by                                                                                                                                                                                                                                                    |
-| --------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `LINT_FIXTURE_ROOT`   | the repo root the guard scans (FS)         | interaction-states, form-error, form-rhythm, ears-naming, ears-test, no-stub, no-hardcoded-path, asset-format, spec-link, instruction-budget, events-drift, glossary-mdx, glossary-roundtrip, frontmatter-yaml, migration-index, external-anchor, db-drift |
-| `LINT_GH_FIXTURE_DIR` | `gh pr/issue view` (canned JSON)           | registry-research, spec-link                                                                                                                                                                                                                               |
-| `LINT_MEMORY_FILE`    | the derived `~/.claude/.../MEMORY.md` path | instruction-budget                                                                                                                                                                                                                                         |
-| _(args)_              | CLI flags (`runGuard(..., { extraArgs })`) | —                                                                                                                                                                                                                                                          |
+| Seam env var          | Replaces                                   | Used by                                                                                                                                                                                                                                                                 |
+| --------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LINT_FIXTURE_ROOT`   | the repo root the guard scans (FS)         | interaction-states, form-error, form-rhythm, ears-naming, ears-test, no-stub, no-hardcoded-path, asset-format, spec-link, instruction-budget, events-drift, glossary-mdx, glossary-roundtrip, frontmatter-yaml, migration-index, external-anchor, db-drift, tsc-version |
+| `LINT_GH_FIXTURE_DIR` | `gh pr/issue view` (canned JSON)           | registry-research, spec-link                                                                                                                                                                                                                                            |
+| `LINT_MEMORY_FILE`    | the derived `~/.claude/.../MEMORY.md` path | instruction-budget                                                                                                                                                                                                                                                      |
+| _(args)_              | CLI flags (`runGuard(..., { extraArgs })`) | —                                                                                                                                                                                                                                                                       |
 
 `LINT_FIXTURE_ROOT` is set to the case dir automatically by `runGuard`; the rest
 are passed per case via `runGuard(guard, caseDir, { env })`.
@@ -46,7 +46,7 @@ Covered here (FS / gh / memory seams): `interaction-states`, `form-error`,
 `asset-format`, `registry-research`, `spec-link`, `instruction-budget`,
 `module-readme`, `tdd-signal`, `spec-status`, `prior-decisions`, `events-drift`,
 `glossary-mdx`, `glossary-roundtrip`, `frontmatter-yaml`, `migration-index`,
-`external-anchor`, `db-drift`.
+`external-anchor`, `db-drift`, `tsc-version`.
 
 `no-hardcoded-path` (#936) is an FS-scan guard over committed `tools/**/*.{mjs,ts}`
 runtime code for machine-specific absolute path literals (drive-letter `C:/…`,
@@ -223,3 +223,22 @@ glue over that tested logic.
 covered above; `ears-test` grew its coverage + orphan behaviour in #316; and
 `tdd-signal` / `spec-status` / `prior-decisions` / `module-readme` grew theirs in
 #438. Every guard that runs now asserts at least one exit-code branch here.
+
+`tsc-version` (#1258) is the one-compiler guard for the api's build. nest-cli's
+`TypeScriptBinaryLoader` resolves `require.resolve("typescript", { paths: [cwd, ...] })`
+cwd-FIRST, and `nest build` runs with cwd = `apps/api`, which pins `typescript`
+itself — so the prod artifact was always emitted by the workspace compiler, and the
+`typescript@5.9.3` vendored inside `@nestjs/cli` was installed but never loaded. The
+guard models THAT resolution rather than nested-copy proximity: red on
+`build-compiler-mismatch` (the compiler resolved cwd-first from `apps/api` differs
+from the root's), `missing-build-pin` (`apps/api` declares no `typescript`, so its
+build compiler would be inherited by accident — the real re-divergence vector, and
+one a version comparison alone cannot see), or `pin-divergence` (a workspace manifest
+on a different range). A merely-present vendored copy is reported as INFO and is
+never a finding; the `green` fixture carries one deliberately. Fixture trees use
+`node_modules__fixture/` rather than `node_modules/` — a real `node_modules/` inside
+the repo is git-ignored and could never be committed as a fixture; the guard swaps
+the directory name only under `LINT_FIXTURE_ROOT`. Cases: green (correct resolution
+
+- a stale vendored copy), red-build-compiler, red-missing-build-pin,
+  red-pin-divergence, skip-not-installed (nothing installed ⇒ SKIP, never a false red).

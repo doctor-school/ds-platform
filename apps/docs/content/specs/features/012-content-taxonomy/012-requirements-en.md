@@ -5,7 +5,29 @@ slug: 012-content-taxonomy
 status: Draft
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
-parent_issue: https://github.com/doctor-school/ds-platform/issues/1240
+parent_issue: https://github.com/doctor-school/ds-platform/issues/1280
+issues:
+  [
+    1282,
+    1283,
+    1284,
+    1285,
+    1286,
+    1287,
+    1288,
+    1289,
+    1290,
+    1291,
+    1292,
+    1293,
+    1294,
+    1295,
+    1296,
+    1297,
+    1298,
+    1299,
+    1300,
+  ]
 prior_decisions:
   - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace; Stage A precedes user-facing implementation)
   - "ADR-0001 — Identity / Auth / RBAC (admin reads and commands: `access: authenticated`, `required_roles: platform_admin`; public reads: `access: public`)"

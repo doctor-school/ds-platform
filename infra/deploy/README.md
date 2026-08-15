@@ -825,6 +825,44 @@ Order — steps run in sequence; **do not reorder 4 and 5** (the reason is in 5)
    TLS handshake simply fails, and an OTP link with a real expiry clock is dead on
    arrival. Once `academy.` serves, the window is closed in both directions.
 
+6. **External blackbox probe — retarget it, in the `bbm` repo.** The portal's
+   availability probe is **not** derived from this repository and no CI guard here
+   can see it. Skipping this step is what left the probe on `app.doctor.school` for
+   the twelve days after #1171 and turned the #1173 retirement into a firing
+   `ExternalHttpProbeFailed` (`tenant=ds` → «DS Мониторинг»), 2026-08-15 10:02 UTC.
+
+   Edit the **SSOT**, not the box: `sidorovanthon/bbm` →
+   `infra/monitoring/prometheus/prometheus.yml`, the `tenant: ds` block — both the
+   target URL and the `service:` label. `~/monitoring-deploy` on `mon-prod-tw` is a
+   deployed copy (rsync + `scripts/02-deploy.sh`); an edit made there alone is lost
+   on the next deploy and silently diverges from the SSOT in the meantime.
+
+   Ships and verifies as:
+
+   ```bash
+   scp infra/monitoring/prometheus/prometheus.yml mon-prod-tw:~/monitoring-deploy/prometheus/prometheus.yml
+   # validate with the version actually deployed there, not a pinned one
+   ssh mon-prod-tw 'set -a; . ~/monitoring-deploy/.env; set +a
+     docker run --rm -v ~/monitoring-deploy/prometheus/prometheus.yml:/tmp/p.yml:ro \
+       --entrypoint promtool prom/prometheus:$PROMETHEUS_VERSION check config /tmp/p.yml'   # SUCCESS
+   ssh mon-prod-tw 'cd ~/monitoring-deploy && docker compose restart prometheus'
+   # read the new target back — 1 = serving; allow one scrape interval
+   ssh mon-prod-tw 'curl -s http://127.0.0.1:9090/api/v1/query \
+     --data-urlencode "query=probe_success{tenant=\"ds\"}"'
+   ```
+
+   `restart` is required, not cosmetic: Prometheus on `mon` runs **without**
+   `--web.enable-lifecycle`, so `POST /-/reload` is unavailable. Expect the retired
+   host's series to linger for up to 5 minutes after the restart — a restart emits
+   no staleness markers, so the old series ages out of the lookback window rather
+   than disappearing at once. Read the alert state from Grafana
+   (`/api/alertmanager/grafana/api/v2/alerts`), **not** from Prometheus: its
+   `rule_files` is empty, so `/api/v1/alerts` there is always empty.
+
+   Ordering: after step 4. A probe retargeted before the deploy points at a host
+   that has DNS but no Caddy site block yet — it goes red for the length of the
+   gap and reports the cutover as broken while it is merely unfinished.
+
 **Legacy-host retirement (#1173, approved 2026-08-15).** The old host was kept for
 12 days as a path-preserving 301 so already-delivered verification/OTP e-mails
 (which carry a real expiry clock, and which mail clients cache) kept resolving. The
@@ -843,7 +881,11 @@ failure), not a redirect.
 > carries the legacy host. Delete this marker once they are.
 
 Retiring a portal host in future follows the same shape: repo config first, then
-DNS, then the captcha domain list, then the Zitadel `PUT`, then the deploy.
+DNS, then the captcha domain list, then the Zitadel `PUT`, then the deploy — and
+then the blackbox probe (step 6). The probe is last and easiest to forget, and it
+is the one step whose omission is silent at the time and loud two weeks later: the
+retired host keeps answering until DNS is actually removed, so a stale probe stays
+green and the miss surfaces only when the name dies.
 
 ## Key gotchas
 

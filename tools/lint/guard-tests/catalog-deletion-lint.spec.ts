@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -9,7 +10,7 @@ import {
   markerFromEnv,
 } from "../catalog-deletion-lint";
 import { type DiffEntry } from "../spec-deletion-lint";
-import { caseDir, ghDir, runGuard } from "./run-guard";
+import { caseDir, ghDir, REPO_ROOT, runGuard } from "./run-guard";
 
 /**
  * Two layers for `tools/lint/catalog-deletion-lint.ts` (Issue #1261):
@@ -105,6 +106,39 @@ describe("catalog-deletion-lint — evaluateCatalogDeletion (pure verdict)", () 
 
   it("a one-line PR body without the marker never sanctions", () => {
     expect(evaluateCatalogDeletion([D(SKILL)], "Closes #1261").ok).toBe(false);
+  });
+});
+
+describe("catalog-deletion-lint — pre-commit hook wiring (#1266 review BLOCKER)", () => {
+  const pkg = JSON.parse(
+    readFileSync(resolve(REPO_ROOT, "package.json"), "utf8"),
+  ) as { "simple-git-hooks": { "pre-commit": string } };
+  const hook = pkg["simple-git-hooks"]["pre-commit"];
+
+  /**
+   * `.git/hooks` is SHARED by the main clone and every linked worktree, and any
+   * `pnpm install` (mandatory in a worktree, AGENTS.md §6) rewrites it from the
+   * CHECKED-OUT branch's package.json. An ungated `pnpm lint:catalog-deletion`
+   * line therefore installs repo-wide and hard-fails every commit on any branch
+   * that predates this guard (`ERR_PNPM_NO_SCRIPT`) — it blocked a concurrent
+   * session during #1261. The invocation must be gated on the guard file being
+   * present on the checked-out branch.
+   */
+  it("gates the guard invocation on the guard file existing (POSIX `test`)", () => {
+    expect(hook).toContain("[ -f tools/lint/catalog-deletion-lint.ts ]");
+    expect(hook).toContain("pnpm lint:catalog-deletion --staged");
+  });
+
+  /**
+   * The gate must not swallow the guard's exit code: an `X && guard || true`
+   * shape turns a BLOCK into a no-op whenever the guard actually fires. Only the
+   * `if … then … fi` form keeps the failure propagating.
+   */
+  it("keeps the guard BLOCKing where it exists (no `|| true` swallow)", () => {
+    expect(hook).not.toMatch(/\|\|\s*true/);
+    expect(hook).toMatch(
+      /if \[ -f tools\/lint\/catalog-deletion-lint\.ts \]; then pnpm lint:catalog-deletion --staged; fi/,
+    );
   });
 });
 

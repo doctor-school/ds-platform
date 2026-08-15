@@ -130,7 +130,7 @@
     "yaml": "^2.9.0"
   },
   "simple-git-hooks": {
-    "pre-commit": "pnpm lint-staged && pnpm lint:catalog-deletion --staged"
+    "pre-commit": "pnpm lint-staged && if [ -f tools/lint/catalog-deletion-lint.ts ]; then pnpm lint:catalog-deletion --staged; fi"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,cjs}": [

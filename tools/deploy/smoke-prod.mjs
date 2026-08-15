@@ -10,9 +10,6 @@
 //          GET https://api.doctor.school/v1/ready     → 200 + postgres+pgvector ok
 //   portal GET https://academy.doctor.school/         → follows redirects; final
 //          page < 500 AND no Next error-boundary markup (#866)
-//          GET https://app.doctor.school/login?smoke=1 → NO-follow 301 whose
-//          Location preserves path + query (#1171 legacy-host redirect; #1173
-//          retires the host and this probe together)
 //          GET https://academy.doctor.school/login    → COLD (cookie-less) 200 +
 //          Next app-shell RSC stream, no error boundary (#866/#885: the portal
 //          login form is CLIENT-rendered, so assert the server-streamed shell —
@@ -38,7 +35,7 @@
 //          disabled on the default login policy by provision.sh 8.quater) —
 //          non-200 / redirect-away / 200 without a form field all pass; a
 //          200 register FORM fails the smoke.
-//   TLS    api. / app. / admin. / id.doctor.school    → cert valid, not near expiry
+//   TLS    api. / academy. / admin. / id.doctor.school → cert valid, not near expiry
 //
 // The prod hostnames ARE the contract here (Caddy vhosts + Beget A-records +
 // the deploy design spec) — not a per-developer recipe — so they are the
@@ -65,15 +62,6 @@ const API_HOST = process.env.PROD_API_HOST || "api.doctor.school";
 const PORTAL_HOST = process.env.PROD_PORTAL_HOST || "academy.doctor.school";
 const ADMIN_HOST = process.env.PROD_ADMIN_HOST || "admin.doctor.school";
 const ID_HOST = process.env.PROD_ID_HOST || "id.doctor.school";
-// Legacy portal host (#1171) — kept as a path-preserving 301 to PORTAL_HOST until
-// already-delivered e-mail links age out. Probed so the day the redirect (or its
-// cert) dies is a smoke failure, not a user report. Opt-OUT by env, same SKIP idiom
-// as the OIDC flow probe: the default holds for prod, but a staging clone (where
-// PROD_PORTAL_HOST is overridden and no legacy host exists) sets this empty, and
-// #1173 flips the same switch to retire host + probes together.
-const LEGACY_PORTAL_HOST = (
-  process.env.PROD_LEGACY_PORTAL_HOST ?? "app.doctor.school"
-).trim();
 // PUBLIC OIDC client id (api.env IDP_CLIENT_ID — visible in every browser
 // authorize URL, NOT a credential). Opt-in: enables the full cookie-less
 // authorize→login flow probe; unset ⇒ that one probe prints SKIP.
@@ -159,28 +147,6 @@ export function findColdErrorMarker(body) {
   return COLD_ERROR_MARKERS.find((m) => body.includes(m)) ?? null;
 }
 
-// Throws unless `res` is the legacy host's path-preserving permanent redirect to
-// the new portal host (#1171). Exported so the three ways this logic could itself
-// be wrong — path dropped, query dropped, 302 instead of 301 — are unit-covered
-// (tools/lint/guard-tests/smoke-prod-cold.spec.ts); the probe body only fetches.
-//
-// Exact 301, not `>=300 && <400`: #1171 asks for a PERMANENT redirect, and a 302
-// would tell caches/clients the move is temporary — the one thing that keeps the
-// legacy host alive in address bars long after #1173 retires it. Exact Location
-// equality, not `startsWith`, because a redirect that silently drops the path or
-// query still lands on a healthy 200 portal page: an expiring OTP deep link would
-// dead-end at the home screen with no error anywhere.
-export function checkLegacyRedirect(res, { path, expectHost }) {
-  if (res.status !== 301)
-    throw new Error(`${path} → ${res.status} (expected 301 permanent)`);
-  const want = `https://${expectHost}${path}`;
-  if (res.headers?.location !== want)
-    throw new Error(
-      `${path} → 301 but Location: ${res.headers?.location ?? "(absent)"} (expected ${want})`,
-    );
-  return `301 → ${want} (path + query preserved)`;
-}
-
 // Throws unless `res` is a real, successfully rendered cold page: exact 200,
 // no error-boundary marker, and (when given) the expected page markup present.
 //
@@ -262,21 +228,6 @@ export function checkRegisterClosed(res) {
 // A probe may throw this to report SKIP (visible, but not a failure).
 class SkipProbe extends Error {}
 
-// The legacy-host probes are opt-out (#1171/#1173). SKIP loudly rather than fail
-// when there is no legacy host to probe: unset/empty (staging clone, or post-#1173)
-// or pointed at the portal host itself, where the "redirect" assertion is a
-// contradiction — nothing can 301 to itself.
-function requireLegacyHost() {
-  if (!LEGACY_PORTAL_HOST)
-    throw new SkipProbe(
-      "PROD_LEGACY_PORTAL_HOST empty — no legacy portal host to probe (#1173 retires it)",
-    );
-  if (LEGACY_PORTAL_HOST === PORTAL_HOST)
-    throw new SkipProbe(
-      `PROD_LEGACY_PORTAL_HOST == PROD_PORTAL_HOST (${PORTAL_HOST}) — nothing to redirect`,
-    );
-}
-
 // --- probes ---------------------------------------------------------------
 
 async function probeApiHealth() {
@@ -335,20 +286,6 @@ async function probePortal() {
       `/ → ${res.status} but body contains ${JSON.stringify(marker)}`,
     );
   return `${res.status} after ${res.hops} redirect(s) (real render, no error boundary)`;
-}
-
-async function probeLegacyPortalRedirect() {
-  // #1171 AC: the legacy host must 301 to the new one PATH-PRESERVINGLY. Probe a
-  // deep link with a query string and do NOT follow — the hop itself is the
-  // assertion. A plain `httpsGetFollow` would land on a healthy 200 and hide a
-  // redirect that dropped the path (the exact way an old OTP link dies silently).
-  requireLegacyHost();
-  const path = "/login?smoke=1";
-  const res = await httpsGet(`https://${LEGACY_PORTAL_HOST}${path}`);
-  return checkLegacyRedirect(res, {
-    path,
-    expectHost: PORTAL_HOST,
-  });
 }
 
 async function probePortalLoginCold() {
@@ -500,7 +437,6 @@ const PROBES = [
   ["api /v1/health", probeApiHealth],
   ["api /v1/ready", probeApiReady],
   ["portal /", probePortal],
-  ["legacy portal 301", probeLegacyPortalRedirect],
   ["portal /login cold", probePortalLoginCold],
   ["portal /verify cold", probeVerifyCold],
   ["admin /", probeAdmin],
@@ -510,13 +446,6 @@ const PROBES = [
   ["register closed", probeRegisterClosed],
   [`TLS ${API_HOST}`, () => probeTls(API_HOST)],
   [`TLS ${PORTAL_HOST}`, () => probeTls(PORTAL_HOST)],
-  [
-    `TLS ${LEGACY_PORTAL_HOST || "(legacy: off)"}`,
-    () => {
-      requireLegacyHost();
-      return probeTls(LEGACY_PORTAL_HOST);
-    },
-  ],
   [`TLS ${ADMIN_HOST}`, () => probeTls(ADMIN_HOST)],
   [`TLS ${ID_HOST}`, () => probeTls(ID_HOST)],
 ];

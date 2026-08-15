@@ -92,7 +92,7 @@ export interface ZitadelConfig {
    */
   orgId?: string | undefined;
   /**
-   * #878: the portal origin (e.g. `https://app.doctor.school`), consumed ONLY
+   * #878: the portal origin (e.g. `https://academy.doctor.school`), consumed ONLY
    * by the still-Zitadel-sent login email-OTP challenge (EARS-6), whose
    * `sendCode.urlTemplate` is the BARE `<origin>/login` (no placeholders —
    * nothing a mail scanner's GET prefetch can consume). The email-verify and

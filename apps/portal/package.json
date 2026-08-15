@@ -3,7 +3,7 @@
   "version": "0.17.1",
   "private": true,
   "type": "module",
-  "description": "DS Platform user portal — app.doctor.school (Next.js 16 App Router, ADR-0004 §3/§7).",
+  "description": "DS Platform user portal — academy.doctor.school (Next.js 16 App Router, ADR-0004 §3/§7).",
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "next build",

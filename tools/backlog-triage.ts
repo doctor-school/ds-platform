@@ -407,11 +407,32 @@ export function subsystemName(text: string): string {
  *   - INLINE `Blocked by <clause>.` sentence (the clause runs to the first
  *     sentence terminator or end of line).
  *
- * A `Blocked by nothing` / `Blocked by none` clause yields NO blocker (so a
- * "landed in #460" mention inside it is never mistaken for a live dep). Only the
- * explicit "Blocked by" surface counts — a "Sub-issue of #N" / "Successor to #N"
- * / "Parent epic: #N" / "Related: #N" reference is hierarchy or lineage, NEVER a
- * blocker, and is deliberately ignored.
+ * A clause that explicitly declares NO blocker yields NO blocker (so a "landed
+ * in #460" mention inside it is never mistaken for a live dep). The recognised
+ * empty-blocker marker set — this is the WRITTEN CONTRACT; extend it here, never
+ * by rewriting Issue bodies (#1264). After stripping any list marker, `**`
+ * emphasis, one leading dash placeholder (`—` / `–` / `-`, with any `:`/`·`
+ * separator that follows it), one enclosing parenthesis and trailing `.,;`, the
+ * remainder must be either EMPTY or begin (case-insensitively, word-bounded)
+ * with one of `none` / `nothing` / `n/a` / `tbd`. That covers every spelling the
+ * repo writes:
+ *
+ *   `—`  ·  `-`  ·  `n/a`  ·  `tbd`  ·  `None currently.`  ·  `Nothing yet.`
+ *   `— (none)`  ·  `— (none).`  ·  `— (none technical)`
+ *   `— (none known yet; the spec will surface backend dependencies …)`
+ *
+ * The match is on the NORMALISED clause, not whole-string equality — a qualified
+ * tail after the marker word is still an empty marker. It stays word-bounded and
+ * anchored at the head so a REAL blocker clause (`#872 — needs ESP`,
+ * `ADR-0009 retention.ts SSOT`) never matches: over-matching would silently free
+ * genuinely blocked rows, the one failure direction this parser must not have.
+ *
+ * Only the explicit "Blocked by" surface counts — a "Sub-issue of #N" /
+ * "Successor to #N" / "Parent epic: #N" / "Related: #N" reference is hierarchy or
+ * lineage, NEVER a blocker, and is deliberately ignored. The `**Blocks:**` half
+ * of a combined Dependencies line feeds no graph edge at all: it is cut off
+ * before this test (see the `·` / `**Blocks` split below), so its own empty
+ * markers are inert by construction.
  */
 export function parseProseBlockers(body: string): ProseBlocker[] {
   const lines = body.replace(/\r\n/g, "\n").split("\n");
@@ -421,23 +442,32 @@ export function parseProseBlockers(body: string): ProseBlocker[] {
   const isBlockedByHeading = (l: string) =>
     /^\s{0,3}#{1,6}\s+blocked\s+by\b/i.test(l);
   const isBullet = (l: string) => /^\s*[-*]\s+/.test(l);
-  // A placeholder bullet/clause that explicitly declares NO blocker, e.g.
-  // `- None currently.` / `Nothing yet.` / the template's canonical empty marker
-  // `**Blocked by:** — · **Blocks:** —` (em/en-dash / hyphen / `n/a` / `tbd`).
-  // Must be skipped in BOTH the section-bullet loop and the inline branch, else
-  // it parses to a bogus `{subsystem: "—"}` and falsely reports the Issue blocked
-  // (#919 — six takeable Issues mis-reported). We normalise off any list marker
-  // and surrounding emphasis before matching.
+  // A placeholder bullet/clause that explicitly declares NO blocker — the marker
+  // set is the docstring's written contract. Must be skipped in BOTH the
+  // section-bullet loop and the inline branch, else the clause survives
+  // normalisation, parses to a bogus `{subsystem: "— (none)"}` and falsely
+  // reports the Issue blocked (#919 — six takeable Issues mis-reported; #1264 —
+  // five more, on the parenthesised/qualified forms). Normalisation peels the
+  // decorations off in a fixed order, then the head word is matched.
   const isNoBlockerText = (t: string) => {
     const stripped = t
       .replace(/^\s*(?:[-*]\s+)?/, "") // list marker
       .replace(/^\s*\*\*\s*/, "") // opening emphasis
       .replace(/\s*\*\*\s*$/, "") // closing emphasis
+      .trim()
+      // ONE leading dash placeholder plus whatever separates it from the word:
+      // `— (none)`, `- n/a`, `– tbd`. A dash INSIDE a real clause (`#872 — needs
+      // ESP`) is untouched — this is anchored at the head.
+      .replace(/^[—–-]+[\s:·]*/u, "")
+      // an enclosing parenthesis around the marker: `(none)`, `(none technical)`,
+      // `(none known yet; …)`. Stripped by ends, not by balance, so a truncated
+      // or `.`-bearing tail still normalises.
+      .replace(/^\(\s*/u, "")
+      .replace(/\s*\)[.,;]*\s*$/u, "")
+      .replace(/[.,;]+\s*$/u, "")
       .trim();
-    return (
-      /^(?:nothing|none)\b/i.test(stripped) ||
-      /^(?:n\/a|tbd|[—–-])$/i.test(stripped)
-    );
+    // Empty ⇒ the bare dash / empty-value placeholder.
+    return stripped === "" || /^(?:nothing|none|n\/a|tbd)\b/iu.test(stripped);
   };
 
   for (let i = 0; i < lines.length; i++) {

@@ -177,9 +177,10 @@ nl-1` — **NOT `ru-2`** (Novosibirsk has no private network). RF-only (152-ФЗ
 4. **DNS (manual, at Beget — the zone is NOT at Timeweb):** point A-records
    `api.` / `academy.` / `id.` / `admin.doctor.school` at the `api_prod_public_ip`
    output (`admin.` is the wave-1 addition — Wave-1 apply order step 2;
-   `academy.` is the portal host per #1171). Those four are the COMPLETE public
-   record set — the pre-#1171 portal host was retired with its A-record and its
-   Caddy vhost in #1173, so nothing else in the zone points at this IP.
+   `academy.` is the portal host per #1171). Those four are the intended public
+   record set — the pre-#1171 portal host is being retired in #1173 (its Caddy
+   vhost is already gone from this tree; its A-record is deleted by hand, see the
+   cutover section's retirement marker below).
    Root `doctor.school` A-record is untouched. Email records (MX/SPF/DKIM/DMARC)
    are already live (memory `reference_doctor_school_email_dns`).
 5. **Get the committed `main` source onto both boxes (images build on-box, no registry).**
@@ -459,9 +460,12 @@ image build.
 
 3. **SmartCaptcha production invariant (#186).** Use the dedicated Yandex Cloud
    resource `ds-platform-prod`; never reuse the localhost-only dev keypair.
-   Keep domain validation **ON** and allow `academy.doctor.school` — the portal
-   auth surface, and the only host that serves it (#1171/#1173). Creating or
-   replacing the provider resource is **[OWNER-GATED]**;
+   Keep domain validation **ON**. Post-#1173 the allowed-domains list is
+   `academy.doctor.school` alone — the portal auth surface, and the only host that
+   serves it; the legacy `app.doctor.school` entry is removed from the resource as
+   an owner-gated console step of that retirement (cutover step 2 below), which is
+   pending until the lead runs it. Creating or replacing the provider resource is
+   **[OWNER-GATED]**;
    capture its **site key** (public, build-time) and **server key** (secret), but
    never print or copy the server key into a repo file, command transcript, or
    issue/PR.
@@ -664,10 +668,11 @@ genuine data corruption, not routine reverts.
 The portal's public host is `academy.doctor.school`. The cutover ran on
 2026-08-03; the legacy host was retired entirely in #1173 (vhost, A-record,
 Centrifugo origin, Zitadel post-logout URI, smoke probe), so this section is the
-recorded procedure for moving the portal host — not a pending change. Step 1 is
-out-of-band console state (Beget) and MUST land **before** the deploy that adds
-the vhost: pointing the new name at a host that still answers as something else
-breaks registration for every user at once.
+recorded procedure for moving the portal host — not a pending change. Steps 1 and
+2 are out-of-band console state (Beget DNS, Yandex Cloud SmartCaptcha) and MUST
+land **before** the deploy that adds the vhost: pointing the new name at a host
+that still answers as something else, or a captcha whose allowed-domain list omits
+the new host, breaks registration for every user at once.
 
 **Every signed-in user is logged out by a host cutover** — expected, not a fault.
 The session cookie is `__Host-`-prefixed, therefore host-only: it does not travel
@@ -681,7 +686,7 @@ unrelated feature. Until the new name resolves to api-prod, that deploy silently
 sends every portal user to whatever else answers on that name. Do not deploy on
 an unverified step 1.
 
-Order — steps run in sequence; **do not reorder 3 and 4** (the reason is in 4):
+Order — steps run in sequence; **do not reorder 4 and 5** (the reason is in 5):
 
 1. **[OWNER-GATED] Beget DNS — REPOINT, not an add.** `academy.doctor.school`
    is **not a free name**: it currently holds a `CNAME → cname.vercel-dns.com`
@@ -713,16 +718,21 @@ Order — steps run in sequence; **do not reorder 3 and 4** (the reason is in 4)
    nslookup academy.doctor.school 1.1.1.1   # NOT a cname.vercel-dns.com alias
    ```
 
-   Both resolvers must show the A-record before step 3. Beget's zone TTL governs
+   Both resolvers must show the A-record before step 4. Beget's zone TTL governs
    how long the stale CNAME lingers; re-check rather than assuming.
 
-   > There is deliberately **no SmartCaptcha step here.** Prod runs with bot
-   > protection OFF (`BOT_PROTECTION_ENABLED` unset, no keys — wave-1 #186 never
-   > ran), so there is no captcha resource whose allowed-domain list could need
-   > the new host. If #186 ever activates SmartCaptcha, its allowed-domain list is
-   > maintained in the wave-1 invariant above, not as a cutover step.
+2. **[OWNER-GATED] SmartCaptcha allowed domains.** Bot protection is **live on
+   prod** (#186, completed 2026-08-06) and the `ds-platform-prod` resource runs
+   with domain validation **ON**, so its allowed-domains list is load-bearing: a
+   portal host missing from it fails every protected auth action — registration
+   included — for every user at once. In the Yandex Cloud console, **add the new
+   host before the deploy that adds its vhost**, and remove a host only once it is
+   fully retired. Post-#1173 the list is `academy.doctor.school` alone: the legacy
+   `app.doctor.school` entry is dropped as part of the retirement, after its DNS
+   record is gone. The site key is unchanged either way, so **no portal rebuild is
+   needed** for this step.
 
-2. **Zitadel URI set — re-pass EVERY URI, not just the new one.** `provision.sh`
+3. **Zitadel URI set — re-pass EVERY URI, not just the new one.** `provision.sh`
    sends ONE full-object `PUT` on `oidc_config`: the payload it builds carries
    both `redirectUris` and `postLogoutRedirectUris`, so the PUT **replaces** both
    arrays — it is idempotent, not additive. Any URI you omit is deleted, and
@@ -770,7 +780,7 @@ Order — steps run in sequence; **do not reorder 3 and 4** (the reason is in 4)
    default `ds-platform-dev`; adjust if the prod app was provisioned under another name.)
 
    Finally, **drive one real login through the host that is live right now** — not
-   the new one: its vhost does not exist until step 3's deploy, so a login attempt
+   the new one: its vhost does not exist until step 4's deploy, so a login attempt
    there proves nothing about this step.
 
    What this step actually buys: registering the portal host in
@@ -779,7 +789,7 @@ Order — steps run in sequence; **do not reorder 3 and 4** (the reason is in 4)
    the step is the redirect-URI clobber above, which is why the full command is
    spelled out rather than a one-flag delta.
 
-3. **Deploy.** `pnpm deploy:prod` ships the Caddyfile (the portal vhost) and the
+4. **Deploy.** `pnpm deploy:prod` ships the Caddyfile (the portal vhost) and the
    Centrifugo origin allowlist, then compares both running single-file mounts
    with the shipped files. Only a stale consumer is restarted,
    and both mounts are verified afterward (#1175). No manual SSH restart is
@@ -793,7 +803,7 @@ Order — steps run in sequence; **do not reorder 3 and 4** (the reason is in 4)
    pnpm deploy:smoke                                    # PORTAL_HOST already academy.
    ```
 
-4. **On-box env — only after step 3 is verified green.** In
+5. **On-box env — only after step 4 is verified green.** In
    `/etc/ds-platform/api.env` set
    `MAILER_PORTAL_BASE_URL=https://academy.doctor.school`, then restart the api.
    This moves **newly sent** e-mail links (Zitadel OTP `sendCode` template + the
@@ -804,18 +814,25 @@ Order — steps run in sequence; **do not reorder 3 and 4** (the reason is in 4)
    TLS handshake simply fails, and an OTP link with a real expiry clock is dead on
    arrival. Once `academy.` serves, the window is closed in both directions.
 
-**Legacy-host retirement (#1173, 2026-08-15).** The old host was kept for 12 days
-as a path-preserving 301 so already-delivered verification/OTP e-mails (which carry
-a real expiry clock, and which mail clients cache) kept resolving. The owner then
-approved removing the domain **entirely**: the vhost, the Beget `app` A-record, the
-Centrifugo origin, the legacy post-logout URI, and the `legacy portal 301` smoke
-probe are all gone. Accepted consequence: a bookmark or an old e-mail link on the
-legacy host is now a dead name (DNS failure), not a redirect. Retiring a portal
-host in future follows the same shape — repo config first, then DNS, then re-run
-the Zitadel `PUT` with the reduced URI set.
+**Legacy-host retirement (#1173, approved 2026-08-15).** The old host was kept for
+12 days as a path-preserving 301 so already-delivered verification/OTP e-mails
+(which carry a real expiry clock, and which mail clients cache) kept resolving. The
+owner then approved removing the domain **entirely**. Accepted consequence: a
+bookmark or an old e-mail link on the legacy host becomes a dead name (DNS
+failure), not a redirect.
 
-**Off-repo state to re-sync after any host change:** the blackbox probe target on
-`mon` (monitoring section below) lives outside this repo and is edited there by hand.
+> **Landing in two halves — the live half may still be pending.** The repo half is
+> merged: the Caddy vhost, the Centrifugo origin, the legacy post-logout URI in the
+> documented `provision.sh` command, and the `legacy portal 301` smoke probe are
+> removed from this tree. The live half is manual and owner-gated, in this order:
+> delete the Beget `app` A-record → verify it no longer resolves → remove
+> `app.doctor.school` from the `ds-platform-prod` SmartCaptcha allowed-domains →
+> re-run the Zitadel `PUT` with the reduced URI set → the Caddy/Centrifugo edits
+> apply at the next `deploy:prod`. Until all five are green, provider state still
+> carries the legacy host. Delete this marker once they are.
+
+Retiring a portal host in future follows the same shape: repo config first, then
+DNS, then the captcha domain list, then the Zitadel `PUT`, then the deploy.
 
 ## Key gotchas
 
@@ -954,3 +971,4 @@ As-built (OBS-трек, живьём верифицировано):
 - **Blackbox-эндпоинты:** `api.doctor.school/v1/health`,
   `academy.doctor.school/`, `id.doctor.school/`. Конфиг blackbox живёт на mon вне
   репозитория — при смене публичного хоста портала его правят там же вручную.
+  Сверка целей после ретайра легаси-хоста (#1173) отслеживается в #1273.

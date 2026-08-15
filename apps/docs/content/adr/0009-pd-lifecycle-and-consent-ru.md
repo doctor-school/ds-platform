@@ -69,7 +69,7 @@ Endpoint'ы — обязательная часть pre-pilot (engineering-readi
 
 ### 2.3 Erasure semantics
 
-ADR-0003 §4 устанавливает lifecycle-инвариант: постоянная доменная сущность или строка связи **никогда физически не удаляется**. Erasure request сохраняет строку, устанавливает её lifecycle-status и `deleted_at` и применяет к PD payload один или несколько механизмов:
+ADR-0003 §4 устанавливает lifecycle-инвариант: постоянная доменная сущность или строка связи **никогда физически не удаляется**. Erasure request сохраняет каждую затронутую строку. Для soft-deletable строки он устанавливает lifecycle-status и `deleted_at`; immutable/append-only evidence-row не мутирует, а subject identity стирается через zeroization `subject_keys`. К PD payload запрос применяет один или несколько механизмов:
 
 | Механизм          | Поведение                                                                                                                                                  | Применимо к                                                                       |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
@@ -87,7 +87,7 @@ Forward-ref: контракт исполнения erasure (BullMQ-задача 
 
 - **Subject-identifying поля** в audit-row (subject_id, ip, ua) шифруются **отдельным ключом per subject**, хранящимся в Vault.
 - **Erasure request** → уничтожение ключа в Vault (key-zeroization). Hash-chain остаётся валидным; tuple остаётся; subject-identifying данные становятся нечитаемыми.
-- **Audit exception clause** (152-ФЗ — обязательность хранения некоторых событий) — реализуется через retention matrix: `audit_ledger` retention 5y (НК РФ + medical compliance), crypto-shred at term.
+- **Audit exception clause** (152-ФЗ — обязательность хранения некоторых событий) — реализуется через retention matrix: `audit_ledger` хранит читаемые encrypted PD 5y (НК РФ + medical compliance), затем crypto-shred'ит PD, сохраняя неперсональную hash-chain строку. Его партиции никогда не удаляются retention-механизмом.
 
 ### 2.5 Backup erasure policy
 
@@ -135,7 +135,7 @@ Forward-ref: контракт исполнения erasure (BullMQ-задача 
 
 ### 3.1 Distributed consent management (без отдельного ADR)
 
-**Отвергнуто.** Размазывание consent / erasure logic по ADR-0001, engineering-readiness, data-layer-design делает невозможным cross-table coherence (backend пишет, audit shred'ит ключ, AI-zone удаляет embeddings — все три должны соблюдать один контракт). Single ADR + design spec — обязательное условие.
+**Отвергнуто.** Размазывание consent / erasure logic по ADR-0001, engineering-readiness, data-layer-design делает невозможным cross-table coherence (backend пишет, audit shred'ит ключ, AI-zone стирает payload и soft-delete'ит embedding rows — все три должны соблюдать один контракт). Single ADR + design spec — обязательное условие.
 
 ### 3.2 Soft delete без PD-value erasure или crypto-shred
 

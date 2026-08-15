@@ -70,7 +70,7 @@ Crypto-shred compatibility: per-subject DEK keys (ADR-0009 §5) live in Vault. O
 
 Partition by month: `ledger`, `audit_log`, `events_log`, `notifications`, `ai_pipeline_jobs`. Not partitioned in v1: `users`, `courses`, `lessons`, `progress` — overhead does not pay off until >10M rows in the table.
 
-**Goal of partitioning from v1** — avoid a retroactive repaint as the system grows: the partition is already in place, retention enforcement if needed = cheap `DROP PARTITION` in O(1).
+**Goal of partitioning from v1** — avoid a retroactive repaint as the system grows: the partition is already in place, and partition pruning keeps high-volume queries and maintenance bounded. Cheap `DROP PARTITION` retention is permitted only for an explicitly retention-managed operational stream; domain and evidentiary rows such as `ledger` / `audit_ledger` are never retention-dropped.
 
 Managed by the `pg_partman` extension. Premake 2–3 months ahead via BGW. **Drop mask disabled in v1** — we do not know the real growth profile; our platform is not high-load. Enabled when a confirmed retention scenario emerges from observability.
 
@@ -198,7 +198,7 @@ Data-layer-relevant parameters that ADR-0012 inherits from this ADR (unchanged):
 - Drizzle TS schema = SSOT — no divergence between ORM and runtime types; doc-as-SSOT principle satisfied.
 - Soft-delete-only domain lifecycle preserves referential integrity, stable identifiers and the product/audit history across every surface.
 - Cerbos embedded = policies-as-code with tests, no separate PDP service on v1.
-- Partitioning from v1 → no retroactive repaint needed; retention enforced via cheap `DROP PARTITION`.
+- Partitioning from v1 → no retroactive repaint needed; explicitly retention-managed operational streams may use cheap `DROP PARTITION`, while domain and evidentiary rows remain retained.
 - Self-hosted Postgres → unrestricted extensions, full control over tuning, 60–180k ₽/year cheaper than managed.
 - Outbox pattern from ADR-0002 already decouples the data layer from destinations — deferred decisions (ClickHouse, Meilisearch, Qdrant) require no rework of emit code.
 

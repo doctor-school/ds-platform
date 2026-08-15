@@ -70,7 +70,7 @@ Crypto-shred compatibility: per-subject DEK ключи (ADR-0009 §5) храня
 
 Партиционируем by month: `ledger`, `audit_log`, `events_log`, `notifications`, `ai_pipeline_jobs`. Не партиционируем v1: `users`, `courses`, `lessons`, `progress` — overhead не окупается до >10M записей в таблице.
 
-**Цель партиционирования с v1** — избежать retroactive repaint при росте: партиция уже на месте, retention enforcement при необходимости = дешёвый `DROP PARTITION` за O(1).
+**Цель партиционирования с v1** — избежать retroactive repaint при росте: партиция уже на месте, а partition pruning ограничивает стоимость high-volume запросов и обслуживания. Дешёвый retention через `DROP PARTITION` разрешён только для явно retention-managed операционного stream; доменные и доказательные строки, включая `ledger` / `audit_ledger`, никогда не удаляются retention-механизмом.
 
 Управление — `pg_partman` extension. Premake 2-3 месяца вперёд через BGW. **Drop-маска выключена на v1** — мы не знаем реального профиля роста, наша платформа не hiload. Включается при подтверждённом сценарии retention.
 
@@ -198,7 +198,7 @@ Data-layer-relevant параметры, которые ADR-0012 наследуе
 - Drizzle TS-schema = SSOT — нет divergence между ORM и runtime types; doc-as-SSOT принцип выполнен.
 - Soft-delete-only lifecycle доменных записей сохраняет ссылочную целостность, стабильные идентификаторы и продуктовую/audit-историю на всех поверхностях.
 - Cerbos embedded = policies-as-code с тестами, без отдельного PDP-сервиса на v1.
-- Partitioning с v1 → retroactive repaint не нужен; retention enforce'ится дешёвыми `DROP PARTITION`.
+- Partitioning с v1 → retroactive repaint не нужен; явно retention-managed операционные streams могут использовать дешёвый `DROP PARTITION`, а доменные и доказательные строки сохраняются.
 - Self-hosted Postgres → extensions без ограничений, full control над тюнингом, дешевле managed на 60-180k ₽/год.
 - Outbox-pattern из ADR-0002 уже декаплит data-layer от destinations — отложенные решения (ClickHouse, Meilisearch, Qdrant) не требуют переделки emit-кода.
 

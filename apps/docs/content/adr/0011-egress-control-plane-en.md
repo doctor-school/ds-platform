@@ -26,7 +26,7 @@ The external review of the DS Platform architecture (DSO-63) found that egress o
 
 The current architecture **correctly** isolates the AI zone from the RF zone (ADR-0007) but does not cover "soft" egress channels. Without a single policy, AI agents working on different modules do not have consistent rules for "what can be sent outside."
 
-In parallel, ADR-0009 introduced cross-zone erasure propagation (PD lifecycle → AI-zone subscriber deletes embeddings). This requires a **formal contract** for cross-zone messaging: which events are allowed, what may be in them, who audits them.
+In parallel, ADR-0009 introduced cross-zone erasure propagation (PD lifecycle → AI-zone subscriber erases subject-derived payloads and soft-deletes the retained embedding/corpus rows). This requires a **formal contract** for cross-zone messaging: which events are allowed, what may be in them, who audits them.
 
 **Hard requirements:**
 
@@ -114,6 +114,7 @@ See **ADR-0009 §2.7 + design spec §8** for PD lifecycle. Common principles:
 - **At-least-once:** outbox pattern (Postgres → RF-zone publisher → AI-zone subscriber).
 - **Ack required:** consumer emits an ack event, producer marks the outbox row as confirmed.
 - **Audit:** both zones log emit + consume + ack.
+- **Erasure event:** `erasure.subject_erased.v1`. `erased` means subject-derived vector/corpus payloads become unreadable and their rows receive lifecycle status + `deleted_at`; the subscriber never physically deletes a domain row. The event name is adopted before implementation, so there is no legacy `subject_purged` wire contract to preserve.
 
 ---
 

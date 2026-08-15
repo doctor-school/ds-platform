@@ -69,7 +69,7 @@ These endpoints are mandatory pre-pilot (engineering-readiness §5 BLOCKER).
 
 ### 2.3 Erasure semantics
 
-ADR-0003 §4 establishes the lifecycle invariant: a persistent domain entity or relationship row is **never physically deleted**. An erasure request retains the row, sets its lifecycle status and `deleted_at`, and applies one or more of these mechanisms to its PD payload:
+ADR-0003 §4 establishes the lifecycle invariant: a persistent domain entity or relationship row is **never physically deleted**. An erasure request retains every affected row. For a soft-deletable row it sets the lifecycle status and `deleted_at`; an immutable/append-only evidence row is not mutated, and its subject identity is erased through `subject_keys` zeroization. The request applies one or more of these mechanisms to the PD payload:
 
 | Mechanism         | Behavior                                                                                                                                          | Applies to                                                                     |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
@@ -87,7 +87,7 @@ Forward reference: the erasure execution contract (BullMQ `erasure-execute` job,
 
 - **Subject-identifying fields** in audit rows (subject_id, ip, ua) are encrypted with a **per-subject key** stored in Vault.
 - **Erasure request** → key zeroization in Vault. Hash-chain remains valid; row remains; subject-identifying data becomes unreadable.
-- **Audit exception clause** (152-FZ — mandatory retention for some events) — handled via retention matrix: `audit_ledger` retention 5y (НК РФ + medical compliance), crypto-shred at term.
+- **Audit exception clause** (152-FZ — mandatory retention for some events) — handled via retention matrix: `audit_ledger` retains readable encrypted PD for 5y (НК РФ + medical compliance), then crypto-shreds the PD while retaining the non-PD hash-chain row. Its partitions are never retention-dropped.
 
 ### 2.5 Backup erasure policy
 
@@ -135,7 +135,7 @@ All PD-lifecycle tables (`consent_*`, `data_export_requests`, `erasure_requests`
 
 ### 3.1 Distributed consent management (no dedicated ADR)
 
-**Rejected.** Spreading consent / erasure logic across ADR-0001, engineering-readiness, data-layer-design makes cross-table coherence impossible (backend writes, audit shreds the key, AI zone deletes embeddings — all three must respect one contract). A single ADR + design spec is the only workable form.
+**Rejected.** Spreading consent / erasure logic across ADR-0001, engineering-readiness, data-layer-design makes cross-table coherence impossible (backend writes, audit shreds the key, AI zone erases payloads and soft-deletes embedding rows — all three must respect one contract). A single ADR + design spec is the only workable form.
 
 ### 3.2 Soft delete without PD-value erasure or crypto-shred
 

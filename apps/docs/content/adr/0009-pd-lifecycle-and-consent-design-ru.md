@@ -400,7 +400,7 @@ Paged. Response per row:
 - Value erasure: NULL/replace PD fields in tables with `erasure: 'value_erasure'`; установить lifecycle status и `deleted_at`, не удаляя строку.
 - Tombstone: сохранить минимальный неперсональный факт в таблицах с `erasure: 'tombstone'`; стереть или crypto-shred'ить subject-link.
 - Crypto-shred: zeroize DEK in `subject_keys`. All encrypted blobs become unreadable.
-- Emit outbox event `erasure.subject_purged.v1` (см. ADR-0011 §3).
+- Emit outbox event `erasure.subject_erased.v1` (см. ADR-0011 §2.5).
 
 5. **AI-zone subscriber** (cross-zone):
 
@@ -425,9 +425,9 @@ Paged. Response per row:
 
 ## 8. Cross-zone erasure propagation
 
-См. **ADR-0011 §3 (Egress control plane)** для полного контракта. Краткий вид:
+См. **ADR-0011 §2.5 (Egress control plane)** для полного контракта. Краткий вид:
 
-- **Outbox event schema** (`erasure.subject_purged.v1`):
+- **Outbox event schema** (`erasure.subject_erased.v1`):
   ```json
   {
     "event_id": "uuid",

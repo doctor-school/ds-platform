@@ -61,7 +61,7 @@ Two consequences the downstream EARS spec inherits:
 1. Operator opens the admin app → Projects → creates a project with its descriptive fields and links one or more experts through `project_experts`, marking the curator role explicitly.
 2. Operator opens an event → links it to the project, and attaches experts, each with a role on that event.
 3. Operator attaches the sponsoring partner to the project.
-4. The public read API immediately serves the project with its events, experts and partner; the portal surfaces (015, and the landing feed of 013) render it without a further step.
+4. When the project and its public projection are complete, the operator explicitly publishes it. Only then does the public read API serve the project with its eligible events, experts and partner; portal surfaces (015, and the landing feed of 013) never expose its draft state.
 
 **Maintain the expert bench (US-2, US-8, US-9):**
 
@@ -105,12 +105,14 @@ Two consequences the downstream EARS spec inherits:
 - Access control beyond the platform's existing admin roles — 012 introduces no new role model.
 - Turning an expert into a login identity or adding an expert self-service cabinet. An `expert` is an editorial domain record in 012; a future optional link to a platform user is additive and must not create a second expert type.
 
-## Resolved decisions for the SDD handoff
+## Product decisions awaiting owner confirmation
 
-- **Expert identity:** one standalone editorial `expert` record. A future optional platform-user link is additive and out of scope; there is never a parallel supplier/person type.
-- **Lifecycle:** no domain row or relationship is physically deleted. Retire/restore uses lifecycle status + `deleted_at`; FKs are restrictive/no-action and cascades are forbidden.
-- **Topics:** a closed operator-curated entity list; event authoring selects existing topics rather than creating strings inline.
-- **Speaker migration:** the legacy rows stay indefinitely as retained source data. The current projection merges linked experts with unmatched legacy entries; no bulk replacement, implicit dedupe, or automatic end-state is required.
-- **Project curator:** an expert linked through `project_experts` with role `curator`; other linked experts use `member`.
-- **API:** REST/OpenAPI under `/v1`; cursor pagination on public growing lists, explicit page/offset pagination permitted for admin tables, and both directions of each relationship are queryable.
-- **Access:** existing `platform_admin` authorization is reused; the feature introduces no new role model.
+The retained-row lifecycle below is owner-approved. The remaining bullets are the recommended coherent package used to draft the SDD, but they are **not approved product decisions yet**; the SDD and implementation WBS remain blocked until the Product Lead confirms or changes each one.
+
+- **Expert identity — pending:** one standalone editorial `expert` record. A future optional platform-user link is additive and out of scope; there is never a parallel supplier/person type.
+- **Lifecycle — approved 2026-08-15:** no domain row or relationship is physically deleted. Retire/restore uses lifecycle status + `deleted_at`; FKs are restrictive/no-action and cascades are forbidden.
+- **Topics — pending:** a closed operator-curated entity list; event authoring selects existing topics rather than creating strings inline.
+- **Speaker migration — pending:** the legacy rows stay indefinitely as retained source data. The current projection merges linked experts with unmatched legacy entries; no bulk replacement, implicit dedupe, or automatic end-state is required.
+- **Project curator — pending:** an expert linked through `project_experts` with role `curator`; other linked experts use `member`.
+- **API — pending:** REST/OpenAPI under `/v1`; cursor pagination on public growing lists, explicit page/offset pagination permitted for admin tables, and both directions of each relationship are queryable.
+- **Access — pending:** existing `platform_admin` authorization is reused; the feature introduces no new role model.

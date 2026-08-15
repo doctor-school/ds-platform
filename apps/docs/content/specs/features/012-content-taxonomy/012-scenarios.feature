@@ -88,6 +88,20 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Then the link is refused with 409 Problem Details
     And no inferred or partial mapping is stored
 
+  @EARS-7 @failure
+  Scenario Outline: An expert link requires a role and a non-negative integer position
+    Given an event and a publishable expert exist
+    When the operator submits an event_experts link with <invalid_field>
+    Then the request is refused with 400 Problem Details
+    And no event_experts row is created or restored
+
+    Examples:
+      | invalid_field         |
+      | a missing role        |
+      | a blank role          |
+      | a negative position   |
+      | a fractional position |
+
   @EARS-8 @happy
   Scenario: Speaker fallback and total ordering stay deterministic during partial migration
     Given active linked experts, unmatched active legacy speakers and equal display names
@@ -190,6 +204,8 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | admin route as doctor_guest        | 403    |
       | invalid cursor                     | 400    |
       | duplicate retained pair            | 409    |
+      | duplicate retained slug            | 409    |
+      | invalid lifecycle transition       | 409    |
       | missing If-Match                   | 428    |
       | stale If-Match                     | 412    |
 
@@ -202,6 +218,13 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Then exactly one succeeds and increments the row to version 4
     And the other returns 412 without mutation
     And the successful mutation has one attributed feature-010 audit record
+
+  @EARS-17 @failure
+  Scenario: An idempotency key cannot be reused for a different request
+    Given an active Idempotency-Key has completed for one actor, normalized route and payload hash
+    When that actor submits a different payload hash to the same route with the same key
+    Then the server returns 409 IDEMPOTENCY_KEY_REUSED Problem Details
+    And no domain row, media reference or audit row changes
 
   @EARS-17 @failure
   Scenario: Idempotency records expire by retained update and are never reused

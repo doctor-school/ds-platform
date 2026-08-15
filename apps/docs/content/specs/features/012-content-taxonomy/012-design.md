@@ -222,6 +222,10 @@ For each entity resource `{projects|experts|topics|partners}`:
 
 For `{event-projects|event-experts|project-experts|project-partners|event-topics}`, the same retained command pattern is exposed at `/v1/admin/<join>`: filtered list, POST create, PATCH attributes, GET retirement impact, POST retire, POST restore. There is no DELETE route. The Refine provider maps `deleteOne` to an unsupported operation rather than an HTTP call.
 
+Create and edit use the same multipart envelope when that entity kind carries media: a canonical JSON `payload` plus at most one kind-specific `cover|photo|logo` file. PATCH without a file keeps the current reference; an explicit nullable media field clears it only when the entity's publish contract permits absence. A replacement always uses a fresh entity-scoped object key and never overwrites an existing object in place. The idempotency request hash includes canonical JSON plus the uploaded file's SHA-256 digest, so a different binary under the same scope/key is a 409 reuse conflict.
+
+The failure order follows the existing feature-007 storage policy. Validation and idempotency ownership happen before upload; an object-storage failure makes no DB/audit mutation. After a successful fresh-key upload, the DB transaction rechecks `If-Match`, swaps the reference, writes audit, and completes the idempotency response atomically. A refused/failed transaction best-effort deletes the newly uploaded unreferenced object; after commit, the superseded object is best-effort deleted. Cleanup failure is warn-logged with the orphan key and never rolls back an already committed content mutation. Concurrent same-key/same-hash requests have one owner; others wait for or replay its stored result and never perform a second upload.
+
 ### 5.2 Public reads
 
 - `GET /v1/public/{projects|experts|topics|partners}` and `/:idOrSlug` return cursor-paginated lists / one allow-listed projection.
@@ -262,7 +266,7 @@ The admin owns four resource lists/details/forms plus relationship editors embed
 
 EARS-18 Stage A is the first UI gate: before any entity or join UI slice, run `build-ui-from-design-system`, inventory the existing Refine/event patterns and `@ds/design-system`, search the approved registry whitelist, present 2–3 concrete compositions, and record the product-owner choice. Stage B drives the chosen real UI on the live stand before merge. All copy uses the typed RU catalog; primitives own focus/hover/active/disabled/loading states.
 
-Implementation WBS stays vertical and bounded: project, expert, topic and partner each have their own schema→API→SDK→Refine→browser slice (EARS-1…4); publish/public projection is EARS-5; each join/projection is its own EARS-6…11 slice. No “build all taxonomy CRUD” issue is acceptable, and none may start its UI portion before EARS-18 Stage A.
+Implementation WBS stays vertical and bounded: project, expert, topic and partner each have their own schema→API→SDK→Refine→browser slice (EARS-1…4); `project_experts` (EARS-9) lands before publish/public projection (EARS-5), so the first project publication consumes a real eligible-curator relation; each remaining join/projection is its own EARS-6…8/10…11 slice. No “build all taxonomy CRUD” issue is acceptable, and none may start its UI portion before EARS-18 Stage A. EARS-16 auth/error classification and EARS-17 idempotency/concurrency/audit are acceptance criteria of every applicable slice as it lands. Their dedicated children are final completeness sweeps against the assembled real route set, not permission to retrofit safeguards later.
 
 ## 8. Verification strategy
 
@@ -276,6 +280,7 @@ Implementation WBS stays vertical and bounded: project, expert, topic and partne
 1. Merge this accepted SDD artifact and open/wire its bounded EARS Issues.
 2. Complete [#1278](https://github.com/doctor-school/ds-platform/issues/1278) before any new 012 entity handler: it owns retained-row runtime conformance for current tables, including `event_speakers`, idempotency expiry and existing cascade/delete removal.
 3. Complete EARS-18 Stage A before any EARS-1…15 UI work.
-4. Deliver the bounded entity and relationship verticals; only then may 013–016 consume the public relationships.
+4. Deliver project → expert → topic → partner → `project_experts` → publication, then the remaining bounded relationship/projection verticals. Every applicable handler includes EARS-16/17 safeguards in its own PR; the dedicated EARS-16/17 work items verify the assembled route set rather than introducing those safeguards late.
+5. Only after the complete 012 parent closes may 013–016 consume the public relationships.
 
 The dependency is real, not a scaffold license: 012 keeps the observable legacy-speaker contract, but it must consume #1278's committed stable row identity and may not add a temporary positional mapping, hardcoded seed or duplicate migration.

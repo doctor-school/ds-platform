@@ -189,3 +189,5 @@ Every mutation requires `Idempotency-Key`; every update/transition requires the 
 - Feature 010 supplies generic audit capture; every new taxonomy table must be attached to its coverage guard.
 - 013–016 consume the public API only after this spec is on `main`; they own all doctor-facing rendering.
 - EARS-18 Stage A is the first UI gate and blocks the UI portions of EARS-1…15; each entity kind and each join/projection remains its own bounded vertical slice rather than one four-entity CRUD issue.
+- The executable slice order is project → expert → topic → partner → `project_experts` → publication → the remaining joins/projections → cross-route verification. `project_experts` therefore exists before EARS-5 attempts to publish a project with an eligible curator.
+- EARS-16 and EARS-17 are cross-cutting acceptance criteria of every relevant read/mutation from the first project vertical onward. Their late WBS children are verification sweeps over already-compliant real handlers, never deferred protocol implementation or a scaffold seam.

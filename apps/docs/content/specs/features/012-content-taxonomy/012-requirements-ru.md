@@ -189,3 +189,5 @@ lang: ru
 - Фича 010 даёт generic audit capture; каждая новая таблица таксономии должна попасть под его coverage guard.
 - 013–016 потребляют публичное API только после попадания этой спеки в `main`; весь врачебный рендеринг принадлежит им.
 - EARS-18 Stage A — первый UI-гейт и блокирует UI-части EARS-1…15; каждый entity kind и каждый join/projection остаётся отдельным bounded vertical slice, а не одним CRUD issue на четыре сущности.
+- Исполнимый порядок срезов: project → expert → topic → partner → `project_experts` → publication → остальные joins/projections → cross-route verification. Поэтому `project_experts` существует до того, как EARS-5 пытается опубликовать проект с допустимым куратором.
+- EARS-16 и EARS-17 — сквозные критерии приёмки каждого применимого read/mutation начиная с первой project-вертикали. Их поздние WBS-дети — verification sweeps по уже compliant real handlers, а не отложенная реализация протокола или scaffold seam.

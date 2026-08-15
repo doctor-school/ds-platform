@@ -666,9 +666,16 @@ genuine data corruption, not routine reverts.
 ## Portal host cutover — `app.` → `academy.doctor.school` (#1171)
 
 The portal's public host is `academy.doctor.school`. The cutover ran on
-2026-08-03; the legacy host was retired entirely in #1173 (vhost, A-record,
-Centrifugo origin, Zitadel post-logout URI, smoke probe), so this section is the
-recorded procedure for moving the portal host — not a pending change. Steps 1 and
+2026-08-03; retiring the legacy host entirely was approved on 2026-08-15 (#1173)
+and lands in two halves. The repo half is merged — the Caddy vhost, the
+Centrifugo origin, the legacy Zitadel post-logout URI and the smoke probe are
+gone from this tree. The live half is manual, owner-gated, and may still be
+pending: delete the Beget `app` A-record → verify it no longer resolves → remove
+`app.doctor.school` from the `ds-platform-prod` SmartCaptcha allowed-domains →
+re-run the Zitadel `PUT` with the reduced URI set → the Caddy/Centrifugo edits
+apply at the next `deploy:prod`. Full statement of both halves: the retirement
+marker at the end of this section. What follows is the recorded procedure for
+moving the portal host. Steps 1 and
 2 are out-of-band console state (Beget DNS, Yandex Cloud SmartCaptcha) and MUST
 land **before** the deploy that adds the vhost: pointing the new name at a host
 that still answers as something else, or a captcha whose allowed-domain list omits
@@ -722,10 +729,14 @@ Order — steps run in sequence; **do not reorder 4 and 5** (the reason is in 5)
    how long the stale CNAME lingers; re-check rather than assuming.
 
 2. **[OWNER-GATED] SmartCaptcha allowed domains.** Bot protection is **live on
-   prod** (#186, completed 2026-08-06) and the `ds-platform-prod` resource runs
-   with domain validation **ON**, so its allowed-domains list is load-bearing: a
-   portal host missing from it fails every protected auth action — registration
-   included — for every user at once. In the Yandex Cloud console, **add the new
+   prod** (#186, completed 2026-08-06). This repo **mandates** domain validation
+   **ON** for the `ds-platform-prod` resource — that is the wave-1 invariant
+   recorded in the SmartCaptcha production invariant above, not a property anyone
+   read back from the Yandex Cloud console (nothing in this repo can observe it;
+   treat it as required-and-unverified and act accordingly). Under that
+   requirement the allowed-domains list is load-bearing: a portal host missing
+   from it fails every protected auth action — registration included — for every
+   user at once. In the Yandex Cloud console, **add the new
    host before the deploy that adds its vhost**, and remove a host only once it is
    fully retired. Post-#1173 the list is `academy.doctor.school` alone: the legacy
    `app.doctor.school` entry is dropped as part of the retirement, after its DNS

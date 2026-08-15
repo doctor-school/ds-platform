@@ -535,7 +535,7 @@ Rule `tools/lint/eslint-rules/glossary-canonical-ids.mjs`, registered under the 
 
 **Id set — read from the glossary source, not `@ds/glossary/ids`.** The flagged id set is read at module load from the live glossary source (`apps/docs/content/product/glossary/*.md`, `**Canonical id:**` marker) via the plain-ESM sync twin of the `glossary-mdx` guard's loader (`tools/lint/lib/glossary-ids.mjs`). It does **not** `import { GLOSSARY_IDS } from "@ds/glossary/ids"` — that resolves to the built `dist/`, which the plain-node `eslint .` path never produces on a fresh checkout.
 
-**CI posture (WARN v1, ADR-0007 §2.6).** Two wirings: (a) `warn` severity in `eslint.config.js` for editor/dev in-line feedback, riding the `lint` job non-blockingly (`eslint .` exits 0 on warnings); (b) a dedicated `glossary-ids` CI job running `pnpm lint:glossary-ids` (its own `eslint.glossary-ids.config.mjs` enabling only this rule at `error`) as the promotable pass/fail check surface, `continue-on-error: true`. Promote to BLOCK — flip `continue-on-error` + add to the `ci` needs-list, no rule change — when a real glossary-consumer surface lands and the §2.6 sweep opens.
+**CI posture (WARN v1, ADR-0007 §2.6).** Two wirings: (a) `warn` severity in `eslint.config.js` for editor/dev in-line feedback, riding the `lint` job non-blockingly (`eslint .` exits 0 on warnings); (b) a `glossary-ids` STEP in the batched `guards-warn` job running `pnpm lint:glossary-ids` (its own `eslint.glossary-ids.config.mjs` enabling only this rule at `error`) as the promotable pass/fail check surface. Severity lives in exit codes, never in a job name (#1253): `continue-on-error: true` sits on the STEP — never on the job, which would leave the check-run concluding FAILURE on a WARN finding and block the merge gate — and the job's final `if: always()` WARN-report step lists every flagged guard in the job summary and exits 0, so a run carrying WARN findings concludes SUCCESS while staying visible. Promote to BLOCK — move the step into the `guards-block` batch (which is in the `ci` needs-list) and drop its WARN-report row, no rule change — when a real glossary-consumer surface lands and the §2.6 sweep opens.
 
 ### 6.4 MDX glossary-lint — prefixed `[[g:term-id]]` glossary directive
 
@@ -813,10 +813,14 @@ jobs:
       - name: Events drift
         run: pnpm lint:events
 
-      - name: Glossary IDs lint (dedicated job, WARN — §6.3)
-        # In the real ci.yml this is a standalone `glossary-ids` job with
-        # `continue-on-error: true` (the promotable check surface); the ESLint step
-        # above only rides `local/glossary-canonical-ids` at warn (non-blocking).
+      - name: Glossary IDs lint (WARN — §6.3)
+        # In the real ci.yml this is a STEP of the batched `guards-warn` job:
+        # `continue-on-error: true` on the STEP — never on the job, which would
+        # leave the check-run concluding FAILURE on a WARN finding and block the
+        # merge gate — plus that job's final `if: always()` WARN-report step,
+        # which lists the flagged guards in the job summary and exits 0. Severity
+        # lives in exit codes (ADR-0007 §2.6, #1253). The ESLint step above only
+        # rides `local/glossary-canonical-ids` at warn (non-blocking).
         continue-on-error: true
         run: pnpm lint:glossary-ids
 
@@ -833,6 +837,7 @@ jobs:
           args: --no-progress 'apps/docs/content/**/*.md' 'AGENTS.md' 'CLAUDE.md' 'README.md' 'docs/adr/*.md'
 
       - name: Module README ↔ exports (WARN-ONLY v1)
+        # Same posture: STEP-level `continue-on-error`, never job-level.
         continue-on-error: true
         run: pnpm lint:module-readme
 

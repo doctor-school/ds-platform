@@ -74,7 +74,9 @@ tools/lint/guard-tests/fixtures/
 # occurrences / 433 unique across the tree — changesets-generated commit +
 # PR links in every CHANGELOG.md, and Issue/PR/milestone citations in specs,
 # ADRs, READMEs and DEBT.md. Excluded because the guard cannot check them
-# DETERMINISTICALLY, not because they are wrong — every one of them resolves.
+# DETERMINISTICALLY, not because any of them is known to be wrong. Note that
+# "they all resolve" was never established either: while they were in scope
+# lychee reported them OK WITHOUT resolving them (step 2 below).
 #
 # Mechanism (#1268, evidenced on runs 31870093022 green / 31870189259 red,
 # 14 minutes apart on the IDENTICAL tree at 036cb9bf):
@@ -86,6 +88,12 @@ tools/lint/guard-tests/fixtures/
 #   2. lychee then RETRIES each failed github.com URL through the authenticated
 #      GitHub API using the workflow's GITHUB_TOKEN. That fallback is the only
 #      reason these links have ever been green: ~433 extra API requests per run.
+#      It never VERIFIED them: in lychee v0.24.2 (lychee-lib/src/checker/github.rs)
+#      `check_github` short-circuits on a private repository —
+#        if let Some(true) = repo.private { return Status::Ok(StatusCode::OK) }
+#      — returning OK as soon as the API confirms the REPO exists, without ever
+#      resolving the Issue / PR / commit the URL names. A green run therefore
+#      proved only "the repo is there and the budget held".
 #   3. lycheeverse/lychee v0.24.2, lychee-lib/src/checker/website.rs, discards
 #      the fallback's own error and re-reports the ORIGINAL status:
 #        if status.is_success() { return status; }
@@ -112,7 +120,12 @@ tools/lint/guard-tests/fixtures/
 # deterministic. Ignoring `**/CHANGELOG.md` wholesale was rejected as strictly
 # worse — it would also stop checking the third-party links those files carry.
 #
-# COVERAGE NARROWED: links pointing at this repo's own Issues / PRs / commits /
-# milestones are no longer verified by CI. Every link to anywhere else — in
-# CHANGELOG.md files included — is still checked. Tracked in DEBT.md.
+# COVERAGE NARROWED — the gap is pre-existing, this exclusion only makes it
+# visible: links pointing at this repo's own Issues / PRs / commits / milestones
+# are not verified by CI. They were not verified BEFORE either — the private-repo
+# short-circuit in step 2 reported them OK without resolving them — so a wrong
+# self-reference (a typo'd Issue number, a commit SHA that never existed) was
+# already uncaught. What the exclusion changes is the run's determinism and its
+# API cost, not the coverage. Every link to anywhere else — in CHANGELOG.md files
+# included — is still checked. Tracked in DEBT.md.
 ^https://github\.com/doctor-school/ds-platform($|/.*$)

@@ -20,7 +20,7 @@
 | PATCH /v1/admin/events/:id             | authenticated | platform_admin               | fast-path  | —            | false   | low-stakes  | EARS-2, EARS-8                   |
 | POST /v1/admin/auth/login              | public        | —                            | none       | —            | false   | high-stakes | EARS-3                           |
 | POST /v1/admin/auth/logout             | authenticated | platform_admin               | fast-path  | —            | false   | high-stakes | EARS-2                           |
-| POST /v1/admin/auth/mfa/enroll/start   | pending-auth  | platform_admin               | none       | —            | false   | low-stakes  | EARS-4, EARS-5                   |
+| POST /v1/admin/auth/mfa/enroll/start   | pending-auth  | platform_admin               | none       | —            | false   | high-stakes | EARS-4, EARS-5                   |
 | POST /v1/admin/auth/mfa/enroll/verify  | pending-auth  | platform_admin               | none       | —            | false   | high-stakes | EARS-4, EARS-5                   |
 | POST /v1/admin/auth/mfa/verify         | pending-auth  | platform_admin               | none       | —            | false   | high-stakes | EARS-6, EARS-7                   |
 | POST /v1/admin/events                  | authenticated | platform_admin               | fast-path  | —            | false   | low-stakes  | EARS-1, EARS-8                   |

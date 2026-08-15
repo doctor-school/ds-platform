@@ -77,9 +77,20 @@ The only real benefit an interceptor offered — "no command can silently skip i
 row" — is delivered instead by a **completeness guard**: the high-stakes-route
 emission-coverage test (`test/authz/audit-emission-coverage.e2e-spec.ts`)
 cross-checks the `audit: high-stakes` routes discovered over the real router
-against an explicit, reviewed coverage registry. Adding a new high-stakes handler
+against an explicit, reviewed coverage registry
+(`src/authz/audit-emission-coverage.ts`). Adding a new high-stakes handler
 without accounting for its terminal emission fails CI. See that file's header for
 the mechanism.
+
+An entry states one of three accountings: the `emits` event type(s) plus the
+covering e2e `it`; a `deferred` gap tracked by an Issue; or `noneBySpec` — the
+route owes **no** durable row because the governing spec says the command emits
+nothing durable (011's `StartMfaEnrollment`, whose one-shot secret must never
+reach the ledger). `noneBySpec` must carry both a reason and the spec clause; a
+bare `emits: []` is rejected, so "no row" is always a cited statement, never an
+empty claim or an under-classification to `low-stakes` that would hide the route
+from the guard. The schema and its accept/reject rules are unit-tested in
+`src/authz/audit-emission-coverage.spec.ts` (no database).
 
 ## Seams filled by later work (not E3)
 

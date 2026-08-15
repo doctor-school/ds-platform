@@ -479,6 +479,15 @@ jobs:
       # markdown-links — lychee link check over the whole tree (needs the full
       # checkout above). Last in the batch: it is the only network-bound step, so
       # the deterministic local guards fail fast ahead of it.
+      #
+      # Exclusions live in `.lycheeignore` (repo root), one rationale comment per
+      # entry. Note in particular the LAST entry there: this repo's OWN
+      # `github.com/doctor-school/ds-platform/…` URLs are excluded, because the
+      # repo is private — lychee 404s them on the plain request and only recovers
+      # via ~433 authenticated GitHub-API calls per run, on an hourly budget it
+      # shares with every other run and every agent `gh` call. That made a BLOCK
+      # gate depend on a resource it cannot reserve (#1268). Links to anywhere
+      # else, including inside the generated CHANGELOG.md files, are still checked.
       - name: markdown-links
         uses: lycheeverse/lychee-action@v2
         with:

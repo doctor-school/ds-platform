@@ -69,3 +69,50 @@ tools/lint/guard-tests/fixtures/
 # inside the Claude Design project, never in this repo — lychee sees them as
 # file:// links and reports false File-not-found errors (#514).
 ^file://.*/design-source/.*$
+
+# THIS repository's own URLs (github.com/doctor-school/ds-platform/…): 1179
+# occurrences / 433 unique across the tree — changesets-generated commit +
+# PR links in every CHANGELOG.md, and Issue/PR/milestone citations in specs,
+# ADRs, READMEs and DEBT.md. Excluded because the guard cannot check them
+# DETERMINISTICALLY, not because they are wrong — every one of them resolves.
+#
+# Mechanism (#1268, evidenced on runs 31870093022 green / 31870189259 red,
+# 14 minutes apart on the IDENTICAL tree at 036cb9bf):
+#   1. The repo is PRIVATE, so lychee's ordinary unauthenticated HTTP request
+#      gets 404 for every one of these URLs — always, in every run. GitHub
+#      hides private resources as 404, never 401. Reproduced by hand:
+#      `curl -o /dev/null -w '%{http_code}' <url>` = 404 for /issues/660,
+#      /pull/1215 and a CHANGELOG commit SHA that all provably exist.
+#   2. lychee then RETRIES each failed github.com URL through the authenticated
+#      GitHub API using the workflow's GITHUB_TOKEN. That fallback is the only
+#      reason these links have ever been green: ~433 extra API requests per run.
+#   3. lycheeverse/lychee v0.24.2, lychee-lib/src/checker/website.rs, discards
+#      the fallback's own error and re-reports the ORIGINAL status:
+#        if status.is_success() { return status; }
+#        if let Ok(github_uri) = GithubUri::try_from(uri) {
+#            let status = self.check_github(github_uri).await;
+#            if status.is_success() { return status; }
+#        }
+#      So the moment the API fallback fails for ANY reason — rate limiting is
+#      the only cause that varies between two runs of one tree — every self-URL
+#      reports as a bare `Rejected status code: 404 Not Found`. The red LOOKS
+#      like ~1100 broken links; it is one exhausted request budget.
+#
+# The budget is shared and hourly (GITHUB_TOKEN: 1000 req/h/repository), and it
+# is consumed by every other workflow run AND every agent `gh` call in the repo
+# (CLAUDE.md § Subagent context economy makes the same point about the 5000/h
+# token). A merge wave — 8 CI runs in the 40 minutes before the red — spends
+# ~433 of it per run on nothing but re-verifying our own history. So the guard's
+# greenness depended on a resource it cannot reserve, and the cost grows
+# monotonically with repo history: this fails MORE often over time, not less.
+#
+# Rejected alternatives: a PAT with a 5000/h budget only moves the cliff (same
+# per-run cost, same shared pool, plus a secret to manage); lychee-action's
+# `cache` input makes a cold branch pay the full 433 again, i.e. rarer, not
+# deterministic. Ignoring `**/CHANGELOG.md` wholesale was rejected as strictly
+# worse — it would also stop checking the third-party links those files carry.
+#
+# COVERAGE NARROWED: links pointing at this repo's own Issues / PRs / commits /
+# milestones are no longer verified by CI. Every link to anywhere else — in
+# CHANGELOG.md files included — is still checked. Tracked in DEBT.md.
+^https://github\.com/doctor-school/ds-platform($|/.*$)

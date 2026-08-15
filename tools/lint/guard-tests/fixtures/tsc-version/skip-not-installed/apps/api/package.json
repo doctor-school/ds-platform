@@ -1,0 +1,6 @@
+{
+  "name": "@ds/api",
+  "scripts": {
+    "build": "nest build"
+  }
+}

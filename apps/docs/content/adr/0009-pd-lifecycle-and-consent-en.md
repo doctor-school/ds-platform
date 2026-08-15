@@ -127,7 +127,7 @@ See ADR-0011 §2.5 (Egress control plane). Erasure request in RF-zone backend �
 
 ### 2.9 Schema location
 
-All PD-lifecycle tables (`consent_*`, `data_export_requests`, `erasure_requests`) live in `packages/db/schema/pd/`. Per DSO-63 #10/I, schemas live in `packages/db/`, not `apps/api`; ADR-0003 §4 (ORM + Migrations) is updated inline to reflect this layout.
+All PD-lifecycle tables (`consent_*`, `data_export_requests`, `erasure_requests`, `subject_keys`, `audit_retention_keys`) live in `packages/db/schema/pd/`. Per DSO-63 #10/I, schemas live in `packages/db/`, not `apps/api`; ADR-0003 §4 (ORM + Migrations) is updated inline to reflect this layout.
 
 ---
 

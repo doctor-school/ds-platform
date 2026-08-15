@@ -1,6 +1,6 @@
 ---
 title: "DS Platform — PD Lifecycle, Consent, Retention, Erasure design [EN]"
-description: "1. Domain rows are retained under the ADR-0003 soft-delete lifecycle; PD is erased by value erasure, tombstoning and crypto-shred. Policy is..."
+description: "1. Every application-owned Postgres row is retained under ADR-0003; PD is erased by value erasure, tombstoning and crypto-shred. Policy is..."
 lang: en
 ---
 
@@ -99,7 +99,7 @@ Withdrawal = revocation of an active consent. Cascading effects:
 
 **Master location:** `packages/db/schema/pd/retention.ts` (TS object, consumed by migrations + CI + admin UI).
 
-**Full list of PD-bearing tables pre-pilot.** Each row fixes: legal basis, retention, retained-row erasure mechanism, audit exception, owner. Soft-deletable domain rows also carry lifecycle `status` + `deleted_at` under ADR-0003 design §3.6; mechanisms may be combined.
+**Full list of PD-bearing tables pre-pilot.** Each row fixes: legal basis, retention, retained-row erasure mechanism, audit exception, owner. Every removable/expiring application-owned row also carries lifecycle `status` + `deleted_at` under ADR-0003 design §3.6; mechanisms may be combined.
 
 |   # | Table                                | PD fields                               | Legal basis                                                     | Retention                           | Retained-row erasure mechanism              | Audit exception                 | Owner           |
 | --: | ------------------------------------ | --------------------------------------- | --------------------------------------------------------------- | ----------------------------------- | ------------------------------------------- | ------------------------------- | --------------- |
@@ -131,7 +131,7 @@ Withdrawal = revocation of an active consent. Cascading effects:
 
 Drizzle schemas (TS). Not full DDL — outline of key fields. Full migrations land in `packages/db/migrations/` post-bootstrap.
 
-Every soft-deletable domain entity and relationship row additionally carries a domain lifecycle `status` and nullable `deleted_at` as defined by ADR-0003 design §3.6. Immutable/append-only records explicitly do not support removal and are erased only through their payload/key contract. The snippets below show the fields relevant to this ADR; legacy `tombstone_at` on soft-deletable request records is standardized to `deleted_at`.
+Every removable/expiring application-owned row additionally carries lifecycle `status` and nullable `deleted_at` as defined by ADR-0003 design §3.6. Immutable/append-only records explicitly do not support removal and are erased only through their payload/key contract. The snippets below show the fields relevant to this ADR; legacy `tombstone_at` on soft-deletable request records is standardized to `deleted_at`.
 
 ### 4.1 `consent_versions`
 

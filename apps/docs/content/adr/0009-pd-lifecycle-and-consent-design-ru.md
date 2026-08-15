@@ -1,6 +1,6 @@
 ---
 title: "DS Platform — PD Lifecycle, Consent, Retention, Erasure design [RU]"
-description: "1. Domain rows сохраняются по soft-delete lifecycle ADR-0003; PD стираются через value erasure, tombstone и crypto-shred. Policy фиксируется..."
+description: "1. Каждая application-owned строка Postgres сохраняется по ADR-0003; PD стираются через value erasure, tombstone и crypto-shred. Policy фиксируется..."
 lang: ru
 ---
 
@@ -99,7 +99,7 @@ Withdrawal — отзыв активного согласия. Cascading effects
 
 **Master location:** `packages/db/schema/pd/retention.ts` (TS объект, читается миграциями + CI + admin UI).
 
-**Полный список таблиц с PD pre-pilot.** Каждая строка fixates: legal basis, retention, retained-row erasure mechanism, audit exception, owner. Soft-deletable доменные строки также имеют lifecycle `status` + `deleted_at` по ADR-0003 design §3.6; механизмы можно комбинировать.
+**Полный список таблиц с PD pre-pilot.** Каждая строка fixates: legal basis, retention, retained-row erasure mechanism, audit exception, owner. Каждая removable/expiring application-owned строка также имеет lifecycle `status` + `deleted_at` по ADR-0003 design §3.6; механизмы можно комбинировать.
 
 |   # | Table                                   | Fields with PD                          | Legal basis                                                    | Retention                           | Retained-row erasure mechanism              | Audit exception                 | Owner           |
 | --: | --------------------------------------- | --------------------------------------- | -------------------------------------------------------------- | ----------------------------------- | ------------------------------------------- | ------------------------------- | --------------- |
@@ -129,7 +129,7 @@ Withdrawal — отзыв активного согласия. Cascading effects
 
 ## 4. Schemas (DDL outline)
 
-Каждая soft-deletable доменная сущность и строка связи дополнительно имеет доменный lifecycle `status` и nullable `deleted_at` по ADR-0003 design §3.6. Immutable/append-only записи явно не поддерживают удаление и стираются только через свой payload/key-контракт. Snippets ниже показывают поля, относящиеся к этому ADR; legacy `tombstone_at` на soft-deletable request records стандартизирован как `deleted_at`.
+Каждая removable/expiring application-owned строка дополнительно имеет lifecycle `status` и nullable `deleted_at` по ADR-0003 design §3.6. Immutable/append-only записи явно не поддерживают удаление и стираются только через свой payload/key-контракт. Snippets ниже показывают поля, относящиеся к этому ADR; legacy `tombstone_at` на soft-deletable request records стандартизирован как `deleted_at`.
 
 Drizzle-схемы (TS). Не полный DDL — выжимка с ключевыми полями. Полные миграции — в `packages/db/migrations/` после bootstrap.
 

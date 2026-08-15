@@ -39,7 +39,7 @@ lang: en
 - Postgres version (17).
 - ORM/query-builder (Drizzle).
 - Migration tool (drizzle-kit) + strategy.
-- Soft-delete-only lifecycle contract for persistent domain entities and relationship rows.
+- Universal retained-row lifecycle contract for every application-owned Postgres row.
 - Partitioning schema for high-volume tables.
 - Policy engine (Cerbos embedded) + integration with IPolicyEngine from ADR-0002.
 - Full-text search engine (PG FTS).
@@ -416,7 +416,7 @@ Single Redis 7+ instance for **volatile concerns only**. Durable concerns (idemp
 | JWKS cache           | Redis                               | `jwks:<kid>`                                 | volatile    | 10 min                   | Re-fetch (acceptable)                  |
 | Introspection cache  | Redis                               | `intro:<jti>`                                | volatile    | 60 s                     | Re-fetch (acceptable)                  |
 | Non-critical jobs    | Redis (BullMQ)                      | `bull:<queue>:*`                             | best-effort | per-job                  | At-least-once retry policy             |
-| **Idempotency keys** | **Postgres**                        | `idempotency_keys` (UNIQUE)                  | **durable** | 24h via cron cleanup     | n/a                                    |
+| **Idempotency keys** | **Postgres**                        | `idempotency_keys` (UNIQUE)                  | **durable** | 24h active; row retained | n/a                                    |
 | **Critical jobs**    | **Postgres outbox + BullMQ worker** | `job_outbox` + `bull:critical:*`             | **durable** | retained until completed | Replay from outbox after Redis restart |
 | **Session state**    | **IdP** (ADR-0001 §6)               | IdP's DB                                     | durable     | refresh-token TTL        | IdP handles                            |
 | Audit ledger, PD     | Postgres                            | per ADR-0003 §6 + ADR-0009 retention matrix  | durable     | per ADR-0009 §2.6        | n/a                                    |
@@ -449,9 +449,11 @@ export const idempotencyKeys = pgTable(
       .defaultNow()
       .notNull(),
     expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
+    status: text("status").notNull().default("active"), // 'active' | 'expired'
+    deleted_at: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => ({
-    idxExpires: index().on(t.expires_at), // for cron cleanup
+    idxExpiryLifecycle: index().on(t.status, t.expires_at), // for lifecycle cron + active reads
   }),
 );
 
@@ -459,7 +461,7 @@ export const jobOutbox = pgTable(
   "job_outbox",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    kind: text("kind").notNull(), // 'erasure.purge', 'payment.refund', 'nmo.issue_credit', ...
+    kind: text("kind").notNull(), // 'erasure-execute', 'payment.refund', 'nmo.issue_credit', ...
     payload: jsonb("payload").notNull(),
     status: text("status").notNull().default("pending"), // 'pending' | 'claimed' | 'completed' | 'failed'
     attempt: integer("attempt").notNull().default(0),
@@ -476,7 +478,7 @@ export const jobOutbox = pgTable(
 );
 ```
 
-Cron cleanup for `idempotency_keys` (`pg_cron`, hourly): `DELETE WHERE expires_at < NOW()`.
+Hourly lifecycle cron for `idempotency_keys` (`pg_cron`): `UPDATE idempotency_keys SET status = 'expired', deleted_at = COALESCE(deleted_at, NOW()) WHERE expires_at < NOW() AND deleted_at IS NULL`. Rows remain retained; active reads require `deleted_at IS NULL`.
 
 BullMQ drainer worker — a separate process; reads `job_outbox WHERE status = 'pending'`, enqueues into the appropriate BullMQ queue, marks `claimed_at`. On retry — increments `attempt`; max attempts per-kind from config.
 

@@ -1,6 +1,6 @@
 # PR-body-parsing guard family (Issue #651) — spec-link, registry-research,
-# spec-status-fresh, prior-decisions, spec-deletion, epic-autoclose (ADR-0007
-# §2.6). These guards evaluate the PR body/metadata, so they live in a DEDICATED
+# spec-status-fresh, prior-decisions, spec-deletion, catalog-deletion,
+# epic-autoclose (ADR-0007 §2.6). These guards evaluate the PR body/metadata, so they live in a DEDICATED
 # workflow that also triggers on the `edited` activity type: a post-create body
 # edit re-runs exactly these checks and never the full test/build matrix in
 # ci.yml (whose `pull_request` trigger keeps the default
@@ -15,7 +15,7 @@
 #   • `spec-link` is BLOCK → a plain step (fails the job → red check-run the
 #     merge gate reads). It runs LAST so a spec-link failure never skips the
 #     WARN guards' findings.
-#   • the other five are WARN → `continue-on-error: true` on the STEP so one
+#   • every other member is WARN → `continue-on-error: true` on the STEP so one
 #     flagged guard never stops the others, PLUS a final `if: always()`
 #     WARN-REPORT step that lists every flagged guard in the job summary and
 #     exits 0. WARN is visible and NEVER merge-blocking (ADR-0007 §2.6, #1253):
@@ -139,6 +139,27 @@ jobs:
           LINT_DIFF_BASE: origin/main
         run: pnpm exec tsx tools/lint/spec-deletion-lint.ts
 
+      # catalog-deletion: a PR must not delete files under
+      # `apps/docs/content/skills/**` — the AGENTS.md §3.3 dispatch contract —
+      # without a `catalog-deletion: <reason>` body marker (Issue #1261: a Windows
+      # `.agents/skills` junction let `git add -A` + `git reset --hard` wipe the whole
+      # catalog, twice in one day, in two unrelated agents). DIFF-based like
+      # `spec-deletion`, so it uses the full history checked out above and the
+      # `origin/main...HEAD` three-dot diff; a rename passes. The hard-failing half of
+      # this guard is its `--staged` pre-commit invocation (package.json
+      # `simple-git-hooks.pre-commit`) — this step is the push-side visibility layer,
+      # WARN v1 per the ADR-0007 §2.6 new-guard posture. TO PROMOTE TO BLOCK drop the
+      # `continue-on-error` line below AND its row from the WARN-report step.
+      - name: WARN · catalog-deletion
+        id: warn_catalog_deletion
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          LINT_DIFF_BASE: origin/main
+        run: pnpm exec tsx tools/lint/catalog-deletion-lint.ts
+
       # epic-autoclose: a child PR whose body writes `Closes #<epic>` would
       # auto-close a parent/epic issue on merge even while it still has OPEN
       # sub-issues (real incident: #927 auto-closed with open children — Issue #964).
@@ -201,6 +222,7 @@ jobs:
             spec-status-fresh=${{ steps.warn_spec_status_fresh.outcome }}
             prior-decisions=${{ steps.warn_prior_decisions.outcome }}
             spec-deletion=${{ steps.warn_spec_deletion.outcome }}
+            catalog-deletion=${{ steps.warn_catalog_deletion.outcome }}
             epic-autoclose=${{ steps.warn_epic_autoclose.outcome }}
         run: |
           failed="$(printf '%s\n' "$WARN_OUTCOMES" | grep -E '=failure$' | cut -d= -f1 || true)"

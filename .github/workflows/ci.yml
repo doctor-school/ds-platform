@@ -647,13 +647,16 @@ jobs:
         run: pnpm lint:migration-index
 
       # tsc-version: one-compiler guard (#1258). `apps/api` builds with `nest build`,
-      # and `@nestjs/cli` vendors its own `typescript` — so the JS shipped to prod was
-      # emitted by 5.9.3 while `pnpm typecheck` ran 6.0.3, with nothing reporting the
-      # split. Fixed by the root `pnpm.overrides.typescript: "$typescript"`; this guard
-      # fails if a build-toolchain package resolves a compiler other than the workspace
-      # one, or a workspace manifest pins a different `typescript` range. Needs the
-      # install to have run (it does — this job installs); an absent install is a SKIP,
-      # never a false red. WARN v1 — promote to BLOCK per ADR-0007 §2.6.
+      # whose TypeScriptBinaryLoader resolves `typescript` cwd-FIRST — cwd = apps/api,
+      # which pins it — so the prod artifact has always been emitted by the workspace
+      # compiler; the typescript@5.9.3 vendored inside @nestjs/cli was installed but
+      # never loaded (#1258 was filed on that installed-vs-loaded confusion). The guard
+      # keeps it that way: red when the compiler resolved from apps/api differs from the
+      # workspace one, when apps/api stops declaring `typescript` (the real vector — its
+      # build compiler would then be inherited by accident), or when a workspace manifest
+      # pins a different range. A merely-present vendored copy is INFO, never red. Needs
+      # the install to have run (it does — this job installs); an absent install is a
+      # SKIP, never a false red. WARN v1 — promote to BLOCK per ADR-0007 §2.6.
       - name: WARN · tsc-version
         id: warn_tsc_version
         continue-on-error: true

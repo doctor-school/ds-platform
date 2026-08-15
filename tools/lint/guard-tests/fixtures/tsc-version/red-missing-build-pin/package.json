@@ -1,5 +1,5 @@
 {
-  "name": "@ds/db",
+  "name": "fixture-root",
   "devDependencies": {
     "typescript": "^6.0.3"
   }

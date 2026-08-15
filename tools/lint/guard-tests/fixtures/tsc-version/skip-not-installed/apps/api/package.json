@@ -2,5 +2,8 @@
   "name": "@ds/api",
   "scripts": {
     "build": "nest build"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
   }
 }

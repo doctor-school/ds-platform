@@ -224,13 +224,21 @@ covered above; `ears-test` grew its coverage + orphan behaviour in #316; and
 `tdd-signal` / `spec-status` / `prior-decisions` / `module-readme` grew theirs in
 #438. Every guard that runs now asserts at least one exit-code branch here.
 
-`tsc-version` (#1258) is the one-compiler guard: `apps/api` builds with `nest build`
-and `@nestjs/cli` vendors its own `typescript`, so until #1258 the prod artifact was
-emitted by 5.9.3 while `pnpm typecheck` ran 6.0.3. It fails on `compiler-mismatch`
-(a build-toolchain package resolves a `typescript` other than the workspace root's)
-or `pin-divergence` (a workspace manifest declares a different `typescript` range).
-Its fixture trees use `node_modules__fixture/` rather than `node_modules/` — a real
-`node_modules/` inside the repo is git-ignored and could never be committed as a
-fixture; the guard swaps the directory name only under `LINT_FIXTURE_ROOT`. Cases:
-green, red-compiler-mismatch, red-pin-divergence, skip-not-installed (nothing
-installed ⇒ SKIP, never a false red).
+`tsc-version` (#1258) is the one-compiler guard for the api's build. nest-cli's
+`TypeScriptBinaryLoader` resolves `require.resolve("typescript", { paths: [cwd, ...] })`
+cwd-FIRST, and `nest build` runs with cwd = `apps/api`, which pins `typescript`
+itself — so the prod artifact was always emitted by the workspace compiler, and the
+`typescript@5.9.3` vendored inside `@nestjs/cli` was installed but never loaded. The
+guard models THAT resolution rather than nested-copy proximity: red on
+`build-compiler-mismatch` (the compiler resolved cwd-first from `apps/api` differs
+from the root's), `missing-build-pin` (`apps/api` declares no `typescript`, so its
+build compiler would be inherited by accident — the real re-divergence vector, and
+one a version comparison alone cannot see), or `pin-divergence` (a workspace manifest
+on a different range). A merely-present vendored copy is reported as INFO and is
+never a finding; the `green` fixture carries one deliberately. Fixture trees use
+`node_modules__fixture/` rather than `node_modules/` — a real `node_modules/` inside
+the repo is git-ignored and could never be committed as a fixture; the guard swaps
+the directory name only under `LINT_FIXTURE_ROOT`. Cases: green (correct resolution
+
+- a stale vendored copy), red-build-compiler, red-missing-build-pin,
+  red-pin-divergence, skip-not-installed (nothing installed ⇒ SKIP, never a false red).

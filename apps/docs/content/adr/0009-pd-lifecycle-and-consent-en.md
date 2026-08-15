@@ -69,15 +69,15 @@ These endpoints are mandatory pre-pilot (engineering-readiness §5 BLOCKER).
 
 ### 2.3 Erasure semantics
 
-ADR-0003 §4 establishes the lifecycle invariant: a persistent domain entity or relationship row is **never physically deleted**. An erasure request retains every affected row. For a soft-deletable row it sets the lifecycle status and `deleted_at`; an immutable/append-only evidence row is not mutated, and its subject identity is erased through `subject_keys` zeroization. The request applies one or more of these mechanisms to the PD payload:
+ADR-0003 §4 establishes the lifecycle invariant: every application-owned Postgres row is retained. An erasure request retains every affected row. For a removable row it sets lifecycle status and `deleted_at`; an immutable/append-only row is not mutated. Subject identity protected by the general `subject_keys` DEK is erased immediately, while legally retained audit fields use an isolated audit-retention DEK until their fixed term (§2.4). The request applies one or more of these mechanisms to the PD payload:
 
-| Mechanism         | Behavior                                                                                                                                          | Applies to                                                                     |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| **Value erasure** | PD fields are nulled or replaced with a non-identifying sentinel; the row, stable ID, status and `deleted_at` remain.                             | mutable PD without legal hold (profile, contact data, marketing data)          |
-| **Tombstone**     | The minimum non-PD business/evidentiary fact remains; subject-identifying fields and links are erased or pseudonymized.                           | action and relationship records where the fact matters but identity does not   |
-| **Crypto-shred**  | Per-subject encrypted fields become unreadable by destroying the key; the row records that zeroization completed and remains referentially valid. | audit_ledger, backup snapshots, encrypted blobs and sensitive derived payloads |
+| Mechanism         | Behavior                                                                                                                                            | Applies to                                                                                        |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **Value erasure** | PD fields are nulled or replaced with a non-identifying sentinel; the row, stable ID, status and `deleted_at` remain.                               | mutable PD without legal hold (profile, contact data, marketing data)                             |
+| **Tombstone**     | The minimum non-PD business/evidentiary fact remains; subject-identifying fields and links are erased or pseudonymized.                             | action and relationship records where the fact matters but identity does not                      |
+| **Crypto-shred**  | Encrypted fields become unreadable by destroying the policy-scoped key; the row records that zeroization completed and remains referentially valid. | general subject PD at erasure; audit PD at its legal term; backups and sensitive derived payloads |
 
-The mechanisms are composable. **Per-table policy** is fixed in the retention matrix (design spec §3) and enforced via migrations + CI lint. `DELETE FROM` and cascade deletion are not valid domain-erasure mechanisms.
+The mechanisms are composable. **Per-table policy** is fixed in the retention matrix (design spec §3) and enforced via migrations + CI lint. `DELETE FROM`, `TRUNCATE`, data-bearing `DROP TABLE` / `DROP PARTITION`, and cascade deletion are not valid lifecycle or erasure mechanisms for application-owned Postgres data.
 
 Forward reference: the erasure execution contract (BullMQ `erasure-execute` job, idempotency, cross-zone propagation) is defined in `2026-05-18-ds-platform-bullmq-queue-contract-design` (queue `pd-lifecycle`).
 
@@ -85,17 +85,17 @@ Forward reference: the erasure execution contract (BullMQ `erasure-execute` job,
 
 `audit_ledger` (ADR-0003 §6) is append-only, hash-chained. Erasure works without breaking the chain:
 
-- **Subject-identifying fields** in audit rows (subject_id, ip, ua) are encrypted with a **per-subject key** stored in Vault.
-- **Erasure request** → key zeroization in Vault. Hash-chain remains valid; row remains; subject-identifying data becomes unreadable.
-- **Audit exception clause** (152-FZ — mandatory retention for some events) — handled via retention matrix: `audit_ledger` retains readable encrypted PD for 5y (НК РФ + medical compliance), then crypto-shreds the PD while retaining the non-PD hash-chain row. Its partitions are never retention-dropped.
+- **Subject-identifying fields** in each audit row (subject_id, ip, ua) are encrypted with a dedicated **per-audit-row retention DEK**. It is isolated from the subject's general DEK and cannot decrypt profile, consent, contact, or derived data.
+- **Erasure request** → immediate zeroization of the general subject DEK. The audit-retention DEK is not touched when the retention matrix supplies a legal exception; therefore the retained evidence remains readable only through the restricted compliance path.
+- **Audit exception clause** (152-FZ — mandatory retention for some events) — `audit_ledger` retains readable encrypted PD for 5y (НК РФ + medical compliance). At the row's term its dedicated retention DEK is zeroized, while the non-PD hash-chain row and key tombstone remain. Audit partitions are never retention-dropped.
 
 ### 2.5 Backup erasure policy
 
-- **Primary backups (Timeweb):** 30d retention; erasure via per-subject crypto-shred.
-- **Offsite backups (Beget S3):** 90d retention; per-subject crypto-shred.
-- **Quarterly archives:** 1y retention; per-subject crypto-shred.
+- **Primary backups (Timeweb):** 30d retention; general subject PD is erased via per-subject crypto-shred, while legally retained audit ciphertext follows its separate key term.
+- **Offsite backups (Beget S3):** 90d retention; the same key separation applies.
+- **Quarterly archives:** 1y retention; the same key separation applies.
 - **Keys stored in Vault on a separate VM** (DSO-63 #9 backup topology).
-- **Erasure SLA** — 30 days (152-FZ art. 14). Key shred → data becomes unreadable immediately; old backup snapshots expire on their rotation while the live lifecycle tombstone remains.
+- **Erasure SLA** — 30 days (152-FZ art. 14). General-key shred makes non-exempt data unreadable immediately; old backup snapshots expire on rotation. A retention-matrix exception stays readable only under its isolated retention key until the recorded term, then that key is shredded while every lifecycle/evidence row remains.
 - **Legal hold** (litigation, regulator) — override; key retained until hold released; row marked `legal_hold = true`.
 
 ### 2.6 Retention matrix
@@ -116,7 +116,7 @@ Full matrix per entity/table — in design spec §3. Summary:
 
 ### 2.7 Cross-zone erasure propagation
 
-See ADR-0011 §3 (Egress control plane). Erasure request in RF-zone backend → outbox event → AI-zone subscriber → embedding/corpus payload erasure and lifecycle tombstone. Audit per event.
+See ADR-0011 §2.5 (Egress control plane). Erasure request in RF-zone backend → outbox event → AI-zone subscriber → embedding/corpus payload erasure and lifecycle tombstone. Audit per event.
 
 ### 2.8 Operator workflow
 
@@ -143,7 +143,7 @@ All PD-lifecycle tables (`consent_*`, `data_export_requests`, `erasure_requests`
 
 ### 3.3 Full physical removal from audit_ledger
 
-**Rejected.** Breaks the hash-chain → we lose the ability to prove an event to a regulator. Per-subject crypto-shred is the correct compromise: chain stays valid, subject-identifying fragments are unreadable.
+**Rejected.** Physical removal is forbidden by ADR-0003 and would also break the hash-chain, losing the ability to prove an event to a regulator. Purpose-separated crypto-shred is the retained-row mechanism: the chain stays valid, general subject data is erased immediately, and legally retained audit fragments become unreadable when their per-row key reaches term.
 
 ### 3.4 Third-party / DPaaS (data privacy as a service)
 
@@ -156,15 +156,15 @@ All PD-lifecycle tables (`consent_*`, `data_export_requests`, `erasure_requests`
 ### Positive
 
 - One archetype document for AI agents / engineers / lawyers. No more "where's consent handled?" — every other doc forward-refs ADR-0009.
-- Per-subject crypto-shred — satisfies 152-FZ backup requirement without forcing short backup retention.
+- Purpose-separated crypto-shred — erases general subject PD immediately without defeating the fixed legal retention of audit evidence.
 - Retention matrix as code (CI-validated) — no drift from reality.
 - Domain rows and relationships retain stable identity and referential history while their PD payload can still be irreversibly erased.
 - Engineering-readiness §5 BLOCKER closed — pre-pilot launch is not blocked by missing consent infrastructure.
 
 ### Negative / costs
 
-- Additional tables (`consent_*`, `data_export_requests`, `erasure_requests`) + cron jobs + admin UI — ≈ 2 weeks backend + 1 week admin frontend.
-- Vault for per-subject keys — extra infra (separate VM). Alternative — keys in Postgres under master-key, simpler but weaker isolation; decided in design spec §5.
+- Additional tables (`consent_*`, `data_export_requests`, `erasure_requests`, `subject_keys`, `audit_retention_keys`) + cron jobs + admin UI — ≈ 2 weeks backend + 1 week admin frontend.
+- Vault for general subject and per-row audit-retention keys — extra infra (separate VM). Keeping wrapped keys in Postgres is rejected because database backups could resurrect erased key material; design spec §5 carries the contract.
 - Every new PD table must pass retention-matrix CI check — small migration overhead.
 
 ### Downstream dependencies

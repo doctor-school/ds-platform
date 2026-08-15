@@ -54,7 +54,7 @@ ADR-0002 inherits: outbox pattern for cross-system event emit (decouples the dat
 | **Encryption keys**          | Vault on a dedicated VM (not Timeweb and not Beget)         | —                                          | separation of custody             |
 | **Restore drill**            | Quarterly, documented in operational runbook (DSO-10)       | —                                          | RTO validation                    |
 
-Crypto-shred compatibility: per-subject DEK keys (ADR-0009 §5) live in Vault. On an erasure request — DEK zeroization → encrypted PD in backups becomes unreadable immediately. Quarterly KEK rotation destroys old KEKs → 90d offsite retention provides de facto erasure within the 152-FZ SLA (30d).
+Crypto-shred compatibility: purpose-separated DEKs (ADR-0009 §5) live in Vault, outside database backups. On an erasure request the general per-subject DEK is destroyed, so non-exempt encrypted PD becomes unreadable immediately in every snapshot. Each identifying audit row uses its own isolated retention DEK, destroyed only at the legal term; its ciphertext and hash-chain row remain.
 
 - RTO/RPO v1: ≤2 hours / ≤15 min.
 
@@ -70,9 +70,9 @@ Crypto-shred compatibility: per-subject DEK keys (ADR-0009 §5) live in Vault. O
 
 Partition by month: `ledger`, `audit_log`, `events_log`, `notifications`, `ai_pipeline_jobs`. Not partitioned in v1: `users`, `courses`, `lessons`, `progress` — overhead does not pay off until >10M rows in the table.
 
-**Goal of partitioning from v1** — avoid a retroactive repaint as the system grows: the partition is already in place, and partition pruning keeps high-volume queries and maintenance bounded. Cheap `DROP PARTITION` retention is permitted only for an explicitly retention-managed operational stream; domain and evidentiary rows such as `ledger` / `audit_ledger` are never retention-dropped.
+**Goal of partitioning from v1** — avoid a retroactive repaint as the system grows: the partition is already in place, and partition pruning keeps high-volume queries and maintenance bounded. Partitioning is not a deletion mechanism: no data-bearing partition is retention-dropped. Expired records remain as lifecycle tombstones or immutable append-only rows.
 
-Managed by the `pg_partman` extension. Premake 2–3 months ahead via BGW. **Drop mask disabled in v1** — we do not know the real growth profile; our platform is not high-load. Enabled when a confirmed retention scenario emerges from observability.
+Managed by the `pg_partman` extension. Premake 2–3 months ahead via BGW. **The drop mask remains disabled** under the retained-row invariant. Growth is handled through capacity planning, partition pruning and indexes, not row or partition deletion.
 
 Retention duration **is not fixed in this ADR** — it is a knob, not an architecture (see OQ-D3). Observability-driven approach: alerts on partition sizes; retention numbers are set by a separate product/compliance decision. Floor for `audit_log` ≥3 years (152-FZ) — fixed at the first product review.
 
@@ -87,18 +87,18 @@ Retention duration **is not fixed in this ADR** — it is a knob, not an archite
 
 - TS schema as single source of truth, doc-as-SSOT principle.
 - pgvector first-class (`vector(...)` type out of the box).
-- Schema files per domain in `packages/db/schema/` — shared SSOT for the whole platform (ADR-0006 §1 SSOT-table + ADR-0008 §2.3), so read-only consumers (`apps/admin`, `apps/cms`, mobile sync) import types without cross-app boundary violations. All PD-bearing tables (`consent_*`, `data_export_requests`, `erasure_requests`, `idempotency_keys`, `job_outbox`, `subject_keys` per ADR-0009 §5) live here. drizzle-kit config in `packages/db/drizzle.config.ts` keeps `out: '../../apps/api/drizzle'` so the migration directory remains `apps/api/drizzle/`.
+- Schema files per domain in `packages/db/schema/` — shared SSOT for the whole platform (ADR-0006 §1 SSOT-table + ADR-0008 §2.3), so read-only consumers (`apps/admin`, `apps/cms`, mobile sync) import types without cross-app boundary violations. All PD-bearing tables (`consent_*`, `data_export_requests`, `erasure_requests`, `idempotency_keys`, `job_outbox`, `subject_keys`, `audit_retention_keys` per ADR-0009 §5) live here. drizzle-kit config in `packages/db/drizzle.config.ts` keeps `out: '../../apps/api/drizzle'` so the migration directory remains `apps/api/drizzle/`.
 - drizzle-kit generate → SQL diff files in `apps/api/drizzle/`, human-editable for complex migrations (concurrent index, partition manipulation, RLS).
 - In CI — migration dry-run against the staging DB before merge.
 
-#### Domain row lifecycle (normative)
+#### Postgres row lifecycle (normative)
 
-- **Persistent domain entities and their relationship rows are never physically deleted from Postgres.** Product and admin commands may only move a row through an explicit lifecycle status and set a nullable `deleted_at` timestamp. Restoring a row clears `deleted_at` and moves it to an allowed active status.
-- Every domain entity or join table that supports a removal transition therefore has: a domain lifecycle `status`, nullable `deleted_at timestamptz`, and indexes that make the default `deleted_at IS NULL` read path efficient. An immutable/append-only domain record declares that removal is unsupported. Existing domain-specific lifecycle timestamps such as `deactivated_at` remain valid for their distinct transition, but do not replace `deleted_at` when the product supports removal.
-- Normal product reads exclude soft-deleted rows. Historical, audit, legal and restore flows include them only through explicit repository methods; there is no implicit global scope that can be accidentally bypassed.
-- Foreign keys between domain rows use restrictive/no-action semantics. `ON DELETE CASCADE` is forbidden for domain data, including join rows. Stable IDs, slugs and historical relationships are not reused after soft deletion unless a later ADR explicitly defines safe reuse.
+- **No application-owned row is ever physically deleted from Postgres.** The rule covers domain entities, relationship rows and operational records. Product, admin and automated retention commands may only move a removable row through an explicit lifecycle status and set a nullable `deleted_at` timestamp. Restoring a row clears `deleted_at` and moves it to an allowed active status.
+- Every application-owned table declares one of two contracts: a removable row has lifecycle `status`, nullable `deleted_at timestamptz`, and indexes for the default `deleted_at IS NULL` read path; an immutable/append-only row declares that removal is unsupported. Existing purpose-specific timestamps such as `deactivated_at`, `expires_at` or `processed_at` keep their distinct meaning but do not replace `deleted_at` when removal/expiry is represented.
+- Normal product and operational reads exclude soft-deleted rows. Historical, audit, legal and restore flows include them only through explicit repository methods; there is no implicit global scope that can be accidentally bypassed.
+- All application-owned foreign keys use restrictive/no-action semantics. `ON DELETE CASCADE` is forbidden, including on join and operational tables. Stable identifiers and historical relationships are not reused after soft deletion unless a later ADR explicitly defines safe reuse.
 - A personal-data erasure request does **not** delete the row: ADR-0009 erases, replaces or crypto-shreds sensitive values while preserving the lifecycle tombstone and the minimum non-personal metadata required for integrity. A soft-delete flag with readable PD is not erasure.
-- This contract applies to persistent business records and their relationships. Expiring sessions, idempotency keys, queue leases and retention-managed telemetry/append streams are operational records rather than domain entities; their bounded physical retention remains governed by the relevant operational contract and ADR-0009.
+- Expiring sessions, idempotency keys and queue leases transition to an expired/retired status and set `deleted_at`; telemetry and evidence streams remain append-only. `DELETE`, `TRUNCATE`, data-bearing `DROP TABLE` / `DROP PARTITION`, and equivalent cascade paths are not retention mechanisms.
 
 **Rejected:**
 
@@ -198,7 +198,7 @@ Data-layer-relevant parameters that ADR-0012 inherits from this ADR (unchanged):
 - Drizzle TS schema = SSOT — no divergence between ORM and runtime types; doc-as-SSOT principle satisfied.
 - Soft-delete-only domain lifecycle preserves referential integrity, stable identifiers and the product/audit history across every surface.
 - Cerbos embedded = policies-as-code with tests, no separate PDP service on v1.
-- Partitioning from v1 → no retroactive repaint needed; explicitly retention-managed operational streams may use cheap `DROP PARTITION`, while domain and evidentiary rows remain retained.
+- Partitioning from v1 → no retroactive repaint needed; partition pruning keeps retained active/tombstone history manageable without `DROP PARTITION` retention.
 - Self-hosted Postgres → unrestricted extensions, full control over tuning, 60–180k ₽/year cheaper than managed.
 - Outbox pattern from ADR-0002 already decouples the data layer from destinations — deferred decisions (ClickHouse, Meilisearch, Qdrant) require no rework of emit code.
 

@@ -54,7 +54,7 @@ ADR-0002 наследует: outbox pattern для cross-system event emit (де
 | **Encryption keys**          | Vault на отдельной VM (не Timeweb и не Beget)                 | —                                           | separation of custody             |
 | **Restore drill**            | Quarterly, документировано в operational runbook (DSO-10)     | —                                           | RTO validation                    |
 
-Crypto-shred compatibility: per-subject DEK ключи (ADR-0009 §5) хранятся в Vault. При erasure request — zeroization DEK → encrypted PD в backup'ах становится нечитаемым immediately. KEK rotation quarterly уничтожает старые KEKs → 90d offsite retention обеспечивает de facto erasure within 152-ФЗ SLA (30d).
+Crypto-shred compatibility: purpose-separated DEK (ADR-0009 §5) хранятся в Vault вне database backups. При erasure request уничтожается общий per-subject DEK, поэтому неисключённые encrypted PD сразу становятся нечитаемыми во всех snapshots. Каждая identifying audit-row использует отдельный retention DEK, который уничтожается только по окончании законного срока; ciphertext и hash-chain строка сохраняются.
 
 - RTO/RPO v1: ≤2 часа / ≤15 мин.
 
@@ -70,9 +70,9 @@ Crypto-shred compatibility: per-subject DEK ключи (ADR-0009 §5) храня
 
 Партиционируем by month: `ledger`, `audit_log`, `events_log`, `notifications`, `ai_pipeline_jobs`. Не партиционируем v1: `users`, `courses`, `lessons`, `progress` — overhead не окупается до >10M записей в таблице.
 
-**Цель партиционирования с v1** — избежать retroactive repaint при росте: партиция уже на месте, а partition pruning ограничивает стоимость high-volume запросов и обслуживания. Дешёвый retention через `DROP PARTITION` разрешён только для явно retention-managed операционного stream; доменные и доказательные строки, включая `ledger` / `audit_ledger`, никогда не удаляются retention-механизмом.
+**Цель партиционирования с v1** — избежать retroactive repaint при росте: партиция уже на месте, а partition pruning ограничивает стоимость high-volume запросов и обслуживания. Партиционирование не является механизмом удаления: ни одна партиция с данными не удаляется по retention. Истёкшие записи сохраняются как lifecycle-tombstones или immutable append-only строки.
 
-Управление — `pg_partman` extension. Premake 2-3 месяца вперёд через BGW. **Drop-маска выключена на v1** — мы не знаем реального профиля роста, наша платформа не hiload. Включается при подтверждённом сценарии retention.
+Управление — `pg_partman` extension. Premake 2-3 месяца вперёд через BGW. **Drop-маска остаётся выключенной** по retained-row инварианту. Рост управляется capacity planning, partition pruning и индексами, а не удалением строк или партиций.
 
 Retention duration **не зафиксирован в этом ADR** — это knob, не архитектура (см. OQ-D3). Observability-driven подход: alerts на размер партиций, retention numbers фиксируются отдельным product/compliance решением. Floor для `audit_log` ≥3 года (152-ФЗ) — фиксируется при первом product-review.
 
@@ -87,18 +87,18 @@ Retention duration **не зафиксирован в этом ADR** — это 
 
 - TS schema как single source of truth, doc-as-SSOT принцип.
 - pgvector first-class (`vector(...)` type из коробки).
-- Schema-файлы по доменам в `packages/db/schema/` — общая SSOT для всей платформы (ADR-0006 §1 SSOT-table + ADR-0008 §2.3), так read-only потребители (`apps/admin`, `apps/cms`, mobile sync) импортируют типы без cross-app boundary violation. Все PD-bearing таблицы (`consent_*`, `data_export_requests`, `erasure_requests`, `idempotency_keys`, `job_outbox`, `subject_keys` по ADR-0009 §5) живут здесь. drizzle-kit конфиг в `packages/db/drizzle.config.ts` указывает `out: '../../apps/api/drizzle'` — миграционная директория остаётся `apps/api/drizzle/`.
+- Schema-файлы по доменам в `packages/db/schema/` — общая SSOT для всей платформы (ADR-0006 §1 SSOT-table + ADR-0008 §2.3), так read-only потребители (`apps/admin`, `apps/cms`, mobile sync) импортируют типы без cross-app boundary violation. Все PD-bearing таблицы (`consent_*`, `data_export_requests`, `erasure_requests`, `idempotency_keys`, `job_outbox`, `subject_keys`, `audit_retention_keys` по ADR-0009 §5) живут здесь. drizzle-kit конфиг в `packages/db/drizzle.config.ts` указывает `out: '../../apps/api/drizzle'` — миграционная директория остаётся `apps/api/drizzle/`.
 - drizzle-kit generate → SQL-diff-файлы в `apps/api/drizzle/`, human-editable для сложных миграций (concurrent index, partition manipulation, RLS).
 - В CI — migration dry-run против staging БД перед merge.
 
-#### Жизненный цикл доменных записей (нормативно)
+#### Жизненный цикл строк Postgres (нормативно)
 
-- **Постоянные доменные сущности и строки их связей никогда физически не удаляются из Postgres.** Продуктовые и административные команды могут только перевести запись в явный lifecycle-статус и установить nullable timestamp `deleted_at`. Восстановление очищает `deleted_at` и переводит запись в допустимый активный статус.
-- Поэтому каждая доменная сущность или join-таблица с транзицией удаления имеет: доменный lifecycle `status`, nullable `deleted_at timestamptz` и индексы для эффективного default read-path `deleted_at IS NULL`. Immutable/append-only доменная запись явно объявляет, что удаление не поддерживается. Существующие доменно-специфичные timestamps вроде `deactivated_at` сохраняют смысл своей отдельной транзиции, но не заменяют `deleted_at`, если продукт поддерживает удаление.
-- Обычные продуктовые чтения исключают soft-deleted записи. Исторические, audit-, legal- и restore-сценарии включают их только через явные repository methods; не используется неявный global scope, который можно случайно обойти.
-- Foreign keys между доменными записями используют restrictive/no-action semantics. `ON DELETE CASCADE` запрещён для доменных данных, включая join-строки. Стабильные ID, slug'и и исторические связи после soft-delete не переиспользуются, если отдельный будущий ADR явно не определит безопасное переиспользование.
+- **Ни одна application-owned строка никогда физически не удаляется из Postgres.** Правило охватывает доменные сущности, строки связей и операционные записи. Продуктовые, административные и автоматические retention-команды могут только перевести удаляемую запись в явный lifecycle-статус и установить nullable timestamp `deleted_at`. Восстановление очищает `deleted_at` и переводит запись в допустимый активный статус.
+- Каждая application-owned таблица объявляет один из двух контрактов: удаляемая строка имеет lifecycle `status`, nullable `deleted_at timestamptz` и индексы для default read-path `deleted_at IS NULL`; immutable/append-only строка объявляет, что удаление не поддерживается. Purpose-specific timestamps вроде `deactivated_at`, `expires_at` или `processed_at` сохраняют отдельный смысл, но не заменяют `deleted_at`, когда моделируется удаление/истечение.
+- Обычные продуктовые и операционные чтения исключают soft-deleted записи. Исторические, audit-, legal- и restore-сценарии включают их только через явные repository methods; не используется неявный global scope, который можно случайно обойти.
+- Все application-owned foreign keys используют restrictive/no-action semantics. `ON DELETE CASCADE` запрещён, включая join- и операционные таблицы. Стабильные идентификаторы и исторические связи после soft-delete не переиспользуются, если отдельный будущий ADR явно не определит безопасное переиспользование.
 - Запрос на стирание персональных данных **не** удаляет строку: ADR-0009 стирает, заменяет или crypto-shred'ит чувствительные значения, сохраняя lifecycle-tombstone и минимальные неперсональные metadata для целостности. Soft-delete-флаг при читаемых PD не является стиранием.
-- Контракт применяется к постоянным бизнес-записям и их связям. Истекающие sessions, idempotency keys, queue leases и retention-managed telemetry/append streams — операционные записи, а не доменные сущности; их ограниченный физический retention по-прежнему регулируется соответствующим операционным контрактом и ADR-0009.
+- Истекающие sessions, idempotency keys и queue leases переходят в expired/retired status и получают `deleted_at`; telemetry и evidence streams остаются append-only. `DELETE`, `TRUNCATE`, data-bearing `DROP TABLE` / `DROP PARTITION` и эквивалентные cascade-пути не являются retention-механизмами.
 
 **Отвергнуто:**
 
@@ -198,7 +198,7 @@ Data-layer-relevant параметры, которые ADR-0012 наследуе
 - Drizzle TS-schema = SSOT — нет divergence между ORM и runtime types; doc-as-SSOT принцип выполнен.
 - Soft-delete-only lifecycle доменных записей сохраняет ссылочную целостность, стабильные идентификаторы и продуктовую/audit-историю на всех поверхностях.
 - Cerbos embedded = policies-as-code с тестами, без отдельного PDP-сервиса на v1.
-- Partitioning с v1 → retroactive repaint не нужен; явно retention-managed операционные streams могут использовать дешёвый `DROP PARTITION`, а доменные и доказательные строки сохраняются.
+- Partitioning с v1 → retroactive repaint не нужен; partition pruning удерживает стоимость active/tombstone истории без retention через `DROP PARTITION`.
 - Self-hosted Postgres → extensions без ограничений, full control над тюнингом, дешевле managed на 60-180k ₽/год.
 - Outbox-pattern из ADR-0002 уже декаплит data-layer от destinations — отложенные решения (ClickHouse, Meilisearch, Qdrant) не требуют переделки emit-кода.
 

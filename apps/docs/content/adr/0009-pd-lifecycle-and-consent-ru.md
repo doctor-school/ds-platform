@@ -69,15 +69,15 @@ Endpoint'ы — обязательная часть pre-pilot (engineering-readi
 
 ### 2.3 Erasure semantics
 
-ADR-0003 §4 устанавливает lifecycle-инвариант: постоянная доменная сущность или строка связи **никогда физически не удаляется**. Erasure request сохраняет каждую затронутую строку. Для soft-deletable строки он устанавливает lifecycle-status и `deleted_at`; immutable/append-only evidence-row не мутирует, а subject identity стирается через zeroization `subject_keys`. К PD payload запрос применяет один или несколько механизмов:
+ADR-0003 §4 устанавливает lifecycle-инвариант: каждая application-owned строка Postgres сохраняется. Erasure request сохраняет каждую затронутую строку. Для удаляемой строки он устанавливает lifecycle-status и `deleted_at`; immutable/append-only строка не мутирует. Subject identity под общим DEK из `subject_keys` стирается сразу, а audit-поля с законным сроком хранения используют изолированный audit-retention DEK до конца фиксированного срока (§2.4). К PD payload запрос применяет один или несколько механизмов:
 
-| Механизм          | Поведение                                                                                                                                                  | Применимо к                                                                       |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| **Value erasure** | PD-поля заменяются на `NULL` или неидентифицирующий sentinel; строка, стабильный ID, status и `deleted_at` сохраняются.                                    | mutable PD без legal hold (профиль, контактные данные, marketing data)            |
-| **Tombstone**     | Сохраняется минимальный неперсональный business/evidentiary факт; subject-identifying поля и связи стираются или псевдонимизируются.                       | записи действий и связей, где важен факт, но не identity                          |
-| **Crypto-shred**  | Зашифрованные per-subject поля становятся нечитаемыми после уничтожения ключа; строка фиксирует завершённую zeroization и сохраняет ссылочную целостность. | audit_ledger, backup snapshots, encrypted blobs и чувствительные derived payloads |
+| Механизм          | Поведение                                                                                                                                                    | Применимо к                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| **Value erasure** | PD-поля заменяются на `NULL` или неидентифицирующий sentinel; строка, стабильный ID, status и `deleted_at` сохраняются.                                      | mutable PD без legal hold (профиль, контактные данные, marketing data)                                         |
+| **Tombstone**     | Сохраняется минимальный неперсональный business/evidentiary факт; subject-identifying поля и связи стираются или псевдонимизируются.                         | записи действий и связей, где важен факт, но не identity                                                       |
+| **Crypto-shred**  | Зашифрованные поля становятся нечитаемыми после уничтожения policy-scoped ключа; строка фиксирует завершённую zeroization и сохраняет ссылочную целостность. | общие subject PD при erasure; audit PD по окончании законного срока; backups и чувствительные derived payloads |
 
-Механизмы комбинируются. **Per-table policy** фиксируется в retention matrix (см. design spec §3) и enforced через migrations + CI lint. `DELETE FROM` и cascade deletion не являются допустимыми механизмами доменного erasure.
+Механизмы комбинируются. **Per-table policy** фиксируется в retention matrix (см. design spec §3) и enforced через migrations + CI lint. `DELETE FROM`, `TRUNCATE`, data-bearing `DROP TABLE` / `DROP PARTITION` и cascade deletion не являются допустимыми lifecycle- или erasure-механизмами для application-owned данных Postgres.
 
 Forward-ref: контракт исполнения erasure (BullMQ-задача `erasure-execute`, idempotency, cross-zone propagation) — см. `2026-05-18-ds-platform-bullmq-queue-contract-design` (queue `pd-lifecycle`).
 
@@ -85,17 +85,17 @@ Forward-ref: контракт исполнения erasure (BullMQ-задача 
 
 `audit_ledger` (ADR-0003 §6) — append-only, hash-chained. Erasure обрабатывается без разрыва цепочки:
 
-- **Subject-identifying поля** в audit-row (subject_id, ip, ua) шифруются **отдельным ключом per subject**, хранящимся в Vault.
-- **Erasure request** → уничтожение ключа в Vault (key-zeroization). Hash-chain остаётся валидным; tuple остаётся; subject-identifying данные становятся нечитаемыми.
-- **Audit exception clause** (152-ФЗ — обязательность хранения некоторых событий) — реализуется через retention matrix: `audit_ledger` хранит читаемые encrypted PD 5y (НК РФ + medical compliance), затем crypto-shred'ит PD, сохраняя неперсональную hash-chain строку. Его партиции никогда не удаляются retention-механизмом.
+- **Subject-identifying поля** каждой audit-row (subject_id, ip, ua) шифруются отдельным **per-audit-row retention DEK**. Он изолирован от общего DEK субъекта и не может расшифровать профиль, consent, контакты или derived data.
+- **Erasure request** → немедленная zeroization общего subject DEK. Audit-retention DEK не затрагивается, если retention matrix задаёт законное исключение; сохранённое доказательство остаётся читаемым только через ограниченный compliance-путь.
+- **Audit exception clause** (152-ФЗ — обязательность хранения некоторых событий) — `audit_ledger` хранит читаемые encrypted PD 5y (НК РФ + medical compliance). По окончании срока строки её отдельный retention DEK zeroize'ится, а неперсональная hash-chain строка и tombstone ключа сохраняются. Audit-партиции никогда не удаляются retention-механизмом.
 
 ### 2.5 Backup erasure policy
 
-- **Primary backups (Timeweb)**: 30d retention; erasure через crypto-shred per-subject ключа.
-- **Offsite backups (Beget S3)**: 90d retention; crypto-shred per-subject ключа.
-- **Quarterly archives**: 1y retention; crypto-shred per-subject ключа.
+- **Primary backups (Timeweb):** 30d retention; общие subject PD стираются через per-subject crypto-shred, а законно сохраняемый audit-ciphertext следует сроку своего отдельного ключа.
+- **Offsite backups (Beget S3):** 90d retention; действует то же разделение ключей.
+- **Quarterly archives:** 1y retention; действует то же разделение ключей.
 - **Ключи хранятся в Vault на отдельной VM** (см. DSO-63 #9 backup topology).
-- **Erasure SLA** — 30 дней (152-ФЗ ст. 14). Crypto-shred ключа → данные становятся нечитаемыми сразу; старые backup snapshots истекают по своей rotation, а live lifecycle-tombstone сохраняется.
+- **Erasure SLA** — 30 дней (152-ФЗ ст. 14). Shred общего ключа делает неисключённые данные нечитаемыми сразу; старые backup snapshots истекают по rotation. Исключение retention matrix читается только через изолированный retention-ключ до записанного срока, после чего ключ уничтожается, а lifecycle/evidence строки сохраняются.
 - **Legal hold** (litigation, регулятор) — override; ключ сохраняется до снятия hold; строка помечается `legal_hold = true`.
 
 ### 2.6 Retention matrix
@@ -116,7 +116,7 @@ Forward-ref: контракт исполнения erasure (BullMQ-задача 
 
 ### 2.7 Cross-zone erasure propagation
 
-См. ADR-0011 §3 (Egress control plane). Erasure request в RF-zone backend → событие в outbox → AI-zone subscriber → стирание embedding/corpus payload и lifecycle-tombstone. Audit per event.
+См. ADR-0011 §2.5 (Egress control plane). Erasure request в RF-zone backend → событие в outbox → AI-zone subscriber → стирание embedding/corpus payload и lifecycle-tombstone. Audit per event.
 
 ### 2.8 Operator workflow
 
@@ -143,7 +143,7 @@ Forward-ref: контракт исполнения erasure (BullMQ-задача 
 
 ### 3.3 Полное физическое удаление из audit_ledger
 
-**Отвергнуто.** Уничтожает hash-chain → теряем способность доказать факт события для регулятора. Crypto-shred per subject — корректный компромисс: hash-chain остаётся валидным, subject-identifying фрагменты не читаемы.
+**Отвергнуто.** Физическое удаление запрещено ADR-0003 и дополнительно ломает hash-chain, лишая возможности доказать событие регулятору. Purpose-separated crypto-shred — retained-row механизм: hash-chain остаётся валидным, общие subject data стираются сразу, а законно сохраняемые audit-фрагменты становятся нечитаемыми по окончании срока их per-row ключа.
 
 ### 3.4 Третья сторона / DPaaS (data privacy as a service)
 
@@ -156,15 +156,15 @@ Forward-ref: контракт исполнения erasure (BullMQ-задача 
 ### Positive
 
 - Один archetype-документ для AI-агентов / разработчиков / юристов. Никаких «а где про consent?» — везде forward-reference на ADR-0009.
-- Crypto-shred per subject — отвечает 152-ФЗ требованию по бэкапам без перехода на короткий backup retention.
+- Purpose-separated crypto-shred стирает общие subject PD сразу, не ломая фиксированный законный срок хранения audit-evidence.
 - Retention matrix как code (CI-validated) — отсутствует drift с реальностью.
 - Доменные строки и связи сохраняют стабильную identity и ссылочную историю, а их PD payload при этом может быть необратимо стёрт.
 - Engineering-readiness §5 BLOCKER closed — pre-pilot launch не блокируется отсутствием консент-инфраструктуры.
 
 ### Negative / costs
 
-- Дополнительные таблицы (`consent_*`, `data_export_requests`, `erasure_requests`) + cron-jobs + admin UI — ≈ 2 недели backend + 1 неделя admin frontend.
-- Vault для key-per-subject — дополнительная инфра (отдельная VM). Альтернатива — хранение ключей в Postgres под master-key, проще, но weaker isolation; решение в design spec §5.
+- Дополнительные таблицы (`consent_*`, `data_export_requests`, `erasure_requests`, `subject_keys`, `audit_retention_keys`) + cron-jobs + admin UI — ≈ 2 недели backend + 1 неделя admin frontend.
+- Vault для общих subject и per-row audit-retention keys — дополнительная инфра (отдельная VM). Wrapped keys в Postgres отвергнуты: database backups могли бы воскресить стёртый key material; контракт находится в design spec §5.
 - Каждый new table с PD должен пройти retention-matrix CI check — небольшой overhead на migrations.
 
 ### Дальнейшие зависимости

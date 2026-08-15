@@ -20,12 +20,12 @@ lang: ru
 
 ## 0. TL;DR
 
-1. **Retained-row erasure:** физическое удаление доменной сущности или связи запрещено; каждая поддерживаемая транзиция удаления следует soft-delete lifecycle ADR-0003 с `status` + `deleted_at`. PD стираются через value erasure / tombstone / crypto-shred.
-2. **Per-subject crypto-shred** для audit_ledger + backups + AI-zone embeddings. Ключи в Vault на отдельной VM. Erasure SLA — 30 дней.
+1. **Retained-row erasure:** физическое удаление каждой application-owned строки Postgres запрещено; каждое поддерживаемое удаление или истечение следует lifecycle ADR-0003 с `status` + `deleted_at`, а immutable/append-only строки сохраняются. PD стираются через value erasure / tombstone / crypto-shred.
+2. **Purpose-separated crypto-shred:** общий per-subject DEK уничтожается при erasure; каждая строка `audit_ledger` использует отдельный retention DEK, живущий только законный срок. Ключи находятся в Vault вне database backups. Erasure SLA для неисключённых PD — 30 дней.
 3. **Consent versioning** — `consent_versions` + append-only `consent_acceptances` + `consent_withdrawals`. Каждое изменение текста = новая версия; пользователь prompted при следующем логине.
 4. **Data subject rights endpoints** под `/me/*` — обязательная часть pre-pilot. `data-export` async (signed link, ≤7d). `erasure-request` async (≤30d).
 5. **Retention matrix** в `packages/db/schema/pd/retention.ts` как TS-объект → читается миграциями + CI + admin UI. Single source of truth.
-6. **Cross-zone propagation:** erasure request → outbox event → AI-zone subscriber стирает embedding/corpus payload и сохраняет tombstones (см. ADR-0011 §3).
+6. **Cross-zone propagation:** erasure request → outbox event → AI-zone subscriber стирает embedding/corpus payload и сохраняет tombstones (см. ADR-0011 §2.5).
 7. **Что НЕ в scope этого spec'а:** конкретный legal text для consent v1 (готовит юрист в составе DSO-X2), точное UX consent screens (frontend track), final SLA для data-export если объём окажется ≥X MB (измеряем в pilot).
 
 ---
@@ -38,8 +38,8 @@ lang: ru
 - API endpoints под `/me/*` (NestJS controllers, Zod-схемы запросов/ответов).
 - Retention matrix как code (TS) + CI validator (`drizzle-kit check` + custom lint).
 - Erasure execution flow (sync vs async, audit, ack).
-- Per-subject crypto-shred реализация: ключ-менеджмент (Vault или sealed master-key), encryption at-rest на критичных полях, key zeroization протокол.
-- Cross-zone erasure propagation (outbox contract, см. ADR-0011 §3).
+- Purpose-separated crypto-shred: общие per-subject ключи, отдельные per-audit-row retention keys, encryption at-rest критичных полей и key-zeroization protocol.
+- Cross-zone erasure propagation (outbox contract, см. ADR-0011 §2.5).
 - Admin UI слой (queue + actions).
 - Backup erasure procedure (cron + Vault key zeroization).
 
@@ -167,7 +167,7 @@ export const consentAcceptances = pgTable(
   "consent_acceptances",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    subject_id_encrypted: bytea("subject_id_encrypted").notNull(), // encrypted with per-subject key
+    subject_id_encrypted: bytea("subject_id_encrypted").notNull(), // encrypted with general per-subject key
     consent_version_id: uuid("consent_version_id")
       .notNull()
       .references(() => consentVersions.id),
@@ -184,7 +184,7 @@ export const consentAcceptances = pgTable(
 );
 ```
 
-Append-only. `subject_id` ищется через `bytea` + per-subject key (см. §5).
+Append-only. `subject_id` ищется через `bytea` + общий per-subject key (см. §5).
 
 ### 4.3 `consent_withdrawals`
 
@@ -235,28 +235,32 @@ export const erasureRequests = pgTable("erasure_requests", {
   reviewed_at: timestamp("reviewed_at", { withTimezone: true }),
   legal_note: text("legal_note"), // legal hold reason if rejected
   executed_at: timestamp("executed_at", { withTimezone: true }),
-  key_zeroized_at: timestamp("key_zeroized_at", { withTimezone: true }),
+  general_key_zeroized_at: timestamp("general_key_zeroized_at", {
+    withTimezone: true,
+  }),
   deleted_at: timestamp("deleted_at", { withTimezone: true }), // for self-tombstoning after 5y
 });
 ```
 
 ---
 
-## 5. Key management (per-subject keys)
+## 5. Key management (purpose-separated keys)
 
 ### 5.1 Архитектура
 
-- **Master KEK** (Key Encryption Key) — хранится в Vault на отдельной VM (Hashicorp Vault или Vault-light).
-- **Per-subject DEK** (Data Encryption Key) — генерируется при создании subject; зашифрован KEK; хранится в `subject_keys` table в Postgres.
-- **Шифрование PD-полей** в `bytea` columns — symmetric encryption (AES-256-GCM) с DEK.
-- **Erasure** = destroy DEK in `subject_keys`, установив `dek_encrypted = NULL`; key-row сохраняется с `status = 'zeroized'` и `zeroized_at`. Encrypted blobs остаются нечитаемыми.
+- **Key authority** — Vault на отдельной VM (Hashicorp Vault или Vault-light service с той же destroy-семантикой). Database backups содержат только opaque key references, но не пригодные DEK.
+- **Общий per-subject DEK** — создаётся вместе с субъектом и защищает profile, consent, contact и derived subject PD. Postgres-таблица `subject_keys` хранит только Vault reference и сохраняемые lifecycle-метаданные.
+- **Per-audit-row retention DEK** — создаётся для каждой строки `audit_ledger`, чьи identifying fields имеют законный срок хранения. Строка ссылается на один tombstone `audit_retention_keys`; этот ключ не может расшифровать никакие non-audit данные.
+- **Шифрование PD-полей** в `bytea` columns — symmetric AES-256-GCM с purpose-scoped DEK.
+- **Erasure** уничтожает общий DEK в Vault и помечает сохраняемую строку `subject_keys` как `zeroized`. Audit-ключ с законным исключением намеренно не затрагивается.
+- **Окончание audit-срока** уничтожает retention DEK строки в Vault и помечает сохраняемую строку `audit_retention_keys` как `zeroized`; audit-ciphertext и hash-chain строка остаются нечитаемыми, но целыми.
 
 ### 5.2 `subject_keys` table
 
 ```ts
 export const subjectKeys = pgTable("subject_keys", {
   subject_id: uuid("subject_id").primaryKey(),
-  dek_encrypted: bytea("dek_encrypted"), // DEK encrypted by KEK from Vault; NULL after erasure
+  vault_key_ref: text("vault_key_ref"), // opaque Vault handle; NULL after zeroization
   status: text("status").notNull().default("active"), // 'active' | 'zeroized'
   created_at: timestamp("created_at", { withTimezone: true })
     .defaultNow()
@@ -266,18 +270,42 @@ export const subjectKeys = pgTable("subject_keys", {
 });
 ```
 
-### 5.3 Why этот pattern (а не alternative)
+Таблица не содержит DEK. Её строка сохраняется после zeroization, поэтому старый database snapshot не может воскресить key material, даже если в нём остался устаревший Vault reference.
 
-- **Postgres pgcrypto под master-key (simpler альтернатива):** требует доступа к master-key для каждой read-операции. Если master-key хранится в env-var → доступен всем процессам, включая ML-задачи. Без isolation.
-- **Vault per-subject DEK (chosen):** Vault кэширует DEK на короткое окно, после revoke DEK становится недоступным. Erasure = revoke в Vault. Backup рисов нет — backup содержит только encrypted blobs, без ключа.
-- **OQ-PD-1 (открытый):** Hashicorp Vault dedicated VM vs Postgres + sealed master-key в startup (Vault-light). Решается при IdP-spike (если IdP-хост уже несёт Vault, переиспользуем; иначе — light pattern для pre-pilot, full Vault при scale).
+### 5.3 Таблица `audit_retention_keys`
 
-### 5.4 Backup erasure через key zeroization
+```ts
+export const auditRetentionKeys = pgTable("audit_retention_keys", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  vault_key_ref: text("vault_key_ref"), // opaque Vault handle; NULL after term zeroization
+  status: text("status").notNull().default("active"), // 'active' | 'zeroized'
+  retention_expires_at: timestamp("retention_expires_at", {
+    withTimezone: true,
+  }).notNull(),
+  created_at: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  zeroized_at: timestamp("zeroized_at", { withTimezone: true }),
+  zeroization_reason: text("zeroization_reason"), // 'retention_term' | 'legal_release'
+});
+```
 
-- Backup snapshot содержит `subject_keys` table + encrypted PD.
-- Если DEK для subject S зануляется (erasure), новые backup snapshots не содержат DEK.
-- **Старые backup snapshots до erasure** — содержат DEK. Compensating control: KEK rotated quarterly + старые KEK уничтожаются по retention rotation. Через ≤90d (offsite retention) старые backups имеют unreadable DEK → de facto erasure.
-- **SLA 30d compatible:** crypto-shred в live DB и primary backup — immediate (within hours of request). Offsite backup — within rotation window. Acceptable per 152-ФЗ ст. 14 (30d).
+Каждая identifying строка `audit_ledger` хранит restrictive FK `retention_key_id` на эту таблицу. Key-record не содержит subject identifier; зашифрованная audit-row — его единственный потребитель. Ни одна из строк не удаляется.
+
+### 5.4 Why этот pattern (а не alternative)
+
+- **Postgres pgcrypto под master-key (отвергнуто):** database snapshots содержали бы wrapped DEKs, а немедленное subject erasure конфликтовало бы с отдельным пятилетним audit-исключением.
+- **Один per-subject key для всех purpose (отвергнуто):** его немедленная zeroization уничтожает читаемость законно хранимого audit; его сохранение оставляет читаемыми все остальные subject PD. Purpose separation обязательна.
+- **Vault + общий subject DEK + per-row audit-retention DEK (выбрано):** revoke ограничен purpose, audit expiry точен для каждой строки, database backups содержат ciphertext и мёртвые references, а не key material.
+- **OQ-PD-1 (открытый):** отдельная Hashicorp Vault VM или sealed Vault-light service. Любая реализация хранит ключи вне Postgres backup set и предоставляет irreversible destroy + сохраняемые zeroization metadata.
+
+### 5.5 Backup erasure через key zeroization
+
+- Database snapshot содержит ciphertext, metadata `subject_keys` / `audit_retention_keys` и opaque Vault references — но не пригодный DEK.
+- Уничтожение общего subject key сразу делает неисключённые PD нечитаемыми в live database и любом старом database backup. Устаревший reference не восстанавливает уничтоженный Vault key.
+- Audit-retention keys доступны только до `retention_expires_at` каждой строки; уничтожение ключа делает identifying ciphertext этой строки нечитаемым в live database и любом backup, сохраняя evidence-row.
+- Vault restore до запуска key service обязан переиграть сохраняемый zeroization ledger; уничтоженная key version никогда не импортируется из cold snapshot. Quarterly restore drill проверяет это fail-closed свойство.
+- **SLA 30d compatible:** неисключённые PD crypto-shred'ятся в течение часов после одобренного запроса. Исключение retention matrix следует записанному законному сроку, а не общему erasure-clock.
 
 ---
 
@@ -399,7 +427,7 @@ Paged. Response per row:
 
 - Value erasure: NULL/replace PD fields in tables with `erasure: 'value_erasure'`; установить lifecycle status и `deleted_at`, не удаляя строку.
 - Tombstone: сохранить минимальный неперсональный факт в таблицах с `erasure: 'tombstone'`; стереть или crypto-shred'ить subject-link.
-- Crypto-shred: zeroize DEK in `subject_keys`. All encrypted blobs become unreadable.
+- Crypto-shred: уничтожить общий subject DEK в Vault и пометить `subject_keys` как zeroized. Неисключённые encrypted blobs становятся нечитаемыми; активные `audit_retention_keys` остаются изолированы до своих сроков.
 - Emit outbox event `erasure.subject_erased.v1` (см. ADR-0011 §2.5).
 
 5. **AI-zone subscriber** (cross-zone):
@@ -413,11 +441,11 @@ Paged. Response per row:
 
 - Primary: within 30d (current rotation window).
 - Offsite: within 90d.
-- Both: cryptographically erased immediately via DEK zeroization.
+- Both: неисключённые PD crypto-shred'ятся сразу через zeroization общего DEK; законно сохраняемый audit-ciphertext читается только через отдельный retention key до срока.
 
 7. **Completion**:
 
-- Status → `'completed'`. `executed_at`, `key_zeroized_at`, `ai_zone_acked_at` filled.
+- Status → `'completed'`. Заполняются `executed_at`, `general_key_zeroized_at`, `ai_zone_acked_at`; срок audit-retention key остаётся независимым.
 - Audit log entry.
 - Optional: send confirmation email (if subject still reachable).
 
@@ -467,23 +495,24 @@ Access control: только роль `pd_officer` (новая; ADR-0001 §1 RBA
 1. Каждая колонка `bytea` / `text` в таблице, расположенной в `packages/db/schema/`, должна быть либо классифицирована в `retention.ts`, либо иметь explicit `@no-pd` annotation в Drizzle schema.
 2. Каждая new table в migration без entry в `retention.ts` → CI fail.
 3. Каждое поле с PD должно иметь корректный retained-row erasure mechanism из {value_erasure, tombstone, crypto_shred, retain}.
-4. Каждая soft-deletable доменная таблица и relationship table должна объявлять lifecycle `status` + nullable `deleted_at`; immutable/append-only доменная таблица должна явно объявлять, что удаление не поддерживается. Migrations и runtime repositories не должны физически удалять доменные строки или добавлять `ON DELETE CASCADE`.
-5. `consent_versions`, `consent_acceptances` и `consent_withdrawals` остаются append-only: без `UPDATE`/`DELETE`; subject identity стирается через zeroization `subject_keys`. Любая отдельно soft-deletable таблица consent-домена следует правилу 4.
+4. Каждая application-owned таблица Postgres должна объявлять либо lifecycle `status` + nullable `deleted_at` для удаления/истечения, либо immutable/append-only контракт без поддержки удаления. Migrations, retention jobs и runtime repositories не должны использовать `DELETE`, `TRUNCATE`, data-bearing `DROP TABLE` / `DROP PARTITION` или `ON DELETE CASCADE`.
+5. `consent_versions`, `consent_acceptances` и `consent_withdrawals` остаются append-only: без `UPDATE`/`DELETE`; subject identity стирается через zeroization общего ключа, на который ссылается `subject_keys`. Любая отдельно soft-deletable таблица consent-домена следует правилу 4.
+6. Каждая identifying строка `audit_ledger` ссылается на одну сохраняемую строку `audit_retention_keys`; общий subject key запрещён для audit-ciphertext, а evidence и key-tombstone строки нельзя физически удалять.
 
 **Red-team тесты** (`tests/red-team/pd-leakage.test.ts`):
 
 - Регистрация test subject с unique-PD строкой.
 - Trigger erasure.
-- Проверка: PD строка не появляется в SELECT'ах + не появляется в audit_ledger raw output + не появляется в логах + не появляется в metrics endpoint + не появляется в ai-zone-subscriber-test fixture.
+- Проверка: marker исчезает из общих продуктовых SELECT'ов, логов, metrics и AI-zone fixture; raw output `audit_ledger` содержит только ciphertext. Ограниченная compliance-проекция расшифровывает audit-row до срока, а синтетическое истечение срока zeroize'ит отдельный retention key, после чего та же строка нечитаема без её удаления.
 
 ---
 
 ## 11. Деплой и операции
 
-- **Phase 0 (до first user):** Vault-light pattern (sealed master-key в systemd-credential, KEK хранится в env). DEK в Postgres.
+- **Phase 0 (до first user):** Vault-light service с sealed storage вне Postgres backup set; Postgres хранит только opaque key references.
 - **Phase 1 (pre-pilot):** Vault-light → Vault-full при наличии IdP-Vault interop (DSO-25 spike).
-- **Quarterly:** KEK rotation. Старые KEK уничтожаются по rotation policy.
-- **Backup procedure:** см. ADR-0009 §2.5 + data-layer-design §2.4. Vault keys backup отдельно (offline cold storage).
+- **Quarterly:** KEK rotation. Сначала активные general/audit DEK rewrap'ятся; старые версии KEK уничтожаются только после успешной проверки rewrap и zeroization ledger.
+- **Backup procedure:** см. ADR-0009 §2.5 + data-layer-design §2.4. Vault keys backup'ятся отдельно; restore переигрывает сохраняемые zeroization tombstones до того, как key service начнёт обслуживать reads.
 
 ---
 

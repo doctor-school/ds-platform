@@ -20,12 +20,12 @@ lang: en
 
 ## 0. TL;DR
 
-1. **Retained-row erasure:** physical deletion of a domain entity or relationship is forbidden; every supported removal follows ADR-0003's `status` + `deleted_at` soft-delete lifecycle. PD is erased through value erasure / tombstone / crypto-shred.
-2. **Per-subject crypto-shred** for audit_ledger + backups + AI-zone embeddings. Keys live in Vault on a dedicated VM. Erasure SLA — 30 days.
+1. **Retained-row erasure:** physical deletion of every application-owned Postgres row is forbidden; every supported removal or expiry follows ADR-0003's `status` + `deleted_at` lifecycle, while immutable/append-only rows remain retained. PD is erased through value erasure / tombstone / crypto-shred.
+2. **Purpose-separated crypto-shred:** a general per-subject DEK is destroyed on erasure; each `audit_ledger` row uses a separate retention DEK that survives only its legal term. Keys live in Vault, outside database backups. Erasure SLA — 30 days for non-exempt PD.
 3. **Consent versioning** — `consent_versions` + append-only `consent_acceptances` + `consent_withdrawals`. Every text change = new version; user is prompted on next login.
 4. **Data subject rights endpoints** under `/me/*` — mandatory pre-pilot. `data-export` async (signed link, ≤7d). `erasure-request` async (≤30d).
 5. **Retention matrix** in `packages/db/schema/pd/retention.ts` as a TS object — read by migrations + CI + admin UI. Single source of truth.
-6. **Cross-zone propagation:** erasure request → outbox event → AI-zone subscriber erases embedding/corpus payloads and retains their tombstones (see ADR-0011 §3).
+6. **Cross-zone propagation:** erasure request → outbox event → AI-zone subscriber erases embedding/corpus payloads and retains their tombstones (see ADR-0011 §2.5).
 7. **Out of scope for this spec:** the actual legal text for consent v1 (drafted by lawyer under DSO-X2), exact UX of consent screens (frontend track), final data-export SLA if size turns out to be ≥X MB (measured in pilot).
 
 ---
@@ -38,8 +38,8 @@ lang: en
 - API endpoints under `/me/*` (NestJS controllers, Zod request/response schemas).
 - Retention matrix as code (TS) + CI validator (`drizzle-kit check` + custom lint).
 - Erasure execution flow (sync vs async, audit, ack).
-- Per-subject crypto-shred: key management (Vault or sealed master-key), at-rest encryption on critical fields, key zeroization protocol.
-- Cross-zone erasure propagation (outbox contract, see ADR-0011 §3).
+- Purpose-separated crypto-shred: general per-subject keys, per-audit-row retention keys, at-rest encryption on critical fields, and key-zeroization protocol.
+- Cross-zone erasure propagation (outbox contract, see ADR-0011 §2.5).
 - Admin UI layer (queue + actions).
 - Backup erasure procedure (cron + Vault key zeroization).
 
@@ -167,7 +167,7 @@ export const consentAcceptances = pgTable(
   "consent_acceptances",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    subject_id_encrypted: bytea("subject_id_encrypted").notNull(), // encrypted with per-subject key
+    subject_id_encrypted: bytea("subject_id_encrypted").notNull(), // encrypted with general per-subject key
     consent_version_id: uuid("consent_version_id")
       .notNull()
       .references(() => consentVersions.id),
@@ -184,7 +184,7 @@ export const consentAcceptances = pgTable(
 );
 ```
 
-Append-only. `subject_id` is queried via `bytea` + per-subject key (see §5).
+Append-only. `subject_id` is queried via `bytea` + the general per-subject key (see §5).
 
 ### 4.3 `consent_withdrawals`
 
@@ -235,28 +235,32 @@ export const erasureRequests = pgTable("erasure_requests", {
   reviewed_at: timestamp("reviewed_at", { withTimezone: true }),
   legal_note: text("legal_note"), // legal hold reason on rejection
   executed_at: timestamp("executed_at", { withTimezone: true }),
-  key_zeroized_at: timestamp("key_zeroized_at", { withTimezone: true }),
+  general_key_zeroized_at: timestamp("general_key_zeroized_at", {
+    withTimezone: true,
+  }),
   deleted_at: timestamp("deleted_at", { withTimezone: true }), // self-tombstoning after 5y
 });
 ```
 
 ---
 
-## 5. Key management (per-subject keys)
+## 5. Key management (purpose-separated keys)
 
 ### 5.1 Architecture
 
-- **Master KEK** (Key Encryption Key) — stored in Vault on a dedicated VM (Hashicorp Vault or Vault-light).
-- **Per-subject DEK** (Data Encryption Key) — generated when the subject is created; encrypted with KEK; stored in the `subject_keys` table in Postgres.
-- **PD-field encryption** in `bytea` columns — symmetric (AES-256-GCM) with DEK.
-- **Erasure** = destroy the DEK in `subject_keys` by setting `dek_encrypted = NULL`; the key row remains with `status = 'zeroized'` and `zeroized_at`. Encrypted blobs become unreadable.
+- **Key authority** — Vault on a dedicated VM (Hashicorp Vault or a Vault-light service with the same destroy semantics). Database backups contain opaque key references, never usable DEKs.
+- **General per-subject DEK** — generated when the subject is created and used for profile, consent, contact, and derived subject PD. Postgres `subject_keys` stores only the Vault reference and retained lifecycle metadata.
+- **Per-audit-row retention DEK** — generated for each `audit_ledger` row whose identifying fields carry a legal retention term. The row references one `audit_retention_keys` tombstone; that key cannot decrypt any non-audit data.
+- **PD-field encryption** in `bytea` columns — symmetric AES-256-GCM with the purpose-scoped DEK.
+- **Erasure** destroys the general DEK in Vault and marks its retained `subject_keys` row `zeroized`. A legally exempt audit key is intentionally unaffected.
+- **Audit term expiry** destroys that row's retention DEK in Vault and marks the retained `audit_retention_keys` row `zeroized`; the audit ciphertext and hash-chain row remain unreadable but intact.
 
 ### 5.2 `subject_keys` table
 
 ```ts
 export const subjectKeys = pgTable("subject_keys", {
   subject_id: uuid("subject_id").primaryKey(),
-  dek_encrypted: bytea("dek_encrypted"), // DEK encrypted by KEK from Vault; NULL after erasure
+  vault_key_ref: text("vault_key_ref"), // opaque Vault handle; NULL after zeroization
   status: text("status").notNull().default("active"), // 'active' | 'zeroized'
   created_at: timestamp("created_at", { withTimezone: true })
     .defaultNow()
@@ -266,18 +270,42 @@ export const subjectKeys = pgTable("subject_keys", {
 });
 ```
 
-### 5.3 Why this pattern (vs alternatives)
+The table holds no DEK. Its row is retained after zeroization, so an old database snapshot cannot resurrect key material even if it still carries a stale Vault reference.
 
-- **Postgres pgcrypto under a master-key (simpler alternative):** every read requires master-key access. If master-key is in an env var → available to every process, including ML jobs. No isolation.
-- **Vault + per-subject DEK (chosen):** Vault caches DEK briefly; after revocation, DEK becomes inaccessible. Erasure = revoke in Vault. Backup risk is bounded — backups hold only encrypted blobs, no key.
-- **OQ-PD-1 (open):** dedicated Hashicorp Vault VM vs Postgres + sealed master-key at startup (Vault-light). Resolved by IdP spike (if the IdP host already runs Vault, reuse; otherwise — light pattern for pre-pilot, full Vault at scale).
+### 5.3 `audit_retention_keys` table
 
-### 5.4 Backup erasure via key zeroization
+```ts
+export const auditRetentionKeys = pgTable("audit_retention_keys", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  vault_key_ref: text("vault_key_ref"), // opaque Vault handle; NULL after term zeroization
+  status: text("status").notNull().default("active"), // 'active' | 'zeroized'
+  retention_expires_at: timestamp("retention_expires_at", {
+    withTimezone: true,
+  }).notNull(),
+  created_at: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  zeroized_at: timestamp("zeroized_at", { withTimezone: true }),
+  zeroization_reason: text("zeroization_reason"), // 'retention_term' | 'legal_release'
+});
+```
 
-- A backup snapshot contains `subject_keys` + encrypted PD.
-- When subject S's DEK is zeroized (erasure), new snapshots no longer contain that DEK.
-- **Old snapshots taken before erasure** still contain the DEK. Compensating control: KEK rotated quarterly + retired KEKs are destroyed on rotation. Within ≤90d (offsite retention) old backups have an unreadable DEK → de facto erasure.
-- **30d SLA compatible:** crypto-shred in live DB and primary backup — immediate (within hours of the request). Offsite — within rotation window. Acceptable per 152-FZ art. 14 (30d).
+Each identifying `audit_ledger` row stores a restrictive FK `retention_key_id` to this table. The key record contains no subject identifier; the encrypted audit row is the only consumer. Neither row may be deleted.
+
+### 5.4 Why this pattern (vs alternatives)
+
+- **Postgres pgcrypto under a master-key (rejected):** database snapshots would carry wrapped DEKs, and one immediate subject erasure would conflict with the separate five-year audit exception.
+- **One per-subject key for all purposes (rejected):** zeroizing it immediately destroys legally retained audit readability; retaining it leaves all other subject PD readable. Purpose separation is mandatory.
+- **Vault + general subject DEK + per-row audit-retention DEK (chosen):** revocation is purpose-scoped, audit expiry is precise per row, and database backups hold ciphertext plus dead references rather than key material.
+- **OQ-PD-1 (open):** dedicated Hashicorp Vault VM vs a sealed Vault-light service. Either implementation must keep keys outside the Postgres backup set and expose irreversible destroy + retained zeroization metadata.
+
+### 5.5 Backup erasure via key zeroization
+
+- A database snapshot contains ciphertext, `subject_keys` / `audit_retention_keys` metadata, and opaque Vault references — never a usable DEK.
+- Destroying the general subject key makes non-exempt PD unreadable in the live database and every old database backup immediately. The stale reference cannot recover a destroyed Vault key.
+- Audit-retention keys remain available only until each row's `retention_expires_at`; destroying one makes that row's identifying ciphertext unreadable in the live database and every backup while retaining the evidence row.
+- Vault restore must replay the retained zeroization ledger before key service resumes; a destroyed key version is never importable from a cold snapshot. The quarterly restore drill verifies this fail-closed property.
+- **30d SLA compatible:** non-exempt PD is crypto-shredded within hours of an approved request. A retention-matrix exception follows its recorded legal term rather than the general erasure clock.
 
 ---
 
@@ -399,7 +427,7 @@ Paged. Per row:
 
 - Value erasure: NULL/replace PD fields in tables with `erasure: 'value_erasure'`; set lifecycle status and `deleted_at` without deleting the row.
 - Tombstone: preserve the minimum non-PD fact in tables with `erasure: 'tombstone'`; erase or crypto-shred the subject link.
-- Crypto-shred: zeroize DEK in `subject_keys`. All encrypted blobs become unreadable.
+- Crypto-shred: destroy the general subject DEK in Vault and mark `subject_keys` zeroized. Non-exempt encrypted blobs become unreadable; active `audit_retention_keys` remain isolated until their own terms.
 - Emit outbox event `erasure.subject_erased.v1` (see ADR-0011 §2.5).
 
 5. **AI-zone subscriber** (cross-zone):
@@ -413,11 +441,11 @@ Paged. Per row:
 
 - Primary: within 30d (current rotation window).
 - Offsite: within 90d.
-- Both: cryptographically erased immediately via DEK zeroization.
+- Both: non-exempt PD is cryptographically erased immediately by general-DEK zeroization; legally retained audit ciphertext remains readable only through its separate retention key until term.
 
 7. **Completion**:
 
-- Status → `'completed'`. `executed_at`, `key_zeroized_at`, `ai_zone_acked_at` filled.
+- Status → `'completed'`. `executed_at`, `general_key_zeroized_at`, `ai_zone_acked_at` filled; audit-retention key expiry remains independent.
 - Audit log entry.
 - Optional confirmation email (if subject still reachable).
 
@@ -467,23 +495,24 @@ Access control: role `pd_officer` only (a new role; ADR-0001 §1 RBAC catalog is
 1. Every `bytea` / `text` column on a table under `packages/db/schema/` must be either classified in `retention.ts` or carry an explicit `@no-pd` annotation in the Drizzle schema.
 2. A new table in a migration without an entry in `retention.ts` → CI fails.
 3. Every PD field must have a valid retained-row erasure mechanism from {value_erasure, tombstone, crypto_shred, retain}.
-4. Every soft-deletable domain table and relationship table must declare lifecycle `status` + nullable `deleted_at`; an immutable/append-only domain table must declare that removal is unsupported. Migrations and runtime repositories must not physically delete domain rows or add `ON DELETE CASCADE`.
-5. `consent_versions`, `consent_acceptances` and `consent_withdrawals` remain append-only: no `UPDATE`/`DELETE`; subject identity is erased by zeroizing `subject_keys`. Any separately soft-deletable consent-domain table follows rule 4.
+4. Every application-owned Postgres table must declare either lifecycle `status` + nullable `deleted_at` for removal/expiry or an immutable/append-only contract where removal is unsupported. Migrations, retention jobs and runtime repositories must not use `DELETE`, `TRUNCATE`, data-bearing `DROP TABLE` / `DROP PARTITION`, or `ON DELETE CASCADE`.
+5. `consent_versions`, `consent_acceptances` and `consent_withdrawals` remain append-only: no `UPDATE`/`DELETE`; subject identity is erased by zeroizing the general key referenced by `subject_keys`. Any separately soft-deletable consent-domain table follows rule 4.
+6. Every identifying `audit_ledger` row references one retained `audit_retention_keys` row; the general subject key is forbidden for audit ciphertext, and neither evidence nor key-tombstone rows may be physically deleted.
 
 **Red-team tests** (`tests/red-team/pd-leakage.test.ts`):
 
 - Register a test subject with a unique PD marker string.
 - Trigger erasure.
-- Assert: the marker does not appear in SELECTs + does not appear in audit_ledger raw output + does not appear in logs + does not appear in metrics endpoint + does not appear in the ai-zone-subscriber test fixture.
+- Assert: the marker disappears from general product SELECTs, logs, metrics, and the AI-zone fixture; raw `audit_ledger` output contains ciphertext only. The restricted compliance projection can decrypt an unexpired audit row, and a synthetic term-expiry zeroizes its separate retention key so the same row becomes unreadable without deleting it.
 
 ---
 
 ## 11. Deployment & operations
 
-- **Phase 0 (before first user):** Vault-light pattern (sealed master-key in systemd-credential, KEK in env). DEK in Postgres.
+- **Phase 0 (before first user):** Vault-light service with sealed storage outside the Postgres backup set; Postgres stores opaque key references only.
 - **Phase 1 (pre-pilot):** Vault-light → Vault-full if IdP-Vault interop is feasible (DSO-25 spike).
-- **Quarterly:** KEK rotation. Old KEKs destroyed per rotation policy.
-- **Backup procedure:** see ADR-0009 §2.5 + data-layer-design §2.4. Vault keys backed up separately (offline cold storage).
+- **Quarterly:** KEK rotation. Active general/audit DEKs are rewrapped first; old KEK versions are destroyed only after the rewrap and zeroization-ledger verification succeed.
+- **Backup procedure:** see ADR-0009 §2.5 + data-layer-design §2.4. Vault keys are backed up separately; restore replays retained zeroization tombstones before the key service accepts reads.
 
 ---
 

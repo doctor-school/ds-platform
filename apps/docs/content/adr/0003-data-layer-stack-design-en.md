@@ -20,7 +20,7 @@ lang: en
 ## 0. TL;DR
 
 1. **Primary DB:** PostgreSQL 17, self-hosted in Docker on a dedicated data-layer VPS. `pgbackrest` daily full + 15-min WAL → Timeweb Object Storage (offsite RF). Declarative partitioning by month for high-volume tables (`ledger`, `audit_log`, `events_log`) from v1 to avoid a retroactive repaint.
-2. **ORM + Migrations + domain lifecycle:** Drizzle ORM (TS schema = SSOT) + drizzle-kit. Product code never physically deletes a persistent domain entity or relationship row; every supported removal uses explicit lifecycle `status` + nullable `deleted_at`. pgvector is first-class via the `vector(...)` type. Complex migrations (concurrent index, partitioning) — raw SQL inside drizzle-kit-generated files.
+2. **ORM + Migrations + retained-row lifecycle:** Drizzle ORM (TS schema = SSOT) + drizzle-kit. No application-owned Postgres row is physically deleted; every supported removal or expiry uses explicit lifecycle `status` + nullable `deleted_at`, while immutable/append-only rows stay retained. pgvector is first-class via the `vector(...)` type. Complex migrations (concurrent index, partitioning) — raw SQL inside drizzle-kit-generated files.
 3. **Policy engine (RBAC):** Cerbos in embedded mode on v1 (`@cerbos/embedded`). Policies in `policies/*.yaml`, version-controlled, `cerbos compile --tests` in CI. `IPolicyEngine` from ADR-0002 — thin wrapper. Fast-path: in-process fine-grained checks for ≥99% read requests; Cerbos is invoked for high-stakes mutations and admin endpoints.
 4. **Full-text search:** PostgreSQL FTS (tsvector + Russian stemmer) + `pg_trgm` for fuzzy + GIN indexes. Single store instead of a separate search service.
 5. **Vector DB:** pgvector in the main Postgres, HNSW index. Same DB, same backups, same deploy.
@@ -126,14 +126,15 @@ lang: en
 
 **Topology:**
 
-| Layer                          | Location                                                                                    | Retention                                    | Purpose                                                  |
-| ------------------------------ | ------------------------------------------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------- |
-| PITR / streaming WAL archiving | Timeweb Object Storage (primary RF, S3-compat)                                              | 7-30d                                        | RPO ≤15min                                               |
-| Daily full backups             | Timeweb Object Storage                                                                      | 30d                                          | RTO ≤2h                                                  |
-| **Weekly offsite cold copy**   | **Beget S3** (RF, separate provider, separate legal entity — same-provider risk eliminated) | 90d                                          | provider-level disaster isolation                        |
-| Quarterly archive              | Beget S3                                                                                    | 1y (or per retention matrix — ADR-0009 §2.6) | long-term compliance                                     |
-| **Encryption keys (KEK)**      | Vault on a dedicated VM (not Timeweb, not Beget) — separation of custody                    | rotated quarterly                            | protection against compromise of either storage provider |
-| **Per-subject DEK**            | Postgres `subject_keys` table (encrypted by KEK)                                            | until erasure                                | crypto-shred at erasure (ADR-0009 §2.5 + §5)             |
+| Layer                           | Location                                                                                    | Retention                                    | Purpose                                                  |
+| ------------------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------- |
+| PITR / streaming WAL archiving  | Timeweb Object Storage (primary RF, S3-compat)                                              | 7-30d                                        | RPO ≤15min                                               |
+| Daily full backups              | Timeweb Object Storage                                                                      | 30d                                          | RTO ≤2h                                                  |
+| **Weekly offsite cold copy**    | **Beget S3** (RF, separate provider, separate legal entity — same-provider risk eliminated) | 90d                                          | provider-level disaster isolation                        |
+| Quarterly archive               | Beget S3                                                                                    | 1y (or per retention matrix — ADR-0009 §2.6) | long-term compliance                                     |
+| **Encryption keys (KEK)**       | Vault on a dedicated VM (not Timeweb, not Beget) — separation of custody                    | rotated quarterly                            | protection against compromise of either storage provider |
+| **General per-subject DEK**     | Vault; Postgres `subject_keys` retains only an opaque key reference                         | until erasure                                | crypto-shred at erasure (ADR-0009 §2.5 + §5)             |
+| **Per-audit-row retention DEK** | Vault; Postgres `audit_retention_keys` retains only reference + expiry + zeroization state  | row's legal term (5y for `audit_ledger`)     | crypto-shred at term; key tombstone retained             |
 
 **Why Beget specifically:** RF-located, S3-compatible, separate legal entity (no Timeweb affiliation), already chosen as DNS provider — see [[reference_beget_dns]]. Same-provider backup does not deliver disaster isolation (Timeweb bankruptcy / regulatory block would take both primary and backup).
 
@@ -143,7 +144,7 @@ lang: en
 - 15-min WAL archiving → Timeweb (primary).
 - Weekly `rclone` / `aws s3 sync` job: Timeweb → Beget S3 (incremental).
 - Encryption: pgbackrest encrypts backups before upload; KEK fetched via Vault API (network-restricted, only the data VPS has access).
-- Per-subject DEK — encrypted-at-rest on every sensitive field (ADR-0009 §5); DEK shred = effective erasure across all backup layers.
+- General per-subject DEK — encrypts non-exempt sensitive fields (ADR-0009 §5); destroy in Vault = immediate erasure across all database backup layers. Identifying audit fields use an isolated per-row retention DEK and cannot be decrypted by the general key.
 
 **Restore drill — quarterly (operational runbook):**
 
@@ -152,7 +153,7 @@ lang: en
 - Alert in GlitchTip if the drill fails.
 - DSO task under DSO-10 (infra readiness) for the runbook write-up.
 
-**Erasure SLA compatibility:** crypto-shred of the per-subject key in Vault — immediate. Encrypted PD in backups becomes unreadable **immediately** (live DB + Timeweb primary backup); old backup snapshots expire on rotation (≤90d offsite). The live domain row remains as a non-readable lifecycle tombstone under §3.6. Compliant with 152-FZ art. 14 (30 days).
+**Erasure SLA compatibility:** destroying the general per-subject key in Vault makes non-exempt encrypted PD unreadable **immediately** in the live DB and every database backup; the stale opaque reference cannot resurrect a destroyed key. An `audit_ledger` legal exception uses a separate per-row retention key, readable only through the compliance path until its term and destroyed then. All domain, evidence, and key-tombstone rows remain under §3.6. Compliant with the 152-FZ art. 14 30-day clock for non-exempt PD without defeating mandatory audit retention.
 
 **RTO/RPO targets:**
 
@@ -178,13 +179,13 @@ lang: en
 
 **Partition management:**
 
-- `pg_partman` (as a Postgres extension) — automatic creation of new partitions. On v1 the **drop mask is disabled** — we do not know the real growth profile (our platform is not high-load until v2-v3). Enabled at the first confirmed retention scenario from observability (see below).
+- `pg_partman` (as a Postgres extension) — automatic creation of new partitions. The **drop mask remains disabled** under the retained-row invariant; observability drives capacity and index planning, not row or partition deletion.
 - Partition creation — `pg_partman` BGW + premake = 2–3 months ahead.
 - `pg_cron` kept for other recurring tasks.
 
 **Retention — closed 2026-05-18 (DSO-63 #6): see ADR-0009 §2.6 + PD-lifecycle design spec §3.**
 
-Retention matrix per table — in `packages/db/schema/pd/retention.ts` (TS object, CI-validated). Every PD-bearing table has: legal basis, retention period, erasure mechanism, audit exception, owner. Partition retention enforcement (`DROP PARTITION`) applies only to explicitly retention-managed operational streams; it is not a product command and does not permit physical deletion of a domain or evidentiary entity or relationship row (§3.6).
+Retention matrix per table — in `packages/db/schema/pd/retention.ts` (TS object, CI-validated). Every PD-bearing table has: legal basis, retention period, erasure mechanism, audit exception, owner. Retention is a lifecycle/value-erasure decision, never a physical-row decision: data-bearing `DROP PARTITION` is forbidden for every application-owned stream (§3.6).
 
 - `audit_log` retention — readable encrypted PD for **5y** (152-FZ + НК РФ + medical compliance), then crypto-shred the PD while retaining the non-PD hash-chain row (ADR-0009 §2.4). Follow-up #383 owns term crypto-shred and the regression guard that keeps `partman.part_config.retention` unset for `audit_ledger`; it must not drop its partitions.
 - `events_log`, `notifications`, `ai_pipeline_jobs` retention — defined in the retention matrix.
@@ -265,18 +266,18 @@ Retention matrix per table — in `packages/db/schema/pd/retention.ts` (TS objec
 - **drizzle-kit does not perform expand-contract automatically.** Mitigation v1: deployments in low-traffic windows (200 users — tolerable); destructive migrations manually split into 2 releases (add new column / backfill / drop old).
 - **OQ-D4 (open question):** when v2 zero-downtime is required — consider pgroll on top of drizzle-kit for destructive migrations.
 
-### 3.6. Domain row lifecycle contract
+### 3.6. Postgres retained-row lifecycle contract
 
-The following rules are normative for every persistent domain entity and every domain relationship row. A soft-deletable row has lifecycle `status` + nullable `deleted_at`; an immutable/append-only row explicitly declares that removal is unsupported.
+The following rules are normative for every application-owned Postgres row, including domain entities, relationships and operational records. A removable/expiring row has lifecycle `status` + nullable `deleted_at`; an immutable/append-only row explicitly declares that removal is unsupported.
 
-1. **No physical deletion.** Application services, admin workflows, repositories and migrations must not issue `DELETE` for domain rows. Removal is a state transition that sets the domain lifecycle `status` to its inactive/removed terminal value and sets `deleted_at = now()` in one transaction.
+1. **No physical deletion.** Application services, admin workflows, automated retention jobs, repositories and data migrations must not physically delete application-owned rows. `DELETE`, `TRUNCATE`, data-bearing `DROP TABLE` / `DROP PARTITION`, and equivalent cascade paths are forbidden. Removal or expiry is a state transition that sets the lifecycle `status` to its inactive/removed/expired value and sets `deleted_at = now()` in one transaction.
 2. **Restore is explicit.** When the domain permits restoration, the command validates the transition, clears `deleted_at` and selects a valid active status. A soft-deleted row never becomes visible merely because a query omitted a condition.
-3. **Read contract.** Default repositories filter `deleted_at IS NULL`. Historical/audit/legal repositories opt in to tombstones through a separately named method. Partial indexes serve the active-row path; tests cover active, deleted and restored states.
-4. **Relationships are records.** Join rows follow the same lifecycle; unlinking entities soft-deletes the relationship row. Foreign keys between domain rows use `RESTRICT`/`NO ACTION`; `ON DELETE CASCADE` is forbidden for domain data.
+3. **Read contract.** Default product and operational repositories filter `deleted_at IS NULL`. Historical/audit/legal repositories opt in to tombstones through a separately named method. Partial indexes serve the active-row path; tests cover active, deleted and restored states.
+4. **Relationships and operational rows are records.** Join rows follow the same lifecycle; unlinking entities soft-deletes the relationship row. Sessions, idempotency keys and queue leases transition to an expired/retired state instead of being deleted; telemetry/evidence streams remain append-only. All application-owned foreign keys use `RESTRICT`/`NO ACTION`; `ON DELETE CASCADE` is forbidden.
 5. **Identifiers are durable.** Primary IDs, public slugs and historical relationships remain reserved after soft deletion. Reuse requires a separate explicit decision because it can rewrite history and invalidate external links.
 6. **PD erasure is orthogonal.** ADR-0009 erases/nulls/replaces/crypto-shreds sensitive values on the retained row and records the lifecycle timestamp. A readable PD payload behind `deleted_at` does not satisfy an erasure request.
 
-Operational records with no product identity or restore lifecycle — expiring sessions, idempotency keys, queue leases and retention-managed telemetry/append streams — are outside this domain-entity contract. Their bounded physical retention is defined explicitly by the owning operational contract; classifying a table as operational solely to bypass soft delete is prohibited.
+This rule concerns application-owned Postgres data. Ephemeral Redis keys and provider-managed temporary state remain governed by their own TTL contracts because they are not Postgres rows; they must not become an alternate store for retained domain truth.
 
 ---
 
@@ -613,7 +614,7 @@ In `.github/workflows/docs.yml` (or equivalent in Gitea Actions):
 - pgvector + PG FTS in one DB = transactional guarantees on INSERT row + embedding + search index.
 - Drizzle TS schema = SSOT — no divergence between ORM and runtime types.
 - Cerbos embedded = policies-as-code with tests, no separate PDP service on v1.
-- Partitioning from v1 → no retroactive repaint needed; explicitly retention-managed operational streams may use cheap `DROP PARTITION`, while domain and evidentiary rows remain retained.
+- Partitioning from v1 → no retroactive repaint needed; partition pruning keeps retained active/tombstone history manageable without `DROP PARTITION` retention.
 - Self-hosted Postgres → unrestricted extensions, full control over tuning, cheaper than managed.
 
 ### Negative

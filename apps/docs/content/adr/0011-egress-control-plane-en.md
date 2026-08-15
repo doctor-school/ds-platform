@@ -114,7 +114,7 @@ See **ADR-0009 §2.7 + design spec §8** for PD lifecycle. Common principles:
 - **At-least-once:** outbox pattern (Postgres → RF-zone publisher → AI-zone subscriber).
 - **Ack required:** consumer emits an ack event, producer marks the outbox row as confirmed.
 - **Audit:** both zones log emit + consume + ack.
-- **Erasure event:** `erasure.subject_erased.v1`. `erased` means subject-derived vector/corpus payloads become unreadable and their rows receive lifecycle status + `deleted_at`; the subscriber never physically deletes a domain row. The event name is adopted before implementation, so there is no legacy `subject_purged` wire contract to preserve.
+- **Erasure event:** `erasure.subject_erased.v1`. `erased` means subject-derived vector/corpus payloads become unreadable and their rows receive lifecycle status + `deleted_at`; the subscriber never physically deletes an application-owned Postgres row. The event name is adopted before implementation, so there is no legacy `subject_purged` wire contract to preserve.
 
 ---
 

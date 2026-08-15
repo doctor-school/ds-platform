@@ -114,7 +114,7 @@ Forward-ref для канала #1 (AI provider egress): любой runtime LLM-
 - **At-least-once:** outbox pattern (Postgres → RF-zone publisher → AI-zone subscriber).
 - **Ack required:** consumer emits ack-event, producer marks outbox row as confirmed.
 - **Audit:** оба зоны логируют emit + consume + ack.
-- **Erasure event:** `erasure.subject_erased.v1`. `erased` означает, что subject-derived vector/corpus payload становится нечитаемым, а его строки получают lifecycle-status + `deleted_at`; subscriber никогда физически не удаляет доменную строку. Имя event принято до реализации, поэтому legacy wire-контракта `subject_purged` нет.
+- **Erasure event:** `erasure.subject_erased.v1`. `erased` означает, что subject-derived vector/corpus payload становится нечитаемым, а его строки получают lifecycle-status + `deleted_at`; subscriber никогда физически не удаляет application-owned строку Postgres. Имя event принято до реализации, поэтому legacy wire-контракта `subject_purged` нет.
 
 ---
 

@@ -18,7 +18,15 @@ The substrate of the whole epic. Today the academy's structure lives as free tex
 
 Two deliverables sit in the same slice. The **operator CRUD surface** lands in the existing `admin` app (Refine, consistent with events in feature 007): the screens where a content editor creates a project, adds an expert, tags an event with topics and attaches a partner. The **public read API** exposes the same data to the portal so the landing feed, the projects and experts catalogs, the archived-event page and the `/webinars` filters all read one taxonomy instead of each inventing its own.
 
-Free-text speakers do not break on the way. The existing `event_speakers` text stays and keeps rendering; an event gains linked `experts` gradually as the operator migrates it, and a partially migrated event is a normal state, not a defect.
+Free-text speakers do not break on the way. The existing `event_speakers` rows stay and keep rendering; an event gains linked `experts` gradually as the operator migrates it, and a partially migrated event is a normal state, not a defect. Linking a real expert records which legacy speaker entry it supersedes in the current projection; it neither overwrites nor retires that legacy row.
+
+Every entity and relationship in this feature follows the retained-row lifecycle fixed by ADR-0003 §4. Domain rows are never physically deleted and no relationship cascades away: entities move through `draft | published | retired` with `deleted_at`, joins through `active | retired` with `deleted_at`, and a restore is an explicit transition. Normal public reads serve only published, non-retired records; history and restore flows opt into retained rows deliberately.
+
+## Current platform → replacement delta
+
+- **Current DS Platform:** feature 007 stores one event aggregate with `partner_ref`, `specialties[]`, and ordered free-text `event_speakers`; editing speakers replaces that ordered list wholesale. There are no project, expert, topic, or partner domain records to query.
+- **Legacy source system:** the epic brief's mined prior art proves that projects, experts, partners, topics, and per-event roles are real business concepts, while also showing the cost of parallel expert types and boolean-scattered lifecycle.
+- **Replacement in 012:** add first-class retained entities and retained m2m relationships beside the current event model, expose them through the existing NestJS/OpenAPI stack, and extend the existing Refine admin rather than creating a second backend or content copy.
 
 ## `surface:` classification and its rationale
 
@@ -39,7 +47,7 @@ Two consequences the downstream EARS spec inherits:
 - **US-4** — As a **content operator**, I link an event to one or more projects, because a broadcast genuinely can belong to two programs at once.
 - **US-5** — As a **content operator**, I tag events with topics from a maintained list, so a doctor can browse the academy by subject rather than by date.
 - **US-6** — As a **content operator**, I describe a partner once — title, logo, website — and attach it to the projects it sponsors, so the partner block on a project page is data, not hand-made markup.
-- **US-7** — As a **content operator**, I edit or retire any of these entities without breaking the events already linked to them, and I am told what a change affects before it is destructive.
+- **US-7** — As a **content operator**, I retire or restore any of these entities without deleting its record or historical relationships, and I see the affected current public surfaces before I confirm the lifecycle transition.
 - **US-8** — As a **content operator**, the events whose speakers are still free text keep working exactly as before, and I can migrate them to real experts one at a time, on my own schedule.
 - **US-9** — As a **content operator**, I find the entity I need quickly — a searchable, paginated list per entity kind — because the expert bench and the event archive both keep growing.
 - **US-10** — As a **doctor**, the projects, experts and topics I see on the public pages are the same ones the operator maintains — there is no second, stale copy of the academy's structure.
@@ -50,7 +58,7 @@ Two consequences the downstream EARS spec inherits:
 
 **Describe a project and populate it (US-1, US-3, US-4, US-6):**
 
-1. Operator opens the admin app → Projects → creates a project with its descriptive fields and curator.
+1. Operator opens the admin app → Projects → creates a project with its descriptive fields and links one or more experts through `project_experts`, marking the curator role explicitly.
 2. Operator opens an event → links it to the project, and attaches experts, each with a role on that event.
 3. Operator attaches the sponsoring partner to the project.
 4. The public read API immediately serves the project with its events, experts and partner; the portal surfaces (015, and the landing feed of 013) render it without a further step.
@@ -58,31 +66,32 @@ Two consequences the downstream EARS spec inherits:
 **Maintain the expert bench (US-2, US-8, US-9):**
 
 1. Operator opens Experts → searches the list → creates or edits an expert.
-2. On an event that still carries free-text speakers, the operator links the matching expert; the free-text value stays as the fallback until every speaker of that event is linked. _(agent-proposed — UNCONFIRMED: the owner approved "gradual migration with the fallback retained", not the per-event mechanics of the fallback's disappearance.)_
+2. On an event that still carries free-text speakers, the operator links the matching expert to the specific legacy speaker entry. The public speaker projection merges linked experts with the remaining unmatched legacy entries in one ordered list; it does not name-dedupe automatically, overwrite the legacy row, or wait for the whole event to be migrated.
 3. Migrated and unmigrated events coexist in the same listing, and the doctor sees no difference in quality on the public page.
 
 **Topic tagging (US-5, US-11):**
 
-1. Operator maintains the topics list as its own small entity.
+1. Operator maintains a closed, curated topics list on its own admin surface; the event form selects existing topics and does not create them inline.
 2. Operator tags events with topics; `specialties[]` on the event is untouched — it is the **audience** axis, a different dimension from topic, and the two are never merged.
 
 **Branches:**
 
-- **Deleting an entity that events depend on** → the operator is warned with what the change affects, and the destructive path is either blocked or explicitly confirmed; a link never silently vanishes from a published event. _(agent-proposed — UNCONFIRMED: the owner approved the entities, not the deletion policy.)_
+- **Retiring an entity or relationship that published content depends on** → the system previews the affected current surfaces and requires explicit confirmation. The row and every historical relationship remain stored; no cascade runs. A retired top-level entity leaves public listings and new selectors, while a relationship changes the current public projection only through its own explicit retire transition.
 - **An entity with no public content yet** (a project with zero published events) → it exists in the admin, and its behavior on the public surface belongs to 015/016, not here.
 
 ## Product acceptance criteria
 
 - `projects`, `experts`, `topics` and `partners` exist as **first-class entities with their own identity and their own admin screens** — never as string tags on an event.
-- The relationships are **m2m joins**, and the event↔expert join carries the person's **role on that event**: `event_projects`, `event_experts` (with role), `project_partners`, `event_topics`.
+- The relationships are **m2m joins**: `event_projects`, `event_experts` (with per-event role and ordering), `project_experts` (with `curator | member` role), `project_partners`, and `event_topics`.
 - An event can belong to **several** projects, and an expert to **many** events — both directions are queryable.
 - `specialties[]` on the event **stays untouched** as the audience axis; topics are a separate dimension and no data is moved between them.
-- The existing free-text `event_speakers` keeps rendering as before, and **an event may be partially migrated** to linked experts without any visible degradation to the doctor.
-- Every entity has a **complete CRUD** in the `admin` app: create, read, list with search and pagination, edit, and a safe retire/delete path that surfaces what a change affects.
+- The existing free-text `event_speakers` keeps rendering as before, and **an event may be partially migrated** to linked experts without any visible degradation to the doctor. A linked expert supersedes only its explicitly matched legacy entry in the current projection; the retained legacy row remains available to history/restore flows.
+- Every entity has complete lifecycle management in the `admin` app: create, read, list with search and pagination, edit, retire, and restore. There is **no hard-delete action** and no cascade; every transition surfaces the affected current public projections.
+- Every top-level taxonomy row carries `status: draft | published | retired` plus nullable `deleted_at`; every removable relationship row carries `status: active | retired` plus nullable `deleted_at`. Restoring an entity returns it to `draft`, so public re-publication is always deliberate.
 - The admin screens are built from the design system and the Refine conventions established by feature 007 — no bespoke admin styling, no hand-assembled controls.
 - A **public read API** exposes the taxonomy and its links to the portal, serving **published content only**; internal partner detail (commercial terms, contacts) is never on the public read path.
 - The data the public API serves and the data the operator maintains are the **same records** — no second copy, no sync step, no manual export.
-- The API answers both directions of every relationship (events of a project / projects of an event, and the same for experts and topics), because 013's feed and 014/015/016's listings are queries against it.
+- The API answers both directions of every relationship (events of a project / projects of an event, and the same for experts and topics), because 013's feed and 014/015/016's listings are queries against it. Public lists use the ADR-0002 cursor contract; admin lists may use explicit page/offset pagination.
 - Nothing in this feature changes the doctor-facing pages themselves — 012 makes them possible, the later features build them.
 
 ## Out of scope
@@ -93,13 +102,15 @@ Two consequences the downstream EARS spec inherits:
 - A bulk migration of every historical event's free-text speakers into `experts` — the migration is operator-driven and gradual by owner decision.
 - Payload CMS (`apps/cms`) as the editing surface — a reserved slot for a future vertical (epic decision #11).
 - Public-facing search across the taxonomy, and any recommendation or ranking logic.
-- Access control beyond the platform's existing admin roles — 012 introduces no new role model. _(agent-proposed — UNCONFIRMED as an exclusion.)_
+- Access control beyond the platform's existing admin roles — 012 introduces no new role model.
+- Turning an expert into a login identity or adding an expert self-service cabinet. An `expert` is an editorial domain record in 012; a future optional link to a platform user is additive and must not create a second expert type.
 
-## Open questions
+## Resolved decisions for the SDD handoff
 
-- **Expert identity vs. platform user.** Whether an `expert` is a standalone record or may be tied to a registered user account (the legacy system carried both a supplier type and a display card) is unresolved; the PRD requires one entity with a per-event role, not two.
-- **Deletion policy.** What happens to an entity that published events depend on — blocked, soft-retired, or confirmed-cascade — is agent-proposed above and needs an owner call.
-- **Topics list ownership.** Whether topics are a closed operator-curated list or can be created inline while tagging an event.
-- **Free-text speaker fallback end-state.** When and how the `event_speakers` text finally disappears from a fully migrated event.
-- **Curator vs. expert.** Whether a project's curator is an `expert` in a curator role or a separate field.
-- **Public API shape and consumers' pagination needs** — driven by 013/015/016, which are specified after this PRD.
+- **Expert identity:** one standalone editorial `expert` record. A future optional platform-user link is additive and out of scope; there is never a parallel supplier/person type.
+- **Lifecycle:** no domain row or relationship is physically deleted. Retire/restore uses lifecycle status + `deleted_at`; FKs are restrictive/no-action and cascades are forbidden.
+- **Topics:** a closed operator-curated entity list; event authoring selects existing topics rather than creating strings inline.
+- **Speaker migration:** the legacy rows stay indefinitely as retained source data. The current projection merges linked experts with unmatched legacy entries; no bulk replacement, implicit dedupe, or automatic end-state is required.
+- **Project curator:** an expert linked through `project_experts` with role `curator`; other linked experts use `member`.
+- **API:** REST/OpenAPI under `/v1`; cursor pagination on public growing lists, explicit page/offset pagination permitted for admin tables, and both directions of each relationship are queryable.
+- **Access:** existing `platform_admin` authorization is reused; the feature introduces no new role model.

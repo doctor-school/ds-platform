@@ -54,7 +54,7 @@ ADR-0002 наследует: outbox pattern для cross-system event emit (де
 | **Encryption keys**          | Vault на отдельной VM (не Timeweb и не Beget)                 | —                                           | separation of custody             |
 | **Restore drill**            | Quarterly, документировано в operational runbook (DSO-10)     | —                                           | RTO validation                    |
 
-Crypto-shred compatibility: per-subject DEK ключи (ADR-0009 §5) хранятся в Vault. При erasure request — zeroization DEK → encrypted PD в backup'ах становится нечитаемым immediately. KEK rotation quarterly уничтожает старые KEKs → 90d offsite retention обеспечивает de facto erasure within 152-ФЗ SLA (30d).
+Crypto-shred compatibility: purpose-separated DEK (ADR-0009 §5) хранятся в Vault вне database backups. При erasure request уничтожается общий per-subject DEK, поэтому неисключённые encrypted PD сразу становятся нечитаемыми во всех snapshots. Каждая identifying audit-row использует отдельный retention DEK, который уничтожается только по окончании законного срока; ciphertext и hash-chain строка сохраняются.
 
 - RTO/RPO v1: ≤2 часа / ≤15 мин.
 
@@ -70,9 +70,9 @@ Crypto-shred compatibility: per-subject DEK ключи (ADR-0009 §5) храня
 
 Партиционируем by month: `ledger`, `audit_log`, `events_log`, `notifications`, `ai_pipeline_jobs`. Не партиционируем v1: `users`, `courses`, `lessons`, `progress` — overhead не окупается до >10M записей в таблице.
 
-**Цель партиционирования с v1** — избежать retroactive repaint при росте: партиция уже на месте, retention enforcement при необходимости = дешёвый `DROP PARTITION` за O(1).
+**Цель партиционирования с v1** — избежать retroactive repaint при росте: партиция уже на месте, а partition pruning ограничивает стоимость high-volume запросов и обслуживания. Партиционирование не является механизмом удаления: ни одна партиция с данными не удаляется по retention. Истёкшие записи сохраняются как lifecycle-tombstones или immutable append-only строки.
 
-Управление — `pg_partman` extension. Premake 2-3 месяца вперёд через BGW. **Drop-маска выключена на v1** — мы не знаем реального профиля роста, наша платформа не hiload. Включается при подтверждённом сценарии retention.
+Управление — `pg_partman` extension. Premake 2-3 месяца вперёд через BGW. **Drop-маска остаётся выключенной** по retained-row инварианту. Рост управляется capacity planning, partition pruning и индексами, а не удалением строк или партиций.
 
 Retention duration **не зафиксирован в этом ADR** — это knob, не архитектура (см. OQ-D3). Observability-driven подход: alerts на размер партиций, retention numbers фиксируются отдельным product/compliance решением. Floor для `audit_log` ≥3 года (152-ФЗ) — фиксируется при первом product-review.
 
@@ -87,9 +87,18 @@ Retention duration **не зафиксирован в этом ADR** — это 
 
 - TS schema как single source of truth, doc-as-SSOT принцип.
 - pgvector first-class (`vector(...)` type из коробки).
-- Schema-файлы по доменам в `packages/db/schema/` — общая SSOT для всей платформы (ADR-0006 §1 SSOT-table + ADR-0008 §2.3), так read-only потребители (`apps/admin`, `apps/cms`, mobile sync) импортируют типы без cross-app boundary violation. Все PD-bearing таблицы (`consent_*`, `data_export_requests`, `erasure_requests`, `idempotency_keys`, `job_outbox`, `subject_keys` по ADR-0009 §5) живут здесь. drizzle-kit конфиг в `packages/db/drizzle.config.ts` указывает `out: '../../apps/api/drizzle'` — миграционная директория остаётся `apps/api/drizzle/`.
+- Schema-файлы по доменам в `packages/db/schema/` — общая SSOT для всей платформы (ADR-0006 §1 SSOT-table + ADR-0008 §2.3), так read-only потребители (`apps/admin`, `apps/cms`, mobile sync) импортируют типы без cross-app boundary violation. Все PD-bearing таблицы (`consent_*`, `data_export_requests`, `erasure_requests`, `idempotency_keys`, `job_outbox`, `subject_keys`, `audit_retention_keys` по ADR-0009 §5) живут здесь. drizzle-kit конфиг в `packages/db/drizzle.config.ts` указывает `out: '../../apps/api/drizzle'` — миграционная директория остаётся `apps/api/drizzle/`.
 - drizzle-kit generate → SQL-diff-файлы в `apps/api/drizzle/`, human-editable для сложных миграций (concurrent index, partition manipulation, RLS).
 - В CI — migration dry-run против staging БД перед merge.
+
+#### Жизненный цикл строк Postgres (нормативно)
+
+- **Ни одна application-owned строка никогда физически не удаляется из Postgres.** Правило охватывает доменные сущности, строки связей и операционные записи. Продуктовые, административные и автоматические retention-команды могут только перевести удаляемую запись в явный lifecycle-статус и установить nullable timestamp `deleted_at`. Восстановление очищает `deleted_at` и переводит запись в допустимый активный статус.
+- Каждая application-owned таблица объявляет один из двух контрактов: удаляемая строка имеет lifecycle `status`, nullable `deleted_at timestamptz` и индексы для default read-path `deleted_at IS NULL`; immutable/append-only строка объявляет, что удаление не поддерживается. Purpose-specific timestamps вроде `deactivated_at`, `expires_at` или `processed_at` сохраняют отдельный смысл, но не заменяют `deleted_at`, когда моделируется удаление/истечение.
+- Обычные продуктовые и операционные чтения исключают soft-deleted записи. Исторические, audit-, legal- и restore-сценарии включают их только через явные repository methods; не используется неявный global scope, который можно случайно обойти.
+- Все application-owned foreign keys используют restrictive/no-action semantics. `ON DELETE CASCADE` запрещён, включая join- и операционные таблицы. Стабильные идентификаторы и исторические связи после soft-delete не переиспользуются, если отдельный будущий ADR явно не определит безопасное переиспользование.
+- Запрос на стирание персональных данных **не** удаляет строку: ADR-0009 стирает, заменяет или crypto-shred'ит чувствительные значения, сохраняя lifecycle-tombstone и минимальные неперсональные metadata для целостности. Soft-delete-флаг при читаемых PD не является стиранием.
+- Истекающие sessions, idempotency keys и queue leases переходят в expired/retired status и получают `deleted_at`; telemetry и evidence streams остаются append-only. `DELETE`, `TRUNCATE`, data-bearing `DROP TABLE` / `DROP PARTITION` и эквивалентные cascade-пути не являются retention-механизмами.
 
 **Отвергнуто:**
 
@@ -159,7 +168,7 @@ Retention duration **не зафиксирован в этом ADR** — это 
 
 **Schema impact:**
 
-- Таблица `idempotency_keys (key text PRIMARY KEY, scope text, created_at timestamptz, expires_at timestamptz)` в `packages/db/schema/` — TTL через cron cleanup.
+- Таблица `idempotency_keys (key text PRIMARY KEY, scope text, created_at timestamptz, expires_at timestamptz, status text, deleted_at timestamptz)` в `packages/db/schema/` — истечение через retained-row lifecycle-cron.
 - Таблица `job_outbox (id uuid PK, kind text, payload jsonb, status text, created_at, claimed_at, completed_at, attempt int)` для critical jobs.
 - BullMQ драйнер читает `job_outbox` для critical job kinds; non-critical jobs шлются напрямую в BullMQ.
 - Queue contract, имена очередей, idempotency-key policy, classification critical vs non-critical — см. `2026-05-18-ds-platform-bullmq-queue-contract-design`.
@@ -187,8 +196,9 @@ Data-layer-relevant параметры, которые ADR-0012 наследуе
 - Один Postgres + один Redis = простая mental model для AI-агентов, простой deploy, простой backup.
 - Pgvector + PG FTS в одной БД = транзакционные гарантии при INSERT строки + embedding + search index.
 - Drizzle TS-schema = SSOT — нет divergence между ORM и runtime types; doc-as-SSOT принцип выполнен.
+- Универсальный retained-row lifecycle сохраняет ссылочную целостность, стабильные идентификаторы и продуктовую/операционную/audit-историю на всех поверхностях.
 - Cerbos embedded = policies-as-code с тестами, без отдельного PDP-сервиса на v1.
-- Partitioning с v1 → retroactive repaint не нужен; retention enforce'ится дешёвыми `DROP PARTITION`.
+- Partitioning с v1 → retroactive repaint не нужен; partition pruning удерживает стоимость active/tombstone истории без retention через `DROP PARTITION`.
 - Self-hosted Postgres → extensions без ограничений, full control над тюнингом, дешевле managed на 60-180k ₽/год.
 - Outbox-pattern из ADR-0002 уже декаплит data-layer от destinations — отложенные решения (ClickHouse, Meilisearch, Qdrant) не требуют переделки emit-кода.
 
@@ -200,6 +210,7 @@ Data-layer-relevant параметры, которые ADR-0012 наследуе
 - pgvector + PG FTS делят I/O с OLTP. Mitigation: read-replica для тяжёлых search/vector запросов когда триггер сработает.
 - Один Redis = SPOF для sessions/idem/rl/bull. v2 HA-триггер addresses.
 - Drizzle младше Prisma — экосистема меньше, риск отсутствия features. Mitigation: SQL-first природа Drizzle позволяет fallback на raw SQL для любого edge-case без переключения ORM.
+- Сохранение всех application-owned строк увеличивает таблицы и индексы и требует capacity planning, дисциплины default-фильтров, partial indexes и явной restore/expiry-семантики.
 
 ### Архитектурные качества (метрики, не декларации)
 
@@ -218,16 +229,16 @@ Data-layer-relevant параметры, которые ADR-0012 наследуе
 
 ## Open questions (deferred)
 
-| OQ                                                                | Триггер пересмотра                                                                                                                                                                                                                                                                     |
-| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OQ-D1. OLAP store (ClickHouse / TimescaleDB) vs read-replica      | Events ≥10M/день или v3 real-time dashboards                                                                                                                                                                                                                                           |
-| OQ-D2. 6.2TB legacy архив — стратегия миграции/cold storage/proxy | Legal review авторских договоров + provider TBD                                                                                                                                                                                                                                        |
-| OQ-D3. Retention duration для партиционированных таблиц           | **CLOSED 2026-05-18 (DSO-63 #6) — retention matrix в ADR-0009 §2.6 + design spec §3** (per entity/table: legal basis, retention period, deletion/anonymization, audit exception, owner). `audit_log` retention 5y (152-ФЗ + НК РФ + medical) с crypto-shred at term per ADR-0009 §2.4. |
-| OQ-D4. Expand-contract migrations (pgroll)                        | v2 zero-downtime requirement                                                                                                                                                                                                                                                           |
-| OQ-D5. Cerbos standalone PDP migration                            | v2 hot-reload без redeploy                                                                                                                                                                                                                                                             |
-| OQ-D6. Tenant isolation (row-level vs schema-per-tenant)          | Появление первой DS Clinic (v3)                                                                                                                                                                                                                                                        |
-| OQ-D7. Postgres HA (Patroni vs Timeweb managed HA tier)           | v2 99.5% SLO + concurrent ≥10k                                                                                                                                                                                                                                                         |
-| OQ-D8. Append-only ledger integrity hash chain                    | Product требование cryptographic immutability (DAO scope DSO-30)                                                                                                                                                                                                                       |
+| OQ                                                                | Триггер пересмотра                                                                                                                                                                                                                                                                                                                     |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OQ-D1. OLAP store (ClickHouse / TimescaleDB) vs read-replica      | Events ≥10M/день или v3 real-time dashboards                                                                                                                                                                                                                                                                                           |
+| OQ-D2. 6.2TB legacy архив — стратегия миграции/cold storage/proxy | Legal review авторских договоров + provider TBD                                                                                                                                                                                                                                                                                        |
+| OQ-D3. Retention duration для партиционированных таблиц           | **CLOSED 2026-05-18 (DSO-63 #6) — retention matrix в ADR-0009 §2.6 + design spec §3** (per entity/table: legal basis, retention period, erasure mechanism, audit exception, owner). Каждая application-owned строка следует retained-row контракту §4; readable-PD retention `audit_log` — 5y с crypto-shred at term по ADR-0009 §2.4. |
+| OQ-D4. Expand-contract migrations (pgroll)                        | v2 zero-downtime requirement                                                                                                                                                                                                                                                                                                           |
+| OQ-D5. Cerbos standalone PDP migration                            | v2 hot-reload без redeploy                                                                                                                                                                                                                                                                                                             |
+| OQ-D6. Tenant isolation (row-level vs schema-per-tenant)          | Появление первой DS Clinic (v3)                                                                                                                                                                                                                                                                                                        |
+| OQ-D7. Postgres HA (Patroni vs Timeweb managed HA tier)           | v2 99.5% SLO + concurrent ≥10k                                                                                                                                                                                                                                                                                                         |
+| OQ-D8. Append-only ledger integrity hash chain                    | Product требование cryptographic immutability (DAO scope DSO-30)                                                                                                                                                                                                                                                                       |
 
 ## Делегировано
 
@@ -235,6 +246,6 @@ Data-layer-relevant параметры, которые ADR-0012 наследуе
 - **6.2TB legacy архив strategy** — отдельная задача после legal Phase 0.
 - **Retention duration** — отдельное product/compliance решение.
 - **Tenant isolation детали** — DSO-26 продуктовая задача или новый ADR при появлении первой DS Clinic.
-- **Right-to-erasure flow + consent management** — **ADR-0009 «PD Lifecycle, Consent, Retention, Erasure»** (2026-05-18, DSO-63 #5+#6) фиксирует архитектуру: consent_versions/acceptances/withdrawals + three erasure levels + per-subject crypto-shred. Реализация — design spec ADR-0009.
+- **Right-to-erasure flow + consent management** — **ADR-0009 «PD Lifecycle, Consent, Retention, Erasure»** (2026-05-18, DSO-63 #5+#6) фиксирует архитектуру: consent_versions/acceptances/withdrawals + retained-row erasure mechanisms + purpose-separated crypto-shred. Реализация — design spec ADR-0009.
 - **DSO-30 (AI runtime)** наследует pgvector decision; конкретные embeddings-модели — в DSO-30.
 - **Frontend / Mobile** — DSO-28 / DSO-29 могут стартовать параллельно.

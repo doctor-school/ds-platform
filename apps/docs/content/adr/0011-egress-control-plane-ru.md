@@ -26,7 +26,7 @@ lang: ru
 
 Текущая архитектура **верно** изолирует AI-zone от RF-zone (ADR-0007), но не покрывает «soft» egress-каналы. Без единой policy AI-агенты, работая над разными модулями, не имеют consistent правил «что можно отправить наружу».
 
-Параллельно, ADR-0009 ввёл cross-zone erasure propagation (PD lifecycle → AI-zone subscriber удаляет embeddings). Это требует **формального контракта** на cross-zone messaging: какие события разрешены, что в них может находиться, кто аудитирует.
+Параллельно, ADR-0009 ввёл cross-zone erasure propagation (PD lifecycle → AI-zone subscriber стирает subject-derived payload и soft-delete'ит сохранённые embedding/corpus rows). Это требует **формального контракта** на cross-zone messaging: какие события разрешены, что в них может находиться, кто аудитирует.
 
 **Hard requirements:**
 
@@ -114,6 +114,7 @@ Forward-ref для канала #1 (AI provider egress): любой runtime LLM-
 - **At-least-once:** outbox pattern (Postgres → RF-zone publisher → AI-zone subscriber).
 - **Ack required:** consumer emits ack-event, producer marks outbox row as confirmed.
 - **Audit:** оба зоны логируют emit + consume + ack.
+- **Erasure event:** `erasure.subject_erased.v1`. `erased` означает, что subject-derived vector/corpus payload становится нечитаемым, а его строки получают lifecycle-status + `deleted_at`; subscriber никогда физически не удаляет application-owned строку Postgres. Имя event принято до реализации, поэтому legacy wire-контракта `subject_purged` нет.
 
 ---
 

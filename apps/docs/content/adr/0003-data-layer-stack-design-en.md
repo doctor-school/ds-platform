@@ -20,7 +20,7 @@ lang: en
 ## 0. TL;DR
 
 1. **Primary DB:** PostgreSQL 17, self-hosted in Docker on a dedicated data-layer VPS. `pgbackrest` daily full + 15-min WAL → Timeweb Object Storage (offsite RF). Declarative partitioning by month for high-volume tables (`ledger`, `audit_log`, `events_log`) from v1 to avoid a retroactive repaint.
-2. **ORM + Migrations:** Drizzle ORM (TS schema = SSOT) + drizzle-kit. pgvector first-class via the `vector(...)` type. Complex migrations (concurrent index, partitioning) — raw SQL inside drizzle-kit-generated files.
+2. **ORM + Migrations + retained-row lifecycle:** Drizzle ORM (TS schema = SSOT) + drizzle-kit. No application-owned Postgres row is physically deleted; every supported removal or expiry uses explicit lifecycle `status` + nullable `deleted_at`, while immutable/append-only rows stay retained. pgvector is first-class via the `vector(...)` type. Complex migrations (concurrent index, partitioning) — raw SQL inside drizzle-kit-generated files.
 3. **Policy engine (RBAC):** Cerbos in embedded mode on v1 (`@cerbos/embedded`). Policies in `policies/*.yaml`, version-controlled, `cerbos compile --tests` in CI. `IPolicyEngine` from ADR-0002 — thin wrapper. Fast-path: in-process fine-grained checks for ≥99% read requests; Cerbos is invoked for high-stakes mutations and admin endpoints.
 4. **Full-text search:** PostgreSQL FTS (tsvector + Russian stemmer) + `pg_trgm` for fuzzy + GIN indexes. Single store instead of a separate search service.
 5. **Vector DB:** pgvector in the main Postgres, HNSW index. Same DB, same backups, same deploy.
@@ -39,6 +39,7 @@ lang: en
 - Postgres version (17).
 - ORM/query-builder (Drizzle).
 - Migration tool (drizzle-kit) + strategy.
+- Universal retained-row lifecycle contract for every application-owned Postgres row.
 - Partitioning schema for high-volume tables.
 - Policy engine (Cerbos embedded) + integration with IPolicyEngine from ADR-0002.
 - Full-text search engine (PG FTS).
@@ -125,14 +126,15 @@ lang: en
 
 **Topology:**
 
-| Layer                          | Location                                                                                    | Retention                                    | Purpose                                                  |
-| ------------------------------ | ------------------------------------------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------- |
-| PITR / streaming WAL archiving | Timeweb Object Storage (primary RF, S3-compat)                                              | 7-30d                                        | RPO ≤15min                                               |
-| Daily full backups             | Timeweb Object Storage                                                                      | 30d                                          | RTO ≤2h                                                  |
-| **Weekly offsite cold copy**   | **Beget S3** (RF, separate provider, separate legal entity — same-provider risk eliminated) | 90d                                          | provider-level disaster isolation                        |
-| Quarterly archive              | Beget S3                                                                                    | 1y (or per retention matrix — ADR-0009 §2.6) | long-term compliance                                     |
-| **Encryption keys (KEK)**      | Vault on a dedicated VM (not Timeweb, not Beget) — separation of custody                    | rotated quarterly                            | protection against compromise of either storage provider |
-| **Per-subject DEK**            | Postgres `subject_keys` table (encrypted by KEK)                                            | until erasure                                | crypto-shred at erasure (ADR-0009 §2.5 + §5)             |
+| Layer                           | Location                                                                                    | Retention                                    | Purpose                                                  |
+| ------------------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------- |
+| PITR / streaming WAL archiving  | Timeweb Object Storage (primary RF, S3-compat)                                              | 7-30d                                        | RPO ≤15min                                               |
+| Daily full backups              | Timeweb Object Storage                                                                      | 30d                                          | RTO ≤2h                                                  |
+| **Weekly offsite cold copy**    | **Beget S3** (RF, separate provider, separate legal entity — same-provider risk eliminated) | 90d                                          | provider-level disaster isolation                        |
+| Quarterly archive               | Beget S3                                                                                    | 1y (or per retention matrix — ADR-0009 §2.6) | long-term compliance                                     |
+| **Encryption keys (KEK)**       | Vault on a dedicated VM (not Timeweb, not Beget) — separation of custody                    | rotated quarterly                            | protection against compromise of either storage provider |
+| **General per-subject DEK**     | Vault; Postgres `subject_keys` retains only an opaque key reference                         | until erasure                                | crypto-shred at erasure (ADR-0009 §2.5 + §5)             |
+| **Per-audit-row retention DEK** | Vault; Postgres `audit_retention_keys` retains only reference + expiry + zeroization state  | row's legal term (5y for `audit_ledger`)     | crypto-shred at term; key tombstone retained             |
 
 **Why Beget specifically:** RF-located, S3-compatible, separate legal entity (no Timeweb affiliation), already chosen as DNS provider — see [[reference_beget_dns]]. Same-provider backup does not deliver disaster isolation (Timeweb bankruptcy / regulatory block would take both primary and backup).
 
@@ -142,7 +144,7 @@ lang: en
 - 15-min WAL archiving → Timeweb (primary).
 - Weekly `rclone` / `aws s3 sync` job: Timeweb → Beget S3 (incremental).
 - Encryption: pgbackrest encrypts backups before upload; KEK fetched via Vault API (network-restricted, only the data VPS has access).
-- Per-subject DEK — encrypted-at-rest on every sensitive field (ADR-0009 §5); DEK shred = effective erasure across all backup layers.
+- General per-subject DEK — encrypts non-exempt sensitive fields (ADR-0009 §5); destroy in Vault = immediate erasure across all database backup layers. Identifying audit fields use an isolated per-row retention DEK and cannot be decrypted by the general key.
 
 **Restore drill — quarterly (operational runbook):**
 
@@ -151,7 +153,7 @@ lang: en
 - Alert in GlitchTip if the drill fails.
 - DSO task under DSO-10 (infra readiness) for the runbook write-up.
 
-**Erasure SLA compatibility:** crypto-shred of per-subject key in Vault — immediate. Encrypted PD in backups becomes unreadable **immediately** (live DB + Timeweb primary backup); physical tuple removal — on rotation (≤90d offsite). Compliant with 152-FZ art. 14 (30 days).
+**Erasure SLA compatibility:** destroying the general per-subject key in Vault makes non-exempt encrypted PD unreadable **immediately** in the live DB and every database backup; the stale opaque reference cannot resurrect a destroyed key. An `audit_ledger` legal exception uses a separate per-row retention key, readable only through the compliance path until its term and destroyed then. All domain, evidence, and key-tombstone rows remain under §3.6. Compliant with the 152-FZ art. 14 30-day clock for non-exempt PD without defeating mandatory audit retention.
 
 **RTO/RPO targets:**
 
@@ -165,27 +167,27 @@ lang: en
 
 **Partitioned tables:**
 
-| Table              | Partition by                  | Reason                                                                                                                               |
-| ------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `ledger`           | `RANGE (created_at)`, monthly | Append-only, potential growth to v3; partition pruning speeds up user-history queries; retention enforced via cheap `DROP PARTITION` |
-| `audit_log`        | `RANGE (created_at)`, monthly | ADR-0001 §1 audit-log requirement, append-only                                                                                       |
-| `events_log`       | `RANGE (created_at)`, monthly | Most volatile stream (presence, view ticks, gameplay events); monthly partition = operationally convenient window                    |
-| `notifications`    | `RANGE (created_at)`, monthly | Push/email/SMS queue, append-only                                                                                                    |
-| `ai_pipeline_jobs` | `RANGE (created_at)`, monthly | Archived job records + references to artefacts in object storage                                                                     |
+| Table              | Partition by                  | Reason                                                                                                                                            |
+| ------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ledger`           | `RANGE (created_at)`, monthly | Append-only evidentiary history, potential growth to v3; partition pruning speeds up user-history queries; partitions are never retention-dropped |
+| `audit_log`        | `RANGE (created_at)`, monthly | ADR-0001 §1 audit-log requirement, append-only                                                                                                    |
+| `events_log`       | `RANGE (created_at)`, monthly | Most volatile stream (presence, view ticks, gameplay events); monthly partition = operationally convenient window                                 |
+| `notifications`    | `RANGE (created_at)`, monthly | Push/email/SMS queue, append-only                                                                                                                 |
+| `ai_pipeline_jobs` | `RANGE (created_at)`, monthly | Archived job records + references to artefacts in object storage                                                                                  |
 
 **Not partitioned in v1:** `users`, `courses`, `lessons`, `progress` — small, heavily FK-linked, partition overhead does not pay off until >10M rows in the table.
 
 **Partition management:**
 
-- `pg_partman` (as a Postgres extension) — automatic creation of new partitions. On v1 the **drop mask is disabled** — we do not know the real growth profile (our platform is not high-load until v2-v3). Enabled at the first confirmed retention scenario from observability (see below).
+- `pg_partman` (as a Postgres extension) — automatic creation of new partitions. The **drop mask remains disabled** under the retained-row invariant; observability drives capacity and index planning, not row or partition deletion.
 - Partition creation — `pg_partman` BGW + premake = 2–3 months ahead.
 - `pg_cron` kept for other recurring tasks.
 
 **Retention — closed 2026-05-18 (DSO-63 #6): see ADR-0009 §2.6 + PD-lifecycle design spec §3.**
 
-Retention matrix per entity/table — in `packages/db/schema/pd/retention.ts` (TS object, CI-validated). Every PD-bearing table has: legal basis, retention period, deletion/anonymization, audit exception, owner. Partition retention enforcement (`DROP PARTITION`) follows the retention matrix.
+Retention matrix per table — in `packages/db/schema/pd/retention.ts` (TS object, CI-validated). Every PD-bearing table has: legal basis, retention period, erasure mechanism, audit exception, owner. Retention is a lifecycle/value-erasure decision, never a physical-row decision: data-bearing `DROP PARTITION` is forbidden for every application-owned stream (§3.6).
 
-- `audit_log` retention — **5y** (152-FZ + НК РФ + medical compliance), crypto-shred at term (ADR-0009 §2.4). The matching `DROP PARTITION` + crypto-shred automation is the #383 follow-up (the v1 slice ships partition auto-creation only; the drop-mask stays disabled until the first confirmed retention scenario).
+- `audit_log` retention — readable encrypted PD for **5y** (152-FZ + НК РФ + medical compliance), then crypto-shred the PD while retaining the non-PD hash-chain row (ADR-0009 §2.4). Follow-up #383 owns term crypto-shred and the regression guard that keeps `partman.part_config.retention` unset for `audit_ledger`; it must not drop its partitions.
 - `events_log`, `notifications`, `ai_pipeline_jobs` retention — defined in the retention matrix.
 - Observability from v1: alerts on the size of each partitioned table (Loki + Grafana from engineering-readiness spec) — kept as a backup safety net.
 
@@ -218,7 +220,7 @@ Retention matrix per entity/table — in `packages/db/schema/pd/retention.ts` (T
 
 **`audit_log` / `audit_ledger` follows the same rules** — same constraints, different columns.
 
-**`audit_ledger` (the auth-audit ledger, §6) as built:** the table is natively `PARTITION BY RANGE (created_at)` into monthly partitions (`audit_ledger_yYYYY_mMM`) plus a `DEFAULT` partition — the never-lose-an-audit-write safety net for any timestamp outside the pre-created range. Native declarative partitioning forces the partition key into **every** unique/primary-key constraint, so the PK is composite `(id, created_at)` and the `event_id` unique is composite `(event_id, created_at)`. `event_id` uniqueness is therefore **scoped within a monthly partition** rather than global: the dedup guarantee is "no two rows share the same `event_id` AND `created_at`", which is exactly an idempotent re-ingest that carries the original event timestamp. The residual gap is a re-ingest that lands in a different partition than the original (a month-boundary retry, or a replay whose `created_at` is regenerated) — a tolerated, low-probability duplicate audit row. The ledger is an evidentiary append log, not a correctness-critical dedup key, so this is acceptable for v1; a globally-unique `event_id` would need either a non-partitioned table (loses the retention story) or a UUIDv7 partition key co-derived from `event_id` (deferred with the rest of the v2 UUIDv7 work, DSO-30). The append-only trigger is attached to the partitioned parent and cascades to every partition (PG17 BEFORE ROW). Partition DDL is hand-managed in the drizzle migration (drizzle does not model `PARTITION BY`, §3.4); the pre-created 2026-2027 months are a fixed buffer adopted by `pg_partman` rather than recreated. **Partition auto-creation now ships on v1** (#136): migration `0004_audit_ledger_partman.sql` installs `pg_partman` in a dedicated `partman` schema and registers the parent via `partman.create_parent` (control `created_at`, monthly RANGE, premake 3, `automatic_maintenance := on`, `infinite_time_partitions := true`); `p_default_table := false` and `p_start_partition := '2028-01-01'` so the manual buffer + `audit_ledger_default` are preserved and the partman-managed chain begins at the buffer's upper bound. The BGW (`shared_preload_libraries = 'pg_partman_bgw'`, GUCs per-env) runs `run_maintenance` to keep ~3 months of empty partitions ahead of the live edge — no external cron. The prerequisite was closed first: the data-layer image ships `pg_partman` (#369; `infra/dev-stand/postgres/Dockerfile`, dev-stand + prod). What remains **deferred to #383** is the retention `DROP PARTITION` + crypto-shred automation per the ADR-0009 retention matrix — on v1 the drop-mask is disabled (above), so `partman.part_config.retention` is intentionally left unset.
+**`audit_ledger` (the auth-audit ledger, §6) as built:** the table is natively `PARTITION BY RANGE (created_at)` into monthly partitions (`audit_ledger_yYYYY_mMM`) plus a `DEFAULT` partition — the never-lose-an-audit-write safety net for any timestamp outside the pre-created range. Native declarative partitioning forces the partition key into **every** unique/primary-key constraint, so the PK is composite `(id, created_at)` and the `event_id` unique is composite `(event_id, created_at)`. `event_id` uniqueness is therefore **scoped within a monthly partition** rather than global: the dedup guarantee is "no two rows share the same `event_id` AND `created_at`", which is exactly an idempotent re-ingest that carries the original event timestamp. The residual gap is a re-ingest that lands in a different partition than the original (a month-boundary retry, or a replay whose `created_at` is regenerated) — a tolerated, low-probability duplicate audit row. The ledger is an evidentiary append log, not a correctness-critical dedup key, so this is acceptable for v1; a globally-unique `event_id` would need either a non-partitioned table (loses the partition-pruning and maintenance story) or a UUIDv7 partition key co-derived from `event_id` (deferred with the rest of the v2 UUIDv7 work, DSO-30). The append-only trigger is attached to the partitioned parent and cascades to every partition (PG17 BEFORE ROW). Partition DDL is hand-managed in the drizzle migration (drizzle does not model `PARTITION BY`, §3.4); the pre-created 2026-2027 months are a fixed buffer adopted by `pg_partman` rather than recreated. **Partition auto-creation now ships on v1** (#136): migration `0004_audit_ledger_partman.sql` installs `pg_partman` in a dedicated `partman` schema and registers the parent via `partman.create_parent` (control `created_at`, monthly RANGE, premake 3, `automatic_maintenance := on`, `infinite_time_partitions := true`); `p_default_table := false` and `p_start_partition := '2028-01-01'` so the manual buffer + `audit_ledger_default` are preserved and the partman-managed chain begins at the buffer's upper bound. The BGW (`shared_preload_libraries = 'pg_partman_bgw'`, GUCs per-env) runs `run_maintenance` to keep ~3 months of empty partitions ahead of the live edge — no external cron. The prerequisite was closed first: the data-layer image ships `pg_partman` (#369; `infra/dev-stand/postgres/Dockerfile`, dev-stand + prod). What remains **deferred to #383** is term crypto-shred plus a regression guard for the retained-row contract in the ADR-0009 retention matrix. No drop-mask may delete `audit_ledger` partitions, and `partman.part_config.retention` remains intentionally unset.
 
 ---
 
@@ -263,6 +265,19 @@ Retention matrix per entity/table — in `packages/db/schema/pd/retention.ts` (T
 
 - **drizzle-kit does not perform expand-contract automatically.** Mitigation v1: deployments in low-traffic windows (200 users — tolerable); destructive migrations manually split into 2 releases (add new column / backfill / drop old).
 - **OQ-D4 (open question):** when v2 zero-downtime is required — consider pgroll on top of drizzle-kit for destructive migrations.
+
+### 3.6. Postgres retained-row lifecycle contract
+
+The following rules are normative for every application-owned Postgres row, including domain entities, relationships and operational records. A removable/expiring row has lifecycle `status` + nullable `deleted_at`; an immutable/append-only row explicitly declares that removal is unsupported.
+
+1. **No physical deletion.** Application services, admin workflows, automated retention jobs, repositories and data migrations must not physically delete application-owned rows. `DELETE`, `TRUNCATE`, data-bearing `DROP TABLE` / `DROP PARTITION`, and equivalent cascade paths are forbidden. Removal or expiry is a state transition that sets the lifecycle `status` to its inactive/removed/expired value and sets `deleted_at = now()` in one transaction.
+2. **Restore is explicit.** When the domain permits restoration, the command validates the transition, clears `deleted_at` and selects a valid active status. A soft-deleted row never becomes visible merely because a query omitted a condition.
+3. **Read contract.** Default product and operational repositories filter `deleted_at IS NULL`. Historical/audit/legal repositories opt in to tombstones through a separately named method. Partial indexes serve the active-row path; tests cover active, deleted and restored states.
+4. **Relationships and operational rows are records.** Join rows follow the same lifecycle; unlinking entities soft-deletes the relationship row. Sessions, idempotency keys and queue leases transition to an expired/retired state instead of being deleted; telemetry/evidence streams remain append-only. All application-owned foreign keys use `RESTRICT`/`NO ACTION`; `ON DELETE CASCADE` is forbidden.
+5. **Identifiers are durable.** Primary IDs, public slugs and historical relationships remain reserved after soft deletion. Reuse requires a separate explicit decision because it can rewrite history and invalidate external links.
+6. **PD erasure is orthogonal.** ADR-0009 erases/nulls/replaces/crypto-shreds sensitive values on the retained row and records the lifecycle timestamp. A readable PD payload behind `deleted_at` does not satisfy an erasure request.
+
+This rule concerns application-owned Postgres data. Ephemeral Redis keys and provider-managed temporary state remain governed by their own TTL contracts because they are not Postgres rows; they must not become an alternate store for retained domain truth.
 
 ---
 
@@ -401,7 +416,7 @@ Single Redis 7+ instance for **volatile concerns only**. Durable concerns (idemp
 | JWKS cache           | Redis                               | `jwks:<kid>`                                 | volatile    | 10 min                   | Re-fetch (acceptable)                  |
 | Introspection cache  | Redis                               | `intro:<jti>`                                | volatile    | 60 s                     | Re-fetch (acceptable)                  |
 | Non-critical jobs    | Redis (BullMQ)                      | `bull:<queue>:*`                             | best-effort | per-job                  | At-least-once retry policy             |
-| **Idempotency keys** | **Postgres**                        | `idempotency_keys` (UNIQUE)                  | **durable** | 24h via cron cleanup     | n/a                                    |
+| **Idempotency keys** | **Postgres**                        | `idempotency_keys` (UNIQUE)                  | **durable** | 24h active; row retained | n/a                                    |
 | **Critical jobs**    | **Postgres outbox + BullMQ worker** | `job_outbox` + `bull:critical:*`             | **durable** | retained until completed | Replay from outbox after Redis restart |
 | **Session state**    | **IdP** (ADR-0001 §6)               | IdP's DB                                     | durable     | refresh-token TTL        | IdP handles                            |
 | Audit ledger, PD     | Postgres                            | per ADR-0003 §6 + ADR-0009 retention matrix  | durable     | per ADR-0009 §2.6        | n/a                                    |
@@ -434,9 +449,11 @@ export const idempotencyKeys = pgTable(
       .defaultNow()
       .notNull(),
     expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
+    status: text("status").notNull().default("active"), // 'active' | 'expired'
+    deleted_at: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => ({
-    idxExpires: index().on(t.expires_at), // for cron cleanup
+    idxExpiryLifecycle: index().on(t.status, t.expires_at), // for lifecycle cron + active reads
   }),
 );
 
@@ -444,7 +461,7 @@ export const jobOutbox = pgTable(
   "job_outbox",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    kind: text("kind").notNull(), // 'erasure.purge', 'payment.refund', 'nmo.issue_credit', ...
+    kind: text("kind").notNull(), // 'erasure-execute', 'payment.refund', 'nmo.issue_credit', ...
     payload: jsonb("payload").notNull(),
     status: text("status").notNull().default("pending"), // 'pending' | 'claimed' | 'completed' | 'failed'
     attempt: integer("attempt").notNull().default(0),
@@ -461,7 +478,7 @@ export const jobOutbox = pgTable(
 );
 ```
 
-Cron cleanup for `idempotency_keys` (`pg_cron`, hourly): `DELETE WHERE expires_at < NOW()`.
+Hourly lifecycle cron for `idempotency_keys` (`pg_cron`): `UPDATE idempotency_keys SET status = 'expired', deleted_at = COALESCE(deleted_at, NOW()) WHERE expires_at < NOW() AND deleted_at IS NULL`. Rows remain retained; active reads require `deleted_at IS NULL`.
 
 BullMQ drainer worker — a separate process; reads `job_outbox WHERE status = 'pending'`, enqueues into the appropriate BullMQ queue, marks `claimed_at`. On retry — increments `attempt`; max attempts per-kind from config.
 
@@ -599,7 +616,7 @@ In `.github/workflows/docs.yml` (or equivalent in Gitea Actions):
 - pgvector + PG FTS in one DB = transactional guarantees on INSERT row + embedding + search index.
 - Drizzle TS schema = SSOT — no divergence between ORM and runtime types.
 - Cerbos embedded = policies-as-code with tests, no separate PDP service on v1.
-- Partitioning from v1 → no retroactive repaint needed; retention enforced via cheap `DROP PARTITION`.
+- Partitioning from v1 → no retroactive repaint needed; partition pruning keeps retained active/tombstone history manageable without `DROP PARTITION` retention.
 - Self-hosted Postgres → unrestricted extensions, full control over tuning, cheaper than managed.
 
 ### Negative

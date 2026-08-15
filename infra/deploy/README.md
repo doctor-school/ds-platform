@@ -977,9 +977,24 @@ As-built (OBS-трек, живьём верифицировано):
   (в `mon-push-allow.conf` на mon).
 - **Алерты** `tenant=ds` → канал «DS Мониторинг» (Mattermost; Telegram временно
   недоступен — bbm-side egress-блокер): `S3BackupStale-ds` (pgbackrest
-  `ds-prod-pgbackrest` >26ч), `ServiceDown`/`CertExpirySoon` (3 эндпоинта),
-  `HostTelemetryStale-api-prod`/`-data-prod`, `DiskFillHigh` (>85/92%).
-- **Blackbox-эндпоинты:** `api.doctor.school/v1/health`,
-  `academy.doctor.school/`, `id.doctor.school/`. Конфиг blackbox живёт на mon вне
-  репозитория — при смене публичного хоста портала его правят там же вручную.
-  Сверка целей после ретайра легаси-хоста (#1173) отслеживается в #1273.
+  `ds-prod-pgbackrest` >26ч), `ExternalHttpProbeFailed` (пробы `probe_scope=user_path`)
+  и `ApplicationHealthProbeFailed` (`probe_scope=app_health`), `CertExpirySoon-warning`
+  /`-critical`, `HostTelemetryStale-api-prod`/`-data-prod`, `DiskFillHigh` (>85/92%).
+  Правила — Grafana-managed (`grafana/provisioning/alerting/rules.yaml`), не
+  Prometheus-rule-файлы: у Prometheus на mon `rule_files` пуст, поэтому
+  `/api/v1/alerts` там всегда пустой — состояние алертов читается из Grafana
+  (`/api/alertmanager/grafana/api/v2/alerts`).
+- **Blackbox-эндпоинты** (`tenant=ds`, 4 цели): `api.doctor.school/v1/health`
+  (`app_health`), `academy.doctor.school/` (`user_path`), `id.doctor.school/`
+  (`user_path`), `id.doctor.school/debug/healthz` (`app_health`).
+- **SSOT конфига мониторинга — репозиторий `bbm`, `infra/monitoring/`**, а не сам
+  бокс: `~/monitoring-deploy` на mon-prod-tw — это выкаченная копия (`rsync` +
+  `scripts/02-deploy.sh`). Менять цели только там и выкатывать; правка на боксе
+  расходится с SSOT и теряется при следующем выкате. Прометей запущен без
+  `--web.enable-lifecycle`, поэтому конфиг перечитывается через
+  `docker compose restart prometheus`, а не POST `/-/reload`.
+- **При смене публичного хоста портала пробу нужно перенацелить руками** — она
+  не выводится из этого репозитория. Ретайр `app.doctor.school` (#1173) этого шага
+  не включал: проба осталась на мёртвом хосте и подняла `ExternalHttpProbeFailed`
+  в канал. Исправлено 2026-08-15 в рамках #1273 (bbm: `chore(monitoring):
+перенацелить blackbox-пробу портала`).

@@ -21,7 +21,7 @@ lang: ru
 ## 0. TL;DR
 
 1. **Primary DB:** PostgreSQL 17, self-hosted в Docker на отдельном data-layer VPS. `pgbackrest` daily full + 15-min WAL → Timeweb Object Storage (offsite RF). Declarative partitioning by month для high-volume таблиц (`ledger`, `audit_log`, `events_log`) c v1, чтобы избежать retroactive repaint.
-2. **ORM + Migrations:** Drizzle ORM (TS schema = SSOT) + drizzle-kit. Pgvector first-class через `vector(...)` тип. Сложные миграции (concurrent index, partitioning) — raw SQL внутри drizzle-kit-генерированных файлов.
+2. **ORM + Migrations + lifecycle доменных записей:** Drizzle ORM (TS schema = SSOT) + drizzle-kit. Продуктовый код никогда физически не удаляет постоянную доменную сущность или строку связи; каждая поддерживаемая транзиция удаления использует явный lifecycle `status` + nullable `deleted_at`. Pgvector first-class через `vector(...)` тип. Сложные миграции (concurrent index, partitioning) — raw SQL внутри drizzle-kit-генерированных файлов.
 3. **Policy engine (RBAC):** Cerbos в embedded mode на v1 (`@cerbos/embedded`). Политики в `policies/*.yaml`, версионируются, `cerbos compile --tests` в CI. `IPolicyEngine` из ADR-0002 — тонкая обёртка. Fast-path: in-process fine-grained checks для ≥99% read-запросов; Cerbos вызываем для high-stakes mutations и admin endpoints.
 4. **Full-text search:** PostgreSQL FTS (tsvector + russian stemmer) + `pg_trgm` для fuzzy + GIN-индексы. Один store вместо отдельного search-сервиса.
 5. **Vector DB:** pgvector в основной Postgres, HNSW индекс. Та же БД, те же backups, тот же deploy.
@@ -40,6 +40,7 @@ lang: ru
 - Версия Postgres (17).
 - ORM/query-builder (Drizzle).
 - Migration tool (drizzle-kit) + стратегия.
+- Soft-delete-only lifecycle-контракт для постоянных доменных сущностей и строк связей.
 - Partitioning schema для high-volume таблиц.
 - Policy engine (Cerbos embedded) + интеграция с IPolicyEngine из ADR-0002.
 - Full-text search engine (PG FTS).
@@ -152,7 +153,7 @@ lang: ru
 - Alert в GlitchTip если drill провалится.
 - DSO-задача под DSO-10 (infra readiness) на runbook write-up.
 
-**Erasure SLA compatibility:** crypto-shred per-subject ключа в Vault — immediate. Encrypted PD в backups становится нечитаемым **immediately** (live DB + Timeweb primary backup); physical tuple removal — на rotation (≤90d offsite). Соответствует 152-ФЗ ст. 14 (30 дней).
+**Erasure SLA compatibility:** crypto-shred per-subject ключа в Vault — immediate. Encrypted PD в backups становится нечитаемым **immediately** (live DB + Timeweb primary backup); старые backup snapshots истекают по rotation (≤90d offsite). Live-доменная строка сохраняется как нечитаемый lifecycle-tombstone по §3.6. Соответствует 152-ФЗ ст. 14 (30 дней).
 
 **RTO/RPO цели:**
 
@@ -184,7 +185,7 @@ lang: ru
 
 **Retention — закрыто 2026-05-18 (DSO-63 #6): см. ADR-0009 §2.6 + PD-lifecycle design spec §3.**
 
-Retention matrix per entity/table — в `packages/db/schema/pd/retention.ts` (TS-объект, CI-validated). Каждая таблица с PD имеет: legal basis, retention period, deletion/anonymization, audit exception, owner. Partition retention enforcement (`DROP PARTITION`) выполняется по retention matrix.
+Retention matrix per table — в `packages/db/schema/pd/retention.ts` (TS-объект, CI-validated). Каждая таблица с PD имеет: legal basis, retention period, erasure mechanism, audit exception, owner. Partition retention enforcement (`DROP PARTITION`) применяется только к retention-managed операционным/evidentiary streams; это не продуктовая команда и не разрешение физически удалять доменную сущность или строку связи (§3.6).
 
 - `audit_log` retention — **5y** (152-ФЗ + НК РФ + medical compliance), crypto-shred at term (ADR-0009 §2.4). Соответствующая автоматизация `DROP PARTITION` + crypto-shred — follow-up #383 (срез v1 поставляет только автосоздание партиций; drop-маска остаётся выключенной до первого подтверждённого сценария retention).
 - `events_log`, `notifications`, `ai_pipeline_jobs` retention — определяется в retention matrix.
@@ -264,6 +265,19 @@ Retention matrix per entity/table — в `packages/db/schema/pd/retention.ts` (T
 
 - **Drizzle-kit не делает expand-contract автоматически.** Митигация v1: деплои в окно низкой активности (200 users — терпимо); destructive миграции вручную split'им на 2 релиза (add new column / backfill / drop old).
 - **OQ-D4 (open question):** при v2 zero-downtime requirement — рассмотреть pgroll поверх drizzle-kit для destructive миграций.
+
+### 3.6. Lifecycle-контракт доменных записей
+
+Следующие правила нормативны для каждой постоянной доменной сущности и каждой строки доменной связи. Soft-deletable строка имеет lifecycle `status` + nullable `deleted_at`; immutable/append-only строка явно объявляет, что удаление не поддерживается.
+
+1. **Без физического удаления.** Application services, admin-workflows, repositories и migrations не выполняют `DELETE` для доменных строк. Удаление — state transition, которая в одной транзакции переводит доменный lifecycle `status` в его inactive/removed terminal value и устанавливает `deleted_at = now()`.
+2. **Восстановление явно.** Если домен разрешает восстановление, команда валидирует транзицию, очищает `deleted_at` и выбирает допустимый активный статус. Soft-deleted строка не становится видимой лишь потому, что запрос забыл условие.
+3. **Контракт чтения.** Default repositories фильтруют `deleted_at IS NULL`. Historical/audit/legal repositories включают tombstones через отдельно названный method. Partial indexes обслуживают active-row path; тесты покрывают active, deleted и restored states.
+4. **Связи — тоже записи.** Join-строки следуют тому же lifecycle; отвязка сущностей soft-delete'ит строку связи. Foreign keys между доменными строками используют `RESTRICT`/`NO ACTION`; `ON DELETE CASCADE` запрещён для доменных данных.
+5. **Идентификаторы долговечны.** Primary IDs, public slugs и исторические связи остаются зарезервированными после soft-delete. Переиспользование требует отдельного явного решения, потому что может переписать историю и сломать внешние ссылки.
+6. **Стирание PD ортогонально.** ADR-0009 стирает/null'ит/заменяет/crypto-shred'ит чувствительные значения в сохранённой строке и фиксирует lifecycle timestamp. Читаемый PD payload за `deleted_at` не исполняет erasure request.
+
+Операционные записи без продуктовой identity или restore-lifecycle — истекающие sessions, idempotency keys, queue leases и retention-managed telemetry/append streams — находятся вне этого domain-entity контракта. Их ограниченный физический retention явно задаётся owning operational contract; классифицировать таблицу как операционную только для обхода soft-delete запрещено.
 
 ---
 

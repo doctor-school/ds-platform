@@ -69,15 +69,15 @@ Endpoint'ы — обязательная часть pre-pilot (engineering-readi
 
 ### 2.3 Erasure semantics
 
-**Три уровня erasure**, выбираемые архитектурой per table:
+ADR-0003 §4 устанавливает lifecycle-инвариант: постоянная доменная сущность или строка связи **никогда физически не удаляется**. Erasure request сохраняет строку, устанавливает её lifecycle-status и `deleted_at` и применяет к PD payload один или несколько механизмов:
 
-| Уровень          | Поведение                                                                                                         | Применимо к                                                                        |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| **Hard delete**  | `DELETE FROM ...`, tuple исчезает.                                                                                | mutable PD без legal hold (профиль, контактные данные, marketing consent)          |
-| **Tombstone**    | Замена PD-полей на `NULL` или `'<erased>'`; запись остаётся со ссылочной целостностью; tombstone-flag для аудита. | append-only логи действий, где факт действия важен, но identity субъекта удаляется |
-| **Crypto-shred** | Field-level encryption per subject; уничтожение ключа = эффективная erasure.                                      | audit_ledger, backup snapshots, AI-zone embeddings, archived blobs                 |
+| Механизм          | Поведение                                                                                                                                                  | Применимо к                                                                       |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **Value erasure** | PD-поля заменяются на `NULL` или неидентифицирующий sentinel; строка, стабильный ID, status и `deleted_at` сохраняются.                                    | mutable PD без legal hold (профиль, контактные данные, marketing data)            |
+| **Tombstone**     | Сохраняется минимальный неперсональный business/evidentiary факт; subject-identifying поля и связи стираются или псевдонимизируются.                       | записи действий и связей, где важен факт, но не identity                          |
+| **Crypto-shred**  | Зашифрованные per-subject поля становятся нечитаемыми после уничтожения ключа; строка фиксирует завершённую zeroization и сохраняет ссылочную целостность. | audit_ledger, backup snapshots, encrypted blobs и чувствительные derived payloads |
 
-**Per-table policy** фиксируется в retention matrix (см. design spec §3) + enforced через migrations + CI lint.
+Механизмы комбинируются. **Per-table policy** фиксируется в retention matrix (см. design spec §3) и enforced через migrations + CI lint. `DELETE FROM` и cascade deletion не являются допустимыми механизмами доменного erasure.
 
 Forward-ref: контракт исполнения erasure (BullMQ-задача `erasure-execute`, idempotency, cross-zone propagation) — см. `2026-05-18-ds-platform-bullmq-queue-contract-design` (queue `pd-lifecycle`).
 
@@ -95,28 +95,28 @@ Forward-ref: контракт исполнения erasure (BullMQ-задача 
 - **Offsite backups (Beget S3)**: 90d retention; crypto-shred per-subject ключа.
 - **Quarterly archives**: 1y retention; crypto-shred per-subject ключа.
 - **Ключи хранятся в Vault на отдельной VM** (см. DSO-63 #9 backup topology).
-- **Erasure SLA** — 30 дней (152-ФЗ ст. 14). Crypto-shred ключа → данные становятся нечитаемыми сразу; физическое удаление tuple — по backup-retention rotation.
-- **Legal hold** (litigation, регулятор) — override; ключ сохраняется до снятия hold; tuple помечается `legal_hold = true`.
+- **Erasure SLA** — 30 дней (152-ФЗ ст. 14). Crypto-shred ключа → данные становятся нечитаемыми сразу; старые backup snapshots истекают по своей rotation, а live lifecycle-tombstone сохраняется.
+- **Legal hold** (litigation, регулятор) — override; ключ сохраняется до снятия hold; строка помечается `legal_hold = true`.
 
 ### 2.6 Retention matrix
 
 Полная матрица per entity/table — в design spec §3. Краткий вид:
 
-| Entity                                   | Legal basis                 | Retention                      | Erasure                                  | Audit exception            |
-| ---------------------------------------- | --------------------------- | ------------------------------ | ---------------------------------------- | -------------------------- |
-| `users`                                  | 152-ФЗ ст. 6 п. 1 / consent | active + 3y after deactivation | hard delete + tombstone where referenced | none                       |
-| `consent_acceptances`                    | 152-ФЗ доказательство       | 5y after withdrawal            | tombstone (subject_id encrypted)         | proof retained             |
-| `consent_withdrawals`                    | 152-ФЗ доказательство       | 5y                             | tombstone                                | proof retained             |
-| `audit_ledger`                           | 152-ФЗ + НК РФ + medical    | 5y                             | crypto-shred at term                     | retain hash-chain          |
-| `payments`                               | НК РФ ст. 23                | 5y                             | no deletion (audit exception)            | full retention             |
-| `webinar_attendance`                     | НМО compliance              | 3y                             | tombstone                                | retain attendance proof    |
-| `marketing_consent` / `marketing_events` | consent                     | until withdrawn + 90d          | hard delete                              | retain proof of revocation |
-| `embeddings` (AI-zone, derived)          | derivative                  | recomputable                   | recompute or delete                      | n/a                        |
-| `prompt_eval_corpus` (AI-zone)           | consent                     | per-corpus consent             | delete                                   | n/a                        |
+| Entity                                   | Legal basis                 | Retention                      | Erasure                                 | Audit exception            |
+| ---------------------------------------- | --------------------------- | ------------------------------ | --------------------------------------- | -------------------------- |
+| `users`                                  | 152-ФЗ ст. 6 п. 1 / consent | active + 3y after deactivation | value erasure on retained tombstone     | none                       |
+| `consent_acceptances`                    | 152-ФЗ доказательство       | 5y after withdrawal            | tombstone (subject_id encrypted)        | proof retained             |
+| `consent_withdrawals`                    | 152-ФЗ доказательство       | 5y                             | tombstone                               | proof retained             |
+| `audit_ledger`                           | 152-ФЗ + НК РФ + medical    | 5y                             | crypto-shred at term                    | retain hash-chain          |
+| `payments`                               | НК РФ ст. 23                | 5y                             | retained; crypto-shred at term          | full retention             |
+| `webinar_attendance`                     | НМО compliance              | 3y                             | tombstone                               | retain attendance proof    |
+| `marketing_consent` / `marketing_events` | consent                     | until withdrawn + 90d          | value erasure on retained tombstone     | retain proof of revocation |
+| `embeddings` (AI-zone, derived)          | derivative                  | recomputable                   | erase vector/payload + retain tombstone | n/a                        |
+| `prompt_eval_corpus` (AI-zone)           | consent                     | per-corpus consent             | erase payload + retain tombstone        | n/a                        |
 
 ### 2.7 Cross-zone erasure propagation
 
-См. ADR-0011 §3 (Egress control plane). Erasure request в RF-zone backend → событие в outbox → AI-zone subscriber → удаление эмбеддингов + corpus entries. Audit per event.
+См. ADR-0011 §3 (Egress control plane). Erasure request в RF-zone backend → событие в outbox → AI-zone subscriber → стирание embedding/corpus payload и lifecycle-tombstone. Audit per event.
 
 ### 2.8 Operator workflow
 
@@ -137,9 +137,9 @@ Forward-ref: контракт исполнения erasure (BullMQ-задача 
 
 **Отвергнуто.** Размазывание consent / erasure logic по ADR-0001, engineering-readiness, data-layer-design делает невозможным cross-table coherence (backend пишет, audit shred'ит ключ, AI-zone удаляет embeddings — все три должны соблюдать один контракт). Single ADR + design spec — обязательное условие.
 
-### 3.2 Soft delete без crypto-shred
+### 3.2 Soft delete без PD-value erasure или crypto-shred
 
-**Отвергнуто.** Soft-delete (`deleted_at IS NOT NULL`) не покрывает backups — данные продолжают существовать в pgbackrest snapshots месяцами. 152-ФЗ требует фактического прекращения обработки, не флага.
+**Отвергнуто.** Retained-row lifecycle обязателен, но одного `deleted_at IS NOT NULL` недостаточно: читаемые PD не стираются, backups не покрываются. Value erasure и/или crypto-shred исполняются независимо; lifecycle-флаг их не заменяет.
 
 ### 3.3 Полное физическое удаление из audit_ledger
 
@@ -158,6 +158,7 @@ Forward-ref: контракт исполнения erasure (BullMQ-задача 
 - Один archetype-документ для AI-агентов / разработчиков / юристов. Никаких «а где про consent?» — везде forward-reference на ADR-0009.
 - Crypto-shred per subject — отвечает 152-ФЗ требованию по бэкапам без перехода на короткий backup retention.
 - Retention matrix как code (CI-validated) — отсутствует drift с реальностью.
+- Доменные строки и связи сохраняют стабильную identity и ссылочную историю, а их PD payload при этом может быть необратимо стёрт.
 - Engineering-readiness §5 BLOCKER closed — pre-pilot launch не блокируется отсутствием консент-инфраструктуры.
 
 ### Negative / costs

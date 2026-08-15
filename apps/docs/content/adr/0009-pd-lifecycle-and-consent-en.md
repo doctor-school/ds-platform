@@ -29,7 +29,7 @@ PD lifecycle for DS Platform is **first-class architecture, not implementation d
 
 1. **Technical conflict between append-only audit ledger and right to erasure.** 152-FZ requires the ability to delete PD on request. The append-only ledger (ADR-0003 §6) is built on a hash-chain — arbitrary delete breaks integrity. A **tombstoning + crypto-shredding** pattern must be chosen architecturally, not ad hoc.
 
-2. **Technical conflict between backup retention and right to erasure.** Standard pgbackrest retention (30d primary + 90d offsite, ADR-0003 §8 + DSO-63 #9) outlives an erasure request by days to weeks. We need either a short backup cycle, or **per-subject crypto-shred** (preferred — "delete from backup" via key destruction).
+2. **Technical conflict between backup retention and right to erasure.** Standard pgbackrest retention (30d primary + 90d offsite, ADR-0003 §8 + DSO-63 #9) outlives an erasure request by days to weeks. We need either a short backup cycle, or **per-subject crypto-shred** (preferred — backup erasure via key destruction).
 
 3. **Cross-zone egress component.** The AI zone holds embeddings + prompt-eval corpora derived from PD. Erasure must propagate there. This requires a contract between RF-zone backend and AI-zone (see ADR-0011).
 
@@ -69,15 +69,15 @@ These endpoints are mandatory pre-pilot (engineering-readiness §5 BLOCKER).
 
 ### 2.3 Erasure semantics
 
-**Three erasure levels**, selected per table:
+ADR-0003 §4 establishes the lifecycle invariant: a persistent domain entity or relationship row is **never physically deleted**. An erasure request retains the row, sets its lifecycle status and `deleted_at`, and applies one or more of these mechanisms to its PD payload:
 
-| Level            | Behavior                                                                                                        | Applies to                                                                       |
-| ---------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| **Hard delete**  | `DELETE FROM …`, tuple disappears.                                                                              | mutable PD without legal hold (profile, contact data, marketing consent)         |
-| **Tombstone**    | PD fields nulled / replaced with `'<erased>'`; row remains for referential integrity; tombstone flag for audit. | append-only action logs where the action matters but subject identity is removed |
-| **Crypto-shred** | Field-level encryption per subject; destroying the key = effective erasure.                                     | audit_ledger, backup snapshots, AI-zone embeddings, archived blobs               |
+| Mechanism         | Behavior                                                                                                                                          | Applies to                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| **Value erasure** | PD fields are nulled or replaced with a non-identifying sentinel; the row, stable ID, status and `deleted_at` remain.                             | mutable PD without legal hold (profile, contact data, marketing data)          |
+| **Tombstone**     | The minimum non-PD business/evidentiary fact remains; subject-identifying fields and links are erased or pseudonymized.                           | action and relationship records where the fact matters but identity does not   |
+| **Crypto-shred**  | Per-subject encrypted fields become unreadable by destroying the key; the row records that zeroization completed and remains referentially valid. | audit_ledger, backup snapshots, encrypted blobs and sensitive derived payloads |
 
-**Per-table policy** is fixed in the retention matrix (design spec §3) + enforced via migrations + CI lint.
+The mechanisms are composable. **Per-table policy** is fixed in the retention matrix (design spec §3) and enforced via migrations + CI lint. `DELETE FROM` and cascade deletion are not valid domain-erasure mechanisms.
 
 Forward reference: the erasure execution contract (BullMQ `erasure-execute` job, idempotency, cross-zone propagation) is defined in `2026-05-18-ds-platform-bullmq-queue-contract-design` (queue `pd-lifecycle`).
 
@@ -95,28 +95,28 @@ Forward reference: the erasure execution contract (BullMQ `erasure-execute` job,
 - **Offsite backups (Beget S3):** 90d retention; per-subject crypto-shred.
 - **Quarterly archives:** 1y retention; per-subject crypto-shred.
 - **Keys stored in Vault on a separate VM** (DSO-63 #9 backup topology).
-- **Erasure SLA** — 30 days (152-FZ art. 14). Key shred → data becomes unreadable immediately; physical tuple removal — on backup rotation.
-- **Legal hold** (litigation, regulator) — override; key retained until hold released; tuple marked `legal_hold = true`.
+- **Erasure SLA** — 30 days (152-FZ art. 14). Key shred → data becomes unreadable immediately; old backup snapshots expire on their rotation while the live lifecycle tombstone remains.
+- **Legal hold** (litigation, regulator) — override; key retained until hold released; row marked `legal_hold = true`.
 
 ### 2.6 Retention matrix
 
 Full matrix per entity/table — in design spec §3. Summary:
 
-| Entity                                   | Legal basis                  | Retention                      | Erasure                                  | Audit exception            |
-| ---------------------------------------- | ---------------------------- | ------------------------------ | ---------------------------------------- | -------------------------- |
-| `users`                                  | 152-FZ art. 6 p. 1 / consent | active + 3y after deactivation | hard delete + tombstone where referenced | none                       |
-| `consent_acceptances`                    | 152-FZ proof                 | 5y after withdrawal            | tombstone (subject_id encrypted)         | proof retained             |
-| `consent_withdrawals`                    | 152-FZ proof                 | 5y                             | tombstone                                | proof retained             |
-| `audit_ledger`                           | 152-FZ + НК РФ + medical     | 5y                             | crypto-shred at term                     | retain hash-chain          |
-| `payments`                               | НК РФ art. 23                | 5y                             | no deletion (audit exception)            | full retention             |
-| `webinar_attendance`                     | NMO compliance               | 3y                             | tombstone                                | retain attendance proof    |
-| `marketing_consent` / `marketing_events` | consent                      | until withdrawn + 90d          | hard delete                              | retain proof of revocation |
-| `embeddings` (AI zone, derived)          | derivative                   | recomputable                   | recompute or delete                      | n/a                        |
-| `prompt_eval_corpus` (AI zone)           | consent                      | per-corpus consent             | delete                                   | n/a                        |
+| Entity                                   | Legal basis                  | Retention                      | Erasure                                 | Audit exception            |
+| ---------------------------------------- | ---------------------------- | ------------------------------ | --------------------------------------- | -------------------------- |
+| `users`                                  | 152-FZ art. 6 p. 1 / consent | active + 3y after deactivation | value erasure on retained tombstone     | none                       |
+| `consent_acceptances`                    | 152-FZ proof                 | 5y after withdrawal            | tombstone (subject_id encrypted)        | proof retained             |
+| `consent_withdrawals`                    | 152-FZ proof                 | 5y                             | tombstone                               | proof retained             |
+| `audit_ledger`                           | 152-FZ + НК РФ + medical     | 5y                             | crypto-shred at term                    | retain hash-chain          |
+| `payments`                               | НК РФ art. 23                | 5y                             | retained; crypto-shred at term          | full retention             |
+| `webinar_attendance`                     | NMO compliance               | 3y                             | tombstone                               | retain attendance proof    |
+| `marketing_consent` / `marketing_events` | consent                      | until withdrawn + 90d          | value erasure on retained tombstone     | retain proof of revocation |
+| `embeddings` (AI zone, derived)          | derivative                   | recomputable                   | erase vector/payload + retain tombstone | n/a                        |
+| `prompt_eval_corpus` (AI zone)           | consent                      | per-corpus consent             | erase payload + retain tombstone        | n/a                        |
 
 ### 2.7 Cross-zone erasure propagation
 
-See ADR-0011 §3 (Egress control plane). Erasure request in RF-zone backend → outbox event → AI-zone subscriber → embedding / corpus entry removal. Audit per event.
+See ADR-0011 §3 (Egress control plane). Erasure request in RF-zone backend → outbox event → AI-zone subscriber → embedding/corpus payload erasure and lifecycle tombstone. Audit per event.
 
 ### 2.8 Operator workflow
 
@@ -137,9 +137,9 @@ All PD-lifecycle tables (`consent_*`, `data_export_requests`, `erasure_requests`
 
 **Rejected.** Spreading consent / erasure logic across ADR-0001, engineering-readiness, data-layer-design makes cross-table coherence impossible (backend writes, audit shreds the key, AI zone deletes embeddings — all three must respect one contract). A single ADR + design spec is the only workable form.
 
-### 3.2 Soft delete without crypto-shred
+### 3.2 Soft delete without PD-value erasure or crypto-shred
 
-**Rejected.** Soft delete (`deleted_at IS NOT NULL`) does not cover backups — data lives on in pgbackrest snapshots for months. 152-FZ requires actual cessation of processing, not a flag.
+**Rejected.** The retained-row lifecycle is mandatory, but `deleted_at IS NOT NULL` alone does not erase readable PD and does not cover backups. Value erasure and/or crypto-shred must complete independently; a lifecycle flag is not a substitute.
 
 ### 3.3 Full physical removal from audit_ledger
 
@@ -158,6 +158,7 @@ All PD-lifecycle tables (`consent_*`, `data_export_requests`, `erasure_requests`
 - One archetype document for AI agents / engineers / lawyers. No more "where's consent handled?" — every other doc forward-refs ADR-0009.
 - Per-subject crypto-shred — satisfies 152-FZ backup requirement without forcing short backup retention.
 - Retention matrix as code (CI-validated) — no drift from reality.
+- Domain rows and relationships retain stable identity and referential history while their PD payload can still be irreversibly erased.
 - Engineering-readiness §5 BLOCKER closed — pre-pilot launch is not blocked by missing consent infrastructure.
 
 ### Negative / costs

@@ -1,6 +1,6 @@
 ---
 title: "DS Platform — PD Lifecycle, Consent, Retention, Erasure design [RU]"
-description: "1. Three erasure levels chosen per table: hard delete / tombstone / crypto-shred. Выбор фиксируется в retention matrix (§3) + CI lint. 2. Per-subject..."
+description: "1. Domain rows сохраняются по soft-delete lifecycle ADR-0003; PD стираются через value erasure, tombstone и crypto-shred. Policy фиксируется..."
 lang: ru
 ---
 
@@ -10,7 +10,7 @@ lang: ru
 
 **Дата:** 2026-05-18
 **Мастер:** репозиторий → `apps/docs/content/adr/0009-pd-lifecycle-and-consent-design-ru.md`
-**Автор:** Tech Lead Сидоров
+**Автор:** Tech Lead
 **Связан с:** Plane DSO-63 finding #5 + #6, milestone DSO-24
 **Наследует:** ADR-0001 (identity / users / audit), ADR-0003 (Postgres + audit_ledger + pgvector), ADR-0007 (AI zone), ADR-0009 (PD lifecycle ADR — этот spec — его реализация)
 **Входы:** `_validation-pack-2026-05-18/ds-platform-architecture-review.md` (Claude — High findings #5/#6), `outputs/2026-05-18-ds-platform-external-validation-findings.md`
@@ -20,12 +20,12 @@ lang: ru
 
 ## 0. TL;DR
 
-1. **Three erasure levels** chosen per table: hard delete / tombstone / crypto-shred. Выбор фиксируется в retention matrix (§3) + CI lint.
+1. **Retained-row erasure:** физическое удаление доменной сущности или связи запрещено; каждая поддерживаемая транзиция удаления следует soft-delete lifecycle ADR-0003 с `status` + `deleted_at`. PD стираются через value erasure / tombstone / crypto-shred.
 2. **Per-subject crypto-shred** для audit_ledger + backups + AI-zone embeddings. Ключи в Vault на отдельной VM. Erasure SLA — 30 дней.
 3. **Consent versioning** — `consent_versions` + append-only `consent_acceptances` + `consent_withdrawals`. Каждое изменение текста = новая версия; пользователь prompted при следующем логине.
 4. **Data subject rights endpoints** под `/me/*` — обязательная часть pre-pilot. `data-export` async (signed link, ≤7d). `erasure-request` async (≤30d).
 5. **Retention matrix** в `packages/db/schema/pd/retention.ts` как TS-объект → читается миграциями + CI + admin UI. Single source of truth.
-6. **Cross-zone propagation:** erasure request → outbox event → AI-zone subscriber удаляет embeddings/corpus entries (см. ADR-0011 §3).
+6. **Cross-zone propagation:** erasure request → outbox event → AI-zone subscriber стирает embedding/corpus payload и сохраняет tombstones (см. ADR-0011 §3).
 7. **Что НЕ в scope этого spec'а:** конкретный legal text для consent v1 (готовит юрист в составе DSO-X2), точное UX consent screens (frontend track), final SLA для data-export если объём окажется ≥X MB (измеряем в pilot).
 
 ---
@@ -90,7 +90,7 @@ Withdrawal — отзыв активного согласия. Cascading effects
 | `tos`                      | User deactivated (account suspended) + erasure offered (no auto-delete)                                                    |
 | `medical_data_processing`  | Access to medical content revoked; profile retained pending erasure decision                                               |
 | `nmo_credit_issuance`      | Future credit issuance blocked; past credits retained (legal retention 3y)                                                 |
-| `marketing_communications` | Все marketing channels off, marketing PD удаляется через 90d                                                               |
+| `marketing_communications` | Все marketing channels off, marketing PD стираются через 90d, lifecycle-tombstones сохраняются                             |
 | `research_anonymized`      | Прекращение использования в новых R&D batch'ах; уже-обученные модели не переобучаются (анонимизация считается достаточной) |
 
 ---
@@ -99,35 +99,37 @@ Withdrawal — отзыв активного согласия. Cascading effects
 
 **Master location:** `packages/db/schema/pd/retention.ts` (TS объект, читается миграциями + CI + admin UI).
 
-**Полный список таблиц с PD pre-pilot.** Каждая строка fixates: legal basis, retention, erasure level, audit exception, owner.
+**Полный список таблиц с PD pre-pilot.** Каждая строка fixates: legal basis, retention, retained-row erasure mechanism, audit exception, owner. Soft-deletable доменные строки также имеют lifecycle `status` + `deleted_at` по ADR-0003 design §3.6; механизмы можно комбинировать.
 
-|   # | Table                                   | Fields with PD                          | Legal basis                                                    | Retention                           | Erasure level                                         | Audit exception                 | Owner           |
-| --: | --------------------------------------- | --------------------------------------- | -------------------------------------------------------------- | ----------------------------------- | ----------------------------------------------------- | ------------------------------- | --------------- |
-|   1 | `users`                                 | email, phone, name, dob, photo_url      | 152-ФЗ ст. 6 п. 1 / consent (`tos`, `medical_data_processing`) | active + 3y after deactivation      | hard delete + tombstone в FK-зависимых таблицах       | none                            | Legal/CTO       |
-|   2 | `user_profiles_medical`                 | specialty, license_no, regalia          | 152-ФЗ ст. 10 (special category)                               | active + 3y                         | hard delete + tombstone                               | none                            | Legal/CTO       |
-|   3 | `consent_versions`                      | body_markdown                           | — (системные данные)                                           | indefinite                          | not deleted                                           | n/a                             | Legal/CTO       |
-|   4 | `consent_acceptances`                   | subject_id, ip, ua                      | 152-ФЗ доказательство                                          | 5y after withdrawal                 | tombstone (subject_id encrypted with key zeroization) | proof retained                  | Legal/CTO       |
-|   5 | `consent_withdrawals`                   | subject_id, channel                     | 152-ФЗ доказательство                                          | 5y                                  | tombstone                                             | proof retained                  | Legal/CTO       |
-|   6 | `audit_ledger`                          | subject_id, ip, ua, payload_hash        | 152-ФЗ + НК РФ + medical                                       | 5y                                  | crypto-shred at term                                  | retain hash-chain               | Legal/CTO       |
-|   7 | `data_export_requests`                  | subject_id, signed_link_id              | operational                                                    | 90d after fulfillment               | hard delete + audit row                               | none                            | Backend/SRE     |
-|   8 | `erasure_requests`                      | subject_id, status, legal_note          | operational + 152-ФЗ доказательство                            | 5y                                  | tombstone (subject_id encrypted)                      | proof retained                  | Legal/CTO       |
-|   9 | `sessions` (если IdP shared)            | subject_id, ua                          | technical                                                      | 30d after expiry                    | hard delete                                           | none                            | IdP / Backend   |
-|  10 | `payments` (если применимо в pre-pilot) | subject_id, amount, invoice_no          | НК РФ ст. 23                                                   | 5y after transaction                | no deletion                                           | full retention                  | Finance         |
-|  11 | `webinar_attendance`                    | subject_id, event_id, presence_minutes  | NMO compliance                                                 | 3y                                  | tombstone                                             | retain attendance proof         | NMO/Legal       |
-|  12 | `nmo_credit_issuance`                   | subject_id, event_id, credit_id         | NMO compliance + Минздрав reporting                            | 5y                                  | no deletion                                           | full retention                  | NMO/Legal       |
-|  13 | `course_enrollments`                    | subject_id, course_id, completion_date  | medical_data_processing                                        | active + 3y after course completion | tombstone                                             | retain completion proof for NMO | NMO/Legal       |
-|  14 | `quiz_attempts`                         | subject_id, course_id, answers, score   | derived from medical_data_processing                           | active + 3y                         | tombstone (answers crypto-shred)                      | retain pass/fail proof          | NMO/Legal       |
-|  15 | `marketing_consent`                     | subject_id, channel, opt_in_at          | consent (`marketing_communications`)                           | until withdrawn + 90d               | hard delete                                           | retain proof of revocation      | Marketing/Legal |
-|  16 | `marketing_events`                      | subject_id, event_type, sent_at         | consent                                                        | until withdrawn + 90d               | hard delete                                           | n/a                             | Marketing       |
-|  17 | `embeddings` (AI-zone)                  | derived from content + subject behavior | derivative                                                     | recomputable                        | recompute or delete via outbox                        | n/a                             | AI lead         |
-|  18 | `prompt_eval_corpus` (AI-zone)          | sanitized prompts + responses           | consent (`research_anonymized`) если PD remains                | per-corpus consent                  | delete via outbox                                     | n/a                             | AI lead         |
-|  19 | `support_tickets` (если применимо)      | subject_id, raw_text                    | operational (legitimate interest)                              | 1y after resolution                 | hard delete + tombstone                               | none                            | Support/Legal   |
+|   # | Table                                   | Fields with PD                          | Legal basis                                                    | Retention                           | Retained-row erasure mechanism              | Audit exception                 | Owner           |
+| --: | --------------------------------------- | --------------------------------------- | -------------------------------------------------------------- | ----------------------------------- | ------------------------------------------- | ------------------------------- | --------------- |
+|   1 | `users`                                 | email, phone, name, dob, photo_url      | 152-ФЗ ст. 6 п. 1 / consent (`tos`, `medical_data_processing`) | active + 3y after deactivation      | value erasure + tombstone                   | none                            | Legal/CTO       |
+|   2 | `user_profiles_medical`                 | specialty, license_no, regalia          | 152-ФЗ ст. 10 (special category)                               | active + 3y                         | value erasure + tombstone                   | none                            | Legal/CTO       |
+|   3 | `consent_versions`                      | body_markdown                           | — (системные данные)                                           | indefinite                          | retained unchanged                          | n/a                             | Legal/CTO       |
+|   4 | `consent_acceptances`                   | subject_id, ip, ua                      | 152-ФЗ доказательство                                          | 5y after withdrawal                 | tombstone + subject-link crypto-shred       | proof retained                  | Legal/CTO       |
+|   5 | `consent_withdrawals`                   | subject_id, channel                     | 152-ФЗ доказательство                                          | 5y                                  | tombstone + subject-link crypto-shred       | proof retained                  | Legal/CTO       |
+|   6 | `audit_ledger`                          | subject_id, ip, ua, payload_hash        | 152-ФЗ + НК РФ + medical                                       | 5y                                  | crypto-shred at term; retain hash-chain row | retain hash-chain               | Legal/CTO       |
+|   7 | `data_export_requests`                  | subject_id, signed_link_id              | operational                                                    | 90d after fulfillment               | value erasure + tombstone                   | none                            | Backend/SRE     |
+|   8 | `erasure_requests`                      | subject_id, status, legal_note          | operational + 152-ФЗ доказательство                            | 5y                                  | tombstone + subject-link crypto-shred       | proof retained                  | Legal/CTO       |
+|   9 | `sessions` (если IdP shared)            | subject_id, ua                          | technical                                                      | 30d after expiry                    | IdP operational expiry; не domain entity    | none                            | IdP / Backend   |
+|  10 | `payments` (если применимо в pre-pilot) | subject_id, amount, invoice_no          | НК РФ ст. 23                                                   | 5y after transaction                | retain; crypto-shred PD at term             | full retention                  | Finance         |
+|  11 | `webinar_attendance`                    | subject_id, event_id, presence_minutes  | NMO compliance                                                 | 3y                                  | tombstone + subject-link crypto-shred       | retain attendance proof         | NMO/Legal       |
+|  12 | `nmo_credit_issuance`                   | subject_id, event_id, credit_id         | NMO compliance + Минздрав reporting                            | 5y                                  | retain; crypto-shred PD at term             | full retention                  | NMO/Legal       |
+|  13 | `course_enrollments`                    | subject_id, course_id, completion_date  | medical_data_processing                                        | active + 3y after course completion | tombstone + subject-link crypto-shred       | retain completion proof for NMO | NMO/Legal       |
+|  14 | `quiz_attempts`                         | subject_id, course_id, answers, score   | derived from medical_data_processing                           | active + 3y                         | tombstone + answer/subject crypto-shred     | retain pass/fail proof          | NMO/Legal       |
+|  15 | `marketing_consent`                     | subject_id, channel, opt_in_at          | consent (`marketing_communications`)                           | until withdrawn + 90d               | value erasure + tombstone                   | retain proof of revocation      | Marketing/Legal |
+|  16 | `marketing_events`                      | subject_id, event_type, sent_at         | consent                                                        | until withdrawn + 90d               | value erasure + tombstone                   | n/a                             | Marketing       |
+|  17 | `embeddings` (AI-zone)                  | derived from content + subject behavior | derivative                                                     | recomputable                        | erase vector/payload + tombstone via outbox | n/a                             | AI lead         |
+|  18 | `prompt_eval_corpus` (AI-zone)          | sanitized prompts + responses           | consent (`research_anonymized`) если PD remains                | per-corpus consent                  | erase payload + tombstone via outbox        | n/a                             | AI lead         |
+|  19 | `support_tickets` (если применимо)      | subject_id, raw_text                    | operational (legitimate interest)                              | 1y after resolution                 | value erasure + tombstone                   | none                            | Support/Legal   |
 
 **Mutability:** Этот список — living. Любая новая таблица с PD требует строку в retention matrix **до** merge миграции (CI gate, см. §7).
 
 ---
 
 ## 4. Schemas (DDL outline)
+
+Каждая soft-deletable доменная сущность и строка связи дополнительно имеет доменный lifecycle `status` и nullable `deleted_at` по ADR-0003 design §3.6. Immutable/append-only записи явно не поддерживают удаление. Snippets ниже показывают поля, относящиеся к этому ADR; `tombstone_at` стандартизирован как `deleted_at`.
 
 Drizzle-схемы (TS). Не полный DDL — выжимка с ключевыми полями. Полные миграции — в `packages/db/migrations/` после bootstrap.
 
@@ -175,7 +177,8 @@ export const consentAcceptances = pgTable(
     ip_encrypted: bytea("ip_encrypted"),
     user_agent_encrypted: bytea("user_agent_encrypted"),
     channel: text("channel").notNull(), // 'web', 'mobile', 'admin-import', 'directual-migration'
-    tombstone_at: timestamp("tombstone_at", { withTimezone: true }), // set on erasure
+    status: text("status").notNull().default("active"), // 'active' | 'erased'
+    deleted_at: timestamp("deleted_at", { withTimezone: true }), // set when lifecycle tombstone is created
   },
   (t) => ({
     idxVersion: index().on(t.consent_version_id),
@@ -199,7 +202,8 @@ export const consentWithdrawals = pgTable("consent_withdrawals", {
     .defaultNow()
     .notNull(),
   channel: text("channel").notNull(),
-  tombstone_at: timestamp("tombstone_at", { withTimezone: true }),
+  status: text("status").notNull().default("active"), // 'active' | 'erased'
+  deleted_at: timestamp("deleted_at", { withTimezone: true }),
 });
 ```
 
@@ -214,8 +218,9 @@ export const dataExportRequests = pgTable("data_export_requests", {
     .notNull(),
   fulfilled_at: timestamp("fulfilled_at", { withTimezone: true }),
   signed_link_id: text("signed_link_id"), // pointer to S3 object with signed URL
-  status: text("status").notNull().default("pending"), // 'pending' | 'building' | 'ready' | 'fulfilled' | 'failed'
+  status: text("status").notNull().default("pending"), // 'pending' | 'building' | 'ready' | 'fulfilled' | 'failed' | 'erased'
   failure_reason: text("failure_reason"),
+  deleted_at: timestamp("deleted_at", { withTimezone: true }),
 });
 ```
 
@@ -229,13 +234,13 @@ export const erasureRequests = pgTable("erasure_requests", {
     .defaultNow()
     .notNull(),
   status: text("status").notNull().default("pending"),
-  // 'pending' | 'review_required' | 'approved' | 'rejected' | 'executing' | 'completed' | 'failed'
+  // 'pending' | 'review_required' | 'approved' | 'rejected' | 'executing' | 'completed' | 'failed' | 'erased'
   reviewed_by: uuid("reviewed_by"),
   reviewed_at: timestamp("reviewed_at", { withTimezone: true }),
   legal_note: text("legal_note"), // legal hold reason if rejected
   executed_at: timestamp("executed_at", { withTimezone: true }),
   key_zeroized_at: timestamp("key_zeroized_at", { withTimezone: true }),
-  tombstone_at: timestamp("tombstone_at", { withTimezone: true }), // for self-tombstoning after 5y
+  deleted_at: timestamp("deleted_at", { withTimezone: true }), // for self-tombstoning after 5y
 });
 ```
 
@@ -248,7 +253,7 @@ export const erasureRequests = pgTable("erasure_requests", {
 - **Master KEK** (Key Encryption Key) — хранится в Vault на отдельной VM (Hashicorp Vault или Vault-light).
 - **Per-subject DEK** (Data Encryption Key) — генерируется при создании subject; зашифрован KEK; хранится в `subject_keys` table в Postgres.
 - **Шифрование PD-полей** в `bytea` columns — symmetric encryption (AES-256-GCM) с DEK.
-- **Erasure** = destroy DEK in `subject_keys` (set to NULL or DELETE row). Encrypted blobs остаются нечитаемыми.
+- **Erasure** = destroy DEK in `subject_keys`, установив `dek_encrypted = NULL`; key-row сохраняется с `status = 'zeroized'` и `zeroized_at`. Encrypted blobs остаются нечитаемыми.
 
 ### 5.2 `subject_keys` table
 
@@ -256,6 +261,7 @@ export const erasureRequests = pgTable("erasure_requests", {
 export const subjectKeys = pgTable("subject_keys", {
   subject_id: uuid("subject_id").primaryKey(),
   dek_encrypted: bytea("dek_encrypted"), // DEK encrypted by KEK from Vault; NULL after erasure
+  status: text("status").notNull().default("active"), // 'active' | 'zeroized'
   created_at: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -395,16 +401,16 @@ Paged. Response per row:
 
 4. **Execution job** (BullMQ, idempotent):
 
-- Hard-delete: rows from tables with `erasure: 'hard_delete'`.
-- Tombstone: NULL/replace PD fields in tables with `erasure: 'tombstone'`. Encrypt subject_id via DEK.
+- Value erasure: NULL/replace PD fields in tables with `erasure: 'value_erasure'`; установить lifecycle status и `deleted_at`, не удаляя строку.
+- Tombstone: сохранить минимальный неперсональный факт в таблицах с `erasure: 'tombstone'`; стереть или crypto-shred'ить subject-link.
 - Crypto-shred: zeroize DEK in `subject_keys`. All encrypted blobs become unreadable.
 - Emit outbox event `erasure.subject_purged.v1` (см. ADR-0011 §3).
 
 5. **AI-zone subscriber** (cross-zone):
 
 - Receives outbox event.
-- Deletes `embeddings` rows for subject.
-- Removes subject from `prompt_eval_corpus`.
+- Стирает vector/payload values и soft-delete'ит строки `embeddings` субъекта.
+- Стирает subject-bearing payloads и soft-delete'ит их строки `prompt_eval_corpus`.
 - Acks completion → recorded in `erasure_requests.ai_zone_acked_at`.
 
 6. **Backup erasure** (deferred — happens organically on rotation):
@@ -438,7 +444,7 @@ Paged. Response per row:
 - **AI-zone subscriber:**
 - Idempotent (deduplicates by event_id).
 - Indexes embeddings by same `subject_id_hash`.
-- Deletes matching rows.
+- Стирает matching vector/payload values и помечает строки soft-deleted.
 - Emits ack event to RF-zone (separate outbox direction).
 - **Sanitization:** event содержит pseudonymous hash, не raw PD. Allowed channel per ADR-0011 §2.
 - **Audit:** каждый erasure event logged in both zones.
@@ -464,8 +470,9 @@ Access control: только роль `pd_officer` (новая; ADR-0001 §1 RBA
 
 1. Каждая колонка `bytea` / `text` в таблице, расположенной в `packages/db/schema/`, должна быть либо классифицирована в `retention.ts`, либо иметь explicit `@no-pd` annotation в Drizzle schema.
 2. Каждая new table в migration без entry в `retention.ts` → CI fail.
-3. Каждое поле с PD должно иметь корректный erasure level из {hard_delete, tombstone, crypto_shred}.
-4. `consent_*` таблицы не должны иметь `UPDATE` / `DELETE` migrations — только `INSERT` + tombstoning через separate column.
+3. Каждое поле с PD должно иметь корректный retained-row erasure mechanism из {value_erasure, tombstone, crypto_shred, retain}.
+4. Каждая soft-deletable доменная таблица и relationship table должна объявлять lifecycle `status` + nullable `deleted_at`; immutable/append-only доменная таблица должна явно объявлять, что удаление не поддерживается. Migrations и runtime repositories не должны физически удалять доменные строки или добавлять `ON DELETE CASCADE`.
+5. `consent_*` таблицы не должны иметь `DELETE` migrations; lifecycle- и PD-erasure updates ограничены явными tombstone/zeroization columns.
 
 **Red-team тесты** (`tests/red-team/pd-leakage.test.ts`):
 

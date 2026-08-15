@@ -20,7 +20,7 @@ lang: en
 ## 0. TL;DR
 
 1. **Primary DB:** PostgreSQL 17, self-hosted in Docker on a dedicated data-layer VPS. `pgbackrest` daily full + 15-min WAL → Timeweb Object Storage (offsite RF). Declarative partitioning by month for high-volume tables (`ledger`, `audit_log`, `events_log`) from v1 to avoid a retroactive repaint.
-2. **ORM + Migrations:** Drizzle ORM (TS schema = SSOT) + drizzle-kit. pgvector first-class via the `vector(...)` type. Complex migrations (concurrent index, partitioning) — raw SQL inside drizzle-kit-generated files.
+2. **ORM + Migrations + domain lifecycle:** Drizzle ORM (TS schema = SSOT) + drizzle-kit. Product code never physically deletes a persistent domain entity or relationship row; every supported removal uses explicit lifecycle `status` + nullable `deleted_at`. pgvector is first-class via the `vector(...)` type. Complex migrations (concurrent index, partitioning) — raw SQL inside drizzle-kit-generated files.
 3. **Policy engine (RBAC):** Cerbos in embedded mode on v1 (`@cerbos/embedded`). Policies in `policies/*.yaml`, version-controlled, `cerbos compile --tests` in CI. `IPolicyEngine` from ADR-0002 — thin wrapper. Fast-path: in-process fine-grained checks for ≥99% read requests; Cerbos is invoked for high-stakes mutations and admin endpoints.
 4. **Full-text search:** PostgreSQL FTS (tsvector + Russian stemmer) + `pg_trgm` for fuzzy + GIN indexes. Single store instead of a separate search service.
 5. **Vector DB:** pgvector in the main Postgres, HNSW index. Same DB, same backups, same deploy.
@@ -39,6 +39,7 @@ lang: en
 - Postgres version (17).
 - ORM/query-builder (Drizzle).
 - Migration tool (drizzle-kit) + strategy.
+- Soft-delete-only lifecycle contract for persistent domain entities and relationship rows.
 - Partitioning schema for high-volume tables.
 - Policy engine (Cerbos embedded) + integration with IPolicyEngine from ADR-0002.
 - Full-text search engine (PG FTS).
@@ -151,7 +152,7 @@ lang: en
 - Alert in GlitchTip if the drill fails.
 - DSO task under DSO-10 (infra readiness) for the runbook write-up.
 
-**Erasure SLA compatibility:** crypto-shred of per-subject key in Vault — immediate. Encrypted PD in backups becomes unreadable **immediately** (live DB + Timeweb primary backup); physical tuple removal — on rotation (≤90d offsite). Compliant with 152-FZ art. 14 (30 days).
+**Erasure SLA compatibility:** crypto-shred of the per-subject key in Vault — immediate. Encrypted PD in backups becomes unreadable **immediately** (live DB + Timeweb primary backup); old backup snapshots expire on rotation (≤90d offsite). The live domain row remains as a non-readable lifecycle tombstone under §3.6. Compliant with 152-FZ art. 14 (30 days).
 
 **RTO/RPO targets:**
 
@@ -183,7 +184,7 @@ lang: en
 
 **Retention — closed 2026-05-18 (DSO-63 #6): see ADR-0009 §2.6 + PD-lifecycle design spec §3.**
 
-Retention matrix per entity/table — in `packages/db/schema/pd/retention.ts` (TS object, CI-validated). Every PD-bearing table has: legal basis, retention period, deletion/anonymization, audit exception, owner. Partition retention enforcement (`DROP PARTITION`) follows the retention matrix.
+Retention matrix per table — in `packages/db/schema/pd/retention.ts` (TS object, CI-validated). Every PD-bearing table has: legal basis, retention period, erasure mechanism, audit exception, owner. Partition retention enforcement (`DROP PARTITION`) applies only to retention-managed operational/evidentiary streams; it is not a product command and does not permit physical deletion of a domain entity or relationship row (§3.6).
 
 - `audit_log` retention — **5y** (152-FZ + НК РФ + medical compliance), crypto-shred at term (ADR-0009 §2.4). The matching `DROP PARTITION` + crypto-shred automation is the #383 follow-up (the v1 slice ships partition auto-creation only; the drop-mask stays disabled until the first confirmed retention scenario).
 - `events_log`, `notifications`, `ai_pipeline_jobs` retention — defined in the retention matrix.
@@ -263,6 +264,19 @@ Retention matrix per entity/table — in `packages/db/schema/pd/retention.ts` (T
 
 - **drizzle-kit does not perform expand-contract automatically.** Mitigation v1: deployments in low-traffic windows (200 users — tolerable); destructive migrations manually split into 2 releases (add new column / backfill / drop old).
 - **OQ-D4 (open question):** when v2 zero-downtime is required — consider pgroll on top of drizzle-kit for destructive migrations.
+
+### 3.6. Domain row lifecycle contract
+
+The following rules are normative for every persistent domain entity and every domain relationship row. A soft-deletable row has lifecycle `status` + nullable `deleted_at`; an immutable/append-only row explicitly declares that removal is unsupported.
+
+1. **No physical deletion.** Application services, admin workflows, repositories and migrations must not issue `DELETE` for domain rows. Removal is a state transition that sets the domain lifecycle `status` to its inactive/removed terminal value and sets `deleted_at = now()` in one transaction.
+2. **Restore is explicit.** When the domain permits restoration, the command validates the transition, clears `deleted_at` and selects a valid active status. A soft-deleted row never becomes visible merely because a query omitted a condition.
+3. **Read contract.** Default repositories filter `deleted_at IS NULL`. Historical/audit/legal repositories opt in to tombstones through a separately named method. Partial indexes serve the active-row path; tests cover active, deleted and restored states.
+4. **Relationships are records.** Join rows follow the same lifecycle; unlinking entities soft-deletes the relationship row. Foreign keys between domain rows use `RESTRICT`/`NO ACTION`; `ON DELETE CASCADE` is forbidden for domain data.
+5. **Identifiers are durable.** Primary IDs, public slugs and historical relationships remain reserved after soft deletion. Reuse requires a separate explicit decision because it can rewrite history and invalidate external links.
+6. **PD erasure is orthogonal.** ADR-0009 erases/nulls/replaces/crypto-shreds sensitive values on the retained row and records the lifecycle timestamp. A readable PD payload behind `deleted_at` does not satisfy an erasure request.
+
+Operational records with no product identity or restore lifecycle — expiring sessions, idempotency keys, queue leases and retention-managed telemetry/append streams — are outside this domain-entity contract. Their bounded physical retention is defined explicitly by the owning operational contract; classifying a table as operational solely to bypass soft delete is prohibited.
 
 ---
 

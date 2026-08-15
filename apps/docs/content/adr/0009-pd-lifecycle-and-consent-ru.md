@@ -177,7 +177,7 @@ Forward-ref: контракт исполнения erasure (BullMQ-задача 
 
 ## 5. Deferred / Open Questions
 
-- **OQ-PD-1:** Vault deployment topology — отдельная VM с Hashicorp Vault vs Postgres + sealed master-key. Решается в design spec §5; trigger — IdP-spike результат (если IdP управляет своими секретами через Vault, переиспользуем; если нет — отдельный экземпляр).
+- **OQ-PD-1:** Vault deployment topology — отдельная VM с Hashicorp Vault или sealed Vault-light service вне Postgres backup set. Граница key custody решена в design spec §5; оставшийся trigger — результат IdP-spike (переиспользуем совместимый внешний Vault service, если он есть, иначе поднимаем отдельный экземпляр).
 - **OQ-PD-2:** Точный SLA на data-export (sync vs async) — зависит от объёма PD per subject. Pre-pilot — async by default (signed link via email). Pilot — измерить, оптимизировать если возможно.
 - **OQ-PD-3:** Granular consent — per-purpose (educational content vs marketing vs research) — vs всё-в-одном. Решается в design spec §2 (skew towards per-purpose, не блокирует ADR).
 

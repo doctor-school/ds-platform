@@ -177,7 +177,7 @@ All PD-lifecycle tables (`consent_*`, `data_export_requests`, `erasure_requests`
 
 ## 5. Deferred / Open Questions
 
-- **OQ-PD-1:** Vault deployment topology — dedicated Hashicorp Vault VM vs Postgres + sealed master-key. Decided in design spec §5; trigger — IdP-spike outcome (if the IdP manages its secrets via Vault, reuse; otherwise stand up a dedicated instance).
+- **OQ-PD-1:** Vault deployment topology — dedicated Hashicorp Vault VM vs a sealed Vault-light service outside the Postgres backup set. The key-custody boundary is decided in design spec §5; the remaining trigger is the IdP-spike outcome (reuse a compliant external Vault service if available, otherwise stand up a dedicated instance).
 - **OQ-PD-2:** Exact data-export SLA (sync vs async) — depends on PD volume per subject. Pre-pilot — async by default (signed link via email). Pilot — measure, optimize if feasible.
 - **OQ-PD-3:** Granular consent — per-purpose (educational content vs marketing vs research) vs all-in-one. Decided in design spec §2 (skew towards per-purpose; does not block ADR).
 

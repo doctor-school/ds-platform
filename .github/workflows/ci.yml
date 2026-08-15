@@ -989,7 +989,8 @@ jobs:
 
   # ─── AI-specific guards from ADR-0007 §2.6 ───────────────────────────
   # The PR-body-parsing guard family (spec-link BLOCK, registry-research,
-  # spec-status-fresh, prior-decisions, spec-deletion, epic-autoclose) lives in
+  # spec-status-fresh, prior-decisions, spec-deletion, catalog-deletion,
+  # epic-autoclose) lives in
   # `pr-body-guards.yml` (#651), collapsed there into one batch job (#1235): a
   # dedicated workflow that also triggers on the PR `edited` event, so a body
   # edit re-runs the guards without re-running this matrix. spec-link is

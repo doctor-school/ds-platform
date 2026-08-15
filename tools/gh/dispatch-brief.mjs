@@ -247,6 +247,7 @@ You CANNOT \`EnterWorktree\` (cwd is pinned to the repo root; the tool refuses t
 - FIRST action: \`cd ${wtAbs}\`, run \`git rev-parse --show-toplevel\`, confirm it is the worktree root BEFORE any edit. \`pnpm install\` in the worktree before any test.
 - Every edited path is absolute under \`${wt}\`. Never touch the shared main tree.
 - Branch: \`${branch}\`.
+- Stage by EXPLICIT path and read \`git status\` + \`git diff --stat\` before every commit. \`git add -A\` in a worktree is how the #1261 trap fired twice in one day: \`pnpm install\` materialises \`.agents/skills\` as a Windows junction onto \`apps/docs/content/skills/\`, git used to descend into it, and any unwind of that add (\`git reset --hard\`, \`git stash\`, \`git checkout -- .\`) deleted the REAL skill catalog through the link. The \`/.agents/skills/**\` ignore rule now blocks the mechanism and a \`catalog-deletion\` pre-commit guard fails the commit if a catalog deletion ever reaches the index — neither replaces reading your own diff.
 
 ## Research budget
 EDIT-FIRST: ≤15 tool calls before your first file edit. Recon facts below are DONE — do not re-verify handed facts. Hitting the cap without editing = STOP + return a partial verdict + what blocked you.

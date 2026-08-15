@@ -1,0 +1,3 @@
+{
+  "body": "Unrelated tooling change; the catalog deletions here are accidental collateral of a `git add -A` unwind.\n\nCloses #1261\nauthor:claude\n"
+}

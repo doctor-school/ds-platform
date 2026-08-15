@@ -35,12 +35,40 @@ function markSkipWorktree(root) {
   });
 }
 
+/**
+ * Bring the TRACKED bridge entry back into the working tree.
+ *
+ * Materialisation marks `.agents/skills` `--skip-worktree`, so once the path is
+ * removed by hand (`rm -rf .agents/skills`) git considers the worktree state
+ * authoritative-and-unchanged and will never restore it — every later
+ * `pnpm install` would then die on the `lstat` below. Un-skipping plus a checkout
+ * restores the tracked placeholder (Windows) or symlink (POSIX) so the normal
+ * materialisation path can run again.
+ */
+export function restoreTrackedBridge(root) {
+  execFileSync("git", ["update-index", "--no-skip-worktree", "--", BRIDGE_REL], {
+    cwd: root,
+    stdio: "ignore",
+  });
+  execFileSync("git", ["checkout", "--", BRIDGE_REL], {
+    cwd: root,
+    stdio: "ignore",
+  });
+}
+
 export function ensureCodexSkillBridge(
   root = resolve(dirname(fileURLToPath(import.meta.url)), "..", ".."),
 ) {
   const bridge = resolve(root, BRIDGE_REL);
   const target = resolve(root, "apps/docs/content/skills");
-  const stat = lstatSync(bridge);
+  let stat;
+  try {
+    stat = lstatSync(bridge);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    restoreTrackedBridge(root);
+    stat = lstatSync(bridge);
+  }
   const kind = bridgeKind(
     stat,
     stat.isFile() ? readFileSync(bridge, "utf8") : "",

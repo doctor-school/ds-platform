@@ -55,6 +55,7 @@
     "lint:route-targets": "tsx tools/lint/route-target-lint.ts",
     "lint:showcase-coverage": "tsx tools/lint/showcase-coverage-lint.ts",
     "lint:showcase-snippet": "tsx tools/lint/showcase-snippet-lint.ts",
+    "lint:catalog-deletion": "tsx tools/lint/catalog-deletion-lint.ts",
     "lint:spec-deletion": "tsx tools/lint/spec-deletion-lint.ts",
     "lint:spec-status": "tsx tools/lint/spec-status-lint.ts",
     "lint:stage-b": "tsx tools/lint/stage-b-lint.ts",
@@ -130,7 +131,7 @@
     "yaml": "^2.9.0"
   },
   "simple-git-hooks": {
-    "pre-commit": "pnpm lint-staged"
+    "pre-commit": "pnpm lint-staged && if [ -f tools/lint/catalog-deletion-lint.ts ]; then pnpm lint:catalog-deletion --staged; fi"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,cjs}": [

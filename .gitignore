@@ -77,3 +77,14 @@ apps/docs/brandbook/
 
 # playwright-bdd generated tests + reports (apps/admin, #595)
 .features-gen/
+
+# Codex skill bridge — CONTENTS only (#1261). `.agents/skills` itself is TRACKED
+# (a symlink blob; `pnpm agent:setup` materialises it as a Windows junction onto
+# `apps/docs/content/skills/`). Without this rule git-for-Windows descends INTO the
+# junction: `git add -A` stages ~28 phantom paths under `.agents/skills/**`, and any
+# routine unwind of that add (`git reset --hard`, `git stash`, `git checkout -- .`)
+# then removes those phantom paths THROUGH the junction — deleting the REAL skill
+# catalog, the AGENTS.md §3.3 contract surface. Ignoring the subtree makes git blind
+# to it, so nothing can be staged (or unstaged) through the link. No-op on POSIX,
+# where the bridge is a real symlink git never traverses.
+/.agents/skills/**

@@ -175,6 +175,15 @@ export function nextStepsLines(relPath) {
     "⚠  A fresh worktree has no node_modules, so the pre-commit hook (lint-staged)",
     "⚠  is not installed yet — your FIRST COMMIT (and any test run) WILL FAIL until",
     "⚠  you run `pnpm install`.",
+    "",
+    "⚠  STAGE BY EXPLICIT PATH — never `git add -A` here, and read `git status` +",
+    "⚠  `git diff --stat` before every commit. `pnpm install` materialises",
+    "⚠  `.agents/skills` as a Windows junction onto apps/docs/content/skills/; git",
+    "⚠  used to descend into it, so an `add -A` plus any unwind (`reset --hard`,",
+    "⚠  `stash`, `checkout -- .`) DELETED the real skill catalog (#1261, fired twice",
+    "⚠  in one day). The `/.agents/skills/**` ignore rule blocks that mechanism and",
+    "⚠  the `catalog-deletion` pre-commit guard fails the commit if a catalog",
+    "⚠  deletion ever reaches the index — neither replaces reading your own diff.",
   ];
 }
 

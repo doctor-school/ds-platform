@@ -181,18 +181,20 @@ export class AdminAuthController {
   @RateLimited()
   @TimingEqualized()
   @HttpCode(200)
-  // `audit: low-stakes` is the honest value, not an under-classification: the
-  // 011 Event Model says `StartMfaEnrollment` "emits nothing durable (the factor
-  // is not yet confirmed)". `high-stakes` asserts a MANDATORY terminal row
-  // (endpoint-authz design §3), so claiming it here would advertise a row the
-  // spec forbids — and this is the one call that touches the shared secret, so
-  // "no row" is a property to protect, not a gap to close. The lifecycle row is
-  // the verify's, where possession is proven.
+  // `audit: high-stakes` — this is the one call that mints and hands over the
+  // shared TOTP secret, so it belongs under the emission-completeness guard. It
+  // owes NO durable row: the 011 Event Model says `StartMfaEnrollment` "emits
+  // nothing durable (the factor is not yet confirmed)", and the secret must
+  // never reach the ledger. That is stated positively by the route's
+  // `noneBySpec` entry in the coverage registry
+  // (`src/authz/audit-emission-coverage.ts`) — "no row" is a property to
+  // protect, not a gap to close. The lifecycle row is the verify's, where
+  // possession is proven.
   @Authz({
     access: "pending-auth",
     roles: ["platform_admin"],
     check: "none",
-    audit: "low-stakes",
+    audit: "high-stakes",
     tests: ["EARS-4", "EARS-5"],
   })
   async startMfaEnrollment(

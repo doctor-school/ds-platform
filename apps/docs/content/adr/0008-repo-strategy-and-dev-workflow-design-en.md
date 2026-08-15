@@ -364,10 +364,8 @@ jobs:
   markdown-links:
     needs: setup
     # ... lycheeverse/lychee-action@v2 with args: --no-progress --include-fragments .
-  module-readme:
-    needs: setup
-    continue-on-error: true # WARN v1
-    # ... pnpm exec tsx tools/lint/module-readme-lint.ts
+  # module-readme is WARN — it is a STEP of the `guards-warn` batch below, not a
+  # job of its own.
 
   # ─── Glossary 4-layer validation from ADR-0006 §6 ────────────────────
   glossary-mdx:
@@ -384,22 +382,67 @@ jobs:
   spec-link:
     needs: setup
     # ... pnpm exec tsx tools/lint/spec-link-lint.ts (BLOCK)
-  ears-tests:
+  # ears-tests / tdd-signal / spec-status-fresh / prior-decisions are WARN —
+  # steps of the `guards-warn` batch below, not jobs of their own.
+
+  # ─── WARN-posture guards, batched (ADR-0007 §2.6) ────────────────────
+  # SEVERITY LIVES IN EXIT CODES, never in a job name — and `continue-on-error`
+  # goes on the STEP, NEVER on the job. A job-level `continue-on-error` still
+  # lets the CHECK-RUN conclude FAILURE, and the merge gate blocks on any red
+  # check-run: one WARN finding would then block every open PR while the required
+  # `ci` check stayed green. The WARN encoding is two exit codes:
+  #   (1) `continue-on-error: true` on each guard STEP, and
+  #   (2) a final `if: always()` WARN-report step that lists every flagged guard
+  #       in the job summary and EXITS 0.
+  # A run carrying WARN findings therefore CONCLUDES SUCCESS while staying fully
+  # visible (per-step red annotation + log + summary). The job itself is never
+  # `continue-on-error`: an infra failure (checkout/install/dead runner) must
+  # still fail it — after the above that is the only thing a red `guards-warn`
+  # can mean, and it must block, because on the board it is indistinguishable
+  # from "everything is clean".
+  guards-warn:
     needs: setup
-    continue-on-error: true # WARN v1
-    # ... pnpm exec tsx tools/lint/ears-test-lint.ts
-  tdd-signal:
-    needs: setup
-    continue-on-error: true # WARN v1
-    # ... pnpm exec tsx tools/lint/tdd-signal-lint.ts
-  spec-status-fresh:
-    needs: setup
-    continue-on-error: true # WARN v1
-    # ... pnpm exec tsx tools/lint/spec-status-lint.ts
-  prior-decisions:
-    needs: setup
-    continue-on-error: true # WARN v1
-    # ... pnpm exec tsx tools/lint/prior-decisions-lint.ts
+    runs-on: ubuntu-latest
+    steps:
+      # ... checkout / pnpm / node / pnpm install --frozen-lockfile
+      - name: WARN · module-readme
+        id: warn_module_readme
+        continue-on-error: true # STEP-level, always
+        run: pnpm exec tsx tools/lint/module-readme-lint.ts
+      - name: WARN · ears-tests
+        id: warn_ears_tests
+        continue-on-error: true
+        run: pnpm exec tsx tools/lint/ears-test-lint.ts
+      - name: WARN · tdd-signal
+        id: warn_tdd_signal
+        continue-on-error: true
+        run: pnpm exec tsx tools/lint/tdd-signal-lint.ts
+      - name: WARN · spec-status-fresh
+        id: warn_spec_status_fresh
+        continue-on-error: true
+        run: pnpm exec tsx tools/lint/spec-status-lint.ts
+      - name: WARN · prior-decisions
+        id: warn_prior_decisions
+        continue-on-error: true
+        run: pnpm exec tsx tools/lint/prior-decisions-lint.ts
+      # The other half of the encoding — the batch's visibility surface.
+      - name: WARN report (job summary — non-blocking by contract)
+        if: always()
+        env:
+          WARN_OUTCOMES: |
+            module-readme=${{ steps.warn_module_readme.outcome }}
+            ears-tests=${{ steps.warn_ears_tests.outcome }}
+            tdd-signal=${{ steps.warn_tdd_signal.outcome }}
+            spec-status-fresh=${{ steps.warn_spec_status_fresh.outcome }}
+            prior-decisions=${{ steps.warn_prior_decisions.outcome }}
+        run: |
+          failed="$(printf '%s\n' "$WARN_OUTCOMES" | grep -E '=failure$' | cut -d= -f1 || true)"
+          echo "### WARN guards (ADR-0007 §2.6 posture)" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$failed" ]; then
+            echo "All WARN guards clean." >> "$GITHUB_STEP_SUMMARY"; exit 0
+          fi
+          printf -- '- `%s`\n' $failed >> "$GITHUB_STEP_SUMMARY"
+          exit 0 # WARN is visible, never merge-blocking
 
   # ─── Meta-job: single status check for branch protection ─────────────
   ci-result:
@@ -430,9 +473,9 @@ jobs:
           echo "All required jobs green"
 ```
 
-**Status check naming:** the branch protection rule (§2.6 / §4) references `ci` — the GitHub job name `ci-result` is displayed as `CI / ci-result`. To avoid confusion, you can set an explicit `name: ci` on the meta-job via `jobs.ci.name`. WARN-only jobs (module-readme, ears-tests, tdd-signal, spec-status-fresh, prior-decisions) are NOT listed in `ci-result.needs` — they appear as separate checks without blocking merge.
+**Status check naming:** the branch protection rule (§2.6 / §4) references `ci` — the GitHub job name `ci-result` is displayed as `CI / ci-result`. To avoid confusion, you can set an explicit `name: ci` on the meta-job via `jobs.ci.name`. The `guards-warn` batch is NOT listed in `ci-result.needs` — it appears as its own check, which stays green while carrying visible WARN findings (they never red it) and goes red only if the guards did not run at all.
 
-**Severity transition:** WARN v1 → BLOCK v2 (AI-stack design spec §11 Phase 1 transition) = remove `continue-on-error` + add job to `ci-result.needs`.
+**Severity transition:** WARN v1 → BLOCK v2 (AI-stack design spec §11 Phase 1 transition) = move the guard's STEP out of `guards-warn` into the `guards-block` batch (a plain step, no `continue-on-error`) and drop its WARN-report row; `guards-block` is already in `ci-result.needs`. Never by putting `continue-on-error` on a job — that shape leaves the check-run concluding FAILURE on a WARN finding and blocks the merge gate (the defect #1253 removed).
 
 ### 3.2 `.github/workflows/agent-review.yml`
 

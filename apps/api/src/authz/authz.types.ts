@@ -57,11 +57,15 @@ export type AuthzAccess = "public" | "authenticated" | "pending-auth";
 export type AuthzCheck = "none" | "fast-path" | "policy";
 
 /**
- * Audit requirement (spec §3). `high-stakes` ⇒ a terminal `auth_audit` ledger
- * entry is mandatory. For auth/security routes that entry is emitted explicitly
- * at the command site (the `AuthAuditLog` port), by design (#135); a CI guard
- * enforces emission completeness over the `high-stakes` route set — see
- * authz/README.md.
+ * Audit requirement (spec §3). `high-stakes` ⇒ the route's audit posture is
+ * accounted for in the emission-coverage registry
+ * (`audit-emission-coverage.ts`): normally a mandatory terminal `auth_audit`
+ * ledger entry, emitted explicitly at the command site (the `AuthAuditLog`
+ * port) by design (#135), and — where the governing spec says the command emits
+ * nothing durable — an explicit, spec-citing `noneBySpec` entry instead. A CI
+ * guard enforces that accounting over the whole `high-stakes` route set, so
+ * "owes no row" is a reviewed statement rather than an under-classification —
+ * see authz/README.md.
  */
 export type AuthzAudit = "none" | "low-stakes" | "high-stakes";
 

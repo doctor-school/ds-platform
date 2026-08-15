@@ -1,6 +1,6 @@
 # `@ds/portal`
 
-The DS Platform **user portal** — `app.doctor.school` (ADR-0004 §3). The
+The DS Platform **user portal** — `academy.doctor.school` (ADR-0004 §3). The
 multi-role cabinet surface (doctor / expert / clinic / investor), built as a
 Next.js 16 App Router app with custom React on the shared design system — **not**
 Refine (Refine is `apps/admin` only; ADR-0004 §5.3 / §7).

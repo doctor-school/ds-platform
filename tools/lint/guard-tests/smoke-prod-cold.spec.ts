@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   COLD_ERROR_MARKERS,
   checkColdPage,
-  checkLegacyRedirect,
   checkRegisterClosed,
   findColdErrorMarker,
 } from "../../deploy/smoke-prod.mjs";
@@ -253,62 +252,5 @@ describe("smoke-prod checkRegisterClosed() — #877 public self-registration sta
         url: "https://id.example/ui/v2/login/register",
       }),
     ).toThrow(/self-registration appears OPEN/);
-  });
-});
-
-describe("smoke-prod checkLegacyRedirect() — #1171 legacy app. → academy. hop", () => {
-  // The one machine-checkable criterion of #1171: the retired portal host must
-  // 301 PATH-PRESERVINGLY to the new one, so an already-delivered OTP/verification
-  // deep link (which carries a real expiry clock) survives the move. The three
-  // cases below are the three ways this assertion could itself be wrong — each
-  // one lands on a healthy 200 portal page in real life, so only an exact-match
-  // check catches them.
-  const OPTS = { path: "/login?smoke=1", expectHost: "academy.example" };
-  const ok = {
-    status: 301,
-    headers: { location: "https://academy.example/login?smoke=1" },
-  };
-
-  it("PASSES an exact 301 whose Location preserves path AND query", () => {
-    expect(() => checkLegacyRedirect(ok, OPTS)).not.toThrow();
-    expect(checkLegacyRedirect(ok, OPTS)).toMatch(/301 →/);
-  });
-
-  it("FAILS a 302 — #1171 asks for a PERMANENT move", () => {
-    // A 302 tells caches and address bars the move is temporary, which is what
-    // keeps the dead host alive long after #1173 retires it.
-    expect(() => checkLegacyRedirect({ ...ok, status: 302 }, OPTS)).toThrow(
-      /→ 302 \(expected 301 permanent\)/,
-    );
-  });
-
-  it("FAILS a 301 that DROPPED the path (lands on the home screen)", () => {
-    expect(() =>
-      checkLegacyRedirect(
-        { status: 301, headers: { location: "https://academy.example/" } },
-        OPTS,
-      ),
-    ).toThrow(/expected https:\/\/academy\.example\/login\?smoke=1/);
-  });
-
-  it("FAILS a 301 that kept the path but DROPPED the query", () => {
-    expect(() =>
-      checkLegacyRedirect(
-        { status: 301, headers: { location: "https://academy.example/login" } },
-        OPTS,
-      ),
-    ).toThrow(/expected https:\/\/academy\.example\/login\?smoke=1/);
-  });
-
-  it("FAILS a 301 pointing at the WRONG host, and one with no Location at all", () => {
-    expect(() =>
-      checkLegacyRedirect(
-        { status: 301, headers: { location: "https://elsewhere.example/login?smoke=1" } },
-        OPTS,
-      ),
-    ).toThrow(/Location: https:\/\/elsewhere\.example/);
-    expect(() => checkLegacyRedirect({ status: 301, headers: {} }, OPTS)).toThrow(
-      /Location: \(absent\)/,
-    );
   });
 });

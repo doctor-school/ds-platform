@@ -2,7 +2,7 @@
 # on-box .env provisioning (spec §5.3, §5.4, §6.3).
 
 output "api_prod_public_ip" {
-  description = "api-prod public IPv4 — set Beget A-records api./academy./admin./id.doctor.school to this (spec §5.3). The legacy portal host app.doctor.school also points here while its redirect vhost lives (#1171)."
+  description = "api-prod public IPv4 — set Beget A-records api./academy./admin./id.doctor.school to this (spec §5.3). These four are the complete public record set: the pre-#1171 portal host was retired with its A-record in #1173."
   value       = twc_server_ip.api_prod_ipv4.ip
 }
 

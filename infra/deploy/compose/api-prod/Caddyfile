@@ -16,15 +16,6 @@ academy.doctor.school {
 	reverse_proxy portal:3001
 }
 
-# Legacy portal host (#1171). Kept as a path-preserving permanent redirect, not a
-# second origin: e-mail links already delivered (Zitadel OTP `sendCode.urlTemplate`,
-# BFF mailer notices) carry app.doctor.school and must keep resolving until they age
-# out. `{uri}` preserves path + query, so a deep link survives the hop. Retiring this
-# vhost (and its A-record) is tracked as #1173, not part of the cutover.
-app.doctor.school {
-	redir https://academy.doctor.school{uri} permanent
-}
-
 # Admin app (Next.js + Refine standalone) — operator event/program management
 # (webinars wave-1, #729). Same auto-ACME treatment as the other vhosts (spec §5.2);
 # the admin app proxies /v1/* to the api internally (same-origin __Host- cookie,

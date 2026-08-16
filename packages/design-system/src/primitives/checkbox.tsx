@@ -39,14 +39,15 @@ function CheckGlyph() {
   );
 }
 
-export interface CheckboxProps
-  extends React.InputHTMLAttributes<HTMLInputElement> {
+export interface CheckboxProps extends React.InputHTMLAttributes<HTMLInputElement> {
   /** Optional visible label rendered next to the box (wrapped by the same label). */
   children?: React.ReactNode;
+  /** Semantic label tone for the surface that owns the checkbox. */
+  tone?: "default" | "on-primary";
 }
 
 const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
-  ({ className, children, disabled, ...props }, ref) => (
+  ({ className, children, disabled, tone = "default", ...props }, ref) => (
     <label
       className={cn(
         "inline-flex items-center gap-2",
@@ -74,7 +75,14 @@ const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
         <CheckGlyph />
       </span>
       {children ? (
-        <span className="text-sm text-foreground peer-disabled:text-muted-2">
+        <span
+          className={cn(
+            "text-sm",
+            tone === "on-primary"
+              ? "text-primary-surface-foreground peer-disabled:text-primary-surface-foreground"
+              : "text-foreground peer-disabled:text-muted-2",
+          )}
+        >
           {children}
         </span>
       ) : null}

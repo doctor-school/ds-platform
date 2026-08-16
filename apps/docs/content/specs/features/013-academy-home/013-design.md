@@ -3,7 +3,7 @@ title: "013 — Academy home and partnership form (Design)"
 description: "Minimal portal design for the private JSON-backed Academy partnership form."
 slug: 013-academy-home-design
 requirements: ./013-requirements-en.md
-status: Draft
+status: Shipped
 lang: en
 ---
 

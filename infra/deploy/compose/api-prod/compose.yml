@@ -120,6 +120,12 @@ services:
       # overrode the image's ENV PORT=3001, the portal bound 3000, and Caddy's
       # portal:3001 upstream broke). compose `environment:` outranks env_file.
       PORT: "3001"
+      # Feature 013 EARS-6: fail-closed private JSON persistence. This named
+      # volume is mounted into portal only; the image pre-creates the mount point
+      # node-owned with 0700 and each record is written 0600.
+      ACADEMY_SUBMISSIONS_DIR: /var/lib/ds-platform/academy-submissions
+    volumes:
+      - academy_partnership_submissions:/var/lib/ds-platform/academy-submissions
     depends_on:
       api:
         condition: service_started
@@ -342,3 +348,4 @@ volumes:
   caddy_data:
   caddy_config:
   centrifugo_data:
+  academy_partnership_submissions:

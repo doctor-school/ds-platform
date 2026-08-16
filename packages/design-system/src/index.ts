@@ -7,6 +7,10 @@ export { interactiveBase } from "./primitives/interactive-base";
 export { Button, buttonVariants, type ButtonProps } from "./primitives/button";
 export { Link, linkVariants, type LinkProps } from "./primitives/link";
 export { Input } from "./primitives/input";
+export {
+  NativeSelect,
+  type NativeSelectProps,
+} from "./primitives/native-select";
 export { Label } from "./primitives/label";
 export {
   Card,
@@ -24,7 +28,10 @@ export {
   FormControl,
   FormDescription,
   FormMessage,
+  FormErrorSummary,
   FormField,
+  type FormErrorSummaryItem,
+  type FormErrorSummaryProps,
 } from "./primitives/form";
 export {
   InputOTP,
@@ -92,4 +99,9 @@ export {
 } from "./primitives/fields";
 
 // ── Blocks (#235 / #227) ──────────────────────────────────────────────────────
-export { AuthLayout, AuthCard, OtpFocusScreen, maskDestination } from "./blocks";
+export {
+  AuthLayout,
+  AuthCard,
+  OtpFocusScreen,
+  maskDestination,
+} from "./blocks";

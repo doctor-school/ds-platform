@@ -19,6 +19,7 @@ copy — and avoids a publish/build cycle for an internal package.
 ```ts
 import { Button } from "@ds/design-system/button";
 import { Form, FormField, FormItem, FormControl } from "@ds/design-system/form";
+import { NativeSelect } from "@ds/design-system/native-select";
 import {
   InputOTP,
   InputOTPGroup,
@@ -52,20 +53,40 @@ the consuming app's CSS even though they live outside the app tree.
 
 ## Component set (003 auth forms)
 
-| Export                     | Purpose                                                                                                                                                  |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Button` (`./button`)      | `cva` variants — primary / outline / ghost / destructive / link                                                                                          |
-| `Link` (`./link`)          | Nav/footer link — `interactiveBase` ring + `link` state row; `standalone` (no resting underline) / `inline` variants, `asChild` wraps `next/link` (#324) |
-| `Input` (`./input`)        | Text/email/password field                                                                                                                                |
-| `Label` (`./label`)        | Radix label primitive                                                                                                                                    |
-| `Card` (`./card`)          | `Card` + `Header`/`Title`/`Description`/`Content`/`Footer` — the auth-form shell                                                                         |
-| `Form` (`./form`)          | RHF binding — `Form`/`FormField`/`FormItem`/`FormLabel`/`FormControl`/`FormMessage` + `FormError` (form-level submit error) (ADR-0004 §9)                |
-| `InputOTP` (`./input-otp`) | One-time-code field for email-OTP / SMS-OTP (EARS-6/7)                                                                                                   |
+| Export                             | Purpose                                                                                                                                                        |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Button` (`./button`)              | `cva` variants — primary / on-primary / outline / ghost / destructive / link                                                                                   |
+| `Link` (`./link`)                  | Nav/footer link — `standalone` / `inline`, semantic `tone="on-primary"`, full interaction states, and `asChild` routing composition (#324)                     |
+| `Input` (`./input`)                | Text/email/password field                                                                                                                                      |
+| `NativeSelect` (`./native-select`) | Native single-select — official shadcn/ui composition, Input-parity shell, quiet decorative chevron, browser-owned keyboard/type-ahead/mobile picker semantics |
+| `Label` (`./label`)                | Radix label primitive                                                                                                                                          |
+| `Card` (`./card`)                  | `Card` + `Header`/`Title`/`Description`/`Content`/`Footer` — the auth-form shell                                                                               |
+| `Form` (`./form`)                  | RHF binding — field primitives, `FormError` (submit error), and focusable linked `FormErrorSummary` for long forms (>3 fields) (ADR-0004 §9; ADR-0013 §7)      |
+| `InputOTP` (`./input-otp`)         | One-time-code field for email-OTP / SMS-OTP (EARS-6/7)                                                                                                         |
 
 Forms follow the ADR-0004 §9 pattern: **RHF + `@hookform/resolvers/zod` + shadcn
 `<Form>`**, with the Zod schema imported from the SSOT (`@ds/schemas`, once the
 auth schemas land in F1/F2). The resolver + schema live in the consuming app, not
 here.
+
+### Surface-safe primary-surface contracts
+
+Controls on the invariant `bg-primary-surface` blue request the semantic
+`tone="on-primary"` contract instead of overriding child classes at the app
+call-site. `Checkbox` applies full-strength `text-primary-surface-foreground` to
+its visible label (enabled and disabled); `FormMessage` and `FormError` apply the
+same AA-safe foreground while preserving their existing glyph and weight.
+`Link` uses that foreground at rest, keeps its underline/focus affordances, and
+uses the AA-safe `primary-surface-muted` token for its active delta. Omit `tone`
+(or pass `default`) everywhere else; the original
+`text-foreground`/`text-destructive-text`/`text-primary-action` behavior remains
+unchanged.
+
+The raised action uses the variant API instead: `Button variant="on-primary"`.
+It composes the existing invariant white-chip roles
+(`bg-header-foreground text-header-chip-foreground shadow-header-chip`) so the
+CTA remains white with navy text and a dark hard cast in both themes. Hover,
+active, focus-visible, disabled, and `loading` behavior stay owned by `Button`.
 
 ## Interaction-state contract (ADR-0013 §7)
 
@@ -127,7 +148,7 @@ stay green).
 | -------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Label ↔ control gap  | `flex flex-col gap-2.5` (10 px)                                               | `FormItem` inner gap; `2.5` not `1.5` so the control's `interactiveBase` `focus-visible:ring-2 ring-offset-2` (~4 px above the input) does not touch the label on focus (ring-clearance, #227/#267 live-proven)           |
 | Field-group spacing  | `space-y-4` (16 px)                                                           | set on the `<form>` / fields wrapper, **not** the `FormItem`; **larger** than the 10 px in-field gap so an on-demand message stays closer to its own field than to the next field's label (proximity, #333 owner finding) |
-| Field height         | `h-9`                                                                         | `Input` / single-line controls (matches `Button` default)                                                                                                                                                                 |
+| Field height         | `h-11`                                                                        | `Input` / `NativeSelect` single-line controls                                                                                                                                                                             |
 | Message (inline)     | `text-xs` (12 px), rendered on demand                                         | **no reserved height** — renders only when there is a helper or an error; small and **not bold** (#333 owner finding)                                                                                                     |
 | Helper (resting)     | `text-xs text-muted-foreground`                                               | shown by default; **omit `FormMessage` children** for a field with no helper → nothing renders at rest                                                                                                                    |
 | Error (swap-in)      | `text-xs text-destructive` (`role=alert`)                                     | replaces the helper **in place**; the field's invalidity is also carried by the input border (below)                                                                                                                      |
@@ -140,8 +161,26 @@ slice-B `min-h-5` over-spacing, K-1). When present it shows the helper (muted) b
 default and **swaps the error into its place** (`role="alert"`, destructive) on
 failure — the two never coexist. The accepted cost is a small one-line downward
 shift when an error appears; validation is **on blur** (`mode: onTouched`) so it
-never fires mid-typing. Long forms (**>3 fields**) use a `<FormErrorSummary>`
-panel **below the submit button** instead (deferred until the first such form).
+never fires mid-typing. Long forms (**>3 fields**) additionally render
+`<FormErrorSummary>` **below the submit button**. Pass localized
+`{ fieldId, message }` items in field order, hold its forwarded `HTMLDivElement`
+ref, and call `ref.current?.focus()` after a rejected submit. The summary owns
+`role="alert"`, `tabIndex={-1}`, its accessible heading, and native `#fieldId`
+links that focus their target controls on activation; `errors={[]}` renders
+nothing. App copy and validation wiring stay in the app.
+
+**Native single-select.** `NativeSelect` is an owned adaptation of official
+shadcn/ui `NativeSelect` (MIT). It remains a real `<select>` — the browser owns
+keyboard arrows, type-ahead, form submission, and the mobile picker — with only a
+pointer-inert, `aria-hidden` chevron layered above it. Its token-only shell matches
+`Input`: `h-11 w-full border-2 bg-background px-3.5 py-3 pr-10 text-sm`; empty
+uses `border-hairline text-muted-foreground`, filled uses
+`border-border text-foreground`, hover uses `border-ring`, active uses
+`border-primary-action bg-muted`, focus-visible uses
+`border-ring shadow-focus`, invalid uses
+`border-destructive bg-destructive-tint`, and disabled uses
+`border-hairline bg-muted text-muted-foreground`. Use a disabled empty option as
+the placeholder; never preselect a real answer in a required field.
 
 **One error-style source.** The error look (`text-xs text-destructive`,
 `role="alert"`) lives in **one place** — `FormMessage` (field-level) and
@@ -151,12 +190,19 @@ compose the shared tone constants in `form.tsx`. A page renders
 className="…">` — duplicating the error style per screen is the #333 Stage-B
 finding the design system exists to prevent.
 
+On `bg-primary-surface`, compose `tone="on-primary"` on `FormMessage` /
+`FormError`; the primitive swaps only the semantic text colour to
+`text-primary-surface-foreground`. Do not repeat a `className` override in the
+page.
+
 ```
 FormItem            → flex flex-col gap-2.5  (label ↔ control, tight + ring-clearing)
   FormLabel                                  (neutral on error — no text-destructive)
-  FormControl        → Input h-9             (aria-invalid → destructive border + ring)
+  FormControl        → Input / NativeSelect h-11 (aria-invalid → destructive border + tint)
   FormMessage        → text-xs, on demand    (helper muted; error swaps in place; null when empty)
 <form> / fields      → space-y-4             (16 px — message hugs its field, not the next)
+  submit button
+  FormErrorSummary   → alert + linked errors (long forms only; programmatic focus target)
 ```
 
 **Enforcement.** Two static guards keep this contract from silently regressing
@@ -173,6 +219,7 @@ defects — a `min-h-*` reserved blank line on a message (K-1), a duplicate
 | Kind                 | Resting                                                                                            | Hover                                                                                      | Active                          | Disabled                                                              |
 | -------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------- | --------------------------------------------------------------------- |
 | `Button` default     | `bg-primary-action text-primary-foreground shadow`                                                 | `hover:bg-primary-hover`                                                                   | `active:bg-primary-pressed`     | `disabled:opacity-50 disabled:pointer-events-none` + L1 `not-allowed` |
+| `Button` on-primary  | `bg-header-foreground text-header-chip-foreground shadow-header-chip`                              | `hover:shadow-header-chip-hover`                                                           | `active:shadow-none`            | same                                                                  |
 | `Button` secondary   | `bg-secondary text-secondary-foreground` **`border border-input`** `shadow-sm`                     | `hover:border-ring hover:bg-secondary/70`                                                  | `active:bg-secondary/60`        | same                                                                  |
 | `Button` outline     | `border border-input bg-background shadow-sm`                                                      | `hover:bg-accent hover:text-accent-foreground`                                             | `active:bg-accent/80`           | same                                                                  |
 | `Button` ghost       | —                                                                                                  | `hover:bg-accent hover:text-accent-foreground`                                             | `active:bg-accent/80`           | same                                                                  |
@@ -187,6 +234,9 @@ defects — a `min-h-*` reserved blank line on a message (K-1), a duplicate
 - **Link (#3):** the new `Link` primitive composes `interactiveBase` (focus ring)
   - `text-primary-action hover:underline underline-offset-4 active:text-primary-action/80`; no
     resting underline on standalone nav links, resting underline on in-body links.
+  - on `bg-primary-surface`, pass `tone="on-primary"` for
+    `text-primary-surface-foreground active:text-primary-surface-muted`; the
+    underline and `focus-visible:shadow-focus` contract is unchanged.
 - **Segment separation (#4, redone in #333):** `TabsList` carries a `gap-2` track
   between segments so an inactive segment's `hover:bg-background/50` never butts
   flush against the active segment (the slice-B hover-gluing defect, K-2). The

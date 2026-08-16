@@ -55,4 +55,27 @@ describe("Checkbox — token-class contract (#513)", () => {
     const input = container.querySelector('input[type="checkbox"]');
     expect(input).toHaveClass("peer", "sr-only");
   });
+
+  it("EARS-5: when the label sits on a primary surface, the system shall use the readable on-primary tone", () => {
+    render(<Checkbox tone="on-primary">Согласен</Checkbox>);
+
+    const label = screen.getByText("Согласен");
+    expect(label).toHaveClass(
+      "text-primary-surface-foreground",
+      "peer-disabled:text-primary-surface-foreground",
+    );
+    expect(label).not.toHaveClass(
+      "text-foreground",
+      "peer-disabled:text-muted-2",
+    );
+  });
+
+  it("keeps the default label tone unchanged", () => {
+    render(<Checkbox>Согласен</Checkbox>);
+
+    expect(screen.getByText("Согласен")).toHaveClass(
+      "text-foreground",
+      "peer-disabled:text-muted-2",
+    );
+  });
 });

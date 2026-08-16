@@ -93,6 +93,33 @@ test.describe("#351 interaction-state runtime smoke on the showcase (backend-fre
       .not.toBe(before);
   });
 
+  test("Button: on-primary CTA stays distinct from its surface in both themes", async ({
+    page,
+  }) => {
+    const surface = page.getByTestId("button-on-primary-surface-default");
+    const button = page.getByTestId("button-on-primary-default");
+
+    for (const theme of ["light", "dark"] as const) {
+      await page.evaluate((nextTheme) => {
+        document.documentElement.classList.toggle("dark", nextTheme === "dark");
+      }, theme);
+      await page.evaluate(
+        () =>
+          new Promise((resolve) => requestAnimationFrame(() => resolve(null))),
+      );
+
+      const surfaceBackground = await cssProp(surface, "background-color");
+      const buttonBackground = await cssProp(button, "background-color");
+      const buttonForeground = await cssProp(button, "color");
+      const buttonBorder = await cssProp(button, "border-color");
+
+      expect(buttonBackground).not.toBe(surfaceBackground);
+      expect(buttonForeground).toBe(surfaceBackground);
+      expect(buttonBorder).toBe(buttonBackground);
+      expect(await cssProp(button, "box-shadow")).not.toBe("none");
+    }
+  });
+
   test("keyboard focus paints a visible focus-visible ring", async ({
     page,
   }) => {
@@ -113,5 +140,47 @@ test.describe("#351 interaction-state runtime smoke on the showcase (backend-fre
     // un-focused signature — a visible keyboard-focus affordance.
     const focusedSig = await focusSignature(backLink);
     expect(focusedSig).not.toBe(unfocused);
+  });
+
+  test("NativeSelect: keyboard arrows change the real native value", async ({
+    page,
+  }) => {
+    const select = page.getByRole("combobox", { name: "Роль" }).first();
+    await expect(select).toHaveJSProperty("tagName", "SELECT");
+    await select.focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(select).toHaveValue("Эксперт");
+  });
+
+  test("NativeSelect: hover and active provide measurable token-state deltas", async ({
+    page,
+  }) => {
+    const select = page.getByRole("combobox", { name: "Роль" }).first();
+    await page.mouse.move(0, 0);
+    const restingBorder = await cssProp(select, "border-color");
+
+    await select.hover();
+    await expect
+      .poll(async () => cssProp(select, "border-color"))
+      .not.toBe(restingBorder);
+    const hoverBorder = await cssProp(select, "border-color");
+
+    const box = await select.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await page.mouse.down();
+    await expect
+      .poll(async () => cssProp(select, "border-color"))
+      .not.toBe(hoverBorder);
+    await page.mouse.up();
+  });
+
+  test("NativeSelect: the mobile-width surface keeps native selection semantics", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const select = page.getByRole("combobox", { name: "Роль" }).first();
+    await select.selectOption("Партнёр");
+    await expect(select).toHaveValue("Партнёр");
   });
 });

@@ -16,6 +16,7 @@ import {
   WHAT_CARDS,
 } from "./fixtures";
 import { LeadDemoFields } from "./lead-demo-fields";
+import { submitAcademyPartnership } from "./academy-partnership-action";
 import { ThemeToggle } from "./theme-toggle";
 import styles from "./academy-home.module.css";
 
@@ -546,7 +547,7 @@ function LeadDemoSection() {
           </p>
         </div>
 
-        <LeadDemoFields />
+        <LeadDemoFields submitAction={submitAcademyPartnership} />
       </Container>
     </section>
   );

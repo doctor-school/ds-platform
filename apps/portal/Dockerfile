@@ -56,6 +56,10 @@ COPY --from=build --chown=node:node /repo/apps/portal/.next/standalone ./
 # Static assets + public are NOT in standalone — copy them alongside.
 COPY --from=build --chown=node:node /repo/apps/portal/.next/static ./apps/portal/.next/static
 COPY --from=build --chown=node:node /repo/apps/portal/public ./apps/portal/public
+# Feature 013 EARS-6: the dedicated named volume is mounted here in production.
+# Docker initializes a new volume from this node-owned 0700 directory, so the
+# non-root runtime can write private 0600 JSON records and no sibling service can.
+RUN install -d -m 0700 -o node -g node /var/lib/ds-platform/academy-submissions
 USER node
 EXPOSE 3001
 ENV PORT=3001 HOSTNAME=0.0.0.0

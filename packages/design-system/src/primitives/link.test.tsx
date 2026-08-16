@@ -34,6 +34,16 @@ describe("Link variant classes", () => {
     const cls = linkVariants({ variant: "inline" });
     expect(cls).toMatch(/(?:^|\s)underline(?:\s|$)/);
   });
+
+  it("EARS-4: when an inline link sits on a primary surface, the system shall keep every interaction state readable", () => {
+    const cls = linkVariants({ variant: "inline", tone: "on-primary" });
+
+    expect(cls).toMatch(/(?:^|\s)text-primary-surface-foreground(?:\s|$)/);
+    expect(cls).toMatch(/hover:underline/);
+    expect(cls).toMatch(/active:text-primary-surface-muted/);
+    expect(cls).toMatch(/focus-visible:shadow-focus/);
+    expect(cls).not.toMatch(/(?:^|\s)text-primary-action(?:\s|$)/);
+  });
 });
 
 describe("Link rendering + routing", () => {
@@ -43,6 +53,23 @@ describe("Link rendering + routing", () => {
     expect(link).toHaveAttribute("href", "/login");
     expect(link).toHaveClass("text-primary-action", "hover:underline");
     expect(link).toHaveClass("focus-visible:shadow-focus");
+  });
+
+  it("EARS-4: applies the on-primary tone to the anchor without leaking the variant prop", () => {
+    render(
+      <Link href="/privacy" variant="inline" tone="on-primary">
+        Privacy policy
+      </Link>,
+    );
+
+    const link = screen.getByRole("link", { name: "Privacy policy" });
+    expect(link).toHaveClass(
+      "text-primary-surface-foreground",
+      "active:text-primary-surface-muted",
+      "hover:underline",
+      "focus-visible:shadow-focus",
+    );
+    expect(link).not.toHaveAttribute("tone");
   });
 
   it("asChild composes onto a wrapped anchor (next/link route carrier) without adding a second element", () => {

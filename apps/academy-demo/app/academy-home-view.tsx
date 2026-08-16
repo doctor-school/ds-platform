@@ -9,11 +9,10 @@ import {
   CREATED_VALUES,
   CURRENT_PROBLEMS,
   EXPERTS,
+  FEATURED_PROJECTS,
   PARTICIPATION_FORMATS,
   PARTNER_VALUES,
-  PODCASTS,
   PROJECTS,
-  WEBINARS,
   WHAT_CARDS,
 } from "./fixtures";
 import { LeadDemoFields } from "./lead-demo-fields";
@@ -166,23 +165,20 @@ function EventsSection() {
           href="#events"
         />
         <div className="-mx-4 space-y-stack-sm border-t-2 border-border layout:mx-0 layout:space-y-stack layout:border-0">
-          {WEBINARS.map((webinar) => (
+          {FEATURED_PROJECTS.map((project) => (
             <div
-              key={webinar.title}
-              data-webinar-state={webinar.state}
-              className={webinar.state === "past" ? "opacity-95" : undefined}
+              key={project.href}
+              data-webinar-state={project.state}
+              className={project.state === "past" ? "opacity-95" : undefined}
             >
               <WebinarCard
-                href="#events"
-                time={webinar.time}
+                href={project.href}
+                time={project.time}
                 tzLabel="МСК"
-                dateLabel={webinar.dateLabel}
-                school={webinar.school}
-                title={webinar.title}
-                specialties={webinar.specialties}
-                speakers={webinar.speakers}
-                live={webinar.state === "live"}
-                liveLabel={webinar.state === "live" ? "В эфире" : undefined}
+                dateLabel={project.dateLabel}
+                school={project.school}
+                title={project.title}
+                speakers={project.speakers}
               />
             </div>
           ))}
@@ -307,9 +303,11 @@ function ProjectsSection() {
               <h3 className="text-lg font-extrabold tracking-heading">
                 {title}
               </h3>
-              <p className="my-2 text-xs font-extrabold uppercase tracking-wide text-primary-action">
-                {metric}
-              </p>
+              {metric ? (
+                <p className="my-2 text-xs font-extrabold uppercase tracking-wide text-primary-action">
+                  {metric}
+                </p>
+              ) : null}
               <p className="text-caption leading-relaxed text-foreground">
                 {copy}
               </p>
@@ -386,36 +384,36 @@ function ExpertsSection() {
           Площадка объединяет фаундеров, приглашенных экспертов и лидеров
           мнений.
         </p>
-        <div className="grid gap-5 sm:grid-cols-2 layout:grid-cols-3">
-          {EXPERTS.map((expert) => (
-            <ExpertCard key={expert.fullName} expert={expert} />
-          ))}
-        </div>
-
-        <Card className="mt-9 grid overflow-hidden layout:grid-cols-2">
+        <Card
+          data-testid="academy-expert-project"
+          className="grid overflow-hidden layout:grid-cols-2"
+        >
           <div className="border-b-2 border-hairline p-6 layout:border-r-2 layout:border-b-0 layout:p-8">
             <p className="mb-3 text-eyebrow font-extrabold uppercase tracking-micro text-primary-action">
-              Подкаст
+              Проект
             </p>
             <h3 className="text-xl font-extrabold tracking-heading">
               Кто стоит за брендом
             </h3>
             <p className="my-4 text-sm leading-relaxed text-muted-foreground">
-              Разговоры с врачами и людьми индустрии о том, как устроено
-              медицинское образование — и каким оно должно быть.
+              Серия откровенных разговоров с лидерами рынка о будущем
+              медицинского образования. Участие в проекте дает экспертам
+              возможность публично транслировать свои ценности, давать живую
+              обратную связь и выстраивать прочную нейронную связь с брендом и
+              аудиторией.
             </p>
           </div>
           <div
-            data-testid="academy-podcast-list"
+            data-testid="academy-project-list"
             className="flex flex-col justify-center"
           >
-            {PODCASTS.map((podcast) => (
+            {FEATURED_PROJECTS.map((project) => (
               <div
-                key={podcast.href}
+                key={project.href}
                 className="border-b border-hairline last:border-b-0"
               >
                 <Link
-                  href={podcast.href}
+                  href={project.href}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block"
@@ -426,10 +424,10 @@ function ExpertsSection() {
                     </span>
                     <span className="min-w-0 text-card-foreground">
                       <span className="block text-body-compact font-bold leading-snug">
-                        {podcast.title}
+                        {project.title}
                       </span>
                       <span className="mt-1 block text-xs text-faint">
-                        {podcast.meta}
+                        {project.meta}
                       </span>
                     </span>
                   </span>
@@ -438,6 +436,14 @@ function ExpertsSection() {
             ))}
           </div>
         </Card>
+        <div
+          data-testid="academy-expert-grid"
+          className="mt-9 grid gap-5 sm:grid-cols-2 layout:grid-cols-3"
+        >
+          {EXPERTS.map((expert) => (
+            <ExpertCard key={expert.fullName} expert={expert} />
+          ))}
+        </div>
       </Container>
     </section>
   );
@@ -607,11 +613,11 @@ export function AcademyHomeView() {
       <AcademyHeader />
       <main>
         <AcademyHero />
-        <EventsSection />
         <WhatSection />
+        <ExpertsSection />
+        <EventsSection />
         <WhySection />
         <ProjectsSection />
-        <ExpertsSection />
         <PartnerValueSection />
         <FormatsSection />
         <LeadDemoSection />

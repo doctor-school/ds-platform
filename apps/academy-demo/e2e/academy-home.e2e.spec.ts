@@ -48,7 +48,7 @@ const STAGE_B_EXPERTS = [
     ],
   },
 ] as const;
-const STAGE_B_PODCASTS = [
+const STAGE_B_PROJECTS = [
   {
     title: "Синергизм вместо конкуренции в фарме (возможен ли?)",
     href: "https://academy.doctor.school/webinars/event-70d250b9",
@@ -125,28 +125,27 @@ test.describe("#1302 static Academy-home demo", () => {
           ),
       )
       .toEqual([
-        "events",
         "what",
+        "experts",
+        "events",
         "why",
         "projects",
-        "experts",
         "partner-value",
         "formats",
         "lead-demo",
       ]);
 
-    await expect(page.locator("[data-webinar-card]")).toHaveCount(3);
-    await expect(
-      page.getByRole("heading", {
-        name: "Пластика ахиллова сухожилия: разбор клинических случаев",
-      }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "СИБР и СРК: что нового в 2026 году" }),
-    ).toBeVisible();
-    const pastWebinar = page.locator('[data-webinar-state="past"]');
+    const events = main.locator('[data-academy-section="events"]');
+    const webinarCards = events.locator("[data-webinar-card]");
+    await expect(webinarCards).toHaveCount(2);
+    for (const project of STAGE_B_PROJECTS) {
+      await expect(
+        events.getByRole("heading", { name: project.title, exact: true }),
+      ).toHaveCount(1);
+    }
+    const pastWebinar = events.locator('[data-webinar-state="past"]');
     await expect(pastWebinar).toContainText(
-      "ХСН с сохранной фракцией выброса: амбулаторное ведение",
+      "B2B — стейкхолдеры реальных решений",
     );
     expect(
       Number(
@@ -172,6 +171,29 @@ test.describe("#1302 static Academy-home demo", () => {
         { exact: true },
       ),
     ).toBeVisible();
+    await expect(experts.getByText("Люди", { exact: true })).toBeVisible();
+    const projectBlock = experts.getByTestId("academy-expert-project");
+    await expect(
+      projectBlock.getByText("Проект", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      projectBlock.getByText(
+        "Серия откровенных разговоров с лидерами рынка о будущем медицинского образования. Участие в проекте дает экспертам возможность публично транслировать свои ценности, давать живую обратную связь и выстраивать прочную нейронную связь с брендом и аудиторией.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    const expertGrid = experts.getByTestId("academy-expert-grid");
+    await expect
+      .poll(() =>
+        experts
+          .locator(
+            '[data-testid="academy-expert-project"], [data-testid="academy-expert-grid"]',
+          )
+          .evaluateAll((elements) =>
+            elements.map((element) => element.getAttribute("data-testid")),
+          ),
+      )
+      .toEqual(["academy-expert-project", "academy-expert-grid"]);
     const expertCards = experts.getByTestId("academy-expert-card");
     await expect(expertCards).toHaveCount(6);
     for (const expert of STAGE_B_EXPERTS) {
@@ -208,19 +230,36 @@ test.describe("#1302 static Academy-home demo", () => {
       missingPhotoCard.getByText("фото ожидается", { exact: true }),
     ).toBeVisible();
 
-    const podcastLinks = experts
-      .getByTestId("academy-podcast-list")
+    await expect(expertGrid.getByTestId("academy-expert-card")).toHaveCount(6);
+
+    const projectLinks = experts
+      .getByTestId("academy-project-list")
       .getByRole("link");
-    await expect(podcastLinks).toHaveCount(2);
-    for (const [index, podcast] of STAGE_B_PODCASTS.entries()) {
-      const link = podcastLinks.nth(index);
-      await expect(link.getByText(podcast.title, { exact: true })).toBeVisible();
-      await expect(link.getByText(podcast.meta, { exact: true })).toBeVisible();
-      await expect(link).toHaveAttribute("href", podcast.href);
+    await expect(projectLinks).toHaveCount(2);
+    for (const [index, project] of STAGE_B_PROJECTS.entries()) {
+      const link = projectLinks.nth(index);
+      await expect(link.getByText(project.title, { exact: true })).toBeVisible();
+      await expect(link.getByText(project.meta, { exact: true })).toBeVisible();
+      await expect(link).toHaveAttribute("href", project.href);
       await expect(link).toHaveAttribute("target", "_blank");
       await expect(link).toHaveAttribute("rel", /noopener/);
       await expect(link).toHaveAttribute("rel", /noreferrer/);
     }
+
+    const projects = main.locator('[data-academy-section="projects"]');
+    for (const falseMetric of [
+      "38 направлений",
+      "12 клубов",
+      "24 выпуска",
+      "6 треков",
+    ]) {
+      await expect(projects.getByText(falseMetric, { exact: true })).toHaveCount(
+        0,
+      );
+    }
+    await expect(
+      projects.getByText("Методология", { exact: true }),
+    ).toBeVisible();
 
     const wordmark = page.getByTestId("academy-footer-wordmark");
     await wordmark.scrollIntoViewIfNeeded();

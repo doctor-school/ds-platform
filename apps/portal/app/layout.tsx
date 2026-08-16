@@ -5,7 +5,6 @@ import { Inter } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import { ThemeWatcher } from "../components/theme-watcher";
-import { AppShellHeader } from "../components/app-shell-header";
 import { THEME_INIT_SCRIPT } from "../lib/theme";
 
 export const metadata: Metadata = {
@@ -49,8 +48,10 @@ const inter = Inter({
  */
 export default async function RootLayout({
   children,
+  chrome,
 }: {
   children: ReactNode;
+  chrome: ReactNode;
 }) {
   const locale = await getLocale();
   const messages = await getMessages();
@@ -81,12 +82,9 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <ThemeWatcher />
         <NextIntlClientProvider locale={locale} messages={messages}>
-          {/* 008 EARS-1 — the persistent app-shell header, mounted ONCE here so it
-              is present on every portal route by construction (it hides itself on
-              the auth + room surfaces, which own their chrome). It sits ABOVE
-              {children}; each page's own blue poster masthead stacks directly
-              below it into one continuous blue band. */}
-          <AppShellHeader />
+          {/* The route-owned `@chrome` slot supplies the persistent app shell on
+              application routes and no shell on the public Academy home. */}
+          {chrome}
           {children}
         </NextIntlClientProvider>
       </body>

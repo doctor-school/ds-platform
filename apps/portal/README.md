@@ -5,9 +5,9 @@ multi-role cabinet surface (doctor / expert / clinic / investor), built as a
 Next.js 16 App Router app with custom React on the shared design system — **not**
 Refine (Refine is `apps/admin` only; ADR-0004 §5.3 / §7).
 
-This is the **scaffold** (issue #82): the app shell + the wiring needed by
-feature 003 (user authentication). Actual cabinet UX and the auth flows arrive in
-later issues.
+The app owns both the public Academy home and the authenticated cabinet. Public
+`/` is the static Feature 013 composition; cabinet, webinar, and authentication
+routes keep their existing application behavior.
 
 ## Stack (ADR-0004)
 
@@ -23,17 +23,19 @@ later issues.
 
 ```
 app/
-├── globals.css        # @import "@ds/design-system/globals.css" (tokens + Tailwind)
-├── layout.tsx         # root <html>/<body>, theme baseline
-├── page.tsx           # shell landing — proves the design-system build wiring
-└── login/page.tsx     # sign-in SCAFFOLD: RHF + zodResolver + <Form> + <InputOTP>
+├── @chrome/
+│   ├── page.tsx                 # no app shell on public /
+│   └── [...catchAll]/page.tsx   # persistent AppShellHeader elsewhere
+├── globals.css                  # shared tokens + Tailwind
+├── layout.tsx                   # root providers, theme baseline, chrome slot
+├── page.tsx                     # static Academy home (Feature 013)
+└── login/page.tsx               # sign-in surface
 ```
 
-`app/login/page.tsx` exercises the full form stack but does **not** call the BFF.
-The real authentication — `/v1/auth/*` over the BFF, the `__Host-ds_session`
-cookie, and the OIDC silent-re-auth `middleware.ts` (ADR-0004 §3.2.1) — lands with
-feature 003: F2 (#86) password + session, F3 (#87) email/SMS-OTP. The sign-in
-schema moves to the `@ds/schemas` SSOT then; here it is local and illustrative.
+The Academy home reads local fixtures and local WEBP portraits only. Its
+partnership preview deliberately has no `<form>`, endpoint, server action, or
+persistence; the fieldset and button stay disabled until the tracked form
+follow-up lands.
 
 ## Commands
 
@@ -41,4 +43,5 @@ schema moves to the `@ds/schemas` SSOT then; here it is local and illustrative.
 pnpm --filter @ds/portal dev        # next dev (local)
 pnpm --filter @ds/portal build      # next build → .next/standalone
 pnpm --filter @ds/portal typecheck  # tsc --noEmit
+pnpm --filter @ds/portal test:e2e:ci # backend-free production-build browser checks
 ```

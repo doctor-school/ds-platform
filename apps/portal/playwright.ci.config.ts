@@ -36,7 +36,10 @@ export default defineConfig({
   // the dev-stand-gated `e2e/a11y/` suite (`test:axe`) stay out. Anchored regex,
   // not a bare-basename glob: `e2e/a11y/a11y-axe.e2e.spec.ts` (the dev-stand
   // tier) shares the basename and a glob would drag its env-skipped tests in.
-  testMatch: /[\\/]e2e[\\/]a11y-axe\.e2e\.spec\.ts$/,
+  testMatch: [
+    /[\\/]e2e[\\/]a11y-axe\.e2e\.spec\.ts$/,
+    /[\\/]e2e[\\/]academy-home\.e2e\.spec\.ts$/,
+  ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

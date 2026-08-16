@@ -25,6 +25,14 @@ routes:
     file: apps/portal/app/page.tsx
     status: product-ready
   - app: portal
+    route: /@chrome
+    file: apps/portal/app/@chrome/page.tsx
+    status: product-ready
+  - app: portal
+    route: /@chrome/[...catchAll]
+    file: apps/portal/app/@chrome/[...catchAll]/page.tsx
+    status: product-ready
+  - app: portal
     route: /login
     file: apps/portal/app/login/page.tsx
     status: product-ready

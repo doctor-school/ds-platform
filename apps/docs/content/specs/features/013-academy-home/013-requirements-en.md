@@ -21,6 +21,13 @@ lang: en
 
 # 013 — Static public Academy home
 
+## Prior decisions
+
+- ADR-0014: the Product Lead-approved PRD is the source for EARS traceability.
+- ADR-0013: `@ds/design-system` components and tokens are the UI source of truth.
+- ADR-0006 §4: requirements stay bilingual and use flat EARS numbering.
+- ADR-0004: the Next.js portal owns the public user-facing route.
+
 ## Scope
 
 This slice publishes the exact merged Academy demo at public /. The page is

@@ -85,7 +85,7 @@ The enabled form contains:
 - a required name;
 - an optional company or clinic;
 - one required combined contact field labelled «Email или Telegram», with the
-  placeholder «name@company.ru или @username», whose value is either a valid
+  placeholder `name@company.ru или @username`, whose value is either a valid
   email address or a Telegram handle;
 - a required role, offered in this exact order: «Эксперт», «Партнёр»,
   «Участник подкаста», «Соавтор направления», «Компания»;

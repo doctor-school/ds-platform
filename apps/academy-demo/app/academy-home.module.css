@@ -1,0 +1,15 @@
+.footerLogoColor {
+  display: block;
+}
+
+.footerLogoWhite {
+  display: none;
+}
+
+:global(.dark) .footerLogoColor {
+  display: none;
+}
+
+:global(.dark) .footerLogoWhite {
+  display: block;
+}

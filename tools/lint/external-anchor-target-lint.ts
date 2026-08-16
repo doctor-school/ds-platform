@@ -17,8 +17,9 @@
  * `noopener` (reverse-tabnabbing / referrer-leak protection for a link that
  * opens a new browsing context).
  *
- * Scope surfaces: `apps/portal`, `apps/admin`, `packages/design-system/src`
- * (the DS primitives the showcase inherits). Tests / stories are excluded.
+ * Scope surfaces: `apps/portal`, `apps/admin`, `apps/academy-demo`,
+ * `packages/design-system/src` (the DS primitives the showcase inherits).
+ * Tests / stories are excluded.
  *
  * ── "external-document" heuristic ─────────────────────────────────────────────
  * Only real JSX `<a …>` opening tags are scanned (a `<a>` appearing inside a
@@ -77,6 +78,7 @@ const TAG = "[external-anchor]";
 const GLOBS = [
   "apps/portal/**/*.{ts,tsx}",
   "apps/admin/**/*.{ts,tsx}",
+  "apps/academy-demo/**/*.{ts,tsx}",
   "packages/design-system/src/**/*.{ts,tsx}",
 ];
 const IGNORE = [

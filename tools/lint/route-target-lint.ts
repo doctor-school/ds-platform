@@ -7,10 +7,11 @@
  * matching `app/webinars/[slug]/room/page.tsx` route existed — a dead link that
  * typecheck/lint could not see (an href string is just a string). This guard
  * makes that class of defect fire at CI time: every internal nav target in
- * `apps/portal` and `apps/admin` must resolve to a real app-router route.
+ * `apps/portal`, `apps/admin`, and the dev-only `apps/academy-demo` must resolve
+ * to a real app-router route.
  *
  * ── What it scans ─────────────────────────────────────────────────────────────
- * For each app (`apps/portal`, `apps/admin`) it collects internal navigation
+ * For each app (`apps/portal`, `apps/admin`, `apps/academy-demo`) it collects internal navigation
  * targets from `*.ts`/`*.tsx` source (tests/stories excluded):
  *   - `<Link href="…">` / `href={"…"}` / `href={`…`}` (string OR template literal)
  *   - `router.push("…")` / `router.replace("…")`
@@ -63,7 +64,7 @@ const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
 const TAG = "[route-target]";
 
 /** Apps whose internal nav targets are checked. */
-const APPS = ["apps/portal", "apps/admin"];
+const APPS = ["apps/portal", "apps/admin", "apps/academy-demo"];
 
 /** Source globs (relative to an app dir) scanned for nav targets. */
 const SRC_GLOBS = ["**/*.{ts,tsx}"];
@@ -280,7 +281,9 @@ async function main(): Promise<void> {
   );
 
   if (findings.length === 0) {
-    info("PASS — every internal nav target resolves to a real app-router route.");
+    info(
+      "PASS — every internal nav target resolves to a real app-router route.",
+    );
     process.exit(0);
   }
 

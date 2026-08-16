@@ -50,9 +50,10 @@ const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
 const TAG = "[submit-pending]";
 
 // The design-system blocks/primitives that own a submit control (e.g. OtpFocusScreen)
-// plus the product apps that compose auth/forms from them. `apps/docs` (Fumadocs),
-// `apps/cms` (Payload), `apps/mobile` (RN) theme off their own host and do not consume
-// the DS Button submit contract, so it is not theirs.
+// plus the DS-consuming apps that compose forms from them, including the dev-only
+// Academy review surface. `apps/docs` (Fumadocs), `apps/cms` (Payload),
+// `apps/mobile` (RN) theme off their own host and do not consume the DS Button
+// submit contract, so it is not theirs.
 const SCAN_GLOBS = [
   "packages/design-system/src/primitives/**/*.tsx",
   "packages/design-system/src/blocks/**/*.tsx",
@@ -65,6 +66,7 @@ const SCAN_GLOBS = [
   "apps/admin/app/**/*.tsx",
   "apps/admin/components/**/*.tsx",
   "apps/admin/src/**/*.tsx",
+  "apps/academy-demo/app/**/*.tsx",
 ];
 const SCAN_IGNORE = [
   "**/*.test.{ts,tsx}",
@@ -171,7 +173,9 @@ function main(): void {
     process.exit(1);
   }
 
-  info(`OK — ${scanned} form file(s) honour the async-submit pending standard.`);
+  info(
+    `OK — ${scanned} form file(s) honour the async-submit pending standard.`,
+  );
   process.exit(0);
 }
 

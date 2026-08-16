@@ -27,8 +27,9 @@
  * raw-interactive tag list.
  *
  * ── What it checks ──────────────────────────────────────────────────────────
- * In product-app UI source (`apps/portal|promo|admin` — `app/`, `components/`,
- * `src/`; real UI .tsx only, tests / e2e / stories excluded):
+ * In DS-consuming app UI source (`apps/portal|promo|admin|academy-demo` —
+ * `app/`, `components/`, `src/`; real UI .tsx only, tests / e2e / stories
+ * excluded):
  *
  * (1) RAW-STATE (states ownership, #828). A **raw interactive element** — a
  *     lowercase `<a>`, `<button>`, `<input>`, `<textarea>`, `<select>`,
@@ -140,6 +141,7 @@ const APP_GLOBS = [
   "apps/admin/app/**/*.tsx",
   "apps/admin/components/**/*.tsx",
   "apps/admin/src/**/*.tsx",
+  "apps/academy-demo/app/**/*.tsx",
 ];
 const APP_IGNORE = [
   "**/*.test.{ts,tsx}",

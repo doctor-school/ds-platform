@@ -17,8 +17,9 @@
  * fix, the same shape as `interaction-states` (#269) and the form-rhythm guard
  * (#334).
  *
- * What it checks — in app UI source (`apps/{portal,promo,admin}/{app,components,
- * src}/**`, real .tsx screens; tests / e2e / stories excluded): a hand-typed
+ * What it checks — in DS-consuming app UI source
+ * (`apps/{portal,promo,admin,academy-demo}/{app,components,src}/**`, real .tsx
+ * screens; tests / e2e / stories excluded): a hand-typed
  * form-error block, identified by the literal duplication signal — an opening JSX
  * tag that carries BOTH `role="alert"` AND a destructive text token
  * (`text-destructive`). That combination is the form-feedback shape the
@@ -57,8 +58,8 @@ const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
 const TAG = "[form-error]";
 
 // App-level UI source — the product apps that consume `@ds/design-system`
-// (portal / promo / admin), matching the `interaction-states` / registry-research
-// surface scope. `apps/docs` (Fumadocs), `apps/cms`/`apps/docs-cms`
+// (portal / promo / admin / academy-demo), matching the `interaction-states` /
+// registry-research surface scope. `apps/docs` (Fumadocs), `apps/cms`/`apps/docs-cms`
 // (Payload/Keystatic) and `apps/mobile` (React Native — no DOM `role="alert"`)
 // theme off their own host framework and do not consume the DS form primitives,
 // so "route through `FormError`" is not their contract.
@@ -72,6 +73,7 @@ const APP_GLOBS = [
   "apps/admin/app/**/*.tsx",
   "apps/admin/components/**/*.tsx",
   "apps/admin/src/**/*.tsx",
+  "apps/academy-demo/app/**/*.tsx",
 ];
 const APP_IGNORE = [
   "**/*.test.{ts,tsx}",
@@ -166,7 +168,9 @@ function main(): void {
   const scanned = checkAppForms(violations);
 
   if (violations.length > 0) {
-    process.stderr.write(`${TAG} ${violations.length} form-error violation(s):\n`);
+    process.stderr.write(
+      `${TAG} ${violations.length} form-error violation(s):\n`,
+    );
     for (const v of violations) {
       process.stderr.write(
         `${TAG}   ${relative(REPO_ROOT, resolve(REPO_ROOT, v.file)).replace(/\\/g, "/")}: ${v.message}\n`,

@@ -17,7 +17,8 @@
  * machine-checked requirement so the gate cannot be silently skipped.
  *
  * What it checks: if the PR diff touches any user-facing UI path
- * (apps/portal/**, apps/promo/**, apps/admin/**, packages/design-system/**),
+ * (apps/portal/**, apps/promo/**, apps/admin/**, apps/academy-demo/**,
+ * packages/design-system/**),
  * the PR body MUST contain a `registry-research:` marker line (or a
  * `## Registry research` section) whose value is non-empty and is one of the
  * two sanctioned shapes from the skill:
@@ -43,7 +44,7 @@ const TAG = "[registry-research]";
 // registry-research artifact. `packages/design-system/**` is included because
 // that is where adopted/bespoke blocks actually land (the #235 sin lived there).
 const UI_PATH_RE =
-  /^(apps\/portal\/|apps\/promo\/|apps\/admin\/|packages\/design-system\/)/;
+  /^(apps\/portal\/|apps\/promo\/|apps\/admin\/|apps\/academy-demo\/|packages\/design-system\/)/;
 
 // Non-UI files inside those trees that should NOT trip the gate on their own
 // (config, docs, tests, generated tokens). If a PR ONLY touches these, the
@@ -82,7 +83,8 @@ const UI_PATH_EXEMPT_RE =
 // The artifact: a `registry-research:` marker line, or a `## Registry research`
 // section heading followed by its body. Either form is accepted.
 const MARKER_RE = /^[ \t>*-]*registry-research\s*:\s*(.*)$/im;
-const SECTION_RE = /^#{1,6}\s*registry[ -]research\b[^\n]*\n([\s\S]*?)(?=\n#{1,6}\s|\n*$)/im;
+const SECTION_RE =
+  /^#{1,6}\s*registry[ -]research\b[^\n]*\n([\s\S]*?)(?=\n#{1,6}\s|\n*$)/im;
 
 // A non-empty value must name a registry (adopt path) OR give a bespoke
 // rationale. We accept the two sanctioned shapes plus a loose "names a known
@@ -92,8 +94,7 @@ const BESPOKE_RE = /\bbespoke\b/i;
 const KNOWN_REGISTRY_RE =
   /\b(shadcn|origin\s*ui|intent\s*ui|jolly\s*ui|jolly|kibo)\b/i;
 // Placeholder values that read as "left blank" — reject these explicitly.
-const EMPTY_VALUE_RE =
-  /^(|n\/?a|none|tbd|todo|xxx|\.\.\.|<.*>|_+|-+)$/i;
+const EMPTY_VALUE_RE = /^(|n\/?a|none|tbd|todo|xxx|\.\.\.|<.*>|_+|-+)$/i;
 
 interface GhPR {
   number: number;
@@ -110,8 +111,7 @@ function info(msg: string): void {
 }
 
 function resolvePrNumber(): string {
-  let prNumber =
-    process.env.PR_NUMBER ?? process.env.GITHUB_PR_NUMBER ?? "";
+  let prNumber = process.env.PR_NUMBER ?? process.env.GITHUB_PR_NUMBER ?? "";
   if (!prNumber && process.env.GITHUB_REF) {
     const m = process.env.GITHUB_REF.match(/refs\/pull\/(\d+)\//);
     if (m) prNumber = m[1];
@@ -122,7 +122,9 @@ function resolvePrNumber(): string {
 async function ghPR(prNumber: string): Promise<GhPR | null> {
   const res = await ghViewJson<GhPR>("pr", prNumber, "number,body,files");
   if (!res.ok) {
-    process.stderr.write(`${TAG} gh pr view ${prNumber} failed: ${res.error}\n`);
+    process.stderr.write(
+      `${TAG} gh pr view ${prNumber} failed: ${res.error}\n`,
+    );
     return null;
   }
   return res.data;
@@ -143,7 +145,12 @@ function artifactIsEvidence(value: string): boolean {
   if (EMPTY_VALUE_RE.test(v)) return false;
   if (BESPOKE_RE.test(value)) {
     // bespoke must carry a rationale, not just the word.
-    return value.replace(BESPOKE_RE, "").replace(/[—\-:]/g, "").trim().length >= 8;
+    return (
+      value
+        .replace(BESPOKE_RE, "")
+        .replace(/[—\-:]/g, "")
+        .trim().length >= 8
+    );
   }
   if (ADOPT_RE.test(value) && KNOWN_REGISTRY_RE.test(value)) return true;
   // A bare registry name with a component is also acceptable evidence.
@@ -172,7 +179,7 @@ async function main(): Promise<void> {
   );
   if (uiFiles.length === 0) {
     info(
-      `PR #${pr.number} touches no user-facing UI source (apps/portal|promo|admin, packages/design-system), rule does not apply`,
+      `PR #${pr.number} touches no user-facing UI source (apps/portal|promo|admin|academy-demo, packages/design-system), rule does not apply`,
     );
     process.exit(0);
   }
@@ -201,7 +208,9 @@ async function main(): Promise<void> {
     );
   }
 
-  info(`registry-research artifact OK: "${artifact.split(/\r?\n/)[0].slice(0, 100)}"`);
+  info(
+    `registry-research artifact OK: "${artifact.split(/\r?\n/)[0].slice(0, 100)}"`,
+  );
   process.exit(0);
 }
 

@@ -79,7 +79,8 @@ const TAG = "[aa-contrast]";
 
 // Surface scope: the design-system primitives/blocks that own the contrast contract, the
 // living showcase (apps/showcase — the surface the #351 retarget caught the 4 defects on),
-// and the product apps that consume @ds/design-system (portal / promo / admin). `apps/docs`
+// and the apps that consume @ds/design-system (portal / promo / admin / the
+// dev-only Academy review app). `apps/docs`
 // (Fumadocs), `apps/cms`/`apps/docs-cms` (Payload/Keystatic) and `apps/mobile` (RN) theme
 // off their own host framework and do not consume these tokens, so the rule is not theirs —
 // matching the `interaction-states` / `submit-pending` scope.
@@ -96,6 +97,7 @@ const SCAN_GLOBS = [
   "apps/admin/app/**/*.tsx",
   "apps/admin/components/**/*.tsx",
   "apps/admin/src/**/*.tsx",
+  "apps/academy-demo/app/**/*.tsx",
 ];
 const SCAN_IGNORE = [
   "**/*.test.{ts,tsx}",
@@ -165,7 +167,11 @@ function info(msg: string): void {
 }
 
 /** (1) every `text-*-foreground/NN` occurrence in the file. */
-function checkDimmedForeground(src: string, file: string, violations: Violation[]): void {
+function checkDimmedForeground(
+  src: string,
+  file: string,
+  violations: Violation[],
+): void {
   const seen = new Set<string>();
   for (const m of src.matchAll(DIMMED_FOREGROUND_RE)) {
     const token = m[0];
@@ -184,7 +190,11 @@ function checkDimmedForeground(src: string, file: string, violations: Violation[
 }
 
 /** (2) `bg-primary` (non-`-action`) on a tag that also carries a text utility. */
-function checkRawPrimaryFill(src: string, file: string, violations: Violation[]): void {
+function checkRawPrimaryFill(
+  src: string,
+  file: string,
+  violations: Violation[],
+): void {
   const seen = new Set<number>();
   for (const m of src.matchAll(RAW_PRIMARY_FILL_RE)) {
     const tag = enclosingTag(src, m.index ?? 0);
@@ -256,7 +266,9 @@ function main(): void {
   const scanned = scan(violations);
 
   if (violations.length > 0) {
-    process.stderr.write(`${TAG} ${violations.length} AA-contrast violation(s):\n`);
+    process.stderr.write(
+      `${TAG} ${violations.length} AA-contrast violation(s):\n`,
+    );
     for (const v of violations) {
       process.stderr.write(
         `${TAG}   ${relative(REPO_ROOT, resolve(REPO_ROOT, v.file)).replace(/\\/g, "/")}: ${v.message}\n`,

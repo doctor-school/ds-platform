@@ -5,7 +5,7 @@
 // unstyled <a href> is also fine — it declares no bespoke look and inherits the
 // layer-1 reset.
 import Link from "next/link";
-import { Link as DsLink } from "@ds/design-system/link";
+import { Link as DsLink, Link as OwnedLink } from "@ds/design-system/link";
 
 export function Page() {
   return (
@@ -17,6 +17,9 @@ export function Page() {
         <Link href="/reset">Forgot password</Link>
       </DsLink>
       <a href="/help">Help</a>
+      <OwnedLink href="/privacy" className="text-primary-action">
+        Privacy policy
+      </OwnedLink>
     </footer>
   );
 }

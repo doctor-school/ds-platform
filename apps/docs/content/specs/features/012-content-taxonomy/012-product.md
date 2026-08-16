@@ -111,7 +111,7 @@ Two consequences the downstream EARS spec inherits:
 
 ## Confirmed product decisions
 
-The Product Lead approved the complete package in [#1240](https://github.com/doctor-school/ds-platform/issues/1240#issuecomment-5305116379) on 2026-08-16. The retained-row lifecycle was approved on 2026-08-15. These are implementation inputs, not open questions:
+The Product Lead approved the base package in [#1240](https://github.com/doctor-school/ds-platform/issues/1240#issuecomment-5305116379) and separately approved the primary-partner addendum in [#1240](https://github.com/doctor-school/ds-platform/issues/1240#issuecomment-5307268480) on 2026-08-16. The retained-row lifecycle was approved on 2026-08-15. These are implementation inputs, not open questions:
 
 - **Expert identity:** one standalone editorial `expert` record. A future optional platform-user link is additive and out of scope; there is never a parallel supplier/person type.
 - **Lifecycle:** no domain row or relationship is physically deleted. Retire/restore uses lifecycle status + `deleted_at`; FKs are restrictive/no-action and cascades are forbidden.

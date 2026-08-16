@@ -190,12 +190,15 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     When the #1305 pre-migration inventory runs
     Then SQL audit_pd_columns and TS AUDIT_PD_COLUMNS first gain the exact expert ciphertext lookup reservation search and subject-key fields plus event_speakers name regalia and subject_key_id with parity
     And event_experts expert_id legacy_speaker_id and role_ciphertext plus project_experts expert_id and role plus subject_keys subject_kind subject_digest and vault_key_ref are registered before their first write
-    And every historical hit is listed by ledger primary key field SHA-256 preimage legal basis term and owner in one approved retained audit_pd_remediation_manifests row
-    And a formal feature-010 production amendment permits only a manifest-bound SECURITY DEFINER transition from that exact plaintext leaf to masked true legacyCiphertextRef and preimageHash
-    And the transition stores AES-256-GCM ciphertext under a per-row audit_retention_keys key leaves ledger identity non-PD diff and timestamps unchanged appends hash-only evidence and consumes the manifest once
+    And formal production amendment blocks to ADR-0009 EN RU design and feature 010 requirements design scenarios correct the as-built append-only no-chain v1 contract before remediation
+    And every historical hit is listed by ledger primary key field opaque commitment reference legal basis finite term and owner in one approved retained audit_pd_remediation_manifests row with no plaintext or bare plaintext hash
+    And a Vault-held per-row audit_retention_keys DEK encrypts the old leaf into audit_legacy_pd_ciphertexts while an HKDF-separated subkey produces a keyed HMAC that cannot be verified offline
+    And the manifest-bound SECURITY DEFINER transition changes only that leaf to masked true legacyCiphertextRef and commitmentRef while preserving ledger identity non-PD diff timestamps and unlisted bytes
+    And one immutable audit_pd_redaction_evidence row stores only target ids keyed commitment ciphertext and envelope hashes signer key version and an external old-to-new signature before the manifest is consumed
     And DELETE trigger disable unrestricted UPDATE plaintext compensating rows and replay are all refused
-    And raw ledger output contains no unclassified plaintext marker while retained ledger envelope manifest and key-tombstone rows remain
-    And destroying the audit-retention key at its approved term makes the retained historical ciphertext unreadable without deleting a row
+    And a future hash chain starts from post-remediation ledger bytes plus the evidence root rather than claiming a nonexistent v1 chain
+    And every manifest ciphertext key and evidence field has explicit retained lifecycle and SQL TS PD classification
+    And destroying the DEK and commitment subkey at the approved term makes ciphertext and keyed commitments unreadable and untestable without deleting a row
     And no expert migration or further unmasked affected write may start before that proof passes
     And only idempotency_keys idempotency_claim_subjects pd_subject_fences pd_key_destruction_jobs and media_cleanup_jobs are parity-tested technical audit exclusions
 
@@ -247,6 +250,16 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     And the queue delivery completes as a no-op with 409 ERASURE_PLAN_EXPIRED
     And no subject gate claim domain row audit row key job or cleanup obligation changes
     And a later approval must derive and approve a fresh plan
+
+  @EARS-2 @EARS-16 @failure
+  Scenario: A legal hold imposed after approval wins before worker execution
+    Given an approved unexpired erasure plan had no legal hold at approval time
+    And a legal hold writer and queued worker contend on the same subject-policy serialization lock
+    When the legal hold commits before the worker consumes approved to executing
+    Then the worker re-reads the hold under that lock and one transaction returns the request to review_required
+    And it records hold_detected_at plus retained hold_evidence_id and completes the queue delivery as no-op 409 LEGAL_HOLD_ACTIVE
+    And no subject gate claim domain row audit row key job cleanup obligation or Vault operation changes
+    And approval after the hold clears must derive a fresh plan
 
   @EARS-2 @EARS-8 @EARS-14 @EARS-16 @EARS-17 @failure
   Scenario: Lawful expert PD erasure preserves exact tombstones but cannot be restored
@@ -677,13 +690,21 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
   @EARS-2 @EARS-15 @failure
   Scenario: Encrypted expert-name search stays indexed and becomes unreadable after erasure
-    Given expert names are ciphertext and each row has a sorted unique bytea array of at most 477 thirty-two-byte HMAC tokens for normalized one-to-three-character grams under the active search-key version
+    Given expert names are ciphertext and both raw and NFKC case-fold whitespace-normalized names are capped at 160 Unicode scalars before token generation
+    And each row has a sorted unique bytea array of at most 477 thirty-two-byte HMAC tokens for normalized one-to-three-character grams under the active search-key version
     And a GIN array_ops index covers that token array
     When admin search requests a partial case-insensitive name
     Then array containment of every query gram plus active key version yields a bounded candidate batch and subject-key decryption verifies exact matches counts and order
     And no route decrypts or loads the full expert roster
     When approved erasure clears one subject tokens rebuilds non-erased rows into a shadow version atomically flips it and destroys the old search key
     Then old snapshot or WAL token copies cannot be tested and the erased expert is absent from every search result
+
+  @EARS-2 @EARS-15 @EARS-16 @failure
+  Scenario: Unicode normalization expansion is rejected before expert token generation
+    Given a raw expert name is within 160 Unicode scalars but a compatibility-expanding fixture exceeds 160 scalars after NFKC case-fold and whitespace normalization
+    When the operator saves that expert
+    Then the response is 400 VALIDATION_FAILED with a field-addressed name error
+    And no expert row search token audit row or media object is created
 
   @EARS-16 @failure
   Scenario Outline: Authorization and protocol failures are exact Problem Details

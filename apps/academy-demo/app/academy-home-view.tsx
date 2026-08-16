@@ -115,56 +115,36 @@ function AcademyHeader() {
   );
 }
 
-function SplitHero() {
+function AcademyHero() {
   return (
     <section className="bg-hero py-12 text-hero-foreground layout:py-20">
       <Container>
         <p className="mb-7 text-xs font-extrabold uppercase tracking-micro text-hero-muted">
           Doctor.School · Врачи учат врачей
         </p>
-        <div className="grid gap-stack layout:grid-cols-2">
-          <Card className="border-primary-surface-foreground bg-primary-surface-foreground p-6 text-header-chip-foreground layout:p-10">
-            <p className="mb-3 text-eyebrow font-extrabold uppercase tracking-micro text-header-chip-foreground">
-              Врачам
-            </p>
-            <h1 className="text-2xl font-extrabold leading-none tracking-tight layout:text-3xl">
-              Учитесь у практиков — бесплатно
-            </h1>
-            <p className="mt-4 text-body-compact leading-relaxed text-header-chip-foreground">
-              Живые эфиры и школы по 38 специальностям. Ведут те, кто оперирует
-              и ведёт приём, — без оплаты и бюрократии.
-            </p>
-            <Button asChild size="lg" className="mt-6">
-              <a href="#events">Смотреть эфиры →</a>
-            </Button>
-            <p className="mt-5 text-eyebrow font-extrabold uppercase tracking-micro text-header-chip-foreground">
-              142 эфира в июле · время — МСК
-            </p>
-          </Card>
-
-          <div className="flex flex-col border-2 border-header-hairline p-6 layout:p-10">
-            <p className="mb-3 text-eyebrow font-extrabold uppercase tracking-micro text-hero-muted">
-              Партнёрам
-            </p>
-            <h2 className="text-2xl font-extrabold leading-none tracking-tight layout:text-3xl">
-              Постройте репутацию в экспертной среде
-            </h2>
-            <p className="mt-4 text-body-compact leading-relaxed text-hero-muted">
-              Финансируйте бесплатное образование врачей и получайте не рекламу,
-              а участие: соавторство направлений и прямой доступ к экспертам.
-            </p>
-            <Button
-              asChild
-              size="lg"
-              variant="outline"
-              className="mt-6 self-start"
-            >
-              <a href="#partner-form">Стать партнёром</a>
-            </Button>
-            <p className="mt-5 text-eyebrow font-extrabold uppercase tracking-micro text-hero-muted">
-              14 партнёров · прозрачная модель
-            </p>
-          </div>
+        <div className="flex flex-col border-2 border-header-hairline p-6 layout:p-10">
+          <p className="mb-3 text-eyebrow font-extrabold uppercase tracking-micro text-hero-muted">
+            Партнёрам
+          </p>
+          <h1 className="text-2xl font-extrabold leading-none tracking-tight layout:text-3xl">
+            Создаем будущее медицинского образования вместе
+          </h1>
+          <p className="mt-4 max-w-3xl text-body-compact leading-relaxed text-hero-muted">
+            Академия Doctor School объединяет экспертов, индустрию и
+            образовательные инициативы для совместного создания новых
+            специальностей, школ и стандартов медицины.
+          </p>
+          <Button
+            asChild
+            size="lg"
+            variant="outline"
+            className="mt-6 self-start"
+          >
+            <a href="#partner-form">Стать партнёром</a>
+          </Button>
+          <p className="mt-5 text-eyebrow font-extrabold uppercase tracking-micro text-hero-muted">
+            14 партнёров · прозрачная модель
+          </p>
         </div>
       </Container>
     </section>
@@ -217,6 +197,21 @@ function WhatSection() {
     <section data-academy-section="what" className="pt-16 layout:pt-24">
       <Container>
         <SectionIntro eyebrow="Платформа" title="Что такое Doctor.School" />
+        <div
+          data-testid="academy-platform-intro"
+          className="mb-8 max-w-3xl space-y-4 text-body-compact leading-relaxed text-muted-foreground"
+        >
+          <p>
+            Академия представляет собой масштабную идеологию, в центре которой
+            — врач и пациент. Участие в проектах Академии — это возможность для
+            корпораций реализовать важнейшую социальную миссию.
+          </p>
+          <p>
+            Инвестируя во врачей и открытую базу знаний, партнеры напрямую
+            повышают свой корпоративный ESG-рейтинг и укрепляют безупречную
+            репутацию среди медицинского сообщества.
+          </p>
+        </div>
         <div className="grid gap-5 sm:grid-cols-2 layout:grid-cols-4">
           {WHAT_CARDS.map(([number, title, copy]) => (
             <Card key={number} className="p-6">
@@ -328,42 +323,50 @@ function ProjectsSection() {
 
 function ExpertCard({ expert }: { expert: (typeof EXPERTS)[number] }) {
   return (
-    <Link
-      href="#experts"
+    <Card
       data-testid="academy-expert-card"
-      className="block h-full"
+      className="flex h-full flex-col overflow-hidden"
     >
-      <Card className="flex h-full flex-col overflow-hidden">
-        <div className="relative flex aspect-4/3 items-center justify-center border-b-2 border-border bg-tint">
-          <span className="text-3xl font-extrabold tracking-heading text-tint-foreground">
-            {expert.initials}
-          </span>
-          <span className="absolute right-2 bottom-2 text-2xs font-extrabold uppercase tracking-micro text-primary-action">
-            фото
-          </span>
-        </div>
-        <div className="flex flex-1 flex-col gap-2 p-5 text-card-foreground">
-          <p className="truncate text-2xs font-extrabold uppercase tracking-micro text-primary-action">
-            {expert.role}
-          </p>
-          <h3
-            lang="ru"
-            className="text-lg font-extrabold leading-tight tracking-heading"
+      <div className="relative flex aspect-4/3 items-center justify-center overflow-hidden border-b-2 border-border bg-tint">
+        {"photo" in expert ? (
+          <Image
+            src={expert.photo}
+            alt={expert.fullName}
+            fill
+            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+            className="object-cover"
+          />
+        ) : (
+          <div className="flex flex-col items-center gap-2 text-center">
+            <span className="text-3xl font-extrabold tracking-heading text-tint-foreground">
+              {expert.initials}
+            </span>
+            <span className="text-2xs font-extrabold uppercase tracking-micro text-primary-action">
+              фото ожидается
+            </span>
+          </div>
+        )}
+      </div>
+      <div
+        data-testid="academy-expert-copy"
+        className="flex flex-1 flex-col gap-2 p-5 text-card-foreground"
+      >
+        <h3
+          lang="ru"
+          className="text-lg font-extrabold leading-tight tracking-heading"
+        >
+          {expert.fullName}
+        </h3>
+        {expert.signature.map((paragraph) => (
+          <p
+            key={paragraph}
+            className="text-caption font-normal leading-relaxed text-muted-foreground"
           >
-            {expert.fullName}
-          </h3>
-          {"credentials" in expert ? (
-            <p className="text-caption font-normal leading-relaxed text-muted-foreground">
-              {expert.credentials}
-            </p>
-          ) : null}
-          <p className="text-xs text-faint">{expert.org}</p>
-          <p className="mt-auto pt-2 text-caption text-primary-action underline underline-offset-4">
-            {expert.meta}
+            {paragraph}
           </p>
-        </div>
-      </Card>
-    </Link>
+        ))}
+      </div>
+    </Card>
   );
 }
 
@@ -377,11 +380,13 @@ function ExpertsSection() {
       <Container>
         <SectionIntro
           eyebrow="Люди"
-          title="Эксперты, которые ведут за собой"
-          linkLabel="Все эксперты"
-          href="#experts"
+          title="Объединение лидеров и экспертов"
         />
-        <div className="grid gap-5 sm:grid-cols-2 layout:grid-cols-4">
+        <p className="mb-8 max-w-2xl text-body-compact leading-relaxed text-muted-foreground">
+          Площадка объединяет фаундеров, приглашенных экспертов и лидеров
+          мнений.
+        </p>
+        <div className="grid gap-5 sm:grid-cols-2 layout:grid-cols-3">
           {EXPERTS.map((expert) => (
             <ExpertCard key={expert.fullName} expert={expert} />
           ))}
@@ -399,23 +404,33 @@ function ExpertsSection() {
               Разговоры с врачами и людьми индустрии о том, как устроено
               медицинское образование — и каким оно должно быть.
             </p>
-            <Button asChild variant="outline">
-              <a href="#experts">Все выпуски</a>
-            </Button>
           </div>
-          <div className="flex flex-col justify-center">
-            {PODCASTS.map(([title, meta]) => (
-              <div key={title} className="border-b border-hairline last:border-b-0">
-                <Link href="#experts" className="block">
+          <div
+            data-testid="academy-podcast-list"
+            className="flex flex-col justify-center"
+          >
+            {PODCASTS.map((podcast) => (
+              <div
+                key={podcast.href}
+                className="border-b border-hairline last:border-b-0"
+              >
+                <Link
+                  href={podcast.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block"
+                >
                   <span className="flex items-center gap-4 p-5">
                     <span className="grid size-10 shrink-0 place-items-center bg-primary-action text-primary-foreground">
                       <span aria-hidden="true">▶</span>
                     </span>
                     <span className="min-w-0 text-card-foreground">
                       <span className="block text-body-compact font-bold leading-snug">
-                        {title}
+                        {podcast.title}
                       </span>
-                      <span className="mt-1 block text-xs text-faint">{meta}</span>
+                      <span className="mt-1 block text-xs text-faint">
+                        {podcast.meta}
+                      </span>
                     </span>
                   </span>
                 </Link>
@@ -544,8 +559,8 @@ function LeadDemoSection() {
 
 function AcademyFooter() {
   return (
-    <footer className="border-t-2 border-border pt-8">
-      <Container className="flex flex-wrap items-center justify-between gap-5 pb-8">
+    <footer>
+      <Container className="flex flex-wrap items-center justify-between gap-5 border-t-2 border-border py-8">
         <Image
           src="/brand/logo.svg"
           alt="Doctor.School"
@@ -575,7 +590,10 @@ function AcademyFooter() {
         </p>
       </Container>
       <div aria-hidden="true" className="overflow-hidden pt-4 layout:pt-9">
-        <p className="translate-y-2 select-none whitespace-nowrap text-center text-6xl font-extrabold leading-none tracking-tighter text-muted-foreground layout:text-9xl">
+        <p
+          data-testid="academy-footer-wordmark"
+          className="origin-bottom translate-y-2 scale-95 select-none whitespace-nowrap text-center text-6xl font-extrabold leading-none tracking-tighter text-hairline layout:translate-y-4 layout:scale-150 layout:text-9xl"
+        >
           Doctor.School
         </p>
       </div>
@@ -588,7 +606,7 @@ export function AcademyHomeView() {
     <div lang="ru" className="min-h-screen bg-background text-foreground">
       <AcademyHeader />
       <main>
-        <SplitHero />
+        <AcademyHero />
         <EventsSection />
         <WhatSection />
         <WhySection />

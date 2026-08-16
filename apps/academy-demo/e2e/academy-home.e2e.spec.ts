@@ -2,6 +2,65 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const ROUTE = "/";
 
+const HERO_HEADING = "Создаем будущее медицинского образования вместе";
+const HERO_BODY =
+  "Академия Doctor School объединяет экспертов, индустрию и образовательные инициативы для совместного создания новых специальностей, школ и стандартов медицины.";
+const PLATFORM_COPY = [
+  "Академия представляет собой масштабную идеологию, в центре которой — врач и пациент. Участие в проектах Академии — это возможность для корпораций реализовать важнейшую социальную миссию.",
+  "Инвестируя во врачей и открытую базу знаний, партнеры напрямую повышают свой корпоративный ESG-рейтинг и укрепляют безупречную репутацию среди медицинского сообщества.",
+] as const;
+const STAGE_B_EXPERTS = [
+  {
+    name: "Эдуард Ильдарханов",
+    signature: [
+      "архитектор смыслов, основатель BBM Academy и Doctor School",
+    ],
+  },
+  {
+    name: "Максим Алексеевич Страхов",
+    signature: [
+      "к. м. н., доцент кафедры травматологии-ортопедии и военно-полевой хирургии РНИМУ им. Н. И. Пирогова, доцент кафедры травматологии и ортопедии АПО ФНКЦ ФМБА России",
+    ],
+  },
+  {
+    name: "Тимофей Гаев",
+    signature: [
+      "кандидат медицинских наук, главный врач профессионального баскетбольного клуба ЦСКА Москва, ведущий специалист Центра спортивной медицины и реабилитации Sport Fizio Life, врач спортивной медицины, травматолог-ортопед, старший преподаватель кафедры травматологии и ортопедии Академии постдипломного образования ФГБУ ФНКЦ ФМБА России",
+    ],
+  },
+  {
+    name: "Евгений Константинов",
+    signature: [
+      "независимый эксперт-консультант фармацевтического маркетинга, инженер-конструктор построения рынков и стратегического управления мнениями",
+    ],
+  },
+  {
+    name: "Загородний Николай Васильевич",
+    signature: [
+      "Автор более 800 научных и печатных работ, 16 монографий, 34 учебно-методических пособий.",
+      "Под его руководством защищено 19 докторских и 54 кандидатские диссертации.",
+    ],
+  },
+  {
+    name: "Бондарев Анатолий",
+    signature: [
+      "новатор, директор по маркетингу Панбиофарм, независимый эксперт по созданию и управлению фармацевтическими рынками",
+    ],
+  },
+] as const;
+const STAGE_B_PODCASTS = [
+  {
+    title: "Синергизм вместо конкуренции в фарме (возможен ли?)",
+    href: "https://academy.doctor.school/webinars/event-70d250b9",
+    meta: "16 августа · Эдуард Ильдарханов, Анатолий Бондарев и Тимофей Гаев · 180 мин",
+  },
+  {
+    title: "B2B — стейкхолдеры реальных решений",
+    href: "https://academy.doctor.school/webinars/event-5dba438b",
+    meta: "18 июля · Эдуард Ильдарханов и Евгений Константинов · 120 мин",
+  },
+] as const;
+
 async function styleSignature(locator: Locator): Promise<string> {
   return locator.evaluate((element) => {
     const style = getComputedStyle(element);
@@ -34,6 +93,7 @@ test.describe("#1302 static Academy-home demo", () => {
   test("renders the approved variant V composition in deterministic order without data requests", async ({
     page,
   }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
     const dataRequests: string[] = [];
     page.on("request", (request) => {
       if (["fetch", "xhr"].includes(request.resourceType())) {
@@ -46,18 +106,13 @@ test.describe("#1302 static Academy-home demo", () => {
 
     const main = page.getByRole("main");
     await expect(main).toBeVisible();
-    await expect(
-      page.getByRole("heading", {
-        level: 1,
-        name: "Учитесь у практиков — бесплатно",
-      }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("heading", {
-        level: 2,
-        name: "Постройте репутацию в экспертной среде",
-      }),
-    ).toBeVisible();
+    const pageHeading = page.getByRole("heading", { level: 1 });
+    await expect(pageHeading).toHaveCount(1);
+    await expect(pageHeading).toHaveText(HERO_HEADING);
+    await expect(page.getByText("Учитесь у практиков — бесплатно")).toHaveCount(
+      0,
+    );
+    await expect(page.getByText(HERO_BODY, { exact: true })).toBeVisible();
 
     await expect
       .poll(() =>
@@ -99,13 +154,93 @@ test.describe("#1302 static Academy-home demo", () => {
       ),
     ).toBeLessThan(1);
 
-    await expect(page.getByTestId("academy-expert-card")).toHaveCount(4);
+    const platform = main.locator('[data-academy-section="what"]');
     await expect(
-      page.getByRole("heading", { name: "Эксперты, которые ведут за собой" }),
+      platform.getByRole("heading", { name: "Что такое Doctor.School" }),
     ).toBeVisible();
     await expect(
-      page.getByText("Кто стоит за брендом", { exact: true }),
+      platform.getByTestId("academy-platform-intro").locator("p"),
+    ).toHaveText([...PLATFORM_COPY]);
+
+    const experts = main.locator('[data-academy-section="experts"]');
+    await expect(
+      experts.getByRole("heading", { name: "Объединение лидеров и экспертов" }),
     ).toBeVisible();
+    await expect(
+      experts.getByText(
+        "Площадка объединяет фаундеров, приглашенных экспертов и лидеров мнений.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    const expertCards = experts.getByTestId("academy-expert-card");
+    await expect(expertCards).toHaveCount(6);
+    for (const expert of STAGE_B_EXPERTS) {
+      const card = expertCards.filter({ hasText: expert.name });
+      await expect(card).toHaveCount(1);
+      await expect(
+        card.getByTestId("academy-expert-copy").locator(":scope > *"),
+      ).toHaveText([expert.name, ...expert.signature]);
+    }
+
+    const expertPhotos = experts.locator("img");
+    await expect(expertPhotos).toHaveCount(5);
+    for (const [index, expert] of STAGE_B_EXPERTS.slice(0, 5).entries()) {
+      const photo = expertPhotos.nth(index);
+      await expect(photo).toHaveAttribute("alt", expert.name);
+      await photo.scrollIntoViewIfNeeded();
+      await expect
+        .poll(() =>
+          photo.evaluate(
+            (image) =>
+              image instanceof HTMLImageElement &&
+              image.complete &&
+              image.naturalWidth > 0 &&
+              image.naturalHeight > 0,
+          ),
+        )
+        .toBe(true);
+    }
+    const missingPhotoCard = expertCards.filter({
+      hasText: "Бондарев Анатолий",
+    });
+    await expect(missingPhotoCard.locator("img")).toHaveCount(0);
+    await expect(
+      missingPhotoCard.getByText("фото ожидается", { exact: true }),
+    ).toBeVisible();
+
+    const podcastLinks = experts
+      .getByTestId("academy-podcast-list")
+      .getByRole("link");
+    await expect(podcastLinks).toHaveCount(2);
+    for (const [index, podcast] of STAGE_B_PODCASTS.entries()) {
+      const link = podcastLinks.nth(index);
+      await expect(link.getByText(podcast.title, { exact: true })).toBeVisible();
+      await expect(link.getByText(podcast.meta, { exact: true })).toBeVisible();
+      await expect(link).toHaveAttribute("href", podcast.href);
+      await expect(link).toHaveAttribute("target", "_blank");
+      await expect(link).toHaveAttribute("rel", /noopener/);
+      await expect(link).toHaveAttribute("rel", /noreferrer/);
+    }
+
+    const wordmark = page.getByTestId("academy-footer-wordmark");
+    await wordmark.scrollIntoViewIfNeeded();
+    await expect(wordmark.locator("xpath=..")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    const wordmarkBox = await wordmark.boundingBox();
+    expect(wordmarkBox).not.toBeNull();
+    expect(wordmarkBox!.width).toBeGreaterThan(1440 * 0.8);
+    expect(wordmarkBox!.height).toBeGreaterThan(150);
+    const wordmarkInk = await wordmark.evaluate((element) => {
+      const probe = document.createElement("span");
+      probe.style.color = "var(--color-hairline)";
+      document.body.append(probe);
+      const expected = getComputedStyle(probe).color;
+      probe.remove();
+      return { actual: getComputedStyle(element).color, expected };
+    });
+    expect(wordmarkInk.actual).toBe(wordmarkInk.expected);
 
     expect(dataRequests).toEqual([]);
   });
@@ -168,6 +303,25 @@ test.describe("#1302 static Academy-home demo", () => {
     });
     await expect(mobileMenu).toBeVisible();
     await expect(mobileMenu).toBeDisabled();
+
+    await footer.scrollIntoViewIfNeeded();
+    const mobileWordmark = page.getByTestId("academy-footer-wordmark");
+    const mobileInkBox = await mobileWordmark.evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const bounds = range.getBoundingClientRect();
+      return {
+        left: bounds.left,
+        right: bounds.right,
+        width: bounds.width,
+      };
+    });
+    expect(mobileInkBox.left).toBeGreaterThanOrEqual(0);
+    expect(mobileInkBox.right).toBeLessThanOrEqual(390);
+    expect(
+      Math.min(mobileInkBox.left, 390 - mobileInkBox.right),
+    ).toBeGreaterThanOrEqual(8);
+    expect(mobileInkBox.width).toBeGreaterThan(390 * 0.75);
   });
 
   test("keeps the lead area visibly demo-only and impossible to submit", async ({
@@ -199,7 +353,7 @@ test.describe("#1302 static Academy-home demo", () => {
     page,
   }) => {
     await page.goto(ROUTE);
-    const cta = page.getByRole("link", { name: "Смотреть эфиры →" }).first();
+    const cta = page.getByRole("link", { name: "Стать партнёром" }).first();
     await expect(cta).toBeVisible();
 
     await page.mouse.move(0, 0);

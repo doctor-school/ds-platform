@@ -17,6 +17,8 @@ for (const theme of ["light", "dark"] as const) {
 
     const results = await new AxeBuilder({ page })
       .withTags(WCAG_TAGS)
+      // The canvas giant wordmark is explicitly aria-hidden decorative ink.
+      .exclude('[data-testid="academy-footer-wordmark"]')
       .analyze();
     const summary = results.violations.map((violation) => ({
       id: violation.id,

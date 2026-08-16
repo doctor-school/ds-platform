@@ -64,6 +64,13 @@ const SECTIONS: readonly Section[] = [
     issue: "#349",
     href: "/candidates",
   },
+  {
+    title: "Academy home demo",
+    description:
+      "The approved variant V Academy-home composition rendered with deterministic fixtures: a durable design-review surface with no portal runtime, data loading, or lead submission.",
+    issue: "#1302",
+    href: "/demos/academy-home",
+  },
 ];
 
 function SectionCard({

@@ -42,7 +42,14 @@ import { test, expect, type Page } from "@playwright/test";
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 
 /** Every showcase route — each renders a slice of the catalogue in every state. */
-const ROUTES = ["/", "/tokens", "/primitives", "/blocks", "/candidates"];
+const ROUTES = [
+  "/",
+  "/tokens",
+  "/primitives",
+  "/blocks",
+  "/candidates",
+  "/demos/academy-home",
+];
 
 /** The two themes each route is scanned in — the token cascade keys off the
  * `.dark` class on `<html>` (the #515 runtime page toggle), so the dark pass just

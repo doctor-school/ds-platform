@@ -28,7 +28,11 @@ const BASE = `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: ["interaction-states.e2e.spec.ts", "a11y-axe.e2e.spec.ts"],
+  testMatch: [
+    "interaction-states.e2e.spec.ts",
+    "a11y-axe.e2e.spec.ts",
+    "academy-home.e2e.spec.ts",
+  ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

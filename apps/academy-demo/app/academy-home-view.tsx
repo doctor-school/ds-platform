@@ -326,24 +326,13 @@ function ExpertCard({ expert }: { expert: (typeof EXPERTS)[number] }) {
       className="flex h-full flex-col overflow-hidden"
     >
       <div className="relative flex aspect-4/3 items-center justify-center overflow-hidden border-b-2 border-border bg-tint">
-        {"photo" in expert ? (
-          <Image
-            src={expert.photo}
-            alt={expert.fullName}
-            fill
-            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-            className="object-cover"
-          />
-        ) : (
-          <div className="flex flex-col items-center gap-2 text-center">
-            <span className="text-3xl font-extrabold tracking-heading text-tint-foreground">
-              {expert.initials}
-            </span>
-            <span className="text-2xs font-extrabold uppercase tracking-micro text-primary-action">
-              фото ожидается
-            </span>
-          </div>
-        )}
+        <Image
+          src={expert.photo}
+          alt={expert.fullName}
+          fill
+          sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+          className="object-cover"
+        />
       </div>
       <div
         data-testid="academy-expert-copy"

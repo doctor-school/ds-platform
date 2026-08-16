@@ -12,30 +12,35 @@ const PLATFORM_COPY = [
 const STAGE_B_EXPERTS = [
   {
     name: "Эдуард Ильдарханов",
+    photo: "/experts/eduard-ildarkhanov.webp",
     signature: [
       "архитектор смыслов, основатель BBM Academy и Doctor School",
     ],
   },
   {
     name: "Максим Алексеевич Страхов",
+    photo: "/experts/maksim-strakhov.webp",
     signature: [
       "к. м. н., доцент кафедры травматологии-ортопедии и военно-полевой хирургии РНИМУ им. Н. И. Пирогова, доцент кафедры травматологии и ортопедии АПО ФНКЦ ФМБА России",
     ],
   },
   {
     name: "Тимофей Гаев",
+    photo: "/experts/timofey-gaev.webp",
     signature: [
       "кандидат медицинских наук, главный врач профессионального баскетбольного клуба ЦСКА Москва, ведущий специалист Центра спортивной медицины и реабилитации Sport Fizio Life, врач спортивной медицины, травматолог-ортопед, старший преподаватель кафедры травматологии и ортопедии Академии постдипломного образования ФГБУ ФНКЦ ФМБА России",
     ],
   },
   {
     name: "Евгений Константинов",
+    photo: "/experts/evgeniy-konstantinov.webp",
     signature: [
       "независимый эксперт-консультант фармацевтического маркетинга, инженер-конструктор построения рынков и стратегического управления мнениями",
     ],
   },
   {
     name: "Загородний Николай Васильевич",
+    photo: "/experts/nikolay-zagorodniy.webp",
     signature: [
       "Автор более 800 научных и печатных работ, 16 монографий, 34 учебно-методических пособий.",
       "Под его руководством защищено 19 докторских и 54 кандидатские диссертации.",
@@ -43,6 +48,7 @@ const STAGE_B_EXPERTS = [
   },
   {
     name: "Бондарев Анатолий",
+    photo: "/experts/anatoliy-bondarev.webp",
     signature: [
       "новатор, директор по маркетингу Панбиофарм, независимый эксперт по созданию и управлению фармацевтическими рынками",
     ],
@@ -208,10 +214,13 @@ test.describe("#1302 static Academy-home demo", () => {
     }
 
     const expertPhotos = experts.locator("img");
-    await expect(expertPhotos).toHaveCount(5);
-    for (const [index, expert] of STAGE_B_EXPERTS.slice(0, 5).entries()) {
+    await expect(expertPhotos).toHaveCount(6);
+    for (const [index, expert] of STAGE_B_EXPERTS.entries()) {
       const photo = expertPhotos.nth(index);
       await expect(photo).toHaveAttribute("alt", expert.name);
+      expect(
+        decodeURIComponent((await photo.getAttribute("src")) ?? ""),
+      ).toContain(expert.photo);
       await photo.scrollIntoViewIfNeeded();
       await expect
         .poll(() =>
@@ -225,13 +234,13 @@ test.describe("#1302 static Academy-home demo", () => {
         )
         .toBe(true);
     }
-    const missingPhotoCard = expertCards.filter({
+    const bondarevCard = expertCards.filter({
       hasText: "Бондарев Анатолий",
     });
-    await expect(missingPhotoCard.locator("img")).toHaveCount(0);
+    await expect(bondarevCard.locator("img")).toHaveCount(1);
     await expect(
-      missingPhotoCard.getByText("фото ожидается", { exact: true }),
-    ).toBeVisible();
+      bondarevCard.getByText("фото ожидается", { exact: true }),
+    ).toHaveCount(0);
 
     await expect(expertGrid.getByTestId("academy-expert-card")).toHaveCount(6);
 

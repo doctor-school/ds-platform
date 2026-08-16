@@ -20,7 +20,5 @@ Intentional design-system deltas are retained for Stage B: owned `Container`
 rhythm and responsive remaps define the geometry; owned `WebinarCard` keeps its
 standard `МСК` label and exposes no public CTA; project tiles are static page
 composition; navigation uses local hash targets; the mobile menu and login are
-honestly disabled; and the past webinar uses a quiet opacity treatment. Expert
-cards now use five owner-supplied portraits optimized locally as WEBP; the
-genuinely missing sixth asset remains an honest initials + `фото ожидается`
-fallback rather than an invented or web-sourced identity photo.
+honestly disabled; and the past webinar uses a quiet opacity treatment. All six
+expert cards use owner-supplied portraits optimized locally as WEBP.

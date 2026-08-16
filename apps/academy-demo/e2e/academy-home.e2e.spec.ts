@@ -56,7 +56,7 @@ const STAGE_B_PROJECTS = [
   },
   {
     title: "B2B — стейкхолдеры реальных решений",
-    href: "https://academy.doctor.school/webinars/event-5dba438b",
+    href: "https://rutube.ru/video/a682bead10b37ce96beef4f3a6d59b08/?r=wd",
     meta: "18 июля · Эдуард Ильдарханов и Евгений Константинов · 120 мин",
   },
 ] as const;
@@ -142,6 +142,9 @@ test.describe("#1302 static Academy-home demo", () => {
       await expect(
         events.getByRole("heading", { name: project.title, exact: true }),
       ).toHaveCount(1);
+      await expect(
+        events.getByRole("link", { name: project.title, exact: true }),
+      ).toHaveAttribute("href", project.href);
     }
     const pastWebinar = events.locator('[data-webinar-state="past"]');
     await expect(pastWebinar).toContainText(

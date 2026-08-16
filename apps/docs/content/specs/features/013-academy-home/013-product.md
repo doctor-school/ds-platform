@@ -95,9 +95,10 @@ The enabled form contains:
 An accepted submission creates exactly one private server-side JSON record.
 The form uses no database, CMS, Mattermost, queue, worker, CRM, or notification.
 Raw submitted values do not appear in application logs, and visitors have no
-public read or list surface for saved records. Retention remains governed by
-the linked privacy policy and ADR-0009; this slice makes no new decision about
-a retention duration.
+public read or list surface for saved records. The linked policy §6.4 already
+sets an unlimited processing period until withdrawal by email to
+`info@doctor.school`; this slice follows that published rule and invents no
+different duration or automated deletion.
 
 ## Flows
 
@@ -142,8 +143,7 @@ visitor sees the exact error text: «Не удалось сохранить за
 - database, Mattermost, queue, worker, CRM, notification, analytics, or admin
   workflow;
 - a public read or list surface for submitted records;
-- a new retention duration or policy beyond the linked privacy policy and
-  ADR-0009;
+- a new retention duration or policy beyond the linked privacy policy §6.4;
 - a new outbound-contact promise or response-time guarantee in the form's
   success state;
 - editorial redesign or copy changes beyond the approved form states.

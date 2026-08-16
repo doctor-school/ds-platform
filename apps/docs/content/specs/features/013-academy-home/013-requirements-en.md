@@ -35,13 +35,16 @@ one private record exists.
 Issue #1312 enables the existing form at public /. A Next.js Server Action writes
 accepted submissions as private JSON; visitors have no read or list surface.
 
-## Constraints and prior decisions
+## Prior decisions
 
-ADR-0002 §4, §5.5 requires an explicit contract and server validation; ADR-0004
-§9, §14 assigns the portal its route and mutation boundary; ADR-0006 §4 requires
-flat bilingual EARS; ADR-0009 §2.1, §2.6 and ADR-0011 §2.1–§2.4 protect personal
-data; ADR-0012 §1, §4 requires fail-closed operation; ADR-0013 §4, §7 requires
-design-system accessibility; ADR-0014 §1–§5 makes the PRD authoritative.
+ADR-0002 design §4.3, §4.4, §4.6, and §5.5 fixes errors, idempotency, request
+protection, and server-side validation. ADR-0004 §5, §6, and §11 plus its design
+§9 and §14 fixes selective Server Actions, RHF + Zod forms, and browser tests.
+ADR-0006 §4 requires flat bilingual EARS. ADR-0009 §2.1 fixes immutable,
+versioned consent evidence; its Postgres-only §2.6 table matrix does not apply to
+the Product Lead-mandated file store. ADR-0011 §2.1–§2.4 prohibits PD egress;
+ADR-0012 §1 and §4 requires fail-closed production storage; ADR-0013 §4 and §7
+requires design-system accessibility; ADR-0014 §1–§5 makes the PRD authoritative.
 
 ## Event Model
 
@@ -57,7 +60,22 @@ None. This slice has no event, read model, public query, or listing.
 ### Policies
 
 Records are visitor-write-only. Raw values never enter application logs or egress.
-The privacy policy and ADR-0009 govern retention; no duration is decided here.
+The linked privacy policy §6.4 already sets an unlimited processing period until
+withdrawal by email to `info@doctor.school`; live JSON and same-zone backup copies
+follow that published rule. The immutable JSON embeds the consent purpose,
+version tag, exact accepted text and its SHA-256 digest, acceptance time, and
+policy URL, preserving ADR-0009 §2.1 evidence semantics without introducing its
+forbidden Postgres topology.
+
+## Field validation and mask contract
+
+| Field             | Shared client/server rule                                                                                         | Input mask                                           |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Name              | Trim; 1–120 Unicode characters.                                                                                   | None: human names must not be shape-restricted.      |
+| Company or clinic | Trim; empty becomes absent; otherwise at most 160 Unicode characters.                                             | None: organisation names have no stable shape.       |
+| Email or Telegram | Trim; either a Zod-valid email of at most 254 characters, or `^@[A-Za-z0-9_]{5,32}$`. Preserve accepted spelling. | None: one control accepts two incompatible syntaxes. |
+| Role              | Exact enum in the Product Lead-approved order.                                                                    | NativeSelect, so free text is impossible.            |
+| Consent           | Literal `true`; unchecked is invalid.                                                                             | Checkbox, so text masking is not applicable.         |
 
 ## EARS requirements
 
@@ -77,8 +95,10 @@ The privacy policy and ADR-0009 govern retention; no duration is decided here.
   themes, remain keyboard-readable, and pass the Academy Playwright and axe checks.
 - **EARS-5** _(realizes: US-6)_ — When a visitor submits the enabled partnership
   form, the portal shall render required name, optional company or clinic, one
-  required combined `Email или Telegram` field accepting email or a Telegram
-  handle, required roles in this exact order — `Эксперт`, `Партнёр`, `Участник
+  required combined `Email или Telegram` field with exact placeholder
+  `name@company.ru или @username`, accepting a trimmed valid email or a trimmed
+  Telegram handle matching `^@[A-Za-z0-9_]{5,32}$`, required roles in this exact
+  order — `Эксперт`, `Партнёр`, `Участник
 подкаста`, `Соавтор направления`, `Компания` — and required consent linked
   exactly to `https://doctor.school/index/privacy-pay`; it shall validate the same
   shared Zod schema in client and Server Action, show accessible inline field
@@ -87,8 +107,9 @@ The privacy policy and ADR-0009 govern retention; no duration is decided here.
 - **EARS-6** _(realizes: US-6)_ — When the shared schema accepts a submission, the
   Server Action shall atomically and idempotently create exactly one private JSON
   file and then replace the form with `Спасибо! Заявка сохранена.`; its immutable
-  record shall include UUID id, accepted time, form fields, consent accepted state,
-  consent time, and policy URL, while exposing no raw logs, read/list, or egress.
+  record shall include UUID id, accepted time, form fields, and consent purpose,
+  version tag, exact text, text SHA-256, accepted state/time, and policy URL,
+  while exposing no raw logs, read/list, or egress.
 - **EARS-7** _(realizes: US-6)_ — If transport or the private write fails, the
   portal shall preserve entered values, create no partial record, show no false
   success, and show `Не удалось сохранить заявку. Попробуйте ещё раз.` above submit.
@@ -99,7 +120,8 @@ The privacy policy and ADR-0009 govern retention; no duration is decided here.
 ## Invariants
 
 The portal uses no DB, CMS, Mattermost, queue, worker, CRM, notification, admin,
-CAPTCHA, automated deletion, contact SLA, or retention duration for this flow.
+CAPTCHA, automated deletion, contact SLA, or retention rule beyond the linked
+policy §6.4 for this flow.
 
 ## Verification
 

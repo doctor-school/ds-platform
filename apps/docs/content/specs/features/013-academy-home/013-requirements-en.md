@@ -3,7 +3,7 @@ title: "013 — Academy home and partnership form"
 description: "Production requirements for the approved Academy home and its enabled private partnership form."
 slug: 013-academy-home-requirements
 product: ./013-product.md
-status: In dev
+status: Shipped
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
 parent_issue: https://github.com/doctor-school/ds-platform/issues/1307

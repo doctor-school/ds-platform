@@ -28,6 +28,22 @@ describe("Button secondary variant reads as enabled", () => {
   });
 });
 
+describe("Button surface-safe on-primary variant", () => {
+  it("EARS-5: when the submit action sits on primary blue, the system shall render the invariant white CTA with complete interaction states", () => {
+    const cls = buttonVariants({ variant: "on-primary" });
+
+    expect(cls).toMatch(/bg-header-foreground/);
+    expect(cls).toMatch(/text-header-chip-foreground/);
+    expect(cls).toMatch(/border-header-foreground/);
+    expect(cls).toMatch(/(?:^|\s)shadow-header-chip(?:\s|$)/);
+    expect(cls).toMatch(/hover:shadow-header-chip-hover/);
+    expect(cls).toMatch(/active:shadow-none/);
+    expect(cls).toMatch(/focus-visible:shadow-focus/);
+    expect(cls).toMatch(/disabled:opacity-40/);
+    expect(cls).not.toMatch(/bg-primary-action/);
+  });
+});
+
 /**
  * Neo-brutalist re-skin contract (#512, source `design-source/design-system.dc.html`).
  * The look is CSS proven live on the dev stand; this pins the token-class contract
@@ -75,6 +91,7 @@ describe("Button neo-brutalist offset-shadow contract (#512)", () => {
   it("every variant is square (radius 0 — no rounded-* utility in the class set)", () => {
     for (const variant of [
       "default",
+      "on-primary",
       "destructive",
       "outline",
       "secondary",

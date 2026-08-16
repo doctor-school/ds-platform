@@ -7,6 +7,7 @@ import type { ControllerProps, FieldPath, FieldValues } from "react-hook-form";
 
 import { cn } from "../lib/utils";
 import { Label } from "./label";
+import { Link } from "./link";
 
 /**
  * shadcn/ui `<Form>` set — the canonical RHF binding (ADR-0004 §9). `<Form>` is
@@ -101,7 +102,9 @@ const FormLabel = React.forwardRef<
   // input border + the error message (NN/g: mark the field, not the text); a red
   // label stacked on a red message + red helper is the "red mush" the owner flagged.
   const { formItemId } = useFormField();
-  return <Label ref={ref} className={className} htmlFor={formItemId} {...props} />;
+  return (
+    <Label ref={ref} className={className} htmlFor={formItemId} {...props} />
+  );
 });
 FormLabel.displayName = "FormLabel";
 
@@ -162,6 +165,7 @@ const FORM_MESSAGE_TEXT = "text-xs";
 // dark card), which keeps the message legible in both themes.
 const FORM_ERROR_TONE = "font-bold text-destructive-text";
 const FORM_HELPER_TONE = "text-muted-foreground";
+const FORM_ON_PRIMARY_TONE = "text-primary-surface-foreground";
 // Success tone (#529, source §07 «Формы и валидация» — the `Success` cell): the
 // confirmation reads 12px **weight 700** in the success role with a leading `✓`, the
 // mirror of the error tone. It uses `success-text`, NOT the `success` FILL: green.500
@@ -235,8 +239,10 @@ const FormMessage = React.forwardRef<
      * needs confirmation copy: `success` with no `children` renders nothing.
      */
     success?: boolean;
+    /** Use full-strength surface-safe text when the field sits on primary blue. */
+    tone?: "default" | "on-primary";
   }
->(({ className, children, success, ...props }, ref) => {
+>(({ className, children, success, tone = "default", ...props }, ref) => {
   const { error, formDescriptionId, formMessageId } = useFormField();
   const errorText = error ? String(error?.message ?? "") : "";
   const hasError = errorText.length > 0;
@@ -256,11 +262,13 @@ const FormMessage = React.forwardRef<
       id={hasError ? formMessageId : formDescriptionId}
       className={cn(
         FORM_MESSAGE_TEXT,
-        hasError
-          ? FORM_ERROR_TONE
-          : showSuccess
-            ? FORM_SUCCESS_TONE
-            : FORM_HELPER_TONE,
+        tone === "on-primary"
+          ? cn(FORM_ON_PRIMARY_TONE, (hasError || showSuccess) && "font-bold")
+          : hasError
+            ? FORM_ERROR_TONE
+            : showSuccess
+              ? FORM_SUCCESS_TONE
+              : FORM_HELPER_TONE,
         // Error / success lead with a glyph, so they lay out as an inline flex row.
         (hasError || showSuccess) && "flex items-center gap-1.5",
         className,
@@ -301,8 +309,8 @@ FormMessage.displayName = "FormMessage";
  */
 const FormError = React.forwardRef<
   HTMLParagraphElement,
-  React.ComponentProps<"p">
->(({ className, children, ...props }, ref) => {
+  React.ComponentProps<"p"> & { tone?: "default" | "on-primary" }
+>(({ className, children, tone = "default", ...props }, ref) => {
   const hasBody = children != null && children !== false && children !== "";
   if (!hasBody) return null;
   return (
@@ -311,7 +319,9 @@ const FormError = React.forwardRef<
       role="alert"
       className={cn(
         FORM_MESSAGE_TEXT,
-        FORM_ERROR_TONE,
+        tone === "on-primary"
+          ? cn("font-bold", FORM_ON_PRIMARY_TONE)
+          : FORM_ERROR_TONE,
         "flex items-center gap-1.5",
         className,
       )}
@@ -324,6 +334,85 @@ const FormError = React.forwardRef<
 });
 FormError.displayName = "FormError";
 
+export interface FormErrorSummaryItem {
+  /** The invalid control id. The summary renders a native `#id` field link. */
+  fieldId: string;
+  /** Localized field error copy. */
+  message: React.ReactNode;
+}
+
+export interface FormErrorSummaryProps extends Omit<
+  React.ComponentPropsWithoutRef<"div">,
+  "children" | "title"
+> {
+  /** Localized summary heading; also provides the alert's accessible name. */
+  title: React.ReactNode;
+  /** Invalid fields in the same order visitors encounter them in the form. */
+  errors: readonly FormErrorSummaryItem[];
+}
+
+/**
+ * Long-form (>3 fields) validation summary (ADR-0013 §7, first realization in
+ * Feature 013 EARS-5). It sits below submit, links each message to its field,
+ * and is deliberately programmatically focusable so the form can move focus
+ * here after a rejected submit. Empty summaries render nothing.
+ */
+const FormErrorSummary = React.forwardRef<
+  HTMLDivElement,
+  FormErrorSummaryProps
+>(({ className, title, errors, ...props }, ref) => {
+  const titleId = React.useId();
+  if (errors.length === 0) return null;
+
+  return (
+    <div
+      {...props}
+      ref={ref}
+      role="alert"
+      tabIndex={-1}
+      aria-labelledby={titleId}
+      className={cn(
+        "border-2 border-destructive bg-background p-4",
+        "focus-visible:outline-none focus-visible:shadow-focus",
+        className,
+      )}
+    >
+      <p
+        id={titleId}
+        className={cn(
+          FORM_MESSAGE_TEXT,
+          FORM_ERROR_TONE,
+          "flex items-center gap-1.5",
+        )}
+      >
+        <ErrorGlyph />
+        {title}
+      </p>
+      <ul className="mt-2 flex list-disc flex-col gap-1.5 pl-5">
+        {errors.map((error) => (
+          <li key={error.fieldId} className="text-xs text-foreground">
+            <Link
+              href={`#${error.fieldId}`}
+              variant="inline"
+              className="text-xs"
+              onClick={(event) => {
+                const control = document.getElementById(error.fieldId);
+                if (control instanceof HTMLElement) {
+                  event.preventDefault();
+                  control.focus();
+                }
+              }}
+            >
+              {error.message}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+});
+FormErrorSummary.displayName = "FormErrorSummary";
+
 export {
   useFormField,
   Form,
@@ -333,5 +422,6 @@ export {
   FormDescription,
   FormMessage,
   FormError,
+  FormErrorSummary,
   FormField,
 };

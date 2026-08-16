@@ -16,9 +16,10 @@ import { cn } from "../lib/utils";
  *
  * FIDELITY TRAP (brief): the offset-shadow COLOUR differs per variant — a FILLED
  * action (`default`/`destructive`) casts in the INK/structural border tone
- * (`shadow-btn`, source `4px 4px 0 {border}`), a BORDERED surface
- * (`outline`/`secondary`) casts in the SOFT elevation tone (`shadow-ghost`,
- * source `4px 4px 0 {shadowSm}`). They are NOT the same token.
+ * (`shadow-btn`, source `4px 4px 0 {border}`), the white `on-primary` action
+ * uses the theme-invariant white-chip cast (`shadow-header-chip`), and a
+ * BORDERED surface (`outline`/`secondary`) casts in the SOFT elevation tone
+ * (`shadow-ghost`, source `4px 4px 0 {shadowSm}`). They are NOT the same token.
  */
 
 // The raised-button motion + collapse shared by every offset-shadow variant:
@@ -36,6 +37,14 @@ const buttonVariants = cva(
         default: cn(
           "border-2 border-primary-action bg-primary-action text-primary-foreground font-extrabold shadow-btn",
           "hover:bg-primary-hover hover:border-primary-hover hover:shadow-btn-hover focus-visible:shadow-btn-focus",
+          RAISED_MOTION,
+        ),
+        // On primary — the Canvas white CTA on the invariant navy surface.
+        // The header-chip roles are the existing theme-invariant white/blue
+        // pair and dark cast; generic button roles flip in dark and disappear.
+        "on-primary": cn(
+          "border-2 border-header-foreground bg-header-foreground text-header-chip-foreground font-extrabold shadow-header-chip",
+          "hover:shadow-header-chip-hover focus-visible:shadow-focus",
           RAISED_MOTION,
         ),
         // Destructive — filled danger red, same ink offset cast as primary.

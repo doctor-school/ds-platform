@@ -13,6 +13,7 @@
     "./button": "./src/primitives/button.tsx",
     "./link": "./src/primitives/link.tsx",
     "./input": "./src/primitives/input.tsx",
+    "./native-select": "./src/primitives/native-select.tsx",
     "./label": "./src/primitives/label.tsx",
     "./card": "./src/primitives/card.tsx",
     "./form": "./src/primitives/form.tsx",

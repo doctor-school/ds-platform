@@ -52,6 +52,7 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "button", section: "primitives" },
   { id: "card", section: "primitives" },
   { id: "input", section: "primitives" },
+  { id: "native-select", section: "primitives" },
   { id: "input-otp", section: "primitives" },
   { id: "label", section: "primitives" },
   { id: "link", section: "primitives" },

@@ -56,19 +56,19 @@ focus-visible / disabled / loading / invalid / empty …>
 
 ## Element-class taxonomy
 
-| Class                      | Status                    | Primitive(s)                      | Section                         |
-| -------------------------- | ------------------------- | --------------------------------- | ------------------------------- |
-| Button / action controls   | researched                | `Button`                          | [↓](#button--action-controls)   |
-| Field / text input         | researched                | `Input`, `FormItem`/`FormControl` | [↓](#field--text-input)         |
-| Native single-select       | researched                | `NativeSelect` (planned)          | [↓](#native-single-select)      |
-| Error & validation display | researched                | `FormMessage`, `FormError`        | [↓](#error--validation-display) |
-| Tabs / segmented control   | researched                | `Tabs`/`TabsTrigger`              | [↓](#tabs--segmented-control)   |
-| Link / navigation          | researched                | `Link`                            | [↓](#link--navigation)          |
-| Menu / dropdown            | on-demand                 | —                                 | populated on first use          |
-| Modal / popover / dialog   | on-demand                 | —                                 | populated on first use          |
-| Image / media              | on-demand                 | —                                 | populated on first use          |
-| Motion / transition        | researched (async-submit) | `Button.loading`                  | [↓](#motion--transition)        |
-| Elevation / shadow         | on-demand                 | —                                 | populated on first use          |
+| Class                      | Status                    | Primitive(s)                                   | Section                         |
+| -------------------------- | ------------------------- | ---------------------------------------------- | ------------------------------- |
+| Button / action controls   | researched                | `Button`                                       | [↓](#button--action-controls)   |
+| Field / text input         | researched                | `Input`, `FormItem`/`FormControl`              | [↓](#field--text-input)         |
+| Native single-select       | researched                | `NativeSelect`                                 | [↓](#native-single-select)      |
+| Error & validation display | researched                | `FormMessage`, `FormError`, `FormErrorSummary` | [↓](#error--validation-display) |
+| Tabs / segmented control   | researched                | `Tabs`/`TabsTrigger`                           | [↓](#tabs--segmented-control)   |
+| Link / navigation          | researched                | `Link`                                         | [↓](#link--navigation)          |
+| Menu / dropdown            | on-demand                 | —                                              | populated on first use          |
+| Modal / popover / dialog   | on-demand                 | —                                              | populated on first use          |
+| Image / media              | on-demand                 | —                                              | populated on first use          |
+| Motion / transition        | researched (async-submit) | `Button.loading`                               | [↓](#motion--transition)        |
+| Elevation / shadow         | on-demand                 | —                                              | populated on first use          |
 
 ---
 
@@ -76,7 +76,7 @@ focus-visible / disabled / loading / invalid / empty …>
 
 **status: researched** — seeded from ADR-0013 §7 (auth slice #270/#324).
 
-**Unit & states.** The action control in its variant set (default / secondary / outline / ghost / link) across default → hover → active → focus-visible → disabled → loading.
+**Unit & states.** The action control in its variant set (default / on-primary / secondary / outline / ghost / link) across default → hover → active → focus-visible → disabled → loading.
 
 **Best-practice principle.** A clickable declares its **full** state set as a contract, never per-page diligence: pointer cursor when enabled, a visible hover change, an `active:` press, a keyboard focus-visible ring, an unambiguous disabled treatment, and a determinate pending affordance on async submit. A control with an arrow cursor, no hover feedback, or no focus ring is a **defect, not a pass**. Disabled is told apart from a quiet `secondary` by the **combination** `opacity-50` + not-allowed cursor + inert `pointer-events-none` (secondary keeps a `border-input`, pointer cursor and live hover) — never by fill depth alone (#2).
 
@@ -84,11 +84,11 @@ focus-visible / disabled / loading / invalid / empty …>
 
 **Adopted from.** shadcn/ui `Button` (Radix), re-skinned to tokens.
 
-**Rendered options + owner pick.** Filled fill/hover/pressed triad approved on the auth slice (#270): resting `primary-action` (blue.700) → `primary-hover`/`primary-pressed` (blue.800).
+**Rendered options + owner pick.** Filled fill/hover/pressed triad approved on the auth slice (#270): resting `primary-action` (blue.700) → `primary-hover`/`primary-pressed` (blue.800). Feature 013 Stage B confirmed that a CTA on the invariant navy primary surface uses the Canvas white action: white fill, navy text, and a dark hard offset cast; the default filled action is not reused because it blends into that surface in light mode.
 
-**Token / primitive mapping.** `Button` composing `interactiveBase` → `packages/design-system/README.md` → _Clickable state matrix_ for the exact classes.
+**Token / primitive mapping.** `Button` composing `interactiveBase` → `packages/design-system/README.md` → _Clickable state matrix_ for the exact classes. On `primary-surface`, product code requests `variant="on-primary"`; the primitive owns the invariant `header-foreground` / `header-chip-foreground` / `shadow-header-chip` composition, with no app-level colour override.
 
-**Rendered contract.** Showcase → Primitives → Button (every variant × state).
+**Rendered contract.** Showcase → Primitives → Button (every variant × state), including `on-primary` on the real navy surface in both themes.
 
 **Decision & enforcement.** [ADR-0013 §7](../adr/0013-design-token-sot-en.md) layers 1–4; guards `interaction-states` (#269), `aa-contrast` (#402).
 
@@ -180,11 +180,11 @@ the composition; Stage B reconfirms both themes and breakpoints before merge.
 
 **Adopted from.** shadcn/ui `FormMessage` pattern; `FormError` bespoke wrapper over the same tone constants.
 
-**Rendered options + owner pick.** #333: text size + label-colour behaviour — owner picked **`text-xs`, non-bold, neutral label**. `<FormErrorSummary>` **deferred** to the first >3-field form (no unused component).
+**Rendered options + owner pick.** #333: text size + label-colour behaviour — owner picked **`text-xs`, non-bold, neutral label**. Feature 013 / #1312 is the first >3-field realization: `FormErrorSummary` renders below submit only when errors exist, receives programmatic focus after rejection, and links each message to the invalid control.
 
-**Token / primitive mapping.** `FormMessage` / `FormError` → `packages/design-system/README.md` → _Form layout standard_.
+**Token / primitive mapping.** `FormMessage` / `FormError` / `FormErrorSummary` → `packages/design-system/README.md` → _Form layout standard_. On the invariant primary-blue surface, `FormMessage` / `FormError` use their semantic `tone="on-primary"` contract (`primary-surface-foreground`, full strength) rather than an app-level colour override.
 
-**Rendered contract.** Showcase → Primitives → Field (invalid state).
+**Rendered contract.** Showcase → Primitives → Field (invalid state) and Form → `FormErrorSummary` (linked, focusable long-form summary).
 
 **Decision & enforcement.** [ADR-0013 §7](../adr/0013-design-token-sot-en.md); guards `form-error` (#339), `form-rhythm` (#334).
 
@@ -213,6 +213,11 @@ the composition; Stage B reconfirms both themes and breakpoints before merge.
 **status: researched** — seeded from ADR-0013 §7 (#3, #324).
 
 **Unit & states.** Standalone nav link vs in-body link: resting / hover / active / focus / disabled.
+
+On the invariant primary-blue surface, `Link` uses its semantic
+`tone="on-primary"` contract: full-strength `primary-surface-foreground` at
+rest, underline on hover, the AA-safe `primary-surface-muted` active delta, and
+the standard focus ring. Product pages do not override link child classes.
 
 **Best-practice principle.** A link stays visibly a link and changes **clearly on hover and focus**, never relying on colour alone: persistent brand colour + hover-underline + a keyboard focus ring identical to the hover affordance (WAI consistency). Standalone nav links carry **no resting underline** (colour + hover-underline + focus ring suffice); in-body links keep a resting underline. Link text uses **`primary-action` (blue.700, 8.14:1 on white)** — `primary` (blue.500) is only ~3.3:1 and fails AA for normal-weight text.
 

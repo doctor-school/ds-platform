@@ -3,7 +3,7 @@ title: "013 — Главная Академии и форма партнёрст
 description: "Продакшен-требования к утверждённой главной Академии и её включённой приватной форме партнёрства."
 slug: 013-academy-home-requirements-ru
 product: ./013-product-ru.md
-status: In dev
+status: Shipped
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
 parent_issue: https://github.com/doctor-school/ds-platform/issues/1307

@@ -20,6 +20,10 @@ import { cn } from "../lib/utils";
  * so it is inert like a disabled control. Token-only throughout (no arbitrary
  * Tailwind values — the §5 / #269 guard must stay green).
  *
+ * On the invariant brand surface, `tone="on-primary"` switches the resting
+ * colour to full-strength `primary-surface-foreground` and the active delta to
+ * AA-safe `primary-surface-muted`; hover underline and focus ring stay intact.
+ *
  * Two variants:
  *  - `standalone` (default) — a nav/footer link: NO resting underline, relies on
  *    brand colour + hover-underline + focus ring (NN/g + WCAG: a standalone link
@@ -36,16 +40,22 @@ const linkVariants = cva(
   // underline, and the flush 3px `shadow-focus` keyboard ring (the source's
   // global `:focus-visible` 3px blue outline) — consistent with every other
   // re-skinned control, instead of the generic ring-with-offset. Token-only.
-  "text-primary-action underline-offset-4 transition-colors font-bold hover:underline active:text-primary-action/80 focus-visible:outline-none focus-visible:shadow-focus aria-disabled:pointer-events-none aria-disabled:opacity-50",
+  "underline-offset-4 transition-colors font-bold hover:underline focus-visible:outline-none focus-visible:shadow-focus aria-disabled:pointer-events-none aria-disabled:opacity-50",
   {
     variants: {
       variant: {
         standalone: "",
         inline: "underline",
       },
+      tone: {
+        default: "text-primary-action active:text-primary-action/80",
+        "on-primary":
+          "text-primary-surface-foreground active:text-primary-surface-muted",
+      },
     },
     defaultVariants: {
       variant: "standalone",
+      tone: "default",
     },
   },
 );
@@ -58,11 +68,11 @@ export interface LinkProps
 }
 
 const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(
-  ({ className, variant, asChild = false, ...props }, ref) => {
+  ({ className, variant, tone, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : "a";
     return (
       <Comp
-        className={cn(linkVariants({ variant, className }))}
+        className={cn(linkVariants({ variant, tone, className }))}
         ref={ref}
         {...props}
       />

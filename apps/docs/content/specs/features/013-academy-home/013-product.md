@@ -5,7 +5,7 @@ slug: academy-public-013-academy-home-product
 epic: ../../product/academy-public/brief.md
 parent_issue: https://github.com/doctor-school/ds-platform/issues/1240
 reservation_issue: https://github.com/doctor-school/ds-platform/issues/1307
-status: In dev
+status: Shipped
 surface: user-facing
 lang: en
 ---

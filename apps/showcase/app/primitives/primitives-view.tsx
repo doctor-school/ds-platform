@@ -6,6 +6,7 @@ import { useForm, type Control, type FieldValues } from "react-hook-form";
 import { Button } from "@ds/design-system/button";
 import { Link } from "@ds/design-system/link";
 import { Input } from "@ds/design-system/input";
+import { NativeSelect } from "@ds/design-system/native-select";
 import { Label } from "@ds/design-system/label";
 import {
   Card,
@@ -45,6 +46,8 @@ import {
   Form,
   FormControl,
   FormDescription,
+  FormError,
+  FormErrorSummary,
   FormField,
   FormItem,
   FormLabel,
@@ -209,6 +212,32 @@ function ButtonSection() {
         </SubRow>
       ))}
 
+      <SubRow label='variant="on-primary" — invariant primary surface'>
+        <StateColumns
+          states={INTERACTIVE_STATES}
+          render={(state) => (
+            <div
+              data-testid={`button-on-primary-surface-${state}`}
+              className="bg-primary-surface p-4"
+            >
+              <Button
+                data-testid={`button-on-primary-${state}`}
+                variant="on-primary"
+                disabled={state === "disabled"}
+                className={state === "focus" ? FORCED_FOCUS : undefined}
+              >
+                Button
+              </Button>
+            </div>
+          )}
+        />
+        <div className="w-fit bg-primary-surface p-4">
+          <Button variant="on-primary" loading>
+            Saving…
+          </Button>
+        </div>
+      </SubRow>
+
       <SubRow label="Sizes (variant=default)">
         <div className="flex flex-wrap items-center gap-4">
           {BUTTON_SIZES.map((size) => (
@@ -270,6 +299,26 @@ function LinkSection() {
           </span>
         </SubRow>
       ))}
+      <SubRow label='tone="on-primary" — invariant primary surface'>
+        <span className="inline-flex flex-wrap items-baseline gap-2 bg-primary-surface p-4 text-primary-surface-foreground">
+          Privacy copy with an{" "}
+          <StateColumnsInline
+            states={LINK_STATES}
+            labelTone="on-primary"
+            render={(state) => (
+              <Link
+                href="#"
+                variant="inline"
+                tone="on-primary"
+                aria-disabled={state === "disabled" || undefined}
+                className={state === "focus" ? FORCED_FOCUS : undefined}
+              >
+                inline link
+              </Link>
+            )}
+          />
+        </span>
+      </SubRow>
     </PrimitiveSection>
   );
 }
@@ -277,16 +326,24 @@ function LinkSection() {
 /** Inline variant of StateColumns for links sitting in running text. */
 function StateColumnsInline({
   states,
+  labelTone = "default",
   render,
 }: {
   states: StateSpec[];
+  labelTone?: "default" | "on-primary";
   render: (state: string) => ReactNode;
 }) {
   return (
     <span className="inline-flex flex-wrap items-baseline gap-x-4 gap-y-1">
       {states.map((s) => (
         <span key={s.name} className="inline-flex items-baseline gap-1.5">
-          <span className="font-mono text-xs text-muted-foreground">
+          <span
+            className={
+              labelTone === "on-primary"
+                ? "font-mono text-xs text-primary-surface-muted"
+                : "font-mono text-xs text-muted-foreground"
+            }
+          >
             {s.name}:
           </span>
           <span
@@ -326,6 +383,105 @@ function InputSection() {
             disabled={state === "disabled"}
             aria-invalid={state === "error" || undefined}
           />
+        )}
+      />
+    </PrimitiveSection>
+  );
+}
+
+const NATIVE_SELECT_ROLES = [
+  "Эксперт",
+  "Партнёр",
+  "Участник подкаста",
+  "Соавтор направления",
+  "Компания",
+] as const;
+
+type NativeSelectState = "empty" | "filled" | "focus" | "invalid" | "disabled";
+
+function NativeSelectFieldDemo({ state }: { state: NativeSelectState }) {
+  const startsFilled =
+    state === "filled" || state === "focus" || state === "disabled";
+  const form = useForm<{ role: string }>({
+    defaultValues: { role: startsFilled ? "Партнёр" : "" },
+    mode: "onTouched",
+  });
+
+  useEffect(() => {
+    if (state === "invalid") {
+      form.setError("role", { type: "manual", message: "Выберите роль" });
+    }
+  }, [form, state]);
+
+  return (
+    <Form {...form}>
+      <form className="w-full" onSubmit={(event) => event.preventDefault()}>
+        <FormField
+          control={form.control}
+          name="role"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel required>Роль</FormLabel>
+              <FormControl>
+                <NativeSelect
+                  {...field}
+                  required
+                  disabled={state === "disabled"}
+                  className={state === "focus" ? FORCED_FOCUS : undefined}
+                >
+                  <option value="" disabled>
+                    Выберите роль
+                  </option>
+                  {NATIVE_SELECT_ROLES.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </form>
+    </Form>
+  );
+}
+
+function NativeSelectSection() {
+  const states: NativeSelectState[] = [
+    "empty",
+    "filled",
+    "focus",
+    "invalid",
+    "disabled",
+  ];
+
+  return (
+    <PrimitiveSection
+      title="NativeSelect"
+      exportsLine="NativeSelect — empty · filled · focus-visible · invalid · disabled"
+    >
+      <p className="text-sm text-muted-foreground">
+        The official shadcn/ui native-select composition, re-skinned to the
+        adjacent Input geometry. The browser retains keyboard arrows,
+        type-ahead, form submission, and its mobile picker; the quiet chevron is
+        decorative.
+      </p>
+      <ThemePair
+        render={() => (
+          <div className="flex w-full flex-col gap-6 text-foreground">
+            {states.map((state) => (
+              <Cell key={state} label={state}>
+                <div
+                  data-showcase-force={state === "focus" ? "focus" : undefined}
+                  className="w-full"
+                >
+                  <NativeSelectFieldDemo state={state} />
+                </div>
+              </Cell>
+            ))}
+          </div>
         )}
       />
     </PrimitiveSection>
@@ -757,7 +913,77 @@ function FormPrimitivesSection() {
           />
         </form>
       </Form>
+      <SubRow label='tone="on-primary" — invariant primary surface'>
+        <OnPrimaryFormToneDemo />
+      </SubRow>
+      <SubRow label="FormErrorSummary — long-form invalid submit">
+        <form
+          className="flex w-72 flex-col gap-4"
+          onSubmit={(event) => event.preventDefault()}
+        >
+          <div className="flex flex-col gap-2.5">
+            <Label htmlFor="summary-name" required>
+              Name
+            </Label>
+            <Input id="summary-name" aria-invalid="true" />
+          </div>
+          <div className="flex flex-col gap-2.5">
+            <Label htmlFor="summary-role" required>
+              Role
+            </Label>
+            <NativeSelect id="summary-role" aria-invalid="true" defaultValue="">
+              <option value="" disabled>
+                Choose a role
+              </option>
+              {NATIVE_SELECT_ROLES.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+          <Button type="submit">Submit sample</Button>
+          <div data-showcase-force="focus">
+            <FormErrorSummary
+              className={FORCED_FOCUS}
+              title="Check the highlighted fields"
+              errors={[
+                { fieldId: "summary-name", message: "Enter your name" },
+                { fieldId: "summary-role", message: "Choose a role" },
+              ]}
+            />
+          </div>
+          <FormErrorSummary title="Check the highlighted fields" errors={[]} />
+          <span className="text-xs text-muted-foreground">
+            Empty errors array: no summary is rendered.
+          </span>
+        </form>
+      </SubRow>
     </PrimitiveSection>
+  );
+}
+
+function OnPrimaryFormToneDemo() {
+  const form = useForm<{ field: string }>({ defaultValues: { field: "" } });
+  useEffect(() => {
+    form.setError("field", { type: "manual", message: "Choose a role" });
+  }, [form]);
+
+  return (
+    <div className="flex w-72 flex-col gap-3 bg-primary-surface p-4">
+      <Form {...form}>
+        <FormField
+          control={form.control}
+          name="field"
+          render={() => (
+            <FormItem>
+              <FormMessage tone="on-primary" />
+            </FormItem>
+          )}
+        />
+      </Form>
+      <FormError tone="on-primary">Unable to save. Try again.</FormError>
+    </div>
   );
 }
 
@@ -1069,6 +1295,14 @@ function CheckboxSection() {
           )}
         />
       </SubRow>
+      <SubRow label='tone="on-primary" — enabled + disabled label'>
+        <div className="flex flex-col items-start gap-3 bg-primary-surface p-4">
+          <Checkbox tone="on-primary">I agree to data processing</Checkbox>
+          <Checkbox tone="on-primary" disabled>
+            Disabled consent
+          </Checkbox>
+        </div>
+      </SubRow>
     </PrimitiveSection>
   );
 }
@@ -1278,8 +1512,8 @@ function ContainerSection() {
       <p className="text-sm text-muted-foreground">
         The §09 layout container centres the content column, caps it (
         <code className="font-mono text-xs">content</code> 1104px /{" "}
-        <code className="font-mono text-xs">calendar</code> 1240px content) and applies
-        the responsive gutter. Below the{" "}
+        <code className="font-mono text-xs">calendar</code> 1240px content) and
+        applies the responsive gutter. Below the{" "}
         <code className="font-mono text-xs">layout</code> breakpoint (≤900px) it
         goes edge-to-edge on a fixed 16px gutter — resize the window, or open
         the{" "}
@@ -1314,16 +1548,15 @@ function WebinarCardSection() {
         tinted 196px time plate (56px display time, explicit МСК label) and the
         content column (school kicker, title, specialty chips, speakers). The
         card root is a container and the title is a stretched link, so the whole
-        card opens its event page while a second action can sit alongside without
-        nesting anchors. Desktop → the bordered, raised grid; ≤900px → flat
-        full-bleed with a bottom divider. Resize to watch the split. The{" "}
+        card opens its event page while a second action can sit alongside
+        without nesting anchors. Desktop → the bordered, raised grid; ≤900px →
+        flat full-bleed with a bottom divider. Resize to watch the split. The{" "}
         <span className="font-medium text-foreground">live</span> variant
         surfaces the «В эфире» signal; the{" "}
         <span className="font-medium text-foreground">live + room-CTA</span>{" "}
         variant (006 EARS-6, «мои события») adds the sibling «Войти в эфир»
-        room-entry button that routes to <code className="font-mono text-xs">
-          /webinars/:slug/room
-        </code>.
+        room-entry button that routes to{" "}
+        <code className="font-mono text-xs">/webinars/:slug/room</code>.
       </p>
       {(
         [
@@ -1591,10 +1824,10 @@ function WebinarRoomSection() {
         <code className="font-mono text-xs">webinar-room-frame.dc.html</code> +{" "}
         <code className="font-mono text-xs">chat-column.dc.html</code>, 006
         EARS-2/EARS-11): a viewport-bounded flex shell — the player region is
-        maximized (no custom chrome), a one-line context strip sits under it, and
-        the chat is a 340px aside that collapses to a 44px rail; mobile a
-        full-bleed player + Чат / О эфире tabs. The chat ledger is Twitch-minimal
-        (borderless rows, stick-to-bottom); behaviour is EARS-3.
+        maximized (no custom chrome), a one-line context strip sits under it,
+        and the chat is a 340px aside that collapses to a 44px rail; mobile a
+        full-bleed player + Чат / О эфире tabs. The chat ledger is
+        Twitch-minimal (borderless rows, stick-to-bottom); behaviour is EARS-3.
       </p>
       <SubRow label="composition">
         <ThemePair
@@ -1628,6 +1861,7 @@ export function PrimitivesView() {
       <ButtonSection />
       <LinkSection />
       <InputSection />
+      <NativeSelectSection />
       <LabelSection />
       <CardSection />
       <TabsSection />

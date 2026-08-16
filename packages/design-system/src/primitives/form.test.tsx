@@ -1,12 +1,14 @@
 import * as React from "react";
 import { useForm } from "react-hook-form";
 import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
   Form,
   FormControl,
   FormError,
+  FormErrorSummary,
   FormField,
   FormItem,
   FormLabel,
@@ -30,9 +32,11 @@ afterEach(cleanup);
 function Harness({
   error,
   helper,
+  tone,
 }: {
   error?: string;
   helper?: string;
+  tone?: "on-primary";
 }) {
   const form = useForm<{ name: string }>({ defaultValues: { name: "" } });
   // Inject an error once after mount so the test does not depend on a resolver
@@ -52,7 +56,9 @@ function Harness({
             <FormControl>
               <Input {...field} />
             </FormControl>
-            <FormMessage data-testid="message">{helper}</FormMessage>
+            <FormMessage data-testid="message" {...(tone ? { tone } : {})}>
+              {helper}
+            </FormMessage>
           </FormItem>
         )}
       />
@@ -198,6 +204,85 @@ describe("FormError — single form-level error primitive (one error style sourc
     expect(err).toHaveClass("text-xs", "font-bold", "text-destructive-text");
     expect(err.textContent ?? "").toContain("⚠");
     expect(err).toHaveAttribute("role", "alert");
+  });
+
+  it("EARS-5: when a form error sits on a primary surface, the system shall use the readable on-primary tone", () => {
+    render(
+      <FormError data-testid="ferr" tone="on-primary">
+        Проверьте поля.
+      </FormError>,
+    );
+
+    const err = screen.getByTestId("ferr");
+    expect(err).toHaveClass("text-primary-surface-foreground");
+    expect(err).not.toHaveClass("text-destructive-text");
+  });
+});
+
+describe("FormMessage — semantic on-primary tone", () => {
+  it("EARS-5: when an inline error sits on a primary surface, the system shall use the readable on-primary tone", () => {
+    render(<Harness error="Выберите роль" tone="on-primary" />);
+
+    const message = screen.getByTestId("message");
+    expect(message).toHaveClass("text-primary-surface-foreground");
+    expect(message).not.toHaveClass("text-destructive-text");
+  });
+});
+
+describe("FormErrorSummary — long-form accessible linked error contract", () => {
+  const errors = [
+    { fieldId: "name", message: "Укажите имя" },
+    { fieldId: "role", message: "Выберите роль" },
+  ];
+
+  it("EARS-5: when a long form has errors, the system shall render one focusable alert with linked field errors", () => {
+    const ref = React.createRef<HTMLDivElement>();
+    render(
+      <FormErrorSummary ref={ref} title="Проверьте поля" errors={errors} />,
+    );
+
+    const summary = screen.getByRole("alert");
+    expect(summary).toHaveAttribute("tabindex", "-1");
+    expect(summary).toHaveAccessibleName("Проверьте поля");
+    expect(ref.current).toBe(summary);
+    expect(screen.getByRole("link", { name: "Укажите имя" })).toHaveAttribute(
+      "href",
+      "#name",
+    );
+    expect(screen.getByRole("link", { name: "Выберите роль" })).toHaveAttribute(
+      "href",
+      "#role",
+    );
+  });
+
+  it("EARS-5: when a long form has no errors, the system shall render no error summary", () => {
+    render(
+      <FormErrorSummary
+        data-testid="summary"
+        title="Проверьте поля"
+        errors={[]}
+      />,
+    );
+
+    expect(screen.queryByTestId("summary")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("EARS-5: when a summary error link is activated, the system shall focus its invalid control", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <input id="name" aria-label="Имя" aria-invalid="true" />
+        <FormErrorSummary
+          title="Проверьте поля"
+          errors={[{ fieldId: "name", message: "Укажите имя" }]}
+        />
+      </>,
+    );
+
+    await user.click(screen.getByRole("link", { name: "Укажите имя" }));
+
+    expect(screen.getByRole("textbox", { name: "Имя" })).toHaveFocus();
   });
 });
 

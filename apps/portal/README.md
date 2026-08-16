@@ -33,9 +33,13 @@ app/
 ```
 
 The Academy home reads local fixtures and local WEBP portraits only. Its
-partnership preview deliberately has no `<form>`, endpoint, server action, or
-persistence; the fieldset and button stay disabled until the tracked form
-follow-up lands.
+partnership form uses React Hook Form with one shared Zod schema and a Next.js
+Server Action. Accepted submissions are written as one atomic, idempotent,
+private JSON file per UUID under `ACADEMY_SUBMISSIONS_DIR`; there is no public
+read/list route and no database, queue, notification, or outbound integration.
+Production mounts a dedicated portal-only Docker volume at that directory. The
+directory is required, real, node-owned and `0700`; records are `0600`, and the
+writer fails closed when those invariants are absent.
 
 ## Commands
 

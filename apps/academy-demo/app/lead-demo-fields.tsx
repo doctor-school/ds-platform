@@ -57,9 +57,11 @@ export function LeadDemoFields() {
         <Checkbox disabled>
           Согласен(а) на обработку персональных данных в соответствии со 152-ФЗ.
         </Checkbox>
-        <Link href="#privacy" variant="inline" className="text-caption">
-          Политика конфиденциальности
-        </Link>
+        <span className="text-caption">
+          <Link href="#privacy" variant="inline">
+            Политика конфиденциальности
+          </Link>
+        </span>
         <Button type="button" size="lg" disabled className="w-full">
           Обсудить партнёрство
         </Button>

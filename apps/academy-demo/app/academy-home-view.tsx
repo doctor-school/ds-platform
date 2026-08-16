@@ -156,8 +156,8 @@ function SplitHero() {
             <Button
               asChild
               size="lg"
-              variant="secondary"
-              className="mt-6 self-start border-primary-surface-foreground bg-primary-surface-foreground text-header-chip-foreground"
+              variant="outline"
+              className="mt-6 self-start"
             >
               <a href="#partner-form">Стать партнёром</a>
             </Button>
@@ -331,7 +331,7 @@ function ExpertCard({ expert }: { expert: (typeof EXPERTS)[number] }) {
     <Link
       href="#experts"
       data-testid="academy-expert-card"
-      className="group block h-full no-underline"
+      className="block h-full"
     >
       <Card className="flex h-full flex-col overflow-hidden">
         <div className="relative flex aspect-4/3 items-center justify-center border-b-2 border-border bg-tint">
@@ -405,21 +405,21 @@ function ExpertsSection() {
           </div>
           <div className="flex flex-col justify-center">
             {PODCASTS.map(([title, meta]) => (
-              <Link
-                key={title}
-                href="#experts"
-                className="flex items-center gap-4 border-b border-hairline p-5 last:border-b-0 hover:bg-tint hover:no-underline"
-              >
-                <span className="grid size-10 shrink-0 place-items-center bg-primary-action text-primary-foreground">
-                  <span aria-hidden="true">▶</span>
-                </span>
-                <span className="min-w-0 text-card-foreground">
-                  <span className="block text-body-compact font-bold leading-snug">
-                    {title}
+              <div key={title} className="border-b border-hairline last:border-b-0">
+                <Link href="#experts" className="block">
+                  <span className="flex items-center gap-4 p-5">
+                    <span className="grid size-10 shrink-0 place-items-center bg-primary-action text-primary-foreground">
+                      <span aria-hidden="true">▶</span>
+                    </span>
+                    <span className="min-w-0 text-card-foreground">
+                      <span className="block text-body-compact font-bold leading-snug">
+                        {title}
+                      </span>
+                      <span className="mt-1 block text-xs text-faint">{meta}</span>
+                    </span>
                   </span>
-                  <span className="mt-1 block text-xs text-faint">{meta}</span>
-                </span>
-              </Link>
+                </Link>
+              </div>
             ))}
           </div>
         </Card>
@@ -460,8 +460,8 @@ function PartnerValueSection() {
         <Button
           asChild
           size="lg"
-          variant="secondary"
-          className="mt-8 border-primary-surface-foreground bg-primary-surface-foreground text-header-chip-foreground"
+          variant="outline"
+          className="mt-8"
         >
           <a href="#partner-form">Обсудить партнёрство</a>
         </Button>
@@ -484,13 +484,11 @@ function FormatsSection() {
               <p className="flex-1 text-caption leading-relaxed text-muted-foreground">
                 {copy}
               </p>
-              <Link
-                href="#partner-form"
-                variant="inline"
-                className="text-caption"
-              >
-                Обсудить →
-              </Link>
+              <span className="text-caption">
+                <Link href="#partner-form" variant="inline">
+                  Обсудить →
+                </Link>
+              </span>
             </Card>
           ))}
         </div>

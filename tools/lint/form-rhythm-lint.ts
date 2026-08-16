@@ -75,6 +75,7 @@ const SCAN_GLOBS = [
   "apps/admin/app/**/*.tsx",
   "apps/admin/components/**/*.tsx",
   "apps/admin/src/**/*.tsx",
+  "apps/academy-demo/app/**/*.tsx",
 ];
 const SCAN_IGNORE = [
   "**/*.test.{ts,tsx}",
@@ -199,7 +200,9 @@ function main(): void {
   const scanned = checkForms(violations);
 
   if (violations.length > 0) {
-    process.stderr.write(`${TAG} ${violations.length} form-rhythm violation(s):\n`);
+    process.stderr.write(
+      `${TAG} ${violations.length} form-rhythm violation(s):\n`,
+    );
     for (const v of violations) {
       process.stderr.write(
         `${TAG}   ${relative(REPO_ROOT, resolve(REPO_ROOT, v.file)).replace(/\\/g, "/")}: ${v.message}\n`,
@@ -213,7 +216,9 @@ function main(): void {
     process.exit(1);
   }
 
-  info(`OK — ${scanned} form file(s) honour the rhythm + error-state contract.`);
+  info(
+    `OK — ${scanned} form file(s) honour the rhythm + error-state contract.`,
+  );
   process.exit(0);
 }
 

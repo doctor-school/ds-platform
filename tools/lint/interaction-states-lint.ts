@@ -83,7 +83,8 @@ const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
 const TAG = "[interaction-states]";
 
 const GLOBALS_CSS = "packages/design-system/src/styles/globals.css";
-const INTERACTIVE_BASE = "packages/design-system/src/primitives/interactive-base.ts";
+const INTERACTIVE_BASE =
+  "packages/design-system/src/primitives/interactive-base.ts";
 const PRIMITIVE_GLOBS = ["packages/design-system/src/primitives/**/*.{ts,tsx}"];
 const PRIMITIVE_IGNORE = [
   "**/*.test.{ts,tsx}",
@@ -98,8 +99,9 @@ const PRIMITIVE_IGNORE = [
 // exclusion mirrors the #314 / #309 registry-research exemption (app E2E is test
 // code, not UI source).
 //
-// Surface scope = the PRODUCT apps that consume `@ds/design-system` (portal /
-// promo / admin), matching the registry-research guard's `UI_PATH_RE`. `apps/docs`
+// Surface scope = the UI apps that consume `@ds/design-system` (portal / promo /
+// admin / the dev-only Academy review app), matching registry-research.
+// `apps/docs`
 // (Fumadocs), `apps/cms`/`apps/docs-cms` (Payload/Keystatic) and `apps/mobile`
 // (React Native — no DOM `<a>`/`next/link`) are deliberately NOT scanned: they do
 // not depend on the DS `Link` primitive and theme off their own host framework
@@ -115,6 +117,7 @@ const APP_GLOBS = [
   "apps/admin/app/**/*.tsx",
   "apps/admin/components/**/*.tsx",
   "apps/admin/src/**/*.tsx",
+  "apps/academy-demo/app/**/*.tsx",
 ];
 const APP_IGNORE = [
   "**/*.test.{ts,tsx}",
@@ -150,7 +153,7 @@ const USES_INTERACTIVE_BASE_RE = /\binteractiveBase\b/;
 // ── App-level raw-styled-link detection (scope c) ────────────────────────────
 // A raw text link in app source is a violation only when it carries its OWN
 // styling — a `className` (literal or interpolated) on a raw `<a …>` element, or
-// on a `next/link` `<Link …>`. The states for app text links live in the
+// on the local default import from `next/link` (under any alias). The states for app text links live in the
 // `@ds/design-system` `Link` primitive; a styled raw link bypasses it (defect #3).
 //
 // We match a single opening tag (`<a …>` / `<Link …>`, attributes up to the
@@ -161,7 +164,15 @@ const USES_INTERACTIVE_BASE_RE = /\binteractiveBase\b/;
 // distinct alias (`DsLink` / `Link as DsLink`); a tag named `<DsLink …>` does not
 // match and is therefore allowed to carry a className (it IS the primitive).
 const RAW_STYLED_ANCHOR_RE = /<a\b[^>]*\bclassName\b[^>]*>/;
-const RAW_STYLED_NEXTLINK_RE = /<Link\b[^>]*\bclassName\b[^>]*>/;
+const NEXT_LINK_IMPORT_RE =
+  /import\s+([A-Za-z_$][\w$]*)\s+from\s+["']next\/link["']/;
+
+function hasStyledNextLink(src: string): boolean {
+  const localName = src.match(NEXT_LINK_IMPORT_RE)?.[1];
+  if (!localName) return false;
+  const escaped = localName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`<${escaped}\\b[^>]*\\bclassName\\b[^>]*>`).test(src);
+}
 
 /**
  * Strip JS/TS comments so a commented-out `// hover:` / `/* focus-visible: *\/`
@@ -210,14 +221,19 @@ function checkLayer1(violations: Violation[]): void {
 
   const checks: { ok: boolean; message: string }[] = [
     {
-      ok: /\[role="button"\]/.test(css) && /\bbutton\b[\s\S]{0,160}cursor:\s*pointer/.test(css),
+      ok:
+        /\[role="button"\]/.test(css) &&
+        /\bbutton\b[\s\S]{0,160}cursor:\s*pointer/.test(css),
       message:
-        "the `cursor: pointer` reset for interactive elements (`button`, `[role=\"button\"]`, …) is missing — Tailwind v4 Preflight dropped it, so layer 1 must restore it (ADR-0013 §7 / tech-spec §3.3).",
+        'the `cursor: pointer` reset for interactive elements (`button`, `[role="button"]`, …) is missing — Tailwind v4 Preflight dropped it, so layer 1 must restore it (ADR-0013 §7 / tech-spec §3.3).',
     },
     {
-      ok: /cursor:\s*not-allowed/.test(css) && /:disabled/.test(css) && /\[aria-disabled="true"\]/.test(css),
+      ok:
+        /cursor:\s*not-allowed/.test(css) &&
+        /:disabled/.test(css) &&
+        /\[aria-disabled="true"\]/.test(css),
       message:
-        "the `cursor: not-allowed` reset for `:disabled` / `[aria-disabled=\"true\"]` is missing from layer 1.",
+        'the `cursor: not-allowed` reset for `:disabled` / `[aria-disabled="true"]` is missing from layer 1.',
     },
     {
       ok: /@media\s*\(\s*prefers-reduced-motion:\s*reduce\s*\)/.test(css),
@@ -276,7 +292,8 @@ function checkPrimitives(violations: Violation[]): number {
     enforced++;
 
     const hasHover = HOVER_RE.test(src);
-    const hasFocus = FOCUS_VISIBLE_RE.test(src) || USES_INTERACTIVE_BASE_RE.test(src);
+    const hasFocus =
+      FOCUS_VISIBLE_RE.test(src) || USES_INTERACTIVE_BASE_RE.test(src);
 
     if (!hasHover) {
       violations.push({
@@ -326,7 +343,7 @@ function checkAppClickables(violations: Violation[]): number {
           "raw `<a className=…>` text link in app source — route it through the `@ds/design-system` `Link` primitive (`<Link asChild><a/NextLink …></Link>`), which owns hover + focus + the brand link colour (ADR-0013 §7 link row). A hand-styled raw anchor bypasses those states (defect #3).",
       });
     }
-    if (RAW_STYLED_NEXTLINK_RE.test(src)) {
+    if (hasStyledNextLink(src)) {
       violations.push({
         file,
         message:
@@ -350,7 +367,9 @@ function main(): void {
       `${TAG} ${violations.length} interaction-state violation(s):\n`,
     );
     for (const v of violations) {
-      process.stderr.write(`${TAG}   ${relative(REPO_ROOT, resolve(REPO_ROOT, v.file)).replace(/\\/g, "/")}: ${v.message}\n`);
+      process.stderr.write(
+        `${TAG}   ${relative(REPO_ROOT, resolve(REPO_ROOT, v.file)).replace(/\\/g, "/")}: ${v.message}\n`,
+      );
     }
     process.stderr.write(
       `${TAG} Interaction-state contract: ADR-0013 §7 / design-system README. ` +

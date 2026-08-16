@@ -20,8 +20,9 @@
  *      `// TODO: implement` is an untracked obligation the tracker can't see.
  *      A TODO that cites an Issue (`TODO(#123)` / `TODO: … see #123`) passes.
  *
- * Scope: user-facing app source only (apps/portal|promo|admin/src, plus
- * packages/design-system/src) — *.ts/*.tsx/*.jsx, excluding tests. Backend BFF
+ * Scope: user-facing app source only (apps/portal|promo|admin/src,
+ * apps/academy-demo/app, plus packages/design-system/src) — *.ts/*.tsx/*.jsx,
+ * excluding tests. Backend BFF
  * and tooling are out of scope (a TODO in a tool is not user-facing). The gate
  * is intentionally narrow + literal so it is reliable, not a style nanny.
  *
@@ -50,6 +51,7 @@ const GLOBS = [
   "apps/portal/src/**/*.{ts,tsx,jsx}",
   "apps/promo/src/**/*.{ts,tsx,jsx}",
   "apps/admin/src/**/*.{ts,tsx,jsx}",
+  "apps/academy-demo/app/**/*.{ts,tsx,jsx}",
   "packages/design-system/src/**/*.{ts,tsx,jsx}",
 ];
 const IGNORE = [

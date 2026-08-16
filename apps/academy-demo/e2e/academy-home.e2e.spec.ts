@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-const ROUTE = "/demos/academy-home";
+const ROUTE = "/";
 
 async function styleSignature(locator: Locator): Promise<string> {
   return locator.evaluate((element) => {
@@ -120,6 +120,7 @@ test.describe("#1302 static Academy-home demo", () => {
       name: "Основная навигация",
     });
     await expect(desktopNav).toBeVisible();
+    await expect(desktopNav.getByRole("link")).toHaveCount(3);
     await expect(
       desktopNav.getByRole("link", { name: "Эфиры" }),
     ).toHaveAttribute("href", "#events");
@@ -131,6 +132,22 @@ test.describe("#1302 static Academy-home demo", () => {
       name: /Switch to (dark|light) theme/,
     });
     await expect(themeToggle).toBeVisible();
+    await page.mouse.move(0, 0);
+    const themeRest = await styleSignature(themeToggle);
+    await themeToggle.hover();
+    await expect.poll(() => styleSignature(themeToggle)).not.toBe(themeRest);
+    const themeHover = await styleSignature(themeToggle);
+    const themeBox = await themeToggle.boundingBox();
+    expect(themeBox).not.toBeNull();
+    await page.mouse.move(
+      themeBox!.x + themeBox!.width / 2,
+      themeBox!.y + themeBox!.height / 2,
+    );
+    await page.mouse.down();
+    const themeActive = await styleSignature(themeToggle);
+    await page.mouse.move(0, 0);
+    await page.mouse.up();
+    expect(themeActive).not.toBe(themeHover);
 
     const footer = page.getByRole("contentinfo");
     const colorLogo = footer.locator('img[src="/brand/logo.svg"]');
@@ -162,6 +179,9 @@ test.describe("#1302 static Academy-home demo", () => {
     const fieldset = page.locator("#partner-form fieldset");
     await expect(fieldset).toHaveAttribute("disabled", "");
     await expect(fieldset).toContainText("Демо: данные не отправляются");
+    await expect(page.getByText("Демонстрационные поля")).toHaveClass(
+      "sr-only",
+    );
     await expect(fieldset.getByLabel("Имя")).toBeDisabled();
     await expect(fieldset.getByLabel("Роль")).toHaveValue("Выберите роль");
     await expect(
@@ -170,6 +190,9 @@ test.describe("#1302 static Academy-home demo", () => {
     await expect(
       page.getByText("Заявка отправлена", { exact: true }),
     ).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: "Политика конфиденциальности" }),
+    ).toHaveAttribute("href", "#privacy");
   });
 
   test("primary CTA exposes hover, keyboard-focus, and active deltas", async ({

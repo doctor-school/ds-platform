@@ -65,15 +65,6 @@ pnpm --filter @ds/showcase exec playwright install --with-deps chromium
 pnpm --filter @ds/showcase test:e2e:ci
 ```
 
-## Academy-home demo boundary
-
-`/demos/academy-home` is a durable rendering of the owner-approved variant V
-composition from `design-source/home.dc.html`, `webinar-card.dc.html`, and
-`expert-card.dc.html`. Its fixtures are deterministic and isolated inside the
-showcase. It does not replace the portal home route, fetch platform data, submit
-leads, claim Feature 013 runtime delivery, or display a false success state. The
-disabled lead fieldset is presentation-only and says so in the rendered UI.
-
 ## Scope
 
 `apps/showcase` is an **internal dev surface**, not a product app — kept out of the

@@ -30,7 +30,7 @@ env:
 #   core                   setup+lint+types+unit+build+api-build-smoke+
 #                          docs-build+tokens-fresh+endpoint-authz   (BLOCK)
 #   api-e2e                unchanged                                (BLOCK)
-#   playwright-axe / playwright-axe-portal
+#   playwright-axe / playwright-academy-demo / playwright-axe-portal
 #                          unchanged                                (BLOCK)
 #   guards-block           the hard-red light guards + primitives-first +
 #                          db-drift                                  (BLOCK)
@@ -69,7 +69,7 @@ env:
 #
 # ─── PR-time path gating (#1251) ─────────────────────────────────────────────
 # #1235 changed job PACKAGING, not the trigger surface: a docs-only PR still
-# billed `api-e2e` + both axe jobs + every code step of `core` — ≈5–6 wasted
+# billed `api-e2e` + the browser jobs + every code step of `core` — ≈5–6 wasted
 # job-minutes per PR on metered private-repo Actions minutes.
 #
 # The trigger surface stays UNCHANGED on purpose. Workflow-level `paths-ignore`
@@ -82,7 +82,7 @@ env:
 #
 #   changes                cheap classifier job — one checkout, no install; emits
 #                          `code=true|false` for the PR's changed-file set
-#   api-e2e / playwright-axe / playwright-axe-portal
+#   api-e2e / playwright-axe / playwright-academy-demo / playwright-axe-portal
 #                          `needs: changes` + `if: needs.changes.outputs.code == 'true'`
 #   core                   ALWAYS runs (it owns `docs-build`); its CODE steps
 #                          carry the same step-level `if:`, so a docs-only diff
@@ -958,6 +958,30 @@ jobs:
       - run: pnpm --filter @ds/showcase exec playwright install --with-deps chromium
       - run: pnpm --filter @ds/showcase test:e2e:ci
 
+  # playwright-academy-demo: dedicated runtime coverage for the deterministic,
+  # development-only Academy home review app (#1302). This stays separate from
+  # `playwright-axe`: the showcase remains a pure design-system catalogue, while
+  # this job verifies the composed Academy page, both axe themes, responsive
+  # header treatment, interaction-state deltas, no-network fixtures, and the
+  # disabled lead boundary through the app's own Playwright suite. The job does
+  # not make Academy a production/deploy surface and requires no backend or env.
+  #
+  # PATH-GATED (#1251), exactly like the sibling browser jobs: no docs-class file
+  # feeds this rendered app, so a docs-only diff legitimately skips it.
+  playwright-academy-demo:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @ds/academy-demo build
+      - run: pnpm --filter @ds/academy-demo exec playwright install --with-deps chromium
+      - run: pnpm --filter @ds/academy-demo test:e2e:ci
+
   # playwright-axe-portal: the PAGE-LEVEL twin of `playwright-axe` (#400 — the
   # #351 showcase retarget retired the portal CI tier; this re-adds a THIN
   # product-surface scan). The showcase gate covers the DS primitives; this job
@@ -1021,13 +1045,14 @@ jobs:
         api-e2e,
         guards-block,
         playwright-axe,
+        playwright-academy-demo,
         playwright-axe-portal,
       ]
     if: always()
     runs-on: ubuntu-latest
     steps:
       # Two classes of need, because #1251 made `skipped` a LEGITIMATE outcome
-      # for three of them. The old blanket
+      # for four of them. The old blanket
       # `contains(needs.*.result, 'skipped') → red` cannot be kept: it would red
       # every docs-only PR. It also cannot simply be dropped — the #449 Mode (a)
       # finding it encodes is real (a red upstream job skips its dependents, and
@@ -1040,14 +1065,15 @@ jobs:
       #   purpose: it is what decides the other class, so a broken classifier
       #   must red `ci` rather than skip the gated jobs into a free green.
       #
-      #   PATH-GATED — `api-e2e`, `playwright-axe`, `playwright-axe-portal`.
+      #   PATH-GATED — `api-e2e`, `playwright-axe`, `playwright-academy-demo`,
+      #   `playwright-axe-portal`.
       #   `success` OR `skipped` is green; `failure`/`cancelled` is still red.
       #   `skipped` here is reachable ONLY via `needs.changes.outputs.code`
       #   (a docs-only diff) or via `changes` itself not succeeding — and that
       #   second path is already red through the unconditional class above.
       #
-      # Net: a docs-only PR is green with three SKIPPED jobs; any FAILURE in any
-      # of the six is still red; a run where the classifier broke is red.
+      # Net: a docs-only PR is green with four SKIPPED jobs; any FAILURE in any
+      # of the seven is still red; a run where the classifier broke is red.
       - name: Aggregate
         env:
           UNCONDITIONAL: |
@@ -1057,6 +1083,7 @@ jobs:
           PATH_GATED: |
             api-e2e=${{ needs['api-e2e'].result }}
             playwright-axe=${{ needs['playwright-axe'].result }}
+            playwright-academy-demo=${{ needs['playwright-academy-demo'].result }}
             playwright-axe-portal=${{ needs['playwright-axe-portal'].result }}
         run: |
           fail=0

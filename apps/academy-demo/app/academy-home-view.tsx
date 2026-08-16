@@ -17,6 +17,7 @@ import {
   WHAT_CARDS,
 } from "./fixtures";
 import { LeadDemoFields } from "./lead-demo-fields";
+import { ThemeToggle } from "./theme-toggle";
 import styles from "./academy-home.module.css";
 
 function SectionIntro({
@@ -52,7 +53,7 @@ function SectionIntro({
 function AcademyHeader() {
   return (
     <header id="top" className="bg-header text-header-foreground">
-      <Container className="flex min-h-19 items-center justify-between gap-controls py-4 pr-16">
+      <Container className="flex min-h-19 items-center justify-between gap-controls py-4">
         <Link
           href="#top"
           aria-label="Doctor.School — наверх"
@@ -68,41 +69,47 @@ function AcademyHeader() {
           />
         </Link>
 
-        <nav
-          aria-label="Основная навигация"
-          className="hidden items-center gap-7 text-sm layout:flex"
-        >
-          {[
-            ["Эфиры", "#events"],
-            ["Проекты", "#projects"],
-            ["Эксперты", "#experts"],
-            ["Партнёрство", "#partner-form"],
-          ].map(([label, href]) => (
-            <Link
-              key={href}
-              href={href}
-              className="text-hero-muted hover:text-header-foreground active:text-header-foreground"
-            >
-              {label}
-            </Link>
-          ))}
-          <Button type="button" variant="outline" disabled>
+        <div className="flex items-center gap-controls">
+          <nav
+            aria-label="Основная навигация"
+            className="hidden items-center gap-7 text-sm layout:flex"
+          >
+            {[
+              ["Эфиры", "#events"],
+              ["Проекты", "#projects"],
+              ["Эксперты", "#experts"],
+            ].map(([label, href]) => (
+              <Link
+                key={href}
+                href={href}
+                className="text-hero-muted hover:text-header-foreground active:text-header-foreground"
+              >
+                {label}
+              </Link>
+            ))}
+          </nav>
+          <ThemeToggle />
+          <Button
+            type="button"
+            variant="outline"
+            disabled
+            className="hidden layout:inline-flex"
+          >
             Войти
           </Button>
-        </nav>
-
-        <Button
-          type="button"
-          size="icon"
-          variant="outline"
-          disabled
-          aria-label="Меню пока недоступно в демо"
-          className="layout:hidden"
-        >
-          <span aria-hidden="true" className="text-xl">
-            ≡
-          </span>
-        </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            disabled
+            aria-label="Меню пока недоступно в демо"
+            className="layout:hidden"
+          >
+            <span aria-hidden="true" className="text-xl">
+              ≡
+            </span>
+          </Button>
+        </div>
       </Container>
     </header>
   );
@@ -345,9 +352,11 @@ function ExpertCard({ expert }: { expert: (typeof EXPERTS)[number] }) {
           >
             {expert.fullName}
           </h3>
-          <p className="text-caption font-normal leading-relaxed text-muted-foreground">
-            {expert.credentials}
-          </p>
+          {"credentials" in expert ? (
+            <p className="text-caption font-normal leading-relaxed text-muted-foreground">
+              {expert.credentials}
+            </p>
+          ) : null}
           <p className="text-xs text-faint">{expert.org}</p>
           <p className="mt-auto pt-2 text-caption text-primary-action underline underline-offset-4">
             {expert.meta}
@@ -506,8 +515,26 @@ function LeadDemoSection() {
             Обсудим партнёрство?
           </h2>
           <p className="mt-5 max-w-lg text-body-compact leading-relaxed text-primary-surface-muted">
-            Эта область показывает будущий состав полей. В демо данные не
-            собираются, не проверяются и никуда не отправляются.
+            Расскажите о себе — вернёмся с ответом в течение двух рабочих дней.
+            Без рассылок и «прогревов»: один разговор по делу.
+          </p>
+          <p className="mt-5 text-sm text-primary-surface-muted">
+            Или напишите напрямую:{" "}
+            <Link
+              href="mailto:partner@doctor.school"
+              variant="inline"
+              className="text-primary-surface-foreground"
+            >
+              partner@doctor.school
+            </Link>{" "}
+            ·{" "}
+            <Link
+              href="https://t.me/doctorschool"
+              variant="inline"
+              className="text-primary-surface-foreground"
+            >
+              t.me/doctorschool
+            </Link>
           </p>
         </div>
 

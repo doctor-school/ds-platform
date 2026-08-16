@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
 
 /**
  * Runtime page-level theme toggle for the showcase shell (#515). Flips the LIVE
@@ -21,8 +20,6 @@ import { usePathname } from "next/navigation";
  * target, visible `focus-visible` ring). `aria-pressed` exposes the on/off state.
  */
 export function ThemeToggle() {
-  const pathname = usePathname();
-  const onAcademyHome = pathname === "/demos/academy-home";
   // Start `false` and reconcile from the DOM after mount so SSR and the first
   // client render agree (no hydration mismatch); the class is the source of truth.
   const [dark, setDark] = useState(false);
@@ -43,16 +40,10 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-pressed={dark}
       aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
-      className={
-        onAcademyHome
-          ? "fixed right-20 top-4 z-50 inline-flex size-11 items-center justify-center border-2 border-header-hairline bg-header p-0 text-sm font-bold text-header-foreground shadow-none transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:shadow-focus"
-          : "fixed right-4 top-4 z-50 inline-flex min-h-11 min-w-11 items-center gap-2 border-2 border-border bg-card px-4 py-2.5 text-sm font-bold text-card-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:shadow-focus"
-      }
+      className="fixed right-4 top-4 z-50 inline-flex min-h-11 min-w-11 items-center gap-2 border-2 border-border bg-card px-4 py-2.5 text-sm font-bold text-card-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:shadow-focus"
     >
       <span aria-hidden="true">{dark ? "☀" : "☾"}</span>
-      <span className={onAcademyHome ? "sr-only" : undefined}>
-        {dark ? "Light theme" : "Dark theme"}
-      </span>
+      {dark ? "Light theme" : "Dark theme"}
     </button>
   );
 }

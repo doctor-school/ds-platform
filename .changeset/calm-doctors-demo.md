@@ -1,5 +1,5 @@
 ---
-"@ds/showcase": minor
+"@ds/academy-demo": minor
 ---
 
-Add the deterministic Academy-home variant V demo route for design review.
+Add the deterministic, development-only Academy-home variant V review app.

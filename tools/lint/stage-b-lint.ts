@@ -25,8 +25,9 @@
  * User-facing surface detection (deterministic, by touched path — the Mode-a
  * "classified by touched surface, not the GitHub label" rule,
  * request-mode-a-review §Scope):
- *   - PRIMARY: the diff touches non-exempt render code under `apps/portal/**`
- *     or `apps/admin/**` (the product surfaces the owner reviews live).
+ *   - PRIMARY: the diff touches non-exempt render code under `apps/portal/**`,
+ *     `apps/admin/**`, or `apps/academy-demo/**` (including the permanent
+ *     development review surface the owner reviews live).
  *   - FRONTMATTER HEURISTIC: the diff touches non-exempt render code under
  *     `packages/design-system/**` AND a linked `feature:NNN-<slug>` label
  *     resolves to a spec whose `NNN-requirements.md` frontmatter is
@@ -74,7 +75,7 @@ const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
 
 // Product render surfaces the owner reviews live. A non-exempt touch here always
 // triggers the gate.
-const PRODUCT_UI_RE = /^(apps\/portal\/|apps\/admin\/)/;
+const PRODUCT_UI_RE = /^(apps\/portal\/|apps\/admin\/|apps\/academy-demo\/)/;
 // The design-system package: a render touch here triggers only when the linked
 // spec is `surface: user-facing` (the frontmatter heuristic below).
 const DS_RE = /^packages\/design-system\//;
@@ -154,14 +155,21 @@ async function ghPR(prNumber: string): Promise<GhPR | null> {
     REPO_ROOT,
   );
   if (!res.ok) {
-    process.stderr.write(`${TAG} gh pr view ${prNumber} failed: ${res.error}\n`);
+    process.stderr.write(
+      `${TAG} gh pr view ${prNumber} failed: ${res.error}\n`,
+    );
     return null;
   }
   return res.data;
 }
 
 async function ghIssue(num: number): Promise<GhIssue | null> {
-  const res = await ghViewJson<GhIssue>("issue", num, "number,comments", REPO_ROOT);
+  const res = await ghViewJson<GhIssue>(
+    "issue",
+    num,
+    "number,comments",
+    REPO_ROOT,
+  );
   if (!res.ok) {
     process.stderr.write(`${TAG} gh issue view ${num} failed: ${res.error}\n`);
     return null;
@@ -194,9 +202,7 @@ function extractMarkerValues(text: string): string[] {
 
 function isEvidence(value: string): boolean {
   return (
-    GO_RE.test(value) ||
-    BATCHED_RE.test(value) ||
-    LEAD_CERTIFIED_RE.test(value)
+    GO_RE.test(value) || BATCHED_RE.test(value) || LEAD_CERTIFIED_RE.test(value)
   );
 }
 
@@ -274,7 +280,7 @@ async function main(): Promise<void> {
 
   if (!isUserFacing) {
     info(
-      `PR #${pr.number} touches no user-facing render surface (apps/portal|admin, or a design-system change under a user-facing spec), rule does not apply`,
+      `PR #${pr.number} touches no user-facing render surface (apps/portal|admin|academy-demo, or a design-system change under a user-facing spec), rule does not apply`,
     );
     process.exit(0);
   }

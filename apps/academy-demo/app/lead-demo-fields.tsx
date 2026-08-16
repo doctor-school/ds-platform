@@ -58,7 +58,12 @@ export function LeadDemoFields() {
           Согласен(а) на обработку персональных данных в соответствии со 152-ФЗ.
         </Checkbox>
         <span className="text-caption">
-          <Link href="#privacy" variant="inline">
+          <Link
+            href="https://doctor.school/index/privacy-pay"
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="inline"
+          >
             Политика конфиденциальности
           </Link>
         </span>

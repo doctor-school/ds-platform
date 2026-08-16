@@ -395,9 +395,18 @@ test.describe("#1302 static Academy-home demo", () => {
     await expect(
       page.getByText("Заявка отправлена", { exact: true }),
     ).toHaveCount(0);
-    await expect(
-      page.getByRole("link", { name: "Политика конфиденциальности" }),
-    ).toHaveAttribute("href", "#privacy");
+    const privacyPolicy = page.getByRole("link", {
+      name: "Политика конфиденциальности",
+    });
+    await expect(privacyPolicy).toHaveAttribute(
+      "href",
+      "https://doctor.school/index/privacy-pay",
+    );
+    await expect(privacyPolicy).toHaveAttribute("target", "_blank");
+    await expect(privacyPolicy).toHaveAttribute(
+      "rel",
+      "noopener noreferrer",
+    );
   });
 
   test("primary CTA exposes hover, keyboard-focus, and active deltas", async ({

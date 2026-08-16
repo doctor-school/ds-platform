@@ -60,6 +60,7 @@ focus-visible / disabled / loading / invalid / empty …>
 | -------------------------- | ------------------------- | --------------------------------- | ------------------------------- |
 | Button / action controls   | researched                | `Button`                          | [↓](#button--action-controls)   |
 | Field / text input         | researched                | `Input`, `FormItem`/`FormControl` | [↓](#field--text-input)         |
+| Native single-select       | researched                | `NativeSelect` (planned)          | [↓](#native-single-select)      |
 | Error & validation display | researched                | `FormMessage`, `FormError`        | [↓](#error--validation-display) |
 | Tabs / segmented control   | researched                | `Tabs`/`TabsTrigger`              | [↓](#tabs--segmented-control)   |
 | Link / navigation          | researched                | `Link`                            | [↓](#link--navigation)          |
@@ -110,6 +111,62 @@ focus-visible / disabled / loading / invalid / empty …>
 **Rendered contract.** Showcase → Primitives → Input / Field.
 
 **Decision & enforcement.** [ADR-0013 §7](../adr/0013-design-token-sot-en.md); guards `form-rhythm` (#334), `interaction-states`.
+
+## Native single-select
+
+**status: researched** — Feature 013 / Issue #1312.
+
+**Unit & states.** One labelled, required, compact single-select for a short,
+fixed vocabulary, covering empty placeholder, filled, focus-visible, invalid
+with an on-demand message, and disabled. The browser owns the open option list;
+the closed control aligns visually with the adjacent owned `Input`. A real role
+is never preselected.
+
+**Best-practice principle.** Prefer radios when a short list fits without
+damaging the form composition. Here the approved Academy form deliberately uses
+one compact «Роль» line in an already dense column, so a native `<select>` is
+the narrow exception: it preserves keyboard, type-ahead, form, and mobile-picker
+semantics without rebuilding a popover. The visible label remains outside the
+control; invalidity is carried by the control and its on-demand message, while
+focus-visible and disabled remain unambiguous.
+
+**Citations.** [GOV.UK Select](https://design-system.service.gov.uk/components/select/)
+· [GitHub Primer Select guidelines](https://primer.style/product/components/select/guidelines/)
+· [IBM Carbon Select](https://carbondesignsystem.com/components/select/usage/)
+· [Adobe React Aria Select](https://react-aria.adobe.com/Select)
+· [Baymard drop-down usability](https://baymard.com/blog/drop-down-usability)
+· [Baymard custom drop-down pitfalls](https://baymard.com/blog/custom-dropdowns-cause-issues).
+
+**Adopted from.** Official
+[shadcn/ui `NativeSelect`](https://ui.shadcn.com/docs/components/radix/native-select),
+MIT: adopt its thin native-select plus decorative-chevron composition and
+re-skin it to DS tokens. The whitelist alternatives were rejected for this
+five-value field: Origin UI had weaker current provenance; Intent UI/JollyUI
+required a heavier React-Aria popover boundary; Kibo UI's closest fit was an
+overbuilt searchable combobox.
+
+**Rendered options + owner pick.** Stage A compared A — Input parity with a
+quiet DS chevron; B — the browser-native arrow; and C — a divided trailing
+chevron rail. On 2026-08-16 the Product Lead picked **A — Input parity** because
+it continues the already approved form geometry without adding visual weight.
+
+**Token / primitive mapping.** Add an owned `NativeSelect` beside `Input`,
+composed through `Label`, `FormItem`, `FormControl`, and `FormMessage`. Match the
+owned Input's control size, inset, square shape, structural border, and text
+scale. Empty, filled, focus-visible, invalid, and disabled use the existing
+semantic field tokens; the pointer-inert decorative chevron is hidden from
+accessibility APIs. Concrete classes live only in the design-system README.
+
+**Rendered contract.** Showcase → Primitives → NativeSelect: the exact role list
+in order, plus empty, filled, focus-visible, invalid with message, and disabled
+states in both themes. Desktop and mobile live checks cover native keyboard,
+type-ahead, selection, and open/close behavior.
+
+**Decision & enforcement.** [ADR-0013 §7](../adr/0013-design-token-sot-en.md)
+layers 1–4; owned primitive tests pin label association, forwarding, option
+order, disabled, and `aria-invalid`. Existing `interaction-states`,
+`primitives-first`, `aa-contrast`, `form-error`, and `form-rhythm` guards enforce
+the composition; Stage B reconfirms both themes and breakpoints before merge.
 
 ## Error & validation display
 

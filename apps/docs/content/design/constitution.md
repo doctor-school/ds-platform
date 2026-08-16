@@ -117,8 +117,8 @@ focus-visible / disabled / loading / invalid / empty …>
 **status: researched** — Feature 013 / Issue #1312.
 
 **Unit & states.** One labelled, required, compact single-select for a short,
-fixed vocabulary, covering empty placeholder, filled, focus-visible, invalid
-with an on-demand message, and disabled. The browser owns the open option list;
+fixed vocabulary, covering empty placeholder, filled, hover, active,
+focus-visible, invalid with an on-demand message, and disabled. The browser owns the open option list;
 the closed control aligns visually with the adjacent owned `Input`. A real role
 is never preselected.
 

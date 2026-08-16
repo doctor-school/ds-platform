@@ -51,6 +51,17 @@ const SUMMARY_FIELDS: ReadonlyArray<{
   { name: "consent", fieldId: "academy-partner-consent-field" },
 ];
 const BLUR_ERROR_DELAY_MS = 100;
+const CONSENT_MESSAGE_ID = "academy-partner-consent-message";
+
+function submissionFingerprint(values: AcademyPartnershipSubmission): string {
+  return JSON.stringify({
+    name: values.name,
+    companyOrClinic: values.companyOrClinic,
+    contact: values.contact,
+    role: values.role,
+    consent: values.consent,
+  });
+}
 
 export function LeadDemoFields({ submitAction }: LeadDemoFieldsProps) {
   const [saved, setSaved] = useState(false);
@@ -58,6 +69,10 @@ export function LeadDemoFields({ submitAction }: LeadDemoFieldsProps) {
   const [summaryFocusRequest, setSummaryFocusRequest] = useState(0);
   const summaryRef = useRef<HTMLDivElement>(null);
   const lastSummaryFocusRequestRef = useRef(0);
+  const lastAttemptRef = useRef<{
+    fingerprint: string;
+    idempotencyKey: string;
+  } | null>(null);
   const form = useForm<
     AcademyPartnershipSubmissionInput,
     unknown,
@@ -100,8 +115,19 @@ export function LeadDemoFields({ submitAction }: LeadDemoFieldsProps) {
 
   async function onSubmit(values: AcademyPartnershipSubmission) {
     setSubmitError(null);
+    const fingerprint = submissionFingerprint(values);
+    const previousAttempt = lastAttemptRef.current;
+    const idempotencyKey =
+      previousAttempt && previousAttempt.fingerprint !== fingerprint
+        ? crypto.randomUUID()
+        : (previousAttempt?.idempotencyKey ?? values.idempotencyKey);
+    const submission = { ...values, idempotencyKey };
+    if (idempotencyKey !== values.idempotencyKey) {
+      form.setValue("idempotencyKey", idempotencyKey);
+    }
+    lastAttemptRef.current = { fingerprint, idempotencyKey };
     try {
-      const result = await submitAction(values);
+      const result = await submitAction(submission);
       if (result.status === "success") {
         setSaved(true);
         return;
@@ -110,7 +136,10 @@ export function LeadDemoFields({ submitAction }: LeadDemoFieldsProps) {
         for (const [field, message] of Object.entries(result.fieldErrors)) {
           if (field === "idempotencyKey" || !message) continue;
           form.setError(
-            field as Exclude<keyof AcademyPartnershipSubmissionInput, "idempotencyKey">,
+            field as Exclude<
+              keyof AcademyPartnershipSubmissionInput,
+              "idempotencyKey"
+            >,
             { type: "server", message },
           );
         }
@@ -153,7 +182,7 @@ export function LeadDemoFields({ submitAction }: LeadDemoFieldsProps) {
                 Имя
               </FormLabel>
               <FormControl id="academy-partner-name-field">
-                <Input {...field} placeholder="Как к вам обращаться" />
+                <Input {...field} required placeholder="Как к вам обращаться" />
               </FormControl>
               <FormMessage tone="on-primary" />
             </FormItem>
@@ -185,7 +214,11 @@ export function LeadDemoFields({ submitAction }: LeadDemoFieldsProps) {
                 Email или Telegram
               </FormLabel>
               <FormControl id="academy-partner-contact-field">
-                <Input {...field} placeholder="name@company.ru или @username" />
+                <Input
+                  {...field}
+                  required
+                  placeholder="name@company.ru или @username"
+                />
               </FormControl>
               <FormMessage tone="on-primary" />
             </FormItem>
@@ -201,7 +234,7 @@ export function LeadDemoFields({ submitAction }: LeadDemoFieldsProps) {
                 Роль
               </FormLabel>
               <FormControl id="academy-partner-role-field">
-                <NativeSelect {...field} value={field.value ?? ""}>
+                <NativeSelect {...field} required value={field.value ?? ""}>
                   <option value="" disabled>
                     Выберите роль
                   </option>
@@ -229,7 +262,12 @@ export function LeadDemoFields({ submitAction }: LeadDemoFieldsProps) {
                 checked={field.value}
                 onBlur={field.onBlur}
                 onChange={(event) => field.onChange(event.target.checked)}
+                required
+                aria-required="true"
                 aria-invalid={fieldState.invalid}
+                aria-describedby={
+                  fieldState.invalid ? CONSENT_MESSAGE_ID : undefined
+                }
                 tone="on-primary"
               >
                 {ACADEMY_CONSENT_TEXT}
@@ -245,7 +283,7 @@ export function LeadDemoFields({ submitAction }: LeadDemoFieldsProps) {
                   Политика конфиденциальности
                 </Link>
               </span>
-              <FormMessage tone="on-primary" />
+              <FormMessage id={CONSENT_MESSAGE_ID} tone="on-primary" />
             </FormItem>
           )}
         />

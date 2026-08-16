@@ -24,7 +24,9 @@ describe("Feature 013 private JSON store", () => {
 
     const first = await saveAcademyPartnershipSubmission(submission, directory);
     const retry = await saveAcademyPartnershipSubmission(submission, directory);
-    const files = (await readdir(directory)).filter((file) => file.endsWith(".json"));
+    const files = (await readdir(directory)).filter((file) =>
+      file.endsWith(".json"),
+    );
 
     expect(retry).toEqual(first);
     expect(files).toEqual([`${first.id}.json`]);
@@ -50,6 +52,27 @@ describe("Feature 013 private JSON store", () => {
       expect((await stat(directory)).mode & 0o777).toBe(0o700);
       expect((await stat(filePath)).mode & 0o777).toBe(0o600);
     }
+  });
+
+  it("EARS-6: reusing an idempotency key with edited values shall fail without claiming the old record matches", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "academy-partnership-"));
+
+    await saveAcademyPartnershipSubmission(submission, directory);
+    await expect(
+      saveAcademyPartnershipSubmission(
+        { ...submission, name: "Мария Петрова" },
+        directory,
+      ),
+    ).rejects.toThrow("Academy submission idempotency payload mismatch");
+
+    const files = (await readdir(directory)).filter((file) =>
+      file.endsWith(".json"),
+    );
+    expect(files).toEqual([`${submission.idempotencyKey}.json`]);
+    const stored = JSON.parse(
+      await readFile(join(directory, files[0]!), "utf8"),
+    ) as { name: string };
+    expect(stored.name).toBe("Анна Соколова");
   });
 
   it("EARS-7: an unsafe or unavailable target shall fail closed without a partial JSON record", async () => {

@@ -43,9 +43,10 @@ const NativeSelect = React.forwardRef<HTMLSelectElement, NativeSelectProps>(
             filled
               ? "border-border text-foreground"
               : "border-hairline text-muted-foreground",
+            "hover:border-ring active:border-primary-action active:bg-muted",
             "focus-visible:border-ring focus-visible:shadow-focus focus-visible:outline-none",
-            "disabled:cursor-not-allowed disabled:border-hairline disabled:bg-muted disabled:text-muted-foreground",
-            "aria-invalid:border-destructive aria-invalid:bg-destructive-tint",
+            "disabled:cursor-not-allowed disabled:border-hairline disabled:bg-muted disabled:text-muted-foreground disabled:hover:border-hairline disabled:active:border-hairline",
+            "aria-invalid:border-destructive aria-invalid:bg-destructive-tint aria-invalid:hover:border-destructive aria-invalid:active:border-destructive aria-invalid:active:bg-destructive-tint",
             className,
           )}
           {...props}

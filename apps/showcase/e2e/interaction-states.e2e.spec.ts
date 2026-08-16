@@ -152,6 +152,29 @@ test.describe("#351 interaction-state runtime smoke on the showcase (backend-fre
     await expect(select).toHaveValue("Эксперт");
   });
 
+  test("NativeSelect: hover and active provide measurable token-state deltas", async ({
+    page,
+  }) => {
+    const select = page.getByRole("combobox", { name: "Роль" }).first();
+    await page.mouse.move(0, 0);
+    const restingBorder = await cssProp(select, "border-color");
+
+    await select.hover();
+    await expect
+      .poll(async () => cssProp(select, "border-color"))
+      .not.toBe(restingBorder);
+    const hoverBorder = await cssProp(select, "border-color");
+
+    const box = await select.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await page.mouse.down();
+    await expect
+      .poll(async () => cssProp(select, "border-color"))
+      .not.toBe(hoverBorder);
+    await page.mouse.up();
+  });
+
   test("NativeSelect: the mobile-width surface keeps native selection semantics", async ({
     page,
   }) => {

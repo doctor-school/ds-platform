@@ -397,11 +397,16 @@ const NATIVE_SELECT_ROLES = [
   "Компания",
 ] as const;
 
-type NativeSelectState = "empty" | "filled" | "focus" | "invalid" | "disabled";
+type NativeSelectState =
+  "empty" | "filled" | "hover" | "active" | "focus" | "invalid" | "disabled";
 
 function NativeSelectFieldDemo({ state }: { state: NativeSelectState }) {
   const startsFilled =
-    state === "filled" || state === "focus" || state === "disabled";
+    state === "filled" ||
+    state === "hover" ||
+    state === "active" ||
+    state === "focus" ||
+    state === "disabled";
   const form = useForm<{ role: string }>({
     defaultValues: { role: startsFilled ? "Партнёр" : "" },
     mode: "onTouched",
@@ -452,6 +457,8 @@ function NativeSelectSection() {
   const states: NativeSelectState[] = [
     "empty",
     "filled",
+    "hover",
+    "active",
     "focus",
     "invalid",
     "disabled",
@@ -460,7 +467,7 @@ function NativeSelectSection() {
   return (
     <PrimitiveSection
       title="NativeSelect"
-      exportsLine="NativeSelect — empty · filled · focus-visible · invalid · disabled"
+      exportsLine="NativeSelect — empty · filled · hover · active · focus-visible · invalid · disabled"
     >
       <p className="text-sm text-muted-foreground">
         The official shadcn/ui native-select composition, re-skinned to the
@@ -474,7 +481,9 @@ function NativeSelectSection() {
             {states.map((state) => (
               <Cell key={state} label={state}>
                 <div
-                  data-showcase-force={state === "focus" ? "focus" : undefined}
+                  data-showcase-force={
+                    POINTER_STATES.has(state) ? state : undefined
+                  }
                   className="w-full"
                 >
                   <NativeSelectFieldDemo state={state} />

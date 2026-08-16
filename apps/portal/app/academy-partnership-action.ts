@@ -66,7 +66,8 @@ export async function submitAcademyPartnership(
     for (const issue of parsed.error.issues) {
       const field = issue.path[0];
       if (typeof field === "string" && !(field in fieldErrors)) {
-        fieldErrors[field as keyof AcademyPartnershipSubmission] = issue.message;
+        fieldErrors[field as keyof AcademyPartnershipSubmission] =
+          issue.message;
       }
     }
     return { status: "invalid", fieldErrors };
@@ -80,6 +81,7 @@ export async function submitAcademyPartnership(
     await saveAcademyPartnershipSubmission(parsed.data);
     return { status: "success" };
   } catch {
+    console.error("[academy-partnership] persistence_failed");
     return { status: "error", message: ACADEMY_PARTNERSHIP_WRITE_ERROR };
   }
 }

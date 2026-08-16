@@ -4,6 +4,7 @@ import {
   link,
   lstat,
   open,
+  readFile,
   realpath,
   rm,
   stat,
@@ -46,6 +47,47 @@ function filesystemCode(error: unknown): string | undefined {
     : undefined;
 }
 
+function isRecordForSubmission(
+  value: unknown,
+  submission: AcademyPartnershipSubmission,
+): boolean {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  const consent = record.consent;
+  if (typeof consent !== "object" || consent === null) return false;
+  const consentRecord = consent as Record<string, unknown>;
+
+  return (
+    record.id === submission.idempotencyKey &&
+    record.idempotencyKey === submission.idempotencyKey &&
+    record.name === submission.name &&
+    (record.companyOrClinic ?? "") === submission.companyOrClinic &&
+    record.contact === submission.contact &&
+    record.role === submission.role &&
+    consentRecord.purpose === ACADEMY_CONSENT.purpose &&
+    consentRecord.versionTag === ACADEMY_CONSENT.versionTag &&
+    consentRecord.text === ACADEMY_CONSENT.text &&
+    consentRecord.textSha256 === ACADEMY_CONSENT.textSha256 &&
+    consentRecord.policyUrl === ACADEMY_CONSENT.policyUrl &&
+    consentRecord.accepted === true
+  );
+}
+
+async function assertMatchingIdempotentRetry(
+  finalPath: string,
+  submission: AcademyPartnershipSubmission,
+): Promise<void> {
+  let existing: unknown;
+  try {
+    existing = JSON.parse(await readFile(finalPath, "utf8")) as unknown;
+  } catch {
+    throw new Error("Academy submission idempotency payload mismatch");
+  }
+  if (!isRecordForSubmission(existing, submission)) {
+    throw new Error("Academy submission idempotency payload mismatch");
+  }
+}
+
 async function assertPrivateDirectory(directory: string): Promise<string> {
   if (!isAbsolute(directory)) {
     throw new Error("Academy submissions directory must be absolute");
@@ -57,7 +99,11 @@ async function assertPrivateDirectory(directory: string): Promise<string> {
     realpath(resolved),
     stat(resolved),
   ]);
-  if (!entry.isDirectory() || entry.isSymbolicLink() || canonical !== resolved) {
+  if (
+    !entry.isDirectory() ||
+    entry.isSymbolicLink() ||
+    canonical !== resolved
+  ) {
     throw new Error("Academy submissions directory is unsafe");
   }
   if (process.platform !== "win32" && (metadata.mode & 0o777) !== 0o700) {
@@ -68,7 +114,9 @@ async function assertPrivateDirectory(directory: string): Promise<string> {
     typeof process.getuid === "function" &&
     metadata.uid !== process.getuid()
   ) {
-    throw new Error("Academy submissions directory must be owned by the runtime user");
+    throw new Error(
+      "Academy submissions directory must be owned by the runtime user",
+    );
   }
   return resolved;
 }
@@ -137,6 +185,7 @@ export async function saveAcademyPartnershipSubmission(
       await link(stagingPath, finalPath);
     } catch (error) {
       if (filesystemCode(error) !== "EEXIST") throw error;
+      await assertMatchingIdempotentRetry(finalPath, submission);
       return { id };
     }
     await syncDirectory(directory);

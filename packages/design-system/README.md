@@ -175,7 +175,8 @@ keyboard arrows, type-ahead, form submission, and the mobile picker — with onl
 pointer-inert, `aria-hidden` chevron layered above it. Its token-only shell matches
 `Input`: `h-11 w-full border-2 bg-background px-3.5 py-3 pr-10 text-sm`; empty
 uses `border-hairline text-muted-foreground`, filled uses
-`border-border text-foreground`, focus-visible uses
+`border-border text-foreground`, hover uses `border-ring`, active uses
+`border-primary-action bg-muted`, focus-visible uses
 `border-ring shadow-focus`, invalid uses
 `border-destructive bg-destructive-tint`, and disabled uses
 `border-hairline bg-muted text-muted-foreground`. Use a disabled empty option as

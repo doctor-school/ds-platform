@@ -1,14 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  submitAcademyPartnership,
-} from "./academy-partnership-action";
+import { submitAcademyPartnership } from "./academy-partnership-action";
 import { ACADEMY_PARTNERSHIP_WRITE_ERROR } from "@/lib/academy-partnership-schema";
 
 const saveAcademyPartnershipSubmission = vi.hoisted(() => vi.fn());
 vi.mock("next/headers", () => ({
-  headers: async () =>
-    new Headers({ "x-forwarded-for": "198.51.100.10" }),
+  headers: async () => new Headers({ "x-forwarded-for": "198.51.100.10" }),
 }));
 vi.mock("@/lib/academy-partnership-store", () => ({
   saveAcademyPartnershipSubmission,
@@ -50,7 +47,9 @@ describe("Feature 013 Academy partnership Server Action", () => {
       id: validSubmission.idempotencyKey,
     });
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
 
     await expect(submitAcademyPartnership(validSubmission)).resolves.toEqual({
       status: "success",
@@ -68,10 +67,14 @@ describe("Feature 013 Academy partnership Server Action", () => {
     error.mockRestore();
   });
 
-  it("EARS-7: private write failure shall return only the exact generic failure without logging submitted values", async () => {
-    saveAcademyPartnershipSubmission.mockRejectedValue(new Error("disk failed"));
+  it("EARS-7: private write failure shall return the generic failure and emit only a sanitized operational signal", async () => {
+    saveAcademyPartnershipSubmission.mockRejectedValue(
+      new Error("disk failed"),
+    );
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
 
     await expect(
       submitAcademyPartnership({
@@ -83,7 +86,13 @@ describe("Feature 013 Academy partnership Server Action", () => {
       message: ACADEMY_PARTNERSHIP_WRITE_ERROR,
     });
     expect(log).not.toHaveBeenCalled();
-    expect(error).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith(
+      "[academy-partnership] persistence_failed",
+    );
+    expect(JSON.stringify(error.mock.calls)).not.toContain("Анна Соколова");
+    expect(JSON.stringify(error.mock.calls)).not.toContain(
+      "partner@example.ru",
+    );
 
     log.mockRestore();
     error.mockRestore();

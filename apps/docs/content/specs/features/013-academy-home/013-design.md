@@ -1,77 +1,72 @@
 ---
-title: "013 — Static public Academy home (Design)"
-description: "Minimal technical design for moving the approved Academy demo onto the portal production route without adding form submission or dynamic data."
+title: "013 — Academy home and partnership form (Design)"
+description: "Minimal portal design for the private JSON-backed Academy partnership form."
 slug: 013-academy-home-design
 requirements: ./013-requirements-en.md
 status: Draft
 lang: en
 ---
 
-# 013 — Static public Academy home (Design)
+# 013 — Academy home and partnership form (Design)
 
-## 1. Architecture
+## Architecture
 
-The release is portal-only:
+The portal route `/` keeps the shipped Academy composition. Its client form uses
+React Hook Form and `@ds/design-system` controls with a shared Zod schema. The
+role selector uses the Stage-A-approved official shadcn `NativeSelect`
+recommendation. A Next.js Server Action repeats schema validation and calls the
+private JSON writer; no API route, database, CMS, queue, worker, CRM,
+Mattermost, notification, or admin surface is introduced.
 
-Browser → Next.js portal route / → static fixtures and local image assets.
+```mermaid
+sequenceDiagram
+  participant V as Visitor
+  participant F as RHF + shared Zod
+  participant A as Portal Server Action
+  participant W as Private JSON writer
+  V->>F: submit(idempotency key, form values)
+  F->>A: valid command only
+  A->>A: validate shared Zod schema
+  A->>W: exclusive UUID JSON create
+  W-->>A: created or existing same key
+  A-->>F: success after record exists
+  F-->>V: Спасибо! Заявка сохранена.
+```
 
-There is no server mutation path. No API application, database, filesystem
-persistence, CMS, queue, worker, webhook, or new environment secret is added.
+## Form and validation states
 
-## 2. Source transfer
+The enabled controls are required name, optional company or clinic, required
+combined `Email или Telegram`, required NativeSelect role in the PRD order, and
+required consent linked exactly to the policy URL. Invalid client or server
+input stays in the form, creates no file, and shows inline errors plus the DS
+`FormErrorSummary` below submit; because this form has over three fields, focus
+moves to that summary. Pending disables repeated submissions without losing
+values. Write or transport failure preserves all values and renders the exact
+approved error above submit. Success replaces the form only after persistence.
 
-The implementation copies the rendered Academy unit from apps/academy-demo at
-the PRD pin into apps/portal, preserving:
+## Private persistence boundary
 
-- fixture values and order;
-- six WEBP portraits;
-- shared Project/Events rows and exact URLs;
-- design-system imports, tokens, theme behavior, and responsive layout;
-- disabled LeadDemoFields behavior and no-send note;
-- footer logo treatment and privacy-policy link.
+The production Docker named volume is writable only by the portal. Its directory
+is configured by environment, fails closed if unavailable or unsafe, and is
+`0700`; each UUID-named JSON file is exclusively created atomically with `0600`.
+The record contains id, acceptedAt, form fields, consent `{ accepted: true,
+acceptedAt, policyUrl }`, and idempotency key. The writer performs no outbound
+call, logging of raw values, read/list API, or partial-file recovery. A transient
+in-memory no-egress abuse limit protects the action; there is no CAPTCHA and no
+automated deletion.
 
-The production page owns local portal components and assets; production must not
-import code from the demo application at runtime.
+## Failure and idempotency
 
-## 3. Route behavior
+An exclusive create makes a retry for the same idempotency key resolve to the
+single already-created record, never a duplicate. Any validation, volume,
+serialization, or transport failure returns failure without success and without
+a partial record. The implementation must not surface raw submitted data in
+errors or logs.
 
-- apps/portal/app/page.tsx renders the Academy home instead of redirecting /.
-- Static rendering is preferred; the page performs no content fetch.
-- Existing authenticated application routes remain unchanged.
-- Every external link keeps its exact approved href and safe external-link
-  attributes.
+## Verification
 
-## 4. Disabled form boundary
-
-The partnership preview is a disabled fieldset. Its controls have no change or
-submit handler. The button is type button and disabled. No route handler or
-server action is created. Automated tests fail if a form request occurs.
-
-The working-form follow-up owns the approved roles:
-
-1. Эксперт
-2. Партнёр
-3. Участник подкаста
-4. Соавтор направления
-5. Компания
-
-This list is documentation for the next slice only and is not rendered as an
-enabled control in the static release.
-
-## 5. Verification
-
-- A production-route Playwright spec starts the portal build and asserts EARS-1
-  through EARS-4.
-- Visual assertions cover desktop/mobile and both themes.
-- Axe covers both themes.
-- Existing portal route, auth, lint, typecheck, build, and guard suites remain
-  green.
-- The live stand remains available for Product Lead Stage-B confirmation before
-  merge.
-
-## 6. Follow-up seam
-
-The disabled form is an explicit owner-approved release boundary, not an
-untracked stub. Follow-up Issue #1312 owns enabling fields, the approved role
-list, validation, and server-side JSON persistence immediately after this
-static release.
+Browser coverage drives rejection, accept, idempotent retry, write failure,
+pending/double-submit, keyboard, mobile, light/dark, and axe. Integration tests
+exercise exclusive creation and exact record shape. This design follows ADR-0002
+§4/§5.5, ADR-0004 §9/§14, ADR-0006 §4, ADR-0009 §2.1/§2.6, ADR-0011 §2.1–§2.4,
+ADR-0012 §1/§4, ADR-0013 §4/§7, and ADR-0014 §1–§5.

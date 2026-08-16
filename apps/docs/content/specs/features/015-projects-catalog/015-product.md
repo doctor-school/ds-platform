@@ -82,7 +82,7 @@ The feature adds **no new data**: everything on both surfaces reads the 012 taxo
 - **A project with no partner** → the card shows no partner attribution and the page renders no partner block; the CTA band's partner side stays, since the point is to attract one.
 - **A project with no events at all** (freshly created) → both tabs are empty; the honest empty state covers Будущие and the Прошедшие tab is not offered as an empty list. _(agent-proposed — UNCONFIRMED.)_
 - **A project with no team yet** → the team section is omitted rather than rendered empty. _(agent-proposed — UNCONFIRMED.)_
-- **An unpublished / archived project** → not listed in the catalog; whether its page stays reachable by direct link is an open question below.
+- **A draft or retired project** → absent from both the catalog and direct-link public detail. Restore returns the same retained project to `draft`; an operator must publish it again before either surface returns.
 - **An expert card opened before 016 ships** → see the sequencing note in the acceptance criteria; the team is never rendered as dead links.
 
 ## Product acceptance criteria
@@ -93,7 +93,8 @@ The feature adds **no new data**: everything on both surfaces reads the 012 taxo
 - A project with **no upcoming эфиры** shows an explicit, honest state with a direct action to its recordings — never an empty list and never a blank section.
 - The **partner block states the editorial boundary in plain words**: the partner funds the эфиры and does not select topics or speakers. This is a trust claim on a medical-education surface, not decoration — it is present wherever a partner is shown on the project page.
 - **Both partner-facing CTAs route to the landing's single lead form** (feature 013). 015 introduces no second lead form and no second submission path.
-- The **catalog and the project page read the 012 taxonomy** — `projects`, `project_partners`, `event_projects`, `experts` and their joins. 015 models no new entity and re-types no free-text.
+- The **catalog and the project page read the 012 taxonomy** — `projects`, `project_partners`, `event_projects`, `experts` and their joins. `projects.kind` is exactly `school | media | program`, and the displayed curator is the one active eligible `project_experts.role = curator` relation, never a second project field. 015 models no new entity and re-types no free-text.
+- Draft, retired and unknown projects are indistinguishable on both public surfaces. Restoring a retained project returns it to `draft`, so republishing is deliberate rather than an automatic return to the catalog or direct-link page.
 - **013's tracked deferral is closed**: the landing's projects entry point resolves to this catalog, and nothing in 013 keeps a placeholder for it.
 - The **expert team uses the same expert-card unit** as the landing and 016, and each card links to that expert's page. **Until 016 ships**, the team renders as cards without a live target rather than as links to a 404 — the deferral 013 recorded, mirrored here for the expert direction, closing when 016 lands. _(agent-proposed — UNCONFIRMED: the epic records the 015/016 sequencing but not this concrete resolution.)_
 - An event belonging to **several projects** appears under each of them; nothing about the event page changes because it was reached from a project.
@@ -116,13 +117,11 @@ The feature adds **no new data**: everything on both surfaces reads the 012 taxo
 
 ## Open questions
 
-- **Project kinds.** The canvas shows three — **Школа / Медиа / Программа** — with kind-specific counts («эфиры» / «выпуски» / «модули»). Whether the kind is a first-class enum on `projects` in 012, and whether Медиа and Программа projects have any content behind them at launch or are catalog entries pointing elsewhere, is unresolved.
+- **Media / Programme content at launch.** `projects.kind` is already the exact 012 enum `school | media | program`. What content sits behind Медиа and Программа projects at launch—or whether they are catalog entries pointing elsewhere—remains unresolved.
 - **Catalog scale and ordering.** The canvas shows six projects in one grid with no pagination, sorting or filtering. What the default order is (activity, size, manual weight) and at what count the catalog needs paging or a filter is unresolved — the shipping catalog is small, so this may stay a deliberate non-feature.
-- **Project lifecycle.** Whether a project can be unpublished or archived, and whether an archived project's page stays reachable by direct link (its past recordings remain valuable) while leaving the catalog.
 - **Carrying the project into the lead.** Whether the partnership request records which project it came from (the canvas asserts the form «уже знает, о каком проекте вы пишете»), which implies a field on `leads` that 013 did not specify.
 - **The header stat row's source.** «24 эфира · 6 экспертов · с 2024 года» — whether these are derived counts or operator-entered figures, and what the "running since" date is derived from.
 - **The partner-independence wording.** The claim itself is treated as fixed above; its exact phrasing is owner copy, and whether it also appears on the catalog card (where the canvas shows only the attribution) is open.
-- **Curator versus team.** The header names a curator and the team section lists experts including that curator with a «Куратор» meta line. Whether "curator" is a role on the project–expert join or a separate field on the project is a 012 modelling question this page surfaces.
 - **Multi-project events in the counts.** Whether an event shared by two projects counts fully in both stat rows or is attributed to a primary project.
 
 ## Approved mockup

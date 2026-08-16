@@ -14,8 +14,8 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
   @EARS-1 @EARS-2 @EARS-3 @EARS-4 @happy
   Scenario Outline: Each entity kind is authored as its own retained draft resource
-    When the operator creates a <kind> with its kind-specific authoring fields
-    Then one <table> row is created in draft with stable id, slug and version 1
+    When the operator creates a <kind> with its required display label and omits slug
+    Then one <table> row is created in draft with stable id, canonical generated slug and version 1
     And the same row appears in that Refine resource list and detail
     And editing it updates that row rather than creating a content copy
 
@@ -28,15 +28,66 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
   @EARS-2 @happy
   Scenario: An expert remains a standalone editorial record
-    Given a draft expert with name, photo, credentials and bio
+    Given a draft expert with name, professional role, credentials, affiliation and bio but no photo
     When the operator saves the expert without selecting a platform user
     Then the expert is saved successfully
+    And its admin preview uses deterministic initials instead of fabricating a photo
     And no user link or parallel expert type is created
+
+  @EARS-1 @EARS-2 @EARS-3 @EARS-4 @EARS-7 @EARS-18 @happy
+  Scenario: Authoring controls expose the server contract without masks
+    When the operator opens each taxonomy form and the event expert editor
+    Then text and textarea fields trim input and show their character limits without input masks
+    And slug shows the canonical generated preview plus pattern and length feedback
+    And partner website uses a URL control that accepts only absolute HTTPS input
+    And event expert position is an integer control from 0 through 32767 with step 1
+    And media controls declare JPEG, PNG and WebP plus size and decoded-dimension limits
+
+  @EARS-1 @EARS-2 @EARS-3 @EARS-4 @EARS-7 @EARS-16 @failure
+  Scenario Outline: Malformed authoring input is rejected before mutation or upload
+    Given a <kind> authoring request
+    When the operator submits <invalid_input>
+    Then the request is refused with 400 <error_code> Problem Details
+    And no row, media object or audit record changes
+
+    Examples:
+      | kind    | invalid_input                                  | error_code        |
+      | project | a missing title                                | VALIDATION_FAILED |
+      | project | a title longer than 160 characters             | VALIDATION_FAILED |
+      | project | slug "Not valid"                              | VALIDATION_FAILED |
+      | expert  | a blank name                                   | VALIDATION_FAILED |
+      | expert  | a bio longer than 4000 characters              | VALIDATION_FAILED |
+      | topic   | a missing title                                | VALIDATION_FAILED |
+      | partner | a blank title                                  | VALIDATION_FAILED |
+      | partner | an HTTP rather than HTTPS website              | VALIDATION_FAILED |
+      | project | a GIF cover                                    | MEDIA_INVALID     |
+      | expert  | a photo larger than 10 MiB                     | MEDIA_INVALID     |
+      | partner | a logo wider than 6000 decoded pixels          | MEDIA_INVALID     |
+      | project | an image containing more than 25 megapixels    | MEDIA_INVALID     |
+      | event   | an event expert role longer than 80 characters | VALIDATION_FAILED |
+      | event   | event expert position 32768                    | VALIDATION_FAILED |
+
+  @EARS-1 @EARS-2 @EARS-3 @EARS-4 @EARS-5 @EARS-16 @failure
+  Scenario Outline: First publication permanently locks the slug
+    Given a draft <kind> whose generated slug the operator edits successfully
+    When the operator completes and publishes the <kind>
+    Then first_published_at is set once in the publication transaction
+    When the operator retires and restores the same <kind>
+    And attempts to change its slug with the current If-Match
+    Then the request is refused with 409 SLUG_IMMUTABLE Problem Details
+    And the original slug and first_published_at remain unchanged
+
+    Examples:
+      | kind    |
+      | project |
+      | expert  |
+      | topic   |
+      | partner |
 
   @EARS-5 @happy
   Scenario Outline: A complete entity publishes through a publish-safe allow-list
-    Given a complete draft <kind>
-    And for a project exactly one active curator is a published non-retired expert
+    Given a complete draft <kind> under its exact field matrix
+    And when the kind is project exactly one active curator is a published non-retired expert
     When the operator publishes the <kind>
     Then its status becomes published and deleted_at stays null
     And its public detail returns only the <kind> allow-list with CDN media URLs
@@ -49,11 +100,42 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | topic   |
       | partner |
 
+  @EARS-5 @EARS-16 @failure
+  Scenario Outline: Missing kind-specific fields prevent publication with field errors
+    Given a draft <kind> is missing <required_field>
+    When the operator attempts to publish the <kind>
+    Then the request is refused with 409 PUBLISH_REQUIREMENTS_NOT_MET Problem Details
+    And the problem identifies <required_field>
+    And the entity remains draft with first_published_at null
+
+    Examples:
+      | kind    | required_field    |
+      | project | kind              |
+      | project | description       |
+      | expert  | professional role |
+      | expert  | credentials       |
+      | expert  | affiliation       |
+      | expert  | bio               |
+
+  @EARS-1 @EARS-2 @EARS-3 @EARS-4 @EARS-5 @happy
+  Scenario Outline: Optional fields and empty relationship collections do not block publication
+    Given a complete draft <kind> with <empty_or_optional_state>
+    When the operator publishes the <kind>
+    Then publication succeeds and the public detail is available without authentication
+    And no missing relationship, media or website value is fabricated
+
+    Examples:
+      | kind    | empty_or_optional_state                                      |
+      | project | one eligible curator but zero events, partners and no cover   |
+      | expert  | zero events and projects and no photo                         |
+      | topic   | zero events                                                    |
+      | partner | zero projects and no logo or website                           |
+
   @EARS-5 @failure
   Scenario Outline: A project without one eligible curator cannot publish
     Given a complete draft project with <curator_state>
     When the operator attempts to publish the project
-    Then the request is refused with 409 Problem Details
+    Then the request is refused with 409 PUBLISHED_PROJECT_REQUIRES_CURATOR Problem Details
     And the project remains draft
 
     Examples:
@@ -119,6 +201,32 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Then project-to-experts and expert-to-projects return both links with their roles
     And a second active curator is refused by the database-backed constraint
 
+  @EARS-9 @EARS-17 @happy
+  Scenario: A published project's curator is replaced atomically
+    Given a published project has one eligible curator and one eligible member
+    And the operator holds the current project ETag
+    When the operator replaces the curator with that member and a new Idempotency-Key
+    Then one transaction promotes the member to curator and demotes the former curator to member
+    And the project remains published with exactly one eligible curator at every committed state
+    And the project and both affected relationship versions increment
+    And one attributed audit row exists for each changed retained row
+
+  @EARS-9 @EARS-13 @EARS-16 @failure
+  Scenario Outline: A published project's sole eligible curator cannot be invalidated directly
+    Given a published project has exactly one eligible curator
+    When the operator attempts to <invalidating_action>
+    Then the request is refused with 409 PUBLISHED_PROJECT_REQUIRES_CURATOR Problem Details
+    And the project, expert and every relationship keep their status, role, version and deleted_at
+    And no audit row is written
+
+    Examples:
+      | invalidating_action                    |
+      | retire the curator expert              |
+      | retire the curator relationship        |
+      | demote the curator relationship        |
+      | replace the curator with a draft expert |
+      | replace the curator with a retired expert |
+
   @EARS-10 @happy
   Scenario: Project and partner are linked without leaking commercial data
     Given a published project and published partner
@@ -165,7 +273,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
   @EARS-13 @happy
   Scenario: Retirement is previewed and changes no related lifecycle state
-    Given a published expert linked to current public events and projects
+    Given a published expert linked to current public events and projects only as a member rather than their sole curator
     When the operator requests the expert's retirement impact
     Then the admin shows affected public identifiers and the current version
     When the operator confirms retire with that If-Match and a new Idempotency-Key
@@ -206,6 +314,11 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | duplicate retained pair            | 409    |
       | duplicate retained slug            | 409    |
       | invalid lifecycle transition       | 409    |
+      | malformed authoring field          | 400    |
+      | invalid media binary               | 400    |
+      | incomplete publish projection      | 409    |
+      | immutable slug change              | 409    |
+      | published curator invalidation     | 409    |
       | missing If-Match                   | 428    |
       | stale If-Match                     | 412    |
 

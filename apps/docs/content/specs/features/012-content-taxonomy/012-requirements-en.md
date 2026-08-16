@@ -59,11 +59,11 @@ lang: en
 **In:**
 
 - Top-level retained entities:
-  - `projects`: stable id + slug, title, description, cover-media reference;
-  - `experts`: stable id + slug, name, photo-media reference, credentials, bio; no platform-user foreign key in 012;
+  - `projects`: stable id + slug, kind `school | media | program`, title, description, optional cover-media reference;
+  - `experts`: stable id + slug, name, professional role, credentials, affiliation, bio, optional photo-media reference; no platform-user foreign key in 012;
   - `topics`: stable id + slug and title, maintained as a curated list;
-  - `partners`: stable id + slug, title, logo-media reference and website URL.
-- Common entity fields: `status: draft | published | retired`, nullable `deleted_at`, monotonic `version`, and timestamps. Create starts in `draft`; restore returns to `draft`.
+  - `partners`: stable id + slug, title, optional logo-media reference and optional website URL.
+- Common entity fields: `status: draft | published | retired`, nullable `deleted_at`, nullable set-once `first_published_at`, monotonic `version`, and timestamps. Create starts in `draft`; restore returns to `draft` without clearing `first_published_at`.
 - Retained joins: `event_projects`, `event_experts`, `project_experts`, `project_partners`, `event_topics`; each has a stable id, `status: active | retired`, nullable `deleted_at`, `version`, timestamps and a uniqueness constraint for its logical endpoint pair.
 - `event_experts`: required event-specific `role`, non-negative `position`, and nullable unique `legacy_speaker_id`. The #1278 retained-row runtime prerequisite gives existing `event_speakers` stable identity and retained semantics so the match cannot drift when the event is edited.
 - Refine resources for entity list/detail/create/edit and lifecycle actions; relationship editors on the relevant event/project forms; search and explicit retained-row filters.
@@ -76,6 +76,21 @@ lang: en
 - New roles or access-policy concepts; 012 reuses `platform_admin`.
 - A general audit-history browser. Feature 010 already captures mutations in `audit_ledger`; 012 only keeps retained rows explicitly addressable for inspect/restore.
 
+## Authoring and publication contract
+
+| Kind    | Required on create                                        | Additional fields required to publish                                                                        | Optional fields                 |
+| ------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------- |
+| Project | `title` (trimmed 1–160); `slug` is generated when omitted | `kind: school \| media \| program`, `description` (trimmed plain text 1–2000), exactly one eligible curator  | `cover_ref`                     |
+| Expert  | `name` (trimmed 1–160); `slug` is generated when omitted  | `professional_role` (1–160), `credentials` (1–500), `affiliation` (1–240), `bio` (trimmed plain text 1–4000) | `photo_ref`; initials fallback  |
+| Topic   | `title` (trimmed 1–120); `slug` is generated when omitted | no additional field or relationship                                                                          | none                            |
+| Partner | `title` (trimmed 1–160); `slug` is generated when omitted | no additional field or relationship                                                                          | `logo_ref`, HTTPS `website_url` |
+
+- Every slug is lowercase ASCII, 1–80 characters, and matches `[a-z0-9]+(?:-[a-z0-9]+)*`. If create omits it, the server applies the canonical transliteration/slugification function to the display label; the UI previews the same candidate. A retained conflict returns 409 `SLUG_CONFLICT` so the operator can provide another value. The first successful publication sets `first_published_at` once; any later slug change, including after retire/restore, returns 409 `SLUG_IMMUTABLE`.
+- Drafts may leave only the table's additional publish fields unset. Omitted PATCH members stay unchanged; explicit `null` clears an optional field or a nullable draft-only incomplete field. A mutation of an already-published entity must leave its publication contract valid. A refused publish/update returns 409 `PUBLISH_REQUIREMENTS_NOT_MET` with field-addressed errors and makes no mutation.
+- A project can publish with zero events and zero partners when its fields and curator are complete. Experts, topics and partners can publish with zero relationships. Optional media and partner website never block publication.
+- Website input, when present, is an absolute HTTPS URL no longer than 2048 characters. Media input, when present, is JPEG, PNG or WebP, at most 10 MiB, at most 6000 px on either decoded axis and at most 25 megapixels; no minimum dimensions apply. Refine performs the same preflight, while server validation is authoritative.
+- The admin uses ordinary text/textarea controls with trim and character counters, not input masks. Slug uses a generated preview plus pattern/length validation; website uses a URL control; `event_experts.position` uses an integer control with step 1 and range 0–32767; event role is trimmed 1–80 characters. File controls declare the accepted formats and reject size/dimension limits before submit.
+
 ## Constraints
 
 - **Retained rows only.** No application path issues `DELETE`, `TRUNCATE`, data-bearing drop, `ON DELETE CASCADE`, or identifier reuse for these entities, joins or migrated `event_speakers`. Every foreign key is `RESTRICT`/`NO ACTION`.
@@ -83,7 +98,8 @@ lang: en
 - **Public default deny.** Public reads include only `published` entities with `deleted_at IS NULL`, `active` joins with `deleted_at IS NULL`, and events allowed by the existing public-event policy. A draft, retired or unknown public id produces the same 404 shape.
 - **Explicit retained reads.** Admin lists default to non-retired entities / active joins. Retained rows appear only through an explicit status or `includeRetired=true` query; an admin detail by stable id remains addressable for restore.
 - **One current speaker projection.** An active mapping suppresses its matched legacy row only when the linked expert is published and non-retired. Otherwise the legacy fallback remains. Rows sort by `position ASC`, then source rank (`expert` before `legacy`), then stable row id; equal-name rows are never deduplicated.
-- **Publish completeness.** Drafts may be incomplete. Publication requires every kind's public fields; a project additionally requires exactly one active `curator` link to an eligible published, non-retired expert.
+- **Publish completeness.** Drafts may be incomplete only as defined by the authoring matrix. Publication applies that matrix; no relationship is required except a project's exactly one active `curator` linked to a published, non-retired expert.
+- **Published-project curator invariant.** A published project has exactly one eligible curator at every committed state. Retiring that expert or retiring/demoting the sole curator link is refused until an atomic replacement succeeds or the project itself is retired.
 - **No stub seam.** Schema, migrations, API, generated SDK, Refine UI and browser wiring ship as real vertical slices. Seeds, fake repositories, placeholder selectors or manual DB steps do not satisfy an EARS clause.
 - **Retained idempotency records.** An idempotency record is `active` for the 24 h replay window, then expires by UPDATE to `status='expired'` plus `deleted_at`; it is retained forever, never TTL-deleted or reused.
 
@@ -100,6 +116,8 @@ lang: en
 
 - **LD-1 — optimistic versioning for authoring races.** ADR-0002 requires idempotency but does not prevent two different valid requests from overwriting one another. Every mutable taxonomy/speaker row therefore carries a monotonic `version`, returned as an ETag; PATCH and lifecycle/link commands require `If-Match`. The same precondition binds a retirement confirmation to the version whose impact was previewed, closing the preview→confirm TOCTOU window. A stale precondition returns 412 without mutation.
 - **LD-2 — stable merged-speaker ordering.** `position` is the editorial order. The total tie-break is `position ASC`, source rank (`expert` before `legacy`), stable row id ASC; the write path also rejects a conflicting visible slot except when a mapped expert deliberately takes the suppressed legacy row's position. This makes every read deterministic without name-based behavior.
+- **LD-3 — permanent slug lock after first publication.** `first_published_at` is set once in the same transaction as the first publish and never cleared. This distinguishes a restored former publication from a never-published draft and enforces the owner-approved permanent slug identity without inferring history from current status.
+- **LD-4 — atomic curator replacement.** `ReplaceProjectCurator(projectId, expertId)` locks the project at its `If-Match` version, verifies the new expert is published/non-retired, promotes or restores the target relation, demotes the previous curator relation to `member`, and advances affected versions in one transaction. No committed state has zero or two curators.
 
 ## Event Model
 
@@ -110,6 +128,7 @@ lang: en
 - `PreviewRetirement(target)` — return the currently visible related projections that the entity or join would remove.
 - `Retire(target)` / `Restore(target)` — explicit lifecycle transitions with no cascade; entity restore targets `draft`, join restore targets `active`.
 - `CreateRelationship(kind, endpoints, attributes)` / `UpdateRelationship(id, attributes)` — create or change one retained join; `event_experts` accepts `role`, `position`, and optional `legacySpeakerId`.
+- `ReplaceProjectCurator(projectId, expertId)` — replace a published project's curator atomically; no retire/demote gap is exposed.
 
 Every mutation requires `Idempotency-Key`; every update/transition requires the current `If-Match` version.
 
@@ -120,6 +139,7 @@ Every mutation requires `Idempotency-Key`; every update/transition requires the 
 | `TaxonomyEntityCreated/Updated/Published/Retired/Restored` | One entity changed state or content; feature 010 records the row diff in the same transaction.                    |
 | `TaxonomyRelationshipCreated/Updated/Retired/Restored`     | One explicit relationship changed; no endpoint or sibling relation changes with it.                               |
 | `EventSpeakerMatched`                                      | An `event_experts` row now explicitly references one retained legacy speaker; the legacy row itself is unchanged. |
+| `ProjectCuratorReplaced`                                   | One transaction promotes the eligible replacement and demotes the former curator without invalidating a project.  |
 
 ### Read models
 
@@ -131,8 +151,8 @@ Every mutation requires `Idempotency-Key`; every update/transition requires the 
 
 ### Policies
 
-- Slugs and logical endpoint pairs remain unique across retained rows; a duplicate create returns a conflict and points the operator to the retained row for restore.
-- A project has at most one active `curator`; other project experts are `member`. A legacy speaker may be matched by at most one retained `event_experts` row, and the speaker must belong to the same event.
+- Slugs and logical endpoint pairs remain unique across retained rows; a duplicate create returns a conflict and points the operator to the retained row for restore. Slug mutability is determined only by `first_published_at`.
+- A project has at most one active `curator`; a published project has exactly one eligible curator and changes it only through the atomic replacement command. Other project experts are `member`. A legacy speaker may be matched by at most one retained `event_experts` row, and the speaker must belong to the same event.
 - Topic assignment always selects an existing non-retired topic. `specialties[]` is never read from or written to `topics`.
 - Media binaries use the existing object-storage abstraction; public DTOs expose CDN URLs, never storage keys. Retiring/restoring a row never deletes its media.
 
@@ -140,29 +160,31 @@ Every mutation requires `Idempotency-Key`; every update/transition requires the 
 
 > Flat numbering per ADR-0006 §4. Every clause realizes one or more PRD stories and is covered by `012-scenarios.feature`.
 
-- **EARS-1** _(realizes: US-1, US-9)_ — When a `platform_admin` creates or edits a project through its Refine resource, the system shall persist one first-class retained `projects` row with stable id/slug/version, title, description and cover reference (a draft may be incomplete), and render that same row on list/detail; a project shall never be an event string or second copy.
-- **EARS-2** _(realizes: US-2, US-9)_ — When a `platform_admin` creates or edits an expert through its Refine resource, the system shall persist one standalone editorial `experts` row with stable id/slug/version, name, photo reference, credentials and bio (a draft may be incomplete), with no required platform-user link or parallel expert type.
+- **EARS-1** _(realizes: US-1, US-9)_ — When a `platform_admin` creates or edits a project through its Refine resource, the system shall validate the authoring matrix and persist one first-class retained `projects` row with stable id/slug/version, kind `school | media | program`, title, description and optional cover reference, and render that same row on list/detail; a project shall never be an event string or second copy.
+- **EARS-2** _(realizes: US-2, US-9)_ — When a `platform_admin` creates or edits an expert through its Refine resource, the system shall validate the authoring matrix and persist one standalone editorial `experts` row with stable id/slug/version, name, professional role, credentials, affiliation, bio and optional photo reference, with initials fallback and no required platform-user link or parallel expert type.
 - **EARS-3** _(realizes: US-5, US-9)_ — When a `platform_admin` creates or edits a topic through its Refine resource, the system shall persist one curated `topics` row with stable id/slug/version and title; topics shall never be free-form event tags.
-- **EARS-4** _(realizes: US-6, US-9)_ — When a `platform_admin` creates or edits a partner through its Refine resource, the system shall persist one descriptive `partners` row with stable id/slug/version, title, logo reference and website URL; commercial terms and contacts are not fields of the public contract.
-- **EARS-5** _(realizes: US-1, US-2, US-5, US-6, US-10, US-12)_ — When an operator publishes a valid `draft` entity, the system shall validate all fields required by its public projection and transition it to `published`; a project additionally shall have exactly one active `curator` linked to a published, non-retired expert. Public list/detail shall then expose only the kind allow-list and CDN media URLs, while incomplete drafts, retired rows and internal fields/storage keys remain absent and indistinguishable from unknown.
+- **EARS-4** _(realizes: US-6, US-9)_ — When a `platform_admin` creates or edits a partner through its Refine resource, the system shall persist one descriptive `partners` row with stable id/slug/version and title plus optional logo reference and optional HTTPS website URL; commercial terms and contacts are not fields of the public contract.
+- **EARS-5** _(realizes: US-1, US-2, US-5, US-6, US-10, US-12)_ — When an operator publishes a valid `draft` entity, the system shall validate the exact field matrix, lock its slug permanently by setting `first_published_at` once, and transition it to `published`; only a project additionally requires exactly one active `curator` linked to a published, non-retired expert, and it may have zero events/partners while every other kind may have zero relationships. Public list/detail shall then expose only the kind allow-list and CDN media URLs, while incomplete drafts, retired rows and internal fields/storage keys remain absent and indistinguishable from unknown.
 - **EARS-6** _(realizes: US-4, US-11)_ — When an operator links an event and a project, the system shall create or restore one `event_projects` row, allow one event to have several projects, expose event→projects and project→events reads, and never modify the event or project lifecycle as a side effect.
 - **EARS-7** _(realizes: US-3, US-8)_ — When an operator links an expert to an event, the system shall persist one `event_experts` row with required event-specific role, non-negative position and optional explicit `legacySpeakerId`; a supplied legacy id shall resolve to one retained speaker of that same event and be unique across retained expert links, and the command shall never infer a match from a name.
 - **EARS-8** _(realizes: US-2, US-3, US-8, US-10)_ — When a public event speaker projection is read, the system shall merge active linked experts with active legacy rows using LD-2's total order: an eligible published expert supersedes only its explicitly matched legacy row, while unmatched rows and fallback for a draft/retired/unlinked expert remain; matching shall not overwrite, retire or name-deduplicate any legacy row.
-- **EARS-9** _(realizes: US-1, US-2, US-11)_ — When an operator links an expert to a project, the system shall persist one `project_experts` row with `curator | member`, enforce at most one active curator, and expose project→experts and expert→projects reads with the role.
+- **EARS-9** _(realizes: US-1, US-2, US-11)_ — When an operator links an expert to a project or replaces a published project's curator, the system shall persist retained `project_experts` rows with `curator | member`, enforce at most one active curator, perform replacement as one version-checked transaction with an eligible expert, preserve exactly one eligible curator for every published project, and expose project→experts and expert→projects reads with the role.
 - **EARS-10** _(realizes: US-6, US-11, US-12)_ — When an operator links a partner to a project, the system shall persist one `project_partners` row and expose project→partners and partner→projects public reads using only partner title, logo URL and website URL; commercial/internal data shall never enter the projection.
 - **EARS-11** _(realizes: US-5, US-11)_ — When an operator tags an event, the event form shall offer only existing non-retired topics, provide no inline creation, persist one `event_topics` row per pair, expose both directions, and leave `specialties[]` byte-for-byte unchanged.
 - **EARS-12** _(realizes: US-10, US-11, US-12)_ — When a public caller reads taxonomy collections or either direction under `/v1/public`, the system shall query the same authored rows, apply published/active/non-deleted allow-lists at every hop, use opaque cursor pagination with `{ data, pagination: { nextCursor, hasMore } }`, return no duplicate pair, and never leak a draft, retired endpoint, inactive join or admin-only field.
-- **EARS-13** _(realizes: US-7)_ — When an operator requests retirement of an entity or relationship, the admin shall first show `RetirementImpact` for the same current version and require confirmation; the server shall then set `retired` + `deleted_at` once, preserve every row/FK, change no related lifecycle state, and remove the target from default selectors/current public projections only by filtering.
+- **EARS-13** _(realizes: US-7)_ — When an operator requests retirement of an entity or relationship, the admin shall first show `RetirementImpact` for the same current version and require confirmation; the server shall refuse retirement/demotion of the sole eligible curator expert/link of a published project, otherwise set `retired` + `deleted_at` once, preserve every row/FK, change no related lifecycle state, and remove the target from default selectors/current public projections only by filtering.
 - **EARS-14** _(realizes: US-7, US-8)_ — When an operator restores a retained entity or relationship, the system shall clear `deleted_at` and transition an entity to `draft` or a join to `active`; detail and explicit `includeRetired` reads address the same stable row, while defaults still exclude retained rows. No HTTP Delete route or Delete control shall exist.
 - **EARS-15** _(realizes: US-9)_ — When an operator lists a taxonomy resource, the admin API and Refine table shall support bounded page/offset pagination, total, case-insensitive title/name/slug search and explicit status/`includeRetired` filters; retired entities shall not appear in new-link selectors, and empty results shall be a successful empty page.
-- **EARS-16** _(realizes: US-1, US-2, US-3, US-4, US-5, US-6, US-7, US-8, US-9, US-12)_ — Admin reads/commands shall be `authenticated` / `platform_admin` (401 unauthenticated, 403 non-admin); public reads shall be `public`; validation/cursor errors shall be 400, unknown/non-public 404, duplicate pairs/slugs and invalid transitions 409, missing preconditions 428, and stale versions 412, as RFC 7807 Problem Details with stable `errorCode` and `traceId`.
+- **EARS-16** _(realizes: US-1, US-2, US-3, US-4, US-5, US-6, US-7, US-8, US-9, US-12)_ — Admin reads/commands shall be `authenticated` / `platform_admin` (401 unauthenticated, 403 non-admin) and public reads shall be zero-auth `public`; malformed fields/media/cursors shall be 400, unknown/non-public 404, duplicate pairs/slugs, publish incompleteness, immutable slug attempts, curator-invariant violations and invalid transitions 409, missing preconditions 428, and stale versions 412, as RFC 7807 Problem Details with stable `errorCode`, field errors where applicable, and `traceId`.
 - **EARS-17** _(realizes: US-7, US-10, US-11)_ — The system shall require `Idempotency-Key` on every mutation and replay the original result for the same actor/route/payload during its 24 h active window while rejecting reuse with another payload; expiry shall UPDATE that application-owned row to `expired` + `deleted_at` and retain it forever, never delete/reactivate/reuse it. Per LD-1, mutable rows expose version/ETag and mutate only when `If-Match` names the current version; every committed mutation receives feature 010 audit capture in the same transaction.
 - **EARS-18** _(realizes: US-1, US-2, US-3, US-4, US-5, US-6, US-7, US-8, US-9)_ — Before any new or changed taxonomy/event-admin UI slice starts, the team shall complete Stage A: run `build-ui-from-design-system`, present 2–3 concrete Refine compositions and record the product-owner choice; implementation shall use `@ds/design-system` primitives with full states and no Delete UI, and the real result shall pass live-stand Playwright plus owner Stage-B confirmation before merge.
 
 ## Invariants
 
 - No taxonomy entity, join or migrated legacy speaker row is physically deleted or cascade-deleted; stable ids/slugs/pairs are never reused.
+- A slug is editable only while `first_published_at IS NULL`; retirement and restore never reset that permanent identity lock.
 - `retired ⇔ deleted_at IS NOT NULL`; entity restore always yields `draft`, join restore `active`.
+- Every published project has exactly one active curator whose expert is published and non-retired; curator replacement is atomic and direct invalidation is refused.
 - A public relationship is visible only when the join is active and every taxonomy endpoint is published and non-retired.
 - A matched legacy speaker remains stored and unchanged; an explicit eligible mapping is the only suppression rule.
 - `specialties[]` and topics are different axes and never synchronize.
@@ -171,16 +193,16 @@ Every mutation requires `Idempotency-Key`; every update/transition requires the 
 
 ## Verification
 
-| EARS  | Test type                                 | Indicative target                                                                  | Required proof                                                                                                                                           |
-| ----- | ----------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1–5   | Vitest e2e + schema tests                 | one bounded entity-kind suite per EARS                                             | Each kind creates/edits independently; publish completeness (including eligible curator), allow-lists and draft/retired 404.                             |
-| 6–11  | Vitest e2e + DB constraints               | one bounded join/projection suite per EARS                                         | Every join, both cardinalities, curator/legacy constraints, LD-2 ordering, topic isolation and no cascades.                                              |
-| 12    | Vitest e2e + contract                     | `apps/api/test/taxonomy/public-reads.e2e-spec.ts`                                  | Both directions, cursor boundaries and filtering at every hop; allow-list snapshot.                                                                      |
-| 13–14 | Vitest e2e + migration test               | `apps/api/test/taxonomy/lifecycle.e2e-spec.ts`                                     | Preview-before-confirm, retire/restore, explicit retained reads, restrictive FKs and absence of DELETE.                                                  |
-| 15    | Vitest e2e + Playwright                   | `apps/api/test/taxonomy/admin-list.e2e-spec.ts`, `apps/admin/e2e/taxonomy.spec.ts` | Search/page/status/retained filters and selectors on the real API.                                                                                       |
-| 16–17 | Vitest e2e                                | `apps/api/test/taxonomy/protocol.e2e-spec.ts`                                      | Authz, exact Problem Details, idempotent replay, key collision, 428/412 and audit rows.                                                                  |
-| 18    | Playwright + axe + UI lint + owner record | `apps/admin/e2e/taxonomy.spec.ts`                                                  | Stage-A decision recorded first; create/link/retire/restore, reject+accept/error timing, keyboard states, both breakpoints/themes; live Stage-B verdict. |
-| all   | Playwright BDD                            | `012-scenarios.feature`                                                            | Every EARS tag executes against the real Refine admin + NestJS/Postgres stack; no stub or seed-only acceptance.                                          |
+| EARS  | Test type                                 | Indicative target                                                                  | Required proof                                                                                                                                            |
+| ----- | ----------------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1–5   | Vitest e2e + schema tests                 | one bounded entity-kind suite per EARS                                             | Exact field/optionality/media bounds, slug generation and permanent lock, zero-relation publication, eligible curator, allow-lists and draft/retired 404. |
+| 6–11  | Vitest e2e + DB constraints               | one bounded join/projection suite per EARS                                         | Every join, both cardinalities, atomic curator replacement and refusal branches, legacy constraints, LD-2 ordering, topic isolation and no cascades.      |
+| 12    | Vitest e2e + contract                     | `apps/api/test/taxonomy/public-reads.e2e-spec.ts`                                  | Both directions, cursor boundaries and filtering at every hop; allow-list snapshot.                                                                       |
+| 13–14 | Vitest e2e + migration test               | `apps/api/test/taxonomy/lifecycle.e2e-spec.ts`                                     | Preview-before-confirm, sole-curator refusal, retire/restore, explicit retained reads, restrictive FKs and absence of DELETE.                             |
+| 15    | Vitest e2e + Playwright                   | `apps/api/test/taxonomy/admin-list.e2e-spec.ts`, `apps/admin/e2e/taxonomy.spec.ts` | Search/page/status/retained filters and selectors on the real API.                                                                                        |
+| 16–17 | Vitest e2e                                | `apps/api/test/taxonomy/protocol.e2e-spec.ts`                                      | Authz, exact Problem Details, idempotent replay, key collision, 428/412 and audit rows.                                                                   |
+| 18    | Playwright + axe + UI lint + owner record | `apps/admin/e2e/taxonomy.spec.ts`                                                  | Stage-A decision recorded first; create/link/retire/restore, reject+accept/error timing, keyboard states, both breakpoints/themes; live Stage-B verdict.  |
+| all   | Playwright BDD                            | `012-scenarios.feature`                                                            | Every EARS tag executes against the real Refine admin + NestJS/Postgres stack; no stub or seed-only acceptance.                                           |
 
 ## Dependencies and sequencing
 

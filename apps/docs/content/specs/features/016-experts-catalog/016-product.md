@@ -16,7 +16,7 @@ lang: en
 
 The academy's credibility is its people. Today an expert exists only as a name printed on an event — free text on a card, unlinkable, uncountable. A doctor who liked how someone taught cannot find their other эфиры; a partner evaluating sponsorship cannot see the bench they would be funding; the academy cannot show that the same practising physicians come back season after season.
 
-Feature 016 gives the expert bench **two public surfaces**. `/experts` is the catalog: a grid of expert cards over the whole roster, with **name search** and a **single-select «Проект» chip filter** — deliberately light, because the bench is browsable at a glance and does not need the full facet machinery of the archive. It states honestly how many of how many are shown, says something useful when nothing matches (and offers a reset rather than a dead end), and closes on a **«Стать экспертом» CTA plate** for a doctor who wants to teach rather than watch.
+Feature 016 gives the expert bench **two public surfaces**. `/experts` is the catalog: a grid of expert cards over the whole roster, with **name search** and a **single-select «Проект» chip filter** — deliberately light, because the bench is browsable at a glance and does not need the full facet machinery of the archive. It states honestly how many of how many are shown, says something useful when nothing matches (and offers a reset rather than a dead end), and closes on a **«Стать экспертом» CTA plate** for a doctor who wants to teach rather than watch. 016 owns the corresponding batched catalog read model over 012's base taxonomy; search, project membership and shown/total counts are not reconstructed by loading the full roster or calling a relationship route per card.
 
 `/experts/[slug]` is the person. A bio hero carries the photo, name, role, credentials and a stat line; **«Где участвует»** lists the projects they take part in as links; and their events sit below in **Будущие / Прошедшие tabs rendered by the shared event-list unit** — so a past эфир leads straight into its recording (feature 014) and an upcoming one into registration (feature 005). When the academy's own media features the person, **podcast episodes** render as an extra section; when they do not, the section simply is not there.
 
@@ -97,6 +97,7 @@ Feature 016 gives the expert bench **two public surfaces**. `/experts` is the ca
 - **Speaker references on event pages link to expert pages** only while the linked expert is published and non-retired; a legacy free-text speaker stays plain text, and retiring an explicitly matched expert reveals that retained legacy fallback again rather than leaving a dead link.
 - **013's tracked deferral is closed here**: the landing's and the header nav's «Эксперты» entry point resolves to the real catalog, and 013's interim treatment is removed rather than left in place.
 - Experts, their projects, their roles on events and their events all come from the **012 taxonomy** — 016 reads that data and models nothing new.
+- 016 owns one exact **batched expert-catalog projection** over that taxonomy. Its EARS spec must pin the request (`q`, at most one project id, cursor/limit), response card DTO and separate filtered/total counts, plus a bounded-SQL plan; the page must not fetch the whole catalog or issue N+1 HTTP/SQL relationship reads.
 - An expert slug is generated when omitted, may be edited only before first publication, and is immutable after first publication; renaming the expert never changes the public route.
 - Both surfaces work on mobile — the search, the chip row, the grid, the bio hero, the project rows and the tabs alike.
 - Both surfaces meet the platform's accessibility bar for a public surface — the same `playwright-axe` gate: the search input labelled, the chips real controls with a visible state, the cards real links, the tabs keyboard-operable.
@@ -104,7 +105,7 @@ Feature 016 gives the expert bench **two public surfaces**. `/experts` is the ca
 
 ## Out of scope
 
-- **The taxonomy itself** — `experts`, the `event_experts` join carrying the per-event role, and the admin CRUD behind them are feature 012, a hard dependency of this one.
+- **The taxonomy itself, admin CRUD and base entity/relationship API** — `experts`, `event_experts` and their publish-safe summaries are feature 012, a hard dependency. The aggregate search/filter/count projection named above belongs to 016 and ships with its catalog.
 - **The event-list unit's filter/tab machinery** — delivered by 014; 016 consumes it ready-made and adds no listing mechanics.
 - **The project pages** the «Где участвует» rows link to — feature 015.
 - **Recordings and the post-live page state** the «Прошедшие» tab leads into — feature 014.

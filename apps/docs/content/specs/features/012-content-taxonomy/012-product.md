@@ -60,7 +60,7 @@ Two consequences the downstream EARS spec inherits:
 
 1. Operator opens the admin app → Projects → creates a project with its descriptive fields and links experts through `project_experts`, marking exactly one eligible expert as curator before publication.
 2. Operator opens an event → links it to the project, and attaches experts, each with a role on that event.
-3. Operator may attach a sponsoring partner to the project; neither a partner nor an event is required for publication.
+3. Operator may attach several sponsoring partners to the project and designate at most one as the primary partner shown on project cards; neither a partner nor an event is required for publication.
 4. When the project's required fields and curator are complete, the operator explicitly publishes it. Only then does the public read API serve the project with whichever eligible events, experts and partners are linked; portal surfaces (015, and the landing feed of 013) never expose its draft state.
 
 **Maintain the expert bench (US-2, US-8, US-9):**
@@ -84,7 +84,7 @@ Two consequences the downstream EARS spec inherits:
 - `projects`, `experts`, `topics` and `partners` exist as **first-class entities with their own identity and their own admin screens** — never as string tags on an event.
 - The authoring contract is explicit: a project has kind `school | media | program`, title, slug and description plus optional cover; an expert has name, slug, professional role, credentials, affiliation and bio plus optional photo; a topic has title and slug; a partner has title and slug plus optional logo and HTTPS website.
 - Slugs are generated from the display name on create, may be edited until first publication, and become permanently immutable after that first publication, including after retirement and restore.
-- The relationships are **m2m joins**: `event_projects`, `event_experts` (with per-event role and ordering), `project_experts` (with `curator | member` role), `project_partners`, and `event_topics`.
+- The relationships are **m2m joins**: `event_projects`, `event_experts` (with per-event role and ordering), `project_experts` (with `curator | member` role), `project_partners` (many links, at most one active primary display partner per project), and `event_topics`.
 - An event can belong to **several** projects, and an expert to **many** events — both directions are queryable.
 - `specialties[]` on the event **stays untouched** as the audience axis; topics are a separate dimension and no data is moved between them.
 - The existing free-text `event_speakers` keeps rendering as before, and **an event may be partially migrated** to linked experts without any visible degradation to the doctor. A linked expert supersedes only its explicitly matched legacy entry in the current projection; the retained legacy row remains available to history/restore flows.
@@ -120,4 +120,5 @@ The Product Lead approved the complete package in [#1240](https://github.com/doc
 - **Project curator:** an expert linked through `project_experts` with role `curator`; other linked experts use `member`. A published project has exactly one eligible curator and replaces that curator atomically.
 - **Fields and optionality:** project = kind/title/slug/description + optional cover; expert = name/slug/professional role/credentials/affiliation/bio + optional photo; topic = title/slug; partner = title/slug + optional logo/website.
 - **Slugs and publication:** slugs are generated on create, editable until first publication and immutable thereafter. A project may publish without events or partners when its fields and curator are complete; an expert may publish without events or projects.
-- **API and access:** REST/OpenAPI under `/v1`; cursor pagination on public growing lists, explicit page/offset pagination for admin tables, bidirectional relationship reads, zero-auth published-only public reads, and existing `platform_admin` authorization for admin routes.
+- **Partners on projects:** a project may have many partner links, but at most one active link is the primary display partner; public project entity/summary data exposes that partner or `null`, while relationship reads expose every eligible link.
+- **API and access:** REST/OpenAPI under `/v1`; cursor pagination on public growing lists, explicit page/offset pagination for admin tables, bidirectional relationship reads, zero-auth published-only public reads, and existing `platform_admin` authorization for ordinary taxonomy admin routes. ADR-0009 erasure approval is a separate compliance workflow, not a taxonomy Delete action.

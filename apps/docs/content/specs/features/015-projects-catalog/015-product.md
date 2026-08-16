@@ -20,7 +20,7 @@ Feature 015 gives projects **two public surfaces**. `/projects` is a **catalog**
 
 `/projects/[slug]` is the **project page**: a blue poster header with breadcrumbs, kind kicker, title, description, the curator named as a link, and a stat row; the **industry partner** presented as a standalone block that states plainly that the partner funds the эфиры and does not choose topics or speakers; the **expert team** as a grid of the same expert-card unit 013 and 016 use; and the project's **own эфиры** split into **Будущие** and **Прошедшие** tabs, rendered by the shared event-list unit — the one that gained its filter capability in 014, consumed here ready-made rather than rebuilt. When a project has no upcoming эфиры, the page says so honestly and sends the doctor to the recordings instead of showing an empty list. A closing dual **CTA band** repeats the epic's dual-audience logic on the page: the nearest эфир for doctors, partnership for the industry.
 
-The feature adds **no new data**: everything on both surfaces reads the 012 taxonomy — `projects`, `project_partners`, `event_projects`, `experts` — and everything about playback and past-event behavior belongs to 014.
+The feature adds **no new domain entity**: everything on both surfaces reads the 012 taxonomy — `projects`, `project_partners`, `event_projects`, `experts` — and everything about playback and past-event behavior belongs to 014. It does own one surface-specific batched catalog/page read model over those rows, because card counts, primary-partner attribution and an enriched team must not be assembled through one 012 relationship call per card.
 
 ## User stories
 
@@ -93,7 +93,8 @@ The feature adds **no new data**: everything on both surfaces reads the 012 taxo
 - A project with **no upcoming эфиры** shows an explicit, honest state with a direct action to its recordings — never an empty list and never a blank section.
 - The **partner block states the editorial boundary in plain words**: the partner funds the эфиры and does not select topics or speakers. This is a trust claim on a medical-education surface, not decoration — it is present wherever a partner is shown on the project page.
 - **Both partner-facing CTAs route to the landing's single lead form** (feature 013). 015 introduces no second lead form and no second submission path.
-- The **catalog and the project page read the 012 taxonomy** — `projects`, `project_partners`, `event_projects`, `experts` and their joins. `projects.kind` is exactly `school | media | program`, and the displayed curator is the one active eligible `project_experts.role = curator` relation, never a second project field. 015 models no new entity and re-types no free-text.
+- The **catalog and the project page read the 012 taxonomy** — `projects`, `project_partners`, `event_projects`, `experts` and their joins. `projects.kind` is exactly `school | media | program`; the displayed curator is the one active eligible `project_experts.role = curator` relation; a project may have many partner links but only its optional active `project_partners.is_primary` relation supplies the singular card/page partner. 015 models no new entity and re-types no free-text.
+- 015 owns one exact **batched project-catalog/page projection** over that taxonomy. Its future EARS spec must pin the card/page DTO and bounded-SQL query for the kind-specific content count, nullable primary partner, curator and enriched team (credentials and affiliation included); rendering must not fetch the full catalog or issue N+1 HTTP/SQL relationship reads.
 - Draft, retired and unknown projects are indistinguishable on both public surfaces. Restoring a retained project returns it to `draft`, so republishing is deliberate rather than an automatic return to the catalog or direct-link page.
 - **013's tracked deferral is closed**: the landing's projects entry point resolves to this catalog, and nothing in 013 keeps a placeholder for it.
 - The **expert team uses the same expert-card unit** as the landing and 016, and each card links to that expert's page. **Until 016 ships**, the team renders as cards without a live target rather than as links to a 404 — the deferral 013 recorded, mirrored here for the expert direction, closing when 016 lands. _(agent-proposed — UNCONFIRMED: the epic records the 015/016 sequencing but not this concrete resolution.)_
@@ -105,7 +106,7 @@ The feature adds **no new data**: everything on both surfaces reads the 012 taxo
 ## Out of scope
 
 - **The experts catalog and expert pages** — feature 016. 015 renders expert cards and links to them; it does not build those surfaces.
-- **The taxonomy entities, admin CRUD and public read API** — feature 012, a hard dependency, not a parallel.
+- **The taxonomy entities, admin CRUD and base entity/relationship read API** — feature 012, a hard dependency, not parallel work. The aggregate catalog/page projection named above belongs to 015 and is implemented with these public surfaces.
 - **The event-list unit's filter facets and the «Прошедшие» tab mechanics** — delivered in 014; 015 consumes them. If a project page needs its own facets at all, that is a refinement of the shared unit, not a 015 deliverable.
 - **The lead form itself** — feature 013. 015 only routes to it.
 - **Recordings, the player and the login gate** — feature 014.

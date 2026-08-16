@@ -131,23 +131,8 @@ interface Deferral {
 /**
  * Deferral allowlist — EARS ids whose real test genuinely cannot be added cheaply,
  * each tracked by an OPEN Issue. Keep this list SHORT and prune stale entries.
- *
- * - EARS-4 (003): "registration verification is email-only; phone verification is a
- *   FUTURE post-registration secondary-identifier path" — a negative/scoping
- *   requirement. Its positive counterpart (email-only verify) is exercised by the
- *   EARS-2/EARS-3 e2e; its own testable path (the future secondary-phone verify)
- *   is unbuilt and would need live Zitadel. Tracked in #454 (sub-issue of the 003
- *   auth post-v1 backlog #220). Prune this entry once the secondary-phone verify
- *   path lands with its own `EARS-4` test.
- *
  */
-const BUILTIN_DEFERRALS: Record<string, Deferral> = {
-  '003:EARS-4': {
-    issue: 454,
-    reason:
-      'registration verify is email-only; the future secondary-phone verify path is unbuilt (needs live Zitadel)',
-  },
-};
+const BUILTIN_DEFERRALS: Record<string, Deferral> = {};
 
 function loadDeferrals(): Record<string, Deferral> {
   const raw = process.env.LINT_EARS_DEFERRALS;

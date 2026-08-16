@@ -3,7 +3,7 @@ title: "013 — Статичная публичная главная Акаде�
 description: "Продакшен-требования к точной утверждённой статичной главной Академии на / с намеренно отключённым превью формы партнёрства."
 slug: 013-academy-home-requirements-ru
 product: ./013-product-ru.md
-status: Draft
+status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
 parent_issue: https://github.com/doctor-school/ds-platform/issues/1307

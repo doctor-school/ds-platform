@@ -3,7 +3,7 @@ title: "013 — Static public Academy home"
 description: "Production requirements for the exact approved static Academy home at / with a deliberately disabled partnership-form preview."
 slug: 013-academy-home-requirements
 product: ./013-product.md
-status: Draft
+status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
 parent_issue: https://github.com/doctor-school/ds-platform/issues/1307

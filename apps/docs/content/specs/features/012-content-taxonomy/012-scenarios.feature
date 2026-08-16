@@ -190,8 +190,12 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     When the #1305 pre-migration inventory runs
     Then SQL audit_pd_columns and TS AUDIT_PD_COLUMNS first gain the exact expert ciphertext lookup reservation search and subject-key fields plus event_speakers name regalia and subject_key_id with parity
     And event_experts expert_id legacy_speaker_id and role_ciphertext plus project_experts expert_id and role plus subject_keys subject_kind subject_digest and vault_key_ref are registered before their first write
-    And every historical hit receives an explicit Legal/Compliance classification term owner and approved append-only-safe encryption or crypto-shred remediation
-    And raw ledger output contains no unclassified plaintext marker while retained evidence rows remain
+    And every historical hit is listed by ledger primary key field SHA-256 preimage legal basis term and owner in one approved retained audit_pd_remediation_manifests row
+    And a formal feature-010 production amendment permits only a manifest-bound SECURITY DEFINER transition from that exact plaintext leaf to masked true legacyCiphertextRef and preimageHash
+    And the transition stores AES-256-GCM ciphertext under a per-row audit_retention_keys key leaves ledger identity non-PD diff and timestamps unchanged appends hash-only evidence and consumes the manifest once
+    And DELETE trigger disable unrestricted UPDATE plaintext compensating rows and replay are all refused
+    And raw ledger output contains no unclassified plaintext marker while retained ledger envelope manifest and key-tombstone rows remain
+    And destroying the audit-retention key at its approved term makes the retained historical ciphertext unreadable without deleting a row
     And no expert migration or further unmasked affected write may start before that proof passes
     And only idempotency_keys idempotency_claim_subjects pd_subject_fences pd_key_destruction_jobs and media_cleanup_jobs are parity-tested technical audit exclusions
 
@@ -233,6 +237,16 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     And it atomically changes review_required to approved and enqueues exactly one payload containing only erasureRequestId
     And it returns 202 with that request id and approved status
     And the same detail becomes read-only while approved executing or completed
+
+  @EARS-2 @EARS-16 @failure
+  Scenario: A queued erasure plan that expires before execution becomes a terminal no-op
+    Given an approved erasure request retains its immutable plan with plan_expires_at equal to approved_at plus 24 hours
+    And its queue delivery has not yet entered executing
+    When the worker locks it at or after plan_expires_at
+    Then one transaction returns the request to review_required records approval_expired_at and retains the expired plan as evidence
+    And the queue delivery completes as a no-op with 409 ERASURE_PLAN_EXPIRED
+    And no subject gate claim domain row audit row key job or cleanup obligation changes
+    And a later approval must derive and approve a fresh plan
 
   @EARS-2 @EARS-8 @EARS-14 @EARS-16 @EARS-17 @failure
   Scenario: Lawful expert PD erasure preserves exact tombstones but cannot be restored
@@ -624,12 +638,12 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     And the ineligible source returns 404 RESOURCE_NOT_FOUND Problem Details
 
   @EARS-10 @EARS-12 @happy
-  Scenario: Surface catalogs own batched aggregates instead of composing relationship routes
-    Given 012 exposes exact base project and enriched expert summaries plus independently cursor-paginated relationships
-    When feature 015 reads its project catalog or page model
-    Then one bounded-SQL projection returns kind-specific content count nullable primary partner and enriched team without one query or HTTP call per card
-    When feature 016 searches experts by name with one project filter
-    Then one bounded-SQL projection returns the page filtered count and total count without loading the full catalog or issuing N plus 1 relationship reads
+  Scenario: Base taxonomy routes remain executable without future surface aggregates
+    Given a published project and expert each have several eligible relationships
+    When a zero-auth caller reads the 012 base project and expert collections and their relationship routes
+    Then project and expert items contain only their exact base or enriched-summary fields
+    And every relationship route keeps its own cursor envelope and bounded query
+    And contentCount team filteredCount and totalCount are absent because later features own those surface projections
 
   @EARS-13 @happy
   Scenario: Retirement is previewed and changes no related lifecycle state
@@ -661,11 +675,12 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     And retired rows never appear in a new-link selector
     And an empty page is a successful empty response
 
-  @EARS-2 @EARS-12 @EARS-15 @failure
+  @EARS-2 @EARS-15 @failure
   Scenario: Encrypted expert-name search stays indexed and becomes unreadable after erasure
-    Given expert names are ciphertext and each row has bounded HMAC tokens for normalized one-to-three-character grams under the active search-key version
-    When admin search or the feature-016 batched catalog searches a partial case-insensitive name
-    Then an indexed token intersection yields a bounded candidate batch and subject-key decryption verifies exact matches counts and order
+    Given expert names are ciphertext and each row has a sorted unique bytea array of at most 477 thirty-two-byte HMAC tokens for normalized one-to-three-character grams under the active search-key version
+    And a GIN array_ops index covers that token array
+    When admin search requests a partial case-insensitive name
+    Then array containment of every query gram plus active key version yields a bounded candidate batch and subject-key decryption verifies exact matches counts and order
     And no route decrypts or loads the full expert roster
     When approved erasure clears one subject tokens rebuilds non-erased rows into a shadow version atomically flips it and destroys the old search key
     Then old snapshot or WAL token copies cannot be tested and the erased expert is absent from every search result
@@ -709,6 +724,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | live idempotency owner exceeded bounded waiter time   | 409    | IDEMPOTENCY_REQUEST_IN_PROGRESS       |
       | erasure request cannot be approved in its state       | 409    | ERASURE_REQUEST_NOT_APPROVABLE        |
       | approved erasure request was already consumed         | 409    | ERASURE_REQUEST_ALREADY_CONSUMED      |
+      | approved erasure plan expired before worker execution | 409    | ERASURE_PLAN_EXPIRED                  |
       | approved erasure subject set changed                  | 409    | ERASURE_SCOPE_STALE                   |
       | erasure request is under legal hold                   | 409    | LEGAL_HOLD_ACTIVE                     |
       | missing If-Match on a conditional method              | 428    | PRECONDITION_REQUIRED                 |
@@ -716,11 +732,20 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | missing lifecycle impact token                        | 428    | LIFECYCLE_IMPACT_REQUIRED             |
       | stale lifecycle impact token                          | 412    | LIFECYCLE_IMPACT_STALE                |
 
+  @EARS-16 @failure
+  Scenario: Missing fresh erasure elevation returns an actionable step-up target
+    Given a dedicated pd_officer admin session has no MFA elevation within the last 30 minutes
+    When the caller invokes erasure-plan approval
+    Then the response is 401 STEP_UP_REQUIRED application/problem+json with traceId
+    And the body contains a server-generated stepUpUrl
+    And no request plan job idempotency domain media or audit side effect occurs
+
   @EARS-16 @EARS-17 @failure
   Scenario: Token-free live authority revalidation precedes every mutation side effect
     Given the dedicated admin session stores a Zitadel session id and sub but no IdP access or refresh token
     When an otherwise valid mutation passes local session fingerprint MFA and CSRF checks
-    Then IdpClient revalidateAdminAuthority uses service authentication to read that session and current project role
+    Then IdpClient revalidateAdminAuthority receives zitadelSessionId sub and requiredRole platform_admin and uses service authentication to read that session and current project role
+    And erasure approval supplies requiredRole pd_officer to the same interface before checking fresh elevation
     And request validation idempotency ownership normalization upload and handler entry wait for its positive verdict
     And provider inability to decide leaves the local session intact and returns IDP_REVALIDATION_UNAVAILABLE with zero side effect
 
@@ -795,7 +820,8 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | changed_input                                      |
       | a different canonical payload                      |
       | a different concrete target id                     |
-      | the same JSON with a different normalized output digest |
+      | the same JSON with different raw source bytes even if canonical output would match |
+      | the same raw source with a different normalized profile or output digest |
       | the same payload with a different If-Match         |
       | the same payload with a different lifecycle token  |
 
@@ -806,11 +832,24 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Then the waiter returns 409 IDEMPOTENCY_REQUEST_IN_PROGRESS with Retry-After 1
     And it performs no upload, domain or audit mutation
 
+  @EARS-16 @EARS-17 @failure
+  Scenario Outline: A pre-normalization crash cannot let takeover change media input
+    Given auth key and content type passed and the bounded raw file was hashed without normalization upload domain or audit work
+    And one claim transaction bound path query canonical JSON raw source digest byte length media profile If-Match lifecycle token and every subject_key_id fence
+    And owner A crashed before normalization
+    When owner B retries the same key with <retry_input>
+    Then <outcome>
+
+    Examples:
+      | retry_input                                  | outcome                                                                 |
+      | the exact bound raw and non-file input       | B may win a newer lease epoch normalize bind the final digest and resume |
+      | different raw bytes or any non-file input    | B receives 409 IDEMPOTENCY_KEY_REUSED before normalization or upload    |
+
   @EARS-17 @failure
   Scenario: Request takeover fences a paused media owner from domain commit
     Given request owner A at lease_epoch 7 reserved every subject fence epoch received a PUT capability expiring with its lease and paused after PUT before domain commit
     When its 60-second request lease expires and request owner B wins the CAS at lease_epoch 8
-    Then B re-reserves current subject epochs HEADs and verifies the normalized digest and reuses that exact unreferenced object or uploads with a new epoch-scoped capability and If-None-Match only if absent
+    Then B first re-hashes and verifies the immutable raw and non-file binding then re-reserves current subject_key_id epochs HEADs and verifies the normalized digest and reuses that exact unreferenced object or uploads with a new epoch-scoped capability and If-None-Match only if absent
     When A resumes and attempts claim completion with owner A epoch 7 and purpose request
     Then its fencing update affects zero rows and the same transaction rolls back every domain and audit write
     And B alone may commit one completed domain mutation and audit result

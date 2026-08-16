@@ -3,7 +3,7 @@ title: "013 — Static public Academy home"
 description: "Production requirements for the exact approved static Academy home at / with a deliberately disabled partnership-form preview."
 slug: 013-academy-home-requirements
 product: ./013-product.md
-status: Draft
+status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
 parent_issue: https://github.com/doctor-school/ds-platform/issues/1307
@@ -20,6 +20,13 @@ lang: en
 > · PRD: [013-product.md](./013-product.md), US-1…US-5.
 
 # 013 — Static public Academy home
+
+## Prior decisions
+
+- ADR-0014: the Product Lead-approved PRD is the source for EARS traceability.
+- ADR-0013: `@ds/design-system` components and tokens are the UI source of truth.
+- ADR-0006 §4: requirements stay bilingual and use flat EARS numbering.
+- ADR-0004: the Next.js portal owns the public user-facing route.
 
 ## Scope
 

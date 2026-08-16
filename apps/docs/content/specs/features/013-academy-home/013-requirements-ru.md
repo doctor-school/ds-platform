@@ -3,7 +3,7 @@ title: "013 — Статичная публичная главная Акаде�
 description: "Продакшен-требования к точной утверждённой статичной главной Академии на / с намеренно отключённым превью формы партнёрства."
 slug: 013-academy-home-requirements-ru
 product: ./013-product-ru.md
-status: Draft
+status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
 parent_issue: https://github.com/doctor-school/ds-platform/issues/1307
@@ -20,6 +20,13 @@ lang: ru
 > · PRD: [013-product-ru.md](./013-product-ru.md), US-1…US-5.
 
 # 013 — Статичная публичная главная Академии
+
+## Prior decisions
+
+- ADR-0014: утверждённый Product Lead PRD служит источником трассировки EARS.
+- ADR-0013: компоненты и токены `@ds/design-system` служат источником истины UI.
+- ADR-0006 §4: требования остаются двуязычными и используют плоскую нумерацию EARS.
+- ADR-0004: публичный пользовательский маршрут принадлежит Next.js-порталу.
 
 ## Скоуп
 

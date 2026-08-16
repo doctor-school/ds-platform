@@ -140,7 +140,7 @@ If create omits `slug`, the service generates it with one shared canonical lower
 
 Media schemas accept optional JPEG/PNG/WebP, at most 10 MiB, decoded width and height at most 6000 px and total pixels at most 25 million, with no minimum dimensions. Validation decodes and verifies the actual binary rather than trusting filename or client MIME. Expert photo absence yields deterministic display initials derived from the normalized name. The admin mirrors these bounds for preflight, but API validation remains authoritative.
 
-Refine uses plain text/textarea controls with trim and character counters; no field has an input mask. Slug has generated preview plus pattern/length feedback, partner website uses a URL input, `event_experts.position` is integer step 1 from 0 through 32767, and its role is trimmed 1–80. Field validation is 400 `VALIDATION_FAILED`; a valid-shaped mutation that would leave a published projection incomplete is 409 `PUBLISH_REQUIREMENTS_NOT_MET` with field-addressed errors.
+Input-mask declaration is `none` for every 012 field: each value is editorial text, a separately validated slug/URL/integer, or a file—not a fixed-format identifier—so a mask would fabricate or rewrite content rather than assist entry. Refine uses plain text/textarea controls with trim and character counters. Slug has generated preview plus pattern/length feedback, partner website uses a URL input, `event_experts.position` is integer step 1 from 0 through 32767, and its role is trimmed 1–80. Field validation is 400 `VALIDATION_FAILED`; a valid-shaped mutation that would leave a published projection incomplete is 409 `PUBLISH_REQUIREMENTS_NOT_MET` with field-addressed errors.
 
 ### 2.3 Existing-row conformance prerequisite (#1278)
 

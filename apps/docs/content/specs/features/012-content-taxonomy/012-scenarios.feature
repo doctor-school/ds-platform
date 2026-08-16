@@ -37,7 +37,8 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
   @EARS-1 @EARS-2 @EARS-3 @EARS-4 @EARS-7 @EARS-18 @happy
   Scenario: Authoring controls expose the server contract without masks
     When the operator opens each taxonomy form and the event expert editor
-    Then text and textarea fields trim input and show their character limits without input masks
+    Then every input-mask declaration is none because no field is a fixed-format identifier
+    And text and textarea fields trim input and show their character limits
     And slug shows the canonical generated preview plus pattern and length feedback
     And partner website uses a URL control that accepts only absolute HTTPS input
     And event expert position is an integer control from 0 through 32767 with step 1

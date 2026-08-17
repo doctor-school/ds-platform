@@ -6,9 +6,8 @@
 Feature: Operators maintain one retained taxonomy that every Academy surface can query
 
   Background:
-    Given expert and legacy-speaker PD policy prerequisite #1305 has fresh Product Lead and Legal/Compliance sign-off plus plaintext audit and backup remediation proof
-    And retained-row runtime prerequisite #1278 is merged after that proof with encrypted speakers global idempotency claims and claim-time subject fences
-    And token-free admin authority prerequisite #1304 is merged before any taxonomy mutation or erasure-plan approval
+    Given retained-row runtime prerequisite #1278 is merged with stable retained speakers and globally reserved idempotency records
+    And every taxonomy and speaker value is an ordinary retained text column
     And the admin app is running with an MFA-verified platform_admin session
     And projects, experts, topics, partners and all five joins use restrictive foreign keys
     And public reads default to published entities and active non-deleted joins
@@ -56,11 +55,11 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Given a taxonomy row references an old normalized <kind> object with versions derivatives and a CDN key
     When a valid <operation> commits and immediate old-object deletion is unavailable
     Then the same database transaction changes or clears the media ref and inserts an active pending retained media_cleanup_jobs row for the old key
-    And the successful content mutation is not rolled back or mistaken for claim-scoped new-upload cleanup
+    And the successful content mutation is not rolled back or mistaken for record-scoped new-upload cleanup
     When the leased cleanup worker retries after storage recovers
     Then a newer fenced lease epoch rechecks that the old object is unreferenced deletes every version and derivative and purges or invalidates the CDN key
     And matching-owner completion sets expired completed and deleted_at while clearing raw keys entity linkage lease and error content
-    And it retains only job id cleanup kind outcome and timestamps as the non-content tombstone
+    And it retains only job id cleanup kind outcome and timestamps as the non-content remainder
     And the audited domain ref change exists while the technical cleanup row is covered by the explicit feature-010 exclusion parity guard
 
     Examples:
@@ -138,7 +137,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
   @EARS-1 @EARS-2 @EARS-4 @EARS-16 @EARS-17 @failure
   Scenario: Object-storage failure has an exact replayable outcome
-    Given a valid media upload owns a fresh idempotency claim
+    Given a valid media upload owns a fresh idempotency record
     When object storage refuses the PUT
     Then the server returns 503 MEDIA_STORAGE_UNAVAILABLE Problem Details
     And no taxonomy entity, speaker-domain or domain audit row changes
@@ -162,7 +161,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | partner |
 
   @EARS-1 @EARS-2 @EARS-3 @EARS-4 @EARS-16 @failure
-  Scenario Outline: Authored slugs cannot enter an id or erasure namespace
+  Scenario Outline: Authored slugs cannot enter the id namespace
     Given the operator authors a <kind> with <slug_case>
     When the create request validates its public identity
     Then it returns 400 VALIDATION_FAILED Problem Details before any row or audit write
@@ -174,188 +173,79 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | expert  | a canonical UUID slug           |
       | topic   | a canonical UUID slug           |
       | partner | a canonical UUID slug           |
-      | expert  | a slug beginning with erased-   |
 
   @EARS-2 @EARS-16 @failure
-  Scenario: Expert erasure and old-slug creation share one reservation lock
-    Given a published-history expert owns slug alpha and its deterministic tombstone candidate is free
-    When approved erasure races another expert create that requests slug alpha
-    Then erasure locks the old reservation digest and tombstone candidate and commits the exact tombstone once
-    And the create returns 409 SLUG_CONFLICT whether it observes the readable slug or permanent reservation
-    And no authored slug can equal another row id or the erased-stable-id tombstone
-
-  @EARS-2 @EARS-16 @failure
-  Scenario: Historical legacy-speaker audit PD is classified before expert migration
-    Given historical audit_ledger data.event_speakers insert and update diffs may contain plaintext name or regalia
-    When the #1305 pre-migration inventory runs
-    Then SQL audit_pd_columns and TS AUDIT_PD_COLUMNS first gain the exact expert ciphertext lookup reservation search and subject-key fields plus event_speakers name regalia and subject_key_id with parity
-    And event_experts expert_id legacy_speaker_id and role_ciphertext plus project_experts expert_id and role plus subject_keys subject_kind subject_digest and vault_key_ref are registered before their first write
-    And formal production amendment blocks to ADR-0009 EN RU design and feature 010 requirements design scenarios correct the as-built append-only no-chain v1 contract before remediation
-    And every historical hit is listed by ledger primary key field opaque commitment reference legal basis finite term and owner in one approved retained audit_pd_remediation_manifests row with no plaintext or bare plaintext hash
-    And a Vault-held per-row audit_retention_keys DEK encrypts the old leaf into audit_legacy_pd_ciphertexts while an HKDF-separated subkey produces a keyed HMAC that cannot be verified offline
-    And the manifest-bound SECURITY DEFINER transition changes only that leaf to masked true legacyCiphertextRef and commitmentRef while preserving ledger identity non-PD diff timestamps and unlisted bytes
-    And one immutable audit_pd_redaction_evidence row stores only target ids keyed commitment ciphertext and envelope hashes signer key version and an external old-to-new signature before the manifest is consumed
-    And DELETE trigger disable unrestricted UPDATE plaintext compensating rows and replay are all refused
-    And a future hash chain starts from post-remediation ledger bytes plus the evidence root rather than claiming a nonexistent v1 chain
-    And every manifest ciphertext key and evidence field has explicit retained lifecycle and SQL TS PD classification
-    And destroying the DEK and commitment subkey at the approved term makes ciphertext and keyed commitments unreadable and untestable without deleting a row
-    And no expert migration or further unmasked affected write may start before that proof passes
-    And only idempotency_keys idempotency_claim_subjects pd_subject_fences pd_key_destruction_jobs and media_cleanup_jobs are parity-tested technical audit exclusions
-
-  @EARS-2 @EARS-16 @failure
-  Scenario: Expert publication waits for ciphertext and backup proof
-    Given legacy speaker and expert subject values could otherwise reach current rows MVCC WAL snapshots or offsite backups
-    When #1305 and #1278 prepare the affected storage boundary
-    Then each subject value is AES-256-GCM ciphertext under an external purpose Vault key and Postgres stores no decrypting key
-    And each idempotency claim content is ciphertext under its own external claim key
-    And every pre-encryption audit snapshot WAL and offsite copy has an approved expiry or purge acknowledgement
-    And a restore drill plus unique-marker scan proves no plaintext can be recovered
-    And expert publication and erasure-request acceptance remain disabled until that entire proof passes
-
-  @EARS-2 @EARS-16 @failure
-  Scenario Outline: Erasure-plan approval enforces dedicated authority and one-use request state
-    Given an ADR-0009 erasure request is in <request_state> with <authority_state>
-    When the caller invokes the compliance approval route
-    Then the response is <status> <error_code> Problem Details
-    And no immutable plan job domain row key or audit evidence changes
-
-    Examples:
-      | request_state              | authority_state                         | status | error_code                       |
-      | review_required            | platform_admin without pd_officer       | 403    | PD_OFFICER_REQUIRED              |
-      | review_required            | pd_officer with stale MFA elevation     | 401    | STEP_UP_REQUIRED                 |
-      | review_required            | pd_officer while IdP is unavailable     | 503    | IDP_REVALIDATION_UNAVAILABLE     |
-      | review_required under hold | fresh stepped-up pd_officer              | 409    | LEGAL_HOLD_ACTIVE                |
-      | expired                    | fresh stepped-up pd_officer              | 409    | ERASURE_REQUEST_NOT_APPROVABLE   |
-      | approved or executing      | fresh stepped-up pd_officer              | 409    | ERASURE_REQUEST_ALREADY_CONSUMED |
+  Scenario: A removed expert keeps its slug so the old public URL cannot resolve to someone else
+    Given a published-history expert owns slug alpha
+    When an editorial removal races another expert create that requests slug alpha
+    Then the removal keeps the retained row and its slug alpha while clearing every descriptive value
+    And the create returns 409 SLUG_CONFLICT because the per-table unique index still covers the retained row
+    And no authored slug can equal another row id
 
   @EARS-2 @EARS-16 @happy
-  Scenario: Fresh pd_officer approval binds one immutable server-derived erasure plan
-    Given an editorial expert or legacy-speaker request is forced to review_required and cannot use automated pending-to-approved triage
-    And the unexpired request has no legal hold
-    And a fresh stepped-up pd_officer supplies exactly one resolution for every sole-curator project
-    When the Refine PD requests detail submits those resolutions without any caller-entered subject or legacy-speaker id
-    And approval locks the request and current subject relationship project and event versions
-    Then it derives all and only explicitly mapped legacy speaker rows without accepting subject ids in the body
-    And it records subject digest reviewer time 24-hour expiry legal-hold verdict dependency fingerprint and exact curator resolutions
-    And it atomically changes review_required to approved and enqueues exactly one payload containing only erasureRequestId
-    And it returns 202 with that request id and approved status
-    And the same detail becomes read-only while approved executing or completed
-
-  @EARS-2 @EARS-16 @failure
-  Scenario: A queued erasure plan that expires before execution becomes a terminal no-op
-    Given an approved erasure request retains its immutable plan with plan_expires_at equal to approved_at plus 24 hours
-    And its queue delivery has not yet entered executing
-    When the worker locks it at or after plan_expires_at
-    Then one transaction returns the request to review_required records approval_expired_at and retains the expired plan as evidence
-    And the queue delivery completes as a no-op with 409 ERASURE_PLAN_EXPIRED
-    And no subject gate claim domain row audit row key job or cleanup obligation changes
-    And a later approval must derive and approve a fresh plan
-
-  @EARS-2 @EARS-16 @failure
-  Scenario: A legal hold imposed after approval wins before worker execution
-    Given an approved unexpired erasure plan had no legal hold at approval time
-    And a legal hold writer and queued worker contend on the same subject-policy serialization lock
-    When the legal hold commits before the worker consumes approved to executing
-    Then the worker re-reads the hold under that lock and one transaction returns the request to review_required
-    And it records hold_detected_at plus retained hold_evidence_id and completes the queue delivery as no-op 409 LEGAL_HOLD_ACTIVE
-    And no subject gate claim domain row audit row key job cleanup obligation or Vault operation changes
-    And approval after the hold clears must derive a fresh plan
+  Scenario: Expert and speaker values are ordinary audited columns
+    Given historical audit_ledger data.event_speakers insert and update diffs contain plain name and regalia text
+    When an expert or speaker mutation reaches the feature-010 trigger
+    Then the diff is recorded exactly like any other editorial column with no separate classification workflow
+    And an editorial-removal UPDATE is recorded as a diff that does not re-publish the cleared values
+    And only idempotency_keys and media_cleanup_jobs are parity-tested technical audit exclusions
 
   @EARS-2 @EARS-8 @EARS-14 @EARS-16 @EARS-17 @failure
-  Scenario: Lawful expert PD erasure preserves exact tombstones but cannot be restored
-    Given #1306 receives only one approved erasureRequestId whose immutable plan is current and legal-hold-free
-    And the expert has encrypted identity a published-history slug photo joins one explicitly mapped encrypted legacy speaker and processing plus completed claim content
-    When the worker locks the request and all subject replacement experts projects events and child rows in canonical order and atomically enters executing
-    And it closes subject gates advances fence epochs and commits the database erasure transaction
-    Then the experts row keeps its stable id and first_published_at with status retired and non-null deleted_at and pd_erased_at
-    And tombstone_slug is erased-stable-id while every readable slug identity and photo ciphertext plus subject key reference is null
-    And a mandatory unique stable-Vault-HMAC reservation digest rejects old-slug reuse without retaining the readable old slug
-    And the explicitly mapped event_speakers row remains retained and retired with non-null deleted_at and pd_erased_at and null name regalia ciphertext and subject key reference
-    And unmatched legacy rows are never guessed by name
-    And subject event_experts are retired with expert_id legacy_speaker_id and role ciphertext null while event id and position remain
-    And subject project_experts are retired with expert_id null and role member while project id remains
-    And every matching processing or completed claim is expired with response headers fingerprint upload target actor subject content and live key reference cleared
-    And the transaction writes durable service-only subject and claim key-destruction plus media CDN public JSON HTML card cache and registered search-index cleanup jobs
-    And no application replay or decrypt path can reopen those values while the request remains executing for external acknowledgements
-    And the admin exposes no restore control for the erased expert
+  Scenario: Editorial removal clears an expert without deleting the row and cannot be undone
+    Given a published expert has name professional role credentials affiliation bio a photo and one explicitly mapped legacy speaker
+    And the operator confirms the removal action with the expert If-Match and a canonical UUID Idempotency-Key
+    When the removal transaction commits
+    Then the experts row keeps its stable id slug and first_published_at with status retired and non-null deleted_at and content_removed_at
+    And name professional_role credentials affiliation bio and photo_ref are null rather than sentinel person text
+    And the admin renders the fixed label instead of a stored placeholder
+    And every incident event_experts and project_experts row is retired and event_experts role is cleared
+    And one active pending media_cleanup_jobs row releases the old photo object and CDN key
+    And ordinary feature-010 audit rows record each affected table
+    And the explicitly mapped legacy speaker row is untouched unless it is removed in its own right
+    And the admin exposes no restore control for the removed expert
     When the operator attempts restore with current headers
-    Then the server returns 409 PD_ERASED Problem Details without changing a row media object or audit record
+    Then the server returns 409 CONTENT_REMOVED Problem Details without changing a row media object or audit record
 
-  @EARS-2 @EARS-16 @EARS-17 @failure
-  Scenario Outline: Execution rejects any stale or wrong erasure subject closure
-    Given one approved immutable erasure plan was derived under locks
-    And before execution <scope_change>
-    When #1306 re-derives the all-and-only subject set and dependency fingerprint under canonical locks
-    Then it records 409 ERASURE_SCOPE_STALE and returns the request to review_required
-    And no subject key claim row tombstone project lifecycle media job or domain audit changes
-
-    Examples:
-      | scope_change                                                        |
-      | a new explicit legacy mapping is added                              |
-      | an approved mapped legacy row is omitted from the discovered set    |
-      | an unrelated legacy row is injected into the requested scope        |
-      | a mapped row is submitted through the legacy-only request path      |
-      | a sole-curator project or replacement eligibility changes           |
-      | a replacement curator is the erasure subject itself                 |
-
-  @EARS-2 @EARS-17 @failure
-  Scenario Outline: Erasure fences claims before response or upload can escape
-    Given an expert erasure worker and a PD-bearing claim overlap at <race_point>
-    When both serialize on the subject fence
-    Then <claim_result>
-    And no claim can upload commit or replay PD after the erasure fence advances
-
-    Examples:
-      | race_point                                 | claim_result                                                                      |
-      | claim reserved before erasure              | erasure finds the processing claim and its later completion fails the old epoch  |
-      | claim attempts acquisition after gate close | acquisition is refused before normalization upload or handler entry             |
-
-  @EARS-2 @EARS-8 @EARS-16 @failure
-  Scenario: External erasure acknowledgement is retried without republishing database PD
-    Given an expert erasure database transaction committed exact tombstones and durable cleanup jobs
-    And object storage CDN or one registered cache or search-index consumer is unavailable
-    When the erasure worker cannot collect every acknowledgement
-    Then the request remains executing with retries and an alert and erased database values are never rolled back or republished
-    When every photo version derivative and CDN key is absent all public JSON HTML card and search projections acknowledge invalidation and every subject or claim key reports destroyed
-    Then old expert profile media and speaker URLs return the ordinary unknown or ineligible response
-    And current MVCC WAL snapshot and backup ciphertext is unreadable because the corresponding external keys no longer exist
-    And red-team marker scans find no plaintext in raw audit output APIs pages CDN caches indexes logs or metrics
-    And the erasure request becomes completed within the approved term of at most 30 days
-
-  @EARS-2 @EARS-8 @EARS-14 @EARS-16 @EARS-17 @failure
-  Scenario: A legacy-only person has an explicit retained-row erasure path
-    Given one event_speakers row identifies a person but has no expert or explicit mapping
-    And a fresh stepped-up pd_officer approved one immutable request plan for that stable eventSpeakerId
-    When #1306 executes only that approved erasureRequestId and revalidates that the row remains unmapped
-    Then that row remains retained and retired with non-null deleted_at and pd_erased_at and null name regalia ciphertext and subject key reference
+  @EARS-2 @EARS-8 @EARS-14 @EARS-16 @failure
+  Scenario: A never-migrated legacy speaker has its own editorial removal path
+    Given one event_speakers row identifies a person but has no expert link
+    When the operator removes that stable speaker id with its If-Match
+    Then that row remains retained and retired with non-null deleted_at and content_removed_at and null name and regalia
     And no other same-name speaker row is selected or changed
-    And after the durable Vault destruction acknowledgement its ciphertext in current MVCC WAL snapshots and backups is unreadable
-    And future audit values are masked and public caches no longer contain that speaker PD
+    And the parent event lifecycle and every other speaker slot are unchanged
     And the event editor exposes no restore control for that row
     When the event editor attempts to restore or repopulate that stable row
-    Then the request returns 409 PD_ERASED with no row or audit mutation
+    Then the request returns 409 CONTENT_REMOVED with no row or audit mutation
 
-  @EARS-2 @EARS-7 @EARS-9 @EARS-16 @failure
-  Scenario: Join erasure cannot copy person linkage back into the audit ledger
-    Given an expert has event_experts expert_id legacy_speaker_id and role_ciphertext plus project_experts expert_id and role
-    When an ordinary join mutation or approved erasure UPDATE reaches the feature-010 trigger
-    Then SQL audit_pd_columns and TS AUDIT_PD_COLUMNS classify every one of those fields with parity
-    And old and new values in audit_ledger are only masked markers rather than role text or subject linkage
-    And the historical inventory leaves no unclassified plaintext join copy
+  @EARS-2 @EARS-7 @EARS-16 @failure
+  Scenario: A mapped legacy speaker is removed through its expert, not the legacy path
+    Given an active event_experts row explicitly maps one legacy speaker to a published expert
+    When the operator invokes the legacy-speaker removal route for that stable speaker id
+    Then the request is refused with 409 LEGACY_SPEAKER_CONFLICT Problem Details
+    And the admin directs the operator to the expert removal action instead
+    And no row media object or audit record changes
 
   @EARS-2 @EARS-5 @EARS-9 @EARS-16 @EARS-17 @failure
-  Scenario Outline: Expert erasure resolves every published sole-curator project atomically
-    Given the erasure subject is sole eligible curator of a published project
-    And the approved curator resolution is <resolution>
-    When erasure races curator replacement or project publication under the shared expert-to-project lock order
+  Scenario Outline: Editorial removal resolves every published sole-curator project atomically
+    Given the removal subject is sole eligible curator of a published project
+    And the operator supplies the resolution <resolution>
+    When removal races curator replacement or project publication under the shared expert-to-project lock order
     Then <committed_project_result>
-    And no committed published project has the erased or retired subject as its curator
+    And no committed published project has the removed or retired subject as its curator
     And a losing concurrent command revalidates or retries without an invalid intermediate state
 
     Examples:
       | resolution                   | committed_project_result                                                        |
       | eligible replacement expert | the project stays published with exactly that one eligible replacement curator |
       | retire project               | the project is retired and absent from catalog and direct detail with joins kept |
+
+  @EARS-2 @EARS-16 @failure
+  Scenario: A removal that cannot resolve a sole-curator project changes nothing
+    Given the removal subject is sole eligible curator of a published project
+    And the supplied replacement expert is retired, draft or the subject itself
+    When the operator submits the removal
+    Then the server returns 409 PUBLISHED_PROJECT_REQUIRES_CURATOR Problem Details
+    And no expert value join lifecycle media job or audit row changes
 
   @EARS-5 @happy
   Scenario Outline: A complete entity publishes through a publish-safe allow-list
@@ -459,7 +349,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Given a legacy speaker belongs to another event or is already referenced by a retained event_experts row
     When the operator submits it as legacySpeakerId
     Then the link is refused with 409 LEGACY_SPEAKER_CONFLICT Problem Details
-    And event_speakers uses UUID id as row identity plus a partial active event_id-position unique explicit event_id-id composite FK target and irreversible pd_erased_at CHECK
+    And event_speakers uses UUID id as row identity plus a partial active event_id-position unique explicit event_id-id composite FK target and the content_removed_at CHECK
     And no inferred or partial mapping is stored
 
   @EARS-7 @failure
@@ -688,28 +578,20 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     And retired rows never appear in a new-link selector
     And an empty page is a successful empty response
 
-  @EARS-2 @EARS-15 @failure
-  Scenario: Encrypted expert-name search stays indexed and becomes unreadable after erasure
-    Given expert names are ciphertext and both raw and NFKC case-fold whitespace-normalized names are capped at 160 Unicode scalars before token generation
-    And each row has a sorted unique bytea array of at most 477 thirty-two-byte HMAC tokens for normalized one-to-three-character grams under the active search-key version
-    And a GIN array_ops index covers that token array
+  @EARS-2 @EARS-15 @happy
+  Scenario: Expert-name search is trigram indexed rather than a full-roster scan
+    Given expert names are ordinary text columns and a pg_trgm GIN index covers experts.name
+    And the handler trims and NFKC-normalizes the query before matching
     When admin search requests a partial case-insensitive name
-    Then array containment of every query gram plus active key version yields a bounded candidate batch and subject-key decryption verifies exact matches counts and order
-    And no route decrypts or loads the full expert roster
-    When approved erasure clears one subject tokens rebuilds non-erased rows into a shadow version atomically flips it and destroys the old search key
-    Then old snapshot or WAL token copies cannot be tested and the erased expert is absent from every search result
-
-  @EARS-2 @EARS-15 @EARS-16 @failure
-  Scenario: Unicode normalization expansion is rejected before expert token generation
-    Given a raw expert name is within 160 Unicode scalars but a compatibility-expanding fixture exceeds 160 scalars after NFKC case-fold and whitespace normalization
-    When the operator saves that expert
-    Then the response is 400 VALIDATION_FAILED with a field-addressed name error
-    And no expert row search token audit row or media object is created
+    Then the ILIKE predicate uses that index and returns the bounded matching page and total
+    And no route loads the full expert roster into application code to filter it
+    When an expert is editorially removed
+    Then its cleared name is absent from every search result while the retained row stays addressable by id
 
   @EARS-16 @failure
   Scenario Outline: Authorization and protocol failures are exact Problem Details
     Given the request condition is <condition>
-    When the caller invokes the corresponding taxonomy or compliance-approval route
+    When the caller invokes the corresponding taxonomy route
     Then the response is <status> <error_code> application/problem+json
     And the body contains a traceId and no hidden lifecycle or database detail
 
@@ -721,12 +603,8 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | missing or mismatched CSRF on a mutation              | 401    | ADMIN_SESSION_REQUIRED                |
       | an inactive missing or mismatched provider session   | 401    | ADMIN_SESSION_REQUIRED                |
       | an active provider session whose current role was revoked | 403 | PLATFORM_ADMIN_REQUIRED             |
-      | erasure approval without current pd_officer authority  | 403    | PD_OFFICER_REQUIRED                   |
-      | erasure approval without fresh MFA elevation           | 401    | STEP_UP_REQUIRED                      |
-      | IdP transport timeout 429 5xx service-auth config or malformed response | 503 | IDP_REVALIDATION_UNAVAILABLE |
       | invalid cursor                                        | 400    | CURSOR_INVALID                        |
       | unknown or ineligible public source                   | 404    | RESOURCE_NOT_FOUND                    |
-      | unknown erasure request                               | 404    | ERASURE_REQUEST_NOT_FOUND             |
       | duplicate retained pair                               | 409    | RELATIONSHIP_CONFLICT                 |
       | duplicate retained slug                               | 409    | SLUG_CONFLICT                         |
       | invalid lifecycle transition                          | 409    | INVALID_TRANSITION                    |
@@ -738,37 +616,23 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | unavailable object storage                            | 503    | MEDIA_STORAGE_UNAVAILABLE             |
       | incomplete publish projection                         | 409    | PUBLISH_REQUIREMENTS_NOT_MET          |
       | immutable slug change                                 | 409    | SLUG_IMMUTABLE                        |
-      | restore of a PD-erased expert                         | 409    | PD_ERASED                             |
+      | restore of an editorially removed expert              | 409    | CONTENT_REMOVED                       |
       | published curator invalidation                        | 409    | PUBLISHED_PROJECT_REQUIRES_CURATOR    |
       | conflicting legacy speaker match                      | 409    | LEGACY_SPEAKER_CONFLICT               |
       | occupied combined speaker slot                        | 409    | SPEAKER_POSITION_OCCUPIED             |
       | live idempotency owner exceeded bounded waiter time   | 409    | IDEMPOTENCY_REQUEST_IN_PROGRESS       |
-      | erasure request cannot be approved in its state       | 409    | ERASURE_REQUEST_NOT_APPROVABLE        |
-      | approved erasure request was already consumed         | 409    | ERASURE_REQUEST_ALREADY_CONSUMED      |
-      | approved erasure plan expired before worker execution | 409    | ERASURE_PLAN_EXPIRED                  |
-      | approved erasure subject set changed                  | 409    | ERASURE_SCOPE_STALE                   |
-      | erasure request is under legal hold                   | 409    | LEGAL_HOLD_ACTIVE                     |
       | missing If-Match on a conditional method              | 428    | PRECONDITION_REQUIRED                 |
       | stale If-Match on a non-lifecycle method              | 412    | PRECONDITION_FAILED                   |
       | missing lifecycle impact token                        | 428    | LIFECYCLE_IMPACT_REQUIRED             |
       | stale lifecycle impact token                          | 412    | LIFECYCLE_IMPACT_STALE                |
 
-  @EARS-16 @failure
-  Scenario: Missing fresh erasure elevation returns an actionable step-up target
-    Given a dedicated pd_officer admin session has no MFA elevation within the last 30 minutes
-    When the caller invokes erasure-plan approval
-    Then the response is 401 STEP_UP_REQUIRED application/problem+json with traceId
-    And the body contains a server-generated stepUpUrl
-    And no request plan job idempotency domain media or audit side effect occurs
-
   @EARS-16 @EARS-17 @failure
-  Scenario: Token-free live authority revalidation precedes every mutation side effect
-    Given the dedicated admin session stores a Zitadel session id and sub but no IdP access or refresh token
+  Scenario: The platform_admin guard precedes every mutation side effect
+    Given the dedicated admin session carries its fingerprint verified MFA and the caller's roles
     When an otherwise valid mutation passes local session fingerprint MFA and CSRF checks
-    Then IdpClient revalidateAdminAuthority receives zitadelSessionId sub and requiredRole platform_admin and uses service authentication to read that session and current project role
-    And erasure approval supplies requiredRole pd_officer to the same interface before checking fresh elevation
-    And request validation idempotency ownership normalization upload and handler entry wait for its positive verdict
-    And provider inability to decide leaves the local session intact and returns IDP_REVALIDATION_UNAVAILABLE with zero side effect
+    Then the route guard requires platform_admin on that session before request validation idempotency normalization upload and handler entry
+    And a session without that role is refused with 403 PLATFORM_ADMIN_REQUIRED and zero side effect
+    And no per-mutation identity-provider call or second role is involved
 
   @EARS-16 @EARS-17 @failure
   Scenario Outline: An absent or invalid idempotency UUID is rejected before side effects
@@ -803,6 +667,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
       | publish         | target ETag   |
       | retire          | target ETag   |
       | restore         | target ETag   |
+      | remove-content  | target ETag   |
       | replace-curator | project ETag  |
 
   @EARS-17 @happy
@@ -814,13 +679,13 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
   @EARS-17 @failure
   Scenario: One idempotency UUID is globally reserved across actors routes and expiry
-    Given actor A owns an active globally unique key digest for one route and exact fingerprint
+    Given actor A owns an active globally unique key for one route and exact fingerprint
     When actor B tries the same UUID on the same or another route
     Then actor B receives 409 IDEMPOTENCY_KEY_REUSED and cannot see actor A response
-    When the claim passes 24 hours and clears actor route request and response content
+    When the record passes 24 hours and clears actor route request and response content
     And actor A or actor B tries that UUID again
-    Then the permanent global digest still returns 409 IDEMPOTENCY_KEY_REUSED before fingerprint comparison
-    And no raw actor identifier method route payload or response is needed to enforce the reservation
+    Then the permanently retained key still returns 409 IDEMPOTENCY_KEY_REUSED before fingerprint comparison
+    And no retained actor identifier method route payload or response is needed to enforce the reservation
 
   @EARS-17 @happy
   Scenario: Optimistic concurrency prevents a lost write
@@ -856,7 +721,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
   @EARS-16 @EARS-17 @failure
   Scenario Outline: A pre-normalization crash cannot let takeover change media input
     Given auth key and content type passed and the bounded raw file was hashed without normalization upload domain or audit work
-    And one claim transaction bound path query canonical JSON raw source digest byte length media profile If-Match lifecycle token and every subject_key_id fence
+    And one record transaction bound path query canonical JSON raw source digest byte length media profile If-Match and lifecycle token
     And owner A crashed before normalization
     When owner B retries the same key with <retry_input>
     Then <outcome>
@@ -868,16 +733,16 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
   @EARS-17 @failure
   Scenario: Request takeover fences a paused media owner from domain commit
-    Given request owner A at lease_epoch 7 reserved every subject fence epoch received a PUT capability expiring with its lease and paused after PUT before domain commit
+    Given request owner A at lease_epoch 7 received a PUT capability expiring with its lease and paused after PUT before domain commit
     When its 60-second request lease expires and request owner B wins the CAS at lease_epoch 8
-    Then B first re-hashes and verifies the immutable raw and non-file binding then re-reserves current subject_key_id epochs HEADs and verifies the normalized digest and reuses that exact unreferenced object or uploads with a new epoch-scoped capability and If-None-Match only if absent
-    When A resumes and attempts claim completion with owner A epoch 7 and purpose request
+    Then B first re-hashes and verifies the immutable raw and non-file binding then HEADs and verifies the normalized digest and reuses that exact unreferenced object or uploads with a new epoch-scoped capability and If-None-Match only if absent
+    When A resumes and attempts record completion with owner A epoch 7 and purpose request
     Then its fencing update affects zero rows and the same transaction rolls back every domain and audit write
     And B alone may commit one completed domain mutation and audit result
 
   @EARS-16 @EARS-17 @failure
-  Scenario Outline: Every deterministic post-claim refusal is fenced and replayed exactly
-    Given one request owner holds an active claim at a current lease_epoch
+  Scenario Outline: Every deterministic post-record refusal is fenced and replayed exactly
+    Given one request owner holds an active idempotency record at a current lease_epoch
     When post-lock handling deterministically returns <status> <error_code>
     Then owner epoch and purpose conditionally complete that exact status body and allowed headers
     And no refused domain or domain-audit mutation commits
@@ -893,7 +758,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
 
   @EARS-17 @failure
   Scenario: An indeterminate provider or database fault remains takeover eligible
-    Given a request owns a claim but receives an unclassified provider timeout database disconnect or uncertain commit verdict
+    Given a request owns an idempotency record but receives an unclassified provider timeout database disconnect or uncertain commit verdict
     When its transaction cannot prove a deterministic result
     Then it stores no terminal replay outcome and commits no domain or audit mutation
     And after lease expiry a new fenced request owner re-runs every post-lock precondition
@@ -912,22 +777,19 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Then it re-uploads only if the object is absent and still produces at most one domain mutation
 
   @EARS-17 @failure
-  Scenario: Idempotency expiry retains the tombstone but minimizes cached content
+  Scenario: Idempotency expiry retains the row but minimizes cached content
     Given an active idempotency record has reached its 24 hour boundary
     When the expiry process runs
     Then the row is updated to expired with deleted_at set
-    And cached response body headers request fingerprint file digest domain target claim-subject rows lease owner purpose actor digest method route and live key reference are cleared
-    And that database clearing succeeds while Vault or object storage is unavailable and records a durable service-only claim-key destruction obligation
-    And no application path can decrypt or replay the claim after that commit
-    When the retrying key worker obtains Vault zeroization acknowledgement
-    Then the opaque destruction handle is cleared
+    And cached response body headers request fingerprint file digest domain target lease owner purpose actor method and route are cleared
+    And that database clearing succeeds while object storage is unavailable
+    And no application path can replay the record after that commit
     And every prior upload capability is closed while the deterministic locator remains only through its quiescent cleanup obligation
-    And only the permanent global key digest status lifecycle timestamps and a temporary non-content cleanup locator or outcome remain
-    And no raw Idempotency-Key or admin sub remains
+    And only the permanently retained key status lifecycle timestamps and a temporary non-content cleanup locator or outcome remain
     And recurring cleanup retains the locator through authorization expiry plus in-flight and skew grace until no unreferenced object remains
     And a later request by any actor or route with that key returns 409 IDEMPOTENCY_KEY_REUSED even for the same fingerprint
     And the stable key cannot be reactivated, reused or physically deleted
-    And no feature-010 audit row is expected for the explicitly allow-listed idempotency_keys idempotency_claim_subjects pd_subject_fences pd_key_destruction_jobs or media_cleanup_jobs tables
+    And no feature-010 audit row is expected for the explicitly allow-listed idempotency_keys or media_cleanup_jobs tables
 
   @EARS-13 @EARS-14 @EARS-16 @EARS-17 @failure
   Scenario Outline: A stale lifecycle preview cannot authorize a transition
@@ -936,7 +798,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     When the operator confirms <transition> with If-Match version 4 and that Lifecycle-Impact-Token
     Then the server returns 412 LIFECYCLE_IMPACT_STALE Problem Details
     And no lifecycle state, relationship, media or domain audit row changes
-    And the fenced idempotency claim completes that exact 412 and same-key retry replays it
+    And the fenced idempotency record completes that exact 412 and same-key retry replays it
     And the admin reloads impact before asking for confirmation again
 
     Examples:
@@ -950,7 +812,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     When confirmation uses <token_abuse>
     Then the server returns 412 LIFECYCLE_IMPACT_STALE Problem Details
     And no lifecycle state relationship media or domain audit row changes
-    And the fenced idempotency claim completes that exact 412 and same-key retry replays it
+    And the fenced idempotency record completes that exact 412 and same-key retry replays it
     And the admin reloads impact before asking for confirmation again
 
     Examples:
@@ -968,7 +830,7 @@ Feature: Operators maintain one retained taxonomy that every Academy surface can
     Then the server returns 412 LIFECYCLE_IMPACT_STALE Problem Details
     And a relationship command never locks its target before the applicable expert project or event dependencies
     And no target, relationship, media or domain audit row changes
-    And the fenced idempotency claim completes that exact 412 and same-key retry replays it
+    And the fenced idempotency record completes that exact 412 and same-key retry replays it
     And the admin reloads the complete lifecycle impact before asking again
 
     Examples:

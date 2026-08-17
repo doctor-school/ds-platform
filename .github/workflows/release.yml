@@ -26,12 +26,16 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Create release PR or publish
-        uses: changesets/action@v1
+        uses: changesets/action@v2
         with:
-          version: pnpm run version-packages
-          publish: pnpm run release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          version-script: pnpm run version-packages
+          publish-script: pnpm run release
+          # Repo-level release tags/Releases are cut by `pnpm deploy:prod`, never here
+          # (see the NOTE below). Both must be false together: the action errors out if
+          # `create-github-releases` is true while `push-git-tags` is false.
+          create-github-releases: false
+          push-git-tags: false
 
   # NOTE (#996/§10.5, Issue #999 — "Option A"): the repo-level release-tag cut has
   # been RETIRED from this workflow. The former `tag-release` job cut a release on
@@ -43,3 +47,10 @@ jobs:
   # The changesets `release` job above STAYS — it maintains per-package `version` +
   # `CHANGELOG.md` (the §D1 changelog SSOT); only the repo-level release cut moved
   # to deploy time.
+  #
+  # NOTE (changesets cli v3): `changeset version` exits 1 when there are no unreleased
+  # changesets, but the action never reaches it — it reads the changeset state itself and
+  # only runs `version-script` when changesets exist. A changeset-less push to main takes
+  # the publish path instead, where `changeset publish` is a clean no-op (exit 0) because
+  # every package here is `"private": true` and `privatePackages.tag` is false, so the
+  # publish plan is empty. No guard step needed; the workflow is not red-by-design.

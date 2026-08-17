@@ -21,6 +21,17 @@ lang: ru
 > [#1324](https://github.com/doctor-school/ds-platform/issues/1324); заглушка и
 > этот файл демонтируются задачей
 > [#1323](https://github.com/doctor-school/ds-platform/issues/1323).
+>
+> **Статус на 2026-08-17:** текст INTERIM-триплета **замещён** триплетом полной
+> главной в рамках
+> [#1324](https://github.com/doctor-school/ds-platform/issues/1324), поэтому
+> `013-requirements-en.md` / `-ru.md`, `013-design.md` и `013-scenarios.feature`
+> теперь описывают полную главную Академии. EARS-текст самой заглушки остаётся
+> доступен в истории git (spec-PR
+> [#1315](https://github.com/doctor-school/ds-platform/pull/1315), PR доставки
+> [#1318](https://github.com/doctor-school/ds-platform/pull/1318)) — заглушка
+> продолжает работать в продакшене, пока её не демонтирует #1323, и эти истории
+> остаются её продуктовой записью.
 
 ## Истории заглушки
 

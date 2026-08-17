@@ -47,5 +47,5 @@ Failures are `application/problem+json` with the stable `errorCode` plus `traceI
 
 - `apps/api/test/taxonomy/projects-schema.e2e-spec.ts` — DB constraints, set-once publication instant, audit attachment, the two technical-table terminal shapes.
 - `apps/api/test/taxonomy/projects.e2e-spec.ts` — the authoring vertical over the real stack (reject + accept branches).
-- `apps/api/test/taxonomy/idempotency-media.e2e-spec.ts` — storage-outage 503, cleanup worker fencing, record expiry, lease takeover.
+- `apps/api/test/taxonomy/idempotency-media.e2e-spec.ts` — storage-outage 503, cleanup worker fencing, record expiry, lease takeover, and takeover ⇄ orphan-cleanup disjointness.
 - `apps/api/test/taxonomy/still-image-normalizer.spec.ts` — normalizer fixtures (accept, strip, orient, reject); its byte-fixture generator lives in `test/taxonomy/support/animated-fixtures.ts` so it never ships in the api build.

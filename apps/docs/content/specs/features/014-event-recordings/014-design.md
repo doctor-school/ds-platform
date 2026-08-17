@@ -21,7 +21,7 @@ It adds no second content store and no new provider abstraction: the playable so
 
 ```mermaid
 flowchart LR
-  ADM[apps/admin — feature-007 event detail + recordings panel]
+  ADM[apps/admin — tabbed feature-007 event detail + «Записи» tab]
   PORTAL[apps/portal — /webinars, /webinars/slug, /account/events]
   APIA["apps/api /v1/admin — platform_admin"]
   APIP["apps/api /v1/public — zero-auth reads"]
@@ -240,7 +240,9 @@ Rules the mechanism must satisfy:
 
 ## 7. Operator surface (`wave: core`)
 
-The recordings panel is a section of the existing feature-007 event detail in `apps/admin`, not a new Refine resource tree — an operator attaches a recording while looking at the event, which is where they already are.
+The recordings panel is an own **«Записи» tab** of the existing feature-007 event detail in `apps/admin`, which this feature turns into a tabbed detail — not a new Refine resource tree. An operator attaches a recording while looking at the event, which is where they already are; the tab keeps the recording work out of the announcement fields it has nothing to do with.
+
+The tabbed composition is the Product Lead's Stage-A pick — option B, 2026-08-17, recorded in [`014-product.md`](./014-product.md) → Approved mockup — and matches the 012 admin decision ([#1282](https://github.com/doctor-school/ds-platform/issues/1282)) so both admin verticals compose the same way. The surface stays stock Refine plus `@ds/design-system` primitives (admin carries no canvas by design, ADR-0004 §3). The new feature-007 lifecycle command «Отметить завершённым (трансляция прошла вне платформы)» sits with the other lifecycle actions on the event detail, shown only when the transition applies, and every status-changing action — that command and the panel's publish / unpublish / retire / restore alike — confirms in a modal before it fires.
 
 ```mermaid
 sequenceDiagram
@@ -261,7 +263,7 @@ sequenceDiagram
   Note over OP,RF: the public page changes by itself — no page edit
 ```
 
-Panel contract: one row per kind with its status chip, the source and poster fields, the action set from §3, and the event-level readiness-date field beside it. No Delete control exists anywhere in the panel; retire is the terminal action and it is reversible.
+Panel contract: inside the «Записи» tab, one row per kind with its status chip, the source and poster fields, the action set from §3 behind modal confirmation, and the event-level readiness-date field beside it. No Delete control exists anywhere in the panel; retire is the terminal action and it is reversible.
 
 ## 8. Portal surfaces (`wave: core`)
 

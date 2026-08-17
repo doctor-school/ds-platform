@@ -157,7 +157,7 @@ stateDiagram-v2
 
 Two boundaries keep this from becoming a general "set any state" escape hatch: the never-opened-room condition means it can never rewrite the history of a broadcast the platform actually hosted, and the past-end condition means it can never pre-declare a future эфир finished. A cancelled or never-aired event keeps feature 004's `published → archived` route and never becomes finished by this command.
 
-Because feature 007 runs in production, its extended transition set is recorded in `007-design.md` as an **amendment block** naming 014 as the source (AGENTS.md §6 amendment rule) rather than as an inline rewrite of its state machine.
+Because feature 007 runs in production, its extended transition set is recorded as an **amendment block** naming 014 as the source (AGENTS.md §6 amendment rule) rather than as an inline rewrite of its state machine. The amendment is mirrored across the whole 007 triplet — `007-design.md` §2, `007-requirements-en.md` and `007-requirements-ru.md` (inline pointers at the closed-set constraint, the transition policy, EARS-7, the invariant and verification row 7) and an annotated `007-scenarios.feature` example — so 007 does not contradict itself across files. The shipped `EARS-7.2` assertion in `apps/api/test/admin/transitions.e2e-spec.ts`, which currently expects 409 for `published → ended`, is a named deliverable of the EARS-18 Issue; nobody else touches it.
 
 ## 4. The derived projection (`wave: core`)
 

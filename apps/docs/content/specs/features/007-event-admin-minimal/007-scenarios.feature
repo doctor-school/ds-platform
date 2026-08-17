@@ -137,11 +137,17 @@ Feature: Minimal event admin — one operator creates, publishes, streams, runs,
     Then the transition is refused server-side
     And the admin UI never offered that transition from the "<from>" state
 
+    # Amended 2026-08-17 (source: feature 014 EARS-18): the `| published | ended |`
+    # row left this set. `published -> ended` is now a legal edge behind the
+    # MarkEventEnded backfill command (state published + scheduled end in the past +
+    # room never opened). See 007-requirements-en.md / -ru.md -> Amendment and
+    # 007-design.md -> Amendment. The shipped assertion in
+    # apps/api/test/admin/transitions.e2e-spec.ts (EARS-7.2) is updated by the
+    # feature-014 EARS-18 Issue, which owns that edit.
     Examples:
       | from      | to        |
       | draft     | live      |
       | draft     | ended     |
-      | published | ended     |
       | archived  | published |
       | live      | published |
 

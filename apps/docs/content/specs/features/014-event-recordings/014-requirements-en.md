@@ -100,6 +100,27 @@ These are verbatim owner answers on [#1326](https://github.com/doctor-school/ds-
 - **Facets read 012, they do not re-model it.** No 014 table stores a project, expert or topic; facet options and counts come from 012's public taxonomy reads.
 - **Bounded queries.** A listing page issues a bounded number of statements — the page query plus one facet-option query. Per-card or per-facet N+1 fan-out is refused at review.
 
+## Prior decisions
+
+- **ADR-0014 §2:** the PRD is the source of the EARS triplet and each clause carries a `realizes: US-N` backlink; Stage A precedes user-facing implementation and an approved canvas default is the decision, not a question to re-open.
+- **ADR-0003 §4:** every application-owned entity is retained — `event_recordings` has no physical delete, no cascade and restrictive foreign keys; normal reads filter `deleted_at IS NULL`.
+- **ADR-0002 §§3–4, 9:** Zod is the request/response SSOT, REST is versioned under `/v1`, public growing lists use opaque cursors, mutation errors are RFC 7807 Problem Details and mutations are idempotent.
+- **ADR-0001 §§4, 7:** the three access classes this feature uses are exactly `public` (the announcement projection), `authenticated` (recording playback — no role, no registration, no attendance) and `platform_admin` on the dedicated MFA-verified admin session (attach and publish).
+- **ADR-0004 §3:** the doctor-facing surface is the Next.js portal; operator authoring extends the existing Refine `apps/admin`, not a second backend and not Payload CMS.
+- **ADR-0006 §4:** the feature-spec triplet and flat EARS numbering; `it('EARS-N: …')` test titles.
+- **ADR-0013 + AGENTS.md §6:** implementation runs the design-system-first gate; interaction states, tokens and primitives come from `@ds/design-system`, and canvas-derived UI is built from the vendored `design-source/` files rather than from issue prose.
+- **Feature 004:** owns `/webinars` and `/webinars/[slug]`. 014 adds a post-live state and a past tab to those existing surfaces; it does not create a second event route or a second listing.
+- **Feature 005:** owns `registrations`, the join «Мои события» projects over. 014 adds tabs and ordering, not a second registration record.
+- **Feature 006:** already abstracts a playable stream as `stream_config.provider` + `embed_ref`. 014 reuses that shape for a recording source rather than introducing a second media abstraction or deciding video hosting.
+- **Feature 007:** supplies the admin event detail plus the authorization and idempotency precedent the recordings panel mirrors.
+- **Feature 010:** supplies generic audit capture; `event_recordings` attaches to it, so 014 introduces no audit table of its own and no technical-table exclusion.
+- **Feature 011 + ADR-0001 §§7/10:** the dedicated MFA-verified admin session and CSRF double-submit that every 014 admin mutation reuses.
+- **Feature 012:** owns projects, experts and topics and their event joins. The `facets` wave reads that public API; no 014 table stores a taxonomy record.
+- **Epic decision #3 (Academy public surface brief):** the archive is a registration driver — the gate is authentication, framed as free, never a paywall.
+- **Epic decision #4:** `/webinars/[slug]` is the single event page for every context; the archived state is a state of that page.
+- **Epic decision #6:** the edited cut takes the main player and the raw capture moves to a secondary slot.
+- **Epic decision #7:** one reusable event card + list + pagination unit serves every listing surface; 014 owns and builds it because 014 starts before the 013 build.
+
 ## Lead technical decisions
 
 - **LD-1 — recording identity and the at-most-one-per-kind rule.** `event_recordings` carries a stable UUID id; the operator-error branch in the PRD («more than one recording of the same kind») is enforced as a partial unique index `UNIQUE (event_id, kind) WHERE deleted_at IS NULL`, so a retired row frees the slot for a replacement while history is retained. A second attach of the same kind is 409 `RECORDING_KIND_OCCUPIED`, naming the retained row to edit or retire.

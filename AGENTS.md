@@ -2,7 +2,7 @@
 
 Universal AI-agent constitution for the DS Platform monorepo — vendor-agnostic, readable by any agent. Claude-Code-specific overlays: `CLAUDE.md`.
 
-<!-- ALWAYS-ON CORE. Per-file budget ≤200 lines AND ≤25 KB (`pnpm lint:instruction-budget`). Always-on set = this file + CLAUDE.md + every .claude/rules/*.md without `paths:` frontmatter — all auto-load at session start. Relocate detail; a task-scoped rules file gets `paths:` frontmatter. Never inline-grow. -->
+<!-- ALWAYS-ON CORE. Per-file budget ≤200 lines AND ≤25 KB (`pnpm lint:instruction-budget`). Always-on set = this file + CLAUDE.md + every .claude/rules/*.md without `paths:` frontmatter — all auto-load at session start. As of #1370 BOTH rules files are `paths:`-scoped, so the always-on set is these two files only; their gates reach the session through the §0 index. Relocate detail; a task-scoped rules file gets `paths:` frontmatter (first bytes of the file, or it is not frontmatter) and a §0 row. Never inline-grow. -->
 
 On-demand detail: branches/commits/versioning/Issues/PRs/merge → `.claude/rules/repo-conventions.md`; dev stand/migrations/live-verify → `.claude/rules/dev-stand.md` — both `paths:`-scoped, so READ them (§0), they do not auto-load; per-task procedure → the §3 skill (read on demand); settled facts → auto-memory (`MEMORY.md` index → topic file, on demand).
 

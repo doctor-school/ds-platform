@@ -1,18 +1,15 @@
-<!-- Auto-loaded reference (no `paths:` frontmatter ⇒ always-on). Detail behind AGENTS.md §2. -->
-
 ---
-
 paths:
-
-- ".github/**"
-- ".changeset/**"
-- "tools/gh/**"
-- "tools/lint/**"
-- "tools/deploy/**"
-- "apps/docs/content/adr/**"
-- "apps/docs/content/specs/**"
-
+  - ".github/**"
+  - ".changeset/**"
+  - "tools/gh/**"
+  - "tools/lint/**"
+  - "tools/deploy/**"
+  - "apps/docs/content/adr/**"
+  - "apps/docs/content/specs/**"
 ---
+
+<!-- READ-ON-DEMAND reference (`paths:` frontmatter ⇒ NOT always-on, NOT re-injected after /compact). The frontmatter MUST stay the first bytes of the file. Command-triggered gates are indexed in AGENTS.md §0; canon behind AGENTS.md §2. -->
 
 # Repository conventions (reference)
 

@@ -1,14 +1,11 @@
-<!-- Auto-loaded reference (no `paths:` frontmatter ⇒ always-on). Detail behind AGENTS.md §9. -->
-
 ---
-
 paths:
-
-- "infra/dev-stand/**"
-- "tools/dev/**"
-- "packages/db/**"
-
+  - "infra/dev-stand/**"
+  - "tools/dev/**"
+  - "packages/db/**"
 ---
+
+<!-- READ-ON-DEMAND reference (`paths:` frontmatter ⇒ NOT always-on, NOT re-injected after /compact). The frontmatter MUST stay the first bytes of the file. Command-triggered gates are indexed in AGENTS.md §0; canon behind AGENTS.md §9. -->
 
 # Local Dev Stand (reference)
 

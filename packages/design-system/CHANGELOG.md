@@ -1,5 +1,12 @@
 # @ds/design-system
 
+## 4.1.0
+
+### Minor Changes
+
+- [#1318](https://github.com/doctor-school/ds-platform/pull/1318) [`e556fbf`](https://github.com/doctor-school/ds-platform/commit/e556fbfd119d19f5940a5f4dc83aec0501359cd7) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add the token-only native select, accessible long-form error summary, and
+  surface-safe on-primary form, link, checkbox, and button contracts.
+
 ## 4.0.2
 
 ### Patch Changes

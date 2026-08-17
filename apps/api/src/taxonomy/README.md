@@ -6,26 +6,26 @@ The module owns the `platform_admin` authoring surface for the four retained tax
 
 ## What is here today
 
-| File                              | Role                                                                                                                   |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `projects.admin.controller.ts`    | `GET/POST /v1/admin/projects`, `GET/PATCH /v1/admin/projects/:id` — realizes the §5.1 failure ORDER.                   |
-| `projects.service.ts`             | The create/edit commands: slug resolution, media swap, cleanup enqueue, fenced record completion.                      |
-| `projects.repository.ts`          | Drizzle access for `projects`; every mutation inside `withRequestAuditContext` (feature 010).                          |
-| `idempotency.service.ts`          | §6 retained, fenced idempotency records — key validation, fingerprint binding, replay, lease takeover, 24-hour expiry. |
-| `media/still-image-normalizer.ts` | §2.2 shared still-image decoder/normalizer → canonical WebP under a pinned codec profile.                              |
-| `media/media-cleanup.service.ts`  | §5.1 durable old-reference cleanup: job enqueue + fenced leased worker.                                                |
-| `media/animated-fixtures.ts`      | Test support: real animated-WebP / APNG byte fixtures (`sharp` cannot write either).                                   |
-| `taxonomy.errors.ts`              | §5.3 `errorCode` ⇄ status tables, `TaxonomyError`, and the scoped RFC 7807 exception filter.                           |
+| File                                | Role                                                                                                                   |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `projects.admin.controller.ts`      | `GET/POST /v1/admin/projects`, `GET/PATCH /v1/admin/projects/:id` — realizes the §5.1 failure ORDER.                   |
+| `projects.service.ts`               | The create/edit commands: slug resolution, media swap, cleanup enqueue, fenced record completion.                      |
+| `projects.repository.ts`            | Drizzle access for `projects`; every mutation inside `withRequestAuditContext` (feature 010).                          |
+| `idempotency.service.ts`            | §6 retained, fenced idempotency records — key validation, fingerprint binding, replay, lease takeover, 24-hour expiry. |
+| `media/still-image-normalizer.ts`   | §2.2 shared still-image decoder/normalizer → canonical WebP under a pinned codec profile.                              |
+| `media/media-cleanup.service.ts`    | §5.1 durable old-reference cleanup: job enqueue + fenced leased worker.                                                |
+| `media/upload-reconcile.service.ts` | §6 quiescent orphan reconciler: reclaims what a never-committed request uploaded, under a CAS-stolen lease.            |
+| `taxonomy.errors.ts`                | §5.3 `errorCode` ⇄ status tables, `TaxonomyError`, and the scoped RFC 7807 exception filter.                           |
 
 Exports (`index.ts`): `TaxonomyModule`, `TaxonomyError`, `TaxonomyProblemFilter`, `TAXONOMY_ERROR_STATUS`, `DETERMINISTIC_TERMINAL_ERROR_CODES`, `markReplayable`, `toProblemDetails`, `IdempotencyService`, `IdempotencyFenceError`, `IdempotencyLease`, `StillImageNormalizer`, `NormalizedImage`, `UploadedImage`, `MediaCleanupService`, `UploadReconcileService`, `UPLOAD_QUIESCENCE_GRACE_MS`.
 
-## The three properties worth knowing before editing
+## The five properties worth knowing before editing
 
 1. **Failure order is the contract (§5.1).** Authorization → `Idempotency-Key` shape → request shape/payload → fingerprint binding → normalization → upload → domain transaction. So a keyless upload never streams, a reused key never normalizes, and a storage outage never mutates a domain row. Moving a check earlier or later changes observable behaviour even when every individual check still passes.
 
 2. **Every deterministic post-record outcome is stored, refusals included.** §6 bullet 3: a 409 invariant, either kind of 412, a refused PUT (503) and a `MEDIA_INVALID` all COMPLETE the record with the exact status/body, so an exact retry replays the refusal instead of being told "still in progress". The classification is one table (`DETERMINISTIC_TERMINAL_ERROR_CODES`); the filter stores the bytes it sends. Faults with no trustworthy verdict stay takeover-eligible on purpose.
 
-3. **Two disjoint object sweeps.** `MediaCleanupService` reclaims what a COMMITTED change released (handle: a `media_cleanup_jobs` row); `UploadReconcileService` reclaims what a NEVER-COMMITTED request uploaded (handle: `idempotency_keys.cleanup_object_key`). Both re-check live references through the SAME predicate (`isObjectReferenced`) — a new media slot taught to one and forgotten in the other would let that sweep delete a live object.
+3. **Two disjoint object sweeps.** `MediaCleanupService` reclaims what a COMMITTED change released (handle: a `media_cleanup_jobs` row); `UploadReconcileService` reclaims what a NEVER-COMMITTED request uploaded (handle: `idempotency_keys.cleanup_object_key`). Both re-check live references through the SAME predicate (`isObjectReferenced`) — a new media slot taught to one and forgotten in the other would let that sweep delete a live object. Disjointness with request TAKEOVER is enforced, not assumed: the reconciler CAS-steals the `lease_epoch` it read (`stealUploadLocatorLease`) before it touches an object and clears the locator fenced on that epoch, so a retry that took the record over always wins and its bytes survive.
 
 4. **A committed content change is never rolled back for a storage failure.** When a replace/clear releases an object, the ref-swap transaction inserts one `media_cleanup_jobs` row (§5.1) and the leased worker finishes the deletion later, rechecking live references first. `enqueue()` therefore MUST be called with the caller's transaction handle — never on its own.
 
@@ -39,9 +39,9 @@ Failures are `application/problem+json` with the stable `errorCode` plus `traceI
 
 ## Operational notes
 
-- Three `@Cron` sweeps run here: the hourly retained-record expiry (`IdempotencyService.sweepExpired`), the 5-minute media-cleanup drain (`MediaCleanupService.sweep`) and the 10-minute upload-locator reconciliation (`UploadReconcileService.sweep`). Both are idempotent and safe on several instances. `ScheduleModule.forRoot()` is registered once by `AuthModule`; a second registration installs a second explorer and aborts the boot.
+- Three `@Cron` sweeps run here: the hourly retained-record expiry (`IdempotencyService.sweepExpired`), the 5-minute media-cleanup drain (`MediaCleanupService.sweep`) and the 10-minute upload-locator reconciliation (`UploadReconcileService.sweep`). All three are idempotent and safe on several instances. `ScheduleModule.forRoot()` is registered once by `AuthModule`; a second registration installs a second explorer and aborts the boot.
 - Every dependency in this module is injected with an explicit `@Inject(token)`, including the class ones — the root-level `endpoint-authz` gate boots this graph under `tsx`, whose esbuild transform emits no `design:paramtypes`, so type-inferred injection resolves to `undefined` there while working fine under `nest build`.
-- Adding a media slot (#1284 photo, #1286 logo) means extending `MediaCleanupService.isStillReferenced` with that column; otherwise the worker would delete an object a live row still points at.
+- Adding a media slot (#1284 photo, #1286 logo) means extending `MediaCleanupService.isObjectReferenced` with that column; otherwise the worker would delete an object a live row still points at.
 
 ## Tests
 

@@ -6,7 +6,7 @@ import {
 } from "@nestjs/platform-fastify";
 import { VersioningType } from "@nestjs/common";
 import multipart from "@fastify/multipart";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import type pg from "pg";
 import { AppModule } from "../../src/app.module.js";
@@ -594,6 +594,101 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         [liveKey],
       );
       expect(liveRow.rows[0]!.cleanup_object_key).toBeNull();
+    });
+
+    it("012 EARS-17: request takeover and orphan cleanup shall be disjoint — the retry wins the lease, the object survives, and only the fenced owner clears the locator", async () => {
+      // §6 "Request takeover and orphan cleanup are disjoint". The dangerous
+      // interleaving: the sweep reads a takeover-ELIGIBLE row (still
+      // `processing`, lease lapsed past the grace), then a retry CAS-takes the
+      // record over and resumes on the still-present deterministic object. If
+      // the sweep acted on that stale read it would delete the bytes the
+      // resumed request is about to commit `cover_ref` to.
+      const k = key();
+      const params = {
+        key: k,
+        scope: "taxonomy.projects",
+        actorId: "actor-race",
+        method: "POST",
+        route: "/v1/admin/projects",
+        fingerprint: "fp-race",
+      };
+      const first = await idempotency.begin(params);
+      if (first.kind !== "owned") throw new Error("expected to own the record");
+      const racedObject = `taxonomy/projects/covers/${k}-race.webp`;
+      await idempotency.noteUploadLocator(first.lease, racedObject);
+      await storage.put({
+        key: racedObject,
+        body: Buffer.from("bytes the resumed request will commit"),
+        contentType: "image/webp",
+        onlyIfAbsent: true,
+      });
+
+      // Age the row so the sweep's read considers it due while `begin` still
+      // considers the lapsed lease takeover-eligible — the overlap itself.
+      await pool.query(
+        `UPDATE idempotency_keys
+            SET created_at = now() - interval '2 days',
+                lease_expires_at = now() - interval '2 days'
+          WHERE key = $1`,
+        [k],
+      );
+
+      // The interleaving, made deterministic: the retry takes the record over
+      // between the sweep's due-read and whatever the sweep does next.
+      let takenOverEpoch = 0;
+      const read = vi
+        .spyOn(idempotency, "quiescentUploadLocators")
+        .mockImplementation(async (cutoff, limit) => {
+          read.mockRestore();
+          const rows = await idempotency.quiescentUploadLocators(cutoff, limit);
+          const takeover = await idempotency.begin(params);
+          if (takeover.kind !== "owned")
+            throw new Error("the retry must win the lapsed lease");
+          takenOverEpoch = takeover.lease.leaseEpoch;
+          return rows;
+        });
+      try {
+        await reconciler.reconcileDueLocators();
+      } finally {
+        read.mockRestore();
+      }
+
+      // The takeover won: the object the resumed request owns is untouched and
+      // its locator is still there for a LATER sweep to reclaim if this attempt
+      // fails too.
+      expect(takenOverEpoch).toBe(2);
+      expect(await storage.exists(racedObject)).toBe(true);
+      const raced = await pool.query<{
+        cleanup_object_key: string | null;
+        lease_epoch: number;
+      }>(
+        "SELECT cleanup_object_key, lease_epoch FROM idempotency_keys WHERE key = $1",
+        [k],
+      );
+      expect(raced.rows[0]!.cleanup_object_key).toBe(racedObject);
+      expect(raced.rows[0]!.lease_epoch).toBe(2);
+
+      // And the clear itself is fenced on `(key, lease_epoch)`: the superseded
+      // epoch clears nothing, only the current owner's epoch does.
+      expect(await idempotency.clearReclaimedLocator(k, 1)).toBe(false);
+      expect(
+        (
+          await pool.query<{ cleanup_object_key: string | null }>(
+            "SELECT cleanup_object_key FROM idempotency_keys WHERE key = $1",
+            [k],
+          )
+        ).rows[0]!.cleanup_object_key,
+      ).toBe(racedObject);
+      expect(await idempotency.clearReclaimedLocator(k, 2)).toBe(true);
+      expect(
+        (
+          await pool.query<{ cleanup_object_key: string | null }>(
+            "SELECT cleanup_object_key FROM idempotency_keys WHERE key = $1",
+            [k],
+          )
+        ).rows[0]!.cleanup_object_key,
+      ).toBeNull();
+      await storage.delete(racedObject);
     });
 
     it("012 EARS-17: when a refused upload left no object at all, the reconciler shall acknowledge the absence and clear the locator", async () => {

@@ -93,6 +93,22 @@ export class IdempotencyFenceError extends Error {
   }
 }
 
+/**
+ * The QUIESCENCE predicate of an upload locator (012-design §6): no owner can
+ * still be writing to the object, i.e. `cutoff >= coalesce(lease_expires_at,
+ * created_at + lease window)`, where `cutoff` already carries the caller's
+ * in-flight-write/clock-skew grace.
+ *
+ * One definition, used by the due-read AND by the sweeper's CAS steal — the two
+ * must agree, or the steal could re-assert a weaker condition than the read.
+ */
+function quiescentBefore(cutoff: Date) {
+  return sql`${sql.param(cutoff)} >= coalesce(
+    ${idempotencyKeys.leaseExpiresAt},
+    ${idempotencyKeys.createdAt} + ${sql.raw(`interval '${Math.round(IDEMPOTENCY_LEASE_MS / 1000)} seconds'`)}
+  )`;
+}
+
 @Injectable()
 export class IdempotencyService {
   private readonly logger = new Logger(IdempotencyService.name);
@@ -465,12 +481,83 @@ export class IdempotencyService {
    * REQUEST is quiescent, which happens long before the 24-hour retained expiry.
    * Gating on `expired` left every refused-upload locator set for a day and made
    * the sweep look like a no-op — the shape this method had while it had no caller.
+   *
+   * FENCED on `(key, lease_epoch)`, exactly like completion: only the epoch that
+   * currently owns the record may clear its locator. A key-only clear would let a
+   * superseded sweeper blank the handle of an object a retry that took the record
+   * over is committing a reference to. `false` = fenced out, do nothing.
+   *
+   * Releasing the lease with the clear is deliberate: the sweeper holds a real
+   * lease while it reclaims (see {@link stealUploadLocatorLease}), and a
+   * still-`processing` record must become takeover-eligible again the moment the
+   * sweeper is done rather than after its lease window lapses.
    */
-  async clearReclaimedLocator(key: string): Promise<void> {
-    await this.db
+  async clearReclaimedLocator(key: string, leaseEpoch: number): Promise<boolean> {
+    const cleared = await this.db
       .update(idempotencyKeys)
-      .set({ cleanupObjectKey: null })
-      .where(eq(idempotencyKeys.key, key));
+      .set({ cleanupObjectKey: null, leaseExpiresAt: null })
+      .where(
+        and(
+          eq(idempotencyKeys.key, key),
+          eq(idempotencyKeys.leaseEpoch, leaseEpoch),
+        ),
+      )
+      .returning({ key: idempotencyKeys.key });
+    return cleared.length > 0;
+  }
+
+  /**
+   * CAS-steal the lease of a quiescent upload locator for the sweeper — what
+   * makes "request takeover and orphan cleanup are disjoint" (012-design §6) an
+   * enforced property rather than a hoped-for one.
+   *
+   * A due row read by the sweep can be takeover-ELIGIBLE (still `processing`,
+   * lease lapsed): between the read and the delete a retry may CAS-take it over
+   * and resume on the still-present deterministic object. So the sweeper must win
+   * the same lease before it touches anything: it bumps `lease_epoch` off the
+   * epoch it READ and re-asserts quiescence in the same statement.
+   *
+   * - zero rows → the retry got there first; the sweep skips the row entirely
+   *   (the locator stays, so a later sweep reclaims the object if that attempt
+   *   fails too).
+   * - one row → the sweeper owns the record for a full lease window, so `begin`
+   *   refuses a concurrent retry with `IDEMPOTENCY_REQUEST_IN_PROGRESS` instead
+   *   of resuming on bytes that are about to be deleted.
+   *
+   * The locator is returned from the stolen row, not from the caller's stale
+   * read, so the reference check downstream runs against the current value.
+   */
+  async stealUploadLocatorLease(params: {
+    key: string;
+    leaseEpoch: number;
+    /** The quiescence cutoff, re-asserted under CAS. */
+    cutoff: Date;
+    now?: Date;
+  }): Promise<{ leaseEpoch: number; leaseOwner: string; objectKey: string } | null> {
+    const now = params.now ?? new Date();
+    const leaseOwner = `upload-reconciler:${randomUUID()}`;
+    const stolen = await this.db
+      .update(idempotencyKeys)
+      .set({
+        leaseEpoch: params.leaseEpoch + 1,
+        leaseOwner,
+        leaseExpiresAt: new Date(now.getTime() + IDEMPOTENCY_LEASE_MS),
+      })
+      .where(
+        and(
+          eq(idempotencyKeys.key, params.key),
+          eq(idempotencyKeys.leaseEpoch, params.leaseEpoch),
+          sql`${idempotencyKeys.cleanupObjectKey} IS NOT NULL`,
+          quiescentBefore(params.cutoff),
+        ),
+      )
+      .returning({
+        leaseEpoch: idempotencyKeys.leaseEpoch,
+        objectKey: idempotencyKeys.cleanupObjectKey,
+      });
+    const row = stolen[0];
+    if (!row || !row.objectKey) return null;
+    return { leaseEpoch: row.leaseEpoch, leaseOwner, objectKey: row.objectKey };
   }
 
   /**
@@ -485,29 +572,34 @@ export class IdempotencyService {
    * lease released), a fenced-out owner (still `processing`, lease lapsed) and a
    * 24-hour-expired record whose non-content locator is deliberately retained
    * until absence is acknowledged.
+   *
+   * The `lease_epoch` travels with every row: a due row can still be
+   * takeover-eligible, so the caller must CAS-steal that exact epoch
+   * ({@link stealUploadLocatorLease}) before acting on this — necessarily stale —
+   * read.
    */
   async quiescentUploadLocators(
     cutoff: Date,
     limit = 50,
-  ): Promise<{ key: string; objectKey: string }[]> {
+  ): Promise<{ key: string; objectKey: string; leaseEpoch: number }[]> {
     const rows = await this.db
       .select({
         key: idempotencyKeys.key,
         objectKey: idempotencyKeys.cleanupObjectKey,
+        leaseEpoch: idempotencyKeys.leaseEpoch,
       })
       .from(idempotencyKeys)
       .where(
         and(
           sql`${idempotencyKeys.cleanupObjectKey} IS NOT NULL`,
-          sql`${sql.param(cutoff)} >= coalesce(
-            ${idempotencyKeys.leaseExpiresAt},
-            ${idempotencyKeys.createdAt} + ${sql.raw(`interval '${Math.round(IDEMPOTENCY_LEASE_MS / 1000)} seconds'`)}
-          )`,
+          quiescentBefore(cutoff),
         ),
       )
       .limit(limit);
     return rows.flatMap((r) =>
-      r.objectKey ? [{ key: r.key, objectKey: r.objectKey }] : [],
+      r.objectKey
+        ? [{ key: r.key, objectKey: r.objectKey, leaseEpoch: r.leaseEpoch }]
+        : [],
     );
   }
 

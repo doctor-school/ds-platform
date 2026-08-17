@@ -57,18 +57,47 @@ export class UploadReconcileService {
    * A locator whose object is still present after a delete attempt is left in
    * place on purpose — the next sweep retries it. "Cleared without proof of
    * absence" is exactly the silent leak this guards against.
+   *
+   * Every row is acted on under a STOLEN lease, never on the due-read alone: the
+   * read is stale by definition and a due row can still be takeover-eligible
+   * (`processing`, lease lapsed). Losing the CAS means a retry owns the record —
+   * it wins, the sweep skips the row untouched, and the locator survives for a
+   * later sweep should that attempt fail too. This is what makes takeover and
+   * cleanup disjoint (§6) instead of merely unlikely to collide.
    */
   async reconcileDueLocators(now = new Date(), limit = 50): Promise<number> {
-    const due = await this.idempotency.quiescentUploadLocators(
-      new Date(now.getTime() - UPLOAD_QUIESCENCE_GRACE_MS),
-      limit,
-    );
+    const cutoff = new Date(now.getTime() - UPLOAD_QUIESCENCE_GRACE_MS);
+    const due = await this.idempotency.quiescentUploadLocators(cutoff, limit);
     let cleared = 0;
     for (const record of due) {
       try {
-        if (await this.reconcileOne(record.objectKey)) {
-          await this.idempotency.clearReclaimedLocator(record.key);
-          cleared += 1;
+        const stolen = await this.idempotency.stealUploadLocatorLease({
+          key: record.key,
+          leaseEpoch: record.leaseEpoch,
+          cutoff,
+        });
+        if (!stolen) {
+          this.logger.log(
+            `upload locator of record ${record.key} is owned by a newer lease; leaving it to that owner`,
+          );
+          continue;
+        }
+        // Under the stolen epoch: quiescence was re-asserted by the CAS itself,
+        // the reference check below runs on the locator the stolen row carried,
+        // and the clear is fenced on the same epoch.
+        if (await this.reconcileOne(stolen.objectKey)) {
+          if (
+            await this.idempotency.clearReclaimedLocator(
+              record.key,
+              stolen.leaseEpoch,
+            )
+          ) {
+            cleared += 1;
+          } else {
+            this.logger.warn(
+              `locator clear for record ${record.key} was fenced out at epoch ${stolen.leaseEpoch}`,
+            );
+          }
         }
       } catch (err) {
         this.logger.warn(

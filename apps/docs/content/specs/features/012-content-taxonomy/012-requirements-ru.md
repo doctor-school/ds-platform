@@ -2,7 +2,7 @@
 title: "012 — Контентная таксономия: проекты, эксперты, темы и партнёры"
 description: "Требования к полноценным сохраняемым сущностям проектов, экспертов, тем и партнёров; их сохраняемым связям многие-ко-многим с мероприятиями и друг с другом; постепенной явной миграции свободнотекстовых спикеров; операторскому интерфейсу platform_admin на Refine; и безопасным двунаправленным REST-чтениям для последующих поверхностей Академии."
 slug: 012-content-taxonomy-ru
-status: Draft
+status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
 parent_issue: https://github.com/doctor-school/ds-platform/issues/1280

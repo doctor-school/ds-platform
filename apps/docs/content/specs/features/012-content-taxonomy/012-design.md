@@ -2,7 +2,7 @@
 title: "012 — Content taxonomy (Design)"
 description: "Design for retained taxonomy entities and joins, explicit legacy-speaker matching and merged projection, Refine admin lifecycle management, bidirectional publish-safe REST reads, and the concurrency/idempotency protocol."
 slug: 012-content-taxonomy-design
-status: Draft
+status: In dev
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
 lang: en
 ---

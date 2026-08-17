@@ -1,5 +1,18 @@
 # @ds/portal
 
+## 0.18.0
+
+### Minor Changes
+
+- [#1313](https://github.com/doctor-school/ds-platform/pull/1313) [`272c53e`](https://github.com/doctor-school/ds-platform/commit/272c53efe500d086b8e1e076d32e0144763745ad) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Publish the approved static Academy home at the public portal root.
+
+- [#1318](https://github.com/doctor-school/ds-platform/pull/1318) [`e556fbf`](https://github.com/doctor-school/ds-platform/commit/e556fbfd119d19f5940a5f4dc83aec0501359cd7) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Enable the Academy partnership form with accessible validation and private, idempotent JSON persistence.
+
+### Patch Changes
+
+- Updated dependencies [[`e556fbf`](https://github.com/doctor-school/ds-platform/commit/e556fbfd119d19f5940a5f4dc83aec0501359cd7)]:
+  - @ds/design-system@4.1.0
+
 ## 0.17.1
 
 ### Patch Changes

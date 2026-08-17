@@ -1,0 +1,12 @@
+# @ds/academy-demo
+
+## 0.1.0
+
+### Minor Changes
+
+- [#1303](https://github.com/doctor-school/ds-platform/pull/1303) [`e20d64c`](https://github.com/doctor-school/ds-platform/commit/e20d64c25b98c30afb280c21bf6966e017a1d1eb) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Add the deterministic, development-only Academy-home variant V review app.
+
+### Patch Changes
+
+- Updated dependencies [[`e556fbf`](https://github.com/doctor-school/ds-platform/commit/e556fbfd119d19f5940a5f4dc83aec0501359cd7)]:
+  - @ds/design-system@4.1.0

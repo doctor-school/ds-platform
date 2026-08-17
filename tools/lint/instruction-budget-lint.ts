@@ -97,6 +97,33 @@ const targets: Target[] = [
   ...(memPath ? [{ label: "MEMORY.md (auto-memory index)", path: memPath, optional: true } as Target] : []),
 ];
 
+/**
+ * Does this rules file carry REAL `paths:` frontmatter, i.e. is it lazy?
+ *
+ * Claude Code's contract (https://code.claude.com/docs/en/memory) is narrow, and
+ * the classifier must be exactly as narrow — anything it calls lazy is dropped
+ * from the always-on total, so a false positive silently under-reports the
+ * session window by the file's whole size. All three conditions must hold:
+ *
+ *   1. the opening `---` delimiter is the FIRST BYTES of the file (a leading
+ *      UTF-8 BOM is tolerated; a comment, a blank line, or any prose above it is
+ *      not — then the `---` is a markdown thematic break, not frontmatter);
+ *   2. the block is TERMINATED by a closing `---` (or YAML `...`) delimiter line;
+ *   3. it declares `paths` as a TOP-LEVEL key (column 0) inside that block.
+ *
+ * Anything else — the word `paths:` in the body, an unterminated block, `paths`
+ * nested under another key — is an always-on file (#1370).
+ */
+function hasPathsFrontmatter(raw: string): boolean {
+  const text = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw; // strip BOM
+  const lines = text.split(/\r?\n/);
+  if (lines[0] !== "---") return false; // (1) must be the literal first bytes
+  const close = lines.findIndex((l, i) => i > 0 && (l === "---" || l === "..."));
+  if (close === -1) return false; // (2) unterminated ⇒ not frontmatter
+  // (3) top-level `paths` key: column 0, no leading indent, not a `#` comment.
+  return lines.slice(1, close).some((l) => /^paths\s*:/.test(l));
+}
+
 // .claude/rules/*.md are always-on too — loaded at session start UNLESS a file
 // carries `paths:` frontmatter (which makes it lazy / file-scoped). Add each so
 // the per-file budget applies and a new always-on rule can't silently grow the
@@ -105,7 +132,7 @@ const rulesDir = resolve(REPO_ROOT, ".claude", "rules");
 if (existsSync(rulesDir)) {
   for (const f of readdirSync(rulesDir).filter((n) => n.endsWith(".md")).sort()) {
     const p = resolve(rulesDir, f);
-    const lazy = /^---[\s\S]*?\bpaths\s*:/m.test(readFileSync(p, "utf8").slice(0, 800));
+    const lazy = hasPathsFrontmatter(readFileSync(p, "utf8"));
     targets.push({
       label: `.claude/rules/${f}${lazy ? " (lazy)" : " (always-on)"}`,
       path: p,

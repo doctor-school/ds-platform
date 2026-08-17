@@ -1,6 +1,6 @@
 ---
 title: "008 — Portal shell & discovery front-door (Design)"
-description: "Design: the persistent app-shell layout composition; nav route resolution to shipped surfaces (Эфиры→/, Мои события→/account/events f005, avatar→/account f009); the auth-state header branch (avatar-icon vs «Войти»); the post-login-landing sequence returning the doctor to /. Built from the vendored «Doctor.School визуальный язык» canvas (design-source/) per ADR-0013; retires the / scaffold."
+description: "Design: the persistent app-shell layout composition; nav route resolution to shipped surfaces (Эфиры→/, Мои события→/account/events f005, avatar→/account f009); the auth-state header branch (avatar-icon vs «Войти»); the post-login-landing sequence returning the doctor to / — amended 2026-08-17 (feature 013): / is the Academy landing, discovery is /webinars, and the post-login landing is the visitor's return target defaulting to /webinars. Built from the vendored «Doctor.School визуальный язык» canvas (design-source/) per ADR-0013; retires the / scaffold."
 slug: 008-portal-shell
 status: In dev
 tracker: "https://github.com/doctor-school/ds-platform/milestone/9"
@@ -98,7 +98,7 @@ sequenceDiagram
   B->>AUTH: complete login (password / OTP)
   AUTH->>API: establish BFF session (__Host- cookie, EARS-8/003)
   API-->>AUTH: session established
-  AUTH->>SHELL: redirect to / (post-login landing, EARS-7)
+  AUTH->>SHELL: redirect to / (post-login landing, EARS-7 — amended: return target, /webinars by default)
   SHELL->>API: GET /v1/auth/session (derive AuthState)
   API-->>SHELL: { authenticated: true, initials }
   SHELL-->>B: render / (feature-004 discovery listing, EARS-8) + doctor header (avatar icon, EARS-5)

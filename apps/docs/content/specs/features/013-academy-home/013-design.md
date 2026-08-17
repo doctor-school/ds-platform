@@ -113,7 +113,7 @@ erDiagram
   }
 ```
 
-Retained per ADR-0003 §4: no physical delete, no cascade, no id reuse; an erasure request clears descriptive values in place and leaves the row. The consent group is the ADR-0009 §2.1 evidence semantics realized on the row itself rather than in `consent_records`, whose purpose model is account-scoped (LD-7).
+Retained per ADR-0003 §4: no physical delete, no cascade, no id reuse; an erasure request clears descriptive values in place and leaves the row. The consent group is the ADR-0009 §2.1 evidence semantics realized on the row itself rather than in the shipped `consent_records` table, whose `user_id` is `NOT NULL` with `onDelete: cascade` — unusable for a subject-less lead and incompatible with retained-row semantics (LD-7). LD-7 also records the reconciliation obligation for the day the full ADR-0009 consent subsystem lands.
 
 ### 5.2 Submission sequence
 
@@ -167,7 +167,9 @@ The canvas fixes the wording and the mechanics of the invalid branch (per-field 
 
 ## 6. Post-login landing (EARS-15) and the feature-008 amendment
 
-Today `/` is both the front door and the post-login landing: `DEFAULT_LANDING = "/"` in `apps/portal/lib/registration-resume.ts`, asserted by two tests in `apps/portal/app/login/page.test.tsx`, and pinned by **feature 008 EARS-7**, which is live in production.
+**The regression is already live — this is a fix, not a precaution.** On `main` the `/` → `/webinars` redirect no longer exists (`apps/portal/app/page.tsx` serves the interim Academy stub), while `apps/portal/lib/registration-resume.ts` still carries `DEFAULT_LANDING = "/"`. A doctor completing login today therefore lands on the interim marketing stub — exactly the US-10 regression. Feature **008 EARS-7**, live in production, still pins that target to `/`.
+
+Because the defect exists now, **EARS-15 is independently shippable**: its own child Issue, `wave: independent`, with **no co-ship constraint** — it waits neither on the landing build, nor on the 012 waves, nor on the 014 list unit, and shipping it early strictly improves production.
 
 ```mermaid
 stateDiagram-v2
@@ -182,10 +184,17 @@ stateDiagram-v2
 Three consequences:
 
 - The **mechanism** is feature 014's (014 EARS-6 / LD-6, Issue #1342): one signed same-origin `returnTo` in the portal auth entry. 013 does not add a second redirect rule (LD-12).
-- The **default** changes from `/` to `/webinars`, in `registration-resume.ts` and in the two tests that pin it — a named deliverable of EARS-15's Issue, never a silent test edit.
+- The **default** changes from `/` to `/webinars`. Every shipped assertion that pins the old target is a **named deliverable of EARS-15's Issue** — never a silent test edit, and never an unnamed file that turns delivery red:
+  - `apps/portal/lib/registration-resume.ts` — `DEFAULT_LANDING`;
+  - `apps/portal/lib/registration-resume.test.ts` — the two default-landing assertions;
+  - `apps/portal/app/login/page.test.tsx` — the login redirect target (including the rejected cross-origin `returnTo` case);
+  - `apps/portal/app/verify/page.test.tsx` — the post-verification landing assertions;
+  - `apps/portal/e2e/shell/post-login-landing.spec.ts` — the 008-owned browser journey (`waitForURL` on pathname `/` plus the discovery heading);
+  - `apps/portal/e2e/steps/shell.steps.ts` — its step definitions;
+  - `008-requirements-en.md` / `-ru.md` verification row 7, whose target is that spec, and the `008-scenarios.feature` example asserting a landing on `/`.
 - Feature **008 is amended, not rewritten**: `008-requirements-en.md` / `-ru.md` and `008-design.md` gain an amendment block naming 013 EARS-15 as its source, and the superseded clauses carry inline pointers to it (AGENTS.md §6). The 008 scenario that asserts landing on `/` is updated by EARS-15's Issue at delivery time, in the same way feature 007's transition assertion is owned by 014 EARS-18.
 
-Sequencing is not optional: the moment `/` stops redirecting to `/webinars`, an unchanged default lands every doctor on the marketing page. EARS-1 and EARS-15 ship in the same release.
+Sequencing: EARS-15 is **not** gated on EARS-1. The regression it repairs is in production today, so the fix ships as soon as it is green — and by the time the landing ships, no landing-target work remains to do.
 
 ## 7. App-shell integration (EARS-16)
 

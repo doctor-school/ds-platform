@@ -30,7 +30,8 @@ import {
 } from "./idempotency.service.js";
 import { sha256, type UploadedImage } from "./media/still-image-normalizer.js";
 import { ProjectsService } from "./projects.service.js";
-import { TaxonomyError, TaxonomyProblemFilter } from "./taxonomy.errors.js";
+import { TaxonomyError } from "./taxonomy.errors.js";
+import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
 
 // 012 EARS-1 (#1283) — the project admin surface (012-design §5.1). Authorization
 // is feature 011 exactly as 007 has it: the dedicated MFA-verified admin session
@@ -294,6 +295,7 @@ export class ProjectsAdminController {
     let payloadRaw: string | undefined;
     let file: UploadedImage | undefined;
     let conflict: string | undefined;
+    let oversize: string | undefined;
     for await (const part of req.parts()) {
       if (part.type === "file") {
         const body = await part.toBuffer(); // always drained
@@ -307,12 +309,11 @@ export class ProjectsAdminController {
         }
         if (body.length > MAX_IMAGE_BYTES) {
           // Bounded here as well as in the normalizer: the size refusal must not
-          // depend on reaching the decoder.
-          conflict ??= undefined;
-          throw new TaxonomyError(
-            "MEDIA_INVALID",
-            `the cover exceeds the ${MAX_IMAGE_BYTES}-byte limit`,
-          );
+          // depend on reaching the decoder. Recorded rather than thrown — throwing
+          // mid-`req.parts()` would abandon the remaining parts unread, which the
+          // "every file part is drained" contract of this method forbids.
+          oversize ??= `the cover exceeds the ${MAX_IMAGE_BYTES}-byte limit`;
+          continue;
         }
         file = {
           fieldname: part.fieldname,
@@ -324,7 +325,11 @@ export class ProjectsAdminController {
         payloadRaw = String(part.value);
       }
     }
+    // Refusal order after the stream is fully drained: an ambiguous SHAPE outranks
+    // a bad payload, because a request asking for two contradictory things has no
+    // single interpretation to validate.
     if (conflict) throw new TaxonomyError("MEDIA_INPUT_CONFLICT", conflict);
+    if (oversize) throw new TaxonomyError("MEDIA_INVALID", oversize);
     if (!file) {
       throw new TaxonomyError(
         "UNSUPPORTED_MEDIA_TYPE",

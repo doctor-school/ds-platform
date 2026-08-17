@@ -147,7 +147,7 @@ export class MediaCleanupService {
     // Re-check every CURRENT media reference before deleting. An operator can
     // have re-pointed the row back at this key between enqueue and now; deleting
     // it then would break a live public projection.
-    if (await this.isStillReferenced(objectKey)) {
+    if (await this.isObjectReferenced(objectKey)) {
       await this.recordFailure(id, nextEpoch, owner, "still_referenced");
       return false;
     }
@@ -206,8 +206,13 @@ export class MediaCleanupService {
    * Whether any current domain row still references `objectKey`. #1283 owns the
    * `projects.cover_ref` slot; #1284/#1286 extend this predicate with
    * `experts.photo_ref` and `partners.logo_ref` when those columns land.
+   *
+   * PUBLIC because `UploadReconcileService` asks the same question about a
+   * different handle (an upload locator rather than a cleanup job). Keeping ONE
+   * predicate means a new media slot cannot be taught to one sweep and forgotten
+   * in the other — which would let that sweep delete a live object.
    */
-  private async isStillReferenced(objectKey: string): Promise<boolean> {
+  async isObjectReferenced(objectKey: string): Promise<boolean> {
     const [hit] = await this.db
       .select({ id: projects.id })
       .from(projects)

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
-import { and, eq, isNull, lte, sql } from "drizzle-orm";
+import { and, eq, lte, sql } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
 import { idempotencyKeys } from "@ds/db";
 import {
@@ -11,7 +11,7 @@ import {
   MEDIA_PROFILE_VERSION,
 } from "@ds/schemas";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
-import { TaxonomyError } from "./taxonomy.errors.js";
+import { type ReplayLeaseRef, TaxonomyError } from "./taxonomy.errors.js";
 
 // 012-design §6 / EARS-17 — the retained, fenced idempotency record. Introduced
 // by #1283 as the first 012 mutation and consumed unchanged by every later
@@ -342,6 +342,48 @@ export class IdempotencyService {
   }
 
   /**
+   * Fenced-store a DETERMINISTIC TERMINAL outcome that produced no domain write —
+   * a 409 invariant, either kind of 412, a refused PUT (§5.1's 503) or a
+   * `MEDIA_INVALID` (§6 bullet 3 / EARS-17). Runs on the pool, NOT inside the
+   * caller's transaction: the domain transaction of a refusal is rolled back (that
+   * is the point), so a store enlisted in it would roll back with it and the
+   * refusal would never become replayable.
+   *
+   * Fenced on the same epoch as {@link complete}: if a newer owner already took
+   * the record over, this writes zero rows and the refusal simply is not stored —
+   * the newer owner's outcome is the one that counts.
+   */
+  async storeTerminalOutcome(
+    lease: ReplayLeaseRef,
+    response: StoredResponse,
+  ): Promise<void> {
+    const updated = await this.db
+      .update(idempotencyKeys)
+      .set({
+        executionState: "completed",
+        responseStatus: response.status,
+        responseBody: (response.body ?? null) as never,
+        responseEtag: response.etag ?? null,
+        responseLocation: response.location ?? null,
+        leaseExpiresAt: null,
+      })
+      .where(
+        and(
+          eq(idempotencyKeys.key, lease.key),
+          eq(idempotencyKeys.leaseEpoch, lease.leaseEpoch),
+          eq(idempotencyKeys.executionState, "processing"),
+          eq(idempotencyKeys.status, "active"),
+        ),
+      )
+      .returning({ key: idempotencyKeys.key });
+    if (!updated[0]) {
+      this.logger.warn(
+        `terminal outcome for record ${lease.key} was fenced out by a newer lease`,
+      );
+    }
+  }
+
+  /**
    * Record the deterministic locator of an object this request uploaded, so the
    * quiescent sweep can reclaim it if the command never commits (012-design §6).
    * Written outside the domain transaction, before the PUT — an orphan we know
@@ -416,47 +458,36 @@ export class IdempotencyService {
   }
 
   /**
-   * Clear the retained upload locator of an expired record once the reconciler
-   * has acknowledged the object's absence (§6) — the last piece of live content
-   * on the row, after which only the key and terminal state remain.
+   * Clear the retained upload locator once the reconciler has acknowledged the
+   * object's absence — or established that a committed domain row owns it (§6).
+   *
+   * Not predicated on `status = 'expired'`: a locator becomes reclaimable when the
+   * REQUEST is quiescent, which happens long before the 24-hour retained expiry.
+   * Gating on `expired` left every refused-upload locator set for a day and made
+   * the sweep look like a no-op — the shape this method had while it had no caller.
    */
   async clearReclaimedLocator(key: string): Promise<void> {
     await this.db
       .update(idempotencyKeys)
       .set({ cleanupObjectKey: null })
-      .where(
-        and(
-          eq(idempotencyKeys.key, key),
-          eq(idempotencyKeys.status, "expired"),
-        ),
-      );
+      .where(eq(idempotencyKeys.key, key));
   }
 
-  /** Expired records whose upload locator still awaits reconciliation. */
-  async pendingReclaimLocators(limit = 50): Promise<
-    { key: string; objectKey: string }[]
-  > {
-    const rows = await this.db
-      .select({
-        key: idempotencyKeys.key,
-        objectKey: idempotencyKeys.cleanupObjectKey,
-      })
-      .from(idempotencyKeys)
-      .where(
-        and(
-          eq(idempotencyKeys.status, "expired"),
-          sql`${idempotencyKeys.cleanupObjectKey} IS NOT NULL`,
-        ),
-      )
-      .limit(limit);
-    return rows.flatMap((r) =>
-      r.objectKey ? [{ key: r.key, objectKey: r.objectKey }] : [],
-    );
-  }
-
-  /** Live records that never completed and whose lease has lapsed (orphan sweep input). */
-  async lapsedUploadLocators(
-    now = new Date(),
+  /**
+   * Upload locators that are QUIESCENT as of `cutoff` — the input of
+   * `UploadReconcileService`. One query, not the two state-specific ones this
+   * originally had: what makes a locator reclaimable is neither "expired" nor
+   * "still processing" but that no owner can still be writing to it, i.e.
+   * `cutoff >= coalesce(lease_expires_at, created_at + lease window)`, where
+   * `cutoff` already includes the caller's in-flight/skew grace.
+   *
+   * Covers every terminal shape §6 produces: a stored refusal or 503 (completed,
+   * lease released), a fenced-out owner (still `processing`, lease lapsed) and a
+   * 24-hour-expired record whose non-content locator is deliberately retained
+   * until absence is acknowledged.
+   */
+  async quiescentUploadLocators(
+    cutoff: Date,
     limit = 50,
   ): Promise<{ key: string; objectKey: string }[]> {
     const rows = await this.db
@@ -467,11 +498,11 @@ export class IdempotencyService {
       .from(idempotencyKeys)
       .where(
         and(
-          eq(idempotencyKeys.status, "active"),
-          eq(idempotencyKeys.executionState, "processing"),
-          lte(idempotencyKeys.leaseExpiresAt, now),
           sql`${idempotencyKeys.cleanupObjectKey} IS NOT NULL`,
-          isNull(idempotencyKeys.deletedAt),
+          sql`${sql.param(cutoff)} >= coalesce(
+            ${idempotencyKeys.leaseExpiresAt},
+            ${idempotencyKeys.createdAt} + ${sql.raw(`interval '${Math.round(IDEMPOTENCY_LEASE_MS / 1000)} seconds'`)}
+          )`,
         ),
       )
       .limit(limit);

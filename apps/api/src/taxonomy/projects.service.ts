@@ -26,7 +26,7 @@ import {
   type UploadedImage,
 } from "./media/still-image-normalizer.js";
 import { ProjectsRepository } from "./projects.repository.js";
-import { TaxonomyError } from "./taxonomy.errors.js";
+import { markReplayable, TaxonomyError } from "./taxonomy.errors.js";
 
 // 012 EARS-1 (#1283) — the project authoring commands. This is the layer where
 // the §5.1 failure ORDER is realized, and the order is the contract:
@@ -85,7 +85,40 @@ export class ProjectsService {
   ) {}
 
   /** `POST /v1/admin/projects` — create one draft project. */
-  async create(input: CreateProjectInput): Promise<ProjectCommandResult> {
+  create(input: CreateProjectInput): Promise<ProjectCommandResult> {
+    return this.fenced(input.lease, () => this.createCommand(input));
+  }
+
+  /** `PATCH /v1/admin/projects/:id` — edit the SAME row. */
+  update(input: UpdateProjectInput): Promise<ProjectCommandResult> {
+    return this.fenced(input.lease, () => this.updateCommand(input));
+  }
+
+  /**
+   * Run a command that already reserved an idempotency record and tag any
+   * DETERMINISTIC refusal with that record, so the problem filter fenced-stores
+   * the outcome and an exact retry replays it (§6 bullet 3 / EARS-17).
+   *
+   * One wrapper per command rather than a tag at each throw site: the set of
+   * deterministic codes is a spec table (`DETERMINISTIC_TERMINAL_ERROR_CODES`),
+   * and a new refusal added inside a command inherits the right behaviour without
+   * anyone remembering to mark it. A fault OUTSIDE that set (a DB timeout, an
+   * uncertain commit) passes through untagged and stays takeover-eligible.
+   */
+  private async fenced<T>(
+    lease: IdempotencyLease,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await run();
+    } catch (err) {
+      throw markReplayable(err, lease);
+    }
+  }
+
+  private async createCommand(
+    input: CreateProjectInput,
+  ): Promise<ProjectCommandResult> {
     const slug = this.resolveCreateSlug(input.payload);
     // Pre-flight the conflict OUTSIDE the transaction so a doomed request never
     // normalizes or uploads; the unique index still guards the race.
@@ -127,8 +160,9 @@ export class ProjectsService {
     return { detail: await this.toDetail(row), etag: taxonomyETag(row.version) };
   }
 
-  /** `PATCH /v1/admin/projects/:id` — edit the SAME row. */
-  async update(input: UpdateProjectInput): Promise<ProjectCommandResult> {
+  private async updateCommand(
+    input: UpdateProjectInput,
+  ): Promise<ProjectCommandResult> {
     const current = await this.repo.findById(input.id);
     if (!current) throw new TaxonomyError("RESOURCE_NOT_FOUND");
     if (current.version !== input.expectedVersion) {
@@ -141,17 +175,21 @@ export class ProjectsService {
     // Slug immutability is a ROW-state refusal, not a shape one, and it is
     // checked before any upload: the permanent public identity of a published
     // project is never negotiable (012-design §2.2).
-    if (input.payload.slug !== undefined) {
+    //
+    // §2.2 predicates slug UPDATES on `first_published_at IS NULL` — and echoing
+    // the current value is not an update. The admin form posts the whole
+    // «Основное» tab, so refusing the echo would block every ordinary edit of a
+    // published project over a field the operator never touched.
+    const slugChanges =
+      input.payload.slug !== undefined && input.payload.slug !== current.slug;
+    if (slugChanges) {
       if (current.firstPublishedAt !== null) {
         throw new TaxonomyError(
           "SLUG_IMMUTABLE",
           "the slug was locked by the first publication and cannot change",
         );
       }
-      if (
-        input.payload.slug !== current.slug &&
-        (await this.repo.slugTakenAnywhere(input.payload.slug, current.id))
-      ) {
+      if (await this.repo.slugTakenAnywhere(input.payload.slug!, current.id)) {
         throw new TaxonomyError(
           "SLUG_CONFLICT",
           "another project already holds this slug",
@@ -187,7 +225,11 @@ export class ProjectsService {
           "the project changed since it was read; reload and retry",
         );
       }
-      if (input.payload.slug !== undefined && locked.firstPublishedAt !== null) {
+      if (
+        input.payload.slug !== undefined &&
+        input.payload.slug !== locked.slug &&
+        locked.firstPublishedAt !== null
+      ) {
         throw new TaxonomyError(
           "SLUG_IMMUTABLE",
           "the slug was locked by the first publication and cannot change",
@@ -207,7 +249,7 @@ export class ProjectsService {
         input.id,
         input.expectedVersion,
         {
-          ...(input.payload.slug !== undefined ? { slug: input.payload.slug } : {}),
+          ...(slugChanges ? { slug: input.payload.slug! } : {}),
           ...(input.payload.kind !== undefined ? { kind: input.payload.kind } : {}),
           ...(input.payload.title !== undefined
             ? { title: input.payload.title }

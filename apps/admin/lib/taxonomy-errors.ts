@@ -26,6 +26,16 @@ export function taxonomyErrorKey(error: unknown, fallbackKey: string): string {
       return "projects.errors.mediaConflict";
     case "MEDIA_STORAGE_UNAVAILABLE":
       return "projects.errors.storageUnavailable";
+    // The pair an operator meets after a double-submit: the provider sends a
+    // fresh Idempotency-Key per call, so a REUSED key means the same key came
+    // back with different input (a resubmitted, edited form), and
+    // IN_PROGRESS means the first submit is still running. Both need their own
+    // sentence — the generic "проверьте поля" would send the operator hunting
+    // for a field problem that does not exist.
+    case "IDEMPOTENCY_KEY_REUSED":
+      return "projects.errors.keyReused";
+    case "IDEMPOTENCY_REQUEST_IN_PROGRESS":
+      return "projects.errors.requestInProgress";
     default:
       return fallbackKey;
   }

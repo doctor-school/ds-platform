@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
 import { CANONICAL_IMAGE_MIME, MAX_IMAGE_BYTES } from "@ds/schemas";
-import { TaxonomyError } from "../taxonomy.errors.js";
-import { animatedWebpFixture, apngFixture } from "./animated-fixtures.js";
+import { TaxonomyError } from "../../src/taxonomy/taxonomy.errors.js";
 import {
   StillImageNormalizer,
   type UploadedImage,
-} from "./still-image-normalizer.js";
+} from "../../src/taxonomy/media/still-image-normalizer.js";
+import { animatedWebpFixture, apngFixture } from "./support/animated-fixtures.js";
 
 // 012 EARS-1 (#1283) — the shared normalizer's reject and accept branches, on
 // real BYTE fixtures produced by the same codec the normalizer uses. Fixtures are

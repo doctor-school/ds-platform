@@ -24,6 +24,7 @@ import {
 } from "../../src/storage/index.js";
 import { IdempotencyService } from "../../src/taxonomy/idempotency.service.js";
 import { MediaCleanupService } from "../../src/taxonomy/media/media-cleanup.service.js";
+import { UploadReconcileService } from "../../src/taxonomy/media/upload-reconcile.service.js";
 import { adminHeaders, establishAdminSession } from "../setup/admin-session.js";
 import {
   RATE_LIMIT_THRESHOLDS,
@@ -54,6 +55,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     let storage: FakeObjectStorage;
     let idempotency: IdempotencyService;
     let cleanup: MediaCleanupService;
+    let reconciler: UploadReconcileService;
     /**
      * The app's own Drizzle handle, resolved from DI. `enqueue` takes the
      * CALLER's transaction handle so the obligation commits with the ref change;
@@ -106,6 +108,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       storage = backing;
       idempotency = app.get(IdempotencyService);
       cleanup = app.get(MediaCleanupService);
+      reconciler = app.get(UploadReconcileService);
       db = app.get(DRIZZLE_DB);
 
       const email = `tax-proto-${Date.now()}@ds.test`;
@@ -233,18 +236,179 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           ).rows[0]!.count,
         ),
       ).toBe(auditBefore);
-      // The record retained the deterministic locator so a later sweep can
-      // reclaim any object a partially-completed PUT might have left.
+      // The record retained the deterministic locator so the quiescent
+      // reconciler can reclaim any object a partially-completed PUT left behind.
       const { rows } = await pool.query<{
         cleanup_object_key: string | null;
         execution_state: string;
+        response_status: number | null;
+        response_body: { errorCode?: string } | null;
       }>(
-        "SELECT cleanup_object_key, execution_state FROM idempotency_keys WHERE key = $1",
+        `SELECT cleanup_object_key, execution_state, response_status, response_body
+           FROM idempotency_keys WHERE key = $1`,
         [k],
       );
       expect(rows[0]!.cleanup_object_key).toMatch(/^taxonomy\/projects\/covers\//);
-      // The failed attempt never completed, so a retry is takeover-eligible.
-      expect(rows[0]!.execution_state).toBe("processing");
+      // §5.1: the PUT failure "completes that idempotency outcome for replay" —
+      // a fenced TERMINAL 503, not a takeover-eligible half-record.
+      expect(rows[0]!.execution_state).toBe("completed");
+      expect(rows[0]!.response_status).toBe(503);
+      expect(rows[0]!.response_body?.errorCode).toBe("MEDIA_STORAGE_UNAVAILABLE");
+
+      // An exact retry replays the stored refusal — even after storage recovers,
+      // because the outcome of THAT request is terminal (§6 bullet 3). Anything
+      // else would let one logical request both fail and succeed.
+      refusePuts = false;
+      const retry = await app.inject({
+        method: "POST",
+        url: "/v1/admin/projects",
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": mp.contentType,
+          "idempotency-key": k,
+        },
+        payload: mp.body,
+      });
+      expect(retry.statusCode).toBe(503);
+      expect(
+        (JSON.parse(retry.payload) as { errorCode: string }).errorCode,
+      ).toBe("MEDIA_STORAGE_UNAVAILABLE");
+      expect(
+        Number((await pool.query("SELECT count(*) FROM projects")).rows[0]!.count),
+      ).toBe(before);
+    });
+
+    it("012 EARS-17: every deterministic post-record refusal shall be fenced-stored and replayed on an exact retry", async () => {
+      // Two 409s and one 412 — the invariant refusals of this handler. Each must
+      // COMPLETE its record with the exact status/body, so an exact retry inside
+      // the lease window replays the refusal instead of answering
+      // IDEMPOTENCY_REQUEST_IN_PROGRESS (which would tell the operator "still
+      // working" about a request that already reached its final answer).
+      const seed = await app.inject({
+        method: "POST",
+        url: "/v1/admin/projects",
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": "application/json",
+          "idempotency-key": key(),
+        },
+        payload: { kind: "school", title: `Занятый адрес ${Date.now()}` },
+      });
+      const seeded = JSON.parse(seed.payload) as { id: string; slug: string };
+      createdProjectIds.push(seeded.id);
+      await pool.query(
+        "UPDATE projects SET status = 'published', first_published_at = now() WHERE id = $1",
+        [seeded.id],
+      );
+
+      const cases: {
+        code: string;
+        status: number;
+        request: () => Promise<{ statusCode: number; payload: string }>;
+      }[] = [
+        {
+          code: "SLUG_CONFLICT",
+          status: 409,
+          request: () => {
+            const k = key();
+            return app.inject({
+              method: "POST",
+              url: "/v1/admin/projects",
+              headers: {
+                ...device,
+                ...adminHeaders(adminSid),
+                "content-type": "application/json",
+                "idempotency-key": k,
+              },
+              payload: {
+                kind: "media",
+                title: "Другой проект",
+                slug: seeded.slug,
+              },
+            }) as never;
+          },
+        },
+        {
+          code: "SLUG_IMMUTABLE",
+          status: 409,
+          request: () =>
+            app.inject({
+              method: "PATCH",
+              url: `/v1/admin/projects/${seeded.id}`,
+              headers: {
+                ...device,
+                ...adminHeaders(adminSid),
+                "content-type": "application/json",
+                "idempotency-key": key(),
+                "if-match": 'W/"1"',
+              },
+              payload: { slug: "novyy-adres-posle-publikacii" },
+            }) as never,
+        },
+        {
+          code: "PRECONDITION_FAILED",
+          status: 412,
+          request: () =>
+            app.inject({
+              method: "PATCH",
+              url: `/v1/admin/projects/${seeded.id}`,
+              headers: {
+                ...device,
+                ...adminHeaders(adminSid),
+                "content-type": "application/json",
+                "idempotency-key": key(),
+                "if-match": 'W/"99"',
+              },
+              payload: { title: "Устаревшая версия" },
+            }) as never,
+        },
+      ];
+
+      for (const c of cases) {
+        // The SAME key must be used twice, so the request builder is invoked once
+        // and its key read back off the record it created.
+        const first = await c.request();
+        expect(first.statusCode, c.code).toBe(c.status);
+        const body = JSON.parse(first.payload) as { errorCode: string };
+        expect(body.errorCode, c.code).toBe(c.code);
+        const usedKey = usedKeys[usedKeys.length - 1]!;
+        const { rows } = await pool.query<{
+          execution_state: string;
+          response_status: number | null;
+          response_body: { errorCode?: string } | null;
+        }>(
+          `SELECT execution_state, response_status, response_body
+             FROM idempotency_keys WHERE key = $1`,
+          [usedKey],
+        );
+        expect(rows[0]!.execution_state, c.code).toBe("completed");
+        expect(rows[0]!.response_status, c.code).toBe(c.status);
+        expect(rows[0]!.response_body?.errorCode, c.code).toBe(c.code);
+      }
+
+      // And the replay itself: re-issue the SLUG_IMMUTABLE refusal under its own
+      // key and check the second call returns the stored body verbatim.
+      const replayKey = key();
+      const send = () =>
+        app.inject({
+          method: "PATCH",
+          url: `/v1/admin/projects/${seeded.id}`,
+          headers: {
+            ...device,
+            ...adminHeaders(adminSid),
+            "content-type": "application/json",
+            "idempotency-key": replayKey,
+            "if-match": 'W/"1"',
+          },
+          payload: { slug: "eshche-odin-adres" },
+        });
+      const original = await send();
+      const replayed = await send();
+      expect(original.statusCode).toBe(409);
+      expect(replayed.statusCode).toBe(409);
+      expect(JSON.parse(replayed.payload)).toEqual(JSON.parse(original.payload));
     });
 
     it("012 EARS-1: when the cleanup worker runs, it shall fence on a newer epoch, delete the released object and reach the cleared terminal shape", async () => {
@@ -336,6 +500,140 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         execution_state: "pending",
         last_error: "still_referenced",
       });
+    });
+
+    it("012 EARS-17: the quiescent reconciler shall reclaim an unreferenced upload and clear its locator, and never touch a referenced one", async () => {
+      // (a) An ORPHAN: a record that uploaded its canonical object and then ended
+      // in a stored refusal, so no domain row ever referenced the bytes. Built
+      // through the same three seams the command uses — reserve, note the
+      // locator, PUT — so the row under test has the shape production produces.
+      const orphanKey = key();
+      const lease = await idempotency.begin({
+        key: orphanKey,
+        scope: "taxonomy.projects",
+        actorId: "actor-reconcile",
+        method: "POST",
+        route: "/v1/admin/projects",
+        fingerprint: "fp-orphan",
+      });
+      if (lease.kind !== "owned") throw new Error("expected to own the record");
+      const orphanObject = `taxonomy/projects/covers/${orphanKey}-orphan.webp`;
+      await idempotency.noteUploadLocator(lease.lease, orphanObject);
+      await storage.put({
+        key: orphanObject,
+        body: Buffer.from("orphaned canonical bytes"),
+        contentType: "image/webp",
+        onlyIfAbsent: true,
+      });
+      await idempotency.storeTerminalOutcome(lease.lease, {
+        status: 409,
+        body: { errorCode: "SLUG_CONFLICT" },
+      });
+
+      // (b) A REFERENCED object: an ordinary successful create with a cover. Its
+      // locator must be cleared WITHOUT deleting the bytes — deleting them would
+      // blank a live cover, the worst outcome this sweep could produce.
+      const mp = multipartBody(
+        { kind: "school", title: `Проект со ссылкой ${Date.now()}` },
+        await stillPng(),
+      );
+      const liveKey = key();
+      const created = await app.inject({
+        method: "POST",
+        url: "/v1/admin/projects",
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": mp.contentType,
+          "idempotency-key": liveKey,
+        },
+        payload: mp.body,
+      });
+      expect(created.statusCode).toBe(201);
+      const liveProject = JSON.parse(created.payload) as { id: string };
+      createdProjectIds.push(liveProject.id);
+      const liveObject = (
+        await pool.query<{ cover_ref: string }>(
+          "SELECT cover_ref FROM projects WHERE id = $1",
+          [liveProject.id],
+        )
+      ).rows[0]!.cover_ref;
+
+      // Not yet quiescent: both records were created just now, so the sweep must
+      // leave them alone — a late PUT from a superseded owner could still land.
+      expect(await reconciler.reconcileDueLocators()).toBe(0);
+      expect(await storage.exists(orphanObject)).toBe(true);
+
+      // Age both past lease expiry + the in-flight/skew grace.
+      await pool.query(
+        `UPDATE idempotency_keys
+            SET created_at = now() - interval '2 days',
+                lease_expires_at = CASE WHEN lease_expires_at IS NULL THEN NULL
+                                        ELSE now() - interval '2 days' END
+          WHERE key = ANY($1::text[])`,
+        [[orphanKey, liveKey]],
+      );
+
+      const reclaimed = await reconciler.reconcileDueLocators();
+      expect(reclaimed).toBeGreaterThanOrEqual(2);
+
+      // The orphan is gone from storage and its locator is cleared — §6's
+      // "repeats until absence is acknowledged", acknowledged.
+      expect(await storage.exists(orphanObject)).toBe(false);
+      const orphanRow = await pool.query<{ cleanup_object_key: string | null }>(
+        "SELECT cleanup_object_key FROM idempotency_keys WHERE key = $1",
+        [orphanKey],
+      );
+      expect(orphanRow.rows[0]!.cleanup_object_key).toBeNull();
+
+      // The referenced object survives, and its locator is cleared too (there is
+      // nothing left to reclaim for that record).
+      expect(await storage.exists(liveObject)).toBe(true);
+      const liveRow = await pool.query<{ cleanup_object_key: string | null }>(
+        "SELECT cleanup_object_key FROM idempotency_keys WHERE key = $1",
+        [liveKey],
+      );
+      expect(liveRow.rows[0]!.cleanup_object_key).toBeNull();
+    });
+
+    it("012 EARS-17: when a refused upload left no object at all, the reconciler shall acknowledge the absence and clear the locator", async () => {
+      refusePuts = true;
+      const k = key();
+      const mp = multipartBody(
+        { kind: "media", title: `Отказ хранилища ${Date.now()}` },
+        await stillPng(),
+      );
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/admin/projects",
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": mp.contentType,
+          "idempotency-key": k,
+        },
+        payload: mp.body,
+      });
+      expect(res.statusCode).toBe(503);
+      const locator = (
+        await pool.query<{ cleanup_object_key: string | null }>(
+          "SELECT cleanup_object_key FROM idempotency_keys WHERE key = $1",
+          [k],
+        )
+      ).rows[0]!.cleanup_object_key;
+      expect(locator).not.toBeNull();
+      expect(await storage.exists(locator!)).toBe(false);
+
+      await pool.query(
+        `UPDATE idempotency_keys SET created_at = now() - interval '2 days' WHERE key = $1`,
+        [k],
+      );
+      expect(await reconciler.reconcileDueLocators()).toBeGreaterThanOrEqual(1);
+      const after = await pool.query<{ cleanup_object_key: string | null }>(
+        "SELECT cleanup_object_key FROM idempotency_keys WHERE key = $1",
+        [k],
+      );
+      expect(after.rows[0]!.cleanup_object_key).toBeNull();
     });
 
     it("012 EARS-17: when a record reaches 24 hours, one transaction shall clear its content, close replay and keep the key forever", async () => {

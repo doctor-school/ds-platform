@@ -675,6 +675,51 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       expect(JSON.parse(detail.payload)).toMatchObject({ slugEditable: false });
     });
 
+    it("012 EARS-1: when a published project echoes its OWN slug, the system shall treat it as a no-op rather than SLUG_IMMUTABLE", async () => {
+      const body = await created(await createJson({ payload: validPayload() }));
+      await pool.query(
+        "UPDATE projects SET status = 'published', first_published_at = now() WHERE id = $1",
+        [body.id],
+      );
+      // §2.2 predicates slug UPDATES on `first_published_at IS NULL`. Re-sending
+      // the value the form was rendered with changes nothing, so refusing it would
+      // block an ordinary edit (the form posts the whole «Основное» tab) over a
+      // field the operator never touched.
+      const res = await app.inject({
+        method: "PATCH",
+        url: `/v1/admin/projects/${body.id}`,
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": "application/json",
+          "idempotency-key": key(),
+          "if-match": 'W/"1"',
+        },
+        payload: { slug: body.slug, title: "Обновлённое название" },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.payload)).toMatchObject({
+        slug: body.slug,
+        title: "Обновлённое название",
+        version: 2,
+      });
+      // A DIFFERENT slug on the same row is still refused.
+      const changed = await app.inject({
+        method: "PATCH",
+        url: `/v1/admin/projects/${body.id}`,
+        headers: {
+          ...device,
+          ...adminHeaders(adminSid),
+          "content-type": "application/json",
+          "idempotency-key": key(),
+          "if-match": 'W/"2"',
+        },
+        payload: { slug: `${body.slug}-2` },
+      });
+      expect(changed.statusCode).toBe(409);
+      expect(problem(changed).errorCode).toBe("SLUG_IMMUTABLE");
+    });
+
     it("012 EARS-5: when a PATCH would leave a published projection incomplete, the system shall refuse with a field-addressed PUBLISH_REQUIREMENTS_NOT_MET", async () => {
       const body = await created(await createJson({ payload: validPayload() }));
       await pool.query(

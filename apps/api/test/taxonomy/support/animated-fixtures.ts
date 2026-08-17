@@ -10,8 +10,9 @@ import sharp from "sharp";
 // each fixture "animated" is visible in the code rather than hidden in a
 // committed binary a reviewer cannot inspect.
 //
-// This file lives beside the normalizer (not under `test/`) because it is
-// imported by a co-located `*.spec.ts`; it is exported nowhere else.
+// It lives under `test/` on purpose: `apps/api/tsconfig.json` includes `src/**/*`
+// and excludes `test`, so a fixture GENERATOR next to the normalizer would ship in
+// the api build. Its only importer is `../still-image-normalizer.spec.ts`.
 
 /** A solid still frame in the requested container. */
 async function stillFrame(

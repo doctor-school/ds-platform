@@ -4,7 +4,7 @@
 # REAL mechanism is the `bdd` project, exactly as the 005 registration journey has
 # no hand-written journey.spec.ts). The per-EARS guarantees are pinned by the
 # e2e/shell/*.spec.ts route pins; HERE we drive the connected arc a person walks:
-# a doctor logs in → lands on the discovery front-door `/` → uses the shell nav
+# a doctor logs in → lands on the discovery listing `/webinars` (013 EARS-15) → uses the shell nav
 # (→ /account/events) and the avatar icon (→ /account); a guest sees «Войти» and
 # the SAME `/`; and on a mobile viewport the nav collapses into a ≡ dropdown.
 #
@@ -23,7 +23,7 @@ Feature: 008 Portal shell journey — login lands on the discovery front-door, s
   Scenario: A doctor logs in, lands on the discovery front-door, and navigates the shell
     Given a registered doctor who is not yet signed in
     When the doctor completes login via the feature-003 auth flow
-    Then the doctor lands on the discovery front-door at "/"
+    Then the doctor lands on the discovery front-door at "/webinars"
     And the persistent header shows the logo, the top-nav, a theme toggle, and the doctor's avatar icon
     When the doctor activates «Мои события» in the header nav
     Then the shell navigates to "/account/events"

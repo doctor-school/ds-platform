@@ -18,15 +18,15 @@ Feature: Persistent portal app-shell header and public discovery front-door
 
   # Amended 2026-08-17 (source: feature 013 EARS-15, see 008-requirements-en.md → Amendment):
   # the post-login landing is the visitor's return target, defaulting to /webinars, and the
-  # discovery listing lives at /webinars while / is the Academy landing. The example below
-  # still asserts the shipped "/" behaviour on purpose — it is re-pointed by the feature-013
-  # EARS-15 Issue together with apps/portal/app/login/page.test.tsx, which owns that edit as a
-  # named deliverable. A silent change here would decouple the spec from production.
+  # discovery listing lives at /webinars while / is the Academy landing. The example below was
+  # re-pointed from "/" to "/webinars" by the feature-013 EARS-15 Issue, which owns that edit
+  # as a named deliverable together with apps/portal/app/login/page.test.tsx and the browser
+  # journey. A silent change here would decouple the spec from production.
   @EARS-1 @EARS-2 @EARS-6 @EARS-7 @happy
   Scenario: A doctor logs in, lands on the discovery front-door, and navigates the shell
     Given a registered doctor who is not yet signed in
     When the doctor completes login via the feature-003 auth flow
-    Then the doctor lands on "/" showing the discovery listing of upcoming broadcasts
+    Then the doctor lands on "/webinars" showing the discovery listing of upcoming broadcasts
     And the persistent header shows the logo, the top-nav [Эфиры · Мои события], a theme toggle, and an avatar icon with the doctor's initials
     When the doctor activates «Мои события» in the top-nav
     Then the portal navigates to "/account/events"

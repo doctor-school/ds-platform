@@ -23,13 +23,21 @@ import { parseRoomReturnTarget } from "./room-return";
  */
 
 /**
- * The default landing when no (or no safe) event context rode the round-trip.
- * 008 EARS-7 — post-login landing is the discovery front-door `/` (the public
- * upcoming-broadcasts listing, reused feature-004 surface), never a scaffold or
- * a dead dashboard. Supersedes the #769 `/account/events` default: the app-shell
- * (008) makes `/` both the front-door and the post-login landing (design §4).
+ * The default landing when no (or no safe) return target rode the round-trip.
+ *
+ * 013 EARS-15 (US-10) — the post-login landing is the visitor’s captured
+ * same-origin return target, and `/webinars` (the public upcoming-broadcasts
+ * listing, feature-004 surface) whenever no valid target exists. This re-points
+ * feature 008’s EARS-7 landing (008 requirements → «Amendment — 2026-08-17»):
+ * `/` no longer redirects to the listing — it serves the Academy landing — so a
+ * `/` default stranded a doctor on marketing copy after login. Never a scaffold,
+ * never a dead dashboard; supersedes the #769 `/account/events` default.
+ *
+ * The return-target MECHANISM is feature 014’s (014 EARS-6, #1342): the shipped
+ * same-origin guards below (`parseReturnTarget` / `parseRoomReturnTarget`) are
+ * consumed as-is — 013 adds no second redirect rule (013 design §6, LD-12).
  */
-const DEFAULT_LANDING = "/";
+const DEFAULT_LANDING = "/webinars";
 
 /**
  * Read the carried `returnTo` off the current URL's query, if any. Runs only in
@@ -46,15 +54,15 @@ export function currentReturnTarget(): string | null {
  * return WHERE to land:
  *   • a SAFE event intent → fire `RegisterForEvent` for its slug, then land on the
  *     event page (`intent.returnTo`), already registered (EARS-2);
- *   • no / an unsafe target → the default discovery front-door landing (`/`,
- *     008 EARS-7) — never an open redirect (an attacker-supplied cross-origin
- *     `returnTo` is dropped by the `parseReturnTarget` guard before it can be
- *     navigated to).
+ *   • no / an unsafe target → the default discovery listing landing (`/webinars`,
+ *     008 EARS-7 as amended by 013 EARS-15) — never an open redirect (an
+ *     attacker-supplied cross-origin `returnTo` is dropped by the
+ *     `parseReturnTarget` guard before it can be navigated to).
  *
  * The register call is best-effort: if it throws (a transient error, a gating
  * refusal), the doctor is still landed on the event page — the per-user
  * registered-state read (EARS-4) or a retry surfaces there — never stranded on
- * the front-door. Firing again on a retry is a server-side idempotent no-op (EARS-3).
+ * the default listing. Firing again on a retry is a server-side idempotent no-op (EARS-3).
  */
 export async function completeReturnTarget(
   rawReturnTo: string | null,

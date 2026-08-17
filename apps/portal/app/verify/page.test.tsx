@@ -372,7 +372,7 @@ describe("005 EARS-2 guest-through-auth completion on /verify", () => {
     expect(registerForEvent).not.toHaveBeenCalled();
   });
 
-  it("EARS-2: a cross-origin returnTo is rejected — the auto-login lands on the discovery front-door (`/`, 008 EARS-7), nothing registers", async () => {
+  it("EARS-2: a cross-origin returnTo is rejected — the auto-login lands on the discovery listing (`/webinars`, 008 EARS-7 as amended by 013 EARS-15), nothing registers", async () => {
     searchParams = new URLSearchParams({
       email: EMAIL,
       returnTo: "//evil.example",
@@ -380,8 +380,9 @@ describe("005 EARS-2 guest-through-auth completion on /verify", () => {
     heldRegistration = { identifier: EMAIL, password: "Sup3r$ecretPw!9" };
     await enterCode();
 
-    // 008 EARS-7 — the default post-login landing is the discovery front-door `/`.
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
+    // 008 EARS-7, amended by 013 EARS-15 — the default post-verification landing is
+    // the discovery listing `/webinars`, never the Academy landing `/`.
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/webinars"));
     expect(registerForEvent).not.toHaveBeenCalled();
   });
 

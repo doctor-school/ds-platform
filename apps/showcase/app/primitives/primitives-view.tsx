@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { useForm, type Control, type FieldValues } from "react-hook-form";
 
 import { Button } from "@ds/design-system/button";
@@ -534,8 +534,12 @@ function TextareaSection() {
                   }
                   className="w-full"
                 >
+                  {/* No hand-made `id`: `ThemePair` renders this tree ONCE PER
+                      THEME PANE, so a literal id would be emitted twice per page.
+                      The primitive derives its counter id from `useId()`, which is
+                      unique per instance — the same reason every other section
+                      keeps ids out of `ThemePair`. */}
                   <Textarea
-                    id={`showcase-textarea-${state}`}
                     aria-label={`Textarea sample (${state})`}
                     showCounter
                     maxLength={120}
@@ -567,6 +571,10 @@ function TextareaSection() {
 
 const DROPZONE_ACCEPT = ["image/jpeg", "image/png", "image/webp"] as const;
 
+/** A tiny inline SVG stand-in for a stored cover — no network, no fixture file. */
+const DROPZONE_PREVIEW =
+  "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MCIgaGVpZ2h0PSI4MCI+PHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjMWQ0ZWQ4Ii8+PC9zdmc+";
+
 const DROPZONE_LABELS = {
   prompt: "Перетащите изображение или выберите файл",
   hint: "JPEG, PNG или WebP · до 10 МБ · до 6000 px по стороне",
@@ -574,8 +582,47 @@ const DROPZONE_LABELS = {
   previewAlt: "Текущее изображение",
 };
 
+type DropzoneState =
+  | "empty"
+  | "hover"
+  | "active"
+  | "focus"
+  | "filled"
+  | "disabled";
+
+/**
+ * One dropzone specimen. `MediaDropzone` REQUIRES an `id` (it names the hidden
+ * file input), and `ThemePair` renders its tree once per theme pane — so the id
+ * comes from `useId()` on this component, giving each pane its own unique value
+ * instead of one literal emitted twice per page.
+ */
+function MediaDropzoneSpecimen({ state }: { state: DropzoneState }) {
+  const id = useId();
+  return (
+    <MediaDropzone
+      id={id}
+      accept={DROPZONE_ACCEPT}
+      maxBytes={10 * 1024 * 1024}
+      currentUrl={state === "filled" ? DROPZONE_PREVIEW : null}
+      file={null}
+      onFileChange={() => undefined}
+      onRemoveCurrent={() => undefined}
+      disabled={state === "disabled"}
+      labels={DROPZONE_LABELS}
+      className={state === "focus" ? FORCED_FOCUS : undefined}
+    />
+  );
+}
+
 function MediaDropzoneSection() {
-  const states = ["empty", "hover", "active", "focus", "filled", "disabled"] as const;
+  const states: DropzoneState[] = [
+    "empty",
+    "hover",
+    "active",
+    "focus",
+    "filled",
+    "disabled",
+  ];
   return (
     <PrimitiveSection
       title="MediaDropzone"
@@ -599,22 +646,7 @@ function MediaDropzoneSection() {
                   }
                   className="w-full"
                 >
-                  <MediaDropzone
-                    id={`showcase-dropzone-${state}`}
-                    accept={DROPZONE_ACCEPT}
-                    maxBytes={10 * 1024 * 1024}
-                    currentUrl={
-                      state === "filled"
-                        ? "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MCIgaGVpZ2h0PSI4MCI+PHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjMWQ0ZWQ4Ii8+PC9zdmc+"
-                        : null
-                    }
-                    file={null}
-                    onFileChange={() => undefined}
-                    onRemoveCurrent={() => undefined}
-                    disabled={state === "disabled"}
-                    labels={DROPZONE_LABELS}
-                    className={state === "focus" ? FORCED_FOCUS : undefined}
-                  />
+                  <MediaDropzoneSpecimen state={state} />
                 </div>
               </Cell>
             ))}

@@ -109,7 +109,13 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
             aria-live="polite"
             className={cn(
               "self-end text-xs",
-              over ? "text-destructive" : "text-muted-foreground",
+              // `destructive-text`, NOT `destructive`: the fill token is the same
+              // dark red in both themes and fails WCAG AA on the dark surface at
+              // this size (caught as axe `color-contrast`, impact `serious`, by
+              // the showcase playwright-axe gate). `destructive-text` is the
+              // theme-flipping red TEXT token FormMessage/FormError already use
+              // for small destructive copy — one token story, both themes AA.
+              over ? "text-destructive-text" : "text-muted-foreground",
             )}
           >
             {formatCounter

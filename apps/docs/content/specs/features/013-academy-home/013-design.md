@@ -1,6 +1,6 @@
 ---
-title: "013 — Academy home and partnership form (Design)"
-description: "Minimal portal design for the private JSON-backed Academy partnership form."
+title: "INTERIM STATIC STUB — 013 Academy home and partnership form (Design)"
+description: "INTERIM STATIC STUB — minimal portal design of the temporary static Academy home and its private JSON-backed partnership form. NOT the Feature 013 contract; the canonical PRD is 013-product.md (US-1…US-12)."
 slug: 013-academy-home-design
 requirements: ./013-requirements-en.md
 status: Shipped
@@ -8,6 +8,14 @@ lang: en
 ---
 
 # 013 — Academy home and partnership form (Design)
+
+> **INTERIM STATIC STUB — NOT the Feature 013 contract.** This design covers the
+> temporary demo stub live at `/` since release-2026.08.16-2 (Issues
+> [#1311](https://github.com/doctor-school/ds-platform/issues/1311) /
+> [#1312](https://github.com/doctor-school/ds-platform/issues/1312)). The canonical
+> Feature 013 product contract is [013-product.md](./013-product.md), US-1…US-12.
+> Superseded by [#1324](https://github.com/doctor-school/ds-platform/issues/1324);
+> dismantled by [#1323](https://github.com/doctor-school/ds-platform/issues/1323).
 
 ## Architecture
 

@@ -33,7 +33,7 @@ lang: en
 - **Doctor (guest, first contact):** land on the academy, understand within a minute what it is and whether it is for me, and get to a relevant broadcast, project, or expert without registering first.
 - **Doctor (registered):** browse the academy's content by project, expert, and topic; watch the recording of a broadcast I missed.
 - **Pharma partner / sponsor:** understand what the academy is, who stands behind it, what participation formats exist and what I get — then leave a request in one short form and be contacted.
-- **Doctor.School commercial team:** have every accepted partner request privately preserved as exactly one server-side JSON record, without a database, working-channel delivery, or notification.
+- **Doctor.School commercial team:** receive every partner request immediately in the working channel («DS Лиды») with it also persisted on the platform, so nothing depends on someone watching an inbox.
 - **Operator / content editor:** describe projects, experts, topics, and partners once as real entities and link them to events, instead of re-typing free-text speaker names per event.
 
 ## Cross-cutting information architecture
@@ -46,7 +46,7 @@ lang: en
 - **Recording display rule.** While only a `raw` recording exists it plays in the main player; once an `edited` one appears, edited takes the main player and raw moves to a secondary slot behind a «Смотреть оригинал трансляции» affordance. The presentation of that affordance is Stage-A territory.
 - **The event list is one reusable design-system unit.** Event card + list + filters + pagination are single components reused on `/webinars`, the project page, the expert page, the «Прошедшие» tab, and the home-page feed — one place to change, applied everywhere.
 - **Content editing lands in the existing `admin` app** (Refine), consistent with events (feature 007). `apps/cms` (Payload) stays a reserved slot for a future vertical.
-- **Lead capture is private JSON-only:** each accepted submission creates exactly one private server-side JSON record. Feature 013 uses no database, Mattermost delivery, or notification for that request.
+- **Lead capture is dual-sink:** a submission persists to `leads` in our Postgres **and** posts to the Mattermost channel «DS Лиды». The DB is the record of truth; the channel is the working notification.
 
 ## Feature decomposition
 
@@ -55,7 +55,7 @@ Five features, numbered from 012. All five PRDs are authored (013 first, per own
 | #   | Feature                                                                  | One-liner                                                                                                                                                                                                             |
 | --- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 012 | [`content-taxonomy`](../../features/012-content-taxonomy/012-product.md) | `projects` / `experts` / `topics` / `partners` entities + m2m joins + admin CRUD + public read API — the substrate every other feature reads.                                                                         |
-| 013 | [`academy-home`](../../features/013-academy-home/013-product.md)         | The landing at `/`: 8-screen dual-audience structure + live feed of latest эфиры + one private server-side JSON record per accepted request; no database, Mattermost, or notification.                                |
+| 013 | [`academy-home`](../../features/013-academy-home/013-product.md)         | The landing at `/`: 8-screen dual-audience structure + live feed of latest эфиры + lead capture → `leads` + Mattermost «DS Лиды».                                                                                     |
 | 014 | [`event-recordings`](../../features/014-event-recordings/014-product.md) | `event_recordings` (edited / raw), the archived-event page state, the login-gated player, and recordings in «Мои события» — covers [#1188](https://github.com/doctor-school/ds-platform/issues/1188) / Plane DSP-229. |
 | 015 | [`projects-catalog`](../../features/015-projects-catalog/015-product.md) | `/projects` and the project page with its events.                                                                                                                                                                     |
 | 016 | [`experts-catalog`](../../features/016-experts-catalog/016-product.md)   | `/experts` and the expert page with their events.                                                                                                                                                                     |
@@ -69,7 +69,7 @@ Webinars-listing filters/facets and the «Прошедшие» tab are not a sep
 ## Success metrics
 
 - `/` serves both flows measurably: a visitor arriving cold reaches either a content surface (event / project / expert page) or the lead form — bounce without either is the failure mode to watch.
-- **Partner requests are privately preserved through the platform**: every accepted submission creates exactly one private server-side JSON record, while an invalid submission or failed write creates none; no database, Mattermost delivery, or notification is involved.
+- **Partner requests arrive through the platform**: submissions land in `leads` and appear in «DS Лиды» with no manual step; the count of inbound partner requests handled off-platform trends to zero.
 - **Content becomes browsable**: every published event is reachable by at least one of project / expert / topic, not only by direct link.
 - **The archive drives registration**: past-event pages produce registrations from visitors who came for a recording.
 - Doctors who missed a broadcast can watch it — recordings are available for past events rather than being a dead end.

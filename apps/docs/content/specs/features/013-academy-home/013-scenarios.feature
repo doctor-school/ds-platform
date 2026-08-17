@@ -1,5 +1,10 @@
-# 013 — Academy home and private partnership form
+# INTERIM STATIC STUB — 013 Academy home and private partnership form
 # Tags map to flat EARS ids in 013-requirements-en.md.
+#
+# NOT the Feature 013 contract. These scenarios cover the temporary demo stub
+# live at / since release-2026.08.16-2 (Issues #1311 / #1312). The canonical
+# Feature 013 product contract is 013-product.md, US-1…US-12. Superseded by
+# #1324; dismantled by #1323.
 
 Feature: A visitor submits the Academy partnership form privately
 

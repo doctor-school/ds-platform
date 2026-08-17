@@ -1,8 +1,8 @@
 ---
-title: "013 — Academy home and partnership form"
-description: "Production requirements for the approved Academy home and its enabled private partnership form."
+title: "INTERIM STATIC STUB — 013 Academy home and partnership form (requirements)"
+description: "INTERIM STATIC STUB — requirements of the temporary static Academy home and its private partnership form, live since release-2026.08.16-2. NOT the Feature 013 contract; the canonical PRD is 013-product.md (US-1…US-12)."
 slug: 013-academy-home-requirements
-product: ./013-product.md
+product: ./013-interim-stub-stories.md
 status: Shipped
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
@@ -20,7 +20,16 @@ lang: en
 ---
 
 > **EN (this)** · **RU:** [013-requirements-ru.md](./013-requirements-ru.md)
-> · PRD: [013-product.md](./013-product.md), US-1…US-6.
+> · Stub stories: [013-interim-stub-stories.md](./013-interim-stub-stories.md), US-1…US-6.
+
+> **INTERIM STATIC STUB — NOT the Feature 013 contract.** This triplet describes
+> the temporary demo stub live at `/` since release-2026.08.16-2 (Issues
+> [#1311](https://github.com/doctor-school/ds-platform/issues/1311) /
+> [#1312](https://github.com/doctor-school/ds-platform/issues/1312)). The canonical
+> Feature 013 product contract is [013-product.md](./013-product.md), US-1…US-12 —
+> a different set of stories that this triplet does not implement. Superseded by
+> [#1324](https://github.com/doctor-school/ds-platform/issues/1324); dismantled by
+> [#1323](https://github.com/doctor-school/ds-platform/issues/1323).
 
 # 013 — Academy home and private partnership form
 

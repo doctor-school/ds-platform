@@ -1,8 +1,8 @@
 ---
-title: "013 — Главная Академии и форма партнёрства"
-description: "Продакшен-требования к утверждённой главной Академии и её включённой приватной форме партнёрства."
+title: "INTERIM STATIC STUB — 013 Главная Академии и форма партнёрства (требования)"
+description: "ВРЕМЕННАЯ СТАТИЧЕСКАЯ ЗАГЛУШКА — требования к временной статической главной Академии и её приватной форме партнёрства, живущей с релиза release-2026.08.16-2. НЕ контракт фичи 013; канонический PRD — 013-product-ru.md (US-1…US-12)."
 slug: 013-academy-home-requirements-ru
-product: ./013-product-ru.md
+product: ./013-interim-stub-stories-ru.md
 status: Shipped
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
@@ -20,7 +20,16 @@ lang: ru
 ---
 
 > **RU (это)** · **EN:** [013-requirements-en.md](./013-requirements-en.md)
-> · PRD: [013-product-ru.md](./013-product-ru.md), US-1…US-6.
+> · Истории заглушки: [013-interim-stub-stories-ru.md](./013-interim-stub-stories-ru.md), US-1…US-6.
+
+> **ВРЕМЕННАЯ СТАТИЧЕСКАЯ ЗАГЛУШКА — НЕ контракт фичи 013.** Этот триплет
+> описывает временную демо-заглушку, живущую на `/` с релиза release-2026.08.16-2
+> (задачи [#1311](https://github.com/doctor-school/ds-platform/issues/1311) /
+> [#1312](https://github.com/doctor-school/ds-platform/issues/1312)). Канонический
+> продуктовый контракт фичи 013 — [013-product-ru.md](./013-product-ru.md),
+> US-1…US-12: другой набор историй, который этот триплет не реализует.
+> Замещается [#1324](https://github.com/doctor-school/ds-platform/issues/1324);
+> демонтируется [#1323](https://github.com/doctor-school/ds-platform/issues/1323).
 
 # 013 — Главная Академии и приватная форма партнёрства
 

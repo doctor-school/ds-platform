@@ -1,6 +1,6 @@
 ---
 title: "008 — Portal shell & discovery front-door (Design)"
-description: "Design: the persistent app-shell layout composition; nav route resolution to shipped surfaces (Эфиры→/, Мои события→/account/events f005, avatar→/account f009); the auth-state header branch (avatar-icon vs «Войти»); the post-login-landing sequence returning the doctor to /. Built from the vendored «Doctor.School визуальный язык» canvas (design-source/) per ADR-0013; retires the / scaffold."
+description: "Design: the persistent app-shell layout composition; nav route resolution to shipped surfaces (Эфиры→/, Мои события→/account/events f005, avatar→/account f009); the auth-state header branch (avatar-icon vs «Войти»); the post-login-landing sequence returning the doctor to / — amended 2026-08-17 (feature 013): / is the Academy landing, discovery is /webinars, and the post-login landing is the visitor's return target defaulting to /webinars. Built from the vendored «Doctor.School визуальный язык» canvas (design-source/) per ADR-0013; retires the / scaffold."
 slug: 008-portal-shell
 status: In dev
 tracker: "https://github.com/doctor-school/ds-platform/milestone/9"
@@ -85,6 +85,8 @@ Note the sign-out edge is **owned by feature 009** (the profile), not this heade
 
 ## 4. Post-login landing sequence
 
+_[Amended 2026-08-17 — the post-login landing is the visitor's return target, defaulting to `/webinars`; `/` is the Academy landing. See the Amendment at the end of this document.]_
+
 Post-login landing is `/` (EARS-7). This feature does **not** mint the session — the feature-003 auth flow does — it only supplies `/` as the return target and guarantees the doctor lands on the discovery front-door, not a scaffold.
 
 ```mermaid
@@ -96,7 +98,7 @@ sequenceDiagram
   B->>AUTH: complete login (password / OTP)
   AUTH->>API: establish BFF session (__Host- cookie, EARS-8/003)
   API-->>AUTH: session established
-  AUTH->>SHELL: redirect to / (post-login landing, EARS-7)
+  AUTH->>SHELL: redirect to / (post-login landing, EARS-7 — amended: return target, /webinars by default)
   SHELL->>API: GET /v1/auth/session (derive AuthState)
   API-->>SHELL: { authenticated: true, initials }
   SHELL-->>B: render / (feature-004 discovery listing, EARS-8) + doctor header (avatar icon, EARS-5)
@@ -116,3 +118,16 @@ At the canvas mobile breakpoint (`≤900px`) the top-nav collapses into a `≡` 
 - **«Мои события» content and the room** — features **005 / 006**. This feature only wires the `/account/events` nav target.
 - **«Школы»** — **not in the v1 nav** (EARS-10 _Retired_). No inert placeholder ships and there is no seam to track; «Школы» enters the nav only via its own future feature.
 - **No new backend primitive** — the session is read-only input; this feature adds no endpoint and mints no session.
+
+### Amendment — 2026-08-17: `/` becomes the Academy landing, discovery is `/webinars`, and the post-login landing is the return target (source: feature 013)
+
+> **Status:** feature 008 is live in production, so this is recorded as an amendment rather than an inline rewrite (AGENTS.md §6). Everything above remains the decision as originally taken; this block re-points two route facts and nothing else. The requirements-side counterpart is [`008-requirements-en.md`](./008-requirements-en.md) → «Amendment — 2026-08-17», with the identical contract.
+
+**Source.** Feature 013 takes `/` for the public Academy landing (canvas «Главная», owner Stage-A pick), and the product owner's platform-wide rule of 2026-08-17 ([#1326](https://github.com/doctor-school/ds-platform/issues/1326)) returns a user to the page they tried to consume after registration, login or verification. Canon: [`013-requirements-en.md`](../013-academy-home/013-requirements-en.md) EARS-1, EARS-15, EARS-16 + [`013-design.md`](../013-academy-home/013-design.md) §6.
+
+**The amendment.** Two route facts change:
+
+- **`/` = Academy landing; `/webinars` = the discovery listing.** The listing surface is unchanged (feature 004); the header logo and the «Эфиры» target resolve to `/webinars`. §4's sequence therefore ends on `/webinars` (or the captured return target) rather than on `/`, and §3's state edge «completes login → land on `/`» reads «→ land on the return target, `/webinars` by default».
+- **The landing target comes from feature 014's return-to-origin mechanism** (014 EARS-6): a signed same-origin `returnTo` carried through the auth flow, with `/webinars` as the fallback. This shell still mints no session and still only reads `GET /v1/auth/session`.
+
+**What does not change.** Header composition, theme persistence, guest «Войти», the initials-avatar icon-link to `/account`, the absence of a dropdown and of a header sign-out, the `≤900px` `≡` collapse, canvas parity at Stage-B, and the auth-independent rendering of the listing. The scaffold stays retired. No nav entry appears for a route that does not exist — `/projects` and `/experts` arrive with features 015 and 016.

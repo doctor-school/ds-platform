@@ -21,6 +21,17 @@ lang: en
 > [#1324](https://github.com/doctor-school/ds-platform/issues/1324); the stub and
 > this file are dismantled by
 > [#1323](https://github.com/doctor-school/ds-platform/issues/1323).
+>
+> **Status as of 2026-08-17:** the INTERIM triplet text has been **replaced** by the
+> full-home triplet under
+> [#1324](https://github.com/doctor-school/ds-platform/issues/1324), so
+> `013-requirements-en.md` / `-ru.md`, `013-design.md` and `013-scenarios.feature`
+> now describe the full Academy home. The stub's own EARS text remains available in
+> git history (spec PR
+> [#1315](https://github.com/doctor-school/ds-platform/pull/1315), delivery PR
+> [#1318](https://github.com/doctor-school/ds-platform/pull/1318)) — the stub still
+> runs in production until #1323 dismantles it, and these stories stay its
+> product-side record.
 
 ## Stub stories
 

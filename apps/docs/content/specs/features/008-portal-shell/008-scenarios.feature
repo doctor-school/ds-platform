@@ -16,6 +16,12 @@ Feature: Persistent portal app-shell header and public discovery front-door
     And the feature-005 «Мои события» surface is available at /account/events
     And the feature-009 profile surface is available at /account
 
+  # Amended 2026-08-17 (source: feature 013 EARS-15, see 008-requirements-en.md → Amendment):
+  # the post-login landing is the visitor's return target, defaulting to /webinars, and the
+  # discovery listing lives at /webinars while / is the Academy landing. The example below
+  # still asserts the shipped "/" behaviour on purpose — it is re-pointed by the feature-013
+  # EARS-15 Issue together with apps/portal/app/login/page.test.tsx, which owns that edit as a
+  # named deliverable. A silent change here would decouple the spec from production.
   @EARS-1 @EARS-2 @EARS-6 @EARS-7 @happy
   Scenario: A doctor logs in, lands on the discovery front-door, and navigates the shell
     Given a registered doctor who is not yet signed in

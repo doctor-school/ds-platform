@@ -1,143 +1,264 @@
 ---
-title: "INTERIM STATIC STUB — 013 Academy home and partnership form (requirements)"
-description: "INTERIM STATIC STUB — requirements of the temporary static Academy home and its private partnership form, live since release-2026.08.16-2. NOT the Feature 013 contract; the canonical PRD is 013-product.md (US-1…US-12)."
-slug: 013-academy-home-requirements
-product: ./013-interim-stub-stories.md
-status: Shipped
+title: "013 — Academy home page and partner lead capture"
+description: "Requirements for the full public Academy home at /: the approved split-hero landing from the «Главная» canvas, a live эфиры feed rendered by feature 014's shared event-list unit, curated platform/argument/partner screens, a 012-fed experts block, and a partner lead form that persists a retained leads record and notifies the Mattermost channel «DS Лиды» through a dedicated API-only webhook — plus the platform-wide post-login return-to-origin rule with /webinars as the default landing."
+slug: 013-academy-home
+status: Draft
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
-parent_issue: https://github.com/doctor-school/ds-platform/issues/1307
-issues: [1311, 1312]
+parent_issue: https://github.com/doctor-school/ds-platform/issues/1357
+issues: [1358, 1359, 1360, 1361, 1362, 1363, 1364, 1365, 1366, 1367, 1368]
 prior_decisions:
-  - "ADR-0002 §4, §5.5: explicit contracts and server-side validation"
-  - "ADR-0004 §9, §14: portal route and server mutation boundary"
-  - "ADR-0006 §4: bilingual requirements and flat EARS numbering"
-  - "ADR-0009 §2.1, §2.6: personal-data protection"
-  - "ADR-0011 §2.1–§2.4 and ADR-0012 §1, §4: data handling and fail-closed operations"
-  - "ADR-0013 §4, §7: design-system controls and accessibility"
-  - "ADR-0014 §1–§5: Product Lead PRD traceability"
+  - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace; Stage A precedes user-facing implementation; the approved canvas is the composition source of truth)
+  - "ADR-0001 — Identity / Auth / RBAC (the landing and the lead endpoint are `access: public`; the post-login landing rule belongs to the portal auth entry)"
+  - ADR-0002 — Backend Core Stack (NestJS + nestjs-zod; REST/OpenAPI under `/v1`; RFC 7807 Problem Details; idempotency; server-side validation)
+  - ADR-0003 — Data Layer (§4 retained-row lifecycle; Postgres + Drizzle; restrictive foreign keys; no physical delete or cascade)
+  - ADR-0004 — Frontend Stack (§3 Next.js portal owns the doctor-facing surface; §9/§14 route and server mutation boundary)
+  - "ADR-0009 — Personal-data lifecycle and consent (§2.1 immutable versioned consent evidence recorded with the lead)"
+  - ADR-0011 — Data handling (§2.1–§2.4 no personal-data egress; submitted values never enter logs)
+  - ADR-0012 — Operations (fail-closed production storage; secrets are deployment configuration, never repository literals)
+  - ADR-0013 — Design-token SoT and design-system-first adoption gate (§4, §7 primitives, interaction states, accessibility)
+  - ADR-0006 — Documentation & SSOT (§4 feature-spec triplet, bilingual product requirements, flat EARS numbering)
 lang: en
 ---
 
-> **EN (this)** · **RU:** [013-requirements-ru.md](./013-requirements-ru.md)
-> · Stub stories: [013-interim-stub-stories.md](./013-interim-stub-stories.md), US-1…US-6.
+> **EN (this)** · **RU:** [`013-requirements-ru.md`](./013-requirements-ru.md)
+>
+> PRD source: [`013-product.md`](./013-product.md) (US-1…US-12). Epic: [Academy public surface — product brief](../../product/academy-public/brief.md). Feature 013 ships a public portal surface, so `surface: user-facing`. Authored under [#1324](https://github.com/doctor-school/ds-platform/issues/1324).
 
-> **INTERIM STATIC STUB — NOT the Feature 013 contract.** This triplet describes
-> the temporary demo stub live at `/` since release-2026.08.16-2 (Issues
-> [#1311](https://github.com/doctor-school/ds-platform/issues/1311) /
-> [#1312](https://github.com/doctor-school/ds-platform/issues/1312)). The canonical
-> Feature 013 product contract is [013-product.md](./013-product.md), US-1…US-12 —
-> a different set of stories that this triplet does not implement. Superseded by
-> [#1324](https://github.com/doctor-school/ds-platform/issues/1324); dismantled by
-> [#1323](https://github.com/doctor-school/ds-platform/issues/1323).
+# 013 — Academy home page and partner lead capture (Requirements)
 
-# 013 — Academy home and private partnership form
+## This triplet supersedes the interim stub
+
+Until this document, the 013 directory carried an **INTERIM stub triplet** describing the temporary static home live at `/` since `release-2026.08.16-2` (Issues [#1311](https://github.com/doctor-school/ds-platform/issues/1311) / [#1312](https://github.com/doctor-school/ds-platform/issues/1312)). That triplet is **replaced by this one**: the stub's six stories stay recorded in [`013-interim-stub-stories.md`](./013-interim-stub-stories.md) as the history of what shipped, and the canonical Feature 013 contract is the PRD's US-1…US-12 formalized below. The stub's copy, its private JSON-file sink and its demo behaviour are **not inherited** — see «Copy work» and LD-6. The stub itself is dismantled by [#1323](https://github.com/doctor-school/ds-platform/issues/1323) once this feature ships.
+
+## Delivery waves
+
+Every EARS clause carries **`wave: independent`** or **`wave: 012-dependent`**, so `open-ears-issues` can wire the `blocked_by` graph without re-deriving it:
+
+- **`independent`** — no dependency on feature 012's taxonomy. The landing shell, the split hero, the эфиры feed (which reads feature 004's existing public event listing through feature 014's shared unit), every curated screen, the lead form, the lead record, the Mattermost notification, and the post-login landing rule.
+- **`012-dependent`** — reads feature 012's public taxonomy API. Exactly one screen: the people/experts block (EARS-8), which renders published expert records.
+
+Two further dependencies are **not** waves and are recorded per clause rather than as tags:
+
+- **The shared event card/list unit is owned by feature 014** ([#1346](https://github.com/doctor-school/ds-platform/issues/1346), 014 EARS-10). 013 **consumes** it; a home-page-local card, list or pager is a defect. The feed clause (EARS-3) is `blocked_by` that Issue.
+- **Two clauses are process gates, not code Issues** — EARS-19 (the design-approval gate) and EARS-20 (the owner copy pass). They are tracked obligations verified by recorded artifacts; `open-ears-issues` must not turn them into implementation Issues.
 
 ## Outcomes
 
-The approved Academy home stays intact while visitors submit the approved contact,
-role, and consent data, receive accessible feedback, and see success only after
-one private record exists.
+- `/` stops redirecting and becomes the academy's front door: one public page that answers a guest doctor and a pharma partner in the same first screen.
+- A guest doctor reaches real content from the landing — the latest эфиры are on the page itself, each one click from its event page.
+- A partner reads a complete argument and ends on one short form, and knows without doubt that the request arrived.
+- Every submitted request exists twice by construction: a retained `leads` row that is the record of truth, and an immediate message in the Mattermost channel «DS Лиды» that the commercial team watches.
+- Logging in lands a doctor where they were going — on the page they tried to consume, and on `/webinars` when there is nothing to return to. Taking `/` for the landing never drops a doctor on the marketing page.
+- The page is one structure with replaceable words: the owner's editorial pass changes copy without a structural rebuild.
+- Every screen, the feed and the form work on a phone and pass the platform accessibility bar.
 
 ## Scope
 
-Issue #1312 enables the existing form at public /. A Next.js Server Action writes
-accepted submissions as private JSON; visitors have no read or list surface.
+**In:**
+
+- The public route `/` in `apps/portal` rendering the approved canvas [`design-source/home.dc.html`](../../../../../../design-source/home.dc.html) in **variant «в» — split hero** (the owner's Stage-A pick and the canvas prop default), inside the feature-008 app shell.
+- The canvas section order as drawn by the canvas `order:` values for variant «в»: **split hero → эфиры feed → «Что такое Doctor.School» → «Зачем» → ecosystem/«Что мы создаём» (`#projects`) → people + podcast (`#people`) → partner value band (`#partners`) → participation formats → closing CTA with the lead form (`#partner-form`)**, plus the footer nav and watermark.
+- The эфиры feed: the latest **three** events, rendered by feature 014's shared event card/list unit with no facets and no pager, with «Все эфиры →» to `/webinars` and each card resolving to `/webinars/[slug]`.
+- The people block rendering feature 012's published experts through the `ЭкспертКарточка` unit ([`design-source/expert-card.dc.html`](../../../../../../design-source/expert-card.dc.html)).
+- The lead form of the closing screen: the canvas field set and states, the owner-approved role list and policy link, mandatory consent, inline field errors and the confirmation state.
+- A retained `leads` table plus one public REST endpoint that persists a lead with its consent evidence and then notifies Mattermost.
+- The dedicated API-only Mattermost webhook `ACADEMY_LEADS_MATTERMOST_WEBHOOK_URL` for the channel «DS Лиды».
+- The platform-wide post-login **return-to-origin** rule realized for the landing's own auth entry points, with `/webinars` as the default landing when no return target exists — including the re-point of `DEFAULT_LANDING` in `apps/portal/lib/registration-resume.ts`, the two tests that pin it, and the **amendment** of feature 008's EARS-7 landing target (008 is live in production).
+- Copy as content: a single content module holding every string of the page, so the owner's editorial pass is a copy edit.
+- Mobile parity for every screen, the feed and the form, and the `playwright-axe` gate on the whole page.
+
+**Out:**
+
+- The `/projects` and `/experts` catalog pages — features 015 and 016. See «Tracked deferrals»: the landing links only what exists.
+- The event page and registration mechanics (features 004/005) and the post-live/archive state (feature 014). The feed links to those pages; it does not re-implement them.
+- Building, forking or re-styling the event card/list unit. Feature 014 owns it (014 EARS-10); 013 consumes it.
+- The taxonomy entities, their admin CRUD and their public read API — feature 012.
+- Lead lifecycle beyond capture: CRM, statuses, assignment, follow-up automation, an admin screen or any read/list surface for `leads`.
+- A confirmation email or SMS to the submitter, and any marketing automation. The confirmation is on-page only.
+- Migrating the interim stub's private JSON submissions into `leads`, and removing the stub route itself — [#1323](https://github.com/doctor-school/ds-platform/issues/1323).
+- Final marketing copy and final imagery: the owner's editorial pass (EARS-20) and the already-approved canvas respectively.
+- Funnel analytics instrumentation for the epic's metrics.
+- A CAPTCHA or third-party anti-abuse service. Abuse control is the platform's own rate limiting (LD-9).
+
+## Owner-recorded decisions
+
+Decisions, not open questions. Each supersedes the correspondingly numbered PRD «Open question».
+
+| Point                           | Decision                                                                                                                                                                                                          |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Composition                     | Variant **«в» — split hero** (doctor column on a white card + partner column outlined on blue). Owner Stage-A pick 2026-08-13, and the canvas prop default.                                                       |
+| Feed placement and size         | The canvas resolves it: the feed is the **first** section under the hero (`ordFeed: 1` for variant «в»), **three** cards, no facets.                                                                              |
+| Lead-form field set             | The canvas field set: имя (required) · компания или клиника (optional) · email или Telegram (required) · роль (select) · mandatory 152-ФЗ consent with a policy link. No free-text message field.                 |
+| Role list                       | Owner-approved on [#1307](https://github.com/doctor-school/ds-platform/issues/1307) / #1312, in this exact order: **Эксперт · Партнёр · Участник подкаста · Соавтор направления · Компания**. See LD-5.           |
+| Privacy policy target           | `https://doctor.school/index/privacy-pay` — owner decision on #1307, already live in the stub. Immutable consent evidence is stored with the lead.                                                                |
+| Consent                         | Mandatory. Submission is impossible while unchecked, and the consent given is recorded with the lead as ADR-0009 §2.1 evidence.                                                                                   |
+| Lead sinks                      | Both: a persisted `leads` record **and** a Mattermost post to «DS Лиды». The record is the truth; the channel is a notification.                                                                                  |
+| Post-login landing              | Owner rule 2026-08-17 ([#1326](https://github.com/doctor-school/ds-platform/issues/1326)): return the user to the page they tried to consume; **`/webinars` is the default only when there is no return target.** |
+| Copy                            | «Над текстами канваса надо будет поработать» / «Не надо слепо переносить тексты из текущей главной» — the canvas copy is reworked, the stub's copy is never reused, and the owner takes the final editorial pass. |
+| Projects / experts entry points | Until 015/016 ship, the landing links only what exists and carries projects and experts as content. A dev placeholder page is banned.                                                                             |
+
+## Copy work
+
+The canvas is the **composition** source of truth; it is **not** the copy source of truth. Per the owner instruction the page's strings are **reworked from** the canvas draft — tone «экспертный, премиальный, без инфобизнеса», no exclamation marks, no urgency devices — and the owner takes the final editorial pass before Stage-B GO (EARS-20).
+
+Two prohibitions are absolute:
+
+1. **No string is imported from the interim stub** (`apps/portal/app/academy-home-view.tsx` or any of its content). The stub's copy is rejected by the owner.
+2. **No number is invented.** The canvas draws placeholder figures («142 эфира в июле», «38 школ», «12 400 врачей в сообществе», «14 партнёров», the ecosystem tile counters). On a live medical platform a fabricated metric is a false claim, not placeholder text — see LD-4.
+
+## Constraints
+
+- **Public means public.** No response on the landing path depends on a session; nothing on the page is hidden behind or degraded by authentication. The only session-aware element is the feature-008 shell's own auth affordance.
+- **One list unit.** The feed renders feature 014's shared event card/list unit. A home-local card, list or pager implementation is a defect, and 013 does not extend that unit's API — a needed capability is an Issue against 014's unit.
+- **The lead record is the record of truth, and it is written first.** Success is shown to the visitor only after the `leads` row is committed. A Mattermost failure never fails the submission, never surfaces to the visitor and never loses the lead.
+- **Notification isolation.** The lead notification uses its own webhook secret, `ACADEMY_LEADS_MATTERMOST_WEBHOOK_URL`, resolved from deployment configuration. Re-using the deploy/CI `MATTERMOST_WEBHOOK_URL` (the release-digest and product-note webhook) or any other existing channel credential is a defect — that channel must never receive lead personal data — there is no fallback, and the value never appears in the repository. Production activation of the real form requires the secret to exist (#1307).
+- **Retained rows only.** `leads` has no physical delete, no cascade and no id reuse; erasure of personal data on request clears descriptive values in place per ADR-0009 while the row remains.
+- **Personal data never leaks sideways.** Submitted names, contacts and company values are absent from application logs, error payloads, traces and any egress path (ADR-0011 §2.1–§2.4). The Mattermost post is the single deliberate outbound copy.
+- **Server-side validation is authoritative.** One shared Zod schema validates in the browser and on the server; a request that bypasses the browser is rejected with the same rules.
+- **Honest emptiness.** A section with no data does not render an empty labelled shell, a spinner or a «скоро» stub: the feed with no publishable events renders its explicit empty state with the «Все эфиры →» route intact, and the experts block with no published experts is absent.
+- **No dead links.** Until 015/016 ship, no control on the page points at a route that does not exist. Omission is the accepted form; a placeholder page is banned.
+- **Copy is content, structure is code.** Replacing every string of the page requires no change to a component, a layout or a test selector.
+- **No stub seam.** Schema, migration, Zod contract, generated SDK, API handler and portal surface ship as real vertical slices. A fake sink, a seeded card or a manual DB step satisfies no clause.
 
 ## Prior decisions
 
-ADR-0002 design §4.3, §4.4, §4.6, and §5.5 fixes errors, idempotency, request
-protection, and server-side validation. ADR-0004 §5, §6, and §11 plus its design
-§9 and §14 fixes selective Server Actions, RHF + Zod forms, and browser tests.
-ADR-0006 §4 requires flat bilingual EARS. ADR-0009 §2.1 fixes immutable,
-versioned consent evidence; its Postgres-only §2.6 table matrix does not apply to
-the Product Lead-mandated file store. ADR-0011 §2.1–§2.4 prohibits PD egress;
-ADR-0012 §1 and §4 requires fail-closed production storage; ADR-0013 §4 and §7
-requires design-system accessibility; ADR-0014 §1–§5 makes the PRD authoritative.
+- **ADR-0014 §2:** the PRD is the source of this triplet; each clause carries `realizes: US-N`; Stage A precedes implementation and an approved canvas default is a decision, not a question to re-open.
+- **ADR-0001 §§4, 7:** the landing and the lead endpoint are `access: public`; no role, session or registration gate exists on this feature's own surface.
+- **ADR-0002 §§3–5:** Zod is the request/response SSOT, REST is versioned under `/v1`, mutations are idempotent, failures are RFC 7807 Problem Details with `traceId` and an exact `errorCode`, and validation is server-side.
+- **ADR-0003 §4:** `leads` is a retained entity — no physical delete, no cascade, restrictive foreign keys, normal reads filter `deleted_at IS NULL`.
+- **ADR-0009 §2.1:** consent is recorded as immutable versioned evidence — purpose, version tag, the exact accepted text and its digest, acceptance time and the policy URL — stored with the lead.
+- **ADR-0011 §§2.1–2.4:** personal data does not egress; the Mattermost notification is the one declared exception and carries only the submitted contact fields the commercial team needs to answer.
+- **ADR-0012 §§1, 4:** production storage is fail-closed and secrets are deployment configuration.
+- **ADR-0004 §3, §9, §14:** the portal is the doctor-facing app; the mutation boundary is a server-side action or route, never a browser-held credential.
+- **ADR-0013 + AGENTS.md §6:** the page is built from `@ds/design-system` primitives with tokens-only styling and full interaction states, against the vendored canvas files rather than issue prose.
+- **Feature 004** owns `/webinars` and `/webinars/[slug]` and the public event listing read the feed consumes. 013 adds no second listing contract and no second event route.
+- **Feature 008** owns the portal app shell (header, mobile menu, footer) and, today, the post-login landing target. 013 renders inside that shell and amends that target (EARS-15).
+- **Feature 012** owns projects, experts, topics and partners and their public reads. The people block reads that API; 013 stores no taxonomy record.
+- **Feature 014** owns the shared event card/list/pagination unit (epic decision #7) and the platform-wide return-to-origin mechanism (014 EARS-6, LD-6). 013 consumes both.
+- **Epic decision #7 (Academy public surface brief):** one reusable event card + list unit serves every listing surface, built by 014 because 014 starts first.
+- **Interim stub (#1311/#1312):** the shipped stub established the owner-approved role list, the policy link, the combined «Email или Telegram» control with its exact placeholder, and the accessible error-summary pattern. Those are carried forward (LD-5); the stub's copy and its JSON sink are not.
+
+## Lead technical decisions
+
+Recorded here for Mode-a review because they are mechanics the owner did not need to decide (AGENTS.md §6 decision-debt rule).
+
+- **LD-1 — the landing is a server-rendered public page, and the feed is a server read.** `/` is a Next.js server component that fetches the latest events server-side and renders 014's fetch-free list unit with the result. Rationale: the page is a public marketing document that must be fast and indexable, 014's unit is deliberately controlled and issues no fetches (014 LD-7), and a client fetch would make the first screen depend on JavaScript for content that has no session dimension.
+- **LD-2 — the feed reads feature 004's existing public listing contract, not a new home endpoint.** The feed asks for the first page of the same public event listing `/webinars` uses, ordered by the listing's own rule, and takes the first three. No `/v1/public/home` aggregate, no home-only projection and no second ordering rule is introduced; the эфиры feed is a view of the listing, so the landing can never disagree with `/webinars`.
+- **LD-3 — the lead endpoint lives in the API, not in a portal Server Action.** `POST /v1/public/leads` (`access: public`) owns validation, persistence, consent evidence and the Mattermost notification. Rationale: the Mattermost webhook is an API-only secret (it must not become a portal runtime secret), the record is a Postgres row governed by ADR-0003, and the contract is a generated-SDK type the portal consumes — the interim stub's portal-local JSON sink was a stub affordance, not the architecture. The portal form posts through the generated client from its server side.
+- **LD-4 — every rendered figure is either real or absent.** The hero's stat strip and the ecosystem tile counters render only from a real platform count available at read time; where no real count exists, the element is **omitted**, not filled with the canvas placeholder and not replaced by a rounded guess. The canvas numbers are placeholder data, and shipping them would publish false claims on a medical platform.
+- **LD-5 — the shipped, owner-approved form contract is extended, not re-invented.** The role enum and its exact order (`Эксперт`, `Партнёр`, `Участник подкаста`, `Соавтор направления`, `Компания`), the policy destination `https://doctor.school/index/privacy-pay`, the combined «Email или Telegram» control with its exact placeholder `name@company.ru или @username` and its two accepted syntaxes (a valid email, or `^@[A-Za-z0-9_]{5,32}$`), and the accessible inline-error + error-summary pattern all come from the shipped stub's owner-approved contract (#1307 / #1312, stub EARS-5) and its `apps/portal/lib/academy-partnership-schema.ts`. The canvas's own five-option select (`Фармкомпания / Медицинская компания / Клиника / Врач-эксперт / Другое`) is an earlier draft of the same control: the owner's approved list wins, and it is the list whose semantics the canvas's own «Форматы участия» screen already mirrors. The validation schema is **promoted** from the portal to `packages/schemas` as the request SSOT (ADR-0002) rather than duplicated, so the browser and the API validate the same object; everything else about the form — where it posts, what it writes to, what it notifies — is new.
+- **LD-6 — exactly one lead path exists after this feature ships.** The full form replaces the stub's Server Action rather than running beside it: on ship, `/` has one submit path, `POST /v1/public/leads`. Two live sinks for the same product action would split the record of truth. Retiring the stub route and deciding what happens to its existing private JSON submissions belongs to #1323, which is why this spec's Out-of-scope names it explicitly instead of leaving it implied.
+- **LD-7 — consent evidence is a value object on the lead row, not a `consent_records` row.** The lead stores the consent purpose (`academy_partnership_contact`), its version tag (`academy-partnership-v1`), the exact accepted Russian text, its SHA-256 digest, the acceptance instant and the policy URL — the shape the stub's store already produces, now a column group of the `leads` row in `packages/db/src/schema/leads.ts`. It is deliberately **not** written into the shipped `consent_records` table (`packages/db/src/schema/consent-records.ts`), whose `user_id` is `NOT NULL` with `onDelete: cascade`: a partner lead has no account, so there is no `user_id` to supply, and a cascading row contradicts the retained-row lifecycle a lead must have. The ADR-0009 §2.1 semantics that do apply — immutable, versioned, evidence of the exact accepted text — are satisfied in place, and the digest is what makes a later copy edit to the consent sentence unable to silently re-label old evidence. **Tracked reconciliation:** ADR-0009 §2.1 centralises text and digest in `consent_versions(version_tag, body_markdown, sha256)` with subject-scoped `consent_acceptances`, so when that subsystem lands the lead's inline evidence group becomes a second consent-evidence model. This spec does not decide which survives; the obligation to decide — migrate the lead evidence into the ADR-0009 tables (with a subject-less acceptance shape) or accept it as a recorded duplication — is a tracked item of that subsystem's delivery, not something to rediscover at audit time.
+- **LD-8 — the notification is a best-effort side effect with an observable failure, and it is this platform's first runtime Mattermost integration.** No `apps/api` Mattermost client exists today: the only `MATTERMOST_WEBHOOK_URL` in the repository belongs to the deploy/CI tooling (`tools/deploy/release-notes.mjs`, `tools/ci/post-product-note.mjs`) and is a GitHub-Actions secret, not a runtime one. This feature therefore builds a small runtime notifier bound to `ACADEMY_LEADS_MATTERMOST_WEBHOOK_URL` and to no other variable — runtime code never reads the tooling variable, and there is no fallback (#1307). The endpoint commits the lead, returns success, and dispatches the post outside the visitor's critical path; a dispatch failure — including an unset webhook — raises an operational error carrying the lead id and **no personal data**, so the message can be recovered from the record. Production activation of the real form is gated on that secret existing (#1307), which is a deployment-readiness item, never a reason to drop a lead at runtime.
+- **LD-9 — abuse control is a shared server-side rate limit, not a CAPTCHA and not the stub's in-process counter.** The endpoint is rate-limited per client in the API with the platform's shared mechanism and refuses over-limit requests with the standard Problem Details shape; the form preserves entered values on refusal. The stub's limiter is an in-memory `Map` inside one portal process — correct for a single-container stub, useless across instances and reset by every deploy — so it is replaced rather than moved. A third-party CAPTCHA stays rejected: it is an external dependency and a personal-data egress question (ADR-0011). Repeat submissions inside the limit are accepted — de-duplication is a commercial-team concern (PRD).
+- **LD-10 — the section links to `/projects` and `/experts` are omitted until 015/016, and the omission is one tracked obligation.** The canvas draws «Все проекты →», «Все эксперты →» and the shell nav entries for both. Until those routes exist the landing renders the sections as content and omits the onward controls; the shell nav gains the two entries with 015/016, not here. This is the PRD's accepted deferral form, tracked as an Issue that restores the controls, not a code comment (AGENTS.md §6).
+- **LD-11 — the podcast/media block is curated content with an owner-supplied destination.** No feature 012–016 models a podcast episode, so the block's episode rows and its «Все выпуски» control are content of the page, held in the same content module as the copy. If the owner supplies no destination for «Все выпуски», the control is omitted rather than pointed at `#` — a dead control is a defect. This is the one open owner question the spec carries (see «Open questions»).
+- **LD-12 — the return-to-origin mechanism is consumed, not re-implemented.** Feature 014 LD-6 defines it once in the portal auth entry as a signed same-origin `returnTo`. 013 changes only the **default** the mechanism falls back to (`/` → `/webinars`) and the surfaces that seed a target. A second per-page redirect rule would be exactly the drift the platform-wide rule exists to prevent.
+- **LD-13 — the people block reads 012's base expert list, shows no event count, and introduces no curation entity.** Feature 012's public reads are deliberately aggregate-free and search-free: `GET /v1/public/experts` returns `PublicExpertSummary { id, slug, name, professionalRole, credentials, affiliation, photoUrl }` with a cursor envelope, and the enriched expert catalog read with counts belongs to feature 016 (012-design §5.2). So the home block renders the first page of that list capped at the canvas's four cards, and the expert card's «N эфиров» meta line is **omitted** here — a per-card relationship call to synthesize the count is explicitly forbidden by 012, and inventing the number is forbidden by LD-4. Which four experts appear is the list's own default order; no «featured expert» flag, table or admin control is introduced by 013 — if the owner later wants curated selection, that is a 012/016 capability, not a home-page column.
+- **LD-14 — experts come from 012, the ecosystem tiles do not, and that asymmetry is deliberate.** Feature 012 models projects with exactly the `kind` enum `school | media | program` — the same domain the ecosystem screen narrates («Школы», «Программы», «Дискуссии и подкасты») — so the natural question is why the people screen reads 012 while the ecosystem screen renders curated content. The reason is what each screen actually asserts. The people screen names **specific real individuals** with credentials and affiliations: publishing a hand-written expert on a medical platform would be an unverified claim about a real person, so it must come from the published record. The ecosystem screen makes a **categorical statement about the academy's own offering** — what kinds of things exist here — which is editorial positioning, not per-record data; with LD-4 removing the tile counters, it needs no 012 read at all, and reading 012 to render five fixed category tiles would invent a curation contract (which projects represent a category) that no feature owns. The asymmetry ends when feature 015 ships the real catalog: at that point the tiles' onward control returns (LD-10) and any move from curated tiles to project-record rendering is a 015-time decision, recorded there rather than drifting.
 
 ## Event Model
 
 ### Commands
 
-- `SubmitAcademyPartnershipApplication`: name, optional companyOrClinic, contact,
-  role, consent, and idempotency key.
+- `SubmitPartnerLead(name, companyOrClinic?, contact, role, consent, idempotencyKey)` — validate, persist one retained `leads` row with its consent evidence, then dispatch the notification. Rejections are validation failures or the rate limit; nothing partial is written.
 
-### Events and read models
+### Events
 
-None. This slice has no event, read model, public query, or listing.
+| Event                     | Meaning                                                                                                             |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `PartnerLeadSubmitted`    | One retained lead exists with committed consent evidence. This is the point at which the visitor may be told «yes». |
+| `PartnerLeadNotified`     | The «DS Лиды» channel received the lead. Independent of the lead's existence.                                       |
+| `PartnerLeadNotifyFailed` | The channel did not receive it. An operational signal only — never visitor-visible, never a lost lead.              |
+
+### Read models
+
+- `AcademyHomeFeed { data: PublicEventSummary[3] }` — the first three items of feature 004's public event listing, in the listing's own order.
+- `AcademyHomeExperts { data: PublicExpertSummary[] }` — feature 012's published non-retired experts for the people block; absent when the wave has not landed or no expert is published.
+- `HomeContent` — the page's copy and curated content (screens, cards, podcast rows, consent sentence) as one structured content module, no read model of the API.
+- `LeadRecord` — the retained lead with contact fields and consent evidence. **No public or admin read surface exists in this feature** (Out of scope); it is the persisted truth only.
 
 ### Policies
 
-Records are visitor-write-only. Raw values never enter application logs or egress.
-The linked privacy policy §6.4 already sets an unlimited processing period until
-withdrawal by email to `info@doctor.school`; live JSON and same-zone backup copies
-follow that published rule. The immutable JSON embeds the consent purpose,
-version tag, exact accepted text and its SHA-256 digest, acceptance time, and
-policy URL, preserving ADR-0009 §2.1 evidence semantics without introducing its
-forbidden Postgres topology.
-
-## Field validation and mask contract
-
-| Field             | Shared client/server rule                                                                                         | Input mask                                           |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| Name              | Trim; 1–120 Unicode characters.                                                                                   | None: human names must not be shape-restricted.      |
-| Company or clinic | Trim; empty becomes absent; otherwise at most 160 Unicode characters.                                             | None: organisation names have no stable shape.       |
-| Email or Telegram | Trim; either a Zod-valid email of at most 254 characters, or `^@[A-Za-z0-9_]{5,32}$`. Preserve accepted spelling. | None: one control accepts two incompatible syntaxes. |
-| Role              | Exact enum in the Product Lead-approved order.                                                                    | NativeSelect, so free text is impossible.            |
-| Consent           | Literal `true`; unchecked is invalid.                                                                             | Checkbox, so text masking is not applicable.         |
+- The landing and the lead endpoint are `access: public`; no clause on this page consults a session.
+- A lead is accepted only when every required field passes the shared schema **and** consent is literally `true`.
+- Success is reported only after the lead row is committed; notification outcome never changes the response.
+- Public reads of experts include only published, non-retired 012 records.
+- Personal data is written to the lead row and the one declared notification, and nowhere else.
 
 ## EARS requirements
 
-- **EARS-1** _(realizes: US-1, US-5)_ — When a visitor requests public /, the
-  portal shall render the static Academy home in the exact section order, copy,
-  assets, and responsive composition pinned by the PRD, without redirecting the
-  visitor and without reading a CMS or API.
-- **EARS-2** _(realizes: US-2, US-3, US-5)_ — The page shall render exactly six
-  supplied portraits, the same two approved rows in both Project and Events, the
-  exact B2B Rutube destination, the exact privacy-policy destination, and no
-  invented project metrics.
-- **EARS-3** _(realizes: US-4)_ — While the form follow-up is not delivered, the
-  partnership preview shall keep its fieldset and submit button disabled, show
-  `Демо: данные не отправляются`, send no network request, and persist no values.
-- **EARS-4** _(realizes: US-1, US-3, US-5)_ — The static page shall preserve the
-  approved demo behavior at desktop and mobile breakpoints in light and dark
-  themes, remain keyboard-readable, and pass the Academy Playwright and axe checks.
-- **EARS-5** _(realizes: US-6)_ — When a visitor submits the enabled partnership
-  form, the portal shall render required name, optional company or clinic, one
-  required combined `Email или Telegram` field with exact placeholder
-  `name@company.ru или @username`, accepting a trimmed valid email or a trimmed
-  Telegram handle matching `^@[A-Za-z0-9_]{5,32}$`, required roles in this exact
-  order — `Эксперт`, `Партнёр`, `Участник
-подкаста`, `Соавтор направления`, `Компания` — and required consent linked
-  exactly to `https://doctor.school/index/privacy-pay`; it shall validate the same
-  shared Zod schema in client and Server Action, show accessible inline field
-  errors plus the owner-approved `FormErrorSummary` below submit and focus it for
-  this over-three-field form, and reject invalid input without JSON.
-- **EARS-6** _(realizes: US-6)_ — When the shared schema accepts a submission, the
-  Server Action shall atomically and idempotently create exactly one private JSON
-  file and then replace the form with `Спасибо! Заявка сохранена.`; its immutable
-  record shall include UUID id, accepted time, form fields, and consent purpose,
-  version tag, exact text, text SHA-256, accepted state/time, and policy URL,
-  while exposing no raw logs, read/list, or egress.
-- **EARS-7** _(realizes: US-6)_ — If transport or the private write fails, the
-  portal shall preserve entered values, create no partial record, show no false
-  success, and show `Не удалось сохранить заявку. Попробуйте ещё раз.` above submit.
-- **EARS-8** _(realizes: US-6)_ — While the form is pending, it shall prevent double
-  submission, remain keyboard-operable with visible focus, preserve the approved
-  mobile and light/dark presentation, and pass axe with no serious or critical violations.
+> Flat numbering per ADR-0006 §4. Every clause realizes one or more PRD stories, carries its delivery wave, and is covered by `013-scenarios.feature`.
+
+- **EARS-1** _(realizes: US-1, US-3 · wave: independent)_ — When any visitor requests `/`, the portal shall serve the Academy landing page with no authentication, no redirect and no session dependency, rendering the approved canvas `design-source/home.dc.html` in variant «в» (split hero) inside the feature-008 app shell, with the sections in the canvas order for that variant — эфиры feed, «Что такое Doctor.School», «Зачем», ecosystem (`#projects`), people and podcast (`#people`), partner value band (`#partners`), participation formats, closing CTA with the lead form (`#partner-form`) — and shall serve the same page to an authenticated visitor without intercepting, redirecting or gating them.
+- **EARS-2** _(realizes: US-1, US-5, US-6 · wave: independent)_ — The split hero shall address both audiences in the first screen with the doctor column and the partner column of the canvas, its doctor action resolving to `/webinars` and its partner action moving the visitor to the lead form at `#partner-form` on the same page; both actions shall be real labelled links, keyboard-reachable, with the canvas hover, active and focus states, and neither audience's column shall be collapsed, tabbed away or deferred below the fold at any supported breakpoint.
+- **EARS-3** _(realizes: US-2, US-3 · wave: independent · consumes the feature-014 list unit, [#1346](https://github.com/doctor-school/ds-platform/issues/1346))_ — When the landing renders, the эфиры feed shall appear as the first section under the hero and list the latest three publishable events read server-side from feature 004's existing public event listing contract, rendered by feature 014's shared event card/list unit with no facets and no pager, each entry resolving to `/webinars/[slug]` and the section carrying «Все эфиры →» to `/webinars`; a home-page-local card, list or pager implementation, a home-only listing endpoint, a second ordering rule, or a seeded or fake card shall each be a defect.
+- **EARS-4** _(realizes: US-2 · wave: independent)_ — When no publishable event exists for the feed, the section shall render its explicit empty state in Russian with the «Все эфиры →» route still present and shall never render an empty labelled shell, a persistent skeleton, a fabricated card or a hidden section; when the listing read fails, the section shall render the same honest state rather than failing the page, and the rest of the landing shall render unaffected.
+- **EARS-5** _(realizes: US-1, US-4 · wave: independent)_ — The «Что такое Doctor.School» screen shall render the canvas's four pillar cards — эксперты, образование, индустрия, партнёры — with their numbering, geometry and interaction states from `@ds/design-system` primitives and tokens-only styling, their text supplied by the page content module (EARS-20), and shall render no card whose text is absent rather than an empty card.
+- **EARS-6** _(realizes: US-1, US-5 · wave: independent)_ — The «Зачем» screen shall render the canvas's two-column comparison — the dashed «Сейчас» column and the bordered, shadowed «Мы создаём» column with their per-row markers — as one readable pair at desktop and as a stacked pair below the mobile breakpoint, with the row texts supplied by the content module and no row rendered empty.
+- **EARS-7** _(realizes: US-3, US-5 · wave: independent)_ — The ecosystem screen (`#projects`) shall render the canvas's curated tiles describing what the academy builds, shall render a tile's counter only when it is a real platform count and omit the counter otherwise per LD-4, and shall omit the «Все проекты →» control entirely until feature 015 ships the `/projects` route — never rendering it disabled, pointed at `#`, or pointed at a placeholder page.
+- **EARS-8** _(realizes: US-4 · wave: 012-dependent)_ — When feature 012's public expert read is available, the people screen (`#people`) shall render the first page of published non-retired experts, capped at the canvas's four cards, through the `ЭкспертКарточка` unit with each expert's name, professional role, credentials and affiliation as the canvas draws them and with the card's event-count meta line omitted per LD-13 — issuing one bounded list read and no per-card relationship call — and shall omit the «Все эксперты →» control until feature 016 ships the `/experts` route; while that wave has not landed, or when no expert is published, the experts grid shall be absent rather than stubbed, seeded or filled with the canvas's example people, and the rest of the screen shall render unaffected.
+- **EARS-9** _(realizes: US-4 · wave: independent)_ — The podcast block of the people screen shall render the academy's own media rows as curated content from the page content module, with its «Все выпуски» control rendered only when the owner has supplied a real destination and omitted otherwise; no podcast entity, table or admin surface shall be introduced by this feature, and no row shall link to `#` or to a placeholder.
+- **EARS-10** _(realizes: US-5 · wave: independent)_ — The partner value band (`#partners`) and the participation-formats screen shall render the canvas's partner-benefit cards and participation-format cards with their canvas geometry and states, every format card and the band's own action resolving to the single lead form at `#partner-form`, so that a partner reaches the form from any point of the argument without a second form, a second route or a mailto fallback replacing it.
+- **EARS-11** _(realizes: US-6 · wave: independent)_ — The closing screen (`#partner-form`) shall render exactly one lead form with the approved field set — required name; optional company or clinic; one required combined «Email или Telegram» control with the approved placeholder `name@company.ru или @username`, accepting either a trimmed valid email or a trimmed Telegram handle matching `^@[A-Za-z0-9_]{5,32}$` and preserving the accepted spelling; a role select carrying the owner-approved options in this exact order — `Эксперт`, `Партнёр`, `Участник подкаста`, `Соавтор направления`, `Компания` — and a required consent checkbox whose label names 152-ФЗ and links `https://doctor.school/index/privacy-pay` — built from `@ds/design-system` primitives with the canvas states, and shall carry the canvas's direct-contact alternative beside the form.
+- **EARS-12** _(realizes: US-6, US-7 · wave: independent)_ — When a visitor submits the form, one shared Zod schema shall validate the input in the browser and on the server; while any required field is invalid or consent is unchecked, the form shall mark each offending field with an actionable Russian message stating what to fix, render the accessible error summary and move focus to it, preserve every other entered value, and send or persist nothing; a submission that bypasses the browser shall be rejected by the server with the identical rules and an RFC 7807 Problem Details document.
+- **EARS-13** _(realizes: US-9 · wave: independent)_ — When the shared schema accepts a submission, `POST /v1/public/leads` shall persist exactly one retained `leads` row in `packages/db/src/schema/leads.ts` — stable id, submitted fields, and immutable consent evidence carrying purpose `academy_partnership_contact`, its version tag, the exact accepted text, its SHA-256 digest, the acceptance instant and the policy URL — idempotently under a canonical UUID `Idempotency-Key`, with no physical delete path, no cascade and no id reuse, and shall write no submitted personal value into application logs, error payloads or traces.
+- **EARS-14** _(realizes: US-7, US-8 · wave: independent)_ — After the lead row is committed, the system shall post the lead to the Mattermost channel «DS Лиды» through the dedicated `ACADEMY_LEADS_MATTERMOST_WEBHOOK_URL` webhook resolved from deployment configuration — never the release-digest webhook and never a repository literal — outside the visitor's critical path, and shall replace the form with the canvas confirmation state stating that the request was received and that the team will respond, offering the canvas's «отправить ещё одну заявку» affordance; a notification failure shall leave the lead persisted, the confirmation shown and an operational error raised carrying the lead id and no personal data, and a repeat submission within the rate limit shall be accepted as a new lead.
+- **EARS-15** _(realizes: US-10 · wave: independent)_ — When a visitor completes login, registration or verification, the portal shall land them on the page they were consuming through the platform-wide same-origin return-to-origin mechanism, and shall land them on `/webinars` whenever no valid return target exists; the portal's landing default shall be re-pointed from `/` to `/webinars` in `apps/portal/lib/registration-resume.ts` together with every shipped assertion that pins the old target — `apps/portal/lib/registration-resume.test.ts`, `apps/portal/app/login/page.test.tsx`, `apps/portal/app/verify/page.test.tsx`, the feature-008-owned browser journey `apps/portal/e2e/shell/post-login-landing.spec.ts` with its step definitions in `apps/portal/e2e/steps/shell.steps.ts`, and verification row 7 of `008-requirements-en.md` / `-ru.md` whose target is that spec — and feature 008's EARS-7 landing target shall be amended in the 008 triplet by this clause and by no other; every file named here is a deliverable of this clause's Issue, and an edit of that clause, of those assertions or of the `008-scenarios.feature` example outside this Issue shall be a defect. No post-login flow shall land a doctor on the marketing landing.
+- **EARS-16** _(realizes: US-1, US-3 · wave: independent)_ — The landing shall render inside feature 008's app shell — its header with the эфиры entry, its theme control and its authentication affordance, its mobile menu, and its footer navigation — adding the landing's own footer partnership anchor and the canvas watermark, and shall add no navigation entry for a route that does not yet exist; the shell's own behaviour, geometry and states shall not be forked or re-implemented by this page.
+- **EARS-17** _(realizes: US-11 · wave: independent)_ — When the landing is rendered below the mobile breakpoint, every screen, the эфиры feed, the expert grid and the lead form shall render in the canvas mobile composition and remain fully operable — including the shell's mobile menu, the full-bleed feed list and the stacked comparison and form controls — and the page shall pass the `playwright-axe` gate in both themes at both breakpoints with every action a real labelled interactive element, every field labelled and associated with its error, and honest contrast.
+- **EARS-18** _(realizes: US-6, US-9 · wave: independent)_ — The public lead endpoint shall be rate-limited per client with the platform's existing mechanism and shall refuse an over-limit request with an RFC 7807 Problem Details document and an exact `errorCode`, upon which the form shall preserve every entered value, state the refusal in plain Russian and offer a retry; the endpoint shall require no session, expose no read or list route, and remain the only write path of the page after this feature ships.
+- **EARS-19** _(realizes: US-1, US-11 · wave: independent · process gate — not a code Issue)_ — Before implementation of the landing begins, the team shall run the `build-ui-from-design-system` gate against the vendored canvases as the composition source of truth — `home.dc.html` plus the units it imports, `webinar-card.dc.html` and `expert-card.dc.html` — build from `@ds/design-system` primitives with full interaction states and tokens-only styling, and re-confirm the rendered page with the product owner on the live stand before merge; the recorded canvas defaults (variant «в», feed first at three cards, the form's states) shall be treated as decisions rather than re-opened questions.
+- **EARS-20** _(realizes: US-12 · wave: independent · process gate — not a code Issue)_ — Every string of the page shall live in one content module, so that replacing the copy requires no change to a component, a layout or a test selector; the shipped copy shall be reworked from the canvas draft in the approved tone and shall import no string from the interim stub, and the product owner's editorial pass shall be recorded before the Stage-B GO. A hard-coded string inside a component, a copy change that forces a structural edit, or a rendered figure that is not a real platform count shall each be a defect.
 
 ## Invariants
 
-The portal uses no DB, CMS, Mattermost, queue, worker, CRM, notification, admin,
-CAPTCHA, automated deletion, contact SLA, or retention rule beyond the linked
-policy §6.4 for this flow.
+- `/` is reachable with no session, never redirects, and renders the same document for a guest and an authenticated visitor.
+- Exactly one lead form and exactly one lead write path exist on the page.
+- No `leads` row is physically deleted or cascade-deleted and no lead id is reused; erasure clears values in place.
+- A committed lead always carries consent evidence whose recorded text matches the digest stored beside it.
+- No lead is reported as accepted before its row is committed, and no notification outcome changes what the visitor sees.
+- The Mattermost credential used by this feature is `ACADEMY_LEADS_MATTERMOST_WEBHOOK_URL` and no other; it exists only as deployment configuration.
+- No submitted personal value appears in a log line, an error payload, a trace or any egress path other than the declared notification.
+- The event card, list and pager on this page are feature 014's shared unit; no forked or home-local copy exists.
+- No control on the page resolves to a non-existent route, `#`, or a placeholder page.
+- Every figure rendered on the page is a real platform count or is absent.
+- No post-login flow lands a doctor on `/`.
+- Every string of the page is replaceable without a structural change.
 
 ## Verification
 
-| Requirement | Evidence                                                                                     |
-| ----------- | -------------------------------------------------------------------------------------------- |
-| EARS-1–4    | Existing Academy Playwright coverage preserves the shipped page.                             |
-| EARS-5      | Browser test covers exact controls, client/server reject, inline errors and summary focus.   |
-| EARS-6      | Browser and integration tests cover one idempotent accepted private write and record shape.  |
-| EARS-7      | Browser test simulates transport/write failure and asserts preserved values and exact error. |
-| EARS-8      | Playwright covers pending/double submit, keyboard, mobile, both themes, and axe.             |
+| EARS    | Test type                               | Indicative target                                                                                                        | Required proof                                                                                                                                                                                                                                  |
+| ------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1–2     | Playwright + Vitest                     | `apps/portal/e2e/academy-home.spec.ts`                                                                                   | Anonymous `/` returns the landing with no redirect; authenticated `/` returns the same page; canvas section order asserted; both hero columns present at both breakpoints; hero actions resolve.                                                |
+| 3–4     | Vitest e2e + Playwright                 | `apps/api/test/events/public-listing.e2e-spec.ts`, `apps/portal/e2e/academy-home-feed.spec.ts`                           | Feed shows the latest three from the same public listing `/webinars` uses; cards open `/webinars/[slug]`; the rendered list is 014's unit; empty and read-failure states render honestly.                                                       |
+| 5–7, 10 | Playwright                              | `apps/portal/e2e/academy-home.spec.ts`                                                                                   | Every curated screen renders its canvas cards and states; counters absent unless real; «Все проекты →» absent pre-015; every format card and the band action reach `#partner-form`.                                                             |
+| 8       | Vitest e2e + Playwright                 | `apps/api/test/taxonomy/public-experts.e2e-spec.ts`, `apps/portal/e2e/academy-home.spec.ts`                              | Experts rendered from 012 published non-retired records through the shared expert card; draft/retired experts absent; with the wave absent the grid is absent, not stubbed; «Все эксперты →» absent.                                            |
+| 9       | Playwright                              | `apps/portal/e2e/academy-home.spec.ts`                                                                                   | Podcast rows render from content; «Все выпуски» present only with a real destination and absent otherwise; no `#` link anywhere in the block.                                                                                                   |
+| 11–12   | Vitest unit + e2e + Playwright          | `packages/schemas` unit tests, `apps/api/test/leads/validation.e2e-spec.ts`, `apps/portal/e2e/academy-home-form.spec.ts` | Every field kind rejected and accepted; unchecked consent blocks submission; error summary rendered and focused; other values preserved; browser-bypassing request rejected identically with Problem Details.                                   |
+| 13      | Vitest e2e + DB constraints + migration | `apps/api/test/leads/persist.e2e-spec.ts`                                                                                | One retained row per accepted submission; idempotent replay; consent evidence fields and digest match the accepted text; absence of any DELETE path; log capture free of submitted values.                                                      |
+| 14      | Vitest e2e + Playwright                 | `apps/api/test/leads/notify.e2e-spec.ts`, `apps/portal/e2e/academy-home-form.spec.ts`                                    | Post goes to the dedicated webhook and to no other configured webhook; a failing webhook leaves the lead persisted, the confirmation shown and an operational error raised without personal data; confirmation and re-submit affordance render. |
+| 15      | Vitest + Playwright                     | `apps/portal/app/login/page.test.tsx` (re-pointed), `apps/portal/e2e/post-login-landing.spec.ts`                         | Login with a return target lands back on the origin page; login with none lands on `/webinars`; no flow lands on `/`; the two re-pointed tests assert `/webinars`; the 008 amendment is present in the 008 triplet.                             |
+| 16      | Playwright                              | `apps/portal/e2e/academy-home.spec.ts`                                                                                   | Landing renders inside the 008 shell; no nav entry for `/projects` or `/experts`; shell behaviour unchanged versus another shell surface.                                                                                                       |
+| 17      | Playwright + axe + UI lint              | `apps/portal/e2e/academy-home.spec.ts`, `apps/portal/e2e/academy-home-form.spec.ts`                                      | Both breakpoints × both themes; axe clean with no serious or critical violations; keyboard reach on every action and field; token-only styling.                                                                                                 |
+| 18      | Vitest e2e + Playwright                 | `apps/api/test/leads/rate-limit.e2e-spec.ts`, `apps/portal/e2e/academy-home-form.spec.ts`                                | Over-limit request refused with the exact `errorCode`; the form preserves values and states the refusal; no read or list route exists on the resource.                                                                                          |
+| 19      | Owner record + Playwright               | Stage-A record in `013-product.md`; Stage-B verdict on the Issue                                                         | Composition verified against the vendored canvases; owner live-stand confirmation before merge. Process gate — verified by recorded artifacts, never opened as a code Issue.                                                                    |
+| 20      | Vitest + review                         | Content-module unit test; PR review                                                                                      | Every rendered string resolves from the content module; a copy swap changes no component; no string matches the interim stub's copy; owner editorial pass recorded before Stage-B GO.                                                           |
+| all     | Playwright BDD                          | `013-scenarios.feature`                                                                                                  | Every EARS tag executes against the real portal → NestJS → Postgres stack; no stub, seed-only or fake-sink acceptance.                                                                                                                          |
+
+## Dependencies and sequencing
+
+- **`independent` needs no feature 012.** It builds on feature 004 (the public event listing contract), feature 008 (the app shell and today's post-login landing), feature 014 (the shared list unit and the return-to-origin mechanism) and the platform's existing rate-limiting and error-reporting mechanisms.
+- **`012-dependent` is exactly EARS-8.** Its child Issue carries `blocked_by` edges to the 012 Issues that deliver the standalone expert record ([#1284](https://github.com/doctor-school/ds-platform/issues/1284)) and the publish-safe public cursor reads ([#1294](https://github.com/doctor-school/ds-platform/issues/1294)), with the rationale recorded on each edge; nothing else on the landing waits on 012.
+- **EARS-3 is `blocked_by` the feature-014 list-unit Issue** ([#1346](https://github.com/doctor-school/ds-platform/issues/1346), which delivers 014 EARS-10's `EventList` / `EventFilters` alongside the `/webinars` tabs). 014 owns and builds the unit (epic decision #7); 013 cannot ship a feed without it, and must not ship a home-local copy while waiting.
+- **EARS-15 is not `blocked_by` the return-to-origin mechanism Issue** ([#1342](https://github.com/doctor-school/ds-platform/issues/1342), 014 EARS-6): it ships on its own as the default-landing fix; when #1342 lands, that mechanism seeds targets from 013 surfaces and 013 builds no second redirect rule.
+- **EARS-15 touches feature 008, which is live in production.** The landing-target change is therefore recorded in the 008 triplet as an **amendment block** naming 013 as its source (AGENTS.md §6 amendment rule), not as an inline rewrite, and it lands in the same PR as this triplet. The runtime re-point of `DEFAULT_LANDING` and of every assertion enumerated in EARS-15 is the delivery-time work of EARS-15's Issue.
+- **EARS-15 repairs a regression that is already live, and it ships on its own.** The `/` → `/webinars` redirect no longer exists on `main` (`apps/portal/app/page.tsx` serves the interim stub) while `DEFAULT_LANDING` is still `/`, so a doctor completing login today already lands on the marketing stub. EARS-15 is therefore its own `wave: independent` child Issue with **no co-ship constraint** — it waits neither on the landing build, nor on the 012 waves, nor on the 014 list unit, and shipping it first strictly improves production. By the time the landing ships, its landing-target work is already done.
+- **Tracked deferrals.** (1) The «Все проекты →» control and the shell's `/projects` entry are restored when feature 015 ships; (2) the «Все эксперты →» control and the shell's `/experts` entry are restored when feature 016 ships. Each is an Issue with a real-dependency done criterion, not a code comment — the sections themselves ship as content in the meantime, and a placeholder page is banned.
+- **The interim stub is dismantled by [#1323](https://github.com/doctor-school/ds-platform/issues/1323)**, which also decides the fate of the stub's existing private JSON submissions. This spec ships the replacement; it does not delete the predecessor.
+
+## Open questions
+
+- **«Все выпуски» destination for the podcast block** (LD-11) — the block's episode rows are content, but the control needs a real destination. Until the owner supplies one, the control is omitted; this changes copy and one link, never structure.
+- **Mattermost channel provisioning** — «DS Лиды» and its incoming-webhook credential are an owner/operations action. The spec fixes the variable name and the isolation rule; the value is deployment configuration.

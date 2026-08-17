@@ -1,5 +1,15 @@
 <!-- Auto-loaded reference (no `paths:` frontmatter ⇒ always-on). Detail behind AGENTS.md §9. -->
 
+---
+
+paths:
+
+- "infra/dev-stand/**"
+- "tools/dev/**"
+- "packages/db/**"
+
+---
+
 # Local Dev Stand (reference)
 
 Canon: AGENTS.md §9 one-liner. Applies to any dev-stand operation, migration, or live UI verification.

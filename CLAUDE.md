@@ -2,7 +2,7 @@
 
 # CLAUDE.md — Claude Code overlay for DS Platform
 
-All conventions in [`AGENTS.md`](./AGENTS.md) apply (imported above); this file adds only Claude-Code-specific tooling. Detail lives in `.claude/rules/*.md` (auto-loaded) and the skill catalog (on demand). Anti-bloat budget: ≤200 lines / ≤25 KB per always-on file (`pnpm lint:instruction-budget`), and net-negative: new always-on rule text is offset by removing at least as many bytes.
+All conventions in [`AGENTS.md`](./AGENTS.md) apply (imported above); this file adds only Claude-Code-specific tooling. Detail lives in `.claude/rules/*.md` (`paths:`-scoped — read on demand per the AGENTS.md §0 index) and the skill catalog (on demand). Anti-bloat budget: ≤200 lines / ≤25 KB per always-on file (`pnpm lint:instruction-budget`), and net-negative: new always-on rule text is offset by removing at least as many bytes.
 
 ---
 
@@ -68,4 +68,4 @@ PowerShell here-strings (`@'…'@`) corrupt commit subjects in the Bash tool (�
 
 ## On-demand pointers
 
-`.claude/rules/*.md` auto-load at session start — already in context, no re-read. Pull on demand: UI construction — AGENTS.md §6 + skill `build-ui-from-design-system` + ADR-0013; engineering-readiness defaults (Coolify, Caddy, GlitchTip, Loki/Prometheus/Tempo, Vault, Unleash, Beget DNS) — [engineering-readiness spec](./apps/docs/content/specs/tech/2026-05-12-engineering-readiness-design-en.md).
+`.claude/rules/*.md` do NOT auto-load at session start (`paths:`-scoped, and not re-injected after `/compact`) — `Read` the file the AGENTS.md §0 index names before the gated action. Pull on demand: UI construction — AGENTS.md §6 + skill `build-ui-from-design-system` + ADR-0013; engineering-readiness defaults (Coolify, Caddy, GlitchTip, Loki/Prometheus/Tempo, Vault, Unleash, Beget DNS) — [engineering-readiness spec](./apps/docs/content/specs/tech/2026-05-12-engineering-readiness-design-en.md).

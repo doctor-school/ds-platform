@@ -1,5 +1,19 @@
 <!-- Auto-loaded reference (no `paths:` frontmatter ⇒ always-on). Detail behind AGENTS.md §2. -->
 
+---
+
+paths:
+
+- ".github/**"
+- ".changeset/**"
+- "tools/gh/**"
+- "tools/lint/**"
+- "tools/deploy/**"
+- "apps/docs/content/adr/**"
+- "apps/docs/content/specs/**"
+
+---
+
 # Repository conventions (reference)
 
 Canon: AGENTS.md §2. Consult when opening a branch/PR, cutting a changeset, bumping a dependency, or opening Issues from a spec.

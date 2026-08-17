@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -24,12 +24,21 @@ import { caseDir, runGuard } from "./run-guard";
  * headroom stays silent; over-budget still fails. The headroom fixtures need
  * byte-exact sizes, so they are generated at run time under a temp fixture root
  * (platform-agnostic — no committed near-ceiling blobs).
+ *
+ * The last group covers the `paths:` frontmatter classifier (#1370), which
+ * decides whether a `.claude/rules/*.md` file counts toward the always-on total
+ * at all — ~21 KB of session window rests on it, so every shape Claude Code
+ * treats as always-on must be classified always-on here. Those fixtures are also
+ * generated at run time: they are byte-shape assertions (what sits at byte 0,
+ * where the closing delimiter is), which a committed fixture's trailing-newline
+ * or BOM handling could quietly perturb.
  */
 const GUARD = "instruction-budget-lint.ts";
 const memoryFile = (name: string) =>
   resolve(caseDir("instruction-budget", name), "memory", "MEMORY.md");
 
 const MAX_BYTES = 25 * 1024; // mirrors the guard's byte ceiling
+const MAX_LINES = 200; // mirrors the guard's line ceiling
 
 /** ASCII content of exactly `totalBytes` bytes, well under the 200-line ceiling. */
 const sizedMd = (totalBytes: number): string => {
@@ -54,6 +63,39 @@ const headroomCase = (agentsBytes: number): string => {
 afterAll(() => {
   for (const root of tempRoots) rmSync(root, { recursive: true, force: true });
 });
+
+/**
+ * Temp fixture root with a small AGENTS.md + CLAUDE.md and ONE
+ * `.claude/rules/<name>` written verbatim — the seam for the `paths:`
+ * frontmatter classifier (#1370). The rules body is passed byte-exact because
+ * the whole point of the classifier is WHERE the `---` block sits.
+ */
+const rulesCase = (name: string, rulesBody: string): string => {
+  const root = mkdtempSync(join(tmpdir(), "instruction-budget-rules-"));
+  tempRoots.push(root);
+  writeFileSync(join(root, "AGENTS.md"), "# AGENTS.md fixture\n");
+  writeFileSync(join(root, "CLAUDE.md"), "# CLAUDE.md fixture\n");
+  mkdirSync(join(root, ".claude", "rules"), { recursive: true });
+  writeFileSync(join(root, ".claude", "rules", name), rulesBody);
+  return root;
+};
+
+/** The `lines` figure from the guard's `always-on total:` summary line. */
+const totalLines = (stdout: string): number => {
+  const m = /always-on total: (\d+) lines/.exec(stdout);
+  if (!m) throw new Error(`no always-on total line in guard output:\n${stdout}`);
+  return Number(m[1]);
+};
+
+/** Line count exactly as the guard computes it (split on \r?\n). */
+const countLines = (s: string): number => s.split(/\r?\n/).length;
+
+const AGENTS_FIXTURE_LINES = countLines("# AGENTS.md fixture\n");
+const CLAUDE_FIXTURE_LINES = countLines("# CLAUDE.md fixture\n");
+/** Always-on total when the rules file is OFF the total (lazy). */
+const BASE_LINES = AGENTS_FIXTURE_LINES + CLAUDE_FIXTURE_LINES;
+
+const PATHS_FRONTMATTER = '---\npaths:\n  - "infra/**"\n---\n\n';
 
 describe("instruction-budget-lint", () => {
   it("green: all always-on files + memory within budget → exit 0", () => {
@@ -125,5 +167,83 @@ describe("instruction-budget-lint", () => {
     expect(code).toBe(1);
     expect(stderr).toContain("AGENTS.md");
     expect(stderr).toContain("KB >");
+  });
+
+  // ── `paths:` frontmatter classification (#1370) ────────────────────────────
+  // Claude Code loads a .claude/rules/*.md file at session start UNLESS it opens
+  // with real YAML frontmatter (first bytes of the file) declaring a top-level
+  // `paths` key. That file is then glob-triggered — off the always-on TOTAL, but
+  // still budget-checked as an on-demand file. Everything else is always-on. The
+  // guard is the only mechanism accounting for ~21 KB of window, so each shape
+  // that Claude Code treats as always-on must be classified always-on here too.
+
+  it("#1370 (a): a path-less rules file is always-on and counts toward the total", () => {
+    const body = "# Plain rules\n\nNo frontmatter at all.\n";
+    const { code, stdout } = runGuard(GUARD, rulesCase("plain.md", body));
+    expect(code).toBe(0);
+    expect(stdout).toContain(".claude/rules/plain.md (always-on)");
+    expect(totalLines(stdout)).toBe(BASE_LINES + countLines(body));
+  });
+
+  it("#1370 (b): byte-0 `paths:` frontmatter → OFF the total but still budget-checked", () => {
+    const lazy = `${PATHS_FRONTMATTER}# Lazy rules\n\nGlob-triggered.\n`;
+    const { code, stdout } = runGuard(GUARD, rulesCase("lazy.md", lazy));
+    expect(code).toBe(0);
+    expect(stdout).toContain(".claude/rules/lazy.md (lazy)");
+    // Off the always-on total: the total is AGENTS.md + CLAUDE.md only.
+    expect(totalLines(stdout)).toBe(BASE_LINES);
+
+    // …but NOT dropped from checking: the same file past the 200-line ceiling
+    // still hard-FAILs. Off-total is not off-budget.
+    const bloated = `${PATHS_FRONTMATTER}${"filler\n".repeat(MAX_LINES + 10)}`;
+    const over = runGuard(GUARD, rulesCase("lazy.md", bloated));
+    expect(over.code).toBe(1);
+    expect(over.stderr).toContain("lazy.md");
+    expect(over.stderr).toContain("> 200");
+  });
+
+  it("#1370 (c): an HTML comment ABOVE the `---` block is NOT frontmatter → always-on", () => {
+    // Regression for the detector bug: a multiline-anchored /^---[\s\S]*?paths:/
+    // matches this shape, so the file was dropped from the always-on total while
+    // Claude Code still loaded it every session. Frontmatter must start at byte 0.
+    const body = `<!-- Auto-loaded reference. -->\n\n${PATHS_FRONTMATTER}# Rules\n\nBody.\n`;
+    const { code, stdout } = runGuard(GUARD, rulesCase("commented.md", body));
+    expect(code).toBe(0);
+    expect(stdout).toContain(".claude/rules/commented.md (always-on)");
+    expect(totalLines(stdout)).toBe(BASE_LINES + countLines(body));
+  });
+
+  it("#1370 (d): the bare word `paths:` in the body is not frontmatter → always-on", () => {
+    const body = "# Rules\n\nSee the `paths:` frontmatter docs.\n\n---\n\npaths: matter.\n";
+    const { code, stdout } = runGuard(GUARD, rulesCase("mentions.md", body));
+    expect(code).toBe(0);
+    expect(stdout).toContain(".claude/rules/mentions.md (always-on)");
+    expect(totalLines(stdout)).toBe(BASE_LINES + countLines(body));
+  });
+
+  it("#1370 (e): an unterminated `---` block is not frontmatter → always-on", () => {
+    const body = '---\npaths:\n  - "infra/**"\n\n# Rules\n\nNo closing delimiter.\n';
+    const { code, stdout } = runGuard(GUARD, rulesCase("unterminated.md", body));
+    expect(code).toBe(0);
+    expect(stdout).toContain(".claude/rules/unterminated.md (always-on)");
+    expect(totalLines(stdout)).toBe(BASE_LINES + countLines(body));
+  });
+
+  it("#1370 (f): `paths` nested under another key is not a top-level key → always-on", () => {
+    const body = '---\ndescription: x\nmeta:\n  paths:\n    - "infra/**"\n---\n\n# Rules\n';
+    const { code, stdout } = runGuard(GUARD, rulesCase("nested.md", body));
+    expect(code).toBe(0);
+    expect(stdout).toContain(".claude/rules/nested.md (always-on)");
+    expect(totalLines(stdout)).toBe(BASE_LINES + countLines(body));
+  });
+
+  it("#1370 (g): a UTF-8 BOM before the frontmatter is tolerated → lazy", () => {
+    const { code, stdout } = runGuard(
+      GUARD,
+      rulesCase("bom.md", `\uFEFF${PATHS_FRONTMATTER}# Rules\n`),
+    );
+    expect(code).toBe(0);
+    expect(stdout).toContain(".claude/rules/bom.md (lazy)");
+    expect(totalLines(stdout)).toBe(BASE_LINES);
   });
 });

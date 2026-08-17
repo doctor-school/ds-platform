@@ -5,8 +5,7 @@
  *
  * Why: the always-on context (AGENTS.md + CLAUDE.md + every path-less
  * .claude/rules/*.md, loaded in full every session; MEMORY.md, of which only
- * the first 200 lines / 25 KB load) suffers
- * "context rot" as it grows — the model's recall of any single rule degrades as
+ * the first 200 lines / 25 KB load) suffers "context rot" as it grows — the model's recall of any single rule degrades as
  * total tokens rise (Anthropic, "Effective context engineering for AI agents").
  * Anthropic's CLAUDE.md guidance is "target under 200 lines"; auto-memory loads
  * only the first 200 lines OR 25 KB of MEMORY.md, whichever comes first. We
@@ -23,6 +22,11 @@
  *   CLAUDE.md additionally carries a softer high-signal WARN target of 120 lines.
  *   An always-on file within budget but with < 256 B of byte-headroom left WARNs
  *   (#1042) — the next edit would force ad-hoc squeezing; compact proactively.
+ *
+ * A `.claude/rules/*.md` file carrying `paths:` frontmatter is file-glob-
+ * triggered, not loaded at session start (and not re-injected after /compact),
+ * so it keeps its per-file budget but is OFF the always-on total (#1370) —
+ * exactly like a read-on-demand skill.
  *
  * Skills (`apps/docs/content/skills/<name>/SKILL.md`, #416) are read-on-demand, not
  * always-on — they never enter the session-start window, so the concern is
@@ -62,7 +66,7 @@ interface Target {
   optional: boolean; // outside git (auto-memory) — skip when absent
   softLines?: number;
   warnOnly?: boolean; // over-budget WARNs instead of failing (Phase-0 skills, #416)
-  offTotal?: boolean; // not part of the always-on total (read-on-demand skills)
+  offTotal?: boolean; // not part of the always-on total (read-on-demand skills, `paths:`-scoped rules)
 }
 
 // MEMORY.md path: derive from this repo's auto-memory dir convention
@@ -93,6 +97,33 @@ const targets: Target[] = [
   ...(memPath ? [{ label: "MEMORY.md (auto-memory index)", path: memPath, optional: true } as Target] : []),
 ];
 
+/**
+ * Does this rules file carry REAL `paths:` frontmatter, i.e. is it lazy?
+ *
+ * Claude Code's contract (https://code.claude.com/docs/en/memory) is narrow, and
+ * the classifier must be exactly as narrow — anything it calls lazy is dropped
+ * from the always-on total, so a false positive silently under-reports the
+ * session window by the file's whole size. All three conditions must hold:
+ *
+ *   1. the opening `---` delimiter is the FIRST BYTES of the file (a leading
+ *      UTF-8 BOM is tolerated; a comment, a blank line, or any prose above it is
+ *      not — then the `---` is a markdown thematic break, not frontmatter);
+ *   2. the block is TERMINATED by a closing `---` (or YAML `...`) delimiter line;
+ *   3. it declares `paths` as a TOP-LEVEL key (column 0) inside that block.
+ *
+ * Anything else — the word `paths:` in the body, an unterminated block, `paths`
+ * nested under another key — is an always-on file (#1370).
+ */
+function hasPathsFrontmatter(raw: string): boolean {
+  const text = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw; // strip BOM
+  const lines = text.split(/\r?\n/);
+  if (lines[0] !== "---") return false; // (1) must be the literal first bytes
+  const close = lines.findIndex((l, i) => i > 0 && (l === "---" || l === "..."));
+  if (close === -1) return false; // (2) unterminated ⇒ not frontmatter
+  // (3) top-level `paths` key: column 0, no leading indent, not a `#` comment.
+  return lines.slice(1, close).some((l) => /^paths\s*:/.test(l));
+}
+
 // .claude/rules/*.md are always-on too — loaded at session start UNLESS a file
 // carries `paths:` frontmatter (which makes it lazy / file-scoped). Add each so
 // the per-file budget applies and a new always-on rule can't silently grow the
@@ -101,8 +132,16 @@ const rulesDir = resolve(REPO_ROOT, ".claude", "rules");
 if (existsSync(rulesDir)) {
   for (const f of readdirSync(rulesDir).filter((n) => n.endsWith(".md")).sort()) {
     const p = resolve(rulesDir, f);
-    const lazy = /^---[\s\S]*?\bpaths\s*:/m.test(readFileSync(p, "utf8").slice(0, 800));
-    targets.push({ label: `.claude/rules/${f}${lazy ? " (lazy)" : " (always-on)"}`, path: p, optional: false });
+    const lazy = hasPathsFrontmatter(readFileSync(p, "utf8"));
+    targets.push({
+      label: `.claude/rules/${f}${lazy ? " (lazy)" : " (always-on)"}`,
+      path: p,
+      optional: false,
+      // A `paths:`-scoped rules file is read-on-demand (file-glob-triggered), so
+      // it never enters the session-start window — same treatment as skills: the
+      // per-file budget still applies, the always-on total excludes it.
+      offTotal: lazy,
+    });
   }
 }
 
@@ -141,7 +180,7 @@ for (const t of targets) {
   const buf = readFileSync(t.path);
   const bytes = buf.length;
   const lineCount = buf.toString("utf8").split(/\r?\n/).length;
-  if (!t.label.includes("(lazy)") && !t.offTotal) {
+  if (!t.offTotal) {
     totalLines += lineCount;
     totalBytes += bytes;
   }
@@ -170,11 +209,11 @@ for (const t of targets) {
     lines.push(`${TAG} WARN        ${t.label}: ${lineCount} lines > soft target ${t.softLines} — consider trimming (not a failure).`);
   }
   // Headroom WARN tier (#1042): an always-on file (never lazy rules, never
-  // read-on-demand skills) that is WITHIN budget but has < 256 B left before the
-  // byte ceiling gets a WARN — the next edit would force ad-hoc squeezing of
-  // canonical rules. Exit code stays 0.
+  // read-on-demand skills — both carry `offTotal`) that is WITHIN budget but has
+  // < 256 B left before the byte ceiling gets a WARN — the next edit would force
+  // ad-hoc squeezing of canonical rules. Exit code stays 0.
   const headroom = MAX_BYTES - bytes;
-  if (!over && !t.offTotal && !t.label.includes("(lazy)") && headroom < HEADROOM_WARN_BYTES) {
+  if (!over && !t.offTotal && headroom < HEADROOM_WARN_BYTES) {
     lines.push(
       `${TAG} WARN        ${t.label}: low byte-headroom — ${bytes} B used, ${headroom} B remaining ` +
         `(< ${HEADROOM_WARN_BYTES} B before the ${(MAX_BYTES / 1024).toFixed(0)} KB ceiling) — compact before the next always-on edit (not a failure).`,

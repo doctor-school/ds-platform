@@ -2,9 +2,32 @@
 
 Universal AI-agent constitution for the DS Platform monorepo — vendor-agnostic, readable by any agent. Claude-Code-specific overlays: `CLAUDE.md`.
 
-<!-- ALWAYS-ON CORE. Per-file budget ≤200 lines AND ≤25 KB (`pnpm lint:instruction-budget`). Always-on set = this file + CLAUDE.md + every .claude/rules/*.md without `paths:` frontmatter — all auto-load at session start. Relocate detail; a task-scoped rules file gets `paths:` frontmatter. Never inline-grow. -->
+<!-- ALWAYS-ON CORE. Per-file budget ≤200 lines AND ≤25 KB (`pnpm lint:instruction-budget`). Always-on set = this file + CLAUDE.md + every .claude/rules/*.md without `paths:` frontmatter — all auto-load at session start. As of #1370 BOTH rules files are `paths:`-scoped, so the always-on set is these two files only; their gates reach the session through the §0 index. Relocate detail; a task-scoped rules file gets `paths:` frontmatter (first bytes of the file, or it is not frontmatter) and a §0 row. Never inline-grow. -->
 
-On-demand detail: branches/commits/versioning/Issues/PRs/merge → `.claude/rules/repo-conventions.md` (auto-loaded); dev stand/migrations/live-verify → `.claude/rules/dev-stand.md` (auto-loaded); per-task procedure → the §3 skill (read on demand); settled facts → auto-memory (`MEMORY.md` index → topic file, on demand).
+On-demand detail: branches/commits/versioning/Issues/PRs/merge → `.claude/rules/repo-conventions.md`; dev stand/migrations/live-verify → `.claude/rules/dev-stand.md` — both `paths:`-scoped, so READ them (§0), they do not auto-load; per-task procedure → the §3 skill (read on demand); settled facts → auto-memory (`MEMORY.md` index → topic file, on demand).
+
+---
+
+## 0. Read-before-you-act index
+
+Both `.claude/rules/*.md` files carry `paths:` frontmatter: they enter context only when a matching file is read, and they are NOT re-injected after `/compact`. They hold hard gates, not background reference. Before the action below, `Read` the named file in full — once per session, again after a `/compact`. "I remember the rule" is not a substitute.
+
+| Before you…                                                                                                                                          | Read first                                                           |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| name a branch; close a PR/branch; `pnpm pr:land <N>`                                                                                                 | `repo-conventions.md` → Branches                                     |
+| `gh pr create` — title, kind label, `Closes #N`, `author:*` body marker, `--assignee` + `--milestone`; `pnpm changeset` + bump letter; `--no-verify` | → Commits, versioning, PRs                                           |
+| `pnpm pr:preflight <N>` / `--static` / `--pre-merge`; `pnpm merge:gate <N>`; `--mode-a-exempt`; the Version-Packages bot PR                          | → Commits, versioning, PRs                                           |
+| `pnpm deploy:prod` / cut a release                                                                                                                   | → Release train & prod deploy (+ skill `run-prod-deploy`)            |
+| a dependency / `chore(deps)` bump                                                                                                                    | → Dependency bumps                                                   |
+| `pnpm issue:create` (the ONLY creation path); Issue fields; claim comment; a `blocked_by` edge; board Status = Done on merge                         | → Issue conventions                                                  |
+| resume an In Progress Issue or act on a handoff (`pnpm handoff:verify`)                                                                              | → Issue conventions                                                  |
+| place an ADR, a feature triplet, or a PRD                                                                                                            | → ADRs & specs                                                       |
+| any `pnpm dev:*`; read a stand endpoint (never hardcode — `~/.ds-platform/.env.local`)                                                               | `dev-stand.md` → Endpoints, DX commands                              |
+| `pnpm drizzle:migrate` or any raw migration                                                                                                          | → Snapshot before migrate                                            |
+| `dev:reset-db`, raw `dev:psql`, touching volume data, or writing a subagent brief with stand access                                                  | → Shared-stand discipline (ban + stand-ops log)                      |
+| bind a port / start api+portal (`pnpm dev:ports`); `pnpm dev:db:branch <N>`                                                                          | → Parallel sessions                                                  |
+| kill a listener you did not start                                                                                                                    | → Parallel sessions (forbidden)                                      |
+| drive Playwright, live-verify UI, or hand a Stage-B URL to the owner                                                                                 | → Rules for agents (+ skill `build-ui-from-design-system` → Stage B) |
 
 ---
 

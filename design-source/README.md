@@ -51,6 +51,7 @@ This folder holds the **actual design source** for the Doctor.School neo-brutali
 
 ## Notes
 
+- **`my-events.dc.html` — the «Сертификаты» tab is out of scope.** The canvas draws three tabs (`Предстоящие / Записи / Сертификаты`), but certificates are covered by no feature 012–016. Owner decision 2026-08-17 (Issue [#1326](https://github.com/doctor-school/ds-platform/issues/1326)): «Пока не реализуем этот таб. В дизайне его по идее тоже быть не должно — я пропустил при ревью макетов.» So it is a **canvas review miss, not a future seam**: feature 014 builds **two** tabs («Предстоящие | Записи», default «Предстоящие») and ships no placeholder, flag or disabled stub for the third. This vendored copy stays verbatim — the canvas-side edit belongs to the owner's Claude Design project; no `DEBT.md` line and no discovery item are opened. Canon: [`014-requirements-en.md`](../apps/docs/content/specs/features/014-event-recordings/014-requirements-en.md) → Scope → Out.
 - The canvas references logo assets `assets/ds-logo-{color,icon,white}.svg`. Those live in the Claude Design project; the repository's own brand marks are at `apps/portal/public/brand/`. They are intentionally not duplicated here — this folder is a **spec reference**, not a runnable app.
 - Per ADR-0014 §4 the canvas is *source*, the repo holds the *built artifact* (the `@ds/design-system` React components). This folder is the pinned build reference the components are verified against; it is not itself shipped.
 - This folder is `.prettierignore`d so the imported bytes stay verbatim.

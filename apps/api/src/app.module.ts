@@ -18,6 +18,7 @@ import { RegistrationModule } from "./registration/registration.module.js";
 import { RoomModule } from "./room/room.module.js";
 import { MeModule } from "./me/me.module.js";
 import { AuditModule } from "./audit/audit.module.js";
+import { TaxonomyModule } from "./taxonomy/taxonomy.module.js";
 
 @Module({
   imports: [
@@ -53,6 +54,10 @@ import { AuditModule } from "./audit/audit.module.js";
     StorageModule,
     // 007 event-admin authoring surface (CreateEvent + admin reads).
     EventsModule,
+    // 012 content taxonomy — the retained project/expert/topic/partner admin
+    // surface plus the shared idempotency-record, media-normalizer and
+    // media-cleanup services (#1283 opens it with the project vertical).
+    TaxonomyModule,
     // 005 registration write + per-user EventRegistrationState read
     // (doctor_guest-authenticated).
     RegistrationModule,

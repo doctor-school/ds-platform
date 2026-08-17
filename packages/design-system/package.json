@@ -19,6 +19,8 @@
     "./form": "./src/primitives/form.tsx",
     "./input-otp": "./src/primitives/input-otp.tsx",
     "./tabs": "./src/primitives/tabs.tsx",
+    "./textarea": "./src/primitives/textarea.tsx",
+    "./media-dropzone": "./src/primitives/media-dropzone.tsx",
     "./filter-chip": "./src/primitives/filter-chip.tsx",
     "./badge": "./src/primitives/badge.tsx",
     "./avatar": "./src/primitives/avatar.tsx",

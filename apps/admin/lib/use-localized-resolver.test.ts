@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   EventFormSchema,
   LoginFormSchema,
+  ProjectFormSchema,
   StreamConfigFormSchema,
 } from "./form-schemas";
 import { translateIssue, type ZodIssueLike } from "./use-localized-resolver";
@@ -161,5 +162,56 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
     expect(malformed).toContain("email");
     expect(malformed).toContain("maxLength");
     expect(malformed).not.toContain("fallback");
+  });
+
+  it("project form (012 EARS-1): every field's real failing rule maps to a specific key, never fallback", () => {
+    // Empty submit — title and description are required; the slug box may be
+    // empty (the server generates it), so it must NOT report an error here.
+    const empty = keysFor(ProjectFormSchema, {
+      kind: "school",
+      title: "",
+      description: "",
+      slug: "",
+    });
+    expect(empty).toContain("required");
+    expect(empty).not.toContain("fallback");
+
+    // Over-long title/description → the length key.
+    const tooLong = keysFor(ProjectFormSchema, {
+      kind: "school",
+      title: "x".repeat(161),
+      description: "x".repeat(2001),
+      slug: "",
+    });
+    expect(tooLong).toEqual(["maxLength", "maxLength"]);
+
+    // The slug box distinguishes its two refusals: wrong grammar vs the
+    // forbidden canonical-UUID id namespace.
+    expect(
+      keysFor(ProjectFormSchema, {
+        kind: "school",
+        title: "Школа",
+        description: "Описание",
+        slug: "Not valid",
+      }),
+    ).toEqual(["slugPattern"]);
+    expect(
+      keysFor(ProjectFormSchema, {
+        kind: "school",
+        title: "Школа",
+        description: "Описание",
+        slug: "00000000-0000-4000-8000-000000000000",
+      }),
+    ).toEqual(["slugReserved"]);
+
+    // An unknown kind maps to its own key.
+    expect(
+      keysFor(ProjectFormSchema, {
+        kind: "podcast",
+        title: "Школа",
+        description: "Описание",
+        slug: "",
+      }),
+    ).toEqual(["kind"]);
   });
 });

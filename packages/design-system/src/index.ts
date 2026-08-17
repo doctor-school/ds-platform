@@ -40,6 +40,12 @@ export {
   InputOTPSeparator,
 } from "./primitives/input-otp";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./primitives/tabs";
+// ── 012 authoring controls (#1283, Stage A #1282) ─────────────────────────────
+export { Textarea, type TextareaProps } from "./primitives/textarea";
+export {
+  MediaDropzone,
+  type MediaDropzoneProps,
+} from "./primitives/media-dropzone";
 
 // ── New-language primitives (#513, source §05–§08) ────────────────────────────
 export {

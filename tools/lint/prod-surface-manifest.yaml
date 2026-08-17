@@ -109,3 +109,22 @@ routes:
     route: /events/[id]
     file: apps/admin/app/events/[id]/page.tsx
     status: product-ready
+  # 012 EARS-1 (#1283): the project authoring vertical — the shared taxonomy admin
+  # list shell plus the Stage-A composition-B tabbed detail (#1282, owner pick
+  # 2026-08-17). Real product deliverables, driven live in
+  # `apps/admin/e2e/taxonomy-projects.spec.ts` and axe-scanned in
+  # `apps/admin/e2e/a11y/a11y-axe.e2e.spec.ts`. The detail ships ONE tab
+  # («Основное») rather than empty «Связи»/«Публикация» placeholders — those tabs
+  # arrive with the slices that make them work (#1288/#1291/#1292, #1287/#1295/#1296).
+  - app: admin
+    route: /projects
+    file: apps/admin/app/projects/page.tsx
+    status: product-ready
+  - app: admin
+    route: /projects/create
+    file: apps/admin/app/projects/create/page.tsx
+    status: product-ready
+  - app: admin
+    route: /projects/[id]
+    file: apps/admin/app/projects/[id]/page.tsx
+    status: product-ready

@@ -5,13 +5,18 @@ import { adminCsrfHeaders } from "@/lib/admin-auth";
 import type {
   ConfigureStreamRequest,
   CreateEventRequest,
+  CreateProjectRequest,
   EventAdminDetail,
   EventAdminListItem,
+  ProjectAdminDetail,
+  ProjectAdminListItem,
+  TaxonomyStatus,
   UpdateEventRequest,
+  UpdateProjectRequest,
 } from "@ds/schemas";
 
 /**
- * Custom Refine REST data provider over the NestJS 007 admin surface (ADR-0004 §5
+ * Custom Refine REST data provider over the NestJS admin surface (ADR-0004 §5
  * — Refine + custom REST data provider). Every call hits the RELATIVE `/v1/admin/*`
  * path with `credentials: "include"`, so it rides the admin's own origin and the
  * `__Host-ds_admin_session` cookie the 011 admin tier issued (proxied to the api
@@ -24,17 +29,19 @@ import type {
  * the double-submit is the defence-in-depth ADR-0004 design §3.2.1 asks for on
  * top of it. Reads owe no proof and send none.
  *
- * The `events` resource maps to the design §7 endpoints:
- *   getList  → GET   /v1/admin/events            (EventAdminList)
- *   getOne   → GET   /v1/admin/events/:id        (EventAdminDetail)
- *   create   → POST  /v1/admin/events            (multipart: payload + programPdf)
- *   update   → PATCH /v1/admin/events/:id        (multipart: payload + programPdf)
- *   custom   → PUT   /v1/admin/events/:id/stream (ConfigureStream) and
- *              POST  /v1/admin/events/:id/{publish|open|close|archive} (transitions)
+ * Two resources today:
  *
- * Create/update ride `multipart/form-data` because the program PDF (EARS-1/2) is a
- * file part alongside the JSON `payload`; the authoring writes therefore build a
- * `FormData`, not a JSON body.
+ *   events   (007)  getList → GET /v1/admin/events; create/update multipart;
+ *                   custom  → stream config + the named lifecycle transitions.
+ *   projects (012)  getList → GET /v1/admin/projects?page&pageSize&q&status&includeRetired
+ *                   getOne  → GET /v1/admin/projects/:id (captures the ETag)
+ *                   create  → POST  (Idempotency-Key; JSON or multipart+cover)
+ *                   update  → PATCH (Idempotency-Key + If-Match)
+ *
+ * `deleteOne` throws for BOTH resources: 012 has no Delete route anywhere in the
+ * taxonomy controller and 007's lifecycle is archive, never destroy. The provider
+ * is the last place a stray Refine `useDelete()` could reach, so the refusal
+ * lives here rather than relying on no page rendering the control.
  */
 const ADMIN_BASE = "/v1/admin";
 
@@ -43,21 +50,61 @@ export type CreateEventVars = CreateEventRequest & { programPdf?: File | null };
 /** Variables the edit form hands the provider — a partial aggregate + an optional replacement PDF. */
 export type UpdateEventVars = UpdateEventRequest & { programPdf?: File | null };
 
-async function toHttpError(res: Response): Promise<HttpError> {
+/** Project create variables: the authored fields plus an optional cover file. */
+export type CreateProjectVars = CreateProjectRequest & { cover?: File | null };
+/**
+ * Project edit variables. `cover` sets/replaces; `mediaAction: "clear"` removes;
+ * supplying both is refused by the API with `MEDIA_INPUT_CONFLICT`, so the form
+ * must never offer both at once. `version` becomes the `If-Match` precondition.
+ */
+export type UpdateProjectVars = UpdateProjectRequest & {
+  cover?: File | null;
+  version: number;
+};
+
+/** RFC 7807 problem body of the 012 surface — the stable `errorCode` is the contract. */
+export interface TaxonomyHttpError extends HttpError {
+  errorCode?: string;
+  traceId?: string;
+  fieldErrors?: { path: string; message: string }[];
+}
+
+async function toHttpError(res: Response): Promise<TaxonomyHttpError> {
   let message = `Запрос завершился ошибкой (${res.status})`;
+  let errorCode: string | undefined;
+  let traceId: string | undefined;
+  let fieldErrors: { path: string; message: string }[] | undefined;
   try {
-    const body = (await res.json()) as { message?: unknown };
+    const body = (await res.json()) as {
+      message?: unknown;
+      detail?: unknown;
+      title?: unknown;
+      errorCode?: unknown;
+      traceId?: unknown;
+      errors?: unknown;
+    };
     if (typeof body.message === "string") message = body.message;
+    else if (typeof body.detail === "string") message = body.detail;
+    else if (typeof body.title === "string") message = body.title;
+    if (typeof body.errorCode === "string") errorCode = body.errorCode;
+    if (typeof body.traceId === "string") traceId = body.traceId;
+    if (Array.isArray(body.errors)) {
+      fieldErrors = body.errors as { path: string; message: string }[];
+    }
   } catch {
     // Non-JSON / empty body — keep the generic message.
   }
-  return { message, statusCode: res.status };
+  return {
+    message,
+    statusCode: res.status,
+    ...(errorCode ? { errorCode } : {}),
+    ...(traceId ? { traceId } : {}),
+    ...(fieldErrors ? { fieldErrors } : {}),
+  };
 }
 
 /** Split the authoring variables into the JSON payload and the file part. */
-function toAuthoringForm(
-  vars: CreateEventVars | UpdateEventVars,
-): FormData {
+function toAuthoringForm(vars: CreateEventVars | UpdateEventVars): FormData {
   const { programPdf, ...payload } = vars;
   const form = new FormData();
   form.append("payload", JSON.stringify(payload));
@@ -65,10 +112,80 @@ function toAuthoringForm(
   return form;
 }
 
+/**
+ * A fresh canonical lowercase UUID per mutation (012-design §6). Generated per
+ * CALL, not per form mount: a second submit is a second logical request, and
+ * reusing the key would replay the first response instead of applying the edit.
+ */
+function idempotencyKey(): string {
+  return crypto.randomUUID();
+}
+
+/**
+ * The project write body. JSON is the canonical no-file shape; a cover rides
+ * `multipart/form-data` with exactly one `payload` part plus one `cover` file
+ * (012-design §5.1). A multipart body with no file is refused with 415, so the
+ * shape is chosen by whether a file exists — never "multipart always".
+ */
+function projectBody(
+  payload: Record<string, unknown>,
+  cover: File | null | undefined,
+): { body: BodyInit; headers: Record<string, string> } {
+  if (cover) {
+    const form = new FormData();
+    form.append("payload", JSON.stringify(payload));
+    form.append("cover", cover);
+    // No explicit content-type: the browser sets it WITH the boundary.
+    return { body: form, headers: {} };
+  }
+  return {
+    body: JSON.stringify(payload),
+    headers: { "content-type": "application/json" },
+  };
+}
+
+/** The admin list query of a taxonomy resource (012-design §5.1). */
+function taxonomyListQuery(params: {
+  pagination?: { currentPage?: number; pageSize?: number };
+  filters?: readonly { field?: string; value?: unknown }[];
+}): string {
+  const query = new URLSearchParams();
+  query.set("page", String(params.pagination?.currentPage ?? 1));
+  query.set("pageSize", String(params.pagination?.pageSize ?? 20));
+  for (const filter of params.filters ?? []) {
+    const value = filter.value;
+    if (filter.field === "q" && typeof value === "string" && value.length > 0) {
+      query.set("q", value);
+    }
+    if (filter.field === "status" && typeof value === "string" && value) {
+      query.set("status", value as TaxonomyStatus);
+    }
+    if (filter.field === "includeRetired" && value === true) {
+      query.set("includeRetired", "true");
+    }
+  }
+  return query.toString();
+}
+
 export const dataProvider: DataProvider = {
   getApiUrl: () => ADMIN_BASE,
 
-  getList: async ({ resource }) => {
+  getList: async ({ resource, pagination, filters }) => {
+    if (resource === "projects") {
+      const res = await fetch(
+        `${ADMIN_BASE}/projects?${taxonomyListQuery({
+          ...(pagination ? { pagination } : {}),
+          ...(filters ? { filters } : {}),
+        })}`,
+        { credentials: "include", headers: { accept: "application/json" } },
+      );
+      if (!res.ok) throw await toHttpError(res);
+      const body = (await res.json()) as {
+        data: ProjectAdminListItem[];
+        total: number;
+      };
+      return { data: body.data as unknown as never[], total: body.total };
+    }
     if (resource !== "events") throw new Error(`unknown resource: ${resource}`);
     const res = await fetch(`${ADMIN_BASE}/events`, {
       credentials: "include",
@@ -83,6 +200,15 @@ export const dataProvider: DataProvider = {
   },
 
   getOne: async ({ resource, id }) => {
+    if (resource === "projects") {
+      const res = await fetch(`${ADMIN_BASE}/projects/${id}`, {
+        credentials: "include",
+        headers: { accept: "application/json" },
+      });
+      if (!res.ok) throw await toHttpError(res);
+      const data = (await res.json()) as ProjectAdminDetail;
+      return { data: data as unknown as never };
+    }
     if (resource !== "events") throw new Error(`unknown resource: ${resource}`);
     const res = await fetch(`${ADMIN_BASE}/events/${id}`, {
       credentials: "include",
@@ -94,6 +220,27 @@ export const dataProvider: DataProvider = {
   },
 
   create: async ({ resource, variables }) => {
+    if (resource === "projects") {
+      const { cover, ...payload } = variables as CreateProjectVars;
+      const { body, headers } = projectBody(
+        payload as Record<string, unknown>,
+        cover,
+      );
+      const res = await fetch(`${ADMIN_BASE}/projects`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          ...headers,
+          accept: "application/json",
+          "idempotency-key": idempotencyKey(),
+          ...adminCsrfHeaders(),
+        },
+        body,
+      });
+      if (!res.ok) throw await toHttpError(res);
+      const data = (await res.json()) as ProjectAdminDetail;
+      return { data: data as unknown as never };
+    }
     if (resource !== "events") throw new Error(`unknown resource: ${resource}`);
     const res = await fetch(`${ADMIN_BASE}/events`, {
       method: "POST",
@@ -107,6 +254,30 @@ export const dataProvider: DataProvider = {
   },
 
   update: async ({ resource, id, variables }) => {
+    if (resource === "projects") {
+      const { cover, version, ...payload } = variables as UpdateProjectVars;
+      const { body, headers } = projectBody(
+        payload as Record<string, unknown>,
+        cover,
+      );
+      const res = await fetch(`${ADMIN_BASE}/projects/${id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          ...headers,
+          accept: "application/json",
+          "idempotency-key": idempotencyKey(),
+          // The optimistic-concurrency precondition (012-design §6): the version
+          // the form was rendered from. A stale one is a 412, never a lost edit.
+          "if-match": `W/"${version}"`,
+          ...adminCsrfHeaders(),
+        },
+        body,
+      });
+      if (!res.ok) throw await toHttpError(res);
+      const data = (await res.json()) as ProjectAdminDetail;
+      return { data: data as unknown as never };
+    }
     if (resource !== "events") throw new Error(`unknown resource: ${resource}`);
     const res = await fetch(`${ADMIN_BASE}/events/${id}`, {
       method: "PATCH",
@@ -119,13 +290,14 @@ export const dataProvider: DataProvider = {
     return { data: data as unknown as never };
   },
 
-  deleteOne: async () => {
-    // 007 has no delete affordance (the lifecycle is archive, never destroy).
-    throw new Error("delete is not supported for events");
+  deleteOne: async ({ resource }) => {
+    // 012 exposes no DELETE route anywhere in the taxonomy controller, and 007's
+    // lifecycle is archive, never destroy (012-design §5.1, EARS-14).
+    throw new Error(`delete is not supported for ${resource}`);
   },
 
   /**
-   * The stream-config write (EARS-3) and the named lifecycle transitions
+   * The stream-config write (007 EARS-3) and the named lifecycle transitions
    * (EARS-4/5/6) — the non-CRUD commands. `payload` carries either the
    * `ConfigureStreamRequest` body (for `PUT :id/stream`) or is empty (for the
    * `POST :id/{publish|open|close|archive}` transitions). `method` + `url` are

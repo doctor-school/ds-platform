@@ -58,6 +58,10 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   { id: "link", section: "primitives" },
   { id: "tabs", section: "primitives" },
   { id: "form", section: "primitives" },
+  // 012 authoring controls (#1283; Stage A #1282 — adopted shadcn Textarea and
+  // the Kibo UI Dropzone pattern, re-skinned to DS tokens).
+  { id: "textarea", section: "primitives" },
+  { id: "media-dropzone", section: "primitives" },
 
   // ── New-language primitives (spec §3.2, #513) — single-file primitive subpaths.
   { id: "filter-chip", section: "primitives" },

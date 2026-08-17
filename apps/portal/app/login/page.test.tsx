@@ -320,7 +320,7 @@ describe("005 EARS-2 guest-through-auth completion on /login", () => {
     });
   });
 
-  it("008 EARS-7: without a carried event context, password-login success lands on the discovery front-door (`/`) and registers nothing", async () => {
+  it("008 EARS-7: without a carried event context, password-login success lands on the discovery listing (`/webinars`) and registers nothing", async () => {
     const user = userEvent.setup();
     await renderLogin();
 
@@ -331,12 +331,13 @@ describe("005 EARS-2 guest-through-auth completion on /login", () => {
     await waitFor(() => expect(login).toHaveBeenCalledTimes(1));
     resolveLogin?.();
 
-    // 008 EARS-7 — the default post-login landing is the discovery front-door `/`.
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
+    // 008 EARS-7, amended by 013 EARS-15 — the default post-login landing is the
+    // discovery listing `/webinars`, never the Academy landing `/`.
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/webinars"));
     expect(registerForEvent).not.toHaveBeenCalled();
   });
 
-  it("EARS-2: a cross-origin returnTo is rejected — login success lands on the discovery front-door (`/`, 008 EARS-7), nothing registers", async () => {
+  it("EARS-2: a cross-origin returnTo is rejected — login success lands on the discovery listing (`/webinars`, 008 EARS-7 as amended by 013 EARS-15), nothing registers", async () => {
     searchParams = new URLSearchParams({ returnTo: "//evil.example" });
     const user = userEvent.setup();
     await renderLogin();
@@ -348,7 +349,7 @@ describe("005 EARS-2 guest-through-auth completion on /login", () => {
     await waitFor(() => expect(login).toHaveBeenCalledTimes(1));
     resolveLogin?.();
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/webinars"));
     expect(registerForEvent).not.toHaveBeenCalled();
   });
 

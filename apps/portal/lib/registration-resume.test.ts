@@ -40,11 +40,12 @@ describe("005 EARS-2 guest-through-auth completion (registration resume)", () =>
     expect(landing).toBe("/webinars/ahilles-042");
   });
 
-  it("008 EARS-7: with no carried event context, the system shall land on the discovery front-door `/` (post-login landing) and register nothing", async () => {
-    // 008 EARS-7 (design §4) — the post-login default landing is the discovery
-    // front-door `/` (the reused feature-004 listing), never a scaffold or a
-    // dead dashboard. Supersedes the #769 `/account/events` default.
-    await expect(completeReturnTarget(null)).resolves.toBe("/");
+  it("008 EARS-7: with no carried event context, the system shall land on the discovery listing `/webinars` (post-login landing) and register nothing", async () => {
+    // 008 EARS-7, amended 2026-08-17 by 013 EARS-15 (008 requirements →
+    // Amendment): the post-login default landing is the discovery listing
+    // `/webinars`, never `/` (the Academy landing) and never a scaffold or a dead
+    // dashboard. Supersedes the #769 `/account/events` default.
+    await expect(completeReturnTarget(null)).resolves.toBe("/webinars");
     expect(registerForEvent).not.toHaveBeenCalled();
   });
 
@@ -56,11 +57,33 @@ describe("005 EARS-2 guest-through-auth completion (registration resume)", () =>
       "/account", // same-origin but not an event return target
       "/webinars/../account",
     ]) {
-      // Dropped by the guard → falls back to the safe default front-door (`/`),
-      // never the attacker's target (008 EARS-7 default landing).
-      await expect(completeReturnTarget(evil)).resolves.toBe("/");
+      // Dropped by the guard → falls back to the safe default discovery listing
+      // (`/webinars`), never the attacker's target (008 EARS-7 default landing as
+      // amended by 013 EARS-15).
+      await expect(completeReturnTarget(evil)).resolves.toBe("/webinars");
     }
     expect(registerForEvent).not.toHaveBeenCalled();
+  });
+
+  it("013 EARS-15: with no valid return target the landing shall be `/webinars` — no post-login flow lands a doctor on the Academy landing `/`", async () => {
+    // The live US-10 regression this clause repairs: `/` no longer redirects to the
+    // discovery listing (it serves the Academy landing), so a `/` default stranded a
+    // doctor on marketing copy after login. The default is the discovery listing.
+    for (const raw of [null, "", "/", "https://evil.example/webinars/x", "//evil.example"]) {
+      await expect(completeReturnTarget(raw)).resolves.toBe("/webinars");
+    }
+  });
+
+  it("013 EARS-15: a captured SAFE same-origin return target still wins over the default landing", async () => {
+    // The return-to-origin mechanism itself is feature 014's (#1342); 013 changes
+    // only the default, so a target the shipped same-origin guards accept — the
+    // event page (005 EARS-2) and the room (006 EARS-6) — is still honoured.
+    await expect(completeReturnTarget("/webinars/ahilles-042")).resolves.toBe(
+      "/webinars/ahilles-042",
+    );
+    await expect(
+      completeReturnTarget("/webinars/ahilles-042/room"),
+    ).resolves.toBe("/webinars/ahilles-042/room");
   });
 
   it("EARS-2: a failing register call still lands the doctor on the event page (best-effort — never stranded off the chosen event)", async () => {

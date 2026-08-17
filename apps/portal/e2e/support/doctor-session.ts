@@ -71,16 +71,20 @@ export async function provisionLoggedInDoctor(page: Page): Promise<string> {
 
 /**
  * Wait for the post-auth resume to leave the auth surfaces and land on an
- * authenticated home. Since 008 EARS-7 the default post-auth landing (no event
- * `returnTo`) is the discovery front-door `/`, but the profile `/account` is still
- * a valid landing for flows that target it — so accept either, keyed off the URL
- * having left `/register`/`/verify`. The session cookie is set before this
- * redirect, so the doctor is logged in once this resolves.
+ * authenticated home. Since 013 EARS-15 re-pointed the 008 EARS-7 default, the
+ * default post-auth landing (no valid return target) is the discovery listing
+ * `/webinars`; the profile `/account` is still a valid landing for flows that
+ * target it, and `/` remains one for a flow that explicitly returns there — so
+ * accept any of the three, keyed off the URL having left `/register`/`/verify`.
+ * The session cookie is set before this redirect, so the doctor is logged in once
+ * this resolves.
  */
 export async function waitForAuthenticatedLanding(page: Page): Promise<void> {
   await page.waitForURL((url) => {
     const path = new URL(url).pathname;
-    return path === "/" || path.startsWith("/account");
+    return (
+      path === "/" || path === "/webinars" || path.startsWith("/account")
+    );
   });
 }
 
@@ -89,7 +93,7 @@ export async function waitForAuthenticatedLanding(page: Page): Promise<void> {
  * later, deliberate `/login` round-trip can drive the post-login landing (which
  * `submitRegisterAndVerify` cannot expose — it mints an internal password it never
  * returns). Register + verify the exact 003 way (real Mailpit OTP, auto-login lands
- * on `/account`), then hand back `{ email, password }` for the caller to log in
+ * on the default post-auth landing), then hand back `{ email, password }` for the caller to log in
  * with after clearing the auto-login session. NOT a new auth primitive (008
  * Constraints): the account is minted the way 003 mints it.
  */

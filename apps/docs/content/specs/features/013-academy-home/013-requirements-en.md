@@ -2,7 +2,7 @@
 title: "013 — Academy home page and partner lead capture"
 description: "Requirements for the full public Academy home at /: the approved split-hero landing from the «Главная» canvas, a live эфиры feed rendered by feature 014's shared event-list unit, curated platform/argument/partner screens, a 012-fed experts block, and a partner lead form that persists a retained leads record and notifies the Mattermost channel «DS Лиды» through a dedicated API-only webhook — plus the platform-wide post-login return-to-origin rule with /webinars as the default landing."
 slug: 013-academy-home
-status: Draft
+status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
 parent_issue: https://github.com/doctor-school/ds-platform/issues/1357

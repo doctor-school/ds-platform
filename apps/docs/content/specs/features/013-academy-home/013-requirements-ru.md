@@ -2,7 +2,7 @@
 title: "013 — Главная страница Академии и захват партнёрских заявок"
 description: "Требования к полной публичной главной Академии на /: утверждённый лендинг со сплит-hero из канваса «Главная», живая лента эфиров на переиспользуемом list-юните фичи 014, курируемые смысловые и партнёрские экраны, блок экспертов из фичи 012 и партнёрская форма, которая пишет retained-запись leads и уведомляет канал Mattermost «DS Лиды» через выделенный API-only вебхук — плюс платформенное правило возврата после логина, где `/webinars` остаётся значением по умолчанию."
 slug: 013-academy-home
-status: Draft
+status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
 parent_issue: https://github.com/doctor-school/ds-platform/issues/1357

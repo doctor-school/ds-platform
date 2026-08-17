@@ -26,7 +26,7 @@ import {
 const DOCTOR_NAME = "Иван Петров";
 const DOCTOR_INITIALS = "ИП";
 
-// ── Doctor logs in → lands on `/` → shell nav → profile (EARS-1/2/6/7) ────────
+// ── Doctor logs in → lands on `/webinars` → shell nav → profile (EARS-1/2/6/7) ─
 
 Given("a registered doctor who is not yet signed in", async ({ page, context, world }) => {
   // Mint a real 003 account with KNOWN credentials + a saved display name (so the
@@ -47,7 +47,8 @@ When("the doctor completes login via the feature-003 auth flow", async ({ page, 
 });
 
 Then("the doctor lands on the discovery front-door at {string}", async ({ page }, path: string) => {
-  // EARS-7: the post-login landing is the discovery front-door — exactly `/`.
+  // EARS-7 as re-pointed by 013 EARS-15: with no valid return target the
+  // post-login landing is the discovery listing — exactly `/webinars`.
   await page.waitForURL((url) => new URL(url).pathname === path);
   await expect(
     page.getByRole("heading", { name: DISCOVERY_HEADING }),

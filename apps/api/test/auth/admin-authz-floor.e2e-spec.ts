@@ -146,6 +146,31 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/events/${ABSENT_ID}/transition`,
     payload: { to: "published" },
   },
+  // 012 EARS-1/EARS-16 (#1283) — the taxonomy project routes sit on the same
+  // raised floor as every other admin route: the guard refuses before validation,
+  // idempotency or upload, so an unfielded request never even reaches the handler.
+  {
+    endpoint: "GET /v1/admin/projects",
+    method: "GET",
+    url: "/v1/admin/projects",
+  },
+  {
+    endpoint: "GET /v1/admin/projects/:id",
+    method: "GET",
+    url: `/v1/admin/projects/${ABSENT_ID}`,
+  },
+  {
+    endpoint: "POST /v1/admin/projects",
+    method: "POST",
+    url: "/v1/admin/projects",
+    payload: {},
+  },
+  {
+    endpoint: "PATCH /v1/admin/projects/:id",
+    method: "PATCH",
+    url: `/v1/admin/projects/${ABSENT_ID}`,
+    payload: {},
+  },
 ];
 
 /** An authz refusal — never a 2xx, never a partially-served admin answer. */

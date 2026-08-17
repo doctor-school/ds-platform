@@ -237,13 +237,17 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     // ── Accept branches ────────────────────────────────────────────────────
 
     it("012 EARS-1: when a platform_admin creates a project, the system shall persist one retained draft row with a generated slug, version 1 and an ETag", async () => {
-      const payload = validPayload({ title: "Школа кардиологии" });
+      // A unique suffix: the generated slug is the row's PERMANENT identity, so a
+      // fixed title would collide with any leftover row from an earlier run (and
+      // 409 SLUG_CONFLICT is the correct answer to that — see the conflict test).
+      const uniqueTitle = `Школа кардиологии ${randomUUID().slice(0, 8)}`;
+      const payload = validPayload({ title: uniqueTitle });
       const res = await createJson({ payload });
       expect(res.statusCode).toBe(201);
       const body = await created(res);
       expect(body).toMatchObject({
         kind: "school",
-        title: "Школа кардиологии",
+        title: uniqueTitle,
         status: "draft",
         version: 1,
         coverUrl: null,
@@ -267,7 +271,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       const list = await app.inject({
         method: "GET",
-        url: `/v1/admin/projects?q=${encodeURIComponent("Школа кардиологии")}`,
+        url: `/v1/admin/projects?q=${encodeURIComponent(uniqueTitle)}`,
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       const listBody = JSON.parse(list.payload) as {

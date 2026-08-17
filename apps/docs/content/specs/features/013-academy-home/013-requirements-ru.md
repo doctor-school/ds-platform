@@ -5,8 +5,8 @@ slug: 013-academy-home
 status: Draft
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
-parent_issue: "TBD — открывается open-ears-issues на этой ветке"
-issues: []
+parent_issue: https://github.com/doctor-school/ds-platform/issues/1357
+issues: [1358, 1359, 1360, 1361, 1362, 1363, 1364, 1365, 1366, 1367, 1368]
 prior_decisions:
   - ADR-0014 — Жизненный цикл продуктового дизайна (§2 трасса PRD → EARS `realizes:`; Stage A предшествует user-facing реализации; утверждённый канвас — источник истины по композиции)
   - "ADR-0001 — Identity / Auth / RBAC (лендинг и endpoint заявок — `access: public`; правило посадки после логина принадлежит auth-входу портала)"

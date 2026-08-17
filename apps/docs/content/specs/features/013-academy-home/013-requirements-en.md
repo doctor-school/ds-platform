@@ -5,8 +5,8 @@ slug: 013-academy-home
 status: Draft
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
-parent_issue: "TBD — opened by open-ears-issues on this branch"
-issues: []
+parent_issue: https://github.com/doctor-school/ds-platform/issues/1357
+issues: [1358, 1359, 1360, 1361, 1362, 1363, 1364, 1365, 1366, 1367, 1368]
 prior_decisions:
   - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace; Stage A precedes user-facing implementation; the approved canvas is the composition source of truth)
   - "ADR-0001 — Identity / Auth / RBAC (the landing and the lead endpoint are `access: public`; the post-login landing rule belongs to the portal auth entry)"

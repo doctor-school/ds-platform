@@ -5,7 +5,27 @@ slug: 014-event-recordings
 status: Draft
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
-issues: []
+parent_issue: https://github.com/doctor-school/ds-platform/issues/1336
+issues:
+  [
+    1337,
+    1338,
+    1339,
+    1340,
+    1341,
+    1342,
+    1343,
+    1344,
+    1345,
+    1346,
+    1347,
+    1348,
+    1349,
+    1350,
+    1351,
+    1352,
+    1353,
+  ]
 prior_decisions:
   - ADR-0014 — Product-design delivery lifecycle (§2 PRD → EARS `realizes:` trace; Stage A precedes user-facing implementation; the canvas is the composition source of truth)
   - "ADR-0001 — Identity / Auth / RBAC (recording playback: `access: authenticated`; operator attach/publish: `platform_admin` on the dedicated admin session; announcement reads: `access: public`)"

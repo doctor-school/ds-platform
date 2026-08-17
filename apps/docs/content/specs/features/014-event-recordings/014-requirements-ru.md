@@ -5,7 +5,27 @@ slug: 014-event-recordings-ru
 status: Draft
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
-issues: []
+parent_issue: https://github.com/doctor-school/ds-platform/issues/1336
+issues:
+  [
+    1337,
+    1338,
+    1339,
+    1340,
+    1341,
+    1342,
+    1343,
+    1344,
+    1345,
+    1346,
+    1347,
+    1348,
+    1349,
+    1350,
+    1351,
+    1352,
+    1353,
+  ]
 prior_decisions:
   - ADR-0014 — Жизненный цикл продуктового дизайна и поставки (§2 PRD → трасса EARS `realizes:`; Stage A предшествует реализации user-facing поверхности; канвас — источник истины по композиции)
   - "ADR-0001 — Identity / Auth / RBAC (воспроизведение записи: `access: authenticated`; прикрепление и публикация оператором: `platform_admin` на выделенной admin-сессии; чтение анонса: `access: public`)"

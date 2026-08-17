@@ -6,7 +6,8 @@
 Feature: Operators maintain one retained taxonomy that every Academy surface can query
 
   Background:
-    Given retained-row runtime prerequisite #1278 is merged with stable retained speakers and globally reserved idempotency records
+    Given every 012 mutation records one globally reserved retained idempotency row
+    And legacy-speaker scenarios additionally assume #1278 has made event_speakers stably retained with UUID row identity
     And every taxonomy and speaker value is an ordinary retained text column
     And the admin app is running with an MFA-verified platform_admin session
     And projects, experts, topics, partners and all five joins use restrictive foreign keys

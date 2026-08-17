@@ -7,7 +7,9 @@
 Feature: A finished broadcast keeps its value as a recording, and the archive is browsable
 
   Background:
-    Given every recording mutation carries a canonical Idempotency-Key and the target ETag
+    Given a finished event means EventLifecycleState is ended and nothing else
+    And an archived event keeps the feature 004 archive notice and appears in no 014 listing, tab or count
+    And every recording mutation carries a canonical Idempotency-Key and the target ETag
     And event_recordings rows are retained with restrictive foreign keys and no Delete route
     And the display rule is derived at read time from published non-retired recordings only
     And Stage A is recorded in 014-product.md and the vendored canvases are the composition source of truth
@@ -52,12 +54,19 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
     Then first_published_at still holds its original value
 
   @EARS-2 @core @failure
-  Scenario: A recording cannot be published for an unfinished event
-    Given a published event whose broadcast has not ended
+  Scenario Outline: A recording is publishable only while the event is ended
+    Given an event in state <state>
     And a draft edited recording attached to it
     When the operator publishes that recording
     Then the request fails with 409 EVENT_NOT_FINISHED
     And the recording is still draft
+
+    Examples:
+      | state     |
+      | draft     |
+      | published |
+      | live      |
+      | archived  |
 
   @EARS-2 @core @failure
   Scenario: The panel offers no Delete anywhere
@@ -65,6 +74,46 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
     When the operator inspects every action in the recordings panel
     Then no Delete control is present
     And no HTTP Delete route exists for a recording
+
+  @EARS-18 @core @happy
+  Scenario: An off-platform broadcast is marked ended so its recording can be published
+    Given a published event whose scheduled end is in the past
+    And its room was never opened
+    When the operator marks it ended as a broadcast held outside the platform
+    Then the event state becomes ended without ever being live
+    And no room record and no presence window were created
+    And one audit row is appended
+    And a recording attached to it can now be published
+
+  @EARS-18 @core @failure
+  Scenario: An event whose broadcast has not finished yet cannot be marked ended
+    Given a published event whose scheduled end is still in the future
+    When the operator invokes the mark-ended command
+    Then the request fails with 409 EVENT_NOT_PAST
+    And the event state is unchanged
+
+  @EARS-18 @core @failure
+  Scenario Outline: Mark-ended refuses every origin other than an unaired published event
+    Given an event that is <situation>
+    When the operator invokes the mark-ended command
+    Then the request fails with 409 INVALID_TRANSITION
+    And the event state is unchanged
+
+    Examples:
+      | situation                                |
+      | still a draft                            |
+      | live right now                           |
+      | already ended                            |
+      | archived                                 |
+      | published but whose room was opened once |
+
+  @EARS-18 @core @failure
+  Scenario: A cancelled event never becomes finished through the backfill
+    Given a published event that was cancelled and archived per feature 004
+    When the operator looks for the mark-ended control
+    Then it is not offered
+    And a direct call fails with 409 INVALID_TRANSITION
+    And the event still renders the archive notice with no player
 
   # ---------------------------------------------------------------- display rule
 
@@ -105,9 +154,30 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
   Scenario: A guest reads the whole archived page on the single event route
     Given a finished event with a published edited recording
     When a visitor with no account opens /webinars/<slug>
-    Then the announcement, description, speakers, projects, topics and materials all render
+    Then every field of the feature 004 PublicEventPage projection renders - title, school, start, duration, description, speakers, specialties, partners and the program PDF when present
     And the page is the same /webinars/<slug> route as before the broadcast
     And no archive-only mirror route exists
+
+  @EARS-4 @core @happy
+  Scenario: An archived event keeps its feature 004 render
+    Given an archived event with a published edited recording attached before archiving
+    When any visitor opens its page
+    Then the feature 004 archive notice renders with no CTA and no player
+    And the event appears in no listing, tab or count
+
+  @EARS-19 @facets @happy
+  Scenario: Projects and topics join the page when the taxonomy lands
+    Given a finished event linked to a published project and two published topics in feature 012
+    When any visitor opens its post-live page
+    Then the project and topic blocks render from those 012 records
+    And each project link resolves to its project page
+
+  @EARS-19 @facets @happy
+  Scenario: Before the taxonomy wave the page is complete without those blocks
+    Given a finished event with no feature 012 taxonomy links
+    When any visitor opens its post-live page
+    Then the page renders complete against the feature 004 projection
+    And the project and topic blocks are absent rather than empty, stubbed or promised as coming soon
 
   @EARS-5 @core @failure
   Scenario: No playable source reaches an unauthenticated caller
@@ -181,12 +251,18 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
     And the operator edited no page in either direction
 
   @EARS-7 @core @failure
-  Scenario: An unavailable source fails honestly
-    Given a finished event with a published edited recording whose provider is unreachable
+  Scenario Outline: A player that cannot load fails honestly in the browser
+    Given a finished event with a published edited recording
+    And the embedded player <failure> in the browser
     When a signed-in doctor opens the event page
-    Then the playback read fails with 503 RECORDING_SOURCE_UNAVAILABLE
-    And the page renders an explicit unavailability message with a retry affordance
-    And no silently dead player is rendered
+    Then the player is replaced by an explicit Russian unavailability message with a retry action
+    And no silently dead or forever-spinning player is rendered
+    And the API returned no error status for it
+
+    Examples:
+      | failure                |
+      | raises a load error    |
+      | never finishes loading |
 
   # ---------------------------------------------------------------- my events
 
@@ -208,10 +284,16 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
 
   @EARS-9 @core @happy
   Scenario: A past registered event with no recording is still listed
-    Given a doctor registered for a past event that has no published recording
+    Given a doctor registered for an ended event that has no published recording
     When the doctor opens the «Записи» tab
     Then that event is listed with the preparing badge
     And its link opens the event page showing the plaque
+
+  @EARS-9 @core @failure
+  Scenario: An archived registered event appears in neither tab
+    Given a doctor registered for an event that was later archived
+    When the doctor opens either tab of «Мои события»
+    Then that event is not listed
 
   # ---------------------------------------------------------------- shared unit
 
@@ -233,18 +315,28 @@ Feature: A finished broadcast keeps its value as a recording, and the archive is
 
   @EARS-11 @core @happy
   Scenario: /webinars gains a past tab with counts
-    Given a mix of upcoming and finished events
+    Given a mix of draft, upcoming, ended and archived events
     When any visitor opens /webinars
     Then «Предстоящие · N» and «Прошедшие · N» tabs render with correct counts
-    And the past tab lists finished events newest first with their recording-state badge
+    And the past tab lists ended events newest first with their recording-state badge
+    And draft and archived events appear in neither tab and in neither count
     And the listing is reachable with no account
 
   @EARS-11 @core @happy
   Scenario: Upcoming discovery is refined, not redesigned
     Given the existing /webinars listing behaviour before 014
     When the past tab ships
-    Then the «Неделя | Месяц» views behave exactly as before
+    Then the «Неделя | Месяц» views render exactly as before
     And the upcoming listing composition is unchanged
+
+  @EARS-11 @core @happy
+  Scenario: The listing selection is linkable and survives navigation
+    Given a visitor on /webinars who selects the past tab, a facet value and page two
+    Then the selected tab, the facet value and the page cursor are all in the URL query
+    And the «Неделя | Месяц» view uses the same URL mechanism rather than its own
+    When the page is reloaded and the browser back and forward buttons are used
+    Then the same narrowed view is restored each time
+    And the URL can be shared with a colleague to reproduce that exact view
 
   @EARS-11 @EARS-15 @core @happy
   Scenario: Browsing the archive and the gate are one continuous path

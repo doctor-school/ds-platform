@@ -80,6 +80,24 @@ stateDiagram-v2
 - **Each transition is a distinct vertical.** Publish opens public reachability + registration; open/close bound the 006 room + presence window; archive removes the event from public surfaces. Each is its own child Issue (EARS-4/5/6), and `audit_ledger` gets exactly one terminal row per transition (ADR-0003 §6).
 - **`ended → archived` is manual (LD-2, owner review pending).** No scheduler, no time-based automation in wave 1 — archiving is an explicit operator command. A time-based auto-archive policy is a named wave-2 candidate.
 
+### Amendment — 2026-08-17: one additional edge `published → ended` (source: feature 014)
+
+> **Status:** feature 007 is live in production, so this is recorded as an amendment rather than an inline rewrite (AGENTS.md §6). Everything above remains the decision as originally taken; this block adds one edge and nothing else.
+
+**Source.** Feature 014 (event recordings and the archived-event page) needs a broadcast to reach `ended` before a recording of it may be published. On this platform `ended` is reachable only through `OpenRoom` + `CloseRoom`, so every эфир held before features 006/007 existed, and every эфир run off-platform, is permanently stuck at `published` — and its recording could never be published. Canon: [`014-requirements-en.md`](../014-event-recordings/014-requirements-en.md) EARS-18 + [`014-design.md`](../014-event-recordings/014-design.md) §3.1.
+
+**The amendment.** The closed set gains exactly one edge, `published → ended`, behind one new command:
+
+- `MarkEventEnded(eventId)` — admin label «Отметить завершённым (трансляция прошла вне платформы)».
+- **Preconditions (all three):** `state = published`; `starts_at + duration_min` already in the past; the room was **never** opened for this event.
+- **Effect:** `published → ended` in one transaction, without passing through `live`. No room record, no presence window, no 006 side effect, no recording.
+- **Authorization and protocol:** ordinary `platform_admin` on the dedicated admin session, `If-Match` on the event ETag plus `Idempotency-Key` — identical to every other 007 transition. No new role and no elevation.
+- **Refusals:** 409 `EVENT_NOT_PAST` when the scheduled end is still in the future; 409 `INVALID_TRANSITION` from any other origin state, or when the room was ever opened.
+- **Audit:** one `audit_ledger` row, as for every other transition.
+- **Admin UI:** offered through the existing `EventAdminDetail.validTransitions` derivation, so the control appears only when all three preconditions hold.
+
+**What does not change.** `OpenRoom` / `CloseRoom` / `ArchiveEvent` and their side effects are untouched. Backward moves and reopening an `archived` event remain refused. There is still **no unpublish**. Feature 004's `published → archived` route for a cancelled or never-aired event is unchanged, and such an event never becomes `ended` by this command — the never-opened-room and past-end preconditions are what keep this from being a general "set any state" escape hatch.
+
 ## 3. The event aggregate + stream config + program PDF
 
 007 owns the write model; 004/005/006 read projections of it. The program-PDF **binary** lives in object storage; the aggregate holds only a reference.

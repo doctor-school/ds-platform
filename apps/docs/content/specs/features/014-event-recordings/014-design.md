@@ -1,6 +1,6 @@
 ---
 title: "014 — Event recordings and the archived-event page (Design)"
-description: "Design for retained event_recordings, the derived edited-over-raw projection, the two-layer public/authenticated read split that implements the login gate, the operator-dated preparing plaque, the platform-wide post-login return-to-origin mechanism, «Мои события» tabs over the registration history, and the shared event card/list/pagination unit with its facet capability."
+description: "Design for retained event_recordings, the ended-only definition of a finished event plus the MarkEventEnded backfill that makes off-platform broadcasts publishable, the derived edited-over-raw projection, the two-layer public/authenticated read split that implements the login gate, the operator-dated preparing plaque, the platform-wide post-login return-to-origin mechanism, «Мои события» tabs over the registration history, and the shared event card/list/pagination unit with its URL-persisted state and facet capability."
 slug: 014-event-recordings-design
 status: Draft
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
@@ -46,6 +46,12 @@ flowchart LR
 ```
 
 The single hard boundary in this design is the one drawn by the login gate: **`APIP` never emits a playable source.** That is a contract fact, asserted on the response body, not a rendering rule in the portal.
+
+### 1.1 «Finished» is one state
+
+Every 014 rule keyed on «finished» reads `EventLifecycleState = ended` and nothing else. `archived` is deliberately excluded: feature 004 routes a cancelled or never-aired event `published -> archived` and renders it as a notice with no CTA, absent from every public listing (`004-design.md` visibility policy, owner variant «а»). Treating `archived` as post-live would hand a player to a broadcast that never happened and would contradict a merged contract. 014 therefore supersedes no 004 clause; the requirements carry the full state table.
+
+That leaves one real gap, which §3.1 closes: on this platform `ended` is reachable only through `OpenRoom` + `CloseRoom`, so every эфир held before features 006/007 existed, or run off-platform, could never become finished and its recording could never be published — the archive the PRD premises would ship empty.
 
 ## 2. Data model (`wave: core`)
 
@@ -95,7 +101,7 @@ erDiagram
 ```mermaid
 stateDiagram-v2
   [*] --> draft : AttachRecording (kind slot free)
-  draft --> published : PublishRecording (event finished)
+  draft --> published : PublishRecording (event state = ended)
   published --> draft : UnpublishRecording
   draft --> retired : RetireRecording
   published --> retired : RetireRecording
@@ -113,14 +119,45 @@ stateDiagram-v2
 
 Refusals:
 
-| Attempt                                               | Result                                                     |
-| ----------------------------------------------------- | ---------------------------------------------------------- |
-| Attach a kind that already has a non-retired row      | 409 `RECORDING_KIND_OCCUPIED` naming that row              |
-| Publish while the event is `draft`/`published`/`live` | 409 `EVENT_NOT_FINISHED`                                   |
-| Restore while the kind slot is taken by another row   | 409 `RECORDING_KIND_OCCUPIED`                              |
-| Any transition not on the diagram                     | 409 `INVALID_TRANSITION`                                   |
-| Stale `If-Match`                                      | 412 `PRECONDITION_FAILED`, no mutation                     |
-| Any Delete attempt                                    | No route exists — 404 from the router, never a soft delete |
+| Attempt                                                               | Result                                                         |
+| --------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Attach a kind that already has a non-retired row                      | 409 `RECORDING_KIND_OCCUPIED` naming that row                  |
+| Publish while the event is `draft`, `published`, `live` or `archived` | 409 `EVENT_NOT_FINISHED` — publishing requires exactly `ended` |
+| Restore while the kind slot is taken by another row                   | 409 `RECORDING_KIND_OCCUPIED`                                  |
+| Any transition not on the diagram                                     | 409 `INVALID_TRANSITION`                                       |
+| Stale `If-Match`                                                      | 412 `PRECONDITION_FAILED`, no mutation                         |
+| Any Delete attempt                                                    | No route exists — 404 from the router, never a soft delete     |
+
+### 3.1 Reaching `ended` for a broadcast the platform never hosted (`wave: core`)
+
+Feature 007's transition set is closed and server-enforced, and `ended` sits behind `OpenRoom` + `CloseRoom`. Every эфир held before features 006/007 existed, and every эфир run off-platform, is therefore stuck at `published` — and under the §3 publish gate its recording could never be published. That is not an edge case: it is the launch content of the archive.
+
+014 does **not** loosen the guard. It adds exactly one new legal edge behind one narrow operator command.
+
+```mermaid
+stateDiagram-v2
+  published --> live : OpenRoom (007, unchanged)
+  live --> ended : CloseRoom (007, unchanged)
+  published --> ended : MarkEventEnded (014 — no room was ever opened)
+  ended --> archived : ArchiveEvent (007, unchanged)
+  published --> archived : ArchiveEvent (004 — cancelled / never aired, unchanged)
+```
+
+`MarkEventEnded` — admin label «Отметить завершённым (трансляция прошла вне платформы)»:
+
+| Aspect        | Contract                                                                                                                                                  |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Preconditions | `state = published` **and** `starts_at + duration_min` already in the past **and** the room was never opened                                              |
+| Effect        | `published → ended` in one transaction; no `live` state, no room record, no presence window, no recording                                                 |
+| Authorization | ordinary `platform_admin` on the dedicated admin session — no new role, no elevation                                                                      |
+| Protocol      | `If-Match` on the event ETag + `Idempotency-Key`, exactly like every other 007 transition                                                                 |
+| Refusals      | 409 `EVENT_NOT_PAST` when the scheduled end is still in the future; 409 `INVALID_TRANSITION` from any other origin state or when the room was ever opened |
+| Audit         | one feature-010 row, like every other lifecycle transition                                                                                                |
+| Admin UI      | derived from `EventAdminDetail.validTransitions` as 007 already does, so the control appears only when the precondition holds                             |
+
+Two boundaries keep this from becoming a general "set any state" escape hatch: the never-opened-room condition means it can never rewrite the history of a broadcast the platform actually hosted, and the past-end condition means it can never pre-declare a future эфир finished. A cancelled or never-aired event keeps feature 004's `published → archived` route and never becomes finished by this command.
+
+Because feature 007 runs in production, its extended transition set is recorded in `007-design.md` as an **amendment block** naming 014 as the source (AGENTS.md §6 amendment rule) rather than as an inline rewrite of its state machine.
 
 ## 4. The derived projection (`wave: core`)
 
@@ -174,6 +211,7 @@ sequenceDiagram
 - The public read is identical for a guest and for a signed-in doctor, which keeps it cacheable and keeps one announcement projection under test.
 - The authenticated read is the only source-bearing response in the feature. Its guard is `access: authenticated`; it checks no registration, no role, no attendance.
 - A `preparing` event returns 200 with `{primary: null, secondary: null}` on the authenticated read too — the plaque is not an error.
+- The API hands out an embed reference and never fetches the media, so it has no way to know the provider is unreachable. Player unavailability is therefore a **client** branch: the portal's player boundary treats a load error or a load timeout as the honest «запись временно недоступна» state with a retry action. There is no server status for it, and there must be no fake one.
 - The portal renders the player in a client boundary that receives the `embedRef` from the server component; the source never lands in a public HTML payload for a guest.
 
 ## 6. Return-to-origin (`wave: core`, platform-wide rule)
@@ -239,6 +277,8 @@ Built from `design-source/webinar-archive.dc.html`, whose props map one-to-one o
 
 The page is the same route and the same layout as the pre-live state; the hero, meta row, «О чём эфир» timecode rows, speaker/materials aside and bottom CTA are the canvas composition. The player card holds exactly one of: the player, the guest gate, the plaque, or the unavailability message.
 
+**Content fields split across the two waves.** The `core` page renders every field of feature 004's existing `PublicEventPage` allow-list — title, school, start instant, duration, description, `speakers[]`, `specialties[]`, `partners[]`, `programPdfUrl?` — and is complete on its own. The event's **project(s) and topics** are 012 entities that the 004 projection does not carry, so they are EARS-19 in the `facets` wave; until it lands those two blocks are simply absent, never a placeholder or a «скоро» stub. This is why the `core` wave's «no 012 dependency» claim holds for the page as well as for the listing.
+
 ### 8.2 The shared event card / list / pagination unit
 
 014 builds it (epic decision #7) because 014 starts before the 013 build. Two controlled, fetch-free components:
@@ -264,7 +304,9 @@ Exactly two tabs — «Предстоящие» (default) and «Записи» �
 
 ### 8.4 `/webinars` tabs
 
-«Предстоящие · N | Прошедшие · N», mirroring the tab pattern already drawn on `project-page.dc.html` / `expert-page.dc.html`. The existing «Неделя | Месяц» views and the upcoming discovery behaviour are untouched — this is a refinement, not a redesign. Tab and facet selection live in the URL query so a filtered archive view is linkable and survives a reload.
+«Предстоящие · N | Прошедшие · N», mirroring the tab pattern already drawn on `project-page.dc.html` / `expert-page.dc.html`. Tab membership is `ended` for the past tab and feature 004's existing upcoming rule for the other; `draft` and `archived` are in neither tab and in neither count. The «Неделя | Месяц» views' rendering and the upcoming discovery behaviour are untouched — this is a refinement, not a redesign.
+
+**State persistence follows LD-11** (requirements → Lead technical decisions): the selected tab, every facet value, the page cursor **and** the week/month view are query parameters of `/webinars`. One surface, one persistence rule — the week/month switcher moves onto the same mechanism rather than keeping its own, because mixed persistence on one page is a fidelity trap. The rationale (linkable filtered archive, reload and back/forward survival, and the fact that a deliberately fetch-free unit leaves the URL as the only place a server component can read the selection from) is recorded there as a lead decision, since the PRD left URL persistence to Stage A and no canvas carries it.
 
 ## 9. Facets (`wave: facets`)
 
@@ -307,26 +349,26 @@ sequenceDiagram
 | GET    | `/v1/public/events` (`timeframe`, cursor)        | `public`         | core   |
 | GET    | `/v1/public/events/facets`                       | `public`         | facets |
 | GET    | `/v1/events/:idOrSlug/recordings`                | `authenticated`  | core   |
-| GET    | `/v1/me/events` (`tab=upcoming\|recordings`)     | `authenticated`  | core   |
+| GET    | `/v1/me/events` (`tab=upcoming\|recordings`)     | `doctor_guest`   | core   |
+| POST   | `/v1/admin/events/:id/mark-ended`                | `platform_admin` | core   |
 
-No Delete route exists for any 014 resource. `/v1/public/events` and `/v1/public/events/:idOrSlug` are extensions of the existing feature-004 controllers, not new ones; `/v1/me/events` extends the existing feature-005 controller.
+No Delete route exists for any 014 resource. `/v1/public/events` and `/v1/public/events/:idOrSlug` are extensions of the existing feature-004 controllers, not new ones; `/v1/me/events` extends the existing feature-005 controller and keeps that feature's `doctor_guest` classification, so the endpoint-authz matrix carries one wording for it rather than two. `/v1/admin/events/:id/mark-ended` extends the feature-007 admin controller.
 
 ## 11. Errors
 
 RFC 7807 Problem Details with `traceId` and an exact `errorCode`, per ADR-0002 §9.
 
-| Status | Codes                                                                                           |
-| ------ | ----------------------------------------------------------------------------------------------- |
-| 400    | `VALIDATION_FAILED`, `CURSOR_INVALID`, `IDEMPOTENCY_KEY_INVALID`                                |
-| 401    | `AUTHENTICATION_REQUIRED` (playback), `ADMIN_SESSION_REQUIRED` (admin)                          |
-| 403    | `PLATFORM_ADMIN_REQUIRED`                                                                       |
-| 404    | `RESOURCE_NOT_FOUND` (unknown/ineligible event, recording or facet id — one shape)              |
-| 409    | `RECORDING_KIND_OCCUPIED`, `EVENT_NOT_FINISHED`, `INVALID_TRANSITION`, `IDEMPOTENCY_KEY_REUSED` |
-| 412    | `PRECONDITION_FAILED`                                                                           |
-| 428    | `IDEMPOTENCY_KEY_REQUIRED`, `PRECONDITION_REQUIRED`                                             |
-| 503    | `RECORDING_SOURCE_UNAVAILABLE` (playback source provider unreachable)                           |
+| Status | Codes                                                                                                             |
+| ------ | ----------------------------------------------------------------------------------------------------------------- |
+| 400    | `VALIDATION_FAILED`, `CURSOR_INVALID`, `IDEMPOTENCY_KEY_INVALID`                                                  |
+| 401    | `AUTHENTICATION_REQUIRED` (playback), `ADMIN_SESSION_REQUIRED` (admin)                                            |
+| 403    | `PLATFORM_ADMIN_REQUIRED`                                                                                         |
+| 404    | `RESOURCE_NOT_FOUND` (unknown/ineligible event, recording or facet id — one shape)                                |
+| 409    | `RECORDING_KIND_OCCUPIED`, `EVENT_NOT_FINISHED`, `EVENT_NOT_PAST`, `INVALID_TRANSITION`, `IDEMPOTENCY_KEY_REUSED` |
+| 412    | `PRECONDITION_FAILED`                                                                                             |
+| 428    | `IDEMPOTENCY_KEY_REQUIRED`, `PRECONDITION_REQUIRED`                                                               |
 
-`RECORDING_SOURCE_UNAVAILABLE` is what the portal turns into the honest «запись временно недоступна» message with a retry affordance — the EARS-7 second branch. A dead player is never an acceptable rendering of it.
+014 defines **no 5xx of its own**, and deliberately no `RECORDING_SOURCE_UNAVAILABLE`: the API returns an embed reference and never fetches the media, so a server status for «source unreachable» would have no producer. The portal's player boundary owns the honest «запись временно недоступна» message and its retry action (§5, EARS-7 second branch); a dead or forever-spinning player is never an acceptable rendering of it.
 
 ## 12. Design-system and Stage gates
 
@@ -340,18 +382,25 @@ RFC 7807 Problem Details with `traceId` and an exact `errorCode`, per ADR-0002 �
 ```mermaid
 flowchart LR
   S["schema + migration (EARS-1/2)"] --> A["admin panel + readiness date"]
+  MB["mark-ended backfill (EARS-18)"] --> A
   S --> R["resolver + public/auth read split (EARS-3/4/5)"]
   R --> PG["post-live page + plaque + spoiler (EARS-7/8)"]
   RT["return-to-origin mechanism (EARS-6)"] --> PG
-  U["shared list unit (EARS-10)"] --> TB["/webinars tabs (EARS-11)"]
+  U["shared list unit (EARS-10 build)"] --> TB["/webinars tabs (EARS-11)"]
   U --> ME["«Мои события» (EARS-9)"]
   R --> TB
   R --> ME
   TWELVE["012 relations wave"] --> FA["facet unit + AND filtering (EARS-12/13/14)"]
+  TWELVE --> PT["projects + topics on the page (EARS-19)"]
+  PG --> PT
   U --> FA
   PG --> AX["mobile + axe sweep (EARS-15)"]
   TB --> AX
   FA --> AX
 ```
 
-`core` runs end to end without the 012 track. Only the `facets` box waits, and it waits on 012's relations wave rather than on anything inside 014.
+`core` runs end to end without the 012 track. Only the two `facets` boxes wait, and they wait on 012's relations wave rather than on anything inside 014.
+
+**EARS-18 comes first in practice.** Without the backfill command there is no `ended` event outside the platform's own room history, so the admin panel has nothing publishable to attach a recording to and the archive ships empty. It is cheap, it touches one command handler plus the 007 amendment, and it unblocks every downstream demonstration of the feature.
+
+Two clauses are **process gates rather than code Issues** and must not be opened as implementation work: EARS-10's «the unit exists once and everyone consumes it» ownership rule (the unit's actual build lands with the first consuming surface, and the rule is verified by the unit contract test) and EARS-16's Stage-A/Stage-B gate (verified by the recorded owner artifacts).

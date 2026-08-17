@@ -27,7 +27,10 @@ import type { z } from "zod";
  */
 export function useLocalizedResolver<TFieldValues extends FieldValues, Out>(
   schema: z.ZodType<Out, TFieldValues>,
-  namespace: "events.validation" | "login.validation" = "events.validation",
+  namespace:
+    | "events.validation"
+    | "login.validation"
+    | "projects.validation" = "events.validation",
 ): Resolver<TFieldValues, unknown, Out> {
   const t = useTranslations(namespace);
 
@@ -91,6 +94,18 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
   if (has("password")) {
     return issue.code === "too_big" ? t("maxLength") : t("passwordTooShort");
   }
+
+  // 012 project authoring (#1283). The slug box carries two DISTINCT refusals —
+  // wrong grammar vs the forbidden id namespace (a canonical UUID slug would make
+  // `/:idOrSlug` ambiguous) — and an operator can only fix what the message names,
+  // so they are separate strings rather than one "invalid slug".
+  if (has("slug")) {
+    if (issue.code === "custom") return t("slugReserved");
+    if (issue.code === "invalid_format") return t("slugPattern");
+    if (issue.code === "too_big") return t("maxLength");
+    return t("required");
+  }
+  if (has("kind")) return t("kind");
 
   // Duration (minutes) — a positive integer, ≤ 24h. An empty/NaN/zero/negative
   // value all resolve to the same "≥ 1 minute" guidance; an over-cap value to its own.

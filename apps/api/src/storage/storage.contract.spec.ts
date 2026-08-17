@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { FakeObjectStorage } from "./storage.fake.js";
 import { S3ObjectStorage } from "./storage.s3.js";
-import { SIGNED_URL_TTL_SECONDS } from "./storage.types.js";
+import {
+  ObjectAlreadyExistsError,
+  SIGNED_URL_TTL_SECONDS,
+} from "./storage.types.js";
 
 // 004 EARS-2 — the public event page's «downloadable program PDF» is only
 // downloadable if the projection URL actually opens in a browser. The prod
@@ -54,6 +57,40 @@ describe("004 EARS-2 program-PDF storage URL signing contract (#842)", () => {
 
       const absent = await fake.urlFor("events/programs/2026/missing.pdf");
       expect((await fake.fetchUrl(absent)).status).toBe(404);
+    });
+  });
+
+  describe("write-once conditional PUT (012-design §6)", () => {
+    it("012 EARS-17: when onlyIfAbsent is set and the key is taken, the fake shall refuse the overwrite exactly as the real conditional PUT does", async () => {
+      const fake = new FakeObjectStorage();
+      const canonicalKey = "projects/covers/record-scoped.webp";
+      const first = Buffer.from("canonical bytes");
+      await fake.put({
+        key: canonicalKey,
+        body: first,
+        contentType: "image/webp",
+        onlyIfAbsent: true,
+      });
+      // A lapsed owner's late PUT under the SAME deterministic key must not
+      // clobber the object the committed row already references.
+      await expect(
+        fake.put({
+          key: canonicalKey,
+          body: Buffer.from("late loser bytes"),
+          contentType: "image/webp",
+          onlyIfAbsent: true,
+        }),
+      ).rejects.toBeInstanceOf(ObjectAlreadyExistsError);
+      expect(await fake.getBytes(canonicalKey)).toEqual(first);
+      // Without the flag the plain 007 overwrite behaviour is unchanged.
+      await fake.put({
+        key: canonicalKey,
+        body: Buffer.from("deliberate overwrite"),
+        contentType: "image/webp",
+      });
+      expect(await fake.getBytes(canonicalKey)).toEqual(
+        Buffer.from("deliberate overwrite"),
+      );
     });
   });
 

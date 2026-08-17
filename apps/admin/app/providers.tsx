@@ -12,7 +12,7 @@ import { accessControlProvider } from "@/providers/access-control-provider";
  * The Refine CSR shell (ADR-0004 §4 caveat — Refine manages its own QueryClient
  * behind this `"use client"` boundary; the admin app is effectively CSR with a
  * thin SSR layout). Wires the custom data/auth/access providers (007 EARS-8/11)
- * and the single `events` resource whose routes back the design §8 surface. The
+ * and the taxonomy/event resources whose routes back the admin surface. The
  * i18n copy is next-intl (`useTranslations` in each page), so Refine's own
  * `i18nProvider` is not needed — every user-facing string flows through the RU
  * catalog and the `no-hardcoded-display-string` gate (EARS-10).
@@ -32,6 +32,15 @@ export function Providers({ children }: { children: ReactNode }) {
           create: "/events/create",
           edit: "/events/:id",
           meta: { label: t("app.nav.events") },
+        },
+        // 012 content taxonomy (#1283). #1284–#1286 register experts / topics /
+        // partners the same way, against the same shared list shell and provider.
+        {
+          name: "projects",
+          list: "/projects",
+          create: "/projects/create",
+          edit: "/projects/:id",
+          meta: { label: t("app.nav.projects") },
         },
       ]}
       options={{

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { PROJECT_DESCRIPTION_MAX } from "@ds/schemas";
 import { bootstrapAdminSession } from "../support/admin-session";
 import { totpCode } from "../support/totp";
 
@@ -111,6 +112,44 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
 
     await page.goto(`/events/${id}`);
     await page.getByTestId("event-form").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
+  // 012 EARS-1 (#1283) — the taxonomy surfaces added by the project vertical: the
+  // shared admin list shell (search box, state select, retired toggle, pagination)
+  // and the tabbed detail with the character counter and the media dropzone. They
+  // introduce four control classes the event surfaces never had, so they get their
+  // own scan rather than inheriting a green from the event pages.
+  test("the project list + create + detail surfaces pass WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    await page.goto("/projects");
+    await page.getByTestId("projects-filters").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page.goto("/projects/create");
+    await page.getByTestId("project-form").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    // The OVER-LIMIT counter is its own colour state (destructive small text), so
+    // it is scanned explicitly rather than inherited from the resting form: the
+    // showcase `playwright-axe` gate caught a real `color-contrast` failure there,
+    // and a suite that only ever renders the muted counter would not have.
+    await page
+      .locator("#description")
+      .fill("х".repeat(PROJECT_DESCRIPTION_MAX + 5));
+    await expect(page.getByText("превышено на", { exact: false })).toBeVisible();
+    for (const theme of THEMES) await scan(page, theme);
+
+    // A real created row, so the detail scan covers the tab bar, the populated
+    // counter and the dropzone's filled state — not just an empty form.
+    await page.locator("#title").fill(`Axe-скан проект ${Date.now()}`);
+    await page.locator("#description").fill("");
+    await page.locator("#description").fill("Описание для скана доступности.");
+    await page.getByTestId("submit-project").click();
+    await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+    await page.getByTestId("project-form").waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
   });
 });

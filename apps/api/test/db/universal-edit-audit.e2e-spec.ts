@@ -26,6 +26,8 @@ const AUDITED_TABLES = [
   "event_speakers",
   "stream_config",
   "registrations",
+  // 012 EARS-1 (#1283) — the first taxonomy entity table.
+  "projects",
 ] as const;
 
 /** Design §5 allowlist — tables that must NOT carry the capture trigger. */
@@ -33,6 +35,9 @@ const ALLOWLISTED_TABLES = [
   "audit_ledger",
   "idempotency_keys",
   "presence_beats",
+  // 012-design §5.1/§6 (#1283) — the second and last taxonomy technical
+  // exclusion: object-cleanup coordination, no domain truth.
+  "media_cleanup_jobs",
 ] as const;
 
 interface LedgerRow {

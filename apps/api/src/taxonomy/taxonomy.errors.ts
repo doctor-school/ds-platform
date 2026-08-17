@@ -1,0 +1,217 @@
+import { randomUUID } from "node:crypto";
+import { HttpException } from "@nestjs/common";
+import type { ProblemDetails, TaxonomyErrorCode } from "@ds/schemas";
+
+// 012-design §5.3 / EARS-16 — every 012 failure is `application/problem+json`
+// with RFC 7807 fields plus the two platform fields `errorCode` and `traceId`,
+// and NO database key, storage key or hidden lifecycle state.
+//
+// The mapping lives in ONE table below rather than at each throw site: a handler
+// names the stable `errorCode`, and the status is derived. That way the spec's
+// §5.3 status⇄code table is a data structure a test can read, not a convention
+// spread across twenty `throw new ConflictException(...)` calls where a wrong
+// status is invisible.
+
+/** The exact §5.3 status for each stable error code. */
+export const TAXONOMY_ERROR_STATUS: Readonly<
+  Record<TaxonomyErrorCode, number>
+> = {
+  VALIDATION_FAILED: 400,
+  MEDIA_INVALID: 400,
+  MEDIA_INPUT_CONFLICT: 400,
+  CURSOR_INVALID: 400,
+  IDEMPOTENCY_KEY_INVALID: 400,
+  ADMIN_SESSION_REQUIRED: 401,
+  PLATFORM_ADMIN_REQUIRED: 403,
+  RESOURCE_NOT_FOUND: 404,
+  RELATIONSHIP_CONFLICT: 409,
+  SLUG_CONFLICT: 409,
+  SLUG_IMMUTABLE: 409,
+  PUBLISH_REQUIREMENTS_NOT_MET: 409,
+  PUBLISHED_PROJECT_REQUIRES_CURATOR: 409,
+  INVALID_TRANSITION: 409,
+  LEGACY_SPEAKER_CONFLICT: 409,
+  SPEAKER_POSITION_OCCUPIED: 409,
+  CONTENT_REMOVED: 409,
+  IDEMPOTENCY_KEY_REUSED: 409,
+  IDEMPOTENCY_REQUEST_IN_PROGRESS: 409,
+  PRECONDITION_FAILED: 412,
+  LIFECYCLE_IMPACT_STALE: 412,
+  UNSUPPORTED_MEDIA_TYPE: 415,
+  IDEMPOTENCY_KEY_REQUIRED: 428,
+  PRECONDITION_REQUIRED: 428,
+  LIFECYCLE_IMPACT_REQUIRED: 428,
+  MEDIA_STORAGE_UNAVAILABLE: 503,
+};
+
+/** Stable, non-disclosing titles — never echo an id, key or internal state. */
+const TAXONOMY_ERROR_TITLE: Readonly<Record<TaxonomyErrorCode, string>> = {
+  VALIDATION_FAILED: "Validation failed",
+  MEDIA_INVALID: "Media rejected",
+  MEDIA_INPUT_CONFLICT: "Ambiguous media input",
+  CURSOR_INVALID: "Invalid cursor",
+  IDEMPOTENCY_KEY_INVALID: "Invalid Idempotency-Key",
+  ADMIN_SESSION_REQUIRED: "Admin session required",
+  PLATFORM_ADMIN_REQUIRED: "platform_admin required",
+  RESOURCE_NOT_FOUND: "Not found",
+  RELATIONSHIP_CONFLICT: "Relationship conflict",
+  SLUG_CONFLICT: "Slug already taken",
+  SLUG_IMMUTABLE: "Slug is permanently locked",
+  PUBLISH_REQUIREMENTS_NOT_MET: "Publication requirements not met",
+  PUBLISHED_PROJECT_REQUIRES_CURATOR: "Published project requires a curator",
+  INVALID_TRANSITION: "Invalid lifecycle transition",
+  LEGACY_SPEAKER_CONFLICT: "Legacy speaker conflict",
+  SPEAKER_POSITION_OCCUPIED: "Speaker position occupied",
+  CONTENT_REMOVED: "Content was editorially removed",
+  IDEMPOTENCY_KEY_REUSED: "Idempotency-Key reused with different input",
+  IDEMPOTENCY_REQUEST_IN_PROGRESS: "Request already in progress",
+  PRECONDITION_FAILED: "Precondition failed",
+  LIFECYCLE_IMPACT_STALE: "Lifecycle impact is stale",
+  UNSUPPORTED_MEDIA_TYPE: "Unsupported media type",
+  IDEMPOTENCY_KEY_REQUIRED: "Idempotency-Key required",
+  PRECONDITION_REQUIRED: "If-Match required",
+  LIFECYCLE_IMPACT_REQUIRED: "Lifecycle-Impact-Token required",
+  MEDIA_STORAGE_UNAVAILABLE: "Object storage unavailable",
+};
+
+/** The RFC 7807 `type` URI namespace — a stable, resolvable docs anchor. */
+export const PROBLEM_TYPE_BASE = "https://docs.doctor.school/errors";
+
+export interface TaxonomyFieldError {
+  path: string;
+  message: string;
+}
+
+/**
+ * The idempotency record this refusal belongs to. Structural on purpose — keeping
+ * `IdempotencyLease` out of this module leaves it dependency-free (the service
+ * imports `TaxonomyError`, so importing the service back would be a cycle).
+ */
+export interface ReplayLeaseRef {
+  key: string;
+  leaseEpoch: number;
+}
+
+/**
+ * The DETERMINISTIC post-record outcomes §6 bullet 3 requires to be fenced-stored
+ * and replayed: "Every deterministic completion — including 409 and both kinds of
+ * 412 — fenced-stores exact status/body plus allowed `ETag`/`Location`".
+ *
+ * Membership is decided by ONE question: given the same bound input, does this
+ * code always come back? A slug already taken, a permanently locked slug, an
+ * incomplete published projection, a stale/absent precondition and a refused
+ * object-storage PUT (§5.1 names the 503 explicitly) all qualify — and
+ * `MEDIA_INVALID` too, because the fingerprint binds the file's SHA-256, so the
+ * same bytes are refused identically forever.
+ *
+ * Deliberately ABSENT:
+ *  - pre-record refusals (auth, key shape, request shape) — no record exists yet;
+ *  - `RESOURCE_NOT_FOUND` — a row can be created later, so the answer is not
+ *    a property of the request;
+ *  - `IDEMPOTENCY_*` — those ARE the record protocol, not outcomes of it;
+ *  - unclassified DB/provider faults — §6 keeps those takeover-eligible, since
+ *    an uncertain commit must not be frozen into a stored verdict.
+ */
+export const DETERMINISTIC_TERMINAL_ERROR_CODES: ReadonlySet<TaxonomyErrorCode> =
+  new Set<TaxonomyErrorCode>([
+    // 400 — deterministic over the fingerprinted bytes
+    "MEDIA_INVALID",
+    // 409 invariants
+    "RELATIONSHIP_CONFLICT",
+    "SLUG_CONFLICT",
+    "SLUG_IMMUTABLE",
+    "PUBLISH_REQUIREMENTS_NOT_MET",
+    "PUBLISHED_PROJECT_REQUIRES_CURATOR",
+    "INVALID_TRANSITION",
+    "LEGACY_SPEAKER_CONFLICT",
+    "SPEAKER_POSITION_OCCUPIED",
+    "CONTENT_REMOVED",
+    // 412 — both kinds
+    "PRECONDITION_FAILED",
+    "LIFECYCLE_IMPACT_STALE",
+    // 503 — §5.1: "completes that idempotency outcome for replay"
+    "MEDIA_STORAGE_UNAVAILABLE",
+  ]);
+
+/**
+ * The single taxonomy failure type. Carries the stable `errorCode` (the client
+ * contract) and optional field-addressed detail; the status and title come from
+ * the §5.3 tables above, so a throw site cannot pick a wrong pair.
+ */
+export class TaxonomyError extends HttpException {
+  /**
+   * Set by a command that already reserved an idempotency record, for a code in
+   * {@link DETERMINISTIC_TERMINAL_ERROR_CODES}. The problem filter is what stores
+   * the outcome, so the bytes stored are byte-identical to the bytes sent — a
+   * second builder would be a second source of truth for "the exact body".
+   */
+  replayLease?: ReplayLeaseRef;
+
+  constructor(
+    readonly errorCode: TaxonomyErrorCode,
+    readonly detail?: string,
+    readonly fieldErrors?: TaxonomyFieldError[],
+  ) {
+    super(TAXONOMY_ERROR_TITLE[errorCode], TAXONOMY_ERROR_STATUS[errorCode]);
+  }
+}
+
+/**
+ * Mark a refusal as a deterministic post-record outcome of `lease`, so the filter
+ * fenced-stores it for replay. A code outside the set passes through untouched —
+ * the classification lives in one table, never at the throw site.
+ */
+export function markReplayable<E>(error: E, lease: ReplayLeaseRef): E {
+  if (
+    error instanceof TaxonomyError &&
+    DETERMINISTIC_TERMINAL_ERROR_CODES.has(error.errorCode)
+  ) {
+    error.replayLease = lease;
+  }
+  return error;
+}
+
+/** Build the wire body for a taxonomy failure. */
+export function toProblemDetails(
+  errorCode: TaxonomyErrorCode,
+  traceId: string,
+  options: {
+    detail?: string | undefined;
+    instance?: string | undefined;
+    errors?: TaxonomyFieldError[] | undefined;
+  } = {},
+): ProblemDetails {
+  return {
+    type: `${PROBLEM_TYPE_BASE}/${errorCode.toLowerCase().replace(/_/g, "-")}`,
+    title: TAXONOMY_ERROR_TITLE[errorCode],
+    status: TAXONOMY_ERROR_STATUS[errorCode],
+    ...(options.detail ? { detail: options.detail } : {}),
+    ...(options.instance ? { instance: options.instance } : {}),
+    errorCode,
+    traceId,
+    ...(options.errors && options.errors.length > 0
+      ? { errors: options.errors }
+      : {}),
+  };
+}
+
+/**
+ * The operational handle on a failure. Prefer the inbound W3C `traceparent`
+ * trace-id (so a Tempo span and the client's problem body name the same trace),
+ * falling back to a fresh id — never absent, because "which request was that?"
+ * is the first question an operator asks.
+ */
+export function resolveTraceId(req: {
+  headers?: Record<string, unknown>;
+  id?: unknown;
+}): string {
+  const traceparent = req.headers?.["traceparent"];
+  if (typeof traceparent === "string") {
+    const parts = traceparent.split("-");
+    if (parts.length >= 3 && parts[1] && /^[0-9a-f]{32}$/.test(parts[1])) {
+      return parts[1];
+    }
+  }
+  if (typeof req.id === "string" && req.id.length > 0) return req.id;
+  return randomUUID();
+}

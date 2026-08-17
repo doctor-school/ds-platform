@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { useForm, type Control, type FieldValues } from "react-hook-form";
 
 import { Button } from "@ds/design-system/button";
 import { Link } from "@ds/design-system/link";
 import { Input } from "@ds/design-system/input";
 import { NativeSelect } from "@ds/design-system/native-select";
+import { Textarea } from "@ds/design-system/textarea";
+import { MediaDropzone } from "@ds/design-system/media-dropzone";
 import { Label } from "@ds/design-system/label";
 import {
   Card,
@@ -487,6 +489,164 @@ function NativeSelectSection() {
                   className="w-full"
                 >
                   <NativeSelectFieldDemo state={state} />
+                </div>
+              </Cell>
+            ))}
+          </div>
+        )}
+      />
+    </PrimitiveSection>
+  );
+}
+
+function TextareaSection() {
+  const states = [
+    "empty",
+    "filled",
+    "hover",
+    "active",
+    "focus",
+    "over-limit",
+    "invalid",
+    "disabled",
+  ] as const;
+
+  return (
+    <PrimitiveSection
+      title="Textarea"
+      exportsLine="Textarea — empty · filled · hover · active · focus-visible · over-limit · invalid · disabled"
+    >
+      <p className="text-sm text-muted-foreground">
+        The official shadcn/ui textarea, re-skinned to the Input geometry, plus
+        the remaining-characters counter the 012 authoring forms need. The
+        counter never truncates: over the limit it turns destructive and the
+        control reads invalid, which is a truthful «this will be refused»
+        instead of silently dropping the operator&apos;s text.
+      </p>
+      <ThemePair
+        render={() => (
+          <div className="flex w-full flex-col gap-6 text-foreground">
+            {states.map((state) => (
+              <Cell key={state} label={state}>
+                <div
+                  data-showcase-force={
+                    POINTER_STATES.has(state) ? state : undefined
+                  }
+                  className="w-full"
+                >
+                  {/* No hand-made `id`: `ThemePair` renders this tree ONCE PER
+                      THEME PANE, so a literal id would be emitted twice per page.
+                      The primitive derives its counter id from `useId()`, which is
+                      unique per instance — the same reason every other section
+                      keeps ids out of `ThemePair`. */}
+                  <Textarea
+                    aria-label={`Textarea sample (${state})`}
+                    showCounter
+                    maxLength={120}
+                    formatCounter={(remaining) =>
+                      remaining < 0
+                        ? `превышено на ${Math.abs(remaining)}`
+                        : `осталось ${remaining}`
+                    }
+                    defaultValue={
+                      state === "empty"
+                        ? ""
+                        : state === "over-limit"
+                          ? "Слишком длинное описание проекта, которое заведомо не проходит по границе поля и должно быть честно помечено как превышение лимита."
+                          : "Программа для практикующих кардиологов."
+                    }
+                    disabled={state === "disabled"}
+                    aria-invalid={state === "invalid" || undefined}
+                    className={state === "focus" ? FORCED_FOCUS : undefined}
+                  />
+                </div>
+              </Cell>
+            ))}
+          </div>
+        )}
+      />
+    </PrimitiveSection>
+  );
+}
+
+const DROPZONE_ACCEPT = ["image/jpeg", "image/png", "image/webp"] as const;
+
+/** A tiny inline SVG stand-in for a stored cover — no network, no fixture file. */
+const DROPZONE_PREVIEW =
+  "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MCIgaGVpZ2h0PSI4MCI+PHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjMWQ0ZWQ4Ii8+PC9zdmc+";
+
+const DROPZONE_LABELS = {
+  prompt: "Перетащите изображение или выберите файл",
+  hint: "JPEG, PNG или WebP · до 10 МБ · до 6000 px по стороне",
+  remove: "убрать",
+  previewAlt: "Текущее изображение",
+};
+
+type DropzoneState =
+  | "empty"
+  | "hover"
+  | "active"
+  | "focus"
+  | "filled"
+  | "disabled";
+
+/**
+ * One dropzone specimen. `MediaDropzone` REQUIRES an `id` (it names the hidden
+ * file input), and `ThemePair` renders its tree once per theme pane — so the id
+ * comes from `useId()` on this component, giving each pane its own unique value
+ * instead of one literal emitted twice per page.
+ */
+function MediaDropzoneSpecimen({ state }: { state: DropzoneState }) {
+  const id = useId();
+  return (
+    <MediaDropzone
+      id={id}
+      accept={DROPZONE_ACCEPT}
+      maxBytes={10 * 1024 * 1024}
+      currentUrl={state === "filled" ? DROPZONE_PREVIEW : null}
+      file={null}
+      onFileChange={() => undefined}
+      onRemoveCurrent={() => undefined}
+      disabled={state === "disabled"}
+      labels={DROPZONE_LABELS}
+      className={state === "focus" ? FORCED_FOCUS : undefined}
+    />
+  );
+}
+
+function MediaDropzoneSection() {
+  const states: DropzoneState[] = [
+    "empty",
+    "hover",
+    "active",
+    "focus",
+    "filled",
+    "disabled",
+  ];
+  return (
+    <PrimitiveSection
+      title="MediaDropzone"
+      exportsLine="MediaDropzone — empty · hover · active · focus-visible · filled (preview + убрать) · disabled"
+    >
+      <p className="text-sm text-muted-foreground">
+        Adopted from the Kibo UI Dropzone pattern (MIT), re-skinned to DS tokens
+        and reduced to one optional image. The whole zone is a
+        <code> label </code> around a visually-hidden file input, so Tab reaches
+        a real control and Space opens the picker. Its type/size checks are
+        preflight only — the API normalizer stays authoritative.
+      </p>
+      <ThemePair
+        render={() => (
+          <div className="flex w-full flex-col gap-6 text-foreground">
+            {states.map((state) => (
+              <Cell key={state} label={state}>
+                <div
+                  data-showcase-force={
+                    POINTER_STATES.has(state) ? state : undefined
+                  }
+                  className="w-full"
+                >
+                  <MediaDropzoneSpecimen state={state} />
                 </div>
               </Cell>
             ))}
@@ -1871,6 +2031,8 @@ export function PrimitivesView() {
       <LinkSection />
       <InputSection />
       <NativeSelectSection />
+      <TextareaSection />
+      <MediaDropzoneSection />
       <LabelSection />
       <CardSection />
       <TabsSection />

@@ -2,6 +2,9 @@ import { z } from "zod";
 import {
   ConfigureStreamRequestSchema,
   CreateEventRequestSchema,
+  CreateProjectRequestSchema,
+  type ProjectKind,
+  SlugSchema,
   type SpeakerEntry,
 } from "@ds/schemas";
 import {
@@ -109,3 +112,48 @@ export interface StreamConfigFields {
 }
 
 export { parseSpecialties };
+
+/**
+ * The 012 project create/edit form (#1283). DERIVED from the `@ds/schemas` SSOT
+ * exactly as the event form is: each field reuses the create-schema validator, so
+ * the bound the operator sees before submit is the bound the API enforces.
+ *
+ * `slug` is a plain string here rather than `SlugSchema.optional()`: the form box
+ * is always present (it shows the generated preview), and an empty box means
+ * "generate it server-side". So emptiness is legal and only a NON-empty value is
+ * validated against the SSOT slug rules.
+ *
+ * `description` is required by the form even though the column is nullable: a
+ * draft may legally be incomplete, but the operator authoring one is asking to
+ * fill it in, and publication (#1287) will demand it anyway. Leaving it optional
+ * would move the discovery of the missing field to publish time.
+ */
+const projectCreate = CreateProjectRequestSchema.shape;
+
+export const ProjectFormSchema = z.object({
+  kind: projectCreate.kind,
+  title: projectCreate.title,
+  description: z.string().trim().min(1).max(2000),
+  slug: z.string().superRefine((value, ctx) => {
+    if (value.trim().length === 0) return; // empty ⇒ server generates it
+    const result = SlugSchema.safeParse(value.trim());
+    if (result.success) return;
+    for (const issue of result.error.issues) {
+      // Preserve the DISTINCTION the SSOT makes: a `custom` issue is the
+      // canonical-UUID refusal, everything else is the grammar/length rule. No
+      // baked message — an explicit one would outrank the localized error map.
+      ctx.addIssue(
+        issue.code === "custom"
+          ? { code: "custom" }
+          : { code: "invalid_format", format: "regex" },
+      );
+    }
+  }),
+});
+
+export interface ProjectFormFields {
+  kind: ProjectKind;
+  title: string;
+  description: string;
+  slug: string;
+}

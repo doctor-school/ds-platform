@@ -11,7 +11,10 @@ import type {
   PutObjectInput,
   StoredObject,
 } from "./storage.types.js";
-import { SIGNED_URL_TTL_SECONDS } from "./storage.types.js";
+import {
+  ObjectAlreadyExistsError,
+  SIGNED_URL_TTL_SECONDS,
+} from "./storage.types.js";
 
 /** The S3 config the adapter needs — resolved from env by the module (never hardcoded). */
 export interface S3StorageConfig {
@@ -48,14 +51,24 @@ export class S3ObjectStorage implements ObjectStorage {
   }
 
   async put(input: PutObjectInput): Promise<StoredObject> {
-    await this.client.send(
-      new PutObjectCommand({
-        Bucket: this.config.bucket,
-        Key: input.key,
-        Body: input.body,
-        ContentType: input.contentType,
-      }),
-    );
+    try {
+      await this.client.send(
+        new PutObjectCommand({
+          Bucket: this.config.bucket,
+          Key: input.key,
+          Body: input.body,
+          ContentType: input.contentType,
+          // `If-None-Match: *` is the S3 conditional-write precondition; the
+          // store answers 412 when the key is taken (012-design §6).
+          ...(input.onlyIfAbsent ? { IfNoneMatch: "*" } : {}),
+        }),
+      );
+    } catch (err) {
+      if (input.onlyIfAbsent && isPreconditionFailed(err)) {
+        throw new ObjectAlreadyExistsError(input.key);
+      }
+      throw err;
+    }
     return { key: input.key, url: await this.urlFor(input.key) };
   }
 
@@ -100,4 +113,11 @@ export class S3ObjectStorage implements ObjectStorage {
       new DeleteObjectCommand({ Bucket: this.config.bucket, Key: key }),
     );
   }
+}
+
+/** Whether a store rejection is the conditional-write "key already taken" answer. */
+function isPreconditionFailed(err: unknown): boolean {
+  const meta = (err as { $metadata?: { httpStatusCode?: number } }).$metadata;
+  const name = (err as { name?: string }).name;
+  return meta?.httpStatusCode === 412 || name === "PreconditionFailed";
 }

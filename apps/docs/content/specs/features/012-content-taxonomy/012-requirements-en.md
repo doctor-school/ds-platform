@@ -2,7 +2,7 @@
 title: "012 — Content taxonomy: projects, experts, topics and partners"
 description: "Requirements for first-class retained projects, experts, topics and partners; their retained many-to-many links to events and one another; gradual explicit migration from legacy free-text event speakers; platform_admin Refine authoring; and publish-safe bidirectional REST reads for later Academy surfaces."
 slug: 012-content-taxonomy
-status: Draft
+status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
 parent_issue: https://github.com/doctor-school/ds-platform/issues/1280

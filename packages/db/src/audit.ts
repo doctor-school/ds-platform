@@ -36,7 +36,12 @@ export const AUDIT_CAPTURE_ALLOWLIST: readonly {
   {
     table: "idempotency_keys",
     rationale:
-      "technical request-dedup cache, no domain truth (010-design §5)",
+      "technical request-dedup cache, no domain truth (010-design §5; 012-design §6 — one of the exact two taxonomy technical exclusions, retained-lifecycle tested)",
+  },
+  {
+    table: "media_cleanup_jobs",
+    rationale:
+      "technical object-cleanup coordination table, no domain truth — feature 010 audits the DOMAIN media-ref mutation that creates the job (012-design §5.1/§6; the second and last taxonomy technical exclusion)",
   },
   {
     table: "presence_beats",

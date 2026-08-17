@@ -3,7 +3,7 @@ title: "Feature 012 — Content taxonomy (PRD)"
 description: "Product requirements for the content taxonomy that binds the Academy's public surface: first-class projects, experts, topics and partners entities with m2m joins to events, an operator CRUD surface in the existing admin app (Refine), and a public read API the landing, catalogs and event pages consume. Feature 012 of the Academy public surface epic; source of the 012 EARS triplet (ADR-0014)."
 slug: academy-public-012-content-taxonomy-product
 epic: ../../product/academy-public/brief.md
-status: Draft
+status: In dev
 surface: user-facing
 lang: en
 ---

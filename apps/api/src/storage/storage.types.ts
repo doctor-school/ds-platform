@@ -10,6 +10,29 @@ export interface PutObjectInput {
   key: string;
   body: Buffer;
   contentType: string;
+  /**
+   * Write-once semantics — the S3 `If-None-Match: *` precondition (012-design
+   * §6). With a deterministic record-scoped key, a resumed request and its
+   * lapsed predecessor target the SAME key: without this flag the late loser
+   * would overwrite the winner's object after the domain row already referenced
+   * it. Set it and a second write to an existing key rejects with
+   * {@link ObjectAlreadyExistsError} instead of clobbering.
+   *
+   * Absent/false keeps the plain overwrite behaviour 007's program-PDF upload
+   * relies on.
+   */
+  onlyIfAbsent?: boolean;
+}
+
+/**
+ * Thrown by `put({ onlyIfAbsent: true })` when the key already holds an object.
+ * A distinct type (not a generic storage failure) because for an idempotent
+ * retry it is a SUCCESS signal: the canonical bytes are already there.
+ */
+export class ObjectAlreadyExistsError extends Error {
+  constructor(readonly key: string) {
+    super(`object ${key} already exists`);
+  }
 }
 
 export interface StoredObject {

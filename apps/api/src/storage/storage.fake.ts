@@ -4,6 +4,7 @@ import type {
   PutObjectInput,
   StoredObject,
 } from "./storage.types.js";
+import { ObjectAlreadyExistsError } from "./storage.types.js";
 
 /** What the fake store answers when a URL is dereferenced (mirrors an HTTP GET). */
 export interface FakeFetchResult {
@@ -35,6 +36,12 @@ export class FakeObjectStorage implements ObjectStorage {
   private readonly secret = randomBytes(16).toString("hex");
 
   async put(input: PutObjectInput): Promise<StoredObject> {
+    // Contract parity (#842 rule: the fake is never MORE permissive than real
+    // S3) — `onlyIfAbsent` must reject a taken key here too, or the write-once
+    // guarantee of 012-design §6 would hold in prod and silently not in tests.
+    if (input.onlyIfAbsent && this.objects.has(input.key)) {
+      throw new ObjectAlreadyExistsError(input.key);
+    }
     this.objects.set(input.key, input.body);
     return { key: input.key, url: await this.urlFor(input.key) };
   }

@@ -171,6 +171,31 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/projects/${ABSENT_ID}`,
     payload: {},
   },
+  // 012 EARS-2/EARS-16 (#1284) — the taxonomy expert routes sit on the same
+  // raised floor as every other admin route: the guard refuses before validation,
+  // idempotency or upload, so an unfielded request never even reaches the handler.
+  {
+    endpoint: "GET /v1/admin/experts",
+    method: "GET",
+    url: "/v1/admin/experts",
+  },
+  {
+    endpoint: "GET /v1/admin/experts/:id",
+    method: "GET",
+    url: `/v1/admin/experts/${ABSENT_ID}`,
+  },
+  {
+    endpoint: "POST /v1/admin/experts",
+    method: "POST",
+    url: "/v1/admin/experts",
+    payload: {},
+  },
+  {
+    endpoint: "PATCH /v1/admin/experts/:id",
+    method: "PATCH",
+    url: `/v1/admin/experts/${ABSENT_ID}`,
+    payload: {},
+  },
 ];
 
 /** An authz refusal — never a 2xx, never a partially-served admin answer. */

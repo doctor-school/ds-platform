@@ -1,5 +1,14 @@
 # @ds/portal
 
+## 0.18.1
+
+### Patch Changes
+
+- [#1369](https://github.com/doctor-school/ds-platform/pull/1369) [`b0a2e9a`](https://github.com/doctor-school/ds-platform/commit/b0a2e9a913cb5bac48e20b9670459e8ce42be4f1) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 013 EARS-15 — post-login landing is the visitor's return target, `/webinars` by default. Fixes the live US-10 regression: `/` now serves the Academy landing instead of redirecting to the discovery listing, so a doctor completing login, registration or verification with no valid return target was stranded on marketing copy. A captured safe same-origin target still wins; a cross-origin or protocol-relative target is rejected in favour of the default.
+- Updated dependencies [[`fde1591`](https://github.com/doctor-school/ds-platform/commit/fde1591457f63310d24ad5867b08695c7c263da2)]:
+  - @ds/schemas@2.3.0
+  - @ds/design-system@4.2.0
+
 ## 0.18.0
 
 ### Minor Changes

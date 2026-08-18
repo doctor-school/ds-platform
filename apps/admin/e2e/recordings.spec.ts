@@ -82,6 +82,19 @@ async function attach(
   await page.getByTestId(`${testId}-submit`).click();
 }
 
+/**
+ * Turn the «показать снятые» toggle on. The DS `Switch` is a REAL checkbox that is
+ * `sr-only` behind its painted track, so `.check()` on the input is intercepted by
+ * the track — exactly as a mouse would be. A user clicks the TRACK, i.e. the
+ * wrapping `<label>`, so the spec does the same.
+ */
+async function showRetired(page: Page): Promise<void> {
+  await page
+    .getByTestId("recordings-show-retired")
+    .locator("xpath=ancestor::label[1]")
+    .click();
+}
+
 /** Answer a §3 command's modal confirmation. */
 async function confirmCommand(page: Page, testId: string): Promise<void> {
   await page.getByTestId(testId).click();
@@ -179,7 +192,7 @@ test.describe("014 EARS-1/EARS-2 — retained recordings in the live admin", () 
     await confirmCommand(page, "recording-edited-retire");
     await expect(page.getByTestId("recording-empty-edited")).toBeVisible();
 
-    await page.getByTestId("recordings-show-retired").check();
+    await showRetired(page);
     await expect(page.getByTestId("recording-retired-edited")).toBeVisible();
 
     await confirmCommand(page, "recording-retired-edited-restore");
@@ -223,7 +236,7 @@ test.describe("014 EARS-1/EARS-2 — retained recordings in the live admin", () 
       "Черновик",
     );
 
-    await page.getByTestId("recordings-show-retired").check();
+    await showRetired(page);
     await confirmCommand(page, "recording-retired-edited-restore");
     await expect(page.getByTestId("recordings-command-error")).toContainText(
       "Слот этого вида уже занят",

@@ -50,6 +50,7 @@ import {
   RecordingSourceFormSchema,
   type RecordingSourceFields,
 } from "@/lib/form-schemas";
+import { formatMskDateTime } from "@/lib/msk";
 import { taxonomyErrorKey } from "@/lib/taxonomy-errors";
 import { useLocalizedResolver } from "@/lib/use-localized-resolver";
 import { recordingsUrl, type UpdateEventVars } from "@/providers/data-provider";
@@ -279,7 +280,12 @@ function KindSlot({
                 : String(row.durationSec)}
             </Fact>
             <Fact label={t("recordings.fields.firstPublishedAt")}>
-              {row.firstPublishedAt ?? t("common.notSet")}
+              {/* The operator reads Moscow wall-clock everywhere else on this
+                  page (the event header, the list); a raw ISO instant here would
+                  be the one date on the surface they have to convert by hand. */}
+              {row.firstPublishedAt
+                ? `${formatMskDateTime(row.firstPublishedAt)} ${t("events.mskSuffix")}`
+                : t("common.notSet")}
             </Fact>
           </dl>
           <div className="flex flex-wrap gap-2">
@@ -734,7 +740,13 @@ function ExpectedByForm({
   onError: (error: unknown) => void;
 }) {
   const t = useTranslations();
-  const [draft, setDraft] = useState(value ?? "");
+  // A real react-hook-form context, not a bare `FormItem`: the DS `FormControl`
+  // reads `useFormContext()` for its id/aria wiring, so a `FormItem` rendered
+  // outside a `<Form>` throws on render. One field, one form — the same
+  // composition the attach dialog uses.
+  const form = useForm<{ expectedBy: string }>({
+    defaultValues: { expectedBy: value ?? "" },
+  });
   const { mutate: update, mutation } = useUpdate();
 
   function save(next: string | null) {
@@ -747,28 +759,38 @@ function ExpectedByForm({
 
   return (
     <div className="flex flex-col gap-2" data-testid="recording-expected-by">
-      <FormItem>
-        <FormLabel htmlFor="recording-expected-by">
-          {t("recordings.fields.expectedBy")}
-        </FormLabel>
-        <FormControl>
-          <Input
-            id="recording-expected-by"
-            type="date"
-            data-testid="recording-expected-by-input"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-          />
-        </FormControl>
-        <FormMessage>{t("recordings.fields.expectedByHint")}</FormMessage>
-      </FormItem>
+      <Form {...form}>
+        <FormField
+          control={form.control}
+          name="expectedBy"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel htmlFor="recording-expected-by">
+                {t("recordings.fields.expectedBy")}
+              </FormLabel>
+              <FormControl>
+                <Input
+                  id="recording-expected-by"
+                  type="date"
+                  data-testid="recording-expected-by-input"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage>{t("recordings.fields.expectedByHint")}</FormMessage>
+            </FormItem>
+          )}
+        />
+      </Form>
       <div className="flex gap-2">
         <Button
           type="button"
           size="sm"
           loading={mutation.isPending}
           data-testid="recording-expected-by-save"
-          onClick={() => save(draft.length === 0 ? null : draft)}
+          onClick={() => {
+            const next = form.getValues("expectedBy");
+            save(next.length === 0 ? null : next);
+          }}
         >
           {t("recordings.action.saveExpectedBy")}
         </Button>
@@ -778,7 +800,7 @@ function ExpectedByForm({
           variant="outline"
           data-testid="recording-expected-by-clear"
           onClick={() => {
-            setDraft("");
+            form.setValue("expectedBy", "");
             save(null);
           }}
         >

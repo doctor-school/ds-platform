@@ -65,6 +65,7 @@
     "lint:workflow-auth": "tsx tools/lint/workflow-auth-lint.ts",
     "lint:oxlint": "oxlint -c .oxlintrc.json --disable-unicorn-plugin --disable-oxc-plugin --disable-typescript-plugin -A all apps packages",
     "lint:stylelint": "stylelint \"apps/**/*.css\" \"packages/**/*.css\"",
+    "retro:tokens": "node tools/retro/token-ledger.mjs",
     "generate:glossary": "tsx packages/glossary/scripts/generate.ts",
     "generate:all": "pnpm generate:glossary",
     "build": "turbo run build",

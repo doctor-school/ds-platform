@@ -13,10 +13,13 @@
  * It reads the CURRENT session transcript (path arrives on stdin), takes the
  * last assistant message's usage block, and computes the live context size as
  * input_tokens + cache_read_input_tokens + cache_creation_input_tokens.
- * Thresholds are owner-calibrated to the ~150K cache-read cost cliff for the
- * session model (owner research; the operator statusline visualizes the 150K
- * limit) — do not change without an explicit owner directive. Below the first
- * tier: silent, no output.
+ * Thresholds (owner decision 2026-08-18: wave-boundary reminder, advisory
+ * only): 200K / 250K. The former 110K/120K pair fired ~20 minutes into a
+ * session and read as noise; the lead's real decision point is a WAVE
+ * boundary, not a token count, so the advisory now speaks in wave language and
+ * lands only once a wave is plausibly finishable. Subagents are governed
+ * separately and coercively by `subagent-context-budget.mjs` (#1374). Do not
+ * change without an explicit owner directive. Below the first tier: silent.
  *
  * Fail-safe: any parse/IO error exits 0 with no output — a broken budget probe
  * must never break prompting.
@@ -25,8 +28,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const WARN_THRESHOLD = 110_000;
-export const WRAP_THRESHOLD = 120_000;
+export const WARN_THRESHOLD = 200_000;
+export const WRAP_THRESHOLD = 250_000;
 
 export function contextTokensFromJsonl(jsonl) {
   const lines = String(jsonl).split("\n");
@@ -70,14 +73,14 @@ function main() {
       const k = Math.round(context / 1000);
       process.stdout.write(
         JSON.stringify({
-          systemMessage: `⚠ Контекст сессии ≈ ${k}K токенов (порог 120K) — каждый следующий ход дорожает кэш-ридами. Пора /wrap.`,
+          systemMessage: `⚠ Контекст лида ≈ ${k}K (порог 250K). Волна легла → /wrap + handoff → новая сессия; новую волну здесь не начинать.`,
         }),
       );
     } else if (context >= WARN_THRESHOLD) {
       const k = Math.round(context / 1000);
       process.stdout.write(
         JSON.stringify({
-          systemMessage: `⚠ Контекст сессии ≈ ${k}K токенов — приближается порог /wrap (120K). Решение за вами.`,
+          systemMessage: `⚠ Контекст лида ≈ ${k}K — после текущей волны /wrap + handoff, не новая волна.`,
         }),
       );
     }

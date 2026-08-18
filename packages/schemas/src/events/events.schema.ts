@@ -334,6 +334,17 @@ export const UpdateEventRequestSchema = z.object({
   specialties: z.array(z.string().trim().min(1).max(100)).max(100).optional(),
   /** `null` clears the sponsor/partner reference; an omitted key leaves it. */
   partnerRef: z.string().trim().max(300).nullish(),
+  /**
+   * 014 EARS-1 (#1339) — the day the operator promises the recording by
+   * (`YYYY-MM-DD`), rendered on the post-live «запись готовится» plaque. `null`
+   * clears the promise; an omitted key leaves it. A DATE and not an instant: the
+   * plaque promises a day, and a timezone-bearing value would invite a precision
+   * the operator never entered (014-design §2).
+   */
+  recordingExpectedBy: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullish(),
 });
 export type UpdateEventRequest = z.infer<typeof UpdateEventRequestSchema>;
 
@@ -361,6 +372,8 @@ export const EventAdminDetailSchema = z.object({
   streamConfig: StreamConfigSchema.nullable(),
   state: EventLifecycleStateSchema,
   validTransitions: z.array(EventLifecycleStateSchema),
+  /** 014 (#1339) — the operator's readiness date, or `null` when unpromised. */
+  recordingExpectedBy: z.string().nullable(),
   createdAt: z.iso.datetime({ offset: true }),
   updatedAt: z.iso.datetime({ offset: true }),
 });

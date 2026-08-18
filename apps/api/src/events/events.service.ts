@@ -297,6 +297,7 @@ export class EventsService {
         | "specialties"
         | "partnerRef"
         | "programPdfRef"
+        | "recordingExpectedBy"
       >
     > = {};
     if (input.title !== undefined) patch.title = input.title;
@@ -308,6 +309,11 @@ export class EventsService {
     if (input.specialties !== undefined) patch.specialties = input.specialties;
     // `null` clears the reference, a string sets it, `undefined` leaves it.
     if (input.partnerRef !== undefined) patch.partnerRef = input.partnerRef;
+    // 014 EARS-1 (#1339) — the operator's recording-readiness date. `null` clears
+    // the promise, a `YYYY-MM-DD` string sets it, `undefined` leaves it. Stored as
+    // a `date`, so the value round-trips as the day the operator typed.
+    if (input.recordingExpectedBy !== undefined)
+      patch.recordingExpectedBy = input.recordingExpectedBy;
     // A replacement PDF supersedes the stored reference (EARS-2).
     if (pdf)
       patch.programPdfRef = await this.storeProgramPdf(current.event.slug, pdf);
@@ -714,6 +720,7 @@ export class EventsService {
       streamConfig: a.streamConfig,
       state: e.state as EventLifecycleState,
       validTransitions: validTransitions(e.state as EventLifecycleState),
+      recordingExpectedBy: e.recordingExpectedBy,
       createdAt: e.createdAt.toISOString(),
       updatedAt: e.updatedAt.toISOString(),
     };

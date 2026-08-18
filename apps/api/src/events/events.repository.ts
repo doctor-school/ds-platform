@@ -99,6 +99,7 @@ export class EventsRepository {
         | "specialties"
         | "partnerRef"
         | "programPdfRef"
+        | "recordingExpectedBy"
       >
     >,
     speakers?: Omit<NewEventSpeaker, "eventId">[],

@@ -475,10 +475,16 @@ export type AdminTaxonomyListQuery = z.infer<
 // ── Errors (012-design §5.3) ─────────────────────────────────────────────────
 
 /**
- * The exact stable `errorCode` set of the 012 surface (012-design §5.3 table,
- * EARS-16). One flat closed union rather than per-status enums: a client
- * switches on the code, and the code is the contract — the HTTP status is the
- * transport-level echo of it.
+ * The exact stable `errorCode` set of the admin problem surface (012-design §5.3
+ * table, EARS-16; 014-design §11). One flat closed union rather than per-status
+ * enums: a client switches on the code, and the code is the contract — the HTTP
+ * status is the transport-level echo of it.
+ *
+ * 014 (#1339) extends the union rather than opening a second one. The RFC 7807
+ * machinery — `TaxonomyError`, `TaxonomyProblemFilter`, the status/title tables
+ * and the fenced deterministic-replay classification — is ONE mechanism shared by
+ * every retained-row admin surface; a parallel union would mean a parallel filter,
+ * a parallel status table and two answers to «what does this code mean».
  */
 export const TAXONOMY_ERROR_CODES = [
   // 400
@@ -502,6 +508,9 @@ export const TAXONOMY_ERROR_CODES = [
   "LEGACY_SPEAKER_CONFLICT",
   "SPEAKER_POSITION_OCCUPIED",
   "CONTENT_REMOVED",
+  // 409 — 014 recordings (014-design §3/§11)
+  "RECORDING_KIND_OCCUPIED",
+  "EVENT_NOT_FINISHED",
   "IDEMPOTENCY_KEY_REUSED",
   "IDEMPOTENCY_REQUEST_IN_PROGRESS",
   // 412

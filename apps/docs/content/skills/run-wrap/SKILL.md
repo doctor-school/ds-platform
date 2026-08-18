@@ -32,7 +32,9 @@ Dispatch [`run-session-retro`](../run-session-retro/SKILL.md) **in single-sessio
 - **Claude Code:** resolve all `~/.claude/projects/*<repo-slug>*` segments by a session-unique task marker, not newest mtime; verify the id and marker, then run `extract.mjs` + `transcripts.mjs --session <id>`.
 - **Codex:** use the active Codex session id with `node tools/retro/codex.mjs --session <id> --out-dir <work-dir>`. For an exported artifact use `--rollout <file>`; for a pre-normalized portable record use `--portable-input <file>`. The adapter emits `harness: codex` plus a versioned portable record and never presents a Codex rollout as a Claude transcript.
 
-Before dispatch, inspect the generated `summary.json` and compact transcript for the expected task marker and `harness`. Brief the agent with the fixed id, harness command, and `run-session-retro` path. A free-form narrative without the schema'd findings array + corpus header + consolidation note is invalid — re-dispatch.
+Before dispatch, inspect the generated `summary.json` and compact transcript for the expected task marker and `harness`. Brief the agent with the fixed id, harness command, and `run-session-retro` path.
+
+**Token ledger (stage-1 input).** Run `pnpm retro:tokens <session-id>` and hand its output to the retro agent alongside the corpus: any subagent peak >200K or lead peak >300K is a deviation finding (category `context-budget`), cited from the ledger row. A wrap whose stage-1 input omits the ledger cannot surface over-budget dispatches at all. A free-form narrative without the schema'd findings array + corpus header + consolidation note is invalid — re-dispatch.
 
 > The retro writes its digests into the gitignored `.audit-tmp/` (the extractor default). **Never** stage or commit `.audit-tmp/`.
 
@@ -70,11 +72,11 @@ Run the catalog [`handoff-prompt`](../handoff-prompt/SKILL.md) skill to emit the
 
 The handoff cites only document paths that exist at emit time (stat/`Read` each before including) and carries the canonical tracker id (GitHub Issue / Plane item) of the next task; «where we stopped» premises come from tracker comments, not the session's memory of itself. **Premise gate (mandatory, #743):** write the draft handoff to a temp file and run `pnpm handoff:verify <file>` — any STALE row = fix the claim before emitting; this deterministic gate replaces the prose-only premise check. Resume side: an agent that cannot locate a cited document STOPS and asks the owner instead of substituting its own reading.
 
-**The handoff's queue is chunked into waves of ≤3 full PR-cycles** («this session: items 1–3; next: 4–6») — never one flat ranked list: the wave cap (memory `feedback_wave_plan_by_touch_set`) must fire at handoff-authoring time, not after the next session has already over-dispatched (2026-07-11 retro: a flat 6-item queue produced 5 dispatches in 5 minutes and 6 PR-cycles in one session). The dispatch-time counterpart is item 0 of memory `feedback_orchestration_brief_full_lint_before_pr`.
+**The handoff's queue is chunked into ONE wave per session** — ≤3 sequential PR-cycles, or ≤5 independent parallel Issues when their touch sets do not overlap (AGENTS.md §6 subagent context budget) — («this session: items 1–3; next: 4–6») — never one flat ranked list: the wave cap (memory `feedback_wave_plan_by_touch_set`) must fire at handoff-authoring time, not after the next session has already over-dispatched (2026-07-11 retro: a flat 6-item queue produced 5 dispatches in 5 minutes and 6 PR-cycles in one session). The dispatch-time counterpart is item 0 of memory `feedback_orchestration_brief_full_lint_before_pr`.
 
 ## Output
 
-- Stage 1: the schema'd findings array from an independent retro agent + the resolved session id it analyzed.
+- Stage 1: the schema'd findings array from an independent retro agent + the resolved session id it analyzed + the `pnpm retro:tokens` ledger.
 - Stage 2: the proposed edit set, presented; user approval (or a trimmed subset).
 - Stage 3: approved edits applied + compacted; `pnpm lint:instruction-budget` **PASS**.
 - Stage 4: outstanding work merged, board statuses set, inventory re-swept, stack-update Issue filed if warranted, next item surfaced.

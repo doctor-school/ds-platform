@@ -2,15 +2,15 @@
 
 Universal AI-agent constitution for the DS Platform monorepo — vendor-agnostic, readable by any agent. Claude-Code-specific overlays: `CLAUDE.md`.
 
-<!-- ALWAYS-ON CORE. Per-file budget ≤200 lines AND ≤25 KB (`pnpm lint:instruction-budget`). Always-on set = this file + CLAUDE.md + every .claude/rules/*.md without `paths:` frontmatter — all auto-load at session start. As of #1370 BOTH rules files are `paths:`-scoped, so the always-on set is these two files only; their gates reach the session through the §0 index. Relocate detail; a task-scoped rules file gets `paths:` frontmatter (first bytes of the file, or it is not frontmatter) and a §0 row. Never inline-grow. -->
+<!-- ALWAYS-ON CORE. Per-file budget ≤200 lines AND ≤25 KB (`pnpm lint:instruction-budget`). The always-on set is this file + CLAUDE.md: both `.claude/rules/*.md` are `paths:`-scoped (#1370) and reach the session through the §0 index. Relocate detail into a `paths:`-scoped rules file (frontmatter in the FIRST bytes, or it is not frontmatter) + a §0 row. Never inline-grow. -->
 
-On-demand detail: branches/commits/versioning/Issues/PRs/merge → `.claude/rules/repo-conventions.md`; dev stand/migrations/live-verify → `.claude/rules/dev-stand.md` — both `paths:`-scoped, so READ them (§0), they do not auto-load; per-task procedure → the §3 skill (read on demand); settled facts → auto-memory (`MEMORY.md` index → topic file, on demand).
+On-demand detail: `.claude/rules/repo-conventions.md` (branches/commits/versioning/Issues/PRs/merge) and `.claude/rules/dev-stand.md` (dev stand/migrations/live-verify) — both `paths:`-scoped, so READ them (§0), they do not auto-load; per-task procedure → the §3 skill; settled facts → auto-memory (`MEMORY.md` index → topic file).
 
 ---
 
 ## 0. Read-before-you-act index
 
-Both `.claude/rules/*.md` files carry `paths:` frontmatter: they enter context only when a matching file is read, and they are NOT re-injected after `/compact`. They hold hard gates, not background reference. Before the action below, `Read` the named file in full — once per session, again after a `/compact`. "I remember the rule" is not a substitute.
+Both `.claude/rules/*.md` files carry `paths:` frontmatter: they enter context only when a matching file is read, and are NOT re-injected after `/compact`. They hold hard gates, not background reference. Before the action below, `Read` the named file in full — once per session, again after a `/compact`; "I remember the rule" is not a substitute.
 
 | Before you…                                                                                                                                          | Read first                                                           |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
@@ -37,13 +37,13 @@ Medical-education platform for Doctor.School (B2B pharma sponsor → B2D doctor 
 
 **Production is live with users** on Timeweb (ru-3): `academy.doctor.school` / `api.` / `id.`. Never tell the owner "there is no production". Authoritative deployed scope = the derived `## Project reality` bootstrap section (`pnpm bootstrap`) + GitHub Releases/Deployments — never inferred from these docs (static prose rots).
 
-Stack (reference `apps/docs/content/adr/`; long-form `README.md`): NestJS + Zod + REST + openapi-typescript SDK (ADR-0002); Postgres 17 + Drizzle + pgvector (ADR-0003); Next.js 15 + Refine — promo / portal / admin / cms-Payload-v3 (ADR-0004); React Native + Expo + WatermelonDB (ADR-0005); Fumadocs + Keystatic + glossary.yaml (ADR-0006).
+Stack (detail in `apps/docs/content/adr/` + `README.md`): NestJS + Zod + REST + openapi-typescript SDK (0002); Postgres 17 + Drizzle + pgvector (0003); Next.js 15 + Refine — promo / portal / admin / cms-Payload-v3 (0004); React Native + Expo + WatermelonDB (0005); Fumadocs + Keystatic + glossary.yaml (0006).
 
 ---
 
-## 2. Repository conventions (one-liners — detail in `.claude/rules/repo-conventions.md`)
+## 2. Repository conventions (detail: `.claude/rules/repo-conventions.md`)
 
-Monorepo pnpm 10 + Turborepo (`apps/`, `packages/`, `tools/`). Trunk-based branches `<prefix>/<N>-<slug>` (prefixes `feat|fix|chore|refactor|docs|tooling`), squash-merge, delete branch on merge/close. Conventional Commits; PR title = squash title. Changesets on user-facing PRs (unsure → major). The agent ships prod via `pnpm deploy:prod`, which cuts the `release-*` tag + Release at the deployed SHA (`/deploy` skill). PR template: kind label + `Closes #N` + author marker in the body (`author:*` is not a `gh --label`). Issues: native sub-issue + blocked-by/blocking links mandatory, not prose; on merge, set board Status = Done by hand. ADRs in `apps/docs/content/adr/`; feature specs (triplet) in `apps/docs/content/specs/features/NNN-<slug>/`; one spec → many Issues; code PRs only after the spec is on `main`.
+Monorepo pnpm 10 + Turborepo (`apps/`, `packages/`, `tools/`). Trunk-based branches `<prefix>/<N>-<slug>` (prefixes `feat|fix|chore|refactor|docs|tooling`), squash-merge, delete branch on merge/close. Conventional Commits; PR title = squash title. Changesets on user-facing PRs (unsure → major). The agent ships prod via `pnpm deploy:prod`, which cuts the `release-*` tag + Release at the deployed SHA (`/deploy` skill). PR template: kind label + `Closes #N` + author marker in the body (`author:*` is not a `gh --label`). Issues: native sub-issue + blocked-by/blocking links mandatory, not prose; on merge, set board Status = Done by hand. One spec → many Issues (paths: §8); code PRs only after the spec is on `main`.
 
 ---
 
@@ -52,8 +52,6 @@ Monorepo pnpm 10 + Turborepo (`apps/`, `packages/`, `tools/`). Trunk-based branc
 Every session, any vendor: **identify task kind → open with the session plan → load skill**.
 
 ### 3.1 Identify task kind
-
-Skills live at `apps/docs/content/skills/<name>/SKILL.md`.
 
 - feature-iteration — one EARS handler in an existing feature-spec → `do-feature-iteration`
 - hotfix-pr — code-level bug, no feature-spec required → `do-hotfix-pr`
@@ -75,11 +73,11 @@ First reply opens with the owner-facing «План сессии» block (RU, ≤
 
 ### 3.4 Superpowers whitelist (single exception)
 
-`superpowers:brainstorming` is the only `superpowers:*` skill allowed for project work, and only as the step-2 implementation vehicle of `author-feature-spec` (and its `do-product-discovery` upstream) — never as the orchestrator (that is the catalog skill, §3.3). Do not chain into `superpowers:writing-plans` — the requirements/design triplet is the plan (ADR-0007 §2.4). Every other `superpowers:*` skill, and any chain one initiates internally, is disallowed for project work; referencing them as patterns inside project SKILL.md content is fine.
+`superpowers:brainstorming` is the only `superpowers:*` skill allowed for project work, and only as the step-2 implementation vehicle of `author-feature-spec` (and its `do-product-discovery` upstream) — never as the orchestrator (that is the catalog skill, §3.3). Do not chain into `superpowers:writing-plans`: the requirements/design triplet is the plan (ADR-0007 §2.4). Every other `superpowers:*` skill, and any chain one starts internally, is disallowed for project work; citing them as patterns inside project SKILL.md content is fine.
 
 ### 3.5 Bootstrap
 
-`pnpm bootstrap` (alias `tsx tools/agent-bootstrap.ts`) gives git/Issue/PR/spec state (Claude Code: automatic on SessionStart). Its ready/working/awaiting rollup is a derived view, not ground truth — read the actual open board (`gh issue list` + Projects v2) and triage every item; never conclude "nothing to do" from a `ready: none` rollup. After a slice ships, drain the matured debt/ops backlog before the next product feature.
+`pnpm bootstrap` gives git/Issue/PR/spec state (Claude Code: automatic on SessionStart). Its ready/working/awaiting rollup is a derived view, not ground truth — read the actual open board (`gh issue list` + Projects v2) and triage every item; never conclude "nothing to do" from a `ready: none` rollup. After a slice ships, drain the matured debt/ops backlog before the next product feature.
 
 ### 3.6 Permission-mode disclosure
 
@@ -87,7 +85,7 @@ With `--dangerously-skip-permissions` the agent assumes the discipline responsib
 
 ### 3.7 Plane lifecycle entry (if applicable)
 
-Plane work-item (DSP-XXX / DSO-XXX) → first action after identifying kind: (1) move to `In Progress`, (2) post a start comment with the planned approach — before any edit. Completion counterpart (`Done` + result comment) is a §6 Hard rule. Reads AND writes via `plane-pp-cli` (`projects issues …`); Plane MCP is an equivalent alternative.
+Plane work-item (DSP-XXX / DSO-XXX) → first action after identifying kind: `In Progress` + a start comment with the planned approach, before any edit (§6 Plane lifecycle owns the completion counterpart). Reads AND writes via `plane-pp-cli` (`projects issues …`); Plane MCP is an equivalent alternative.
 
 ### 3.8 Engineering-task discipline (no orchestration skill)
 
@@ -109,7 +107,7 @@ Per ADR-0007 §2.10. Mode (a) — same-session subagent dispatch via `request-mo
 
 ## 5. Lint guards
 
-CI lint guards (ADR-0007 §2.6) surface as PR Checks. Authoritative list + severity: `.github/workflows/ci.yml` + `pr-body-guards.yml` (re-runs on body edits); WARN→BLOCK criterion + sweep cadence: ADR-0007 §2.6. `spec-link` / `endpoint-authz` / `playwright-axe` / `prod-surface` are BLOCK; the rest WARN in Phase 0 (baseline drift/glossary are separate hard-red checks).
+CI lint guards surface as PR Checks. Authoritative list + severity: `.github/workflows/ci.yml` + `pr-body-guards.yml` (re-runs on body edits); WARN→BLOCK criterion + sweep cadence: ADR-0007 §2.6. `spec-link` / `endpoint-authz` / `playwright-axe` / `prod-surface` are BLOCK; the rest WARN in Phase 0 (baseline drift/glossary are separate hard-red checks).
 
 ---
 
@@ -118,19 +116,20 @@ CI lint guards (ADR-0007 §2.6) surface as PR Checks. Authoritative list + sever
 - **SDD.** No production code without a feature spec at `apps/docs/content/specs/features/NNN-<slug>/`; absent → `author-feature-spec` (§3.1) first.
 - **Vertical slices over horizontal layers (F-22).** Every feature-spec declares `surface: backend-only | user-facing` in `NNN-requirements.md` frontmatter. Backend-only is verified by Vitest e2e alone; `user-facing` owns its UI deliverable in the same WBS as its backend; backend-first only as an explicit tracked deferral named in the spec. A UI surface in any EARS trigger forbids `backend-only`. Enforced by `author-ears-spec`, `open-ears-issues` 3a, `run-iteration-end-checklist` item 12.
 - **No untracked seam / scaffold (F-22).** A scaffold/stub/fake/fail-closed seam standing in for a real deliverable is decision-debt; a code comment is not a tracked obligation. Significance threshold: an Issue with a real-dependency done-criterion ONLY when it blocks a product deliverable, is user-visible or a prod risk (security/data), or must precede the next release; else a `DEBT.md` line. Detail: `open-ears-issues` 3a.
-- **Orchestration is the default execution mode.** Implementation/execution dispatches to subagents; inline requires naming a sanctioned carve-out — an unnamed inline edit is a visible violation. Closed list (the `#700-M1` dispatch-guard hook's WARN set): (i) read-only recon/scope framing; (ii) ≤2 consecutive lead main-tree mutations (hook WARNs at 3); (iii) a skill's declared `mode:inline` step within its size cap (`do-feature-iteration` RED/GREEN/REFACTOR share the ≤2 cap). Nothing else: an impl-heavy/to-merge session opens with a dispatch.
-- **No workarounds, no patches, no temporary hacks.** Monkey-patch, local edit "just to make it run", manual one-off step, hardcoded stand-in for missing config — forbidden, in code and process. Prerequisite not ready → STOP, fix it properly first as its own tracked Issue wired `blocked_by`. (a) Never rush a UI/integration layer ahead of its backend; (b) verification counts only against clean committed code; (c) "just get it working now" signals re-sequence, not patch.
-- **Live-infra destructive actions — pre-flight, don't thrash.** On live paid infra, before ANY irreversible/destructive provider call (reinstall/replace/delete/network change/write-`action` API): (1) action + params confirmed in provider docs/schema first — fire-an-unknown-action-and-read-the-error is banned; (2) the prior hypothesis excluded with read-only evidence before the next state-change — a reboot/reinstall/recreate is not a free probe; (3) blast radius = the failing resource only — a "fix" that also mutates a working box is a stop-and-confirm signal; (4) anything irreversible needs an explicit owner "go" — a rhetorical owner question is not consent, and an owner/vendor recommendation is binding; deviation needs explicit sign-off.
+- **Orchestration is the default execution mode.** Implementation dispatches to subagents; inline needs a named carve-out — an unnamed inline edit is a visible violation. Closed list (`#700-M1` dispatch-guard hook WARN set): (i) read-only recon/scope framing; (ii) ≤2 consecutive lead main-tree mutations (WARN at 3); (iii) a skill's declared `mode:inline` step within its size cap (`do-feature-iteration` RED/GREEN/REFACTOR share the ≤2 cap). An impl-heavy/to-merge session opens with a dispatch.
+- **Subagent context budget.** The subagent hook rotates at 150K (`ROTATE: <checkpoint>` on line 1) and denies non-git tools at 200K; on `ROTATE:` the lead re-dispatches a FRESH agent from the checkpoint, never SendMessage-continues. SendMessage rework/re-review only while the child's `<subagent_tokens>` (task-notification `<usage>`) is < 120K (impl) / < 150K (reviewer) — above that, fresh dispatch with PR + review URL + checkpoint. One dispatch ≤ 2 layers (db+api+e2e · UI+Playwright · live-verify+PR-polish), each returning a checkpoint; briefs carry spec anchors / line ranges, never «read NNN-design.md whole». One wave (≤4–5 parallel Issues) per lead session — wave landed → `/wrap` + handoff → new session. A subagent >200K or lead >300K is a retro finding (`pnpm retro:tokens`).
+- **No workarounds, no patches, no temporary hacks.** Monkey-patch, local edit "just to make it run", manual one-off step, hardcoded stand-in for missing config — forbidden, in code and process. Prerequisite not ready → STOP and fix it first as its own Issue wired `blocked_by`. (a) Never rush a UI/integration layer ahead of its backend; (b) verification counts only against clean committed code; (c) "just get it working now" signals re-sequence, not patch.
+- **Live-infra destructive actions — pre-flight, don't thrash.** On live paid infra, before ANY irreversible/destructive provider call (reinstall/replace/delete/network change/write-`action` API): (1) confirm action + params in provider docs/schema first — firing an unknown action to read the error is banned; (2) exclude the prior hypothesis with read-only evidence before the next state-change — a reboot/reinstall/recreate is not a free probe; (3) blast radius = the failing resource only — a "fix" that also mutates a working box is a stop-and-confirm signal; (4) anything irreversible needs an explicit owner "go" — a rhetorical owner question is not consent; an owner/vendor recommendation is binding and deviation needs sign-off.
 - **UI from the design system — adopt before bespoke.** All UI from `@ds/design-system`: tokens-only styling (arbitrary Tailwind values lint-blocked, §5); interactive elements + hover/active/focus states from its primitives, never hand-assembled from token utilities. Before any bespoke page/form/element: run the `build-ui-from-design-system` gate — inventory the package, search the approved registry whitelist (official shadcn · Origin UI · Intent·Jolly · Kibo), report the result; bespoke = recorded last resort. Product code is `UNLICENSED`: adopt MIT/permissive freely (preserve notices); proprietary/paid registries need a license + private repo, else pattern-only. Canvas-derived UI: vendor every rendered canvas (incl. composed units) into `design-source/` first (DesignSync), build from the files, not issue prose; before Stage-B the lead runs the eyes-on render + interaction-state parity check (both breakpoints × both themes). Canon: ADR-0013 + the skill.
-- **UI design is approved before it's built — and re-confirmed live before merge.** For a `user-facing` surface (notification emails/SMS included) look + behavior changes are product decisions, not lead calls. Stage A: design proposal with research findings + 2-3 concrete options → explicit product-owner choice before implementation. Stage B: rendered result re-confirmed by the owner on the LIVE stand before merge — stand stays up until the verdict; an unanswered Stage-B question BLOCKS the merge. Carve-outs (exact recorded forms: `repo-conventions.md` pre-merge gates + the skill): batched — an owner-designated Stage-B gate Issue defers live Stage-B (stands stay up; child PRs merge on Mode-a + green CI, body naming `Stage-B: batched at #<gate>`; silent deferral = violation); lead self-cert — behavioral-only, NO new/changed visual surface, ONLY with explicit owner autonomous-merge auth AND a recorded lead live-verify, never to bypass a pending design question. Canon: skill `build-ui-from-design-system` → Design-approval gate.
+- **UI design is approved before it's built — and re-confirmed live before merge.** For a `user-facing` surface (notification emails/SMS included) look + behavior changes are product decisions, not lead calls. Stage A: design proposal with research findings + 2-3 concrete options → explicit product-owner choice before implementation. Stage B: rendered result re-confirmed by the owner on the LIVE stand before merge — stand stays up until the verdict; an unanswered Stage-B question BLOCKS the merge. Two carve-outs only, in the exact forms recorded in `repo-conventions.md` pre-merge gates + the skill: batched (owner-designated Stage-B gate Issue defers live Stage-B; stands stay up, child PRs merge on Mode-a + green CI with the body naming `Stage-B: batched at #<gate>`; silent deferral = violation) and lead self-cert (behavioral-only, NO new/changed visual surface, explicit owner autonomous-merge auth AND a recorded lead live-verify, never to bypass a pending design question). Canon: skill `build-ui-from-design-system` → Design-approval gate.
 - **Verify UI live before "done".** Drive any UI-checkable feature in the actual running UI (Playwright, live dev-stand) — build/typecheck/lint/Mode-a are necessary, not sufficient. Every field kind × surface, reject + accept, error language + timing; a user-facing dev placeholder is a banned stub.
 - **PR lifecycle runs to completion.** "PR open" ≠ "done". Autonomously: Mode (a) → `gh pr checks` green by hand → merge (§4) → Issue closed → board Status = Done → re-sweep branches/PRs; do not stop midway. Exception: a `user-facing` PR merges only after the recorded owner Stage-B "go" — never merge past a pending design question or tear down the stand before the owner verified.
 - **TDD.** No production code without a failing test. `it('EARS-N: ...')`; flat numbering per ADR-0006 §4; nested `N.M` only for a handler with multiple shall-clauses.
 - **Trackers.** Code-level → GitHub Issues here; strategic/cross-team → Plane `doctor-school`. Never both.
 - **Plane lifecycle.** `In Progress` + start comment before work; on completion `Done` + result comment (artifacts, what was done, open questions, what is unblocked); incomplete → a "where we stopped / what remains" comment, never silent.
 - **Roles, not names** in any spec / ADR / design doc.
-- **Direct push to `main` is forbidden.** Single merge command (Phase 0): `gh pr merge <N> --squash --delete-branch`.
-- **Worktree-per-session when parallel.** Sessions run concurrently here. If any other session may touch the repo, isolate in a git worktree as the FIRST action of a code/doc task — including the analysis reads that inform the design: `pnpm task:worktree <N>` → `EnterWorktree path:.claude/worktrees/<N>` → `pnpm install` before the first commit (a PreToolUse hook warns on main-tree source reads until then). Never `git checkout -b` in the shared main tree. Carve-out — orchestration-lead, read-only: a lead dispatching ALL deliverable edits to worktree'd subagents, zero main-tree writes, may stay read-only in main; the read-guard re-arms on the first main-tree WRITE — isolate before it. Merge/teardown: skill `merge-when-green`.
+- **Direct push to `main` is forbidden.** Land via the single §4 merge command.
+- **Worktree-per-session when parallel.** Sessions run concurrently here. If any other session may touch the repo, isolate in a git worktree as the FIRST action of a code/doc task — including the analysis reads that inform the design: `pnpm task:worktree <N>` → `EnterWorktree path:.claude/worktrees/<N>` → `pnpm install` before the first commit (a PreToolUse hook warns on main-tree source reads until then). Never `git checkout -b` in the shared main tree. Carve-out — a lead dispatching ALL deliverable edits to worktree'd subagents, with zero main-tree writes, may stay read-only in main; the read-guard re-arms on the first main-tree WRITE — isolate before it. Merge/teardown: skill `merge-when-green`.
 - **Project skill catalog.** Only `apps/docs/content/skills/` (§3.3 — the path is the contract).
 - **Discipline gates.** `run-iteration-end-checklist` and `request-mode-a-review` produce artifacts the lead cannot bypass; without their outputs, merge is forbidden (ADR-0007 §2.4).
 - **Decision-debt.** Silent deviation from documented convention MUST surface via `surface-decision-debt` before the summary/result comment; route by the significance threshold — Issue (one `source:*` label) or `DEBT.md` line.
@@ -139,8 +138,6 @@ CI lint guards (ADR-0007 §2.6) surface as PR Checks. Authoritative list + sever
 ---
 
 ## 7. Roles
-
-Specs / ADRs / process docs use roles, not names.
 
 - Tech Lead / System Architect — IT architecture, AI orchestration, product engineering, bizmodel; primary code author.
 - Product Lead — Doctor.School owner, MBA marketer, pharma sales, domain expertise; primary product/PRD author.
@@ -160,9 +157,7 @@ In Phase 0, Tech Lead is the single CODEOWNERS owner (ADR-0008 §2.7) and the si
 - API contract SSOT / DB schema SSOT: `packages/schemas/` (Zod) / `packages/db/schema/` (Drizzle)
 - Generated — never edit by hand: `packages/api-client/`, `packages/glossary/src/ids.ts`
 - Lint tools / bootstrap: `tools/lint/*.ts` / `tools/agent-bootstrap.ts` (`pnpm bootstrap`)
-- Strategic / cross-team work-items: Plane `doctor-school` (DSP, DSC, DSM, DSO); code-level Issues → GitHub here
-
-Tracker rule (ADR-0006 §9): `gh` CLI first for code-level Issues; `pp-plane` only for cross-tracker references.
+- Strategic / cross-team work-items: Plane `doctor-school` (DSP, DSC, DSM, DSO)
 
 ---
 

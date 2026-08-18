@@ -128,3 +128,20 @@ routes:
     route: /projects/[id]
     file: apps/admin/app/projects/[id]/page.tsx
     status: product-ready
+  # 012 EARS-2 (#1284): the expert authoring vertical on the same shared list shell
+  # and the same tabbed detail. Real product deliverables, driven live in
+  # `apps/admin/e2e/taxonomy-experts.spec.ts` and axe-scanned in
+  # `apps/admin/e2e/a11y/a11y-axe.e2e.spec.ts`. Same one-tab rule as projects: no
+  # empty «Связи»/«Публикация» placeholder ships ahead of the slice that fills it.
+  - app: admin
+    route: /experts
+    file: apps/admin/app/experts/page.tsx
+    status: product-ready
+  - app: admin
+    route: /experts/create
+    file: apps/admin/app/experts/create/page.tsx
+    status: product-ready
+  - app: admin
+    route: /experts/[id]
+    file: apps/admin/app/experts/[id]/page.tsx
+    status: product-ready

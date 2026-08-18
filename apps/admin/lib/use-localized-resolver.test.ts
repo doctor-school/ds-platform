@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import {
   EventFormSchema,
+  ExpertFormSchema,
   LoginFormSchema,
   ProjectFormSchema,
   StreamConfigFormSchema,
@@ -213,5 +214,50 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
         slug: "",
       }),
     ).toEqual(["kind"]);
+  });
+
+  it("expert form (012 EARS-2): every field's real failing rule maps to a specific key, never fallback", () => {
+    const filled = {
+      name: "Иван Петров",
+      professionalRole: "Кардиолог",
+      credentials: "д.м.н.",
+      affiliation: "НМИЦ кардиологии",
+      bio: "Практикующий кардиолог.",
+      slug: "",
+    };
+
+    // An empty submit reports the NAME only: the four publish-required fields are
+    // legally empty in a draft, so the form must not manufacture an error for them.
+    expect(keysFor(ExpertFormSchema, { ...filled, name: "", professionalRole: "", credentials: "", affiliation: "", bio: "" })).toEqual([
+      "required",
+    ]);
+
+    // Every text field's over-long bound maps to the length key, never fallback.
+    const tooLong = keysFor(ExpertFormSchema, {
+      name: "x".repeat(161),
+      professionalRole: "x".repeat(161),
+      credentials: "x".repeat(501),
+      affiliation: "x".repeat(241),
+      bio: "x".repeat(4001),
+      slug: "",
+    });
+    expect(tooLong).toEqual([
+      "maxLength",
+      "maxLength",
+      "maxLength",
+      "maxLength",
+      "maxLength",
+    ]);
+
+    // The slug box distinguishes its two refusals exactly as the project form does.
+    expect(keysFor(ExpertFormSchema, { ...filled, slug: "Not valid" })).toEqual([
+      "slugPattern",
+    ]);
+    expect(
+      keysFor(ExpertFormSchema, {
+        ...filled,
+        slug: "00000000-0000-4000-8000-000000000000",
+      }),
+    ).toEqual(["slugReserved"]);
   });
 });

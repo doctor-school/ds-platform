@@ -7,25 +7,32 @@ import type { TaxonomyHttpError } from "@/providers/data-provider";
  * actionable sentence the operator can act on.
  *
  * An unmapped code falls back to the caller's generic key — visible, not silent.
+ *
+ * The RESOURCE namespace is read off the caller's fallback key (`projects.…`,
+ * `experts.…`, …) rather than passed separately: every taxonomy resource owns the
+ * same §5.3 code set but says it in its own nouns («этот адрес занят другим
+ * проектом» vs «…другим экспертом»), and deriving the prefix keeps one mapping
+ * table for all four #1283–#1286 verticals with no call-site ceremony.
  */
 export function taxonomyErrorKey(error: unknown, fallbackKey: string): string {
+  const ns = fallbackKey.split(".")[0] ?? "projects";
   const code = (error as TaxonomyHttpError | undefined)?.errorCode;
   switch (code) {
     case "SLUG_CONFLICT":
-      return "projects.errors.slugConflict";
+      return `${ns}.errors.slugConflict`;
     case "SLUG_IMMUTABLE":
-      return "projects.errors.slugImmutable";
+      return `${ns}.errors.slugImmutable`;
     case "PRECONDITION_FAILED":
     case "PRECONDITION_REQUIRED":
-      return "projects.errors.stale";
+      return `${ns}.errors.stale`;
     case "PUBLISH_REQUIREMENTS_NOT_MET":
-      return "projects.errors.publishRequirements";
+      return `${ns}.errors.publishRequirements`;
     case "MEDIA_INVALID":
-      return "projects.errors.mediaInvalid";
+      return `${ns}.errors.mediaInvalid`;
     case "MEDIA_INPUT_CONFLICT":
-      return "projects.errors.mediaConflict";
+      return `${ns}.errors.mediaConflict`;
     case "MEDIA_STORAGE_UNAVAILABLE":
-      return "projects.errors.storageUnavailable";
+      return `${ns}.errors.storageUnavailable`;
     // The pair an operator meets after a double-submit: the provider sends a
     // fresh Idempotency-Key per call, so a REUSED key means the same key came
     // back with different input (a resubmitted, edited form), and
@@ -33,9 +40,9 @@ export function taxonomyErrorKey(error: unknown, fallbackKey: string): string {
     // sentence — the generic "проверьте поля" would send the operator hunting
     // for a field problem that does not exist.
     case "IDEMPOTENCY_KEY_REUSED":
-      return "projects.errors.keyReused";
+      return `${ns}.errors.keyReused`;
     case "IDEMPOTENCY_REQUEST_IN_PROGRESS":
-      return "projects.errors.requestInProgress";
+      return `${ns}.errors.requestInProgress`;
     default:
       return fallbackKey;
   }

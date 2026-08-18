@@ -2,7 +2,12 @@ import { z } from "zod";
 import {
   ConfigureStreamRequestSchema,
   CreateEventRequestSchema,
+  CreateExpertRequestSchema,
   CreateProjectRequestSchema,
+  EXPERT_AFFILIATION_MAX,
+  EXPERT_BIO_MAX,
+  EXPERT_CREDENTIALS_MAX,
+  EXPERT_PROFESSIONAL_ROLE_MAX,
   type ProjectKind,
   SlugSchema,
   type SpeakerEntry,
@@ -155,5 +160,56 @@ export interface ProjectFormFields {
   kind: ProjectKind;
   title: string;
   description: string;
+  slug: string;
+}
+
+/**
+ * The 012 expert create/edit form (#1284, EARS-2). Same derivation rule as the
+ * project form: `name` reuses the SSOT create-schema validator verbatim, and the
+ * four publish-required fields reuse the SSOT length CONSTANTS rather than a
+ * re-typed bound, so the client and the API can never drift.
+ *
+ * Where it deliberately differs from `ProjectFormSchema`: professional role,
+ * credentials, affiliation and bio are OPTIONAL in the form. The API accepts a
+ * draft expert with only a display name (`CreateExpertRequestSchema` — every
+ * other field is `.nullish()`), and an expert record is routinely started from a
+ * business card and completed later. Forcing all five at authoring time would
+ * make the form refuse a state the platform itself considers legal. Publication
+ * still demands them — the server answers `PUBLISH_REQUIREMENTS_NOT_MET` (#1287)
+ * — and the form says so under each box.
+ */
+const expertCreate = CreateExpertRequestSchema.shape;
+
+/** Empty box ⇒ the field is cleared/omitted; a non-empty one is bounded by the SSOT max. */
+function optionalBoundedText(max: number) {
+  return z.string().trim().max(max);
+}
+
+export const ExpertFormSchema = z.object({
+  name: expertCreate.name,
+  professionalRole: optionalBoundedText(EXPERT_PROFESSIONAL_ROLE_MAX),
+  credentials: optionalBoundedText(EXPERT_CREDENTIALS_MAX),
+  affiliation: optionalBoundedText(EXPERT_AFFILIATION_MAX),
+  bio: optionalBoundedText(EXPERT_BIO_MAX),
+  slug: z.string().superRefine((value, ctx) => {
+    if (value.trim().length === 0) return; // empty ⇒ server generates it
+    const result = SlugSchema.safeParse(value.trim());
+    if (result.success) return;
+    for (const issue of result.error.issues) {
+      ctx.addIssue(
+        issue.code === "custom"
+          ? { code: "custom" }
+          : { code: "invalid_format", format: "regex" },
+      );
+    }
+  }),
+});
+
+export interface ExpertFormFields {
+  name: string;
+  professionalRole: string;
+  credentials: string;
+  affiliation: string;
+  bio: string;
   slug: string;
 }

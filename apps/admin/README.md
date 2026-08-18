@@ -15,6 +15,17 @@ The DS Platform admin app (Next.js 16 + **Refine** CSR shell, ADR-0004 §3/§5).
 
 `events` resource: list (all states + lifecycle badge + air time in МСК + edit link), create (full aggregate + program-PDF upload), and a detail page carrying the aggregate edit (incl. PDF replace), the stream config (closed enum `rutube | youtube`), and the lifecycle action bar. The lifecycle actions are derived **only** from the server-supplied `EventAdminDetail.validTransitions` (`lib/lifecycle.ts`) — the UI offers only the transitions valid from the current state; the api guard is the authority (EARS-7).
 
+## The 012 taxonomy surface
+
+`projects` (#1283) and `experts` (#1284) are the first two of the four 012 content-taxonomy resources. They share, deliberately, one implementation:
+
+- **One list shell** — `components/admin-list-shell.tsx` owns the four controls the API exposes (free-text `q`, state filter, «показывать снятые с публикации» off by default, pagination) plus the loading / empty / error states. A resource passes its columns and a row renderer and owns nothing else; #1297's cross-resource search sweep then has one place to touch.
+- **One data provider path** — `providers/data-provider.ts` dispatches every taxonomy call off `TAXONOMY_MEDIA_PART`, the map from resource name to its multipart file part (`projects → cover`, `experts → photo`). Writes carry a fresh `Idempotency-Key`; edits carry `If-Match: W/"<version>"`; `deleteOne` throws — 012 exposes no DELETE route anywhere.
+- **One error mapping** — `lib/taxonomy-errors.ts` maps the §5.3 `errorCode` to the RU sentence, reading the resource namespace off the caller's fallback key so each vertical says the refusal in its own nouns.
+- **Tabbed detail, «Основное» only** — Stage-A composition B (#1282). Publication and relationship tabs arrive with their own slices; an empty placeholder tab is never rendered.
+
+The expert form adds two things the project form does not have: only the display **name** is required (the API accepts a draft carrying nothing else, so the four publish-required fields say so under the box instead of blocking the save), and the no-photo avatar renders the **server-computed** `initials` — the admin never re-derives them, so this avatar, the public projection (#1294) and the speaker projection (#1290) cannot disagree about the same person.
+
 ## Develop
 
 ```bash

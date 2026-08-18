@@ -19,6 +19,8 @@
     "./form": "./src/primitives/form.tsx",
     "./input-otp": "./src/primitives/input-otp.tsx",
     "./tabs": "./src/primitives/tabs.tsx",
+    "./dialog": "./src/primitives/dialog.tsx",
+    "./alert-dialog": "./src/primitives/alert-dialog.tsx",
     "./textarea": "./src/primitives/textarea.tsx",
     "./media-dropzone": "./src/primitives/media-dropzone.tsx",
     "./filter-chip": "./src/primitives/filter-chip.tsx",
@@ -46,6 +48,8 @@
   },
   "dependencies": {
     "@ds/schemas": "workspace:*",
+    "@radix-ui/react-alert-dialog": "^1.1.16",
+    "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-label": "^2.1.15",
     "@radix-ui/react-slot": "^1.3.3",
     "@radix-ui/react-tabs": "^1.1.21",

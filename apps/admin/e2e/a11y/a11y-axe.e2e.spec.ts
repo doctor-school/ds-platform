@@ -139,7 +139,9 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     await page
       .locator("#description")
       .fill("х".repeat(PROJECT_DESCRIPTION_MAX + 5));
-    await expect(page.getByText("превышено на", { exact: false })).toBeVisible();
+    await expect(
+      page.getByText("превышено на", { exact: false }),
+    ).toBeVisible();
     for (const theme of THEMES) await scan(page, theme);
 
     // A real created row, so the detail scan covers the tab bar, the populated
@@ -180,6 +182,50 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     await page.waitForURL(/\/experts\/[0-9a-f-]{36}$/);
     await page.getByTestId("expert-form").waitFor({ state: "visible" });
     await page.getByTestId("expert-initials").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+  });
+
+  // 014 EARS-1/EARS-2 (#1339) — the «Записи» tab and the modal element class it
+  // introduces. The OPEN modal is scanned explicitly, not just the tab behind it:
+  // a dialog is a different a11y surface from the page (its own name, its own
+  // description, a focus trap and a scrim over everything else), and a suite that
+  // only ever scanned the closed trigger would certify nothing about it.
+  test("the recordings tab and its modal confirmation pass WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    const id = await createEventForScan(page);
+
+    await page.goto(`/events/${id}`);
+    await page.getByTestId("tab-recordings").click();
+    await page.getByTestId("recordings-panel").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    // The attach `Dialog` — a form inside a modal, with the walk-away × affordance.
+    await page.getByTestId("recording-attach-edited").click();
+    await page
+      .getByTestId("recording-attach-edited-form")
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+    await page.keyboard.press("Escape");
+
+    // A row plus its `AlertDialog` confirmation — the must-be-answered variant,
+    // whose action pair is the raised-button contract on the card surface.
+    await page.getByTestId("recording-attach-edited").click();
+    await page
+      .getByTestId("recording-attach-edited-provider")
+      .selectOption("rutube");
+    await page
+      .getByTestId("recording-attach-edited-embed-ref")
+      .fill("a1b2c3d4e5f60718293a4b5c6d7e8f90");
+    await page.getByTestId("recording-attach-edited-submit").click();
+    await page
+      .getByTestId("recording-status-edited")
+      .waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page.getByTestId("recording-edited-retire").click();
+    await page.getByRole("alertdialog").waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
   });
 });

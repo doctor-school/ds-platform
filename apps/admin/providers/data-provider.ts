@@ -3,6 +3,7 @@
 import type { DataProvider, HttpError } from "@refinedev/core";
 import { adminCsrfHeaders } from "@/lib/admin-auth";
 import type {
+  AttachRecordingRequest,
   ConfigureStreamRequest,
   CreateEventRequest,
   CreateExpertRequest,
@@ -14,12 +15,14 @@ import type {
   ProjectAdminDetail,
   ProjectAdminListItem,
   CreateTopicRequest,
+  RecordingCommand,
   TaxonomyStatus,
   TopicAdminDetail,
   TopicAdminListItem,
   UpdateEventRequest,
   UpdateExpertRequest,
   UpdateProjectRequest,
+  UpdateRecordingRequest,
   UpdateTopicRequest,
 } from "@ds/schemas";
 
@@ -37,7 +40,10 @@ import type {
  * the double-submit is the defence-in-depth ADR-0004 design §3.2.1 asks for on
  * top of it. Reads owe no proof and send none.
  *
- * Two resources today:
+ * Two CRUD resources plus one command sub-resource. `recordings` (014) is
+ * deliberately NOT a Refine CRUD resource — it hangs off an event, its writes are
+ * named §3 commands, and its list body carries event facts a `getList` contract
+ * would truncate; it rides `custom`, which also owns its EARS-17 protocol headers.
  *
  *   events   (007)  getList → GET /v1/admin/events; create/update multipart;
  *                   custom  → stream config + the named lifecycle transitions.
@@ -385,14 +391,30 @@ export const dataProvider: DataProvider = {
   },
 
   /**
-   * The stream-config write (007 EARS-3) and the named lifecycle transitions
-   * (EARS-4/5/6) — the non-CRUD commands. `payload` carries either the
-   * `ConfigureStreamRequest` body (for `PUT :id/stream`) or is empty (for the
-   * `POST :id/{publish|open|close|archive}` transitions). `method` + `url` are
-   * supplied by the caller (`useCustomMutation`).
+   * The non-CRUD commands: feature 007's stream-config write (EARS-3) and named
+   * lifecycle transitions (EARS-4/5/6), and feature 014's whole recordings
+   * sub-resource (`/v1/admin/events/:id/recordings*`, 014-design §10).
+   *
+   * Recordings are NOT a Refine CRUD resource on purpose. They are a sub-resource
+   * of an event with named commands (`publish` / `unpublish` / `retire` /
+   * `restore`) and a list response that carries event facts alongside the rows
+   * (`eventState`, `recordingExpectedBy`) — a shape `getList` would truncate to
+   * `{ data, total }`. So they ride this path, which returns the response body
+   * whole.
+   *
+   * **The 014 EARS-17 protocol headers are OWNED HERE, not at the call site.**
+   * Every mutating recordings request must carry a canonical `Idempotency-Key`,
+   * and every non-create must carry `If-Match`. Generating the key in the
+   * provider is what makes it correct: a fresh key per CALL is the point (a
+   * second submit is a second logical request, and a key hoisted into a
+   * component would replay the first response instead of applying the edit).
+   * The caller supplies only the row `version` it rendered from, via
+   * `meta.version`; a stale one comes back as 412, never as a lost edit.
    */
-  custom: async ({ url, method, payload }) => {
+  custom: async ({ url, method, payload, meta }) => {
     const hasBody = payload !== undefined && method !== "get";
+    const mutating = method !== "get";
+    const version = (meta as { version?: number } | undefined)?.version;
     const res = await fetch(url, {
       method: (method ?? "post").toUpperCase(),
       credentials: "include",
@@ -402,14 +424,39 @@ export const dataProvider: DataProvider = {
         ...(hasBody
           ? { "content-type": "application/json", accept: "application/json" }
           : { accept: "application/json" }),
+        ...(mutating ? { "idempotency-key": idempotencyKey() } : {}),
+        ...(mutating && typeof version === "number"
+          ? { "if-match": `W/"${version}"` }
+          : {}),
         ...(method === "get" ? {} : adminCsrfHeaders()),
       },
       body: hasBody
-        ? JSON.stringify(payload as ConfigureStreamRequest | undefined)
+        ? JSON.stringify(
+            payload as
+              | ConfigureStreamRequest
+              | AttachRecordingRequest
+              | UpdateRecordingRequest
+              | undefined,
+          )
         : undefined,
     });
     if (!res.ok) throw await toHttpError(res);
-    const data = (await res.json()) as EventAdminDetail;
-    return { data: data as unknown as never };
+    // 007 transitions answer with an `EventAdminDetail`; the 014 routes answer
+    // with a `RecordingAdminList` (GET) or a `RecordingAdminDetail` (writes).
+    // The caller types the body it asked for — this seam stays shape-agnostic.
+    const data = (await res.json()) as unknown;
+    return { data: data as never };
   },
+};
+
+/**
+ * The recordings endpoints of 014-design §10, built in ONE place so a caller
+ * never hand-concatenates a path (and never reaches a DELETE — none exists).
+ */
+export const recordingsUrl = {
+  collection: (eventId: string) => `${ADMIN_BASE}/events/${eventId}/recordings`,
+  row: (eventId: string, recordingId: string) =>
+    `${ADMIN_BASE}/events/${eventId}/recordings/${recordingId}`,
+  command: (eventId: string, recordingId: string, command: RecordingCommand) =>
+    `${ADMIN_BASE}/events/${eventId}/recordings/${recordingId}/${command}`,
 };

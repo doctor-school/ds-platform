@@ -32,7 +32,8 @@ export function useLocalizedResolver<TFieldValues extends FieldValues, Out>(
     | "login.validation"
     | "projects.validation"
     | "experts.validation"
-    | "topics.validation" = "events.validation",
+    | "topics.validation"
+    | "recordings.validation" = "events.validation",
 ): Resolver<TFieldValues, unknown, Out> {
   const t = useTranslations(namespace);
 
@@ -116,6 +117,13 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
   // branch that only repeats the default would be dead code pretending to be a
   // rule. The drift guard in `use-localized-resolver.test.ts` drives the real
   // ExpertFormSchema rules and fails if any of them ever reaches `fallback`.
+  // 014 recordings (#1339). The poster box is a bounded free-text reference;
+  // the duration box is a TEXT box holding seconds, so an empty/garbage/zero
+  // value and an over-24h value are two different fixes and get two sentences.
+  if (has("posterRef")) return t("maxLength");
+  if (has("durationSecText")) {
+    return issue.code === "too_big" ? t("durationMax") : t("duration");
+  }
 
   // Duration (minutes) — a positive integer, ≤ 24h. An empty/NaN/zero/negative
   // value all resolve to the same "≥ 1 minute" guidance; an over-cap value to its own.

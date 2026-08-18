@@ -27,8 +27,9 @@
  *      primitive (a `button` element, `role="button"`, or a Radix `*.Trigger`)
  *      must declare, in its own classes, a **hover affordance** (`hover:*`) and
  *      a **visible keyboard focus** — the latter satisfied either by a literal
- *      `focus-visible:*` class or by composing the shared `interactiveBase`
- *      fragment (which carries the focus-visible ring). `cursor-pointer` is NOT
+ *      `focus-visible:*` class or by composing a shared fragment that carries it
+ *      — `interactiveBase` (the focus ring) or `buttonVariants` (the whole
+ *      raised-button state set, hover included). `cursor-pointer` is NOT
  *      required per primitive — layer 1 owns it globally.
  *
  *  (c) **App-level "no raw styled text link"** in `apps/<app>/{app,components,
@@ -149,6 +150,25 @@ const HAS_OWN_STYLING_RE = /\bcva\s*\(|className=\{?\s*(?:cn\s*\(|["'`])/;
 const HOVER_RE = /\bhover:/;
 const FOCUS_VISIBLE_RE = /\bfocus-visible:/;
 const USES_INTERACTIVE_BASE_RE = /\binteractiveBase\b/;
+/**
+ * The `Button` variant fragment. A primitive whose clickable takes its classes
+ * from `buttonVariants(...)` is composing the SAME shared contract
+ * `interactiveBase` represents — `button.tsx` owns the raised-button hover, the
+ * press translate and the focus ring for every variant, and this guard already
+ * enforces that ownership there. Re-declaring `hover:` / `focus-visible:` at the
+ * composing call site would be the per-surface re-implementation the guard
+ * exists to prevent (#1103), so composition satisfies BOTH halves — exactly as
+ * `interactiveBase` does for the focus half. (Introduced with the #1339
+ * `AlertDialog`, whose action pair is `buttonVariants` by design.)
+ *
+ * The fragment must be IMPORTED, not declared here: `button.tsx` itself both
+ * defines and calls `buttonVariants`, and a bare call-site match would let the
+ * owner exempt itself — the one file whose hover/focus classes this guard most
+ * needs to enforce. Only a CONSUMER of the fragment is delegating.
+ */
+const IMPORTS_BUTTON_VARIANTS_RE =
+  /import\s[^;]*\bbuttonVariants\b[^;]*from\s+["']/;
+const CALLS_BUTTON_VARIANTS_RE = /\bbuttonVariants\s*\(/;
 
 // ── App-level raw-styled-link detection (scope c) ────────────────────────────
 // A raw text link in app source is a violation only when it carries its OWN
@@ -291,9 +311,13 @@ function checkPrimitives(violations: Violation[]): number {
     if (!HAS_OWN_STYLING_RE.test(src)) continue; // unstyled re-export — no own contract
     enforced++;
 
-    const hasHover = HOVER_RE.test(src);
+    const composesButton =
+      IMPORTS_BUTTON_VARIANTS_RE.test(src) && CALLS_BUTTON_VARIANTS_RE.test(src);
+    const hasHover = HOVER_RE.test(src) || composesButton;
     const hasFocus =
-      FOCUS_VISIBLE_RE.test(src) || USES_INTERACTIVE_BASE_RE.test(src);
+      FOCUS_VISIBLE_RE.test(src) ||
+      USES_INTERACTIVE_BASE_RE.test(src) ||
+      composesButton;
 
     if (!hasHover) {
       violations.push({

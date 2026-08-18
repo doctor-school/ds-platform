@@ -185,7 +185,10 @@ export function gatherState({ issueNumber, runner, worktreeExists }) {
       "origin/main...HEAD",
     ]);
     if (d.status === 0) {
-      worktreeChanged = d.stdout.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+      worktreeChanged = d.stdout
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter(Boolean);
     }
   }
 
@@ -251,6 +254,8 @@ You CANNOT \`EnterWorktree\` (cwd is pinned to the repo root; the tool refuses t
 
 ## Research budget
 EDIT-FIRST: ≤15 tool calls before your first file edit. Recon facts below are DONE — do not re-verify handed facts. Hitting the cap without editing = STOP + return a partial verdict + what blocked you.
+CONTEXT BUDGET: hook rotates you at 150K (write the checkpoint, return \`ROTATE: <path>\` line 1) and denies non-git tools at 200K — plan the slice to finish under 150K.
+SPEC ANCHORS: read only the line ranges / anchors named in Recon facts — never a whole NNN-design.md.
 
 ## Recon facts (authoritative — do not re-verify)
 - <fill: the DONE facts the subagent needs — sibling scripts to mirror, exact file locations, wiring points. Hand these as facts; never write "re-read the cited files yourself".>
@@ -258,6 +263,7 @@ EDIT-FIRST: ≤15 tool calls before your first file edit. Recon facts below are 
 ## Deliverable / scope (${scopeLabel})
 ${bulletsOrPlaceholder(scopeSource, "the files/surfaces this slice touches — each is in-slice or a named, tracked exclusion")}
 - <fill: the concrete deliverable — what to build/change, and its acceptance.>
+- ≤2 layers per dispatch (db+api+e2e · UI+Playwright · live-verify+PR-polish); a wider brief is split by the lead before dispatch.
 
 ## Gates (all GREEN before push, from the worktree)
 - \`pnpm pr:preflight --static\` GREEN before push (runs the STATIC_GUARDS tree-scan family: \`ears-naming\`, \`no-stub\`, …).

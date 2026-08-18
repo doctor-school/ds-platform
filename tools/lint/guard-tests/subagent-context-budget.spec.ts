@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -15,6 +15,7 @@ import {
   hardMessage,
   isAllowedUnderHardCap,
   readState,
+  resolveSubagentTranscript,
   softMessage,
   stateFilePath,
 } from "../../hooks/subagent-context-budget.mjs";
@@ -22,9 +23,10 @@ import {
 /**
  * Unit + end-to-end cover for the #1374 subagent context budget hook: a
  * PreToolUse guard that acts ONLY inside a subagent (stdin `agent_id`), reads
- * the subagent's own transcript, injects a ROTATE directive at SOFT_THRESHOLD
- * (then every +SOFT_REPEAT_STEP) and DENIES every non-allow-listed tool at
- * HARD_THRESHOLD. Fail-open on anything malformed.
+ * the SUBAGENT's own transcript — never the lead's, which is what
+ * `transcript_path` actually carries in this CLI version — injects a ROTATE
+ * directive at SOFT_THRESHOLD (then every +SOFT_REPEAT_STEP) and DENIES every
+ * non-allow-listed tool at HARD_THRESHOLD. Fail-open on anything malformed.
  */
 
 const HOOK = resolve(__dirname, "../../hooks/subagent-context-budget.mjs");
@@ -38,24 +40,44 @@ function runHook(payload: Record<string, unknown>) {
   return stdout.trim();
 }
 
-/** Write a one-line subagent transcript whose last assistant usage sums to n. */
-function transcript(contextTokens: number): string {
-  const dir = mkdtempSync(join(tmpdir(), "subagent-ctx-"));
-  const file = join(dir, "agent-a1.jsonl");
-  writeFileSync(
-    file,
-    `${JSON.stringify({
-      type: "assistant",
-      message: {
-        usage: {
-          input_tokens: 0,
-          cache_read_input_tokens: contextTokens,
-          cache_creation_input_tokens: 0,
-        },
+/** One transcript line whose assistant usage block sums to `contextTokens`. */
+function usageLine(contextTokens: number): string {
+  return `${JSON.stringify({
+    type: "assistant",
+    message: {
+      usage: {
+        input_tokens: 0,
+        cache_read_input_tokens: contextTokens,
+        cache_creation_input_tokens: 0,
       },
-    })}\n`,
-  );
-  return file;
+    },
+  })}\n`;
+}
+
+/**
+ * The REAL on-disk layout the harness produces: the lead transcript
+ * `<projects>/<slug>/<session>.jsonl` and, beside it, the subagent transcript
+ * `<projects>/<slug>/<session>/subagents/agent-<agent_id>.jsonl`.
+ * `withSubagent: false` builds the lead-only variant (no `subagents/` dir).
+ */
+function fixture(opts: {
+  lead: number;
+  subagent?: number;
+  agentId?: string;
+}): { session: string; leadPath: string } {
+  const dir = mkdtempSync(join(tmpdir(), "subagent-ctx-"));
+  const session = "sess-1";
+  const leadPath = join(dir, `${session}.jsonl`);
+  writeFileSync(leadPath, usageLine(opts.lead));
+  if (typeof opts.subagent === "number") {
+    const subDir = join(dir, session, "subagents");
+    mkdirSync(subDir, { recursive: true });
+    writeFileSync(
+      join(subDir, `agent-${opts.agentId ?? "a1"}.jsonl`),
+      usageLine(opts.subagent),
+    );
+  }
+  return { session, leadPath };
 }
 
 describe("subagent-context-budget thresholds", () => {
@@ -63,6 +85,62 @@ describe("subagent-context-budget thresholds", () => {
     expect(SOFT_THRESHOLD).toBe(150_000);
     expect(HARD_THRESHOLD).toBe(200_000);
     expect(SOFT_REPEAT_STEP).toBe(25_000);
+  });
+});
+
+describe("subagent-context-budget resolveSubagentTranscript()", () => {
+  const payload = {
+    session_id: "sess-1",
+    agent_id: "a1",
+    transcript_path: "/p/slug/sess-1.jsonl",
+  };
+
+  it("derives <dirname>/<session>/subagents/agent-<id>.jsonl from the LEAD path", () => {
+    const p = resolveSubagentTranscript(payload, () => true);
+    expect(String(p).replace(/\\/g, "/")).toBe(
+      "/p/slug/sess-1/subagents/agent-a1.jsonl",
+    );
+  });
+
+  it("an explicit agent_transcript_path wins (forward-compat)", () => {
+    const p = resolveSubagentTranscript(
+      { ...payload, agent_transcript_path: "/x/sess/subagents/agent-z.jsonl" },
+      () => true,
+    );
+    expect(String(p).replace(/\\/g, "/")).toBe(
+      "/x/sess/subagents/agent-z.jsonl",
+    );
+  });
+
+  it("null when the resolved file does not exist (never the lead transcript)", () => {
+    expect(resolveSubagentTranscript(payload, () => false)).toBeNull();
+  });
+
+  it("null when the path is not under a subagents/ segment", () => {
+    expect(
+      resolveSubagentTranscript(
+        { ...payload, agent_transcript_path: "/p/slug/sess-1.jsonl" },
+        () => true,
+      ),
+    ).toBeNull();
+  });
+
+  it("null when the payload lacks session_id / agent_id / transcript_path", () => {
+    expect(
+      resolveSubagentTranscript({ agent_id: "a1" }, () => true),
+    ).toBeNull();
+    expect(
+      resolveSubagentTranscript(
+        { transcript_path: "/p/s.jsonl", agent_id: "a1" },
+        () => true,
+      ),
+    ).toBeNull();
+    expect(
+      resolveSubagentTranscript(
+        { transcript_path: "/p/s.jsonl", session_id: "s" },
+        () => true,
+      ),
+    ).toBeNull();
   });
 });
 
@@ -156,6 +234,19 @@ describe("subagent-context-budget decide() — hard cap + allow-list", () => {
     ).toBe(true);
   });
 
+  it("allow-list rejects a chained / piped / substituted command", () => {
+    for (const command of [
+      "git status && pnpm build",
+      "git log; rm -rf x",
+      "git diff | tee /tmp/out",
+      "git add $(ls src)",
+      "git status\npnpm test",
+      "git log `whoami`",
+    ]) {
+      expect(isAllowedUnderHardCap("Bash", { command })).toBe(false);
+    }
+  });
+
   it("allow-list rejects near-misses (git-ish names, other writes, other tools)", () => {
     expect(isAllowedUnderHardCap("Bash", { command: "github-cli sync" })).toBe(
       false,
@@ -187,17 +278,20 @@ describe("subagent-context-budget decide() — hard cap + allow-list", () => {
 
 describe("subagent-context-budget messages + paths", () => {
   it("the ROTATE contract and the resolved checkpoint path are in both messages", () => {
-    const path = checkpointPath("a1", { CLAUDE_SCRATCHPAD_DIR: "/scratch" });
-    expect(path.replace(/\\/g, "/")).toContain("/scratch/checkpoint-a1.md");
+    const path = checkpointPath("a1");
+    expect(path.replace(/\\/g, "/")).toContain(
+      "claude-checkpoints/checkpoint-a1.md",
+    );
     expect(softMessage(160_000, path)).toContain(`ROTATE: ${path}`);
     expect(softMessage(160_000, path)).toContain("160K");
     expect(hardMessage(210_000, path)).toContain(`ROTATE: ${path}`);
     expect(hardMessage(210_000, path)).toContain("210K");
   });
 
-  it("falls back to a tmp checkpoint dir when no scratchpad is exported", () => {
-    const path = checkpointPath("a/1", {}).replace(/\\/g, "/");
-    expect(path).toContain("claude-checkpoints/checkpoint-a_1.md");
+  it("checkpoint file names are filename-safe", () => {
+    expect(checkpointPath("a/1").replace(/\\/g, "/")).toContain(
+      "claude-checkpoints/checkpoint-a_1.md",
+    );
   });
 
   it("state path is per-agent under the shared guard-state dir", () => {
@@ -212,40 +306,82 @@ describe("subagent-context-budget messages + paths", () => {
 });
 
 describe("subagent-context-budget end-to-end (real hook process)", () => {
-  it("denies a Read at ≈210K inside a subagent", () => {
-    const out = runHook({
-      session_id: "x",
-      agent_id: "a1",
-      tool_name: "Read",
-      tool_input: {},
-      transcript_path: transcript(210_000),
-    });
-    const json = JSON.parse(out);
+  it("measures the SUBAGENT transcript, not the lead's: lead 300K + subagent 50K → silent", () => {
+    const { leadPath } = fixture({ lead: 300_000, subagent: 50_000 });
+    expect(
+      runHook({
+        session_id: "sess-1",
+        agent_id: "a1",
+        agent_type: "ds-explorer",
+        tool_name: "Read",
+        tool_input: {},
+        transcript_path: leadPath,
+      }),
+    ).toBe("");
+  });
+
+  it("denies a Read when the SUBAGENT transcript is ≈210K (lead below cap)", () => {
+    const { leadPath } = fixture({ lead: 10_000, subagent: 210_000 });
+    const json = JSON.parse(
+      runHook({
+        session_id: "sess-1",
+        agent_id: "a1",
+        tool_name: "Read",
+        tool_input: {},
+        transcript_path: leadPath,
+      }),
+    );
     expect(json.hookSpecificOutput.permissionDecision).toBe("deny");
     expect(json.hookSpecificOutput.permissionDecisionReason).toContain(
       "ROTATE:",
     );
   });
 
-  it("is silent for the same payload with no agent_id (the lead's own call)", () => {
+  it("soft directive carries additionalContext WITHOUT a permissionDecision", () => {
+    // Unique per run: the per-agent soft-cadence state file persists on disk,
+    // so a fixed id would be "already notified" on the second run.
+    const softAgentId = `a-soft-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+    const { leadPath } = fixture({
+      lead: 10_000,
+      subagent: 160_000,
+      agentId: softAgentId,
+    });
+    const json = JSON.parse(
+      runHook({
+        session_id: "sess-1",
+        agent_id: softAgentId,
+        tool_name: "Bash",
+        tool_input: { command: "pnpm test" },
+        transcript_path: leadPath,
+      }),
+    );
+    expect(json.hookSpecificOutput.additionalContext).toContain("ROTATE:");
+    expect(json.hookSpecificOutput.permissionDecision).toBeUndefined();
+  });
+
+  it("lead transcript only (no subagents/ file) → silent even at 300K", () => {
+    const { leadPath } = fixture({ lead: 300_000 });
     expect(
       runHook({
-        session_id: "x",
+        session_id: "sess-1",
+        agent_id: "a1",
         tool_name: "Read",
         tool_input: {},
-        transcript_path: transcript(210_000),
+        transcript_path: leadPath,
       }),
     ).toBe("");
   });
 
-  it("is silent below the soft cap", () => {
+  it("is silent for the same payload with no agent_id (the lead's own call)", () => {
+    const { leadPath } = fixture({ lead: 10_000, subagent: 210_000 });
     expect(
       runHook({
-        session_id: "x",
-        agent_id: "a-low",
+        session_id: "sess-1",
         tool_name: "Read",
         tool_input: {},
-        transcript_path: transcript(100_000),
+        transcript_path: leadPath,
       }),
     ).toBe("");
   });
@@ -258,6 +394,7 @@ describe("subagent-context-budget end-to-end (real hook process)", () => {
     expect(bad.trim()).toBe("");
     expect(
       runHook({
+        session_id: "sess-1",
         agent_id: "a1",
         tool_name: "Read",
         tool_input: {},

@@ -213,9 +213,18 @@ function reportSession(logDir, sessionId, out = process.stdout) {
     flags.push(`lead peak ${fmtK(lead.peak)} > ${fmtK(LEAD_PEAK_FLAG)}`);
   }
 
+  // Flags collected so far must still print when the session has no subagents
+  // (a lead above LEAD_PEAK_FLAG is exactly the case worth surfacing).
+  const writeFlags = () => {
+    if (!flags.length) return;
+    out.write(`  FLAG (#1374 budget):\n`);
+    for (const f of flags) out.write(`    - ${f}\n`);
+  };
+
   const subDir = path.join(logDir, sessionId, "subagents");
   if (!fs.existsSync(subDir)) {
     out.write("  SUBAGENTS: none\n");
+    writeFlags();
     return;
   }
   const rows = [];
@@ -255,10 +264,7 @@ function reportSession(logDir, sessionId, out = process.stdout) {
       );
     }
   }
-  if (flags.length) {
-    out.write(`  FLAG (#1374 budget):\n`);
-    for (const f of flags) out.write(`    - ${f}\n`);
-  }
+  writeFlags();
 }
 
 function main(argv = process.argv.slice(2)) {

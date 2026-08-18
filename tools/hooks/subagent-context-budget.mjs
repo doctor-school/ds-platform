@@ -14,11 +14,28 @@
  * to the model, because its addressee is a subagent, not the human):
  *   - Acts ONLY inside a subagent: stdin must carry `agent_id`. No `agent_id`
  *     ⇒ the call is the lead's ⇒ exit 0 with no output.
- *   - Context size = the SUBAGENT's own transcript (`transcript_path` points at
- *     `<project>/<session>/subagents/agent-<id>.jsonl`), last assistant usage
- *     block: input + cache_read + cache_creation — computed by the shared
- *     `contextTokensFromJsonl` imported from `context-budget.mjs` (single
- *     definition; never duplicate the parse).
+ *   - VERIFIED PreToolUse stdin shape inside a subagent (probed live in this
+ *     CLI version, 2026-08-18, from a real `ds-explorer` dispatch):
+ *       {"session_id":"<LEAD session id>",
+ *        "transcript_path":"<projects>/<slug>/<LEAD session id>.jsonl",
+ *        "cwd":"…","agent_id":"a803ac1b8bab61dc0","agent_type":"ds-explorer",
+ *        "hook_event_name":"PreToolUse","tool_name":"Read",
+ *        "tool_input":{…},"tool_use_id":"…"}
+ *     i.e. `transcript_path` is the LEAD's transcript, and there is NO
+ *     `agent_transcript_path` field on PreToolUse here. Measuring
+ *     `transcript_path` would apply subagent thresholds to the LEAD's context
+ *     and deny every dispatched agent from its first tool call.
+ *   - Context size = the SUBAGENT's OWN transcript only, resolved by
+ *     `resolveSubagentTranscript()`: `agent_transcript_path` when a future CLI
+ *     supplies it, else the derived sibling
+ *     `<dirname(transcript_path)>/<session_id>/subagents/agent-<agent_id>.jsonl`
+ *     (verified to exist on disk). A path not under a `subagents/` segment, or
+ *     a path that does not exist, ⇒ SILENT — never fall back to the lead
+ *     transcript. The last assistant usage block (input + cache_read +
+ *     cache_creation) is computed by the shared `contextTokensFromJsonl`
+ *     imported from `context-budget.mjs` (single definition; never duplicate
+ *     the parse), over the TAIL of the file (the runs this hook targets write
+ *     tens of MB and the parse scans from the end anyway).
  *   - ≥ SOFT_THRESHOLD → `additionalContext` ROTATE directive, emitted at the
  *     FIRST crossing and then again every +SOFT_REPEAT_STEP (per-agent state
  *     file, so a chatty agent is not nagged on every tool call).
@@ -30,9 +47,18 @@
  * IO / logic error exits 0 with no output — a budget probe must never wedge a
  * legitimate tool call.
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { contextTokensFromJsonl } from "./context-budget.mjs";
 import { projectRoot } from "./hook-compat.mjs";
@@ -88,16 +114,76 @@ export function writeState(path, state, deps = {}) {
   }
 }
 
-/** Where the rotation checkpoint is written. The session scratchpad when the
- * harness exports one, else a stable tmp dir — never inside the repo. */
-export function scratchpadDir(env = process.env) {
-  return env.CLAUDE_SCRATCHPAD_DIR || resolve(tmpdir(), "claude-checkpoints");
+/** Where the rotation checkpoint is written: `<tmp>/claude-checkpoints`, never
+ * inside the repo. The CLI exports no per-session scratchpad variable to hooks
+ * (only `CLAUDE_PROJECT_DIR`), so this is a fixed, documented location rather
+ * than a guess at an env name; the absolute path is injected verbatim into the
+ * directive, so the lead always knows where the checkpoint landed. */
+export function checkpointDir() {
+  return resolve(tmpdir(), "claude-checkpoints");
 }
 
 /** Resolved checkpoint path for one agent — injected verbatim into the
  * directive so the subagent never has to invent a location. */
-export function checkpointPath(agentId, env = process.env) {
-  return resolve(scratchpadDir(env), `checkpoint-${safeId(agentId)}.md`);
+export function checkpointPath(agentId) {
+  return resolve(checkpointDir(), `checkpoint-${safeId(agentId)}.md`);
+}
+
+/**
+ * The subagent's OWN transcript, or `null` when it cannot be established.
+ * See the header for the verified PreToolUse stdin shape. `null` ⇒ the caller
+ * MUST stay silent: measuring the lead's transcript with subagent thresholds
+ * would fence every dispatched agent from its first tool call.
+ */
+export function resolveSubagentTranscript(payload, exists = existsSync) {
+  const explicit = payload?.agent_transcript_path;
+  let candidate =
+    typeof explicit === "string" && explicit.trim() ? explicit : "";
+  if (!candidate) {
+    const transcriptPath = payload?.transcript_path;
+    const sessionId = payload?.session_id;
+    const agentId = payload?.agent_id;
+    if (
+      typeof transcriptPath !== "string" ||
+      !transcriptPath ||
+      !sessionId ||
+      !agentId
+    ) {
+      return null;
+    }
+    candidate = join(
+      dirname(transcriptPath),
+      safeId(sessionId),
+      "subagents",
+      `agent-${safeId(agentId)}.jsonl`,
+    );
+  }
+  // Guard-rail for BOTH branches: a path not under a `subagents/` segment is
+  // somebody else's transcript (the lead's, typically) — refuse to measure it.
+  if (!/(^|[\\/])subagents[\\/]/.test(candidate)) return null;
+  return exists(candidate) ? candidate : null;
+}
+
+/** Bytes of the transcript tail that are parsed. `contextTokensFromJsonl`
+ * scans from the end and stops at the last assistant usage block, so the tail
+ * yields the same number as the whole file while keeping the per-tool-call cost
+ * bounded on the multi-MB logs this hook exists to catch. */
+export const TAIL_BYTES = 512 * 1024;
+
+/** Last `TAIL_BYTES` of a file as UTF-8 (a truncated first line is fine — the
+ * parser skips unparseable lines). Any IO error propagates to the fail-open
+ * catch in `main()`. */
+export function readTail(path, maxBytes = TAIL_BYTES) {
+  const fd = openSync(path, "r");
+  try {
+    const size = fstatSync(fd).size;
+    const length = Math.min(size, maxBytes);
+    const buf = Buffer.allocUnsafe(length);
+    readSync(fd, buf, 0, length, size - length);
+    return buf.toString("utf8");
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /**
@@ -108,6 +194,9 @@ export function checkpointPath(agentId, env = process.env) {
 export function isAllowedUnderHardCap(toolName, toolInput) {
   if (toolName === "Bash") {
     const command = String(toolInput?.command ?? "").trim();
+    // Chained / substituted commands are rejected: the prefix must describe the
+    // WHOLE command, else `git status && pnpm build` routes around the fence.
+    if (/[;&|`]|\$\(|\n/.test(command)) return false;
     return (
       command.startsWith("git ") || command.startsWith("pnpm pr:preflight")
     );
@@ -174,11 +263,10 @@ function main() {
     const agentId = payload.agent_id;
     // Not a subagent → not our addressee. The lead has its own advisory hook.
     if (!agentId) process.exit(0);
-    const transcriptPath = payload.transcript_path;
+    const transcriptPath = resolveSubagentTranscript(payload);
+    // No transcript of OUR OWN ⇒ nothing this hook is allowed to measure.
     if (!transcriptPath) process.exit(0);
-    const contextTokens = contextTokensFromJsonl(
-      readFileSync(transcriptPath, "utf8"),
-    );
+    const contextTokens = contextTokensFromJsonl(readTail(transcriptPath));
     const projectDir = projectRoot(payload);
     const statePath = stateFilePath(projectDir, agentId);
     const decision = decide({
@@ -205,13 +293,14 @@ function main() {
     }
     writeState(statePath, decision.state);
     const msg = softMessage(contextTokens, path);
+    // `additionalContext` alone carries the directive. No `permissionDecision`
+    // here: this hook matches `.*`, and "allow" would auto-approve whichever
+    // arbitrary call happened to cross the soft cap.
     process.stdout.write(
       JSON.stringify({
         systemMessage: msg,
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
-          permissionDecision: "allow",
-          permissionDecisionReason: msg,
           additionalContext: msg,
         },
       }),

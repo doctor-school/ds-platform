@@ -223,26 +223,48 @@ export const ConfigureStreamRequestSchema = z
     embedRef: EmbedRefSchema,
   })
   .superRefine((value, ctx) => {
-    if (!StreamProviderSchema.safeParse(value.provider).success) return;
-    if (!EmbedRefSchema.safeParse(value.embedRef).success) return;
-    // Id-style providers reject a URL-shaped paste up front with the actionable
-    // "you pasted a link" copy; `cdnvideo`'s reference IS a URL (validated by its
-    // allowlist shape below), so it is exempt from this guard (#1134).
-    if (
-      value.provider !== "cdnvideo" &&
-      EMBED_REF_LOOKS_LIKE_URL.test(value.embedRef)
-    ) {
-      ctx.addIssue({ code: "custom", path: ["embedRef"] });
-      return;
-    }
-    if (!EMBED_REF_SHAPES[value.provider].test(value.embedRef)) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["embedRef"],
-        params: { shape: value.provider },
-      });
-    }
+    refineEmbedRefForProvider(ctx, value.provider, value.embedRef);
   });
+
+/**
+ * The provider-scoped `embedRef` check, extracted so every surface that stores a
+ * playable source runs the SAME one: 006's `ConfigureStream` above and 014's
+ * `AttachRecording`/`UpdateRecording` (#1339). A second copy of this rule would be
+ * a second answer to "is this a valid rutube id", and the two would drift the
+ * first time a provider changes its id format.
+ *
+ * Silent while either field is invalid on its own — each problem renders exactly
+ * one issue. Issues stay UNTAGGED for the URL ban (the "paste a link" copy) and
+ * carry `params.shape` for the shape mismatch (#200: no baked English message).
+ */
+export function refineEmbedRefForProvider(
+  ctx: z.RefinementCtx,
+  provider: unknown,
+  embedRef: unknown,
+  path: PropertyKey[] = ["embedRef"],
+): void {
+  const parsedProvider = StreamProviderSchema.safeParse(provider);
+  if (!parsedProvider.success) return;
+  const parsedRef = EmbedRefSchema.safeParse(embedRef);
+  if (!parsedRef.success) return;
+  // Id-style providers reject a URL-shaped paste up front with the actionable
+  // "you pasted a link" copy; `cdnvideo`'s reference IS a URL (validated by its
+  // allowlist shape), so it is exempt from this guard (#1134).
+  if (
+    parsedProvider.data !== "cdnvideo" &&
+    EMBED_REF_LOOKS_LIKE_URL.test(parsedRef.data)
+  ) {
+    ctx.addIssue({ code: "custom", path });
+    return;
+  }
+  if (!EMBED_REF_SHAPES[parsedProvider.data].test(parsedRef.data)) {
+    ctx.addIssue({
+      code: "custom",
+      path,
+      params: { shape: parsedProvider.data },
+    });
+  }
+}
 export type ConfigureStreamRequest = z.infer<
   typeof ConfigureStreamRequestSchema
 >;

@@ -38,6 +38,8 @@ function baseEvent(programPdfRef: string | null): Event {
     programPdfRef,
     state: "published",
     liveAt: null,
+    // 014 (#1339) — the operator's recording-readiness date; unset here.
+    recordingExpectedBy: null,
     createdAt: new Date("2026-07-01T00:00:00.000Z"),
     updatedAt: new Date("2026-07-01T00:00:00.000Z"),
   };

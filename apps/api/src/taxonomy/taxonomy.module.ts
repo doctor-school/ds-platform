@@ -57,6 +57,11 @@ import { TopicsService } from "./topics.service.js";
   ],
   exports: [
     IdempotencyService,
+    // Exported for 014's recordings module (#1339): it declares its own
+    // controller, and a controller-level `@UseFilters(TaxonomyProblemFilter)`
+    // is resolved from the DECLARING module's context. Exporting the existing
+    // provider is what keeps 014 on ONE RFC 7807 filter instead of a copy.
+    TaxonomyProblemFilter,
     StillImageNormalizer,
     MediaCleanupService,
     UploadReconcileService,

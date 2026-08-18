@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { StreamProviderSchema } from "../events/events.schema.js";
+import {
+  EmbedRefSchema,
+  refineEmbedRefForProvider,
+  StreamProviderSchema,
+} from "../events/events.schema.js";
 import { TaxonomyErrorCodeSchema } from "../taxonomy/taxonomy.schema.js";
 
 // 014 EARS-1 / EARS-2 (#1339) — the admin contract for retained event recordings
@@ -36,13 +40,16 @@ export const RECORDING_COMMANDS = [
 export const RecordingCommandSchema = z.enum(RECORDING_COMMANDS);
 export type RecordingCommand = z.infer<typeof RecordingCommandSchema>;
 
-export const EMBED_REF_MAX = 500;
 export const POSTER_REF_MAX = 500;
 /** 24 hours, matching the `event_recordings_duration_bounds` DB CHECK. */
 export const RECORDING_DURATION_SEC_MAX = 24 * 60 * 60;
 
-/** Provider-scoped source id — never a URL to be sniffed (014-design §2). */
-export const EmbedRefSchema = z.string().trim().min(1).max(EMBED_REF_MAX);
+// The playable source is validated by feature 006's EXISTING pair — the shared
+// `EmbedRefSchema` bounds plus `refineEmbedRefForProvider` (the per-provider id
+// shapes and the URL-paste ban, #1134). 014 adds no second embed validator: a
+// recording's source is the same kind of provider-scoped reference the live room
+// already stores, so "is this a valid rutube id" keeps exactly one answer.
+
 /** Optional poster reference; an empty string is not a synonym for «none». */
 export const PosterRefSchema = z.string().trim().min(1).max(POSTER_REF_MAX);
 export const DurationSecSchema = z.coerce
@@ -73,7 +80,10 @@ export const AttachRecordingRequestSchema = z
     posterRef: PosterRefSchema.nullish(),
     durationSec: DurationSecSchema.nullish(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    refineEmbedRefForProvider(ctx, value.provider, value.embedRef);
+  });
 export type AttachRecordingRequest = z.infer<
   typeof AttachRecordingRequestSchema
 >;
@@ -92,7 +102,25 @@ export const UpdateRecordingRequestSchema = z
     posterRef: PosterRefSchema.nullish(),
     durationSec: DurationSecSchema.nullish(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    // The source is one value in two fields: an `embedRef` is only meaningful
+    // against the provider whose id format it must match, so a correction
+    // carries BOTH or neither. Patching one alone would let a rutube id be
+    // re-labelled `youtube` without ever being re-validated.
+    const partial =
+      (value.provider === undefined) !== (value.embedRef === undefined);
+    if (partial) {
+      ctx.addIssue({
+        code: "custom",
+        path: [value.provider === undefined ? "provider" : "embedRef"],
+      });
+      return;
+    }
+    if (value.provider !== undefined && value.embedRef !== undefined) {
+      refineEmbedRefForProvider(ctx, value.provider, value.embedRef);
+    }
+  });
 export type UpdateRecordingRequest = z.infer<
   typeof UpdateRecordingRequestSchema
 >;

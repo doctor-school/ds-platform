@@ -2,7 +2,7 @@
 
 Spec: [`specs/features/012-content-taxonomy`](../../../docs/content/specs/features/012-content-taxonomy/012-design.md) · ADRs 0001 (authz), 0002 (REST/OpenAPI/idempotency), 0003 (retained-row data layer), 0009 (retained-row value erasure).
 
-The module owns the `platform_admin` authoring surface for the four retained taxonomy entities and the three protocol services every taxonomy handler shares. #1283 (EARS-1) opened it with the **project** vertical; #1284–#1286 add expert / topic / partner controllers against the same three services, and #1287/#1294–#1297 add publication, lifecycle and public reads.
+The module owns the `platform_admin` authoring surface for the four retained taxonomy entities and the three protocol services every taxonomy handler shares. #1283 (EARS-1) opened it with the **project** vertical and #1284 (EARS-2) added the **expert** one against the same three services; #1285–#1286 add topic / partner controllers, and #1287/#1294–#1297 add publication, lifecycle and public reads.
 
 ## What is here today
 
@@ -11,6 +11,9 @@ The module owns the `platform_admin` authoring surface for the four retained tax
 | `projects.admin.controller.ts`      | `GET/POST /v1/admin/projects`, `GET/PATCH /v1/admin/projects/:id` — realizes the §5.1 failure ORDER.                   |
 | `projects.service.ts`               | The create/edit commands: slug resolution, media swap, cleanup enqueue, fenced record completion.                      |
 | `projects.repository.ts`            | Drizzle access for `projects`; every mutation inside `withRequestAuditContext` (feature 010).                          |
+| `experts.admin.controller.ts`       | `GET/POST /v1/admin/experts`, `GET/PATCH /v1/admin/experts/:id` — the same §5.1 failure ORDER, media slot `photo`.     |
+| `experts.service.ts`                | The expert create/edit commands: slug from the NAME, photo swap, cleanup enqueue, fenced record completion.            |
+| `experts.repository.ts`             | Drizzle access for `experts`; LD-6 `ILIKE` search over `name`/`slug` served by the `pg_trgm` GIN indexes.              |
 | `idempotency.service.ts`            | §6 retained, fenced idempotency records — key validation, fingerprint binding, replay, lease takeover, 24-hour expiry. |
 | `media/still-image-normalizer.ts`   | §2.2 shared still-image decoder/normalizer → canonical WebP under a pinned codec profile.                              |
 | `media/media-cleanup.service.ts`    | §5.1 durable old-reference cleanup: job enqueue + fenced leased worker.                                                |
@@ -41,11 +44,13 @@ Failures are `application/problem+json` with the stable `errorCode` plus `traceI
 
 - Three `@Cron` sweeps run here: the hourly retained-record expiry (`IdempotencyService.sweepExpired`), the 5-minute media-cleanup drain (`MediaCleanupService.sweep`) and the 10-minute upload-locator reconciliation (`UploadReconcileService.sweep`). All three are idempotent and safe on several instances. `ScheduleModule.forRoot()` is registered once by `AuthModule`; a second registration installs a second explorer and aborts the boot.
 - Every dependency in this module is injected with an explicit `@Inject(token)`, including the class ones — the root-level `endpoint-authz` gate boots this graph under `tsx`, whose esbuild transform emits no `design:paramtypes`, so type-inferred injection resolves to `undefined` there while working fine under `nest build`.
-- Adding a media slot (#1284 photo, #1286 logo) means extending `MediaCleanupService.isObjectReferenced` with that column; otherwise the worker would delete an object a live row still points at.
+- Adding a media slot means extending `MediaCleanupService.isObjectReferenced` with that column; otherwise the worker would delete an object a live row still points at. `projects.cover_ref` and `experts.photo_ref` are both registered there today; #1286's partner logo is the next one.
 
 ## Tests
 
 - `apps/api/test/taxonomy/projects-schema.e2e-spec.ts` — DB constraints, set-once publication instant, audit attachment, the two technical-table terminal shapes.
-- `apps/api/test/taxonomy/projects.e2e-spec.ts` — the authoring vertical over the real stack (reject + accept branches).
+- `apps/api/test/taxonomy/projects.e2e-spec.ts` — the project authoring vertical over the real stack (reject + accept branches).
+- `apps/api/test/taxonomy/experts-schema.e2e-spec.ts` — the expert DB half: removal shape (§2.4), the display label required unless removed, and the LD-6 trigram indexes.
+- `apps/api/test/taxonomy/experts.e2e-spec.ts` — the expert authoring vertical over the real stack, including the deterministic no-photo initials.
 - `apps/api/test/taxonomy/idempotency-media.e2e-spec.ts` — storage-outage 503, cleanup worker fencing, record expiry, lease takeover, and takeover ⇄ orphan-cleanup disjointness.
 - `apps/api/test/taxonomy/still-image-normalizer.spec.ts` — normalizer fixtures (accept, strip, orient, reject); its byte-fixture generator lives in `test/taxonomy/support/animated-fixtures.ts` so it never ships in the api build.

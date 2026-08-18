@@ -160,5 +160,5 @@ export class ExpertsRepository {
 
 /** Escape the LIKE wildcards so a search for `100%` is a literal search. */
 function escapeLike(value: string): string {
-  return value.replace(/[\%_]/g, (ch) => `\${ch}`);
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 }

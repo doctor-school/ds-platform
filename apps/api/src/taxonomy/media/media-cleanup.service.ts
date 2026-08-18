@@ -3,7 +3,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { and, eq, lte, or, sql } from "drizzle-orm";
 import type { DrizzleHandle } from "@ds/db";
-import { mediaCleanupJobs, projects } from "@ds/db";
+import { experts, mediaCleanupJobs, projects } from "@ds/db";
 import { DRIZZLE_DB } from "../../database/database.tokens.js";
 import { OBJECT_STORAGE, type ObjectStorage } from "../../storage/index.js";
 
@@ -204,8 +204,8 @@ export class MediaCleanupService {
 
   /**
    * Whether any current domain row still references `objectKey`. #1283 owns the
-   * `projects.cover_ref` slot; #1284/#1286 extend this predicate with
-   * `experts.photo_ref` and `partners.logo_ref` when those columns land.
+   * `projects.cover_ref` slot and #1284 added `experts.photo_ref`; #1286 extends
+   * this predicate with `partners.logo_ref` when that column lands.
    *
    * PUBLIC because `UploadReconcileService` asks the same question about a
    * different handle (an upload locator rather than a cleanup job). Keeping ONE
@@ -213,12 +213,18 @@ export class MediaCleanupService {
    * in the other — which would let that sweep delete a live object.
    */
   async isObjectReferenced(objectKey: string): Promise<boolean> {
-    const [hit] = await this.db
+    const [coverHit] = await this.db
       .select({ id: projects.id })
       .from(projects)
       .where(eq(projects.coverRef, objectKey))
       .limit(1);
-    return Boolean(hit);
+    if (coverHit) return true;
+    const [photoHit] = await this.db
+      .select({ id: experts.id })
+      .from(experts)
+      .where(eq(experts.photoRef, objectKey))
+      .limit(1);
+    return Boolean(photoHit);
   }
 
   private async recordFailure(

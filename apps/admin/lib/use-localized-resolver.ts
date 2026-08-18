@@ -30,7 +30,8 @@ export function useLocalizedResolver<TFieldValues extends FieldValues, Out>(
   namespace:
     | "events.validation"
     | "login.validation"
-    | "projects.validation" = "events.validation",
+    | "projects.validation"
+    | "experts.validation" = "events.validation",
 ): Resolver<TFieldValues, unknown, Out> {
   const t = useTranslations(namespace);
 
@@ -106,6 +107,14 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
     return t("required");
   }
   if (has("kind")) return t("kind");
+
+  // 012 expert authoring (#1284): name / professional role / credentials /
+  // affiliation / bio all fail on exactly two shapes — empty (`too_small` on the
+  // SSOT min-1) and over-long (`too_big`) — which the generic tail below already
+  // maps to `required` / `maxLength`. No per-field branch is added for them: a
+  // branch that only repeats the default would be dead code pretending to be a
+  // rule. The drift guard in `use-localized-resolver.test.ts` drives the real
+  // ExpertFormSchema rules and fails if any of them ever reaches `fallback`.
 
   // Duration (minutes) — a positive integer, ≤ 24h. An empty/NaN/zero/negative
   // value all resolve to the same "≥ 1 minute" guidance; an over-cap value to its own.

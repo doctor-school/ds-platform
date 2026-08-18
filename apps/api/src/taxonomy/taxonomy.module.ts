@@ -1,4 +1,7 @@
 import { Module } from "@nestjs/common";
+import { ExpertsAdminController } from "./experts.admin.controller.js";
+import { ExpertsRepository } from "./experts.repository.js";
+import { ExpertsService } from "./experts.service.js";
 import { IdempotencyService } from "./idempotency.service.js";
 import { MediaCleanupService } from "./media/media-cleanup.service.js";
 import { StillImageNormalizer } from "./media/still-image-normalizer.js";
@@ -15,7 +18,7 @@ import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
  * `IdempotencyService` is the §6 retained-record contract, `StillImageNormalizer`
  * the §2.2 shared media component, `MediaCleanupService` the §5.1 durable cleanup
  * obligation and `UploadReconcileService` its §6 counterpart for objects a
- * never-committed request uploaded. #1284–#1286 add their controllers/services here and consume
+ * never-committed request uploaded. #1284 (experts) is wired here alongside them; #1285–#1286 follow and consume
  * all three unchanged — there is no second normalizer and no second record shape.
  *
  * `DatabaseModule` and `StorageModule` are `@Global`, so no import list is needed.
@@ -25,7 +28,7 @@ import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
   // WHOLE application for @Cron providers, and `AuthModule` already registers it
   // once. A second registration installs a second explorer, which re-registers
   // every cron name and aborts the boot — verified while wiring this module.
-  controllers: [ProjectsAdminController],
+  controllers: [ProjectsAdminController, ExpertsAdminController],
   providers: [
     IdempotencyService,
     StillImageNormalizer,
@@ -33,6 +36,8 @@ import { TaxonomyProblemFilter } from "./taxonomy.problem-filter.js";
     UploadReconcileService,
     ProjectsRepository,
     ProjectsService,
+    ExpertsRepository,
+    ExpertsService,
     // Registered as a provider (not just referenced by class in `@UseFilters`)
     // so Nest resolves its IdempotencyService dependency: the filter is what
     // fenced-stores a deterministic refusal for replay (§6 bullet 3).

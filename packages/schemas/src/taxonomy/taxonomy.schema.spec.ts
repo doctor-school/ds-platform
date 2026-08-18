@@ -2,12 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import {
   AdminTaxonomyListQuerySchema,
+  CreateExpertRequestSchema,
   CreateProjectRequestSchema,
+  expertInitials,
+  ExpertAdminDetailSchema,
+  ExpertAdminListItemSchema,
   isCanonicalIdempotencyKey,
   parseIfMatchVersion,
   slugifyTaxonomyTitle,
   SlugSchema,
   taxonomyETag,
+  UpdateExpertRequestSchema,
   UpdateProjectRequestSchema,
 } from "./index.js";
 
@@ -148,5 +153,123 @@ describe("012 taxonomy — authoring contract (SSOT)", () => {
     expect(parseIfMatchVersion(undefined)).toBeNull();
     expect(parseIfMatchVersion("*")).toBeNull();
     expect(parseIfMatchVersion('W/"abc"')).toBeNull();
+  });
+});
+
+// 012 EARS-2 (#1284) — the expert wire contract. Same rule as EARS-1: a bound
+// asserted here is the bound the Refine form shows the operator BEFORE the
+// round-trip and the one the server enforces after.
+describe("012 taxonomy — expert authoring contract (SSOT)", () => {
+  it("012 EARS-2: when an expert create omits the name or exceeds a field bound, the schema shall refuse it", () => {
+    expect(CreateExpertRequestSchema.safeParse({}).success).toBe(false);
+    expect(CreateExpertRequestSchema.safeParse({ name: "" }).success).toBe(false);
+    expect(
+      CreateExpertRequestSchema.safeParse({ name: "x".repeat(161) }).success,
+    ).toBe(false);
+    // Every §2.2 bound, at its exact edge.
+    for (const [field, max] of [
+      ["professionalRole", 160],
+      ["credentials", 500],
+      ["affiliation", 240],
+      ["bio", 4000],
+    ] as const) {
+      expect(
+        CreateExpertRequestSchema.safeParse({
+          name: "Иванов Иван",
+          [field]: "x".repeat(max + 1),
+        }).success,
+      ).toBe(false);
+      expect(
+        CreateExpertRequestSchema.safeParse({
+          name: "Иванов Иван",
+          [field]: "x".repeat(max),
+        }).success,
+      ).toBe(true);
+    }
+    expect(
+      CreateExpertRequestSchema.safeParse({ name: "Иванов Иван" }).success,
+    ).toBe(true);
+  });
+
+  it("012 EARS-2: when client JSON carries a storage reference or a create-time mediaAction, the schema shall refuse it", () => {
+    // `.strict()` — an attempt to supply storage authority is a refusal, never
+    // an ignored field (012-design §5.1).
+    expect(
+      CreateExpertRequestSchema.safeParse({
+        name: "Иванов Иван",
+        photoRef: "taxonomy/experts/photos/x.webp",
+      }).success,
+    ).toBe(false);
+    expect(
+      CreateExpertRequestSchema.safeParse({
+        name: "Иванов Иван",
+        photoUrl: "https://cdn.example/x.webp",
+      }).success,
+    ).toBe(false);
+    // `mediaAction` is a PATCH-only verb: there is nothing to clear on create.
+    expect(
+      CreateExpertRequestSchema.safeParse({
+        name: "Иванов Иван",
+        mediaAction: "clear",
+      }).success,
+    ).toBe(false);
+    expect(
+      UpdateExpertRequestSchema.safeParse({ mediaAction: "clear" }).success,
+    ).toBe(true);
+    // There is NO required platform-user link, so no such field is accepted.
+    expect(
+      CreateExpertRequestSchema.safeParse({ name: "Иванов Иван", userId: "u1" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("012 EARS-2: when an expert PATCH omits a field, the schema shall mean unchanged — and shall refuse a null display label", () => {
+    const empty = UpdateExpertRequestSchema.parse({});
+    expect(Object.keys(empty)).toHaveLength(0);
+    // Explicit null clears an optional / still-incomplete draft field…
+    expect(
+      UpdateExpertRequestSchema.safeParse({ affiliation: null, bio: null })
+        .success,
+    ).toBe(true);
+    // …but the display label is only ever removed by #1306's editorial removal.
+    expect(UpdateExpertRequestSchema.safeParse({ name: null }).success).toBe(
+      false,
+    );
+  });
+
+  it("012 EARS-2: when an expert has no photo, initials shall be derived deterministically from the name", () => {
+    expect(expertInitials("Иванов Иван Петрович")).toBe("ИИ");
+    expect(expertInitials("Мария Смирнова")).toBe("МС");
+    expect(expertInitials("  анна   ")).toBe("А");
+    expect(expertInitials("John Ronald Reuel Tolkien")).toBe("JR");
+    // Same input, same output — the admin renders what the API computed.
+    expect(expertInitials("Иванов Иван")).toBe(expertInitials("Иванов Иван"));
+    // No letter at all yields no fabricated glyph.
+    expect(expertInitials("🙂 🙃")).toBe("");
+    expect(expertInitials(null)).toBe("");
+  });
+
+  it("012 EARS-2: when an admin expert detail is projected, it shall carry no storage key", () => {
+    const detail = {
+      id: "11111111-1111-4111-8111-111111111111",
+      slug: "ivanov-ivan",
+      name: "Иванов Иван",
+      professionalRole: "Кардиолог",
+      credentials: "д.м.н.",
+      affiliation: "НМИЦ кардиологии",
+      bio: "Биография",
+      photoUrl: "https://cdn.example/photo.webp",
+      initials: "ИИ",
+      status: "draft" as const,
+      firstPublishedAt: null,
+      slugEditable: true,
+      contentRemovedAt: null,
+      version: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const parsed = ExpertAdminDetailSchema.parse(detail);
+    expect(parsed).not.toHaveProperty("photoRef");
+    expect(ExpertAdminListItemSchema.parse(detail)).not.toHaveProperty("bio");
   });
 });

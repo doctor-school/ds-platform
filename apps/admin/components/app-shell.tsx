@@ -43,6 +43,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {t("app.nav.projects")}
                 </Link>
               </DsLink>
+              <DsLink asChild variant="standalone">
+                <Link href="/experts" data-testid="nav-experts">
+                  {t("app.nav.experts")}
+                </Link>
+              </DsLink>
             </nav>
           </div>
           <Button

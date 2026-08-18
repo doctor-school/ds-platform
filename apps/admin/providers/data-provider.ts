@@ -5,13 +5,17 @@ import { adminCsrfHeaders } from "@/lib/admin-auth";
 import type {
   ConfigureStreamRequest,
   CreateEventRequest,
+  CreateExpertRequest,
   CreateProjectRequest,
   EventAdminDetail,
   EventAdminListItem,
+  ExpertAdminDetail,
+  ExpertAdminListItem,
   ProjectAdminDetail,
   ProjectAdminListItem,
   TaxonomyStatus,
   UpdateEventRequest,
+  UpdateExpertRequest,
   UpdateProjectRequest,
 } from "@ds/schemas";
 
@@ -38,7 +42,10 @@ import type {
  *                   create  → POST  (Idempotency-Key; JSON or multipart+cover)
  *                   update  → PATCH (Idempotency-Key + If-Match)
  *
- * `deleteOne` throws for BOTH resources: 012 has no Delete route anywhere in the
+ *   experts  (012)  the same four calls against /v1/admin/experts, with `photo`
+ *                   as the file part instead of `cover` (#1284, EARS-2).
+ *
+ * `deleteOne` throws for EVERY resource: 012 has no Delete route anywhere in the
  * taxonomy controller and 007's lifecycle is archive, never destroy. The provider
  * is the last place a stray Refine `useDelete()` could reach, so the refusal
  * lives here rather than relying on no page rendering the control.
@@ -50,6 +57,23 @@ export type CreateEventVars = CreateEventRequest & { programPdf?: File | null };
 /** Variables the edit form hands the provider — a partial aggregate + an optional replacement PDF. */
 export type UpdateEventVars = UpdateEventRequest & { programPdf?: File | null };
 
+/**
+ * The 012 taxonomy resources this provider serves, and the multipart file part
+ * each one's image rides in (012-design §5.1). The map is the single place a new
+ * vertical (#1285/#1286) registers itself: every call below dispatches off it, so
+ * a resource cannot be half-wired — listed here means list/detail/create/update
+ * all work for it.
+ */
+const TAXONOMY_MEDIA_PART = {
+  projects: "cover",
+  experts: "photo",
+} as const;
+type TaxonomyResource = keyof typeof TAXONOMY_MEDIA_PART;
+
+function isTaxonomyResource(resource: string): resource is TaxonomyResource {
+  return Object.hasOwn(TAXONOMY_MEDIA_PART, resource);
+}
+
 /** Project create variables: the authored fields plus an optional cover file. */
 export type CreateProjectVars = CreateProjectRequest & { cover?: File | null };
 /**
@@ -59,6 +83,19 @@ export type CreateProjectVars = CreateProjectRequest & { cover?: File | null };
  */
 export type UpdateProjectVars = UpdateProjectRequest & {
   cover?: File | null;
+  version: number;
+};
+
+/** Expert create variables: the authored fields plus an optional photo file (#1284). */
+export type CreateExpertVars = CreateExpertRequest & { photo?: File | null };
+/**
+ * Expert edit variables. `photo` sets/replaces the stored photo; `mediaAction:
+ * "clear"` removes it; supplying both is refused by the API with
+ * `MEDIA_INPUT_CONFLICT`, so the form never offers both at once. `version`
+ * becomes the `If-Match` precondition.
+ */
+export type UpdateExpertVars = UpdateExpertRequest & {
+  photo?: File | null;
   version: number;
 };
 
@@ -122,19 +159,21 @@ function idempotencyKey(): string {
 }
 
 /**
- * The project write body. JSON is the canonical no-file shape; a cover rides
- * `multipart/form-data` with exactly one `payload` part plus one `cover` file
- * (012-design §5.1). A multipart body with no file is refused with 415, so the
- * shape is chosen by whether a file exists — never "multipart always".
+ * The taxonomy write body. JSON is the canonical no-file shape; an image rides
+ * `multipart/form-data` with exactly one `payload` part plus one file part named
+ * for the resource — `cover` for a project, `photo` for an expert (012-design
+ * §5.1). A multipart body with no file is refused with 415, so the shape is
+ * chosen by whether a file exists — never "multipart always".
  */
-function projectBody(
+function taxonomyBody(
+  resource: TaxonomyResource,
   payload: Record<string, unknown>,
-  cover: File | null | undefined,
+  file: File | null | undefined,
 ): { body: BodyInit; headers: Record<string, string> } {
-  if (cover) {
+  if (file) {
     const form = new FormData();
     form.append("payload", JSON.stringify(payload));
-    form.append("cover", cover);
+    form.append(TAXONOMY_MEDIA_PART[resource], file);
     // No explicit content-type: the browser sets it WITH the boundary.
     return { body: form, headers: {} };
   }
@@ -171,9 +210,9 @@ export const dataProvider: DataProvider = {
   getApiUrl: () => ADMIN_BASE,
 
   getList: async ({ resource, pagination, filters }) => {
-    if (resource === "projects") {
+    if (isTaxonomyResource(resource)) {
       const res = await fetch(
-        `${ADMIN_BASE}/projects?${taxonomyListQuery({
+        `${ADMIN_BASE}/${resource}?${taxonomyListQuery({
           ...(pagination ? { pagination } : {}),
           ...(filters ? { filters } : {}),
         })}`,
@@ -181,7 +220,7 @@ export const dataProvider: DataProvider = {
       );
       if (!res.ok) throw await toHttpError(res);
       const body = (await res.json()) as {
-        data: ProjectAdminListItem[];
+        data: (ProjectAdminListItem | ExpertAdminListItem)[];
         total: number;
       };
       return { data: body.data as unknown as never[], total: body.total };
@@ -200,13 +239,13 @@ export const dataProvider: DataProvider = {
   },
 
   getOne: async ({ resource, id }) => {
-    if (resource === "projects") {
-      const res = await fetch(`${ADMIN_BASE}/projects/${id}`, {
+    if (isTaxonomyResource(resource)) {
+      const res = await fetch(`${ADMIN_BASE}/${resource}/${id}`, {
         credentials: "include",
         headers: { accept: "application/json" },
       });
       if (!res.ok) throw await toHttpError(res);
-      const data = (await res.json()) as ProjectAdminDetail;
+      const data = (await res.json()) as ProjectAdminDetail | ExpertAdminDetail;
       return { data: data as unknown as never };
     }
     if (resource !== "events") throw new Error(`unknown resource: ${resource}`);
@@ -220,13 +259,15 @@ export const dataProvider: DataProvider = {
   },
 
   create: async ({ resource, variables }) => {
-    if (resource === "projects") {
-      const { cover, ...payload } = variables as CreateProjectVars;
-      const { body, headers } = projectBody(
+    if (isTaxonomyResource(resource)) {
+      const { cover, photo, ...payload } = variables as CreateProjectVars &
+        CreateExpertVars;
+      const { body, headers } = taxonomyBody(
+        resource,
         payload as Record<string, unknown>,
-        cover,
+        resource === "projects" ? cover : photo,
       );
-      const res = await fetch(`${ADMIN_BASE}/projects`, {
+      const res = await fetch(`${ADMIN_BASE}/${resource}`, {
         method: "POST",
         credentials: "include",
         headers: {
@@ -238,7 +279,7 @@ export const dataProvider: DataProvider = {
         body,
       });
       if (!res.ok) throw await toHttpError(res);
-      const data = (await res.json()) as ProjectAdminDetail;
+      const data = (await res.json()) as ProjectAdminDetail | ExpertAdminDetail;
       return { data: data as unknown as never };
     }
     if (resource !== "events") throw new Error(`unknown resource: ${resource}`);
@@ -254,13 +295,15 @@ export const dataProvider: DataProvider = {
   },
 
   update: async ({ resource, id, variables }) => {
-    if (resource === "projects") {
-      const { cover, version, ...payload } = variables as UpdateProjectVars;
-      const { body, headers } = projectBody(
+    if (isTaxonomyResource(resource)) {
+      const { cover, photo, version, ...payload } = variables as UpdateProjectVars &
+        UpdateExpertVars;
+      const { body, headers } = taxonomyBody(
+        resource,
         payload as Record<string, unknown>,
-        cover,
+        resource === "projects" ? cover : photo,
       );
-      const res = await fetch(`${ADMIN_BASE}/projects/${id}`, {
+      const res = await fetch(`${ADMIN_BASE}/${resource}/${id}`, {
         method: "PATCH",
         credentials: "include",
         headers: {
@@ -275,7 +318,7 @@ export const dataProvider: DataProvider = {
         body,
       });
       if (!res.ok) throw await toHttpError(res);
-      const data = (await res.json()) as ProjectAdminDetail;
+      const data = (await res.json()) as ProjectAdminDetail | ExpertAdminDetail;
       return { data: data as unknown as never };
     }
     if (resource !== "events") throw new Error(`unknown resource: ${resource}`);

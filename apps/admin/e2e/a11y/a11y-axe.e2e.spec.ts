@@ -152,4 +152,34 @@ test.describe("007 EARS-11 axe-core a11y scan of the admin event surface", () =>
     await page.getByTestId("project-form").waitFor({ state: "visible" });
     for (const theme of THEMES) await scan(page, theme);
   });
+
+  // 012 EARS-2 (#1284) — the expert vertical. It reuses the shared list shell and
+  // the dropzone the project scan already covers, but it adds one control class no
+  // other admin surface renders: the initials AVATAR (a `primary-action` fill with
+  // `primary-foreground` text, carrying an `aria-label` as its only accessible
+  // name). A contrast or naming regression there would pass every existing scan,
+  // so the expert surfaces get their own.
+  test("the expert list + create + detail surfaces pass WCAG 2 A/AA (light)", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    await page.goto("/experts");
+    await page.getByTestId("experts-filters").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    await page.goto("/experts/create");
+    await page.getByTestId("expert-form").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+
+    // A real created row, so the detail scan covers the tab bar, the populated
+    // counters and — the point of this test — the rendered initials avatar.
+    await page.locator("#name").fill(`Пётр Аксёнов ${Date.now()}`);
+    await page.locator("#professionalRole").fill("Кардиолог");
+    await page.locator("#bio").fill("Биография для скана доступности.");
+    await page.getByTestId("submit-expert").click();
+    await page.waitForURL(/\/experts\/[0-9a-f-]{36}$/);
+    await page.getByTestId("expert-form").waitFor({ state: "visible" });
+    await page.getByTestId("expert-initials").waitFor({ state: "visible" });
+    for (const theme of THEMES) await scan(page, theme);
+  });
 });

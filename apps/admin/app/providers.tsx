@@ -33,14 +33,22 @@ export function Providers({ children }: { children: ReactNode }) {
           edit: "/events/:id",
           meta: { label: t("app.nav.events") },
         },
-        // 012 content taxonomy (#1283). #1284–#1286 register experts / topics /
-        // partners the same way, against the same shared list shell and provider.
+        // 012 content taxonomy: projects (#1283) and experts (#1284) on the same
+        // shared list shell and provider; #1285/#1286 register topics / partners
+        // the same way.
         {
           name: "projects",
           list: "/projects",
           create: "/projects/create",
           edit: "/projects/:id",
           meta: { label: t("app.nav.projects") },
+        },
+        {
+          name: "experts",
+          list: "/experts",
+          create: "/experts/create",
+          edit: "/experts/:id",
+          meta: { label: t("app.nav.experts") },
         },
       ]}
       options={{

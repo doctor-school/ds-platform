@@ -186,6 +186,169 @@ export const ProjectAdminListSchema = z.object({
 });
 export type ProjectAdminList = z.infer<typeof ProjectAdminListSchema>;
 
+// ── Expert authoring DTOs (012-design §2.2 matrix; EARS-2, #1284) ───────────
+
+export const EXPERT_NAME_MIN = 1;
+export const EXPERT_NAME_MAX = 160;
+export const EXPERT_PROFESSIONAL_ROLE_MIN = 1;
+export const EXPERT_PROFESSIONAL_ROLE_MAX = 160;
+export const EXPERT_CREDENTIALS_MIN = 1;
+export const EXPERT_CREDENTIALS_MAX = 500;
+export const EXPERT_AFFILIATION_MIN = 1;
+export const EXPERT_AFFILIATION_MAX = 240;
+export const EXPERT_BIO_MIN = 1;
+export const EXPERT_BIO_MAX = 4000;
+
+const ExpertNameSchema = z
+  .string()
+  .trim()
+  .min(EXPERT_NAME_MIN)
+  .max(EXPERT_NAME_MAX);
+const ExpertProfessionalRoleSchema = z
+  .string()
+  .trim()
+  .min(EXPERT_PROFESSIONAL_ROLE_MIN)
+  .max(EXPERT_PROFESSIONAL_ROLE_MAX);
+const ExpertCredentialsSchema = z
+  .string()
+  .trim()
+  .min(EXPERT_CREDENTIALS_MIN)
+  .max(EXPERT_CREDENTIALS_MAX);
+const ExpertAffiliationSchema = z
+  .string()
+  .trim()
+  .min(EXPERT_AFFILIATION_MIN)
+  .max(EXPERT_AFFILIATION_MAX);
+const ExpertBioSchema = z
+  .string()
+  .trim()
+  .min(EXPERT_BIO_MIN)
+  .max(EXPERT_BIO_MAX);
+
+/**
+ * `POST /v1/admin/experts` — create one draft expert.
+ *
+ * `.strict()` is load-bearing exactly as it is for a project: client JSON must
+ * never carry `photoRef`, an object key or a storage URL (012-design §5.1), so
+ * an attempt to supply storage authority is 400 `VALIDATION_FAILED` rather than
+ * a silently ignored field. `mediaAction` is PATCH-only and absent here.
+ *
+ * `name` is the required display identity (§2.2 — display labels are required
+ * on create); every other public field is publish-required and may stay null
+ * while the row is a draft. An expert has NO required platform-user link: there
+ * is no `userId` field to supply, by design (EARS-2).
+ */
+export const CreateExpertRequestSchema = z
+  .object({
+    name: ExpertNameSchema,
+    professionalRole: ExpertProfessionalRoleSchema.nullish(),
+    credentials: ExpertCredentialsSchema.nullish(),
+    affiliation: ExpertAffiliationSchema.nullish(),
+    bio: ExpertBioSchema.nullish(),
+    slug: SlugSchema.optional(),
+  })
+  .strict();
+export type CreateExpertRequest = z.infer<typeof CreateExpertRequestSchema>;
+
+/**
+ * `PATCH /v1/admin/experts/:id` — edit the same row.
+ *
+ * Omission means unchanged; an explicit `null` clears an optional or
+ * still-incomplete draft field (012-design §2.2). `name` accepts no null: the
+ * display label is only ever removed by §2.4's editorial removal (#1306), never
+ * by an ordinary edit. `slug` is accepted only while `first_published_at IS
+ * NULL` — the refusal depends on row state, so it is a 409 `SLUG_IMMUTABLE`
+ * from the service, not a shape rule here.
+ */
+export const UpdateExpertRequestSchema = z
+  .object({
+    name: ExpertNameSchema.optional(),
+    professionalRole: ExpertProfessionalRoleSchema.nullish(),
+    credentials: ExpertCredentialsSchema.nullish(),
+    affiliation: ExpertAffiliationSchema.nullish(),
+    bio: ExpertBioSchema.nullish(),
+    slug: SlugSchema.optional(),
+    mediaAction: MediaActionSchema.optional(),
+  })
+  .strict();
+export type UpdateExpertRequest = z.infer<typeof UpdateExpertRequestSchema>;
+
+/**
+ * Deterministic initials for an expert with no photo (012-design §2.2 — "expert
+ * photo absence yields deterministic initials from the name").
+ *
+ * ONE implementation, server-side, surfaced on the DTO: the admin renders what
+ * the API computed instead of deriving its own, so the avatar fallback in the
+ * admin, the public projection (#1294) and the merged speaker projection
+ * (#1290) can never disagree about the same person. Returns `""` for a name
+ * with no letter or digit at all — the caller then shows a neutral avatar
+ * rather than a fabricated glyph.
+ */
+export function expertInitials(name: string | null): string {
+  if (!name) return "";
+  const words = name
+    .normalize("NFKC")
+    .split(/\s+/)
+    .map((w) => w.replace(/^[^\p{L}\p{N}]+/u, ""))
+    .filter((w) => w.length > 0);
+  const letters = words.slice(0, 2).map((w) => [...w][0] ?? "");
+  return letters.join("").toLocaleUpperCase("ru-RU");
+}
+
+/**
+ * The admin detail projection. `photoUrl` is a server-issued signed/CDN URL
+ * derived from the stored key at read time — the key itself never crosses the
+ * wire (012-design §5.1). `initials` is the server-computed avatar fallback.
+ * `contentRemovedAt` is present and null for every row this slice can produce;
+ * it becomes non-null only through #1306's editorial removal, and the admin
+ * reads it to know that no restore control may be offered (EARS-14).
+ */
+export const ExpertAdminDetailSchema = z.object({
+  id: z.string(),
+  slug: z.string(),
+  /** Null only on an editorially removed row (#1306); the admin then labels it «[удалён]». */
+  name: z.string().nullable(),
+  professionalRole: z.string().nullable(),
+  credentials: z.string().nullable(),
+  affiliation: z.string().nullable(),
+  bio: z.string().nullable(),
+  photoUrl: z.string().nullable(),
+  /** Deterministic initials from the name — the no-photo avatar fallback. */
+  initials: z.string(),
+  status: TaxonomyStatusSchema,
+  /** Null until the first publish; once set, the slug is permanently locked. */
+  firstPublishedAt: z.string().nullable(),
+  /** True iff the slug may still be edited — the UI reads this, never re-derives it. */
+  slugEditable: z.boolean(),
+  /** Non-null only after #1306's irreversible editorial removal. */
+  contentRemovedAt: z.string().nullable(),
+  version: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type ExpertAdminDetail = z.infer<typeof ExpertAdminDetailSchema>;
+
+/** One row of the admin list — the columns the table renders, nothing more. */
+export const ExpertAdminListItemSchema = ExpertAdminDetailSchema.pick({
+  id: true,
+  slug: true,
+  name: true,
+  professionalRole: true,
+  status: true,
+  version: true,
+  updatedAt: true,
+});
+export type ExpertAdminListItem = z.infer<typeof ExpertAdminListItemSchema>;
+
+/** Offset/page admin list envelope (ADR-0002 — admin pagination is offset-based). */
+export const ExpertAdminListSchema = z.object({
+  data: z.array(ExpertAdminListItemSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export type ExpertAdminList = z.infer<typeof ExpertAdminListSchema>;
+
 // ── Admin list query (012-design §5.1; the shell #1297 later sweeps) ─────────
 
 export const ADMIN_LIST_PAGE_SIZE_DEFAULT = 20;

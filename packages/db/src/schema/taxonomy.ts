@@ -133,3 +133,127 @@ export const projects = pgTable(
 
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
+
+export const EXPERT_NAME_MAX = 160;
+export const EXPERT_PROFESSIONAL_ROLE_MAX = 160;
+export const EXPERT_CREDENTIALS_MAX = 500;
+export const EXPERT_AFFILIATION_MAX = 240;
+export const EXPERT_BIO_MAX = 4000;
+
+/**
+ * `experts` — the standalone editorial expert record (012 EARS-2, #1284).
+ *
+ * An expert is NOT a platform user and NOT a second copy of an event speaker
+ * string: one retained row feeds the admin list, the admin detail, the later
+ * public projection (#1294) and the merged event-speaker projection (#1290).
+ * There is no required `users` link and no parallel expert type.
+ *
+ * Every descriptive column is ordinary editorial text (012-design §1): the
+ * name, professional role, credentials, affiliation and bio are the same public
+ * regalia the person already publishes on conference sites. 012 adds no
+ * encryption, no key management and no compliance workflow of its own.
+ *
+ * The descriptive columns are NULLABLE — not because a draft may be sloppy, but
+ * because §2.4's editorial removal (`RemoveExpertContent`, #1306) NULLs them
+ * while keeping the row, its id and its slug forever. `content_removed_at`
+ * exists here from day one so that lifecycle is expressible in schema terms;
+ * this slice ships NO removal route. `experts_content_removed_shape` pins the
+ * exact removed shape, and `experts_name_present_unless_removed` keeps the
+ * display label mandatory for every row that has not been removed.
+ */
+export const experts = pgTable(
+  "experts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** The permanent public identity. Editable only while `first_published_at IS NULL`. */
+    slug: text("slug").notNull(),
+    /** The display label. Null ONLY on an editorially removed row (§2.4). */
+    name: text("name"),
+    /** Server-generated object-storage key of the normalized WebP photo. */
+    photoRef: text("photo_ref"),
+    /** Publish-required; null on an incomplete draft or a removed row. */
+    professionalRole: text("professional_role"),
+    credentials: text("credentials"),
+    affiliation: text("affiliation"),
+    bio: text("bio"),
+    /** Set once by the first publish transaction; trigger-pinned thereafter. */
+    firstPublishedAt: timestamp("first_published_at", { withTimezone: true }),
+    status: taxonomyStatus("status").notNull().default("draft"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /** §2.4 editorial removal instant. Written only by #1306; NULL everywhere here. */
+    contentRemovedAt: timestamp("content_removed_at", { withTimezone: true }),
+    /** Optimistic-concurrency counter behind the admin ETag; starts at 1, `++` per successful write. */
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // Spans EVERY retained row, removed ones included (012-design §2.1, §2.4):
+    // a removed expert keeps holding its slug, so the URL a doctor bookmarked
+    // can never later resolve to a different person.
+    uniqueIndex("experts_slug_key").on(t.slug),
+    check(
+      "experts_retired_iff_deleted",
+      sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
+    ),
+    check("experts_slug_pattern", sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`),
+    check(
+      "experts_slug_not_uuid",
+      sql`${t.slug} !~ ${sql.raw(`'${UUID_TEXT_PATTERN}'`)}`,
+    ),
+    check(
+      "experts_name_bounds",
+      sql`${t.name} IS NULL OR char_length(${t.name}) BETWEEN 1 AND ${sql.raw(String(EXPERT_NAME_MAX))}`,
+    ),
+    check(
+      "experts_professional_role_bounds",
+      sql`${t.professionalRole} IS NULL OR char_length(${t.professionalRole}) BETWEEN 1 AND ${sql.raw(String(EXPERT_PROFESSIONAL_ROLE_MAX))}`,
+    ),
+    check(
+      "experts_credentials_bounds",
+      sql`${t.credentials} IS NULL OR char_length(${t.credentials}) BETWEEN 1 AND ${sql.raw(String(EXPERT_CREDENTIALS_MAX))}`,
+    ),
+    check(
+      "experts_affiliation_bounds",
+      sql`${t.affiliation} IS NULL OR char_length(${t.affiliation}) BETWEEN 1 AND ${sql.raw(String(EXPERT_AFFILIATION_MAX))}`,
+    ),
+    check(
+      "experts_bio_bounds",
+      sql`${t.bio} IS NULL OR char_length(${t.bio}) BETWEEN 1 AND ${sql.raw(String(EXPERT_BIO_MAX))}`,
+    ),
+    check("experts_version_positive", sql`${t.version} >= 1`),
+    check(
+      "experts_published_has_first_published_at",
+      sql`${t.status} <> 'published' OR ${t.firstPublishedAt} IS NOT NULL`,
+    ),
+    // The display label is mandatory for every row that still describes a
+    // person; only §2.4's removal is allowed to take it away.
+    check(
+      "experts_name_present_unless_removed",
+      sql`${t.contentRemovedAt} IS NOT NULL OR ${t.name} IS NOT NULL`,
+    ),
+    // §2.4 exact removed shape: retired, deleted, and every descriptive value
+    // NULL — never sentinel person text. Pinned in the DB so no future writer
+    // can invent a half-removal.
+    check(
+      "experts_content_removed_shape",
+      sql`${t.contentRemovedAt} IS NULL OR (
+        ${t.status} = 'retired'
+        AND ${t.deletedAt} IS NOT NULL
+        AND ${t.name} IS NULL
+        AND ${t.photoRef} IS NULL
+        AND ${t.professionalRole} IS NULL
+        AND ${t.credentials} IS NULL
+        AND ${t.affiliation} IS NULL
+        AND ${t.bio} IS NULL
+      )`,
+    ),
+  ],
+);
+
+export type Expert = typeof experts.$inferSelect;
+export type NewExpert = typeof experts.$inferInsert;

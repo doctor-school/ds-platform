@@ -2,7 +2,7 @@
 title: "014 — Event recordings and the archived-event page"
 description: "Requirements for retained event_recordings with kinds edited and raw, their own publication status scheme, the data-driven edited-over-raw display rule, the publicly readable post-live state of /webinars/[slug] with a login-gated player and an operator-dated «запись готовится» plaque, the platform-wide post-login return-to-origin rule, past registered events and recordings in «Мои события», and the reusable event card/list/pagination unit carrying the «Прошедшие» tab plus project, expert and topic facets."
 slug: 014-event-recordings
-status: Draft
+status: In dev
 surface: user-facing
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
 parent_issue: https://github.com/doctor-school/ds-platform/issues/1336

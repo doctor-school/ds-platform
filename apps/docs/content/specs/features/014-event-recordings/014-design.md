@@ -2,7 +2,7 @@
 title: "014 — Event recordings and the archived-event page (Design)"
 description: "Design for retained event_recordings, the ended-only definition of a finished event plus the MarkEventEnded backfill that makes off-platform broadcasts publishable, the derived edited-over-raw projection, the two-layer public/authenticated read split that implements the login gate, the operator-dated preparing plaque, the platform-wide post-login return-to-origin mechanism, «Мои события» tabs over the registration history, and the shared event card/list/pagination unit with its URL-persisted state and facet capability."
 slug: 014-event-recordings-design
-status: Draft
+status: In dev
 tracker: https://github.com/doctor-school/ds-platform/milestone/12
 lang: en
 ---

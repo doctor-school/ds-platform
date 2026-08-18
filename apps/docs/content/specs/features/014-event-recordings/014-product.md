@@ -3,7 +3,7 @@ title: "Feature 014 — Event recordings & the archived-event page (PRD)"
 description: "Product requirements for turning a finished broadcast into standing content: event_recordings (edited / raw) with the edited-on-top display rule, the post-live state of the event page with a publicly readable announcement and a login-gated player, an honest «запись готовится» state, recordings reachable from «Мои события», and the archive's front door on `/webinars` — the «Прошедшие» tab plus project/expert/topic facets in the shared event-list unit. Feature 014 of the Academy public surface epic; covers the scope of #1188 / Plane DSP-229; source of the 014 EARS triplet (ADR-0014)."
 slug: academy-public-014-event-recordings-product
 epic: ../../product/academy-public/brief.md
-status: Draft
+status: In dev
 surface: user-facing
 lang: en
 ---

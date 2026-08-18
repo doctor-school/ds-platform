@@ -37,6 +37,7 @@
     "lint:glossary-mdx": "tsx tools/lint/glossary-mdx-lint.ts",
     "lint:glossary-roundtrip": "tsx tools/lint/glossary-roundtrip-lint.ts",
     "lint:instruction-budget": "tsx tools/lint/instruction-budget-lint.ts",
+    "retro:tokens": "node tools/retro/token-ledger.mjs",
     "lint:aa-contrast": "tsx tools/lint/aa-contrast-lint.ts",
     "lint:audit-coverage": "tsx tools/lint/audit-coverage-lint.ts",
     "lint:ears-naming": "tsx tools/lint/ears-naming-lint.ts",

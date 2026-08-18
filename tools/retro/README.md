@@ -13,12 +13,13 @@ README covers only how to run the tools.
 
 ## Scripts
 
-| Script                   | Produces (in `<out-dir>`)                                                                 |
-| ------------------------ | ----------------------------------------------------------------------------------------- |
-| `extract.mjs`            | `sessions/<id>.json`, `index.json`, `summary.json`, `corrections.json`                    |
-| `transcripts.mjs`        | `transcripts/<id>.md`, `self-catches.json`                                                |
-| `codex.mjs`              | All single-session corpus files above + `portable/<id>.json` (`ds-platform-retro/v1`)     |
-| `orchestration-mine.mjs` | `orchestration-metrics.json`, `orchestration-episodes.json`, `orchestration-summary.json` |
+| Script                   | Produces (in `<out-dir>`)                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `extract.mjs`            | `sessions/<id>.json`, `index.json`, `summary.json`, `corrections.json`                                        |
+| `transcripts.mjs`        | `transcripts/<id>.md`, `self-catches.json`                                                                    |
+| `codex.mjs`              | All single-session corpus files above + `portable/<id>.json` (`ds-platform-retro/v1`)                         |
+| `orchestration-mine.mjs` | `orchestration-metrics.json`, `orchestration-episodes.json`, `orchestration-summary.json`                     |
+| `token-ledger.mjs`       | stdout ledger: lead + per-subagent peak ctx / turns / cache-read / est \$ + `FLAG` rows (`pnpm retro:tokens`) |
 
 `extract.mjs` isolates interactive sessions (excludes `promptSource: sdk`
 runs), pulls the real human input, and flags correction / pushback messages.
@@ -60,6 +61,10 @@ node tools/retro/orchestration-mine.mjs
 # Single-session mode — one log id (the /wrap case):
 node tools/retro/extract.mjs     --session <session-id>
 node tools/retro/transcripts.mjs --session <session-id>
+
+# Token ledger — where a session's tokens/dollars went (lead vs subagents):
+pnpm retro:tokens <session-id>
+pnpm retro:tokens --since 2026-08-10
 
 # Codex single-session mode (raw rollout is normalized, never treated as Claude):
 node tools/retro/codex.mjs --session <session-id>

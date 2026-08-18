@@ -12,7 +12,7 @@ All conventions in [`AGENTS.md`](./AGENTS.md) apply (imported above); this file 
 
 ## Wrap cadence
 
-`/wrap` runs on owner request or before a planned long gap — not a mandatory end-of-every-session step. The context-budget hook (110K/120K thresholds) is advisory to the operator only, never a directive to the model — the agent keeps working until the owner calls `/wrap`.
+`/wrap` runs on owner request or before a planned long gap — not a mandatory end-of-every-session step. The context-budget hook (200K/250K) is advisory to the operator only, never a directive to the model — the agent keeps working until the owner calls `/wrap`.
 
 ## Auto-memory (load-on-demand by design)
 
@@ -60,7 +60,8 @@ A subagent's final message lands in the lead's context and is re-read until sess
 3. Browser payloads are dispatched — interactive Playwright runs inside a subagent, not the lead (`.claude/rules/dev-stand.md`).
 4. Lead-only tools are never delegated — a tool absent from the subagent environment (DesignSync, …) the lead runs itself BEFORE dispatch; the subagent gets only the mechanical follow-on. A dispatch that dead-ends on a lead-only tool is a guaranteed block.
 5. Briefs in English; RU only where the RU string is itself the artifact. User-facing replies stay RU.
-6. Background dispatches are checkpointed; report only observed artifacts. Probe after a bounded interval with `pnpm dispatch:probe <N>` (one line `<ALIVE|QUIET|STILL-CLEAN> #<N> age= commits= dirty=`; STILL-CLEAN ≈10 min in ⇒ kill + re-dispatch with a tighter brief) — never "wait for the notification". Owner-facing status = observed artifacts only (commit / PR # / verdict); downstream steps are phrased as plan. Every impl brief carries the dispatch-brief checklist heading (memory `feedback_orchestration_brief_full_lint_before_pr`: edit-first, ≤15-tool-call research budget, …). Applies to ANY background waiter, CI pollers included: CI-waits are a bounded FOREGROUND poll with a hard deadline ≈ observed avg CI + ~2 min and a mandatory terminal GREEN/RED/TIMEOUT line; parse the `gh pr checks <N> --json name,state` STATE field, never `grep` the text (job names can contain «pending»); prefer `pnpm merge:gate <N>` as the terminal readiness gate. The 5000/hr `gh` token is SHARED across all sessions/agents — never hand-roll `for`-loop `gh run view` polling or repeated `gh project item-list --limit 2000` dumps; use bounded gate commands (`merge:gate`, `run:wait`).
+6. Background dispatches are checkpointed; report only observed artifacts. Probe after a bounded interval with `pnpm dispatch:probe <N>` (one line `<ALIVE|QUIET|STILL-CLEAN> #<N> age= commits= dirty=`; STILL-CLEAN ≈10 min in ⇒ kill + re-dispatch with a tighter brief) — never "wait for the notification". Owner-facing status = observed artifacts only (commit / PR # / verdict); downstream steps are phrased as plan. Every impl brief carries the dispatch-brief checklist heading (memory `feedback_orchestration_brief_full_lint_before_pr`). Same for ANY background waiter, CI pollers included: a bounded FOREGROUND poll, deadline ≈ avg CI + ~2 min, terminal GREEN/RED/TIMEOUT line, parsing the `gh pr checks <N> --json name,state` STATE field, never `grep` (job names contain «pending»). The 5000/hr `gh` token is SHARED — no hand-rolled `gh run view` loops or repeated `gh project item-list --limit 2000` dumps; use `pnpm merge:gate <N>` / `run:wait`.
+7. Context budget hook: subagent ≥150K → ROTATE (checkpoint + fresh dispatch), ≥200K → tools denied except git/checkpoint; dispatch impl via `ds-implementer` (Opus, maxTurns 120).
 
 ## Shell gotchas
 

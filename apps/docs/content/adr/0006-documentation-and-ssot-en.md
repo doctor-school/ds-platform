@@ -27,19 +27,19 @@ ADR-0001..0005 locked in the technologies, but did not establish:
 - Who is Master for each type of truth (Zod / Drizzle / glossary / prose).
 - How drift between a document and the code is detected.
 - Which format to use for feature specs (EARS + Event Modeling + Gherkin or free-form).
-- Where Product Lead (non-technical, does not write markdown in an IDE) has a UI for PRD/Vision.
+- How Product Lead (non-technical) authors and updates PRD/Vision without a parallel prose store.
 
 Hard requirements:
 
 - Self-host (Federal Law 152-FZ; no Cloudflare/Vercel/Notion).
 - AI-friendliness: AI reads docs at session start directly from the repo, without MCP-fetch proxies.
-- Modern Notion-vibe UX for Product Lead (block-based, not classical wiki).
-- Two-way markdown editing: Product Lead in UI ↔ Tech Lead/AI in IDE — single source.
+- A low-friction authoring path for Product Lead: plain text files, no build step, no dev stack to run.
+- One source for every author: Product Lead, Tech Lead and AI edit the same files.
 - Mainstream stack, large LLM corpus (continuation of the [[feedback_tech_stack_criteria_no_team_skill]] principle).
 
 Principle [[feedback_docs_as_ssot]] (STRICT): doc-first cycle, AI session starts by reading the relevant docs, every PR updates docs, docs do not contradict code by construction where possible (via codegen).
 
-**Inheritance caveat (for transparency).** ADR-0006 architecturally inherits the unified TS stack from ADR-0002/0004 (TypeScript on backend and frontend → one language in Keystatic config, Fumadocs, generator scripts, ESLint custom rules, drift-detection tools). ADR-0002 §1 contains argumentation mentioning existing prototypes ("3 prototypes on Next.js") — this violates [[feedback_tech_stack_criteria_no_team_skill]], which was formulated later. ADR-0004 already noted this caveat. ADR-0006 does not invalidate ADR-0002/0004 in this sense (intrinsic criteria — LLM dataset, mainstream stack, RF self-host — are satisfied independently), but when revising ADR-0002 without the "3 prototypes" argument, Node.js must pass on clean criteria alone; otherwise the documentation stack requires revision.
+**Inheritance caveat (for transparency).** ADR-0006 architecturally inherits the unified TS stack from ADR-0002/0004 (TypeScript on backend and frontend → one language in Fumadocs config, generator scripts, ESLint custom rules, drift-detection tools). ADR-0002 §1 contains argumentation mentioning existing prototypes ("3 prototypes on Next.js") — this violates [[feedback_tech_stack_criteria_no_team_skill]], which was formulated later. ADR-0004 already noted this caveat. ADR-0006 does not invalidate ADR-0002/0004 in this sense (intrinsic criteria — LLM dataset, mainstream stack, RF self-host — are satisfied independently), but when revising ADR-0002 without the "3 prototypes" argument, Node.js must pass on clean criteria alone; otherwise the documentation stack requires revision.
 
 ---
 
@@ -53,16 +53,16 @@ Principle 7 of the reference doc applied literally: each type of truth has exact
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | API contract                                 | Zod schemas in `packages/schemas/`                                                                       | nestjs-zod → OpenAPI 3.1 → openapi-typescript → `@ds/api-client` SDK (ADR-0002 §3-5)                      |
 | DB schema                                    | Drizzle TS schemas in `packages/db/schema/`                                                              | drizzle-kit generate → SQL migrations + introspect → ERD .svg (ADR-0003 §4)                               |
-| Domain IDs (immutable)                       | `apps/docs/content/product/glossary/*.md` (Keystatic-managed)                                            | `pnpm generate:glossary` → `packages/glossary/src/ids.ts` TS const → ESLint enforce import                |
+| Domain IDs (immutable)                       | `apps/docs/content/product/glossary/*.md` (file-per-term)                                                | `pnpm generate:glossary` → `packages/glossary/src/ids.ts` TS const → ESLint enforce import                |
 | Domain labels (mutable RU/EN)                | same glossary                                                                                            | i18n bundles + sync to Payload Glossary Collection                                                        |
 | Business content (legal/team/marketing)      | Payload v3 collections                                                                                   | Build-time fetch / runtime API (ADR-0004 §7)                                                              |
 | Architectural decisions                      | `docs/adr/NNNN-*.md` immutable Git                                                                       | Rendered in Fumadocs portal                                                                               |
-| Tech specs (architectural brainstorm output) | `docs/content/specs/tech/YYYY-MM-DD-*.md`                                                                | DSO-25..29 pattern, Keystatic-editable                                                                    |
+| Tech specs (architectural brainstorm output) | `docs/content/specs/tech/YYYY-MM-DD-*.md`                                                                | DSO-25..29 pattern, edited in the IDE                                                                     |
 | Feature specs (SDD)                          | `docs/content/specs/features/NNN-name/` (req+design+scenarios — 3 files, no tasks.md)                    | EARS → unit tests; Gherkin → Playwright E2E; per-EARS GitHub Issues with label `feature:NNN-name`         |
 | Implementation tasks (code-level)            | **GitHub Issues** in DS Platform repo (one Issue per EARS handler / bug / refactor)                      | PR-linked, auto-close on merge; AI reads `gh issue view`; cross-link `tracker:` field in spec frontmatter |
 | Strategic/PM tasks (non-code)                | **Plane** workspace `doctor-school` (DSP/DSC/DSM/DSO projects)                                           | Strategic level, cross-team (product+legal+HR+marketing), Product Lead-native; cross-link via URL labels  |
 | Module README                                | `apps/*/src/<module>/README.md` (module dir = direct child of `apps/<app>/src/` holding a `*.module.ts`) | Rendered Fumadocs + lint checks README presence (exports ↔ README in v2)                                  |
-| Prose narrative (Vision, OKRs, PRD)          | `apps/docs/content/product/*.md`                                                                         | Keystatic UI for Product Lead + Fumadocs render                                                           |
+| Prose narrative (Vision, OKRs, PRD)          | `apps/docs/content/product/*.md`                                                                         | Markdown in Git (IDE / PR) + Fumadocs render                                                              |
 | Operations (runbooks, monitoring)            | `apps/docs/content/operations/`                                                                          | Fumadocs render                                                                                           |
 | AI constitution                              | `AGENTS.md` (root) + `CLAUDE.md` (Claude-Code overrides)                                                 | Read by AI first at session start                                                                         |
 
@@ -89,32 +89,32 @@ The rendering layer for technical documentation. Fumadocs satisfies the full set
 
 **Diagrams in Fumadocs:** Mermaid via `remark-mdx-mermaid` remark plugin (external dependency, not a "built-in Fumadocs plugin"), wired in Fumadocs `source.config.ts`. Performance is acceptable (lazy-load client-side).
 
-### 3. Markdown Editor (Notion-like UX for non-developers): **Keystatic**
+### 3. Authoring Model: **Markdown in Git, edited in the IDE and landed by PR**
 
-A UI layer on top of the same `.md` / `.mdx` / `.yaml` files in Git. Two-way workflow:
+There is no separate editor application. Every document is a `.md` / `.mdx` / `.yaml` file under `apps/docs/content/`, edited where the rest of the repository is edited and landed through a pull request:
 
-- Product Lead edits prose pages (PRD, vision, business-rules, glossary) in the Keystatic UI. On save, Keystatic commits the file to Git via GitHub App.
-- Tech Lead/AI edits the same files directly in the IDE — Keystatic picks up changes on the next open.
+- Tech Lead and AI agents author in the IDE; changes land as ordinary commits reviewed on the PR.
+- Product Lead edits prose pages (PRD, vision, business-rules, glossary) in the same files — locally or through the GitHub web editor — and the change goes through the same PR flow.
+- Fumadocs renders the result at `docs.doctor.school`: Git is the writing surface, the rendered portal is the reading surface.
 
-**Why Keystatic:**
+**Why Git as the authoring surface:**
 
-- MIT, schema-as-code in TypeScript (collections, fields, blocks are typed).
-- Block editor inspired by Notion 2024 — not a classical wiki, modern UX.
-- Content = plain Markdown / MDX / YAML / JSON — AI reads directly without proprietary deserialization.
-- Native Next.js App Router plugin (`makeRouteHandler` + `<KeystaticApp />`) — runs as `apps/docs-cms/` alongside `apps/docs/`.
-- TypeScript schema enforces: typed fields, save-time validation in the UI, relationship references (cannot reference a non-existent glossary term).
+- Content = plain Markdown / MDX / YAML / JSON — AI reads and writes directly without proprietary deserialization.
+- One review gate for prose and code: doc changes pass the same PR + CI lint pipeline, so frontmatter, glossary and drift guards apply to every author uniformly (§6).
+- Structure is enforced by the CI lint layer rather than an editor UI, so the guarantee holds regardless of who or what wrote the file — including an AI agent writing files unattended.
+- No extra runtime application to deploy, protect with OIDC, upgrade and keep compatible with the render pipeline.
 
-**Self-host honest framing.** Keystatic `storage.kind: 'github'` uses the GitHub.com API for commits — meaning a dependency on GitHub.com (Microsoft US infrastructure) for the doc repo. The prose/specs/ADR/glossary docs **do not contain personal data (PD)** → Federal Law 152-FZ is not violated. Platform PD lives in RF-Postgres (ADR-0003) and Timeweb Object Storage (ADR-0002). Doc repo on GitHub.com is an acceptable trade-off, not "fully self-hosted." If full air-gap is required (e.g., upon loss of access to GitHub.com) — fallback to Keystatic `kind: 'local'` + self-hosted Gitea/GitLab. Trigger: GitHub.com blocked from the Russian Federation (RF), or a policy decision to move source code to RF.
+**Self-host honest framing.** The doc repository lives on GitHub.com (Microsoft US infrastructure). The prose/specs/ADR/glossary docs **do not contain personal data (PD)** → Federal Law 152-FZ is not violated. Platform PD lives in RF-Postgres (ADR-0003) and Timeweb Object Storage (ADR-0002). Doc repo on GitHub.com is an acceptable trade-off, not "fully self-hosted." If full air-gap is required (e.g., upon loss of access to GitHub.com) — fallback to a self-hosted Gitea/GitLab, with content moving as-is. Trigger: GitHub.com blocked from the Russian Federation (RF), or a policy decision to move source code to RF.
 
-**Content format (Markdoc vs MDX impedance).** Keystatic `fields.document` serializes to Markdoc-flavored markdown. Fumadocs expects MDX. For prose collections (PRD chapters, Vision, business-rules) `fields.document` is used — DSO-31 verifies on a pilot page that Markdoc output is readable by Fumadocs (via `fumadocs-mdx` or a separate markdoc→mdx transform). For glossary `definition` — short prose, format is not critical (rendered by a separate custom Fumadocs component).
+**Content format.** Prose collections (PRD chapters, Vision, business-rules) and the glossary are authored as stock MDX with YAML frontmatter — exactly the format Fumadocs consumes, with no intermediate serialization layer. Each collection carries a template file so a new page starts from the required frontmatter shape.
 
 **Alternatives and why not chosen:**
 
-- **TinaCMS:** higher maturity (5+ years), live-preview of Next.js pages, but GraphQL layer adds complexity, Tina Cloud bias in out-of-box setup. Weighted score practically tied (147 vs 149). Trigger to revisit: Keystatic v1.0 release + first breaking change in Keystatic that breaks our CI.
+- **A Git-backed block-editor CMS on top of the repo:** buys a Notion-like UX for a single prose author at the cost of another Next.js application, an OIDC-protected host, a schema layer to maintain, and an editor-flavored markdown dialect to reconcile with the MDX render pipeline. Not worth it at the current doc volume.
 - **Wiki.js:** classical wiki UX, not Notion-like blocks. AGPL. Bidirectional Git sync — powerful, but interval-based (not instant). Score 122.
 - ~~Outline/AFFiNE/AppFlowy/HedgeDoc~~: store data in their own DB, not in Git. AI-friendliness drops (requires MCP-fetch + cron snapshot for AI), drift risk is high. Rejected.
 
-**Risk acknowledged:** Keystatic v0.x, breaking changes possible. Mitigation: content = plain `.md` files in Git, editor swappable to TinaCMS/Pages-CMS without data loss.
+**Risk acknowledged:** the Product Lead writes Markdown by hand, without a block editor. Mitigation: per-collection templates, review on the PR, and CI lint that reports a malformed page in plain language.
 
 ### 4. Spec Format: **Hybrid B (tech-spec brainstorm + feature-spec SDD)**
 
@@ -154,18 +154,17 @@ Outputs of Spec-Driven Development:
 
 `.cursor/rules/` — added when/if Cursor joins the team.
 
-### 6. Glossary Mechanism: file-per-term glossary + 4-layer validation + roundtrip check
+### 6. Glossary Mechanism: file-per-term glossary + 3-layer validation + roundtrip check
 
 Described in detail in design spec §6 with code sketches. Summary:
 
-- Master = `apps/docs/content/product/glossary/*.md` — a Keystatic file-per-term collection. Each file carries Keystatic frontmatter (`title` / `description` / `lang`) and states its **canonical id in the body** as a `**Canonical id:** \`snake_id\``marker (alongside`**Bounded context:** <ctx>`), followed by the markdown definition. The canonical id is the machine-checkable key (parsed by the glossary guards); it is not a frontmatter field.
+- Master = `apps/docs/content/product/glossary/*.md` — a file-per-term collection. Each file carries frontmatter (`title` / `description` / `lang`) and states its **canonical id in the body** as a `**Canonical id:** \`snake_id\``marker (alongside`**Bounded context:** <ctx>`), followed by the markdown definition. The canonical id is the machine-checkable key (parsed by the glossary guards); it is not a frontmatter field.
 - Generated artifact = `packages/glossary/src/ids.ts` (TS const enum) + sync to Payload Glossary Collection.
-- 4 client-facing validation layers + 1 CI roundtrip check:
+- 3 CI validation layers + 1 CI roundtrip check:
 
-1.  **Keystatic UI** — typed fields, relationship references, save-blocking validators.
-2.  **MDX glossary-lint** — custom AST parser scans `[[g:term-id]]` glossary directives in `apps/docs/content/**/*.{md,mdx}`; an unresolved id without a same-line `new-term: <id>` opt-out → fail.
-3.  **ESLint `local/glossary-canonical-ids`** — TS literals matching a GlossaryId must be imported from `@ds/glossary/ids`, not be an inline string.
-4.  **Payload Lexical glossary-ref check** — every `<GlossaryRef id="...">` in a Payload Lexical AST export exists in the glossary.
+1.  **MDX glossary-lint** — custom AST parser scans `[[g:term-id]]` glossary directives in `apps/docs/content/**/*.{md,mdx}`; an unresolved id without a same-line `new-term: <id>` opt-out → fail.
+2.  **ESLint `local/glossary-canonical-ids`** — TS literals matching a GlossaryId must be imported from `@ds/glossary/ids`, not be an inline string.
+3.  **Payload Lexical glossary-ref check** — every `<GlossaryRef id="...">` in a Payload Lexical AST export exists in the glossary.
 
 - **Roundtrip CI check** — glossary source ↔ generated TS ids ↔ Payload Glossary table consistent (runs post-sync).
 
@@ -173,21 +172,21 @@ Described in detail in design spec §6 with code sketches. Summary:
 
 Full v1 list (all block merge except those marked warn-only):
 
-| Check                                                                      | Tool                                                    | What it verifies                                                                                                                                  |
-| -------------------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TS compile                                                                 | `tsc --noEmit`                                          | Basic type safety                                                                                                                                 |
-| ESLint                                                                     | `eslint` flat config                                    | Custom rules incl. `local/glossary-canonical-ids`, `no-class-validator`, `no-vercel-only-api` (ADR-0004 §13)                                      |
-| Prettier                                                                   | `prettier --check`                                      | Code style                                                                                                                                        |
-| Unit tests                                                                 | Vitest                                                  | Per-handler coverage                                                                                                                              |
-| E2E                                                                        | Playwright + `playwright-bdd`                           | Gherkin scenarios pass                                                                                                                            |
-| **API drift**                                                              | Spectral + `openapi.snapshot.json` diff                 | NestJS-generated OpenAPI vs committed snapshot                                                                                                    |
-| **DB schema drift**                                                        | `drizzle-kit check`                                     | TS schema ↔ migrations consistent                                                                                                                 |
-| **Events drift**                                                           | Custom AST (`tools/lint/events-lint.ts`)                | `@OutboxEmit` calls ↔ spec's `events.md`                                                                                                          |
-| **Glossary lint (3 CI checks; layer 1 = Keystatic UI runtime, not in CI)** | custom MDX-lint + ESLint custom rule + Payload AST scan | See §6 above                                                                                                                                      |
-| **Generated artifacts**                                                    | `pnpm generate:all --check`                             | openapi-typescript SDK + glossary IDs + ERD up-to-date                                                                                            |
-| **Markdown links**                                                         | `lychee`                                                | No broken links cross-docs                                                                                                                        |
-| **Module README**                                                          | `tools/lint/module-readme-lint.ts`                      | Every top-level NestJS module dir (direct child of `apps/<app>/src/` holding a `*.module.ts`) has a README (warn-only v1; exports ↔ README in v2) |
-| **Docs build**                                                             | `apps/docs` next build                                  | Fumadocs builds without errors                                                                                                                    |
+| Check                           | Tool                                                    | What it verifies                                                                                                                                  |
+| ------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TS compile                      | `tsc --noEmit`                                          | Basic type safety                                                                                                                                 |
+| ESLint                          | `eslint` flat config                                    | Custom rules incl. `local/glossary-canonical-ids`, `no-class-validator`, `no-vercel-only-api` (ADR-0004 §13)                                      |
+| Prettier                        | `prettier --check`                                      | Code style                                                                                                                                        |
+| Unit tests                      | Vitest                                                  | Per-handler coverage                                                                                                                              |
+| E2E                             | Playwright + `playwright-bdd`                           | Gherkin scenarios pass                                                                                                                            |
+| **API drift**                   | Spectral + `openapi.snapshot.json` diff                 | NestJS-generated OpenAPI vs committed snapshot                                                                                                    |
+| **DB schema drift**             | `drizzle-kit check`                                     | TS schema ↔ migrations consistent                                                                                                                 |
+| **Events drift**                | Custom AST (`tools/lint/events-lint.ts`)                | `@OutboxEmit` calls ↔ spec's `events.md`                                                                                                          |
+| **Glossary lint (3 CI checks)** | custom MDX-lint + ESLint custom rule + Payload AST scan | See §6 above                                                                                                                                      |
+| **Generated artifacts**         | `pnpm generate:all --check`                             | openapi-typescript SDK + glossary IDs + ERD up-to-date                                                                                            |
+| **Markdown links**              | `lychee`                                                | No broken links cross-docs                                                                                                                        |
+| **Module README**               | `tools/lint/module-readme-lint.ts`                      | Every top-level NestJS module dir (direct child of `apps/<app>/src/` holding a `*.module.ts`) has a README (warn-only v1; exports ↔ README in v2) |
+| **Docs build**                  | `apps/docs` next build                                  | Fumadocs builds without errors                                                                                                                    |
 
 **Module-README location.** A _module_ is a top-level NestJS module directory — a direct child of `apps/<app>/src/` that contains at least one `*.module.ts` file (e.g. `apps/api/src/auth/`); its README lives at that directory's root (`apps/<app>/src/<module>/README.md`). NestJS modules nest directly under `src/` — there is no intermediate `modules/` wrapper directory. The app-root composition module (`apps/<app>/src/app.module.ts`, no subdirectory) is out of scope, and a nested sub-module rides its parent module's README. `module-readme-lint.ts` asserts README presence only in v1 (warn-only); the exports ↔ README cross-check is the v2 tightening.
 
@@ -249,7 +248,7 @@ ds-platform/
 │   │       ├── operations/
 │   │       ├── product/
 │   │       │   ├── vision.md
-│   │       │   ├── prd/           # PRD chapters per Keystatic collection
+│   │       │   ├── prd/           # PRD chapters
 │   │       │   ├── business-rules.md
 │   │       │   ├── user-journeys.md
 │   │       │   └── glossary/      # file-per-term
@@ -257,8 +256,6 @@ ds-platform/
 │   │       │   ├── tech/          # brainstorm-style
 │   │       │   └── features/      # SDD-style (NNN-name/)
 │   │       └── user-guides/       # Diátaxis
-│   ├── docs-cms/                  # Keystatic editor (Next.js)
-│   │   └── keystatic.config.ts
 │   ├── portal/                    # student app (ADR-0004)
 │   ├── admin/                     # Refine (ADR-0004)
 │   ├── promo/                     # marketing (ADR-0004)
@@ -287,21 +284,20 @@ ds-platform/
 ### Positive
 
 - **Single Git Master for all prose+tech** — no drift between Notion/Outline and the code; AI reads directly.
-- **Keystatic over Git** gives Product Lead a Notion-like UX without a separate prose store: edit in UI = commit to Git = visible to AI in the next session.
+- **Docs in Git, no separate prose store** — every edit is a commit reviewed on a PR and visible to AI in the next session, with prose and code held to the same gate.
 - **Fumadocs as a Next.js app** — unified toolchain (Turborepo cache, shared ESLint/Tailwind/TS config) for docs+portal+admin+promo+cms.
 - **SSOT-per-kind table** — a formal map of who is Master for what, codegen where possible, automatically catches drift.
 - **EARS+Event Model in feature specs** gives AI a structured prompt for generating NestJS handlers + Vitest tests + Playwright E2E — one source, three artifacts.
 - **AGENTS.md split** allows adding Cursor/Codex without rewriting CLAUDE.md.
 - **Drift detection across 12 checks** catches divergences at PR time; development does not drift from the specification.
-- **Self-hosted runtime stack** (Keystatic admin, Fumadocs portal, lint tools) — all compute within the RF zone. Documentation in Git on GitHub.com is an acceptable trade-off (no PD in doc repo), Federal Law 152-FZ is not violated. Trigger to revisit: GitHub.com blocked or a policy decision to move source code to RF (Gitea/GitLab self-host).
-- **Content portability**: content = stock `.md`/`.mdx`/`.yaml` — editor and portal are swappable without data loss.
+- **Self-hosted runtime stack** (Fumadocs portal, lint tools) — all compute within the RF zone. Documentation in Git on GitHub.com is an acceptable trade-off (no PD in doc repo), Federal Law 152-FZ is not violated. Trigger to revisit: GitHub.com blocked or a policy decision to move source code to RF (Gitea/GitLab self-host).
+- **Content portability**: content = stock `.md`/`.mdx`/`.yaml` — the portal is swappable without data loss.
 
 ### Negative
 
-- **Keystatic v0.x maturity risk** — breaking changes possible every 3–6 months. Mitigation: content-portable; pin minor version; CI smoke-test after Keystatic upgrade.
 - **Fumadocs young (~1.5 years)** — smaller plugin ecosystem than Docusaurus, OpenAPI integration requires manually embedding a Scalar/Redoc React component. Mitigation: content-portable.
-- **Product Lead learning Keystatic** — block editor is simpler than an IDE, but still a new environment; first month + tutorial.
-- **Glossary 4-layer validation** requires writing ~3 custom lint scripts in `tools/lint/` (~300 lines of TS). Not trivial, but a straightforward pattern.
+- **Product Lead authors Markdown by hand** — no block editor; frontmatter and directive syntax are a new environment; first month + tutorial + per-collection templates.
+- **Glossary 3-layer validation** requires writing ~3 custom lint scripts in `tools/lint/` (~300 lines of TS). Not trivial, but a straightforward pattern.
 - **Custom ESLint rule `local/glossary-canonical-ids`** — one more thing to maintain. Mitigation: standalone package, tested separately.
 - **EARS + Event Modeling + Gherkin discipline** requires training; the first feature spec is written more slowly. Mitigation: payoff on codegen tests from the second feature onward.
 - **Sync glossary.yaml → Payload Glossary Collection** — one more CI script, idempotency required.
@@ -309,9 +305,9 @@ ds-platform/
 
 ### Risks
 
-- **Keystatic + Fumadocs combined youth** — both are young; theoretically possible for both to break simultaneously on a major Next.js upgrade. Mitigation: pin major Next.js, run upgrades through a canary branch.
-- **Product Lead continues writing in Notion despite Keystatic** — a social risk. Mitigation: explicitly state that Notion is no longer Master for DS Platform docs"; deactivate the corresponding Notion pages (or make them a read-only mirror via CI).
-- **AI agent writes to `apps/docs/content/` directly, breaking Keystatic schema** — e.g., adds a `.md` file without required frontmatter. Mitigation: CI schema-validation for Keystatic collections — fail if a file does not conform to the schema.
+- **Fumadocs youth** — the render pipeline may break on a major Next.js upgrade. Mitigation: pin major Next.js, run upgrades through a canary branch.
+- **Product Lead continues writing in Notion** — a social risk. Mitigation: explicitly state that Notion is no longer Master for DS Platform docs"; deactivate the corresponding Notion pages (or make them a read-only mirror via CI).
+- **An author writes to `apps/docs/content/` without the required shape** — e.g., adds a `.md` file with no frontmatter or a malformed canonical-id marker; with no editor UI to block the save, only CI catches it. Mitigation: frontmatter/MDX lint in CI — fail the PR if a file does not conform to its collection's schema.
 
 ---
 
@@ -321,9 +317,7 @@ ds-platform/
 | ------------------------------------------------------ | :-----: | -------------------------------------------------------------------------------------------------------------------------------- |
 | Notion-as-Master for prose                             |   n/a   | Federal Law 152-FZ vendor compliance; AI must fetch via MCP — slower context build; markdown ↔ Notion-blocks lossy serialization |
 | Outline self-hosted                                    |   n/a   | Storage = Postgres (not Git) → AI reads a snapshot, drift risk; bidirectional sync with Git non-trivial                          |
-| TinaCMS                                                |   147   | Close to Keystatic (149) — GraphQL layer adds complexity; revisit trigger recorded                                               |
 | Wiki.js                                                |   122   | Classical wiki UX, not Notion-blocks; AGPL acceptable but restrictive; sync interval-based                                       |
-| Pages CMS / Sveltia CMS                                | 102-110 | Very young, schema power weaker, GitHub OAuth bias                                                                               |
 | Outline / AFFiNE / AppFlowy / HedgeDoc                 |   n/a   | Store data in their own DB, not Git → drift risk + AI fetch overhead                                                             |
 | Docusaurus v3 (portal)                                 |   157   | Webpack build separate from the Next.js monorepo; ecosystem more mature but stack-disconnect                                     |
 | Starlight (Astro) portal                               | 161/181 | Tied/wins on weighted; explicit user override in favor of Next.js fit (Fumadocs)                                                 |
@@ -348,7 +342,6 @@ ds-platform/
 | OQ-Doc2  | Add AsyncAPI                                                                                                                  | When the first product event bus exposed externally appears                                                                                                                                                                                                                                     |
 | OQ-Doc3  | AI-powered search (Mintlify / Orama Cloud)                                                                                    | If organic Fumadocs search proves insufficient after 6 months                                                                                                                                                                                                                                   |
 | OQ-Doc4  | Additional glossary fields beyond v1 (synonyms with weight, related-terms graph, deprecation flag)                            | As terminology grows — DSO-31+                                                                                                                                                                                                                                                                  |
-| OQ-Doc5  | Keystatic → TinaCMS migration trigger                                                                                         | At the first breaking Keystatic v0.x → v1.0 change                                                                                                                                                                                                                                              |
 | OQ-Doc6  | Pact contract testing                                                                                                         | First external integration after v1                                                                                                                                                                                                                                                             |
 | OQ-Doc7  | Property-based invariant tests                                                                                                | First product-complex feature with mathematical invariants (ledger reconciliation, etc.)                                                                                                                                                                                                        |
 | OQ-Doc8  | AI-powered hosted doc search (Mintlify / similar)                                                                             | Only upon explicit pain — self-hosted Fumadocs Orama search insufficient after 6 months AND ops overhead of self-hosted alternative is significant. Hosted doc search does not contain PD (only public docs metadata), Federal Law 152-FZ trade-off is acceptable. Default — stay on self-host. |
@@ -362,7 +355,6 @@ ds-platform/
 
 **Inherited from:**
 
-- ADR-0001 — single OIDC tenant: Zitadel (closed per ADR-0001 §8, DSP-209) for Keystatic admin login, same tenant as Refine admin (`apps/admin`)
 - ADR-0002 — Zod schemas + nestjs-zod + openapi-typescript → SDK
 - ADR-0003 — Drizzle schemas + drizzle-kit
 - ADR-0004 — Payload v3 Glossary Collection, Next.js 15 + Tailwind + shadcn for all apps
@@ -370,12 +362,12 @@ ds-platform/
 
 **Delegated to other tasks:**
 
-- **DSO-31 (Repo strategy / Engineering readiness):** monorepo tooling finalization (Turborepo); CI workflow.yml; Fumadocs setup; Keystatic setup; AGENTS.md/CLAUDE.md draft; first glossary YAML scaffold; lint-tools package; sync-glossary-to-payload script; deployment domain `docs.doctor.school` + `docs-cms.doctor.school`.
+- **DSO-31 (Repo strategy / Engineering readiness):** monorepo tooling finalization (Turborepo); CI workflow.yml; Fumadocs setup; AGENTS.md/CLAUDE.md draft; first glossary YAML scaffold; lint-tools package; sync-glossary-to-payload script; deployment domain `docs.doctor.school`.
 - **Phase 0.5 after DSO-31:** first feature spec in SDD format as acceptance proof.
 - **DSO-32 (Legal):** status of DS Platform Notion pages after migration — read-only mirror or deprecation.
 
 **Impacts (downstream blockers):**
 
-- **DSO-31** — structure of `apps/docs/`, `apps/docs-cms/`, `packages/glossary/`, `tools/lint/`.
+- **DSO-31** — structure of `apps/docs/`, `packages/glossary/`, `tools/lint/`.
 - **Payload Phase 0 implementation** — Payload Glossary Collection requires canonical glossary as SSOT.
 - **Feature specs DS Platform code** — spec format is locked, work can begin on `docs/content/specs/features/001-*/` for the first product feature.

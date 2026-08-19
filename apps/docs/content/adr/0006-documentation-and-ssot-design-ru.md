@@ -20,19 +20,19 @@ lang: ru
 
 ## 1. Сводка решений (cross-ref ADR-0006)
 
-| Решение         | Выбор                                                                           | ADR-0006 § |
-| --------------- | ------------------------------------------------------------------------------- | ---------- |
-| ADR split       | Один ADR-0006 + этот design spec                                                | —          |
-| SSOT топология  | SSOT-per-kind (см. §3 ниже)                                                     | §1         |
-| Doc portal      | Fumadocs (Next.js + MDX)                                                        | §2         |
-| MD editor       | Keystatic (block UI, files in Git)                                              | §3         |
-| Prose Master    | Git (через Keystatic+Fumadocs) — Notion/Outline не используются для DS Platform | §1         |
-| Spec format     | Hybrid B (tech brainstorm + feature SDD)                                        | §4         |
-| AI Constitution | AGENTS.md + CLAUDE.md split                                                     | §5         |
-| Glossary        | yaml в Git + 4-layer validation + Payload sync                                  | §6         |
-| Drift detection | Spectral + drizzle-kit + custom AST + Playwright                                | §7         |
-| Diagrams        | Mermaid only v1                                                                 | §8         |
-| Tooling stack   | См. §9 detailed below                                                           | §7         |
+| Решение          | Выбор                                                                      | ADR-0006 § |
+| ---------------- | -------------------------------------------------------------------------- | ---------- |
+| ADR split        | Один ADR-0006 + этот design spec                                           | —          |
+| SSOT топология   | SSOT-per-kind (см. §3 ниже)                                                | §1         |
+| Doc portal       | Fumadocs (Next.js + MDX)                                                   | §2         |
+| Модель авторства | Markdown в Git — IDE + PR, без редакторского приложения                    | §3         |
+| Prose Master     | Git (рендерится Fumadocs) — Notion/Outline не используются для DS Platform | §1         |
+| Spec format      | Hybrid B (tech brainstorm + feature SDD)                                   | §4         |
+| AI Constitution  | AGENTS.md + CLAUDE.md split                                                | §5         |
+| Glossary         | файлы в Git + 3-layer validation + Payload sync                            | §6         |
+| Drift detection  | Spectral + drizzle-kit + custom AST + Playwright                           | §7         |
+| Diagrams         | Mermaid only v1                                                            | §8         |
+| Tooling stack    | См. §9 detailed below                                                      | §7         |
 
 ---
 
@@ -48,18 +48,17 @@ lang: ru
 │  packages/glossary/  (generated artifacts)                  │
 │  AGENTS.md, CLAUDE.md                                       │
 └────┬─────────────────────┬────────────────────┬─────────────┘
-     │ reads/writes        │ reads              │ reads
-     ▼                     ▼                    ▼
-┌─ Layer 3 (editor) ─┐ ┌─ Layer 2 (portal)─┐ ┌─ AI / IDE ───┐
-│ apps/docs-cms      │ │ apps/docs         │ │ Direct file  │
-│ Keystatic          │ │ Fumadocs build    │ │ access       │
-│ → block UI         │ │ → static site     │ │ → context    │
-│ → save = git commit│ │ → cdn deploy      │ │ → write PR   │
-└────────────────────┘ └───────────────────┘ └──────────────┘
-     │ on save                  ▲
-     │ commit                   │ on merge
-     ▼                          │
-┌─ GitHub repo ─────────────────┘
+     │ reads                          │ reads/writes
+     ▼                                ▼
+┌─ Layer 2 (portal)─┐            ┌─ Authors (IDE / AI) ─┐
+│ apps/docs         │            │ Direct file access   │
+│ Fumadocs build    │            │ → context            │
+│ → static site     │            │ → edit locally       │
+│ → cdn deploy      │            │ → open pull request  │
+└───────────────────┘            └──────────┬───────────┘
+          ▲                                 │ pull request
+          │ on merge                        ▼
+┌─ GitHub repo ────────────────────────────────────────────
 │  merge to main → CI:
 │    1. Lint & drift checks (§7)
 │    2. Generate artifacts (openapi-ts, glossary ids, ERD)
@@ -77,9 +76,8 @@ lang: ru
 ### 2.2 Топология deploy
 
 - `docs.doctor.school` — Fumadocs (public read-only).
-- `docs-cms.doctor.school` — Keystatic admin (Zitadel-protected — same tenant as `apps/admin` per ADR-0001/0004).
-- `apps/docs` и `apps/docs-cms` живут как 5-й и 6-й Next.js app в `apps/` директории monorepo (см. §4 layout).
-- Build: один Turborepo task `pnpm docs:build` пересобирает оба.
+- `apps/docs` живёт как 5-й Next.js app в `apps/` директории monorepo (см. §4 layout).
+- Build: один Turborepo task `pnpm docs:build`.
 
 ---
 
@@ -167,12 +165,6 @@ ds-platform/                          # репо корень
 │   │           ├── how-to/
 │   │           ├── reference/
 │   │           └── explanation/
-│   ├── docs-cms/                       # Keystatic editor app (Next.js App Router)
-│   │   ├── keystatic.config.ts
-│   │   ├── package.json
-│   │   └── app/
-│   │       ├── api/keystatic/[...params]/route.ts   # makeRouteHandler({ config })
-│   │       └── keystatic/[[...params]]/page.tsx     # <KeystaticApp />
 │   ├── portal/, admin/, promo/, cms/   # ADR-0004
 │   └── mobile/                         # ADR-0005
 ├── packages/
@@ -227,143 +219,29 @@ export const source = loader({
 
 ---
 
-## 5. Keystatic config (sketch)
+## 5. Формат авторства контента
 
-**Content format decision: MDX, not Markdoc.** Keystatic's `fields.markdoc` стораит контент в Markdoc syntax, который Fumadocs не рендерит нативно (Fumadocs ожидает MDX). Чтобы не вводить Markdoc→MDX transform pipeline, используем `fields.document` (Keystatic's serialization to MDX) для prose. Glossary `definition` остаётся как plain markdown body файла (через `contentField` config). DSO-31 верифицирует на первом deployed примере, что Keystatic-edit → MDX → Fumadocs-render работает end-to-end.
+**Решение по формату: MDX с YAML-frontmatter.** Prose-коллекции и glossary хранятся ровно в той форме, которую потребляет Fumadocs, — stock MDX плюс небольшой блок frontmatter, — поэтому между тем, что пишет автор, и тем, что рендерит портал, нет слоя сериализации. Никакой другой markdown-диалект внутри `apps/docs/content/` не вводится.
 
-`apps/docs-cms/keystatic.config.ts`:
+Форма по коллекциям:
 
-```ts
-import { config, collection, fields, singleton } from "@keystatic/core";
+| Коллекция                                     | Путь                                      | Frontmatter                      | Тело                                                              |
+| --------------------------------------------- | ----------------------------------------- | -------------------------------- | ----------------------------------------------------------------- |
+| Prose (Vision, business-rules, user-journeys) | `apps/docs/content/product/*.md`          | `title` / `description` / `lang` | свободный MDX                                                     |
+| PRD chapters                                  | `apps/docs/content/product/prd/*.md`      | `title` / `description` / `lang` | свободный MDX                                                     |
+| Glossary                                      | `apps/docs/content/product/glossary/*.md` | `title` / `description` / `lang` | `**Canonical id:**` + `**Bounded context:**` + определение (§6.1) |
+| Operations / runbooks                         | `apps/docs/content/operations/*.md`       | `title` / `description` / `lang` | свободный MDX                                                     |
+| Feature specs                                 | `apps/docs/content/specs/features/NNN-*/` | по SDD-триплету                  | EARS / design / Gherkin                                           |
 
-export default config({
-  storage: {
-    kind: "github",
-    repo: { owner: "doctor-school", name: "ds-platform" },
-    branchPrefix: "docs/", // PR branch naming
-  },
-  ui: {
-    brand: { name: "DS Platform Docs", mark: () => "📚" },
-    navigation: {
-      Product: [
-        "vision",
-        "prdChapters",
-        "businessRules",
-        "userJourneys",
-        "glossary",
-      ],
-      Architecture: ["techSpecs", "architecturePages"],
-      Operations: ["operationsPages", "runbooks"],
-    },
-  },
-  collections: {
-    glossary: collection({
-      label: "Glossary",
-      slugField: "id",
-      path: "apps/docs/content/product/glossary/*",
-      format: { contentField: "definition" },
-      schema: {
-        id: fields.slug({
-          name: {
-            label: "ID (snake_case)",
-            description:
-              "IMMUTABLE — never change after first save. Referenced by code, specs, Payload. Renaming requires a deprecation+supersede flow, not edit.",
-          },
-          validation: { length: { min: 2, max: 60 } },
-        }),
-        label_ru: fields.text({
-          label: "Лейбл RU",
-          validation: { length: { min: 1 } },
-        }),
-        label_en: fields.text({ label: "Label EN" }),
-        aliases: fields.array(fields.text(), { label: "Aliases (RU+EN)" }),
-        bounded_context: fields.select({
-          label: "Bounded context",
-          options: [
-            { label: "identity", value: "identity" },
-            { label: "learning", value: "learning" },
-            { label: "payments", value: "payments" },
-            { label: "gameplay", value: "gameplay" },
-            { label: "content", value: "content" },
-            { label: "compliance", value: "compliance" },
-          ],
-          defaultValue: "identity",
-        }),
-        related: fields.array(
-          fields.relationship({ collection: "glossary", label: "Related" }),
-        ),
-        definition: fields.markdoc({ label: "Definition" }),
-        // Note: glossary definition is short prose, Markdoc is OK here because
-        // glossary entries are rendered by a custom Fumadocs component, not directly.
-        // For prose-collections (PRD, Vision) — use fields.document which serializes to MDX.
-      },
-    }),
-    prdChapters: collection({
-      label: "PRD chapters",
-      slugField: "slug",
-      path: "apps/docs/content/product/prd/*",
-      format: { contentField: "content", data: "yaml" },
-      schema: {
-        slug: fields.slug({ name: { label: "Slug" } }),
-        title: fields.text({ label: "Title" }),
-        order: fields.integer({ label: "Order", defaultValue: 0 }),
-        content: fields.document({
-          label: "Content",
-          formatting: true,
-          dividers: true,
-          links: true,
-          images: true,
-        }),
-      },
-    }),
-    // techSpecs, architecturePages, operationsPages — collections с fields.document
-    // (Tech Lead/AI редактируют чаще в IDE — Keystatic дает viewer + occasional edit)
-    //
-    // featureSpecs — отдельный case: SDD pattern требует 4-file folder (requirements/design/
-    // scenarios/tasks). Keystatic не управляет multi-file folder в одной "entry". Решение v1:
-    // НЕ создавать featureSpecs collection в Keystatic. Feature-specs — IDE-only (Tech Lead/AI
-    // пишут напрямую). Product Lead их не редактирует — он работает только с PRD/vision/glossary.
-    // Trigger to revisit: если Product Lead начнёт регулярно править feature-specs prose.
-  },
-  singletons: {
-    vision: singleton({
-      label: "Vision",
-      path: "apps/docs/content/product/vision",
-      format: { contentField: "content", data: "yaml" },
-      schema: {
-        content: fields.document({
-          label: "Vision",
-          formatting: true,
-          dividers: true,
-          links: true,
-          images: true,
-        }),
-      },
-    }),
-    businessRules: singleton({
-      label: "Business rules",
-      path: "apps/docs/content/product/business-rules",
-      format: { contentField: "content", data: "yaml" },
-      schema: {
-        content: fields.document({
-          label: "Rules (BR-NNN)",
-          formatting: true,
-          links: true,
-        }),
-      },
-    }),
-    // userJourneys, operationsPages, runbooks — analogous
-  },
-});
-```
+У каждой коллекции есть файл-шаблон, чтобы новая страница начиналась с нужной формы frontmatter; соответствие форме обеспечивает CI-lint frontmatter/MDX (§7) — UI редактора, который заблокировал бы некорректный save, нет.
 
-**Authentication:** Keystatic admin защищён Zitadel (закрыто по ADR-0001 §8, DSP-209) тем же tenant что `apps/admin`. Group `docs-editors` (Tech Lead + Product Lead) даёт access. Commits идут от GitHub App (`ds-docs-bot`), в commit message — `Co-authored-by: <oidc-user-email>`.
+**Кто что редактирует.** Product Lead ведёт prose-коллекции (PRD, Vision, business-rules) и добавляет термины в glossary; Tech Lead и AI-агенты ведут feature-specs, ADR, operations-доки и файлы конституции. Это соглашение, а не граница прав — все авторы приземляют правки через один и тот же PR.
 
-**Immutability of `id`:** не enforce'ится в Keystatic UI (slugField field в Keystatic editable). Вместо этого:
+**Immutability of `id` в glossary:** не enforce'ится на записи (переименование файла — обычный коммит). Вместо этого:
 
-- UI description явно говорит «IMMUTABLE — never change».
+- Шаблон и заголовок термина явно говорят «IMMUTABLE — never change».
 - ESLint rule `local/glossary-canonical-ids` ловит изменения downstream (TS refs ломаются на rename → fail).
-- Roundtrip CI check ловит расхождения glossary.yaml ↔ generated ids ↔ Payload Glossary Collection.
+- Roundtrip CI check ловит расхождения glossary source ↔ generated ids ↔ Payload Glossary Collection.
 - Перенос на новый id = deprecation+supersede flow: добавить новый term, оставить старый с `aliases: [<новый_id>]`, перевести references по одному. Старый удаляется только после grep-clean.
 
 ---
@@ -372,7 +250,7 @@ export default config({
 
 ### 6.1 File format
 
-Каждый термин — отдельный markdown-файл в `apps/docs/content/product/glossary/` (slug = kebab-имя файла, например `doctor-guest.md`). Файл — это **Keystatic-entry**: frontmatter `title` / `description` / `lang`, затем тело, которое открывается заголовком термина и строкой метаданных с **каноническим id** и его bounded context, после чего идут определение, related terms и sources.
+Каждый термин — отдельный markdown-файл в `apps/docs/content/product/glossary/` (slug = kebab-имя файла, например `doctor-guest.md`). Файл несёт frontmatter `title` / `description` / `lang`, затем тело, которое открывается заголовком термина и строкой метаданных с **каноническим id** и его bounded context, после чего идут определение, related terms и sources.
 
 **Канонический id живёт в теле**, а не во frontmatter — его несёт маркер `**Canonical id:** \`snake_id\``. Этот маркер — авторитетный, машинно-проверяемый ключ: glossary-guard'ы (`glossary-mdx-lint`, `glossary-roundtrip-lint`, через `tools/lint/lib/glossary.ts`) читают id именно из него, а маркер `**Bounded context:** <ctx>` в той же строке фиксирует DDD-контекст.
 
@@ -397,7 +275,7 @@ backend identity but has not yet been verified and upgraded to a full `doctor`.
 **Sources:** ADR-0001 §1, §4; feature 003 requirements + design.
 ```
 
-**Про sketches §5 (Keystatic config) и §6.2 (generator).** Эти sketches предшествуют принятому Keystatic-формату выше — они иллюстрируют frontmatter-схему `label_ru` / `bounded_context` / `related` и generator, который её парсит. Формат на диске, имеющий силу, — тот, что в этом §6.1 (frontmatter + маркер `**Canonical id:**` в теле). Пайплайн генерации (§6.2) реализован в #460: `packages/glossary/scripts/generate.ts` (запускается через `pnpm generate:glossary`) читает реальный формат — id из body-маркера `**Canonical id:**` плюс сохраняемый frontmatter — и генерирует закоммиченный `packages/glossary/src/ids.ts` (`GLOSSARY_IDS`).
+**Про sketch §6.2 (generator).** Этот sketch предшествует принятому формату выше — он иллюстрирует frontmatter-схему `label_ru` / `bounded_context` / `related` и generator, который её парсит. Формат на диске, имеющий силу, — тот, что в этом §6.1 (frontmatter + маркер `**Canonical id:**` в теле). Пайплайн генерации (§6.2) реализован в #460: `packages/glossary/scripts/generate.ts` (запускается через `pnpm generate:glossary`) читает реальный формат — id из body-маркера `**Canonical id:**` плюс сохраняемый frontmatter — и генерирует закоммиченный `packages/glossary/src/ids.ts` (`GLOSSARY_IDS`).
 
 ### 6.2 Generator script
 
@@ -660,7 +538,7 @@ main().catch((e) => {
 
 Two checkpoints чтобы избежать window of inconsistency между Payload write и следующим CI:
 
-**Checkpoint 1 — Payload `beforeChange` hook (save-time, runtime).** Когда Product Lead сохраняет marketing page в Payload UI, hook валидирует все `<GlossaryRef id="...">` ноды в Lexical state против `GLOSSARY_IDS`. Если id неизвестен — save **блокируется** с явной ошибкой в UI («GlossaryRef points to id "x" which does not exist in glossary — add it in docs-cms first»).
+**Checkpoint 1 — Payload `beforeChange` hook (save-time, runtime).** Когда Product Lead сохраняет marketing page в Payload UI, hook валидирует все `<GlossaryRef id="...">` ноды в Lexical state против `GLOSSARY_IDS`. Если id неизвестен — save **блокируется** с явной ошибкой в UI («GlossaryRef points to id "x" which does not exist in glossary — add it to `apps/docs/content/product/glossary/` first»).
 
 `apps/cms/src/collections/MarketingPages.ts` (sketch):
 
@@ -690,7 +568,7 @@ export const MarketingPages: CollectionConfig = {
         for (const id of refs) {
           if (!(id in GLOSSARY_IDS)) {
             throw new Error(
-              `Glossary term "${id}" does not exist. Add it in docs-cms before referencing.`,
+              `Glossary term "${id}" does not exist. Add it to apps/docs/content/product/glossary/ before referencing.`,
             );
           }
         }
@@ -737,7 +615,7 @@ CI fail → marketing-страница референсит несуществу
 | **Pilot** (добавляется когда есть pilot users) | Roundtrip validation Payload ↔ glossary, MDX glossary-lint `[[g:term-id]]` opt-in, generated ERD freshness, module README freshness checks.                                                                                                                                                                                             |
 | **Scale** (добавляется при scale-фазе)         | Editorial UI integration (Payload), advanced roundtrip checks, machine-validatable spec fragments (JSON Schema / OpenAPI in-spec), automated spec re-validation against code changes.                                                                                                                                                   |
 
-**Rationale:** Claude valid pre-pilot review flag — «Fumadocs + Keystatic + glossary YAML + roundtrip validation + many CI gates may slow early delivery and produce false positives». Phasing предотвращает overhead на ранней стадии, давая полную defense at scale.
+**Rationale:** Claude valid pre-pilot review flag — «Fumadocs + glossary files + roundtrip validation + many CI gates may slow early delivery and produce false positives». Phasing предотвращает overhead на ранней стадии, давая полную defense at scale.
 
 ### 7.1 GitHub Actions workflow
 
@@ -1218,7 +1096,6 @@ Inherit from `/AGENTS.md` (universal AI constitution). This file adds Claude-Cod
 
 - plane-pp-mcp — DS Platform Plane workspace `doctor-school`
 - payload — Payload v3 admin (apps/cms) for AI content reads (read-only by default)
-- (TBD) keystatic — once an MCP server lands
 
 ## Tool preferences
 
@@ -1256,18 +1133,17 @@ Phase 0 (Tech Lead solo, sequential):
 | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | --------- |
 | 1    | Создать DS Platform repo (DSO-31)                                                                                                                                                                                                                               | `ds-platform/` skeleton                                  | DSO-31    |
 | 2    | Scaffold `apps/docs/` (Fumadocs)                                                                                                                                                                                                                                | empty portal builds                                      | —         |
-| 3    | Scaffold `apps/docs-cms/` (Keystatic)                                                                                                                                                                                                                           | empty editor admin                                       | step 2    |
 | 4    | Подключить `docs/adr/*.md` в Fumadocs через `apps/docs/source.config.ts` mapper (Variant B — без симлинков и копий)                                                                                                                                             | ADR visible в portal на `/adr/<slug>` route              | step 2    |
 | 5    | Scaffold `packages/glossary/` + generate.ts                                                                                                                                                                                                                     | пустой ids.ts                                            | —         |
 | 6    | Создать seed glossary (~30 DS Platform доменных терминов: doctor, nmo_credit, accreditation, course, lesson, certificate, ledger, con, pul, au, etc.) — seed list определяется в отдельном prep-step DSO-31 на основе PRD §13-15 + bounded contexts ADR-0006 §5 | glossary populated                                       | step 5    |
 | 7    | Add `tools/lint/` scripts                                                                                                                                                                                                                                       | events-lint, glossary-mdx-lint, module-readme-lint stubs | —         |
 | 8    | Add CI workflow.yml                                                                                                                                                                                                                                             | green build на empty app                                 | steps 2-7 |
 | 9    | Write AGENTS.md + CLAUDE.md draft                                                                                                                                                                                                                               | committed                                                | —         |
-| 10   | Deploy `docs.doctor.school` + `docs-cms.doctor.school`                                                                                                                                                                                                          | live portal + editor                                     | step 8    |
+| 10   | Deploy `docs.doctor.school`                                                                                                                                                                                                                                     | live portal                                              | step 8    |
 
 Phase 0.5 (после Phase 0 готов):
 
-- Product Lead pilot edit Vision в Keystatic (smoke test UX).
+- Product Lead pilot edit Vision через PR (smoke test авторства).
 - Tech Lead пишет первый feature-spec в SDD-формате (`docs/content/specs/features/001-doctor-onboarding/` — 3 файла, без tasks.md).
 - **Создать (или переиспользовать) product-тему GitHub Milestone** (например `Doctor onboarding v1`) + Issues per EARS-handler через `gh issue create`, каждый с лейблом `feature:001-doctor-onboarding`. Заполнить frontmatter `tracker:` URL в `NNN-requirements.md`.
 - **Setup GitHub Project v2 «DS Platform Implementation»** с swimlanes by feature label.
@@ -1283,7 +1159,6 @@ Phase 1 (продакшн):
 
 ## 11. Связанные decisions (cross-ref)
 
-- **ADR-0001** — OIDC tenant: Zitadel (закрыто по ADR-0001 §8, DSP-209); `docs-cms.doctor.school` использует тот же OIDC client что `apps/admin`. Group `docs-editors`.
 - **ADR-0002 §3-5** — Zod как API SSOT, openapi-typescript как codegen. Подтверждено как Master в SSOT-таблице §3 этого spec'а.
 - **ADR-0003 §4** — Drizzle как DB SSOT, drizzle-kit как migrations. drizzle-kit check заменяет atlas schema diff.
 - **ADR-0004 §7, §10.3** — Payload v3 content-only + Glossary Collection. §10.3 hard dep — этот spec разрешает: Payload Glossary Collection синхронизируется FROM glossary.yaml, не наоборот.
@@ -1294,9 +1169,8 @@ Phase 1 (продакшн):
 ## 12. Open follow-ups (DSO-31+)
 
 1. Fumadocs setup specifics (theme, search provider, navigation config).
-2. Keystatic GitHub App registration (`ds-docs-bot`).
-3. Lint-tools пакет structure (один пакет `@ds/lint-tools` или per-tool?).
-4. EARS-ID ↔ Vitest linkage convention (закрыто): плоская нумерация — `it('EARS-N: ...', ...)`; вложенное `N.M` только если один handler несёт несколько shall-выражений. Референс-spec: `001-api-bootstrap-health`.
-5. Gherkin → Playwright transpilation pipeline setup (`playwright-bdd` setup details).
-6. Initial 30 glossary terms — какие переносим первым batch'ом.
-7. Migration: что делать с существующими Notion DS-Platform-страницами (если есть). Recommend: deprecated + redirect notice в Notion, content уже в Git.
+2. Lint-tools пакет structure (один пакет `@ds/lint-tools` или per-tool?).
+3. EARS-ID ↔ Vitest linkage convention (закрыто): плоская нумерация — `it('EARS-N: ...', ...)`; вложенное `N.M` только если один handler несёт несколько shall-выражений. Референс-spec: `001-api-bootstrap-health`.
+4. Gherkin → Playwright transpilation pipeline setup (`playwright-bdd` setup details).
+5. Initial 30 glossary terms — какие переносим первым batch'ом.
+6. Migration: что делать с существующими Notion DS-Platform-страницами (если есть). Recommend: deprecated + redirect notice в Notion, content уже в Git.

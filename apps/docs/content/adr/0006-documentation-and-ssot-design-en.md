@@ -41,32 +41,32 @@ This document is the implementation detail for ADR-0006. The ADR records "what a
 ### 2.1 Layers
 
 ```
-┌─ Git (SSOT) ───────────────────────────────────────────────┐
+┌─ Layer 1 — Git (SSOT) ──────────────────────────────────────┐
 │  apps/docs/content/  (markdown/MDX)                         │
 │  packages/db/schema/ (Drizzle TS — DB SSOT)                 │
 │  packages/schemas/   (Zod TS — API SSOT)                    │
 │  packages/glossary/  (generated artifacts)                  │
 │  AGENTS.md, CLAUDE.md                                       │
-└────┬─────────────────────┬────────────────────┬─────────────┘
-     │ reads                          │ reads/writes
-     ▼                                ▼
-┌─ Layer 2 (portal)─┐            ┌─ Authors (IDE / AI) ─┐
-│ apps/docs         │            │ Direct file access   │
-│ Fumadocs build    │            │ → context            │
-│ → static site     │            │ → edit locally       │
-│ → cdn deploy      │            │ → open pull request  │
-└───────────────────┘            └──────────┬───────────┘
-          ▲                                 │ pull request
-          │ on merge                        ▼
-┌─ GitHub repo ────────────────────────────────────────────
-│  merge to main → CI:
-│    1. Lint & drift checks (§7)
-│    2. Generate artifacts (openapi-ts, glossary ids, ERD)
-│    3. Build apps/docs (Fumadocs) → deploy docs.doctor.school
-│    4. Sync glossary.yaml → Payload Glossary Collection
-└────────────────────────────────────────────────────────────
+└────┬──────────────────────────────┬─────────────────────────┘
+     │ reads                        │ reads/writes
+     ▼                              ▼
+┌─ Layer 2 (portal) ─┐         ┌─ Authors (IDE / AI) ─┐
+│  apps/docs         │         │  Direct file access  │
+│  Fumadocs build    │         │  → context           │
+│  → static site     │         │  → edit locally      │
+│  → cdn deploy      │         │  → open pull request │
+└───────────────┴────┘         └──────────┬───────────┘
+                ▲                         │ pull request
+                │ on merge                ▼
+┌─ GitHub repo ─┴─────────────────────────┴───────────────────┐
+│  merge to main → CI:                                        │
+│    1. Lint & drift checks (§7)                              │
+│    2. Generate artifacts (openapi-ts, glossary ids, ERD)    │
+│    3. Build apps/docs (Fumadocs) → deploy docs.doctor.school│
+│    4. Sync glossary.yaml → Payload Glossary Collection      │
+└───────────────────────────────┬─────────────────────────────┘
                                 ▼
-┌─ Layer 4 (product runtime — ADR-0004 §7) ──────────────────┐
+┌─ Layer 3 (product runtime — ADR-0004 §7) ───────────────────┐
 │  apps/cms (Payload v3)                                      │
 │    glossary collection (synced from Git)                    │
 │    marketing content + Lexical "Insert glossary term"       │
@@ -1133,13 +1133,13 @@ Phase 0 (Tech Lead solo, sequential):
 | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | --------- |
 | 1    | Create DS Platform repo (DSO-31)                                                                                                                                                                                                                            | `ds-platform/` skeleton                                  | DSO-31    |
 | 2    | Scaffold `apps/docs/` (Fumadocs)                                                                                                                                                                                                                            | empty portal builds                                      | —         |
-| 4    | Wire `docs/adr/*.md` into Fumadocs via `apps/docs/source.config.ts` mapper (Variant B — no symlinks or copies)                                                                                                                                              | ADR visible in portal at `/adr/<slug>` route             | step 2    |
-| 5    | Scaffold `packages/glossary/` + generate.ts                                                                                                                                                                                                                 | empty ids.ts                                             | —         |
-| 6    | Create seed glossary (~30 DS Platform domain terms: doctor, nmo_credit, accreditation, course, lesson, certificate, ledger, con, pul, au, etc.) — seed list determined in a separate prep-step in DSO-31 based on PRD §13-15 + bounded contexts ADR-0006 §5 | glossary populated                                       | step 5    |
-| 7    | Add `tools/lint/` scripts                                                                                                                                                                                                                                   | events-lint, glossary-mdx-lint, module-readme-lint stubs | —         |
-| 8    | Add CI workflow.yml                                                                                                                                                                                                                                         | green build on empty app                                 | steps 2-7 |
-| 9    | Write AGENTS.md + CLAUDE.md draft                                                                                                                                                                                                                           | committed                                                | —         |
-| 10   | Deploy `docs.doctor.school`                                                                                                                                                                                                                                 | live portal                                              | step 8    |
+| 3    | Wire `docs/adr/*.md` into Fumadocs via `apps/docs/source.config.ts` mapper (Variant B — no symlinks or copies)                                                                                                                                              | ADR visible in portal at `/adr/<slug>` route             | step 2    |
+| 4    | Scaffold `packages/glossary/` + generate.ts                                                                                                                                                                                                                 | empty ids.ts                                             | —         |
+| 5    | Create seed glossary (~30 DS Platform domain terms: doctor, nmo_credit, accreditation, course, lesson, certificate, ledger, con, pul, au, etc.) — seed list determined in a separate prep-step in DSO-31 based on PRD §13-15 + bounded contexts ADR-0006 §5 | glossary populated                                       | step 4    |
+| 6    | Add `tools/lint/` scripts                                                                                                                                                                                                                                   | events-lint, glossary-mdx-lint, module-readme-lint stubs | —         |
+| 7    | Add CI workflow.yml                                                                                                                                                                                                                                         | green build on empty app                                 | steps 2-6 |
+| 8    | Write AGENTS.md + CLAUDE.md draft                                                                                                                                                                                                                           | committed                                                | —         |
+| 9    | Deploy `docs.doctor.school`                                                                                                                                                                                                                                 | live portal                                              | step 7    |
 
 Phase 0.5 (after Phase 0 is ready):
 

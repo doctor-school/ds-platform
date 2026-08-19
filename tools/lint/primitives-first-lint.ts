@@ -129,8 +129,8 @@ const REPO_ROOT = process.env.LINT_FIXTURE_ROOT
 const TAG = "[primitives-first]";
 
 // Surface scope mirrors `interaction-states` scope (c): the product apps that
-// consume `@ds/design-system`. `apps/docs` / `apps/cms` / `apps/docs-cms` /
-// `apps/mobile` theme off their own host framework and are not scanned.
+// consume `@ds/design-system`. `apps/docs` / `apps/cms` / `apps/mobile` theme
+// off their own host framework and are not scanned.
 const APP_GLOBS = [
   "apps/portal/app/**/*.tsx",
   "apps/portal/components/**/*.tsx",

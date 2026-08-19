@@ -14,7 +14,7 @@
  * ── Source-of-truth reality (why the BODY marker, not §6.1 frontmatter) ───────
  * ADR-0006 §6.1 sketches each glossary term as a YAML-frontmatter file
  * (`id:`/`label_ru:` …). The repo NEVER adopted that shape: the live
- * `apps/docs/content/product/glossary/*.md` files carry Keystatic
+ * `apps/docs/content/product/glossary/*.md` files carry
  * `title:`/`description:`/`lang:` frontmatter and state the canonical id in the
  * BODY as ``**Canonical id:** `snake_id` ``. So this reader keys on the body
  * marker (the authoritative, machine-checkable id) — NOT the §6.1 frontmatter,

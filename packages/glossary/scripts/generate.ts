@@ -3,7 +3,7 @@
  * packages/glossary/scripts/generate.ts — the ADR-0006 §6.2 glossary generator.
  *
  * Reads the glossary source-of-truth (`apps/docs/content/product/glossary/*.md`,
- * Keystatic file-per-term) and emits two committed, generated artifacts:
+ * file-per-term) and emits two committed, generated artifacts:
  *
  *   1. `packages/glossary/src/ids.ts` — the `GLOSSARY_IDS` const (+ `GlossaryId`
  *      type + `GLOSSARY_TERMS` metadata). This is the artifact the
@@ -15,10 +15,10 @@
  *      per language present in the source (`lang` frontmatter). Each bundle maps
  *      canonical id → `{ title, description }`.
  *
- * ── Field mapping (reconciled to the REAL Keystatic format, #460) ─────────────
+ * ── Field mapping (reconciled to the REAL on-disk format, #460) ──────────────
  * ADR-0006 §6.1 records that the §5/§6.2 sketches (a `label_ru`/`bounded_context`/
  * `related` frontmatter schema) predate the adopted shape. The real per-term file
- * carries Keystatic frontmatter `title` / `description` / `lang` PLUS body markers
+ * carries frontmatter `title` / `description` / `lang` PLUS body markers
  * `**Canonical id:** \`id\`` and `**Bounded context:** <ctx>`. This generator reads
  * that reality (same body-marker id the guards key on — see
  * `tools/lint/lib/glossary.ts`), NOT the obsolete sketch frontmatter. A source

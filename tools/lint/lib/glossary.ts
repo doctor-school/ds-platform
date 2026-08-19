@@ -13,7 +13,7 @@
  * ── Source-of-truth reality (documented-path drift, #448) ─────────────────────
  * ADR-0006 §6.1 sketches each glossary term as a YAML-frontmatter file
  * (`id:`/`label_ru:`/`bounded_context:` …). The repo NEVER adopted that shape:
- * the live `apps/docs/content/product/glossary/*.md` files carry Keystatic
+ * the live `apps/docs/content/product/glossary/*.md` files carry
  * `title:`/`description:`/`lang:` frontmatter and state the canonical id in the
  * BODY as ``**Canonical id:** `snake_id` ``. So the shared reader keys on the body
  * marker (the authoritative, machine-checkable id) — NOT the §6.1 frontmatter,

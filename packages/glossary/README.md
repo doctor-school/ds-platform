@@ -14,7 +14,7 @@ import { GLOSSARY_IDS, type GlossaryId } from "@ds/glossary";
 
 ## Source of truth → generation
 
-The source of truth is the Keystatic file-per-term glossary at
+The source of truth is the file-per-term glossary at
 `apps/docs/content/product/glossary/*.md`. Each term declares its canonical id in
 the body via `**Canonical id:** \`snake_id\``.
 

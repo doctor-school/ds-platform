@@ -37,7 +37,7 @@ Medical-education platform for Doctor.School (B2B pharma sponsor → B2D doctor 
 
 **Production is live with users** on Timeweb (ru-3): `academy.doctor.school` / `api.` / `id.`. Never tell the owner "there is no production". Authoritative deployed scope = the derived `## Project reality` bootstrap section (`pnpm bootstrap`) + GitHub Releases/Deployments — never inferred from these docs (static prose rots).
 
-Stack (detail in `apps/docs/content/adr/` + `README.md`): NestJS + Zod + REST + openapi-typescript SDK (0002); Postgres 17 + Drizzle + pgvector (0003); Next.js 15 + Refine — promo / portal / admin / cms-Payload-v3 (0004); React Native + Expo + WatermelonDB (0005); Fumadocs + Keystatic + glossary.yaml (0006).
+Stack (detail in `apps/docs/content/adr/` + `README.md`): NestJS + Zod + REST + openapi-typescript SDK (0002); Postgres 17 + Drizzle + pgvector (0003); Next.js 15 + Refine — promo / portal / admin / cms-Payload-v3 (0004); React Native + Expo + WatermelonDB (0005); Fumadocs + glossary (0006).
 
 ---
 
@@ -153,7 +153,7 @@ In Phase 0, Tech Lead is the single CODEOWNERS owner (ADR-0008 §2.7) and the si
 - Feature specs (triplet): `apps/docs/content/specs/features/NNN-<slug>/`
 - Tech specs (brainstorm): `apps/docs/content/specs/tech/<topic>.md`
 - Project skill catalog: `apps/docs/content/skills/<name>/SKILL.md`
-- Glossary: `apps/docs/content/product/glossary/` (file-per-term, Keystatic-managed)
+- Glossary: `apps/docs/content/product/glossary/` (file-per-term)
 - API contract SSOT / DB schema SSOT: `packages/schemas/` (Zod) / `packages/db/schema/` (Drizzle)
 - Generated — never edit by hand: `packages/api-client/`, `packages/glossary/src/ids.ts`
 - Lint tools / bootstrap: `tools/lint/*.ts` / `tools/agent-bootstrap.ts` (`pnpm bootstrap`)

@@ -139,18 +139,17 @@ Compose-контракт живёт в `infra/dev-stand/` этого репоз�
 
 ### 3.4 Host-side порты (для справки)
 
-| App                                 | Port |
-| ----------------------------------- | ---- |
-| `apps/api` (NestJS)                 | 4001 |
-| `apps/portal` (Next.js)             | 3000 |
-| `apps/admin` (Next.js + Refine)     | 3001 |
-| `apps/cms` (Next.js + Payload)      | 3002 |
-| `apps/promo` (Next.js)              | 3003 |
-| `apps/docs` (Fumadocs Next.js)      | 3004 |
-| `apps/docs-cms` (Keystatic Next.js) | 3005 |
-| `apps/mobile` (Expo Metro)          | 8081 |
+| App                             | Port |
+| ------------------------------- | ---- |
+| `apps/api` (NestJS)             | 4001 |
+| `apps/portal` (Next.js)         | 3000 |
+| `apps/admin` (Next.js + Refine) | 3001 |
+| `apps/cms` (Next.js + Payload)  | 3002 |
+| `apps/promo` (Next.js)          | 3003 |
+| `apps/docs` (Fumadocs Next.js)  | 3004 |
+| `apps/mobile` (Expo Metro)      | 8081 |
 
-**Конфликтов нет в рамках TrueNAS-сервисов** (5432, 6379, 8000, 8001, 9000, 9001, 9080, 9443, 3100, 4000, 1025, 8025, 3592, 3593). Host-side порты (3000–3005, 4001, 8081) живут на отдельной машине и с TrueNAS-портами не пересекаются.
+**Конфликтов нет в рамках TrueNAS-сервисов** (5432, 6379, 8000, 8001, 9000, 9001, 9080, 9443, 3100, 4000, 1025, 8025, 3592, 3593). Host-side порты (3000–3004, 4001, 8081) живут на отдельной машине и с TrueNAS-портами не пересекаются.
 
 ---
 

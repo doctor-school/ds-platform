@@ -65,13 +65,13 @@ The brainstorm research confirmed that under AI-agent driven development the 202
 
 ### Deferred to pilot (not done pre-pilot)
 
-- **Payload CMS** (`cms.doctor.school`). Pre-pilot content — via Keystatic + git workflow / directly in repo.
+- **Payload CMS** (`cms.doctor.school`). Pre-pilot content — via the git workflow / directly in repo.
 - **Promo Next.js app** as a separate application. Pre-pilot promo — part of portal or a static snippet via docs.
 - **Mobile (RN + Expo)** — pre-pilot = responsive web / PWA. Native mobile — pilot trigger.
 - **Centrifugo** (real-time) — unless the first pilot school runs live webinars.
 - **Tempo** (distributed tracing) — after GlitchTip + Loki.
 - **Unleash** (feature flags) — originally deferred (pre-pilot ran on env / DB config). **Update (2026-06): pulled forward.** 003 prod-readiness surfaced a concrete operator need — flip the delivery-mode (`EMAIL_DELIVERY_MODE` / `SMS_DELIVERY_MODE`) and captcha (`BOT_PROTECTION_ENABLED`) flags at **runtime** via a UI, not by editing `.env` + restarting. Deploying Unleash self-hosted and migrating those env flags onto its admin UI is now an active backlog track (infra). Env config remains the **interim bootstrap default + fail-closed fallback** until it lands.
-- **Glossary YAML sync / Keystatic editorial UI** — pre-pilot: pure markdown in repo.
+- **Glossary YAML sync** — pre-pilot: pure markdown in repo.
 - **Cross-vendor reviewer bot** — pre-pilot: one primary LLM reviewer is enough.
 - **Cost ledger automation** — pre-pilot: manual tracking.
 

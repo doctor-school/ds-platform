@@ -12,7 +12,7 @@ lang: ru
 **Статус:** Accepted
 **Связан с:** Plane DSO-30 (`fce557aa-4cfd-4466-b487-5ba165501a1f`), milestone DSO-24
 **Design spec:** `apps/docs/content/adr/0007-ai-stack-design-ru.md`
-**Наследует:** ADR-0001 (Zitadel), ADR-0002 (NestJS + BullMQ), ADR-0003 (Postgres17 + pgvector), ADR-0004 (Next.js 15 + ESLint guards), ADR-0005 (RN+Expo), ADR-0006 (Fumadocs + Keystatic + SDD + GitHub Issues task split)
+**Наследует:** ADR-0001 (Zitadel), ADR-0002 (NestJS + BullMQ), ADR-0003 (Postgres17 + pgvector), ADR-0004 (Next.js 15 + ESLint guards), ADR-0005 (RN+Expo), ADR-0006 (Fumadocs + SDD + GitHub Issues task split)
 
 ---
 
@@ -191,7 +191,7 @@ Cost-tracking ведётся в собственной консоли vendor'а 
 - **PII Filter применяется unconditionally** к обоим маршрутам — даже YandexGPT внутри РФ (152-ФЗ требует обезличивания при отправке любому третьему лицу).
 - **LiteLLM admin UI** не имеет native OIDC — потребуется nginx forward-auth proxy с Zitadel (ADR-0001 tenant). Не-trivial setup, документируется в trigger-ADR.
 
-**Self-host honest framing (parallel to ADR-0006 §3 Keystatic/GitHub caveat):** Hetzner EU = non-RF compute. 152-ФЗ не нарушается потому что ПДн обезличиваются PII-Filter'ом **до** пересечения границы Zone RF → Zone AI; через границу идут только sanitized prompts. Это "self-host" в смысле «инфраструктура контролируется нами», но **не "data sovereignty"** в строгом смысле (compute в EU). Trigger to revisit fallback: блокировка Hetzner из РФ или regulatory требование compute-в-РФ для AI — fallback к Timeweb self-hosted с международным egress proxy.
+**Self-host honest framing (parallel to the ADR-0006 §3 GitHub-hosting caveat):** Hetzner EU = non-RF compute. 152-ФЗ не нарушается потому что ПДн обезличиваются PII-Filter'ом **до** пересечения границы Zone RF → Zone AI; через границу идут только sanitized prompts. Это "self-host" в смысле «инфраструктура контролируется нами», но **не "data sovereignty"** в строгом смысле (compute в EU). Trigger to revisit fallback: блокировка Hetzner из РФ или regulatory требование compute-в-РФ для AI — fallback к Timeweb self-hosted с международным egress proxy.
 
 **Pre-v2 prerequisite — dual-LLM pattern для user-content:** перед запуском Content Pipeline v2 — формальная оценка, входит ли user-controlled content (briefs от соавторов, file uploads) в pipeline. Если да — OWASP dual-LLM pattern (privileged + quarantined LLM) реализуется в trigger-ADR, не deferred дальше.
 

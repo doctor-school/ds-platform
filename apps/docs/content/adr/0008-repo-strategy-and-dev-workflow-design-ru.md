@@ -27,7 +27,7 @@ lang: ru
 | Monorepo orchestrator  | Turborepo 2.x + pnpm 10.x workspaces                                                                                                 | §2.2                        |
 | Node version pin       | `.nvmrc` (`22`) + `packageManager: pnpm@10.x` + `engines` + `engine-strict=true`                                                     | §2.2                        |
 | Repo layout root       | `apps/`, `packages/`, `tools/`, `.github/`, `.changeset/`, manifest files                                                            | §2.3                        |
-| Apps inventory         | api (NestJS) + promo + portal + admin + cms (Payload v3) + docs (Fumadocs) + docs-cms (Keystatic) + mobile (Expo). 8 apps.           | §2.3                        |
+| Apps inventory         | api (NestJS) + promo + portal + admin + cms (Payload v3) + docs (Fumadocs) + mobile (Expo). 7 apps.                                  | §2.3                        |
 | Packages inventory     | schemas, api-client, db, glossary, hooks, design-system, observability, utils, eslint-config, tsconfig, llm-utils                    | §2.3                        |
 | ADR location           | `apps/docs/content/adr/NNNN-<slug>.md` + companion `NNNN-<slug>-design.md`                                                           | §2.3                        |
 | Feature spec location  | `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}`                            | §2.3 (inherits ADR-0006)    |
@@ -861,7 +861,7 @@ Phase 0 (greenfield, brainstorm complete). Pre-pilot target: 2026 Q3 (TBD).
 - **Data:** Postgres 17 + Drizzle + pgvector (ADR-0003); schemas в `packages/db/`, migrations в `apps/api/drizzle/`
 - **Frontend:** Next.js 15 + Refine; 4 apps — `apps/promo/`, `apps/portal/`, `apps/admin/`, `apps/cms/` (Payload v3 content-only) (ADR-0004)
 - **Mobile:** React Native + Expo + WatermelonDB (ADR-0005); `apps/mobile/`
-- **Docs:** Fumadocs (`apps/docs/`) + Keystatic editor (`apps/docs-cms/`) + glossary.yaml в `apps/docs/content/product/glossary/` (ADR-0006)
+- **Docs:** Fumadocs (`apps/docs/`) + glossary.yaml в `apps/docs/content/product/glossary/` (ADR-0006)
 - **AI dev loop:** Claude Code + Codex async + reviewer-bot (ADR-0007)
 - **Repo:** pnpm workspaces + Turborepo + changesets + GitHub Actions CI на GitHub-hosted раннерах (ADR-0008 §2.8)
 - **Identity:** Zitadel (ADR-0001 §8, закрыто по DSP-209) + Cerbos RBAC (ADR-0003 §5)
@@ -919,7 +919,7 @@ See AGENTS.md (universal constitution) и CLAUDE.md (Claude Code overlay).
 - **ADR-0004** §7 — Payload v3 в `apps/cms/` (content-only, `cms.*` schema namespace shared Postgres).
 - **ADR-0004** §13 — `packages/eslint-config/` экспортирует `no-vercel-only-api` rule.
 - **ADR-0005** — `apps/mobile/` — Expo SDK 53, отдельный build/release pipeline (Expo EAS).
-- **ADR-0006** §1, §2, §3, §6, §7, §9, §10 — doc topology, Fumadocs, Keystatic, glossary, drift guards, task-tracker split: воплощается в layout §2.3 + tooling §3.
+- **ADR-0006** §1, §2, §3, §6, §7, §9, §10 — doc topology, Fumadocs, glossary, drift guards, task-tracker split: воплощается в layout §2.3 + tooling §3.
 - **ADR-0007** §2.4 (orchestrated iteration cycle), §2.5 (bootstrap), §2.6 (drift guards), §2.8 (reviewer-bot), §2.10 (cost-ledger), §2.11 (autonomy + kill switch); **AI-stack design spec §11** (14-step migration plan): этот ADR-0008 + spec — operational ground для §11 migration steps.
 - **Engineering-readiness spec** (`../specs/tech/2026-05-12-engineering-readiness-design-ru.md`) — runtime tooling defaults: Caddy/Traefik, Coolify, GlitchTip, Loki+Prometheus+Tempo, Vault, Unleash, Beget DNS. Referenced from `README.md` § Runtime tooling. Не дублируется в ADR-0008.
 

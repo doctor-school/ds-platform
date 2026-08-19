@@ -12,7 +12,7 @@ lang: ru
 **Статус:** Accepted
 **Связан с:** Plane DSO-31 (`fae57ab6-f09b-4a4d-9ede-9a4f1ca504c0`), milestone DSO-24
 **Design spec:** `apps/docs/content/adr/0008-repo-strategy-and-dev-workflow-design-ru.md`
-**Наследует:** ADR-0001 (Zitadel), ADR-0002 (NestJS+BullMQ), ADR-0003 (Postgres17+Drizzle), ADR-0004 (Next.js 15+Refine), ADR-0005 (RN+Expo), ADR-0006 (Fumadocs+Keystatic+GitHub Issues), ADR-0007 (AI loop + интерактивные режимы ревью)
+**Наследует:** ADR-0001 (Zitadel), ADR-0002 (NestJS+BullMQ), ADR-0003 (Postgres17+Drizzle), ADR-0004 (Next.js 15+Refine), ADR-0005 (RN+Expo), ADR-0006 (Fumadocs+GitHub Issues), ADR-0007 (AI loop + интерактивные режимы ревью)
 
 ---
 
@@ -87,7 +87,7 @@ ds-platform/
 │   │       ├── operations/      # runbooks, monitoring (ADR-0006 §1, §10)
 │   │       ├── product/
 │   │       │   ├── vision.md
-│   │       │   ├── prd/         # PRD chapters (Keystatic collection)
+│   │       │   ├── prd/         # PRD chapters
 │   │       │   ├── business-rules.md
 │   │       │   ├── user-journeys.md
 │   │       │   └── glossary/    # file-per-term master (ADR-0006 §6)
@@ -95,8 +95,6 @@ ds-platform/
 │   │       │   ├── tech/        # tech-spec brainstorm outputs (ADR-0006 §4)
 │   │       │   └── features/NNN-<slug>/   # SDD 3-file (ADR-0006 §4)
 │   │       └── user-guides/     # Diátaxis (ADR-0006 §10)
-│   ├── docs-cms/                # Keystatic editor (ADR-0006 §3, ОТДЕЛЬНЫЙ Next.js app)
-│   │   └── keystatic.config.ts
 │   └── mobile/                  # Expo/RN (ADR-0005)
 ├── packages/
 │   ├── schemas/                 # Zod API SSOT (ADR-0002 §3-5, ADR-0006 §1)
@@ -253,15 +251,15 @@ Pre-DSO-31 admin (Tech Lead, ≤10 минут, ручной):
 
 Phase 0 implementation steps — extends AI-stack design spec §11. Шаги 1–14 из AI-stack design spec §11 unchanged. Additional шаги (DSO-32 children или новый work-item):
 
-| Step | Action                                                                                                                                                                                                                                                                                                                                                             | Output                                           |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
-| 15   | Initialise root `package.json` + `pnpm-workspace.yaml` + `turbo.json` + `tsconfig.base.json` + `.changeset/config.json` + `.editorconfig` + `.gitignore` + `.gitattributes` + `.npmrc` + `.nvmrc`                                                                                                                                                                  | repo bootstraps locally                          |
-| 16   | Создать `.github/` minimal skeleton: `workflows/{ci,release}.yml`, `CODEOWNERS`, `pull_request_template.md`, `ISSUE_TEMPLATE/{feature,bug,chore}.md`, `dependabot.yml`. CI references только tools которые уже существуют или skip'аются gracefully                                                                                                                | CI runs на первом push                           |
-| 17   | Установить `simple-git-hooks` + `lint-staged` в root `package.json` + конфиг `simple-git-hooks` section                                                                                                                                                                                                                                                            | pre-commit работает                              |
-| 19   | Initialise empty workspace stubs: `apps/{api,promo,portal,admin,cms,docs,docs-cms,mobile}/` + `packages/{schemas,api-client,db,glossary,hooks,design-system,observability,utils,eslint-config,tsconfig}/`, каждый с минимальным `package.json` (`name: @ds/<name>`, `version: 0.0.0`, `private: true`) + опциональным per-package `turbo.json` для script-stub map | workspace discoverable                           |
-| 20   | Initialise `apps/docs/` как Fumadocs Next.js app (см. ADR-0006 §2) — ADR-контент + парные design-спеки лежат в `content/adr/`. Initialise `apps/docs-cms/` как Keystatic Next.js app (ADR-0006 §3)                                                                                                                                                                 | doc portal builds                                |
-| 21   | **[Manual, admin]** Apply repository settings (`allow_squash_merge=true`, `allow_rebase_merge=false`, `allow_merge_commit=false`, `delete_branch_on_merge=true`) через `gh api`. Закоммитить target-state branch-protection payload в `branch-protection.json` в корне репо. См. design spec §4 для точных команд и reactivation trigger (§2.6)                    | squash-only enforced; target rule документирован |
-| 22   | Smoke test: создать первую feature-spec (`NNN-onboarding` или подобная) и пройти iteration cycle ADR-0007 §2.4 end-to-end                                                                                                                                                                                                                                          | proof of concept                                 |
+| Step | Action                                                                                                                                                                                                                                                                                                                                                    | Output                                           |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| 15   | Initialise root `package.json` + `pnpm-workspace.yaml` + `turbo.json` + `tsconfig.base.json` + `.changeset/config.json` + `.editorconfig` + `.gitignore` + `.gitattributes` + `.npmrc` + `.nvmrc`                                                                                                                                                         | repo bootstraps locally                          |
+| 16   | Создать `.github/` minimal skeleton: `workflows/{ci,release}.yml`, `CODEOWNERS`, `pull_request_template.md`, `ISSUE_TEMPLATE/{feature,bug,chore}.md`, `dependabot.yml`. CI references только tools которые уже существуют или skip'аются gracefully                                                                                                       | CI runs на первом push                           |
+| 17   | Установить `simple-git-hooks` + `lint-staged` в root `package.json` + конфиг `simple-git-hooks` section                                                                                                                                                                                                                                                   | pre-commit работает                              |
+| 19   | Initialise empty workspace stubs: `apps/{api,promo,portal,admin,cms,docs,mobile}/` + `packages/{schemas,api-client,db,glossary,hooks,design-system,observability,utils,eslint-config,tsconfig}/`, каждый с минимальным `package.json` (`name: @ds/<name>`, `version: 0.0.0`, `private: true`) + опциональным per-package `turbo.json` для script-stub map | workspace discoverable                           |
+| 20   | Initialise `apps/docs/` как Fumadocs Next.js app (см. ADR-0006 §2) — ADR-контент + парные design-спеки лежат в `content/adr/`                                                                                                                                                                                                                             | doc portal builds                                |
+| 21   | **[Manual, admin]** Apply repository settings (`allow_squash_merge=true`, `allow_rebase_merge=false`, `allow_merge_commit=false`, `delete_branch_on_merge=true`) через `gh api`. Закоммитить target-state branch-protection payload в `branch-protection.json` в корне репо. См. design spec §4 для точных команд и reactivation trigger (§2.6)           | squash-only enforced; target rule документирован |
+| 22   | Smoke test: создать первую feature-spec (`NNN-onboarding` или подобная) и пройти iteration cycle ADR-0007 §2.4 end-to-end                                                                                                                                                                                                                                 | proof of concept                                 |
 
 Dependency graph: 15 → 16 → 17 → 19 параллельно с 15. 20 depends on 19. 21 depends on 16. 22 depends на всё.
 
@@ -375,7 +373,7 @@ Step 21 — admin-only. Step 22 — joint Tech Lead+AI.
 - ADR-0004 §7 — Payload v3 content-only: `apps/cms/`, marketing-content в `cms.*` schema namespace shared Postgres.
 - ADR-0004 §13 — ESLint `no-vercel-only-api` rule: `packages/eslint-config/` экспортирует.
 - ADR-0005 — RN/Expo mobile: `apps/mobile/` workspace, отдельный build с Expo EAS.
-- ADR-0006 §1, §2, §3, §9 — doc topology, Fumadocs, Keystatic, task-tracker split: все воплощаются в layout §2.3.
+- ADR-0006 §1, §2, §3, §9 — doc topology, Fumadocs, task-tracker split: все воплощаются в layout §2.3.
 - ADR-0007 §2.5, §2.6, §2.10 — bootstrap, lint drift guards, autonomy ladder (интерактивные режимы ревью); AI-stack design spec §11 — migration plan: воплощается в `tools/` + `.github/workflows/`.
 
 **Делегировано в другие задачи:**

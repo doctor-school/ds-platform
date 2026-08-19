@@ -20,29 +20,29 @@ This document is the implementation detail for ADR-0008. The ADR fixes "what and
 
 ## 1. Decision summary (cross-ref ADR-0008)
 
-| Decision               | Choice                                                                                                                            | ADR-0008 §                  |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| GitHub org             | `doctor-school` (GitHub Free plan)                                                                                                | §2.1                        |
-| Repo name + visibility | `doctor-school/ds-platform`, private                                                                                              | §2.1                        |
-| Monorepo orchestrator  | Turborepo 2.x + pnpm 10.x workspaces                                                                                              | §2.2                        |
-| Node version pin       | `.nvmrc` (`22`) + `packageManager: pnpm@10.x` + `engines` + `engine-strict=true`                                                  | §2.2                        |
-| Repo layout root       | `apps/`, `packages/`, `tools/`, `.github/`, `.changeset/`, manifest files                                                         | §2.3                        |
-| Apps inventory         | api (NestJS) + promo + portal + admin + cms (Payload v3) + docs (Fumadocs) + docs-cms (Keystatic) + mobile (Expo). 8 apps.        | §2.3                        |
-| Packages inventory     | schemas, api-client, db, glossary, hooks, design-system, observability, utils, eslint-config, tsconfig, llm-utils                 | §2.3                        |
-| ADR location           | `apps/docs/content/adr/NNNN-<slug>.md` + companion `NNNN-<slug>-design.md`                                                        | §2.3                        |
-| Feature spec location  | `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}`                         | §2.3 (inherits ADR-0006)    |
-| Tech spec location     | `apps/docs/content/specs/tech/<topic>.md`                                                                                         | §2.3 (inherits ADR-0006 §4) |
-| Drizzle schema master  | `packages/db/schema/` per ADR-0006 §1 (supersedes ADR-0003 §4 location); migrations in `apps/api/drizzle/`                        | §2.3                        |
-| Release tooling        | changesets + `changesets/action` GitHub workflow                                                                                  | §2.4                        |
-| Commit convention      | conventional-commits (light, no enforce)                                                                                          | §2.4                        |
-| Merge style            | squash-only                                                                                                                       | §2.4                        |
-| Pre-commit hooks       | simple-git-hooks + lint-staged                                                                                                    | §2.5                        |
-| Branch strategy        | trunk-based, branches `feat/DSO-NN-<slug>` short-lived                                                                            | §2.6                        |
-| Branch protection rule | Target-state contract per ADR-0008 §2.6 (deferred enforcement; required status check `ci` only)                                   | §2.6                        |
-| CODEOWNERS Phase 0     | `* @sidorovanthon`                                                                                                                | §2.7                        |
-| CI runner              | GitHub-hosted `ubuntu-latest` for every job; batched topology — 8 executing jobs, one checkout + install per batch (#1237, #1249) | §2.8                        |
-| Dependabot             | weekly, grouped, ecosystems npm + github-actions                                                                                  | §2.9                        |
-| Bootstrap steps        | extends AI-stack design spec §11 + steps 15–22                                                                                    | §2.10                       |
+| Decision               | Choice                                                                                                                                                   | ADR-0008 §                  |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| GitHub org             | `doctor-school` (GitHub Free plan)                                                                                                                       | §2.1                        |
+| Repo name + visibility | `doctor-school/ds-platform`, private                                                                                                                     | §2.1                        |
+| Monorepo orchestrator  | Turborepo 2.x + pnpm 10.x workspaces                                                                                                                     | §2.2                        |
+| Node version pin       | `.nvmrc` (`22`) + `packageManager: pnpm@10.x` + `engines` + `engine-strict=true`                                                                         | §2.2                        |
+| Repo layout root       | `apps/`, `packages/`, `tools/`, `.github/`, `.changeset/`, manifest files                                                                                | §2.3                        |
+| Apps inventory         | api (NestJS) + promo + portal + admin + cms (Payload v3) + docs (Fumadocs) + mobile (Expo) + academy-demo + showcase (dev-only review surfaces). 9 apps. | §2.3                        |
+| Packages inventory     | schemas, api-client, db, glossary, hooks, design-system, observability, utils, eslint-config, tsconfig, llm-utils                                        | §2.3                        |
+| ADR location           | `apps/docs/content/adr/NNNN-<slug>.md` + companion `NNNN-<slug>-design.md`                                                                               | §2.3                        |
+| Feature spec location  | `apps/docs/content/specs/features/NNN-<slug>/{NNN-requirements.md, NNN-design.md, NNN-scenarios.feature}`                                                | §2.3 (inherits ADR-0006)    |
+| Tech spec location     | `apps/docs/content/specs/tech/<topic>.md`                                                                                                                | §2.3 (inherits ADR-0006 §4) |
+| Drizzle schema master  | `packages/db/schema/` per ADR-0006 §1 (supersedes ADR-0003 §4 location); migrations in `apps/api/drizzle/`                                               | §2.3                        |
+| Release tooling        | changesets + `changesets/action` GitHub workflow                                                                                                         | §2.4                        |
+| Commit convention      | conventional-commits (light, no enforce)                                                                                                                 | §2.4                        |
+| Merge style            | squash-only                                                                                                                                              | §2.4                        |
+| Pre-commit hooks       | simple-git-hooks + lint-staged                                                                                                                           | §2.5                        |
+| Branch strategy        | trunk-based, branches `feat/DSO-NN-<slug>` short-lived                                                                                                   | §2.6                        |
+| Branch protection rule | Target-state contract per ADR-0008 §2.6 (deferred enforcement; required status check `ci` only)                                                          | §2.6                        |
+| CODEOWNERS Phase 0     | `* @sidorovanthon`                                                                                                                                       | §2.7                        |
+| CI runner              | GitHub-hosted `ubuntu-latest` for every job; batched topology — 8 executing jobs, one checkout + install per batch (#1237, #1249)                        | §2.8                        |
+| Dependabot             | weekly, grouped, ecosystems npm + github-actions                                                                                                         | §2.9                        |
+| Bootstrap steps        | extends AI-stack design spec §11 + steps 15–22                                                                                                           | §2.10                       |
 
 ---
 
@@ -862,7 +862,7 @@ Phase 0 (greenfield, brainstorm complete). Pre-pilot target: 2026 Q3 (TBD).
 - **Data:** Postgres 17 + Drizzle + pgvector (ADR-0003); schemas in `packages/db/`, migrations in `apps/api/drizzle/`
 - **Frontend:** Next.js 15 + Refine; 4 apps — `apps/promo/`, `apps/portal/`, `apps/admin/`, `apps/cms/` (Payload v3 content-only) (ADR-0004)
 - **Mobile:** React Native + Expo + WatermelonDB (ADR-0005); `apps/mobile/`
-- **Docs:** Fumadocs (`apps/docs/`) + Keystatic editor (`apps/docs-cms/`) + glossary.yaml in `apps/docs/content/product/glossary/` (ADR-0006)
+- **Docs:** Fumadocs (`apps/docs/`) + glossary.yaml in `apps/docs/content/product/glossary/` (ADR-0006)
 - **AI dev loop:** Claude Code + Codex async + reviewer-bot (ADR-0007)
 - **Repo:** pnpm workspaces + Turborepo + changesets + GitHub Actions CI on GitHub-hosted runners (ADR-0008 §2.8)
 - **Identity:** Zitadel (ADR-0001 §8, closed per DSP-209) + Cerbos RBAC (ADR-0003 §5)
@@ -920,7 +920,7 @@ Concrete workflow when a trigger fires (any of OQ-R1..R12):
 - **ADR-0004** §7 — Payload v3 in `apps/cms/` (content-only, `cms.*` schema namespace shared Postgres).
 - **ADR-0004** §13 — `packages/eslint-config/` exports the `no-vercel-only-api` rule.
 - **ADR-0005** — `apps/mobile/` — Expo SDK 53, separate build/release pipeline (Expo EAS).
-- **ADR-0006** §1, §2, §3, §6, §7, §9, §10 — doc topology, Fumadocs, Keystatic, glossary, drift guards, task-tracker split: materialised in layout §2.3 + tooling §3.
+- **ADR-0006** §1, §2, §3, §6, §7, §9, §10 — doc topology, Fumadocs, glossary, drift guards, task-tracker split: materialised in layout §2.3 + tooling §3.
 - **ADR-0007** §2.4 (orchestrated iteration cycle), §2.5 (bootstrap), §2.6 (drift guards), §2.8 (reviewer-bot), §2.10 (cost-ledger), §2.11 (autonomy + kill switch); **AI-stack design spec §11** (14-step migration plan): this ADR-0008 + spec — operational ground for §11 migration steps.
 - **Engineering-readiness spec** (`../specs/tech/2026-05-12-engineering-readiness-design-en.md`) — runtime tooling defaults: Caddy/Traefik, Coolify, GlitchTip, Loki+Prometheus+Tempo, Vault, Unleash, Beget DNS. Referenced from `README.md` § Runtime tooling. Not duplicated in ADR-0008.
 

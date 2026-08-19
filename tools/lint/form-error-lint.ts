@@ -59,8 +59,8 @@ const TAG = "[form-error]";
 
 // App-level UI source — the product apps that consume `@ds/design-system`
 // (portal / promo / admin / academy-demo), matching the `interaction-states` /
-// registry-research surface scope. `apps/docs` (Fumadocs), `apps/cms`/`apps/docs-cms`
-// (Payload/Keystatic) and `apps/mobile` (React Native — no DOM `role="alert"`)
+// registry-research surface scope. `apps/docs` (Fumadocs), `apps/cms` (Payload)
+// and `apps/mobile` (React Native — no DOM `role="alert"`)
 // theme off their own host framework and do not consume the DS form primitives,
 // so "route through `FormError`" is not their contract.
 const APP_GLOBS = [

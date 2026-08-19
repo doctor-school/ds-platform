@@ -102,7 +102,7 @@ const PRIMITIVE_IGNORE = [
 // Surface scope = the UI apps that consume `@ds/design-system` (portal / promo /
 // admin / the dev-only Academy review app), matching registry-research.
 // `apps/docs`
-// (Fumadocs), `apps/cms`/`apps/docs-cms` (Payload/Keystatic) and `apps/mobile`
+// (Fumadocs), `apps/cms` (Payload) and `apps/mobile`
 // (React Native — no DOM `<a>`/`next/link`) are deliberately NOT scanned: they do
 // not depend on the DS `Link` primitive and theme off their own host framework
 // (Fumadocs `fd-*` tokens, Payload admin), so "route through the DS Link" is not

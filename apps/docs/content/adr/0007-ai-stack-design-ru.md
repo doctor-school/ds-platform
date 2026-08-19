@@ -77,7 +77,7 @@ orchestrated iteration cycle (`do-feature-iteration` оркеструет эти
 
 4. GREEN
    - Minimum code чтобы тесты прошли
-   - Respect SSOT-per-kind (ADR-0006 §3): no inline glossary IDs,
+   - Respect SSOT-per-kind (ADR-0006 §1): no inline glossary IDs,
      Zod ↔ Drizzle ↔ OpenAPI canonical sources
    - Run `pnpm generate:all` после edits в schemas/db/glossary
 
@@ -823,7 +823,7 @@ Single config flag в `.github/agents-config.json`:
 
 **Trigger:** first runtime AI feature deploy. Сейчас это запланировано как Content Pipeline v2 (LLM draft уроков) — см. `knowledge-base/documents/ds-platform-components/12-ai-content-pipeline.md` §3. Конкретная дата ≈ v2 milestone (после Pre-pilot, ~3-6 месяцев после Phase 0 закрыт).
 
-**Self-host honest framing (parallel to ADR-0006 §3 Keystatic/GitHub caveat):** Hetzner EU — non-RF compute (Германия). 152-ФЗ не нарушается потому что **ПДн не пересекают границу Zone RF → Zone AI**: PII Filter (см. §9.2) обезличивает payload **перед** mTLS egress. На границе проходят только sanitized prompts с placeholder-токенами. Это "self-host" в смысле «инфраструктура контролируется нами, не managed-vendor'ом», но **не "data sovereignty"** в строгом смысле (compute в EU). Trigger to revisit fallback: блокировка Hetzner EU из РФ (политически или сетево), или regulatory изменение требующее compute в РФ для AI-обработки — fallback к self-hosted в Timeweb с международным egress proxy (см. §9.6 sandbox / experimentation).
+**Self-host honest framing (parallel to the ADR-0006 §3 GitHub-hosting caveat):** Hetzner EU — non-RF compute (Германия). 152-ФЗ не нарушается потому что **ПДн не пересекают границу Zone RF → Zone AI**: PII Filter (см. §9.2) обезличивает payload **перед** mTLS egress. На границе проходят только sanitized prompts с placeholder-токенами. Это "self-host" в смысле «инфраструктура контролируется нами, не managed-vendor'ом», но **не "data sovereignty"** в строгом смысле (compute в EU). Trigger to revisit fallback: блокировка Hetzner EU из РФ (политически или сетево), или regulatory изменение требующее compute в РФ для AI-обработки — fallback к self-hosted в Timeweb с международным egress proxy (см. §9.6 sandbox / experimentation).
 
 **Архитектура (план):**
 

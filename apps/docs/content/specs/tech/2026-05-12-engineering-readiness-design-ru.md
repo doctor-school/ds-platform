@@ -65,13 +65,13 @@ Brainstorm-исследование подтвердило, что под AI-age
 
 ### Deferred до pilot (не делаем pre-pilot)
 
-- **Payload CMS** (`cms.doctor.school`). Pre-pilot контент — через Keystatic + git workflow / напрямую в repo.
+- **Payload CMS** (`cms.doctor.school`). Pre-pilot контент — через git workflow / напрямую в repo.
 - **Promo Next.js app** отдельным application. Pre-pilot promo — часть portal или статический snippet через docs.
 - **Mobile (RN + Expo)** — pre-pilot = responsive web / PWA. Mobile native — pilot trigger.
 - **Centrifugo** (real-time) — если первая pilot школа не делает live webinars.
 - **Tempo** (distributed tracing) — после GlitchTip + Loki.
 - **Unleash** (feature flags) — изначально отложен (pre-pilot работал на конфиге через env / DB). **Обновление (2026-06): вынесен вперёд.** 003 prod-readiness выявил конкретную операторскую потребность — переключать флаги доставки (`EMAIL_DELIVERY_MODE` / `SMS_DELIVERY_MODE`) и капчи (`BOT_PROTECTION_ENABLED`) в **рантайме** через UI, а не правкой `.env` + рестартом. Развёртывание Unleash self-hosted и перенос этих env-флагов в его админ-UI теперь активный трек бэклога (infra). Конфиг через env остаётся **промежуточным bootstrap-дефолтом + fail-closed fallback'ом**, пока это не приземлится.
-- **Glossary YAML sync / Keystatic editorial UI** — pre-pilot: pure markdown в repo.
+- **Glossary YAML sync** — pre-pilot: pure markdown в repo.
 - **Cross-vendor reviewer bot** — pre-pilot: один primary LLM-reviewer достаточно.
 - **Cost ledger automation** — pre-pilot: manual tracking.
 

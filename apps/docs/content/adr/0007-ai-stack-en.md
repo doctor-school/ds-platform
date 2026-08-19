@@ -12,7 +12,7 @@ lang: en
 **Status:** Accepted
 **Related to:** Plane DSO-30 (`fce557aa-4cfd-4466-b487-5ba165501a1f`), milestone DSO-24
 **Design spec:** `apps/docs/content/adr/0007-ai-stack-design-en.md`
-**Inherits:** ADR-0001 (Zitadel), ADR-0002 (NestJS + BullMQ), ADR-0003 (Postgres17 + pgvector), ADR-0004 (Next.js 15 + ESLint guards), ADR-0005 (RN+Expo), ADR-0006 (Fumadocs + Keystatic + SDD + GitHub Issues task split)
+**Inherits:** ADR-0001 (Zitadel), ADR-0002 (NestJS + BullMQ), ADR-0003 (Postgres17 + pgvector), ADR-0004 (Next.js 15 + ESLint guards), ADR-0005 (RN+Expo), ADR-0006 (Fumadocs + SDD + GitHub Issues task split)
 
 ---
 
@@ -192,7 +192,7 @@ Runtime gateway architecture:
 - **PII Filter applied unconditionally** to both routes — even YandexGPT inside the Russian Federation (RF) (Federal Law 152-FZ requires anonymization when sending to any third party).
 - **LiteLLM admin UI** has no native OIDC — will require an nginx forward-auth proxy with Zitadel (ADR-0001 tenant). Non-trivial setup; documented in the trigger-ADR.
 
-**Self-host honest framing (parallel to ADR-0006 §3 Keystatic/GitHub caveat):** Hetzner EU = non-RF compute. Federal Law 152-FZ is not violated because personal data (PD) is anonymized by the PII Filter **before** crossing the Zone RF → Zone AI boundary; only sanitized prompts cross the boundary. This is "self-host" in the sense of "infrastructure we control," but **not "data sovereignty"** in the strict sense (compute in EU). Trigger to revisit fallback: Hetzner blocked from RF, or regulatory requirement for AI compute-in-RF — fallback to Timeweb self-hosted with an international egress proxy.
+**Self-host honest framing (parallel to the ADR-0006 §3 GitHub-hosting caveat):** Hetzner EU = non-RF compute. Federal Law 152-FZ is not violated because personal data (PD) is anonymized by the PII Filter **before** crossing the Zone RF → Zone AI boundary; only sanitized prompts cross the boundary. This is "self-host" in the sense of "infrastructure we control," but **not "data sovereignty"** in the strict sense (compute in EU). Trigger to revisit fallback: Hetzner blocked from RF, or regulatory requirement for AI compute-in-RF — fallback to Timeweb self-hosted with an international egress proxy.
 
 **Pre-v2 prerequisite — dual-LLM pattern for user content:** before launching Content Pipeline v2 — a formal assessment of whether user-controlled content (briefs from co-authors, file uploads) enters the pipeline. If yes — the OWASP dual-LLM pattern (privileged + quarantined LLM) is implemented in the trigger-ADR, not deferred further.
 

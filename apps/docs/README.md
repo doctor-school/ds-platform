@@ -3,7 +3,7 @@
 The DS Platform **documentation site** — ADRs, feature/tech specs, the skill
 catalog, and the product glossary, rendered with **Fumadocs** (Next.js App
 Router) (ADR-0006). This is the read/render surface; content is authored as MDX
-in `content/` (and edited through `@ds/docs-cms`, the Keystatic companion).
+in `content/` and edited in the IDE / by agents, straight in Git.
 
 ## Public surface
 
@@ -36,4 +36,4 @@ pnpm --filter @ds/docs lint       # eslint .
 
 ## Owning ADR
 
-- **ADR-0006** — documentation & SSOT (Fumadocs + Keystatic + glossary).
+- **ADR-0006** — documentation & SSOT (Fumadocs + glossary).

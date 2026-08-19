@@ -18,7 +18,7 @@ mode: inline
 1. **Explicit reflection.** Re-read your own session transcript (the current conversation) for moments where you took a decision that:
    - **Deviated from a documented convention** in an ADR or AGENTS.md without amending the convention.
    - **Substituted a generic label / convention** for a project-specific one because the project one wasn't set up (e.g., the `enhancement` for `feature:NNN-<slug>` pattern in G11 finding F-8).
-   - **Skipped a checklist item** with a silent N/A that deserves a follow-up (e.g., "deferred glossary terms because no Keystatic UI yet").
+   - **Skipped a checklist item** with a silent N/A that deserves a follow-up (e.g., "deferred the module README because the API surface was still moving").
    - **Made an architectural call** that the spec didn't pre-resolve (e.g., chose Vitest config layout pattern that the spec didn't dictate).
 2. **For each item, classify it against the significance threshold (AGENTS.md §6)** — a tracker Issue ONLY when the debt (a) blocks / sits on the critical path of a product deliverable, (b) is user-visible or a prod risk (security/data), or (c) must be acted on before the next release — then route:
    - **Above threshold → open a follow-up Issue** with label `decision-debt` **and exactly one `source:*` provenance label** (`source:retro` for a ritual-surfaced item; `source:agent` if surfaced mid-execution; `source:owner` only with a quotable owner request) — `pnpm issue:create --label decision-debt --label source:retro --label chore --milestone "Platform ops & hardening" --title "..." --body-file ...` (the wrapper refuses creation without exactly one `source:*` label, exactly one kind label, and a milestone; pick the honest kind label and the theme milestone when one fits).

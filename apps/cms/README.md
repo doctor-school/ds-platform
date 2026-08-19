@@ -2,8 +2,7 @@
 
 The DS Platform **content-management app** — the marketing/content CMS built on
 **Payload v3** (ADR-0004: promo / portal / admin / cms-Payload-v3). It owns
-editorial content for the public-facing surfaces (distinct from `@ds/docs-cms`,
-which manages the engineering docs corpus).
+editorial content for the public-facing surfaces.
 
 ## Status — reserved scaffold
 

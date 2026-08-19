@@ -81,7 +81,7 @@ const TAG = "[aa-contrast]";
 // living showcase (apps/showcase — the surface the #351 retarget caught the 4 defects on),
 // and the apps that consume @ds/design-system (portal / promo / admin / the
 // dev-only Academy review app). `apps/docs`
-// (Fumadocs), `apps/cms`/`apps/docs-cms` (Payload/Keystatic) and `apps/mobile` (RN) theme
+// (Fumadocs), `apps/cms` (Payload) and `apps/mobile` (RN) theme
 // off their own host framework and do not consume these tokens, so the rule is not theirs —
 // matching the `interaction-states` / `submit-pending` scope.
 const SCAN_GLOBS = [

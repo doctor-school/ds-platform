@@ -12,7 +12,7 @@ lang: en
 **Status:** Accepted
 **Related to:** Plane DSO-31 (`fae57ab6-f09b-4a4d-9ede-9a4f1ca504c0`), milestone DSO-24
 **Design spec:** `apps/docs/content/adr/0008-repo-strategy-and-dev-workflow-design-en.md`
-**Inherits:** ADR-0001 (Zitadel), ADR-0002 (NestJS+BullMQ), ADR-0003 (Postgres17+Drizzle), ADR-0004 (Next.js 15+Refine), ADR-0005 (RN+Expo), ADR-0006 (Fumadocs+Keystatic+GitHub Issues), ADR-0007 (AI loop + interactive review modes)
+**Inherits:** ADR-0001 (Zitadel), ADR-0002 (NestJS+BullMQ), ADR-0003 (Postgres17+Drizzle), ADR-0004 (Next.js 15+Refine), ADR-0005 (RN+Expo), ADR-0006 (Fumadocs+GitHub Issues), ADR-0007 (AI loop + interactive review modes)
 
 ---
 
@@ -87,7 +87,7 @@ ds-platform/
 │   │       ├── operations/      # runbooks, monitoring (ADR-0006 §1, §10)
 │   │       ├── product/
 │   │       │   ├── vision.md
-│   │       │   ├── prd/         # PRD chapters (Keystatic collection)
+│   │       │   ├── prd/         # PRD chapters
 │   │       │   ├── business-rules.md
 │   │       │   ├── user-journeys.md
 │   │       │   └── glossary/    # file-per-term master (ADR-0006 §6)
@@ -95,9 +95,9 @@ ds-platform/
 │   │       │   ├── tech/        # tech-spec brainstorm outputs (ADR-0006 §4)
 │   │       │   └── features/NNN-<slug>/   # SDD 3-file (ADR-0006 §4)
 │   │       └── user-guides/     # Diátaxis (ADR-0006 §10)
-│   ├── docs-cms/                # Keystatic editor (ADR-0006 §3, SEPARATE Next.js app)
-│   │   └── keystatic.config.ts
-│   └── mobile/                  # Expo/RN (ADR-0005)
+│   ├── mobile/                  # Expo/RN (ADR-0005)
+│   ├── academy-demo/            # dev-only Academy review surface (ADR-0013)
+│   └── showcase/                # dev-only design-system showcase (ADR-0013)
 ├── packages/
 │   ├── schemas/                 # Zod API SSOT (ADR-0002 §3-5, ADR-0006 §1)
 │   ├── api-client/              # generated openapi-typescript SDK (ADR-0002, ADR-0006 §1)
@@ -253,15 +253,15 @@ Pre-DSO-31 admin (Tech Lead, ≤10 minutes, manual):
 
 Phase 0 implementation steps — extends AI-stack design spec §11. Steps 1–14 from AI-stack design spec §11 unchanged. Additional steps (DSO-32 children or new work-item):
 
-| Step | Action                                                                                                                                                                                                                                                                                                                                                        | Output                                       |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| 15   | Initialise root `package.json` + `pnpm-workspace.yaml` + `turbo.json` + `tsconfig.base.json` + `.changeset/config.json` + `.editorconfig` + `.gitignore` + `.gitattributes` + `.npmrc` + `.nvmrc`                                                                                                                                                             | repo bootstraps locally                      |
-| 16   | Create `.github/` minimal skeleton: `workflows/{ci,release}.yml`, `CODEOWNERS`, `pull_request_template.md`, `ISSUE_TEMPLATE/{feature,bug,chore}.md`, `dependabot.yml`. CI references only tools that already exist or skips gracefully                                                                                                                        | CI runs on first push                        |
-| 17   | Install `simple-git-hooks` + `lint-staged` in root `package.json` + `simple-git-hooks` config section                                                                                                                                                                                                                                                         | pre-commit works                             |
-| 19   | Initialise empty workspace stubs: `apps/{api,promo,portal,admin,cms,docs,docs-cms,mobile}/` + `packages/{schemas,api-client,db,glossary,hooks,design-system,observability,utils,eslint-config,tsconfig}/`, each with a minimal `package.json` (`name: @ds/<name>`, `version: 0.0.0`, `private: true`) + optional per-package `turbo.json` for script-stub map | workspace discoverable                       |
-| 20   | Initialise `apps/docs/` as a Fumadocs Next.js app (see ADR-0006 §2) — ADR content + paired design specs reside in `content/adr/`. Initialise `apps/docs-cms/` as a Keystatic Next.js app (ADR-0006 §3)                                                                                                                                                        | doc portal builds                            |
-| 21   | **[Manual, admin]** Apply repository settings (`allow_squash_merge=true`, `allow_rebase_merge=false`, `allow_merge_commit=false`, `delete_branch_on_merge=true`) via `gh api`. Commit the target-state branch-protection payload to `branch-protection.json` at repo root. See design spec §4 for exact commands and the reactivation trigger (§2.6)          | squash-only enforced; target rule documented |
-| 22   | Smoke test: create the first feature-spec (`NNN-onboarding` or similar) and run the iteration cycle ADR-0007 §2.4 end-to-end                                                                                                                                                                                                                                  | proof of concept                             |
+| Step | Action                                                                                                                                                                                                                                                                                                                                               | Output                                       |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| 15   | Initialise root `package.json` + `pnpm-workspace.yaml` + `turbo.json` + `tsconfig.base.json` + `.changeset/config.json` + `.editorconfig` + `.gitignore` + `.gitattributes` + `.npmrc` + `.nvmrc`                                                                                                                                                    | repo bootstraps locally                      |
+| 16   | Create `.github/` minimal skeleton: `workflows/{ci,release}.yml`, `CODEOWNERS`, `pull_request_template.md`, `ISSUE_TEMPLATE/{feature,bug,chore}.md`, `dependabot.yml`. CI references only tools that already exist or skips gracefully                                                                                                               | CI runs on first push                        |
+| 17   | Install `simple-git-hooks` + `lint-staged` in root `package.json` + `simple-git-hooks` config section                                                                                                                                                                                                                                                | pre-commit works                             |
+| 19   | Initialise empty workspace stubs: `apps/{api,promo,portal,admin,cms,docs,mobile}/` + `packages/{schemas,api-client,db,glossary,hooks,design-system,observability,utils,eslint-config,tsconfig}/`, each with a minimal `package.json` (`name: @ds/<name>`, `version: 0.0.0`, `private: true`) + optional per-package `turbo.json` for script-stub map | workspace discoverable                       |
+| 20   | Initialise `apps/docs/` as a Fumadocs Next.js app (see ADR-0006 §2) — ADR content + paired design specs reside in `content/adr/`                                                                                                                                                                                                                     | doc portal builds                            |
+| 21   | **[Manual, admin]** Apply repository settings (`allow_squash_merge=true`, `allow_rebase_merge=false`, `allow_merge_commit=false`, `delete_branch_on_merge=true`) via `gh api`. Commit the target-state branch-protection payload to `branch-protection.json` at repo root. See design spec §4 for exact commands and the reactivation trigger (§2.6) | squash-only enforced; target rule documented |
+| 22   | Smoke test: create the first feature-spec (`NNN-onboarding` or similar) and run the iteration cycle ADR-0007 §2.4 end-to-end                                                                                                                                                                                                                         | proof of concept                             |
 
 Dependency graph: 15 → 16 → 17 → 19 parallel with 15. 20 depends on 19. 21 depends on 16. 22 depends on everything.
 
@@ -375,7 +375,7 @@ Step 21 — admin-only. Step 22 — joint Tech Lead+AI.
 - ADR-0004 §7 — Payload v3 content-only: `apps/cms/`, marketing-content in `cms.*` schema namespace shared Postgres.
 - ADR-0004 §13 — ESLint `no-vercel-only-api` rule: exported from `packages/eslint-config/`.
 - ADR-0005 — RN/Expo mobile: `apps/mobile/` workspace, separate build with Expo EAS.
-- ADR-0006 §1, §2, §3, §9 — doc topology, Fumadocs, Keystatic, task-tracker split: all materialised in layout §2.3.
+- ADR-0006 §1, §2, §3, §9 — doc topology, Fumadocs, task-tracker split: all materialised in layout §2.3.
 - ADR-0007 §2.5, §2.6, §2.10 — bootstrap, lint drift guards, autonomy ladder (interactive review modes); AI-stack design spec §11 — migration plan: materialised in `tools/` + `.github/workflows/`.
 
 **Delegated to other tasks:**

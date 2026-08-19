@@ -49,7 +49,7 @@ lang: ru
 - App-split decision (1 / 2 / 3 / 4 apps).
 - Rendering strategy per surface (SSG / SSR / RSC hybrid).
 - Admin/CMS approach (headless CMS vs admin-UI framework vs custom).
-- Promo content source (MDX / Decap / TinaCMS / Payload).
+- Promo content source (MDX / Decap / TinaCMS / Keystatic / Payload).
 - Design-system stack (styling + UI-kit + icons).
 - Data-fetching pattern.
 - Forms pattern.
@@ -606,18 +606,18 @@ Payload v3 имеет **MCP server** — AI-агент (Claude Code, Cursor) м�
 
 ### 10.6. Обоснование выбора (без doc-bias)
 
-| Критерий                                  | Вес    | MDX inline | Decap CMS | TinaCMS | **Payload content-only** |
-| ----------------------------------------- | ------ | ---------- | --------- | ------- | ------------------------ |
-| SSOT enforcement (placeholders/relations) | High   | +1         | +1        | +3      | **+3**                   |
-| AI-friendliness                           | High   | +3         | +3        | +2      | +2 (MCP)                 |
-| UI quality для маркетолога                | High   | -3         | -2        | +3      | **+3**                   |
-| Modern, AI-native                         | High   | +1         | -2        | +2      | **+3**                   |
-| Маркетолог без git                        | High   | -3         | +3        | +3      | **+3**                   |
-| Schema-as-code в git                      | Medium | +3         | 0         | +2      | **+3**                   |
-| Self-host RF                              | High   | +3         | +3        | +2      | +3                       |
-| License MIT без cap                       | Medium | +3         | +3        | +2      | +3                       |
-| Operational complexity                    | Medium | +3         | +2        | 0       | **-1**                   |
-| **Weighted (H=3, M=2)**                   |        | **21**     | 25        | 51      | **64**                   |
+| Критерий                                  | Вес    | MDX inline | Decap CMS | TinaCMS | Keystatic | **Payload content-only** |
+| ----------------------------------------- | ------ | ---------- | --------- | ------- | --------- | ------------------------ |
+| SSOT enforcement (placeholders/relations) | High   | +1         | +1        | +3      | +2        | **+3**                   |
+| AI-friendliness                           | High   | +3         | +3        | +2      | +3        | +2 (MCP)                 |
+| UI quality для маркетолога                | High   | -3         | -2        | +3      | +2        | **+3**                   |
+| Modern, AI-native                         | High   | +1         | -2        | +2      | +3        | **+3**                   |
+| Маркетолог без git                        | High   | -3         | +3        | +3      | +3        | **+3**                   |
+| Schema-as-code в git                      | Medium | +3         | 0         | +2      | +3        | **+3**                   |
+| Self-host RF                              | High   | +3         | +3        | +2      | +3        | +3                       |
+| License MIT без cap                       | Medium | +3         | +3        | +2      | +3        | +3                       |
+| Operational complexity                    | Medium | +3         | +2        | 0       | +2        | **-1**                   |
+| **Weighted (H=3, M=2)**                   |        | **21**     | 25        | 51      | 61        | **64**                   |
 
 Payload выигрывает потому что закрывает 5 строгих требований одновременно:
 
@@ -631,7 +631,7 @@ Trade-off — operational complexity (-1): Payload это новый Next.js app
 
 ### 10.7. Trigger пересмотра
 
-OQ-F4: если маркетинг scope сузится до 3-5 статических лендингов И не возникнет потребности в inline-glossary references в rich-text → можно переехать на git-based flat-file CMS (без сервера). Trigger: маркетинг-команда осознанно отказывается от polished admin UI ради zero ops overhead.
+OQ-F4: если маркетинг scope сузится до 3-5 статических лендингов И не возникнет потребности в inline-glossary references в rich-text → можно переехать на Keystatic (git-based, без сервера). Trigger: маркетинг-команда осознанно отказывается от polished admin UI ради zero ops overhead.
 
 ---
 
@@ -903,7 +903,7 @@ Custom ESLint rule `no-vercel-only-api` блокирует следующие im
 | OQ-F1     | Миграция `apps/promo` на Astro                                                                                                             | Маркетинг ≥3 разработчиков, PageSpeed промо <90 на mobile, demand на visual-CMS workflow                                                                                                                                                                                                                                                                                                                                                                      |
 | OQ-F2     | Portal split на multiple apps (доктор/эксперт/клиника/инвестор)                                                                            | Portal-bundle >500KB gzipped, или expert-CMS получает отдельный security threat model                                                                                                                                                                                                                                                                                                                                                                         |
 | OQ-F3     | Scaling топологии v3                                                                                                                       | 1M MAU достигнут, или Centrifugo+SSR на одном VPS становится bottleneck                                                                                                                                                                                                                                                                                                                                                                                       |
-| OQ-F4     | Migration Payload → git-based flat-file CMS                                                                                                | Маркетинг scope сужается до 3-5 статических лендингов И inline-glossary не нужен                                                                                                                                                                                                                                                                                                                                                                              |
+| OQ-F4     | Migration Payload → Keystatic                                                                                                              | Маркетинг scope сужается до 3-5 статических лендингов И inline-glossary не нужен                                                                                                                                                                                                                                                                                                                                                                              |
 | OQ-F5     | Auth perimeter cms vs admin                                                                                                                | Решено split: маркетинг ≠ модераторы. Пересмотр если threat models сольются                                                                                                                                                                                                                                                                                                                                                                                   |
 | ~~OQ-F6~~ | ~~Timeweb CDN native image transforms~~ — **закрыт 2026-05-14:** feature не существует на Timeweb CDN. Sharp on Node остаётся primary path | —                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | OQ-F7     | Offline-уроки в PWA web                                                                                                                    | DSO-29 mobile sync-strategy фиксирует pattern; web подхватывает                                                                                                                                                                                                                                                                                                                                                                                               |

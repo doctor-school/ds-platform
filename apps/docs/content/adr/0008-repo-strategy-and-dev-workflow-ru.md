@@ -95,7 +95,9 @@ ds-platform/
 │   │       │   ├── tech/        # tech-spec brainstorm outputs (ADR-0006 §4)
 │   │       │   └── features/NNN-<slug>/   # SDD 3-file (ADR-0006 §4)
 │   │       └── user-guides/     # Diátaxis (ADR-0006 §10)
-│   └── mobile/                  # Expo/RN (ADR-0005)
+│   ├── mobile/                  # Expo/RN (ADR-0005)
+│   ├── academy-demo/            # dev-only Academy review surface (ADR-0013)
+│   └── showcase/                # dev-only design-system showcase (ADR-0013)
 ├── packages/
 │   ├── schemas/                 # Zod API SSOT (ADR-0002 §3-5, ADR-0006 §1)
 │   ├── api-client/              # generated openapi-typescript SDK (ADR-0002, ADR-0006 §1)

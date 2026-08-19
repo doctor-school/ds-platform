@@ -78,7 +78,7 @@ The orchestrated iteration cycle (`do-feature-iteration` orchestrates these):
 
 4. GREEN
    - Minimum code to pass tests
-   - Respect SSOT-per-kind (ADR-0006 §3): no inline glossary IDs,
+   - Respect SSOT-per-kind (ADR-0006 §1): no inline glossary IDs,
      Zod ↔ Drizzle ↔ OpenAPI canonical sources
    - Run `pnpm generate:all` after edits in schemas/db/glossary
 

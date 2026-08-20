@@ -281,6 +281,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // under, carried over from the pending authentication so the EARS-13
       // factor-removal route draws on the SAME budget primary auth does instead of
       // opening a fourth allowance of its own. It authenticates nothing.
+      //
+      // `mfaVerifiedAtMs` (#1304) is a server-recorded elevation timestamp — the
+      // millisecond at which THIS server observed the second factor, written by
+      // the server and never accepted from a client. It is PD-free, is not
+      // credential material, and cannot be replayed: possessing the number grants
+      // nothing, and forging it is impossible without already holding the record.
+      // It is what the high-stakes guard measures step-up freshness against, which
+      // is precisely why it is a timestamp rather than a token at rest.
       expect(Object.keys(record).sort()).toEqual(
         [
           "csrfToken",
@@ -288,6 +296,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
           "fingerprint",
           "identifier",
           "mfa",
+          "mfaVerifiedAtMs",
           "roles",
           "sid",
           "sub",

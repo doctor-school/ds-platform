@@ -1,4 +1,5 @@
 import { Logger, Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
 import { Redis } from "ioredis";
 import { loadEnv } from "../../config/env.schema.js";
 import { MailerModule } from "../../mailer/mailer.module.js";
@@ -22,6 +23,7 @@ import {
 } from "./admin-session-store.redis.js";
 import { AdminSessionService } from "./admin-session.service.js";
 import { AdminSessionAuthHook } from "./admin-session-auth.hook.js";
+import { AdminAuthorityGuard } from "./admin-authority.guard.js";
 import { AdminAuthController } from "./admin-auth.controller.js";
 import { AdminUsersController } from "./admin-users.controller.js";
 
@@ -76,6 +78,15 @@ import { AdminUsersController } from "./admin-users.controller.js";
     AdminSessionService,
     AdminSessionAuthHook,
     MfaLockoutService,
+    // #1304: a SECOND global guard beside `AuthzGuard`. It lives in this module
+    // rather than in `AuthzModule` because it needs `AdminSessionService` (the
+    // session record carries the wrapped Zitadel session id and the elevation
+    // timestamp), and pulling the admin-session tier into the authz module to
+    // register a guard would invert the dependency — authz classifies routes, it
+    // does not know about the 011 session store. Registering an APP_GUARD from a
+    // feature module is the documented Nest pattern and applies app-wide, which
+    // is exactly the property the "no handler can bypass" AC needs.
+    { provide: APP_GUARD, useClass: AdminAuthorityGuard },
   ],
   exports: [AdminSessionService, MfaLockoutService],
 })

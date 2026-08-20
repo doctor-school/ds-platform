@@ -584,10 +584,16 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const columns = line!.split("|").map((c) => c.trim());
       expect(columns).toContain("authenticated");
       expect(columns).toContain("platform_admin");
-      // step_up is the 7th data column; asserting membership of `false` would
-      // also match another column, so pin the position.
+      // Positional, not membership: `false` / `none` each also appear in other
+      // columns, so pin the index. Split on `|` leaves columns[0] empty, so the
+      // Nth data column is columns[N]: 6 = step_up, 7 = revalidate, 8 = audit.
       expect(columns[6]).toBe("false");
-      expect(columns[7]).toBe("high-stakes");
+      // #1304 inserted `revalidate` between step_up and audit. The factor-removal
+      // route is deliberately `none`: it carries 011's route-local fresh-TOTP
+      // proof, a stronger statement than a window-freshness re-ask, so state that
+      // posture positively rather than merely tolerating the new column.
+      expect(columns[7]).toBe("none");
+      expect(columns[8]).toBe("high-stakes");
     });
   },
 );

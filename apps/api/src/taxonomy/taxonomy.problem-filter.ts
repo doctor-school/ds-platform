@@ -7,6 +7,10 @@ import {
   Logger,
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import {
+  AdminAuthorityException,
+  adminAuthorityProblem,
+} from "../auth/admin-session/admin-authority.problem.js";
 import { IdempotencyService } from "./idempotency.service.js";
 import {
   PROBLEM_TYPE_BASE,
@@ -75,6 +79,28 @@ export class TaxonomyProblemFilter implements ExceptionFilter {
           );
         }
       }
+      void reply
+        .status(body.status)
+        .header("content-type", "application/problem+json")
+        .send(body);
+      return;
+    }
+
+    // #1304: the global `AdminAuthorityGuard` refuses BEFORE any 012 work, with
+    // a fully-formed problem body of its own. It is passed through verbatim
+    // (only `traceId`/`instance` are added here, the two per-request fields the
+    // guard cannot know) rather than re-derived from the status: the guard
+    // distinguishes refusals this filter's status table cannot — 401
+    // `STEP_UP_REQUIRED` vs 401 `ADMIN_SESSION_REQUIRED`, 403 `PD_OFFICER_REQUIRED`
+    // vs 403 `PLATFORM_ADMIN_REQUIRED` — and its 503 has no status mapping here
+    // at all, so without this branch a provider outage would surface as an opaque
+    // 500 and lose the one distinction #1304 exists to preserve.
+    if (exception instanceof AdminAuthorityException) {
+      const body = {
+        ...adminAuthorityProblem(exception.errorCode, exception.stepUpUrl),
+        traceId,
+        instance,
+      };
       void reply
         .status(body.status)
         .header("content-type", "application/problem+json")

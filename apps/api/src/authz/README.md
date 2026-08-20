@@ -92,6 +92,48 @@ empty claim or an under-classification to `low-stakes` that would hide the route
 from the guard. The schema and its accept/reject rules are unit-tested in
 `src/authz/audit-emission-coverage.spec.ts` (no database).
 
+## The `revalidate` / `stepUp` fields: live admin authority (#1304)
+
+`@Authz` carries two more enforced fields on the token-free admin tier, and the
+generated matrix renders them as the `revalidate` / `step_up` columns:
+
+- **`revalidate: "live"`** — before the handler runs, the caller's authority is
+  re-read from the IdP, not merely believed from the local admin-session record.
+  A revocation that happened after the session was minted refuses the call.
+- **`stepUp: true`** — the route additionally demands a server-verified MFA
+  elevation no older than the window pinned in `authz.types.ts`.
+
+Enforcement lives in a **second global guard**, `AdminAuthorityGuard`
+(`src/auth/admin-session/admin-authority.guard.ts`, registered as an
+`APP_GUARD` by `AdminSessionModule`), running alongside `AuthzGuard`. The split
+is deliberate: `AuthzGuard` answers "is this route classified, and does the
+request subject hold the role" from local metadata; `AdminAuthorityGuard` makes
+the **network** hop (`IdpClient.revalidateAdminAuthority`) and owns the
+refusals that hop can produce. Normative order is **authority before
+presence**: a caller who has lost the role gets `403` even when their elevation
+is also stale — a stale-MFA `401` must never be the answer to someone who is no
+longer an admin. Refusals precede all validation / idempotency / upload /
+domain / audit work.
+
+| Verdict                | Refusal                                                   |
+| ---------------------- | --------------------------------------------------------- |
+| session inactive       | `401 ADMIN_SESSION_REQUIRED`                              |
+| role no longer held    | `403 PLATFORM_ADMIN_REQUIRED` / `403 PD_OFFICER_REQUIRED` |
+| elevation absent/stale | `401 STEP_UP_REQUIRED` + `stepUpUrl`                      |
+| IdP unavailable        | `503 IDP_REVALIDATION_UNAVAILABLE`                        |
+
+The `503` is **not** a credential denial — an outage must never read as "you
+are not an admin"; see [`../auth/idp/README.md`](../auth/idp/README.md).
+
+**Coverage registry (default-deny).**
+`admin-revalidation-coverage.spec.ts` discovers the real router and asserts that
+every admin mutation either carries `revalidate: "live"` or is named in
+`REVALIDATION_EXEMPT` with a written reason. Adding an admin mutation without
+accounting for its revalidation fails the suite; the registry is anti-rot in
+both directions (an exemption for a route the router no longer registers, or
+for a route that IS wired, also fails). Deferred exemptions are tracked in
+`DEBT.md`, not in code comments.
+
 ## Seams filled by later work (not E3)
 
 `@Authz` deliberately records intent that downstream subsystems enforce. These

@@ -102,6 +102,12 @@ export class ExpertsAdminController {
     access: "authenticated",
     roles: ["platform_admin"],
     check: "fast-path",
+    // #1304 (ADR-0001 §10): a state-changing admin command is high-stakes, so
+    // the role is re-established against the LIVE IdP before anything happens —
+    // the guard refuses ahead of validation, the idempotency reservation and any
+    // portrait upload, so a revoked grant cannot leave a half-written expert
+    // behind. Reads keep it absent, by the same cost argument.
+    revalidate: "live",
     // The domain audit row is written by feature 010's capture trigger inside
     // the command transaction (012-design §6), not by an authz-tier emission —
     // so this is the same `low-stakes` AUTH-audit tier as 007's authoring writes.
@@ -188,6 +194,8 @@ export class ExpertsAdminController {
     access: "authenticated",
     roles: ["platform_admin"],
     check: "fast-path",
+    // #1304 — same high-stakes posture as the create route above.
+    revalidate: "live",
     audit: "low-stakes",
     tests: ["EARS-2", "EARS-16", "EARS-17"],
   })

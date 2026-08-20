@@ -3,6 +3,7 @@ import {
   IdpInvalidArgumentError,
   IdpPasswordPolicyError,
   IdpUnavailableError,
+  type AdminAuthorityVerdict,
   type CreatedUser,
   type CreateUserInput,
   type EmailLoginOutcome,
@@ -13,6 +14,7 @@ import {
   type IdpTokens,
   type IdpUser,
   type PasswordLoginResult,
+  type RevalidateAdminAuthorityInput,
   type TotpRegistration,
 } from "./idp.types.js";
 import { InMemoryOtpChallengeStore } from "./otp-challenge-store.fake.js";
@@ -1596,6 +1598,160 @@ export class ZitadelIdpClient implements IdpClient {
     return (data.result ?? [])
       .filter((grant) => grant.projectId === this.config.projectId)
       .flatMap((grant) => grant.roleKeys ?? []);
+  }
+
+  /**
+   * #1304: live authority revalidation for a token-free admin session.
+   *
+   * Three service-authenticated reads, in refusal order — each one able to end
+   * the check, none of them able to turn a provider fault into a denial:
+   *
+   * 1. `GET /v2/sessions/{id}` — is the wrapped Zitadel session still there, and
+   *    is it still the session of THIS `sub`? A 404 is the one non-2xx that means
+   *    "the credential is gone" (the resource genuinely does not exist); every
+   *    other non-2xx — including a 401/403 on the SERVICE token, a 429, a 5xx —
+   *    means we could not find out, which is `unavailable`. An expired
+   *    `expirationDate` is `inactive` even on a 200, because Zitadel keeps the
+   *    resource readable past its expiry.
+   * 2. User v2 search on the sub — is the ACCOUNT still active? A disabled or
+   *    deleted admin must not ride an unexpired session. Unlike
+   *    {@link getUser} (which fails SOFT to `null` for the mirror self-heal),
+   *    a fault here is `unavailable`: the whole contract of this method is that
+   *    "we could not check" is never "you are not allowed".
+   * 3. {@link getProjectRoles} — does `sub` still hold `requiredRole`? It throws
+   *    {@link IdpUnavailableError} on every fault (including the missing
+   *    `IDP_PROJECT_ID` config), which is folded into `unavailable` here.
+   *
+   * Nothing is written and no user token is obtained, so the 011 token-free
+   * boundary is untouched: the session record gains no new credential.
+   */
+  async revalidateAdminAuthority(
+    input: RevalidateAdminAuthorityInput,
+  ): Promise<AdminAuthorityVerdict> {
+    const { zitadelSessionId, sub, requiredRole } = input;
+    if (!zitadelSessionId || !sub) {
+      // A record that names no session or no subject cannot be revalidated. It
+      // is a broken credential, not an outage — refuse as `inactive`.
+      return { outcome: "inactive", reason: "session_gone" };
+    }
+
+    // 1. The wrapped Zitadel session.
+    let sessionRes: Awaited<ReturnType<FetchLike>>;
+    try {
+      sessionRes = await this.fetchImpl(
+        this.url(`/v2/sessions/${zitadelSessionId}`),
+        { method: "GET", headers: this.headers() },
+      );
+    } catch (cause) {
+      return {
+        outcome: "unavailable",
+        reason: `session read unreachable: ${(cause as Error).message}`,
+      };
+    }
+    if (sessionRes.status === 404) {
+      return { outcome: "inactive", reason: "session_gone" };
+    }
+    if (!sessionRes.ok) {
+      return {
+        outcome: "unavailable",
+        reason: `session read failed: HTTP ${sessionRes.status}`,
+      };
+    }
+    let sessionData: {
+      session?: {
+        expirationDate?: string;
+        factors?: { user?: { id?: string } };
+      };
+    };
+    try {
+      sessionData = (await sessionRes.json()) as typeof sessionData;
+    } catch (cause) {
+      return {
+        outcome: "unavailable",
+        reason: `session read returned malformed data: ${(cause as Error).message}`,
+      };
+    }
+    const sessionSub = sessionData.session?.factors?.user?.id;
+    if (!sessionSub) {
+      // A 200 that names no checked user is a shape we cannot reason about —
+      // "malformed provider data" is explicitly an availability fault (#1304),
+      // never grounds to refuse a credential.
+      return {
+        outcome: "unavailable",
+        reason: "session read carried no checked user id",
+      };
+    }
+    if (sessionSub !== sub) {
+      return { outcome: "inactive", reason: "session_subject_mismatch" };
+    }
+    const expiry = sessionData.session?.expirationDate;
+    if (expiry) {
+      const expiresAtMs = Date.parse(expiry);
+      if (Number.isNaN(expiresAtMs)) {
+        return {
+          outcome: "unavailable",
+          reason: "session expirationDate is not a parseable timestamp",
+        };
+      }
+      if (expiresAtMs <= Date.now()) {
+        return { outcome: "inactive", reason: "session_gone" };
+      }
+    }
+
+    // 2. The account behind the session.
+    let userRes: Awaited<ReturnType<FetchLike>>;
+    try {
+      userRes = await this.fetchImpl(this.url("/v2/users"), {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({
+          queries: [{ inUserIdsQuery: { userIds: [sub] } }],
+        }),
+      });
+    } catch (cause) {
+      return {
+        outcome: "unavailable",
+        reason: `user read unreachable: ${(cause as Error).message}`,
+      };
+    }
+    if (!userRes.ok) {
+      return {
+        outcome: "unavailable",
+        reason: `user read failed: HTTP ${userRes.status}`,
+      };
+    }
+    let userData: { result?: Array<{ userId?: string; state?: string }> };
+    try {
+      userData = (await userRes.json()) as typeof userData;
+    } catch (cause) {
+      return {
+        outcome: "unavailable",
+        reason: `user read returned malformed data: ${(cause as Error).message}`,
+      };
+    }
+    const hit = userData.result?.[0];
+    if (!hit?.userId) {
+      // The search succeeded and the subject is not there — the account is gone.
+      return { outcome: "inactive", reason: "account_inactive" };
+    }
+    if (hit.state != null && hit.state !== "USER_STATE_ACTIVE") {
+      return { outcome: "inactive", reason: "account_inactive" };
+    }
+
+    // 3. The live project-role grant.
+    let roles: string[];
+    try {
+      roles = await this.getProjectRoles(sub);
+    } catch (cause) {
+      return {
+        outcome: "unavailable",
+        reason: `role read failed: ${(cause as Error).message}`,
+      };
+    }
+    if (!roles.includes(requiredRole)) {
+      return { outcome: "role_revoked", roles };
+    }
+    return { outcome: "active", sub, roles };
   }
 
   /**

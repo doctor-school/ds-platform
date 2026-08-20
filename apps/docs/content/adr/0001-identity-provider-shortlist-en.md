@@ -142,27 +142,45 @@ Cross-zone constraints: all profiles ship `Strict-Transport-Security: max-age=31
 
 **MFA bootstrap for legacy admin** — a separate elevated-session magic-link flow → mandatory TOTP/SMS enrollment within a 7-day window, otherwise manual unlock via support (spec §8.5).
 
-### 10. Step-up authentication for high-risk actions
+### 10. Live authority revalidation and step-up for high-risk actions
 
-The base session issued after primary login (§6) carries a single security level, uniform across read and write operations of any kind. For elevated-risk actions — destructive admin operations against users (role grant/revoke, lock, erasure-execute), account-level deletion / erasure-request by the subject, payment-method change, MFA changes, initiating PD export, logout-all — that uniform level is insufficient: an attacker holding a stolen long-lived session MUST NOT be able to execute a catastrophic action immediately without fresh re-authentication.
+The base session issued after primary login (§6) carries a single security level, uniform across read and write operations of any kind, and it is a *cached* statement about the principal: it was true at login and is replayed unchanged until it expires. For elevated-risk actions — destructive admin operations against users (role grant/revoke, lock, erasure-execute), the ADR-0009 erasure-plan approval, account-level deletion / erasure-request by the subject, payment-method change, MFA changes, initiating PD export, logout-all — that cached, uniform level is insufficient on two independent axes:
 
-Each step-up endpoint is flagged in the **endpoint-authorization-matrix** via the `@Authz({ step_up: true })` declaration; the normative list of step-up endpoints is the matrix projection of the rows carrying that flag (`step_up` is orthogonal to the `auth_check` kind, so it is an independent boolean, not an auth-check mode). The step-up trigger is OIDC `prompt=login` + `acr_values=urn:ds:acr:mfa-fresh` at the IdP. After successful step-up, the IdP MUST issue an access token with an additional claim `acr=mfa-fresh` and a `mfa_fresh_at` timestamp; the fresh step-up TTL is **30 minutes** (see identity-auth-rbac-design §7.1).
+- **Authority may have lapsed.** The account could have been disabled or the `platform_admin` grant revoked at the IdP seconds ago; the session says nothing about it until it expires.
+- **Presence may be stale.** An attacker holding a stolen long-lived session MUST NOT be able to execute a catastrophic action without fresh re-authentication.
 
-The backend MUST verify `acr=mfa-fresh` AND `mfa_fresh_at ≥ now − 30 min` on every endpoint flagged `step_up: true` via a single `StepUpGuard` middleware (see identity-auth-rbac-design — step-up mechanism — + backend-core middleware checklist). On failure — `401 Unauthorized` with body `{ error: 'step_up_required', step_up_url: '<IdP authorize URL with prompt=login + acr_values + redirect_uri + state>' }`. This error contract is normative (identity-auth-rbac-design); frontend and mobile MUST handle it.
+The two are answered by two independent declarations on the endpoint, both carried by the **endpoint-authorization-matrix** and both enforced by one global guard (`AdminAuthorityGuard`) rather than per-handler code — the completeness claim is that no handler *can* bypass them, which a convention cannot give.
 
-**Session lifetime after step-up.** The elevated state is a **separate claim in the access token**, not a separate session. The base session (refresh token web 30d / mobile 14d, §6) continues to exist independently: the elevated TTL of 30 min expires faster than the access-token TTL (15 min), but refreshing an access token via refresh token does NOT re-issue `acr=mfa-fresh` automatically — once the elevated window expires, the next high-risk action requires step-up again. Step-up does not extend the base session expiration.
+**Authority: `@Authz({ revalidate: "live" })` (matrix column `revalidate`).** Before the handler runs, the backend asks the IdP whether this principal still holds the required grant, using its own SERVICE credential over the wrapped IdP session id. No user access or refresh token is read or stored — the admin session is token-free by construction (§6.1), and this check preserves that. The verdict is one of four, and the mapping is normative:
 
-**IdP requirements.** `prompt=login` + custom `acr_values` are supported by Zitadel (§8).
+| verdict                    | response                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------ |
+| active, grant present      | the handler proceeds                                                            |
+| session gone / inactive    | `401` `errorCode: ADMIN_SESSION_REQUIRED`                                       |
+| grant revoked              | `403` `errorCode: PLATFORM_ADMIN_REQUIRED` (or `PD_OFFICER_REQUIRED`)           |
+| provider unavailable       | `503` `errorCode: IDP_REVALIDATION_UNAVAILABLE`                                 |
 
-**UX implications.** Frontend (portal/admin/cms) MUST intercept `401 step_up_required`, redirect to `step_up_url` without losing the current context (preserved via the `state` parameter + client-side route restoration after returning with an auth code), exchange the code for a refreshed access token, and retry the original request. Mobile follows the same flow via `ASWebAuthenticationSession` (iOS) / `Custom Tabs` (Android). A series of step-up operations within the 30-minute window does not require repeated authentication (UX-critical for the admin console).
+The `unavailable` row is load-bearing, not defensive boilerplate. Every provider fault — transport error, timeout, `429`, `5xx`, rejected service token, missing config, malformed payload — MUST arrive as `503`, never as a credential denial. An implementation that collapsed those into `401` would turn a brief IdP blip into "your session expired" for every administrator simultaneously, and would train operators to re-authenticate in response to an outage.
+
+**Presence: `@Authz({ stepUp: true })` (matrix column `step_up`).** The normative list of step-up endpoints is the matrix projection of the rows carrying that flag; `step_up` is orthogonal to the `auth_check` kind and to `revalidate`, so it is an independent boolean, not an auth-check mode. Because the admin tier holds no access token, the elevated state is NOT an `acr` claim: the server records the moment MFA was verified on the session record itself when the session is minted, and the guard requires that timestamp to be present and within **30 minutes**. An absent timestamp reads as STALE — fail-closed, never "assume it was recent". On failure: `401` with a Problem Details body carrying `errorCode: STEP_UP_REQUIRED` and `stepUpUrl`, the address at which the operator re-elevates. This error contract is normative; frontend and mobile MUST handle it.
+
+**Order is normative: authority outranks presence.** The live verdict is taken FIRST and the freshness check second. An operator whose account was disabled or whose grant was revoked is told that (`401 ADMIN_SESSION_REQUIRED` / `403 …_REQUIRED`) rather than being sent to re-elevate a credential that no longer stands — the reverse order ends with a revoked administrator successfully completing MFA and only then being refused.
+
+**Where the checks run.** Both are guard-tier, so every refusal precedes request validation, any idempotency reservation, any object-storage upload and any audit row. That "refusals precede all work" property comes from the position in the request pipeline, not from careful early-returns repeated in each handler.
+
+**Session lifetime after step-up.** The elevated state is a property of the server-side session record, not a separate session and not a token claim. The base session (§6) continues to exist independently; the 30-minute elevated window simply lapses, and the next high-risk action requires step-up again. Step-up does not extend the base session expiration.
+
+**IdP requirements.** Service-authenticated session, user and grant reads are supported by Zitadel (§8), as are `prompt=login` + custom `acr_values` for the surfaces that still authenticate through the OIDC flow.
+
+**UX implications.** The admin console MUST intercept `401 STEP_UP_REQUIRED`, send the operator to `stepUpUrl` without losing the current context, and retry the original request afterwards. It MUST also distinguish `503 IDP_REVALIDATION_UNAVAILABLE` from a credential refusal in what it shows: the correct affordance there is retry, not re-login. A series of step-up operations within the 30-minute window does not require repeated authentication (UX-critical for the admin console).
 
 **Audit.** Every step-up attempt (success + fail) MUST be written to `audit_ledger` (ADR-0003 §6, ADR-0009 §2.4 — audit class `auth.step_up.{requested,succeeded,failed}`) with fields `user_id`, `endpoint`, `acr_before`, `acr_after`, `mfa_method`, `ip`, `ua`. The full list of auth audit events — identity-auth-rbac-design §7.3.
 
 **Forward references:**
 
-- **endpoint-authorization-matrix-design** — the per-endpoint `step_up` flag (`@Authz({ step_up: true })`); the step-up endpoint list is the matrix projection of flagged rows.
-- **identity-auth-rbac-design** — the step-up mechanism: `StepUpGuard`, the `401 step_up_required` response contract, the OIDC `prompt=login` + `acr_values` trigger, the `acr=mfa-fresh` claim + TTL + MFA-elevated session (§7.1).
-- **backend-core-design** — middleware stack for step-up (CI rule asserting `StepUpGuard` is present on every endpoint flagged `step_up: true`).
+- **endpoint-authorization-matrix-design** — the per-endpoint `step_up` and `revalidate` columns; both endpoint lists are matrix projections of the flagged rows.
+- **identity-auth-rbac-design** — the elevation mechanism and the refusal contract (§7.1).
+- **backend-core-design** — the middleware stack (a CI-enforced coverage check asserting that every admin mutation either declares `revalidate: "live"` or appears in a written exemption registry).
 - **ADR-0009 §2.4** — audit class registration for step-up events.
 
 ## Consequences

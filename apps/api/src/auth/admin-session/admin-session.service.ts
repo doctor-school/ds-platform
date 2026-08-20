@@ -934,6 +934,13 @@ export class AdminSessionService {
       fingerprint,
       csrfToken: randomUUID(),
       expiresAtMs: Date.now() + ADMIN_SESSION_TTL_SECONDS * 1000,
+      // #1304: this method IS the moment a second factor was verified — the
+      // session exists only because the enrollment/challenge path just checked
+      // one. Stamping the elevation here rather than at the two call sites keeps
+      // "when was MFA last proven" a property of how the record is built, so a
+      // future third upgrade path cannot forget it and silently mint a session
+      // that satisfies a `stepUp` route for free.
+      mfaVerifiedAtMs: Date.now(),
     };
     await this.sessions.create(session);
     // The pending record is consumed by the upgrade — it never coexists with the

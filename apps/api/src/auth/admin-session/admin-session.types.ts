@@ -109,6 +109,20 @@ export interface AdminSessionRecord {
   csrfToken: string;
   /** Epoch ms at which the session expires (drives the store TTL). */
   expiresAtMs: number;
+  /**
+   * #1304 — epoch ms of the last SERVER-VERIFIED second-factor check on this
+   * session (ADR-0001 §10 step-up).
+   *
+   * A `@Authz({ stepUp: true })` route requires this to be no older than
+   * `STEP_UP_MAX_AGE_MS`. It is a recorded timestamp rather than an `acr` claim
+   * because this tier holds no IdP token to read a claim from — the factor was
+   * checked by this backend, so this backend is the one that can say when.
+   *
+   * Optional in the type, and an ABSENT value reads as STALE at every call site:
+   * records written before the field existed (and any future write path that
+   * forgets it) must fail the freshness check, never pass it by default.
+   */
+  mfaVerifiedAtMs?: number;
 }
 
 /** Server-side store for {@link PendingAuthRecord}s — its own key namespace (design §3). */

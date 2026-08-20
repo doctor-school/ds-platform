@@ -225,9 +225,84 @@ export type IdpRefreshResult =
  */
 export type EmailLoginOutcome = "challenge" | "verification" | "none";
 
+/**
+ * #1304: the roles a high-stakes admin mutation may be revalidated against.
+ *
+ * Deliberately a closed pair rather than the whole {@link Role} vocabulary: live
+ * revalidation is the *high-stakes* instrument (a taxonomy mutation, an ADR-0009
+ * erasure-plan approval), and widening it to every role would turn an IdP
+ * round-trip into an ambient cost on ordinary reads.
+ */
+export type AdminAuthorityRole = "platform_admin" | "pd_officer";
+
+/** Input to {@link IdpClient.revalidateAdminAuthority} (#1304). */
+export interface RevalidateAdminAuthorityInput {
+  /** The Zitadel session the admin session record wraps (011 design §8). */
+  zitadelSessionId: string;
+  /** The IdP subject the admin session was established for. */
+  sub: string;
+  /** The role the caller must STILL hold at the IdP for this request. */
+  requiredRole: AdminAuthorityRole;
+}
+
+/**
+ * #1304: the verdict of a live authority revalidation. Four outcomes, never a
+ * throw — the whole point of the port method is that the caller can distinguish
+ * "this credential is gone" from "the provider could not tell us", so a Zitadel
+ * outage becomes a 503 rather than a false 401.
+ *
+ * - `active` — the Zitadel session is live, still bound to `sub`, the account is
+ *   active, and `sub` still holds `requiredRole` **right now** (`roles` carries
+ *   the freshly-read project roles, so the caller may refresh its projection).
+ * - `inactive` — the credential itself no longer stands: the session is gone or
+ *   expired, it belongs to another subject, or the account is disabled. The
+ *   caller answers 401 `ADMIN_SESSION_REQUIRED`.
+ * - `role_revoked` — the session is fine but the grant is gone: `sub` no longer
+ *   holds `requiredRole` (`roles` is what it DOES hold). The caller answers 403.
+ * - `unavailable` — nothing could be established. Every transport error, timeout,
+ *   429, 5xx, service-auth failure (401/403 on the SERVICE token), missing config
+ *   and malformed provider payload lands here, so a provider fault can never be
+ *   reported as a credential denial (#1304 AC). The caller answers 503
+ *   `IDP_REVALIDATION_UNAVAILABLE`.
+ */
+export type AdminAuthorityVerdict =
+  | { outcome: "active"; sub: string; roles: string[] }
+  | {
+      outcome: "inactive";
+      reason: "session_gone" | "session_subject_mismatch" | "account_inactive";
+    }
+  | { outcome: "role_revoked"; roles: string[] }
+  | { outcome: "unavailable"; reason: string };
+
 export interface IdpClient {
   /** Create a user; a duplicate identifier returns `alreadyExisted: true`, not a throw. */
   createUser(input: CreateUserInput): Promise<CreatedUser>;
+  /**
+   * #1304: re-establish, against the LIVE IdP, that the principal behind a
+   * token-free admin session is still who and what the session record claims —
+   * the session is still live and bound to `sub`, the account is still active,
+   * and `sub` still holds `requiredRole`.
+   *
+   * **Why it exists.** ADR-0001 §10 wants high-stakes admin actions validated
+   * against the live IdP, but feature 011 deliberately discards the access and
+   * refresh tokens when `__Host-ds_admin_session` is established (011 design §8 —
+   * the record holds no IdP token material). There was therefore no way to ask
+   * the IdP anything about an established admin session. This method closes that
+   * seam WITHOUT reopening the token-at-rest boundary: it reads the session and
+   * the project-role grant with the adapter's **service** credential, so nothing
+   * new is stored anywhere. A caller that needed a user token to answer this
+   * question would be contradicting the shipped design.
+   *
+   * **Never throws.** Unlike {@link getProjectRoles} (which throws
+   * {@link IdpUnavailableError}), every failure is folded into the
+   * `unavailable` variant of {@link AdminAuthorityVerdict}. That is the load-
+   * bearing property: the caller refuses on `inactive`/`role_revoked` and reports
+   * an OUTAGE on `unavailable`, and a `throw` would invite a `catch` that
+   * collapses the two back into one refusal.
+   */
+  revalidateAdminAuthority(
+    input: RevalidateAdminAuthorityInput,
+  ): Promise<AdminAuthorityVerdict>;
   /**
    * Deliver a Zitadel `otp_email` verification code (EARS-1/29). `email` (#904)
    * is the destination the BFF mailer sends to; omit it and the adapter falls

@@ -29,7 +29,7 @@ Stale branches: auto-deleted on merge via `--delete-branch`; PRs closed without 
 
 - `pnpm pr:land <N>` — merge gate → squash-merge → board Done → `worktree:teardown` iff `.claude/worktrees/<N>` exists → re-sweep `gh pr list` + `git ls-remote --heads origin` (bot branches can appear post-merge); forwards `--mode-a-exempt`, aborts on the first non-zero stage (skill `merge-when-green` Step 2).
 - `pnpm merge:when-green <N>` — only when the post-merge tail is intentionally completed separately (it stops at the merge; board Done + teardown + re-sweep are then yours by hand).
-- Raw `gh pr merge <N> --squash --delete-branch` — the exception only: the Version-Packages bot branch (no CI, no Mode-a — see _Version-Packages release PR_ below) or manual recovery. Invoked on its own statement, never downstream of a piped gate (#928).
+- Raw `gh pr merge <N> --squash --delete-branch` — the exception only: the Version-Packages bot branch (`--admin` REQUIRED: the branch carries no `ci` check-run, so the ruleset refuses a plain merge — the admin PR-scoped bypass is the documented hatch; no CI, no Mode-a — see _Version-Packages release PR_ below) or manual recovery. Invoked on its own statement, never downstream of a piped gate (#928).
 
 **Recovery — remote merge landed, local cleanup failed.** Canonical procedure: skill `merge-when-green` Step 2a (confirm `state:MERGED` → verify the remote branch is gone → `git fetch origin --prune` + `git branch -D <branch>` → `pnpm worktree:teardown <N>` and assert `git worktree list` no longer shows it). Stated once there; do not re-derive it here or in `AGENTS.md`.
 

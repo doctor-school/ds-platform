@@ -1,6 +1,6 @@
 {
   "name": "@ds/academy-demo",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "description": "Deterministic, dev-only Academy-home review surface built from @ds/design-system.",

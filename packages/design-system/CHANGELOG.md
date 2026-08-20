@@ -1,5 +1,28 @@
 # @ds/design-system
 
+## 5.0.0
+
+### Major Changes
+
+- [#1396](https://github.com/doctor-school/ds-platform/pull/1396) [`74a1731`](https://github.com/doctor-school/ds-platform/commit/74a173134347ad1bafad8b54e3e16d62a4d8ec33) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 003 EARS-36 — the creation-password policy is now **length only**: at least 8
+  characters, with no upper-case, lower-case, digit, or symbol requirement.
+
+  - `@ds/schemas` exports `PASSWORD_MIN_LENGTH` / `PASSWORD_MAX_LENGTH` as the single
+    SSOT constants mirroring the explicitly-provisioned Zitadel instance
+    password-complexity policy (`minLength = 8`, every character-class flag `false`).
+    **Breaking:** `NEW_PASSWORD_COMPLEXITY` (the four-class regex) is removed, and
+    `NewPasswordSchema` no longer enforces a composition rule.
+  - `@ds/design-system` `NewPasswordFieldSchema` composes the same constants, so the
+    portal's client-side pre-validation (EARS-22) cannot drift from the API baseline.
+  - The login guard is deliberately unchanged (permissive shape check): every
+    credential created under the previous four-class policy keeps authenticating —
+    nothing is rotated, invalidated, or re-validated.
+
+### Patch Changes
+
+- Updated dependencies [[`74a1731`](https://github.com/doctor-school/ds-platform/commit/74a173134347ad1bafad8b54e3e16d62a4d8ec33), [`717921a`](https://github.com/doctor-school/ds-platform/commit/717921ab7da5745cff5f833bbbc049736b6a96d3)]:
+  - @ds/schemas@3.0.0
+
 ## 4.2.0
 
 ### Minor Changes

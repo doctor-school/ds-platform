@@ -1,5 +1,46 @@
 # @ds/schemas
 
+## 3.0.0
+
+### Major Changes
+
+- [#1396](https://github.com/doctor-school/ds-platform/pull/1396) [`74a1731`](https://github.com/doctor-school/ds-platform/commit/74a173134347ad1bafad8b54e3e16d62a4d8ec33) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 003 EARS-36 — the creation-password policy is now **length only**: at least 8
+  characters, with no upper-case, lower-case, digit, or symbol requirement.
+
+  - `@ds/schemas` exports `PASSWORD_MIN_LENGTH` / `PASSWORD_MAX_LENGTH` as the single
+    SSOT constants mirroring the explicitly-provisioned Zitadel instance
+    password-complexity policy (`minLength = 8`, every character-class flag `false`).
+    **Breaking:** `NEW_PASSWORD_COMPLEXITY` (the four-class regex) is removed, and
+    `NewPasswordSchema` no longer enforces a composition rule.
+  - `@ds/design-system` `NewPasswordFieldSchema` composes the same constants, so the
+    portal's client-side pre-validation (EARS-22) cannot drift from the API baseline.
+  - The login guard is deliberately unchanged (permissive shape check): every
+    credential created under the previous four-class policy keeps authenticating —
+    nothing is rotated, invalidated, or re-validated.
+
+### Minor Changes
+
+- [#1379](https://github.com/doctor-school/ds-platform/pull/1379) [`717921a`](https://github.com/doctor-school/ds-platform/commit/717921ab7da5745cff5f833bbbc049736b6a96d3) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 012 EARS-2 — expert authoring vertical ([#1284](https://github.com/doctor-school/ds-platform/issues/1284))
+
+  Additive across four packages, no breaking change to an existing export; the
+  slice consumes the W1a ([#1283](https://github.com/doctor-school/ds-platform/issues/1283)) taxonomy foundation byte-for-byte rather than
+  forking it.
+
+  - `@ds/db`: the `experts` entity — slug grammar CHECK, canonical-UUID
+    exclusion, the set-once `first_published_at` trigger, a tombstone-ready
+    `content_removed_at` column, the `experts_audit` mirror and a `pg_trgm` GIN
+    index over `name`/`slug` for operator search.
+  - `@ds/schemas`: expert DTOs (create/update/list/detail), the shared
+    `expertInitials` derivation and the 012 error codes the surface can raise.
+  - `@ds/api`: `GET/POST /v1/admin/experts` and `GET/PATCH /v1/admin/experts/:id`
+    — multipart `photo` through the shared still-image normalizer, fenced
+    idempotency, ETag/If-Match concurrency, RFC 7807 problems and audit writes.
+  - `@ds/admin`: the `experts` resource — list on the shared taxonomy list shell,
+    tabbed create/detail with «Основное», the generated-slug preview and the
+    deterministic-initials `Avatar` fallback when an expert has no photo. The
+    data provider now dispatches its media part off a resource map instead of a
+    hardcoded `projects` branch.
+
 ## 2.3.0
 
 ### Minor Changes

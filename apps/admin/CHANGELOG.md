@@ -1,5 +1,46 @@
 # @ds/admin
 
+## 0.7.0
+
+### Minor Changes
+
+- [#1379](https://github.com/doctor-school/ds-platform/pull/1379) [`717921a`](https://github.com/doctor-school/ds-platform/commit/717921ab7da5745cff5f833bbbc049736b6a96d3) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 012 EARS-2 — expert authoring vertical ([#1284](https://github.com/doctor-school/ds-platform/issues/1284))
+
+  Additive across four packages, no breaking change to an existing export; the
+  slice consumes the W1a ([#1283](https://github.com/doctor-school/ds-platform/issues/1283)) taxonomy foundation byte-for-byte rather than
+  forking it.
+
+  - `@ds/db`: the `experts` entity — slug grammar CHECK, canonical-UUID
+    exclusion, the set-once `first_published_at` trigger, a tombstone-ready
+    `content_removed_at` column, the `experts_audit` mirror and a `pg_trgm` GIN
+    index over `name`/`slug` for operator search.
+  - `@ds/schemas`: expert DTOs (create/update/list/detail), the shared
+    `expertInitials` derivation and the 012 error codes the surface can raise.
+  - `@ds/api`: `GET/POST /v1/admin/experts` and `GET/PATCH /v1/admin/experts/:id`
+    — multipart `photo` through the shared still-image normalizer, fenced
+    idempotency, ETag/If-Match concurrency, RFC 7807 problems and audit writes.
+  - `@ds/admin`: the `experts` resource — list on the shared taxonomy list shell,
+    tabbed create/detail with «Основное», the generated-slug preview and the
+    deterministic-initials `Avatar` fallback when an expert has no photo. The
+    data provider now dispatches its media part off a resource map instead of a
+    hardcoded `projects` branch.
+
+### Patch Changes
+
+- [#1387](https://github.com/doctor-school/ds-platform/pull/1387) [`b4a7821`](https://github.com/doctor-school/ds-platform/commit/b4a7821d2e3d191f406579be6eeeb95972b73cd3) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Admin list surfaces stop clipping at phone widths. The admin chrome row (brand + nav + sign-out) now wraps below the `sm` breakpoint instead of forcing the page ~113px wider than a 390px viewport — which cut off «Выйти» and, because a horizontal swipe panned the whole page, made the events table's own scroll wrapper unreachable, so «Дата» / «Статус» / «Действия» read as clipped. The list headings on `/events` and on the shared taxonomy list shell also stack above their «Создать …» button at the same breakpoint, instead of the button overlapping the description text. Desktop rendering is unchanged.
+
+- [#1400](https://github.com/doctor-school/ds-platform/pull/1400) [`bebf510`](https://github.com/doctor-school/ds-platform/commit/bebf510ff94062d74689cf386c847ce96a5c24ec) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - The admin event screen at `/events/<id>` stops clipping at phone widths. Its header kept the pre-[#1387](https://github.com/doctor-school/ds-platform/issues/1387) single-row `justify-between`, so the event title block and the lifecycle state badge stayed side by side at every width and a realistic (long) title pushed the badge past a 390px viewport. The badge now stacks under the title below the `sm` breakpoint, matching the list surfaces. Desktop rendering is unchanged.
+
+- [#1408](https://github.com/doctor-school/ds-platform/pull/1408) [`1c7c856`](https://github.com/doctor-school/ds-platform/commit/1c7c856a177f1592d3e781ba2a4390a5eec74e48) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Pin `next` to 16.3.0 in the portal and admin apps. Next 16.3.1 bumps its `@swc/helpers`
+  dependency to 0.5.23, whose export map adds a `module-sync` condition that Node ≥22.10
+  honours in `require()` — the runtime then resolves `@swc/helpers/_/*` to `esm/*.js`, while
+  Next's output-file tracing still copies only the `cjs/*.cjs` variants into
+  `.next/standalone`. The standalone production images therefore crash-loop at boot with
+  `MODULE_NOT_FOUND` before serving a single request.
+- Updated dependencies [[`74a1731`](https://github.com/doctor-school/ds-platform/commit/74a173134347ad1bafad8b54e3e16d62a4d8ec33), [`717921a`](https://github.com/doctor-school/ds-platform/commit/717921ab7da5745cff5f833bbbc049736b6a96d3)]:
+  - @ds/schemas@3.0.0
+  - @ds/design-system@5.0.0
+
 ## 0.6.0
 
 ### Minor Changes

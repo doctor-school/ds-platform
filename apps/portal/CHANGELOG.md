@@ -1,5 +1,19 @@
 # @ds/portal
 
+## 0.18.2
+
+### Patch Changes
+
+- [#1408](https://github.com/doctor-school/ds-platform/pull/1408) [`1c7c856`](https://github.com/doctor-school/ds-platform/commit/1c7c856a177f1592d3e781ba2a4390a5eec74e48) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - Pin `next` to 16.3.0 in the portal and admin apps. Next 16.3.1 bumps its `@swc/helpers`
+  dependency to 0.5.23, whose export map adds a `module-sync` condition that Node ≥22.10
+  honours in `require()` — the runtime then resolves `@swc/helpers/_/*` to `esm/*.js`, while
+  Next's output-file tracing still copies only the `cjs/*.cjs` variants into
+  `.next/standalone`. The standalone production images therefore crash-loop at boot with
+  `MODULE_NOT_FOUND` before serving a single request.
+- Updated dependencies [[`74a1731`](https://github.com/doctor-school/ds-platform/commit/74a173134347ad1bafad8b54e3e16d62a4d8ec33), [`717921a`](https://github.com/doctor-school/ds-platform/commit/717921ab7da5745cff5f833bbbc049736b6a96d3)]:
+  - @ds/schemas@3.0.0
+  - @ds/design-system@5.0.0
+
 ## 0.18.1
 
 ### Patch Changes

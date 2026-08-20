@@ -349,6 +349,96 @@ export const ExpertAdminListSchema = z.object({
 });
 export type ExpertAdminList = z.infer<typeof ExpertAdminListSchema>;
 
+// ── Topic authoring DTOs (012-design §2.2 matrix; EARS-3, #1285) ────────────
+
+export const TOPIC_TITLE_MIN = 1;
+export const TOPIC_TITLE_MAX = 120;
+
+const TopicTitleSchema = z
+  .string()
+  .trim()
+  .min(TOPIC_TITLE_MIN)
+  .max(TOPIC_TITLE_MAX);
+
+/**
+ * `POST /v1/admin/topics` — create one draft topic.
+ *
+ * The thinnest create body of the four entities: a topic is a title plus its
+ * permanent public identity (§2 ER; §5.2 `PublicTopic { id, slug, title }`).
+ * There is no description and no media, so this request is always
+ * `application/json` (§5.1) and carries no `mediaAction`.
+ *
+ * `.strict()` is load-bearing here for a different reason than it is for a
+ * project or an expert: there is no media reference to smuggle in, but a client
+ * that posts `description` or `coverRef` is asking for a topic shape this
+ * feature deliberately does NOT have — a silently ignored field would let the
+ * admin believe it stored something. 400 `VALIDATION_FAILED` instead.
+ */
+export const CreateTopicRequestSchema = z
+  .object({
+    title: TopicTitleSchema,
+    slug: SlugSchema.optional(),
+  })
+  .strict();
+export type CreateTopicRequest = z.infer<typeof CreateTopicRequestSchema>;
+
+/**
+ * `PATCH /v1/admin/topics/:id` — edit the same row.
+ *
+ * Omission means unchanged. Neither field accepts `null`: `title` is the row's
+ * only descriptive value and NOT NULL in the DB, and `slug` is the permanent
+ * identity. `slug` is accepted only while `first_published_at IS NULL` — the
+ * refusal depends on row state, so it is a 409 `SLUG_IMMUTABLE` from the
+ * service, not a shape rule here.
+ */
+export const UpdateTopicRequestSchema = z
+  .object({
+    title: TopicTitleSchema.optional(),
+    slug: SlugSchema.optional(),
+  })
+  .strict();
+export type UpdateTopicRequest = z.infer<typeof UpdateTopicRequestSchema>;
+
+/**
+ * The admin detail projection. `version` backs the ETag the next PATCH must
+ * echo; `slugEditable` is the server's answer to "may the operator still change
+ * the public URL", which the UI reads rather than re-deriving.
+ */
+export const TopicAdminDetailSchema = z.object({
+  id: z.string(),
+  slug: z.string(),
+  title: z.string(),
+  status: TaxonomyStatusSchema,
+  /** Null until the first publish; once set, the slug is permanently locked. */
+  firstPublishedAt: z.string().nullable(),
+  /** True iff the slug may still be edited — the UI reads this, never re-derives it. */
+  slugEditable: z.boolean(),
+  version: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type TopicAdminDetail = z.infer<typeof TopicAdminDetailSchema>;
+
+/** One row of the admin list — the columns the table renders, nothing more. */
+export const TopicAdminListItemSchema = TopicAdminDetailSchema.pick({
+  id: true,
+  slug: true,
+  title: true,
+  status: true,
+  version: true,
+  updatedAt: true,
+});
+export type TopicAdminListItem = z.infer<typeof TopicAdminListItemSchema>;
+
+/** Offset/page admin list envelope (ADR-0002 — admin pagination is offset-based). */
+export const TopicAdminListSchema = z.object({
+  data: z.array(TopicAdminListItemSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export type TopicAdminList = z.infer<typeof TopicAdminListSchema>;
+
 // ── Admin list query (012-design §5.1; the shell #1297 later sweeps) ─────────
 
 export const ADMIN_LIST_PAGE_SIZE_DEFAULT = 20;

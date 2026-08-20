@@ -196,6 +196,31 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/experts/${ABSENT_ID}`,
     payload: {},
   },
+  // 012 EARS-3 (#1285) — the curated topic authoring surface. Same floor as its
+  // siblings: the `platform_admin` guard answers before validation, so an
+  // unauthenticated caller cannot tell an absent topic from an existing one.
+  {
+    endpoint: "GET /v1/admin/topics",
+    method: "GET",
+    url: "/v1/admin/topics",
+  },
+  {
+    endpoint: "GET /v1/admin/topics/:id",
+    method: "GET",
+    url: `/v1/admin/topics/${ABSENT_ID}`,
+  },
+  {
+    endpoint: "POST /v1/admin/topics",
+    method: "POST",
+    url: "/v1/admin/topics",
+    payload: {},
+  },
+  {
+    endpoint: "PATCH /v1/admin/topics/:id",
+    method: "PATCH",
+    url: `/v1/admin/topics/${ABSENT_ID}`,
+    payload: {},
+  },
 ];
 
 /** An authz refusal — never a 2xx, never a partially-served admin answer. */

@@ -257,3 +257,76 @@ export const experts = pgTable(
 
 export type Expert = typeof experts.$inferSelect;
 export type NewExpert = typeof experts.$inferInsert;
+
+export const TOPIC_TITLE_MAX = 120;
+
+/**
+ * `topics` — the curated editorial topic record (012 EARS-3, #1285).
+ *
+ * A topic is a first-class retained row, never a free-form event tag: an event
+ * is classified by LINKING it to an existing topic (`event_topics`, #1293), so
+ * there is no inline creation path and no per-event string that could drift into
+ * a second spelling of the same subject. One row feeds the admin list, the admin
+ * detail and (from #1294) the public `PublicTopic { id, slug, title }`
+ * projection.
+ *
+ * The topic is the THINNEST taxonomy entity of the four (§2 ER): a stable id, a
+ * permanent slug, a title and the shared lifecycle. It carries no description
+ * and no media — the §5.2 public DTO exposes exactly `id`, `slug`, `title`, so a
+ * descriptive column here would be an unreadable field, and its authoring
+ * requests are therefore always `application/json` (§5.1). It also carries no
+ * `content_removed_at`: §2.4's editorial removal is about a PERSON's regalia
+ * (`experts`), and a subject heading has nothing to remove.
+ *
+ * `title` is NOT NULL: unlike a project description or an expert's regalia there
+ * is no publish-required-but-draft-incomplete field to model — a topic with no
+ * title would be an unlabelled row with nothing else to identify it.
+ */
+export const topics = pgTable(
+  "topics",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** The permanent public identity. Editable only while `first_published_at IS NULL`. */
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    /** Set once by the first publish transaction; trigger-pinned thereafter. */
+    firstPublishedAt: timestamp("first_published_at", { withTimezone: true }),
+    status: taxonomyStatus("status").notNull().default("draft"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    /** Optimistic-concurrency counter behind the admin ETag; starts at 1, `++` per successful write. */
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // Spans EVERY retained row (012-design §2.1): a retired topic keeps holding
+    // its slug, so a bookmarked topic URL can never later resolve to a different
+    // subject. Deliberately NOT a partial index.
+    uniqueIndex("topics_slug_key").on(t.slug),
+    check(
+      "topics_retired_iff_deleted",
+      sql`(${t.status} = 'retired') = (${t.deletedAt} IS NOT NULL)`,
+    ),
+    check("topics_slug_pattern", sql`${t.slug} ~ ${sql.raw(`'${SLUG_PATTERN}'`)}`),
+    check(
+      "topics_slug_not_uuid",
+      sql`${t.slug} !~ ${sql.raw(`'${UUID_TEXT_PATTERN}'`)}`,
+    ),
+    check(
+      "topics_title_bounds",
+      sql`char_length(${t.title}) BETWEEN 1 AND ${sql.raw(String(TOPIC_TITLE_MAX))}`,
+    ),
+    check("topics_version_positive", sql`${t.version} >= 1`),
+    check(
+      "topics_published_has_first_published_at",
+      sql`${t.status} <> 'published' OR ${t.firstPublishedAt} IS NOT NULL`,
+    ),
+  ],
+);
+
+export type Topic = typeof topics.$inferSelect;
+export type NewTopic = typeof topics.$inferInsert;

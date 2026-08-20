@@ -145,3 +145,21 @@ routes:
     route: /experts/[id]
     file: apps/admin/app/experts/[id]/page.tsx
     status: product-ready
+  # 012 EARS-3 (#1285): the curated-topic authoring vertical — the same shared
+  # list shell, the same tabbed detail, the thinnest form of the three (a title
+  # plus its permanent address; the entity has no description and no media).
+  # Real product deliverables, driven live in
+  # `apps/admin/e2e/taxonomy-topics.spec.ts`. Same one-tab rule: no empty
+  # «Публикация» placeholder ships ahead of the slice that fills it.
+  - app: admin
+    route: /topics
+    file: apps/admin/app/topics/page.tsx
+    status: product-ready
+  - app: admin
+    route: /topics/create
+    file: apps/admin/app/topics/create/page.tsx
+    status: product-ready
+  - app: admin
+    route: /topics/[id]
+    file: apps/admin/app/topics/[id]/page.tsx
+    status: product-ready

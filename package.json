@@ -15,6 +15,7 @@
     "bootstrap": "pnpm agent:setup && tsx tools/agent-bootstrap.ts",
     "backlog:triage": "tsx tools/backlog-triage.ts",
     "board:status": "node tools/gh/set-board-status.mjs",
+    "ci:standalone-boot": "node tools/ci/standalone-boot-check.mjs",
     "ci:wait": "node tools/gh/wait-ci-green.mjs",
     "dispatch:brief": "node tools/gh/dispatch-brief.mjs",
     "dispatch:brief-check": "node tools/gh/dispatch-brief-check.mjs",

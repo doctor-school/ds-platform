@@ -518,6 +518,89 @@ done`,
   ok(`api + portal + admin RUN ds-*:${sha.slice(0, 12)} and are healthy`);
 }
 
+// PRE-SWAP boot verify (#1410). `verifyRunningSha` above is the truthful-success
+// gate — but it runs AFTER `up -d`, i.e. after the old containers have already
+// stopped serving. #1407 is exactly that gap: `next` 16.3.1 built cleanly, the
+// images swapped, and the freshly started portal + admin crash-looped, so the
+// public surface 502'd until a human rolled back.
+//
+// This runs the freshly built images BEFORE anything is swapped, as throwaway
+// detached containers with the SAME env_file production uses, and asserts each
+// answers non-5xx on `/` from inside the container (same probe shape as the
+// compose healthcheck). A non-booting image aborts the deploy while the OLD
+// containers are still up and serving — the public surface never sees it.
+//
+// Scope: portal + admin, the two Next standalone images. The api is deliberately
+// NOT probed here: it needs Postgres/Redis/Zitadel on the compose network, so a
+// detached one-shot would fail for reasons unrelated to the image and turn a
+// safety gate into a flaky one. The api keeps its compose healthcheck +
+// `verifyRunningSha`.
+//
+// No published ports, no compose network, unique container names, always removed
+// — the probe cannot collide with or disturb the live stack.
+async function verifyImagesBoot(sha) {
+  const out = await sshCapture(
+    API_PROD,
+    `probe() {
+  svc="$1"; repo="$2"; port="$3"
+  name="ds-bootcheck-$svc"
+  sudo docker rm -f "$name" >/dev/null 2>&1 || true
+  # -e PORT after --env-file on purpose: an explicit -e outranks the env-file, the
+  # same precedence compose \`environment:\` has over \`env_file:\` (DSO-100).
+  if ! sudo docker run -d --name "$name" --env-file /etc/ds-platform/api.env \\
+        -e PORT="$port" -e HOSTNAME=0.0.0.0 "$repo:${sha}" >/dev/null 2>&1; then
+    echo "$svc=NOSTART"; return
+  fi
+  deadline=$(( $(date +%s) + 120 ))
+  status=PENDING
+  while [ "$status" = PENDING ]; do
+    running=$(sudo docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null || echo false)
+    if sudo docker exec "$name" node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then
+      status=OK
+    elif [ "$running" != true ]; then
+      status=EXITED
+    elif [ "$(date +%s)" -ge "$deadline" ]; then
+      status=TIMEOUT
+    else
+      sleep 3
+    fi
+  done
+  echo "$svc=$status"
+  if [ "$status" != OK ]; then
+    echo "---- $svc boot log (last 60) ----"
+    sudo docker logs --tail 60 "$name" 2>&1 || true
+  fi
+  sudo docker rm -f "$name" >/dev/null 2>&1 || true
+}
+probe portal ds-portal 3001
+probe admin ds-admin 3002`,
+  );
+  console.log(
+    out
+      .split(/\r?\n/)
+      .map((l) => `      ${l}`)
+      .join("\n"),
+  );
+  const verdicts = Object.fromEntries(
+    out
+      .split(/\r?\n/)
+      .map((l) => l.trim().match(/^(portal|admin)=(\w+)$/))
+      .filter(Boolean)
+      .map((m) => [m[1], m[2]]),
+  );
+  const bad = ["portal", "admin"].filter((s) => verdicts[s] !== "OK");
+  if (bad.length > 0) {
+    die(
+      `freshly built image(s) do NOT boot: ${bad
+        .map((s) => `${s}=${verdicts[s] ?? "NO-VERDICT"}`)
+        .join(", ")}\n` +
+        `  Nothing was swapped — the PREVIOUS containers are still up and serving.\n` +
+        `  Fix the image (see the boot log above) and re-run the deploy (#1407/#1410).`,
+    );
+  }
+  ok(`ds-portal + ds-admin :${sha.slice(0, 12)} boot and serve / before the swap`);
+}
+
 // Ship the committed tree to a box through a sibling staging directory. The
 // committed archive is extracted completely before the live tree is swapped,
 // carrying forward only the documented api-prod compose interpolation file.
@@ -671,7 +754,13 @@ sudo docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info
       .join("\n"),
   );
 
-  step("api-prod: migrate → build → up -d");
+  // ORDER (#1410): build → boot-verify → migrate → up -d. The app images are
+  // built and PROVEN TO BOOT before the database is migrated and before any
+  // container is swapped, so a #1407-class non-booting image aborts the deploy
+  // with prod untouched — no 502, and no migration applied for a build that was
+  // never going to serve. (The pre-migrate pgbackrest checkpoint above still
+  // anchors PITR for the migrate step itself.)
+  step(`api-prod: build ds-api/portal/admin :${sha.slice(0, 12)}…`);
   t = Date.now();
   await sshScript(
     API_PROD,
@@ -681,21 +770,36 @@ sudo docker compose exec -T pgbackrest gosu postgres pgbackrest --stanza=ds info
 # BUILD-time captcha site key) that a clobbering '>' would silently wipe,
 # baking an empty site key into the very portal image built two lines below.
 { { [ -f .env ] && grep -v '^DEPLOY_SHA=' .env; } || true; printf 'DEPLOY_SHA=%s\\n' '${sha}'; } > .env.next && mv .env.next .env
+echo '── build ds-api:${sha.slice(0, 12)}… + ds-portal + ds-admin ──'
+# ${NO_ATTEST}: reproducible image IDs so a same-SHA re-run is a true no-op (#486).
+sudo ${NO_ATTEST} docker compose build
+`,
+    { label: "api-prod build", stallBudgetMs: STALL_BUDGET_BUILD_MS },
+  );
+  ok("images built", t);
+
+  step("#1410: PRE-SWAP boot verify (old containers still serving)");
+  // No `t = Date.now()` here: verifyImagesBoot() prints its own `ok(...)` line
+  // and takes no elapsed argument, so timing it would be a dead assignment.
+  await verifyImagesBoot(sha);
+
+  step("api-prod: migrate → up -d");
+  t = Date.now();
+  await sshScript(
+    API_PROD,
+    `cd ${API_COMPOSE}
 echo '── migrate (drizzle-kit; idempotent) ──'
 # --build: rebuild the migrate image from the freshly shipped tree, else the
 #   run reuses a stale ds-api-migrate:local and applies OLD migrations.
 # </dev/null: compose run attaches the container's stdin by default — never
 #   let it read this shell's stdin (see REMOTE_BASH; defense in depth).
-# ${NO_ATTEST}: reproducible image IDs so a same-SHA re-run is a true no-op (#486).
 sudo ${NO_ATTEST} docker compose --profile migrate run --build --rm migrate </dev/null
-echo '── build ds-api:${sha.slice(0, 12)}… + ds-portal + ds-admin ──'
-sudo ${NO_ATTEST} docker compose build
 echo '── up -d ──'
 sudo docker compose up -d
 `,
     { label: "api-prod deploy", stallBudgetMs: STALL_BUDGET_BUILD_MS },
   );
-  ok("migrate + build + up -d", t);
+  ok("migrate + up -d", t);
 
   step("api-prod: apply bind-mounted Caddy + Centrifugo configs (#1175)");
   t = Date.now();

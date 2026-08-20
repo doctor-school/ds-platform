@@ -41,14 +41,30 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
    `backup.sh` cron runs) **before** `migrate`, so a restore anchor exists at the
    pre-migrate state. Pairs with the **expand/contract** prod migration rule
    (README) so an app rollback never needs a DB rollback.
-5. **api-prod** — `migrate --build` (the migrate image is rebuilt from the
-   freshly shipped tree — a reused stale image would apply old migrations) →
-   `build` → `up -d`; images SHA-tagged **`ds-api:<sha>` / `ds-portal:<sha>`**
+5. **api-prod** — `build` → **pre-swap boot verify (#1410)** → `migrate --build`
+   (the migrate image is rebuilt from the freshly shipped tree — a reused stale
+   image would apply old migrations) → `up -d`; images SHA-tagged
+   **`ds-api:<sha>` / `ds-portal:<sha>` / `ds-admin:<sha>`**
    (DSO-127) via a `DEPLOY_SHA` `.env` the script writes beside `compose.yml`.
    Then compare the shipped `Caddyfile` and `centrifugo/config.json` with the
    files visible through the running containers and **restart only consumers
    whose bind mount is stale**. Both mounts are compared again after apply, so
    a mismatch fails the deploy instead of requiring a manual SSH step (#1175).
+5a. **Pre-swap boot verify (#1410)** — between `build` and `migrate`/`up -d`, the
+   freshly built **`ds-portal:<sha>` and `ds-admin:<sha>`** are each started as a
+   throwaway detached container (`ds-bootcheck-<svc>`, no published port, no
+   compose network, always removed) with the SAME `env_file` production uses, and
+   must answer **non-5xx on `/`** from inside the container within 2 min — the
+   same probe shape as the compose healthcheck. A non-booting image **aborts the
+   deploy while the OLD containers are still up and serving**, and before the DB
+   is migrated. This is the gap #1407 fell through: `next` 16.3.1 built cleanly,
+   the containers swapped, and the public surface 502'd on a crash-loop until a
+   human rolled back. The **api is deliberately not probed here** — it needs
+   Postgres/Redis/Zitadel on the compose network, so a detached one-shot would go
+   red for reasons unrelated to the image; it keeps its compose healthcheck plus
+   step 6. CI's static twin is the `standalone-boot` job
+   (`tools/ci/standalone-boot-check.mjs`), which boots the same standalone entry
+   on every PR.
 6. **Truthful-success verify** — the script polls `docker inspect` on-box until
    the RUNNING api + portal containers carry exactly `ds-*:<sha>` **and** report
    healthy (≤ 4 min); otherwise the deploy is FAILED, never "OK". (Added after
@@ -72,7 +88,7 @@ Pipeline, fail-closed, stops at the first red step and prints a rollback pointer
 connection (NAT flush, VPN flap) dies loudly in ~60s instead of hanging the
 deploy forever. On top of that, every streamed remote step (`sshScript`) runs
 under a per-step **no-output watchdog**: **5 min** for build-class steps
-(data-prod `up -d --build`, api-prod `migrate → build → up`), **2 min** for
+(data-prod `up -d --build`, api-prod `build` and `migrate → up`), **2 min** for
 everything else. Output flowing resets the timer — a normal long build is
 untouched. A step whose channel goes quiet past its budget is killed and the
 deploy exits non-zero with a loud

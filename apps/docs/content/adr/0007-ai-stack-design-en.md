@@ -97,7 +97,7 @@ The orchestrated iteration cycle (`do-feature-iteration` orchestrates these):
 8. REVIEW + MERGE
    - Mode (a) subagent `/review` skill, Mode (b) parallel Codex CLI,
      or Mode (c) human review (AGENTS.md §4).
-   - On positive verdict + green CI → `gh pr merge <N> --auto --squash --delete-branch`
+   - On positive verdict + hand-confirmed green CI → `pnpm pr:land <N>` (→ `gh pr merge <N> --squash --delete-branch`)
      (skill: merge-when-green).
 ```
 
@@ -1015,7 +1015,10 @@ ADR-0007 §5.2) will block merge if violated.
 
 Trigger the interactive review via Mode (a) subagent `/review` skill, Mode (b) parallel
 Codex CLI, or Mode (c) pure human (AGENTS.md §4). Address findings, then merge with
-`gh pr merge <N> --auto --squash --delete-branch` once the verdict is positive and CI is green.
+`pnpm pr:land <N>` once the verdict is positive and CI is confirmed green by hand — it runs the
+pre-merge gate, then `gh pr merge <N> --squash --delete-branch`, then board Status = Done and
+branch teardown. GitHub auto-merge (`--auto`) is unavailable on the Free plan, so CI is a manual
+gate in Phase 0.
 
 ## SDD — hard rule
 

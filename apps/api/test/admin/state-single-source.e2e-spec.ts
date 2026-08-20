@@ -16,6 +16,7 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import { futureMskStart } from "../setup/wall-clock.js";
 
 // 007 EARS-9 — one source of truth for event state across the whole epic. The
 // `EventLifecycleState` the 007 admin commands write (create → publish → open →
@@ -90,21 +91,6 @@ describe.skipIf(
       body: Buffer.concat(chunks),
       contentType: `multipart/form-data; boundary=${boundary}`,
     };
-  }
-
-  /**
-   * A future MSK wall-clock start (`YYYY-MM-DDTHH:mm`, the 007 admin-create
-   * input format), derived relative to now instead of pinned to a literal.
-   * EARS-9 asserts the published event is visible on the 004 upcoming listing,
-   * and that listing filters by `starts_at ≥ now() − airWindow` (007 design §4)
-   * — so a wall-clock literal silently turns the suite red the day it drifts
-   * into the past.
-   */
-  function futureMskStart(daysAhead: number, hhmm: string): string {
-    const day = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Europe/Moscow",
-    }).format(new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000));
-    return `${day}T${hhmm}`;
   }
 
   const payload = {

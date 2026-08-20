@@ -23,7 +23,7 @@ DS Platform — greenfield TS/Postgres платформа, разрабатыв�
 - **Как агент проходит итерацию** — какой цикл (READ → PLAN → RED → GREEN → REFACTOR → checklist → PR → merge), какие методологии (SDD/TDD) hard rules vs soft.
 - **Как любой агент (Claude Code, Codex, будущий Cursor) подхватывает контекст в начале свежей сессии**, без stale-state файлов.
 - **AI-specific drift guards** поверх general'ных в ADR-0006 §7 — что ловит нарушение SDD-link, TDD-discipline, ADR-compliance.
-- **Review-режимы** — какой путь ревью (subagent, параллельная Codex CLI сессия, чистый human) допустим и когда положительный verdict разрешает auto-merge.
+- **Review-режимы** — какой путь ревью (subagent, параллельная Codex CLI сессия, чистый human) допустим и когда положительный verdict разрешает merge без отдельного human approval.
 - **Prompt-caching и cost discipline** — без gateway инфраструктуры (которая преждевременна для Phase 0).
 - **Autonomy ladder** — какой review-путь обязателен по каждому PR, какие условия триггернут re-introducing automated reviewer-инфраструктуры.
 - **Runtime AI инфраструктура** (LLM gateway, PII-filter, Zone-AI VM, OTel GenAI collector) — нужна для Content Pipeline v2/v3 и AI-рекомендаций v3 (PRD §24, §15), но не для Phase 0 dev-time работы. Должна быть спроектирована **сейчас** (с явными trigger-точками) и **реализована потом** (отдельный ADR на trigger).
@@ -70,7 +70,7 @@ Enforcement: AGENTS.md hard rules + machine-checkable CI guards (§2.6).
 
 ### 2.4 Цикл итерации — делегирован skill'у `do-feature-iteration`
 
-Каждая итерация реализации проходит оркестрованный цикл: READ relevant ADRs → verify base CI green → RED (failing test) → GREEN (минимум кода) → REFACTOR → iteration-end checklist (dispatch, verdict-gated) → surface decision-debt → PR open → Mode (a) review dispatch (verdict-gated) → respond-to-review до APPROVE + green CI → iteration summary → merge через `gh pr merge <N> --auto --squash --delete-branch`. Положительный verdict Mode (a) или Mode (b) + green CI достаточен для merge; Mode (c)-ревью остаются single human decision.
+Каждая итерация реализации проходит оркестрованный цикл: READ relevant ADRs → verify base CI green → RED (failing test) → GREEN (минимум кода) → REFACTOR → iteration-end checklist (dispatch, verdict-gated) → surface decision-debt → PR open → Mode (a) review dispatch (verdict-gated) → respond-to-review до APPROVE + green CI → iteration summary → merge через `pnpm pr:land <N>` (pre-merge gate → `gh pr merge <N> --squash --delete-branch` → board Status = Done → teardown ветки). Положительный verdict Mode (a) или Mode (b) + green CI достаточен для merge; Mode (c)-ревью остаются single human decision.
 
 Procedural source of truth — **`apps/docs/content/skills/do-feature-iteration/SKILL.md`**. Orchestration skill несёт discipline-gate'ы (verdict checklist'а, verdict review, обязательная invocation decision-debt), которые inline narrative checklist обеспечить не может: агент, читающий narrative bullet list, молча пропустит, а агент, который не может пройти дальше без артефакта от subagent'а, пропустить не может. Конкретно:
 
@@ -157,7 +157,7 @@ Cost-tracking ведётся в собственной консоли vendor'а 
   - **Mode (b)** — параллельная Codex CLI сессия независимо ревьюит PR.
   - **Mode (c)** — чистый human review, без LLM-ассиста.
 - Все три режима интерактивные, session-driven, и используют собственные LLM credentials человека в его терминале. Никаких API-ключей в GitHub repo secrets.
-- Auto-merge после положительного Mode (a) или Mode (b) verdict + green CI разрешён через обязательную invocation `gh pr merge <N> --auto --squash --delete-branch`; Mode (c)-ревью остаются single human decision.
+- Merge после положительного Mode (a) или Mode (b) verdict + green CI разрешён без отдельного human approval — через обязательную invocation `pnpm pr:land <N>`, которая оборачивает `gh pr merge <N> --squash --delete-branch`. GitHub auto-merge (`--auto`) недоступен на Free-плане, поэтому CI в Phase 0 — ручной gate: зелёные checks подтверждаются руками до запуска merge-команды. Mode (c)-ревью остаются single human decision.
 - Write-доступ в prod-DB запрещён.
 - Direct push в main запрещён.
 - Auto-chores (lint-fix, devDep bumps, doc-sync) идут тем же review-путём, что и feature-PR.
@@ -168,7 +168,7 @@ Cost-tracking ведётся в собственной консоли vendor'а 
 (ii) >50 PR данных review-loop'а (вручную залогированные выходы interactive `/review` skill'а ИЛИ automated reviewer-bot пересмотрен и построен).
 (iii) У Tech Lead'а есть пропускная способность на tuning loop.
 
-До тех пор Phase 2 baseline (human-driven review через modes a/b/c + lint guards + auto-merge после положительного verdict'а) — это операционный режим.
+До тех пор Phase 2 baseline (human-driven review через modes a/b/c + lint guards + merge агентом после положительного verdict'а и подтверждённого руками зелёного CI) — это операционный режим.
 
 ### 2.11 Deferred runtime architecture (design only, реализация по trigger)
 

@@ -96,7 +96,7 @@ orchestrated iteration cycle (`do-feature-iteration` оркеструет эти
 8. REVIEW + MERGE
    - Mode (a) subagent `/review` skill, Mode (b) параллельный Codex CLI,
      или Mode (c) human review (AGENTS.md §4).
-   - Положительный verdict + зелёный CI → `gh pr merge <N> --auto --squash --delete-branch`
+   - Положительный verdict + подтверждённый руками зелёный CI → `pnpm pr:land <N>` (→ `gh pr merge <N> --squash --delete-branch`)
      (skill: merge-when-green).
 ```
 
@@ -1014,7 +1014,10 @@ ADR-0007 §5.2) will block merge if violated.
 
 Запусти интерактивный review через Mode (a) subagent `/review` skill, Mode (b) параллельный
 Codex CLI, или Mode (c) pure human (AGENTS.md §4). Обработай findings, затем merge через
-`gh pr merge <N> --auto --squash --delete-branch` после положительного verdict'а и зелёного CI.
+`pnpm pr:land <N>` после положительного verdict'а и подтверждённого руками зелёного CI — команда
+проходит pre-merge gate, затем `gh pr merge <N> --squash --delete-branch`, затем board Status = Done
+и teardown ветки. GitHub auto-merge (`--auto`) недоступен на Free-плане, поэтому CI в Phase 0 —
+ручной gate.
 
 ## SDD — hard rule
 

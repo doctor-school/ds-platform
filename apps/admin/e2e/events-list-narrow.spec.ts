@@ -132,11 +132,14 @@ async function pageOverflow(page: Page): Promise<number> {
 async function tableOverflow(page: Page): Promise<number> {
   return page
     .getByTestId("events-table")
-    .evaluate((table) => table.parentElement!.scrollWidth - table.parentElement!.clientWidth);
+    .evaluate(
+      (table) =>
+        table.parentElement!.scrollWidth - table.parentElement!.clientWidth,
+    );
 }
 
 /** Do the heading block and the create button share any vertical band? */
-async function headerBoxesOverlap(page: Page): Promise<boolean> {
+async function headerBoxesShareVerticalBand(page: Page): Promise<boolean> {
   const description = await page
     .getByTestId("create-event")
     .locator("xpath=../div/p")
@@ -181,7 +184,7 @@ test.describe("#1222 admin /events at 390px", () => {
 
     expect(await pageOverflow(page)).toBe(0);
     expect(await tableOverflow(page)).toBeGreaterThan(0);
-    expect(await headerBoxesOverlap(page)).toBe(false);
+    expect(await headerBoxesShareVerticalBand(page)).toBe(false);
     if (SHOT_DIR) {
       await page.screenshot({
         path: `${SHOT_DIR}/1222-after-390.png`,
@@ -195,7 +198,7 @@ test.describe("#1222 admin /events at 390px", () => {
     // the description.
     await restoreBrokenLayout(page);
     expect(await pageOverflow(page)).toBeGreaterThan(0);
-    expect(await headerBoxesOverlap(page)).toBe(true);
+    expect(await headerBoxesShareVerticalBand(page)).toBe(true);
     if (SHOT_DIR) {
       await page.screenshot({
         path: `${SHOT_DIR}/1222-before-390.png`,
@@ -211,8 +214,11 @@ test.describe("#1222 admin /events at 390px", () => {
     await page.getByTestId("events-table").waitFor({ state: "visible" });
 
     expect(await pageOverflow(page)).toBe(0);
-    expect(await tableOverflow(page)).toBe(0);
-    expect(await headerBoxesOverlap(page)).toBe(true);
+    // No desktop table-overflow assert: the wrapper scrollWidth at 1440px is
+    // data-dependent (one long operator-authored «Название» on the shared stand
+    // flips it with no layout regression behind it). The page-level
+    // `pageOverflow === 0` above already carries the desktop-unchanged claim.
+    expect(await headerBoxesShareVerticalBand(page)).toBe(true);
     if (SHOT_DIR) {
       await page.screenshot({
         path: `${SHOT_DIR}/1222-after-desktop.png`,

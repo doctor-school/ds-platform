@@ -26,6 +26,7 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import { futureMskStart } from "../setup/wall-clock.js";
 
 // 007 EARS-6 — ArchiveEvent (POST /v1/admin/events/:id/archive). The operator's
 // post-broadcast action that transitions an `ended` event `ended → archived`,
@@ -169,7 +170,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       school: "Кардиология",
       // A future МСК instant so a published event lands on the upcoming listing
       // (004 EARS-7) — the before-state of the "leaves public surfaces" drop.
-      startsAtMsk: "2026-12-17T19:00",
+      // Derived from `now`, never a wall-clock literal: a pinned date rots the
+      // day it drifts into the past (#1386).
+      startsAtMsk: futureMskStart(30, "19:00"),
       durationMin: 90,
       specialties: ["cardiology"],
     };

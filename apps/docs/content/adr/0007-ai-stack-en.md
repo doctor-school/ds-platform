@@ -23,7 +23,7 @@ DS Platform is a greenfield TS/Postgres platform developed in Phase 0 primarily 
 - **How an agent progresses through an iteration** — the cycle (READ → PLAN → RED → GREEN → REFACTOR → checklist → PR → merge), which methodologies (SDD/TDD) are hard rules vs. soft.
 - **How any agent (Claude Code, Codex, future Cursor) picks up context at the start of a fresh session**, without stale-state files.
 - **AI-specific drift guards** on top of the general ones in ADR-0006 §7 — what catches SDD-link violations, TDD discipline breaks, ADR non-compliance.
-- **Review modes** — what review path (subagent, parallel Codex CLI session, pure human) is acceptable, and when a positive verdict permits auto-merge.
+- **Review modes** — what review path (subagent, parallel Codex CLI session, pure human) is acceptable, and when a positive verdict permits merging without a separate human approval.
 - **Prompt-caching and cost discipline** — without gateway infrastructure (premature for Phase 0).
 - **Autonomy ladder** — what review path is required per PR, what conditions would trigger re-introducing automated reviewer infrastructure.
 - **Runtime AI infrastructure** (LLM gateway, PD filter, Zone-AI VM, OTel GenAI collector) — needed for Content Pipeline v2/v3 and AI recommendations v3 (PRD §24, §15), but not for Phase 0 dev-time work. Must be designed **now** (with explicit trigger points) and **implemented later** (separate ADR on trigger).
@@ -70,7 +70,7 @@ Enforcement: AGENTS.md hard rules + machine-checkable CI guards (§2.6).
 
 ### 2.4 Iteration cycle — delegated to `do-feature-iteration` skill
 
-Every implementation iteration follows an orchestrated cycle: READ relevant ADRs → verify base CI green → RED (failing test) → GREEN (minimum code) → REFACTOR → iteration-end checklist (dispatch, verdict-gated) → surface decision-debt → PR open → Mode (a) review dispatch (verdict-gated) → respond-to-review until APPROVE + green CI → iteration summary → merge via `gh pr merge <N> --auto --squash --delete-branch`. A positive Mode (a) or Mode (b) review verdict + green CI is sufficient for merge; Mode (c) reviews remain a single human decision.
+Every implementation iteration follows an orchestrated cycle: READ relevant ADRs → verify base CI green → RED (failing test) → GREEN (minimum code) → REFACTOR → iteration-end checklist (dispatch, verdict-gated) → surface decision-debt → PR open → Mode (a) review dispatch (verdict-gated) → respond-to-review until APPROVE + green CI → iteration summary → merge via `pnpm pr:land <N>` (pre-merge gate → `gh pr merge <N> --squash --delete-branch` → board Status = Done → branch teardown). A positive Mode (a) or Mode (b) review verdict + green CI is sufficient for merge; Mode (c) reviews remain a single human decision.
 
 The procedural source of truth is **`apps/docs/content/skills/do-feature-iteration/SKILL.md`**. The orchestration skill carries the discipline gates — checklist verdict, review verdict, decision-debt invocation — that an inline narrative checklist cannot enforce: an agent reading a narrative bullet list will skip silently, but an agent that cannot proceed without an artifact returned by a subagent cannot skip. Concretely:
 
@@ -158,7 +158,7 @@ Cost tracking happens via each vendor's own console (Anthropic Console, OpenAI P
   - **Mode (b)** — parallel Codex CLI session reviewing the PR independently.
   - **Mode (c)** — pure human review, no LLM assist.
 - All three modes are interactive, session-driven, and use the human's own LLM credentials in their terminal. No API keys live in GitHub repo secrets.
-- Auto-merge after a positive Mode (a) or Mode (b) verdict + green CI is permitted via the mandatory invocation `gh pr merge <N> --auto --squash --delete-branch`; Mode (c) reviews remain a single human decision.
+- Merge after a positive Mode (a) or Mode (b) verdict + green CI is permitted without a human approval step, via the mandatory invocation `pnpm pr:land <N>`, which wraps `gh pr merge <N> --squash --delete-branch`. GitHub auto-merge (`--auto`) is unavailable on the Free plan, so CI is a manual gate in Phase 0: green checks are confirmed by hand before the merge command runs. Mode (c) reviews remain a single human decision.
 - Write access to prod-DB prohibited.
 - Direct push to main prohibited.
 - Auto-chores (lint-fix, devDep bumps, doc-sync) follow the same review path as feature PRs.
@@ -169,7 +169,7 @@ Cost tracking happens via each vendor's own console (Anthropic Console, OpenAI P
 (ii) >50 PRs of review-loop data exist (interactive `/review` skill outputs logged manually, OR an automated reviewer-bot is reconsidered and built).
 (iii) Tech Lead has bandwidth for the tuning loop.
 
-Until then, Phase 2 baseline (human-driven review via modes a/b/c + lint guards + auto-merge after positive verdict) is the operating mode.
+Until then, Phase 2 baseline (human-driven review via modes a/b/c + lint guards + agent-run merge after a positive verdict and hand-confirmed green CI) is the operating mode.
 
 ### 2.11 Deferred runtime architecture (design only, implementation on trigger)
 

@@ -49,9 +49,23 @@ export class RedisAdminSessionStore implements AdminSessionStore {
   }
 
   async get(sid: string): Promise<AdminSessionRecord | undefined> {
-    const raw = await this.redis.get(`${ADMIN_SESSION_PREFIX}${sid}`);
+    const key = `${ADMIN_SESSION_PREFIX}${sid}`;
+    const raw = await this.redis.get(key);
     if (!raw) return undefined;
-    return JSON.parse(raw) as AdminSessionRecord;
+    const record = JSON.parse(raw) as AdminSessionRecord;
+    // Key TTL is the primary expiry mechanism, but it is a rounded, floored
+    // approximation of the record's real deadline: `ttlSecondsUntil` ceils to
+    // whole seconds and never writes below 1s (Redis rejects `EX 0`). So a
+    // record can outlive its own `expiresAtMs` by up to a second — and the
+    // record carries that deadline, so enforce it on read too. An expired
+    // record is absent, the exact answer the in-memory store gives (EARS-10:
+    // an expired session record refuses the request); the two adapters must
+    // not disagree about when a session is over.
+    if (record.expiresAtMs <= Date.now()) {
+      await this.redis.del(key);
+      return undefined;
+    }
+    return record;
   }
 
   async delete(sid: string): Promise<void> {
@@ -79,9 +93,10 @@ export class RedisAdminSessionStore implements AdminSessionStore {
     // The stale members need no `srem` — the whole index key is dropped below.
     const revoked: string[] = [];
     for (const sid of sids) {
-      const key = `${ADMIN_SESSION_PREFIX}${sid}`;
-      if (await this.redis.get(key)) {
-        await this.redis.del(key);
+      // Through `get`, so a record that is present but past its own
+      // `expiresAtMs` counts as dead here exactly as it does on a request.
+      if (await this.get(sid)) {
+        await this.redis.del(`${ADMIN_SESSION_PREFIX}${sid}`);
         revoked.push(sid);
       }
     }

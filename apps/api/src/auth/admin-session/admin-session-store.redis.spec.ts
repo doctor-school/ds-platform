@@ -93,4 +93,19 @@ describe("011 EARS-10 — RedisAdminSessionStore force-logout", () => {
     const store = new RedisAdminSessionStore(new FakeRedis());
     await expect(store.deleteBySub("sub-unknown")).resolves.toEqual([]);
   });
+
+  it("EARS-10: a record still keyed in Redis but past its own expiry reads as absent", async () => {
+    const redis = new FakeRedis();
+    const store = new RedisAdminSessionStore(redis);
+    // `ttlSecondsUntil` floors the key TTL at one second, so a record can
+    // outlive its own deadline by up to a second even with real Redis expiry —
+    // and the request path must refuse it for that whole window, exactly as the
+    // in-memory store does.
+    await store.create({ ...record("sid-past", "sub-2"), expiresAtMs: Date.now() - 1000 });
+
+    await expect(store.get("sid-past")).resolves.toBeUndefined();
+    // The read prunes it, so it can never resurface.
+    expect(redis.strings.has("ds:admin-session:sid-past")).toBe(false);
+    await expect(store.deleteBySub("sub-2")).resolves.toEqual([]);
+  });
 });

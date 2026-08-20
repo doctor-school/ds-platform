@@ -92,10 +92,25 @@ describe.skipIf(
     };
   }
 
+  /**
+   * A future MSK wall-clock start (`YYYY-MM-DDTHH:mm`, the 007 admin-create
+   * input format), derived relative to now instead of pinned to a literal.
+   * EARS-9 asserts the published event is visible on the 004 upcoming listing,
+   * and that listing filters by `starts_at ≥ now() − airWindow` (007 design §4)
+   * — so a wall-clock literal silently turns the suite red the day it drifts
+   * into the past.
+   */
+  function futureMskStart(daysAhead: number, hhmm: string): string {
+    const day = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Moscow",
+    }).format(new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000));
+    return `${day}T${hhmm}`;
+  }
+
   const payload = {
     title: "Единый источник состояния",
     school: "Кардиология сегодня",
-    startsAtMsk: "2026-07-17T19:00",
+    startsAtMsk: futureMskStart(30, "19:00"),
     durationMin: 90,
     description: "EARS-9 single-source check.",
     speakers: [{ name: "Иванов И.И.", regalia: "д.м.н." }],

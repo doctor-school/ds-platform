@@ -132,9 +132,17 @@ describe.skipIf(!process.env.DATABASE_URL)(
     }
 
     beforeAll(async () => {
+      // The fake is BOUND here, never read back off the container: `IdpModule`
+      // picks the real `ZitadelIdpClient` whenever `IDP_ISSUER` +
+      // `IDP_SERVICE_TOKEN` are configured (a developer's dev-stand), so
+      // `app.get(IDP_CLIENT)` would hand back the live adapter and the
+      // test-only accessors this suite drives do not exist on it.
+      fake = new FakeIdpClient();
       const moduleRef: TestingModule = await Test.createTestingModule({
         imports: [AppModule],
       })
+        .overrideProvider(IDP_CLIENT)
+        .useValue(fake)
         .overrideProvider(RATE_LIMIT_THRESHOLDS)
         .useValue(RELAXED_RATE_LIMIT)
         .compile();
@@ -145,7 +153,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await app.init();
       await app.getHttpAdapter().getInstance().ready();
       pool = app.get<pg.Pool>(DRIZZLE_POOL);
-      fake = app.get<FakeIdpClient>(IDP_CLIENT);
     });
 
     afterEach(async () => {

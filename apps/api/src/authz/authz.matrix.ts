@@ -92,6 +92,30 @@ export function validateRow(
   if (hasAttrs && check !== "policy")
     at("`object_attrs` is only valid with `auth_check: policy`");
 
+  // #1304: live revalidation and step-up are instruments of the AUTHENTICATED
+  // admin tier. On a `public` row there is no session to revalidate and no
+  // elevation to be fresh, so declaring either would publish a guarantee the
+  // guard cannot make — and the matrix is read as security evidence.
+  const { revalidate, stepUp } = meta;
+  if (revalidate !== undefined && revalidate !== "none" && revalidate !== "live")
+    at(`\`revalidate\` has invalid value "${String(revalidate)}"`);
+  if (access !== "authenticated") {
+    if (revalidate === "live")
+      at("`revalidate: live` requires `access: authenticated`");
+    if (stepUp === true) at("`step_up` requires `access: authenticated`");
+  }
+  // The live check asks the IdP whether `sub` still holds ONE named role, so a
+  // revalidated row must name a role the revalidation vocabulary covers.
+  if (
+    (revalidate === "live" || stepUp === true) &&
+    hasRoles &&
+    !roles.some((r) => r === "platform_admin" || r === "pd_officer")
+  ) {
+    at(
+      "`revalidate: live` / `step_up` requires `required_roles` to include `platform_admin` or `pd_officer`",
+    );
+  }
+
   return v;
 }
 
@@ -122,6 +146,7 @@ const HEADERS = [
   "auth_check",
   "object_attrs",
   "step_up",
+  "revalidate",
   "audit",
   "test_coverage",
 ] as const;
@@ -137,6 +162,10 @@ function cells(row: MatrixRow): string[] {
       ? m.objectAttrs.join("; ")
       : EM_DASH,
     m.stepUp ? "true" : "false",
+    // #1304: the live-IdP revalidation posture is part of the published security
+    // evidence, not an implementation detail — a reviewer must be able to read
+    // off the matrix which routes re-ask the IdP before they act.
+    m.revalidate === "live" ? "live" : "none",
     m.audit,
     m.tests.join(", "),
   ];

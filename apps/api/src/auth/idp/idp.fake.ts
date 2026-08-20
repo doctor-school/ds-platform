@@ -2,6 +2,7 @@ import type { Mailer } from "../../mailer/mailer.types.js";
 import {
   IdpInvalidArgumentError,
   IdpUnavailableError,
+  type AdminAuthorityVerdict,
   type CreatedUser,
   type CreateUserInput,
   type EmailLoginOutcome,
@@ -11,6 +12,7 @@ import {
   type IdpTokens,
   type IdpUser,
   type PasswordLoginResult,
+  type RevalidateAdminAuthorityInput,
   type TotpRegistration,
 } from "./idp.types.js";
 import {
@@ -116,6 +118,11 @@ export class FakeIdpClient implements IdpClient {
    * {@link setTotpFactor} test accessor.
    */
   private readonly totpFactors = new Set<string>();
+  /**
+   * #1304: when non-`null`, every {@link revalidateAdminAuthority} call reports a
+   * provider outage with this reason. See {@link setRevalidationUnavailable}.
+   */
+  private revalidationOutage: string | null = null;
   /**
    * 011 EARS-5/EARS-6: every TOTP factor the fake holds, `sub` → its shared
    * secret plus the time steps already consumed by an accepted code — whether the
@@ -465,6 +472,76 @@ export class FakeIdpClient implements IdpClient {
    */
   getProjectRoles(sub: string): Promise<string[]> {
     return Promise.resolve(this.grantedRoles(sub));
+  }
+
+  /**
+   * #1304 test seam: make the next revalidations report a PROVIDER OUTAGE.
+   *
+   * The real adapter reaches `unavailable` through transport errors, timeouts,
+   * 429/5xx, a rejected service token, missing config and malformed payloads —
+   * none of which an in-memory fake can produce naturally. Without this seam the
+   * 503 branch (the branch whose whole purpose is that an outage is NOT a
+   * credential denial) would be unreachable in the suite that exercises the
+   * default binding. Pass `null` to restore normal operation.
+   */
+  setRevalidationUnavailable(reason: string | null): void {
+    this.revalidationOutage = reason;
+  }
+
+  /**
+   * #1304: live authority revalidation, modelling exactly the branches the real
+   * adapter distinguishes — and no more permissive on any of them.
+   *
+   * The fake plays the IdP's own session store, so "the session is gone" is a
+   * real absence from {@link sessions} (what {@link terminateSession} or a
+   * force-logout produces) rather than a flag, and "the role is gone" is a real
+   * absence from {@link grants} (what {@link revokeProjectRole} produces). The
+   * account-state branch reads the same `active` field {@link deactivateUser}
+   * writes and {@link listUsers} projects, so one deactivation is visible
+   * identically to the sweep and to this check.
+   *
+   * Parity discipline (the recorded project rule): every input the real adapter
+   * refuses, this refuses — an unknown session, a session bound to another
+   * subject, a deactivated or absent account, a missing grant. The one branch the
+   * fake cannot reach on its own is the provider outage, which is why
+   * {@link setRevalidationUnavailable} exists; it can only ever make the fake
+   * STRICTER, never more permissive.
+   */
+  revalidateAdminAuthority(
+    input: RevalidateAdminAuthorityInput,
+  ): Promise<AdminAuthorityVerdict> {
+    const { zitadelSessionId, sub, requiredRole } = input;
+    if (this.revalidationOutage !== null) {
+      return Promise.resolve({
+        outcome: "unavailable",
+        reason: this.revalidationOutage,
+      });
+    }
+    if (!zitadelSessionId || !sub) {
+      return Promise.resolve({ outcome: "inactive", reason: "session_gone" });
+    }
+    const session = this.sessions.get(zitadelSessionId);
+    if (!session) {
+      return Promise.resolve({ outcome: "inactive", reason: "session_gone" });
+    }
+    if (session.sub !== sub) {
+      return Promise.resolve({
+        outcome: "inactive",
+        reason: "session_subject_mismatch",
+      });
+    }
+    const record = this.bySub.get(sub);
+    if (!record || !record.active) {
+      return Promise.resolve({
+        outcome: "inactive",
+        reason: "account_inactive",
+      });
+    }
+    const roles = this.grantedRoles(sub);
+    if (!roles.includes(requiredRole)) {
+      return Promise.resolve({ outcome: "role_revoked", roles });
+    }
+    return Promise.resolve({ outcome: "active", sub, roles });
   }
 
   /**

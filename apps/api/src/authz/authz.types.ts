@@ -21,6 +21,7 @@ export const ROLES = [
   "doctor",
   "legacy_admin",
   "platform_admin",
+  "pd_officer",
   "expert",
 ] as const;
 export type Role = (typeof ROLES)[number];
@@ -82,12 +83,49 @@ export interface AuthzMeta {
   check: AuthzCheck;
   /** object-level (ABAC) predicates; only valid when `check: "policy"`. */
   objectAttrs?: string[];
-  /** fresh step-up (`acr=mfa-fresh`) requirement; mechanism lives in identity-auth-rbac-design. Default false. */
+  /**
+   * Fresh step-up requirement (ADR-0001 §10). Default false.
+   *
+   * #1304 gives it a runtime mechanism on the token-free admin tier: a `stepUp`
+   * row additionally requires a server-verified MFA elevation no older than
+   * {@link STEP_UP_MAX_AGE_MS} recorded on the admin session record itself — no
+   * `acr` claim is read, because the 011 admin session holds no IdP token to read
+   * one from. `AdminAuthorityGuard` enforces it; a missing or stale elevation is
+   * 401 `STEP_UP_REQUIRED` carrying the `stepUpUrl` the operator re-elevates at.
+   */
   stepUp?: boolean;
+  /**
+   * #1304: live IdP authority revalidation before the handler runs.
+   *
+   * `"live"` — this route is high-stakes (every 012 admin mutation; every
+   * ADR-0009 erasure-plan approval): after the local 011 checks (dedicated
+   * session, fingerprint, MFA invariant, CSRF) the guard asks the IdP whether the
+   * wrapped Zitadel session, the account and the role grant are STILL good, and
+   * refuses before any validation, idempotency record or upload happens. Absent /
+   * `"none"` — the local session checks are the whole authorization story, which
+   * is the correct posture for reads and for the auth-tier routes themselves.
+   *
+   * It is metadata rather than a per-controller decorator so the ONE registry the
+   * matrix, the generated evidence and the runtime guard all read stays single —
+   * and so `admin-revalidation-coverage.spec.ts` can assert over every discovered
+   * route that no admin mutation is missing it.
+   */
+  revalidate?: "none" | "live";
   audit: AuthzAudit;
   /** covering EARS id(s), e.g. `["EARS-5"]` — keyed to the `it('EARS-N: …')` convention. */
   tests: string[];
 }
+
+/**
+ * #1304: how fresh a server-verified MFA elevation must be for a `stepUp` route —
+ * 30 minutes (ADR-0001 §10). Beyond it the elevation is stale and the operator
+ * re-elevates; it is deliberately shorter than the admin session lifetime,
+ * because the point of a step-up is that it is close in time to the action.
+ */
+export const STEP_UP_MAX_AGE_MS = 30 * 60 * 1000;
+
+/** #1304: where an operator re-elevates when a `stepUp` route finds no fresh MFA. */
+export const STEP_UP_URL = "/v1/admin/auth/mfa/verify";
 
 /** Nest metadata key the decorator writes and the guard/gate/generator read. */
 export const AUTHZ_KEY = "ds:authz";

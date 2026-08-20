@@ -10,12 +10,11 @@ import { FormControl, FormItem, FormLabel, FormMessage } from "../form";
  * baked in; the call site chooses the autocomplete posture via `purpose`:
  *   • `purpose="new"`  → `autoComplete="new-password"` (registration / reset
  *     creation). The composing form pairs this with the `NewPasswordFieldSchema`
- *     fragment (the #147 upper/lower/digit/symbol baseline), and the policy hint is
+ *     fragment (the 003 EARS-36 length-only baseline), and the policy hint is
  *     shown by default (when a `policyHint` string is supplied).
  *   • `purpose="current"` → `autoComplete="current-password"` (login). Paired with
- *     the permissive `CurrentPasswordFieldSchema` (min 8, no complexity) so a legacy
- *     credential still authenticates (#147); no policy hint (it is a login, not a
- *     creation).
+ *     the permissive `CurrentPasswordFieldSchema` (min 8) so a legacy credential
+ *     still authenticates (#147); no policy hint (it is a login, not a creation).
  *
  * The widget does not pick the resolver fragment — the form composes that — but it
  * guarantees the autocomplete + policy-hint pairing is always consistent with the
@@ -41,7 +40,7 @@ export function PasswordField<T extends FieldValues>({
   policyHint?: string;
   /**
    * Show the password-policy hint. Defaults to `true` for `purpose="new"` (the
-   * creation surfaces show the complexity baseline) and `false` for `current`. The
+   * creation surfaces show the length baseline) and `false` for `current`. The
    * hint only renders when both `showPolicy` resolves true AND a `policyHint` string
    * is supplied.
    */

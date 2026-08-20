@@ -1,35 +1,45 @@
 import { describe, expect, it } from "vitest";
 import {
   LoginRequestSchema,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
   PasswordResetCompleteRequestSchema,
   RegisterRequestSchema,
   VerifyRequestSchema,
 } from "./auth.schema.js";
 
-// #147 — password-policy SSOT. The creation schemas (register / reset-complete)
-// MUST mirror the live Zitadel default complexity policy (min 8 + upper + lower
-// + digit + symbol) so the BFF contract is honest and the portal can pre-validate
-// (#131). The login schema MUST stay a permissive shape guard (min 8, NO
-// complexity) so a legacy user whose stored password predates the policy is never
-// locked out at the DTO layer — Zitadel authenticates whatever it stored.
+// 003 EARS-36 — the creation-password policy is LENGTH ONLY (min 8, no character
+// classes), mirrored here from the single `PASSWORD_MIN_LENGTH` SSOT constant that
+// the provisioned Zitadel instance policy (`minLength = 8`, every class flag
+// `false`) is the authority for. The login schema stays a permissive shape guard
+// (min 8, NO composition rule) so a credential created under the previous
+// four-class policy is never invalidated at the DTO layer — nothing is rotated or
+// re-validated (#1331, supersedes the #147 four-class baseline).
 
 const consent = [{ purpose: "tos", version: "2026-01" }];
 
-// Baseline-compliant: ≥8, has upper, lower, digit, symbol.
-const COMPLIANT = "Aa1!aaaa";
+// Policy-conforming under the length-only rule: 8 chars, ZERO character classes
+// beyond lower-case letters (no upper-case, no digit, no symbol).
+const COMPLIANT = "пароль12";
 
-describe("creation password complexity (#147, mirrors Zitadel default policy)", () => {
-  // Each entry violates exactly one baseline rule; all must be REJECTED.
-  const violations: Array<[label: string, password: string]> = [
+describe("003 EARS-36: creation password policy (length-only, mirrors the provisioned IdP policy)", () => {
+  // Every one of these was REJECTED by the superseded four-class baseline and
+  // must now be ACCEPTED: length is the only rule.
+  const classFree: Array<[label: string, password: string]> = [
     ["no uppercase", "aa1!aaaa"],
     ["no lowercase", "AA1!AAAA"],
     ["no digit", "Aa!aaaaa"],
     ["no symbol", "Aa1aaaaa"],
-    ["too short (<8)", "Aa1!aaa"],
+    ["no class at all — 8 plain lower-case letters", "aaaaaaaa"],
   ];
 
+  it("003 EARS-36: the SSOT constants are the length-only policy (8 ≤ len ≤ 256)", () => {
+    expect(PASSWORD_MIN_LENGTH).toBe(8);
+    expect(PASSWORD_MAX_LENGTH).toBe(256);
+  });
+
   describe("RegisterRequestSchema.password", () => {
-    it("accepts a baseline-compliant password", () => {
+    it("003 EARS-36: accepts an 8-character password with no character classes", () => {
       expect(
         RegisterRequestSchema.safeParse({
           email: "user@ds.test",
@@ -39,21 +49,34 @@ describe("creation password complexity (#147, mirrors Zitadel default policy)", 
       ).toBe(true);
     });
 
-    it.each(violations)("rejects a password with %s", (_label, password) => {
+    it.each(classFree)(
+      "003 EARS-36: accepts a password with %s",
+      (_label, password) => {
+        expect(
+          RegisterRequestSchema.safeParse({
+            email: "user@ds.test",
+            password,
+            consent,
+          }).success,
+        ).toBe(true);
+      },
+    );
+
+    it("003 EARS-36: rejects a 7-character password (below the length floor)", () => {
       expect(
         RegisterRequestSchema.safeParse({
           email: "user@ds.test",
-          password,
+          password: "a".repeat(PASSWORD_MIN_LENGTH - 1),
           consent,
         }).success,
       ).toBe(false);
     });
 
-    it("rejects a >256 char password (upper bound preserved)", () => {
+    it("003 EARS-36: rejects a >256 char password (upper bound preserved)", () => {
       expect(
         RegisterRequestSchema.safeParse({
           email: "user@ds.test",
-          password: `Aa1!${"a".repeat(300)}`,
+          password: "a".repeat(PASSWORD_MAX_LENGTH + 1),
           consent,
         }).success,
       ).toBe(false);
@@ -61,7 +84,7 @@ describe("creation password complexity (#147, mirrors Zitadel default policy)", 
   });
 
   describe("PasswordResetCompleteRequestSchema.newPassword", () => {
-    it("accepts a baseline-compliant new password", () => {
+    it("003 EARS-36: accepts an 8-character new password with no character classes", () => {
       expect(
         PasswordResetCompleteRequestSchema.safeParse({
           identifier: "user@ds.test",
@@ -71,8 +94,8 @@ describe("creation password complexity (#147, mirrors Zitadel default policy)", 
       ).toBe(true);
     });
 
-    it.each(violations)(
-      "rejects a new password with %s",
+    it.each(classFree)(
+      "003 EARS-36: accepts a new password with %s",
       (_label, newPassword) => {
         expect(
           PasswordResetCompleteRequestSchema.safeParse({
@@ -80,9 +103,19 @@ describe("creation password complexity (#147, mirrors Zitadel default policy)", 
             code: "424242",
             newPassword,
           }).success,
-        ).toBe(false);
+        ).toBe(true);
       },
     );
+
+    it("003 EARS-36: rejects a 7-character new password", () => {
+      expect(
+        PasswordResetCompleteRequestSchema.safeParse({
+          identifier: "user@ds.test",
+          code: "424242",
+          newPassword: "a".repeat(PASSWORD_MIN_LENGTH - 1),
+        }).success,
+      ).toBe(false);
+    });
   });
 });
 
@@ -166,5 +199,17 @@ describe("login password guard (#147, permissive — lockout regression guard)",
         password: "short",
       }).success,
     ).toBe(false);
+  });
+
+  it("003 EARS-36: still accepts a legacy four-class credential (nothing rotated or re-validated)", () => {
+    // The length-only creation policy governs CREATION only. A credential created
+    // under the superseded upper+lower+digit+symbol baseline must keep passing the
+    // login DTO untouched — no existing password is invalidated (#1331).
+    expect(
+      LoginRequestSchema.safeParse({
+        identifier: "user@ds.test",
+        password: "Aa1!aaaa",
+      }).success,
+    ).toBe(true);
   });
 });

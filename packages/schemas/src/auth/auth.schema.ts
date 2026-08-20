@@ -64,62 +64,64 @@ export const PhoneIdentifierSchema = z.string().regex(E164);
 const LoginPassword = z.string().min(8).max(256);
 
 /**
- * **Creation** password complexity rule (#147, #200) — the bare regex, exported as
- * the single SSOT for the *pattern* (min-length bounds are applied alongside it).
- * Four positive look-aheads: at least one lower-case letter, one upper-case letter,
- * one digit, and one non-letter/non-digit "symbol" character (Unicode-aware, `u`).
+ * **Creation** password policy — the single SSOT constant (003 EARS-36, #1331).
  *
- * Why the regex is split out from {@link NewPasswordSchema} (the message-carrying
- * field schema): the *rule* is the SSOT, but the *message* is layer-specific. The
- * API DTO ({@link NewPasswordSchema}) keeps a generic, non-enumerating English
- * message (see its doc-comment); the portal composes a **message-less** field
- * schema from THIS constant so its localized resolver
- * (`apps/portal/lib/use-localized-resolver.ts`) can map the resulting
- * `invalid_format` issue to the RU `errors.validation.passwordComplexity` copy. In
- * zod v4 a schema-level `.regex()` message outranks the contextual error map, so a
- * baked-in message would leak English on the portal — hence the rule (this regex)
- * is shared while each layer owns its own message. Re-using this constant keeps the
- * pattern from drifting between the two layers (the #197 anti-drift rationale).
+ * The policy is **length only**: at least 8 characters, with no upper-case,
+ * lower-case, digit, or symbol requirement and no other composition rule. It
+ * mirrors the explicitly-provisioned Zitadel instance password-complexity policy
+ * (`minLength = 8`, `hasUppercase`/`hasLowercase`/`hasNumber`/`hasSymbol` all
+ * `false` — converged idempotently by `infra/dev-stand/idp/provision.sh`), which
+ * is the credential authority; this constant is the mirror, so the rule lives in
+ * exactly two places (the IdP policy and this constant) and nowhere else.
+ *
+ * NIST SP 800-63B recommends **against** composition rules — they push users to
+ * predictable transformations (`Password1!`), raise abandonment, and buy little
+ * entropy — so the earlier four-class baseline (#147/#200) is superseded rather
+ * than relaxed ad hoc (003 design §15.1/§15.2).
+ *
+ * Exported as a bare number, not a schema, so both consumers compose the *same*
+ * bound with their own message: the API DTO ({@link NewPasswordSchema}, generic
+ * English) and the portal's message-less `NewPasswordFieldSchema`
+ * (`packages/design-system/src/primitives/fields/field-schemas.ts`), whose issue
+ * falls through to the localized resolver's RU copy. In zod v4 a schema-level
+ * message outranks the contextual error map, which is why the *bound* is shared
+ * and each layer owns its *message* (the #200 rule-vs-message split, the #197
+ * anti-drift rationale).
  */
-export const NEW_PASSWORD_COMPLEXITY =
-  /^(?=.*\p{Ll})(?=.*\p{Lu})(?=.*\d)(?=.*[^\p{L}\d]).*$/u;
+export const PASSWORD_MIN_LENGTH = 8;
 
 /**
- * **Creation** password schema (#147) — registration and password-reset. It
- * mirrors the deployed Zitadel default complexity policy as the BFF *baseline*
- * (min 8 + at least one upper-case, one lower-case, one digit, and one symbol)
- * so the contract is honest and the portal (#131) can pre-validate client-side
- * before submit. This is a baseline, not a ceiling: Zitadel remains the ultimate
- * credential authority (design §2, ADR-0001 §7) and may be configured stricter —
- * the residual race (schema passes, a stricter live policy 400s inside Zitadel's
+ * Upper bound on a creation password (unchanged, #147) — a DoS guard on the hash
+ * input, not a policy rule; the IdP policy carries no maximum.
+ */
+export const PASSWORD_MAX_LENGTH = 256;
+
+/**
+ * **Creation** password schema (003 EARS-36) — registration and password-reset.
+ * Length-only, built from the {@link PASSWORD_MIN_LENGTH} SSOT so the BFF
+ * contract is honest and the portal (#131) can pre-validate client-side before
+ * submit against the identical bound.
+ *
+ * This is a baseline, not a ceiling: Zitadel remains the ultimate credential
+ * authority (design §2, ADR-0001 §7) and may be configured stricter — the
+ * residual race (schema passes, a stricter live policy 400s inside Zitadel's
  * `createUser`) is mapped to a generic, non-enumerating "weak password" failure
  * in the auth service, never a 500 and never an existence oracle (EARS-16). The
  * BFF still never stores or hashes a password (Constraints / design §2).
  *
- * Encoded as four positive look-aheads + the length bound; the message is generic
- * (it names the requirement, not which class is missing) and identical for every
- * violation so the field-level error discloses nothing account-specific.
- *
- * Exported (#197) as the reusable creation-password fragment so the portal's
- * `NewPasswordFieldSchema` (`apps/portal/components/fields`) composes from THIS
- * SSOT instead of re-declaring the complexity regex — same rationale as the
- * `EmailIdentifierSchema` / `PhoneIdentifierSchema` shape fragments above: the
- * client pre-validation cannot silently drift from the BFF baseline. This is the
- * per-field fragment, NOT a request schema — the loose REQUEST schemas are
- * unaffected; they keep composing `NewPasswordSchema` exactly as before.
+ * The message is generic and identical for every violation, so the field-level
+ * error discloses nothing account-specific. It governs **creation** only —
+ * {@link LoginPassword} stays a permissive shape guard so every credential
+ * created under the superseded four-class policy keeps authenticating; nothing is
+ * rotated, invalidated, or re-validated (EARS-36).
  */
 export const NewPasswordSchema = z
   .string()
-  .min(8)
-  .max(256)
-  // Built from the {@link NEW_PASSWORD_COMPLEXITY} SSOT rule so the pattern has a
-  // single source; the generic English MESSAGE is owned here at the DTO layer (the
-  // portal composes its own message-less field schema from the same constant —
-  // #200, the rule-vs-message split documented on the constant above).
-  .regex(
-    NEW_PASSWORD_COMPLEXITY,
-    "password must include an upper-case letter, a lower-case letter, a digit, and a symbol",
-  );
+  .min(
+    PASSWORD_MIN_LENGTH,
+    `password must be at least ${PASSWORD_MIN_LENGTH} characters`,
+  )
+  .max(PASSWORD_MAX_LENGTH);
 
 /**
  * One accepted per-purpose consent version (ADR-0009). Captured at registration

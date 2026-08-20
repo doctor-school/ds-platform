@@ -4,7 +4,7 @@
     "phone": "Телефон",
     "password": "Пароль",
     "emailOrPhone": "Электронная почта или телефон",
-    "passwordPolicy": "Не менее 8 символов: заглавная буква, строчная буква, цифра и спецсимвол.",
+    "passwordPolicy": "Не менее 8 символов.",
     "emailPlaceholder": "doctor@example.com",
     "phonePlaceholder": "+79991234567",
     "identifierPlaceholder": "doctor@example.com или +7…",

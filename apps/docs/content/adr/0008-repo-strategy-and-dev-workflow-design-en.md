@@ -23,7 +23,7 @@ This document is the implementation detail for ADR-0008. The ADR fixes "what and
 | Decision               | Choice                                                                                                                                                   | ADR-0008 §                  |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
 | GitHub org             | `doctor-school` (GitHub Free plan)                                                                                                                       | §2.1                        |
-| Repo name + visibility | `doctor-school/ds-platform`, private                                                                                                                     | §2.1                        |
+| Repo name + visibility | `doctor-school/ds-platform`, public                                                                                                                      | §2.1                        |
 | Monorepo orchestrator  | Turborepo 2.x + pnpm 10.x workspaces                                                                                                                     | §2.2                        |
 | Node version pin       | `.nvmrc` (`22`) + `packageManager: pnpm@10.x` + `engines` + `engine-strict=true`                                                                         | §2.2                        |
 | Repo layout root       | `apps/`, `packages/`, `tools/`, `.github/`, `.changeset/`, manifest files                                                                                | §2.3                        |
@@ -38,7 +38,7 @@ This document is the implementation detail for ADR-0008. The ADR fixes "what and
 | Merge style            | squash-only                                                                                                                                              | §2.4                        |
 | Pre-commit hooks       | simple-git-hooks + lint-staged                                                                                                                           | §2.5                        |
 | Branch strategy        | trunk-based, branches `feat/DSO-NN-<slug>` short-lived                                                                                                   | §2.6                        |
-| Branch protection rule | Target-state contract per ADR-0008 §2.6 (deferred enforcement; required status check `ci` only)                                                          | §2.6                        |
+| Branch protection rule | Target-state contract per ADR-0008 §2.6 (API reachable — activation tracked in #1403; required status check `ci` only)                                   | §2.6                        |
 | CODEOWNERS Phase 0     | `* @sidorovanthon`                                                                                                                                       | §2.7                        |
 | CI runner              | GitHub-hosted `ubuntu-latest` for every job; batched topology — 8 executing jobs, one checkout + install per batch (#1237, #1249)                        | §2.8                        |
 | Dependabot             | weekly, grouped, ecosystems npm + github-actions                                                                                                         | §2.9                        |
@@ -728,7 +728,7 @@ No per-directory npm sub-configs are configured — pnpm-monorepo single root in
 
 ## 4. Branch protection + repo settings — concrete `gh api` calls
 
-Per ADR-0008 §2.6, step 21. Admin runs §4.1 once. **§4.2 is target-state**, not currently applied: GitHub Free + private repo blocks the branch-protection API (HTTP 403 from both the legacy endpoint and the rulesets API). The payload below is committed verbatim to `branch-protection.json` at repo root as documentation; it is applied via `gh api` only when any reactivation trigger in ADR-0008 §2.6 fires. Required status checks contain `ci` only (single meta-job from §3.1); there is no automated reviewer-bot in Phase 0 (ADR-0007 §2.10 dropped that flow).
+Per ADR-0008 §2.6, step 21. Admin runs §4.1 once. **§4.2 is target-state**, not currently applied — no longer because of a paywall (the repo is public, so both the legacy protection endpoint and the rulesets API are reachable), but because the payload cannot be applied verbatim: `required_status_checks: ["ci"]` would permanently block the Changesets bot branch `changeset-release/main`, which carries no check-runs. Issue #1403 owns choosing the enforceable shape (ruleset with a bot bypass, or protection without required status checks), applying it, and reconciling `branch-protection.json` with the enforced result. The payload below is committed verbatim to `branch-protection.json` at repo root as documentation until then. Required status checks contain `ci` only (single meta-job from §3.1); there is no automated reviewer-bot in Phase 0 (ADR-0007 §2.10 dropped that flow).
 
 **4.1 Repository settings — enforce squash-only:**
 
@@ -799,7 +799,7 @@ Beyond the baseline from ADR-0006/0007, add a repository conventions section:
 
 **PR template is required** — set the correct label (feature/bug/chore/refactor/docs), link the Issue (`Closes #N`), mark the author (claude/codex/human) for reviewer-bot vendor detection.
 
-**Branch protection:** main is protected. A PR requires: passing `ci` + `agent-review` status checks, ≥1 human approval, conversation resolved, branch up-to-date, linear history, no force push.
+**Branch protection:** the contract on `main` (PR required, `ci` green, ≥1 review, conversation resolved, branch up-to-date, linear history, no force push) is enforced by convention and the local merge gate `pnpm pr:land <N>`; server-side activation is tracked in #1403 (§4).
 
 **ADRs live in `apps/docs/content/adr/`**, rendered by Fumadocs at `/adr/<slug>`. Paired design spec — `NNNN-<slug>-design.md` alongside.
 

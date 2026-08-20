@@ -23,7 +23,7 @@ lang: ru
 | Решение                | Выбор                                                                                                                                                    | ADR-0008 §                  |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
 | GitHub org             | `doctor-school` (GitHub Free plan)                                                                                                                       | §2.1                        |
-| Repo name + visibility | `doctor-school/ds-platform`, private                                                                                                                     | §2.1                        |
+| Repo name + visibility | `doctor-school/ds-platform`, public                                                                                                                      | §2.1                        |
 | Monorepo orchestrator  | Turborepo 2.x + pnpm 10.x workspaces                                                                                                                     | §2.2                        |
 | Node version pin       | `.nvmrc` (`22`) + `packageManager: pnpm@10.x` + `engines` + `engine-strict=true`                                                                         | §2.2                        |
 | Repo layout root       | `apps/`, `packages/`, `tools/`, `.github/`, `.changeset/`, manifest files                                                                                | §2.3                        |
@@ -38,7 +38,7 @@ lang: ru
 | Merge style            | squash-only                                                                                                                                              | §2.4                        |
 | Pre-commit hooks       | simple-git-hooks + lint-staged                                                                                                                           | §2.5                        |
 | Branch strategy        | trunk-based, ветки `feat/DSO-NN-<slug>` short-lived                                                                                                      | §2.6                        |
-| Branch protection rule | Target-state contract per ADR-0008 §2.6 (deferred enforcement; required status check `ci` only)                                                          | §2.6                        |
+| Branch protection rule | Target-state contract per ADR-0008 §2.6 (API доступен — активация трекается в #1403; required status check `ci` only)                                    | §2.6                        |
 | CODEOWNERS Phase 0     | `* @sidorovanthon`                                                                                                                                       | §2.7                        |
 | CI runner              | GitHub-hosted `ubuntu-latest` для всех jobs; batched-топология — 8 исполняемых jobs, один checkout + install на batch (#1237, #1249)                     | §2.8                        |
 | Dependabot             | weekly, grouped, ecosystems npm + github-actions                                                                                                         | §2.9                        |
@@ -727,7 +727,7 @@ updates:
 
 ## 4. Branch protection + repo settings — конкретные `gh api` вызовы
 
-Per ADR-0008 §2.6, step 21. Admin запускает §4.1 один раз. **§4.2 — target-state**, не применяется сейчас: GitHub Free + private repo блокирует branch-protection API (HTTP 403 и от legacy endpoint, и от rulesets API). Payload ниже закоммичен дословно в `branch-protection.json` в корне репо как документация; применяется через `gh api` только когда срабатывает любой reactivation trigger из ADR-0008 §2.6. Required status checks содержат только `ci` (single meta-job из §3.1); автоматического reviewer-bot'а в Phase 0 нет (ADR-0007 §2.10 заменил его на interactive review modes).
+Per ADR-0008 §2.6, step 21. Admin запускает §4.1 один раз. **§4.2 — target-state**, сейчас не применяется — уже не из-за paywall'а (репо public, поэтому доступны и legacy protection endpoint, и rulesets API), а потому что payload нельзя применить дословно: `required_status_checks: ["ci"]` навсегда заблокировал бы bot-ветку Changesets `changeset-release/main`, у которой нет ни одного check-run. Issue #1403 владеет выбором применимой формы (ruleset с bypass для бота либо protection без required status checks), её применением и приведением `branch-protection.json` в соответствие с enforce'ящимся результатом. До этого payload ниже закоммичен дословно в `branch-protection.json` в корне репо как документация. Required status checks содержат только `ci` (single meta-job из §3.1); автоматического reviewer-bot'а в Phase 0 нет (ADR-0007 §2.10 заменил его на interactive review modes).
 
 **4.1 Repository settings — enforce squash-only:**
 
@@ -798,7 +798,7 @@ gh api \
 
 **PR template обязателен** — ставь правильный label (feature/bug/chore/refactor/docs), линкуй Issue (`Closes #N`), помечай author (claude/codex/human) для reviewer-bot vendor detection.
 
-**Branch protection:** main защищена. PR требует: passing `ci` + `agent-review` status checks, ≥1 human approval, conversation resolved, branch up-to-date, linear history, no force push.
+**Branch protection:** контракт на `main` (PR обязателен, `ci` зелёный, ≥1 review, conversation resolved, branch up-to-date, linear history, no force push) держится конвенцией и локальным merge-gate `pnpm pr:land <N>`; серверная активация трекается в #1403 (§4).
 
 **ADRs live in `apps/docs/content/adr/`**, render через Fumadocs at `/adr/<slug>`. Парный design spec — `NNNN-<slug>-design.md` рядом.
 

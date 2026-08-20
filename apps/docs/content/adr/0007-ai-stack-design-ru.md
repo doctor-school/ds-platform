@@ -1019,8 +1019,8 @@ check-runs, привязанный к head SHA, плюс head-pinned Mode (a) AP
 `gh pr merge <N> --squash --delete-branch`, затем board Status = Done и teardown ветки. `--auto`
 в Phase 0 не используется: на `main` нет branch protection, поэтому нет required checks, за
 которыми можно было бы встать в очередь — GitHub отклоняет auto-merge на уже чистом PR и не гейтит
-по CI там, где принимает его (skill `merge-when-green`; ADR-0008 §2.6 сохраняет
-`--auto --squash --delete-branch` как команду target-state, когда protection вернут). CI гейтится
+по CI там, где принимает его (skill `merge-when-green`). Изменит ли это серверная protection —
+решается при её включении: ADR-0008 §2.6 / Issue #1403. CI гейтится
 in-band через `merge:gate`, а не очередью auto-merge от GitHub.
 
 ## SDD — hard rule

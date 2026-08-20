@@ -1020,8 +1020,8 @@ check-runs poll plus a head-pinned Mode (a) APPROVE), then `gh pr merge <N> --sq
 --delete-branch`, then board Status = Done and branch teardown. `--auto` is not used in Phase 0:
 with no branch protection on `main` there are no required checks to queue behind, so GitHub
 rejects auto-merge on an already-clean PR and does not gate on CI where it accepts it (skill
-`merge-when-green`; ADR-0008 §2.6 keeps `--auto --squash --delete-branch` as the target-state
-command for when protection is reactivated). CI is gated in band by `merge:gate`, not by GitHub's
+`merge-when-green`). Whether server-side protection changes that is decided when protection is
+actually enabled — ADR-0008 §2.6 / Issue #1403. CI is gated in band by `merge:gate`, not by GitHub's
 auto-merge queue.
 
 ## SDD — hard rule

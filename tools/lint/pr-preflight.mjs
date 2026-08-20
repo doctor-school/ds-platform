@@ -137,6 +137,7 @@ export const STATIC_GUARDS = [
   { name: "ears-tests", file: "ears-test-lint.ts" },
   { name: "ears-naming", file: "ears-naming-lint.ts" },
   { name: "workflow-auth", file: "workflow-auth-lint.ts" },
+  { name: "retained-data", file: "retained-data-lint.ts" },
 ];
 
 /**

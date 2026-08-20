@@ -34,7 +34,7 @@ env:
 #                          unchanged                                (BLOCK)
 #   guards-block           the hard-red light guards + primitives-first +
 #                          db-drift                                  (BLOCK)
-#   guards-warn            the 23 WARN light guards                  (WARN)
+#   guards-warn            the 25 WARN light guards                  (WARN)
 #   ci                     the single required status check
 #
 # SEVERITY LIVES IN EXIT CODES (ADR-0007 §2.6, #1253). No tool anywhere reads a
@@ -854,6 +854,27 @@ jobs:
         continue-on-error: true
         run: pnpm exec tsx tools/lint/workflow-auth-lint.ts
 
+      # retained-data: retained-row lifecycle regression guard (#1404, slice C of
+      # #1278). Application-owned Postgres data is retained LOGICALLY (soft-delete /
+      # status transition) — retained rows back audit, consent and analytics — yet
+      # nothing blocked a PR from reintroducing physical removal: a Drizzle
+      # `db`/`tx.delete(` call or a raw `DELETE FROM`/`TRUNCATE`/`DROP TABLE` in
+      # `apps/api/src|scripts/**`, or a NEW `onDelete: "cascade"` FK in
+      # `packages/db/src/schema/**` (an implicit cascade delete of retained child
+      # rows). In-memory container deletes (`map.delete`) deliberately do not match —
+      # only database-handle receivers do. Test-database teardown (`*.spec.ts`,
+      # `apps/api/test/**`) and migrations history (`apps/api/drizzle/**`) are a named
+      # allowlist per the #1278 scope boundary. The occurrences on main today are
+      # recorded in `tools/lint/retained-data-baseline.json` with a per-file count,
+      # SHRINK-ONLY: a higher count is a new regression, a lower one is a stale
+      # baseline (removing a baselined occurrence must update the baseline in the same
+      # PR). The #1278 schema slices drain it as they land. Static source scan — no
+      # PR/gh context. WARN v1 — promote to BLOCK per ADR-0007 §2.6.
+      - name: WARN · retained-data
+        id: warn_retained_data
+        continue-on-error: true
+        run: pnpm lint:retained-data
+
       # WARN report — the second half of the WARN encoding, and the batch's
       # VISIBILITY surface. It collects every WARN step whose `outcome` is
       # `failure` and writes them to the job summary; it exits 0 by design.
@@ -863,7 +884,7 @@ jobs:
       # completed non-success check-run — kept treating a WARN finding as a
       # merge-blocker. That is precisely the contradiction #1253 closes: ADR-0007
       # §2.6 defines WARN as visible and NEVER merge-blocking, yet one WARN
-      # finding on any of the 23 guards below blocked `pnpm pr:land` on every open
+      # finding on any of the 25 guards below blocked `pnpm pr:land` on every open
       # PR at once while the required `ci` check stayed green. Nothing exempts
       # this check-run at the gate — the fix is that this step stops
       # manufacturing a red the contract never wanted, so a WARN-findings run
@@ -904,6 +925,7 @@ jobs:
             tdd-signal=${{ steps.warn_tdd_signal.outcome }}
             product-note=${{ steps.warn_product_note.outcome }}
             workflow-auth=${{ steps.warn_workflow_auth.outcome }}
+            retained-data=${{ steps.warn_retained_data.outcome }}
         run: |
           failed="$(printf '%s\n' "$WARN_OUTCOMES" | grep -E '=failure$' | cut -d= -f1 || true)"
           echo "### WARN guards (ADR-0007 §2.6 posture)" >> "$GITHUB_STEP_SUMMARY"

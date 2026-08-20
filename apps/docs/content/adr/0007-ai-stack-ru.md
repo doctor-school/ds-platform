@@ -157,7 +157,7 @@ Cost-tracking ведётся в собственной консоли vendor'а 
   - **Mode (b)** — параллельная Codex CLI сессия независимо ревьюит PR.
   - **Mode (c)** — чистый human review, без LLM-ассиста.
 - Все три режима интерактивные, session-driven, и используют собственные LLM credentials человека в его терминале. Никаких API-ключей в GitHub repo secrets.
-- Merge после положительного Mode (a) или Mode (b) verdict + green CI разрешён без отдельного human approval — через обязательную invocation `pnpm pr:land <N>`, которая оборачивает `gh pr merge <N> --squash --delete-branch`. GitHub auto-merge (`--auto`) недоступен на Free-плане, поэтому CI в Phase 0 — ручной gate: зелёные checks подтверждаются руками до запуска merge-команды. Mode (c)-ревью остаются single human decision.
+- Merge после положительного Mode (a) или Mode (b) verdict + green CI разрешён без отдельного human approval — через обязательную invocation `pnpm pr:land <N>`, которая оборачивает `gh pr merge <N> --squash --delete-branch`. `--auto` в Phase 0 не используется: на `main` нет branch protection, поэтому нет required checks, за которыми можно было бы встать в очередь — GitHub отклоняет auto-merge на уже чистом PR и не гейтит по CI там, где принимает его (skill `merge-when-green`; ADR-0008 §2.6 сохраняет `--auto --squash --delete-branch` как команду target-state, когда protection вернут). Вместо этого CI гейтится in-band через `merge:gate` — опрос check-runs, привязанный к head SHA, плюс head-pinned Mode (a) APPROVE — который `pr:land` выполняет первой стадией. Mode (c)-ревью остаются single human decision.
 - Write-доступ в prod-DB запрещён.
 - Direct push в main запрещён.
 - Auto-chores (lint-fix, devDep bumps, doc-sync) идут тем же review-путём, что и feature-PR.
@@ -168,7 +168,7 @@ Cost-tracking ведётся в собственной консоли vendor'а 
 (ii) >50 PR данных review-loop'а (вручную залогированные выходы interactive `/review` skill'а ИЛИ automated reviewer-bot пересмотрен и построен).
 (iii) У Tech Lead'а есть пропускная способность на tuning loop.
 
-До тех пор Phase 2 baseline (human-driven review через modes a/b/c + lint guards + merge агентом после положительного verdict'а и подтверждённого руками зелёного CI) — это операционный режим.
+До тех пор Phase 2 baseline (human-driven review через modes a/b/c + lint guards + merge агентом после положительного verdict'а, с CI, гейтящимся in-band через `merge:gate`) — это операционный режим.
 
 ### 2.11 Deferred runtime architecture (design only, реализация по trigger)
 

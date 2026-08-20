@@ -158,7 +158,7 @@ Cost tracking happens via each vendor's own console (Anthropic Console, OpenAI P
   - **Mode (b)** — parallel Codex CLI session reviewing the PR independently.
   - **Mode (c)** — pure human review, no LLM assist.
 - All three modes are interactive, session-driven, and use the human's own LLM credentials in their terminal. No API keys live in GitHub repo secrets.
-- Merge after a positive Mode (a) or Mode (b) verdict + green CI is permitted without a human approval step, via the mandatory invocation `pnpm pr:land <N>`, which wraps `gh pr merge <N> --squash --delete-branch`. GitHub auto-merge (`--auto`) is unavailable on the Free plan, so CI is a manual gate in Phase 0: green checks are confirmed by hand before the merge command runs. Mode (c) reviews remain a single human decision.
+- Merge after a positive Mode (a) or Mode (b) verdict + green CI is permitted without a human approval step, via the mandatory invocation `pnpm pr:land <N>`, which wraps `gh pr merge <N> --squash --delete-branch`. `--auto` is not used in Phase 0: with no branch protection on `main` there are no required checks to queue behind, so GitHub rejects auto-merge on an already-clean PR and does not gate on CI where it accepts it (skill `merge-when-green`; ADR-0008 §2.6 keeps `--auto --squash --delete-branch` as the target-state command for when protection is reactivated). CI is instead gated in band by `merge:gate` — a head-SHA-pinned check-runs poll plus a head-pinned Mode (a) APPROVE — which `pr:land` runs as its first stage. Mode (c) reviews remain a single human decision.
 - Write access to prod-DB prohibited.
 - Direct push to main prohibited.
 - Auto-chores (lint-fix, devDep bumps, doc-sync) follow the same review path as feature PRs.
@@ -169,7 +169,7 @@ Cost tracking happens via each vendor's own console (Anthropic Console, OpenAI P
 (ii) >50 PRs of review-loop data exist (interactive `/review` skill outputs logged manually, OR an automated reviewer-bot is reconsidered and built).
 (iii) Tech Lead has bandwidth for the tuning loop.
 
-Until then, Phase 2 baseline (human-driven review via modes a/b/c + lint guards + agent-run merge after a positive verdict and hand-confirmed green CI) is the operating mode.
+Until then, Phase 2 baseline (human-driven review via modes a/b/c + lint guards + agent-run merge after a positive verdict, with CI gated in band by `merge:gate`) is the operating mode.
 
 ### 2.11 Deferred runtime architecture (design only, implementation on trigger)
 

@@ -90,7 +90,10 @@ export function AdminListShell<Row>({
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      {/* Same narrow-viewport stacking as the events list (#1222): the create
+          action drops below the heading until `sm`, where the two stop
+          competing for one line. */}
+      <div className="mb-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-extrabold text-foreground">{title}</h1>
           <p className="text-sm text-muted-foreground">{description}</p>

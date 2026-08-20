@@ -28,7 +28,11 @@ export default function EventsListPage() {
   return (
     <Authenticated key="events-list" redirectOnFail="/login">
       <AppShell>
-        <div className="mb-6 flex items-center justify-between">
+        {/* Narrow viewports stack the heading above the create action; the
+            single-row `justify-between` only holds from `sm` up, where the
+            description text and the button no longer compete for the same
+            line (#1222). */}
+        <div className="mb-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-xl font-extrabold text-foreground">
               {t("events.listTitle")}

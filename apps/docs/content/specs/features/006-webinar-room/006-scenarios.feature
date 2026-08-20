@@ -73,17 +73,34 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
       | 100     | the video is unavailable                     |
 
   @EARS-18 @edge
-  Scenario Outline: An unobservable stall shows a non-covering advisory banner, not a covering wall
-    Given a gated doctor in a live room on a "<provider>" stream that never emits a playing signal
+  Scenario: An unobservable cdnvideo stall shows a non-covering advisory banner, not a covering wall
+    Given a gated doctor in a live room on a "cdnvideo" stream that never emits a playing signal
     When no playing signal is observed within the watchdog threshold
     Then the player region shows a NON-covering advisory banner beside the still-visible embed
     And the room does not auto-retry or re-create the embed
     And the room offers a manual «Перезапустить плеер» affordance
 
-    Examples:
-      | provider |
-      | vk       |
-      | cdnvideo |
+  @EARS-18 @edge
+  Scenario: The cdnvideo advisory is time-boxed and its restart is gesture-gated
+    Given a gated doctor in a live room on a "cdnvideo" stream showing the advisory banner
+    When the advisory time box elapses with no playing signal
+    Then the advisory banner is withdrawn and the embed stays visible
+    And a «Перезапустить плеер» control remains available
+    And the embed is re-created only when the doctor activates that control
+
+  @EARS-18 @happy
+  Scenario: A vk embed is parent-observable through its js_api handshake
+    Given a gated doctor in a live room on a "vk" stream whose embed src is built with the js_api parameter enabled
+    When the vk player sends its handshake message
+    And the vk player reports a playing state
+    Then the watchdog is cleared and no failure status is shown
+
+  @EARS-18 @edge
+  Scenario: A vk embed whose handshake never arrives is treated as suspected, not a false confirmed failure
+    Given a gated doctor in a live room on a "vk" stream whose player never sends its handshake
+    When no playing signal is observed within the watchdog threshold
+    Then the player region shows a NON-covering advisory banner beside the still-visible embed
+    And the room does not auto-retry or re-create the embed
 
   @EARS-18 @edge
   Scenario: A YouTube embed whose handshake never arrives is treated as suspected, not a false confirmed failure
@@ -236,6 +253,16 @@ Feature: Webinar room — a registered doctor watches live, chats in real time, 
     And a late chat post for that event is refused
     And the room degrades to the truthful ended state
     And the doctor's minutes are computed over the window the room was open
+
+  @EARS-7 @happy
+  Scenario: The ended room shows the end card and keeps the chat history readable
+    Given a gated doctor in a room whose event has left the live state
+    When the room renders its ended state
+    Then the player area shows the end card announcing the broadcast has ended
+    And the card points to the recording appearing in «Мои события»
+    And the card points to the nearest upcoming эфиры
+    And the chat history remains readable and scrollable
+    And the chat composer is replaced by a truthful ended line rather than silently disabled
 
   # --- Cross-cutting (US-5, US-1) ---
 

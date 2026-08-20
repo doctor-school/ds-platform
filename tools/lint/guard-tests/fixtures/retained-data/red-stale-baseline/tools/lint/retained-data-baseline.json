@@ -1,0 +1,6 @@
+{
+  "cascade": {
+    "packages/db/src/schema/registrations.ts": { "count": 2, "sites": [10, 12] }
+  },
+  "physicalDelete": {}
+}

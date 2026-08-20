@@ -395,3 +395,79 @@ Feature: Net-new web authentication producing a doctor_guest identity
     And the BFF dispatches a send to a real-domain recipient
     Then both sends proceed to the transport chain unchanged
     And no send is suppressed, regardless of the recipient tag
+
+  @EARS-36 @happy
+  Scenario: A password of eight characters with no character classes is accepted
+    Given the IdP instance complexity policy is provisioned as minimum length 8 with every character-class flag off
+    And a visitor with a never-registered email
+    When the visitor submits the registration form with the password "orangetree" and accepted consent versions
+    Then the registration is accepted end to end
+    And no character-class requirement is applied by the portal, the API, or the IdP
+
+  @EARS-36 @failure
+  Scenario: A password shorter than the minimum length is rejected by the single rule
+    Given a visitor on the registration form
+    When the visitor submits a password of seven characters
+    Then the submission is rejected before it reaches the IdP
+    And the rejection names only the minimum-length rule
+
+  @EARS-36 @happy
+  Scenario: A credential created under the previous four-class policy still signs in
+    Given an account whose password was created under the previous four-class policy
+    When the owner signs in with that unchanged password
+    Then the sign-in succeeds
+    And the owner is never asked to rotate or re-validate the password
+
+  @EARS-37 @happy
+  Scenario: The single password rule is visible before submission
+    Given a visitor opens the registration form
+    When the password field is rendered and before any interaction
+    Then the single rule "Не менее 8 символов" is visible
+    And no requirement checklist, strength meter, or second requirement is shown
+
+  @EARS-37 @failure
+  Scenario: The password rule stays visible while the validation error is shown
+    Given a visitor on the registration form
+    When the visitor submits a password that is too short
+    Then the validation error is shown in its own slot
+    And the single rule remains visible at the same time
+    And the error names the same single rule as the hint
+
+  @EARS-38 @happy
+  Scenario Outline: Every password field carries a keyboard-operable reveal toggle
+    Given a visitor on the <surface> form
+    When the visitor focuses the password field
+    Then the field is masked by default and renders a show-password toggle
+    When the visitor activates the toggle with the keyboard
+    Then the entered value is rendered in plain text
+    And the accessible state and label of the toggle reflect the revealed state
+    And the entered value and caret position are preserved
+
+    Examples:
+      | surface        |
+      | registration   |
+      | reset-complete |
+      | password login |
+
+  @EARS-38 @failure
+  Scenario: Revealing a password has no side effect and never survives a reload
+    Given a visitor has revealed the password on the registration form
+    When the page is reloaded
+    Then the password field is masked again
+    And revealing emitted no network request, log entry, or storage write
+
+  @EARS-39 @happy
+  Scenario: Reloading the verify screen keeps the registrant on the verification step
+    Given a registrant who has submitted the registration form and is on the /verify screen
+    When the registrant hard-reloads the page so the in-memory password hold is lost
+    Then the verification step is still shown with the code field and the resend control
+    And the registrant is not bounced to /login
+    When the registrant submits a valid verification code
+    Then the verification completes
+    And the registrant is routed to sign-in with explicit copy naming the password they just created
+
+  @EARS-39 @failure
+  Scenario: The held registration password is never persisted anywhere
+    Given a registrant moving from /register to /verify
+    When the password hold is inspected on every path including reload and abandonment
+    Then the password is absent from the URL, localStorage, sessionStorage, and cookies

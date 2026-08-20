@@ -38,7 +38,7 @@ lang: ru
 | Merge style            | squash-only                                                                                                                                              | §2.4                        |
 | Pre-commit hooks       | simple-git-hooks + lint-staged                                                                                                                           | §2.5                        |
 | Branch strategy        | trunk-based, ветки `feat/DSO-NN-<slug>` short-lived                                                                                                      | §2.6                        |
-| Branch protection rule | Target-state contract per ADR-0008 §2.6 (API доступен — активация трекается в #1403; required status check `ci` only)                                    | §2.6                        |
+| Branch protection rule | Применён как repository ruleset на `main` per ADR-0008 §2.6 (required status check только `ci`; bypass админа сужен до `pull_request`)                   | §2.6                        |
 | CODEOWNERS Phase 0     | `* @sidorovanthon`                                                                                                                                       | §2.7                        |
 | CI runner              | GitHub-hosted `ubuntu-latest` для всех jobs; batched-топология — 8 исполняемых jobs, один checkout + install на batch (#1237, #1249)                     | §2.8                        |
 | Dependabot             | weekly, grouped, ecosystems npm + github-actions                                                                                                         | §2.9                        |
@@ -727,7 +727,7 @@ updates:
 
 ## 4. Branch protection + repo settings — конкретные `gh api` вызовы
 
-Per ADR-0008 §2.6, step 21. Admin запускает §4.1 один раз. **§4.2 — target-state**, сейчас не применяется — уже не из-за paywall'а (репо public, поэтому доступны и legacy protection endpoint, и rulesets API), а потому что payload нельзя применить дословно: `required_status_checks: ["ci"]` навсегда заблокировал бы bot-ветку Changesets `changeset-release/main`, у которой нет ни одного check-run. Issue #1403 владеет выбором применимой формы (ruleset с bypass для бота либо protection без required status checks), её применением и приведением `branch-protection.json` в соответствие с enforce'ящимся результатом. До этого payload ниже закоммичен дословно в `branch-protection.json` в корне репо как документация. Required status checks содержат только `ci` (single meta-job из §3.1); автоматического reviewer-bot'а в Phase 0 нет (ADR-0007 §2.10 заменил его на interactive review modes).
+Per ADR-0008 §2.6, step 21. Admin запускает §4.1 один раз; §4.2 применён и работает. Механизм защиты — **repository ruleset**, а не legacy branch protection: у legacy-эндпоинта нет bypass actors, а без них bot-ветка Changesets `changeset-release/main` (у которой нет ни одного check-run) была бы навсегда неmergeable под required-check `ci`. Required status checks содержат только `ci` (single meta-job из §3.1); автоматического reviewer-bot'а в Phase 0 нет (ADR-0007 §2.10 заменил его на interactive review modes). Обоснование каждого правила и тех пунктов контракта, что сознательно оставлены на процессном уровне: ADR-0008 §2.6.
 
 **4.1 Repository settings — enforce squash-only:**
 
@@ -746,32 +746,30 @@ gh api \
 
 Без отключения `allow_rebase_merge` + `allow_merge_commit` любой контрибьютор может выбрать rebase-merge или merge-commit, что ломает changesets parsing (changesets ожидает один squashed commit на PR) и AI-agent reasoning о history.
 
-**4.2 Branch protection rule:**
+**4.2 Branch ruleset на `main` — применён:**
 
 ```bash
+# создание (однократно); повторное применение после правки — --method PUT на /rulesets/<id>
 gh api \
-  --method PUT \
+  --method POST \
   -H "Accept: application/vnd.github+json" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
-  /repos/doctor-school/ds-platform/branches/main/protection \
-  -f required_status_checks[strict]=true \
-  -f required_status_checks[contexts][]=ci \
-  -f enforce_admins=true \
-  -f required_pull_request_reviews[dismiss_stale_reviews]=true \
-  -f required_pull_request_reviews[required_approving_review_count]=1 \
-  -f required_pull_request_reviews[require_code_owner_reviews]=false \
-  -f restrictions=null \
-  -f allow_force_pushes=false \
-  -f allow_deletions=false \
-  -f required_linear_history=true \
-  -f required_conversation_resolution=true
+  /repos/doctor-school/ds-platform/rulesets \
+  --input branch-protection.json
+
+# read-back того, что реально enforce'ится
+gh api /repos/doctor-school/ds-platform/rulesets
 ```
 
-`required_linear_history=true` enforces squash или rebase merge (matches §2.4 squash-only).
+`branch-protection.json` в корне репо содержит точный payload: правила `deletion`, `non_fast_forward`, `required_linear_history`, `pull_request` (0 required approvals, без требования resolve тредов, `allowed_merge_methods: ["squash"]`), `required_status_checks` (`ci`, non-strict); один bypass actor — `RepositoryRole` id 5 (Admin) в режиме `bypass_mode: pull_request`.
 
-`require_code_owner_reviews=false` Phase 0 — CODEOWNERS = одна строка `* @sidorovanthon`, и Tech Lead обычно author'ит PR; включение rule создавало бы recursion ("ты не можешь approve свой PR"). Phase 1 (hire #2) — переключить в `true`.
+`required_linear_history` enforces squash или rebase merge (matches §2.4 squash-only).
 
-`required_conversation_resolution=true` — все PR-комментарии reviewer-bot'а должны быть resolved перед merge.
+`require_code_owner_review: false` Phase 0 — CODEOWNERS = одна строка `* @sidorovanthon`, и Tech Lead обычно author'ит PR; включение создавало бы recursion («ты не можешь approve свой PR»). Phase 1 (hire #2) — переключить в `true` и одновременно поднять `required_approving_review_count` до `1`.
+
+`required_review_thread_resolution: false` и `strict_required_status_checks_policy: false` — сознательно: при одном человеке и параллельных волнах PR любой из них делает merge невозможным; эквивалентный intent живёт в gate `pnpm pr:land <N>` (ADR-0008 §2.6).
+
+`bypass_mode: pull_request` — самая узкая лазейка, сохраняющая живым release train: админ может смержить PR ветки `changeset-release/main`, у которой нет ни одного check-run, но прямые push'и, force-push'и и удаление `main` остаются заблокированы для всех, включая админов.
 
 ---
 
@@ -798,7 +796,7 @@ gh api \
 
 **PR template обязателен** — ставь правильный label (feature/bug/chore/refactor/docs), линкуй Issue (`Closes #N`), помечай author (claude/codex/human) для reviewer-bot vendor detection.
 
-**Branch protection:** контракт на `main` (PR обязателен, `ci` зелёный, ≥1 review, conversation resolved, branch up-to-date, linear history, no force push) держится конвенцией и локальным merge-gate `pnpm pr:land <N>`; серверная активация трекается в #1403 (§4).
+**Branch protection:** repository ruleset на `main` enforce'ит на сервере — PR обязателен, `ci` зелёный, linear history, no force push, no deletion (§4). Глубина ревью и свежесть чеков остаются за локальным merge-gate `pnpm pr:land <N>` (привязанные к head-SHA чеки + вердикт Mode-a); админ обходит правила только при merge PR — ради ветки Version-Packages без check-run'ов.
 
 **ADRs live in `apps/docs/content/adr/`**, render через Fumadocs at `/adr/<slug>`. Парный design spec — `NNNN-<slug>-design.md` рядом.
 

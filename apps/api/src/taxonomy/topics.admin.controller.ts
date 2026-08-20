@@ -99,6 +99,13 @@ export class TopicsAdminController {
     access: "authenticated",
     roles: ["platform_admin"],
     check: "fast-path",
+    // #1304 (ADR-0001 §10): a state-changing admin command is high-stakes, so
+    // the role is re-established against the LIVE IdP before anything happens —
+    // the guard refuses ahead of validation and the idempotency reservation, so
+    // a revoked grant cannot leave a half-written topic behind. Reads keep it
+    // absent, by the same cost argument. Identical posture to the sibling
+    // project and expert writes; a topic has no upload stage to fence.
+    revalidate: "live",
     // The domain audit row is written by feature 010's capture trigger inside
     // the command transaction (012-design §6), not by an authz-tier emission —
     // so this is the same `low-stakes` AUTH-audit tier as 007's authoring writes.
@@ -183,6 +190,9 @@ export class TopicsAdminController {
     access: "authenticated",
     roles: ["platform_admin"],
     check: "fast-path",
+    // Same #1304 posture as `create` — the edit command re-establishes the role
+    // against the live IdP before validation or the If-Match version check.
+    revalidate: "live",
     audit: "low-stakes",
     tests: ["EARS-3", "EARS-16", "EARS-17"],
   })

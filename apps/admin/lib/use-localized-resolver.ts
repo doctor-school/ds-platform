@@ -120,6 +120,12 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
   // 014 recordings (#1339). The poster box is a bounded free-text reference;
   // the duration box is a TEXT box holding seconds, so an empty/garbage/zero
   // value and an over-24h value are two different fixes and get two sentences.
+  // The readiness date box: every refusal it can produce — an empty-but-not-empty
+  // buffer, the wrong shape, and a day that is not on the calendar — has the same
+  // fix, «type ГГГГ-ММ-ДД», so it is one sentence rather than three near-identical
+  // ones. It arrives as a `custom` issue (the form schema folds the SSOT day check
+  // into one refinement), which the generic tail below would send to `fallback`.
+  if (has("expectedBy")) return t("expectedBy");
   if (has("posterRef")) return t("maxLength");
   if (has("durationSecText")) {
     return issue.code === "too_big" ? t("durationMax") : t("duration");

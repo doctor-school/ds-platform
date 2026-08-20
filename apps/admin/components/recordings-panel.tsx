@@ -47,6 +47,8 @@ import {
 } from "@ds/schemas";
 import { TokenSelect } from "@/components/fields";
 import {
+  type RecordingExpectedByFields,
+  RecordingExpectedByFormSchema,
   RecordingSourceFormSchema,
   type RecordingSourceFields,
 } from "@/lib/form-schemas";
@@ -290,6 +292,14 @@ function KindSlot({
           </dl>
           <div className="flex flex-wrap gap-2">
             <SourceDialog
+              // `useForm` captures its `defaultValues` ONCE, at mount, and this
+              // instance survives every re-render of the slot — including the
+              // `row: null → row` switch after an attach and each subsequent
+              // correction. Keying it to the row identity AND its version remounts
+              // the dialog whenever the stored source changes, so «Изменить»
+              // always opens on what is stored now rather than on the empty (or
+              // pre-edit) values the first mount captured.
+              key={`${row.id}:${row.version}`}
               eventId={eventId}
               kind={kind}
               row={row}
@@ -319,6 +329,9 @@ function KindSlot({
           </p>
           <div>
             <SourceDialog
+              // Its own key, so retiring the last row (row → null) cannot leave
+              // the previous holder's values sitting in the attach form.
+              key="empty"
               eventId={eventId}
               kind={kind}
               row={null}
@@ -744,7 +757,19 @@ function ExpectedByForm({
   // reads `useFormContext()` for its id/aria wiring, so a `FormItem` rendered
   // outside a `<Form>` throws on render. One field, one form — the same
   // composition the attach dialog uses.
-  const form = useForm<{ expectedBy: string }>({
+  // Validated against the SAME calendar-checked SSOT schema the API enforces, so
+  // an impossible day («2026-13-45», pasted past the date control) is refused in
+  // RU under the field instead of coming back as the server's generic
+  // «проверьте поля»: the operator can only fix what the message names.
+  const form = useForm<RecordingExpectedByFields>({
+    mode: "onTouched",
+    resolver: useLocalizedResolver(
+      RecordingExpectedByFormSchema as unknown as z.ZodType<
+        RecordingExpectedByFields,
+        RecordingExpectedByFields
+      >,
+      "recordings.validation",
+    ),
     defaultValues: { expectedBy: value ?? "" },
   });
   const { mutate: update, mutation } = useUpdate();
@@ -787,10 +812,12 @@ function ExpectedByForm({
           size="sm"
           loading={mutation.isPending}
           data-testid="recording-expected-by-save"
-          onClick={() => {
-            const next = form.getValues("expectedBy");
-            save(next.length === 0 ? null : next);
-          }}
+          // Through `handleSubmit`, not `getValues`: the save must run the same
+          // guard the API does, and a refused day has to STOP here rather than
+          // travel to the server and come back as a generic failure banner.
+          onClick={form.handleSubmit((values) => {
+            save(values.expectedBy.length === 0 ? null : values.expectedBy);
+          })}
         >
           {t("recordings.action.saveExpectedBy")}
         </Button>
@@ -800,6 +827,9 @@ function ExpectedByForm({
           variant="outline"
           data-testid="recording-expected-by-clear"
           onClick={() => {
+            // Clearing is always legal — an empty box IS «no promise» — so it
+            // must not stay blocked by a refusal the operator just erased.
+            form.clearErrors("expectedBy");
             form.setValue("expectedBy", "");
             save(null);
           }}

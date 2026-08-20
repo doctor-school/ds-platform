@@ -15,6 +15,7 @@ import {
   PosterRefSchema,
   type ProjectKind,
   RECORDING_DURATION_SEC_MAX,
+  RecordingExpectedBySchema,
   refineEmbedRefForProvider,
   SlugSchema,
   type SpeakerEntry,
@@ -322,4 +323,31 @@ export interface RecordingSourceFields {
   embedRef: string;
   posterRef: string;
   durationSecText: string;
+}
+
+/**
+ * 014 EARS-1 (#1339) — the event-level readiness date box.
+ *
+ * An empty box is legal and means «no promise» (the panel sends `null` to clear
+ * it); anything else must be the SAME calendar-checked day the API enforces, so
+ * the SSOT schema is folded in rather than re-typed. The date control keeps a
+ * typed-in value the browser could not parse in its own buffer and hands the
+ * form an empty string, so this guard is not the only thing standing between the
+ * operator and a bad date — but a pasted `2026-13-45` is caught here, in RU, on
+ * blur, instead of coming back as the server's generic "проверьте поля".
+ */
+export const RecordingExpectedByFormSchema = z.object({
+  // One refinement rather than `z.union([z.literal(""), …])`: a union reports one
+  // issue PER member, and the box has exactly one sentence to say — two issues
+  // carrying the same message is noise the form layer would have to de-duplicate.
+  expectedBy: z
+    .string()
+    .refine(
+      (value) =>
+        value === "" || RecordingExpectedBySchema.safeParse(value).success,
+    ),
+});
+
+export interface RecordingExpectedByFields {
+  expectedBy: string;
 }

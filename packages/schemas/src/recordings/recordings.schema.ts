@@ -58,14 +58,12 @@ export const DurationSecSchema = z.coerce
   .positive()
   .max(RECORDING_DURATION_SEC_MAX);
 
-/** `YYYY-MM-DD` — the plaque promises a day, never an instant (§2). */
-export const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
-export const RecordingExpectedBySchema = z
-  .string()
-  .regex(ISO_DATE_REGEX)
-  .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)), {
-    message: "must be a real calendar date",
-  });
+// `recordingExpectedBy` is a column on the EVENT, not on `event_recordings`, so
+// `RecordingExpectedBySchema` / `ISO_DATE_REGEX` live in `events.schema.ts`, next
+// to the `UpdateEventRequestSchema` field they validate. They are NOT re-exported
+// here: this file already imports the event contracts, so a re-export would make
+// the two `export *` barrels declare the same names twice (ESM drops ambiguous
+// star exports silently) — one home per symbol.
 
 /**
  * `AttachRecording` — `POST /v1/admin/events/:id/recordings` (EARS-1). The row is
@@ -206,7 +204,10 @@ void _recordingCodesAreAdminCodes;
  * (409 `EVENT_NOT_FINISHED`) because it is a fact about the EVENT, not the edge.
  */
 export const RECORDING_TRANSITIONS: Readonly<
-  Record<RecordingCommand, { from: readonly RecordingStatus[]; to: RecordingStatus }>
+  Record<
+    RecordingCommand,
+    { from: readonly RecordingStatus[]; to: RecordingStatus }
+  >
 > = {
   publish: { from: ["draft"], to: "published" },
   unpublish: { from: ["published"], to: "draft" },

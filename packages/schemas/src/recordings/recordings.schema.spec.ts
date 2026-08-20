@@ -5,10 +5,15 @@ import {
   RECORDING_COMMANDS,
   RECORDING_ERROR_CODES,
   RECORDING_TRANSITIONS,
-  RecordingExpectedBySchema,
   UpdateRecordingRequestSchema,
   validRecordingCommands,
 } from "./index.js";
+// The readiness date is a field of the EVENT write model, so its schema lives
+// with the event contracts — asserted here because 014 owns the rule.
+import {
+  RecordingExpectedBySchema,
+  UpdateEventRequestSchema,
+} from "../events/events.schema.js";
 
 // 014 EARS-1 / EARS-2 (#1339) — the wire-contract half. These are the bounds the
 // admin panel derives its client-side messages from, so a bound asserted here is
@@ -106,9 +111,9 @@ describe("014 event recordings — admin contract (SSOT)", () => {
       }).success,
     ).toBe(true);
     // Re-slotting is a retire plus a fresh attach, never an edit.
-    expect(UpdateRecordingRequestSchema.safeParse({ kind: "raw" }).success).toBe(
-      false,
-    );
+    expect(
+      UpdateRecordingRequestSchema.safeParse({ kind: "raw" }).success,
+    ).toBe(false);
   });
 
   it("014 EARS-2: the transition table shall hold exactly the §3 edges", () => {
@@ -133,13 +138,42 @@ describe("014 event recordings — admin contract (SSOT)", () => {
   });
 
   it("014 EARS-1: the readiness date shall be a real calendar day, never an instant", () => {
-    expect(RecordingExpectedBySchema.safeParse("2026-09-01").success).toBe(true);
+    expect(RecordingExpectedBySchema.safeParse("2026-09-01").success).toBe(
+      true,
+    );
     expect(
       RecordingExpectedBySchema.safeParse("2026-09-01T10:00:00Z").success,
     ).toBe(false);
     expect(RecordingExpectedBySchema.safeParse("2026-13-01").success).toBe(
       false,
     );
+    // An impossible DAY is as wrong as an impossible month, and it is the one a
+    // lenient parser silently rolls over into the next month.
+    expect(RecordingExpectedBySchema.safeParse("2026-02-31").success).toBe(
+      false,
+    );
+  });
+
+  it("014 EARS-1: the event write model shall refuse a non-existent calendar day, not forward it to the database", () => {
+    // The rule is only worth anything WIRED: a bare `^\d{4}-\d{2}-\d{2}$` accepts
+    // `2026-13-45`, Postgres then raises on the out-of-range `date`, and the API
+    // answers with a 5xx it authored itself (014-design §11, ADR-0002 §9).
+    expect(
+      UpdateEventRequestSchema.safeParse({ recordingExpectedBy: "2026-13-45" })
+        .success,
+    ).toBe(false);
+    expect(
+      UpdateEventRequestSchema.safeParse({ recordingExpectedBy: "2026-02-31" })
+        .success,
+    ).toBe(false);
+    // The two legal values stay legal: a real day, and `null` to clear the promise.
+    expect(
+      UpdateEventRequestSchema.safeParse({ recordingExpectedBy: "2026-09-01" })
+        .success,
+    ).toBe(true);
+    expect(
+      UpdateEventRequestSchema.safeParse({ recordingExpectedBy: null }).success,
+    ).toBe(true);
   });
 
   it("014 EARS-17: the client-visible error set shall carry every refusal the surface can answer with and no 5xx of its own", () => {

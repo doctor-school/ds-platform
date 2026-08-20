@@ -132,6 +132,53 @@ test.describe("014 EARS-1/EARS-2 — retained recordings in the live admin", () 
     await expect(page.getByText("Удалить", { exact: true })).toHaveCount(0);
   });
 
+  test("014 EARS-1: «Изменить источник» shall open on the stored source, both right after an attach and after a correction", async ({
+    page,
+  }) => {
+    await signInAsAdmin(page);
+    await createEvent(page, `Запись — правка источника ${Date.now()}`);
+    await openRecordingsTab(page);
+
+    await attach(page, "edited", RUTUBE_EDITED);
+    await expect(page.getByTestId("recording-status-edited")).toContainText(
+      "Черновик",
+    );
+
+    // The attach dialog and the edit dialog are the SAME component in the same
+    // slot: without a remount its form keeps the values captured when the slot
+    // was still empty, so the operator's first «Изменить» would open a blank
+    // source and a blind Save would wipe the row they just attached.
+    const edit = "recording-edit-edited";
+    await page.getByTestId(edit).click();
+    await expect(page.getByTestId(`${edit}-form`)).toBeVisible();
+    await expect(page.getByTestId(`${edit}-embed-ref`)).toHaveValue(
+      RUTUBE_EDITED,
+    );
+    await expect(page.getByTestId(`${edit}-provider`)).toHaveValue("rutube");
+
+    // Correct the source through that same dialog…
+    await page.getByTestId(`${edit}-embed-ref`).fill(RUTUBE_RAW);
+    await page.getByTestId(`${edit}-poster-ref`).fill("posters/edited.jpg");
+    await page.getByTestId(`${edit}-duration`).fill("3600");
+    await page.getByTestId(`${edit}-submit`).click();
+    await expect(page.getByTestId("recordings-notice")).toContainText(
+      "Источник записи обновлён",
+    );
+    await expect(page.getByTestId("recording-embed-ref-edited")).toContainText(
+      RUTUBE_RAW,
+    );
+
+    // …and reopening it in the SAME session shows the corrected values, not the
+    // ones the form was mounted with.
+    await page.getByTestId(edit).click();
+    await expect(page.getByTestId(`${edit}-form`)).toBeVisible();
+    await expect(page.getByTestId(`${edit}-embed-ref`)).toHaveValue(RUTUBE_RAW);
+    await expect(page.getByTestId(`${edit}-poster-ref`)).toHaveValue(
+      "posters/edited.jpg",
+    );
+    await expect(page.getByTestId(`${edit}-duration`)).toHaveValue("3600");
+  });
+
   test("014 EARS-1: an operator shall attach, publish, unpublish, retire and restore a recording of a finished event", async ({
     page,
   }) => {

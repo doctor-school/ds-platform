@@ -127,7 +127,7 @@
     "stylelint": "^17.14.1",
     "stylelint-plugin-rhythmguard": "^2.0.1",
     "tsx": "^4.23.12",
-    "turbo": "^2.10.9",
+    "turbo": "^2.10.10",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.67.0",
     "yaml": "^2.9.0"

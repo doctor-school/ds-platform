@@ -23,7 +23,15 @@ pnpm 10 workspaces + Turborepo 2.x. Root scripts `pnpm <script>`; per-package `p
 
 Trunk-based; short-lived branches off `main`, squash-merge back. Naming `<prefix>/<N>-<slug>` (`N` = Issue #, or `<TRACKER-ID>` for Plane-driven work, e.g. `chore/dsp-193-repo-hygiene`). Prefixes: `feat/`, `fix/`, `chore/`, `refactor/` (no behavior change), `docs/`, `tooling/`. Dependabot branches — leave as-is; a lockfile-conflicted Dependabot PR → comment `@dependabot recreate` (`rebase` replays commits and re-hits the same conflict).
 
-Stale branches: auto-deleted on merge via `--delete-branch`; PRs closed without merge → `gh pr close <N> --delete-branch` in the same step — no branch outlives its PR (Dependabot: closing the PR is enough). Closeout tail — `pnpm pr:land <N>` is the preferred single entry point: merge gate → squash-merge → board Done → `worktree:teardown` iff `.claude/worktrees/<N>` exists → re-sweep `gh pr list` + `git ls-remote --heads origin` (bot branches can appear post-merge); forwards `--mode-a-exempt`, aborts on the first non-zero stage (skill `merge-when-green` Step 2).
+Stale branches: auto-deleted on merge via `--delete-branch`; PRs closed without merge → `gh pr close <N> --delete-branch` in the same step — no branch outlives its PR (Dependabot: closing the PR is enough).
+
+**Closeout — from the MAIN tree, never from a worktree.** The local branch cleanup of `--delete-branch` cannot run while the primary tree holds `main` (`fatal: 'main' is already used by worktree at …`), so the gate refuses a `.claude/worktrees/*` cwd or a checked-out PR branch (exit `4`, remedy `pnpm worktree:teardown <N>`). Return to the primary tree FIRST, then run the single entry point for the complete tail:
+
+- `pnpm pr:land <N>` — merge gate → squash-merge → board Done → `worktree:teardown` iff `.claude/worktrees/<N>` exists → re-sweep `gh pr list` + `git ls-remote --heads origin` (bot branches can appear post-merge); forwards `--mode-a-exempt`, aborts on the first non-zero stage (skill `merge-when-green` Step 2).
+- `pnpm merge:when-green <N>` — only when the post-merge tail is intentionally completed separately (it stops at the merge; board Done + teardown + re-sweep are then yours by hand).
+- Raw `gh pr merge <N> --squash --delete-branch` — the exception only: the Version-Packages bot branch (no CI, no Mode-a — see _Version-Packages release PR_ below) or manual recovery. Invoked on its own statement, never downstream of a piped gate (#928).
+
+**Recovery — remote merge landed, local cleanup failed.** Canonical procedure: skill `merge-when-green` Step 2a (confirm `state:MERGED` → verify the remote branch is gone → `git fetch origin --prune` + `git branch -D <branch>` → `pnpm worktree:teardown <N>` and assert `git worktree list` no longer shows it). Stated once there; do not re-derive it here or in `AGENTS.md`.
 
 ## Commits, versioning, PRs
 

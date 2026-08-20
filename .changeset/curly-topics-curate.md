@@ -12,9 +12,8 @@ slice consumes the W1a (#1283) taxonomy foundation and the #1284 expert
 precedent byte-for-byte rather than forking either.
 
 - `@ds/db`: the `topics` entity — slug grammar CHECK, canonical-UUID exclusion,
-  the set-once `first_published_at` trigger, a tombstone-ready
-  `content_removed_at` column, the `topics_audit` mirror and a `pg_trgm` GIN
-  index over `title`/`slug` for operator search.
+  the set-once `first_published_at` trigger, the `topics_audit` mirror and a
+  `pg_trgm` GIN index over `title`/`slug` for operator search.
 - `@ds/schemas`: topic DTOs (create/update/list/detail) — the thinnest of the
   four entities: a title (1–120, trimmed) plus its permanent public identity,
   with `.strict()` refusing the description/media fields a topic does not have.

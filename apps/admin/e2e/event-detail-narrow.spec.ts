@@ -125,7 +125,7 @@ async function pageOverflow(page: Page): Promise<number> {
 }
 
 /** Do the title block and the state badge share any vertical band? */
-async function headerBoxesOverlap(page: Page): Promise<boolean> {
+async function headerBoxesShareVerticalBand(page: Page): Promise<boolean> {
   const header = page.getByTestId("event-detail-header");
   const titleBlock = await header.locator("> div").first().boundingBox();
   const badge = await header.locator("> :last-child").boundingBox();
@@ -160,7 +160,7 @@ test.describe("#1399 admin /events/[id] at 390px", () => {
     await page.getByTestId("event-detail-header").waitFor({ state: "visible" });
 
     expect(await pageOverflow(page)).toBe(0);
-    expect(await headerBoxesOverlap(page)).toBe(false);
+    expect(await headerBoxesShareVerticalBand(page)).toBe(false);
     if (SHOT_DIR) {
       await page.screenshot({
         path: `${SHOT_DIR}/1399-after-390.png`,
@@ -169,11 +169,13 @@ test.describe("#1399 admin /events/[id] at 390px", () => {
     }
 
     // --- narrow, reproducer -------------------------------------------------
-    // Prove the guarded defect is real: with the shipped-before class string
-    // back on the same node, the badge rides beside the title again on a width
-    // that cannot hold both.
+    // Scope of this leg, precisely: with the shipped-before class string back on
+    // the same node the header returns to ONE row at 390px. It is not itself the
+    // clip measurement — two `items-center` flex-row children share a band at any
+    // width. The regression guard is the fixed leg's `toBe(false)` above; this
+    // leg exists so a refactor that stops reproducing the row fails loudly.
     await restoreBrokenHeader(page);
-    expect(await headerBoxesOverlap(page)).toBe(true);
+    expect(await headerBoxesShareVerticalBand(page)).toBe(true);
     if (SHOT_DIR) {
       await page.screenshot({
         path: `${SHOT_DIR}/1399-before-390.png`,
@@ -189,7 +191,7 @@ test.describe("#1399 admin /events/[id] at 390px", () => {
     await page.getByTestId("event-detail-header").waitFor({ state: "visible" });
 
     expect(await pageOverflow(page)).toBe(0);
-    expect(await headerBoxesOverlap(page)).toBe(true);
+    expect(await headerBoxesShareVerticalBand(page)).toBe(true);
     if (SHOT_DIR) {
       await page.screenshot({
         path: `${SHOT_DIR}/1399-after-desktop.png`,

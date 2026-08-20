@@ -133,11 +133,6 @@ interface Deferral {
  * each tracked by an OPEN Issue. Keep this list SHORT and prune stale entries.
  */
 const BUILTIN_DEFERRALS: Record<string, Deferral> = {
-  '003:EARS-36': {
-    issue: 1331,
-    reason:
-      'spec authored ahead of code (password-friction increment); EARS-36 tests land with the policy-SSOT implementation slice of #1331',
-  },
   '003:EARS-37': {
     issue: 1331,
     reason:

@@ -2,7 +2,8 @@ import { z } from "zod";
 
 import {
   EmailIdentifierSchema,
-  NEW_PASSWORD_COMPLEXITY,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
   PhoneIdentifierSchema,
 } from "@ds/schemas";
 
@@ -52,28 +53,27 @@ export const IdentifierFieldSchema = z.union(
 export const OtpCodeFieldSchema = z.string().min(1);
 
 /**
- * Creation-password field shape — registration / reset "new password". Composed
- * from the `@ds/schemas` `NEW_PASSWORD_COMPLEXITY` SSOT regex (#147: the
- * upper/lower/digit/symbol baseline) plus the min 8 / ≤256 bounds, re-using the
- * shared pattern rather than re-declaring it (#197 anti-drift) — but, crucially,
- * with NO message on the `.regex()` (#200).
+ * Creation-password field shape — registration / reset "new password". The policy
+ * is **length only** (003 EARS-36, #1331): at least 8 characters, no character-class
+ * requirement of any kind. Composed from the `@ds/schemas` {@link PASSWORD_MIN_LENGTH}
+ * / {@link PASSWORD_MAX_LENGTH} SSOT constants — the mirror of the provisioned
+ * Zitadel instance policy — rather than re-declaring the bound (#197 anti-drift),
+ * and, crucially, with NO message on the bound (#200).
  *
- * Why message-less and NOT `= NewPasswordSchema`: in zod v4 a schema-level
- * `.regex(pattern, message)` message outranks the contextual error map that
- * `useLocalizedResolver` installs, so reusing `NewPasswordSchema` (which carries the
- * generic English DTO message) leaked that English onto `/register` and `/reset`
- * instead of the RU `errors.validation.passwordComplexity` copy. Omitting the
- * message lets the resulting `invalid_format` issue fall through to the resolver's
- * error map, which maps a `password`/`newPassword` format issue → `passwordComplexity`
- * (see `translateIssue`). `@ds/schemas` keeps its generic message for API DTO
- * honesty; the portal owns the localized rendering. Zitadel remains the ultimate
- * authority; this is only the pre-submit client guard.
+ * Why message-less and NOT `= NewPasswordSchema`: in zod v4 a schema-level message
+ * outranks the contextual error map that `useLocalizedResolver` installs, so reusing
+ * `NewPasswordSchema` (which carries the generic English DTO message) leaked that
+ * English onto `/register` and `/reset` instead of the RU catalog copy. Omitting the
+ * message lets the resulting `too_small` issue fall through to the resolver's error
+ * map, which renders the localized "at least 8 characters" copy (see `translateIssue`).
+ * `@ds/schemas` keeps its generic message for API DTO honesty; the portal owns the
+ * localized rendering. Zitadel remains the ultimate authority; this is only the
+ * pre-submit client guard.
  */
 export const NewPasswordFieldSchema = z
   .string()
-  .min(8)
-  .max(256)
-  .regex(NEW_PASSWORD_COMPLEXITY);
+  .min(PASSWORD_MIN_LENGTH)
+  .max(PASSWORD_MAX_LENGTH);
 
 /**
  * Login (current) password field shape — deliberately permissive (#147): min 8,

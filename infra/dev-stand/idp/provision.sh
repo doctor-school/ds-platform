@@ -825,6 +825,58 @@ else
     && echo "notification policy: disabled password-change notice (passwordChange -> false)" >&2
 fi
 
+# ── 8.sexies. creation-password policy → length-only (003 EARS-36, #1331) ────
+# Spec: apps/docs/content/specs/features/003-user-authentication/003-requirements-en.md
+# (EARS-36) + 003-design.md §15.2. The IdP instance password-complexity policy is
+# the CREDENTIAL AUTHORITY for what a new password must look like; `@ds/schemas`
+# (PASSWORD_MIN_LENGTH) only mirrors it. Until now the policy was an INHERITED
+# PROVIDER DEFAULT (min 8 + upper + lower + digit + symbol) that provisioning never
+# touched — so it was neither versioned nor safe from a silent drift back on an
+# instance rebuild. This step makes provisioning its managed owner.
+#
+# The product decision (2026-08-20) drops every character class and keeps length:
+# NIST SP 800-63B recommends AGAINST composition rules (they buy little entropy and
+# raise abandonment — design §15.1). Ordering matters: the IdP converges FIRST,
+# because a relaxed schema in front of a still-strict instance does not fail loudly
+# — it surfaces as the generic enumeration-safe 422 residual (design §15.3/§9).
+#
+# Nothing here touches EXISTING credentials: Zitadel applies the complexity policy
+# at password CREATION/CHANGE only, so no stored password is invalidated, rotated,
+# or re-validated (EARS-36) — the login guard stays permissive in the same spirit.
+#
+# READ-BEFORE-WRITE for idempotency (the step-8/login-policy precedent): a policy
+# already at the target values skips the PUT entirely, so a re-run leaves the policy
+# unchanged; api_idempotent absorbs a raced code-9 "no changes".
+PASSWORD_POLICY_MIN_LENGTH=8
+COMPLEXITY_POLICY="$(api GET /admin/v1/policies/password/complexity | jq '.policy')"
+if [[ "$(jq -r --argjson min "$PASSWORD_POLICY_MIN_LENGTH" '
+      (((.minLength // "0") | tonumber) == $min)
+      and ((.hasUppercase // false) == false)
+      and ((.hasLowercase // false) == false)
+      and ((.hasNumber // false) == false)
+      and ((.hasSymbol // false) == false)
+    ' <<< "$COMPLEXITY_POLICY")" == "true" ]]; then
+  echo "password complexity policy: already length-only (minLength=${PASSWORD_POLICY_MIN_LENGTH}, no character classes)" >&2
+else
+  COMPLEXITY_POLICY_UPDATE="$(jq -nc --argjson min "$PASSWORD_POLICY_MIN_LENGTH" '
+    {
+      minLength: ($min | tostring),
+      hasUppercase: false,
+      hasLowercase: false,
+      hasNumber: false,
+      hasSymbol: false
+    }
+  ')"
+  api_idempotent PUT /admin/v1/policies/password/complexity "$COMPLEXITY_POLICY_UPDATE" >/dev/null \
+    && echo "password complexity policy: converged to length-only (minLength=${PASSWORD_POLICY_MIN_LENGTH}; hasUppercase/hasLowercase/hasNumber/hasSymbol -> false)" >&2
+fi
+
+# Verdict line from the CONVERGED policy — operator visibility that the mirrored
+# `@ds/schemas` PASSWORD_MIN_LENGTH constant and the live instance agree.
+api GET /admin/v1/policies/password/complexity | jq -r '.policy |
+  "password-policy sweep: minLength=\(.minLength // "0") hasUppercase=\(.hasUppercase // false) hasLowercase=\(.hasLowercase // false) hasNumber=\(.hasNumber // false) hasSymbol=\(.hasSymbol // false) — length-only creation policy (003 EARS-36)"
+' >&2
+
 # ── 9. MFA capability on the default login policy (011 EARS-8) ───────────────
 # Spec: apps/docs/content/specs/features/011-admin-session-2fa/011-requirements-en.md
 # (EARS-8). TOTP for `platform_admin` is mandatory (ADR-0001 §4). Zitadel supplies

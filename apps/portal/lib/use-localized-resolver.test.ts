@@ -107,11 +107,14 @@ const cases: {
     expected: "email",
   },
   {
-    rule: "register — password fails complexity (>=8 but weak)",
+    // 003 EARS-36: the creation policy is LENGTH ONLY — a class-free password of
+    // 8+ chars is valid, so the only reachable creation-password rule is the
+    // length floor. (The superseded four-class fixture asserted the opposite.)
+    rule: "register — new password below the length floor (<8)",
     schema: registerFormSchema() as unknown as z.ZodType<unknown, never>,
-    input: { email: "a@b.co", password: "weakpassword", consent: [] },
+    input: { email: "a@b.co", password: "weak", consent: [] },
     field: "password",
-    expected: "passwordComplexity",
+    expected: "passwordTooShort",
   },
   {
     rule: "otp verify — empty code (min 1)",

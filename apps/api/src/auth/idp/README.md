@@ -76,6 +76,45 @@ claim is empty and `AuthzGuard` 403s.
   resolving it to `false` re-opens the enrolled-admin MFA bypass (#1208); the
   adapter raises `IdpUnavailableError` on every non-2xx here.
 
+## `revalidateAdminAuthority` — live authority re-read (#1304)
+
+`IdpClient.revalidateAdminAuthority({ zitadelSessionId, sub, requiredRole })`
+answers, at call time, whether a token-free admin session still stands behind an
+account that still holds `platform_admin` / `pd_officer`. It is what
+`AdminAuthorityGuard` calls before every `revalidate: "live"` admin mutation
+(see [`../../authz/README.md`](../../authz/README.md)).
+
+**Three service-authenticated hops, in order** — all on the service token; no
+user access/refresh token is stored anywhere (the admin-session record stays
+token-free):
+
+1. `GET /v2/sessions/{zitadelSessionId}` — the session still exists, its
+   `expirationDate` has not passed, and its subject is the expected `sub`.
+2. `POST /v2/users` with an `inUserIdsQuery` for `sub` — the account exists and
+   is `USER_STATE_ACTIVE`.
+3. The live project-role grant (`getProjectRoles`) — `requiredRole` is still
+   granted.
+
+**It never throws.** Every path resolves to a verdict:
+`active` / `inactive` (`session_gone`, `session_subject_mismatch`,
+`account_inactive`) / `role_revoked` (carrying the roles actually held) /
+`unavailable` (with a reason string). Transport failure, timeout, any non-2xx,
+malformed JSON, an unparseable timestamp and service-auth/config faults all map
+to **`unavailable`**, which the guard surfaces as
+`503 IDP_REVALIDATION_UNAVAILABLE`.
+
+**`unavailable` is not a denial.** The distinction is the whole point of the
+verdict shape: an IdP outage must never be reported to an operator as "your
+session is invalid" or "you are not an admin", because that reads as a
+revocation and provokes a re-login that cannot succeed. Equally, it must never
+fail _open_ — the call is refused, just under an availability code. Only a hop
+that **succeeded** and answered "gone / inactive / not granted" produces a
+credential refusal.
+
+The strict fake (`idp.fake.ts`) mirrors this verdict-for-verdict — it is never
+more permissive than the real adapter — and the parity is pinned by
+`idp-revalidate.parity.spec.ts`.
+
 ## Emails: Zitadel-rendered vs BFF link-free
 
 In a **Zitadel-rendered** email the button cannot be removed — `buttonText: ""`

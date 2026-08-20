@@ -65,13 +65,17 @@ const GENERIC_ADMIN_MFA_FAILURE = "verification failed";
  * (`auth.service.ts` → `GENERIC_UNAVAILABLE`): a genuine infra fault is an
  * honest 503 "unavailable", **never** a bare 500.
  *
- * This is a security control, not cosmetics. The IdP calls behind `startLogin`
- * — the OIDC exchange and the EARS-3 factor read — run only AFTER the password
- * matched AND `requiresMfa(roles)` passed. An unmapped throw would therefore
- * surface a 500 for exactly one input class (valid credentials on a
- * `platform_admin`) while every other outcome stays the uniform 401 — a
- * `platform_admin`-membership oracle. Both refusal and fault are mapped here, in
- * the handler, so `TimingEqualizationInterceptor` still pads them identically.
+ * This is a security control, not cosmetics, and its reach is deliberately
+ * bounded (#1221). On `login` it answers a FULL outage only: the sole IdP call
+ * that can still reach this catch is `passwordLogin`, which EVERY caller hits —
+ * an unknown identifier, a wrong password, a doctor, an admin — so the 503 is
+ * returned to everyone and separates nobody. The post-password span (the OIDC
+ * exchange, the EARS-3 factor read) runs only after the password matched, so a
+ * distinct status there would be returned for exactly one input class — valid
+ * credentials on a `platform_admin` — a membership oracle; that span therefore
+ * folds into the uniform 401 inside `AdminSessionService.startLogin`. Both
+ * refusal and fault are mapped here, in the handler, so
+ * `TimingEqualizationInterceptor` still pads them identically.
  */
 const GENERIC_ADMIN_UNAVAILABLE = "the service is temporarily unavailable";
 
@@ -142,9 +146,11 @@ export class AdminAuthController {
         fingerprint,
       );
     } catch (err) {
-      // A genuine IdP infra fault (5xx / transport / an unroutable management
-      // path — #1208) is "unavailable", carrying no detail that would separate
-      // this caller from any other. Anything else keeps its own handling.
+      // A FULL IdP outage — `passwordLogin` itself faulting, which every caller
+      // meets — is "unavailable", carrying no detail that would separate this
+      // caller from any other. A post-password fault never arrives here: the
+      // service folds it into the uniform refusal below (#1221). Anything else
+      // keeps its own handling.
       if (err instanceof IdpUnavailableError) {
         throw new ServiceUnavailableException(GENERIC_ADMIN_UNAVAILABLE);
       }

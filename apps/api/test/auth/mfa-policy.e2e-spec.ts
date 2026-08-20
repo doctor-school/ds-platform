@@ -347,24 +347,26 @@ describe.skipIf(!process.env.DATABASE_URL)(
 );
 
 /**
- * 011 EARS-3 + #202 (#1208 follow-up) — the IdP-fault posture of admin primary
+ * 011 EARS-3 + #202 (#1208 → #1221) — the IdP-fault posture of admin primary
  * auth at the HTTP layer.
  *
  * `hasTotpFactor` fails LOUD by design (#1208: a swallowed fault would report an
- * enrolled admin as factor-less). That throw must not reach the client as a bare
- * 500, for two independent reasons:
+ * enrolled admin as factor-less). #1208 mapped that throw to a 503 so it would
+ * never be a bare 500. #1221 finishes the argument: on a PARTIAL IdP fault, a 503
+ * is itself the oracle. Every post-password call on this route (the OIDC exchange,
+ * the factor read) runs ONLY after `passwordLogin` matched AND `requiresMfa(roles)`
+ * passed, so under a partial fault the 503 is returned for exactly one input class
+ * — a valid credential pair on a `platform_admin` — while every other caller keeps
+ * the uniform 401. That is the `platform_admin`-membership oracle the uniform
+ * refusal exists to deny, so the post-password span answers the SAME uniform 401.
  *
- * 1. The recorded project rule (`register.e2e-spec.ts` #202): a genuine IdP infra
- *    fault is a 503 "unavailable", NEVER a 500 — the portal path maps it at
- *    `auth.service.ts` and the admin path must match.
- * 2. Enumeration safety (`GENERIC_ADMIN_LOGIN_FAILURE`). The factor read sits
- *    AFTER `passwordLogin` succeeded and AFTER `requiresMfa(roles)` passed, so
- *    an unmapped status here is returned **only** for a valid credential pair on
- *    a `platform_admin` — a membership oracle every other outcome (the uniform
- *    401) is built to deny.
+ * The FULL-outage carve-out stays a 503 (see the suite below): when `passwordLogin`
+ * itself is down, every caller gets the 503, so it discriminates nobody and the
+ * #202 rule — a genuine infra fault is an honest "unavailable", never a bare 500 —
+ * is served without building an oracle.
  */
 describe.skipIf(!process.env.DATABASE_URL)(
-  "011 EARS-3 — an IdP fault during the factor read (e2e, #1208)",
+  "011 EARS-3 — a PARTIAL IdP fault during the factor read (e2e, #1208/#1221)",
   () => {
     /** The #1208 fault window: the factor read is down, everything else works. */
     class FactorReadUnavailableIdp extends FakeIdpClient {
@@ -429,21 +431,21 @@ describe.skipIf(!process.env.DATABASE_URL)(
       return email;
     }
 
-    function adminLogin(email: string) {
+    function adminLogin(email: string, pw: string = password) {
       return app.inject({
         method: "POST",
         url: "/v1/admin/auth/login",
         headers: ADMIN_DEVICE,
-        payload: { identifier: email, password },
+        payload: { identifier: email, password: pw },
       });
     }
 
-    it("EARS-3: an IdP fault during the factor read yields a 503, NEVER a 500 (#1208)", async () => {
+    it("EARS-3: a partial IdP fault after a CORRECT password yields the uniform 401, not a 503 (#1221)", async () => {
       const email = await registerAdmin();
 
       const res = await adminLogin(email);
 
-      expect(res.statusCode).toBe(503);
+      expect(res.statusCode).toBe(401);
       expect(res.statusCode).not.toBe(500);
       // No session, no pending reference — the fault admits nothing.
       const names = res.cookies.map((c) => c.name);
@@ -451,7 +453,19 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(names).not.toContain(ADMIN_PENDING_COOKIE_NAME);
     });
 
-    it("EARS-3: the 503 body discloses nothing — no identifier, sub, role, or IdP detail (#1208)", async () => {
+    it("EARS-3: the fault answer is byte-identical to a wrong-password refusal — no membership oracle (#1221)", async () => {
+      const email = await registerAdmin();
+
+      // Correct password, post-password RPC down.
+      const faulted = await adminLogin(email);
+      // Wrong password: `passwordLogin` itself refuses, the fault is never reached.
+      const wrongPassword = await adminLogin(email, "Aa1!totally-wrong-pw");
+
+      expect(faulted.statusCode).toBe(wrongPassword.statusCode);
+      expect(faulted.body).toBe(wrongPassword.body);
+    });
+
+    it("EARS-3: the refusal body discloses nothing — no identifier, sub, role, or IdP detail (#1208/#1221)", async () => {
       const email = await registerAdmin();
 
       const res = await adminLogin(email);
@@ -462,8 +476,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(body).not.toContain("totp");
       expect(body).not.toContain("factor");
       expect(body).not.toContain("zitadel");
-      // A generic "unavailable" is honest about an outage without discriminating.
-      expect(body).toContain("unavailable");
+      // Not even the outage is disclosed: an "unavailable" here would be the
+      // membership oracle #1221 closes.
+      expect(body).not.toContain("unavailable");
+      expect(body).toContain("invalid credentials");
     });
 
     it("EARS-3: the fault path is timing-equalized like every other admin-login outcome (#1208)", async () => {
@@ -477,7 +493,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // travels through TimingEqualizationInterceptor's padded catchError
       // branch (the padding mechanism itself is owned by
       // timing-equalization.interceptor.spec.ts).
-      expect(res.statusCode).toBe(503);
+      expect(res.statusCode).toBe(401);
       expect(elapsed).toBeGreaterThanOrEqual(DEFAULT_TIMING_FLOOR_MS - 5);
     });
 
@@ -491,6 +507,73 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // persistent fault, leaving it live would leak one IdP session per login
       // attempt. Same disposal the non-policy refusal branch performs.
       expect(fake.terminated.length).toBeGreaterThan(before);
+    });
+  },
+);
+
+/**
+ * 011 EARS-3 + #202 (#1221) — the FULL-outage carve-out that survives the #1221
+ * change: `passwordLogin` itself is down.
+ *
+ * Every caller of `POST /v1/admin/auth/login` hits `passwordLogin` first — an
+ * unknown identifier, a wrong password, a doctor, an admin. A 503 raised there is
+ * therefore returned to EVERYONE and separates nobody, so the #202 rule holds
+ * without building the oracle the partial-fault suite above closes: a genuine
+ * infra fault is an honest "unavailable", never a bare 500 and never a lie that
+ * the credentials were wrong.
+ */
+describe.skipIf(!process.env.DATABASE_URL)(
+  "011 EARS-3 — a FULL IdP outage during primary auth (e2e, #1221)",
+  () => {
+    /** The whole password check is down — the fault every caller meets. */
+    class PasswordLoginUnavailableIdp extends FakeIdpClient {
+      override passwordLogin(): ReturnType<FakeIdpClient["passwordLogin"]> {
+        return Promise.reject(new IdpUnavailableError("the IdP is down"));
+      }
+    }
+
+    let app: NestFastifyApplication;
+    let fake: PasswordLoginUnavailableIdp;
+
+    beforeAll(async () => {
+      fake = new PasswordLoginUnavailableIdp();
+      const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+        .overrideProvider(IDP_CLIENT)
+        .useValue(fake)
+        .overrideProvider(RATE_LIMIT_THRESHOLDS)
+        .useValue(RELAXED_RATE_LIMIT)
+        .compile();
+      app = moduleRef.createNestApplication<NestFastifyApplication>(
+        new FastifyAdapter(),
+      );
+      app.enableVersioning({ type: VersioningType.URI, defaultVersion: "1" });
+      await app.init();
+      await app.getHttpAdapter().getInstance().ready();
+    });
+
+    afterAll(async () => {
+      await app.close();
+    });
+
+    it("EARS-3: a full IdP outage still yields the honest 503, NEVER a 500 (#202/#1221)", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/v1/admin/auth/login",
+        headers: ADMIN_DEVICE,
+        payload: {
+          identifier: "nobody-in-particular@ds.test",
+          password: "Aa1!ufficiently-long-pw",
+        },
+      });
+
+      expect(res.statusCode).toBe(503);
+      expect(res.statusCode).not.toBe(500);
+      // Enumeration-safe because it is uniform: an unknown identifier gets the
+      // same 503, so the status separates no caller from any other.
+      expect(res.body.toLowerCase()).toContain("unavailable");
+      const names = res.cookies.map((c) => c.name);
+      expect(names).not.toContain(ADMIN_SESSION_COOKIE_NAME);
+      expect(names).not.toContain(ADMIN_PENDING_COOKIE_NAME);
     });
   },
 );

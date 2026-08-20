@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { RedisLike } from "../session/session-store.redis.js";
-import { RedisAdminSessionStore } from "./admin-session-store.redis.js";
-import type { AdminSessionRecord } from "./admin-session.types.js";
+import { InMemoryPendingAuthStore } from "./admin-session-store.fake.js";
+import {
+  RedisAdminSessionStore,
+  RedisPendingAuthStore,
+} from "./admin-session-store.redis.js";
+import type {
+  AdminSessionRecord,
+  PendingAuthRecord,
+  PendingAuthStore,
+} from "./admin-session.types.js";
 
 /**
  * A minimal Redis double: string keys + set keys, with `expire` recorded but NOT
@@ -108,4 +116,50 @@ describe("011 EARS-10 — RedisAdminSessionStore force-logout", () => {
     expect(redis.strings.has("ds:admin-session:sid-past")).toBe(false);
     await expect(store.deleteBySub("sub-2")).resolves.toEqual([]);
   });
+});
+
+function pending(ref: string, expiresAtMs: number): PendingAuthRecord {
+  return {
+    ref,
+    sub: `sub-${ref}`,
+    identifier: `${ref}@ds.test`,
+    roles: ["platform_admin"],
+    nextStep: "mfa_challenge_required",
+    zitadelSessionId: `zit-${ref}`,
+    sessionToken: `tok-${ref}`,
+    fingerprint: "fp",
+    expiresAtMs,
+  };
+}
+
+describe("011 EARS-3 — pending-auth expiry is enforced by both bindings", () => {
+  // Both adapters must agree on when a pending reference is over: the Redis key
+  // TTL is floored at one second (`ttlSecondsUntil`), so a record can outlive
+  // its own `expiresAtMs` and still be served unless `get` re-checks the
+  // deadline the record itself carries.
+  const bindings: [string, () => PendingAuthStore][] = [
+    ["InMemoryPendingAuthStore", () => new InMemoryPendingAuthStore()],
+    ["RedisPendingAuthStore", () => new RedisPendingAuthStore(new FakeRedis())],
+  ];
+
+  for (const [name, make] of bindings) {
+    it(`EARS-3: ${name} refuses a pending record past its own expiry`, async () => {
+      const store = make();
+      await store.create(pending("ref-past", Date.now() - 1000));
+
+      await expect(store.get("ref-past")).resolves.toBeUndefined();
+      // A second read must agree — the first one prunes it, so an expired
+      // reference can never resurface.
+      await expect(store.get("ref-past")).resolves.toBeUndefined();
+    });
+
+    it(`EARS-3: ${name} still serves a live pending record`, async () => {
+      const store = make();
+      await store.create(pending("ref-live", Date.now() + 60_000));
+
+      await expect(store.get("ref-live")).resolves.toMatchObject({
+        ref: "ref-live",
+      });
+    });
+  }
 });

@@ -434,7 +434,7 @@ Before `git push` the agent goes through each item. If even one is false — do 
 | **Spec status freshness** | Merged PR with spec:NNN but spec status='Draft'                          | Custom lint: at merge — check `status: In dev` minimum.                                                                                                                                                                                      | WARN v1               |
 | **Prior decisions cited** | New spec without cited ADRs in "Prior decisions" if category ≠ docs-only | Spec lint: `NNN-requirements.md` has a section with ≥1 ADR-link.                                                                                                                                                                             | WARN v1               |
 
-> **Interim semantics note:** rows marked `BLOCK` assume a server-side required status check on `main`. While ADR-0008 §2.6 branch protection is deferred (GitHub Free + private repo blocks the branch-protection API — ADR-0008 §2.6), `BLOCK` is read operationally as **"CI job exits red and the Tech Lead treats it as a merge-blocker by convention"** — same outcome on the single-developer happy path, no server-side guarantee.
+> **Interim semantics note:** rows marked `BLOCK` assume a server-side required status check on `main`. While the ADR-0008 §2.6 branch-protection rule is not applied server-side (the API is reachable on the public repo — the trigger has fired — but choosing a rule shape that does not deadlock the Changesets bot branch is owned by Issue #1403), `BLOCK` is read operationally as **"CI job exits red and the Tech Lead treats it as a merge-blocker by convention"** — same outcome on the single-developer happy path, no server-side guarantee.
 
 The table above is the founding set; the authoritative live guard list + per-guard severity is `.github/workflows/ci.yml` + `.github/workflows/pr-body-guards.yml` (the PR-body-parsing family, re-run on PR body edits — #651). Severity lifecycle — new-guard WARN posture, the WARN→BLOCK promotion criterion, demotion, and the sweep cadence — lives in the narrative ADR-0007 §2.6.
 
@@ -1020,8 +1020,8 @@ check-runs poll plus a head-pinned Mode (a) APPROVE), then `gh pr merge <N> --sq
 --delete-branch`, then board Status = Done and branch teardown. `--auto` is not used in Phase 0:
 with no branch protection on `main` there are no required checks to queue behind, so GitHub
 rejects auto-merge on an already-clean PR and does not gate on CI where it accepts it (skill
-`merge-when-green`; ADR-0008 §2.6 keeps `--auto --squash --delete-branch` as the target-state
-command for when protection is reactivated). CI is gated in band by `merge:gate`, not by GitHub's
+`merge-when-green`). Whether server-side protection changes that is decided when protection is
+actually enabled — ADR-0008 §2.6 / Issue #1403. CI is gated in band by `merge:gate`, not by GitHub's
 auto-merge queue.
 
 ## SDD — hard rule
@@ -1102,7 +1102,7 @@ Phase 0 (Tech Lead + AI, sequential — after DSO-31 creates the `ds-platform` r
 | 9 | Add steps to `.github/workflows/ci.yml` for guards (WARN/BLOCK per §5.2) | CI executes guards | step 8 |
 | 11 | Update `AGENTS.md` (root) with AI-loop discipline section | agents follow orchestrated iteration cycle | DSO-31 baseline AGENTS.md |
 | 12 | Update `CLAUDE.md` (root) with SessionStart hook reference + skill priorities | Claude Code aligned | step 11 |
-| 13 | **[Manual GitHub UI / `gh api`]** Add branch protection rule: ≥1 human approval required, no direct push to main. Deferred per ADR-0008 §2.6 (GitHub Free + private repo blocks the API). | merge gated server-side once protection is reachable | step 9 |
+| 13 | **[Manual GitHub UI / `gh api`]** Add branch protection rule: ≥1 human approval required, no direct push to main. Deferred per ADR-0008 §2.6 — the API is reachable on the public repo, but the rule shape must not deadlock the Changesets bot branch; owned by Issue #1403. | merge gated server-side once the rule lands | step 9 |
 | 14 | Smoke test: first feature spec through the cycle (superpowers:brainstorming → spec → Issues → PR → review → merge) | proof of concept | steps 1–13 |
 
 Step numbering preserves the original sequence; cancelled steps (5, 6, 10) are intentionally omitted.

@@ -117,7 +117,10 @@ export const PASSWORD_MAX_LENGTH = 256;
  */
 export const NewPasswordSchema = z
   .string()
-  .min(PASSWORD_MIN_LENGTH, "password must be at least 8 characters")
+  .min(
+    PASSWORD_MIN_LENGTH,
+    `password must be at least ${PASSWORD_MIN_LENGTH} characters`,
+  )
   .max(PASSWORD_MAX_LENGTH);
 
 /**

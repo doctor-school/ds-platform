@@ -34,14 +34,17 @@ const BAD_NUMERIC = "99545545445";
 const VALID_EMAIL = "doctor@example.com";
 const VALID_PHONE = "+79991234567";
 const VALID_PASSWORD = "sufficiently-long-pw";
-// A creation password that fails the #147 complexity baseline (no upper/digit/
-// symbol) — the /register + /reset-complete "new password" must flag it.
-const WEAK_NEW_PASSWORD = "weakpassword";
-// The RU complexity copy (apps/portal/messages/ru.json → errors.validation.
-// passwordComplexity). The English baked into `@ds/schemas` `NewPasswordSchema`
-// ("password must include …") must NEVER reach the rendered field (#200).
-const RU_PASSWORD_COMPLEXITY =
-  "Пароль должен содержать заглавную и строчную буквы, цифру и спецсимвол.";
+// A class-free creation password that is long enough — under the 003 EARS-36
+// length-only policy this must be ACCEPTED (it used to fail the #147 four-class
+// baseline, which no longer exists in schema, portal copy, or the IdP policy).
+const CLASS_FREE_NEW_PASSWORD = "weakpassword";
+// A creation password that is too SHORT (7 chars) — the only creation-password
+// rule left, so /register + /reset-complete must flag it.
+const SHORT_NEW_PASSWORD = "short7!";
+// The RU too-short copy (apps/portal/messages/ru.json → errors.validation.
+// passwordTooShort). The English baked into `@ds/schemas` `NewPasswordSchema`
+// ("password must be at least …") must NEVER reach the rendered field (#200).
+const RU_PASSWORD_TOO_SHORT = "Не менее 8 символов.";
 
 /** The identifier input is flagged invalid (aria-invalid) when validation fails. */
 async function expectInvalid(
@@ -55,6 +58,27 @@ async function expectValidOrAbsent(
 ): Promise<void> {
   // RHF leaves aria-invalid="false" on a field that passed its resolver.
   await expect(input).not.toHaveAttribute("aria-invalid", "true");
+}
+
+/**
+ * Assert the field's OWN error message copy. Since 003 EARS-36 the creation-password
+ * policy hint and the too-short error carry the same sentence, and `<PasswordField>`
+ * swaps one into the other IN PLACE (`FormMessage`), so a bare `getByText` would pass
+ * on the resting helper. Resolve the erroring message element through the input's
+ * `aria-describedby` (it owns `formMessageId` only while erroring) and require
+ * `role="alert"` — that is what distinguishes the error from the hint.
+ */
+async function expectFieldError(
+  page: Page,
+  input: ReturnType<Page["locator"]>,
+  copy: string,
+): Promise<void> {
+  await expectInvalid(input);
+  const describedBy = (await input.getAttribute("aria-describedby")) ?? "";
+  const messageId = describedBy.trim().split(/\s+/).pop() ?? "";
+  const message = page.locator(`#${messageId}`);
+  await expect(message).toHaveAttribute("role", "alert");
+  await expect(message).toContainText(copy);
 }
 
 test.describe("EARS-22: portal identifier validation + mask (client-side, ungated) (#192)", () => {
@@ -208,12 +232,14 @@ test.describe("EARS-22: portal /reset identifier validation (client-side, ungate
  * migration, on the SAME ungated, backend-free tier (client-side RHF validation,
  * no api/Zitadel/Mailpit needed):
  *
- *  1. A weak NEW password on `/register` (and `/reset` complete) must render the RU
- *     `errors.validation.passwordComplexity` copy — NOT the English baked into the
- *     `@ds/schemas` `NewPasswordSchema` `.regex()` message. In zod v4 a schema-level
- *     message outranks the contextual error map the localized resolver installs, so
- *     the leak only disappears once the portal field schema composes the bare
- *     complexity regex WITHOUT a message (issue #200, defect 1).
+ *  1. A rejected NEW password on `/register` (and `/reset` complete) must render the
+ *     RU catalog copy — NOT the English baked into the `@ds/schemas`
+ *     `NewPasswordSchema`. In zod v4 a schema-level message outranks the contextual
+ *     error map the localized resolver installs, so the leak only disappears while
+ *     the portal field schema composes the bound WITHOUT a message (issue #200,
+ *     defect 1). Since 003 EARS-36 the only creation rule is the length floor, so
+ *     the rejected case is a <8-char password → `errors.validation.passwordTooShort`,
+ *     and a class-free 8+ password is ACCEPTED.
  *  2. The auth forms must validate on BLUR (`mode: "onTouched"`), so an obviously
  *     malformed email is flagged before the user clicks submit (defect 2).
  *
@@ -224,20 +250,35 @@ test.describe("EARS-22: portal /reset identifier validation (client-side, ungate
 test.describe("EARS-22: creation-password RU copy + on-blur validation (client-side, ungated) (#200)", () => {
   test.use({ baseURL: BASE });
 
-  test("EARS-21/22: a weak new password renders the RU complexity copy from the message catalog, never the baked English", async ({
+  test("EARS-21/22/36: a too-short new password renders the RU length copy from the message catalog, never the baked English", async ({
     page,
   }) => {
     await page.goto("/register");
     const pw = page.locator('input[autocomplete="new-password"]');
 
-    await pw.fill(WEAK_NEW_PASSWORD);
-    await page.getByTestId("register-submit").click();
+    // Blur (mode: "onTouched") is enough to run the field resolver — no submit
+    // click, so this stays backend-free even when a stand happens to be up.
+    await pw.fill(SHORT_NEW_PASSWORD);
+    await pw.blur();
 
-    // The field is flagged invalid …
-    await expectInvalid(pw);
-    // … and the visible message is the RU copy, with NO English leak.
-    await expect(page.getByText(RU_PASSWORD_COMPLEXITY)).toBeVisible();
-    await expect(page.getByText(/password must include/i)).toHaveCount(0);
+    // The field is flagged invalid, the message element is the RU copy …
+    await expectFieldError(page, pw, RU_PASSWORD_TOO_SHORT);
+    // … with NO English leak from `@ds/schemas`.
+    await expect(page.getByText(/password must be at least/i)).toHaveCount(0);
+  });
+
+  test("003 EARS-36: a class-free 8+ new password is accepted (no composition rule left)", async ({
+    page,
+  }) => {
+    await page.goto("/register");
+    const pw = page.locator('input[autocomplete="new-password"]');
+
+    await pw.fill(CLASS_FREE_NEW_PASSWORD);
+    await pw.blur();
+
+    // Length-only policy: lowercase-only is fine, the field must not be flagged.
+    await expectValidOrAbsent(pw);
+    await expect(page.getByRole("alert")).toHaveCount(0);
   });
 
   test("register: a malformed email is flagged on blur, before submit", async ({
@@ -256,12 +297,12 @@ test.describe("EARS-22: creation-password RU copy + on-blur validation (client-s
     await expectInvalid(email);
   });
 
-  // NOTE: the `/reset` *complete*-step variant of the weak-password RU-copy
+  // NOTE: the `/reset` *complete*-step variant of the rejected-password RU-copy
   // assertion lives in the live-gated `auth-journeys.e2e.spec.ts`, NOT here:
   // reaching the complete step requires a real BFF reset ack
   // (`reset-request-submit` → `authClient.requestPasswordReset()` →
   // `POST /password/reset`) to flip the stage, so it is NOT backend-free and would
-  // silently depend on a running api in this ungated tier. The `/register` test
-  // above proves the SAME defect-1 mechanism (message-less complexity regex → RU
-  // copy) purely client-side, which is why it belongs in this tier.
+  // silently depend on a running api in this ungated tier. The `/register` tests
+  // above prove the SAME defect-1 mechanism (message-less length bound → RU copy)
+  // purely client-side, which is why they belong in this tier.
 });

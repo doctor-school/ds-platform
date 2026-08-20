@@ -309,20 +309,23 @@ test.describe("portal auth journeys (real Zitadel)", () => {
   // stays there, reaching the complete step is NOT backend-free: the stage flips only
   // after a live BFF reset ack (`reset-request-submit` →
   // `authClient.requestPasswordReset()` → `POST /password/reset`). So the new-password
-  // field that renders the complexity copy does not exist until the api round-trips —
+  // field that renders the rejection copy does not exist until the api round-trips —
   // it belongs in this live-gated suite, not the portal-only tier. The assertion is
-  // the same: a weak new password must render the RU `passwordComplexity` copy, with
-  // NO English leak from the `@ds/schemas` `NewPasswordSchema` `.regex()` message.
-  test("reset complete: a weak new password renders the RU complexity copy, never English", async ({
+  // the same shape: a rejected new password must render the RU catalog copy, with NO
+  // English leak from the `@ds/schemas` `NewPasswordSchema` message. Since 003
+  // EARS-36 the only creation rule is the length floor, so the rejected input is a
+  // <8-char password and a class-free 8+ password is accepted.
+  test("003 EARS-36 / reset complete: a too-short new password renders the RU length copy (never English), a class-free 8+ one is accepted", async ({
     page,
   }) => {
-    // The RU copy (apps/portal/messages/ru.json → errors.validation.passwordComplexity);
-    // the English `NewPasswordSchema` message ("password must include …") must never
-    // reach the rendered field (#200 defect 1).
-    const ruPasswordComplexity =
-      "Пароль должен содержать заглавную и строчную буквы, цифру и спецсимвол.";
-    // A new password failing the #147 complexity baseline (no upper/digit/symbol).
-    const weakNewPassword = "weakpassword";
+    // The RU copy (apps/portal/messages/ru.json → errors.validation.passwordTooShort);
+    // the English `NewPasswordSchema` message ("password must be at least …") must
+    // never reach the rendered field (#200 defect 1).
+    const ruPasswordTooShort = "Не менее 8 символов.";
+    // A new password failing the only remaining rule — the 8-character floor.
+    const shortNewPassword = "short7!";
+    // Long enough but class-free: accepted under the length-only policy.
+    const classFreeNewPassword = "weakpassword";
 
     // ── Advance to the complete step via the live BFF reset ack ──────────────
     // The request only needs a well-formed identifier; EARS-16 makes the ack
@@ -334,12 +337,25 @@ test.describe("portal auth journeys (real Zitadel)", () => {
 
     const pw = page.locator('input[autocomplete="new-password"]');
     await expect(pw).toBeVisible();
-    await pw.fill(weakNewPassword);
+    await pw.fill(shortNewPassword);
     // Blur to trigger on-touched validation without needing the code field.
     await pw.blur();
 
-    await expect(page.getByText(ruPasswordComplexity)).toBeVisible();
-    await expect(page.getByText(/password must include/i)).toHaveCount(0);
+    // The policy HINT now carries the same sentence as the too-short error and
+    // `<PasswordField>` swaps one into the other in place, so assert the erroring
+    // message element itself: it owns `formMessageId` (the last `aria-describedby`
+    // token) and `role="alert"` only while the field is invalid.
+    await expect(pw).toHaveAttribute("aria-invalid", "true");
+    const describedBy = (await pw.getAttribute("aria-describedby")) ?? "";
+    const message = page.locator(`#${describedBy.trim().split(/\s+/).pop()}`);
+    await expect(message).toHaveAttribute("role", "alert");
+    await expect(message).toContainText(ruPasswordTooShort);
+    await expect(page.getByText(/password must be at least/i)).toHaveCount(0);
+
+    // Length-only policy (EARS-36): lowercase-only, no digit/symbol — accepted.
+    await pw.fill(classFreeNewPassword);
+    await pw.blur();
+    await expect(pw).not.toHaveAttribute("aria-invalid", "true");
   });
 
   // #207 EARS-23/24 — the duplicate-registration UX dead-end fix. Two halves:

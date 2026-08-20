@@ -91,8 +91,10 @@ export function translateIssue(issue: ZodIssueLike, t: Translator): string {
       if (issue.format === "email" || issue.validation === "email") {
         return t("email");
       }
-      // The creation-password complexity regex vs the E.164 phone regex: the only
-      // regex on a `password`/`newPassword` field is the complexity baseline.
+      // Dead branch since 003 EARS-36 dropped the creation-password complexity
+      // regex: no `password`/`newPassword` field carries a regex any more, so
+      // `invalid_format` can no longer fire for one. Kept (with its catalog entry)
+      // until the hint/error slot rework in EARS-37 (#1392) retires both.
       if (field === "password" || field === "newPassword") {
         return t("passwordComplexity");
       }

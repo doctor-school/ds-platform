@@ -67,6 +67,25 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // (`next` 16.3.1 stopped tracing `@swc/helpers` under pnpm → MODULE_NOT_FOUND on
 // boot, in the image only). So: copy the bundle to a scratch dir OUTSIDE the repo
 // tree and boot it there, with no repo `node_modules` above it.
+//
+// `verbatimSymlinks: true` on that copy is load-bearing, not a detail. Node's
+// default `cpSync` RESOLVES each symlink and rewrites it to an ABSOLUTE target —
+// pnpm's `node_modules` is a forest of links, so the scratch copy would point
+// straight back into the repo store and re-open the very masking escape the
+// scratch dir exists to close. `dereference: true` is the opposite failure: it
+// launders out-of-bundle links into real files, so a dependency Next never
+// traced silently becomes part of the "bundle". Keeping target strings VERBATIM
+// is what the image actually does — Docker `COPY` restores a tar stream and
+// writes literal link targets; it does NOT dereference links inside the copied
+// tree. A link Next traced then resolves inside the scratch dir (green, as in
+// the image); a link Next missed dangles (red, as in the image).
+//
+// PLATFORM: ubuntu (Linux) is the supported platform for this check, and CI runs
+// it there. Windows is NOT supported: pnpm materialises `node_modules` entries as
+// junctions carrying ABSOLUTE targets, so a verbatim copy still points back into
+// the repo whatever this script does, while Linux links are relative and
+// self-contained. That asymmetry is the whole Windows-red / Linux-green split —
+// isolation is never weakened to make a local Windows run go green.
 function assembleStandalone(app) {
   const appDir = join(ROOT, "apps", app);
   const built = join(appDir, ".next", "standalone");
@@ -80,7 +99,7 @@ function assembleStandalone(app) {
     };
   }
   const scratch = mkdtempSync(join(tmpdir(), `ds-standalone-boot-${app}-`));
-  cpSync(built, scratch, { recursive: true });
+  cpSync(built, scratch, { recursive: true, verbatimSymlinks: true });
   const nested = join(scratch, "apps", app);
   for (const rel of [[".next", "static"], ["public"]]) {
     const from = join(appDir, ...rel);

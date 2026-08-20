@@ -32,6 +32,8 @@ env:
 #   api-e2e                unchanged                                (BLOCK)
 #   playwright-axe / playwright-academy-demo / playwright-axe-portal
 #                          unchanged                                (BLOCK)
+#   standalone-boot        boots the Next standalone output both prod images
+#                          run — #1410, the gap #1407 fell through (BLOCK)
 #   guards-block           the hard-red light guards + primitives-first +
 #                          db-drift                                  (BLOCK)
 #   guards-warn            the 25 WARN light guards                  (WARN)
@@ -1033,6 +1035,47 @@ jobs:
       - run: pnpm --filter @ds/portal exec playwright install --with-deps chromium
       - run: pnpm --filter @ds/portal test:e2e:ci
 
+  # ─── standalone-boot: the deployed artifact must actually BOOT (#1410) ─
+  # #1407: bumping `next` 16.3.0 → 16.3.1 crash-looped the portal AND admin
+  # standalone servers on prod, and every check above stayed green — `next build`
+  # succeeds, and no job here had ever EXECUTED `.next/standalone/**/server.js`,
+  # which is precisely what the production images run
+  # (apps/{portal,admin}/Dockerfile `CMD ["node","apps/<app>/server.js"]`). The
+  # sibling Playwright jobs boot `next start`, a DIFFERENT server entry that does
+  # not exercise the traced standalone bundle at all.
+  #
+  # This job builds both standalone outputs and boots each one, asserting a
+  # non-5xx HTTP response on `/` inside a bounded deadline; a crash before first
+  # response, a server that never listens, or a 5xx-only server is red. Guard
+  # logic lives in `tools/ci/standalone-boot-check.mjs` so the command CI runs is
+  # runnable verbatim on a workstation (`pnpm ci:standalone-boot`).
+  #
+  # BOTH apps, not just the portal: they are separate images with separate traced
+  # bundles and separate `next.config.ts` files (admin additionally runs Refine),
+  # and #1407 crash-looped BOTH — asserting one and reasoning about the other is
+  # exactly the inference that made the incident invisible. The marginal cost is
+  # one extra build on a job that pays checkout + install anyway.
+  #
+  # BLOCK: it is in the `ci` needs-list (path-gated class — a docs-only diff
+  # cannot change a runtime bundle). BACKEND-FREE: the portal reaches the api
+  # through a rewrite at REQUEST time, so booting and serving `/` needs no api /
+  # Postgres / Zitadel.
+  standalone-boot:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version-file: .nvmrc, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # Same cold-build path the `build` step exercises — no special env. The
+      # standalone output is a side effect of `output: "standalone"` in each
+      # app's next.config.ts, so no build flag is needed here.
+      - run: pnpm exec turbo run build --filter=@ds/portal --filter=@ds/admin
+      - run: pnpm ci:standalone-boot portal admin
+
   # ─── AI-specific guards from ADR-0007 §2.6 ───────────────────────────
   # The PR-body-parsing guard family (spec-link BLOCK, registry-research,
   # spec-status-fresh, prior-decisions, spec-deletion, catalog-deletion,
@@ -1069,6 +1112,7 @@ jobs:
         playwright-axe,
         playwright-academy-demo,
         playwright-axe-portal,
+        standalone-boot,
       ]
     if: always()
     runs-on: ubuntu-latest
@@ -1088,13 +1132,13 @@ jobs:
       #   must red `ci` rather than skip the gated jobs into a free green.
       #
       #   PATH-GATED — `api-e2e`, `playwright-axe`, `playwright-academy-demo`,
-      #   `playwright-axe-portal`.
+      #   `playwright-axe-portal`, `standalone-boot`.
       #   `success` OR `skipped` is green; `failure`/`cancelled` is still red.
       #   `skipped` here is reachable ONLY via `needs.changes.outputs.code`
       #   (a docs-only diff) or via `changes` itself not succeeding — and that
       #   second path is already red through the unconditional class above.
       #
-      # Net: a docs-only PR is green with four SKIPPED jobs; any FAILURE in any
+      # Net: a docs-only PR is green with five SKIPPED jobs; any FAILURE in any
       # of the seven is still red; a run where the classifier broke is red.
       - name: Aggregate
         env:
@@ -1107,6 +1151,7 @@ jobs:
             playwright-axe=${{ needs['playwright-axe'].result }}
             playwright-academy-demo=${{ needs['playwright-academy-demo'].result }}
             playwright-axe-portal=${{ needs['playwright-axe-portal'].result }}
+            standalone-boot=${{ needs['standalone-boot'].result }}
         run: |
           fail=0
 

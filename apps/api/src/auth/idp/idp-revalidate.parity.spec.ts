@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { FakeIdpClient } from "./idp.fake.js";
-import type { AdminAuthorityVerdict, IdpClient } from "./idp.types.js";
+import type {
+  AdminAuthorityVerdict,
+  IdpClient,
+  IdpSession,
+} from "./idp.types.js";
 import type { FetchLike } from "./zitadel.idp.js";
 import { ZitadelIdpClient } from "./zitadel.idp.js";
 
@@ -102,6 +106,7 @@ describe("#1304 revalidateAdminAuthority — fake/real port parity", () => {
     idp: FakeIdpClient;
     sub: string;
     sessionId: string;
+    session: IdpSession;
   }> {
     const fake = new FakeIdpClient();
     const created = await fake.createUser({
@@ -112,10 +117,17 @@ describe("#1304 revalidateAdminAuthority — fake/real port parity", () => {
     expect(login.outcome, "the fake must mint a checked session").toBe(
       "authenticated",
     );
-    const sessionId =
-      login.outcome === "authenticated" ? login.session.zitadelSessionId : "";
+    if (login.outcome !== "authenticated") {
+      throw new Error("unreachable: the fake refused a valid password login");
+    }
+    const session = login.session;
     await fake.grantProjectRole(created.sub, "platform_admin");
-    return { idp: fake, sub: created.sub, sessionId };
+    return {
+      idp: fake,
+      sub: created.sub,
+      sessionId: session.zitadelSessionId,
+      session,
+    };
   }
 
   const scenarios: Scenario[] = [
@@ -207,8 +219,8 @@ describe("#1304 revalidateAdminAuthority — fake/real port parity", () => {
     });
 
     it("#1304: inactive — the wrapped session is gone (force-logout, expiry)", async () => {
-      const { idp, sub, sessionId } = await fakeWithSession();
-      await idp.terminateSession({ zitadelSessionId: sessionId, sub });
+      const { idp, sub, sessionId, session } = await fakeWithSession();
+      await idp.terminateSession(session);
       const verdict = await idp.revalidateAdminAuthority({
         zitadelSessionId: sessionId,
         sub,

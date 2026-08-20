@@ -1,5 +1,32 @@
 # @ds/db
 
+## 0.9.0
+
+### Minor Changes
+
+- [#1414](https://github.com/doctor-school/ds-platform/pull/1414) [`f17dca0`](https://github.com/doctor-school/ds-platform/commit/f17dca0366368a3b59dedb6e8c7aa604081eaca5) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 012 EARS-3 — curated topic authoring vertical ([#1285](https://github.com/doctor-school/ds-platform/issues/1285))
+
+  Additive across four packages, no breaking change to an existing export; the
+  slice consumes the W1a ([#1283](https://github.com/doctor-school/ds-platform/issues/1283)) taxonomy foundation and the [#1284](https://github.com/doctor-school/ds-platform/issues/1284) expert
+  precedent byte-for-byte rather than forking either.
+
+  - `@ds/db`: the `topics` entity — slug grammar CHECK, canonical-UUID exclusion,
+    the set-once `first_published_at` trigger, the `topics_audit` mirror and a
+    `pg_trgm` GIN index over `title`/`slug` for operator search.
+  - `@ds/schemas`: topic DTOs (create/update/list/detail) — the thinnest of the
+    four entities: a title (1–120, trimmed) plus its permanent public identity,
+    with `.strict()` refusing the description/media fields a topic does not have.
+  - `@ds/api`: `GET/POST /v1/admin/topics` and `GET/PATCH /v1/admin/topics/:id`
+    — JSON-only writes (no media part anywhere), fenced idempotency,
+    ETag/If-Match concurrency, RFC 7807 problems and audit writes.
+  - `@ds/admin`: the `topics` resource — list on the shared taxonomy list shell,
+    tabbed create/detail with «Основное», and the generated-slug preview that is
+    editable until the first publication. The data provider's resource map now
+    admits a resource with NO file part, so a topic write can never be shaped as
+    multipart.
+
+- [#1381](https://github.com/doctor-school/ds-platform/pull/1381) [`1789e78`](https://github.com/doctor-school/ds-platform/commit/1789e785c2e129a8876389215cf67e9a8d72bb63) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 014 EARS-1..2: retained event recordings — attach, publish, unpublish, retire and restore a recording on its own lifecycle, independent of the event's; the admin event detail becomes tabbed and gains a «Записи» tab plus the «запись ожидается к» readiness date; `@ds/design-system` gains the `Dialog` / `AlertDialog` element class.
+
 ## 0.8.0
 
 ### Minor Changes

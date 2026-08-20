@@ -142,27 +142,45 @@ Cross-zone constraints: все профили отдают `Strict-Transport-Sec
 
 **MFA bootstrap для legacy admin** — отдельный flow elevated-session magic-link → принудительный TOTP/SMS enrollment в 7-дневное окно, иначе manual unlock через support (spec §8.5).
 
-### 10. Step-up authentication для high-risk actions
+### 10. Live-ревалидация authority и step-up для high-risk actions
 
-Базовая session, выданная после первичного login (§6), несёт общий security level, единый для read- и write-операций любого назначения. Для действий повышенного риска — деструктивных admin-операций над пользователями (role grant/revoke, lock, erasure-execute), account-level deletion / erasure-request от subject'а, payment-method change, изменения MFA, инициирования PD export, logout-all — общего level недостаточно: атакующий с украденной long-lived session не должен иметь возможности немедленно выполнить катастрофическое действие без свежей re-аутентификации.
+Базовая session, выданная после первичного login (§6), несёт общий security level, единый для read- и write-операций любого назначения, и является *кэшированным* утверждением о principal'е: оно было истинным в момент login и воспроизводится неизменным до истечения session. Для действий повышенного риска — деструктивных admin-операций над пользователями (role grant/revoke, lock, erasure-execute), approval erasure-плана по ADR-0009, account-level deletion / erasure-request от subject'а, payment-method change, изменения MFA, инициирования PD export, logout-all — этого кэшированного общего level недостаточно по двум независимым осям:
 
-Каждый step-up endpoint помечен в **endpoint-authorization-matrix** декларацией `@Authz({ step_up: true })`; нормативный список step-up endpoints — это проекция matrix по строкам с этим флагом (`step_up` ортогонален виду `auth_check`, поэтому это независимый boolean, а не режим auth-check). Триггер step-up — OIDC `prompt=login` + `acr_values=urn:ds:acr:mfa-fresh` на IdP. После успешного step-up IdP issues access-token с дополнительным claim `acr=mfa-fresh` и `mfa_fresh_at` timestamp; TTL свежего step-up — **30 минут** (см. identity-auth-rbac-design §7.1).
+- **Authority могло исчезнуть.** Аккаунт мог быть отключён, а grant `platform_admin` отозван на IdP секунды назад; session не скажет об этом ничего до собственного истечения.
+- **Presence могло устареть.** Атакующий с украденной long-lived session не должен иметь возможности выполнить катастрофическое действие без свежей re-аутентификации.
 
-Backend обязан проверять `acr=mfa-fresh` AND `mfa_fresh_at ≥ now − 30 мин` на всех endpoints, помеченных `step_up: true`, через единый `StepUpGuard` middleware (см. identity-auth-rbac-design — механизм step-up — + backend-core middleware checklist). При неуспехе — `401 Unauthorized` с телом `{ error: 'step_up_required', step_up_url: '<IdP authorize URL с prompt=login + acr_values + redirect_uri + state>' }`. Этот контракт ошибки — нормативный (identity-auth-rbac-design), frontend и mobile обязаны его обрабатывать.
+На каждую ось отвечает своя декларация на endpoint'е; обе несёт **endpoint-authorization-matrix**, и обе исполняет один глобальный guard (`AdminAuthorityGuard`), а не код в каждом handler'е — утверждение полноты состоит в том, что ни один handler *не может* их обойти, а соглашение такой гарантии не даёт.
 
-**Session lifetime после step-up.** Elevated state — это **отдельный claim в access-token**, не отдельная session. Базовая session (refresh-token web 30d / mobile 14d, §6) продолжает существовать независимо: elevated TTL 30 мин истекает быстрее access-token TTL (15 мин), но обновление access-token через refresh-token не возвращает `acr=mfa-fresh` автоматически — после истечения elevated окна следующий high-risk action заново требует step-up. Step-up не продлевает базовую session expiration.
+**Authority: `@Authz({ revalidate: "live" })` (колонка matrix `revalidate`).** До входа в handler backend спрашивает IdP, держит ли principal требуемый grant, используя СОБСТВЕННЫЙ service-credential поверх обёрнутого IdP session id. Ни access-, ни refresh-token пользователя при этом не читается и не хранится — admin-session token-free по построению (§6.1), и эта проверка сохраняет это свойство. Вердикт — один из четырёх, отображение нормативно:
 
-**IdP requirements.** `prompt=login` + custom `acr_values` поддерживаются Zitadel (§8).
+| вердикт                     | ответ                                                                     |
+| --------------------------- | ------------------------------------------------------------------------- |
+| активен, grant на месте     | handler выполняется                                                       |
+| session исчезла / inactive  | `401` `errorCode: ADMIN_SESSION_REQUIRED`                                 |
+| grant отозван               | `403` `errorCode: PLATFORM_ADMIN_REQUIRED` (или `PD_OFFICER_REQUIRED`)    |
+| provider недоступен         | `503` `errorCode: IDP_REVALIDATION_UNAVAILABLE`                           |
 
-**UX implications.** Frontend (portal/admin/cms) обязан перехватывать `401 step_up_required`, выполнять redirect на `step_up_url` без потери текущего context (preserved через `state` параметр + client-side route restoration после возврата с auth code), обменивать code на обновлённый access-token и retry оригинального request. Mobile — тот же flow через `ASWebAuthenticationSession` (iOS) / `Custom Tabs` (Android). Серия step-up-операций в пределах 30-минутного окна не требует повторной аутентификации (UX-критично для admin-консоли).
+Строка `unavailable` — несущая, а не оборонительная формальность. Любой сбой провайдера — transport error, timeout, `429`, `5xx`, отклонённый service-token, отсутствующий config, некорректный payload — обязан приходить как `503`, никогда как отказ по credential. Реализация, схлопывающая их в `401`, превратила бы кратковременный сбой IdP в «ваша сессия истекла» одновременно для всех администраторов и приучила бы операторов отвечать на аварию повторным логином.
+
+**Presence: `@Authz({ stepUp: true })` (колонка matrix `step_up`).** Нормативный список step-up endpoints — это проекция matrix по строкам с этим флагом; `step_up` ортогонален и виду `auth_check`, и `revalidate`, поэтому это независимый boolean, а не режим auth-check. Поскольку admin-tier не держит access-token, elevated state — не claim `acr`: сервер записывает момент проверки MFA в саму session-запись при её создании, а guard требует, чтобы этот timestamp присутствовал и укладывался в **30 минут**. Отсутствующий timestamp читается как УСТАРЕВШИЙ — fail-closed, никогда не «считаем, что было недавно». При неуспехе — `401` с телом Problem Details, несущим `errorCode: STEP_UP_REQUIRED` и `stepUpUrl`, адрес повторной элевации оператора. Этот контракт ошибки нормативен; frontend и mobile обязаны его обрабатывать.
+
+**Порядок нормативен: authority старше presence.** Live-вердикт берётся ПЕРВЫМ, проверка свежести — второй. Оператору, у которого аккаунт отключён или grant отозван, говорят именно это (`401 ADMIN_SESSION_REQUIRED` / `403 …_REQUIRED`), а не отправляют переподтверждать credential, который больше не действует, — обратный порядок заканчивается тем, что администратор с отозванным доступом успешно проходит MFA и только после этого получает отказ.
+
+**Где выполняются проверки.** Обе — на уровне guard, поэтому любой отказ предшествует валидации запроса, резервированию idempotency-ключа, любой загрузке в object storage и любой audit-записи. Свойство «отказы предшествуют всей работе» следует из позиции в pipeline запроса, а не из аккуратных ранних возвратов, повторённых в каждом handler'е.
+
+**Session lifetime после step-up.** Elevated state — свойство серверной session-записи, не отдельная session и не claim в token'е. Базовая session (§6) продолжает существовать независимо; 30-минутное elevated-окно просто истекает, и следующий high-risk action заново требует step-up. Step-up не продлевает базовую session expiration.
+
+**IdP requirements.** Service-аутентифицированные чтения session, пользователя и grants поддерживаются Zitadel (§8), как и `prompt=login` + custom `acr_values` для тех поверхностей, которые по-прежнему аутентифицируются через OIDC-flow.
+
+**UX implications.** Admin-консоль обязана перехватывать `401 STEP_UP_REQUIRED`, отправлять оператора на `stepUpUrl` без потери текущего контекста и после возврата повторять исходный запрос. Она также обязана отличать `503 IDP_REVALIDATION_UNAVAILABLE` от отказа по credential в том, что показывает: правильное действие там — retry, а не повторный вход. Серия step-up-операций в пределах 30-минутного окна не требует повторной аутентификации (UX-критично для admin-консоли).
 
 **Audit.** Каждая step-up попытка (success + fail) обязана писаться в `audit_ledger` (ADR-0003 §6, ADR-0009 §2.4 — audit class `auth.step_up.{requested,succeeded,failed}`) с полями `user_id`, `endpoint`, `acr_before`, `acr_after`, `mfa_method`, `ip`, `ua`. Полный список auth audit-событий — identity-auth-rbac-design §7.3.
 
 **Forward references:**
 
-- **endpoint-authorization-matrix-design** — per-endpoint флаг `step_up` (`@Authz({ step_up: true })`); список step-up endpoints — это проекция matrix по помеченным строкам.
-- **identity-auth-rbac-design** — механизм step-up: `StepUpGuard`, контракт ответа `401 step_up_required`, OIDC-триггер `prompt=login` + `acr_values`, claim `acr=mfa-fresh` + TTL + MFA-elevated session (§7.1).
-- **backend-core-design** — middleware-stack для step-up (CI rule на наличие `StepUpGuard` для каждого endpoint, помеченного `step_up: true`).
+- **endpoint-authorization-matrix-design** — per-endpoint колонки `step_up` и `revalidate`; оба списка endpoints — проекции matrix по помеченным строкам.
+- **identity-auth-rbac-design** — механизм элевации и контракт отказа (§7.1).
+- **backend-core-design** — middleware-stack (CI-проверка полноты: каждая admin-мутация либо объявляет `revalidate: "live"`, либо присутствует в письменном реестре исключений).
 - **ADR-0009 §2.4** — audit class регистрация для step-up событий.
 
 ## Consequences

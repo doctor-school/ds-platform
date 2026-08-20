@@ -1,5 +1,16 @@
 # @ds/design-system
 
+## 5.1.0
+
+### Minor Changes
+
+- [#1381](https://github.com/doctor-school/ds-platform/pull/1381) [`1789e78`](https://github.com/doctor-school/ds-platform/commit/1789e785c2e129a8876389215cf67e9a8d72bb63) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 014 EARS-1..2: retained event recordings — attach, publish, unpublish, retire and restore a recording on its own lifecycle, independent of the event's; the admin event detail becomes tabbed and gains a «Записи» tab plus the «запись ожидается к» readiness date; `@ds/design-system` gains the `Dialog` / `AlertDialog` element class.
+
+### Patch Changes
+
+- Updated dependencies [[`f17dca0`](https://github.com/doctor-school/ds-platform/commit/f17dca0366368a3b59dedb6e8c7aa604081eaca5), [`1789e78`](https://github.com/doctor-school/ds-platform/commit/1789e785c2e129a8876389215cf67e9a8d72bb63)]:
+  - @ds/schemas@3.1.0
+
 ## 5.0.0
 
 ### Major Changes

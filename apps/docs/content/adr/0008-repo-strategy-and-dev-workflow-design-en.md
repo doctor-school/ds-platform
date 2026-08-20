@@ -38,7 +38,7 @@ This document is the implementation detail for ADR-0008. The ADR fixes "what and
 | Merge style            | squash-only                                                                                                                                              | §2.4                        |
 | Pre-commit hooks       | simple-git-hooks + lint-staged                                                                                                                           | §2.5                        |
 | Branch strategy        | trunk-based, branches `feat/DSO-NN-<slug>` short-lived                                                                                                   | §2.6                        |
-| Branch protection rule | Target-state contract per ADR-0008 §2.6 (API reachable — activation tracked in #1403; required status check `ci` only)                                   | §2.6                        |
+| Branch protection rule | Applied as a repository ruleset on `main` per ADR-0008 §2.6 (required status check `ci` only; admin bypass scoped to `pull_request`)                     | §2.6                        |
 | CODEOWNERS Phase 0     | `* @sidorovanthon`                                                                                                                                       | §2.7                        |
 | CI runner              | GitHub-hosted `ubuntu-latest` for every job; batched topology — 8 executing jobs, one checkout + install per batch (#1237, #1249)                        | §2.8                        |
 | Dependabot             | weekly, grouped, ecosystems npm + github-actions                                                                                                         | §2.9                        |
@@ -728,7 +728,7 @@ No per-directory npm sub-configs are configured — pnpm-monorepo single root in
 
 ## 4. Branch protection + repo settings — concrete `gh api` calls
 
-Per ADR-0008 §2.6, step 21. Admin runs §4.1 once. **§4.2 is target-state**, not currently applied — no longer because of a paywall (the repo is public, so both the legacy protection endpoint and the rulesets API are reachable), but because the payload cannot be applied verbatim: `required_status_checks: ["ci"]` would permanently block the Changesets bot branch `changeset-release/main`, which carries no check-runs. Issue #1403 owns choosing the enforceable shape (ruleset with a bot bypass, or protection without required status checks), applying it, and reconciling `branch-protection.json` with the enforced result. The payload below is committed verbatim to `branch-protection.json` at repo root as documentation until then. Required status checks contain `ci` only (single meta-job from §3.1); there is no automated reviewer-bot in Phase 0 (ADR-0007 §2.10 dropped that flow).
+Per ADR-0008 §2.6, step 21. Admin runs §4.1 once; §4.2 is applied and live. The protection mechanism is a **repository ruleset**, not legacy branch protection — the legacy endpoint has no bypass actors, and without one the Changesets bot branch `changeset-release/main` (no check-runs at all) would be permanently unmergeable under a required `ci` check. Required status checks contain `ci` only (single meta-job from §3.1); there is no automated reviewer-bot in Phase 0 (ADR-0007 §2.10 dropped that flow). Rationale for every rule, and for the contract items deliberately left process-level: ADR-0008 §2.6.
 
 **4.1 Repository settings — enforce squash-only:**
 
@@ -747,32 +747,30 @@ gh api \
 
 Without disabling `allow_rebase_merge` + `allow_merge_commit` any contributor can choose rebase-merge or merge-commit, which breaks changesets parsing (changesets expects one squashed commit per PR) and AI-agent reasoning about history.
 
-**4.2 Branch protection rule:**
+**4.2 Branch ruleset on `main` — applied:**
 
 ```bash
+# create (once); re-apply after an edit with --method PUT on /rulesets/<id>
 gh api \
-  --method PUT \
+  --method POST \
   -H "Accept: application/vnd.github+json" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
-  /repos/doctor-school/ds-platform/branches/main/protection \
-  -f required_status_checks[strict]=true \
-  -f required_status_checks[contexts][]=ci \
-  -f enforce_admins=true \
-  -f required_pull_request_reviews[dismiss_stale_reviews]=true \
-  -f required_pull_request_reviews[required_approving_review_count]=1 \
-  -f required_pull_request_reviews[require_code_owner_reviews]=false \
-  -f restrictions=null \
-  -f allow_force_pushes=false \
-  -f allow_deletions=false \
-  -f required_linear_history=true \
-  -f required_conversation_resolution=true
+  /repos/doctor-school/ds-platform/rulesets \
+  --input branch-protection.json
+
+# read back what is actually enforced
+gh api /repos/doctor-school/ds-platform/rulesets
 ```
 
-`required_linear_history=true` enforces squash or rebase merge (matches §2.4 squash-only).
+`branch-protection.json` at repo root holds the exact payload: rules `deletion`, `non_fast_forward`, `required_linear_history`, `pull_request` (0 required approvals, no thread-resolution requirement, `allowed_merge_methods: ["squash"]`), `required_status_checks` (`ci`, non-strict); one bypass actor — `RepositoryRole` id 5 (Admin) in `bypass_mode: pull_request`.
 
-`require_code_owner_reviews=false` Phase 0 — CODEOWNERS = one line `* @sidorovanthon`, and Tech Lead is typically the PR author; enabling the rule would create recursion ("you cannot approve your own PR"). Phase 1 (hire #2) — switch to `true`.
+`required_linear_history` enforces squash or rebase merge (matches §2.4 squash-only).
 
-`required_conversation_resolution=true` — all reviewer-bot PR comments must be resolved before merge.
+`require_code_owner_review: false` Phase 0 — CODEOWNERS = one line `* @sidorovanthon`, and Tech Lead is typically the PR author; enabling it would create recursion ("you cannot approve your own PR"). Phase 1 (hire #2) — switch to `true` and raise `required_approving_review_count` to `1` at the same time.
+
+`required_review_thread_resolution: false` and `strict_required_status_checks_policy: false` are deliberate — with a single human and parallel PR waves, either one deadlocks merges; the equivalent intent lives in the `pnpm pr:land <N>` gate (ADR-0008 §2.6).
+
+`bypass_mode: pull_request` is the narrowest hatch that keeps the release train alive: an admin can merge the check-run-less `changeset-release/main` PR, but direct pushes, force-pushes, and deletion of `main` remain blocked for everyone, admins included.
 
 ---
 
@@ -799,7 +797,7 @@ Beyond the baseline from ADR-0006/0007, add a repository conventions section:
 
 **PR template is required** — set the correct label (feature/bug/chore/refactor/docs), link the Issue (`Closes #N`), mark the author (claude/codex/human) for reviewer-bot vendor detection.
 
-**Branch protection:** the contract on `main` (PR required, `ci` green, ≥1 review, conversation resolved, branch up-to-date, linear history, no force push) is enforced by convention and the local merge gate `pnpm pr:land <N>`; server-side activation is tracked in #1403 (§4).
+**Branch protection:** a repository ruleset on `main` enforces server-side — PR required, `ci` green, linear history, no force push, no deletion (§4). Review depth and check-freshness stay with the local merge gate `pnpm pr:land <N>` (head-SHA-pinned checks + Mode-a verdict); admins bypass only when merging a PR, for the check-run-less Version-Packages branch.
 
 **ADRs live in `apps/docs/content/adr/`**, rendered by Fumadocs at `/adr/<slug>`. Paired design spec — `NNNN-<slug>-design.md` alongside.
 

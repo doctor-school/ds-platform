@@ -123,9 +123,23 @@ export class RedisPendingAuthStore implements PendingAuthStore {
   }
 
   async get(ref: string): Promise<PendingAuthRecord | undefined> {
-    const raw = await this.redis.get(`${PENDING_AUTH_PREFIX}${ref}`);
+    const key = `${PENDING_AUTH_PREFIX}${ref}`;
+    const raw = await this.redis.get(key);
     if (!raw) return undefined;
-    return JSON.parse(raw) as PendingAuthRecord;
+    const record = JSON.parse(raw) as PendingAuthRecord;
+    // Same reason the session store re-checks its deadline on read:
+    // `ttlSecondsUntil` ceils to whole seconds and never writes below 1s (Redis
+    // rejects `EX 0`), so a record can outlive its own `expiresAtMs` by up to a
+    // second. The record carries that deadline — enforce it here too, or the
+    // second-factor window silently stretches past the minutes the design
+    // grants it. An expired reference is absent, exactly the answer the
+    // in-memory store gives; the two adapters must not disagree about when a
+    // pending authentication is over.
+    if (record.expiresAtMs <= Date.now()) {
+      await this.redis.del(key);
+      return undefined;
+    }
+    return record;
   }
 
   async delete(ref: string): Promise<void> {

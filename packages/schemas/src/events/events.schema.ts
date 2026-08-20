@@ -118,7 +118,12 @@ export function mskLocalToInstant(local: string): Date {
  * This is the shared SSOT the API, the Refine admin app, the DB `stream_provider`
  * enum, and the 006 consumer all read.
  */
-export const STREAM_PROVIDERS = ["rutube", "youtube", "vk", "cdnvideo"] as const;
+export const STREAM_PROVIDERS = [
+  "rutube",
+  "youtube",
+  "vk",
+  "cdnvideo",
+] as const;
 export const StreamProviderSchema = z.enum(STREAM_PROVIDERS);
 export type StreamProvider = z.infer<typeof StreamProviderSchema>;
 
@@ -223,26 +228,48 @@ export const ConfigureStreamRequestSchema = z
     embedRef: EmbedRefSchema,
   })
   .superRefine((value, ctx) => {
-    if (!StreamProviderSchema.safeParse(value.provider).success) return;
-    if (!EmbedRefSchema.safeParse(value.embedRef).success) return;
-    // Id-style providers reject a URL-shaped paste up front with the actionable
-    // "you pasted a link" copy; `cdnvideo`'s reference IS a URL (validated by its
-    // allowlist shape below), so it is exempt from this guard (#1134).
-    if (
-      value.provider !== "cdnvideo" &&
-      EMBED_REF_LOOKS_LIKE_URL.test(value.embedRef)
-    ) {
-      ctx.addIssue({ code: "custom", path: ["embedRef"] });
-      return;
-    }
-    if (!EMBED_REF_SHAPES[value.provider].test(value.embedRef)) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["embedRef"],
-        params: { shape: value.provider },
-      });
-    }
+    refineEmbedRefForProvider(ctx, value.provider, value.embedRef);
   });
+
+/**
+ * The provider-scoped `embedRef` check, extracted so every surface that stores a
+ * playable source runs the SAME one: 006's `ConfigureStream` above and 014's
+ * `AttachRecording`/`UpdateRecording` (#1339). A second copy of this rule would be
+ * a second answer to "is this a valid rutube id", and the two would drift the
+ * first time a provider changes its id format.
+ *
+ * Silent while either field is invalid on its own — each problem renders exactly
+ * one issue. Issues stay UNTAGGED for the URL ban (the "paste a link" copy) and
+ * carry `params.shape` for the shape mismatch (#200: no baked English message).
+ */
+export function refineEmbedRefForProvider(
+  ctx: z.RefinementCtx,
+  provider: unknown,
+  embedRef: unknown,
+  path: PropertyKey[] = ["embedRef"],
+): void {
+  const parsedProvider = StreamProviderSchema.safeParse(provider);
+  if (!parsedProvider.success) return;
+  const parsedRef = EmbedRefSchema.safeParse(embedRef);
+  if (!parsedRef.success) return;
+  // Id-style providers reject a URL-shaped paste up front with the actionable
+  // "you pasted a link" copy; `cdnvideo`'s reference IS a URL (validated by its
+  // allowlist shape), so it is exempt from this guard (#1134).
+  if (
+    parsedProvider.data !== "cdnvideo" &&
+    EMBED_REF_LOOKS_LIKE_URL.test(parsedRef.data)
+  ) {
+    ctx.addIssue({ code: "custom", path });
+    return;
+  }
+  if (!EMBED_REF_SHAPES[parsedProvider.data].test(parsedRef.data)) {
+    ctx.addIssue({
+      code: "custom",
+      path,
+      params: { shape: parsedProvider.data },
+    });
+  }
+}
 export type ConfigureStreamRequest = z.infer<
   typeof ConfigureStreamRequestSchema
 >;
@@ -316,6 +343,45 @@ export type CreateEventRequest = z.infer<typeof CreateEventRequestSchema>;
  * through the guarded transition commands. Editing is a **pre-archive** action;
  * the server refuses an edit to an `archived` event (EARS-2, requirements Scope).
  */
+/** `YYYY-MM-DD` — the plaque promises a day, never an instant (014-design §2). */
+export const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+/**
+ * 014 EARS-1 (#1339) — the operator's recording-readiness date.
+ *
+ * The regex alone only proves the SHAPE: `2026-13-45` matches it and would reach
+ * Postgres as an out-of-range `date`, which the driver raises as an unhandled
+ * error → a 500 the API itself authored (014-design §11 «no own 5xx», ADR-0002
+ * §9). The calendar check is therefore part of the contract, not a UI nicety: a
+ * date that does not exist is refused at the I/O boundary as a 400 Problem
+ * Details, and the admin renders it as `recordings.validation.expectedBy`.
+ */
+export const RecordingExpectedBySchema = z
+  .string()
+  .regex(ISO_DATE_REGEX)
+  .refine(isRealCalendarDay, { message: "must be a real calendar date" });
+
+/**
+ * `YYYY-MM-DD` names a day that actually exists.
+ *
+ * Deliberately NOT `Date.parse`: when the strict ISO parse fails V8 falls back to
+ * its legacy parser, which ROLLS OVER an out-of-range day — `2026-02-31` comes
+ * back as 3 March instead of `NaN`. Building the UTC instant and reading the
+ * three components back is the only check that catches both the impossible month
+ * and the impossible day, and it says «this day is not on the calendar» rather
+ * than silently accepting a different day than the operator typed.
+ */
+function isRealCalendarDay(value: string): boolean {
+  const [year, month, day] = value.split("-").map(Number);
+  if (year === undefined || month === undefined || day === undefined)
+    return false;
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  return (
+    utc.getUTCFullYear() === year &&
+    utc.getUTCMonth() === month - 1 &&
+    utc.getUTCDate() === day
+  );
+}
+
 export const UpdateEventRequestSchema = z.object({
   title: z.string().trim().min(1).max(300).optional(),
   school: z.string().trim().min(1).max(200).optional(),
@@ -334,6 +400,14 @@ export const UpdateEventRequestSchema = z.object({
   specialties: z.array(z.string().trim().min(1).max(100)).max(100).optional(),
   /** `null` clears the sponsor/partner reference; an omitted key leaves it. */
   partnerRef: z.string().trim().max(300).nullish(),
+  /**
+   * 014 EARS-1 (#1339) — the day the operator promises the recording by
+   * (`YYYY-MM-DD`), rendered on the post-live «запись готовится» plaque. `null`
+   * clears the promise; an omitted key leaves it. A DATE and not an instant: the
+   * plaque promises a day, and a timezone-bearing value would invite a precision
+   * the operator never entered (014-design §2).
+   */
+  recordingExpectedBy: RecordingExpectedBySchema.nullish(),
 });
 export type UpdateEventRequest = z.infer<typeof UpdateEventRequestSchema>;
 
@@ -361,6 +435,8 @@ export const EventAdminDetailSchema = z.object({
   streamConfig: StreamConfigSchema.nullable(),
   state: EventLifecycleStateSchema,
   validTransitions: z.array(EventLifecycleStateSchema),
+  /** 014 (#1339) — the operator's readiness date, or `null` when unpromised. */
+  recordingExpectedBy: z.string().nullable(),
   createdAt: z.iso.datetime({ offset: true }),
   updatedAt: z.iso.datetime({ offset: true }),
 });

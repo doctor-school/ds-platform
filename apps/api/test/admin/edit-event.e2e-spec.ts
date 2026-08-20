@@ -438,6 +438,49 @@ describe.skipIf(
     expect(rows[0]?.starts_at.toISOString()).toBe("2026-07-17T16:00:00.000Z");
   });
 
+  it("014 EARS-1: a readiness date that is not on the calendar is refused (400), never forwarded to the date column", async () => {
+    const cookie = await session(uniqueEmail("admin"), "platform_admin");
+    const created = await createEvent(cookie);
+    const id = created.id as string;
+
+    // A real promise lands first, so the refusal below is provably a refusal and
+    // not just "nothing was written anyway".
+    const good = multipartBody({
+      payload: JSON.stringify({ recordingExpectedBy: "2026-09-01" }),
+    });
+    const accepted = await app.inject({
+      method: "PATCH",
+      url: `/v1/admin/events/${id}`,
+      headers: admHeaders(cookie, good.contentType),
+      payload: good.body,
+    });
+    expect(accepted.statusCode).toBe(200);
+
+    // `2026-13-45` matches the `YYYY-MM-DD` SHAPE but names no day that exists.
+    // Unwired, it reaches Postgres as an out-of-range `date` and the API answers
+    // with a 5xx it authored itself — banned by 014-design §11 / ADR-0002 §9.
+    for (const impossible of ["2026-13-45", "2026-02-31"]) {
+      const bad = multipartBody({
+        payload: JSON.stringify({ recordingExpectedBy: impossible }),
+      });
+      const res = await app.inject({
+        method: "PATCH",
+        url: `/v1/admin/events/${id}`,
+        headers: admHeaders(cookie, bad.contentType),
+        payload: bad.body,
+      });
+      expect(res.statusCode).toBe(400);
+    }
+
+    // `::text` so the assertion reads the stored CALENDAR DAY, not the driver's
+    // local-timezone rendering of a `date`.
+    const { rows } = await pool.query<{ expected_by: string | null }>(
+      "SELECT recording_expected_by::text AS expected_by FROM events WHERE id = $1",
+      [id],
+    );
+    expect(rows[0]?.expected_by).toBe("2026-09-01");
+  });
+
   it("EARS-8: a doctor_guest is refused (401) — not silently satisfied — on the edit command", async () => {
     const adminCookie = await session(uniqueEmail("admin"), "platform_admin");
     const created = await createEvent(adminCookie);

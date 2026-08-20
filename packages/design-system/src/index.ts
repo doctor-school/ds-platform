@@ -40,6 +40,35 @@ export {
   InputOTPSeparator,
 } from "./primitives/input-otp";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./primitives/tabs";
+// ── 014 modal element class (#1339, Stage A #1337) — adopted from official
+//    shadcn/ui `dialog` + `alert-dialog` (MIT) on their Radix substrate. Built
+//    once here because 014's recordings panel and 007's mark-ended command
+//    (#1338) both confirm in a modal (#1280/#1336 shared-class rule).
+export {
+  Dialog,
+  DialogPortal,
+  DialogOverlay,
+  DialogTrigger,
+  DialogClose,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+} from "./primitives/dialog";
+export {
+  AlertDialog,
+  AlertDialogPortal,
+  AlertDialogOverlay,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "./primitives/alert-dialog";
 // ── 012 authoring controls (#1283, Stage A #1282) ─────────────────────────────
 export { Textarea, type TextareaProps } from "./primitives/textarea";
 export {

@@ -30,6 +30,26 @@ import {
   TabsList,
   TabsTrigger,
 } from "@ds/design-system/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@ds/design-system/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@ds/design-system/alert-dialog";
 import { FilterChip } from "@ds/design-system/filter-chip";
 import { Badge } from "@ds/design-system/badge";
 import { Avatar } from "@ds/design-system/avatar";
@@ -583,12 +603,7 @@ const DROPZONE_LABELS = {
 };
 
 type DropzoneState =
-  | "empty"
-  | "hover"
-  | "active"
-  | "focus"
-  | "filled"
-  | "disabled";
+  "empty" | "hover" | "active" | "focus" | "filled" | "disabled";
 
 /**
  * One dropzone specimen. `MediaDropzone` REQUIRES an `id` (it names the hidden
@@ -2024,6 +2039,112 @@ function WebinarRoomSection() {
   );
 }
 
+/**
+ * The modal pair (#1339). A modal is the one primitive whose specimen cannot be
+ * a static cell: everything worth showing — the scrim, the focus trap, where
+ * initial focus lands, whether an outside press dismisses — only exists while it
+ * is OPEN. So the specimen is the real trigger, and the reader opens it.
+ *
+ * `container` is what keeps the theme pair honest. Both primitives portal to
+ * `document.body` by default (an app modal must escape clipping ancestors), and a
+ * body-level portal would render the DARK specimen against the page's light
+ * chrome. Pointing the portal at the pane node puts the modal back inside the
+ * `.dark` subtree, so what the reader sees is the dark surface, not a light one
+ * mislabelled.
+ */
+function ModalSpecimens({ pane }: { pane: HTMLElement | null }) {
+  return (
+    <div className="flex flex-wrap items-start gap-4">
+      <Cell label="Dialog — dismissible">
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="outline">Прикрепить запись</Button>
+          </DialogTrigger>
+          <DialogContent container={pane}>
+            <DialogHeader>
+              <DialogTitle>Прикрепить запись</DialogTitle>
+              <DialogDescription>
+                Провайдер и идентификатор встраивания. Форму можно закрыть,
+                ничего не выбрав — Escape, крестик или клик вне окна.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline">Отмена</Button>
+              <Button>Прикрепить</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </Cell>
+      <Cell label="AlertDialog — must be answered">
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="outline">Отозвать запись</Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent container={pane}>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Отозвать запись?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Запись перестанет показываться и освободит слот своего вида. Её
+                можно будет восстановить — действие обратимо.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Отмена</AlertDialogCancel>
+              <AlertDialogAction>Отозвать</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </Cell>
+    </div>
+  );
+}
+
+function DialogSection() {
+  // One ref per theme pane: `ThemePair` renders its tree twice, so a single
+  // shared ref would point at whichever pane mounted last and send the light
+  // specimen's portal into the dark pane.
+  const [lightPane, setLightPane] = useState<HTMLElement | null>(null);
+  const [darkPane, setDarkPane] = useState<HTMLElement | null>(null);
+
+  return (
+    <PrimitiveSection
+      title="Dialog / AlertDialog"
+      exportsLine="Dialog · DialogTrigger · DialogContent · DialogHeader · DialogFooter · DialogTitle · DialogDescription · DialogClose — AlertDialog · AlertDialogTrigger · AlertDialogContent · AlertDialogHeader · AlertDialogFooter · AlertDialogTitle · AlertDialogDescription · AlertDialogAction · AlertDialogCancel"
+    >
+      <p className="text-sm text-muted-foreground">
+        The official shadcn/ui dialog and alert-dialog on their Radix substrate,
+        re-skinned to the DS tokens. They look alike and behave differently on
+        purpose: <code className="font-mono text-xs">Dialog</code> is the
+        walk-away surface (Escape, the scrim, a named × affordance), while{" "}
+        <code className="font-mono text-xs">AlertDialog</code> takes{" "}
+        <code className="font-mono text-xs">role=&quot;alertdialog&quot;</code>,
+        refuses an outside press and lands initial focus on Cancel — so a
+        consequential action is chosen, never clicked away. Open one in each
+        pane to read the scrim and the focus ring; the scrim is theme-invariant
+        black because a foreground-keyed veil would flip to white in the dark
+        theme.
+      </p>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {(["light", "dark"] as const).map((theme) => (
+          <div
+            key={theme}
+            ref={theme === "light" ? setLightPane : setDarkPane}
+            className={
+              "relative flex flex-col items-start gap-4 border-2 border-border bg-background p-6 " +
+              theme
+            }
+          >
+            <span className="font-mono text-xs text-muted-foreground">
+              {theme}
+            </span>
+            <ModalSpecimens pane={theme === "light" ? lightPane : darkPane} />
+          </div>
+        ))}
+      </div>
+    </PrimitiveSection>
+  );
+}
+
 export function PrimitivesView() {
   return (
     <div className="flex flex-col gap-2">
@@ -2036,6 +2157,7 @@ export function PrimitivesView() {
       <LabelSection />
       <CardSection />
       <TabsSection />
+      <DialogSection />
       <OtpSection />
       <FormPrimitivesSection />
       <FieldsSection />

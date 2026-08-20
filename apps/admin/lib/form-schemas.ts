@@ -5,13 +5,22 @@ import {
   CreateExpertRequestSchema,
   CreateProjectRequestSchema,
   CreateTopicRequestSchema,
+  DurationSecSchema,
+  EmbedRefSchema,
   EXPERT_AFFILIATION_MAX,
   EXPERT_BIO_MAX,
   EXPERT_CREDENTIALS_MAX,
   EXPERT_PROFESSIONAL_ROLE_MAX,
+  POSTER_REF_MAX,
+  PosterRefSchema,
   type ProjectKind,
+  RECORDING_DURATION_SEC_MAX,
+  RecordingExpectedBySchema,
+  refineEmbedRefForProvider,
   SlugSchema,
   type SpeakerEntry,
+  type StreamProvider,
+  StreamProviderSchema,
 } from "@ds/schemas";
 import {
   CurrentPasswordFieldSchema,
@@ -252,4 +261,93 @@ export const TopicFormSchema = z.object({
 export interface TopicFormFields {
   title: string;
   slug: string;
+}
+
+/**
+ * The 014 recordings source form (#1339 — attach and edit share one shape, exactly
+ * as the event create/edit forms do: both author the same source triple).
+ *
+ * DERIVED from the `@ds/schemas` SSOT: the provider enum, the embed-reference
+ * bounds and the per-provider reference shape all come from the SAME validators
+ * feature 006's stream config runs (`refineEmbedRefForProvider`), so «is this a
+ * valid rutube id» keeps one answer across the live room and the recording.
+ *
+ * The two optional fields are TEXT boxes here, not `number | null` — an operator
+ * types into a box, and an empty box means «none». So emptiness is legal at the
+ * form layer and only a NON-empty value is folded back through the SSOT
+ * validator; the panel converts «» to the `null`/absent the API expects.
+ */
+export const RecordingSourceFormSchema = z
+  .object({
+    provider: StreamProviderSchema,
+    embedRef: EmbedRefSchema,
+    posterRef: z.string(),
+    durationSecText: z.string(),
+  })
+  .superRefine((values, ctx) => {
+    refineEmbedRefForProvider(ctx, values.provider, values.embedRef);
+
+    const poster = values.posterRef.trim();
+    if (poster.length > 0 && !PosterRefSchema.safeParse(poster).success) {
+      ctx.addIssue({
+        code: "too_big",
+        origin: "string",
+        maximum: POSTER_REF_MAX,
+        inclusive: true,
+        path: ["posterRef"],
+      });
+    }
+
+    const duration = values.durationSecText.trim();
+    if (duration.length === 0) return;
+    const parsed = DurationSecSchema.safeParse(duration);
+    if (parsed.success) return;
+    // Preserve the DISTINCTION the SSOT makes: over the 24h cap is its own
+    // actionable sentence, everything else ("", "abc", 0, -1) is the same
+    // "positive whole number of seconds" guidance.
+    ctx.addIssue(
+      parsed.error.issues.some((issue) => issue.code === "too_big")
+        ? {
+            code: "too_big",
+            origin: "number",
+            maximum: RECORDING_DURATION_SEC_MAX,
+            inclusive: true,
+            path: ["durationSecText"],
+          }
+        : { code: "custom", path: ["durationSecText"] },
+    );
+  });
+
+export interface RecordingSourceFields {
+  provider: StreamProvider;
+  embedRef: string;
+  posterRef: string;
+  durationSecText: string;
+}
+
+/**
+ * 014 EARS-1 (#1339) — the event-level readiness date box.
+ *
+ * An empty box is legal and means «no promise» (the panel sends `null` to clear
+ * it); anything else must be the SAME calendar-checked day the API enforces, so
+ * the SSOT schema is folded in rather than re-typed. The date control keeps a
+ * typed-in value the browser could not parse in its own buffer and hands the
+ * form an empty string, so this guard is not the only thing standing between the
+ * operator and a bad date — but a pasted `2026-13-45` is caught here, in RU, on
+ * blur, instead of coming back as the server's generic "проверьте поля".
+ */
+export const RecordingExpectedByFormSchema = z.object({
+  // One refinement rather than `z.union([z.literal(""), …])`: a union reports one
+  // issue PER member, and the box has exactly one sentence to say — two issues
+  // carrying the same message is noise the form layer would have to de-duplicate.
+  expectedBy: z
+    .string()
+    .refine(
+      (value) =>
+        value === "" || RecordingExpectedBySchema.safeParse(value).success,
+    ),
+});
+
+export interface RecordingExpectedByFields {
+  expectedBy: string;
 }

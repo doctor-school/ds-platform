@@ -221,6 +221,33 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/topics/${ABSENT_ID}`,
     payload: {},
   },
+  // 014 EARS-1/EARS-2/EARS-17 (#1339) — the recording routes hang under an event
+  // path but are their own aggregate, and they sit on the same raised floor: the
+  // guard refuses before the Idempotency-Key check, so a keyless anonymous
+  // request is answered by authz, never by the protocol preamble.
+  {
+    endpoint: "GET /v1/admin/events/:eventId/recordings",
+    method: "GET",
+    url: `/v1/admin/events/${ABSENT_ID}/recordings`,
+  },
+  {
+    endpoint: "POST /v1/admin/events/:eventId/recordings",
+    method: "POST",
+    url: `/v1/admin/events/${ABSENT_ID}/recordings`,
+    payload: {},
+  },
+  {
+    endpoint: "PATCH /v1/admin/events/:eventId/recordings/:recordingId",
+    method: "PATCH",
+    url: `/v1/admin/events/${ABSENT_ID}/recordings/${ABSENT_ID}`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/events/:eventId/recordings/:recordingId/:command",
+    method: "POST",
+    url: `/v1/admin/events/${ABSENT_ID}/recordings/${ABSENT_ID}/publish`,
+    payload: {},
+  },
 ];
 
 /** An authz refusal — never a 2xx, never a partially-served admin answer. */
@@ -570,8 +597,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("EARS-11.7: the 007 admin-events commands keep their shape on the raised floor", () => {
-      const events = adminRows().filter((r) =>
-        r.endpoint.includes(" /v1/admin/events"),
+      // The 007 event commands only: 014's recording routes (#1339) hang under
+      // the same path prefix but are a different feature with its own EARS
+      // coverage, and they are asserted by the floor-table rows above.
+      const events = adminRows().filter(
+        (r) =>
+          r.endpoint.includes(" /v1/admin/events") &&
+          !r.endpoint.includes("/recordings"),
       );
       expect(events.length).toBe(10);
       for (const row of events) {

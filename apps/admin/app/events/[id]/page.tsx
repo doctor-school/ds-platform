@@ -10,6 +10,10 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
 } from "@ds/design-system";
 import type { EventAdminDetail } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
@@ -17,6 +21,7 @@ import { BackToList } from "@/components/back-to-list";
 import { EventForm } from "@/components/event-form";
 import { StreamConfigForm } from "@/components/stream-config-form";
 import { LifecycleActions } from "@/components/lifecycle-actions";
+import { RecordingsPanel } from "@/components/recordings-panel";
 import { StateBadge } from "@/components/state-badge";
 import { formatMskDateTime } from "@/lib/msk";
 import type { UpdateEventVars } from "@/providers/data-provider";
@@ -72,81 +77,120 @@ export default function EventEditPage() {
               <StateBadge state={detail.state} />
             </div>
 
-            {/* Lifecycle actions — only the currently-valid transitions (EARS-7). */}
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("events.sections.lifecycle")}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <LifecycleActions
-                  detail={detail}
-                  onTransition={() => refetch()}
-                />
-              </CardContent>
-            </Card>
+            <Tabs defaultValue="main">
+              <TabsList>
+                <TabsTrigger value="main" data-testid="tab-main">
+                  {t("events.tabs.main")}
+                </TabsTrigger>
+                <TabsTrigger value="recordings" data-testid="tab-recordings">
+                  {t("events.tabs.recordings")}
+                </TabsTrigger>
+              </TabsList>
 
-            {/* Stream config (EARS-3). */}
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("events.sections.stream")}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <StreamConfigForm
-                  detail={detail}
-                  onConfigured={() => refetch()}
-                />
-              </CardContent>
-            </Card>
+              <TabsContent value="main" className="flex flex-col gap-6">
+                {/* Lifecycle actions — only the currently-valid transitions (EARS-7). */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{t("events.sections.lifecycle")}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <LifecycleActions
+                      detail={detail}
+                      onTransition={() => refetch()}
+                    />
+                  </CardContent>
+                </Card>
 
-            {/* Aggregate edit + program-PDF replace (EARS-2). */}
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("events.editTitle")}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {editError ? (
-                  <Alert variant="danger" className="mb-4" data-testid="edit-error">
-                    {editError}
-                  </Alert>
-                ) : null}
-                {editOk ? (
-                  <Alert variant="success" className="mb-4" data-testid="edit-ok">
-                    {t("events.toast.updated")}
-                  </Alert>
-                ) : null}
-                <EventForm
-                  detail={detail}
-                  submitLabel={t("common.save")}
-                  submitting={updating}
-                  onSubmit={(values) => {
-                    setEditError(null);
-                    setEditOk(false);
-                    const vars: UpdateEventVars = {
-                      title: values.title,
-                      school: values.school,
-                      startsAtMsk: values.startsAtMsk,
-                      durationMin: values.durationMin,
-                      description: values.description,
-                      speakers: values.speakers,
-                      specialties: values.specialties,
-                      partnerRef: values.partnerRef,
-                      programPdf: values.programPdf,
-                    };
-                    update(
-                      { resource: "events", id, values: vars },
-                      {
-                        onSuccess: () => {
-                          setEditOk(true);
-                          refetch();
-                        },
-                        onError: () =>
-                          setEditError(t("events.errors.updateFailed")),
-                      },
-                    );
-                  }}
-                />
-              </CardContent>
-            </Card>
+                {/* Stream config (EARS-3). */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{t("events.sections.stream")}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <StreamConfigForm
+                      detail={detail}
+                      onConfigured={() => refetch()}
+                    />
+                  </CardContent>
+                </Card>
+
+                {/* Aggregate edit + program-PDF replace (EARS-2). */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{t("events.editTitle")}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {editError ? (
+                      <Alert
+                        variant="danger"
+                        className="mb-4"
+                        data-testid="edit-error"
+                      >
+                        {editError}
+                      </Alert>
+                    ) : null}
+                    {editOk ? (
+                      <Alert
+                        variant="success"
+                        className="mb-4"
+                        data-testid="edit-ok"
+                      >
+                        {t("events.toast.updated")}
+                      </Alert>
+                    ) : null}
+                    <EventForm
+                      detail={detail}
+                      submitLabel={t("common.save")}
+                      submitting={updating}
+                      onSubmit={(values) => {
+                        setEditError(null);
+                        setEditOk(false);
+                        const vars: UpdateEventVars = {
+                          title: values.title,
+                          school: values.school,
+                          startsAtMsk: values.startsAtMsk,
+                          durationMin: values.durationMin,
+                          description: values.description,
+                          speakers: values.speakers,
+                          specialties: values.specialties,
+                          partnerRef: values.partnerRef,
+                          programPdf: values.programPdf,
+                        };
+                        update(
+                          { resource: "events", id, values: vars },
+                          {
+                            onSuccess: () => {
+                              setEditOk(true);
+                              refetch();
+                            },
+                            onError: () =>
+                              setEditError(t("events.errors.updateFailed")),
+                          },
+                        );
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* «Записи» (014 EARS-1/EARS-2) — the recordings panel and the
+                  event-level readiness date. It re-fetches the event detail on a
+                  readiness-date save so the badge/aggregate above stays the one
+                  the server just wrote (EARS-9). */}
+              <TabsContent value="recordings">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{t("recordings.title")}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <RecordingsPanel
+                      eventId={id}
+                      onEventChanged={() => refetch()}
+                    />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
           </div>
         )}
       </AppShell>

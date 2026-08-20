@@ -21,6 +21,7 @@ export default defineConfig({
     "../../packages/db/src/schema/presence-beats.ts",
     "../../packages/db/src/schema/taxonomy.ts",
     "../../packages/db/src/schema/media-cleanup-jobs.ts",
+    "../../packages/db/src/schema/event-recordings.ts",
   ],
   out: "../../apps/api/drizzle",
   dialect: "postgresql",

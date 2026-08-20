@@ -6,6 +6,7 @@ import {
   ExpertFormSchema,
   LoginFormSchema,
   ProjectFormSchema,
+  RecordingExpectedByFormSchema,
   StreamConfigFormSchema,
   TopicFormSchema,
 } from "./form-schemas";
@@ -97,7 +98,9 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
       }),
     ).toContain("specialty");
 
-    const manyTokens = Array.from({ length: 101 }, (_, i) => `c${i}`).join(", ");
+    const manyTokens = Array.from({ length: 101 }, (_, i) => `c${i}`).join(
+      ", ",
+    );
     expect(
       keysFor(EventFormSchema, {
         title: "ok",
@@ -113,9 +116,9 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
   });
 
   it("maps a required and a URL-shaped stream embed reference", () => {
-    expect(keysFor(StreamConfigFormSchema, { provider: "rutube", embedRef: "" })).toContain(
-      "required",
-    );
+    expect(
+      keysFor(StreamConfigFormSchema, { provider: "rutube", embedRef: "" }),
+    ).toContain("required");
     expect(
       keysFor(StreamConfigFormSchema, {
         provider: "rutube",
@@ -130,10 +133,16 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
     // `params.shape`, and the resolver renders the provider-named RU guidance
     // (never the generic URL copy, never fallback).
     expect(
-      keysFor(StreamConfigFormSchema, { provider: "rutube", embedRef: "ччсапп" }),
+      keysFor(StreamConfigFormSchema, {
+        provider: "rutube",
+        embedRef: "ччсапп",
+      }),
     ).toEqual(["embedRefRutube"]);
     expect(
-      keysFor(StreamConfigFormSchema, { provider: "youtube", embedRef: "ччсапп" }),
+      keysFor(StreamConfigFormSchema, {
+        provider: "youtube",
+        embedRef: "ччсапп",
+      }),
     ).toEqual(["embedRefYoutube"]);
     // #1134 — vk (malformed triple) and cdnvideo (non-allowlisted URL) map to
     // their own provider-named RU guidance, never the generic URL copy or fallback.
@@ -229,9 +238,16 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
 
     // An empty submit reports the NAME only: the four publish-required fields are
     // legally empty in a draft, so the form must not manufacture an error for them.
-    expect(keysFor(ExpertFormSchema, { ...filled, name: "", professionalRole: "", credentials: "", affiliation: "", bio: "" })).toEqual([
-      "required",
-    ]);
+    expect(
+      keysFor(ExpertFormSchema, {
+        ...filled,
+        name: "",
+        professionalRole: "",
+        credentials: "",
+        affiliation: "",
+        bio: "",
+      }),
+    ).toEqual(["required"]);
 
     // Every text field's over-long bound maps to the length key, never fallback.
     const tooLong = keysFor(ExpertFormSchema, {
@@ -251,9 +267,9 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
     ]);
 
     // The slug box distinguishes its two refusals exactly as the project form does.
-    expect(keysFor(ExpertFormSchema, { ...filled, slug: "Not valid" })).toEqual([
-      "slugPattern",
-    ]);
+    expect(keysFor(ExpertFormSchema, { ...filled, slug: "Not valid" })).toEqual(
+      ["slugPattern"],
+    );
     expect(
       keysFor(ExpertFormSchema, {
         ...filled,
@@ -285,5 +301,21 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
         slug: "00000000-0000-4000-8000-000000000000",
       }),
     ).toEqual(["slugReserved"]);
+  });
+
+  it("the 014 readiness date maps every refusal to its own key, never fallback", () => {
+    // Wrong shape, impossible month and impossible DAY are one fix — «type
+    // ГГГГ-ММ-ДД» — and none of them may degrade to the generic sentence.
+    for (const bad of ["01.09.2026", "2026-13-45", "2026-02-31"]) {
+      expect(
+        keysFor(RecordingExpectedByFormSchema, { expectedBy: bad }),
+      ).toEqual(["expectedBy"]);
+    }
+    // The two legal values: a real day, and the empty box that means «no promise».
+    for (const good of ["2026-09-01", ""]) {
+      expect(
+        RecordingExpectedByFormSchema.safeParse({ expectedBy: good }).success,
+      ).toBe(true);
+    }
   });
 });

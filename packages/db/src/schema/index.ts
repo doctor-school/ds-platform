@@ -3,6 +3,7 @@ export * from "./users.js";
 export * from "./consent-records.js";
 export * from "./audit-ledger.js";
 export * from "./events.js";
+export * from "./event-recordings.js";
 export * from "./registrations.js";
 export * from "./presence-beats.js";
 export * from "./taxonomy.js";

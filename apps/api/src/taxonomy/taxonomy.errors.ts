@@ -33,6 +33,8 @@ export const TAXONOMY_ERROR_STATUS: Readonly<
   LEGACY_SPEAKER_CONFLICT: 409,
   SPEAKER_POSITION_OCCUPIED: 409,
   CONTENT_REMOVED: 409,
+  RECORDING_KIND_OCCUPIED: 409,
+  EVENT_NOT_FINISHED: 409,
   IDEMPOTENCY_KEY_REUSED: 409,
   IDEMPOTENCY_REQUEST_IN_PROGRESS: 409,
   PRECONDITION_FAILED: 412,
@@ -63,6 +65,8 @@ const TAXONOMY_ERROR_TITLE: Readonly<Record<TaxonomyErrorCode, string>> = {
   LEGACY_SPEAKER_CONFLICT: "Legacy speaker conflict",
   SPEAKER_POSITION_OCCUPIED: "Speaker position occupied",
   CONTENT_REMOVED: "Content was editorially removed",
+  RECORDING_KIND_OCCUPIED: "Recording kind already occupied",
+  EVENT_NOT_FINISHED: "Event is not finished",
   IDEMPOTENCY_KEY_REUSED: "Idempotency-Key reused with different input",
   IDEMPOTENCY_REQUEST_IN_PROGRESS: "Request already in progress",
   PRECONDITION_FAILED: "Precondition failed",
@@ -126,6 +130,10 @@ export const DETERMINISTIC_TERMINAL_ERROR_CODES: ReadonlySet<TaxonomyErrorCode> 
     "LEGACY_SPEAKER_CONFLICT",
     "SPEAKER_POSITION_OCCUPIED",
     "CONTENT_REMOVED",
+    // 409 — 014 recording invariants (014-design §3): both are properties of the
+    // bound request against a row state, so an exact retry gets the same refusal.
+    "RECORDING_KIND_OCCUPIED",
+    "EVENT_NOT_FINISHED",
     // 412 — both kinds
     "PRECONDITION_FAILED",
     "LIFECYCLE_IMPACT_STALE",

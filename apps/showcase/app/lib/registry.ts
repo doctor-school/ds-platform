@@ -62,6 +62,12 @@ export const SHOWCASE_REGISTRY: ShowcaseEntry[] = [
   // the Kibo UI Dropzone pattern, re-skinned to DS tokens).
   { id: "textarea", section: "primitives" },
   { id: "media-dropzone", section: "primitives" },
+  // 014 modal element class (#1339; Stage A #1337 — adopted official shadcn/ui
+  // `dialog` + `alert-dialog`, MIT). Two units, not one: they differ in dismissal
+  // semantics (walk-away vs must-be-answered), which is a visible behavioural
+  // contract the viewer is expected to show side by side.
+  { id: "dialog", section: "primitives" },
+  { id: "alert-dialog", section: "primitives" },
 
   // ── New-language primitives (spec §3.2, #513) — single-file primitive subpaths.
   { id: "filter-chip", section: "primitives" },

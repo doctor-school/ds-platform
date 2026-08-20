@@ -1,4 +1,5 @@
 import {
+  date,
   integer,
   pgEnum,
   pgTable,
@@ -61,6 +62,14 @@ export const events = pgTable("events", {
    * and the room renders the pill with no suffix (truthful, not back-filled).
    */
   liveAt: timestamp("live_at", { withTimezone: true }),
+  /**
+   * 014 EARS-1 (#1339) — the day the operator promises the recording by, shown
+   * on the post-live «запись готовится» plaque (014-design §2). A `date`, not a
+   * timestamp: the plaque promises a DAY, and a timezone-bearing instant would
+   * invite a precision the operator never entered. `null` means «no date
+   * promised» — the plaque then carries no date rather than a made-up one.
+   */
+  recordingExpectedBy: date("recording_expected_by"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

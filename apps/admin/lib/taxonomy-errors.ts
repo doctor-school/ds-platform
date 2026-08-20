@@ -1,10 +1,10 @@
 import type { TaxonomyHttpError } from "@/providers/data-provider";
 
 /**
- * Map a 012 Problem Details failure onto the operator-facing RU catalogue key
- * (012-design §5.3). Keys off the stable `errorCode`, never the HTTP status or
- * the server's English `detail`: the code is the contract, and each code has one
- * actionable sentence the operator can act on.
+ * Map an admin Problem Details failure onto the operator-facing RU catalogue key.
+ * Keys off the stable `errorCode`, never the HTTP status or the server's English
+ * `detail`: the code is the contract, and each code has one actionable sentence
+ * the operator can act on.
  *
  * An unmapped code falls back to the caller's generic key — visible, not silent.
  *
@@ -17,6 +17,33 @@ import type { TaxonomyHttpError } from "@/providers/data-provider";
 export function taxonomyErrorKey(error: unknown, fallbackKey: string): string {
   const ns = fallbackKey.split(".")[0] ?? "projects";
   const code = (error as TaxonomyHttpError | undefined)?.errorCode;
+
+  // ── 014 recordings codes (014-design §11) ────────────────────────────────
+  // Scoped to the recordings namespace deliberately: the taxonomy surfaces can
+  // never receive these codes, and pointing them at a `projects.errors.*` key
+  // that does not exist would trade a wrong sentence for a crashed render.
+  if (ns === "recordings") {
+    switch (code) {
+      case "RECORDING_KIND_OCCUPIED":
+        return "recordings.errors.kindOccupied";
+      case "EVENT_NOT_FINISHED":
+        return "recordings.errors.eventNotFinished";
+      case "INVALID_TRANSITION":
+        return "recordings.errors.invalidTransition";
+      case "RESOURCE_NOT_FOUND":
+        return "recordings.errors.notFound";
+      case "VALIDATION_FAILED":
+        return "recordings.errors.validation";
+      // Live authority revalidation (#1304) refused to answer: the mutation was
+      // rejected before it touched the row, so the sentence must say "nothing
+      // changed, retry" rather than send the operator looking for bad input.
+      case "IDP_REVALIDATION_UNAVAILABLE":
+        return "recordings.errors.authorityUnavailable";
+      default:
+        break;
+    }
+  }
+
   switch (code) {
     case "SLUG_CONFLICT":
       return `${ns}.errors.slugConflict`;

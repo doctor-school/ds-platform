@@ -19,6 +19,7 @@ import { RoomModule } from "./room/room.module.js";
 import { MeModule } from "./me/me.module.js";
 import { AuditModule } from "./audit/audit.module.js";
 import { TaxonomyModule } from "./taxonomy/taxonomy.module.js";
+import { RecordingsModule } from "./recordings/recordings.module.js";
 
 @Module({
   imports: [
@@ -58,6 +59,10 @@ import { TaxonomyModule } from "./taxonomy/taxonomy.module.js";
     // surface plus the shared idempotency-record, media-normalizer and
     // media-cleanup services (#1283 opens it with the project vertical).
     TaxonomyModule,
+    // 014 retained event recordings — the operator's attach/publish surface
+    // (#1339 EARS-1/EARS-2). After TaxonomyModule: it consumes that module's
+    // exported IdempotencyService and RFC 7807 filter (EARS-17).
+    RecordingsModule,
     // 005 registration write + per-user EventRegistrationState read
     // (doctor_guest-authenticated).
     RegistrationModule,

@@ -433,7 +433,7 @@ main().catch((e) => {
 | **Spec status freshness** | Merged PR со spec:NNN, но spec status='Draft'                               | Custom lint: при merge — проверить `status: In dev` minimum.                                                                                                                                                                                  | WARN v1                 |
 | **Prior decisions cited** | Новый spec без указанных ADR в "Prior decisions" если категория ≠ docs-only | Spec lint: `NNN-requirements.md` имеет секцию с ≥1 ADR-link.                                                                                                                                                                                  | WARN v1                 |
 
-> **Interim semantics note:** строки `BLOCK` предполагают server-side required status check на `main`. Пока правило branch protection (ADR-0008 §2.6) не применено server-side (API доступен на public-репозитории — trigger сработал, — но выбор формы правила, не блокирующей bot-ветку Changesets, вынесен в Issue #1403), `BLOCK` читается операционально как **«CI job выходит red, и Tech Lead трактует это как merge-blocker по convention'у»** — тот же outcome на single-developer happy path, без server-side гарантии.
+> **Семантика `BLOCK`:** строки `BLOCK` обеспечиваются server-side. Ruleset `main` (ADR-0008 §2.6) требует зелёный контекст `ci`; упавший BLOCK-guard красит job `guards-block`, который красит агрегат `ci`, — и GitHub сам отказывает в merge, а не только Tech Lead по convention'у. Строки WARN остаются advisory: они сообщают red, не затрагивая агрегат `ci`, и именно promotion WARN→BLOCK делает guard обязывающим.
 
 Таблица выше — стартовый набор; авторитетный живой список guard'ов + per-guard severity — `.github/workflows/ci.yml` + `.github/workflows/pr-body-guards.yml` (семейство body-parsing guard'ов, перезапускается при правке тела PR — #651). Жизненный цикл severity — posture нового guard'а (WARN), критерий WARN→BLOCK promotion, demotion и каденция sweep'ов — живёт в нарративном ADR-0007 §2.6.
 
@@ -1017,10 +1017,9 @@ Codex CLI, или Mode (c) pure human (AGENTS.md §4). Обработай findin
 `pnpm pr:land <N>` после положительного verdict'а — команда прогоняет `merge:gate` (опрос
 check-runs, привязанный к head SHA, плюс head-pinned Mode (a) APPROVE), затем
 `gh pr merge <N> --squash --delete-branch`, затем board Status = Done и teardown ветки. `--auto`
-в Phase 0 не используется: на `main` нет branch protection, поэтому нет required checks, за
-которыми можно было бы встать в очередь — GitHub отклоняет auto-merge на уже чистом PR и не гейтит
-по CI там, где принимает его (skill `merge-when-green`). Изменит ли это серверная protection —
-решается при её включении: ADR-0008 §2.6 / Issue #1403. CI гейтится
+не используется: ruleset `main` требует ровно один check (`ci`), поэтому auto-merge влил бы PR по
+одному контексту `ci` — без привязки к head SHA и без Mode (a) verdict'а, которые ruleset выразить
+не может (skill `merge-when-green`, ADR-0008 §2.6). CI гейтится
 in-band через `merge:gate`, а не очередью auto-merge от GitHub.
 
 ## SDD — hard rule
@@ -1086,7 +1085,7 @@ For DS Platform feature work, invoke skills in this order:
 
 ## 11. Migration plan
 
-Phase 0 (Tech Lead + AI, sequential — после того как DSO-31 создаст репо `ds-platform`). Порядок: bootstrap + helpers (шаги 1–4), kill switch + lint-tools + CI integration (шаги 7–9), AGENTS.md / CLAUDE.md drafting (шаги 11–12), branch protection (шаг 13 — отложен по ADR-0008 §2.6), smoke test (шаг 14).
+Phase 0 (Tech Lead + AI, sequential — после того как DSO-31 создаст репо `ds-platform`). Порядок: bootstrap + helpers (шаги 1–4), kill switch + lint-tools + CI integration (шаги 7–9), AGENTS.md / CLAUDE.md drafting (шаги 11–12), branch protection (шаг 13 — ruleset `main` по ADR-0008 §2.6), smoke test (шаг 14).
 
 **Pre-requisite для шага 13:** Tech Lead должен иметь admin permissions на репо (branch protection rule в шаге 13 требует admin token; cannot be automated). Если репо принадлежит организации — нужны org-admin права или явное delegation на репо-admin role.
 
@@ -1101,7 +1100,7 @@ Phase 0 (Tech Lead + AI, sequential — после того как DSO-31 соз
 | 9 | Добавить шаги в `.github/workflows/ci.yml` для guards (WARN/BLOCK per §5.2) | CI выполняет guards | step 8 |
 | 11 | Обновить `AGENTS.md` (root) с секцией AI-loop discipline | агенты следуют orchestrated iteration cycle | DSO-31 baseline AGENTS.md |
 | 12 | Обновить `CLAUDE.md` (root) с SessionStart hook reference + skill priorities | Claude Code aligned | step 11 |
-| 13 | **[Manual GitHub UI / `gh api`]** Добавить branch protection rule: ≥1 human approval required, no direct push to main. Отложено по ADR-0008 §2.6 — API доступен на public-репозитории, но форма правила не должна блокировать bot-ветку Changesets; вынесено в Issue #1403. | merge gated server-side когда правило применено | step 9 |
+| 13 | **[`gh api` — payload `branch-protection.json`]** Применить repository ruleset `main protection`: PR обязателен, required-контекст `ci` (non-strict), linear history, без force-push, без удаления ветки, **ноль** required approvals, admin bypass только в scope `pull_request` (форточка для ветки `changeset-release/main` без check-run'ов). Обоснование: ADR-0008 §2.6. | merge gated server-side | step 9 |
 | 14 | Smoke test: first feature spec через цикл (superpowers:brainstorming → spec → Issues → PR → review → merge) | proof of concept | steps 1-13 |
 
 Нумерация шагов сохраняет исходную последовательность; отменённые шаги (5, 6, 10) намеренно пропущены.

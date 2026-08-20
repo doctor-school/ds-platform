@@ -125,7 +125,7 @@ Sketch и edge cases — design spec §4.
 
 Механика promotion: перенести STEP guard'а в BLOCK-batch, убрать `continue-on-error` и строку guard'а из WARN-report шага, обновить header-комментарии обоих batch'ей. Снятие `continue-on-error` И ЕСТЬ promotion — с этого момента падение guard'а роняет check-run его batch'а, а на нём merge gate блокирует. **Demotion:** один подтверждённый false positive у BLOCK-guard'а демоутит его обратно в WARN тем же тактом, с Issue на починку guard'а. **Каденция:** весь WARN-набор переоценивается на каждом чекпойнте «drain the matured debt backlog» (AGENTS.md §3.5); каждый sweep фиксирует датированный per-guard вердикт (promoted / left WARN + причина) в несущем его Issue или PR.
 
-> **Interim semantics note (per ADR-0008 §2.6 deferred branch protection):** пока ADR-0008 §2.6 branch protection отложен до апгрейда плана org'а или перевода репо в public, `BLOCK` читается операционально как **«CI job выходит red, и Tech Lead трактует это как merge-blocker по convention'у»** — тот же outcome на single-developer happy path, без server-side гарантии.
+> **Семантика `BLOCK`:** `BLOCK` обеспечивается server-side — ruleset `main` (ADR-0008 §2.6) требует зелёный контекст `ci`, а упавший BLOCK-guard красит job `guards-block` и вместе с ним агрегат `ci`, поэтому GitHub отказывает в merge. WARN-guard'ы сообщают red, не затрагивая этот агрегат; именно promotion до BLOCK делает guard обязывающим.
 
 ### 2.7 14-item iteration-end checklist (dispatch через `run-iteration-end-checklist`)
 
@@ -157,7 +157,7 @@ Cost-tracking ведётся в собственной консоли vendor'а 
   - **Mode (b)** — параллельная Codex CLI сессия независимо ревьюит PR.
   - **Mode (c)** — чистый human review, без LLM-ассиста.
 - Все три режима интерактивные, session-driven, и используют собственные LLM credentials человека в его терминале. Никаких API-ключей в GitHub repo secrets.
-- Merge после положительного Mode (a) или Mode (b) verdict + green CI разрешён без отдельного human approval — через обязательную invocation `pnpm pr:land <N>`, которая оборачивает `gh pr merge <N> --squash --delete-branch`. `--auto` в Phase 0 не используется: на `main` нет branch protection, поэтому нет required checks, за которыми можно было бы встать в очередь — GitHub отклоняет auto-merge на уже чистом PR и не гейтит по CI там, где принимает его (skill `merge-when-green`). Изменит ли это серверная protection — решается при её включении: ADR-0008 §2.6 / Issue #1403. Вместо этого CI гейтится in-band через `merge:gate` — опрос check-runs, привязанный к head SHA, плюс head-pinned Mode (a) APPROVE — который `pr:land` выполняет первой стадией. Mode (c)-ревью остаются single human decision.
+- Merge после положительного Mode (a) или Mode (b) verdict + green CI разрешён без отдельного human approval — через обязательную invocation `pnpm pr:land <N>`, которая оборачивает `gh pr merge <N> --squash --delete-branch`. `--auto` не используется: ruleset `main` требует ровно один check (`ci`), поэтому auto-merge влил бы PR по одному контексту `ci` — без привязки к head SHA и без Mode (a) verdict'а, которые ruleset выразить не может (skill `merge-when-green`). Вместо этого CI гейтится in-band через `merge:gate` — опрос check-runs, привязанный к head SHA, плюс head-pinned Mode (a) APPROVE — который `pr:land` выполняет первой стадией. Mode (c)-ревью остаются single human decision.
 - Write-доступ в prod-DB запрещён.
 - Direct push в main запрещён.
 - Auto-chores (lint-fix, devDep bumps, doc-sync) идут тем же review-путём, что и feature-PR.

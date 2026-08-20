@@ -434,7 +434,7 @@ Before `git push` the agent goes through each item. If even one is false — do 
 | **Spec status freshness** | Merged PR with spec:NNN but spec status='Draft'                          | Custom lint: at merge — check `status: In dev` minimum.                                                                                                                                                                                      | WARN v1               |
 | **Prior decisions cited** | New spec without cited ADRs in "Prior decisions" if category ≠ docs-only | Spec lint: `NNN-requirements.md` has a section with ≥1 ADR-link.                                                                                                                                                                             | WARN v1               |
 
-> **Interim semantics note:** rows marked `BLOCK` assume a server-side required status check on `main`. While the ADR-0008 §2.6 branch-protection rule is not applied server-side (the API is reachable on the public repo — the trigger has fired — but choosing a rule shape that does not deadlock the Changesets bot branch is owned by Issue #1403), `BLOCK` is read operationally as **"CI job exits red and the Tech Lead treats it as a merge-blocker by convention"** — same outcome on the single-developer happy path, no server-side guarantee.
+> **`BLOCK` semantics:** rows marked `BLOCK` are enforced server-side. The `main` ruleset (ADR-0008 §2.6) requires the `ci` context green; a failing BLOCK guard reds the `guards-block` job, which reds the `ci` aggregate, so GitHub itself refuses the merge — not merely a Tech Lead convention. WARN rows stay advisory: they report red without touching the `ci` aggregate, and the WARN→BLOCK promotion is what makes a guard binding.
 
 The table above is the founding set; the authoritative live guard list + per-guard severity is `.github/workflows/ci.yml` + `.github/workflows/pr-body-guards.yml` (the PR-body-parsing family, re-run on PR body edits — #651). Severity lifecycle — new-guard WARN posture, the WARN→BLOCK promotion criterion, demotion, and the sweep cadence — lives in the narrative ADR-0007 §2.6.
 
@@ -1017,11 +1017,10 @@ Trigger the interactive review via Mode (a) subagent `/review` skill, Mode (b) p
 Codex CLI, or Mode (c) pure human (AGENTS.md §4). Address findings, then merge with
 `pnpm pr:land <N>` once the verdict is positive — it runs `merge:gate` (a head-SHA-pinned
 check-runs poll plus a head-pinned Mode (a) APPROVE), then `gh pr merge <N> --squash
---delete-branch`, then board Status = Done and branch teardown. `--auto` is not used in Phase 0:
-with no branch protection on `main` there are no required checks to queue behind, so GitHub
-rejects auto-merge on an already-clean PR and does not gate on CI where it accepts it (skill
-`merge-when-green`). Whether server-side protection changes that is decided when protection is
-actually enabled — ADR-0008 §2.6 / Issue #1403. CI is gated in band by `merge:gate`, not by GitHub's
+--delete-branch`, then board Status = Done and branch teardown. `--auto` is not used: the `main`
+ruleset requires exactly one check (`ci`), so auto-merge would land a PR on the `ci` context alone —
+without the head-SHA freshness pinning and the Mode (a) verdict the ruleset cannot express (skill
+`merge-when-green`, ADR-0008 §2.6). CI is gated in band by `merge:gate`, not by GitHub's
 auto-merge queue.
 
 ## SDD — hard rule
@@ -1087,7 +1086,7 @@ For DS Platform feature work, invoke skills in this order:
 
 ## 11. Migration plan
 
-Phase 0 (Tech Lead + AI, sequential — after DSO-31 creates the `ds-platform` repo). Order: bootstrap + helpers (steps 1–4), kill switch + lint tools + CI integration (steps 7–9), AGENTS.md / CLAUDE.md drafting (steps 11–12), branch protection (step 13 — deferred per ADR-0008 §2.6), smoke test (step 14).
+Phase 0 (Tech Lead + AI, sequential — after DSO-31 creates the `ds-platform` repo). Order: bootstrap + helpers (steps 1–4), kill switch + lint tools + CI integration (steps 7–9), AGENTS.md / CLAUDE.md drafting (steps 11–12), branch protection (step 13 — the `main` ruleset per ADR-0008 §2.6), smoke test (step 14).
 
 **Pre-requisite for step 13:** Tech Lead must have admin permissions on the repo (branch protection rule in step 13 requires admin token; cannot be automated). If the repo belongs to an organization — org-admin rights or explicit delegation to repo-admin role are needed.
 
@@ -1102,7 +1101,7 @@ Phase 0 (Tech Lead + AI, sequential — after DSO-31 creates the `ds-platform` r
 | 9 | Add steps to `.github/workflows/ci.yml` for guards (WARN/BLOCK per §5.2) | CI executes guards | step 8 |
 | 11 | Update `AGENTS.md` (root) with AI-loop discipline section | agents follow orchestrated iteration cycle | DSO-31 baseline AGENTS.md |
 | 12 | Update `CLAUDE.md` (root) with SessionStart hook reference + skill priorities | Claude Code aligned | step 11 |
-| 13 | **[Manual GitHub UI / `gh api`]** Add branch protection rule: ≥1 human approval required, no direct push to main. Deferred per ADR-0008 §2.6 — the API is reachable on the public repo, but the rule shape must not deadlock the Changesets bot branch; owned by Issue #1403. | merge gated server-side once the rule lands | step 9 |
+| 13 | **[`gh api` — payload `branch-protection.json`]** Apply the `main protection` repository ruleset: PR required, required `ci` context (non-strict), linear history, no force-push, no deletion, **zero** required approvals, admin bypass scoped to `pull_request` (the hatch for the check-run-less `changeset-release/main` branch). Rationale: ADR-0008 §2.6. | merge gated server-side | step 9 |
 | 14 | Smoke test: first feature spec through the cycle (superpowers:brainstorming → spec → Issues → PR → review → merge) | proof of concept | steps 1–13 |
 
 Step numbering preserves the original sequence; cancelled steps (5, 6, 10) are intentionally omitted.

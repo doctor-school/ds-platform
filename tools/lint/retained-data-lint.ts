@@ -143,40 +143,216 @@ function loadBaseline(): Baseline {
   };
 }
 
+/** Characters that may legally precede a regex literal (vs. a division `/`). */
+const REGEX_PRECEDING_KEYWORDS = new Set([
+  "return",
+  "typeof",
+  "instanceof",
+  "case",
+  "delete",
+  "void",
+  "in",
+  "of",
+  "new",
+  "throw",
+  "do",
+  "else",
+  "yield",
+  "await",
+]);
+
+function regexAllowedAfter(token: string): boolean {
+  if (token === "") return true;
+  if (REGEX_PRECEDING_KEYWORDS.has(token)) return true;
+  if (/^[A-Za-z0-9_$]/.test(token)) return false; // identifier / literal → division
+  return !")]".includes(token);
+}
+
 /**
- * Strip block and line comments, preserving line count, so a path/statement that
- * appears only inside documentation is not flagged. Not string-aware — it only
- * ever REMOVES text, so it cannot introduce a false positive; the
- * `// retained-data-ok:` suppression is checked against the raw line.
+ * Strip block and line comments, preserving line count and column positions, so
+ * a path/statement that appears only inside documentation is not flagged.
+ *
+ * The scan is STRING-AWARE: single/double-quoted strings, template literals
+ * (including `${…}` expression re-entry, arbitrarily nested) and regex literals
+ * (including character classes) are tracked as their own states, and a `/*` or
+ * `//` inside one of them is literal text, not a comment opener. Getting this
+ * wrong is not a cosmetic issue — the previous naive stripper entered
+ * block-comment mode on the `/*` inside an ordinary glob constant
+ * (`const IGNORE = ["apps/api/test/**"]`), never found a closing block-comment
+ * terminator, and blanked the WHOLE REST OF THE FILE, so every delete or cascade below
+ * that line became a silent false NEGATIVE. The `guard-tests` cases
+ * `red-string-glob-*` pin that shape.
+ *
+ * String and template CONTENT is preserved (not blanked): raw-SQL findings live
+ * inside string literals and `sql` templates, which is exactly what
+ * `RAW_SQL_RE` matches. The `// retained-data-ok:` suppression is checked
+ * against the raw line, not this output.
  */
 function stripComments(source: string): string[] {
   const out: string[] = [];
-  let inBlock = false;
-  for (const raw of source.split(/\r?\n/)) {
-    let line = "";
-    let i = 0;
-    while (i < raw.length) {
-      if (inBlock) {
-        const end = raw.indexOf("*/", i);
-        if (end === -1) {
-          i = raw.length;
-        } else {
-          i = end + 2;
-          inBlock = false;
-        }
-        continue;
-      }
-      if (raw.startsWith("//", i)) break;
-      if (raw.startsWith("/*", i)) {
-        inBlock = true;
-        i += 2;
-        continue;
-      }
-      line += raw[i];
-      i += 1;
+  let line = "";
+  type Mode =
+    | "code"
+    | "line"
+    | "block"
+    | "single"
+    | "double"
+    | "template"
+    | "regex"
+    | "regexClass";
+  let mode: Mode = "code";
+  // Brace depth in code mode, plus the depths at which each open `${` sits — a
+  // `}` at a recorded depth returns to its enclosing template literal.
+  let braceDepth = 0;
+  const templateStack: number[] = [];
+  // The last significant code token (identifier/keyword word or single char),
+  // used to disambiguate a regex literal from a division operator.
+  let lastToken = "";
+
+  const push = (ch: string): void => {
+    if (ch === "\n") {
+      out.push(line);
+      line = "";
+    } else if (ch !== "\r") {
+      line += ch;
     }
-    out.push(line);
+  };
+  // A comment character keeps the layout (newlines still break lines) but the
+  // text is dropped.
+  const drop = (ch: string): void => {
+    if (ch === "\n") {
+      out.push(line);
+      line = "";
+    }
+  };
+
+  let i = 0;
+  while (i < source.length) {
+    const ch = source[i]!;
+    const pair = source.slice(i, i + 2);
+
+    switch (mode) {
+      case "code": {
+        if (pair === "//") {
+          mode = "line";
+          i += 2;
+          continue;
+        }
+        if (pair === "/*") {
+          mode = "block";
+          i += 2;
+          continue;
+        }
+        if (ch === '"' || ch === "'" || ch === "`") {
+          mode = ch === '"' ? "double" : ch === "'" ? "single" : "template";
+          lastToken = ch;
+          push(ch);
+          i += 1;
+          continue;
+        }
+        if (ch === "/" && regexAllowedAfter(lastToken)) {
+          mode = "regex";
+          lastToken = ch;
+          push(ch);
+          i += 1;
+          continue;
+        }
+        if (ch === "{") braceDepth += 1;
+        if (ch === "}") {
+          if (
+            templateStack.length > 0 &&
+            templateStack[templateStack.length - 1] === braceDepth
+          ) {
+            templateStack.pop();
+            mode = "template";
+            lastToken = "}";
+            push(ch);
+            i += 1;
+            continue;
+          }
+          braceDepth -= 1;
+        }
+        if (/[A-Za-z0-9_$]/.test(ch)) {
+          lastToken = /^[A-Za-z0-9_$]/.test(lastToken) ? lastToken + ch : ch;
+        } else if (!/\s/.test(ch)) {
+          lastToken = ch;
+        }
+        push(ch);
+        i += 1;
+        continue;
+      }
+      case "line": {
+        if (ch === "\n") mode = "code";
+        drop(ch);
+        i += 1;
+        continue;
+      }
+      case "block": {
+        if (pair === "*/") {
+          mode = "code";
+          i += 2;
+          continue;
+        }
+        drop(ch);
+        i += 1;
+        continue;
+      }
+      case "single":
+      case "double":
+      case "template":
+      case "regex":
+      case "regexClass": {
+        if (ch === "\\") {
+          push(ch);
+          if (i + 1 < source.length) push(source[i + 1]!);
+          i += 2;
+          continue;
+        }
+        if (mode === "template" && pair === "${") {
+          templateStack.push(braceDepth);
+          mode = "code";
+          lastToken = "{";
+          push("$");
+          push("{");
+          i += 2;
+          continue;
+        }
+        if (mode === "regex" && ch === "[") {
+          mode = "regexClass";
+          push(ch);
+          i += 1;
+          continue;
+        }
+        if (mode === "regexClass" && ch === "]") {
+          mode = "regex";
+          push(ch);
+          i += 1;
+          continue;
+        }
+        const closes =
+          (mode === "single" && ch === "'") ||
+          (mode === "double" && ch === '"') ||
+          (mode === "template" && ch === "`") ||
+          (mode === "regex" && ch === "/");
+        // An unterminated single/double-quoted string cannot cross a newline in
+        // valid TS — recover at the line break rather than swallowing the file.
+        if (ch === "\n" && (mode === "single" || mode === "double")) {
+          mode = "code";
+          push(ch);
+          i += 1;
+          continue;
+        }
+        if (closes) {
+          mode = "code";
+          lastToken = ch === "/" ? "x" : ch; // a regex literal ends a value
+        }
+        push(ch);
+        i += 1;
+        continue;
+      }
+    }
   }
+  out.push(line);
   return out;
 }
 

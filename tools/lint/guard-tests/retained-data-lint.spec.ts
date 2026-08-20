@@ -50,4 +50,27 @@ describe("retained-data-lint", () => {
     const { code } = runGuard(GUARD, dir("green-suppressed"));
     expect(code).toBe(0);
   });
+
+  // Regression: the comment stripper must be STRING-aware. A `/*` embedded in an
+  // ordinary string constant (the ubiquitous glob shape `".../**"`) used to flip
+  // the stripper into block-comment mode with no terminator, blanking the rest of
+  // the file — a silent, whole-file FALSE NEGATIVE. Both cases fail (exit 0,
+  // "PASS") against the pre-fix stripper.
+  it("red: a physical delete below a string containing `/*` is still caught → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-string-glob-delete"));
+    expect(code).toBe(1);
+    expect(stderr).toContain("new-physical-delete");
+    expect(stderr).toContain(
+      "apps/api/src/registrations/registrations.repository.ts",
+    );
+    // The `db.delete(` call AND the raw `DELETE FROM` in the sql template.
+    expect(stderr).toContain("2 NEW occurrence(s)");
+  });
+
+  it("red: a NEW cascade FK below a string containing `/*` is still caught → exit 1", () => {
+    const { code, stderr } = runGuard(GUARD, dir("red-string-glob-cascade"));
+    expect(code).toBe(1);
+    expect(stderr).toContain("new-cascade");
+    expect(stderr).toContain("packages/db/src/schema/notes.ts");
+  });
 });

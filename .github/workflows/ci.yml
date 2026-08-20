@@ -925,6 +925,7 @@ jobs:
             tdd-signal=${{ steps.warn_tdd_signal.outcome }}
             product-note=${{ steps.warn_product_note.outcome }}
             workflow-auth=${{ steps.warn_workflow_auth.outcome }}
+            retained-data=${{ steps.warn_retained_data.outcome }}
         run: |
           failed="$(printf '%s\n' "$WARN_OUTCOMES" | grep -E '=failure$' | cut -d= -f1 || true)"
           echo "### WARN guards (ADR-0007 §2.6 posture)" >> "$GITHUB_STEP_SUMMARY"

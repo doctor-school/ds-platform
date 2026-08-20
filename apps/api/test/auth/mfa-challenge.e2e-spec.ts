@@ -172,9 +172,18 @@ describe.skipIf(!process.env.DATABASE_URL)(
     }
 
     beforeAll(async () => {
+      // The fake is BOUND here, never read back off the container: `IdpModule`
+      // picks the real `ZitadelIdpClient` whenever `IDP_ISSUER` +
+      // `IDP_SERVICE_TOKEN` are configured, which is exactly the case on a
+      // developer's dev-stand — so `app.get(IDP_CLIENT)` hands back the live
+      // adapter, and the test-only accessors this suite drives do not exist on
+      // it. Explicit override = the same suite outcome on CI and on the stand.
+      fake = new FakeIdpClient();
       const moduleRef: TestingModule = await Test.createTestingModule({
         imports: [AppModule],
       })
+        .overrideProvider(IDP_CLIENT)
+        .useValue(fake)
         .overrideProvider(RATE_LIMIT_THRESHOLDS)
         .useValue(RELAXED_RATE_LIMIT)
         .compile();
@@ -185,7 +194,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await app.init();
       await app.getHttpAdapter().getInstance().ready();
       pool = app.get<pg.Pool>(DRIZZLE_POOL);
-      fake = app.get<FakeIdpClient>(IDP_CLIENT);
     });
 
     afterEach(async () => {
@@ -556,9 +564,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
     const createdEmails: string[] = [];
 
     beforeAll(async () => {
+      // Bound, not read back — see the sibling `beforeAll` above.
+      fake = new FakeIdpClient();
       const moduleRef: TestingModule = await Test.createTestingModule({
         imports: [AppModule],
       })
+        .overrideProvider(IDP_CLIENT)
+        .useValue(fake)
         .overrideProvider(RATE_LIMIT_THRESHOLDS)
         .useValue({
           perUserPer15Min: PER_USER,
@@ -576,7 +588,6 @@ describe.skipIf(!process.env.DATABASE_URL)(
       await app.init();
       await app.getHttpAdapter().getInstance().ready();
       pool = app.get<pg.Pool>(DRIZZLE_POOL);
-      fake = app.get<FakeIdpClient>(IDP_CLIENT);
     });
 
     afterEach(async () => {

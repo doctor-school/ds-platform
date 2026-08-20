@@ -206,6 +206,12 @@ describe.skipIf(!process.env.DATABASE_URL)(
         );
         return Number(rows[0]!.n);
       };
+      // The same collision also leaves LIVE sessions of an earlier run indexed
+      // under this sub in the shared Redis (30-day TTL), and force-logout would
+      // revoke those too — inflating the delta past the two sessions this test
+      // owns. Clear the subject first, THEN measure: the delta is then exactly
+      // what this test created.
+      await app.get(AdminSessionService).forceLogout(sub);
       const before = await forceRows();
       const first = await establishAdminSession(app, {
         identifier: email,

@@ -44,6 +44,25 @@ pnpm --filter @ds/api drizzle:migrate  # snapshot + drizzle-kit migrate
 `@ds/api` tests run only in the `api-e2e` CI job (real Postgres), not the shared
 unit job — see the CI test topology.
 
+Running the e2e suites locally against the dev stand needs two env facts beyond
+the endpoints in `~/.ds-platform/.env.local`:
+
+- `BOT_PROTECTION_ENABLED=false` in the **vitest process env**. With it on,
+  `POST /v1/auth/register` answers 403 and every suite that registers a
+  principal (all the admin/auth e2e) fails inside its `adminSession()` helper —
+  the 403 surfaces as an unrelated-looking assertion, not as a captcha error.
+- A per-branch database rather than the shared `ds_dev`:
+  `pnpm dev:db:branch <issue-N>` creates and migrates one, and prints the
+  `DATABASE_URL` to export for that session.
+
+Suites that drive the IdP **bind** their `FakeIdpClient` with
+`.overrideProvider(IDP_CLIENT).useValue(fake)`; they never read it back off the
+container. `IdpModule` selects the real `ZitadelIdpClient` whenever `IDP_ISSUER`
+and `IDP_SERVICE_TOKEN` are configured — which is the normal state of a dev
+stand — so a suite that reads `IDP_CLIENT` is green on CI and red on every
+developer machine. `test/auth/idp-fake-seam.spec.ts` pins both that rule and the
+fake↔real port parity.
+
 ## Owning ADRs
 
 - **ADR-0002** — backend core stack (NestJS + Zod + REST + SDK).

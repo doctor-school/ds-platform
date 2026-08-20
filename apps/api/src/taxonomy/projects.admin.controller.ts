@@ -101,6 +101,13 @@ export class ProjectsAdminController {
     access: "authenticated",
     roles: ["platform_admin"],
     check: "fast-path",
+    // #1304 (ADR-0001 §10): a state-changing admin command is high-stakes, so
+    // the role is re-established against the LIVE IdP before anything happens —
+    // the guard refuses ahead of validation, the idempotency reservation and any
+    // media upload, so a revoked grant cannot leave a half-written project
+    // behind. Reads keep it absent: an IdP round-trip per list page would be an
+    // ambient cost with no comparable blast radius.
+    revalidate: "live",
     // The domain audit row is written by feature 010's capture trigger inside
     // the command transaction (012-design §6), not by an authz-tier emission —
     // so this is the same `low-stakes` AUTH-audit tier as 007's authoring writes.
@@ -187,6 +194,8 @@ export class ProjectsAdminController {
     access: "authenticated",
     roles: ["platform_admin"],
     check: "fast-path",
+    // #1304 — same high-stakes posture as the create route above.
+    revalidate: "live",
     audit: "low-stakes",
     tests: ["EARS-1", "EARS-16", "EARS-17"],
   })

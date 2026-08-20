@@ -175,7 +175,6 @@ for (const app of targets) {
   process.stdout.write(`── standalone-boot: ${app}\n`);
   // Sequential on purpose: two Next servers on one runner would compete for
   // memory and turn a real red into a flaky one.
-  // eslint-disable-next-line no-await-in-loop
   const r = await bootOne(app);
   results.push(r);
   if (r.ok) {

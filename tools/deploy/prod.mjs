@@ -779,7 +779,8 @@ sudo ${NO_ATTEST} docker compose build
   ok("images built", t);
 
   step("#1410: PRE-SWAP boot verify (old containers still serving)");
-  t = Date.now();
+  // No `t = Date.now()` here: verifyImagesBoot() prints its own `ok(...)` line
+  // and takes no elapsed argument, so timing it would be a dead assignment.
   await verifyImagesBoot(sha);
 
   step("api-prod: migrate → up -d");

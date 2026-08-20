@@ -1,5 +1,52 @@
 # @ds/api
 
+## 1.3.0
+
+### Minor Changes
+
+- [#1379](https://github.com/doctor-school/ds-platform/pull/1379) [`717921a`](https://github.com/doctor-school/ds-platform/commit/717921ab7da5745cff5f833bbbc049736b6a96d3) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - 012 EARS-2 — expert authoring vertical ([#1284](https://github.com/doctor-school/ds-platform/issues/1284))
+
+  Additive across four packages, no breaking change to an existing export; the
+  slice consumes the W1a ([#1283](https://github.com/doctor-school/ds-platform/issues/1283)) taxonomy foundation byte-for-byte rather than
+  forking it.
+
+  - `@ds/db`: the `experts` entity — slug grammar CHECK, canonical-UUID
+    exclusion, the set-once `first_published_at` trigger, a tombstone-ready
+    `content_removed_at` column, the `experts_audit` mirror and a `pg_trgm` GIN
+    index over `name`/`slug` for operator search.
+  - `@ds/schemas`: expert DTOs (create/update/list/detail), the shared
+    `expertInitials` derivation and the 012 error codes the surface can raise.
+  - `@ds/api`: `GET/POST /v1/admin/experts` and `GET/PATCH /v1/admin/experts/:id`
+    — multipart `photo` through the shared still-image normalizer, fenced
+    idempotency, ETag/If-Match concurrency, RFC 7807 problems and audit writes.
+  - `@ds/admin`: the `experts` resource — list on the shared taxonomy list shell,
+    tabbed create/detail with «Основное», the generated-slug preview and the
+    deterministic-initials `Avatar` fallback when an expert has no photo. The
+    data provider now dispatches its media part off a resource map instead of a
+    hardcoded `projects` branch.
+
+- [#1390](https://github.com/doctor-school/ds-platform/pull/1390) [`851bc55`](https://github.com/doctor-school/ds-platform/commit/851bc5502a0b9c5c99468533e1e6050ba64f281f) Thanks [@sidorovanthon](https://github.com/sidorovanthon)! - `POST /v1/admin/auth/login` no longer answers a PARTIAL identity-service fault
+  with a 503. Every IdP call after the password check (the OIDC exchange, the
+  EARS-3 factor read) is reached only by a valid credential pair on a
+  `platform_admin`, so a distinct status there was returned for exactly one input
+  class — a membership oracle the uniform refusal exists to deny. That span now
+  returns the same uniform 401 «invalid credentials» as a wrong password, and the
+  outage is recorded in the operator log rather than in the response.
+
+  The FULL-outage carve-out is unchanged: when the password check itself is down —
+  which every caller reaches, so the answer discriminates nobody — the route still
+  returns the honest 503 «temporarily unavailable», and the admin login screen
+  still renders its outage alert ([#1220](https://github.com/doctor-school/ds-platform/issues/1220)). The 503 posture of the second-factor
+  routes ([#1211](https://github.com/doctor-school/ds-platform/issues/1211)) is untouched.
+
+  No export, signature or payload shape changes; the admin app needs no update.
+
+### Patch Changes
+
+- Updated dependencies [[`74a1731`](https://github.com/doctor-school/ds-platform/commit/74a173134347ad1bafad8b54e3e16d62a4d8ec33), [`717921a`](https://github.com/doctor-school/ds-platform/commit/717921ab7da5745cff5f833bbbc049736b6a96d3)]:
+  - @ds/schemas@3.0.0
+  - @ds/db@0.8.0
+
 ## 1.2.0
 
 ### Minor Changes

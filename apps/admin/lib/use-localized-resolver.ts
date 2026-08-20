@@ -31,7 +31,8 @@ export function useLocalizedResolver<TFieldValues extends FieldValues, Out>(
     | "events.validation"
     | "login.validation"
     | "projects.validation"
-    | "experts.validation" = "events.validation",
+    | "experts.validation"
+    | "topics.validation" = "events.validation",
 ): Resolver<TFieldValues, unknown, Out> {
   const t = useTranslations(namespace);
 

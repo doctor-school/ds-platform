@@ -7,6 +7,7 @@ import {
   LoginFormSchema,
   ProjectFormSchema,
   StreamConfigFormSchema,
+  TopicFormSchema,
 } from "./form-schemas";
 import { translateIssue, type ZodIssueLike } from "./use-localized-resolver";
 
@@ -256,6 +257,31 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
     expect(
       keysFor(ExpertFormSchema, {
         ...filled,
+        slug: "00000000-0000-4000-8000-000000000000",
+      }),
+    ).toEqual(["slugReserved"]);
+  });
+
+  it("EARS-3: every topic-form failing rule maps to a specific key, never fallback", () => {
+    // Empty submit — the title is the topic's only required value; the slug box
+    // may be empty (the server generates it) and must NOT report an error here.
+    expect(keysFor(TopicFormSchema, { title: "", slug: "" })).toEqual([
+      "required",
+    ]);
+
+    // The 120-character title bound maps to the length key, not the fallback.
+    expect(
+      keysFor(TopicFormSchema, { title: "х".repeat(121), slug: "" }),
+    ).toEqual(["maxLength"]);
+
+    // The slug box distinguishes its two refusals exactly as its siblings do:
+    // wrong grammar vs the forbidden canonical-UUID id namespace.
+    expect(
+      keysFor(TopicFormSchema, { title: "Кардиология", slug: "Not valid" }),
+    ).toEqual(["slugPattern"]);
+    expect(
+      keysFor(TopicFormSchema, {
+        title: "Кардиология",
         slug: "00000000-0000-4000-8000-000000000000",
       }),
     ).toEqual(["slugReserved"]);

@@ -4,6 +4,7 @@ import {
   CreateEventRequestSchema,
   CreateExpertRequestSchema,
   CreateProjectRequestSchema,
+  CreateTopicRequestSchema,
   EXPERT_AFFILIATION_MAX,
   EXPERT_BIO_MAX,
   EXPERT_CREDENTIALS_MAX,
@@ -211,5 +212,44 @@ export interface ExpertFormFields {
   credentials: string;
   affiliation: string;
   bio: string;
+  slug: string;
+}
+
+/**
+ * The 012 topic create/edit form (#1285, EARS-3) — the thinnest of the four
+ * taxonomy forms, and deliberately so: a curated topic IS a title plus the
+ * permanent address it will be reachable at (012-requirements EARS-3; §2.2
+ * matrix). There is no description, no media and no second descriptive column,
+ * so the form has exactly two boxes and adding a third would be inventing an
+ * entity shape the API refuses (`CreateTopicRequestSchema` is `.strict()`).
+ *
+ * `title` reuses the SSOT create-schema validator verbatim (trim + 1…120), and
+ * `slug` follows the same "empty box ⇒ the server generates it" rule the project
+ * and expert forms established — emptiness is legal, only a non-empty value is
+ * checked against the SSOT slug grammar.
+ */
+const topicCreate = CreateTopicRequestSchema.shape;
+
+export const TopicFormSchema = z.object({
+  title: topicCreate.title,
+  slug: z.string().superRefine((value, ctx) => {
+    if (value.trim().length === 0) return; // empty ⇒ server generates it
+    const result = SlugSchema.safeParse(value.trim());
+    if (result.success) return;
+    for (const issue of result.error.issues) {
+      // Same distinction the sibling forms keep: `custom` is the canonical-UUID
+      // refusal, everything else the grammar/length rule. No baked message — an
+      // explicit one would outrank the localized per-parse error map.
+      ctx.addIssue(
+        issue.code === "custom"
+          ? { code: "custom" }
+          : { code: "invalid_format", format: "regex" },
+      );
+    }
+  }),
+});
+
+export interface TopicFormFields {
+  title: string;
   slug: string;
 }

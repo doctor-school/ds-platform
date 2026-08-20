@@ -34,6 +34,11 @@ export function taxonomyErrorKey(error: unknown, fallbackKey: string): string {
         return "recordings.errors.notFound";
       case "VALIDATION_FAILED":
         return "recordings.errors.validation";
+      // Live authority revalidation (#1304) refused to answer: the mutation was
+      // rejected before it touched the row, so the sentence must say "nothing
+      // changed, retry" rather than send the operator looking for bad input.
+      case "IDP_REVALIDATION_UNAVAILABLE":
+        return "recordings.errors.authorityUnavailable";
       default:
         break;
     }

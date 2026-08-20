@@ -91,6 +91,7 @@ export class RecordingsAdminController {
     access: "authenticated",
     roles: ["platform_admin"],
     check: "fast-path",
+    revalidate: "live",
     // The domain audit row is written by feature 010's capture trigger inside
     // the command transaction, not by an authz-tier emission — the same
     // `low-stakes` AUTH-audit tier 007 and 012 use for authoring writes.
@@ -145,6 +146,7 @@ export class RecordingsAdminController {
     access: "authenticated",
     roles: ["platform_admin"],
     check: "fast-path",
+    revalidate: "live",
     audit: "low-stakes",
     tests: ["EARS-1", "EARS-17"],
   })
@@ -202,6 +204,7 @@ export class RecordingsAdminController {
     access: "authenticated",
     roles: ["platform_admin"],
     check: "fast-path",
+    revalidate: "live",
     // A recording lifecycle transition is a deliberate operator act on published
     // content; feature 010's trigger writes the domain row inside the command
     // transaction, as for every other authoring write on this surface.

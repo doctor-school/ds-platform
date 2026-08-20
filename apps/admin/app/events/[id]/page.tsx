@@ -52,7 +52,15 @@ export default function EventEditPage() {
         ) : (
           <div className="flex flex-col gap-6">
             <BackToList />
-            <div className="flex items-center justify-between">
+            {/* Narrow viewports stack the state badge under the title block;
+                the single-row `justify-between` only holds from `sm` up, where
+                the (potentially long) event title and the badge no longer
+                compete for the same line (#1399, adopting the #1387/#1222
+                list-header pattern). */}
+            <div
+              className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between"
+              data-testid="event-detail-header"
+            >
               <div>
                 <h1 className="text-xl font-extrabold text-foreground">
                   {detail.title}

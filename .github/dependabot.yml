@@ -11,6 +11,9 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # next 16.3.1 crash-loops the standalone output (#1407); interim until #1410 lands the standalone-boot gate, which retires this entry
+      - dependency-name: next
 
   - package-ecosystem: github-actions
     directory: /

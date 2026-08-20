@@ -97,7 +97,7 @@ The orchestrated iteration cycle (`do-feature-iteration` orchestrates these):
 8. REVIEW + MERGE
    - Mode (a) subagent `/review` skill, Mode (b) parallel Codex CLI,
      or Mode (c) human review (AGENTS.md §4).
-   - On positive verdict + green CI → `gh pr merge <N> --auto --squash --delete-branch`
+   - On positive verdict → `pnpm pr:land <N>` (`merge:gate` head-SHA check-runs poll → `gh pr merge <N> --squash --delete-branch`)
      (skill: merge-when-green).
 ```
 
@@ -1015,7 +1015,14 @@ ADR-0007 §5.2) will block merge if violated.
 
 Trigger the interactive review via Mode (a) subagent `/review` skill, Mode (b) parallel
 Codex CLI, or Mode (c) pure human (AGENTS.md §4). Address findings, then merge with
-`gh pr merge <N> --auto --squash --delete-branch` once the verdict is positive and CI is green.
+`pnpm pr:land <N>` once the verdict is positive — it runs `merge:gate` (a head-SHA-pinned
+check-runs poll plus a head-pinned Mode (a) APPROVE), then `gh pr merge <N> --squash
+--delete-branch`, then board Status = Done and branch teardown. `--auto` is not used in Phase 0:
+with no branch protection on `main` there are no required checks to queue behind, so GitHub
+rejects auto-merge on an already-clean PR and does not gate on CI where it accepts it (skill
+`merge-when-green`; ADR-0008 §2.6 keeps `--auto --squash --delete-branch` as the target-state
+command for when protection is reactivated). CI is gated in band by `merge:gate`, not by GitHub's
+auto-merge queue.
 
 ## SDD — hard rule
 

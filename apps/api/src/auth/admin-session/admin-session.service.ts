@@ -4,6 +4,7 @@ import type { AdminAuthState, AdminEnrollmentOffer } from "@ds/schemas";
 import { MAILER, type Mailer } from "../../mailer/mailer.types.js";
 import {
   IDP_CLIENT,
+  IdpUnavailableError,
   type IdpClient,
   type IdpSession,
 } from "../idp/idp.types.js";
@@ -213,8 +214,7 @@ export class AdminSessionService {
     // outlive it — the same disposal the non-policy refusal below performs,
     // extended to the fault path. Without it a persistent fault leaks one live
     // IdP session per login attempt. The disposal is fail-soft: it must never
-    // replace the original fault with a second one, which the caller maps to its
-    // HTTP status (`AdminAuthController.login` → 503).
+    // replace the original fault with a second one.
     try {
       return await this.startLoginAfterPassword(
         identifier,
@@ -226,6 +226,27 @@ export class AdminSessionService {
         await this.idp.terminateSession(result.session);
       } catch {
         /* the fault below is the one worth reporting */
+      }
+      // #1221 — a PARTIAL IdP fault is answered with the uniform refusal, not a
+      // 503. Every call in this span runs only after the password matched, so a
+      // distinct status here is returned for exactly one input class — a valid
+      // credential pair at the admin origin — and is therefore a
+      // `platform_admin`-membership oracle, the very thing
+      // `GENERIC_ADMIN_LOGIN_FAILURE` exists to deny. The honest-outage answer
+      // (#202: a genuine infra fault is a 503, never a bare 500) is kept where it
+      // discriminates nobody: `passwordLogin` above, which EVERY caller hits, so
+      // a full outage still surfaces as the uniform 503 the controller maps.
+      //
+      // The outage is not recorded as a failed attempt: no `AdminPrimaryAuthFailed`
+      // row and no lockout unit is spent (the same posture the second-factor
+      // routes hold), or a downed IdP would look like a credential-stuffing run
+      // and lock out every operator who kept trying. The operator-facing signal is
+      // this log line plus the IdP's own alerting.
+      if (cause instanceof IdpUnavailableError) {
+        this.logger.error(
+          `admin login: post-password IdP fault, answered with the uniform refusal (#1221): ${cause.message}`,
+        );
+        return { status: "refused" };
       }
       throw cause;
     }

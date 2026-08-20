@@ -433,7 +433,7 @@ main().catch((e) => {
 | **Spec status freshness** | Merged PR со spec:NNN, но spec status='Draft'                               | Custom lint: при merge — проверить `status: In dev` minimum.                                                                                                                                                                                  | WARN v1                 |
 | **Prior decisions cited** | Новый spec без указанных ADR в "Prior decisions" если категория ≠ docs-only | Spec lint: `NNN-requirements.md` имеет секцию с ≥1 ADR-link.                                                                                                                                                                                  | WARN v1                 |
 
-> **Interim semantics note:** строки `BLOCK` предполагают server-side required status check на `main`. Пока branch protection (ADR-0008 §2.6) отложен (GitHub Free + private repo блокирует branch-protection API — ADR-0008 §2.6), `BLOCK` читается операционально как **«CI job выходит red, и Tech Lead трактует это как merge-blocker по convention'у»** — тот же outcome на single-developer happy path, без server-side гарантии.
+> **Interim semantics note:** строки `BLOCK` предполагают server-side required status check на `main`. Пока правило branch protection (ADR-0008 §2.6) не применено server-side (API доступен на public-репозитории — trigger сработал, — но выбор формы правила, не блокирующей bot-ветку Changesets, вынесен в Issue #1403), `BLOCK` читается операционально как **«CI job выходит red, и Tech Lead трактует это как merge-blocker по convention'у»** — тот же outcome на single-developer happy path, без server-side гарантии.
 
 Таблица выше — стартовый набор; авторитетный живой список guard'ов + per-guard severity — `.github/workflows/ci.yml` + `.github/workflows/pr-body-guards.yml` (семейство body-parsing guard'ов, перезапускается при правке тела PR — #651). Жизненный цикл severity — posture нового guard'а (WARN), критерий WARN→BLOCK promotion, demotion и каденция sweep'ов — живёт в нарративном ADR-0007 §2.6.
 
@@ -1101,7 +1101,7 @@ Phase 0 (Tech Lead + AI, sequential — после того как DSO-31 соз
 | 9 | Добавить шаги в `.github/workflows/ci.yml` для guards (WARN/BLOCK per §5.2) | CI выполняет guards | step 8 |
 | 11 | Обновить `AGENTS.md` (root) с секцией AI-loop discipline | агенты следуют orchestrated iteration cycle | DSO-31 baseline AGENTS.md |
 | 12 | Обновить `CLAUDE.md` (root) с SessionStart hook reference + skill priorities | Claude Code aligned | step 11 |
-| 13 | **[Manual GitHub UI / `gh api`]** Добавить branch protection rule: ≥1 human approval required, no direct push to main. Отложено по ADR-0008 §2.6 (GitHub Free + private). | merge gated server-side когда protection доступен | step 9 |
+| 13 | **[Manual GitHub UI / `gh api`]** Добавить branch protection rule: ≥1 human approval required, no direct push to main. Отложено по ADR-0008 §2.6 — API доступен на public-репозитории, но форма правила не должна блокировать bot-ветку Changesets; вынесено в Issue #1403. | merge gated server-side когда правило применено | step 9 |
 | 14 | Smoke test: first feature spec через цикл (superpowers:brainstorming → spec → Issues → PR → review → merge) | proof of concept | steps 1-13 |
 
 Нумерация шагов сохраняет исходную последовательность; отменённые шаги (5, 6, 10) намеренно пропущены.

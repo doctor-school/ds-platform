@@ -21,8 +21,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-8">
+        {/* The chrome row WRAPS below the `sm` breakpoint (#1222). Unwrapped, the
+            brand + three nav links + sign-out measured ~503px, so at 390px the
+            page itself scrolled sideways: «Выйти» was cut off at the edge, and —
+            worse — a horizontal swipe moved the whole page instead of the events
+            table, which defeated that table's own `overflow-x-auto` and made its
+            trailing columns effectively unreachable. Killing the page-level
+            overflow is what hands the table back its scroll. From `sm` up the row
+            fits and renders exactly as before. */}
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-6 py-4">
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
             <div>
               <p className="text-sm font-semibold text-primary-action">
                 {t("app.brand")}

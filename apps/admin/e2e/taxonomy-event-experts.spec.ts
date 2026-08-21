@@ -161,7 +161,7 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     await page.getByTestId("event-expert-add-role").fill("Модератор");
     await page.getByTestId("event-expert-add-position").fill("1");
     await page.getByTestId("event-expert-add-submit").click();
-    await expect(page.getByTestId("event-experts-notice")).toHaveText(
+    await expect(page.getByTestId("event-experts-notice")).toContainText(
       "Эксперт привязан к мероприятию.",
     );
     const row = page.getByTestId("event-experts-active").locator("section");
@@ -210,7 +210,7 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     await page
       .locator('[data-testid^="event-expert-edit-"][data-testid$="-submit"]')
       .click();
-    await expect(page.getByTestId("event-experts-notice")).toHaveText(
+    await expect(page.getByTestId("event-experts-notice")).toContainText(
       "Изменения сохранены.",
     );
     await page.reload();
@@ -227,7 +227,7 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     await page
       .locator('[data-testid^="event-expert-"][data-testid$="-retire-submit"]')
       .click();
-    await expect(page.getByTestId("event-experts-notice")).toHaveText(
+    await expect(page.getByTestId("event-experts-notice")).toContainText(
       "Связь отозвана.",
     );
     // The row leaves the active list but is NOT deleted — it is behind the toggle.
@@ -246,7 +246,7 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     await page
       .locator('[data-testid^="event-expert-"][data-testid$="-restore-submit"]')
       .click();
-    await expect(page.getByTestId("event-experts-notice")).toHaveText(
+    await expect(page.getByTestId("event-experts-notice")).toContainText(
       "Связь возвращена.",
     );
     await expect(

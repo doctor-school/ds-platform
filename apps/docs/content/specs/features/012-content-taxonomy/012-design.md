@@ -211,7 +211,7 @@ sequenceDiagram
   O->>A: choose Retire or Restore
   A->>API: GET .../:id/lifecycle-impact?transition=retire|restore
   API->>DB: read target + all incident relations and opposite-endpoint eligibility inputs
-  API-->>A: LifecycleImpact(transition, version, affected ids, signed impactToken)
+  API-->>A: LifecycleImpact(transition, version, affected rows {kind,id,title,slug,status}, signed impactToken)
   A-->>O: confirmation dialog (no Delete wording)
   O->>A: confirm
   A->>API: POST .../:id/{retire|restore} + If-Match + Lifecycle-Impact-Token + Idempotency-Key
@@ -219,6 +219,10 @@ sequenceDiagram
   DB-->>API: row + feature-010 audit record
   API-->>A: updated detail + ETag
 ```
+
+Every affected row in the response is operator-readable on its own: exactly `{ kind, id, title, slug, status }`. `kind` is `event | project | expert | topic | partner` for an entity row and `event↔project | event↔expert | event↔topic | project↔expert | project↔partner` for a join row. `id` is its stable identifier. `title` is always present and never null: for an entity it is the row's title, or the person's name for an expert; for a join it is the operator-readable pairing of its two endpoints' display forms, `«<left display form> — <right display form>»` in the endpoint order the kind names — the preview has already loaded both endpoints to compute eligibility, so no additional read is needed to build it. `slug` is the entity's public slug, and is `null` exactly for join rows and for any entity kind that has none. `status` is the row's own current lifecycle state — `published | retired` for an entity, `active | retired` for a join; `draft` never appears here, because the affected list is scoped to currently-public projections. The confirmation dialog therefore renders the complete affected list from one preview response, with no follow-up read per affected id.
+
+The added fields widen no disclosure boundary. Every entity display field is one the corresponding public summary DTO already exposes, and `status` is read from the affected row itself and disclosed only because this preview is an admin-only route behind the `platform_admin` guard. Rows the caller may not see are still only counted by the fingerprint below, never listed here.
 
 `impactToken` is an opaque server-signed envelope binding transition, target kind/id/version, issued-at and a 15-minute expiry to a canonical fingerprint of every retained incident relation and every opposite endpoint input that determines current public eligibility. The fingerprint is over sorted tuples of table/kind, stable id, monotonic version where present, lifecycle state and the exact event-public-eligibility inputs; it therefore covers inactive relations and non-public endpoints that could become visible, without returning their hidden content to the client.
 

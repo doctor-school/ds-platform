@@ -6,6 +6,9 @@ import { IdempotencyService } from "./idempotency.service.js";
 import { MediaCleanupService } from "./media/media-cleanup.service.js";
 import { StillImageNormalizer } from "./media/still-image-normalizer.js";
 import { UploadReconcileService } from "./media/upload-reconcile.service.js";
+import { PartnersAdminController } from "./partners.admin.controller.js";
+import { PartnersRepository } from "./partners.repository.js";
+import { PartnersService } from "./partners.service.js";
 import { ProjectsAdminController } from "./projects.admin.controller.js";
 import { ProjectsRepository } from "./projects.repository.js";
 import { ProjectsService } from "./projects.service.js";
@@ -38,6 +41,7 @@ import { TopicsService } from "./topics.service.js";
     ProjectsAdminController,
     ExpertsAdminController,
     TopicsAdminController,
+    PartnersAdminController,
   ],
   providers: [
     IdempotencyService,
@@ -50,6 +54,8 @@ import { TopicsService } from "./topics.service.js";
     ExpertsService,
     TopicsRepository,
     TopicsService,
+    PartnersRepository,
+    PartnersService,
     // Registered as a provider (not just referenced by class in `@UseFilters`)
     // so Nest resolves its IdempotencyService dependency: the filter is what
     // fenced-stores a deterministic refusal for replay (§6 bullet 3).

@@ -439,6 +439,132 @@ export const TopicAdminListSchema = z.object({
 });
 export type TopicAdminList = z.infer<typeof TopicAdminListSchema>;
 
+// ── Partner authoring DTOs (012-design §2.2 matrix; EARS-4, #1286) ──────────
+
+export const PARTNER_TITLE_MIN = 1;
+export const PARTNER_TITLE_MAX = 160;
+export const PARTNER_WEBSITE_URL_MAX = 2048;
+
+const PartnerTitleSchema = z
+  .string()
+  .trim()
+  .min(PARTNER_TITLE_MIN)
+  .max(PARTNER_TITLE_MAX);
+
+/**
+ * An absolute HTTPS partner website (012-design §2.2 — "optional absolute HTTPS
+ * website up to 2048"). Three refusals, not one:
+ *
+ * - a non-absolute value (`doctor.school`, `/about`) has no origin to link to;
+ * - any scheme other than `https:` — `http:` would downgrade a doctor-facing
+ *   outbound link, and `javascript:`/`data:` are injection vectors, so the
+ *   allow-list is a single scheme rather than a deny-list of bad ones;
+ * - a URL with no host (`https:///x`).
+ *
+ * The value is stored VERBATIM, never rewritten into a "fixed" form: a sponsor's
+ * URL is their identity, and silently normalizing it could point the public link
+ * somewhere they did not authorize. The same shape is a DB CHECK
+ * (`partners_website_url_https`), so the column cannot hold anything else either.
+ */
+export const PartnerWebsiteUrlSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(PARTNER_WEBSITE_URL_MAX)
+  .refine((raw) => {
+    let url: URL;
+    try {
+      url = new URL(raw);
+    } catch {
+      return false;
+    }
+    return url.protocol === "https:" && url.hostname.length > 0;
+  }, "website must be an absolute https:// URL");
+
+/**
+ * `POST /v1/admin/partners` — create one draft partner.
+ *
+ * `.strict()` is load-bearing exactly as it is for a project or an expert:
+ * client JSON must never carry `logoRef`, an object key or a storage URL
+ * (012-design §5.1), so an attempt to supply storage authority is 400
+ * `VALIDATION_FAILED` rather than a silently ignored field. `mediaAction` is
+ * PATCH-only and absent here.
+ *
+ * `title` is the required display identity; `websiteUrl` and the logo are
+ * optional and stay optional after publication — §5.2's `PublicPartner`
+ * declares both nullable, so neither is publish-required.
+ */
+export const CreatePartnerRequestSchema = z
+  .object({
+    title: PartnerTitleSchema,
+    websiteUrl: PartnerWebsiteUrlSchema.nullish(),
+    slug: SlugSchema.optional(),
+  })
+  .strict();
+export type CreatePartnerRequest = z.infer<typeof CreatePartnerRequestSchema>;
+
+/**
+ * `PATCH /v1/admin/partners/:id` — edit the same row.
+ *
+ * Omission means unchanged; an explicit `null` clears the optional website.
+ * `title` accepts no null: it is the row's display identity and NOT NULL in the
+ * DB. `slug` is accepted only while `first_published_at IS NULL` — the refusal
+ * depends on row state, so it is a 409 `SLUG_IMMUTABLE` from the service, not a
+ * shape rule here. `mediaAction: "clear"` drops the logo.
+ */
+export const UpdatePartnerRequestSchema = z
+  .object({
+    title: PartnerTitleSchema.optional(),
+    websiteUrl: PartnerWebsiteUrlSchema.nullish(),
+    slug: SlugSchema.optional(),
+    mediaAction: MediaActionSchema.optional(),
+  })
+  .strict();
+export type UpdatePartnerRequest = z.infer<typeof UpdatePartnerRequestSchema>;
+
+/**
+ * The admin detail projection. `logoUrl` is a server-issued signed/CDN URL
+ * derived from the stored key at read time — the key itself never crosses the
+ * wire (012-design §5.1). `version` backs the ETag the next PATCH must echo.
+ */
+export const PartnerAdminDetailSchema = z.object({
+  id: z.string(),
+  slug: z.string(),
+  title: z.string(),
+  logoUrl: z.string().nullable(),
+  websiteUrl: z.string().nullable(),
+  status: TaxonomyStatusSchema,
+  /** Null until the first publish; once set, the slug is permanently locked. */
+  firstPublishedAt: z.string().nullable(),
+  /** True iff the slug may still be edited — the UI reads this, never re-derives it. */
+  slugEditable: z.boolean(),
+  version: z.number().int().positive(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type PartnerAdminDetail = z.infer<typeof PartnerAdminDetailSchema>;
+
+/** One row of the admin list — the columns the table renders, nothing more. */
+export const PartnerAdminListItemSchema = PartnerAdminDetailSchema.pick({
+  id: true,
+  slug: true,
+  title: true,
+  websiteUrl: true,
+  status: true,
+  version: true,
+  updatedAt: true,
+});
+export type PartnerAdminListItem = z.infer<typeof PartnerAdminListItemSchema>;
+
+/** Offset/page admin list envelope (ADR-0002 — admin pagination is offset-based). */
+export const PartnerAdminListSchema = z.object({
+  data: z.array(PartnerAdminListItemSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export type PartnerAdminList = z.infer<typeof PartnerAdminListSchema>;
+
 // ── Admin list query (012-design §5.1; the shell #1297 later sweeps) ─────────
 
 export const ADMIN_LIST_PAGE_SIZE_DEFAULT = 20;

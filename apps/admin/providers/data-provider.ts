@@ -5,6 +5,7 @@ import { adminCsrfHeaders } from "@/lib/admin-auth";
 import type {
   AttachRecordingRequest,
   ConfigureStreamRequest,
+  CreateEventExpertRequest,
   CreateEventRequest,
   CreateExpertRequest,
   CreatePartnerRequest,
@@ -22,6 +23,7 @@ import type {
   TaxonomyStatus,
   TopicAdminDetail,
   TopicAdminListItem,
+  UpdateEventExpertRequest,
   UpdateEventRequest,
   UpdateExpertRequest,
   UpdatePartnerRequest,
@@ -334,10 +336,11 @@ export const dataProvider: DataProvider = {
 
   create: async ({ resource, variables }) => {
     if (isTaxonomyResource(resource)) {
-      const { cover, photo, logo, ...payload } = variables as CreateProjectVars &
-        CreateExpertVars &
-        CreatePartnerVars &
-        CreateTopicVars;
+      const { cover, photo, logo, ...payload } =
+        variables as CreateProjectVars &
+          CreateExpertVars &
+          CreatePartnerVars &
+          CreateTopicVars;
       const { body, headers } = taxonomyBody(
         resource,
         payload as Record<string, unknown>,
@@ -372,16 +375,11 @@ export const dataProvider: DataProvider = {
 
   update: async ({ resource, id, variables }) => {
     if (isTaxonomyResource(resource)) {
-      const {
-        cover,
-        photo,
-        logo,
-        version,
-        ...payload
-      } = variables as UpdateProjectVars &
-        UpdateExpertVars &
-        UpdatePartnerVars &
-        UpdateTopicVars;
+      const { cover, photo, logo, version, ...payload } =
+        variables as UpdateProjectVars &
+          UpdateExpertVars &
+          UpdatePartnerVars &
+          UpdateTopicVars;
       const { body, headers } = taxonomyBody(
         resource,
         payload as Record<string, unknown>,
@@ -469,6 +467,8 @@ export const dataProvider: DataProvider = {
               | ConfigureStreamRequest
               | AttachRecordingRequest
               | UpdateRecordingRequest
+              | CreateEventExpertRequest
+              | UpdateEventExpertRequest
               | undefined,
           )
         : undefined,
@@ -492,4 +492,36 @@ export const recordingsUrl = {
     `${ADMIN_BASE}/events/${eventId}/recordings/${recordingId}`,
   command: (eventId: string, recordingId: string, command: RecordingCommand) =>
     `${ADMIN_BASE}/events/${eventId}/recordings/${recordingId}/${command}`,
+};
+
+/**
+ * The 012 EARS-7 event↔expert link endpoints (012-design §5.1, #1289), built in
+ * ONE place like the recordings paths so no caller hand-concatenates a route —
+ * and so no caller can reach a DELETE, because the join controller exposes none.
+ *
+ * The links are NOT a Refine CRUD resource: they are always read filtered to one
+ * parent event and written with named retire/restore commands, so they ride the
+ * `custom` path (which owns the Idempotency-Key + If-Match protocol headers)
+ * rather than `getList`/`update`.
+ */
+export const eventExpertsUrl = {
+  collection: (query?: {
+    eventId?: string;
+    includeRetired?: boolean;
+    page?: number;
+    pageSize?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (query?.eventId) params.set("eventId", query.eventId);
+    if (query?.includeRetired) params.set("includeRetired", "true");
+    if (query?.page) params.set("page", String(query.page));
+    if (query?.pageSize) params.set("pageSize", String(query.pageSize));
+    const qs = params.toString();
+    return qs
+      ? `${ADMIN_BASE}/event-experts?${qs}`
+      : `${ADMIN_BASE}/event-experts`;
+  },
+  row: (linkId: string) => `${ADMIN_BASE}/event-experts/${linkId}`,
+  command: (linkId: string, command: "retire" | "restore") =>
+    `${ADMIN_BASE}/event-experts/${linkId}/${command}`,
 };

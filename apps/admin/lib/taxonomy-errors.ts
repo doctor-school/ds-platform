@@ -44,6 +44,35 @@ export function taxonomyErrorKey(error: unknown, fallbackKey: string): string {
     }
   }
 
+  // ── 012 EARS-7 event↔expert link codes (012-design §5.3, #1289) ──────────
+  // Scoped to the link namespace for the same reason the recordings block is:
+  // three of these codes exist ONLY on the join surface, and the entity screens
+  // can never receive them. `SPEAKER_POSITION_OCCUPIED` in particular is the one
+  // refusal whose fix is a different NUMBER, not a different field — the generic
+  // «проверьте поля» would send the operator hunting through the whole form.
+  if (ns === "eventExperts") {
+    switch (code) {
+      case "SPEAKER_POSITION_OCCUPIED":
+        return "eventExperts.errors.positionOccupied";
+      case "LEGACY_SPEAKER_CONFLICT":
+        return "eventExperts.errors.legacyConflict";
+      case "RELATIONSHIP_CONFLICT":
+        return "eventExperts.errors.relationshipConflict";
+      case "CONTENT_REMOVED":
+        return "eventExperts.errors.contentRemoved";
+      case "INVALID_TRANSITION":
+        return "eventExperts.errors.invalidTransition";
+      case "RESOURCE_NOT_FOUND":
+        return "eventExperts.errors.notFound";
+      case "VALIDATION_FAILED":
+        return "eventExperts.errors.validation";
+      case "IDP_REVALIDATION_UNAVAILABLE":
+        return "eventExperts.errors.authorityUnavailable";
+      default:
+        break;
+    }
+  }
+
   switch (code) {
     case "SLUG_CONFLICT":
       return `${ns}.errors.slugConflict`;

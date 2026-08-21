@@ -18,6 +18,7 @@ import {
 import type { EventAdminDetail } from "@ds/schemas";
 import { AppShell } from "@/components/app-shell";
 import { BackToList } from "@/components/back-to-list";
+import { EventExpertsPanel } from "@/components/event-experts-panel";
 import { EventForm } from "@/components/event-form";
 import { StreamConfigForm } from "@/components/stream-config-form";
 import { LifecycleActions } from "@/components/lifecycle-actions";
@@ -84,6 +85,13 @@ export default function EventEditPage() {
                 </TabsTrigger>
                 <TabsTrigger value="recordings" data-testid="tab-recordings">
                   {t("events.tabs.recordings")}
+                </TabsTrigger>
+                {/* 012 EARS-7 (#1289) — the event↔expert link editor lives on the
+                    event, per 012-design §7 («relationship editors embedded in
+                    the existing 007 event form»), in the Stage-A tabbed
+                    composition the owner picked (#1282, option B). */}
+                <TabsTrigger value="experts" data-testid="tab-experts">
+                  {t("events.tabs.experts")}
                 </TabsTrigger>
               </TabsList>
 
@@ -187,6 +195,18 @@ export default function EventEditPage() {
                       eventId={id}
                       onEventChanged={() => refetch()}
                     />
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* «Эксперты» (012 EARS-7) — the event↔expert link editor. */}
+              <TabsContent value="experts">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{t("eventExperts.title")}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <EventExpertsPanel eventId={id} />
                   </CardContent>
                 </Card>
               </TabsContent>

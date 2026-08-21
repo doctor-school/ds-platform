@@ -459,27 +459,28 @@ const PartnerTitleSchema = z
  * - any scheme other than `https:` — `http:` would downgrade a doctor-facing
  *   outbound link, and `javascript:`/`data:` are injection vectors, so the
  *   allow-list is a single scheme rather than a deny-list of bad ones;
- * - a URL with no host (`https:///x`).
+ * - a URL with no host (`https://`, `https:///x`).
  *
  * The value is stored VERBATIM, never rewritten into a "fixed" form: a sponsor's
  * URL is their identity, and silently normalizing it could point the public link
- * somewhere they did not authorize. The same shape is a DB CHECK
- * (`partners_website_url_https`), so the column cannot hold anything else either.
+ * somewhere they did not authorize.
+ *
+ * The rule is expressed as a PATTERN rather than a WHATWG `new URL()` parse for
+ * two reasons. This package is the environment-agnostic contract SSOT — it
+ * compiles against `lib: ES2022` alone and must hold in a browser, in Node and in
+ * the Expo runtime, so it cannot reach for a host global. And the identical
+ * pattern is the DB CHECK `partners_website_url_https` (migration 0019), so the
+ * contract edge and the column enforce ONE rule instead of two validators that
+ * can drift apart; `partners-schema.e2e-spec.ts` proves the column agrees.
  */
+export const PARTNER_WEBSITE_URL_PATTERN = /^https:\/\/[^\s/?#]+[^\s]*$/;
+
 export const PartnerWebsiteUrlSchema = z
   .string()
   .trim()
   .min(1)
   .max(PARTNER_WEBSITE_URL_MAX)
-  .refine((raw) => {
-    let url: URL;
-    try {
-      url = new URL(raw);
-    } catch {
-      return false;
-    }
-    return url.protocol === "https:" && url.hostname.length > 0;
-  }, "website must be an absolute https:// URL");
+  .regex(PARTNER_WEBSITE_URL_PATTERN, "website must be an absolute https:// URL");
 
 /**
  * `POST /v1/admin/partners` — create one draft partner.

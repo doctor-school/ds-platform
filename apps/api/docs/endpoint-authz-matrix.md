@@ -9,6 +9,8 @@
 | GET /v1/admin/events/:id                                        | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-8                           |
 | GET /v1/admin/experts                                           | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-2, EARS-15, EARS-16         |
 | GET /v1/admin/experts/:id                                       | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-2, EARS-16                  |
+| GET /v1/admin/partners                                          | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-4, EARS-15, EARS-16         |
+| GET /v1/admin/partners/:id                                      | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-4, EARS-16                  |
 | GET /v1/admin/projects                                          | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-1, EARS-15, EARS-16         |
 | GET /v1/admin/projects/:id                                      | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-1, EARS-16                  |
 | GET /v1/admin/topics                                            | authenticated | platform_admin               | fast-path  | —            | false   | none       | none        | EARS-3, EARS-15, EARS-16         |
@@ -27,6 +29,7 @@
 | PATCH /v1/admin/events/:eventId/recordings/:recordingId         | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-1, EARS-17                  |
 | PATCH /v1/admin/events/:id                                      | authenticated | platform_admin               | fast-path  | —            | false   | none       | low-stakes  | EARS-2, EARS-8                   |
 | PATCH /v1/admin/experts/:id                                     | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-2, EARS-16, EARS-17         |
+| PATCH /v1/admin/partners/:id                                    | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-4, EARS-16, EARS-17         |
 | PATCH /v1/admin/projects/:id                                    | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-1, EARS-16, EARS-17         |
 | PATCH /v1/admin/topics/:id                                      | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-3, EARS-16, EARS-17         |
 | POST /v1/admin/auth/login                                       | public        | —                            | none       | —            | false   | none       | high-stakes | EARS-3                           |
@@ -43,6 +46,7 @@
 | POST /v1/admin/events/:id/publish                               | authenticated | platform_admin               | fast-path  | —            | false   | none       | low-stakes  | EARS-4, EARS-8                   |
 | POST /v1/admin/events/:id/transition                            | authenticated | platform_admin               | fast-path  | —            | false   | none       | low-stakes  | EARS-7, EARS-8                   |
 | POST /v1/admin/experts                                          | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-2, EARS-16, EARS-17         |
+| POST /v1/admin/partners                                         | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-4, EARS-16, EARS-17         |
 | POST /v1/admin/projects                                         | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-1, EARS-16, EARS-17         |
 | POST /v1/admin/topics                                           | authenticated | platform_admin               | fast-path  | —            | false   | live       | low-stakes  | EARS-3, EARS-16, EARS-17         |
 | POST /v1/auth/login                                             | public        | —                            | none       | —            | false   | none       | high-stakes | EARS-5, EARS-8, EARS-17          |

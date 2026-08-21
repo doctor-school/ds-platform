@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
+import { EVENT_EXPERT_POSITION_MAX } from "@ds/schemas";
+
 import {
+  EventExpertFormSchema,
   EventFormSchema,
   ExpertFormSchema,
   LoginFormSchema,
@@ -358,6 +361,71 @@ describe("translateIssue — admin form RU error mapping (#665)", () => {
         slug: "00000000-0000-4000-8000-000000000000",
       }),
     ).toEqual(["slugReserved"]);
+  });
+
+  it("EARS-7: every event↔expert link failing rule maps to a specific key, never fallback", () => {
+    const expertId = "11111111-1111-4111-8111-111111111111";
+
+    // Empty submit — the expert selector, the role box and the place box are all
+    // required, and none of the three may degrade to the generic sentence.
+    const empty = keysFor(EventExpertFormSchema, {
+      expertId: "",
+      role: "",
+      positionText: "",
+    });
+    expect(empty).not.toContain("fallback");
+    expect(empty).toContain("expert");
+    expect(empty).toContain("required");
+
+    // Nothing chosen in the selector gets the «pick from the list» sentence, not
+    // «обязательное поле» — under a dropdown the latter names no action.
+    expect(
+      keysFor(EventExpertFormSchema, {
+        expertId: "",
+        role: "Модератор",
+        positionText: "1",
+      }),
+    ).toEqual(["expert"]);
+
+    // The role box: empty and over the 80-character SSOT bound are the two shapes
+    // it can fail on, and they map to the two generic-tail keys, never fallback.
+    expect(
+      keysFor(EventExpertFormSchema, {
+        expertId,
+        role: "",
+        positionText: "1",
+      }),
+    ).toEqual(["required"]);
+    expect(
+      keysFor(EventExpertFormSchema, {
+        expertId,
+        role: "х".repeat(81),
+        positionText: "1",
+      }),
+    ).toEqual(["maxLength"]);
+
+    // The place box is a TEXT box folded through the SSOT number check. Empty,
+    // whitespace-only, non-numeric, an exponent and a negative slot are ONE fix
+    // — type a whole number in range — and `Number(" ")` = 0 / `Number("1e3")` =
+    // 1000 must not slip through as a legal slot the operator never typed.
+    for (const bad of ["", " ", "abc", "1e3", "-1", "1.5"]) {
+      expect(
+        keysFor(EventExpertFormSchema, {
+          expertId,
+          role: "Модератор",
+          positionText: bad,
+        }),
+      ).toEqual(["position"]);
+    }
+
+    // Over the SSOT cap is its own sentence, not the generic «type a number».
+    expect(
+      keysFor(EventExpertFormSchema, {
+        expertId,
+        role: "Модератор",
+        positionText: String(EVENT_EXPERT_POSITION_MAX + 1),
+      }),
+    ).toEqual(["positionMax"]);
   });
 
   it("the 014 readiness date maps every refusal to its own key, never fallback", () => {

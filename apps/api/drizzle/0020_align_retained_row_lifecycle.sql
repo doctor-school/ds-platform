@@ -18,6 +18,14 @@
 --    whole file runs in one transaction (drizzle-kit migrate), so the window in
 --    which `event_speakers` has no primary key is never visible to a session.
 --
+--    Lock profile: one transaction holding ACCESS EXCLUSIVE on every touched
+--    table — 7 FK re-adds (full revalidation scans; `presence_beats` is the
+--    largest child), 5 non-CONCURRENT index builds, and the `event_speakers`
+--    PK rewrite. Acceptable at current prod row counts (≤ thousands per table);
+--    at high volume this migration would need NOT VALID + VALIDATE CONSTRAINT
+--    and CONCURRENTLY splits — deliberately not done now (adds failure modes a
+--    small dataset doesn't pay for). Deploy during a quiet window regardless.
+--
 --    Tables deliberately NOT touched here: `presence_beats`, `consent_records`
 --    and `audit_ledger` are classified immutable/append-only, so they get the
 --    RESTRICT foreign keys but NO lifecycle columns — see

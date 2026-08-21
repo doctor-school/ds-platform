@@ -248,6 +248,45 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/partners/${ABSENT_ID}`,
     payload: {},
   },
+  // 012 EARS-7/EARS-16 (#1289) — the explicit expert↔event link. A JOIN leaks
+  // MORE than an entity if its floor is soft: an anonymous 404-vs-409 difference
+  // would disclose which legacy speaker of which event is already matched. The
+  // guard therefore answers before validation, before the Idempotency-Key check
+  // and before the If-Match check, exactly as it does for the four entities.
+  {
+    endpoint: "GET /v1/admin/event-experts",
+    method: "GET",
+    url: "/v1/admin/event-experts",
+  },
+  {
+    endpoint: "GET /v1/admin/event-experts/:id",
+    method: "GET",
+    url: `/v1/admin/event-experts/${ABSENT_ID}`,
+  },
+  {
+    endpoint: "POST /v1/admin/event-experts",
+    method: "POST",
+    url: "/v1/admin/event-experts",
+    payload: {},
+  },
+  {
+    endpoint: "PATCH /v1/admin/event-experts/:id",
+    method: "PATCH",
+    url: `/v1/admin/event-experts/${ABSENT_ID}`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/event-experts/:id/retire",
+    method: "POST",
+    url: `/v1/admin/event-experts/${ABSENT_ID}/retire`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/event-experts/:id/restore",
+    method: "POST",
+    url: `/v1/admin/event-experts/${ABSENT_ID}/restore`,
+    payload: {},
+  },
   // 014 EARS-1/EARS-2/EARS-17 (#1339) — the recording routes hang under an event
   // path but are their own aggregate, and they sit on the same raised floor: the
   // guard refuses before the Idempotency-Key check, so a keyless anonymous

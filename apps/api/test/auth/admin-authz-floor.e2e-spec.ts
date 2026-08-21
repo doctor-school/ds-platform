@@ -287,6 +287,45 @@ const FLOOR_ROUTES: {
     url: `/v1/admin/event-experts/${ABSENT_ID}/restore`,
     payload: {},
   },
+  // 012 EARS-6 (#1288) — the event↔project relationship surface. The floor
+  // matters MORE here than on the entity verticals, not less: the two lifecycle
+  // routes answer 428 when the `Lifecycle-Impact-Token` is missing, so without
+  // the guard firing first an anonymous caller could read a protocol answer off
+  // a relationship it may not know exists. There is no PATCH row because there
+  // is no PATCH route — the join carries no mutable attribute.
+  {
+    endpoint: "GET /v1/admin/event-projects",
+    method: "GET",
+    url: "/v1/admin/event-projects",
+  },
+  {
+    endpoint: "GET /v1/admin/event-projects/:id",
+    method: "GET",
+    url: `/v1/admin/event-projects/${ABSENT_ID}`,
+  },
+  {
+    endpoint: "GET /v1/admin/event-projects/:id/lifecycle-impact",
+    method: "GET",
+    url: `/v1/admin/event-projects/${ABSENT_ID}/lifecycle-impact?transition=retire`,
+  },
+  {
+    endpoint: "POST /v1/admin/event-projects",
+    method: "POST",
+    url: "/v1/admin/event-projects",
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/event-projects/:id/retire",
+    method: "POST",
+    url: `/v1/admin/event-projects/${ABSENT_ID}/retire`,
+    payload: {},
+  },
+  {
+    endpoint: "POST /v1/admin/event-projects/:id/restore",
+    method: "POST",
+    url: `/v1/admin/event-projects/${ABSENT_ID}/restore`,
+    payload: {},
+  },
   // 014 EARS-1/EARS-2/EARS-17 (#1339) — the recording routes hang under an event
   // path but are their own aggregate, and they sit on the same raised floor: the
   // guard refuses before the Idempotency-Key check, so a keyless anonymous

@@ -31,6 +31,13 @@ export async function scanRealRouteSet(): Promise<AuthzScanResult> {
   // so nothing is ever masked; a placeholder satisfies the fail-closed
   // construction check exactly as the DATABASE_URL stub satisfies pool config.
   process.env.AUDIT_IDENTIFIER_PEPPER ??= "authz-lint-placeholder-pepper";
+  // TaxonomyModule → LifecycleImpactService fails closed without its HMAC
+  // signing secret (012-design §3.1), resolved once at construction so a
+  // misconfigured deploy cannot issue an unsigned impact token. Same argument as
+  // the pepper above: this gate only enumerates routes — it never issues or
+  // verifies an envelope — so a placeholder satisfies the fail-closed
+  // construction check without ever signing anything.
+  process.env.LIFECYCLE_IMPACT_TOKEN_SECRET ??= "authz-lint-placeholder-secret";
 
   const app = await NestFactory.createApplicationContext(AuthzGateModule, {
     logger: false,

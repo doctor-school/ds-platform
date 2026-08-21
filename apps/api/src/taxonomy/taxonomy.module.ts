@@ -2,10 +2,18 @@ import { Module } from "@nestjs/common";
 import { EventExpertsAdminController } from "./event-experts.admin.controller.js";
 import { EventExpertsRepository } from "./event-experts.repository.js";
 import { EventExpertsService } from "./event-experts.service.js";
+import { EventProjectsAdminController } from "./event-projects.admin.controller.js";
+import {
+  EventProjectsPublicController,
+  ProjectEventsPublicController,
+} from "./event-projects.public.controller.js";
+import { EventProjectsRepository } from "./event-projects.repository.js";
+import { EventProjectsService } from "./event-projects.service.js";
 import { ExpertsAdminController } from "./experts.admin.controller.js";
 import { ExpertsRepository } from "./experts.repository.js";
 import { ExpertsService } from "./experts.service.js";
 import { IdempotencyService } from "./idempotency.service.js";
+import { LifecycleImpactService } from "./lifecycle-impact.service.js";
 import { MediaCleanupService } from "./media/media-cleanup.service.js";
 import { StillImageNormalizer } from "./media/still-image-normalizer.js";
 import { UploadReconcileService } from "./media/upload-reconcile.service.js";
@@ -50,6 +58,11 @@ import { TopicsService } from "./topics.service.js";
     // idempotency record, RFC 7807 filter) is the taxonomy one; the event side
     // contributes only the parent row it locks.
     EventExpertsAdminController,
+    EventProjectsAdminController,
+    // The two §5.2 public traversals. They mount here, not in the events
+    // module, because the relationship is what they read (see the file header).
+    EventProjectsPublicController,
+    ProjectEventsPublicController,
   ],
   providers: [
     IdempotencyService,
@@ -66,6 +79,11 @@ import { TopicsService } from "./topics.service.js";
     PartnersService,
     EventExpertsRepository,
     EventExpertsService,
+    EventProjectsRepository,
+    EventProjectsService,
+    // The §3.1 preview/confirmation seam, authored once for every 012 resource
+    // with a retire/restore pair (#1288 is the first adopter, #1295/#1296 next).
+    LifecycleImpactService,
     // Registered as a provider (not just referenced by class in `@UseFilters`)
     // so Nest resolves its IdempotencyService dependency: the filter is what
     // fenced-stores a deterministic refusal for replay (§6 bullet 3).
@@ -73,6 +91,9 @@ import { TopicsService } from "./topics.service.js";
   ],
   exports: [
     IdempotencyService,
+    // Exported for the sibling relationship verticals (#1295 / #1296): they
+    // adopt this exact envelope rather than re-deriving a token format.
+    LifecycleImpactService,
     // Exported for 014's recordings module (#1339): it declares its own
     // controller, and a controller-level `@UseFilters(TaxonomyProblemFilter)`
     // is resolved from the DECLARING module's context. Exporting the existing

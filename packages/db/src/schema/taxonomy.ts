@@ -11,8 +11,6 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { events } from "./events.js";
-
 import { events, eventSpeakers } from "./events.js";
 
 // 012 — Content taxonomy: the retained entity write model (012-design §2, §2.1;

@@ -13,16 +13,14 @@ import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
-import {
-  OBJECT_STORAGE,
-  type ObjectStorage,
-} from "../../src/storage/index.js";
+import { OBJECT_STORAGE, type ObjectStorage } from "../../src/storage/index.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { adminHeaders, establishAdminSession } from "../setup/admin-session.js";
 import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 // 012 EARS-2 (#1284) — the expert authoring vertical over the REAL stack:
 // Fastify + the 011 admin session + Postgres + object storage. It is the SAME
@@ -41,7 +39,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     let storage: ObjectStorage;
     const fake = new FakeIdpClient();
     const password = "Aa1!ufficiently-long-pw";
-    const device = { "user-agent": "AdminTest/1.0", "accept-language": "en-US" };
+    const device = {
+      "user-agent": "AdminTest/1.0",
+      "accept-language": "en-US",
+    };
     const consent = [{ purpose: "tos", version: "2026-01" }];
     const createdEmails: string[] = [];
     const createdExpertIds: string[] = [];
@@ -220,9 +221,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterEach(async () => {
       for (const id of createdExpertIds.splice(0)) {
-        await pool.query("DELETE FROM media_cleanup_jobs WHERE entity_id = $1", [
-          id,
-        ]);
+        await pool.query(
+          "DELETE FROM media_cleanup_jobs WHERE entity_id = $1",
+          [id],
+        );
         await pool.query("DELETE FROM experts WHERE id = $1", [id]);
       }
       for (const k of usedKeys.splice(0)) {
@@ -232,7 +234,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterAll(async () => {
       for (const email of createdEmails.splice(0)) {
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
       }
       await app.close();
     });
@@ -241,7 +243,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("012 EARS-2: when a platform_admin creates an expert, the system shall persist one retained draft row with a slug generated from the name, version 1 and an ETag", async () => {
       const uniqueName = `Иванова Мария ${randomUUID().slice(0, 8)}`;
-      const res = await createJson({ payload: validPayload({ name: uniqueName }) });
+      const res = await createJson({
+        payload: validPayload({ name: uniqueName }),
+      });
       expect(res.statusCode).toBe(201);
       const body = await created(res);
       expect(body).toMatchObject({
@@ -486,7 +490,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     it("012 EARS-15: the list shall search names case-insensitively and exclude retired rows by default", async () => {
       const marker = randomUUID().slice(0, 8);
       const body = await created(
-        await createJson({ payload: validPayload({ name: `Петров ${marker}` }) }),
+        await createJson({
+          payload: validPayload({ name: `Петров ${marker}` }),
+        }),
       );
       // LD-6: ordinary case-insensitive substring search over the name.
       const found = await app.inject({
@@ -521,9 +527,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(
-        (JSON.parse(withRetired.payload) as { data: { id: string }[] }).data.map(
-          (r) => r.id,
-        ),
+        (
+          JSON.parse(withRetired.payload) as { data: { id: string }[] }
+        ).data.map((r) => r.id),
       ).toContain(body.id);
 
       // The detail route addresses a retired row directly (restore path input).
@@ -1005,7 +1011,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       );
       let present = 0;
       for (const row of rows) {
-        if (row.photo_ref && (await storage.exists(row.photo_ref))) present += 1;
+        if (row.photo_ref && (await storage.exists(row.photo_ref)))
+          present += 1;
       }
       return present;
     }

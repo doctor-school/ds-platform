@@ -12,6 +12,7 @@ import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
+import { deleteEventFixture } from "../setup/fixture-cleanup.js";
 
 // 004 EARS-15 + EARS-16 — the public month-calendar read side. Two endpoints:
 //   GET /v1/public/events?month=YYYY-MM      → MonthBroadcastEntry[]
@@ -112,7 +113,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     afterEach(async () => {
       for (const id of createdEventIds.splice(0))
-        await pool.query("DELETE FROM events WHERE id = $1", [id]);
+        await deleteEventFixture(pool, id);
     });
 
     afterAll(async () => {

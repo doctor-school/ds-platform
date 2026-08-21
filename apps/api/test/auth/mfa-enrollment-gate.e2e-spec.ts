@@ -10,12 +10,16 @@ import { AppModule } from "../../src/app.module.js";
 import { DRIZZLE_POOL } from "../../src/database/database.tokens.js";
 import { IDP_CLIENT } from "../../src/auth/idp/idp.types.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
-import { RATE_LIMIT_THRESHOLDS, RELAXED_RATE_LIMIT } from "../setup/rate-limit.js";
+import {
+  RATE_LIMIT_THRESHOLDS,
+  RELAXED_RATE_LIMIT,
+} from "../setup/rate-limit.js";
 import {
   ADMIN_PENDING_COOKIE_NAME,
   ADMIN_SESSION_COOKIE_NAME,
 } from "../../src/auth/admin-session/admin-session.cookie.js";
 import { ADMIN_DEVICE, establishAdminSession } from "../setup/admin-session.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 /**
  * The full 007 admin route set — the surface EARS-4 says a `mfa_pending_enrollment`
@@ -157,7 +161,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     afterEach(async () => {
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {

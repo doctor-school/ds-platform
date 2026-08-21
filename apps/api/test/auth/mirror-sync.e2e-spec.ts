@@ -15,6 +15,7 @@ import {
 } from "../setup/rate-limit.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { ReconcileService } from "../../src/auth/reconcile.service.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 // Mirror sync (EARS-19): the Zitadel Action webhook upserts a doctor_guest
 // mirror row and the reconciliation sweep closes a webhook-miss divergence. The
@@ -51,7 +52,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Mirror sync (e2e)", () => {
 
   afterEach(async () => {
     for (const sub of subs.splice(0))
-      await pool.query("DELETE FROM users WHERE zitadel_sub = $1", [sub]);
+      await deleteUserFixture(pool, "zitadel_sub", sub);
   });
 
   afterAll(async () => {

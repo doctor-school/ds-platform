@@ -24,6 +24,7 @@ import {
   establishAdminSession,
   type AdminSessionHandle,
 } from "../setup/admin-session.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 /**
  * The full 007 admin route set (the generated endpoint-authz matrix is the
@@ -164,7 +165,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     afterEach(async () => {
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {

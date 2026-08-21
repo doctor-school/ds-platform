@@ -22,6 +22,10 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
 
 // 006 EARS-3 — live chat over Centrifugo (gated read + real-time post).
 //
@@ -56,7 +60,9 @@ function roomChannel(eventId: string): string {
 /** Read a channel's publication history over the Centrifugo HTTP API. */
 async function centrifugoHistory(
   channel: string,
-): Promise<Array<{ data: { id: string; authorTag: string; text: string; at: string } }>> {
+): Promise<
+  Array<{ data: { id: string; authorTag: string; text: string; at: string } }>
+> {
   const res = await fetch(`${CENTRIFUGO_URL}/api/history`, {
     method: "POST",
     headers: {
@@ -201,7 +207,11 @@ describe.skipIf(
     slug: string,
     headers: Record<string, string>,
   ): ReturnType<NestFastifyApplication["inject"]> {
-    return app.inject({ method: "GET", url: `/v1/events/${slug}/room`, headers });
+    return app.inject({
+      method: "GET",
+      url: `/v1/events/${slug}/room`,
+      headers,
+    });
   }
 
   function postChat(
@@ -253,10 +263,10 @@ describe.skipIf(
   afterEach(async () => {
     for (const id of createdEventIds.splice(0)) {
       await pool.query("DELETE FROM presence_beats WHERE event_id = $1", [id]);
-      await pool.query("DELETE FROM events WHERE id = $1", [id]);
+      await deleteEventFixture(pool, id);
     }
     for (const email of createdEmails.splice(0))
-      await pool.query("DELETE FROM users WHERE email = $1", [email]);
+      await deleteUserFixture(pool, "email", email);
   });
 
   afterAll(async () => {
@@ -389,7 +399,11 @@ describe.skipIf(
 
     // The SAME publish WITH the server's real key succeeds — proving the channel is
     // publishable ONLY by the credentialed server side (the gated command's path).
-    const withKey = await centrifugoPublish(channel, forged, CENTRIFUGO_API_KEY);
+    const withKey = await centrifugoPublish(
+      channel,
+      forged,
+      CENTRIFUGO_API_KEY,
+    );
     expect(withKey.status).toBe(200);
     expect(withKey.error).toBeUndefined();
   });

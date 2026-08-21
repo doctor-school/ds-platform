@@ -21,6 +21,7 @@ import type {
   BotProtection,
   BotProtectionResult,
 } from "../../src/bot-protection/index.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 const device = { "user-agent": "Test/1.0", "accept-language": "en-US" };
 
@@ -53,8 +54,7 @@ async function cleanup(
   emails: string[],
 ): Promise<void> {
   const pool = app.get<pg.Pool>(DRIZZLE_POOL);
-  for (const email of emails)
-    await pool.query("DELETE FROM users WHERE email = $1", [email]);
+  for (const email of emails) await deleteUserFixture(pool, "email", email);
   await app.close();
 }
 

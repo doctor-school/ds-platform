@@ -11,6 +11,7 @@ import {
 } from "@ds/schemas";
 import { and, asc, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE_DB } from "../database/database.tokens.js";
+import { reconcileEventSpeakers } from "./event-speakers.reconcile.js";
 
 /**
  * The terminal `audit_ledger` row a named lifecycle transition appends (EARS-4;
@@ -30,6 +31,27 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Db = DrizzleHandle["db"];
+
+/**
+ * #1278 (ADR-0003 design §3.6 rule 3) — every default read is the ACTIVE
+ * projection. Retired rows stay in the table forever (a removed speaker, a
+ * de-configured stream, a retired event are historical facts), so the product
+ * read paths have to say so explicitly; `events_active_starts_at_idx` and the
+ * partial speaker unique index are built for exactly these predicates.
+ */
+const activeSpeakersOf = (eventId: string) =>
+  and(
+    eq(eventSpeakers.eventId, eventId),
+    eq(eventSpeakers.recordStatus, "active"),
+  );
+
+const activeStreamOf = (eventId: string) =>
+  and(
+    eq(streamConfig.eventId, eventId),
+    eq(streamConfig.recordStatus, "active"),
+  );
+
+const ACTIVE_EVENT = eq(events.recordStatus, "active");
 
 /** One event aggregate with its ordered speaker rows and (optional) stream config. */
 export interface EventWithSpeakers {
@@ -80,8 +102,11 @@ export class EventsRepository {
    * ordered speaker list, in a single transaction so a partial edit is never
    * persisted. `patch` carries only the columns to overwrite (an omitted column
    * is untouched); `updated_at` is always bumped. When `speakers` is provided the
-   * stored list is replaced wholesale (delete-then-insert, preserving order); when
-   * it is `undefined` the speaker rows are left as they are. The caller (the
+   * stored list is RECONCILED against the authored one (#1278, ADR-0003 design
+   * §3.6): a departing speaker is retired, a returning one is restored in place
+   * and only a new one is inserted — the list is never deleted and re-created
+   * (see {@link reconcileEventSpeakers}). When it is `undefined` the speaker rows
+   * are left as they are. The caller (the
    * service) has already validated the pre-archive edit window and folded any
    * program-PDF replacement into `patch.programPdfRef`. Returns the updated
    * aggregate, or `null` when the id does not exist.
@@ -108,28 +133,26 @@ export class EventsRepository {
       const [row] = await tx
         .update(events)
         .set({ ...patch, updatedAt: new Date() })
-        .where(eq(events.id, id))
+        // A retired event is not editable — it resolves to `null` (404) exactly
+        // as the reads do (#1278 §3.6 rule 3), never a silent write on a removed
+        // aggregate.
+        .where(and(eq(events.id, id), ACTIVE_EVENT))
         .returning();
       if (!row) return null;
 
       if (speakers) {
-        await tx.delete(eventSpeakers).where(eq(eventSpeakers.eventId, id));
-        if (speakers.length > 0) {
-          await tx
-            .insert(eventSpeakers)
-            .values(speakers.map((s) => ({ ...s, eventId: id })));
-        }
+        await reconcileEventSpeakers(tx, id, speakers);
       }
 
       const speakerRows = await tx
         .select()
         .from(eventSpeakers)
-        .where(eq(eventSpeakers.eventId, id))
+        .where(activeSpeakersOf(id))
         .orderBy(asc(eventSpeakers.position));
       const [streamRow] = await tx
         .select()
         .from(streamConfig)
-        .where(eq(streamConfig.eventId, id));
+        .where(activeStreamOf(id));
       return {
         event: row,
         speakers: speakerRows.map((s) => ({
@@ -150,6 +173,11 @@ export class EventsRepository {
    * config while `published` replaces the single row (no state reversal). The
    * caller (the service) has already validated the state window. Returns `null`
    * when the id does not exist.
+   *
+   * #1278 (§3.6 rule 2): because the PK is the event id there is exactly one
+   * retained config row per event, so re-configuring a stream that was retired is
+   * the explicit RESTORE of that same row — `record_status` back to `active` with
+   * `deleted_at` cleared — never a second row and never a delete-then-insert.
    */
   async upsertStreamConfig(
     eventId: string,
@@ -162,7 +190,12 @@ export class EventsRepository {
         .values({ eventId, provider: input.provider, embedRef: input.embedRef })
         .onConflictDoUpdate({
           target: streamConfig.eventId,
-          set: { provider: input.provider, embedRef: input.embedRef },
+          set: {
+            provider: input.provider,
+            embedRef: input.embedRef,
+            recordStatus: "active",
+            deletedAt: null,
+          },
         }),
     );
     return this.findById(eventId);
@@ -175,12 +208,16 @@ export class EventsRepository {
     const [row] = await this.db
       .select()
       .from(streamConfig)
-      .where(eq(streamConfig.eventId, eventId));
+      .where(activeStreamOf(eventId));
     return row ? { provider: row.provider, embedRef: row.embedRef } : null;
   }
 
   async listAll(): Promise<Event[]> {
-    return this.db.select().from(events).orderBy(desc(events.createdAt));
+    return this.db
+      .select()
+      .from(events)
+      .where(ACTIVE_EVENT)
+      .orderBy(desc(events.createdAt));
   }
 
   /**
@@ -202,6 +239,7 @@ export class EventsRepository {
       .from(events)
       .where(
         and(
+          ACTIVE_EVENT,
           inArray(events.state, [...UPCOMING_BROADCAST_STATES]),
           gte(events.startsAt, cutoff),
         ),
@@ -213,7 +251,12 @@ export class EventsRepository {
     const speakerRows = await this.db
       .select()
       .from(eventSpeakers)
-      .where(inArray(eventSpeakers.eventId, ids))
+      .where(
+        and(
+          inArray(eventSpeakers.eventId, ids),
+          eq(eventSpeakers.recordStatus, "active"),
+        ),
+      )
       .orderBy(asc(eventSpeakers.position));
 
     const byEvent = new Map<string, EventWithSpeakers["speakers"]>();
@@ -247,6 +290,7 @@ export class EventsRepository {
       .from(events)
       .where(
         and(
+          ACTIVE_EVENT,
           inArray(events.state, [...MONTH_BROADCAST_STATES]),
           gte(events.startsAt, start),
           lt(events.startsAt, end),
@@ -271,6 +315,7 @@ export class EventsRepository {
       .from(events)
       .where(
         and(
+          ACTIVE_EVENT,
           inArray(events.state, [...MONTH_BROADCAST_STATES]),
           gte(events.startsAt, start),
           lt(events.startsAt, end),
@@ -297,14 +342,14 @@ export class EventsRepository {
       tx
         .update(events)
         .set({ state, updatedAt: new Date() })
-        .where(eq(events.id, id))
+        .where(and(eq(events.id, id), ACTIVE_EVENT))
         .returning(),
     );
     if (!row) return null;
     const speakerRows = await this.db
       .select()
       .from(eventSpeakers)
-      .where(eq(eventSpeakers.eventId, id))
+      .where(activeSpeakersOf(id))
       .orderBy(asc(eventSpeakers.position));
     return {
       event: row,
@@ -353,7 +398,7 @@ export class EventsRepository {
             ? { liveAt: sql`coalesce(${events.liveAt}, now())` }
             : {}),
         })
-        .where(eq(events.id, id))
+        .where(and(eq(events.id, id), ACTIVE_EVENT))
         .returning();
       if (!row) return null;
       await tx.insert(auditLedger).values({
@@ -371,7 +416,7 @@ export class EventsRepository {
       const [streamRow] = await tx
         .select()
         .from(streamConfig)
-        .where(eq(streamConfig.eventId, id));
+        .where(activeStreamOf(id));
       return {
         event: row,
         speakers: speakerRows.map((s) => ({
@@ -387,7 +432,10 @@ export class EventsRepository {
   }
 
   async findById(id: string): Promise<EventWithSpeakers | null> {
-    const [row] = await this.db.select().from(events).where(eq(events.id, id));
+    const [row] = await this.db
+      .select()
+      .from(events)
+      .where(and(eq(events.id, id), ACTIVE_EVENT));
     if (!row) return null;
     return this.withSpeakers(row);
   }
@@ -402,7 +450,10 @@ export class EventsRepository {
     const where = UUID_RE.test(idOrSlug)
       ? or(eq(events.id, idOrSlug), eq(events.slug, idOrSlug))
       : eq(events.slug, idOrSlug);
-    const [row] = await this.db.select().from(events).where(where);
+    const [row] = await this.db
+      .select()
+      .from(events)
+      .where(and(where, ACTIVE_EVENT));
     if (!row) return null;
     return this.withSpeakers(row);
   }
@@ -411,7 +462,7 @@ export class EventsRepository {
     const speakerRows = await this.db
       .select()
       .from(eventSpeakers)
-      .where(eq(eventSpeakers.eventId, row.id))
+      .where(activeSpeakersOf(row.id))
       .orderBy(asc(eventSpeakers.position));
     return {
       event: row,

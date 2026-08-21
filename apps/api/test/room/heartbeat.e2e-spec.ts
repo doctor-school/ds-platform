@@ -22,6 +22,10 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
 
 // 006 EARS-4 — server-authoritative heartbeat presence capture (append-only).
 //
@@ -205,11 +209,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // presence_beats cascade-delete with their event; deleting the event is
       // enough, but be explicit so a leaked beat never bleeds across tests.
       for (const id of createdEventIds.splice(0)) {
-        await pool.query("DELETE FROM presence_beats WHERE event_id = $1", [id]);
-        await pool.query("DELETE FROM events WHERE id = $1", [id]);
+        await pool.query("DELETE FROM presence_beats WHERE event_id = $1", [
+          id,
+        ]);
+        await deleteEventFixture(pool, id);
       }
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {
@@ -235,9 +241,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         user_id: string;
         event_id: string;
         beat_at: string;
-      }>("SELECT user_id, event_id, beat_at FROM presence_beats WHERE event_id = $1", [
-        id,
-      ]);
+      }>(
+        "SELECT user_id, event_id, beat_at FROM presence_beats WHERE event_id = $1",
+        [id],
+      );
       expect(rows).toHaveLength(1);
       expect(rows[0].event_id).toBe(id);
       expect(rows[0].user_id).toMatch(
@@ -312,7 +319,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("EARS-4/8: when a heartbeat is posted for an unknown event, the system shall refuse it server-side (404) and append no beat", async () => {
       const cookie = await doctorSession(uniqueEmail("doc-missing-beat"));
-      const res = await postHeartbeat("no-such-room-slug", cookieHeader(cookie));
+      const res = await postHeartbeat(
+        "no-such-room-slug",
+        cookieHeader(cookie),
+      );
       expect(res.statusCode).toBe(404);
     });
   },

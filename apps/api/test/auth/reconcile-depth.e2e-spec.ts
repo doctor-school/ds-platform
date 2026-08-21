@@ -15,6 +15,7 @@ import {
 } from "../setup/rate-limit.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { ReconcileService } from "../../src/auth/reconcile.service.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 /**
  * #753 EARS-19 reconcile depth (design §11): the sweep soft-deletes the mirror
@@ -59,7 +60,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Reconcile depth (e2e)", () => {
   afterEach(async () => {
     for (const sub of subs.splice(0)) {
       fake.removeUser(sub); // reset fake state so later sweeps ignore it
-      await pool.query("DELETE FROM users WHERE zitadel_sub = $1", [sub]);
+      await deleteUserFixture(pool, "zitadel_sub", sub);
     }
   });
 

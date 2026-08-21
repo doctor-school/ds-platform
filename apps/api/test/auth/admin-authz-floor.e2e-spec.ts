@@ -35,6 +35,7 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { ADMIN_DEVICE, establishAdminSession } from "../setup/admin-session.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 /** Fastify's `inject` always reports this client IP; the fingerprint must match it. */
 const INJECT_IP = "127.0.0.1";
@@ -484,7 +485,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     afterEach(async () => {
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {
@@ -562,7 +563,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
           headers: portalHeaders,
           ...(route.payload === undefined ? {} : { payload: route.payload }),
         });
-        expectRefused(withPortal.statusCode, `${route.endpoint} (doctor_guest)`);
+        expectRefused(
+          withPortal.statusCode,
+          `${route.endpoint} (doctor_guest)`,
+        );
 
         const anonymous = await app.inject({
           method: route.method,

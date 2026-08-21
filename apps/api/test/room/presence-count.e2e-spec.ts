@@ -23,6 +23,10 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
 
 // 006 EARS-5 — the LIVE room-presence count («N врачей в комнате»).
 //
@@ -186,10 +190,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await pool.query("DELETE FROM presence_beats WHERE event_id = $1", [
           id,
         ]);
-        await pool.query("DELETE FROM events WHERE id = $1", [id]);
+        await deleteEventFixture(pool, id);
       }
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {

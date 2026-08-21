@@ -22,6 +22,10 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
 
 // 007 EARS-3 — ConfigureStream (PUT /v1/admin/events/:id/stream). The stream
 // config is recorded from an EXPLICIT provider in the closed enum
@@ -227,9 +231,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterEach(async () => {
       for (const id of createdEventIds.splice(0))
-        await pool.query("DELETE FROM events WHERE id = $1", [id]);
+        await deleteEventFixture(pool, id);
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {

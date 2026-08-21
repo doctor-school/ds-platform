@@ -15,6 +15,7 @@ import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
 import { OBJECT_STORAGE, type ObjectStorage } from "../../src/storage/index.js";
 import { FakeObjectStorage } from "../../src/storage/storage.fake.js";
+import { deleteEventFixture } from "../setup/fixture-cleanup.js";
 
 // 004 EARS-1 + EARS-10 — the public event-page read endpoint
 // (GET /v1/public/events/:idOrSlug → PublicEventPage). A visitor opens a
@@ -53,7 +54,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
      * lifecycle state — the 004↔007 fixture seam: lifecycle transitions do not
      * exist yet (feature 007), so a public-read test seeds the state it needs.
      */
-    async function seedEvent(opts: SeedOptions): Promise<{ id: string; slug: string }> {
+    async function seedEvent(
+      opts: SeedOptions,
+    ): Promise<{ id: string; slug: string }> {
       const id = randomUUID();
       const slug = `pub-${opts.state}-${id.slice(0, 8)}`;
       await pool.query(
@@ -70,9 +73,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
           90,
           "Разбор клинических случаев.",
           ["traumatology", "orthopedics"],
-          opts.partnerRef === undefined ? "sponsor:acme-pharma" : opts.partnerRef,
-          (opts.pdfRef ??
-            (opts.withPdf ? "events/programs/seed/program.pdf" : null)),
+          opts.partnerRef === undefined
+            ? "sponsor:acme-pharma"
+            : opts.partnerRef,
+          opts.pdfRef ??
+            (opts.withPdf ? "events/programs/seed/program.pdf" : null),
           opts.state,
         ],
       );
@@ -111,7 +116,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     afterEach(async () => {
       for (const id of createdEventIds.splice(0))
-        await pool.query("DELETE FROM events WHERE id = $1", [id]);
+        await deleteEventFixture(pool, id);
     });
 
     afterAll(async () => {

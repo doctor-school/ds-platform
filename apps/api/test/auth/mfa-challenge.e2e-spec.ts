@@ -25,6 +25,7 @@ import {
   ADMIN_SESSION_COOKIE_NAME,
 } from "../../src/auth/admin-session/admin-session.cookie.js";
 import { ADMIN_DEVICE } from "../setup/admin-session.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 const ENROLL_START_URL = "/v1/admin/auth/mfa/enroll/start";
 const ENROLL_VERIFY_URL = "/v1/admin/auth/mfa/enroll/verify";
@@ -198,7 +199,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     afterEach(async () => {
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {
@@ -220,7 +221,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
       const session = verify.cookies.find(
         (c) => c.name === ADMIN_SESSION_COOKIE_NAME,
       );
-      expect(session, "the challenge must issue the admin session").toBeDefined();
+      expect(
+        session,
+        "the challenge must issue the admin session",
+      ).toBeDefined();
       expect(session!.value).toBeTruthy();
       // Opaque server-side reference, never a token (EARS-1).
       expect(session!.value.split(".")).toHaveLength(1);
@@ -384,7 +388,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     it("EARS-7.2: refusals land inside the §7 ≤50 ms timing band", async () => {
       const { ref } = await enrolledAtChallenge();
-      async function timeOf(payload: { code: string }, headers = pendingHeaders(ref)) {
+      async function timeOf(
+        payload: { code: string },
+        headers = pendingHeaders(ref),
+      ) {
         const started = performance.now();
         const res = await app.inject({
           method: "POST",
@@ -592,7 +599,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     afterEach(async () => {
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {
@@ -635,7 +642,11 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // Spend the whole per-user window through PRIMARY AUTH alone, until the
       // login route itself starts answering the generic throttled response.
       let loginThrottled = false;
-      for (let attempt = 0; attempt < PER_USER + 2 && !loginThrottled; attempt++) {
+      for (
+        let attempt = 0;
+        attempt < PER_USER + 2 && !loginThrottled;
+        attempt++
+      ) {
         const res = await app.inject({
           method: "POST",
           url: "/v1/admin/auth/login",

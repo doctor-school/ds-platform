@@ -21,6 +21,7 @@ import {
 } from "../setup/rate-limit.js";
 import { FakeIdpClient, FAKE_VALID_CODE } from "../../src/auth/idp/idp.fake.js";
 import { FakeMailer } from "../../src/mailer/mailer.fake.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 // Registration cascade (EARS-1, email-primary per #202), the consent gate
 // (EARS-20), and enumeration resistance (EARS-16). Runs against a real Postgres
@@ -71,9 +72,9 @@ describe.skipIf(!process.env.DATABASE_URL)("Register (e2e)", () => {
 
   afterEach(async () => {
     for (const email of createdEmails.splice(0))
-      await pool.query("DELETE FROM users WHERE email = $1", [email]);
+      await deleteUserFixture(pool, "email", email);
     for (const phone of createdPhones.splice(0))
-      await pool.query("DELETE FROM users WHERE phone = $1", [phone]);
+      await deleteUserFixture(pool, "phone", phone);
   });
 
   afterAll(async () => {
@@ -352,9 +353,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
       expect(res.statusCode).toBe(400);
       expect(res.statusCode).not.toBe(500);
-      const { rows } = await pool.query("SELECT 1 FROM users WHERE email = $1", [
-        email,
-      ]);
+      const { rows } = await pool.query(
+        "SELECT 1 FROM users WHERE email = $1",
+        [email],
+      );
       expect(rows).toHaveLength(0);
     });
 
@@ -369,9 +371,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
       expect(res.statusCode).toBe(503);
       expect(res.statusCode).not.toBe(500);
-      const { rows } = await pool.query("SELECT 1 FROM users WHERE email = $1", [
-        email,
-      ]);
+      const { rows } = await pool.query(
+        "SELECT 1 FROM users WHERE email = $1",
+        [email],
+      );
       expect(rows).toHaveLength(0);
     });
 
@@ -436,7 +439,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     afterEach(async () => {
       for (const email of emails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
       idp.setCreateReturnsCode(true);
     });
 
@@ -457,7 +460,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(res.statusCode).toBe(200);
 
       const sent = mailer.verificationCodeEmails.slice(before);
-      expect(sent).toEqual([{ to: email.toLowerCase(), code: FAKE_VALID_CODE }]);
+      expect(sent).toEqual([
+        { to: email.toLowerCase(), code: FAKE_VALID_CODE },
+      ]);
       // The hinge: no fallback regeneration happened — the single create-time
       // code was delivered, not a second one.
       expect(idp.emailVerificationRegenerations()).toBe(regenBefore);
@@ -477,7 +482,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       expect(res.statusCode).toBe(200);
 
       const sent = mailer.verificationCodeEmails.slice(before);
-      expect(sent).toEqual([{ to: email.toLowerCase(), code: FAKE_VALID_CODE }]);
+      expect(sent).toEqual([
+        { to: email.toLowerCase(), code: FAKE_VALID_CODE },
+      ]);
       // Exactly one regeneration for this register (the code-less create fallback).
       expect(idp.emailVerificationRegenerations()).toBe(regenBefore + 1);
     });

@@ -26,6 +26,7 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { ADMIN_DEVICE } from "../setup/admin-session.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 const LOGIN_URL = "/v1/admin/auth/login";
 const ENROLL_START_URL = "/v1/admin/auth/mfa/enroll/start";
@@ -143,7 +144,11 @@ describe("011 EARS-9 — canonical wire-id mapping (Event Model → Events)", ()
       metadata: { tier: "admin" },
     },
     {
-      event: { type: "AdminSessionRejected", sub: "sub-1", reason: "wrong_cookie" },
+      event: {
+        type: "AdminSessionRejected",
+        sub: "sub-1",
+        reason: "wrong_cookie",
+      },
       wireId: "auth.session.rejected",
       reason: "wrong_cookie",
       metadata: { tier: "admin" },
@@ -365,7 +370,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
 
     afterEach(async () => {
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {
@@ -634,9 +639,9 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // rows carry a tier — back-filling `tier: "portal"` is owned by no clause
       // here — so the discriminator is the PRESENCE of `tier: "admin"`, which is
       // all the separability assertion needs.
-      expect(
-        only(adminRows, "auth.login.success")[0]!.metadata.tier,
-      ).toBe("admin");
+      expect(only(adminRows, "auth.login.success")[0]!.metadata.tier).toBe(
+        "admin",
+      );
       expect(
         only(portalRows, "auth.login.success")[0]!.metadata.tier,
       ).toBeUndefined();

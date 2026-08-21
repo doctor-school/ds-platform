@@ -18,6 +18,10 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
 
 // 005 EARS-6 — the `MyEvents` read model (GET /v1/me/events) + its EARS-10
 // doctor_guest classification. The authenticated doctor's «мои события»
@@ -156,9 +160,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterEach(async () => {
       for (const id of createdEventIds.splice(0))
-        await pool.query("DELETE FROM events WHERE id = $1", [id]);
+        await deleteEventFixture(pool, id);
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {
@@ -207,7 +211,11 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       });
       expect(typeof first.startsAt).toBe("string");
       expect(Number.isNaN(Date.parse(first.startsAt))).toBe(false);
-      expect(list.map((e) => e.state)).toEqual(["live", "published", "published"]);
+      expect(list.map((e) => e.state)).toEqual([
+        "live",
+        "published",
+        "published",
+      ]);
     });
 
     it("EARS-6.2: ended/archived registrations are absent — only published/live upcoming events appear", async () => {

@@ -1,16 +1,5 @@
 {
   "$schema-note": "Baseline for tools/lint/retained-data-lint.ts (#1404, slice C of #1278). SHRINK-ONLY: `count` is authoritative and is compared exactly — removing a baselined occurrence must lower the count (or drop the entry) in the SAME PR, and a higher actual count is a NEW regression. `sites` and `reason` are documentation only; line numbers drift with unrelated edits and are never compared. The #1278 schema slices drain this file as they land.",
   "cascade": {},
-  "physicalDelete": {
-    "apps/api/src/events/events.repository.ts": {
-      "count": 1,
-      "sites": [115],
-      "reason": "Wholesale replace of an event's speaker list inside a transaction (composite PK makes a plain re-insert conflict). Pre-#1278; the schema slice moves it to a diff-based upsert."
-    },
-    "apps/api/scripts/seed-events.ts": {
-      "count": 2,
-      "sites": [284, 314],
-      "reason": "Seed script replacing an event's speakers and stream config wholesale. Pre-#1278; dev/seed path, not a production request path."
-    }
-  }
+  "physicalDelete": {}
 }

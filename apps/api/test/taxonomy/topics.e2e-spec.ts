@@ -18,6 +18,7 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 // 012 EARS-3 (#1285) — the curated topic authoring vertical over the REAL
 // stack: Fastify + the 011 admin session + Postgres. It is the SAME §5.1
@@ -40,7 +41,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     let pool: pg.Pool;
     const fake = new FakeIdpClient();
     const password = "Aa1!ufficiently-long-pw";
-    const device = { "user-agent": "AdminTest/1.0", "accept-language": "en-US" };
+    const device = {
+      "user-agent": "AdminTest/1.0",
+      "accept-language": "en-US",
+    };
     const consent = [{ purpose: "tos", version: "2026-01" }];
     const createdEmails: string[] = [];
     const createdTopicIds: string[] = [];
@@ -198,7 +202,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterAll(async () => {
       for (const email of createdEmails.splice(0)) {
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
       }
       await app.close();
     });
@@ -285,7 +289,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     it("012 EARS-15: the list shall search titles case-insensitively and exclude retired rows by default", async () => {
       const marker = randomUUID().slice(0, 8);
       const body = await created(
-        await createJson({ payload: validPayload({ title: `Онкология ${marker}` }) }),
+        await createJson({
+          payload: validPayload({ title: `Онкология ${marker}` }),
+        }),
       );
       // LD-6: ordinary case-insensitive substring search over the title.
       const found = await app.inject({
@@ -320,9 +326,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         headers: { ...device, ...adminHeaders(adminSid) },
       });
       expect(
-        (JSON.parse(withRetired.payload) as { data: { id: string }[] }).data.map(
-          (r) => r.id,
-        ),
+        (
+          JSON.parse(withRetired.payload) as { data: { id: string }[] }
+        ).data.map((r) => r.id),
       ).toContain(body.id);
 
       // The detail route addresses a retired row directly (restore path input).

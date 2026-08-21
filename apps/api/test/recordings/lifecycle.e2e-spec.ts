@@ -18,6 +18,10 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
 
 // 014 EARS-1 / EARS-2 / EARS-17 (#1339) — retained event recordings over the REAL
 // stack: Fastify + the 011 admin session + Postgres.
@@ -49,7 +53,10 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     let pool: pg.Pool;
     const fake = new FakeIdpClient();
     const password = "Aa1!ufficiently-long-pw";
-    const device = { "user-agent": "AdminTest/1.0", "accept-language": "en-US" };
+    const device = {
+      "user-agent": "AdminTest/1.0",
+      "accept-language": "en-US",
+    };
     const consent = [{ purpose: "tos", version: "2026-01" }];
     const createdEmails: string[] = [];
     const createdEventIds: string[] = [];
@@ -302,7 +309,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         await pool.query("DELETE FROM event_recordings WHERE event_id = $1", [
           id,
         ]);
-        await pool.query("DELETE FROM events WHERE id = $1", [id]);
+        await deleteEventFixture(pool, id);
       }
       for (const k of usedKeys.splice(0)) {
         await pool.query("DELETE FROM idempotency_keys WHERE key = $1", [k]);
@@ -311,7 +318,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterAll(async () => {
       for (const email of createdEmails.splice(0)) {
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
       }
       await app.close();
     });
@@ -468,11 +475,15 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const drafted = await commanded(eventId, edited.id, "unpublish", 2);
       expect(drafted.status).toBe("draft");
       // Unpublish never clears the publication instant …
-      expect((await dbRow(edited.id))!.first_published_at).toEqual(firstInstant);
+      expect((await dbRow(edited.id))!.first_published_at).toEqual(
+        firstInstant,
+      );
       const republished = await commanded(eventId, edited.id, "publish", 3);
       expect(republished.status).toBe("published");
       // … and a second publish keeps the ORIGINAL one.
-      expect((await dbRow(edited.id))!.first_published_at).toEqual(firstInstant);
+      expect((await dbRow(edited.id))!.first_published_at).toEqual(
+        firstInstant,
+      );
     });
 
     it.each(["draft", "published", "live", "archived"])(
@@ -577,7 +588,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     it("014 EARS-17: an attach without an Idempotency-Key shall be refused 428 IDEMPOTENCY_KEY_REQUIRED and persist nothing", async () => {
       const eventId = await insertEvent("ended");
-      const res = await attach(eventId, attachPayload(), { idempotencyKey: "" });
+      const res = await attach(eventId, attachPayload(), {
+        idempotencyKey: "",
+      });
       expect(res.statusCode).toBe(428);
       expect(problem(res).errorCode).toBe("IDEMPOTENCY_KEY_REQUIRED");
       expect(await rowCount(eventId)).toBe(0);
@@ -693,7 +706,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         await pool.query("DELETE FROM event_recordings WHERE event_id = $1", [
           id,
         ]);
-        await pool.query("DELETE FROM events WHERE id = $1", [id]);
+        await deleteEventFixture(pool, id);
       }
       await pool.end();
     });
@@ -749,7 +762,10 @@ describe.skipIf(!process.env.DATABASE_URL)(
     });
 
     it("014 EARS-1: the migration shall create both partial indexes, the unique one scoped to the non-retired rows", async () => {
-      const { rows } = await pool.query<{ indexname: string; indexdef: string }>(
+      const { rows } = await pool.query<{
+        indexname: string;
+        indexdef: string;
+      }>(
         `SELECT indexname, indexdef FROM pg_indexes
           WHERE tablename = 'event_recordings' ORDER BY indexname`,
       );
@@ -774,10 +790,13 @@ describe.skipIf(!process.env.DATABASE_URL)(
       // delete could take its recordings with it (014-design §2, ADR-0003 §4).
       expect(rows.map((r) => r.confdeltype)).toEqual(["r"]);
 
+      // Deliberately a RAW parent delete, not `deleteEventFixture` — the
+      // fixture helper clears children in FK order precisely so teardown can
+      // succeed, which would hide the very refusal this case asserts.
       const eventId = await seedEvent();
       await insertRecording(eventId);
       await expect(
-        pool.query("DELETE FROM events WHERE id = $1", [eventId]),
+        pool.query(`DELETE FROM events WHERE id = $1`, [eventId]),
       ).rejects.toThrow(/foreign key|violates/i);
     });
 

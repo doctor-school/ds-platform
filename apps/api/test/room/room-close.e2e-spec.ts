@@ -24,6 +24,10 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
 
 // 006 EARS-7 — room-close stops heartbeat + chat capture.
 //
@@ -269,11 +273,13 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     afterEach(async () => {
       for (const id of createdEventIds.splice(0)) {
-        await pool.query("DELETE FROM presence_beats WHERE event_id = $1", [id]);
-        await pool.query("DELETE FROM events WHERE id = $1", [id]);
+        await pool.query("DELETE FROM presence_beats WHERE event_id = $1", [
+          id,
+        ]);
+        await deleteEventFixture(pool, id);
       }
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {
@@ -287,7 +293,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       // one durable row is appended — capture is running.
       const openBeat = await postHeartbeat(slug, cookieHeader(cookie));
       expect(openBeat.statusCode).toBe(200);
-      expect(PresenceHeartbeatAckSchema.parse(openBeat.json()).eventId).toBe(id);
+      expect(PresenceHeartbeatAckSchema.parse(openBeat.json()).eventId).toBe(
+        id,
+      );
       expect(await beatCount(id)).toBe(1);
 
       // The director closes the room — the event leaves `live` (→ ended).
@@ -313,7 +321,9 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
           text: "Пока идёт эфир — сообщение проходит",
         });
         expect(openPost.statusCode).toBe(200);
-        expect(PostChatMessageAckSchema.parse(openPost.json()).eventId).toBe(id);
+        expect(PostChatMessageAckSchema.parse(openPost.json()).eventId).toBe(
+          id,
+        );
       }
 
       // The director closes the room — the event leaves `live` (→ ended).

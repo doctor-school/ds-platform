@@ -15,6 +15,7 @@ import {
 } from "../setup/rate-limit.js";
 import { FakeIdpClient } from "../../src/auth/idp/idp.fake.js";
 import { SESSION_COOKIE_NAME } from "../../src/auth/session/session.cookie.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 // Password login (EARS-5). Success establishes a BFF session (EARS-8) — a
 // `__Host-` cookie, no token in the body; failure is an enumeration-resistant
@@ -72,7 +73,7 @@ describe.skipIf(!process.env.DATABASE_URL)("Login with password (e2e)", () => {
 
   afterEach(async () => {
     for (const email of createdEmails.splice(0))
-      await pool.query("DELETE FROM users WHERE email = $1", [email]);
+      await deleteUserFixture(pool, "email", email);
   });
 
   afterAll(async () => {

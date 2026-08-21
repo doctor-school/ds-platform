@@ -22,6 +22,7 @@ import {
   RATE_LIMIT_THRESHOLDS,
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
+import { deleteUserFixture } from "../setup/fixture-cleanup.js";
 
 // 003 EARS-27 — the account-profile v1 self-read (`GET /v1/me/profile`,
 // design §12; GH #770). One thin, session-scoped projection of the caller's OWN
@@ -129,7 +130,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
     afterEach(async () => {
       // Delete by email — a fake-sub value collides on zitadel_sub across cases.
       for (const email of createdEmails.splice(0))
-        await pool.query("DELETE FROM users WHERE email = $1", [email]);
+        await deleteUserFixture(pool, "email", email);
     });
 
     afterAll(async () => {

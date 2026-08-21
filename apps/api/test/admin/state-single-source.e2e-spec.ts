@@ -17,6 +17,10 @@ import {
   RELAXED_RATE_LIMIT,
 } from "../setup/rate-limit.js";
 import { futureMskStart } from "../setup/wall-clock.js";
+import {
+  deleteEventFixture,
+  deleteUserFixture,
+} from "../setup/fixture-cleanup.js";
 
 // 007 EARS-9 — one source of truth for event state across the whole epic. The
 // `EventLifecycleState` the 007 admin commands write (create → publish → open →
@@ -168,9 +172,9 @@ describe.skipIf(
 
   afterEach(async () => {
     for (const id of createdEventIds.splice(0))
-      await pool.query("DELETE FROM events WHERE id = $1", [id]);
+      await deleteEventFixture(pool, id);
     for (const email of createdEmails.splice(0))
-      await pool.query("DELETE FROM users WHERE email = $1", [email]);
+      await deleteUserFixture(pool, "email", email);
   });
 
   afterAll(async () => {

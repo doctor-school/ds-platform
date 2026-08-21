@@ -25,6 +25,11 @@ const EVENT_CHILDREN = [
   "event_speakers",
   "stream_config",
   "event_recordings",
+  // 012 EARS-6 (#1288) — the event↔project relationship. Its FK into `events`
+  // is `ON DELETE RESTRICT` like every other retained child, so an event
+  // fixture that was ever related to a project cannot be swept away until the
+  // relationship row is named here first.
+  "event_projects",
 ] as const;
 
 /** Child tables of `users`, in the order they must be removed. */

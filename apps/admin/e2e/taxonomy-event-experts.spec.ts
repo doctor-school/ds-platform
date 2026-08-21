@@ -232,7 +232,12 @@ test.describe("012 EARS-7 — event↔expert links in the live admin", () => {
     );
     // The row leaves the active list but is NOT deleted — it is behind the toggle.
     await expect(page.getByTestId("event-experts-empty")).toBeVisible();
-    await page.getByTestId("event-experts-show-retired").check();
+    // The DS Switch keeps its input `sr-only` under the label that carries the
+    // visible track, so a user's click lands on the LABEL — `check()` would aim
+    // at the hidden input and be intercepted by the track it draws.
+    const showRetired = page.getByTestId("event-experts-show-retired");
+    await showRetired.locator("xpath=ancestor::label[1]").click();
+    await expect(showRetired).toBeChecked();
     const retiredRow = page
       .getByTestId("event-experts-retired")
       .locator("section");

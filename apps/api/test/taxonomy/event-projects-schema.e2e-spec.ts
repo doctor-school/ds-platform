@@ -156,8 +156,14 @@ describe.skipIf(!process.env.DATABASE_URL)(
         `UPDATE event_projects SET status = 'retired', deleted_at = now(), version = version + 1 WHERE id = $1`,
         [id],
       );
+      // The 010 trail addresses a row by its `data.<table>.<op>` event type and
+      // the primary key it carries in `metadata -> 'pk'` — the ledger has no
+      // per-entity column, so this is the shape every audit suite reads.
       const { rows } = await pool.query<{ count: string }>(
-        `SELECT count(*)::text AS count FROM audit_ledger WHERE entity_id = $1`,
+        `SELECT count(*)::text AS count
+           FROM audit_ledger
+          WHERE event_type LIKE 'data.event_projects.%'
+            AND metadata -> 'pk' ->> 'id' = $1`,
         [id],
       );
       // The row-change trigger is what writes these — a domain table opts IN to

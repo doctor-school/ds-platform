@@ -187,8 +187,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const body = res.json() as { id: string; slug: string };
       createdProjectIds.push(body.id);
       if (published) {
+        // `projects_published_has_first_published_at` is a table CHECK: a
+        // published row without its first-publication stamp is not a state the
+        // schema admits, so the fixture writes the pair the publish command
+        // would have written, never a half-state the DB would reject.
         await pool.query(
-          "UPDATE projects SET status = 'published' WHERE id = $1",
+          "UPDATE projects SET status = 'published', first_published_at = now() WHERE id = $1",
           [body.id],
         );
       }
@@ -330,8 +334,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
     async function auditCount(id: string): Promise<number> {
       const { rows } = await pool.query<{ count: string }>(
+        // The 010 trail addresses a row by its `data.<table>.<op>` event type
+        // plus the primary key in `metadata -> 'pk'` (the ledger has no
+        // per-entity column) — the same shape `test/audit/*` reads.
         `SELECT count(*)::text AS count FROM audit_ledger
-          WHERE entity_id = $1`,
+          WHERE event_type LIKE 'data.event_projects.%'
+            AND metadata -> 'pk' ->> 'id' = $1`,
         [id],
       );
       return Number(rows[0]!.count);
@@ -597,8 +605,30 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         url: `/v1/public/events/${randomUUID()}/projects`,
       });
       expect(unknownSource.statusCode).toBe(404);
-      expect(draftSource.json()).toMatchObject(
-        (unknownSource.json() as Record<string, unknown>) as object,
+
+      // Indistinguishable means the REFUSAL is identical. `instance` echoes the
+      // URL the caller themselves asked for and `traceId` is per-request — both
+      // are already known to the caller, so neither can disclose whether the id
+      // exists. Everything else must match byte for byte: a draft event that
+      // answered with a different title, type or errorCode would be an existence
+      // oracle for unpublished content.
+      const shape = (raw: unknown): Record<string, unknown> => {
+        const { instance: _i, traceId: _t, ...rest } = raw as Record<
+          string,
+          unknown
+        >;
+        return rest;
+      };
+      expect(shape(draftSource.json())).toEqual(shape(unknownSource.json()));
+      expect(shape(draftSource.json())).toEqual({
+        type: "https://docs.doctor.school/errors/resource-not-found",
+        title: "Not found",
+        status: 404,
+        errorCode: "RESOURCE_NOT_FOUND",
+      });
+      // The echoed instance is the caller's own path and carries nothing else.
+      expect((draftSource.json() as { instance?: string }).instance).toBe(
+        `/v1/public/events/${event.id}/projects`,
       );
     });
 
@@ -609,7 +639,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const again = await relate(event.id, project.id);
       expect(again.statusCode).toBe(409);
-      expect((again.json() as { code?: string }).code).toBe(
+      expect((again.json() as { errorCode?: string }).errorCode).toBe(
         "RELATIONSHIP_CONFLICT",
       );
       const { rows } = await pool.query<{ count: string }>(
@@ -627,8 +657,8 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const again = await relate(event.id, project.id);
       expect(again.statusCode).toBe(409);
-      const body = again.json() as { code?: string; detail?: string };
-      expect(body.code).toBe("RELATIONSHIP_CONFLICT");
+      const body = again.json() as { errorCode?: string; detail?: string };
+      expect(body.errorCode).toBe("RELATIONSHIP_CONFLICT");
       expect(String(body.detail)).toContain("restore");
       // Refusing is not enough: the retired row must be untouched.
       expect(await relationRow(rel.id)).toMatchObject({
@@ -645,7 +675,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const before = await auditCount(rel.id);
       const res = await confirm(rel.id, "retire", { version: 1, token: null });
       expect(res.statusCode).toBe(428);
-      expect((res.json() as { code?: string }).code).toBe(
+      expect((res.json() as { errorCode?: string }).errorCode).toBe(
         "LIFECYCLE_IMPACT_REQUIRED",
       );
       expect(await relationRow(rel.id)).toMatchObject({
@@ -665,7 +695,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         token: null,
       });
       expect(res.statusCode).toBe(428);
-      expect((res.json() as { code?: string }).code).toBe(
+      expect((res.json() as { errorCode?: string }).errorCode).toBe(
         "PRECONDITION_REQUIRED",
       );
     });
@@ -705,7 +735,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         token: p.impactToken,
       });
       expect(res.statusCode).toBe(412);
-      expect((res.json() as { code?: string }).code).toBe(
+      expect((res.json() as { errorCode?: string }).errorCode).toBe(
         "LIFECYCLE_IMPACT_STALE",
       );
       expect(await relationRow(rel.id)).toMatchObject({
@@ -789,7 +819,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         token: flipped,
       });
       expect(res.statusCode).toBe(412);
-      expect((res.json() as { code?: string }).code).toBe(
+      expect((res.json() as { errorCode?: string }).errorCode).toBe(
         "LIFECYCLE_IMPACT_STALE",
       );
     });
@@ -801,7 +831,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
 
       const res = await preview(rel.id, "restore");
       expect(res.statusCode).toBe(409);
-      expect((res.json() as { code?: string }).code).toBe("INVALID_TRANSITION");
+      expect((res.json() as { errorCode?: string }).errorCode).toBe("INVALID_TRANSITION");
     });
 
     it("012 EARS-6: when a relationship is created without an Idempotency-Key, the system shall refuse before persisting anything", async () => {
@@ -846,9 +876,12 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
       const absentProject = await relate(event.id, randomUUID());
       expect(absentProject.statusCode).toBe(404);
 
-      await pool.query("UPDATE projects SET status = 'retired' WHERE id = $1", [
-        project.id,
-      ]);
+      // `projects_retired_iff_deleted` — retirement is the status AND the
+      // soft-delete stamp together; the fixture may not invent a half-retired row.
+      await pool.query(
+        "UPDATE projects SET status = 'retired', deleted_at = now() WHERE id = $1",
+        [project.id],
+      );
       const retiredProject = await relate(event.id, project.id);
       expect(retiredProject.statusCode).toBe(409);
 
@@ -886,7 +919,7 @@ describe.skipIf(!process.env.DATABASE_URL || !process.env.IDP_ISSUER)(
         url: `/v1/public/events/${event.id}/projects?cursor=not-a-cursor`,
       });
       expect(res.statusCode).toBe(400);
-      expect((res.json() as { code?: string }).code).toBe("CURSOR_INVALID");
+      expect((res.json() as { errorCode?: string }).errorCode).toBe("CURSOR_INVALID");
     });
   },
 );
